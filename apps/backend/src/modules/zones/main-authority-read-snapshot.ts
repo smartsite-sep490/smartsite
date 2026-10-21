@@ -3,6 +3,12 @@ import { MAIN_AUTHORITY_V2_SOURCES } from '../../common/configuration/main-team-
 
 export class MainAuthoritySnapshotUnavailable extends Error {}
 
+export const MAIN_AUTHORITY_SNAPSHOT_TABLES = [
+  ...MAIN_AUTHORITY_V2_SOURCES.map(([, table]) => table),
+  'authorization_history_epoch',
+  'authorization_history_control',
+] as const;
+
 /** Own the transaction so source writers drain before its first data snapshot. */
 export async function readMainAuthoritySnapshot<T>(
   source: DataSource,
@@ -23,7 +29,7 @@ export async function readMainAuthoritySnapshot<T>(
     await manager.query("SET LOCAL statement_timeout='5s'");
     // A SELECT, including catalog validation, before this lock would freeze an old snapshot.
     await manager.query(
-      `LOCK TABLE ${MAIN_AUTHORITY_V2_SOURCES.map(([, table]) => `${quote(schema)}.${quote(table)}`).join(',')} IN SHARE MODE`,
+      `LOCK TABLE ${MAIN_AUTHORITY_SNAPSHOT_TABLES.map((table) => `${quote(schema)}.${quote(table)}`).join(',')} IN SHARE MODE`,
     );
     await manager.query('SET TRANSACTION READ ONLY');
     // Frozen capture profiles use the schema-only path; reject pooled temp namespaces

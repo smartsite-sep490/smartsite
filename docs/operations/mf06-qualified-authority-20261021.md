@@ -19,7 +19,8 @@ manifest, migration registration, current website migration or runtime activatio
   reconstructor from a write transaction. It verifies the original context, archive,
   release and database state, with a bounded2049-row history tail and2048-row limit.
 - The caller MUST own a fresh SERIALIZABLE writable transaction and acquire all18
-  source SHARE locks before its first SELECT. pg_locks cannot establish that order
+  source SHARE locks plus epoch/control metadata locks before its first SELECT.
+  Reuse the ordered20-table MAIN_AUTHORITY_SNAPSHOT_TABLES list. pg_locks cannot establish that order
   retrospectively. The actual WorkPort must supply it before claim/profile/store reads.
 - Changes to epoch state, close/gap markers or the relevant fact/witness state require
   re-preparation; an old prepared object is refused. Historical reconstruction can
@@ -60,8 +61,10 @@ configuration-source-current-20261019-v1/agy-backend-ai-20261020-v1.
 - Qualified reader: initial fixture failures retained; actual3PASS/4FAIL exposed
   the strict decoder epochId mismatch. Root repaired it and checked9cases, then
   added explicit pooled-connection error handling and exact-gap boundary coverage.
-  Final10PASS/6.63s include exact first-gap boundary and pooled error mapping:
-  qualified-authority-green-v5. No inference of browser acceptance.
+  Final11PASS include exact first-gap boundary, pooled error mapping and pending
+  epoch writes. The follow-up10PASS/1FAIL reproduced missing epoch metadata fencing;
+  the ordered20-table fix then passed, including refusal of an18-source-only finalizer.
+  qualified-authority-red-v3/green-v7. No inference of browser acceptance.
 - Affected cutover command:14PASS with expanded source/runtime pins and gap guard;
   original bearer, CAS conflict, concurrent activation, rollback, revocation,
   witness failure and resource/error boundaries. authority-cutover-service-green-v6.
@@ -74,9 +77,11 @@ configuration-source-current-20261019-v1/agy-backend-ai-20261020-v1.
   warning remains an explicit Task3 integration requirement, not blanket acceptance.
 
 The integration test file intentionally keeps one synthetic release/history journey
-and the atomic rollback helpers together (under700lines;400-line target exceeded).
+and the atomic rollback helpers together. Reviewed exception:707lines after the
+pending-epoch race regression (700-line review threshold;400-line target exceeded).
 No formatting compression or security cases were removed to meet a count. Owner:
-Root; split shared fixture setup if another consumer needs it. The reader is under300lines.
+Root, reviewed for this coherent history journey; extract shared fixture setup when
+the WorkPort tests introduce another consumer. The reader is under300lines.
 
 ## Next critical path
 

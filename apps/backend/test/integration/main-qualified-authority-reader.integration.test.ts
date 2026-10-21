@@ -16,7 +16,10 @@ import { AuthClientType } from '../../src/database/entities/auth-session.entity.
 import { hashPassword } from '../../src/modules/auth/password.js';
 import { AuthorizationHistoryCutover1793059200000 } from '../../src/database/migrations/1793059200000-AuthorizationHistoryCutover.js';
 import { hasMainAuthorityCapture } from '../../src/common/configuration/main-authority-capture-preflight.js';
-import { readMainAuthoritySnapshot } from '../../src/modules/zones/main-authority-read-snapshot.js';
+import {
+  MAIN_AUTHORITY_SNAPSHOT_TABLES,
+  readMainAuthoritySnapshot,
+} from '../../src/modules/zones/main-authority-read-snapshot.js';
 import { executeMainConfigurationCommand } from '../../src/common/configuration/main-configuration-authority.js';
 import { MAIN_AUTHORITY_V2_SOURCES } from '../../src/common/configuration/main-team-authority-sources.js';
 import { MainAuthorityBaselineService } from '../../src/modules/zones/main-authority-baseline.service.js';
@@ -79,7 +82,7 @@ function makeInput(
 /** Simulates the future WorkPort writable SERIALIZABLE TX with early 18-table SHARE locks and schema-only path. */
 async function withWritableSnapshotFence<T>(
   operation: (manager: EntityManager) => Promise<T>,
-  tables: readonly string[] = MAIN_AUTHORITY_V2_SOURCES.map(([, table]) => table),
+  tables: readonly string[] = MAIN_AUTHORITY_SNAPSHOT_TABLES,
 ): Promise<T> {
   return db.transaction('SERIALIZABLE', async (manager) => {
     await manager.query("SET LOCAL lock_timeout='1500ms'");
@@ -316,6 +319,13 @@ test('Missing early SHARE locks or missing transaction in writable revalidate is
   const seventeenTables = MAIN_AUTHORITY_V2_SOURCES.slice(0, 17).map(([, table]) => table);
   assert.deepEqual(
     await withWritableSnapshotFence((m) => reader.revalidate(m, input, prepared), seventeenTables),
+    { status: 'UNAVAILABLE', reason: 'SNAPSHOT_FENCE_REQUIRED' },
+  );
+  assert.deepEqual(
+    await withWritableSnapshotFence(
+      (m) => reader.revalidate(m, input, prepared),
+      MAIN_AUTHORITY_V2_SOURCES.map(([, table]) => table),
+    ),
     { status: 'UNAVAILABLE', reason: 'SNAPSHOT_FENCE_REQUIRED' },
   );
 });
@@ -659,5 +669,39 @@ test('pooled temporary namespace produces an explicit unavailable preparation', 
     });
   } finally {
     await pooled.destroy();
+  }
+});
+
+test('pending epoch gap transition drains before the authority snapshot', async () => {
+  const [{ epoch_id: epochId }] = await db.query(
+    'SELECT epoch_id FROM authorization_history_control',
+  );
+  const writer = db.createQueryRunner(),
+    observer = db.createQueryRunner();
+  try {
+    await writer.startTransaction();
+    await writer.query("UPDATE authorization_history_epoch SET state='GAPPED' WHERE epoch_id=$1", [
+      epochId,
+    ]);
+    const input = makeInput(epochId, await pgNowUtc());
+    const pending = reader.prepare(input);
+    let waiting = false;
+    for (let attempt = 0; attempt < 100; attempt++) {
+      const [row] = await observer.query(
+        `SELECT EXISTS(SELECT 1 FROM pg_locks l JOIN pg_class c ON c.oid=l.relation
+        WHERE c.relnamespace=$1::regnamespace AND c.relname='authorization_history_epoch'
+        AND l.mode='ShareLock' AND NOT l.granted) AS waiting`,
+        [schema],
+      );
+      if ((waiting = row.waiting)) break;
+      await new Promise((resolve) => setTimeout(resolve, 5));
+    }
+    assert.equal(waiting, true, 'Pending epoch mutation must delay the first read snapshot');
+    await writer.commitTransaction();
+    assert.deepEqual(await pending, { status: 'UNAVAILABLE', reason: 'HISTORY_GAP' });
+  } finally {
+    if (writer.isTransactionActive) await writer.rollbackTransaction();
+    await writer.release();
+    await observer.release();
   }
 });

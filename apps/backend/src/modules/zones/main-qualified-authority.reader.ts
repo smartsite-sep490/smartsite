@@ -19,6 +19,7 @@ import {
 } from './main-authority-cutover-release.js';
 import {
   MainAuthoritySnapshotUnavailable,
+  MAIN_AUTHORITY_SNAPSHOT_TABLES,
   readMainAuthoritySnapshot,
 } from './main-authority-read-snapshot.js';
 
@@ -201,9 +202,9 @@ export class MainQualifiedAuthorityReader {
         to_char(w.confirmed_at AT TIME ZONE 'UTC','YYYY-MM-DD"T"HH24:MI:SS.US"Z"') AS witness_confirmed_at,
         current_schema()=$3::text AND pg_catalog.pg_my_temp_schema()=0 AS schema_valid, current_setting('transaction_isolation')='serializable' AS isolation_valid,
         current_setting('transaction_read_only')='on' AS read_only,
-        NOT EXISTS(SELECT 1 FROM authorization_history_source s JOIN pg_class r ON r.relname=s.table_name AND r.relkind='r'
-          JOIN pg_namespace n ON n.oid=r.relnamespace AND n.nspname=current_schema()
-          WHERE NOT EXISTS(SELECT 1 FROM pg_locks l WHERE l.pid=pg_backend_pid() AND l.granted AND l.relation=r.oid
+        NOT EXISTS(SELECT 1 FROM unnest($4::text[]) AS required(name)
+          LEFT JOIN pg_class r ON r.relname=required.name AND r.relkind='r' AND r.relnamespace=current_schema()::regnamespace
+          WHERE r.oid IS NULL OR NOT EXISTS(SELECT 1 FROM pg_locks l WHERE l.pid=pg_backend_pid() AND l.granted AND l.relation=r.oid
             AND l.mode IN ('ShareLock','ShareRowExclusiveLock','ExclusiveLock','AccessExclusiveLock'))) AS locks_held,
         $2::timestamptz<=transaction_timestamp() AND $2::timestamptz<=statement_timestamp() AS not_future,
         EXISTS(SELECT 1 FROM pg_proc p JOIN pg_namespace n ON n.oid=p.pronamespace
@@ -228,7 +229,7 @@ export class MainQualifiedAuthorityReader {
         LEFT JOIN authorization_history_command rc USING(command_id)
         LEFT JOIN authorization_history_commit_receipt rw USING(command_id)) tail ON true
       WHERE e.epoch_id=$1`,
-      [epochId, capturedAt, schema],
+      [epochId, capturedAt, schema, MAIN_AUTHORITY_SNAPSHOT_TABLES],
     );
     if (!row) return unavailable('BASELINE_UNAVAILABLE');
     if (!row.schema_valid || !row.isolation_valid || !row.locks_held)

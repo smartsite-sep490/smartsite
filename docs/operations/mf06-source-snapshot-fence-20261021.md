@@ -6,7 +6,8 @@ SERIALIZABLE READ ONLY alone does not drain that writer. The existing low-level
 reconstructor still returns coverage=false; it is not an operational qualifier.
 
 `readMainAuthoritySnapshot` owns a fresh SERIALIZABLE transaction. Before any SELECT,
-it acquires SHARE locks on all18 frozen V2 source tables in the selected driver
+it acquires SHARE locks on all18 frozen V2 source tables followed by the epoch/control
+metadata tables in the selected driver
 schema, with a1500ms lock timeout and5s statement timeout. It then switches READ ONLY,
 rejects any pooled temporary namespace, sets the schema-only search path, validates the selected schema,
 and invokes the callback. Failure rolls back; there is no unfenced fallback.
@@ -52,3 +53,10 @@ The fix preserves the schema-only profile and refuses a pooled temp namespace
 before any unqualified metadata query. Final4PASS/3.05s, compile/lint exit0; earlier
 2PASS and the actual regression failure remain retained. The low-level reader is
 still unqualified and returns coverage=false; this change does not promote it.
+
+Root later reproduced a pending epoch UPDATE missed by the18-source-only fence
+(qualified cohort10PASS/1FAIL). Both fresh read and writable-finalizer contracts now
+require the ordered20-table MAIN_AUTHORITY_SNAPSHOT_TABLES list before the first
+SELECT. The qualified cohort verifies pending epoch writer drain and refuses a
+finalizer holding only the18 source locks. Source registry remains frozen18;
+metadata tables are lock targets, not new business authority sources.
