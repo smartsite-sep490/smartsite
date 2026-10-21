@@ -73,6 +73,7 @@ describe('Mf06AssessmentDetailDialog', () => {
   beforeEach(() => {
     mockGetMf06Assessment = vi.fn().mockResolvedValue(sampleRecord);
     mockClient = {
+      getMf06AssessmentFrame: vi.fn().mockRejectedValue(new ApiError('http', 'No frame fixture', 404)),
       getMf06Assessment: mockGetMf06Assessment,
     } as unknown as SmartSiteManagementClient;
   });

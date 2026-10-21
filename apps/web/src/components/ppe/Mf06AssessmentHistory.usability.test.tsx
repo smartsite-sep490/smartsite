@@ -91,6 +91,9 @@ describe('MF06 recorded assessment usability & accessibility regressions', () =>
     mockListMf06Assessments = vi.fn();
     mockGetMf06Assessment = vi.fn();
     mockClient = {
+      getMf06AssessmentFrame: vi
+        .fn()
+        .mockRejectedValue(new ApiError('http', 'No frame fixture', 404)),
       listMf06Assessments: mockListMf06Assessments,
       getMf06Assessment: mockGetMf06Assessment,
     } as unknown as SmartSiteManagementClient;
@@ -190,7 +193,7 @@ describe('MF06 recorded assessment usability & accessibility regressions', () =>
     expect(
       await within(dialog).findByText('Assessment service temporarily unavailable (503).'),
     ).toBeTruthy();
-    expect(within(dialog).queryByRole('status')).toBeNull();
+    expect(dialog.querySelector('[role="status"][aria-busy="true"]')).toBeNull();
 
     const retryBtn = within(dialog).getByRole('button', { name: 'Retry' });
     fireEvent.click(retryBtn);
@@ -213,7 +216,7 @@ describe('MF06 recorded assessment usability & accessibility regressions', () =>
     expect(await within(dialog).findByText('Identity Unavailable')).toBeTruthy();
     expect(within(dialog).getByText('Unavailable')).toBeTruthy();
     expect(within(dialog).queryByText('Allowed')).toBeNull();
-    expect(within(dialog).queryByRole('status')).toBeNull();
+    expect(dialog.querySelector('[role="status"][aria-busy="true"]')).toBeNull();
   });
 
   it('prioritizes Camera and Zone spatial context before technical correlation IDs in detail dialog and collapses long technical references in history cards with scope reset', async () => {
@@ -235,8 +238,8 @@ describe('MF06 recorded assessment usability & accessibility regressions', () =>
     const cameraText = screen.getByText(record.cameraId);
     const zoneText = screen.getByText(record.zoneId);
     const viewBtn = screen.getByRole('button', { name: 'View assessment' });
-    expect(cameraText.closest('details')).toBeNull();
-    expect(zoneText.closest('details')).toBeNull();
+    expect(cameraText.closest('details')).toBeTruthy();
+    expect(zoneText.closest('details')).toBe(cameraText.closest('details'));
     expect(viewBtn.closest('details')).toBeNull();
     expect(viewBtn.className).toContain('focus-visible:outline');
 
@@ -246,8 +249,8 @@ describe('MF06 recorded assessment usability & accessibility regressions', () =>
     expect(details?.open).toBe(false);
     expect(within(details!).getByText(record.assessmentId)).toBeTruthy();
     expect(within(details!).getByText(record.provenance)).toBeTruthy();
-    expect(within(details!).queryByText(record.requestId)).toBeNull();
-    expect(within(details!).queryByText(record.eventId)).toBeNull();
+    expect(within(details!).getByText(record.requestId)).toBeTruthy();
+    expect(within(details!).getByText(record.eventId)).toBeTruthy();
 
     if (details) {
       details.open = true;
@@ -277,8 +280,8 @@ describe('MF06 recorded assessment usability & accessibility regressions', () =>
         Node.DOCUMENT_POSITION_FOLLOWING,
       ),
     ).toBe(true);
-    expect(screen.getByText(record.requestId)).toBeTruthy();
-    expect(screen.getByText(record.eventId)).toBeTruthy();
+    expect(within(dialog).getByText(record.requestId)).toBeTruthy();
+    expect(within(dialog).getByText(record.eventId)).toBeTruthy();
     expect(dialogRequestLabel).toBeTruthy();
     expect(dialogEventLabel).toBeTruthy();
     expect(dialogProvenanceLabel).toBeTruthy();

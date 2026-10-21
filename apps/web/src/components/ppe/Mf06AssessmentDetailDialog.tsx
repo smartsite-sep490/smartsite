@@ -6,6 +6,7 @@ import {
   type Mf06AssessmentResponse,
 } from '@smartsite/api-client';
 import { PpeDialog } from './PpeDialog';
+import { Mf06AssessmentFrame } from './Mf06AssessmentFrame';
 import {
   validateAssessmentBinding,
   areUuidsEqual,
@@ -54,20 +55,17 @@ const OUTCOME_CONFIG: Record<
 > = {
   ALLOWED: {
     labelKey: 'mf06.detail.outcome.ALLOWED',
-    badgeClass:
-      'bg-emerald-50 text-emerald-700 border-emerald-200 dark:bg-emerald-950/40 dark:text-emerald-300 dark:border-emerald-800',
+    badgeClass: 'bg-emerald-50 text-emerald-700 border-emerald-200 ',
     icon: IconCheck,
   },
   DENIED: {
     labelKey: 'mf06.detail.outcome.DENIED',
-    badgeClass:
-      'bg-rose-50 text-rose-700 border-rose-200 dark:bg-rose-950/40 dark:text-rose-300 dark:border-rose-800',
+    badgeClass: 'bg-rose-50 text-rose-700 border-rose-200 ',
     icon: IconX,
   },
   UNAVAILABLE: {
     labelKey: 'mf06.detail.outcome.UNAVAILABLE',
-    badgeClass:
-      'bg-amber-50 text-amber-700 border-amber-200 dark:bg-amber-950/40 dark:text-amber-300 dark:border-amber-800',
+    badgeClass: 'bg-amber-50 text-amber-700 border-amber-200 ',
     icon: IconAlertTriangle,
   },
 };
@@ -446,12 +444,12 @@ export function Mf06AssessmentDetailDialog({
     <PpeDialog open={open} onClose={handleClose} title={t('mf06.detail.title')} wide>
       <div className="space-y-4 text-xs">
         {/* Technical Safety Observation Disclaimer */}
-        <div className="rounded-xl border border-amber-200/90 dark:border-amber-900/60 bg-amber-50/80 dark:bg-amber-950/25 px-4 py-3 space-y-1.5 text-amber-900 dark:text-amber-200">
+        <div className="rounded-xl border border-amber-200/90 bg-amber-50/80 px-4 py-3 space-y-1.5 text-amber-900 ">
           <div className="flex items-center gap-2 font-semibold text-xs">
-            <IconAlertTriangle className="w-4 h-4 text-amber-600 dark:text-amber-400 shrink-0" />
+            <IconAlertTriangle className="w-4 h-4 text-amber-600 shrink-0" />
             <span>{t('mf06.detail.disclaimerTitle')}</span>
           </div>
-          <p className="leading-relaxed text-[11px] text-amber-800 dark:text-amber-300">
+          <p className="leading-relaxed text-[11px] text-amber-800 ">
             {t('mf06.detail.disclaimerBody')}
           </p>
         </div>
@@ -462,7 +460,7 @@ export function Mf06AssessmentDetailDialog({
             role="status"
             aria-live="polite"
             aria-busy="true"
-            className="flex items-center justify-center py-8 space-x-2 text-sm text-zinc-500 dark:text-zinc-400"
+            className="flex items-center justify-center py-8 space-x-2 text-sm text-zinc-500 "
           >
             <IconClock className="w-5 h-5 animate-spin" />
             <span>{t('mf06.detail.loading')}</span>
@@ -473,7 +471,7 @@ export function Mf06AssessmentDetailDialog({
         {effectiveError && (
           <div
             role="alert"
-            className="rounded-xl border border-rose-200 dark:border-rose-900/50 bg-rose-50 dark:bg-rose-950/20 p-4 space-y-2.5 text-rose-700 dark:text-rose-300"
+            className="rounded-xl border border-rose-200 bg-rose-50 p-4 space-y-2.5 text-rose-700 "
           >
             <div className="flex items-center gap-2 font-medium">
               <IconAlertTriangle className="w-4 h-4 flex-shrink-0" />
@@ -484,7 +482,7 @@ export function Mf06AssessmentDetailDialog({
                 type="button"
                 onClick={handleManualRetry}
                 disabled={isFetching}
-                className="px-3 py-1.5 bg-rose-600 text-white rounded-md text-xs font-medium hover:bg-rose-700 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-rose-700 dark:focus-visible:outline-rose-300 transition cursor-pointer disabled:opacity-50"
+                className="px-3 py-1.5 bg-rose-600 text-white rounded-md text-xs font-medium hover:bg-rose-700 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-rose-700 transition cursor-pointer disabled:opacity-50"
               >
                 {t('mf06.detail.retry')}
               </button>
@@ -496,7 +494,7 @@ export function Mf06AssessmentDetailDialog({
         {validationError && (
           <div
             role="alert"
-            className="rounded-xl border border-rose-200 dark:border-rose-900/50 bg-rose-50 dark:bg-rose-950/20 p-4 space-y-1 text-rose-700 dark:text-rose-300"
+            className="rounded-xl border border-rose-200 bg-rose-50 p-4 space-y-1 text-rose-700 "
           >
             <div className="flex items-center gap-2 font-medium">
               <IconAlertTriangle className="w-4 h-4 flex-shrink-0" />
@@ -513,7 +511,7 @@ export function Mf06AssessmentDetailDialog({
         {record && outcomeMeta && OutcomeIcon && (
           <div className="space-y-4">
             {/* Outcome & Reason Code Badges */}
-            <div className="flex flex-wrap items-center justify-between gap-3 px-4 py-3 bg-zinc-50 dark:bg-zinc-800/50 border border-zinc-200/90 dark:border-zinc-700/80 rounded-xl">
+            <div className="flex flex-wrap items-center justify-between gap-3 px-4 py-3 bg-zinc-50 border border-zinc-200/90 rounded-xl">
               <div className="flex items-center gap-2 flex-wrap">
                 <span
                   className={`inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-semibold border ${outcomeMeta.badgeClass}`}
@@ -521,42 +519,65 @@ export function Mf06AssessmentDetailDialog({
                   <OutcomeIcon className="w-3.5 h-3.5 shrink-0" />
                   {t(outcomeMeta.labelKey)}
                 </span>
-                <span className="inline-flex items-center px-2.5 py-0.5 rounded-md text-xs font-medium bg-zinc-200/80 dark:bg-zinc-700/70 text-zinc-800 dark:text-zinc-200">
+                <span className="inline-flex items-center px-2.5 py-0.5 rounded-md text-xs font-medium bg-zinc-200/80 text-zinc-800 ">
                   {reasonLabel}
                 </span>
-                <span className="inline-flex items-center px-2.5 py-0.5 rounded-md text-xs font-medium bg-white dark:bg-zinc-800 text-zinc-600 dark:text-zinc-400 border border-zinc-200 dark:border-zinc-700">
+                <span className="inline-flex items-center px-2.5 py-0.5 rounded-md text-xs font-medium bg-white text-zinc-600 border border-zinc-200 ">
                   {purposeLabel}
                 </span>
               </div>
-              <span className="text-[11px] font-mono tabular-nums px-2 py-0.5 rounded bg-white dark:bg-zinc-900 text-zinc-500 dark:text-zinc-400 border border-zinc-200/70 dark:border-zinc-700/70">
+              <span className="text-[11px] font-mono tabular-nums px-2 py-0.5 rounded bg-white text-zinc-500 border border-zinc-200/70 ">
                 v{record.evaluatorVersion}
               </span>
             </div>
 
+            {token && (
+              <Mf06AssessmentFrame
+                client={managementClient}
+                assessment={record}
+                token={token}
+                credentialId={credentialId}
+                onError={(frameError) => {
+                  if (frameError.status !== 401 && frameError.status !== 403) return;
+                  setHardErrorLatch({
+                    token,
+                    siteId,
+                    credentialId,
+                    queryClient,
+                    apiUrl,
+                    client: managementClient,
+                    status: frameError.status,
+                    assessmentId,
+                    error: frameError,
+                  });
+                }}
+              />
+            )}
+
             {/* Timestamps */}
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 bg-white dark:bg-zinc-800/60 rounded-xl p-3.5 border border-zinc-200/80 dark:border-zinc-700/60">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 bg-white rounded-xl p-3.5 border border-zinc-200/80 ">
               <div className="flex flex-col gap-1">
-                <span className="text-[11px] text-zinc-400 dark:text-zinc-500 font-medium">
+                <span className="text-[11px] text-zinc-400 font-medium">
                   {t('mf06.detail.field.captured')}
                 </span>{' '}
-                <div className="font-mono tabular-nums text-[11px] text-zinc-800 dark:text-zinc-200 space-y-0.5">
+                <div className="font-mono tabular-nums text-[11px] text-zinc-800 space-y-0.5">
                   <time dateTime={record.capturedAt} className="block">
                     {record.capturedAt}
                   </time>
-                  <div className="text-[10px] text-zinc-400 dark:text-zinc-500">
+                  <div className="text-[10px] text-zinc-400 ">
                     {formatIsoDisplay(record.capturedAt, locale)}
                   </div>
                 </div>
               </div>
-              <div className="flex flex-col gap-1 sm:border-l sm:border-zinc-100 sm:dark:border-zinc-700/60 sm:pl-3">
-                <span className="text-[11px] text-zinc-400 dark:text-zinc-500 font-medium">
+              <div className="flex flex-col gap-1 sm:border-l sm:border-zinc-100 sm:pl-3">
+                <span className="text-[11px] text-zinc-400 font-medium">
                   {t('mf06.detail.field.assessed')}
                 </span>{' '}
-                <div className="font-mono tabular-nums text-[11px] text-zinc-800 dark:text-zinc-200 space-y-0.5">
+                <div className="font-mono tabular-nums text-[11px] text-zinc-800 space-y-0.5">
                   <time dateTime={record.assessedAt} className="block">
                     {record.assessedAt}
                   </time>
-                  <div className="text-[10px] text-zinc-400 dark:text-zinc-500">
+                  <div className="text-[10px] text-zinc-400 ">
                     {formatIsoDisplay(record.assessedAt, locale)}
                   </div>
                 </div>
@@ -564,42 +585,42 @@ export function Mf06AssessmentDetailDialog({
             </div>
 
             {/* Identifiers & Provenance (Primary Spatial Context followed by Technical References) */}
-            <div className="space-y-2.5 text-[11px] font-mono tabular-nums text-zinc-700 dark:text-zinc-300 bg-zinc-50/70 dark:bg-zinc-900/40 px-3.5 py-3 rounded-xl border border-zinc-200/70 dark:border-zinc-800">
+            <div className="space-y-2.5 text-[11px] font-mono tabular-nums text-zinc-700 bg-zinc-50/70 px-3.5 py-3 rounded-xl border border-zinc-200/70 ">
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-2.5">
                 <div className="flex flex-col gap-0.5 break-all">
-                  <span className="font-sans text-[11px] font-medium text-zinc-400 dark:text-zinc-500">
+                  <span className="font-sans text-[11px] font-medium text-zinc-400 ">
                     {t('mf06.detail.field.cameraId')}
                   </span>{' '}
                   <span>{record.cameraId}</span>
                 </div>
                 <div className="flex flex-col gap-0.5 break-all">
-                  <span className="font-sans text-[11px] font-medium text-zinc-400 dark:text-zinc-500">
+                  <span className="font-sans text-[11px] font-medium text-zinc-400 ">
                     {t('mf06.detail.field.zoneId')}
                   </span>{' '}
                   <span>{record.zoneId}</span>
                 </div>
               </div>
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-2.5 border-t border-zinc-200/70 dark:border-zinc-800 pt-2.5">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-2.5 border-t border-zinc-200/70 pt-2.5">
                 <div className="flex flex-col gap-0.5 break-all">
-                  <span className="font-sans text-[11px] font-medium text-zinc-400 dark:text-zinc-500">
+                  <span className="font-sans text-[11px] font-medium text-zinc-400 ">
                     {t('mf06.detail.field.assessmentId')}
                   </span>{' '}
                   <span>{record.assessmentId}</span>
                 </div>
                 <div className="flex flex-col gap-0.5 break-all">
-                  <span className="font-sans text-[11px] font-medium text-zinc-400 dark:text-zinc-500">
+                  <span className="font-sans text-[11px] font-medium text-zinc-400 ">
                     {t('mf06.detail.field.requestId')}
                   </span>{' '}
                   <span>{record.requestId}</span>
                 </div>
                 <div className="flex flex-col gap-0.5 break-all">
-                  <span className="font-sans text-[11px] font-medium text-zinc-400 dark:text-zinc-500">
+                  <span className="font-sans text-[11px] font-medium text-zinc-400 ">
                     {t('mf06.detail.field.eventId')}
                   </span>{' '}
                   <span>{record.eventId}</span>
                 </div>
                 <div className="flex flex-col gap-0.5 break-all">
-                  <span className="font-sans text-[11px] font-medium text-zinc-400 dark:text-zinc-500">
+                  <span className="font-sans text-[11px] font-medium text-zinc-400 ">
                     {t('mf06.detail.field.provenance')}
                   </span>{' '}
                   <span>{record.provenance}</span>

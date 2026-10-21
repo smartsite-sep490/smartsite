@@ -98,6 +98,7 @@ describe('Mf06ZoneAssessmentPanel (B5 Requests & Assessments)', () => {
     mockListMf06Assessments = vi.fn().mockResolvedValue(emptyAssessmentPage);
     mockListMf06RequestStatuses = vi.fn().mockResolvedValue(createRequestPage());
     mockClient = {
+      getMf06AssessmentFrame: vi.fn().mockRejectedValue(new ApiError('http', 'No frame fixture', 404)),
       listMf06Assessments: mockListMf06Assessments,
       listMf06RequestStatuses: mockListMf06RequestStatuses,
     } as unknown as SmartSiteManagementClient;
