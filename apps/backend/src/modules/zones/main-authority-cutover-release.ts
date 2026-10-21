@@ -70,6 +70,7 @@ export interface MainAuthorityCutoverReleaseConfig {
 export const MAIN_AUTHORITY_CUTOVER_RELEASE_FILES = [
   'common/configuration/main-configuration-authority.ts',
   'common/configuration/main-authority-capture-preflight.ts',
+  'common/configuration/main-authority-sources.ts',
   'common/configuration/authorization-history-cutover-bodies-v1.ts',
   'common/configuration/main-team-authority-sources.ts',
   'modules/auth/configuration-command-context.ts',
@@ -80,6 +81,8 @@ export const MAIN_AUTHORITY_CUTOVER_RELEASE_FILES = [
   'modules/zones/main-authority-read-snapshot.ts',
   'modules/zones/main-authority-captured-state.reader.ts',
   'modules/zones/main-authority-archive-codec.ts',
+  'modules/zones/main-authority-baseline-profile.ts',
+  'modules/zones/main-team-authority-archive.ts',
   'modules/zones/main-qualified-authority.reader.ts',
 ].map((path) => `apps/backend/src/${path}`);
 

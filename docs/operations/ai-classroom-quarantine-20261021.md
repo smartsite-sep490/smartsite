@@ -81,3 +81,36 @@ qualification holdouts. Exact SHA absence from parentv4 and the17-source proposa
 does not prove whole-lineage/scene independence. Hidden-hand balance, reviewed
 annotation boxes and the independent qualification protocol remain open.
 No training, new weights, threshold change or product application performed.
+
+### Annotation review follow-up
+
+Root refused Agy's first proposal: all six boxes used vendor IDs instead of the
+current fifteen-class map. Corrected proposal v2 uses Person0, Gloves5 and
+NO-Gloves6. Root verified both original-image hashes, dimensions, all six raw
+boxes unchanged and raw-to-normalized arithmetic; the mechanical check passes.
+Proposal SHA256: `c13db879383d294a41fcf20532de17db773d2d7c445c65f92f1e3fe89234eb8e`.
+
+Agy P8 independently reviewed both images and reported tool/rebar occlusion,
+touching glove boundaries and incomplete whole-image labels. Root retained these
+limitations but rejected overlap alone as proof of a bad box and ordinary
+eyeglasses/military clothing as certified PPE. These remain development proposals,
+not exhaustive fifteen-class labels, human GT or admitted training data.
+
+Proofs in `ai-industrial-controls-two-source-20261021-v1`: Root's v1 refusal,
+v2 mechanical verification, P8 annotation review and Root admission review.
+No new train is justified by these two images alone.
+
+### Two further scene controls acquired
+
+Root acquired and viewed the original Korolyov suspended-scaffold and bamboo
+scaffold-dismantling photos, preserving Commons metadata and attribution in
+`ai-industrial-controls-next-source-20261021-v1`. Both downloads completed;
+independent image/metadata hash and dimension checks passed. A preliminary inline
+guard command had a quoting failure; the corrected three unsafe-URL checks pass.
+
+The first scene has a visible light glove and other hands obscured by body,
+equipment or structure. The second has small hand regions requiring closer
+review. These add observed occlusion examples, not a qualified balanced cohort.
+Publisher metadata declares CC BY-SA3.0; this is not a legal approval or human
+GT. Source/admission review is retained separately. No labels, train or new model
+inference ran on these two photos; neither is an untouched qualification holdout.
