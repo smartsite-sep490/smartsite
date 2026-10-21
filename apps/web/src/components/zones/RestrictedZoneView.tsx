@@ -1942,6 +1942,25 @@ export function RestrictedZoneView({
               >
                 {tr('common.review_incident')}
               </button>
+              {onNavigate &&
+                (!isControlled || sharedSession !== null) &&
+                isSiteMetadataSettled &&
+                availableSites.some((site) => site.id === selectedSiteId) && (
+                  <button
+                    type="button"
+                    data-testid="zone-evidence-view-safety-alerts-btn"
+                    onClick={() => {
+                      setDetailOpenScopeKey(null);
+                      onNavigate('incidents', {
+                        alertType: 'RESTRICTED_ZONE_INTRUSION',
+                        siteId: selectedSiteId,
+                      });
+                    }}
+                    className="w-full py-2 px-3.5 rounded-xl bg-white border border-slate-300 text-slate-800 hover:bg-slate-50 font-bold text-xs transition-colors cursor-pointer shadow-2xs"
+                  >
+                    {tr('ppe_monitoring_view.view_in_safety_alerts')}
+                  </button>
+                )}
               {(activeFilterWorker !== null ||
                 (testDetection?.trackId !== null && testDetection?.trackId !== undefined)) && (
                 <button

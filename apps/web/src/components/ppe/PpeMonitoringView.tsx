@@ -3244,7 +3244,7 @@ export function PpeMonitoringView({
 
           {/* Action button */}
           {(!isControlled || sharedSession !== null) && (
-            <div className="p-3 border-t border-slate-200/80 bg-[#F8FAFC] flex-shrink-0">
+            <div className="p-3 border-t border-slate-200/80 bg-[#F8FAFC] space-y-2 flex-shrink-0">
               <button
                 type="button"
                 onClick={openReviewFromDetection}
@@ -3253,6 +3253,35 @@ export function PpeMonitoringView({
               >
                 {t('ppe.action.reviewAlert')}
               </button>
+              {onNavigate &&
+                token &&
+                sessionScope &&
+                canViewSiteCameras &&
+                (!effectiveUser || effectiveUser.mustChangePassword !== true) &&
+                selectedSiteId &&
+                selectedSite &&
+                visibleAuthorizedSites.some((s) => s.id === selectedSiteId) &&
+                sitesInfiniteQuery.isSuccess &&
+                !isSitesBaseError &&
+                !isSitesInitialLoading &&
+                ![sitesQuery.error, previewCamerasQuery.error, meQuery.error].some(
+                  (error) => error instanceof ApiError && error.status === 401,
+                ) && (
+                  <button
+                    type="button"
+                    data-testid="evidence-view-safety-alerts-btn"
+                    onClick={() => {
+                      setIsEvidenceOpen(false);
+                      onNavigate('incidents', {
+                        alertType: 'PPE_VIOLATION',
+                        siteId: selectedSiteId,
+                      });
+                    }}
+                    className="w-full py-2 px-4 rounded-lg border border-slate-300 bg-white text-slate-700 hover:bg-slate-50 text-xs font-semibold transition-colors cursor-pointer shadow-xs"
+                  >
+                    {t('ppe.observations.viewInSafetyAlerts')}
+                  </button>
+                )}
             </div>
           )}
         </div>

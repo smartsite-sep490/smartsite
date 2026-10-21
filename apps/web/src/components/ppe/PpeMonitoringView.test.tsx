@@ -2211,4 +2211,43 @@ describe('PpeMonitoringView Single-Runtime i18n Language Switching', () => {
     expect(episodeWarning.closest('details')).toBeNull();
     expect(episodeWarning.querySelector('details')).not.toBeNull();
   });
+
+  it('provides secondary View in Safety Alerts CTA inside Evidence dialog when no current detection exists, closes dialog on click, and guards against missing onNavigate ', async () => {
+    state.preview = mockPreview(); // zero detections -> Review Alert disabled
+    const onNavigate = vi.fn();
+
+    const { rerender } = render(
+      <QueryClientProvider client={queryClient}>
+        <PpeMonitoringView sharedSession={adminSession} onNavigate={onNavigate} />
+      </QueryClientProvider>,
+    );
+
+    await screen.findByRole('option', { name: /Công trường Alpha/i });
+    fireEvent.click(screen.getByTestId('open-evidence-details-btn'));
+
+    expect(screen.getByTestId('ai-detection-panel')).not.toBeNull();
+    const reviewAlertBtn = screen.getByRole('button', { name: /Review Alert/i });
+    expect((reviewAlertBtn as HTMLButtonElement).disabled).toBe(true);
+
+    const evidenceAlertsBtn = screen.getByTestId('evidence-view-safety-alerts-btn');
+    expect(evidenceAlertsBtn.textContent).toContain('View in Safety Alerts');
+
+    fireEvent.click(evidenceAlertsBtn);
+    expect(screen.queryByTestId('ai-detection-panel')).toBeNull();
+    expect(onNavigate).toHaveBeenCalledTimes(1);
+    expect(onNavigate).toHaveBeenCalledWith('incidents', {
+      alertType: 'PPE_VIOLATION',
+      siteId: 'site-alpha',
+    });
+
+    // Guard check: omitted when onNavigate is not provided
+    rerender(
+      <QueryClientProvider client={queryClient}>
+        <PpeMonitoringView sharedSession={adminSession} />
+      </QueryClientProvider>,
+    );
+    fireEvent.click(screen.getByTestId('open-evidence-details-btn'));
+    expect(screen.getByTestId('ai-detection-panel')).not.toBeNull();
+    expect(screen.queryByTestId('evidence-view-safety-alerts-btn')).toBeNull();
+  });
 });

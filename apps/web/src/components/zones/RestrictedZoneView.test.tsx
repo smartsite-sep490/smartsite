@@ -666,7 +666,6 @@ describe('RestrictedZoneView Backend Polygon Persistence & Scope Integration', (
     });
 
     it('shared-session delegates sign-out UI to the application shell without duplicate controls', async () => {
-
       const onSignOut = vi.fn();
       const logoutSpy = vi.spyOn(SmartSiteManagementClient.prototype, 'logout');
 
@@ -1007,6 +1006,47 @@ describe('RestrictedZoneView Backend Polygon Persistence & Scope Integration', (
       expect(state.previewOptions?.enabled).toBe(false);
       expect(screen.queryByRole('button', { name: /SỬA KHU VỰC/i })).toBeNull();
       expect(container.querySelectorAll('circle').length).toBe(0);
+    });
+
+    it('provides secondary View in Safety Alerts CTA inside zone-evidence-panel when no active detection exists, closes panel on click, and guards against missing onNavigate ', async () => {
+      state.preview = mockPreview(); // no active intrusion -> Review Incident disabled
+      const onNavigate = vi.fn();
+
+      const { rerender } = render(
+        <QueryClientProvider client={queryClient}>
+          <RestrictedZoneView sharedSession={adminSession} onNavigate={onNavigate} />
+        </QueryClientProvider>,
+      );
+
+      await screen.findByRole('option', { name: /Công trường Alpha/i });
+      await screen.findByRole('option', { name: /Camera 01/i });
+      await userEvent.click(screen.getByTestId('zone-details-toggle'));
+
+      expect(await screen.findByTestId('zone-evidence-panel')).not.toBeNull();
+      const reviewBtn = screen.getByRole('button', { name: /Review Incident/i });
+      expect((reviewBtn as HTMLButtonElement).disabled).toBe(true);
+
+      const evidenceAlertsBtn = screen.getByTestId('zone-evidence-view-safety-alerts-btn');
+      expect(evidenceAlertsBtn.textContent).toContain('View in Safety Alerts');
+
+      fireEvent.click(evidenceAlertsBtn);
+      expect(screen.queryByTestId('zone-evidence-panel')).toBeNull();
+      expect(onNavigate).toHaveBeenCalledTimes(1);
+      expect(onNavigate).toHaveBeenCalledWith('incidents', {
+        alertType: 'RESTRICTED_ZONE_INTRUSION',
+        siteId: 'site-alpha',
+      });
+
+      // Guard check: omitted when onNavigate is not provided
+      rerender(
+        <QueryClientProvider client={queryClient}>
+          <RestrictedZoneView sharedSession={adminSession} />
+        </QueryClientProvider>,
+      );
+      await screen.findByRole('option', { name: /Camera 01/i });
+      await userEvent.click(screen.getByTestId('zone-details-toggle'));
+      expect(await screen.findByTestId('zone-evidence-panel')).not.toBeNull();
+      expect(screen.queryByTestId('zone-evidence-view-safety-alerts-btn')).toBeNull();
     });
   });
 });
