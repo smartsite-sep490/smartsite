@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import React from 'react';
-import { render, screen, cleanup, waitFor, act } from '@testing-library/react';
+import { render, screen, cleanup, waitFor, act, fireEvent } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { describe, expect, it, vi, beforeEach, afterEach } from 'vitest';
@@ -143,6 +143,7 @@ describe('RestrictedZoneView Navigation & Bounded Review Integration', () => {
     );
 
     // Mở modal review từ detection bằng nút "Review Incident"
+    await user.click(screen.getByTestId('zone-details-toggle'));
     const reviewIncidentBtn = screen.getByRole('button', { name: /Review Incident/i });
     await user.click(reviewIncidentBtn);
 
@@ -219,6 +220,7 @@ describe('RestrictedZoneView Navigation & Bounded Review Integration', () => {
     expect(onNavigate.mock.calls[0]?.[1]?.alertId).toBeUndefined();
 
     // 2. Modal review CTA
+    await user.click(screen.getByTestId('zone-details-toggle'));
     const reviewIncidentBtn = screen.getByRole('button', { name: /Review Incident/i });
     await user.click(reviewIncidentBtn);
     const modalCta = screen.getByRole('button', { name: /Review in Safety Alerts/i });
@@ -303,6 +305,7 @@ describe('RestrictedZoneView Navigation & Bounded Review Integration', () => {
     // Old all-clear claim MUST be absent
     expect(screen.queryByText(/No Restricted Zone Intrusions/i)).toBeNull();
 
+    fireEvent.click(screen.getByTestId('zone-details-toggle'));
     // Technical no-target description must be present without safety conclusion
     expect(
       screen.getByText(
@@ -662,8 +665,8 @@ describe('RestrictedZoneView Backend Polygon Persistence & Scope Integration', (
       expect(onSignOut).not.toHaveBeenCalled();
     });
 
-    it('explicit sign-out delegates to sharedSession.onSignOut and does not call client.logout', async () => {
-      const user = userEvent.setup();
+    it('shared-session delegates sign-out UI to the application shell without duplicate controls', async () => {
+
       const onSignOut = vi.fn();
       const logoutSpy = vi.spyOn(SmartSiteManagementClient.prototype, 'logout');
 
@@ -685,10 +688,9 @@ describe('RestrictedZoneView Backend Polygon Persistence & Scope Integration', (
       );
 
       await screen.findByText(/Admin Session Active/i);
-      const signOutBtn = screen.getByRole('button', { name: /SIGN OUT/i });
-      await user.click(signOutBtn);
+      expect(screen.queryByRole('button', { name: /SIGN OUT/i })).toBeNull();
 
-      expect(onSignOut).toHaveBeenCalledTimes(1);
+      expect(onSignOut).not.toHaveBeenCalled();
       expect(logoutSpy).not.toHaveBeenCalled();
     });
 
@@ -774,6 +776,7 @@ describe('RestrictedZoneView Backend Polygon Persistence & Scope Integration', (
 
       // Verify NO video fixture element is rendered
       expect(screen.queryByLabelText(/Restricted-zone test video/i)).toBeNull();
+      await userEvent.click(screen.getByTestId('zone-details-toggle'));
       // Verify badge displays UNAVAILABLE
       expect(screen.getByText(/MF06 SNAPSHOT UNAVAILABLE/i)).toBeDefined();
     });
