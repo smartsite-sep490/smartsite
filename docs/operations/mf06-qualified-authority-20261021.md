@@ -107,8 +107,8 @@ checks:2PASS. Proof:capture-time-green-v1-proof.json and capture-time-unit-green
 Unit flag checks do not prove real concurrent revision/gap races. The concrete
 WorkPort must bind this helper to the original hashed raw event before appending.
 
-Implement the concrete MF06 WorkPort and its actual lifecycle/DI registration only
-with valid configuration. Preserve lease/CAS, stable invocation, timeout/drain,
+The concrete private MF06 WorkPort is implemented; see mf06-workport-20261021.md.
+Actual lifecycle/DI registration still requires valid configuration. Preserve lease/CAS, stable invocation, timeout/drain,
 original event/media bindings, consent/profile recheck and trusted identity boundaries.
 NONE/PROHIBITED can skip Face only using qualified captured policy. AUTHORIZATION_REQUIRED
 cannot promote a correlated Face/profile candidate into a verified Worker.

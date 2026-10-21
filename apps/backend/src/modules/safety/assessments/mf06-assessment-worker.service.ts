@@ -145,6 +145,8 @@ export class Mf06AssessmentWorker {
         if (error instanceof Mf06RetryableWorkError) return this.leases.retry(claim, error.code);
         const failure = error as { code?: unknown; driverError?: { code?: unknown } };
         const code = failure?.driverError?.code ?? failure?.code;
+        if (code === '55P03' || code === '57014' || code === '55000')
+          return this.leases.retry(claim, 'DATABASE_UNAVAILABLE');
         if (code === '40001' || code === '40P01') {
           if (attempt + 1 < this.settings.maxDatabaseAttempts) continue;
           return this.leases.retry(claim, 'DATABASE_UNAVAILABLE');

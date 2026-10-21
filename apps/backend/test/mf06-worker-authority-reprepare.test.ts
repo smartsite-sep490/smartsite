@@ -17,7 +17,10 @@ import {
 type WorkerLeases = Pick<Mf06JobLeaseService, 'claim' | 'retry' | 'fail' | 'cancel'>;
 const RetryableWorkError = Mf06RetryableWorkError as unknown as new (code: string) => Error;
 
-function makeClaim(attemptCount = 1, leaseToken = '22222222-2222-4222-8222-222222222222'): Mf06JobClaim {
+function makeClaim(
+  attemptCount = 1,
+  leaseToken = '22222222-2222-4222-8222-222222222222',
+): Mf06JobClaim {
   return {
     requestId: '11111111-1111-4111-8111-111111111111',
     leaseToken,
@@ -63,11 +66,17 @@ function createHarness(config: {
     cancel: async (claim) => (calls.cancel.push(claim), 'CANCELLED'),
   };
   const work: Mf06AssessmentWorkPort = {
-    prepare: async (claim, signal) => (calls.prepare.push({ claim, signal }), config.prepareImpl(claim, signal)),
+    prepare: async (claim, signal) => (
+      calls.prepare.push({ claim, signal }),
+      config.prepareImpl(claim, signal)
+    ),
     finalize: async (txManager, claim, prepared, signal) => {
       calls.finalize.push({ manager: txManager, claim, prepared });
       if (config.finalizeImpl) return config.finalizeImpl(txManager, claim, prepared, signal);
-      return { state: 'RECORDED', assessment: { assessmentId: '33333333-3333-4333-8333-333333333333' } as never };
+      return {
+        state: 'RECORDED',
+        assessment: { assessmentId: '33333333-3333-4333-8333-333333333333' } as never,
+      };
     },
   };
   const db = {
@@ -80,6 +89,25 @@ function createHarness(config: {
 }
 
 describe('Mf06AssessmentWorker DATABASE_UNAVAILABLE re-prepare unit tests', () => {
+  it('retries post-fence PostgreSQL availability failures on a fresh lease', async () => {
+    for (const code of ['55P03', '57014', '55000']) {
+      const claim = makeClaim();
+      const { db, leases, work, calls } = createHarness({
+        claims: [claim],
+        prepareImpl: async () => ({}),
+        finalizeImpl: async () => {
+          throw Object.assign(new Error('Synthetic PG failure'), { driverError: { code } });
+        },
+      });
+      assert.equal(
+        await new Mf06AssessmentWorker(db, leases, work, workerOptions).runOnce(),
+        'RETRY',
+      );
+      assert.equal(calls.transactions.length, 1);
+      assert.deepEqual(calls.retry, [{ claim, errorCode: 'DATABASE_UNAVAILABLE' }]);
+      assert.equal(calls.fail.length, 0);
+    }
+  });
   it('retries with DATABASE_UNAVAILABLE when prepare throws Mf06RetryableWorkError(DATABASE_UNAVAILABLE)', async () => {
     const claim = makeClaim(1);
     const { db, leases, work, calls } = createHarness({
