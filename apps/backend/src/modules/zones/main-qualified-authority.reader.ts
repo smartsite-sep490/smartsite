@@ -107,17 +107,23 @@ export class MainQualifiedAuthorityReader {
   /** The event time selects history; the current control pointer is never a fallback. */
   async prepareForEvent(
     context: MainAuthorityArchiveContext,
+    signal?: AbortSignal,
   ): Promise<MainQualifiedAuthorityResult> {
+    signal?.throwIfAborted();
     if (
       typeof context?.capturedAt !== 'string' ||
       parseMainAuthorityInstant(context.capturedAt) === null
     )
       return unavailable('INVALID_CAPTURE_TIME');
-    const release = await verifyMainAuthorityCutoverRelease(this.release, this.environment).catch(
-      () => null,
-    );
+    const release = await verifyMainAuthorityCutoverRelease(
+      this.release,
+      this.environment,
+      signal,
+    ).catch(() => null);
+    signal?.throwIfAborted();
     if (!release) return unavailable('RELEASE_UNAVAILABLE');
-    return readMainAuthoritySnapshot(this.source, async (manager) => {
+    const result = await readMainAuthoritySnapshot(this.source, async (manager) => {
+      signal?.throwIfAborted();
       if (!(await hasMainAuthorityCapture(manager))) return unavailable('CAPTURE_UNAVAILABLE');
       const epochs: { epoch_id: string }[] = await manager.query(
         `SELECT epoch_id FROM authorization_history_epoch
@@ -126,9 +132,12 @@ export class MainQualifiedAuthorityReader {
          ORDER BY activated_at DESC,epoch_id LIMIT 2`,
         [context.capturedAt, release.manifestSha256],
       );
+      signal?.throwIfAborted();
       if (epochs.length !== 1) return unavailable('EPOCH_WINDOW_UNQUALIFIED');
       return this.prepareInSnapshot(manager, { ...context, epochId: epochs[0]!.epoch_id }, release);
     }).catch((error: unknown) => this.mapDatabaseError(error, false));
+    signal?.throwIfAborted();
+    return result;
   }
 
   private async prepareInSnapshot(

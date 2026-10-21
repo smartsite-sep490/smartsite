@@ -380,4 +380,43 @@ test('WorkPort PG integration: qualified NONE/PROHIBITED skip Face, AUTHORIZATIO
     }
     assert.equal(await store.replay(seeded.requestId, seeded.requestId, fx.siteId), null);
   }
+  // Post-claim cutover release invalidation (RELEASE_UNAVAILABLE) rejects as retryable DATABASE_UNAVAILABLE without finalize or assessment row.
+  {
+    const seeded = await seedWorkPortJobClaim(fx.db, {
+      siteId: fx.siteId,
+      zoneId: fx.zoneNoneId,
+      cameraId: fx.cameraId,
+      regionId: fx.regionNoneId,
+      geometryVersion: WORKPORT_SYNTHETIC_REGION_VERSION,
+      capturedAt: fx.capturedAt,
+    });
+    const releaseUnavailableWorkPort = new Mf06ZoneEntryAssessmentWorkPort(
+      fx.db,
+      claimContextReader,
+      {
+        prepareForEvent: async () => ({
+          status: 'UNAVAILABLE' as const,
+          reason: 'RELEASE_UNAVAILABLE',
+        }),
+        revalidate: (manager, context, prepared) =>
+          fx.reader.revalidate(manager, context, prepared),
+      },
+      facePreparation,
+      candidateMetadata,
+      store,
+    );
+    facePrepareCalls = 0;
+    profileLookupCalls = 0;
+    await assert.rejects(
+      releaseUnavailableWorkPort.prepare(seeded.claim, signal),
+      (error) => error instanceof Mf06RetryableWorkError && error.code === 'DATABASE_UNAVAILABLE',
+    );
+    assert.equal(facePrepareCalls, 0);
+    assert.equal(profileLookupCalls, 0);
+    const rows = (await fx.db.query(
+      `SELECT COUNT(*)::int AS count FROM "${fx.schema.replaceAll('"', '""')}"."zone_entry_assessment" WHERE request_id = $1`,
+      [seeded.requestId],
+    )) as { count: number }[];
+    assert.equal(Number(rows[0]?.count ?? -1), 0);
+  }
 });

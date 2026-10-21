@@ -166,11 +166,17 @@ export class Mf06ZoneEntryAssessmentWorkPort implements Mf06AssessmentWorkPort {
       capturedAt: context.request.capturedAt,
       purpose: context.request.requestedPurpose,
     });
-    const preparedAuthority: MainQualifiedAuthorityResult =
-      await this.authority.prepareForEvent(authorityContext);
+    const preparedAuthority: MainQualifiedAuthorityResult = await this.authority.prepareForEvent(
+      authorityContext,
+      signal,
+    );
     signal.throwIfAborted();
     if (preparedAuthority.status !== 'QUALIFIED') {
-      if (preparedAuthority.reason === 'DATABASE_UNAVAILABLE')
+      // Release I/O failure is infrastructure failure, not a final event-time authority result.
+      if (
+        preparedAuthority.reason === 'DATABASE_UNAVAILABLE' ||
+        preparedAuthority.reason === 'RELEASE_UNAVAILABLE'
+      )
         throw new Mf06RetryableWorkError('DATABASE_UNAVAILABLE');
       const authority = Object.freeze({
         status: 'UNAVAILABLE' as const,
@@ -386,7 +392,10 @@ export class Mf06ZoneEntryAssessmentWorkPort implements Mf06AssessmentWorkPort {
     signal: AbortSignal,
   ) {
     if (record.authority.status === 'UNAVAILABLE') {
-      if (record.authority.reason === 'DATABASE_UNAVAILABLE')
+      if (
+        record.authority.reason === 'DATABASE_UNAVAILABLE' ||
+        record.authority.reason === 'RELEASE_UNAVAILABLE'
+      )
         throw new Mf06RetryableWorkError('DATABASE_UNAVAILABLE');
       return this.unavailableDecision('AUTHORITY_UNAVAILABLE', 'UNAVAILABLE', null);
     }
@@ -399,6 +408,7 @@ export class Mf06ZoneEntryAssessmentWorkPort implements Mf06AssessmentWorkPort {
     if (revalidated.status !== 'QUALIFIED') {
       if (
         revalidated.reason === 'CUTOVER_STATE_DRIFT' ||
+        revalidated.reason === 'RELEASE_UNAVAILABLE' ||
         revalidated.reason === 'DATABASE_UNAVAILABLE'
       )
         throw new Mf06RetryableWorkError('DATABASE_UNAVAILABLE');
