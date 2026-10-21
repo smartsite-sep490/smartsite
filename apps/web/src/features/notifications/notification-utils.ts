@@ -1,17 +1,50 @@
 import i18n, { translate as tr, uiLocale } from '../../i18n';
 import { localizeMessage } from '../../i18n/messages';
 import { localizedLabel } from '../../i18n/labels';
-import type { UserNotificationResponse } from '@smartsite/api-client';
+import type { PpeAlertNotificationMetadata, UserNotificationResponse } from '@smartsite/api-client';
+
+const PPE_ALERT_NOTIFICATION_SUBTYPES: ReadonlySet<
+  PpeAlertNotificationMetadata['candidateSubtype']
+> = new Set([
+  'PPE_HARD_HAT_MISSING',
+  'PPE_SAFETY_VEST_MISSING',
+  'PPE_GLOVES_MISSING',
+  'PPE_BOOTS_MISSING',
+  'PPE_GOGGLES_MISSING',
+]);
 
 export function notificationHref(notification: UserNotificationResponse, assignedWork = false) {
   if (notification.target.tab === 'documents')
     return `/worker-documents?${new URLSearchParams({ ...notification.target })}`;
+  if ('alertId' in notification.target)
+    return `/incidents?${new URLSearchParams({ ...notification.target })}`;
   return `${'incidentId' in notification.target || 'checklistId' in notification.target ? (assignedWork ? '/assigned-work' : '/incidents') : notification.target.tab === 'attendance' ? '/access' : '/workforce'}?${new URLSearchParams({ ...notification.target })}`;
 }
 
 export function formatNotificationDisplayMessage(
-  item: Pick<UserNotificationResponse, 'event' | 'message' | 'workDate'>,
+  item: Pick<UserNotificationResponse, 'event' | 'message' | 'workDate' | 'safetyAlert'>,
 ): string {
+  if (item.event === 'PPE_ALERT_CREATED') {
+    const alert = item.safetyAlert;
+    if (
+      !alert ||
+      typeof alert.cameraName !== 'string' ||
+      !alert.cameraName.trim() ||
+      typeof alert.candidateSubtype !== 'string' ||
+      !PPE_ALERT_NOTIFICATION_SUBTYPES.has(alert.candidateSubtype)
+    ) {
+      return tr('notifications.PPE_ALERT_CREATED');
+    }
+    const zone =
+      typeof alert.zoneName === 'string' && alert.zoneName.trim()
+        ? alert.zoneName
+        : tr('ppeNotifications.noZone');
+    return tr('ppeNotifications.body', {
+      camera: alert.cameraName,
+      zone,
+      subtype: tr(`ppeNotifications.${alert.candidateSubtype}`),
+    });
+  }
   if (['EXIT_DURATION_EXCEEDED', 'MAX_EXITS_EXCEEDED'].includes(item.event)) {
     // Older notifications stored a transient duration snapshot. Hide that
     // suffix as well so existing inbox entries use the same concise copy.
@@ -83,7 +116,8 @@ export function formatNotificationDisplayMessage(
 }
 
 export function formatNotificationTitle(item: Pick<UserNotificationResponse, 'event' | 'title'>) {
-  if (item.event.startsWith('DOCUMENT_')) return tr(`notifications.${item.event}`);
+  if (item.event.startsWith('DOCUMENT_') || item.event === 'PPE_ALERT_CREATED')
+    return tr(`notifications.${item.event}`);
   if (
     i18n.exists(`notifications.${item.event}`) &&
     (item.title === item.event ||

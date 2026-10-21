@@ -3909,5 +3909,14 @@
   "errors.document_pending_filter": "Bộ lọc hồ sơ chờ duyệt không hợp lệ.",
   "errors.document_kind": "Loại giấy tờ công nhân không hợp lệ.",
   "errors.document_quality_unavailable": "Chưa kiểm tra được chất lượng ảnh. Vui lòng thử lại trước khi nộp.",
-  "errors.document_quality_rejected": "Ảnh giấy tờ chưa đạt yêu cầu ({{reason}}). Vui lòng chụp lại rõ nét."
+  "errors.document_quality_rejected": "Ảnh giấy tờ chưa đạt yêu cầu ({{reason}}). Vui lòng chụp lại rõ nét.",
+  "notifications.PPE_ALERT_CREATED": "Cảnh báo PPE cần xem xét",
+  "ppeNotifications.PPE_HARD_HAT_MISSING": "Dấu hiệu thiếu mũ bảo hộ",
+  "ppeNotifications.PPE_SAFETY_VEST_MISSING": "Dấu hiệu thiếu áo phản quang",
+  "ppeNotifications.PPE_GLOVES_MISSING": "Dấu hiệu thiếu găng tay bảo hộ",
+  "ppeNotifications.PPE_BOOTS_MISSING": "Dấu hiệu thiếu giày bảo hộ",
+  "ppeNotifications.PPE_GOGGLES_MISSING": "Dấu hiệu thiếu kính bảo hộ",
+  "ppeNotifications.body": "{{camera}} · {{zone}}: {{subtype}}. Vui lòng xem xét bằng chứng.",
+  "ppeNotifications.noZone": "Chưa xác định Zone",
+  "ppeNotifications.targetUnavailable": "Công trường của cảnh báo này không khả dụng hoặc bạn không còn quyền truy cập. Chọn công trường được phân quyền để tiếp tục."
 }
