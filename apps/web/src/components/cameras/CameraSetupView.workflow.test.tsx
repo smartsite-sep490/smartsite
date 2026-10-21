@@ -230,3 +230,79 @@ it('keeps policy management independent of a denied camera catalog without expos
   expect(mocks.canManageZones).toBe(true);
   expect(mocks.canManageRegions).toBe(false);
 });
+
+it('exposes per-row PPE and Restricted-zone monitoring links with siteId and cameraId only for active scoped rows when monitoring access is authorized', async () => {
+  const foreignActiveCamera: CameraResponse = {
+    ...activeCamera,
+    id: 'cam-foreign',
+    siteId: 'site-2',
+    code: 'CF',
+    name: 'Foreign camera',
+  };
+  mocks.listCameras.mockResolvedValue({
+    items: [activeCamera, inactiveCamera, foreignActiveCamera],
+    total: 3,
+  });
+
+  const { rerender } = mount();
+  const camerasSection = await screen.findByRole('region', { name: 'Cameras' });
+  const activeHeading = await within(camerasSection).findByRole('heading', {
+    name: activeCamera.name,
+  });
+  const inactiveHeading = within(camerasSection).getByRole('heading', {
+    name: inactiveCamera.name,
+  });
+  expect(
+    within(camerasSection).queryByRole('heading', { name: foreignActiveCamera.name }),
+  ).toBeNull();
+
+  const activeRow = activeHeading.closest('li')!;
+  const inactiveRow = inactiveHeading.closest('li')!;
+
+  expect(within(activeRow).queryByRole('link')).toBeNull();
+  expect(within(inactiveRow).queryByRole('link')).toBeNull();
+  expect(within(activeRow).getByRole('button', { name: 'Link observation regions' })).toBeTruthy();
+
+  rerender({
+    ...manager,
+    user: {
+      ...manager.user,
+      roleAssignments: [{ role: 'ADMIN', siteId: null }],
+    },
+  });
+
+  const refreshedHeading = await screen.findByRole('heading', { name: activeCamera.name });
+  const adminRow = refreshedHeading.closest('li')!;
+  const adminInactiveRow = screen
+    .getByRole('heading', { name: inactiveCamera.name })
+    .closest('li')!;
+  const adminPpeLink = await within(adminRow).findByRole('link', {
+    name: `PPE monitoring ${activeCamera.name}`,
+  });
+  const adminZonesLink = within(adminRow).getByRole('link', {
+    name: `Restricted-zone monitoring ${activeCamera.name}`,
+  });
+  expect(adminPpeLink.getAttribute('href')).toBe('/ppe?siteId=site-1&cameraId=cam-1');
+  expect(adminZonesLink.getAttribute('href')).toBe('/zones?siteId=site-1&cameraId=cam-1');
+  expect(within(adminRow).queryByRole('button', { name: 'Link observation regions' })).toBeNull();
+  expect(
+    within(adminRow).queryByRole('button', { name: `Manage ${activeCamera.name}` }),
+  ).toBeNull();
+  expect(within(adminInactiveRow).queryByRole('link')).toBeNull();
+
+  await act(async () => changeUiLanguage('vi'));
+  const translatedCameras = screen.getByRole('region', { name: 'Camera' });
+  const viActiveRow = within(translatedCameras)
+    .getByRole('heading', { name: activeCamera.name })
+    .closest('li')!;
+  expect(
+    within(viActiveRow)
+      .getByRole('link', { name: `Giám sát PPE ${activeCamera.name}` })
+      .getAttribute('href'),
+  ).toBe('/ppe?siteId=site-1&cameraId=cam-1');
+  expect(
+    within(viActiveRow)
+      .getByRole('link', { name: `Giám sát vùng hạn chế ${activeCamera.name}` })
+      .getAttribute('href'),
+  ).toBe('/zones?siteId=site-1&cameraId=cam-1');
+});

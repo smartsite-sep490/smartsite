@@ -1,5 +1,6 @@
 import { useId, type ReactNode } from 'react';
 import { useTranslation } from 'react-i18next';
+import { Link } from 'react-router-dom';
 import type { CameraResponse } from '@smartsite/contracts/management';
 import { SAFETY_NAMESPACE } from '../../i18n/runtime';
 import type { ZonePpeCapabilities } from '../ppe/zone-ppe-scope';
@@ -8,6 +9,8 @@ import { CAMERA_BUTTON_STYLES } from './camera-dialog-styles';
 import { CameraSetupWorkflow, type CameraSetupOpenHandler } from './CameraSetupWorkflow';
 
 export function CameraSetupCatalog({
+  siteId,
+  canOpenMonitoring = false,
   capabilities,
   canReadCameras,
   canReadZones = false,
@@ -17,6 +20,8 @@ export function CameraSetupCatalog({
   cameraError,
   open,
 }: {
+  siteId?: string;
+  canOpenMonitoring?: boolean;
   capabilities: ZonePpeCapabilities;
   canReadCameras: boolean;
   canReadZones?: boolean;
@@ -86,6 +91,16 @@ export function CameraSetupCatalog({
                   );
                   const nameId = `${catalogId}-camera-name-${row.id}`;
                   const hintId = `${catalogId}-inactive-hint-${row.id}`;
+                  const ppeMonitorId = `${catalogId}-camera-ppe-${row.id}`;
+                  const zonesMonitorId = `${catalogId}-camera-zones-${row.id}`;
+                  const canMonitorRow =
+                    canOpenMonitoring &&
+                    isEnabled &&
+                    Boolean(siteId && row.siteId === siteId) &&
+                    !cameras.baseError;
+                  const monitorParams = canMonitorRow
+                    ? new URLSearchParams({ siteId: row.siteId, cameraId: row.id }).toString()
+                    : '';
                   return (
                     <li
                       key={row.id}
@@ -132,27 +147,51 @@ export function CameraSetupCatalog({
                           </p>
                         )}
                       </div>
-                      {canManageCameras && (
+                      {(canManageCameras || canMonitorRow) && (
                         <div className="flex shrink-0 flex-wrap items-center gap-2 sm:self-center">
-                          {isEnabled && (
-                            <button
-                              type="button"
-                              className={button}
-                              aria-describedby={nameId}
-                              onClick={(event) => open('regions', row.id, event.currentTarget)}
-                            >
-                              {t('cameraSetup.regionsAction')}
-                            </button>
+                          {canMonitorRow && (
+                            <>
+                              <Link
+                                id={ppeMonitorId}
+                                aria-labelledby={`${ppeMonitorId} ${nameId}`}
+                                className={`${CAMERA_BUTTON_STYLES.compactSecondary} shrink-0`}
+                                to={`/ppe?${monitorParams}`}
+                              >
+                                {t('cameraSetup.monitorPpe')}
+                              </Link>
+                              <Link
+                                id={zonesMonitorId}
+                                aria-labelledby={`${zonesMonitorId} ${nameId}`}
+                                className={`${CAMERA_BUTTON_STYLES.compactSecondary} shrink-0`}
+                                to={`/zones?${monitorParams}`}
+                              >
+                                {t('cameraSetup.monitorZones')}
+                              </Link>
+                            </>
                           )}
-                          <button
-                            type="button"
-                            className={`${CAMERA_BUTTON_STYLES.compactSecondary} shrink-0`}
-                            aria-label={t('cameraSetup.manage', { name: row.name })}
-                            aria-describedby={!isEnabled ? hintId : undefined}
-                            onClick={(event) => open('manage', row.id, event.currentTarget)}
-                          >
-                            {t('cameraSetup.manageAction')}
-                          </button>
+                          {canManageCameras && (
+                            <>
+                              {isEnabled && (
+                                <button
+                                  type="button"
+                                  className={button}
+                                  aria-describedby={nameId}
+                                  onClick={(event) => open('regions', row.id, event.currentTarget)}
+                                >
+                                  {t('cameraSetup.regionsAction')}
+                                </button>
+                              )}
+                              <button
+                                type="button"
+                                className={`${CAMERA_BUTTON_STYLES.compactSecondary} shrink-0`}
+                                aria-label={t('cameraSetup.manage', { name: row.name })}
+                                aria-describedby={!isEnabled ? hintId : undefined}
+                                onClick={(event) => open('manage', row.id, event.currentTarget)}
+                              >
+                                {t('cameraSetup.manageAction')}
+                              </button>
+                            </>
+                          )}
                         </div>
                       )}
                     </li>

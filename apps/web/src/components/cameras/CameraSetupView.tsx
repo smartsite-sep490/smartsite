@@ -381,6 +381,8 @@ function SetupWorkspace({ apiUrl, session }: { apiUrl: string; session: SharedSe
       {site && (
         <CameraSetupCatalog
           key={site.id}
+          siteId={site.id}
+          canOpenMonitoring={canOpenMonitoring && !sites.baseError && !cameras.baseError}
           capabilities={capabilities}
           canReadZones={canReadZones}
           canReadCameras={canReadCameras}
