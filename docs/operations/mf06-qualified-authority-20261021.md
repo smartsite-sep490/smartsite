@@ -115,3 +115,18 @@ cannot promote a correlated Face/profile candidate into a verified Worker.
 
 Independent model/data/video/wearer, real identity/calibration, notification recipients,
 allowed browser journeys, deployment/capacity and whole-product acceptance remain open.
+
+## Writer review metadata repair
+
+Root found117 reconciled review rows without fileSha256,although their actual
+37 source files still match the frozen index. Reconciliation v3 now attaches each
+verified index file pin and rejects conflicting supplied file/body/location pins.
+All160 actual AST method bodies match the index;classifications/reasons remain
+unchanged. Four adversarial metadata fixtures are rejected without writing proofs.
+P5 reviewed the normalization;Root retained the conflicting-body-pin finding and
+rejected requiring invented new review semantics merely to fill a derived field.
+
+Evidence:`writer-review-reconciled-v3.json`,
+`writer-pin-normalization-root-proof-v1.json`,`writer-review-conflicts-v1-proof.json`
+in the proof directory above. completeWriterClosureEstablished remains false;
+this repaired metadata is not an operational approval or authority activation.

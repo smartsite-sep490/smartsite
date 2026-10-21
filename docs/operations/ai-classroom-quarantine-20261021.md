@@ -114,3 +114,21 @@ review. These add observed occlusion examples, not a qualified balanced cohort.
 Publisher metadata declares CC BY-SA3.0; this is not a legal approval or human
 GT. Source/admission review is retained separately. No labels, train or new model
 inference ran on these two photos; neither is an untouched qualification holdout.
+
+### Follow-up CPU localization diagnostic
+
+The two scaffold photos were subsequently run once on the same pinned80b model,
+CPU2,imgsz832,confidence0.25. Actual exit0;both return four Person proposals and
+zero Gloves/NO-Gloves proposals. Oversized Person boxes cover facade/scaffolding;
+the bamboo scene also has overlapping Vest/NO-Vest detections. These development
+failures are not independent false-positive rates or final person policy results.
+
+Root investigated five Person targets occupying at least85% of an image in the
+actual corrective6 training manifest (6416 total occurrences),hash-checked labels
+and viewed/verified all five candidate images. Each contains a large foreground
+person;box area alone does not justify quarantine or relabeling. No causal link
+to facade detections is established,no labels changed and no new train justified.
+
+Proof:`ai-next-two-source-cpu-diagnostic-20261021-v1/result.json`,
+`large-person-source-candidates.json`,`root-diagnostic-review-v1.json`.
+This supersedes only the preceding no-inference statement for those two photos.
