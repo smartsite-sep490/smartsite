@@ -1574,4 +1574,211 @@ describe('SafetyAlertsView Integration (Plan §15 A4 Parent View & Session Scope
       );
     });
   });
+  describe('SafetyAlertsView Notification Deep-Link Integration', () => {
+    it('shows an unavailable target instead of falling back to another Site for an unknown or denied alert link', async () => {
+      vi.spyOn(SmartSiteManagementClient.prototype, 'listSites').mockResolvedValue({
+        items: [
+          ...mockSitesList.items,
+          {
+            id: 'site-beta',
+            code: 'SITE-B',
+            name: 'Contractor-only Site',
+            createdAt: '2026-09-30T00:00:00Z',
+          },
+        ],
+        total: 2,
+      });
+      const alerts = vi
+        .spyOn(SmartSiteManagementClient.prototype, 'listSafetyAlerts')
+        .mockResolvedValue({ items: [mockAlert], total: 1 });
+      const detail = vi
+        .spyOn(SmartSiteManagementClient.prototype, 'getSafetyAlert')
+        .mockResolvedValue(mockAlertDetail);
+      const session: LoginResponse = {
+        ...mockSafetyOfficerLoginResponse,
+        user: {
+          ...mockSafetyOfficerLoginResponse.user,
+          roleAssignments: [
+            ...mockSafetyOfficerLoginResponse.user.roleAssignments,
+            { role: 'CONTRACTOR_REPRESENTATIVE', siteId: 'site-beta' },
+          ],
+        },
+      };
+
+      const { rerender } = render(
+        <QueryClientProvider client={queryClient}>
+          <SafetyAlertsView
+            apiUrl="http://127.0.0.1:3001"
+            authenticatedSession={session}
+            initialSiteId="site-unauthorized"
+            initialAlertId="alert-unauthorized"
+          />
+        </QueryClientProvider>,
+      );
+
+      expect((await screen.findByRole('alert')).textContent).toContain('no longer have access');
+      expect(alerts).not.toHaveBeenCalled();
+      expect(detail).not.toHaveBeenCalled();
+      expect((screen.getByLabelText('Site') as HTMLSelectElement).value).toBe('');
+
+      // Also verify denied Site where the user only holds CONTRACTOR_REPRESENTATIVE
+      rerender(
+        <QueryClientProvider client={queryClient}>
+          <SafetyAlertsView
+            apiUrl="http://127.0.0.1:3001"
+            authenticatedSession={session}
+            initialSiteId="site-beta"
+            initialAlertId="alert-on-contractor-site"
+          />
+        </QueryClientProvider>,
+      );
+
+      expect((await screen.findByRole('alert')).textContent).toContain('no longer have access');
+      expect(alerts).not.toHaveBeenCalled();
+      expect(detail).not.toHaveBeenCalled();
+      expect((screen.getByLabelText('Site') as HTMLSelectElement).value).toBe('');
+    });
+
+    it('loads authorized notification target detail even when the target alert is not on page 1', async () => {
+      vi.spyOn(SmartSiteManagementClient.prototype, 'listSites').mockResolvedValue(mockSitesList);
+      vi.spyOn(SmartSiteManagementClient.prototype, 'listSafetyAlerts').mockResolvedValue({
+        items: [mockAlert],
+        total: 25,
+      });
+      const detail = vi
+        .spyOn(SmartSiteManagementClient.prototype, 'getSafetyAlert')
+        .mockImplementation(async (_token, siteId, id) => ({
+          ...mockAlertDetail,
+          siteId,
+          id,
+          candidateSubtype: 'PPE_GOGGLES_MISSING',
+          detections: [],
+          detectionsTotal: 0,
+        }));
+
+      render(
+        <QueryClientProvider client={queryClient}>
+          <SafetyAlertsView
+            apiUrl="http://127.0.0.1:3001"
+            authenticatedSession={mockSafetyOfficerLoginResponse}
+            initialSiteId="site-alpha"
+            initialAlertId="alert-off-page-1"
+          />
+        </QueryClientProvider>,
+      );
+
+      expect(await screen.findByText(/Alert alert-off-page-1 · Revision 1/)).not.toBeNull();
+      expect(
+        screen.getByRole('complementary', { name: 'Alert detail' }).className.split(/\s+/),
+      ).not.toContain('hidden');
+      expect(detail).toHaveBeenCalledWith(
+        mockSafetyOfficerLoginResponse.accessToken,
+        'site-alpha',
+        'alert-off-page-1',
+        expect.any(Object),
+      );
+      expect(detail.mock.calls.some((call) => call[2] === mockAlert.id)).toBe(false);
+    });
+
+    it('updates target and clears incompatible review draft, command, and offset when initialSiteId and initialAlertId change while mounted', async () => {
+      const user = userEvent.setup();
+      const session: LoginResponse = {
+        ...mockSafetyOfficerLoginResponse,
+        user: {
+          ...mockSafetyOfficerLoginResponse.user,
+          roleAssignments: [
+            { role: 'SAFETY_OFFICER', siteId: 'site-alpha' },
+            { role: 'SAFETY_OFFICER', siteId: 'site-beta' },
+          ],
+        },
+      };
+      vi.spyOn(SmartSiteManagementClient.prototype, 'listSites').mockResolvedValue({
+        items: [
+          ...mockSitesList.items,
+          {
+            id: 'site-beta',
+            code: 'SITE-B',
+            name: 'Site Beta',
+            createdAt: '2026-09-30T00:00:00Z',
+          },
+        ],
+        total: 2,
+      });
+      const pageOne = Array.from({ length: 20 }, (_, index) => ({
+        ...mockAlert,
+        id: index === 0 ? 'alert-1' : `other-${index}`,
+      }));
+      const listAlerts = vi
+        .spyOn(SmartSiteManagementClient.prototype, 'listSafetyAlerts')
+        .mockImplementation(async (_token, siteId, page) => ({
+          items:
+            siteId === 'site-alpha'
+              ? page?.offset
+                ? [{ ...mockAlert, id: 'alpha-page-2' }]
+                : pageOne
+              : [{ ...mockAlert, id: 'beta-first', siteId: 'site-beta' }],
+          total: siteId === 'site-alpha' ? 21 : 1,
+        }));
+      const detail = vi
+        .spyOn(SmartSiteManagementClient.prototype, 'getSafetyAlert')
+        .mockImplementation(async (_token, siteId, id) => ({
+          ...mockAlertDetail,
+          siteId,
+          id,
+          detections: [],
+          detectionsTotal: 0,
+        }));
+      const review = vi
+        .spyOn(SmartSiteManagementClient.prototype, 'reviewSafetyAlert')
+        .mockRejectedValue(new ApiError('network', 'Synthetic transient network error'));
+
+      const tree = (siteId?: string, alertId?: string) => (
+        <QueryClientProvider client={queryClient}>
+          <SafetyAlertsView
+            apiUrl="http://127.0.0.1:3001"
+            authenticatedSession={session}
+            initialSiteId={siteId}
+            initialAlertId={alertId}
+          />
+        </QueryClientProvider>
+      );
+
+      const view = render(tree('site-alpha', 'target-a'));
+      await screen.findByText(/Alert target-a · Revision 1/);
+
+      // Move to page 2 on site-alpha, then type a draft and trigger a review command on alpha-page-2
+      await user.click(screen.getByRole('button', { name: 'Next' }));
+      await screen.findByText(/Alert alpha-page-2 · Revision 1/);
+      const reasonText = 'Shared review reason text across targets.';
+      await user.type(await screen.findByRole('textbox', { name: /Decision reason/i }), reasonText);
+      await user.click(screen.getByRole('button', { name: 'Confirm violation' }));
+      await waitFor(() => expect(review).toHaveBeenCalledTimes(1));
+      const firstCommandId = review.mock.calls[0]![3].commandId;
+
+      // Navigate via notification deep-link to (site-beta, target-b) while mounted
+      view.rerender(tree('site-beta', 'target-b'));
+
+      expect(await screen.findByText(/Alert target-b · Revision 1/)).not.toBeNull();
+      expect(screen.queryByText(/Alert alpha-page-2 · Revision 1/)).toBeNull();
+      expect(detail.mock.calls.at(-1)?.slice(1, 3)).toEqual(['site-beta', 'target-b']);
+      expect(
+        listAlerts.mock.calls.some(
+          ([, siteId, params]) => siteId === 'site-beta' && params?.offset === 0,
+        ),
+      ).toBe(true);
+
+      const newReasonInput = (await screen.findByRole('textbox', {
+        name: /Decision reason/i,
+      })) as HTMLTextAreaElement;
+      expect(newReasonInput.value).toBe('');
+
+      await user.type(newReasonInput, reasonText);
+      await user.click(screen.getByRole('button', { name: 'Confirm violation' }));
+      await waitFor(() => expect(review).toHaveBeenCalledTimes(2));
+      expect(review.mock.calls[1]![1]).toBe('site-beta');
+      expect(review.mock.calls[1]![2]).toBe('target-b');
+      expect(review.mock.calls[1]![3].commandId).not.toBe(firstCommandId);
+    });
+  });
+
 });

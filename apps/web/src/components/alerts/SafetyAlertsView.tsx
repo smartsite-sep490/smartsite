@@ -261,7 +261,7 @@ export function SafetyAlertsView({
     }
   }
   const [incidentSourceAlert, setIncidentSourceAlert] = useState('');
-  const [mobileAlertDetail, setMobileAlertDetail] = useState(false);
+  const [mobileAlertDetail, setMobileAlertDetail] = useState(!!initialAlertId);
   const [localSession, setSession] = useState<LoginResponse | null>(null);
   const session = authenticatedSession ?? localSession;
 
@@ -382,18 +382,34 @@ export function SafetyAlertsView({
     setRequestedChecklistId(initialChecklistId ?? '');
     setCreatedIncidentId('');
     setRequestedSiteId(initialSiteId ?? '');
-    setRequestedAlertId('');
-    setMobileAlertDetail(false);
+    setRequestedAlertId(initialAlertId ?? '');
+    setMobileAlertDetail(!!initialAlertId);
     setIncidentSourceAlert('');
     setRetainedReviewContext(null);
+    setOffset(0);
+    setReviewDraft(null);
   }
 
   const [prevInitialAlertId, setPrevInitialAlertId] = useState(initialAlertId);
   if (prevInitialAlertId !== initialAlertId) {
     setPrevInitialAlertId(initialAlertId);
+    if (initialSiteId !== undefined) {
+      setRequestedSiteId(initialSiteId);
+    }
     setRequestedAlertId(initialAlertId ?? '');
     setRetainedReviewContext(null);
+    setOffset(0);
+    setReviewDraft(null);
+    if (initialAlertId) {
+      setWorkspaceTab('Alerts');
+      setRelatedAlertFilter(undefined);
+      setMobileAlertDetail(true);
+    }
   }
+
+  useEffect(() => {
+    reviewCommand.current = null;
+  }, [initialSiteId, initialAlertId]);
 
   const removeSessionQueries = useCallback(
     (scope: string) => {
@@ -633,11 +649,17 @@ export function SafetyAlertsView({
     [isGlobalAdmin, selectedTabSiteIds, sites.data?.items, sites.error],
   );
 
-  const selectedSiteId = sites.error
-    ? ''
-    : visibleSites.some((site) => site.id === requestedSiteId)
-      ? requestedSiteId
-      : (visibleSites[0]?.id ?? '');
+  const alertSiteUnavailable =
+    !!requestedAlertId &&
+    !!requestedSiteId &&
+    sites.isSuccess &&
+    !visibleSites.some((site) => site.id === requestedSiteId);
+  const selectedSiteId =
+    sites.error || alertSiteUnavailable
+      ? ''
+      : visibleSites.some((site) => site.id === requestedSiteId)
+        ? requestedSiteId
+        : (visibleSites[0]?.id ?? '');
 
   const canAlerts =
     isGlobalAdmin ||
@@ -700,7 +722,7 @@ export function SafetyAlertsView({
   const selectedAlertId =
     sites.error || alerts.error
       ? ''
-      : alerts.data?.items.some((alert) => alert.id === requestedAlertId) ||
+      : requestedAlertId ||
           canRetainReviewedAlert ||
           canRetainDraftAlert
         ? requestedAlertId
@@ -1096,6 +1118,7 @@ export function SafetyAlertsView({
 
   return (
     <div className="mx-auto max-w-[1202px] w-full min-w-0 space-y-3 pb-10 text-[#2F3437]">
+      {alertSiteUnavailable && <p role="alert">{tr('ppeNotifications.targetUnavailable')}</p>}
       <header className="flex flex-wrap items-start justify-between gap-3 min-w-0">
         <div className="min-w-0">
           <h1 className="mt-1 text-2xl font-bold tracking-tight text-[#111111]">
@@ -1125,6 +1148,11 @@ export function SafetyAlertsView({
               disabled={sites.isPending || visibleSites.length === 0}
               className="mt-1.5 w-full min-w-0 truncate rounded-md border border-[#EAEAEA] bg-white px-3 py-2 text-sm font-semibold text-[#2F3437]"
             >
+              {alertSiteUnavailable && (
+                <option value="" disabled>
+                  {tr('accounts.selectSite')}
+                </option>
+              )}
               {visibleSites.map((site) => (
                 <option key={site.id} value={site.id}>
                   {site.code} · {site.name}
