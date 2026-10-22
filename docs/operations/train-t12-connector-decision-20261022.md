@@ -35,3 +35,19 @@ Root read the actual frozen `unified8_experiment_train_v2.py`, SHA256 `a4c593a29
 Therefore an unresolved old class14 rectangle cannot simply remain a positive geometry target while class14 is marked UNKNOWN. A future candidate must explicitly quarantine that row, or omit the unresolved class14 target from the derived target view while masking class14 classification and preserving other reviewed targets/scopes. Never remove the frozen guard or silently keep wrong geometry under an UNKNOWN label. Source originals and lineage must remain intact either way.
 
 The separate Codex AI thread received this constraint and the exact receipt. It owns preparation of the reviewed target transformation and actual counts. Existing VAL/test/control bytes, the 19 acceptance predicates and rejected V12 checkpoint remain frozen. No dataset export, label mutation, inference, training or product runtime action occurred in Root's review.
+
+## Independent target-view arithmetic review
+
+Root independently read and hash-checked all 5,765 frozen source labels and rechecked all 659 validation labels after analysis. Each of the 12 selected Hook identities occurs once in TRAIN and none occurs in VAL. The 11 unresolved review candidates contain 17 Hook targets and 22 Harness targets. This describes those selected rows, not all Hook data or 11 proven mislabeled photographs.
+
+| Hypothetical policy, including T12 replacement of one box by two | TRAIN rows | VAL rows | Hook targets | Harness targets |
+| --- | ---: | ---: | ---: | ---: |
+| Frozen V12 parent | 5,106 | 659 | 2,546 | 2,829 |
+| Quarantine all 11 unresolved rows | 5,095 | 659 | 2,530 | 2,807 |
+| Remove their class14 targets and mask class14 UNKNOWN in the derived target view | 5,106 | 659 | 2,530 | 2,829 |
+
+The latter policy is preferred for further review because it preserves every class0–13 target count and scope instead of discarding 22 Harness boxes. It is not a blanket permission to remove class14 targets from unreviewed rows. The candidate must preserve image and original-label lineage, and keep incomplete class14 coverage UNKNOWN; no empty-label/background assumption is allowed.
+
+Root recomputed the baseline class counts and both deltas independently rather than accepting the agent's table. Receipt: `train-target-review-v1/root-review-v1/candidate-count-review.json`; proposal SHA256 `285636f1ffd93b9aa683ef754838c77acc4358a377b2293d1eb1c4fdffd6a27a`. No dataset was materialized and no trainer was executed.
+
+The other 1,593 Hook-positive TRAIN images remain uncertified against the canonical target. One new approved photo plus an eleven-row scope proposal does not solve that coverage gap or justify predicting 19/19. The AI thread was assigned a bounded next review batch: inspect at most 24 original TRAIN images and propose at most 12 clear, previously unapproved connector photos, with full source/coordinate evidence before any further human review.
