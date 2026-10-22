@@ -1,11 +1,10 @@
 import { localizedLabel } from '../../../i18n/labels';
 import { localizedError } from '../../../i18n/messages';
 import { translate as tr } from '../../../i18n';
-import { useMemo, useState, type FormEvent } from 'react';
+import { useState, type FormEvent } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useTranslation } from 'react-i18next';
-import { SmartSiteManagementClient } from '@smartsite/api-client';
-import { useAuth, useCurrentUser } from '../../../features/auth/auth-session';
+import { useManagementClient, useAuth, useCurrentUser } from '../../../features/auth/auth-session';
 import type { ZoneResponse } from '@smartsite/contracts';
 import { uiLocale } from '../../../i18n';
 import { IconCamera, IconShield, IconPlus, IconUsers, IconAlertTriangle } from '../../icons';
@@ -26,7 +25,7 @@ export function SiteOperationsSetupView({
   const locale = uiLocale();
   const { accessToken } = useAuth();
   const { data: user } = useCurrentUser(apiUrl);
-  const client = useMemo(() => new SmartSiteManagementClient(apiUrl), [apiUrl]);
+  const client = useManagementClient(apiUrl);
   const cache = useQueryClient();
 
   const [requestedSite, setSite] = useState('');

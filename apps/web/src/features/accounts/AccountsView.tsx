@@ -2,8 +2,7 @@ import { translate as tr } from '../../i18n';
 import { useMemo, useState } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useTranslation } from 'react-i18next';
-import { SmartSiteManagementClient } from '@smartsite/api-client';
-import { useAuth, useCurrentUser, useLogout } from '../auth/auth-session';
+import { useManagementClient, useAuth, useCurrentUser, useLogout } from '../auth/auth-session';
 import { loadAllPages } from '../../components/workforce/load-all-pages';
 import {
   IconUsers,
@@ -34,7 +33,7 @@ export function AccountsView({ apiUrl }: { apiUrl: string }) {
     !currentUser.mustChangePassword &&
     currentUser.roleAssignments.some(({ role, siteId }) => role === 'ADMIN' && siteId === null),
   );
-  const client = useMemo(() => new SmartSiteManagementClient(apiUrl), [apiUrl]);
+  const client = useManagementClient(apiUrl);
   const cache = useQueryClient();
   const key = ['account-management', apiUrl, currentUser?.id];
 

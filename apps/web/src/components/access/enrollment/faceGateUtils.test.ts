@@ -8,6 +8,11 @@ import {
 } from './faceGateUtils';
 
 describe('faceGateUtils', () => {
+  it('explains document eligibility failures without implying that a schedule grants entry', () => {
+    expect(getSafeReasonMessage('WORKER_DOCUMENTS_INVALID')).toContain(
+      'Worker documents are incomplete, unapproved or expired',
+    );
+  });
   it('explains missing schedule denial and offers no entry or QR bypass', () => {
     expect(getSafeReasonMessage('NO_SCHEDULE')).toBe(
       'You have not been assigned a work shift for today.',

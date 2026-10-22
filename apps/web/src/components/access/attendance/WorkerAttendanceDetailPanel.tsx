@@ -1,7 +1,7 @@
-import { useMemo, useState } from 'react';
+import { useManagementClient } from '../../../features/auth/auth-session';
+import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useQuery } from '@tanstack/react-query';
-import { SmartSiteManagementClient } from '@smartsite/api-client';
 import { translate as tr, uiLocale } from '../../../i18n';
 import { localizedError } from '../../../i18n/messages';
 import { attendanceHours, attendanceLabel } from './attendance-display';
@@ -46,7 +46,7 @@ export function WorkerAttendanceDetailPanel({
   onNextWeek: () => void;
 }) {
   useTranslation();
-  const client = useMemo(() => new SmartSiteManagementClient(apiUrl), [apiUrl]);
+  const client = useManagementClient(apiUrl);
   const [activeTab, setActiveTab] = useState<'records' | 'timesheet'>('records');
   const [expandedDayId, setExpandedDayId] = useState<string | null>(null);
 

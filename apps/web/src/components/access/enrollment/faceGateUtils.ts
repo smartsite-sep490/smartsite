@@ -193,6 +193,8 @@ export function getSafeReasonMessage(code?: FaceGateReasonCode | string | null):
       );
     case 'WORKER_INACTIVE':
       return tr('face_gate_utils.worker_profile_status_is_deactivated');
+    case 'WORKER_DOCUMENTS_INVALID':
+      return tr('face_gate_utils.worker_documents_invalid');
     case 'CONTRACTOR_INACTIVE':
       return tr('face_gate_utils.contractor_company_is_currently_deactivated');
     case 'CONTRACTOR_SITE_PARTICIPATION_INVALID':

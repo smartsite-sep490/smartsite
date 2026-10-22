@@ -134,20 +134,20 @@ describe('WorkforceView & MF07 Workflow Logic', () => {
       return {
         canAccess: isAdmin || isManager || isContractorRep,
         canManageShiftsAndVersions: isManager,
-        canAssignWorker: isManager,
+        canAssignWorker: isContractorRep,
       };
     };
 
     // 1. Contractor Representative: can access and assign worker, read-only shift/version
     const repPerms = getScheduleSetupPermissions(['CONTRACTOR_REPRESENTATIVE']);
     expect(repPerms.canAccess).toBe(true);
-    expect(repPerms.canAssignWorker).toBe(false);
+    expect(repPerms.canAssignWorker).toBe(true);
     expect(repPerms.canManageShiftsAndVersions).toBe(false);
 
     // 2. Site Manager: can access, can manage shift/version, CANNOT assign workers (tab hidden)
     const managerPerms = getScheduleSetupPermissions(['SITE_MANAGER']);
     expect(managerPerms.canAccess).toBe(true);
-    expect(managerPerms.canAssignWorker).toBe(true);
+    expect(managerPerms.canAssignWorker).toBe(false);
     expect(managerPerms.canManageShiftsAndVersions).toBe(true);
 
     // 3. Admin: can view setup, but cannot manage shifts or assign workers

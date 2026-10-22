@@ -3068,6 +3068,7 @@
   "face_gate_utils.face_scan_was_inconclusive_please_request_the_worker_to_present_their_dynamic_qr_c": "Chưa xác minh được khuôn mặt. Hãy đề nghị công nhân đưa QR động để xác minh dự phòng.",
   "face_gate_utils.worker_identity_and_site_zone_assignment_verified_security_officer_may_record_in_o": "Đã xác minh danh tính và phân công công trường/khu vực. Bảo vệ có thể ghi nhận lượt vào hoặc ra.",
   "face_gate_utils.access_denied_by_backend_policy_qr_fallback_is_not_permitted_for_denied_credential": "Chính sách backend từ chối quyền vào. Không được dùng QR dự phòng cho thông tin đã bị từ chối.",
+  "face_gate_utils.worker_documents_invalid": "Hồ sơ công nhân chưa đủ, chưa được duyệt hoặc đã hết hạn. Liên hệ Đại diện nhà thầu bổ sung hồ sơ và Cán bộ an toàn kiểm tra, phê duyệt trước khi vào công trường.",
   "face_gate_utils.worker_record_flagged_for_manual_inspection_security_officer_must_perform_manual_i": "Hồ sơ công nhân cần kiểm tra thủ công. Bảo vệ phải xem xét danh tính trước khi cho phép qua cổng.",
   "face_gate_utils.position_face_in_frame_and_click_scan_face_to_verify_identity_and_access_rights": "Đặt khuôn mặt trong khung và bấm “Quét khuôn mặt” để xác minh danh tính và quyền ra vào.",
   "gate_camera_session.camera_a_ngat_ket_noi_ket_noi_lai_roi_khoi_ong_lai_camera": "Camera đã ngắt kết nối. Kết nối lại rồi khởi động lại camera.",
