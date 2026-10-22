@@ -3,7 +3,11 @@ import { ConfigService } from '@nestjs/config';
 import type { BackendEnvironment } from '../../config/environment.js';
 import { DataSource, type EntityManager, QueryFailedError } from 'typeorm';
 import type { QueryDeepPartialEntity } from 'typeorm/query-builder/QueryPartialEntity.js';
-import { computeCanonicalPayloadHash, validateObservationEvent } from '@smartsite/contracts';
+import {
+  computeCanonicalPayloadHash,
+  validateEightFamilyObservationEvent,
+  validateObservationEvent,
+} from '@smartsite/contracts';
 import { EventProcessingStatus } from '../../database/entities/enums.js';
 import { AiObservationEventEntity } from '../../database/entities/ai-observation-event.entity.js';
 import { AlertDetectionMappingEntity } from '../../database/entities/alert-detection-mapping.entity.js';
@@ -79,7 +83,13 @@ export class AiIngestionService {
 
   async ingestEvent(payload: unknown): Promise<AiIngestionResult> {
     // 1. Validate contract schema and semantic geometry (Spec §15.1, §16)
-    const validationResult = validateObservationEvent(payload);
+    const validationResult =
+      payload &&
+      typeof payload === 'object' &&
+      'schemaVersion' in payload &&
+      payload.schemaVersion === '1.3.0'
+        ? validateEightFamilyObservationEvent(payload)
+        : validateObservationEvent(payload);
     if (!validationResult.isValid) {
       throw new PublicHttpException(HttpStatus.BAD_REQUEST, {
         code: 'VALIDATION_FAILED',
