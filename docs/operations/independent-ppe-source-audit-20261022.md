@@ -48,3 +48,11 @@ Evidence: `ppe-field-candidates-20261022-v1/intake.json`, `ATTRIBUTION.md`, orig
 Next: prepare explicit annotation/completeness/visibility review for reserved field candidates and acquire enough separate source groups to meet C1 coverage. Freeze per-capability evaluation limits and independent grouping before candidate qualification. These two photographs do not close the eight-family, wearer, temporal or installed-camera gates; no new training follows automatically.
 
 Browser inventory now exposes the in-app browser again, but that alone does not prove the previous localhost URL restriction changed. Root read inventory/documentation only, did not retry the denied URL, and asked the human whether actual local access settings changed. Browser/UI acceptance remains open.
+
+## Positive-box review follow-up
+
+Root prepared and viewed two proposal sheets and native-coordinate crops. V2 corrected Person extents: C01 excludes the foreground beam; C02 includes the visible clothing strip at the lower-right image edge. All ten proposals passed source/figure hash and coordinate round-trip checks. V1 remains preserved.
+
+The human then answered **“10 khung khoanh đúng”** for exactly the displayed V2 packet: C01 Person/Hardhat/Harness/Hook and C02 Person/Hardhat/two Gloves/Goggles/Mask. Immutable receipt: `ppe-field-candidates-20261022-v1/annotation-review-v2/human-positive-box-approval-v1.json`, SHA256 `5e775f86ae0f812efe2bc6e8a6cfe9122a3d0fd2d9cac855b1e2f120f3414a34`. It binds both source hashes, ten pixel rectangles and both displayed figure hashes.
+
+This approves visible positive coordinates for continued reserved qualification preparation. It does not approve exhaustive annotations, negatives, source consent, independent scene coverage, TRAIN use or the model. The two images remain one proposed source group and zero admitted qualification cases; no predictions were run. Next review must establish visibility/completeness and additional source groups before an independent evaluation can make quality claims.
