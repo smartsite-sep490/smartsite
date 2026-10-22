@@ -54,12 +54,13 @@
 - [ ] Phân biệt người chưa xác định, Worker đã xác nhận, team/site và quyền ở thời điểm sự kiện; không tự gán danh tính hoặc kết luận unauthorized khi UNKNOWN.
 - [ ] Owner nghiệm thu toàn luồng, có bằng chứng xem được. Chưa có toàn bộ production acceptance.
 
-## Runtime được ghi nhận gần nhất
+## Demo local đã nối — 22/10 17:19VN
 
-Web35 đã phục vụ trong flow37 và flow38; Web36 hiện phục vụ trong flow39/Node74776 (16:41:56VN), Backend `5e118c5`, schema73 và authority READY. Flow38/Node61704 đã dừng sạch sau export cấu hình mới nhất. PostgreSQL69444 được giữ; expiry flow39 xem launch receipt hiện tại. Phải xác minh lại sau expiry/reboot. Flow36 có receipt dừng sạch; PG440 và flow37/Node59100 sau đó biến mất, nguyên nhân/graceful exit chưa rõ. Đã khôi phục đúng cluster/schema và đối chiếu cấu hình với snapshot trước khi mở flow38. Xem `local-web35-ai-demo-20261022.md`.
+- [x] Bốn nguồn preview qua Backend200: hai LIVE (laptop/Tapo), hai REPLAY; Web36 bật. Bản cuối flow41/Node73780, PG69444/schema73 giữ nguyên. Browser chưa nghiệm thu.
+- [x] Replay AI thực tạo cảnh báo thiếu mũ/áo và thông báo cho demo.safety; ảnh JPEG được đọc đúng quyền và khớp file lưu. Các cảnh báo PENDING_REVIEW, không phải GT/vi phạm được human xác nhận. Có nhiều lượt chạy cùng clip; không đếm thành công nhân/sự cố độc lập.
+- [x] MF06 enqueue/worker đã bật: lượt hash-bound tạo9 request/job SUCCEEDED, lịch sử200 và ảnh SHA-bound200. Kết quả cả9 là ALLOWED/POLICY_NONE theo chính sách hiện có; chưa chứng minh quyền/identity Worker hay phát hiện unauthorized.
+- [x] Đã sửa producer AI (7b99080) để gắn SHA ảnh thực và xuất version1.2/1.3.77 ca hash/evidence/domain và21 runtime PASS, lint PASS. Không nới guard ảnh Backend.
+- [x] Tapo LIVE durable worker riêng đang xử lý thực (120 frame lúc17:19), outbox/evidence và MF06 auto enqueue. Chưa chứng minh cảnh báo phát sinh từ LIVE. Laptop mới có preview.
+- [ ] Hoàn thiện mọi camera có durable delivery, kiểm UI thật, live source recovery/capacity, chất lượng model và identity/authority; các gate production ở trên vẫn OPEN.
 
-Human đã cho phép nối AI cho demo: fallback80b thực sự chạy replay đủ76/76 frame trên GPU, không drop/sample, exit0/load-close sạch. Không có associated MISSING hay event gửi nên chưa chứng minh thông báo. V12 vẫn bị loại; không đổi model/ngưỡng để tạo vi phạm. Web36/flow39 hiện đã bật preview cho đúng một nguồn REPLAY core5-recorded-demo: Backend preview200/no-store/JPEG1280x720, video200/909367bytes, anonymous401. Ba camera còn lại chưa nối; MF06 worker/enqueue vẫn OFF. Chưa có kiểm chứng hiển thị trình duyệt thật. Human duyệt tài khoản local demo.safety: đã tạo bằng API, đúng một quyền SAFETY_OFFICER/site demo, hoàn tất đổi mật khẩu, inbox200/Admin users403; hai tài khoản demo cũ được giữ nguyên. Thông báo thật vẫn chưa được tạo trong lượt AI này.
-
-Checkpoint phục hồi: `checkpoint-main-integration-progress-v193.json` trong tooling `demo-readiness-20261014-v1/main-0dd7d27-integration-20261017-v1/`. Heading cũ về flow36/Web34, chờ role demo.safety hoặc training-running là lịch sử.
-
-**Thứ tự tiếp theo:** theo chỉ đạo mới, nối fallback80b cho demo có giới hạn, preview và thông báo thật từ đầu vào phù hợp; song song hoàn thiện dữ liệu/qualification. Chỉ sau model đạt mới đóng gate chất lượng và release. Mở được trình duyệt hợp lệ thì kiểm tra UI thật. Không dùng số test hay tỷ lệ checkbox làm phần trăm hoàn thiện sản phẩm.
+Hướng dẫn demo: docs/operations/demo-local-mf05-mf06-20261022.md. Artifact/proof trong SmartSiteData/runs/demo-ai-notification-20261022-v1; checkpoint phục hồi v194. Preview deadline02:41VN23/10, website expiry theo receipt; phải xác minh lại sau reboot/expiry. Không push/merge/deploy.
