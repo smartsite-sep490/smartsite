@@ -165,6 +165,7 @@ export function FourSourceWallTile({
   const isReplay = status === 'REPLAY' || sourceKind === 'REPLAY';
   const detectionsCount = preview?.frame.detections.length ?? 0;
   const modelObjectsCount = preview?.frame.modelObjects?.detections.length ?? 0;
+  const cameraActionName = camera.name ? `${camera.name} (${camera.code})` : camera.code;
 
   return (
     <div
@@ -379,6 +380,7 @@ export function FourSourceWallTile({
               <button
                 type="button"
                 data-testid={`enlarge-camera-btn-${camera.id}`}
+                aria-label={`${t('ppe.wall.enlargeCameraBtn')}: ${cameraActionName}`}
                 onClick={(e) => {
                   e.stopPropagation();
                   onEnlarge(camera.id);
@@ -394,6 +396,8 @@ export function FourSourceWallTile({
               <button
                 type="button"
                 data-testid={`tile-evidence-btn-${camera.id}`}
+                aria-label={`${t('ppe.common.evidence')}: ${cameraActionName}`}
+                aria-haspopup="dialog"
                 onClick={(e) => {
                   e.stopPropagation();
                   onOpenEvidence(camera.id);

@@ -5,6 +5,7 @@
 ## Phase 2 — giao diện sản phẩm
 
 - [x] Web v34 (`cb187d7`): cấu hình camera riêng; màn giám sát ưu tiên hình; chi tiết mở theo nhu cầu; phóng lớn từng camera và toàn màn hình lưới; pagination và giữ draft/scope. Có kiểm tra phần mềm và bản phục vụ đã đối chiếu.
+- [x] Source local bổ sung tên/mã camera vào nhãn truy cập nút phóng to/bằng chứng, kể cả camera trùng tên hoặc chưa đặt tên; nút bằng chứng báo mở dialog. Hai ca mới tái hiện lỗi trước sửa, 41 ca liên quan/3 file PASS, TypeScript với contracts hiện tại và lint PASS. Chưa rollout thay Web v34, chưa kiểm trình đọc màn hình thật.
 - [ ] Xem và thao tác thật trên `/ppe`, `/zones`, `/camera-setup`: bố cục, chữ, bàn phím, phóng lớn, bằng chứng, trạng thái lỗi và người mới sử dụng. Công cụ hiện báo `Local browser use is disabled in Work settings`; human đã cho phép, không cần xin lại. Chưa có nghiệm thu hiển thị.
 - [ ] Owner xác nhận luồng desktop dễ dùng. Mobile để sau.
 

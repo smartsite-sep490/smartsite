@@ -118,6 +118,38 @@ describe('FourSourceWall Site/Camera/Zone Context (P0)', () => {
     expect(previewCalls.every((call) => call.enabled === false)).toBe(true);
   });
 
+  it.each([
+    ['en', 'Enlarge camera', 'Evidence'],
+    ['vi', 'Phóng to camera', 'Bằng chứng'],
+  ] as const)(
+    'identifies each camera action in the %s accessible button list',
+    async (locale, enlargeLabel, evidenceLabel) => {
+      const onEnlargeCamera = vi.fn();
+      const onOpenEvidence = vi.fn();
+      vi.spyOn(client, 'getCameraObservationZones').mockImplementation(
+        async (_token, _siteId, cameraId) => makeZonesResponse({ cameraId }),
+      );
+      const cameras = [
+        makeCamera({ name: 'North gate' }),
+        makeCamera({ id: CAM_2_ID, name: 'North gate', code: 'CAM-08' }),
+        makeCamera({ id: 'aaaa3333-3333-4333-8333-333333333333', name: '', code: 'CAM-09' }),
+      ];
+      render(
+        buildWallTree({ locale, cameras, onEnlargeCamera, onOpenEvidence, isAiWorkPaused: true }),
+      );
+
+      for (const camera of cameras) {
+        const name = camera.name ? `${camera.name} (${camera.code})` : camera.code;
+        fireEvent.click(screen.getByRole('button', { name: `${enlargeLabel}: ${name}` }));
+        expect(onEnlargeCamera).toHaveBeenLastCalledWith(camera.id);
+        const evidence = screen.getByRole('button', { name: `${evidenceLabel}: ${name}` });
+        expect(evidence.getAttribute('aria-haspopup')).toBe('dialog');
+        fireEvent.click(evidence);
+        expect(onOpenEvidence).toHaveBeenLastCalledWith(camera.id);
+      }
+    },
+  );
+
   function buildWallTree({
     configurationVersion = 3,
     cameraOverrides,
