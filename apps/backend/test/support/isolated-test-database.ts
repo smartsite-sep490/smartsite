@@ -1,3 +1,5 @@
+import assert from 'node:assert/strict';
+import { reviewedReleaseMigrationNames } from './reviewed-release-graph.js';
 import { randomUUID } from 'node:crypto';
 import { DataSource } from 'typeorm';
 import { buildTypeOrmOptions } from '../../src/database/typeorm.options.js';
@@ -7,10 +9,21 @@ import { Legacy24TestDataSource, LEGACY_ENTITIES } from './legacy24/data-source.
 
 /** File-owned disposable schema. Never truncate audit belonging to another integration suite. */
 export function createIsolatedTestDatabase(
-  profile: { canonical?: true; legacy?: never } | { legacy: true; canonical?: never } = {},
+  profile:
+    | { canonical?: true; legacy?: never; preAuthorityCutover72?: true }
+    | { legacy: true; canonical?: never; preAuthorityCutover72?: never } = {},
 ) {
   const schema = `isolated_test_${randomUUID().replaceAll('-', '')}`;
-  const productionOptions = buildTypeOrmOptions({ DATABASE_URL: resolveTestDatabaseUrl() });
+  let productionOptions = buildTypeOrmOptions({ DATABASE_URL: resolveTestDatabaseUrl() });
+  if (profile.preAuthorityCutover72) {
+    const migrations = productionOptions.migrations;
+    assert(Array.isArray(migrations));
+    const names = reviewedReleaseMigrationNames(migrations);
+    assert.equal(names.length, 73);
+    assert.equal(names.at(-1), 'AuthorizationHistoryCutover1793232000000');
+    productionOptions = { ...productionOptions, migrations: migrations.slice(0, -1) };
+    assert.equal(reviewedReleaseMigrationNames(productionOptions.migrations).length, 72);
+  }
   // Default is the actual release graph. Old branch fixtures opt into frozen24
   // explicitly; their PASS never proves canonical MAIN behavior.
   const options = profile.legacy

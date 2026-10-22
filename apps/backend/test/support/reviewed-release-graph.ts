@@ -99,9 +99,13 @@ export function reviewedReleaseMigrationNames(migrations: unknown): string[] {
     'PpeAlertNotifications1792886400000',
     'ExpandedPpeNotificationKinds1793145600000',
   ];
-  const expected = names.includes(release72Extensions[0]!)
+  const predecessor = names.includes(release72Extensions[0]!)
     ? [...release61, workerQr, ...documents, ...release72Extensions]
     : retained;
+  const cutover = 'AuthorizationHistoryCutover1793232000000';
+  const expected = names.includes(cutover)
+    ? [...release61, workerQr, ...documents, ...release72Extensions, cutover]
+    : predecessor;
   assert.deepEqual(names, expected, 'Exact reviewed release migration names and order');
   return names;
 }

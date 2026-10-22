@@ -23,7 +23,7 @@ const sha256 = (body: Buffer | string) => createHash('sha256').update(body).dige
 
 /** One owned canonical schema and explicitly synthetic release; never an operational manifest. */
 export async function createQualifiedAuthorityFixture() {
-  const owned = createIsolatedTestDatabase(),
+  const owned = createIsolatedTestDatabase({ preAuthorityCutover72: true }),
     db = owned.dataSource;
   const schema = (db.options as { schema: string }).schema;
   console.log('ownedQualifiedAuthorityReaderSchema=' + schema);

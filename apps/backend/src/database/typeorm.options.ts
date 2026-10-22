@@ -1,5 +1,6 @@
 import { PpeAlertNotifications1792886400000 } from './migrations/1792886400000-PpeAlertNotifications.js';
 import { ExpandedPpeNotificationKinds1793145600000 } from './migrations/1793145600000-ExpandedPpeNotificationKinds.js';
+import { AuthorizationHistoryCutover1793232000000 } from './migrations/1793232000000-AuthorizationHistoryCutover.js';
 import { PrepareNotificationCompatibility1792010000000 } from './migrations/1792010000000-PrepareNotificationCompatibility.js';
 import { Mf06TeamAuthorityHistory1792281600000 } from './migrations/1792281600000-Mf06TeamAuthorityHistory.js';
 import { CompleteNotificationCompatibility1792368000001 } from './migrations/1792368000001-CompleteNotificationCompatibility.js';
@@ -178,6 +179,7 @@ export function buildTypeOrmOptions(config: DatabaseConnectionConfig): DataSourc
       ZoneEntryPhysicalStorage1792454400000,
       PpeAlertNotifications1792886400000,
       ExpandedPpeNotificationKinds1793145600000,
+      AuthorizationHistoryCutover1793232000000,
     ],
     logging: false,
     extra: {

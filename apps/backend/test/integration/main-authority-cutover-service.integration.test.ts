@@ -21,7 +21,7 @@ import {
   type MainAuthorityCutoverReleaseConfig,
 } from '../../src/modules/zones/main-authority-cutover-release.js';
 
-const owned = createIsolatedTestDatabase(),
+const owned = createIsolatedTestDatabase({ preAuthorityCutover72: true }),
   db = owned.dataSource;
 const sha256 = (body: Buffer | string) => createHash('sha256').update(body).digest('hex');
 let auth: AuthService,

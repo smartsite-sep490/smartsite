@@ -9,14 +9,11 @@ test('independent reviewed registry accepts current release and rejects unknown,
   }).migrations;
   assert(Array.isArray(registered));
   const names = reviewedReleaseMigrationNames(registered);
-  assert.equal(names.length, 72);
-  for (const count of [61, 62, 66])
+  assert.equal(names.length, 73);
+  for (const count of [61, 62, 66, 72])
     assert.equal(reviewedReleaseMigrationNames(registered.slice(0, count)).length, count);
-  assert.equal(names.at(-1), 'ExpandedPpeNotificationKinds1793145600000');
-  assert.deepEqual(
-    reviewedReleaseMigrationNames(names.map((name) => ({ name }))),
-    names,
-  );
+  assert.equal(names.at(-1), 'AuthorizationHistoryCutover1793232000000');
+  assert.deepEqual(reviewedReleaseMigrationNames(names.map((name) => ({ name }))), names);
   const reordered = [...registered];
   [reordered[0], reordered[1]] = [reordered[1]!, reordered[0]!];
   for (const invalid of [
@@ -28,10 +25,12 @@ test('independent reviewed registry accepts current release and rejects unknown,
     reordered,
     registered.filter((_, index) => index !== 61),
     registered.filter((_, index) => index !== 63),
-  ]) assert.throws(() => reviewedReleaseMigrationNames(invalid));
+    [...registered.slice(0, 61), registered.at(-1)],
+  ])
+    assert.throws(() => reviewedReleaseMigrationNames(invalid));
   assert.throws(() =>
     reviewedReleaseMigrationNames([...registered, class UnreviewedMigration1799999999999 {}]),
   );
-  assert.throws(() => reviewedReleaseMigrationNames(registered.slice(0, -1)));
+  assert.throws(() => reviewedReleaseMigrationNames(registered.filter((_, index) => index !== 70)));
   assert.throws(() => reviewedReleaseMigrationNames([...registered, registered[0]]));
 });

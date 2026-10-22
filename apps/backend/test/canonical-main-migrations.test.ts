@@ -22,6 +22,9 @@ test(
   () => {
     const canonical = createIsolatedTestDatabase();
     const legacy = createIsolatedTestDatabase({ legacy: true });
+    const predecessor = createIsolatedTestDatabase({ preAuthorityCutover72: true });
+    assert(Array.isArray(predecessor.dataSource.options.migrations));
+    assert.equal(predecessor.dataSource.options.migrations.length, 72);
     const production = buildTypeOrmOptions({
       DATABASE_URL: 'postgresql://unit:unit@localhost/unit',
     });
@@ -70,10 +73,11 @@ test(
       'CompleteNotificationCompatibility1792368000001',
       'ZoneEntryPhysicalStorage1792454400000',
       'ExpandedPpeNotificationKinds1793145600000',
+      'AuthorizationHistoryCutover1793232000000',
     ];
     const expected = [...names, ...extensions];
     assert.deepEqual([...actual].sort(), [...expected].sort());
-    assert.equal(actual.length, 72);
+    assert.equal(actual.length, 73);
     assert.equal(new Set(actual).size, actual.length, 'migration registrations must be unique');
     assert.equal(new Set(expected).size, names.length + extensions.length);
     assert.equal(registered.synchronize, false);
@@ -106,6 +110,6 @@ test(
       'apps/backend/src/database/migrations/1792195200000-SafetyChecklists.ts',
     ]);
     assert(!actual.includes('ZoneAuthorityHistory1791417600000'));
-    assert(!actual.some((name) => name.startsWith('AuthorizationHistoryCutover')));
+    assert.equal(actual.filter((name) => name.startsWith('AuthorizationHistoryCutover')).length, 1);
   },
 );

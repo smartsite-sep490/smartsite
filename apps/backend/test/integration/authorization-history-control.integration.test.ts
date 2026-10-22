@@ -13,7 +13,7 @@ import { executeMainConfigurationCommand } from '../../src/common/configuration/
 import type { EntityManager } from 'typeorm';
 import { hasNamedV2AuthorityCutoverPredecessor } from '../../src/common/configuration/authorization-history-cutover-predecessor-v1.js';
 
-const owned = createIsolatedTestDatabase();
+const owned = createIsolatedTestDatabase({ preAuthorityCutover72: true });
 const db = owned.dataSource;
 const preparedBaselines: MainAuthorityBaselineRecord[] = [];
 before(async () => {
