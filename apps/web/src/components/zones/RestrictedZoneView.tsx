@@ -190,7 +190,6 @@ export function RestrictedZoneView({
   }, [clearStatusMessage]);
 
   useEffect(() => clearStatusMessage, [clearStatusMessage]);
-  const [clockTime, setClockTime] = useState<string>(() => formatClockTime());
   const [activeFilterWorker, setActiveFilterWorker] = useState<number | null>(null);
   const [zoneFilter, setZoneFilter] = useState<'ALL' | 'ACTIVE_ONLY'>('ALL');
   const [expandedCameraScopeKey, setExpandedCameraScopeKey] = useState<string | null>(null);
@@ -540,6 +539,7 @@ export function RestrictedZoneView({
   });
 
   const preview = isAiWorkPaused ? null : scopedPreview.preview;
+  const capturedTime = preview ? formatClockTime(new Date(preview.frame.capturedAt)) : '—';
   const socketError = isAiWorkPaused ? null : scopedPreview.error;
   const isLive =
     !isAiWorkPaused && (scopedPreview.status === 'LIVE' || scopedPreview.status === 'REPLAY');
@@ -565,14 +565,6 @@ export function RestrictedZoneView({
       setSelectedIncident(null);
     }
   }
-
-  // Update clock every second
-  useEffect(() => {
-    const timer = setInterval(() => {
-      setClockTime(formatClockTime());
-    }, 1000);
-    return () => clearInterval(timer);
-  }, []);
 
   // Track container dimensions for accurate object-cover polygon mapping
   useEffect(() => {
@@ -734,10 +726,6 @@ export function RestrictedZoneView({
   // Bug 5: Key zone = eventId + trackId
   const events: ZoneReviewItem[] = useMemo(() => {
     if (!preview) return [];
-    const timeStr = scopedPreview.capturedAt
-      ? formatClockTime(new Date(scopedPreview.capturedAt))
-      : clockTime;
-
     return (preview.frame.zoneDetections ?? [])
       .filter((det) => det.active)
       .map((det) => {
@@ -750,7 +738,7 @@ export function RestrictedZoneView({
           id: det.eventId || `SNAPSHOT-${det.trackId ?? 0}`,
           rowKey: getZoneEventRowKey(det.eventId || 'SNAP', det.trackId ?? 0),
           trackId: det.trackId ?? 0,
-          time: timeStr,
+          time: capturedTime,
           person:
             det.trackId !== null && det.trackId !== undefined
               ? localize('messages.2c6bb8488230', { value1: det.trackId })
@@ -762,7 +750,7 @@ export function RestrictedZoneView({
           result: 'Technical entry',
         };
       });
-  }, [preview, scopedPreview.capturedAt, clockTime, selectedCamera?.code, localize]);
+  }, [preview, capturedTime, selectedCamera?.code, localize]);
 
   // Truly filters the loaded Zone events list
   const displayedEvents = useMemo(() => {
@@ -794,7 +782,7 @@ export function RestrictedZoneView({
       result: testDetection.active
         ? tr('common.zone_entry_observation_f1b9fa')
         : 'Scanning Snapshot',
-      time: isLive ? clockTime : (testDetection.timecode ?? '00:00'),
+      time: capturedTime,
     });
   };
 
@@ -1601,9 +1589,9 @@ export function RestrictedZoneView({
                   {isAiWorkPaused
                     ? t('ppe.header.status.paused')
                     : scopedPreview.status === 'LIVE'
-                      ? t('restrictedZone.headerOverlay.liveSnapshotTime', { time: clockTime })
+                      ? t('restrictedZone.headerOverlay.liveSnapshotTime', { time: capturedTime })
                       : scopedPreview.status === 'REPLAY'
-                        ? t('restrictedZone.headerOverlay.replaySnapshotTime', { time: clockTime })
+                        ? t('restrictedZone.headerOverlay.replaySnapshotTime', { time: capturedTime })
                         : socketError
                           ? t('restrictedZone.headerOverlay.snapshotUnavailable')
                           : t('restrictedZone.headerOverlay.offline')}
@@ -1856,7 +1844,7 @@ export function RestrictedZoneView({
                       {tr('common.detected')}
                     </p>
                     <p className="font-semibold text-slate-900 text-xs mt-0.5 font-mono">
-                      {isLive ? clockTime : (testDetection?.timecode ?? '—')}
+                      {testDetection ? capturedTime : '—'}
                     </p>
                   </div>
                   <div>

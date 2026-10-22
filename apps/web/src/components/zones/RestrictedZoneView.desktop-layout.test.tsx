@@ -12,6 +12,7 @@ import type { DecodedPreview } from '../cameras/useRealtimePreview';
 import type { VideoTestDetection } from '../cameras/videoTestFixture';
 import type { SharedSession } from '../../types/shared-session';
 import i18n from '../../i18n';
+import { formatClockTime } from '../cameras/monitoringUtils';
 
 if (typeof globalThis.ResizeObserver !== 'function') {
   globalThis.ResizeObserver = class {
@@ -264,4 +265,27 @@ describe('RestrictedZoneView Desktop Layout', () => {
       expect(screen.getByTestId('zone-details-toggle').getAttribute('aria-expanded')).toBe('false');
     });
   });
+
+  it.each(['LIVE', 'REPLAY'] as const)(
+    'shows the frame capture time in %s detection details instead of the viewing clock',
+    async (status) => {
+      state.status = status;
+      const user = userEvent.setup();
+      render(
+        <QueryClientProvider client={queryClient}>
+          <RestrictedZoneView sharedSession={sharedAdminSession} />
+        </QueryClientProvider>,
+      );
+      await waitFor(() => {
+        expect((document.getElementById('zone-camera-select') as HTMLSelectElement).value).toBe('cam-1');
+      });
+      await user.click(screen.getByTestId('zone-details-toggle'));
+      const label = screen.getByTestId('zone-evidence-panel').querySelectorAll('p');
+      const detectedLabel = Array.from(label).find((node) => node.textContent === 'Detected');
+      expect(detectedLabel).toBeDefined();
+      expect(detectedLabel?.nextElementSibling?.textContent).toBe(
+        formatClockTime(new Date(state.preview!.frame.capturedAt)),
+      );
+    },
+  );
 });
