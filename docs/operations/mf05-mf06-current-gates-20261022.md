@@ -29,6 +29,7 @@
 - [x] Protocol 19 learning controls được khóa; V12 có checkpoint/recipe/CSV/nguồn truy vết. Không đổi gate để nhận model đã bị loại.
 - [x] Root lập quy tắc phạm vi nhãn PPE (`ppe-annotation-targets-20261022.md`, `cf956fe`): connector Hook khác cả bộ dây, harness khác áo phản quang; ghi rõ trường hợp không xác định. Đây là mục tiêu kỹ thuật, không tự duyệt lại nhãn vendor/human.
 - [x] Đối chiếu metadata/license và định danh 5 file video với nguồn hiện tại (`2943a9e`); kiểm tra 30 ảnh/53 source pins và xem đủ 5 contact sheets (`fcaf883`).
+- [x] Human duyệt riêng hai khung Hook của một ảnh TRAIN T12; receipt gắn đúng ảnh/tọa độ/hash. Root kiểm 18 bản sao/36 source pins và giữ nguyên nguồn. Xem `train-t12-connector-decision-20261022.md`; chưa xuất dataset hay mở lượt train từ quyết định một ảnh này.
 - [ ] Bộ qualification đủ mọi PPE, nhãn và coverage được review, phân nhóm video/scene, quyền sử dụng rõ. Bộ 30 frame hiện tại chưa đủ: nhiều ảnh đen/hoạt hình/phỏng vấn/máy thi công. Không gọi ảnh chưa nhãn là negative hoặc human GT.
 - [ ] Xử lý bất nhất phạm vi nhãn Hook/Harness và các sai số đã xem bằng dữ liệu được review; không sửa tập đánh giá cũ để làm đẹp điểm. Phiên AI đang tìm tối đa 3 nguồn công khai phù hợp; kết quả tìm kiếm chưa phải dữ liệu được duyệt.
 
@@ -50,6 +51,6 @@
 
 Website local flow35: Node12916, Web v34, Backend `5e118c5`, schema73 và authority READY; expiry được ghi là 13:19 VN ngày 22/10. Đây là trạng thái ở lần xác minh trước, không cam kết process còn sống sau expiry/reboot. Camera/AI worker/enqueue/Apply của website đang OFF; không tự bật bằng model bị loại.
 
-Checkpoint phục hồi: `checkpoint-main-integration-progress-v177.json` trong tooling `demo-readiness-20261014-v1/main-0dd7d27-integration-20261017-v1/`. Những heading cũ ghi schema72, chờ local73 hoặc training-running là lịch sử.
+Checkpoint phục hồi: `checkpoint-main-integration-progress-v179.json` trong tooling `demo-readiness-20261014-v1/main-0dd7d27-integration-20261017-v1/`. Những heading cũ ghi schema72, chờ local73 hoặc training-running là lịch sử.
 
 **Thứ tự tiếp theo:** mở được trình duyệt thì kiểm tra UI thật; song song hoàn thiện dữ liệu/qualification; chỉ sau model đạt mới đóng luồng camera thật và release. Không dùng số test hay tỷ lệ checkbox làm phần trăm hoàn thiện sản phẩm.
