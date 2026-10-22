@@ -40,3 +40,11 @@ Twelve approved replacements change 14 old Hook targets into 27 (+13). Twelve ex
 This leaves 1,579 legacy Hook-positive photos with 2,512 Hook boxes not certified against the connector-only definition. The thirteen coordinate-reviewed Hook photos contain 29 boxes, including the previously approved control photograph. The remaining legacy labels are not thereby proven wrong. This limited repair cannot be described as full ontology cleanup or a guaranteed route to 19/19 retention.
 
 Root authorized only a bounded CPU mechanics check next: at most one small batch, two CPU threads, actual frozen scoped loss, approved/held/retained-class examples, no optimizer step, epoch, GPU, worker or full-corpus export. It must distinguish verified BCE/target exclusion from any unexecuted box/DFL claim. Independent data qualification and a justified training design remain open.
+
+## Actual CPU loss follow-up
+
+The AI thread executed two detector forwards total on the same three actual TRAIN inputs at320px/two CPU threads. The first observer failed indexing a float0/1 GT mask; its script/log remain. Four synthetic checks validate the corrected Boolean inspection. The second forward reached the actual frozen ScopedDetectionLoss/ScopedBCE and original assigner, followed by one backward at detached raw loss-input tensors. There were zero optimizer steps/epochs/GPU initialization and no model-parameter gradients or updates.
+
+Held T06 class14 logit-gradient sum is0.0 and no class14 GT enters its assigner; retained Harness13 remains. Approved T12 has20 positive Hook anchors and gradient sum0.3669980466. The approved bare-hand input has20 positive NO-Gloves anchors and gradient sum0.2796683311. Loss parts/inspected gradients are finite. This verifies the bounded loss boundary, not accuracy or isolation of future shared box-head updates.
+
+Root inspected the executable probe/frozen loss, verified ten handoff file pins and source/model pins, checked scalar/GT assertions and saved `cpu-target-mechanics-v1/root-review-v1.json`. Root did not run a third forward. Result SHA256 `8390191ec1e6746372dc312ccf6912f2dada17bc00be8148c6226c39feb74fa7`; probe SHA256 `648763bfea0426e0c165a197be37422426adf20316c9447336bd2a796c1efd51`. Provenance/extent inventory and choosing an informative experiment remain next; no automatic materialization or heavy training follows.
