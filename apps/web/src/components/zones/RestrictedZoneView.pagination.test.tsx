@@ -7,6 +7,7 @@ import type { CameraResponse } from '@smartsite/contracts';
 import type { SharedSession } from '../../types/shared-session';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import { RestrictedZoneView } from './RestrictedZoneView';
+import { saveLocalDraft } from './zonePolygonAdapter';
 
 vi.mock('../cameras/useScopedCameraPreview', () => ({
   useScopedCameraPreview: () => ({
@@ -303,4 +304,112 @@ it('does not create concurrent next-page requests from repeated clicks', async (
   expect(list).toHaveBeenCalledTimes(2);
   await act(async () => resolve({ items: [camera(2)], total: 2 }));
   await screen.findByRole('option', { name: 'CAM-2 · Camera 2 (v1)' });
+});
+
+it('handles wrong-Site partial pages for Sites and Cameras with accurate authorized counts', async () => {
+  session = {
+    ...session,
+    user: {
+      id: 'officer-2',
+      displayName: 'Site 2 Safety Officer',
+      roleAssignments: [{ role: 'SAFETY_OFFICER', siteId: 'site-2' }],
+    },
+  };
+  vi.mocked(SmartSiteManagementClient.prototype.listSites)
+    .mockResolvedValueOnce({ items: [site(1)], total: 2 })
+    .mockResolvedValueOnce({ items: [site(2)], total: 2 });
+  vi.mocked(SmartSiteManagementClient.prototype.listPreviewCameras)
+    .mockResolvedValueOnce({ items: [camera(99, 'site-1')], total: 2 })
+    .mockResolvedValueOnce({ items: [camera(2, 'site-2')], total: 2 });
+
+  mount();
+  const moreSites = await screen.findByRole('button', { name: 'Load more sites' });
+  expect(screen.getByText('0 of 2 sites loaded')).toBeTruthy();
+  expect(screen.queryByRole('option', { name: 'SITE-1 · Worksite 1' })).toBeNull();
+
+  fireEvent.click(moreSites);
+  await screen.findByRole('option', { name: 'SITE-2 · Worksite 2' });
+  expect(screen.getByText('1 of 2 sites loaded')).toBeTruthy();
+
+  const moreCameras = await screen.findByRole('button', { name: 'Load more cameras' });
+  expect(screen.getByText('0 of 2 cameras loaded')).toBeTruthy();
+  expect(screen.queryByRole('option', { name: 'CAM-99 · Camera 99 (v1)' })).toBeNull();
+
+  fireEvent.click(moreCameras);
+  await screen.findByRole('option', { name: 'CAM-2 · Camera 2 (v1)' });
+  expect(screen.getByText('1 of 2 cameras loaded')).toBeTruthy();
+  expect((screen.getByRole('combobox', { name: 'Camera' }) as HTMLSelectElement).value).toBe(
+    'cam-2',
+  );
+});
+
+it('retains authorized draft polygon and settled site actions on transient next-page errors, and resets draft when a hard next-page error hides rows', async () => {
+  saveLocalDraft('site-1', 'cam-1', 'default', 1, [
+    [0.12, 0.18],
+    [0.88, 0.18],
+    [0.88, 0.84],
+    [0.12, 0.84],
+  ]);
+  vi.mocked(SmartSiteManagementClient.prototype.listSites)
+    .mockResolvedValueOnce({ items: [site(1)], total: 2 })
+    .mockRejectedValueOnce(new ApiError('http', 'Transient site page error', 503));
+  vi.mocked(SmartSiteManagementClient.prototype.listPreviewCameras)
+    .mockResolvedValueOnce({ items: [camera(1)], total: 2 })
+    .mockRejectedValueOnce(new ApiError('http', 'Transient camera page error', 503))
+    .mockRejectedValueOnce(new ApiError('http', 'Revoked camera scope', 403));
+
+  const { container } = render(
+    <QueryClientProvider client={queries}>
+      <RestrictedZoneView
+        apiUrl="http://localhost:3000"
+        sharedSession={session}
+        onNavigate={vi.fn()}
+      />
+    </QueryClientProvider>,
+  );
+
+  await screen.findByRole('option', { name: 'CAM-1 · Camera 1 (v1)' });
+  const polygon = container.querySelector('polygon');
+  const draftPointsAttr = polygon?.getAttribute('points');
+  expect(draftPointsAttr).toBeTruthy();
+  expect(draftPointsAttr).not.toContain('0.63');
+
+  fireEvent.click(await screen.findByRole('button', { name: 'Load more sites' }));
+  await screen.findByRole('button', { name: 'Retry loading more sites' });
+  fireEvent.click(await screen.findByRole('button', { name: 'Load more cameras' }));
+  const retryMoreCameras = await screen.findByRole('button', {
+    name: 'Retry loading more cameras',
+  });
+
+  expect(screen.getByRole('option', { name: 'SITE-1 · Worksite 1' })).toBeTruthy();
+  expect(screen.getByRole('option', { name: 'CAM-1 · Camera 1 (v1)' })).toBeTruthy();
+  expect(container.querySelector('polygon')?.getAttribute('points')).toBe(draftPointsAttr);
+
+  fireEvent.click(screen.getByTestId('zone-details-toggle'));
+  expect(await screen.findByTestId('zone-evidence-view-safety-alerts-btn')).toBeTruthy();
+
+  fireEvent.click(retryMoreCameras);
+  await screen.findByRole('button', { name: 'Retry loading cameras' });
+  expect(screen.queryByRole('option', { name: 'CAM-1 · Camera 1 (v1)' })).toBeNull();
+  expect(container.querySelector('polygon')?.getAttribute('points')).not.toBe(draftPointsAttr);
+});
+
+it('does not claim the linked Site is missing while its first metadata page is pending', () => {
+  vi.mocked(SmartSiteManagementClient.prototype.listSites).mockImplementation(
+    () => new Promise(() => {}),
+  );
+  render(
+    <QueryClientProvider client={queries}>
+      <RestrictedZoneView
+        apiUrl="http://localhost:3000"
+        sharedSession={session}
+        initialSelection={{ siteId: 'site-1', cameraId: 'cam-1' }}
+      />
+    </QueryClientProvider>,
+  );
+  expect(
+    screen.queryByText(
+      'The linked selection is not in the loaded list. Load more or choose an available item.',
+    ),
+  ).toBeNull();
 });

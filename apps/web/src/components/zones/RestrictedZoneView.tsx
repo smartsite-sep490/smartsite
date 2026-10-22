@@ -455,6 +455,14 @@ export function RestrictedZoneView({
     return items.filter((site) => assignedSiteIds.has(site.id));
   }, [sites.data?.items, assignedSiteIds]);
 
+  const sitesPagingQuery = useMemo(
+    () => ({
+      ...sites,
+      data: sites.data ? { items: availableSites, total: sites.data.total } : undefined,
+    }),
+    [sites, availableSites],
+  );
+
   const holdLinkedSite = Boolean(
     initialSelection?.siteId && initialSelection.siteId === requestedSiteId,
   );
@@ -489,6 +497,14 @@ export function RestrictedZoneView({
   const scopedCameras = useMemo(
     () => (cameras.data?.items ?? []).filter((cam) => cam.siteId === selectedSiteId),
     [cameras.data?.items, selectedSiteId],
+  );
+
+  const camerasPagingQuery = useMemo(
+    () => ({
+      ...cameras,
+      data: cameras.data ? { items: scopedCameras, total: cameras.data.total } : undefined,
+    }),
+    [cameras, scopedCameras],
   );
 
   const holdLinkedCamera = Boolean(
@@ -891,7 +907,7 @@ export function RestrictedZoneView({
     apiToken &&
     sessionScope &&
     !sites.isPending &&
-    !sites.error &&
+    sites.data &&
     !auth401Error &&
     selectedSiteId,
   );
@@ -1196,7 +1212,7 @@ export function RestrictedZoneView({
                   </option>
                 ))}
               </select>
-              <ZoneMetadataPaging query={sites} kind="sites" />
+              <ZoneMetadataPaging query={sitesPagingQuery} kind="sites" />
             </div>
 
             <div>
@@ -1232,7 +1248,7 @@ export function RestrictedZoneView({
                   </option>
                 ))}
               </select>
-              <ZoneMetadataPaging query={cameras} kind="cameras" />
+              <ZoneMetadataPaging query={camerasPagingQuery} kind="cameras" />
             </div>
 
             <div className="flex flex-wrap items-center gap-2 md:pt-5">
@@ -1283,12 +1299,12 @@ export function RestrictedZoneView({
               )}
             </div>
 
-            {((holdLinkedSite && !selectedSiteId && !sites.isPending && !sites.error) ||
+            {((holdLinkedSite && !selectedSiteId && !sites.isPending && Boolean(sites.data)) ||
               (holdLinkedCamera &&
                 selectedSiteId &&
                 !selectedCameraId &&
                 !cameras.isPending &&
-                !cameras.error)) && (
+                Boolean(cameras.data))) && (
               <p role="status" className="md:col-span-3 text-xs text-slate-600">
                 {tr('cameraSetup.linkedSelection', { ns: 'safety' })}
               </p>
