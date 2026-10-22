@@ -1,0 +1,185 @@
+diff --git a/apps/backend/src/database/typeorm.options.ts b/apps/backend/src/database/typeorm.options.ts
+--- a/apps/backend/src/database/typeorm.options.ts
++++ b/apps/backend/src/database/typeorm.options.ts
+@@ -1,5 +1,6 @@
+ import { PpeAlertNotifications1792886400000 } from './migrations/1792886400000-PpeAlertNotifications.js';
+ import { ExpandedPpeNotificationKinds1793145600000 } from './migrations/1793145600000-ExpandedPpeNotificationKinds.js';
++import { AuthorizationHistoryCutover1793232000000 } from './migrations/1793232000000-AuthorizationHistoryCutover.js';
+ import { PrepareNotificationCompatibility1792010000000 } from './migrations/1792010000000-PrepareNotificationCompatibility.js';
+ import { Mf06TeamAuthorityHistory1792281600000 } from './migrations/1792281600000-Mf06TeamAuthorityHistory.js';
+ import { CompleteNotificationCompatibility1792368000001 } from './migrations/1792368000001-CompleteNotificationCompatibility.js';
+@@ -178,6 +179,7 @@ export function buildTypeOrmOptions(config: DatabaseConnectionConfig): DataSourc
+       ZoneEntryPhysicalStorage1792454400000,
+       PpeAlertNotifications1792886400000,
+       ExpandedPpeNotificationKinds1793145600000,
++      AuthorizationHistoryCutover1793232000000,
+     ],
+     logging: false,
+     extra: {
+diff --git a/apps/backend/test/support/isolated-test-database.ts b/apps/backend/test/support/isolated-test-database.ts
+--- a/apps/backend/test/support/isolated-test-database.ts
++++ b/apps/backend/test/support/isolated-test-database.ts
+@@ -1,3 +1,5 @@
++import assert from 'node:assert/strict';
++import { reviewedReleaseMigrationNames } from './reviewed-release-graph.js';
+ import { randomUUID } from 'node:crypto';
+ import { DataSource } from 'typeorm';
+ import { buildTypeOrmOptions } from '../../src/database/typeorm.options.js';
+@@ -7,10 +9,19 @@ import { Legacy24TestDataSource, LEGACY_ENTITIES } from './legacy24/data-source.
+ 
+ /** File-owned disposable schema. Never truncate audit belonging to another integration suite. */
+ export function createIsolatedTestDatabase(
+-  profile: { canonical?: true; legacy?: never } | { legacy: true; canonical?: never } = {},
++  profile: { canonical?: true; legacy?: never; preAuthorityCutover72?: true } | { legacy: true; canonical?: never; preAuthorityCutover72?: never } = {},
+ ) {
+   const schema = `isolated_test_${randomUUID().replaceAll('-', '')}`;
+-  const productionOptions = buildTypeOrmOptions({ DATABASE_URL: resolveTestDatabaseUrl() });
++  let productionOptions = buildTypeOrmOptions({ DATABASE_URL: resolveTestDatabaseUrl() });
++  if (profile.preAuthorityCutover72) {
++    const migrations = productionOptions.migrations;
++    assert(Array.isArray(migrations));
++    const names = reviewedReleaseMigrationNames(migrations);
++    assert.equal(names.length, 73);
++    assert.equal(names.at(-1), 'AuthorizationHistoryCutover1793232000000');
++    productionOptions = { ...productionOptions, migrations: migrations.slice(0, -1) };
++    assert.equal(reviewedReleaseMigrationNames(productionOptions.migrations).length, 72);
++  }
+   // Default is the actual release graph. Old branch fixtures opt into frozen24
+   // explicitly; their PASS never proves canonical MAIN behavior.
+   const options = profile.legacy
+diff --git a/apps/backend/test/integration/authorization-history-control.integration.test.ts b/apps/backend/test/integration/authorization-history-control.integration.test.ts
+--- a/apps/backend/test/integration/authorization-history-control.integration.test.ts
++++ b/apps/backend/test/integration/authorization-history-control.integration.test.ts
+@@ -13,7 +13,7 @@ import { executeMainConfigurationCommand } from '../../src/common/configuration/
+ import type { EntityManager } from 'typeorm';
+ import { hasNamedV2AuthorityCutoverPredecessor } from '../../src/common/configuration/authorization-history-cutover-predecessor-v1.js';
+ 
+-const owned = createIsolatedTestDatabase();
++const owned = createIsolatedTestDatabase({ preAuthorityCutover72: true });
+ const db = owned.dataSource;
+ const preparedBaselines: MainAuthorityBaselineRecord[] = [];
+ before(async () => {
+diff --git a/apps/backend/test/integration/main-authority-cutover-service.integration.test.ts b/apps/backend/test/integration/main-authority-cutover-service.integration.test.ts
+--- a/apps/backend/test/integration/main-authority-cutover-service.integration.test.ts
++++ b/apps/backend/test/integration/main-authority-cutover-service.integration.test.ts
+@@ -21,7 +21,7 @@ import {
+   type MainAuthorityCutoverReleaseConfig,
+ } from '../../src/modules/zones/main-authority-cutover-release.js';
+ 
+-const owned = createIsolatedTestDatabase(),
++const owned = createIsolatedTestDatabase({ preAuthorityCutover72: true }),
+   db = owned.dataSource;
+ const sha256 = (body: Buffer | string) => createHash('sha256').update(body).digest('hex');
+ let auth: AuthService,
+diff --git a/apps/backend/test/support/qualified-authority-fixture.ts b/apps/backend/test/support/qualified-authority-fixture.ts
+--- a/apps/backend/test/support/qualified-authority-fixture.ts
++++ b/apps/backend/test/support/qualified-authority-fixture.ts
+@@ -23,7 +23,7 @@ const sha256 = (body: Buffer | string) => createHash('sha256').update(body).dige
+ 
+ /** One owned canonical schema and explicitly synthetic release; never an operational manifest. */
+ export async function createQualifiedAuthorityFixture() {
+-  const owned = createIsolatedTestDatabase(),
++  const owned = createIsolatedTestDatabase({ preAuthorityCutover72: true }),
+     db = owned.dataSource;
+   const schema = (db.options as { schema: string }).schema;
+   console.log('ownedQualifiedAuthorityReaderSchema=' + schema);
+diff --git a/apps/backend/test/support/reviewed-release-graph.ts b/apps/backend/test/support/reviewed-release-graph.ts
+--- a/apps/backend/test/support/reviewed-release-graph.ts
++++ b/apps/backend/test/support/reviewed-release-graph.ts
+@@ -99,9 +99,11 @@ export function reviewedReleaseMigrationNames(migrations: unknown): string[] {
+     'PpeAlertNotifications1792886400000',
+     'ExpandedPpeNotificationKinds1793145600000',
+   ];
+-  const expected = names.includes(release72Extensions[0]!)
++  const predecessor = names.includes(release72Extensions[0]!)
+     ? [...release61, workerQr, ...documents, ...release72Extensions]
+     : retained;
++  const cutover = 'AuthorizationHistoryCutover1793232000000';
++  const expected = names.includes(cutover) ? [...predecessor, cutover] : predecessor;
+   assert.deepEqual(names, expected, 'Exact reviewed release migration names and order');
+   return names;
+ }
+diff --git a/apps/backend/test/reviewed-release-graph.test.ts b/apps/backend/test/reviewed-release-graph.test.ts
+--- a/apps/backend/test/reviewed-release-graph.test.ts
++++ b/apps/backend/test/reviewed-release-graph.test.ts
+@@ -9,10 +9,10 @@ test('independent reviewed registry accepts current release and rejects unknown,
+   }).migrations;
+   assert(Array.isArray(registered));
+   const names = reviewedReleaseMigrationNames(registered);
+-  assert.equal(names.length, 72);
+-  for (const count of [61, 62, 66])
++  assert.equal(names.length, 73);
++  for (const count of [61, 62, 66, 72])
+     assert.equal(reviewedReleaseMigrationNames(registered.slice(0, count)).length, count);
+-  assert.equal(names.at(-1), 'ExpandedPpeNotificationKinds1793145600000');
++  assert.equal(names.at(-1), 'AuthorizationHistoryCutover1793232000000');
+   assert.deepEqual(
+     reviewedReleaseMigrationNames(names.map((name) => ({ name }))),
+     names,
+@@ -32,6 +32,6 @@ test('independent reviewed registry accepts current release and rejects unknown,
+   assert.throws(() =>
+     reviewedReleaseMigrationNames([...registered, class UnreviewedMigration1799999999999 {}]),
+   );
+-  assert.throws(() => reviewedReleaseMigrationNames(registered.slice(0, -1)));
++  assert.throws(() => reviewedReleaseMigrationNames(registered.filter((_, index) => index !== 70)));
+   assert.throws(() => reviewedReleaseMigrationNames([...registered, registered[0]]));
+ });
+diff --git a/apps/backend/test/canonical-main-migrations.test.ts b/apps/backend/test/canonical-main-migrations.test.ts
+--- a/apps/backend/test/canonical-main-migrations.test.ts
++++ b/apps/backend/test/canonical-main-migrations.test.ts
+@@ -22,6 +22,9 @@ test(
+   () => {
+     const canonical = createIsolatedTestDatabase();
+     const legacy = createIsolatedTestDatabase({ legacy: true });
++    const predecessor = createIsolatedTestDatabase({ preAuthorityCutover72: true });
++    assert(Array.isArray(predecessor.dataSource.options.migrations));
++    assert.equal(predecessor.dataSource.options.migrations.length, 72);
+     const production = buildTypeOrmOptions({
+       DATABASE_URL: 'postgresql://unit:unit@localhost/unit',
+     });
+@@ -70,10 +73,11 @@ test(
+       'CompleteNotificationCompatibility1792368000001',
+       'ZoneEntryPhysicalStorage1792454400000',
+       'ExpandedPpeNotificationKinds1793145600000',
++      'AuthorizationHistoryCutover1793232000000',
+     ];
+     const expected = [...names, ...extensions];
+     assert.deepEqual([...actual].sort(), [...expected].sort());
+-    assert.equal(actual.length, 72);
++    assert.equal(actual.length, 73);
+     assert.equal(new Set(actual).size, actual.length, 'migration registrations must be unique');
+     assert.equal(new Set(expected).size, names.length + extensions.length);
+     assert.equal(registered.synchronize, false);
+@@ -106,6 +110,6 @@ test(
+       'apps/backend/src/database/migrations/1792195200000-SafetyChecklists.ts',
+     ]);
+     assert(!actual.includes('ZoneAuthorityHistory1791417600000'));
+-    assert(!actual.some((name) => name.startsWith('AuthorizationHistoryCutover')));
++    assert.equal(actual.filter((name) => name.startsWith('AuthorizationHistoryCutover')).length, 1);
+   },
+ );
+diff --git a/apps/backend/test/authority-cutover-migration-identity.test.ts b/apps/backend/test/authority-cutover-migration-identity.test.ts
+--- a/apps/backend/test/authority-cutover-migration-identity.test.ts
++++ b/apps/backend/test/authority-cutover-migration-identity.test.ts
+@@ -3,7 +3,7 @@ import { test } from 'node:test';
+ import { AuthorizationHistoryCutover1793232000000 } from '../src/database/migrations/1793232000000-AuthorizationHistoryCutover.js';
+ import { buildTypeOrmOptions } from '../src/database/typeorm.options.js';
+ 
+-test('unregistered authority cutover candidate follows all registered migration timestamps', () => {
++test('authority cutover is registered exactly once after all predecessor timestamps', () => {
+   const candidate = new AuthorizationHistoryCutover1793232000000();
+   const registered = buildTypeOrmOptions({
+     DATABASE_URL: 'postgresql://fixture:fixture@127.0.0.1:5433/smartsite_test',
+@@ -13,9 +13,10 @@ test('unregistered authority cutover candidate follows all registered migration
+   const names = registered.map((migration) =>
+     typeof migration === 'function' ? migration.name : String(migration),
+   );
+-  assert(!names.includes(candidate.name));
++  assert.equal(names.filter((name) => name === candidate.name).length, 1);
++  assert.equal(names.at(-1), candidate.name);
+   assert.equal(candidate.name, 'AuthorizationHistoryCutover1793232000000');
+   assert(
+-    Number(candidate.name.slice(-13)) > Math.max(...names.map((name) => Number(name.slice(-13)))),
++    Number(candidate.name.slice(-13)) > Math.max(...names.filter((name) => name !== candidate.name).map((name) => Number(name.slice(-13)))),
+   );
+ });
