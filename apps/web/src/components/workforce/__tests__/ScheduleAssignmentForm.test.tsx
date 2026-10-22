@@ -181,6 +181,30 @@ const batchData = {
   dates: ['2030-10-07', '2030-10-08'],
   createdAt: '2030-01-01',
 };
+it('shows batch dates as day/month/year with the target and counts separately', async () => {
+  vi.mocked(SmartSiteManagementClient.prototype.listScheduleAssignments).mockResolvedValue({
+    items: [batchData],
+    total: 1,
+  });
+  mount();
+  expect(await screen.findByRole('heading', { name: 'Team A' })).toBeTruthy();
+  expect(screen.getByText('07/10/2030')).toBeTruthy();
+  expect(screen.getByText('08/10/2030')).toBeTruthy();
+  expect(screen.getByText('2 worker(s) across 2 day(s)')).toBeTruthy();
+  expect(screen.getByRole('button', { name: 'Edit' }).getAttribute('aria-expanded')).toBe('false');
+});
+
+it('shows a single-day batch date once', async () => {
+  vi.mocked(SmartSiteManagementClient.prototype.listScheduleAssignments).mockResolvedValue({
+    items: [{ ...batchData, dates: ['2030-10-07'] }],
+    total: 1,
+  });
+  mount();
+  expect(await screen.findByText('07/10/2030')).toBeTruthy();
+  expect(screen.getAllByText('07/10/2030')).toHaveLength(1);
+  expect(screen.queryByText('2030-10-07')).toBeNull();
+});
+
 async function select() {
   await screen.findByRole('option', { name: /^Team A \(2(?: members)?\)$/ });
   fireEvent.change(screen.getByLabelText('Team'), { target: { value: 'team' } });
@@ -310,10 +334,10 @@ it('shows one batch edit entry and sends an explicit one-worker future cancellat
     .spyOn(SmartSiteManagementClient.prototype, 'changeScheduleAssignment')
     .mockResolvedValue({ id: 'batch', version: 2 });
   mount();
-  fireEvent.click(await screen.findByRole('button', { name: 'Edit or cancel schedules' }));
+  fireEvent.click(await screen.findByRole('button', { name: 'Edit' }));
   expect(screen.queryByRole('button', { name: 'Edit unstarted schedules' })).toBeNull();
   expect(screen.queryByRole('button', { name: 'Apply remaining dates to new members' })).toBeNull();
-  expect(screen.getAllByRole('button', { name: 'Edit or cancel schedules' })).toHaveLength(1);
+  expect(screen.getAllByRole('button', { name: 'Edit' })).toHaveLength(1);
   fireEvent.change(screen.getByLabelText('Apply change to'), { target: { value: 'FROM_DATE' } });
   fireEvent.change(screen.getByLabelText('Affected workers'), { target: { value: 'a' } });
   fireEvent.change(screen.getByLabelText('Change reason'), {
@@ -345,7 +369,7 @@ it('edits all unstarted batch schedules without choosing dates and reports prote
     .mockRejectedValueOnce(new Error('Response unavailable'))
     .mockResolvedValue({ id: 'batch', version: 2, changedCount: 3, skippedCount: 2 });
   mount();
-  fireEvent.click(await screen.findByRole('button', { name: 'Edit or cancel schedules' }));
+  fireEvent.click(await screen.findByRole('button', { name: 'Edit' }));
   fireEvent.change(screen.getByLabelText('Apply change to'), { target: { value: 'UNSTARTED' } });
   fireEvent.change(screen.getByLabelText('Action'), { target: { value: 'CHANGE_SHIFT' } });
   expect(screen.queryByLabelText('Change date')).toBeNull();
@@ -379,7 +403,7 @@ it('cancels unstarted schedules for one selected worker and keeps the form on co
     .spyOn(SmartSiteManagementClient.prototype, 'changeScheduleAssignment')
     .mockRejectedValue(new Error('No unstarted schedules without attendance remain in this batch'));
   mount();
-  fireEvent.click(await screen.findByRole('button', { name: 'Edit or cancel schedules' }));
+  fireEvent.click(await screen.findByRole('button', { name: 'Edit' }));
   fireEvent.change(screen.getByLabelText('Apply change to'), { target: { value: 'UNSTARTED' } });
   fireEvent.change(screen.getByLabelText('Action'), { target: { value: 'CANCEL' } });
   expect(screen.queryByLabelText('Replacement shift')).toBeNull();

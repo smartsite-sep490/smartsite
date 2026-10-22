@@ -122,6 +122,8 @@ it('manager Dashboard displays API counts, scopes Sites and opens dated contract
   const dialog = within(await screen.findByRole('dialog'));
   await dialog.findByText('Tower A');
   expect(dialog.getByText('Team work area')).toBeTruthy();
+  expect(dialog.getAllByText('01/01/2026 – 01/01/2027')).toHaveLength(2);
+  expect(dialog.getByText(/\d{2}:\d{2}/)).toBeTruthy();
   expect(dialog.getByText('No team Zone assignments on this date.')).toBeTruthy();
   expect(dialog.queryByText(/Team Zone data unavailable/)).toBeNull();
   expect(dialog.getByText(/3 scheduled workers/)).toBeTruthy();

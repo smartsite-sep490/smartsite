@@ -3068,6 +3068,7 @@
   "face_gate_utils.face_scan_was_inconclusive_please_request_the_worker_to_present_their_dynamic_qr_c": "Face scan was inconclusive. Please request the Worker to present their dynamic QR code for fallback verification.",
   "face_gate_utils.worker_identity_and_site_zone_assignment_verified_security_officer_may_record_in_o": "Worker identity and site zone assignment verified. Security Officer may record IN or OUT.",
   "face_gate_utils.access_denied_by_backend_policy_qr_fallback_is_not_permitted_for_denied_credential": "Access denied by backend policy. QR fallback is not permitted for denied credentials.",
+  "face_gate_utils.worker_documents_invalid": "Worker documents are incomplete, unapproved or expired. Ask the Contractor Representative to complete the documents and the Safety Officer to review and approve them before entry.",
   "face_gate_utils.worker_record_flagged_for_manual_inspection_security_officer_must_perform_manual_i": "Worker record flagged for manual inspection. Security Officer must perform manual identity review before granting clearance.",
   "face_gate_utils.position_face_in_frame_and_click_scan_face_to_verify_identity_and_access_rights": "Position face in frame and click \"Scan face\" to verify identity and access rights.",
   "gate_camera_session.camera_a_ngat_ket_noi_ket_noi_lai_roi_khoi_ong_lai_camera": "The camera disconnected. Reconnect it and restart the camera.",
