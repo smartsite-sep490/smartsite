@@ -13,3 +13,9 @@ Human priority: connect existing components for tonight's local demo; improve pr
 Evidence: SmartSiteData/runs/demo-ai-notification-20261022-v1; product-rollout-461c857-20261021-v1/flow37-http-proof-root-v1.json, flow37-owner-proof-root-v1.json, flow38-recovery-preflight-proof-root-v1.json and launch receipts (private).
 
 Next: inspect actual observations and correlate real event -> persisted alert -> correct recipient -> authorized image retrieval. SAFETY_OFFICER site assignment is required for the inbox; Admin is not automatically a recipient. Do not fabricate identity, negatives or notifications. This remains a local experimental integration, not production acceptance.
+
+## Follow-up: complete replay and recipients
+
+- Read-only recipient query found zero eligible Safety Officers at the demo site; zero alerts/notifications. Proposed local demo.safety account requires owner approval; no role grants performed.
+- Native15 FPS on CPU processed46/76 and dropped30 frames. Repeated with the same80b spec differing only device=cuda:0: processed all76/76, zero dropped/sampled frames, model closed and exit0, zero events. This rules out sampling/drop as the only cause on this video; it does not prove absence of real violations.
+- GPU observation counts: {"('SAFETY_VEST', 'PRESENT')": 37, "('GLOVES', 'PRESENT')": 23, "('BOOTS', 'PRESENT')": 52, "('HARD_HAT', 'PRESENT')": 7}. No notification delivery proven. Preserve current filters and choose a representative source; do not force MISSING or weaken temporal guards.
