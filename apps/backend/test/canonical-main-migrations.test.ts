@@ -11,7 +11,7 @@ import { createIsolatedTestDatabase } from './support/isolated-test-database.js'
 const repository = process.env.SMARTSITE_TEST_SOURCE_REPO;
 const baseline = '2e98619ac94be775ef43f4cb3076f00a59b88df1';
 const previousMain = '3ce035888d18b61f8b70bd7c1eada4ae8d799d74';
-const currentMain = '585cc2631caf244e40af393d1abb2ceead5f9500';
+const currentMain = '0d206cdec1b2d6b926727f2b5f81367dacba42e6';
 test(
   'owned test database defaults to release graph; historical24 requires an explicit test-only selection',
   {
@@ -60,16 +60,22 @@ test(
       assert.equal(typeof migration, 'function');
       return (migration as new () => { name: string }).name;
     });
-    const expected = [
-      ...names,
+    const extensions = [
       'Mf06AssessmentRequests1791590400001',
       'Mf06MainAuthorityJournal1791590400002',
       'SafetyFaceProvenance1791590400003',
       'Mf06ImmutableAssessments1791590400004',
+      'PrepareNotificationCompatibility1792010000000',
+      'Mf06TeamAuthorityHistory1792281600000',
+      'CompleteNotificationCompatibility1792368000001',
+      'ZoneEntryPhysicalStorage1792454400000',
+      'ExpandedPpeNotificationKinds1793145600000',
     ];
+    const expected = [...names, ...extensions];
     assert.deepEqual([...actual].sort(), [...expected].sort());
+    assert.equal(actual.length, 72);
     assert.equal(new Set(actual).size, actual.length, 'migration registrations must be unique');
-    assert.equal(new Set(expected).size, names.length + 4);
+    assert.equal(new Set(expected).size, names.length + extensions.length);
     assert.equal(registered.synchronize, false);
     assert.equal(registered.migrationsRun, false);
     const digest = (bytes: Buffer) => createHash('sha256').update(bytes).digest('hex');
@@ -100,5 +106,6 @@ test(
       'apps/backend/src/database/migrations/1792195200000-SafetyChecklists.ts',
     ]);
     assert(!actual.includes('ZoneAuthorityHistory1791417600000'));
+    assert(!actual.some((name) => name.startsWith('AuthorizationHistoryCutover')));
   },
 );

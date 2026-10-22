@@ -86,11 +86,22 @@ export function reviewedReleaseMigrationNames(migrations: unknown): string[] {
     'WorkerDocumentSubmittedExpiry1792713600000',
     'WorkerHealthIssueDate1792800000000',
   ];
-  const expected = names.includes(documents[0]!)
+  const retained = names.includes(documents[0]!)
     ? [...release61, workerQr, ...documents]
     : names.includes(workerQr)
       ? [...release61, workerQr]
       : release61;
+  const release72Extensions = [
+    'PrepareNotificationCompatibility1792010000000',
+    'Mf06TeamAuthorityHistory1792281600000',
+    'CompleteNotificationCompatibility1792368000001',
+    'ZoneEntryPhysicalStorage1792454400000',
+    'PpeAlertNotifications1792886400000',
+    'ExpandedPpeNotificationKinds1793145600000',
+  ];
+  const expected = names.includes(release72Extensions[0]!)
+    ? [...release61, workerQr, ...documents, ...release72Extensions]
+    : retained;
   assert.deepEqual(names, expected, 'Exact reviewed release migration names and order');
   return names;
 }
