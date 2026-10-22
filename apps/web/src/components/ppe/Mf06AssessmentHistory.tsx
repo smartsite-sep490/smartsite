@@ -189,7 +189,11 @@ export function Mf06AssessmentHistory({
     },
     enabled: isQueryEnabled,
     refetchOnMount: 'always',
-    refetchInterval: false,
+    refetchInterval:
+      import.meta.env.VITE_AI_WORK_PAUSED === 'true' || selectedAssessmentTarget
+        ? false
+        : (query) => (query.state.error ? false : 10_000),
+    refetchIntervalInBackground: false,
     refetchOnWindowFocus: false,
     retry: false,
   });

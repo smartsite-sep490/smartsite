@@ -109,14 +109,7 @@ describe('Mf06AssessmentHistory technical references disclosure', () => {
     expect(
       screen.getByText(/Historical records reflect technical camera observations/i),
     ).toBeTruthy();
-    for (const label of [
-      'Allowed',
-      'Authorized',
-      'Initial Observation',
-      'vmf06-v1.0.0',
-      first.cameraId,
-      first.zoneId,
-    ]) {
+    for (const label of ['Allowed', 'Authorized']) {
       expect(within(firstRow).getByText(label).closest('details')).toBeNull();
     }
     expect(
@@ -124,14 +117,8 @@ describe('Mf06AssessmentHistory technical references disclosure', () => {
     ).toBeNull();
     expect(
       firstRow.querySelector(`time[datetime="${first.assessedAt}"]`)?.closest('details'),
-    ).toBeNull();
-    for (const label of [
-      'Unavailable',
-      'Identity Unavailable',
-      'Retrospective Review',
-      second.cameraId,
-      second.zoneId,
-    ]) {
+    ).not.toBeNull();
+    for (const label of ['Unavailable', 'Identity Unavailable']) {
       expect(within(secondRow).getByText(label).closest('details')).toBeNull();
     }
 
@@ -151,6 +138,13 @@ describe('Mf06AssessmentHistory technical references disclosure', () => {
     expect(summary0.getAttribute('role')).toBeNull();
     summary0.focus();
     expect(document.activeElement).toBe(summary0);
+
+    for (const label of ['Initial Observation', 'vmf06-v1.0.0', first.cameraId, first.zoneId]) {
+      expect(within(firstRow).getByText(label).closest('details')).toBe(details0);
+    }
+    for (const label of ['Retrospective Review', second.cameraId, second.zoneId]) {
+      expect(within(secondRow).getByText(label).closest('details')).toBe(details1);
+    }
 
     expect(within(firstRow).getByText(first.assessmentId).closest('details')).toBe(details0);
     expect(within(firstRow).getByText('TRUSTED_SERVICE').closest('details')).toBe(details0);
