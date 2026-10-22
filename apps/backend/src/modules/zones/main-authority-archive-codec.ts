@@ -334,17 +334,17 @@ const rowSchemas = {
     id,
     camera_id: id,
     zone_id: id,
-    // Preserve both retained tuple archives and the camera API's stored point objects verbatim.
+    // Preserve retained tuple archives and the camera API's coordinates envelope verbatim.
     polygon: z.union([
       z
         .array(z.tuple([z.number().min(0).max(1), z.number().min(0).max(1)]))
         .min(3)
         .max(256),
       z.strictObject({
-        points: z
-          .array(z.strictObject({ x: z.number().min(0).max(1), y: z.number().min(0).max(1) }))
+        coordinates: z
+          .array(z.tuple([z.number().min(0).max(1), z.number().min(0).max(1)]))
           .min(3)
-          .max(256),
+          .max(64),
       }),
     ]),
     coordinate_space: z.literal('NORMALIZED_0_1'),
