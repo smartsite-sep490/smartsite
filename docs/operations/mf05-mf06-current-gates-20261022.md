@@ -61,6 +61,7 @@
 - [x] MF06 enqueue/worker đã bật: lượt hash-bound tạo9 request/job SUCCEEDED, lịch sử200 và ảnh SHA-bound200. Kết quả cả9 là ALLOWED/POLICY_NONE theo chính sách hiện có; chưa chứng minh quyền/identity Worker hay phát hiện unauthorized.
 - [x] Đã sửa producer AI (7b99080) để gắn SHA ảnh thực và xuất version1.2/1.3.77 ca hash/evidence/domain và21 runtime PASS, lint PASS. Không nới guard ảnh Backend.
 - [x] Tapo LIVE durable worker riêng đang xử lý thực (120 frame lúc17:19), outbox/evidence và MF06 auto enqueue. Chưa chứng minh cảnh báo phát sinh từ LIVE. Laptop mới có preview.
-- [ ] Hoàn thiện mọi camera có durable delivery, kiểm UI thật, live source recovery/capacity, chất lượng model và identity/authority; các gate production ở trên vẫn OPEN.
+- [x] Ảnh nền cấu hình vùng trên bốn nguồn đang chạy: đúng quyền Site Manager, camera/version/SHA, reference5phút; no-op lưu polygon hiện có và đọc lại200, giữ nguyên geometry/version. AI router d3681ee chỉ quan sát raw capture đã chạy, không mở nguồn/model từ request; cold/new camera còn cần binding riêng. Chưa kiểm thao tác kéo/vẽ thật trên browser.
+- [ ] Hoàn thiện mọi camera có durable delivery, cold/new source binding, kiểm UI thật, live source recovery/capacity, chất lượng model và identity/authority; các gate production ở trên vẫn OPEN.
 
 Hướng dẫn demo: docs/operations/demo-local-mf05-mf06-20261022.md. Artifact/proof trong SmartSiteData/runs/demo-ai-notification-20261022-v1; checkpoint phục hồi v194. Preview deadline02:41VN23/10, website expiry theo receipt; phải xác minh lại sau reboot/expiry. Không push/merge/deploy.

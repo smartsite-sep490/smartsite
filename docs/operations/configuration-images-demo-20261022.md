@@ -1,0 +1,13 @@
+# Configuration images on the running demo
+
+The four preview origins did not expose `/v1/realtime/configuration-image`, so the existing authoring UI could not obtain a background image. AI commit d3681ee adds an authenticated observer router for an existing raw capture buffer. It does not open a camera, invoke inference, select a region or write an AI event. Monitoring frames are refused; original raw JPEG bytes are hashed and projected into the existing REGION_CONFIGURATION contract.
+
+The local preview wrappers explicitly mount this router. LIVE sources reuse their independent raw-media capture buffer. For REPLAY, a read-only observer offers the original newly-read envelope to that buffer before detector processing; pixels/session/sequence/capture time are unchanged. Backend hash/dimension/scope/version/freshness checks remain intact. No inference JPEG is re-labelled as a configuration photo.
+
+All four preview owners were replaced on their existing ports, with fresh configurations read from the actual Backend. Three old producers drained normally; the old core replay required its previously documented forced stop. New producers all support STOP/deadline drain. Exact listener child PID/birth/command ownership is recorded in four-preview-lifecycle-owner-v4.json; watcher78140 checks the current website. Node73780, PostgreSQL69444, database schema73, account roles, policies and durable Tapo worker were not restarted or changed.
+
+Actual Site Manager verification: four configuration-image reads200/no-store, purpose/scope/version and SHA checks passed; JPEGs640x360 except webcam640x480. References expire after the existing five-minute authoring lifetime. A PATCH of the existing core replay polygon with its current configuration version returned200; reading it again matched exactly and no geometry/configuration version changed. This is an API no-op save proof, not a new polygon or browser drawing proof. Nine focused router cases and scoped lint passed.
+
+Evidence: SmartSiteData/runs/demo-ai-notification-20261022-v1/configuration-images-proof.json and configuration-preview-v1/. Original configuration JPEGs/receipts stay outside Git. User path: log in as demo.manager, open `/camera-setup`, select the camera and capture a fresh reference before editing a region. Refresh the reference when it expires.
+
+Limits: this observer only reads already-running capture; it never starts a cold source from a request. A brand-new/cold source still needs explicit capture-owner binding. Actual browser gestures, loading/error layout and user acceptance remain unverified. Model quality, Worker identity and production deployment are separate open gates.
