@@ -927,3 +927,49 @@ test('2048 total rows are accepted while duplicate source IDs and hidden propert
     reason: 'MALFORMED_ARCHIVE',
   });
 });
+
+test('canonical persisted Region polygon survives archive sealing without changing bytes or hash', () => {
+  const f = createArchiveFixture({ cameraId: randomUUID(), regionId: randomUUID() });
+  const region = f.payload.sources.find((s) => s.sourceKind === 'REGION')!.rows[0]!;
+  region.polygon = {
+    points: [
+      { x: 0, y: 0 },
+      { x: 1, y: 0 },
+      { x: 1, y: 1 },
+    ],
+  };
+  const hash = computeCanonicalPayloadHash(f.payload);
+  const result = sealMainAuthorityArchive(f.payload, f.context);
+  assert.equal(result.status, 'VALID');
+  if (result.status !== 'VALID') return;
+  assert.equal(result.archive.sha256, hash);
+  assert.equal(JSON.stringify(result.archive.payload), JSON.stringify(f.payload));
+  assert.equal(
+    decodeStoredMainAuthorityArchive(result.archive, { ...f.context, sha256: hash }).status,
+    'VALID',
+  );
+});
+
+test('persisted Region polygon still rejects malformed, oversized and out-of-range coordinates', () => {
+  const valid = [
+    { x: 0, y: 0 },
+    { x: 1, y: 0 },
+    { x: 1, y: 1 },
+  ];
+  for (const polygon of [
+    { points: valid.slice(0, 2) },
+    { points: Array.from({ length: 257 }, () => ({ x: 0, y: 0 })) },
+    { points: [{ x: -0.1, y: 0 }, ...valid] },
+    { points: [{ x: 0, y: 1.1 }, ...valid] },
+    { points: [{ x: NaN, y: 0 }, ...valid] },
+    { points: valid, extra: true },
+    { points: [{ x: 0, y: 0, extra: true }, ...valid] },
+  ]) {
+    const f = createArchiveFixture({ cameraId: randomUUID(), regionId: randomUUID() });
+    f.payload.sources.find((s) => s.sourceKind === 'REGION')!.rows[0]!.polygon = polygon;
+    assert.deepEqual(sealMainAuthorityArchive(f.payload, f.context), {
+      status: 'UNAVAILABLE',
+      reason: 'MALFORMED_ARCHIVE',
+    });
+  }
+});
