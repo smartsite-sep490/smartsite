@@ -406,3 +406,32 @@ test('Logout before readback leaves committed cutover intact; replay with revoke
   await assert.rejects(service.activate(request, committed.control[0].epoch_id), status(401));
   assert.deepEqual(await state(), committed);
 });
+
+test('MOBILE Admin bearer cannot activate the WEB-only authority cutover', async () => {
+  const login = await auth.login(actor, 'Synthetic-Cutover-Session-123!', AuthClientType.MOBILE);
+  const mobileRequest: AuthenticatedRequest = {
+    headers: { authorization: `Bearer ${login.accessToken}` },
+  };
+  await guard.authenticateRequest(mobileRequest);
+  const before = await state();
+  const [control] = await db.query(
+    'SELECT epoch_id FROM authorization_history_control WHERE singleton=1',
+  );
+  await assert.rejects(service.activate(mobileRequest, control.epoch_id), status(401));
+  assert.deepEqual(await state(), before);
+});
+
+test('caller-supplied WEB marker cannot replace a MOBILE session at transactional reauthorization', async () => {
+  const login = await auth.login(actor, 'Synthetic-Cutover-Session-123!', AuthClientType.MOBILE);
+  const forgedRequest: AuthenticatedRequest = {
+    headers: { authorization: `Bearer ${login.accessToken}` },
+  };
+  await guard.authenticateRequest(forgedRequest);
+  forgedRequest.clientType = AuthClientType.WEB;
+  const before = await state();
+  const [control] = await db.query(
+    'SELECT epoch_id FROM authorization_history_control WHERE singleton=1',
+  );
+  await assert.rejects(service.activate(forgedRequest, control.epoch_id), status(401));
+  assert.deepEqual(await state(), before);
+});

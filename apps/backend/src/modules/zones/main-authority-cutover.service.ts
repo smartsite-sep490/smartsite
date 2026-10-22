@@ -1,5 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import { DataSource, QueryFailedError } from 'typeorm';
+import { AuthClientType } from '../../database/entities/auth-session.entity.js';
 import { UnauthorizedException } from '@nestjs/common';
 import type { ConfigService } from '@nestjs/config';
 import type { BackendEnvironment } from '../../config/environment.js';
@@ -30,8 +31,14 @@ export class MainAuthorityCutoverService {
   }
 
   async activate(request: AuthenticatedRequest, expectedPreviousEpochId: string | null) {
-    if (!request.user) throw new UnauthorizedException();
+    if (!request.user || request.clientType !== AuthClientType.WEB)
+      throw new UnauthorizedException();
     const context = configurationCommandContext(request, this.auth);
+    const reauthorize = context.reauthorize!;
+    context.reauthorize = async (manager) => {
+      await reauthorize(manager);
+      if (request.clientType !== AuthClientType.WEB) throw new UnauthorizedException();
+    };
     const expected =
       expectedPreviousEpochId === null ? null : uuid(expectedPreviousEpochId).toLowerCase();
     // Filesystem work precedes all DB locks/retries. Trusted release bytes must be immutable during activation.
