@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import React, { useState } from 'react';
-import { render, screen, cleanup, waitFor, act } from '@testing-library/react';
+import { render, screen, cleanup, waitFor, act, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { describe, expect, it, vi, beforeEach, afterEach } from 'vitest';
@@ -237,6 +237,48 @@ describe('RestrictedZoneView MF06 Assessment History Integration', () => {
     expect(listPreviewCamerasSpy).toHaveBeenCalled();
   });
 
+  it('current camera catalog flows through history and detail, then clears on camera scope denial', async () => {
+    const record = createAssessment();
+    vi.spyOn(SmartSiteManagementClient.prototype, 'listSites').mockResolvedValue({
+      items: [mockSites[0]],
+      total: 1,
+    });
+    const cameras = vi
+      .spyOn(SmartSiteManagementClient.prototype, 'listPreviewCameras')
+      .mockResolvedValue({
+        items: [{ ...mockCamerasSite1[0]!, id: record.cameraId, name: 'Current North Gate' }],
+        total: 1,
+      });
+    vi.spyOn(SmartSiteManagementClient.prototype, 'listMf06Assessments').mockResolvedValue(
+      createPage([record]),
+    );
+    vi.spyOn(SmartSiteManagementClient.prototype, 'getMf06Assessment').mockResolvedValue(record);
+    vi.spyOn(SmartSiteManagementClient.prototype, 'getMf06AssessmentFrame').mockRejectedValue(
+      new ApiError('http', 'No synthetic frame', 404),
+    );
+    render(
+      <QueryClientProvider client={queryClient}>
+        <RestrictedZoneView sharedSession={mockSharedSession} />
+      </QueryClientProvider>,
+    );
+    const label = await screen.findByText('Camera (current catalog)');
+    const card = label.closest('li');
+    expect(card).not.toBeNull();
+    expect(within(card!).getByText('CAM-01 · Current North Gate')).toBeTruthy();
+    await userEvent.click(within(card!).getByRole('button', { name: 'View assessment' }));
+    const dialog = await screen.findByRole('dialog', { name: 'Recorded assessment' });
+    expect(await within(dialog).findByText('CAM-01 · Current North Gate')).toBeTruthy();
+    cameras.mockRejectedValue(new ApiError('http', 'Camera scope revoked', 403));
+    await act(async () => {
+      await queryClient.refetchQueries({
+        predicate: (query) =>
+          query.queryKey[0] === 'zone-admin' && query.queryKey.includes('cameras'),
+      });
+    });
+    await waitFor(() => expect(screen.queryByText('CAM-01 · Current North Gate')).toBeNull());
+    expect(screen.queryByText('Camera (current catalog)')).toBeNull();
+  });
+
   it('distinguishes between 503 service unavailable and empty assessment history', async () => {
     vi.spyOn(SmartSiteManagementClient.prototype, 'listSites').mockResolvedValue({
       items: [mockSites[0]],
@@ -401,16 +443,12 @@ describe('RestrictedZoneView MF06 Assessment History Integration', () => {
     function Harness() {
       const [session, setSession] = useState<SharedSession | null>(mockSharedSession);
       return (
-        <RestrictedZoneView
-          sharedSession={
-            session
-              ? {
-                  ...session,
-                  onSignOut: () => setSession(null),
-                }
-              : null
-          }
-        />
+        <>
+          <button type="button" onClick={() => setSession(null)}>
+            Sign out of shell
+          </button>
+          <RestrictedZoneView sharedSession={session} />
+        </>
       );
     }
 

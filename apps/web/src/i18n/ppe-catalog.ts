@@ -412,6 +412,7 @@ export const PPE_EN_CATALOG = {
   'mf06.case.evidenceOpenRecord': 'View image in record (if available)',
   'mf06.case.identityTeamLabel': 'Person / Team:',
   'mf06.case.identityNotProjected': 'No public person/team data available',
+  'mf06.case.currentCameraLabel': 'Camera (current catalog)',
 
   'mf06.panel.sectionAria': 'Restricted Zone Assessments and Requests',
   'mf06.panel.heading': 'MF06 Restricted Zone Assessments',
@@ -1446,6 +1447,7 @@ export const PPE_VI_CATALOG: Record<PpeTranslationKey, string> = {
   'mf06.case.evidenceOpenRecord': 'Ảnh trong hồ sơ (nếu có)',
   'mf06.case.identityTeamLabel': 'Người / Tổ đội:',
   'mf06.case.identityNotProjected': 'Không có dữ liệu công khai về người/tổ đội',
+  'mf06.case.currentCameraLabel': 'Camera (danh mục hiện tại)',
 
   'mf06.panel.sectionAria': 'Đánh giá và yêu cầu khu vực hạn chế',
   'mf06.panel.heading': 'Đánh giá khu vực hạn chế MF06',

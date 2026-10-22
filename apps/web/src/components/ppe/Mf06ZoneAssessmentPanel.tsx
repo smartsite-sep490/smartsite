@@ -9,6 +9,7 @@ import {
 import { Mf06AssessmentHistory } from './Mf06AssessmentHistory';
 import { Mf06AssessmentDetailDialog } from './Mf06AssessmentDetailDialog';
 import type { AssessmentTargetContext } from './mf06AssessmentDetailBinding';
+import type { Mf06CameraCatalog } from './mf06CurrentCameraLabel';
 import { IconClock, IconShield, IconAlertTriangle } from '../icons';
 import { useLocale, type Locale, type TranslationKey } from '../../i18n/ppe-locale';
 
@@ -19,6 +20,7 @@ export interface Mf06ZoneAssessmentPanelProps {
   onUnauthorized?: () => void;
   apiUrl?: string;
   client?: SmartSiteManagementClient;
+  cameraCatalog?: Mf06CameraCatalog;
   initialTab?: 'assessments' | 'requests';
 }
 
@@ -246,6 +248,7 @@ export function Mf06ZoneAssessmentPanel(props: Mf06ZoneAssessmentPanelProps) {
                 credentialId={props.credentialId}
                 apiUrl={props.apiUrl}
                 client={props.client}
+                cameraCatalog={props.cameraCatalog}
                 onUnauthorized={props.onUnauthorized}
               />
             </div>
@@ -263,6 +266,7 @@ export function Mf06ZoneAssessmentPanel(props: Mf06ZoneAssessmentPanelProps) {
                 credentialId={props.credentialId}
                 apiUrl={props.apiUrl}
                 client={props.client}
+                cameraCatalog={props.cameraCatalog}
                 onUnauthorized={props.onUnauthorized}
               />
             </div>
@@ -281,6 +285,7 @@ function Mf06RequestStatusList({
   apiUrl = (typeof import.meta !== 'undefined' && import.meta.env?.VITE_API_URL) ||
     'http://localhost:3000',
   client: injectedClient,
+  cameraCatalog,
 }: Mf06ZoneAssessmentPanelProps) {
   const { locale, t } = useLocale();
   const queryClient = useQueryClient();
@@ -847,6 +852,7 @@ function Mf06RequestStatusList({
         credentialId={credentialId}
         apiUrl={apiUrl}
         client={managementClient}
+        cameraCatalog={cameraCatalog}
         onUnauthorized={onUnauthorized}
         onAccessError={handleDetailAccessError}
       />

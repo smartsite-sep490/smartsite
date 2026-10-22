@@ -2160,6 +2160,7 @@ export function RestrictedZoneView({
           credentialId={`${sessionScope}:${metadataCredential}`}
           apiUrl={apiUrl}
           client={client}
+          cameraCatalog={scopedCameras}
           onUnauthorized={handleHistoryUnauthorized}
         />
       )}

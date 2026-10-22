@@ -7,9 +7,12 @@ import { Mf06AssessmentDetailDialog } from './Mf06AssessmentDetailDialog';
 import {
   ApiError,
   SmartSiteManagementClient,
+  type CameraResponse,
   type Mf06AssessmentResponse,
 } from '@smartsite/api-client';
 import type { AssessmentTargetContext } from './mf06AssessmentDetailBinding';
+
+type CameraCatalogItem = Pick<CameraResponse, 'id' | 'siteId' | 'code' | 'name'>;
 
 const SITE_1 = '33333333-3333-4333-8333-333333333331';
 const CREDENTIAL_1 = 'cred-test-1';
@@ -73,7 +76,9 @@ describe('Mf06AssessmentDetailDialog', () => {
   beforeEach(() => {
     mockGetMf06Assessment = vi.fn().mockResolvedValue(sampleRecord);
     mockClient = {
-      getMf06AssessmentFrame: vi.fn().mockRejectedValue(new ApiError('http', 'No frame fixture', 404)),
+      getMf06AssessmentFrame: vi
+        .fn()
+        .mockRejectedValue(new ApiError('http', 'No frame fixture', 404)),
       getMf06Assessment: mockGetMf06Assessment,
     } as unknown as SmartSiteManagementClient;
   });
@@ -482,5 +487,95 @@ describe('Mf06AssessmentDetailDialog', () => {
 
     // Access error must NOT be invoked because it belongs to old scope
     expect(onAccessError).not.toHaveBeenCalled();
+  });
+
+  it('current camera catalog renders matched same-Site camera label outside default-collapsed technical details while keeping raw assessment, request, event, camera, and zone IDs inside details', async () => {
+    const cameraCatalog: ReadonlyArray<CameraCatalogItem> = [
+      {
+        id: sampleTarget.cameraId.toUpperCase(),
+        siteId: SITE_1,
+        code: 'CAM-01',
+        name: 'North Gate Camera',
+      },
+    ];
+
+    mount(() => (
+      <Mf06AssessmentDetailDialog
+        open={true}
+        onClose={vi.fn()}
+        target={sampleTarget}
+        token={TOKEN_1}
+        siteId={SITE_1}
+        credentialId={CREDENTIAL_1}
+        client={mockClient}
+        cameraCatalog={cameraCatalog}
+      />
+    ));
+
+    const dialog = await screen.findByRole('dialog', { name: 'Recorded assessment' });
+    expect(await screen.findByText('Identity Unavailable')).toBeTruthy();
+    expect(screen.getByText('Camera (current catalog)')).toBeTruthy();
+    expect(screen.getByText(/North Gate Camera/)).toBeTruthy();
+    expect(screen.getByText(/CAM-01/)).toBeTruthy();
+
+    const details = dialog.querySelector('details');
+    expect(details).toBeTruthy();
+    expect(details?.hasAttribute('open')).toBe(false);
+    expect(details?.textContent).not.toContain('North Gate Camera');
+    expect(details?.textContent).not.toContain('CAM-01');
+    expect(details?.textContent).toContain(sampleRecord.cameraId);
+    expect(details?.textContent).toContain(sampleRecord.zoneId);
+    expect(details?.textContent).toContain(sampleRecord.assessmentId);
+    expect(details?.textContent).toContain(sampleRecord.requestId);
+    expect(details?.textContent).toContain(sampleRecord.eventId);
+    expect(details?.textContent).toContain(sampleRecord.provenance);
+  });
+
+  it('current camera catalog withholds foreign-Site camera label and clears label when rerendered without catalog', async () => {
+    const foreignCatalog: ReadonlyArray<CameraCatalogItem> = [
+      {
+        id: sampleTarget.cameraId,
+        siteId: '99999999-9999-4999-8999-999999999999',
+        code: 'CAM-FOREIGN',
+        name: 'Foreign Gate Camera',
+      },
+    ];
+    const sameSiteCatalog: ReadonlyArray<CameraCatalogItem> = [
+      {
+        id: sampleTarget.cameraId,
+        siteId: SITE_1,
+        code: 'CAM-01',
+        name: 'North Gate Camera',
+      },
+    ];
+
+    const ui = (catalog?: ReadonlyArray<CameraCatalogItem>) => (
+      <Mf06AssessmentDetailDialog
+        open={true}
+        onClose={vi.fn()}
+        target={sampleTarget}
+        token={TOKEN_1}
+        siteId={SITE_1}
+        credentialId={CREDENTIAL_1}
+        client={mockClient}
+        cameraCatalog={catalog}
+      />
+    );
+    const view = mount(() => ui(foreignCatalog));
+    expect(await screen.findByText('Identity Unavailable')).toBeTruthy();
+    expect(screen.queryByText('Camera (current catalog)')).toBeNull();
+    expect(screen.queryByText(/Foreign Gate Camera/)).toBeNull();
+
+    view.rerender(
+      <QueryClientProvider client={view.queries}>{ui(sameSiteCatalog)}</QueryClientProvider>,
+    );
+    expect(screen.getByText('Camera (current catalog)')).toBeTruthy();
+    expect(screen.getByText(/North Gate Camera/)).toBeTruthy();
+    expect(screen.getByText(/CAM-01/)).toBeTruthy();
+
+    view.rerender(<QueryClientProvider client={view.queries}>{ui(undefined)}</QueryClientProvider>);
+    expect(screen.queryByText('Camera (current catalog)')).toBeNull();
+    expect(screen.queryByText(/North Gate Camera/)).toBeNull();
+    expect(screen.queryByText(/CAM-01/)).toBeNull();
   });
 });

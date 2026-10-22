@@ -2,10 +2,18 @@
 import React from 'react';
 import { render, screen, fireEvent, cleanup } from '@testing-library/react';
 import { describe, it, expect, vi, afterEach } from 'vitest';
-import type { Mf06AssessmentResponse } from '@smartsite/api-client';
+import type { CameraResponse, Mf06AssessmentResponse } from '@smartsite/api-client';
 import { Mf06AssessmentCaseCard } from './Mf06AssessmentCaseCard';
 import { LocaleProvider } from '../../i18n/locale';
 import i18n from '../../i18n/runtime';
+
+type CameraCatalogItem = Pick<CameraResponse, 'id' | 'siteId' | 'code' | 'name'>;
+
+const VALID_SITE_ID = '00000000-0000-4000-8000-000000000010';
+const FOREIGN_SITE_ID = '00000000-0000-4000-8000-000000000099';
+const VALID_CAMERA_ID = '55555555-5555-4555-8555-555555555555';
+const OTHER_CAMERA_ID = '55555555-5555-4555-8555-555555555599';
+const VALID_ZONE_ID = '66666666-6666-4666-8666-666666666666';
 
 function makeAssessment(overrides: Partial<Mf06AssessmentResponse> = {}): Mf06AssessmentResponse {
   return {
@@ -133,5 +141,182 @@ describe('Mf06AssessmentCaseCard', () => {
     expect(screen.getByText('Ảnh trong hồ sơ (nếu có)')).toBeTruthy();
     expect(screen.getByText('Không có dữ liệu công khai về người/tổ đội')).toBeTruthy();
     expect(container.querySelector('details')?.textContent).toContain('Quan sát ban đầu');
+  });
+
+  it('current camera catalog displays matched same-Site camera name and code under Camera (current catalog) outside technical IDs in en and vi', async () => {
+    await i18n.changeLanguage('en');
+    const assessment = makeAssessment({
+      siteId: VALID_SITE_ID,
+      cameraId: VALID_CAMERA_ID,
+      zoneId: VALID_ZONE_ID,
+    });
+    const cameraCatalog: ReadonlyArray<CameraCatalogItem> = [
+      {
+        id: VALID_CAMERA_ID.toUpperCase(),
+        siteId: VALID_SITE_ID,
+        code: 'CAM-01',
+        name: 'North Gate Camera',
+      },
+    ];
+
+    const { container, rerender } = render(
+      <LocaleProvider defaultLocale="en">
+        <ul>
+          <Mf06AssessmentCaseCard
+            assessment={assessment}
+            referencesKey="scope-en"
+            cameraCatalog={cameraCatalog}
+            onViewAssessment={vi.fn()}
+          />
+        </ul>
+      </LocaleProvider>,
+    );
+
+    expect(screen.getByText('Camera (current catalog)')).toBeTruthy();
+    expect(screen.getByText(/North Gate Camera/)).toBeTruthy();
+    expect(screen.getByText(/CAM-01/)).toBeTruthy();
+    expect(screen.getByText('No public person/team data available')).toBeTruthy();
+
+    const details = container.querySelector('details');
+    expect(details).toBeTruthy();
+    expect(details?.hasAttribute('open')).toBe(false);
+    expect(details?.textContent).not.toContain('North Gate Camera');
+    expect(details?.textContent).not.toContain('CAM-01');
+    expect(details?.textContent).toContain(VALID_CAMERA_ID);
+    expect(details?.textContent).toContain(VALID_ZONE_ID);
+
+    await i18n.changeLanguage('vi');
+    rerender(
+      <LocaleProvider defaultLocale="vi">
+        <ul>
+          <Mf06AssessmentCaseCard
+            assessment={assessment}
+            referencesKey="scope-vi"
+            cameraCatalog={cameraCatalog}
+            onViewAssessment={vi.fn()}
+          />
+        </ul>
+      </LocaleProvider>,
+    );
+
+    expect(screen.getByText('Camera (danh mục hiện tại)')).toBeTruthy();
+    expect(screen.getByText(/North Gate Camera/)).toBeTruthy();
+    expect(screen.getByText(/CAM-01/)).toBeTruthy();
+  });
+
+  it('current camera catalog omits foreign-Site label for same cameraId while rendering same-Site match', async () => {
+    await i18n.changeLanguage('en');
+    const assessment = makeAssessment({
+      siteId: VALID_SITE_ID,
+      cameraId: VALID_CAMERA_ID,
+      zoneId: VALID_ZONE_ID,
+    });
+    const foreignAndOtherCatalog: ReadonlyArray<CameraCatalogItem> = [
+      {
+        id: VALID_CAMERA_ID,
+        siteId: FOREIGN_SITE_ID,
+        code: 'CAM-FOREIGN',
+        name: 'Foreign Gate Camera',
+      },
+      {
+        id: OTHER_CAMERA_ID,
+        siteId: VALID_SITE_ID,
+        code: 'CAM-OTHER',
+        name: 'Other Site Camera',
+      },
+    ];
+    const sameSiteCatalog: ReadonlyArray<CameraCatalogItem> = [
+      {
+        id: VALID_CAMERA_ID,
+        siteId: VALID_SITE_ID,
+        code: 'CAM-01',
+        name: 'North Gate Camera',
+      },
+    ];
+
+    const { rerender } = render(
+      <LocaleProvider defaultLocale="en">
+        <ul>
+          <Mf06AssessmentCaseCard
+            assessment={assessment}
+            referencesKey="scope-foreign"
+            cameraCatalog={foreignAndOtherCatalog}
+            onViewAssessment={vi.fn()}
+          />
+        </ul>
+      </LocaleProvider>,
+    );
+
+    expect(screen.queryByText('Camera (current catalog)')).toBeNull();
+    expect(screen.queryByText(/Foreign Gate Camera/)).toBeNull();
+    expect(screen.queryByText(/CAM-FOREIGN/)).toBeNull();
+    expect(screen.queryByText(/Other Site Camera/)).toBeNull();
+
+    rerender(
+      <LocaleProvider defaultLocale="en">
+        <ul>
+          <Mf06AssessmentCaseCard
+            assessment={assessment}
+            referencesKey="scope-same"
+            cameraCatalog={sameSiteCatalog}
+            onViewAssessment={vi.fn()}
+          />
+        </ul>
+      </LocaleProvider>,
+    );
+
+    expect(screen.getByText('Camera (current catalog)')).toBeTruthy();
+    expect(screen.getByText(/North Gate Camera/)).toBeTruthy();
+  });
+
+  it('current camera catalog clears displayed camera name and code when rerendered without catalog', async () => {
+    await i18n.changeLanguage('en');
+    const assessment = makeAssessment({
+      siteId: VALID_SITE_ID,
+      cameraId: VALID_CAMERA_ID,
+      zoneId: VALID_ZONE_ID,
+    });
+    const cameraCatalog: ReadonlyArray<CameraCatalogItem> = [
+      {
+        id: VALID_CAMERA_ID,
+        siteId: VALID_SITE_ID,
+        code: 'CAM-01',
+        name: 'North Gate Camera',
+      },
+    ];
+
+    const { rerender } = render(
+      <LocaleProvider defaultLocale="en">
+        <ul>
+          <Mf06AssessmentCaseCard
+            assessment={assessment}
+            referencesKey="scope-with-catalog"
+            cameraCatalog={cameraCatalog}
+            onViewAssessment={vi.fn()}
+          />
+        </ul>
+      </LocaleProvider>,
+    );
+
+    expect(screen.getByText('Camera (current catalog)')).toBeTruthy();
+    expect(screen.getByText(/North Gate Camera/)).toBeTruthy();
+    expect(screen.getByText(/CAM-01/)).toBeTruthy();
+
+    rerender(
+      <LocaleProvider defaultLocale="en">
+        <ul>
+          <Mf06AssessmentCaseCard
+            assessment={assessment}
+            referencesKey="scope-without-catalog"
+            cameraCatalog={undefined}
+            onViewAssessment={vi.fn()}
+          />
+        </ul>
+      </LocaleProvider>,
+    );
+
+    expect(screen.queryByText('Camera (current catalog)')).toBeNull();
+    expect(screen.queryByText(/North Gate Camera/)).toBeNull();
+    expect(screen.queryByText(/CAM-01/)).toBeNull();
   });
 });

@@ -9,6 +9,7 @@ import {
 import { Mf06AssessmentDetailDialog } from './Mf06AssessmentDetailDialog';
 import { Mf06AssessmentCaseCard } from './Mf06AssessmentCaseCard';
 import { areUuidsEqual, type AssessmentTargetContext } from './mf06AssessmentDetailBinding';
+import type { Mf06CameraCatalog } from './mf06CurrentCameraLabel';
 import { IconClock, IconShield, IconAlertTriangle } from '../icons';
 import { useLocale, type TranslationKey } from '../../i18n/ppe-locale';
 
@@ -19,6 +20,7 @@ export interface Mf06AssessmentHistoryProps {
   onUnauthorized?: () => void;
   apiUrl?: string;
   client?: SmartSiteManagementClient;
+  cameraCatalog?: Mf06CameraCatalog;
 }
 
 interface HardErrorLatch {
@@ -86,6 +88,7 @@ export function Mf06AssessmentHistory({
   apiUrl = (typeof import.meta !== 'undefined' && import.meta.env?.VITE_API_URL) ||
     'http://localhost:3000',
   client: injectedClient,
+  cameraCatalog,
 }: Mf06AssessmentHistoryProps) {
   const { t } = useLocale();
   const queryClient = useQueryClient();
@@ -481,6 +484,7 @@ export function Mf06AssessmentHistory({
                   key={assessment.assessmentId}
                   assessment={assessment}
                   referencesKey={`${apiUrl}:${clientNonce}:${siteId}:${credentialId}:${tokenNonce}`}
+                  cameraCatalog={cameraCatalog}
                   onViewAssessment={() =>
                     setSelectedAssessmentTarget({
                       assessmentId: assessment.assessmentId,
@@ -554,6 +558,7 @@ export function Mf06AssessmentHistory({
         credentialId={credentialId}
         apiUrl={apiUrl}
         client={managementClient}
+        cameraCatalog={cameraCatalog}
         onUnauthorized={onUnauthorized}
         onAccessError={handleDetailAccessError}
       />

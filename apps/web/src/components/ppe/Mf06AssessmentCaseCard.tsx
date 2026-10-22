@@ -2,10 +2,12 @@ import React from 'react';
 import { type Mf06AssessmentResponse } from '@smartsite/api-client';
 import { IconCheck, IconX, IconAlertTriangle } from '../icons';
 import { useLocale, type Locale, type TranslationKey } from '../../i18n/ppe-locale';
+import { resolveMf06CurrentCameraLabel, type Mf06CameraCatalog } from './mf06CurrentCameraLabel';
 
 export interface Mf06AssessmentCaseCardProps {
   assessment: Mf06AssessmentResponse;
   referencesKey: string;
+  cameraCatalog?: Mf06CameraCatalog;
   onViewAssessment: () => void;
 }
 
@@ -72,6 +74,7 @@ function formatTimestamp(isoString: string, locale: Locale): string {
 export function Mf06AssessmentCaseCard({
   assessment,
   referencesKey,
+  cameraCatalog,
   onViewAssessment,
 }: Mf06AssessmentCaseCardProps) {
   const { locale, t } = useLocale();
@@ -82,8 +85,12 @@ export function Mf06AssessmentCaseCard({
   const purposeKey = PURPOSE_KEYS[assessment.purpose];
   const purposeLabel = purposeKey ? t(purposeKey) : assessment.purpose;
   const assessedTime = formatTimestamp(assessment.assessedAt, locale);
+  const currentCameraLabel = resolveMf06CurrentCameraLabel(assessment, cameraCatalog);
 
   const contextRows: Array<{ label: TranslationKey; value: string }> = [
+    ...(currentCameraLabel
+      ? [{ label: 'mf06.case.currentCameraLabel' as const, value: currentCameraLabel }]
+      : []),
     { label: 'mf06.case.evidenceLabel', value: t('mf06.case.evidenceOpenRecord') },
     { label: 'mf06.case.identityTeamLabel', value: t('mf06.case.identityNotProjected') },
   ];

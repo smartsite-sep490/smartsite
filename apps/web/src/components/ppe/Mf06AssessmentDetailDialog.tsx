@@ -12,6 +12,7 @@ import {
   areUuidsEqual,
   type AssessmentTargetContext,
 } from './mf06AssessmentDetailBinding';
+import { resolveMf06CurrentCameraLabel, type Mf06CameraCatalog } from './mf06CurrentCameraLabel';
 import { useTranslation } from 'react-i18next';
 import { IconClock, IconCheck, IconX, IconAlertTriangle } from '../icons';
 import {
@@ -30,6 +31,7 @@ export interface Mf06AssessmentDetailDialogProps {
   credentialId: string;
   apiUrl?: string;
   client?: SmartSiteManagementClient;
+  cameraCatalog?: Mf06CameraCatalog;
   onUnauthorized?: () => void;
   onAccessError?: (
     error: ApiError,
@@ -165,6 +167,7 @@ export function Mf06AssessmentDetailDialog({
   apiUrl = (typeof import.meta !== 'undefined' && import.meta.env?.VITE_API_URL) ||
     'http://localhost:3000',
   client: injectedClient,
+  cameraCatalog,
   onUnauthorized,
   onAccessError,
 }: Mf06AssessmentDetailDialogProps) {
@@ -438,6 +441,7 @@ export function Mf06AssessmentDetailDialog({
   const reasonLabel = record ? (reasonKey ? t(reasonKey) : record.reasonCode) : null;
   const purposeKey = record ? PURPOSE_KEYS[record.purpose] : undefined;
   const purposeLabel = record ? (purposeKey ? t(purposeKey) : record.purpose) : null;
+  const currentCameraLabel = record ? resolveMf06CurrentCameraLabel(record, cameraCatalog) : null;
   const OutcomeIcon = outcomeMeta?.icon;
 
   return (
@@ -584,49 +588,66 @@ export function Mf06AssessmentDetailDialog({
               </div>
             </div>
 
-            {/* Identifiers & Provenance (Primary Spatial Context followed by Technical References) */}
-            <div className="space-y-2.5 text-[11px] font-mono tabular-nums text-zinc-700 bg-zinc-50/70 px-3.5 py-3 rounded-xl border border-zinc-200/70 ">
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-2.5">
-                <div className="flex flex-col gap-0.5 break-all">
-                  <span className="font-sans text-[11px] font-medium text-zinc-400 ">
-                    {t('mf06.detail.field.cameraId')}
-                  </span>{' '}
-                  <span>{record.cameraId}</span>
+            {currentCameraLabel && (
+              <div className="rounded-xl border border-zinc-200/80 bg-white px-3.5 py-2.5 text-xs text-zinc-700">
+                <span className="text-[11px] font-medium text-zinc-400">
+                  {t('mf06.case.currentCameraLabel')}
+                </span>{' '}
+                <span className="font-medium text-zinc-800">{currentCameraLabel}</span>
+              </div>
+            )}
+
+            {/* Technical References (Collapsed by default) */}
+            <details
+              key={`${apiUrl}:${clientNonce}:${siteId}:${credentialId}:${tokenNonce}:${record.assessmentId}`}
+              className="rounded-xl border border-zinc-200/70 bg-zinc-50/70 px-3.5 py-2.5 text-[11px] text-zinc-700 "
+            >
+              <summary className="cursor-pointer select-none font-sans text-xs font-medium text-zinc-600 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-zinc-900 ">
+                {t('mf06.history.technicalReferences')}
+              </summary>
+              <div className="mt-2.5 space-y-2.5 border-t border-zinc-200/70 pt-2.5 font-mono tabular-nums">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-2.5">
+                  <div className="flex flex-col gap-0.5 break-all">
+                    <span className="font-sans text-[11px] font-medium text-zinc-400 ">
+                      {t('mf06.detail.field.cameraId')}
+                    </span>{' '}
+                    <span>{record.cameraId}</span>
+                  </div>
+                  <div className="flex flex-col gap-0.5 break-all">
+                    <span className="font-sans text-[11px] font-medium text-zinc-400 ">
+                      {t('mf06.detail.field.zoneId')}
+                    </span>{' '}
+                    <span>{record.zoneId}</span>
+                  </div>
                 </div>
-                <div className="flex flex-col gap-0.5 break-all">
-                  <span className="font-sans text-[11px] font-medium text-zinc-400 ">
-                    {t('mf06.detail.field.zoneId')}
-                  </span>{' '}
-                  <span>{record.zoneId}</span>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-2.5 border-t border-zinc-200/70 pt-2.5">
+                  <div className="flex flex-col gap-0.5 break-all">
+                    <span className="font-sans text-[11px] font-medium text-zinc-400 ">
+                      {t('mf06.detail.field.assessmentId')}
+                    </span>{' '}
+                    <span>{record.assessmentId}</span>
+                  </div>
+                  <div className="flex flex-col gap-0.5 break-all">
+                    <span className="font-sans text-[11px] font-medium text-zinc-400 ">
+                      {t('mf06.detail.field.requestId')}
+                    </span>{' '}
+                    <span>{record.requestId}</span>
+                  </div>
+                  <div className="flex flex-col gap-0.5 break-all">
+                    <span className="font-sans text-[11px] font-medium text-zinc-400 ">
+                      {t('mf06.detail.field.eventId')}
+                    </span>{' '}
+                    <span>{record.eventId}</span>
+                  </div>
+                  <div className="flex flex-col gap-0.5 break-all">
+                    <span className="font-sans text-[11px] font-medium text-zinc-400 ">
+                      {t('mf06.detail.field.provenance')}
+                    </span>{' '}
+                    <span>{record.provenance}</span>
+                  </div>
                 </div>
               </div>
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-2.5 border-t border-zinc-200/70 pt-2.5">
-                <div className="flex flex-col gap-0.5 break-all">
-                  <span className="font-sans text-[11px] font-medium text-zinc-400 ">
-                    {t('mf06.detail.field.assessmentId')}
-                  </span>{' '}
-                  <span>{record.assessmentId}</span>
-                </div>
-                <div className="flex flex-col gap-0.5 break-all">
-                  <span className="font-sans text-[11px] font-medium text-zinc-400 ">
-                    {t('mf06.detail.field.requestId')}
-                  </span>{' '}
-                  <span>{record.requestId}</span>
-                </div>
-                <div className="flex flex-col gap-0.5 break-all">
-                  <span className="font-sans text-[11px] font-medium text-zinc-400 ">
-                    {t('mf06.detail.field.eventId')}
-                  </span>{' '}
-                  <span>{record.eventId}</span>
-                </div>
-                <div className="flex flex-col gap-0.5 break-all">
-                  <span className="font-sans text-[11px] font-medium text-zinc-400 ">
-                    {t('mf06.detail.field.provenance')}
-                  </span>{' '}
-                  <span>{record.provenance}</span>
-                </div>
-              </div>
-            </div>
+            </details>
           </div>
         )}
       </div>
