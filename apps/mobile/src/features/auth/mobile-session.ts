@@ -1,3 +1,4 @@
+import { translate as tr } from '../../i18n';
 import {
   ApiError,
   SmartSiteManagementClient,
@@ -16,7 +17,7 @@ type Snapshot = {
   expired: boolean;
   notice: string | null;
 };
-const cancelled = () => new ApiError('cancelled', 'Phiên đăng nhập đã thay đổi.');
+const cancelled = () => new ApiError('cancelled', tr('auth.sessionChanged'));
 
 /** Only refresh credentials are persisted; rotations, login and logout are serialized. */
 export class MobileSession {
@@ -56,7 +57,7 @@ export class MobileSession {
   }
   private async accept(response: LoginResponse, epoch: number) {
     if (!response.refreshToken)
-      throw new ApiError('invalid-response', 'Thiếu thông tin phiên mobile.');
+      throw new ApiError('invalid-response', tr('auth.mobileSessionMissing'));
     // Finish rotation under the queue even if logout happened during the request.
     // The queued logout must revoke the latest refresh token, not its consumed parent.
     try {
@@ -96,11 +97,11 @@ export class MobileSession {
       this.assertEpoch(epoch);
       const token = await this.store.read();
       this.assertEpoch(epoch);
-      if (!token) throw new ApiError('http', 'Vui lòng đăng nhập.', 401);
+      if (!token) throw new ApiError('http', tr('auth.signInRequired'), 401);
       try {
         const response = await this.client.refresh('MOBILE', token, { timeoutMs: 15000 });
         if (this.snapshot.response && response.user.id !== this.snapshot.response.user.id)
-          throw new ApiError('http', 'Tài khoản đã thay đổi.', 401);
+          throw new ApiError('http', tr('auth.accountChanged'), 401);
         return await this.accept(response, epoch);
       } catch (error) {
         if (
@@ -135,7 +136,7 @@ export class MobileSession {
         if (token) await this.client.logout('MOBILE', token, { timeoutMs: 15000 });
       } catch (error) {
         this.update({
-          notice: 'Đã đăng xuất trên thiết bị. Máy chủ chưa xác nhận hủy phiên vì lỗi kết nối.',
+          notice: tr('auth.localSignOutNotice'),
         });
         throw error;
       }
@@ -144,7 +145,7 @@ export class MobileSession {
   async afterPasswordChange() {
     this.clear();
     await this.serial(() => this.store.remove());
-    this.update({ notice: 'Đã đổi mật khẩu. Vui lòng đăng nhập lại.' });
+    this.update({ notice: tr('auth.passwordChangedNotice') });
   }
   adapter(epoch = this.snapshot.epoch): ManagementSession {
     return {

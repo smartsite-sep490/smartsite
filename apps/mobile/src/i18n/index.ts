@@ -25,6 +25,9 @@ void i18n.use(initReactI18next).init({
 export function uiLanguage(): UiLanguage {
   return (i18n.resolvedLanguage ?? i18n.language)?.startsWith('en') ? 'en' : 'vi';
 }
+export function uiLocale(): 'vi-VN' | 'en-GB' {
+  return uiLanguage() === 'vi' ? 'vi-VN' : 'en-GB';
+}
 
 export async function initSavedLanguage(): Promise<UiLanguage> {
   try {

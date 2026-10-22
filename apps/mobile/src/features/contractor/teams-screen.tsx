@@ -1,3 +1,4 @@
+import { translate as tr } from '../../i18n';
 import { useState } from 'react';
 import {
   View,
@@ -87,7 +88,7 @@ export function TeamsScreen({ onBack }: { onBack: () => void }) {
       <QueryState query={query}>
         {(data) => (
           <>
-            {!data.items.length && <Hint>Không có nhóm phù hợp.</Hint>}
+            {!data.items.length && <Hint>{tr('teams.noneInScope')}</Hint>}
             {data.items.map((teamItem) => (
               <View key={teamItem.id} style={teamStyles.teamCard}>
                 <View style={teamStyles.teamHeaderRow}>
@@ -127,13 +128,13 @@ export function TeamsScreen({ onBack }: { onBack: () => void }) {
 
                 <View style={teamStyles.memberCountRow}>
                   <Text style={teamStyles.memberCountText}>
-                    👥 {teamItem.memberCount} thành viên
+                    👥 {teamItem.memberCount} {tr('teams.membersUnit')}
                   </Text>
                 </View>
 
                 <Button
                   secondary
-                  label="Thành viên & khu vực của nhóm"
+                  label={tr('teams.membersAndZones')}
                   onPress={() => setTeam(teamItem)}
                 />
               </View>
@@ -220,6 +221,7 @@ function CreateTeamModal({
   );
 }
 function TeamDetail({ teamId, onBack }: { teamId: string; onBack: () => void }) {
+  useTranslation();
   const { scope, client, token, queryKey } = useWorkspace();
   const [edit, setEdit] = useState(false),
     [name, setName] = useState(''),
@@ -257,21 +259,22 @@ function TeamDetail({ teamId, onBack }: { teamId: string; onBack: () => void }) 
     (w) => w.workerId === workerId,
   );
   return (
-    <Page title="Chi tiết nhóm" onBack={onBack}>
+    <Page title={tr('teams.details')} onBack={onBack}>
       <ErrorNotice error={command.error} />
       <QueryState query={detail}>
         {(t) => (
           <>
             <Card>
               <Body>
-                {t.name} · {t.isActive ? 'Hoạt động' : 'Lưu trữ'} · {t.memberCount} thành viên
+                {t.name} · {t.isActive ? tr('teams.active') : tr('teams.archived')} ·{' '}
+                {t.memberCount} {tr('teams.membersUnit')}
               </Body>
               <Hint>{t.description}</Hint>
               {t.isActive && (
                 <>
                   <Button
                     secondary
-                    label={edit ? 'Đóng chỉnh sửa' : 'Đổi tên / mô tả'}
+                    label={edit ? tr('teams.closeEditing') : tr('teams.editNameDescription')}
                     onPress={() => {
                       setName(t.name);
                       setDescription(t.description);
@@ -280,15 +283,15 @@ function TeamDetail({ teamId, onBack }: { teamId: string; onBack: () => void }) 
                   />
                   {edit && (
                     <>
-                      <Field label="Tên nhóm" value={name} onChangeText={setName} />
+                      <Field label={tr('teams.teamName')} value={name} onChangeText={setName} />
                       <Field
-                        label="Mô tả"
+                        label={tr('common.description')}
                         value={description}
                         onChangeText={setDescription}
                         multiline
                       />
                       <Button
-                        label="Lưu thay đổi nhóm"
+                        label={tr('teams.saveChanges')}
                         disabled={command.isPending || !name.trim()}
                         onPress={() =>
                           command.mutate(async () => {
@@ -299,7 +302,7 @@ function TeamDetail({ teamId, onBack }: { teamId: string; onBack: () => void }) 
                               t.id,
                               {
                                 expectedVersion: t.version,
-                                name: required(name, 'tên nhóm'),
+                                name: required(name, tr('validation.teamNameLabel')),
                                 description,
                               },
                             );
@@ -310,13 +313,13 @@ function TeamDetail({ teamId, onBack }: { teamId: string; onBack: () => void }) 
                     </>
                   )}
                   <Field
-                    label="Lý do chuyển / gỡ thành viên / lưu trữ"
+                    label={tr('teams.membershipReason')}
                     value={reason}
                     onChangeText={setReason}
                   />
                   <Button
                     secondary
-                    label="Lưu trữ nhóm trống"
+                    label={tr('teams.archiveEmpty')}
                     disabled={command.isPending || t.memberCount > 0 || !reason.trim()}
                     onPress={() =>
                       command.mutate(async () => {
@@ -325,7 +328,10 @@ function TeamDetail({ teamId, onBack }: { teamId: string; onBack: () => void }) 
                           scope.siteId,
                           scope.contractorId,
                           t.id,
-                          { expectedVersion: t.version, reason: required(reason, 'lý do') },
+                          {
+                            expectedVersion: t.version,
+                            reason: required(reason, tr('validation.reasonLabel')),
+                          },
                         );
                         onBack();
                       })
@@ -337,41 +343,41 @@ function TeamDetail({ teamId, onBack }: { teamId: string; onBack: () => void }) 
             <QueryState query={workers}>
               {(members) => (
                 <Card>
-                  <Body>Thành viên hiện tại</Body>
+                  <Body>{tr('teams.currentMembers')}</Body>
                   {members
                     .filter((w) => w.teamId === teamId)
                     .map((w) => (
                       <Body key={w.workerId}>{w.displayName}</Body>
                     ))}
                   {!members.some((w) => w.teamId === teamId) && (
-                    <Hint>Nhóm chưa có thành viên.</Hint>
+                    <Hint>{tr('teams.noMembers')}</Hint>
                   )}
                   {t.isActive && (
                     <>
                       <Choice
-                        label="Công nhân cần thêm / chuyển / gỡ"
+                        label={tr('teams.workerToMove')}
                         value={workerId}
                         onChange={setWorkerId}
                         options={members.map((w) => ({
                           value: w.workerId,
-                          label: `${w.displayName} · ${w.teamName ?? 'Chưa có nhóm'}`,
+                          label: `${w.displayName} · ${w.teamName ?? tr('teams.unassigned')}`,
                         }))}
                       />
                       <QueryState query={teams}>
                         {(list) => (
                           <Choice
-                            label="Nhóm đích"
+                            label={tr('teams.targetTeam')}
                             value={targetTeam}
                             onChange={setTargetTeam}
                             options={[
-                              { value: '', label: 'Gỡ khỏi nhóm hiện tại' },
+                              { value: '', label: tr('teams.removeFromCurrent') },
                               ...list.map((v) => ({ value: v.id, label: v.name })),
                             ]}
                           />
                         )}
                       </QueryState>
                       <Button
-                        label="Xác nhận thành viên"
+                        label={tr('teams.confirmMembership')}
                         disabled={
                           command.isPending ||
                           !worker ||
@@ -380,8 +386,9 @@ function TeamDetail({ teamId, onBack }: { teamId: string; onBack: () => void }) 
                         }
                         onPress={() =>
                           command.mutate(async () => {
-                            if (!worker) throw new Error('Chọn công nhân.');
-                            if (worker.membershipId) required(reason, 'lý do chuyển hoặc gỡ nhóm');
+                            if (!worker) throw new Error(tr('validation.chooseWorker'));
+                            if (worker.membershipId)
+                              required(reason, tr('validation.transferReasonLabel'));
                             const input = {
                               teamId: targetTeam || null,
                               expectedMembershipId: worker.membershipId,
@@ -411,6 +418,7 @@ function TeamDetail({ teamId, onBack }: { teamId: string; onBack: () => void }) 
   );
 }
 function TeamZones({ teamId }: { teamId: string }) {
+  useTranslation();
   const { scope, client, token, queryKey } = useWorkspace();
   const [permission, setPermission] = useState(''),
     [from, setFrom] = useState(''),
@@ -424,7 +432,7 @@ function TeamZones({ teamId }: { teamId: string }) {
   const timezone = Intl.DateTimeFormat().resolvedOptions().timeZone;
   return (
     <Card>
-      <Body>Khu vực của nhóm</Body>
+      <Body>{tr('teams.zones')}</Body>
       <QueryState query={query}>
         {(data) => {
           const current = data.permissions.find((p) => !p.revokedAt);
@@ -434,7 +442,11 @@ function TeamZones({ teamId }: { teamId: string }) {
                 <Card key={p.id}>
                   <Body>
                     {p.name} ·{' '}
-                    {p.revokedAt ? 'Đã thu hồi' : p.effective ? 'Hiệu lực' : 'Ngoài thời hạn'}
+                    {p.revokedAt
+                      ? tr('access.revoked')
+                      : p.effective
+                        ? tr('teams.effective')
+                        : tr('teams.outsideValidity')}
                   </Body>
                   <Hint>
                     {displayTime(p.validFrom)} → {displayTime(p.validUntil)}
@@ -442,7 +454,7 @@ function TeamZones({ teamId }: { teamId: string }) {
                   {!p.revokedAt && (
                     <Button
                       secondary
-                      label="Thu hồi quyền khu vực nhóm"
+                      label={tr('teams.revokeZone')}
                       disabled={command.isPending}
                       onPress={() =>
                         command.mutate(() =>
@@ -460,7 +472,7 @@ function TeamZones({ teamId }: { teamId: string }) {
                 </Card>
               ))}
               <Choice
-                label="Khu vực nhà thầu đã được cấp"
+                label={tr('teams.contractorZone')}
                 value={permission}
                 options={data.availableZones.map((p) => ({ value: p.permissionId, label: p.name }))}
                 onChange={(v) => {
@@ -472,12 +484,15 @@ function TeamZones({ teamId }: { teamId: string }) {
                   }
                 }}
               />
-              <Field label="Từ ngày (YYYY-MM-DD)" value={from} onChangeText={setFrom} />
-              <Field label="Đến hết ngày (YYYY-MM-DD)" value={to} onChangeText={setTo} />
-              <Hint>Múi giờ: {timezone}. Thời hạn phải nằm trong quyền nhà thầu đã được cấp.</Hint>
+              <Field label={tr('teams.validFromDate')} value={from} onChangeText={setFrom} />
+              <Field label={tr('teams.validUntilDate')} value={to} onChangeText={setTo} />
+              <Hint>
+                {tr('teams.timezone')} {timezone}
+                {tr('teams.zoneValidityHint')}
+              </Hint>
               <ErrorNotice error={command.error} />
               <Button
-                label={current ? 'Cập nhật khu vực nhóm' : 'Cấp khu vực nhóm'}
+                label={current ? tr('teams.updateZone') : tr('teams.grantZone')}
                 disabled={command.isPending || !permission || !from || !to}
                 onPress={() =>
                   command.mutate(async () => {

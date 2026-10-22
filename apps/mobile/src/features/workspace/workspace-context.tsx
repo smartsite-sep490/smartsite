@@ -1,3 +1,5 @@
+import { useTranslation } from '../../i18n';
+import { translate as tr } from '../../i18n';
 import {
   createContext,
   useContext,
@@ -6,7 +8,11 @@ import {
   useState,
   type PropsWithChildren,
 } from 'react';
-import { SmartSiteManagementClient, type AccountResponse } from '@smartsite/api-client';
+import {
+  SmartSiteManagementClient,
+  type AccountResponse,
+  type WorkerComplianceStatus,
+} from '@smartsite/api-client';
 import { API_URL, useAuth } from '../auth/auth-context';
 import { useQuery } from '@tanstack/react-query';
 import { QueryState, Page, Hint, Button } from '../shared/ui';
@@ -24,6 +30,7 @@ type Workspace = {
   token: string;
   queryKey: readonly unknown[];
   workerId: string;
+  workerDocumentStatus?: WorkerComplianceStatus;
 };
 const WorkspaceContext = createContext<Workspace | null>(null);
 export function WorkspaceProvider({
@@ -32,6 +39,7 @@ export function WorkspaceProvider({
   children,
   onScopeChange,
 }: PropsWithChildren<{ scope: MobileScope; user: AccountResponse; onScopeChange: () => void }>) {
+  useTranslation();
   const { session, epoch, token } = useAuth();
   const [controller] = useState(() => new AbortController());
   useEffect(() => {
@@ -61,18 +69,32 @@ export function WorkspaceProvider({
     queryFn: () => client.myContractorTeam(token, scope.siteId),
     enabled: scope.role === 'worker',
   });
+  const compliance = useQuery({
+    queryKey: [...queryKey, 'worker-documents', self.data?.workerId],
+    queryFn: () => client.workerCompliance(token, scope.siteId, self.data!.workerId),
+    enabled: scope.role === 'worker' && !!self.data?.workerId,
+    refetchInterval: 60_000,
+  });
   const content = (
     <WorkspaceContext.Provider
-      value={{ scope, user, client, token, queryKey, workerId: self.data?.workerId ?? '' }}
+      value={{
+        scope,
+        user,
+        client,
+        token,
+        queryKey,
+        workerId: self.data?.workerId ?? '',
+        workerDocumentStatus: compliance.data?.status,
+      }}
     >
       {children}
     </WorkspaceContext.Provider>
   );
   if (scope.role === 'worker' && !self.isSuccess)
     return (
-      <Page title="Hồ sơ công nhân">
+      <Page title={tr('workforce.workerProfile')}>
         <QueryState query={self}>{() => null}</QueryState>
-        <Button secondary label="Chọn lại công trường / vai trò" onPress={onScopeChange} />
+        <Button secondary label={tr('scope.chooseAgain')} onPress={onScopeChange} />
       </Page>
     );
   if (scope.role === 'worker')
@@ -82,8 +104,8 @@ export function WorkspaceProvider({
           data.workerId ? (
             content
           ) : (
-            <Page title="Chưa có hồ sơ công nhân">
-              <Hint>Liên hệ đại diện nhà thầu để liên kết tài khoản tại công trường.</Hint>
+            <Page title={tr('scope.noWorkerProfile')}>
+              <Hint>{tr('scope.linkWorkerHint')}</Hint>
             </Page>
           )
         }

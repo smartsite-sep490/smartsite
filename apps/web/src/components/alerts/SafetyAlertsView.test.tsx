@@ -1,10 +1,10 @@
 // @vitest-environment jsdom
 import React from 'react';
-import { render, screen, cleanup } from '@testing-library/react';
+import { render, screen, cleanup, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { describe, expect, it, vi, beforeEach, afterEach } from 'vitest';
-import { SmartSiteManagementClient } from '@smartsite/api-client';
+import { SmartSiteManagementClient, ApiError } from '@smartsite/api-client';
 import type {
   LoginResponse,
   SiteResponse,
@@ -187,66 +187,212 @@ describe('SafetyAlertsView Integration (Plan §15 A4 Parent View & Session Scope
     expect(alerts.mock.calls.every((call) => call[1] === 'site-alpha')).toBe(true);
   });
 
-  it('Admin-only role computation: passes canReviewIdentity=false and NEVER calls identity APIs when user has only global Admin role', async () => {
-    const user = userEvent.setup();
-
-    vi.spyOn(SmartSiteManagementClient.prototype, 'login').mockResolvedValue(
-      mockAdminLoginResponse,
-    );
+  it('shows an unavailable target instead of falling back to another Site for an alert link', async () => {
     vi.spyOn(SmartSiteManagementClient.prototype, 'listSites').mockResolvedValue(mockSitesList);
+    const alerts = vi
+      .spyOn(SmartSiteManagementClient.prototype, 'listSafetyAlerts')
+      .mockResolvedValue({ items: [], total: 0 });
+    const detail = vi
+      .spyOn(SmartSiteManagementClient.prototype, 'getSafetyAlert')
+      .mockResolvedValue(mockAlertDetail);
+    render(
+      <QueryClientProvider client={queryClient}>
+        <SafetyAlertsView
+          apiUrl="http://local"
+          authenticatedSession={mockSafetyOfficerLoginResponse}
+          initialSiteId="site-unauthorized"
+          initialAlertId="alert-unauthorized"
+        />
+      </QueryClientProvider>,
+    );
+    expect((await screen.findByRole('alert')).textContent).toContain('no longer have access');
+    expect(alerts).not.toHaveBeenCalled();
+    expect(detail).not.toHaveBeenCalled();
+    expect((screen.getByLabelText('Site') as HTMLSelectElement).value).toBe('');
+  });
+
+  it.each([401, 403, 404])(
+    'unmounts cached alert details and evicts sensitive child data after a %s refresh',
+    async (status) => {
+      vi.spyOn(SmartSiteManagementClient.prototype, 'listSites').mockResolvedValue(mockSitesList);
+      vi.spyOn(SmartSiteManagementClient.prototype, 'listSafetyAlerts').mockResolvedValue({
+        items: [mockAlert],
+        total: 1,
+      });
+      const detail = vi
+        .spyOn(SmartSiteManagementClient.prototype, 'getSafetyAlert')
+        .mockResolvedValue({
+          ...mockAlertDetail,
+          id: 'sensitive-target',
+          detections: [],
+          detectionsTotal: 0,
+        });
+      render(
+        <QueryClientProvider client={queryClient}>
+          <SafetyAlertsView
+            apiUrl="http://local"
+            authenticatedSession={mockSafetyOfficerLoginResponse}
+            initialSiteId="site-alpha"
+            initialAlertId="sensitive-target"
+          />
+        </QueryClientProvider>,
+      );
+      await screen.findByText(/Alert sensitive-target · Revision 1/);
+      const key = queryClient.getQueryCache().findAll({ queryKey: ['safety-alert'] })[0]!.queryKey;
+      const evidenceKey = [
+        'safety-alert-evidence',
+        'http://local',
+        key[2],
+        'site-alpha',
+        'sensitive-target',
+        'event',
+        0,
+      ];
+      queryClient.setQueryData(
+        evidenceKey,
+        new Blob(['synthetic-sensitive-frame'], { type: 'image/jpeg' }),
+      );
+      detail.mockRejectedValue(new ApiError('http', 'Access unavailable', status));
+      await userEvent.setup().click(screen.getByRole('button', { name: 'Refresh detail' }));
+      await screen.findByRole('alert');
+      expect(screen.queryByText(/Alert sensitive-target · Revision 1/)).toBeNull();
+      expect(screen.queryByRole('button', { name: 'Confirm violation' })).toBeNull();
+      await waitFor(() => expect(queryClient.getQueryData(evidenceKey)).toBeUndefined());
+    },
+  );
+
+  it('opens the exact alert when Site and alert change together without choosing the first list result', async () => {
+    const session = {
+      ...mockSafetyOfficerLoginResponse,
+      user: {
+        ...mockSafetyOfficerLoginResponse.user,
+        roleAssignments: ['site-alpha', 'site-beta'].map((siteId) => ({
+          role: 'SAFETY_OFFICER' as const,
+          siteId,
+        })),
+      },
+    };
+    vi.spyOn(SmartSiteManagementClient.prototype, 'listSites').mockResolvedValue({
+      items: [
+        ...mockSitesList.items,
+        { ...mockSitesList.items[0]!, id: 'site-beta', code: 'B', name: 'Site Beta' },
+      ],
+      total: 2,
+    });
     vi.spyOn(SmartSiteManagementClient.prototype, 'listSafetyAlerts').mockResolvedValue({
       items: [mockAlert],
       total: 1,
     });
-    vi.spyOn(SmartSiteManagementClient.prototype, 'getSafetyAlert').mockResolvedValue(
-      mockAlertDetail,
-    );
-    vi.spyOn(SmartSiteManagementClient.prototype, 'getSafetyAlertEvidence').mockResolvedValue(
-      new Blob([], { type: 'image/jpeg' }),
-    );
-
-    const getIdentityContextSpy = vi
-      .spyOn(SmartSiteManagementClient.prototype, 'getObservationIdentityContext')
-      .mockResolvedValue(mockIdentityContext);
-    const listWorkersSpy = vi
-      .spyOn(SmartSiteManagementClient.prototype, 'listObservationIdentityWorkers')
-      .mockResolvedValue(mockIdentityWorkers);
-    const listDecisionsSpy = vi
-      .spyOn(SmartSiteManagementClient.prototype, 'listObservationIdentityDecisions')
-      .mockResolvedValue({ items: [], total: 0 });
-    const decideSpy = vi.spyOn(SmartSiteManagementClient.prototype, 'decideObservationIdentity');
-
-    render(
+    const detail = vi
+      .spyOn(SmartSiteManagementClient.prototype, 'getSafetyAlert')
+      .mockImplementation(async (_token, siteId, id) => ({
+        ...mockAlertDetail,
+        siteId,
+        id,
+        detections: [],
+        detectionsTotal: 0,
+      }));
+    const tree = (siteId: string, alertId: string) => (
       <QueryClientProvider client={queryClient}>
-        <SafetyAlertsView apiUrl="http://127.0.0.1:3001" />
-      </QueryClientProvider>,
+        <SafetyAlertsView
+          apiUrl="http://local"
+          authenticatedSession={session}
+          initialSiteId={siteId}
+          initialAlertId={alertId}
+        />
+      </QueryClientProvider>
     );
-
-    // Form đăng nhập ban đầu
-    expect(screen.getByRole('heading', { name: 'Safety alert queue' })).not.toBeNull();
-
-    await user.type(screen.getByLabelText(/Username/i), 'admin');
-    await user.type(screen.getByLabelText(/Password/i), 'password123');
-    await user.click(screen.getByRole('button', { name: 'Sign in' }));
-
-    // Đăng nhập thành công, hàng đợi cảnh báo hiển thị
-    await screen.findByRole('heading', { name: 'Safety operations' });
-    await screen.findByText(/Công trường Alpha/i);
-    await user.click(screen.getByRole('button', { name: 'Alerts' }));
-
-    // Chờ chi tiết cảnh báo được tải
-    await screen.findByText('00000000-0000-4000-8000-000000000001');
-
-    // Admin đơn thuần: không có role SAFETY_OFFICER tại công trường này -> canReviewIdentity được tính là false
-    // Do đó ObservationIdentityReviewPanel KHÔNG được mount
-    expect(screen.queryByText('Xác minh người trong ảnh')).toBeNull();
-
-    // Tuyệt đối không gọi bất kỳ API danh tính nào
-    expect(getIdentityContextSpy).not.toHaveBeenCalled();
-    expect(listWorkersSpy).not.toHaveBeenCalled();
-    expect(listDecisionsSpy).not.toHaveBeenCalled();
-    expect(decideSpy).not.toHaveBeenCalled();
+    const view = render(tree('site-alpha', 'target-a'));
+    await screen.findByText(/Alert target-a · Revision 1/);
+    expect(
+      screen.getByRole('complementary', { name: 'Alert detail' }).className.split(/\s+/),
+    ).not.toContain('hidden');
+    view.rerender(tree('site-beta', 'target-b'));
+    expect(await screen.findByText(/Alert target-b · Revision 1/)).not.toBeNull();
+    expect(
+      screen.getByRole('complementary', { name: 'Alert detail' }).className.split(/\s+/),
+    ).not.toContain('hidden');
+    expect(screen.queryByText(/Alert target-a · Revision 1/)).toBeNull();
+    expect(detail.mock.calls.at(-1)?.slice(1, 3)).toEqual(['site-beta', 'target-b']);
   });
+
+  it.each([false, true])(
+    'Admin is read-only even with Safety on another Site: %s',
+    async (otherSite) => {
+      const user = userEvent.setup();
+
+      vi.spyOn(SmartSiteManagementClient.prototype, 'login').mockResolvedValue(
+        otherSite
+          ? {
+              ...mockAdminLoginResponse,
+              user: {
+                ...mockAdminLoginResponse.user,
+                roleAssignments: [
+                  ...mockAdminLoginResponse.user.roleAssignments,
+                  { role: 'SAFETY_OFFICER', siteId: 'other-site' },
+                ],
+              },
+            }
+          : mockAdminLoginResponse,
+      );
+      vi.spyOn(SmartSiteManagementClient.prototype, 'listSites').mockResolvedValue(mockSitesList);
+      vi.spyOn(SmartSiteManagementClient.prototype, 'listSafetyAlerts').mockResolvedValue({
+        items: [mockAlert],
+        total: 1,
+      });
+      vi.spyOn(SmartSiteManagementClient.prototype, 'getSafetyAlert').mockResolvedValue(
+        mockAlertDetail,
+      );
+      vi.spyOn(SmartSiteManagementClient.prototype, 'getSafetyAlertEvidence').mockResolvedValue(
+        new Blob([], { type: 'image/jpeg' }),
+      );
+
+      const getIdentityContextSpy = vi
+        .spyOn(SmartSiteManagementClient.prototype, 'getObservationIdentityContext')
+        .mockResolvedValue(mockIdentityContext);
+      const listWorkersSpy = vi
+        .spyOn(SmartSiteManagementClient.prototype, 'listObservationIdentityWorkers')
+        .mockResolvedValue(mockIdentityWorkers);
+      const listDecisionsSpy = vi
+        .spyOn(SmartSiteManagementClient.prototype, 'listObservationIdentityDecisions')
+        .mockResolvedValue({ items: [], total: 0 });
+      const decideSpy = vi.spyOn(SmartSiteManagementClient.prototype, 'decideObservationIdentity');
+
+      render(
+        <QueryClientProvider client={queryClient}>
+          <SafetyAlertsView apiUrl="http://127.0.0.1:3001" />
+        </QueryClientProvider>,
+      );
+
+      // Form đăng nhập ban đầu
+      expect(screen.getByRole('heading', { name: 'Safety alert queue' })).not.toBeNull();
+
+      await user.type(screen.getByLabelText(/Username/i), 'admin');
+      await user.type(screen.getByLabelText(/Password/i), 'password123');
+      await user.click(screen.getByRole('button', { name: 'Sign in' }));
+
+      // Đăng nhập thành công, hàng đợi cảnh báo hiển thị
+      await screen.findByRole('heading', { name: 'Safety operations' });
+      await screen.findByText(/Công trường Alpha/i);
+      await user.click(screen.getByRole('button', { name: 'Alerts' }));
+
+      // Chờ chi tiết cảnh báo được tải
+      await screen.findByText('00000000-0000-4000-8000-000000000001');
+
+      // Admin đơn thuần: không có role SAFETY_OFFICER tại công trường này -> canReviewIdentity được tính là false
+      // Do đó ObservationIdentityReviewPanel KHÔNG được mount
+      expect(screen.queryByText('Xác minh người trong ảnh')).toBeNull();
+      expect(screen.queryByRole('button', { name: 'Confirm violation' })).toBeNull();
+      expect(screen.queryByRole('button', { name: 'Dismiss alert' })).toBeNull();
+      expect(screen.queryByRole('button', { name: 'Request more evidence' })).toBeNull();
+
+      // Tuyệt đối không gọi bất kỳ API danh tính nào
+      expect(getIdentityContextSpy).not.toHaveBeenCalled();
+      expect(listWorkersSpy).not.toHaveBeenCalled();
+      expect(listDecisionsSpy).not.toHaveBeenCalled();
+      expect(decideSpy).not.toHaveBeenCalled();
+    },
+  );
 
   it('Same user re-login gets fresh sessionScope and logout cancels sensitive queries and clears cache', async () => {
     const user = userEvent.setup();

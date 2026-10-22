@@ -1,3 +1,4 @@
+import { translate as tr } from '../../i18n';
 import React, { useState } from 'react';
 import {
   Modal,
@@ -58,7 +59,7 @@ export function ScheduleAssignModal({ visible, onClose, onSuccess }: ScheduleAss
       await command.mutateAsync(async () => {
         const versions = await client.listScheduleVersions(token, scope.siteId);
         const scheduleVersionId = versions.items[0]?.id;
-        if (!scheduleVersionId) throw new Error('Chưa có phiên bản lịch hoạt động.');
+        if (!scheduleVersionId) throw new Error(tr('schedule.noActiveVersion'));
         const input = {
           contractorId: scope.contractorId,
           scheduleVersionId,

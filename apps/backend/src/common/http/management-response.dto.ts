@@ -181,6 +181,7 @@ export class WorkerResponseDto {
   @ApiProperty() externalId!: string;
   @ApiProperty() displayName!: string;
   @ApiProperty() isActive!: boolean;
+  @ApiProperty({ required: false, enum: ['PENDING', 'ACTIVE', 'EXPIRED'] }) documentStatus?: string;
   @ApiProperty({ format: 'date-time' }) createdAt!: string;
 }
 

@@ -4,11 +4,12 @@ import { useQuery } from '@tanstack/react-query';
 import { useAuth } from '../auth/auth-context';
 import { useWorkspace } from './workspace-context';
 import { allPages, displayTime, localDate, minutes, required, useCommand } from '../shared/data';
-import { Button, ErrorNotice, Field, Page, QueryState, palette } from '../shared/ui';
+import { Button, ErrorNotice, Field, Hint, Page, QueryState, palette } from '../shared/ui';
 import { WorkerAvatar } from '../../components/common/WorkerAvatar';
 import { WorkerQrModal } from '../../components/worker/WorkerQrModal';
 import { WorkerRequestModal } from '../../components/modals/WorkerRequestModal';
 import { CreateWorkerModal } from '../../components/modals/CreateWorkerModal';
+import { WorkerDocuments } from '../contractor/worker-documents';
 import { ScheduleAssignModal } from '../../components/modals/ScheduleAssignModal';
 import {
   IconCalendar,
@@ -29,7 +30,7 @@ import type { NavigationTarget } from '../../SmartSiteMobileApp';
 
 export function HomeScreen({ navigate }: { navigate: (target: NavigationTarget) => void }) {
   const { t } = useTranslation();
-  const { scope, client, token, user, queryKey, workerId } = useWorkspace();
+  const { scope, client, token, user, queryKey, workerId, workerDocumentStatus } = useWorkspace();
   const contractor = scope.role === 'contractor';
   const today = localDate();
   const [showQrModal, setShowQrModal] = useState(false);
@@ -504,6 +505,9 @@ export function HomeScreen({ navigate }: { navigate: (target: NavigationTarget) 
       showsVerticalScrollIndicator={false}
     >
       {/* Worker Greeting Section */}
+      {workerDocumentStatus && workerDocumentStatus !== 'ACTIVE' && (
+        <Hint>{t('documents.readOnly')}</Hint>
+      )}
       <View style={homeStyles.greetingSection}>
         <View style={homeStyles.greetingTextContainer}>
           <Text numberOfLines={1} ellipsizeMode="tail" style={homeStyles.greetingSub}>
@@ -769,11 +773,18 @@ export function ChangePasswordModal({
   );
 }
 
-export function ProfileScreen({ onScopeChange }: { onScopeChange: () => void }) {
+export function ProfileScreen({
+  onScopeChange,
+  initialDocuments = false,
+}: {
+  onScopeChange: () => void;
+  initialDocuments?: boolean;
+}) {
   const { t } = useTranslation();
   const { scope, user, client, token, queryKey } = useWorkspace();
   const { session } = useAuth();
   const [showPasswordModal, setShowPasswordModal] = useState(false);
+  const [documents, setDocuments] = useState(initialDocuments);
   const command = useCommand();
 
   const worker = useQuery({
@@ -785,8 +796,21 @@ export function ProfileScreen({ onScopeChange }: { onScopeChange: () => void }) 
       ) ?? null,
   });
 
+  if (documents && scope.role === 'worker' && worker.data)
+    return (
+      <Page title={t('documents.title')} onBack={() => setDocuments(false)}>
+        <WorkerDocuments workerId={worker.data.id} />
+      </Page>
+    );
   return (
     <Page title={t('profile.title')}>
+      {scope.role === 'worker' && worker.data && (
+        <>
+          <Hint>{t(`documents.${worker.data.documentStatus ?? 'PENDING'}`)}</Hint>
+          {worker.data.documentStatus !== 'ACTIVE' && <Hint>{t('documents.readOnly')}</Hint>}
+          <Button secondary label={t('documents.title')} onPress={() => setDocuments(true)} />
+        </>
+      )}
       {/* Hero Profile Card */}
       <View style={homeStyles.profileHeroCard}>
         <View style={homeStyles.profileAvatarRow}>

@@ -31,6 +31,7 @@ export type ActiveTab =
   | 'contractor-teams'
   | 'worker-summary'
   | 'worker-onboarding'
+  | 'worker-documents'
   | 'workforce'
   | 'site-setup'
   | 'accounts'
@@ -91,9 +92,15 @@ export function AppLayout({ currentTab: propCurrentTab, onSelectTab, children }:
   // Navigation and business capabilities still use the scoped role policy below.
   const mainSafetyUi =
     roles.includes('SAFETY_OFFICER') &&
-    ['dashboard', 'live-monitoring', 'ppe', 'zones', 'incidents', 'account/password'].includes(
-      activeTab,
-    );
+    [
+      'dashboard',
+      'live-monitoring',
+      'ppe',
+      'zones',
+      'incidents',
+      'worker-documents',
+      'account/password',
+    ].includes(activeTab);
   const allowedTabs = workspaceTabs(currentUser?.roleAssignments ?? []);
   const workerOnly = roles.length === 1 && roles[0] === 'WORKER';
   const navGroups = [
@@ -104,6 +111,7 @@ export function AppLayout({ currentTab: propCurrentTab, onSelectTab, children }:
         { id: 'contractor-teams', label: t('shell.contractorTeams'), icon: IconUsers },
         { id: 'assigned-work', label: t('shell.assignedWork'), icon: IconUsers },
         { id: 'worker-onboarding', label: t('shell.workerOnboarding'), icon: IconUsers },
+        { id: 'worker-documents', label: t('documents.title'), icon: IconUsers },
         { id: 'worker-summary', label: t('shell.workerSummary'), icon: IconDashboard },
         {
           id: 'workforce',

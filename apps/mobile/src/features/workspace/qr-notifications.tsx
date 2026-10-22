@@ -17,6 +17,7 @@ import { displayTime, useCommand } from '../shared/data';
 import type { NavigationTarget } from '../../SmartSiteMobileApp';
 import { notificationTarget } from './notification-target';
 import { useTranslation } from '../../i18n';
+import { notificationTitle, notificationMessage } from '../../i18n/messages';
 
 export function QrScreen({ onBack }: { onBack: () => void }) {
   const { t } = useTranslation();
@@ -85,9 +86,9 @@ export function NotificationsScreen({
                 <Card key={n.id}>
                   <Body>
                     {n.readAt ? '' : '● '}
-                    {n.title}
+                    {notificationTitle(n)}
                   </Body>
-                  <Body>{n.message}</Body>
+                  <Body>{notificationMessage(n)}</Body>
                   <Hint>
                     {n.siteName} · {displayTime(n.createdAt)}
                   </Hint>

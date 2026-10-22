@@ -13,6 +13,10 @@ it('loads representative Contractor options and creates a linked Worker account 
     siteId: 'site/a',
     displayName: 'Synthetic Worker',
     username: 'worker001',
+    nationalId: '000000000001',
+    phoneNumber: '0900000001',
+    gender: 'MALE' as const,
+    address: 'Synthetic address',
   };
   await client.createContractorWorkerAccount('representative-token', 'contractor/a', input);
   expect(fetch.mock.calls[0]).toEqual([

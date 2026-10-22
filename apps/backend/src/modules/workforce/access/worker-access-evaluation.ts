@@ -13,6 +13,7 @@ import {
   OvertimeRequestEntity,
 } from '../../../database/entities/index.js';
 import { scheduledShiftWindow, workDateAt } from '../attendance/attendance-calculation.js';
+import { workerDocumentsAllowEntry } from '../documents/worker-compliance.js';
 
 /** QR and Face establish identity; both use the same persisted Site authorization. */
 export async function evaluateWorkerAccess(
@@ -108,6 +109,8 @@ export async function evaluateWorkerAccess(
   let reason: GateAuthorizationDecision['reasonCode'] | null = null;
   if (!worker.isActive) reason = 'WORKER_INACTIVE';
   else if (worker.siteId !== siteId) reason = 'SITE_MISMATCH';
+  else if (!(await workerDocumentsAllowEntry(manager, worker.id, at)))
+    reason = 'WORKER_DOCUMENTS_INVALID';
   else if (!assignment) reason = 'ASSIGNMENT_MISSING';
   else if (!assignment.siteContractorId) reason = 'CONTRACTOR_SITE_PARTICIPATION_INVALID';
   else {

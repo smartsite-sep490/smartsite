@@ -10,6 +10,8 @@ import {
   WorkerGatePermissionEntity,
   ContractorEntity,
   ContractorSiteParticipationEntity,
+  WorkerComplianceProfileEntity,
+  WorkerDocumentEntity,
 } from '../src/database/entities/index.js';
 import { evaluateWorkerAccess } from '../src/modules/workforce/access/worker-access-evaluation.js';
 
@@ -31,6 +33,17 @@ function fixture(
   };
   return {
     getRepository: (entity: unknown) => {
+      if (entity === WorkerComplianceProfileEntity) return { findOneBy: async () => null };
+      if (entity === WorkerDocumentEntity)
+        return {
+          findBy: async () =>
+            ['SAFETY_CARD', 'HEALTH_CERTIFICATE', 'PERSONAL_INSURANCE'].map((kind) => ({
+              kind,
+              status: 'APPROVED',
+              issuedOn: '2020-01-01',
+              expiresOn: '2099-01-01',
+            })),
+        };
       if (entity === WorkerSiteZoneAssignmentEntity)
         return {
           find: async () => [

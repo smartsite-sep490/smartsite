@@ -1,3 +1,4 @@
+import { translate as tr, useTranslation } from '../../i18n';
 import React from 'react';
 import { View, Text, Image } from 'react-native';
 import { colors } from '../../theme/colors';
@@ -13,13 +14,14 @@ interface IconProps {
  * SmartSite official brand icon / symbol
  */
 export function SmartSiteLogo({ size = 38 }: { size?: number }) {
+  useTranslation();
   return (
     <Image
       source={smartSiteSymbol}
       style={{ width: size, height: size }}
       resizeMode="contain"
       accessibilityRole="image"
-      accessibilityLabel="SmartSite Logo"
+      accessibilityLabel={tr('header.logoAlt')}
     />
   );
 }

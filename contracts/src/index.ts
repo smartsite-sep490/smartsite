@@ -138,6 +138,9 @@ export type {
   SchedulingNotificationEvent,
   ScheduleAssignmentNotificationEvent,
   SchedulingNotificationTarget,
+  PpeAlertNotificationEvent,
+  PpeAlertNotificationMetadata,
+  SafetyAlertNotificationTarget,
   UserNotificationResponse,
   UserNotificationListResponse,
   NotificationReadResponse,
@@ -160,3 +163,5 @@ export * from './manager-overview-api.js';
 
 export * from './safety-overview-api.js';
 export * from './safety-checklist-api.js';
+export type * from './worker-documents-api.js';
+export { healthCertificateExpiry } from './worker-document-dates.js';

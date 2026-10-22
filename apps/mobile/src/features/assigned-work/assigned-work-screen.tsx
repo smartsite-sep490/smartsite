@@ -1,3 +1,5 @@
+import { localizedLabel } from '../../i18n/messages';
+import { translate as tr } from '../../i18n';
 import { useState } from 'react';
 import { File } from 'expo-file-system';
 import { useQuery } from '@tanstack/react-query';
@@ -34,6 +36,7 @@ export function AssignedWorkScreen({
   initialKind?: string;
   onBack: () => void;
 }) {
+  useTranslation();
   const { scope, client, token, user, queryKey } = useWorkspace();
   const [kind, setKind] = useState(initialKind === 'incident' ? 'incident' : 'checklist'),
     [id, setId] = useState(initialId ?? ''),
@@ -78,34 +81,40 @@ export function AssignedWorkScreen({
       <IncidentDetail id={id} onBack={() => setId('')} />
     );
   return (
-    <Page title="Công việc được giao" onBack={onBack}>
+    <Page title={tr('assignedWork.title')} onBack={onBack}>
       <Choice
-        label="Loại công việc"
+        label={tr('assignedWork.workType')}
         value={kind}
         onChange={(v) => {
           setKind(v);
           setOffset(0);
         }}
         options={[
-          { value: 'checklist', label: 'Phiếu kiểm tra an toàn' },
-          { value: 'incident', label: 'Khắc phục được giao' },
+          { value: 'checklist', label: tr('assignedWork.checklist') },
+          { value: 'incident', label: tr('assignedWork.correctiveAction') },
         ]}
       />
       {kind === 'checklist' ? (
         <QueryState query={checklists}>
           {(data) => (
             <>
-              {!data.items.length && <Hint>Chưa có phiếu được giao.</Hint>}
+              {!data.items.length && <Hint>{tr('assignedWork.noChecklists')}</Hint>}
               {data.items
                 .filter((c) => c.contractorId === scope.contractorId)
                 .map((c) => (
                   <Card key={c.id}>
                     <Body>{c.description}</Body>
                     <Hint>
-                      {c.teamName} · {c.zoneName} · {c.status}
+                      {c.teamName} · {c.zoneName} · {localizedLabel(c.status)}
                     </Hint>
-                    <Hint>Hạn: {displayTime(c.endsAt)}</Hint>
-                    <Button secondary label="Mở phiếu kiểm tra" onPress={() => setId(c.id)} />
+                    <Hint>
+                      {tr('common.deadline')} {displayTime(c.endsAt)}
+                    </Hint>
+                    <Button
+                      secondary
+                      label={tr('assignedWork.openChecklist')}
+                      onPress={() => setId(c.id)}
+                    />
                   </Card>
                 ))}
               <Pager offset={offset} total={data.total} onChange={setOffset} />
@@ -116,16 +125,20 @@ export function AssignedWorkScreen({
         <QueryState query={incidents}>
           {(data) => (
             <>
-              {!data.items.length && <Hint>Chưa có công việc khắc phục.</Hint>}
+              {!data.items.length && <Hint>{tr('assignedWork.noActions')}</Hint>}
               {data.items
                 .filter((i) => !i.contractorId || i.contractorId === scope.contractorId)
                 .map((i) => (
                   <Card key={i.id}>
                     <Body>{i.title}</Body>
                     <Hint>
-                      {i.status} · {i.severity}
+                      {localizedLabel(i.status)} · {localizedLabel(i.severity)}
                     </Hint>
-                    <Button secondary label="Mở công việc khắc phục" onPress={() => setId(i.id)} />
+                    <Button
+                      secondary
+                      label={tr('assignedWork.openAction')}
+                      onPress={() => setId(i.id)}
+                    />
                   </Card>
                 ))}
               <Pager offset={offset} total={data.total} onChange={setOffset} />
@@ -154,18 +167,18 @@ function ChecklistDetail({
     queryFn: () => client.getSafetyChecklist(token, scope.siteId, id),
   });
   return (
-    <Page title="Phiếu kiểm tra được giao" onBack={onBack}>
+    <Page title={tr('assignedWork.assignedChecklist')} onBack={onBack}>
       <ErrorNotice error={command.error} />
       <QueryState query={detail}>
         {(data) =>
           data.contractorId !== scope.contractorId ? (
-            <Hint>Phiếu thuộc phạm vi nhà thầu khác. Chọn đúng nhà thầu trước khi thao tác.</Hint>
+            <Hint>{tr('assignedWork.checklistScopeHint')}</Hint>
           ) : (
             <>
               <Card>
                 <Body>{data.description}</Body>
                 <Hint>
-                  {data.teamName} · {data.zoneName} · {data.status}
+                  {data.teamName} · {data.zoneName} · {localizedLabel(data.status)}
                 </Hint>
                 <Hint>
                   {displayTime(data.startsAt)} → {displayTime(data.endsAt)}
@@ -190,12 +203,12 @@ function ChecklistDetail({
                 <ChecklistForm key={`${data.id}:${data.version}`} detail={data} />
               )}
               <Card>
-                <Body>Lịch sử nộp / trả kết quả</Body>
-                {!data.submissions.length && <Hint>Chưa có báo cáo.</Hint>}
+                <Body>{tr('assignedWork.submissionHistory')}</Body>
+                {!data.submissions.length && <Hint>{tr('assignedWork.noReports')}</Hint>}
                 {data.submissions.map((s) => (
                   <Card key={s.id}>
                     <Body>
-                      {s.status} · {s.submittedByName ?? 'Người thực hiện'}
+                      {localizedLabel(s.status)} · {s.submittedByName ?? tr('common.actor')}
                     </Body>
                     <Hint>
                       {displayTime(s.submittedAt)} · {s.reviewNote ?? ''}
@@ -216,7 +229,7 @@ function ChecklistDetail({
                         {r.linkedIncident && (
                           <Button
                             secondary
-                            label={`Sự cố: ${r.linkedIncident.title}`}
+                            label={tr('assignedWork.incident', { id: r.linkedIncident.title })}
                             onPress={() => onIncident(r.linkedIncident!.id)}
                           />
                         )}
@@ -226,10 +239,10 @@ function ChecklistDetail({
                 ))}
               </Card>
               <Card>
-                <Body>Lịch sử thao tác</Body>
+                <Body>{tr('assignedWork.actionHistory')}</Body>
                 {data.audit.map((a) => (
                   <Hint key={a.id}>
-                    {a.actorName ?? 'Người thực hiện'} · {a.action} · {displayTime(a.occurredAt)}
+                    {a.actorName ?? tr('common.actor')} · {a.action} · {displayTime(a.occurredAt)}
                     {a.reason ? ` · ${a.reason}` : ''}
                   </Hint>
                 ))}
@@ -253,24 +266,24 @@ function ChecklistForm({ detail }: { detail: ChecklistDetailResponse }) {
   return (
     <Card>
       <Body>
-        {completed}/{detail.items.length} tiêu chí
+        {completed}/{detail.items.length} {tr('assignedWork.criteriaUnit')}
       </Body>
       {detail.items.map((item) => (
         <Card key={item.id}>
           <Body>{item.text}</Body>
-          <Hint>{item.evidenceRequired ? 'Cần bằng chứng khi đạt.' : ''}</Hint>
+          <Hint>{item.evidenceRequired ? tr('assignedWork.passEvidenceHint') : ''}</Hint>
           <Choice
-            label="Kết quả kiểm tra"
+            label={tr('assignedWork.checkResult')}
             value={answers[item.id] ?? ''}
             options={[
-              { value: 'PASS', label: 'Đạt' },
-              { value: 'FAIL', label: 'Không đạt' },
-              { value: 'NOT_APPLICABLE', label: 'Không áp dụng' },
+              { value: 'PASS', label: tr('assignedWork.pass') },
+              { value: 'FAIL', label: tr('assignedWork.fail') },
+              { value: 'NOT_APPLICABLE', label: tr('assignedWork.notApplicable') },
             ]}
             onChange={(value) => setAnswers({ ...answers, [item.id]: value as ChecklistAnswer })}
           />
           <Field
-            label="Ghi chú tiêu chí"
+            label={tr('assignedWork.criterionNote')}
             value={notes[item.id] ?? ''}
             onChangeText={(value) => setNotes({ ...notes, [item.id]: value })}
             multiline
@@ -290,13 +303,13 @@ function ChecklistForm({ detail }: { detail: ChecklistDetailResponse }) {
             const files: NativeUploadFile[] = [];
             const results: ChecklistResultInput[] = detail.items.map((item) => {
               const answer = answers[item.id];
-              if (!answer) throw new Error('Hoàn thành tất cả tiêu chí.');
+              if (!answer) throw new Error(tr('validation.completeCriteria'));
               const note = notes[item.id]?.trim() ?? '';
               if ((answer === 'FAIL' || answer === 'NOT_APPLICABLE') && !note)
-                throw new Error('Ghi chú bắt buộc khi không đạt hoặc không áp dụng.');
+                throw new Error(tr('validation.criterionNoteRequired'));
               const selected = filesByItem[item.id] ?? [];
               if (item.evidenceRequired && answer === 'PASS' && !selected.length)
-                throw new Error('Tiêu chí đạt cần đính kèm bằng chứng theo yêu cầu.');
+                throw new Error(tr('validation.criterionEvidenceRequired'));
               const fileIndexes = selected.map((file) => {
                 const index = files.length;
                 files.push(file);
@@ -305,7 +318,7 @@ function ChecklistForm({ detail }: { detail: ChecklistDetailResponse }) {
               return { itemId: item.id, answer, note, fileIndexes };
             });
             if (files.reduce((total, f) => total + new File(f.uri).size, 0) > 20 * 1024 * 1024)
-              throw new Error('Tổng dung lượng bằng chứng tối đa 20 MB.');
+              throw new Error(tr('validation.evidenceTotal'));
             const input = { expectedVersion: detail.version, results };
             await client.submitSafetyChecklist(
               token,
@@ -321,34 +334,37 @@ function ChecklistForm({ detail }: { detail: ChecklistDetailResponse }) {
   );
 }
 function IncidentDetail({ id, onBack }: { id: string; onBack: () => void }) {
+  useTranslation();
   const { scope, client, token, user, queryKey } = useWorkspace();
   const query = useQuery({
     queryKey: [...queryKey, 'incident', id],
     queryFn: () => client.getIncident(token, scope.siteId, id),
   });
   return (
-    <Page title="Khắc phục được giao" onBack={onBack}>
+    <Page title={tr('assignedWork.correctiveAction')} onBack={onBack}>
       <QueryState query={query}>
         {(data) =>
           data.contractorId && data.contractorId !== scope.contractorId ? (
-            <Hint>Công việc thuộc nhà thầu khác. Chọn đúng phạm vi.</Hint>
+            <Hint>{tr('assignedWork.actionScopeHint')}</Hint>
           ) : (
             <>
               <Card>
                 <Body>{data.title}</Body>
                 <Body>{data.description}</Body>
                 <Hint>
-                  {data.status} · {data.severity} · {data.zoneName ?? ''}
+                  {localizedLabel(data.status)} · {localizedLabel(data.severity)} ·{' '}
+                  {data.zoneName ?? ''}
                 </Hint>
                 {data.sourceChecklist && (
                   <Hint>
-                    Nguồn phiếu: {data.sourceChecklist.description} ·{' '}
+                    {tr('assignedWork.sourceChecklist')} {data.sourceChecklist.description} ·{' '}
                     {data.sourceChecklist.itemText} · {data.sourceChecklist.note}
                   </Hint>
                 )}
                 {data.alerts.map((a) => (
                   <Hint key={a.id}>
-                    Cảnh báo liên kết: {a.alertType} · {a.status}
+                    {tr('assignedWork.linkedAlert')} {localizedLabel(a.alertType)} ·{' '}
+                    {localizedLabel(a.status)}
                   </Hint>
                 ))}
               </Card>
@@ -358,10 +374,10 @@ function IncidentDetail({ id, onBack }: { id: string; onBack: () => void }) {
                   <ActionForm key={`${a.id}:${a.version}`} action={a} incidentId={id} />
                 ))}
               <Card>
-                <Body>Lịch sử xử lý</Body>
+                <Body>{tr('assignedWork.reviewHistory')}</Body>
                 {data.audit.map((a) => (
                   <Hint key={a.id}>
-                    {a.actorName ?? 'Người thực hiện'} · {a.action} · {displayTime(a.occurredAt)} ·{' '}
+                    {a.actorName ?? tr('common.actor')} · {a.action} · {displayTime(a.occurredAt)} ·{' '}
                     {a.reason ?? ''}
                   </Hint>
                 ))}
@@ -380,6 +396,7 @@ function ActionForm({
   action: CorrectiveActionResponse;
   incidentId: string;
 }) {
+  useTranslation();
   const { scope, client, token } = useWorkspace();
   const [result, setResult] = useState(''),
     [files, setFiles] = useState<NativeUploadFile[]>([]);
@@ -389,15 +406,18 @@ function ActionForm({
     <Card>
       <Body>{action.description}</Body>
       <Hint>
-        {action.status} · Hạn: {displayTime(action.dueAt)}
+        {localizedLabel(action.status)} {tr('assignedWork.deadlineSuffix')}{' '}
+        {displayTime(action.dueAt)}
       </Hint>
       {action.supersededAt ? (
-        <Hint>Đã chuyển giao: {action.supersededReason}</Hint>
+        <Hint>
+          {tr('assignedWork.handedOver')} {action.supersededReason}
+        </Hint>
       ) : (
         <>
           {action.status === 'ASSIGNED' && (
             <Button
-              label="Bắt đầu khắc phục"
+              label={tr('assignedWork.startAction')}
               disabled={command.isPending}
               onPress={() =>
                 command.mutate(() => {
@@ -416,16 +436,21 @@ function ActionForm({
           )}
           {action.status === 'IN_PROGRESS' && (
             <>
-              <Field label="Kết quả khắc phục" multiline value={result} onChangeText={setResult} />
+              <Field
+                label={tr('assignedWork.actionResult')}
+                multiline
+                value={result}
+                onChangeText={setResult}
+              />
               <Attachments files={files} onChange={setFiles} jpegOnly maxFiles={1} />
               <Button
-                label="Nộp kết quả cho cán bộ an toàn"
+                label={tr('assignedWork.submitToSafety')}
                 disabled={command.isPending || !result.trim()}
                 onPress={() =>
                   command.mutate(() => {
                     const input = {
                       expectedVersion: action.version,
-                      resultDescription: required(result, 'kết quả'),
+                      resultDescription: required(result, tr('validation.resultLabel')),
                     };
                     return client.incidentCommand(
                       token,
@@ -448,7 +473,7 @@ function ActionForm({
         <Card key={s.id}>
           <Body>{s.resultDescription}</Body>
           <Hint>
-            {s.status} · {displayTime(s.submittedAt)} · {s.reviewNote ?? ''}
+            {localizedLabel(s.status)} · {displayTime(s.submittedAt)} · {s.reviewNote ?? ''}
           </Hint>
           {s.evidence && (
             <EvidenceButton

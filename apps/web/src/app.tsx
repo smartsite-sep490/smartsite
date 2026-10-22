@@ -35,6 +35,7 @@ import { AssignedWorkView } from './components/contractor/AssignedWorkView';
 import { ContractorDashboardView } from './components/contractor/ContractorDashboardView';
 import { WorkerDashboardView } from './components/dashboard/WorkerDashboardView';
 import { WorkerOnboardingView } from './components/workforce/components/WorkerOnboardingView';
+import { WorkerDocumentsView } from './components/workforce/components/WorkerDocumentsView';
 import { workspaceTabs, defaultWorkspace } from './features/auth/workspace-access';
 
 const apiUrl = import.meta.env.VITE_API_URL || 'http://localhost:3000';
@@ -148,6 +149,7 @@ function ProtectedRoutes({ defaultAuthTab, alertsContext, onNavigate }: Protecte
           element={<WorkerDashboardView apiUrl={apiUrl} onNavigate={onNavigate} />}
         />
         <Route path="/worker-onboarding" element={<WorkerOnboardingView apiUrl={apiUrl} />} />
+        <Route path="/worker-documents" element={<WorkerDocumentsView apiUrl={apiUrl} />} />
         <Route path="/schedule-setup" element={<ScheduleSetupView apiUrl={apiUrl} />} />
         <Route path="/access" element={<AccessControlView apiUrl={apiUrl} />} />
         <Route
@@ -174,16 +176,25 @@ function ProtectedRoutes({ defaultAuthTab, alertsContext, onNavigate }: Protecte
           element={
             profile.data ? (
               <SafetyAlertsView
-                key={profile.data.id + JSON.stringify(alertsContext ?? {})}
+                key={
+                  profile.data.id +
+                  JSON.stringify(alertsContext ?? {}) +
+                  (incidentLink.has('alertId') ? location.search : '')
+                }
                 authenticatedSession={{ accessToken, user: profile.data }}
                 onSignOut={() => logout.mutate()}
                 apiUrl={apiUrl}
                 initialSiteId={incidentLink.get('siteId') ?? alertsContext?.siteId}
                 initialIncidentId={incidentLink.get('incidentId') ?? undefined}
                 initialActionId={incidentLink.get('actionId') ?? undefined}
-                initialAlertId={alertsContext?.alertId}
-                initialStatus={alertsContext?.status}
-                initialType={alertsContext?.alertType}
+                initialDocumentWorkerId={
+                  incidentLink.get('tab') === 'documents'
+                    ? (incidentLink.get('workerId') ?? undefined)
+                    : undefined
+                }
+                initialAlertId={incidentLink.get('alertId') ?? alertsContext?.alertId}
+                initialStatus={incidentLink.has('alertId') ? undefined : alertsContext?.status}
+                initialType={incidentLink.has('alertId') ? undefined : alertsContext?.alertType}
               />
             ) : profile.isError ? (
               <div role="alert">

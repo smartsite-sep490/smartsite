@@ -1,3 +1,4 @@
+import { translate as tr } from '../../i18n';
 import { useEffect, useMemo, useState } from 'react';
 import { AppState, Text, View } from 'react-native';
 import { useQuery } from '@tanstack/react-query';
@@ -8,6 +9,7 @@ import { Body, Button, Choice, ErrorNotice, Hint } from '../shared/ui';
 import { useTranslation } from '../../i18n';
 
 function QrGraphic({ code }: { code: string }) {
+  useTranslation();
   const { size, path } = useMemo(() => {
     const { modules } = QRCode.create(code, { errorCorrectionLevel: 'M' });
     let path = '';
@@ -17,7 +19,7 @@ function QrGraphic({ code }: { code: string }) {
     return { size: modules.size + 8, path };
   }, [code]);
   return (
-    <View accessibilityLabel="QR dự phòng do máy chủ cấp" style={{ alignItems: 'center' }}>
+    <View accessibilityLabel={tr('qr.serverFallback')} style={{ alignItems: 'center' }}>
       <Svg width={240} height={240} viewBox={`0 0 ${size} ${size}`}>
         <Path d={`M0 0h${size}v${size}H0z`} fill="white" />
         <Path d={path} fill="black" />
@@ -28,6 +30,7 @@ function QrGraphic({ code }: { code: string }) {
 
 export function WorkerQrPanel() {
   const { t } = useTranslation();
+  const { workerDocumentStatus } = useWorkspace();
   const [direction, setDirection] = useState<'IN' | 'OUT'>('IN');
   return (
     <View style={{ gap: 12, width: '100%' }}>
@@ -41,7 +44,11 @@ export function WorkerQrPanel() {
         ]}
         onChange={(value) => setDirection(value as 'IN' | 'OUT')}
       />
-      <WorkerQrPass key={direction} direction={direction} />
+      {direction === 'IN' && workerDocumentStatus && workerDocumentStatus !== 'ACTIVE' ? (
+        <Hint>{t('documents.readOnly')}</Hint>
+      ) : (
+        <WorkerQrPass key={direction} direction={direction} />
+      )}
     </View>
   );
 }

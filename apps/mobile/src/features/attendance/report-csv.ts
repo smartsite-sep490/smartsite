@@ -1,3 +1,5 @@
+import { translate as tr } from '../../i18n';
+import { localizedLabel } from '../../i18n/messages';
 import type { AttendanceWorkerReport } from '@smartsite/api-client';
 function cell(value: string | number | null) {
   const text = String(value ?? '');
@@ -5,16 +7,16 @@ function cell(value: string | number | null) {
 }
 export function attendanceCsv(rows: AttendanceWorkerReport[]) {
   const header = [
-    'Mã công nhân',
-    'Họ tên',
-    'Trạng thái hôm nay',
-    'Tổng phút đã xác nhận',
-    'Phút thường',
-    'Phút tăng ca',
-    'Phút tạm tính',
-    'Ngày có mặt',
-    'Ngày yêu cầu',
-    'Tỷ lệ có mặt',
+    tr('attendance.csvWorkerCode'),
+    tr('attendance.csvWorkerName'),
+    tr('attendance.csvTodayStatus'),
+    tr('attendance.csvConfirmedMinutes'),
+    tr('attendance.csvRegularMinutes'),
+    tr('attendance.csvOvertimeMinutes'),
+    tr('attendance.csvProvisionalMinutes'),
+    tr('attendance.csvPresentDays'),
+    tr('attendance.csvRequiredDays'),
+    tr('attendance.csvPresenceRate'),
   ];
   return (
     '\uFEFF' +
@@ -24,7 +26,7 @@ export function attendanceCsv(rows: AttendanceWorkerReport[]) {
         [
           w.workerCode,
           w.workerName,
-          w.todayStatus,
+          localizedLabel(w.todayStatus),
           w.totalMinutes,
           w.regularMinutes,
           w.overtimeMinutes,

@@ -1,4 +1,5 @@
 import type { WorkerSiteZoneAssignmentStatus } from './identity-access-api.js';
+export type * from './worker-documents-api.js';
 export type * from './attendance-reports-api.js';
 
 export type UserRole =
@@ -172,6 +173,8 @@ export interface WorkerResponse {
   externalId: string;
   displayName: string;
   isActive: boolean;
+  /** Current document eligibility, separate from manual suspension. */
+  documentStatus?: import('./worker-documents-api.js').WorkerComplianceStatus;
   createdAt: string;
 }
 
@@ -179,6 +182,10 @@ export const WORKER_DEFAULT_TEMPORARY_PASSWORD = '12345678';
 
 export interface CreateContractorWorkerAccountCommand {
   siteId: string;
+  nationalId: string;
+  phoneNumber: string;
+  gender: 'MALE' | 'FEMALE' | 'OTHER';
+  address: string;
   /** Omit to let the Backend generate a Worker code. Accepted for legacy clients. */
   externalId?: string;
   displayName: string;
@@ -438,13 +445,31 @@ export interface SafetyNotificationTarget {
   actionId: string;
   tab: 'incidents';
 }
+export type PpeAlertNotificationEvent = 'PPE_ALERT_CREATED';
+
+export interface SafetyAlertNotificationTarget {
+  siteId: string;
+  alertId: string;
+  tab: 'alerts';
+}
+
+export interface PpeAlertNotificationMetadata {
+  cameraId: string;
+  cameraName: string;
+  zoneId: string | null;
+  zoneName: string | null;
+  candidateSubtype: 'PPE_HARD_HAT_MISSING' | 'PPE_SAFETY_VEST_MISSING';
+}
+
 export interface UserNotificationResponse {
   id: string;
   event:
+    | import('./worker-documents-api.js').WorkerDocumentNotificationEvent
     | SchedulingNotificationEvent
     | ScheduleAssignmentNotificationEvent
     | import('./safety-checklist-api.js').ChecklistNotificationEvent
     | 'SAFETY_HANDOVER'
+    | PpeAlertNotificationEvent
     | import('./attendance-api.js').AttendanceNotificationEvent;
   siteId: string;
   siteName: string;
@@ -453,12 +478,15 @@ export interface UserNotificationResponse {
   workDate?: string;
   fromShiftName?: string;
   toShiftName?: string;
+  safetyAlert?: PpeAlertNotificationMetadata;
   createdAt: string;
   readAt: string | null;
   target:
+    | { siteId: string; workerId: string; tab: 'documents' }
     | SchedulingNotificationTarget
     | { siteId: string; checklistId: string; tab: 'checklists' }
     | SafetyNotificationTarget
+    | SafetyAlertNotificationTarget
     | { siteId: string; workDate: string; tab: 'schedule' }
     | { siteId: string; dayId: string; tab: 'attendance' };
 }

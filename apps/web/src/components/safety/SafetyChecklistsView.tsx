@@ -42,6 +42,7 @@ type Editor = {
   version: number;
   result?: ChecklistResultResponse;
   submission?: ChecklistSubmissionResponse;
+  submissionId?: string;
 };
 export function SafetyChecklistsView(
   p: WorkflowProps & {
@@ -69,6 +70,8 @@ export function SafetyChecklistsView(
     [previousDraft, setPreviousDraft] = useState(p.draft),
     [previousId, setPreviousId] = useState(p.initialChecklistId),
     [previousContext, setPreviousContext] = useState(p.context);
+  const [refreshed, setRefreshed] = useState(false);
+  const [reloading, setReloading] = useState(false);
   if (previousContext !== p.context) {
     setPreviousContext(p.context);
     setEditor(null);
@@ -124,6 +127,7 @@ export function SafetyChecklistsView(
   });
   const close = () => {
     setEditor(null);
+    setRefreshed(false);
     p.onDraftConsumed();
   };
   const mutation = useWorkflowCommand(p, (id) => {
@@ -132,18 +136,53 @@ export function SafetyChecklistsView(
     setMobileDetail(true);
     close();
   });
-  const reload = () => {
+  const reload = async () => {
+    const openedEditor = editor;
+    setReloading(true);
     mutation.reset();
-    close();
-    void list.refetch();
-    if (selectedId) void detail.refetch();
+    try {
+      const [, result] = await Promise.all([
+        list.refetch(),
+        selectedId ? detail.refetch() : Promise.resolve(undefined),
+      ]);
+      if (result?.data && !result.isError && openedEditor) {
+        const version = result.data.version;
+        setEditor((currentEditor) =>
+          currentEditor === openedEditor ? { ...currentEditor, version } : currentEditor,
+        );
+        setRefreshed(true);
+      }
+    } finally {
+      setReloading(false);
+    }
   };
   const current = detail.data,
     pending = current?.submissions.find((s) => s.status === 'PENDING');
   const open = (next: Editor) => {
     mutation.reset();
-    setEditor(next);
+    setRefreshed(false);
+    if (selectedId) setSelected(selectedId);
+    setEditor({ ...next, submissionId: pending?.id });
   };
+  const editorBlocked =
+    !!editor &&
+    (editor.op === 'submit'
+      ? !representative ||
+        !current ||
+        current.assignedTo !== p.user.id ||
+        current.status !== 'IN_PROGRESS'
+      : editor.op === 'record' || editor.op === 'return'
+        ? !safety ||
+          !pending ||
+          pending.id !== editor.submissionId ||
+          pending.submittedBy === p.user.id
+        : editor.op === 'cancel'
+          ? !safety || !current || !['ASSIGNED', 'IN_PROGRESS'].includes(current.status)
+          : false);
+  const editorDisabled =
+    editorBlocked ||
+    reloading ||
+    (editor?.op !== 'create' && (detail.isFetching || detail.isError));
   return (
     <div className="space-y-5">
       {p.context && (
@@ -500,9 +539,19 @@ export function SafetyChecklistsView(
           }
           onClose={close}
           pending={mutation.isPending}
-          error={mutation.error}
+          error={mutation.error ?? (editor.op !== 'create' ? detail.error : undefined)}
           reload={reload}
         >
+          {refreshed && (
+            <p role="status" className="text-sm">
+              {tr('safety_ux.data_refreshed')}
+            </p>
+          )}
+          {editorBlocked && (
+            <p role="alert" className="text-sm">
+              {tr('safety_ux.checklist_no_longer_editable')}
+            </p>
+          )}
           {editor.op === 'create' ? (
             <CreateChecklistForm
               {...p}
@@ -525,7 +574,9 @@ export function SafetyChecklistsView(
             <ReportChecklistForm
               items={current.items}
               pending={mutation.isPending}
+              disabled={editorDisabled}
               onSubmit={(results, files) => {
+                if (editorDisabled) return;
                 const input = { expectedVersion: editor.version, results };
                 mutation.mutate({
                   fingerprint: JSON.stringify({ id: current.id, ...input }),
@@ -560,6 +611,7 @@ export function SafetyChecklistsView(
             current && (
               <CommandForm
                 pending={mutation.isPending}
+                disabled={editorDisabled}
                 label={
                   editor.op === 'record'
                     ? tr('safety_workspace.record_checklist')
@@ -568,6 +620,7 @@ export function SafetyChecklistsView(
                       : tr('safety_workspace.cancel_checklist')
                 }
                 onSubmit={(form) => {
+                  if (editorDisabled) return;
                   const reason = String(form.get('reason') ?? '').trim();
                   if (editor.op === 'cancel')
                     mutation.mutate({
@@ -586,10 +639,10 @@ export function SafetyChecklistsView(
                           { signal },
                         ),
                     });
-                  else if (pending) {
+                  else if (editor.submissionId) {
                     const input = {
                       expectedVersion: editor.version,
-                      submissionId: pending.id,
+                      submissionId: editor.submissionId,
                       decision:
                         editor.op === 'record' ? ('ACCEPTED' as const) : ('RETURNED' as const),
                       reason,

@@ -12,6 +12,66 @@ afterEach(async () => {
 });
 
 describe('notification-utils', () => {
+  it('opens the persisted PPE alert in its Site rather than the scheduling workspace', () => {
+    const item = {
+      target: { siteId: 'site-ppe', alertId: 'alert-ppe', tab: 'alerts' },
+    } as unknown as UserNotificationResponse;
+    expect(notificationHref(item)).toBe('/incidents?siteId=site-ppe&alertId=alert-ppe&tab=alerts');
+  });
+
+  it('translates PPE metadata without translating camera or Zone names', async () => {
+    const item = {
+      event: 'PPE_ALERT_CREATED',
+      title: 'PPE alert requires review',
+      message: 'Review the PPE observation.',
+      safetyAlert: {
+        cameraId: 'cam',
+        cameraName: 'Camera Nguyễn An',
+        zoneId: 'zone',
+        zoneName: 'Zone Nguyễn An',
+        candidateSubtype: 'PPE_HARD_HAT_MISSING',
+      },
+    } as unknown as UserNotificationResponse;
+    await i18n.changeLanguage('vi');
+    expect(formatNotificationTitle(item)).toBe('Cảnh báo PPE cần xem xét');
+    const vietnamese = formatNotificationDisplayMessage(item);
+    expect(vietnamese).toContain('Camera Nguyễn An');
+    expect(vietnamese).toContain('Zone Nguyễn An');
+    expect(vietnamese).toContain('mũ bảo hộ');
+    await i18n.changeLanguage('en');
+    expect(formatNotificationTitle(item)).toBe('PPE alert requires review');
+    expect(formatNotificationDisplayMessage(item)).toContain('hard hat');
+  });
+
+  it.each(['SAFETY_CARD', 'HEALTH_CERTIFICATE', 'PERSONAL_INSURANCE'] as const)(
+    'translates %s notification text without changing authored values',
+    async (kind) => {
+      const values = {
+        name: 'Nguyễn Văn Test',
+        code: 'W001',
+        note: 'Giữ nguyên Approved & 012345678901',
+        date: '2026-10-18',
+      };
+      for (const event of [
+        'DOCUMENT_SUBMITTED',
+        'DOCUMENT_APPROVED',
+        'DOCUMENT_REJECTED',
+        'DOCUMENT_EXPIRING',
+        'DOCUMENT_EXPIRED',
+      ] as const) {
+        await i18n.changeLanguage('vi');
+        const key = `documentNotifications.${kind}_${event}`;
+        const message = translate(key, values),
+          title = translate(`notifications.${event}`);
+        await i18n.changeLanguage('en');
+        expect(formatNotificationTitle({ event, title })).toBe(translate(`notifications.${event}`));
+        expect(formatNotificationDisplayMessage({ event, message })).toBe(translate(key, values));
+        expect(formatNotificationDisplayMessage({ event, message })).toContain(values.name);
+        if (event === 'DOCUMENT_REJECTED')
+          expect(formatNotificationDisplayMessage({ event, message })).toContain(values.note);
+      }
+    },
+  );
   it('identifies the worker missing checkout in both languages without translating their name', async () => {
     const item = {
       event: 'MISSING_CHECKOUT' as const,
@@ -169,6 +229,22 @@ it('opens a checklist notification in the shared Safety workspace with its Site'
       target: { siteId: 'site/a', checklistId: 'checklist/a', tab: 'checklists' },
     }),
   ).toBe('/incidents?siteId=site%2Fa&checklistId=checklist%2Fa&tab=checklists');
+});
+
+it('opens a document notification in the worker documents view with its Site and Worker ID', () => {
+  expect(
+    notificationHref({
+      id: 'notice',
+      event: 'DOCUMENT_EXPIRING',
+      siteId: 'site-a',
+      siteName: 'Synthetic site',
+      title: 'Giấy tờ sắp hết hạn',
+      message: 'Worker A - Thẻ an toàn lao động nhóm 3 sắp hết hạn',
+      createdAt: '2026-10-17T00:00:00Z',
+      readAt: null,
+      target: { siteId: 'site-a', workerId: 'worker-1', tab: 'documents' },
+    }),
+  ).toBe('/worker-documents?siteId=site-a&workerId=worker-1&tab=documents');
 });
 
 it('preserves authored Safety bodies even when they exactly match known system copy', async () => {

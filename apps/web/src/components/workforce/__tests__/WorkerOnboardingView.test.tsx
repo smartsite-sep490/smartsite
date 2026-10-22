@@ -33,6 +33,8 @@ vi.mock('../../access/enrollment/WorkerEnrollmentView', () => ({
 }));
 let cache: QueryClient;
 beforeEach(() => {
+  URL.createObjectURL = vi.fn(() => 'blob:synthetic-document');
+  URL.revokeObjectURL = vi.fn();
   cache = new QueryClient({
     defaultOptions: { queries: { retry: false }, mutations: { retry: false } },
   });
@@ -62,6 +64,48 @@ beforeEach(() => {
   vi.spyOn(SmartSiteManagementClient.prototype, 'listWorkers').mockResolvedValue({
     items: [],
     total: 0,
+  });
+  vi.spyOn(SmartSiteManagementClient.prototype, 'checkDocumentImageQuality').mockResolvedValue({
+    status: 'ACCEPTED',
+    reason: 'IMAGE_ACCEPTED',
+  });
+  vi.spyOn(SmartSiteManagementClient.prototype, 'uploadWorkerIdentityImage').mockResolvedValue({
+    id: 'synthetic-id-image',
+  });
+  vi.spyOn(SmartSiteManagementClient.prototype, 'uploadWorkerDocument').mockImplementation(
+    async (_token, _site, workerId, kind) => ({
+      id: 'synthetic-document',
+      workerId,
+      kind,
+      status: 'PENDING',
+      originalName: 'synthetic.jpg',
+      mediaType: 'image/jpeg',
+      size: 1,
+      ocr: { status: 'UNAVAILABLE', issuedOn: null, expiresOn: null, warnings: [] },
+      issuedOn: null,
+      expiresOn: null,
+      uploadedAt: '2026-10-17T00:00:00Z',
+      reviewedAt: null,
+      reviewNote: null,
+      version: 1,
+    }),
+  );
+  vi.spyOn(SmartSiteManagementClient.prototype, 'workerCompliance').mockResolvedValue({
+    workerId: 'worker-1',
+    contractorId: 'own-contractor',
+    displayName: 'Synthetic Worker',
+    externalId: 'W001',
+    nationalId: null,
+    phoneNumber: null,
+    gender: null,
+    address: null,
+    identityImages: [],
+    status: 'NOT_REQUIRED',
+    submissionStatus: 'NOT_SUBMITTED',
+    needsSupplement: true,
+    documents: [],
+    missingKinds: [],
+    expiringKinds: [],
   });
   vi.spyOn(SmartSiteManagementClient.prototype, 'updateContractorWorker').mockImplementation(
     async (_token, _siteId, _contractorId, workerId, input) => ({
@@ -110,18 +154,52 @@ async function fill() {
   await screen.findByRole('heading', { name: 'Create Worker account' });
   await user.type(screen.getByLabelText('Full name'), 'New Worker');
   await user.type(screen.getByLabelText('Username'), 'Worker001');
+  await fillDocuments(user);
   return user;
+}
+async function fillDocuments(user: ReturnType<typeof userEvent.setup>) {
+  await user.type(screen.getByLabelText(tr('documents.nationalId')), '000000000001');
+  await user.type(screen.getByLabelText(tr('documents.phoneNumber')), '0900000001');
+  await user.selectOptions(screen.getByLabelText(tr('documents.gender')), 'MALE');
+  await user.type(screen.getByLabelText(tr('documents.address')), 'Synthetic address');
+  for (const kind of ['FRONT', 'BACK', 'SAFETY_CARD', 'HEALTH_CERTIFICATE', 'PERSONAL_INSURANCE'])
+    await user.upload(
+      screen.getByLabelText(tr(`documents.${kind}`)),
+      new File(['synthetic'], `${kind}.jpg`, { type: 'image/jpeg' }),
+    );
+  await waitFor(() =>
+    expect(SmartSiteManagementClient.prototype.checkDocumentImageQuality).toHaveBeenCalledTimes(5),
+  );
 }
 it('Representative creates a Worker login at its Site/Contractor without Admin account controls', async () => {
   mount();
   const user = await fill();
+  for (const kind of ['SAFETY_CARD', 'HEALTH_CERTIFICATE', 'PERSONAL_INSURANCE'])
+    await user.type(
+      screen.getByLabelText(
+        `${tr(`documents.${kind}`)} - ${tr(kind === 'HEALTH_CERTIFICATE' ? 'documents.submittedIssuedOn' : 'documents.submittedExpiresOn')}`,
+      ),
+      '2027-10-18',
+    );
+  expect(screen.queryByRole('button', { name: /Use camera|Chụp bằng camera/ })).toBeNull();
   expect(screen.queryByRole('option', { name: 'other-site' })).toBeNull();
   expect(screen.getByText('Biometrics site-a / account management false')).toBeTruthy();
   expect(screen.queryByLabelText('Worker code')).toBeNull();
   expect(screen.queryByLabelText(/Temporary password/)).toBeNull();
-  expect(screen.getByText('12345678')).toBeTruthy();
+  expect(screen.getByText(tr('documents.accountHint'))).toBeTruthy();
   await user.click(screen.getByRole('button', { name: 'Create Worker account' }));
   await screen.findByText(/Account worker001 and Worker profile created/);
+  for (const kind of ['SAFETY_CARD', 'HEALTH_CERTIFICATE', 'PERSONAL_INSURANCE'])
+    expect(SmartSiteManagementClient.prototype.uploadWorkerDocument).toHaveBeenCalledWith(
+      'representative-token',
+      'site-a',
+      'worker-1',
+      kind,
+      expect.any(File),
+      kind === 'HEALTH_CERTIFICATE'
+        ? { submittedIssuedOn: '2027-10-18' }
+        : { submittedExpiresOn: '2027-10-18' },
+    );
   expect(SmartSiteManagementClient.prototype.createContractorWorkerAccount).toHaveBeenCalledWith(
     'representative-token',
     'own-contractor',
@@ -129,12 +207,55 @@ it('Representative creates a Worker login at its Site/Contractor without Admin a
       siteId: 'site-a',
       displayName: 'New Worker',
       username: 'worker001',
+      nationalId: '000000000001',
+      phoneNumber: '0900000001',
+      gender: 'MALE',
+      address: 'Synthetic address',
     },
   );
   expect(screen.getByText(/Account worker001 and Worker profile created/).textContent).toMatch(
     /temporary password 12345678/,
   );
   expect(screen.getByText('W000001')).toBeTruthy();
+});
+
+it('keeps a blurred image out of the draft and requires a clear replacement', async () => {
+  vi.mocked(SmartSiteManagementClient.prototype.checkDocumentImageQuality).mockResolvedValueOnce({
+    status: 'RETAKE',
+    reason: 'IMAGE_BLURRY',
+  });
+  mount();
+  const user = await fill();
+  expect(
+    screen.getByRole('button', { name: 'Create Worker account' }).hasAttribute('disabled'),
+  ).toBe(true);
+  expect(screen.getByRole('alert').textContent).toContain(tr('documents.IMAGE_BLURRY'));
+  expect(SmartSiteManagementClient.prototype.createContractorWorkerAccount).not.toHaveBeenCalled();
+  await user.upload(
+    screen.getByLabelText(tr('documents.FRONT')),
+    new File(['clear synthetic'], 'clear.jpg', { type: 'image/jpeg' }),
+  );
+  await waitFor(() =>
+    expect(
+      screen.getByRole('button', { name: 'Create Worker account' }).hasAttribute('disabled'),
+    ).toBe(false),
+  );
+});
+
+it('retries incomplete document uploads without creating a second account', async () => {
+  vi.mocked(SmartSiteManagementClient.prototype.uploadWorkerDocument).mockRejectedValueOnce(
+    new Error('Synthetic upload interruption'),
+  );
+  mount();
+  const user = await fill();
+  await user.click(screen.getByRole('button', { name: 'Create Worker account' }));
+  await screen.findByText('Synthetic upload interruption');
+  expect(screen.getByText(tr('documents.accountPending'))).toBeTruthy();
+  await user.click(screen.getByRole('button', { name: 'Create Worker account' }));
+  await screen.findByText(/Account worker001 and Worker profile created/);
+  expect(SmartSiteManagementClient.prototype.createContractorWorkerAccount).toHaveBeenCalledTimes(
+    1,
+  );
 });
 
 it.each(['en', 'vi'] as const)(
@@ -146,6 +267,7 @@ it.each(['en', 'vi'] as const)(
     await screen.findByRole('heading', { name: tr('common.create_worker_account') });
     await user.type(screen.getByLabelText(tr('common.full_name')), 'Nguyễn Văn QA');
     await user.type(screen.getByLabelText(tr('common.username')), 'workerqa');
+    await fillDocuments(user);
     const calls = vi.mocked(SmartSiteManagementClient.prototype.listSites).mock.calls.length;
     await user.click(screen.getByRole('button', { name: tr('language.choose') }));
     await user.click(
@@ -166,6 +288,10 @@ it.each(['en', 'vi'] as const)(
         siteId: 'site-a',
         displayName: 'Nguyễn Văn QA',
         username: 'workerqa',
+        nationalId: '000000000001',
+        phoneNumber: '0900000001',
+        gender: 'MALE',
+        address: 'Synthetic address',
       }),
     );
   },
