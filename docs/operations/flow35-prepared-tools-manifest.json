@@ -1,0 +1,18 @@
+{
+  "at": "2026-10-22T02:23:53.3252956Z",
+  "status": "PREPARED_NOT_OWNER_APPROVED_NOT_APPLIED",
+  "release": "5e118c50f51c62d735e36ae58938c6850ab00427",
+  "pins": {
+    "apply-flow35-root-v1.ps1": "deb0b9edb644e64b71a3076bd21a10d28591cc3568b642750746726a8eb34853",
+    "flow35-operator-env-loader-root-v1.mjs": "52c83f69dda0d411139ebdda64e26b6952a60aba72b28e2f49f0bbd5e647f687",
+    "flow35-preconditions-proof-v1.json": "a32ea94d1b55712ae7f833831cbd22375b81d0ee451a24a510e34a9ad77bd390",
+    "qualify-flow35-root-v1.mjs": "4cf537e61d4d8584ebe083392576303ee89d60ba87d5b9c02121093fa5e4348b",
+    "flow35-media-selfcheck-proof-v1.json": "86ec56abb97d9e25eebb9a8d3a7547f7b1fb2e5fad0e1cd25af457bc86f22e9e",
+    "flow35-local-launcher-root-v1.mjs": "1a06efbd79db329210c00c39e20076238dae9183f9dce175dc4d74c8272adf4a",
+    "prepare-flow35-retained-clone-root-v1.mjs": "1d5bd859d8e59c48a851bfa8dd5c99cd10e73e25d25ad913bbd2225d115c7b9d"
+  },
+  "fullLifecycleExecuted": false,
+  "websiteModified": false,
+  "approvalFileCreated": false,
+  "newAgyReview": false
+}
