@@ -1,0 +1,16 @@
+# Local73 Backend and original WEB authority activation
+
+Owner replied `duyệt` to the concrete local73/WEB-Admin proposal on22October. Root recorded the original reply separately from the normalized action, checked the committed tool hashes and exact old Node/PG ownership, then executed the approved local-only transition.
+
+- Backend now serves committed build `5e118c50f51c62d735e36ae58938c6850ab00427`, canonical73; Webv34 remains `cb187d7622ec071fa36eb4fb9804b6e5fcaab8f7`.
+- New Node12916, exact birth `2026-10-22T09:28:50.8516130+07:00`, port5181; output `website-flow35-20261022-092850-ac44cc9a`. Old25580 gracefully stopped, shutdown failure null; no force kill.
+- Source72 `isolated_test_a27d00b49dc057c365a0355b1e589036` retained. Fresh clone73 `isolated_test_7e9ea9d26e8f917ff859f3355bddd027` upgraded transactionally. Rows/selections and source state compared before STOP and again after final export; media inventory hashes matched. Startup target rows matched the captured73 state before new runtime activity.
+- Existing account logged in through HTTP WEB; compiled operator used the same private runtime JWT environment and that original bearer. It committed one authority epoch with witness; actual control pointer and READY/activated/non-gapped epoch read back. No new account/role was created. Own operator session then logged out and its bearer returned401.
+- Changed-runtime HTTP checks passed: login/PPE/zones shells200, entry asset exact SHA, unauth sites401, retained account login200, scoped metadata/history200 (4loaded cameras/6loaded zones), logout204/revoked401. READY remained ungapped, rollback72 existed. Current periodic private snapshot includes the READY epoch.
+- Dedicated5433 only; no cloud/5434/MF08/source model edits. New runtime has zero owned Python descendants. Enqueue/worker/inference and model Apply remain disabled. Separately delegated AI training is untouched.
+
+URL: http://127.0.0.1:5181/login . Existing account credentials remain only in the current output's private `DEMO.md`; no password/token is included here. Runtime JWT rotation invalidates older browser sessions, so log in again. Expiry is unchanged: `2026-10-22T06:19:14.265Z` (13:19VN), not indefinitely available.
+
+Evidence under `D:/Ky9-FPT/SmartSiteData/runs/unified-corpus-tooling-20261006/demo-readiness-20261014-v1/main-0dd7d27-integration-20261017-v1/product-rollout-461c857-20261021-v1/`: `flow35-owner-approval.json`, `flow35-retained-092807/retained-preparation.json`, `flow35-final-state-proof-root-v1.json`, `flow35-authority-activation-proof-v1.json`, `flow35-operator-session-closed-v1.json`, `flow35-http-proof-root-v1.json`, `flow35-owner-proof-root-v1.json` and private media/snapshot receipts. Do not publish private receipts.
+
+Limits: imported-module/configureApplication local runtime, not a production main deployment; Vite preview emitted its root/outDir warning. No actual browser rendering/UAT or independent media-backup disaster recovery established. READY proves the reviewed software history baseline under trusted DB controls; it does not prove Worker/Team identity, Face consent, model accuracy or prior history coverage. Never blindly switch back to72 after new writes; export and reconcile current data first. Whole phases2–7 remain open.
