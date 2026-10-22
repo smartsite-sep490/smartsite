@@ -7,8 +7,8 @@ import {
 } from '../../common/configuration/authorization-history-cutover-bodies-v1.js';
 import { hasNamedV2AuthorityCutoverPredecessor } from '../../common/configuration/authorization-history-cutover-predecessor-v1.js';
 /** Unregistered capability candidate; no startup or production cutover. */
-export class AuthorizationHistoryCutover1793059200000 implements MigrationInterface {
-  name = 'AuthorizationHistoryCutover1793059200000';
+export class AuthorizationHistoryCutover1793232000000 implements MigrationInterface {
+  name = 'AuthorizationHistoryCutover1793232000000';
 
   async up(runner: QueryRunner): Promise<void> {
     if (!runner.isTransactionActive)

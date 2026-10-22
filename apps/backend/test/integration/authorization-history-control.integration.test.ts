@@ -7,7 +7,7 @@ import {
   MainAuthorityBaselineService,
   type MainAuthorityBaselineRecord,
 } from '../../src/modules/zones/main-authority-baseline.service.js';
-import { AuthorizationHistoryCutover1793059200000 } from '../../src/database/migrations/1793059200000-AuthorizationHistoryCutover.js';
+import { AuthorizationHistoryCutover1793232000000 } from '../../src/database/migrations/1793232000000-AuthorizationHistoryCutover.js';
 import { hasMainAuthorityCapture } from '../../src/common/configuration/main-authority-capture-preflight.js';
 import { executeMainConfigurationCommand } from '../../src/common/configuration/main-configuration-authority.js';
 import type { EntityManager } from 'typeorm';
@@ -25,7 +25,7 @@ before(async () => {
   const runner = db.createQueryRunner();
   try {
     await runner.startTransaction();
-    await new AuthorizationHistoryCutover1793059200000().up(runner);
+    await new AuthorizationHistoryCutover1793232000000().up(runner);
     await runner.commitTransaction();
   } finally {
     if (runner.isTransactionActive) await runner.rollbackTransaction();
@@ -205,7 +205,7 @@ test('Unused cutover rollback restores the exact predecessor and rolls back with
   const runner = db.createQueryRunner();
   try {
     await runner.startTransaction();
-    await new AuthorizationHistoryCutover1793059200000().down(runner);
+    await new AuthorizationHistoryCutover1793232000000().down(runner);
     assert.equal(await hasNamedV2AuthorityCutoverPredecessor(runner.manager), true);
     assert.equal(await hasMainAuthorityCapture(runner.manager), true);
     assert.equal(
@@ -218,7 +218,7 @@ test('Unused cutover rollback restores the exact predecessor and rolls back with
     );
     await runner.query('ALTER TABLE authorization_history_epoch ADD COLUMN gapped_at timestamptz');
     assert.equal(await hasMainAuthorityCapture(runner.manager), false);
-    await assert.rejects(new AuthorizationHistoryCutover1793059200000().up(runner), refused);
+    await assert.rejects(new AuthorizationHistoryCutover1793232000000().up(runner), refused);
   } finally {
     if (runner.isTransactionActive) await runner.rollbackTransaction();
     await runner.release();
@@ -232,7 +232,7 @@ test('Cutover rollback refuses schema drift before accessing relations', async (
     await runner.startTransaction();
     await runner.query('SET LOCAL search_path TO pg_catalog');
     await assert.rejects(
-      new AuthorizationHistoryCutover1793059200000().down(runner),
+      new AuthorizationHistoryCutover1793232000000().down(runner),
       /Explicit owned schema required/,
     );
   } finally {
@@ -272,7 +272,7 @@ test('Cutover rollback is refused after a direct STAGING gap marker even before 
       [staging],
     );
     assert.deepEqual(row, { activated_at: null, gapped: true, after_start: true });
-    await assert.rejects(new AuthorizationHistoryCutover1793059200000().down(runner), refused);
+    await assert.rejects(new AuthorizationHistoryCutover1793232000000().down(runner), refused);
   } finally {
     if (runner.isTransactionActive) await runner.rollbackTransaction();
     await runner.release();
@@ -285,7 +285,7 @@ test('Cutover rollback rejects changed function security metadata despite an unc
     await runner.startTransaction();
     await runner.query('ALTER FUNCTION mf06_authority_control_guard() SECURITY DEFINER');
     assert.equal(await hasMainAuthorityCapture(runner.manager), false);
-    await assert.rejects(new AuthorizationHistoryCutover1793059200000().down(runner), refused);
+    await assert.rejects(new AuthorizationHistoryCutover1793232000000().down(runner), refused);
   } finally {
     if (runner.isTransactionActive) await runner.rollbackTransaction();
     await runner.release();
@@ -342,7 +342,7 @@ test('Controlled command commits a READY epoch with a witness; a failed replacem
   const runner = db.createQueryRunner();
   try {
     await runner.startTransaction();
-    await assert.rejects(new AuthorizationHistoryCutover1793059200000().down(runner), refused);
+    await assert.rejects(new AuthorizationHistoryCutover1793232000000().down(runner), refused);
   } finally {
     if (runner.isTransactionActive) await runner.rollbackTransaction();
     await runner.release();

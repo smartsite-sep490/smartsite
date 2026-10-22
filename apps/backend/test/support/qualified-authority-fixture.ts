@@ -12,7 +12,7 @@ import { AuthTokenService } from '../../src/modules/auth/auth-token.service.js';
 import { UserAuthGuard } from '../../src/modules/auth/user-auth.guard.js';
 import { AuthClientType } from '../../src/database/entities/auth-session.entity.js';
 import { hashPassword } from '../../src/modules/auth/password.js';
-import { AuthorizationHistoryCutover1793059200000 } from '../../src/database/migrations/1793059200000-AuthorizationHistoryCutover.js';
+import { AuthorizationHistoryCutover1793232000000 } from '../../src/database/migrations/1793232000000-AuthorizationHistoryCutover.js';
 import { MainAuthorityCutoverService } from '../../src/modules/zones/main-authority-cutover.service.js';
 import {
   MAIN_AUTHORITY_CUTOVER_RELEASE_FILES,
@@ -33,7 +33,7 @@ export async function createQualifiedAuthorityFixture() {
     const runner = db.createQueryRunner();
     try {
       await runner.startTransaction();
-      await new AuthorizationHistoryCutover1793059200000().up(runner);
+      await new AuthorizationHistoryCutover1793232000000().up(runner);
       await runner.commitTransaction();
     } finally {
       if (runner.isTransactionActive) await runner.rollbackTransaction();
