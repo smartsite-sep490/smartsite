@@ -30,12 +30,14 @@
 - [x] Root lập quy tắc phạm vi nhãn PPE (`ppe-annotation-targets-20261022.md`, `cf956fe`): connector Hook khác cả bộ dây, harness khác áo phản quang; ghi rõ trường hợp không xác định. Đây là mục tiêu kỹ thuật, không tự duyệt lại nhãn vendor/human.
 - [x] Đối chiếu metadata/license và định danh 5 file video với nguồn hiện tại (`2943a9e`); kiểm tra 30 ảnh/53 source pins và xem đủ 5 contact sheets (`fcaf883`).
 - [x] Human duyệt riêng hai khung Hook của một ảnh TRAIN T12; receipt gắn đúng ảnh/tọa độ/hash. Root kiểm 18 bản sao/36 source pins và giữ nguyên nguồn. Xem `train-t12-connector-decision-20261022.md`; chưa xuất dataset hay mở lượt train từ quyết định một ảnh này.
+- [x] Human duyệt thêm 11 ảnh/25 khung Hook; cộng T12 thành 12 ảnh/27 khung mới. Chuyển nhãn thử trong bộ nhớ giữ đủ 5.765 mẫu/659 VAL, chỉ đổi đúng 24 hàng đã chỉ định và giữ lớp0–13. Chưa xuất dataset; còn 2.512 khung Hook nguồn cũ chưa được xác minh theo định nghĩa connector-only. Xem `train-target-transform-review-20261022.md`.
 - [ ] Bộ qualification đủ mọi PPE, nhãn và coverage được review, phân nhóm video/scene, quyền sử dụng rõ. Bộ 30 frame hiện tại chưa đủ: nhiều ảnh đen/hoạt hình/phỏng vấn/máy thi công. Không gọi ảnh chưa nhãn là negative hoặc human GT.
 - [ ] Xử lý bất nhất phạm vi nhãn Hook/Harness và các sai số đã xem bằng dữ liệu được review; không sửa tập đánh giá cũ để làm đẹp điểm. Phiên AI đang tìm tối đa 3 nguồn công khai phù hợp; kết quả tìm kiếm chưa phải dữ liệu được duyệt.
 
 ## Phase 6 — train và đánh giá YOLO11s
 
 - [x] V12 thực sự hoàn thành 3 epoch/exit0, checkpoint tải được; Root đối chiếu hash và tính lại 19 kết quả từ số liệu đã lưu.
+- [x] Kiểm tra loss CPU nhỏ xác nhận UNKNOWN Hook không tạo gradient BCE hoặc GT Hook cho assigner; Hook đã duyệt và NO-Gloves giữ tín hiệu học. Hai forward tổng cộng, một backward trên logits tách rời, không optimizer/update. Đây là cơ chế phần mềm, không phải chất lượng model.
 - [ ] Model đạt: **V12 bị loại, 6/19 PASS**. NO-Gloves và Mask cải thiện nhưng Gloves/Hook và các lớp khác còn hồi quy. Không apply V12.
 - [ ] Chỉ chạy thử nghiệm tiếp khi sửa dữ liệu/protocol có căn cứ và các cổng lifecycle đạt; sau đó cần qualification độc lập và kiểm tra wearer, tay bị che, các PPE nhỏ. Test học/ảnh đã dùng phát triển không thay independent quality.
 
@@ -49,8 +51,8 @@
 
 ## Runtime được ghi nhận gần nhất
 
-Website local flow35: Node12916, Web v34, Backend `5e118c5`, schema73 và authority READY; expiry được ghi là 13:19 VN ngày 22/10. Đây là trạng thái ở lần xác minh trước, không cam kết process còn sống sau expiry/reboot. Camera/AI worker/enqueue/Apply của website đang OFF; không tự bật bằng model bị loại.
+Website flow35/Node12916 và PostgreSQL22012 đã ngừng; nguyên nhân và graceful exit chưa rõ. Đã khôi phục đúng cluster/schema hiện có, đối chiếu cấu hình mới nhất khớp trước khi mở lại. Website hiện là flow36/Node43272 birth13:24:09.794222VN, PostgreSQL440; Web v34, Backend `5e118c5`, schema73 và authority READY. HTTP đăng nhập/scoped metadata/history/đăng xuất và bốn shell đã kiểm tra. Expiry17:23VN22/10; phải xác minh lại sau expiry/reboot. Camera/AI worker/enqueue/Apply vẫn OFF. Xem `local73-runtime-recovery-20261022.md`; không phải nghiệm thu trình duyệt hoặc production.
 
-Checkpoint phục hồi: `checkpoint-main-integration-progress-v179.json` trong tooling `demo-readiness-20261014-v1/main-0dd7d27-integration-20261017-v1/`. Những heading cũ ghi schema72, chờ local73 hoặc training-running là lịch sử.
+Checkpoint phục hồi: `checkpoint-main-integration-progress-v184.json` trong tooling `demo-readiness-20261014-v1/main-0dd7d27-integration-20261017-v1/`. Những heading cũ ghi schema72, chờ local73, flow35 còn chạy hoặc training-running là lịch sử.
 
 **Thứ tự tiếp theo:** mở được trình duyệt thì kiểm tra UI thật; song song hoàn thiện dữ liệu/qualification; chỉ sau model đạt mới đóng luồng camera thật và release. Không dùng số test hay tỷ lệ checkbox làm phần trăm hoàn thiện sản phẩm.
