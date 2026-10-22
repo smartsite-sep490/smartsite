@@ -117,7 +117,18 @@ export function CameraSetupCatalog({
                           id={nameId}
                           className="break-words [overflow-wrap:anywhere] text-base font-semibold tracking-tight text-slate-900"
                         >
-                          {row.name}
+                          {canManageCameras && isEnabled ? (
+                            <button
+                              type="button"
+                              aria-haspopup="dialog"
+                              className="cursor-pointer rounded-md text-left underline decoration-slate-300 underline-offset-4 hover:decoration-slate-900 focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-slate-900"
+                              onClick={(event) => open('regions', row.id, event.currentTarget)}
+                            >
+                              {row.name}
+                            </button>
+                          ) : (
+                            row.name
+                          )}
                         </h3>
                         <dl className="flex flex-wrap items-center gap-x-3 gap-y-1.5 text-xs">
                           <div className="min-w-0 inline-flex flex-wrap items-center gap-1.5">

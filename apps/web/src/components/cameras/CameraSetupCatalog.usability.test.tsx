@@ -121,6 +121,18 @@ function mountCatalog(options?: Partial<Pick<HarnessProps, 'user' | 'siteId' | '
 }
 
 beforeEach(() => changeUiLanguage('en'));
+it('opens the active camera region dialog from its name without granting read-only users an edit action', async () => {
+  const manager = mountCatalog();
+  const name = await screen.findByRole('button', { name: activeCamera.name });
+  expect(name.getAttribute('aria-haspopup')).toBe('dialog');
+  fireEvent.click(name);
+  expect(manager.open).toHaveBeenCalledWith('regions', activeCamera.id, name);
+  expect(screen.queryByRole('button', { name: inactiveCamera.name })).toBeNull();
+  manager.unmount();
+  mountCatalog({ user: adminUser });
+  await screen.findByText(activeCamera.name);
+  expect(screen.queryByRole('button', { name: activeCamera.name })).toBeNull();
+});
 afterEach(() => {
   cleanup();
   activeClients.splice(0).forEach((client) => client.clear());
