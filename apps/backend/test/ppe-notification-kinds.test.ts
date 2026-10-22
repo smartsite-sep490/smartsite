@@ -51,7 +51,7 @@ test('PPE notifications retain all five explicit missing kinds, recipient scope 
       /ON CONFLICT ON CONSTRAINT uq_notification_event_recipient DO NOTHING/,
     );
     assert.equal(calls[2]!.parameters[3], alert.id);
-    const content = JSON.parse(calls[2]!.parameters[4] as string);
+    const content = JSON.parse(calls[2]!.parameters.at(-1) as string);
     assert.equal(content.safetyAlert.candidateSubtype, candidateSubtype);
     assert.equal(content.safetyAlert.cameraId, camera);
   }

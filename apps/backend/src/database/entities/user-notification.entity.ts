@@ -1,3 +1,4 @@
+import { ZONE_ALERT_NOTIFICATION_TARGET_V1 } from '../constraints/zone-alert-notification-v1.js';
 import {
   Check,
   Column,
@@ -19,7 +20,9 @@ import { ContractorEntity } from './contractor.entity.js';
 import { WorkerEntity } from './worker.entity.js';
 
 export interface NotificationContent {
-  safetyAlert?: import('@smartsite/contracts').PpeAlertNotificationMetadata;
+  safetyAlert?:
+    | import('@smartsite/contracts').PpeAlertNotificationMetadata
+    | import('@smartsite/contracts').ZoneAlertNotificationMetadata;
   documentWorkerId?: string;
   checklistId?: string;
   dayId?: string;
@@ -48,7 +51,7 @@ export interface NotificationContent {
 )
 @Check(
   'chk_notification_event',
-  "event IN ('CHANGE_REQUESTED', 'SWAP_REQUESTED', 'SWAP_CONFIRMED', 'SWAP_DECLINED', 'REQUEST_APPLIED', 'REQUEST_REJECTED', 'REQUEST_CONFLICTED','SAFETY_HANDOVER','EARLY_EXIT','MISSING_CHECKOUT','ABSENT','UNSCHEDULED_ENTRY','ENTRY_DENIED_NO_SCHEDULE','TIME_REQUESTED','TIME_APPROVED','TIME_REJECTED','SCHEDULE_CHANGED','SCHEDULE_CANCELLED','CHECKLIST_ASSIGNED','CHECKLIST_SUBMITTED','CHECKLIST_RETURNED','CHECKLIST_RECORDED','EXIT_DURATION_EXCEEDED','MAX_EXITS_EXCEEDED','DOCUMENT_SUBMITTED','DOCUMENT_APPROVED','DOCUMENT_REJECTED','DOCUMENT_EXPIRING','DOCUMENT_EXPIRED','PPE_ALERT_CREATED')",
+  "event IN ('CHANGE_REQUESTED', 'SWAP_REQUESTED', 'SWAP_CONFIRMED', 'SWAP_DECLINED', 'REQUEST_APPLIED', 'REQUEST_REJECTED', 'REQUEST_CONFLICTED','SAFETY_HANDOVER','EARLY_EXIT','MISSING_CHECKOUT','ABSENT','UNSCHEDULED_ENTRY','ENTRY_DENIED_NO_SCHEDULE','TIME_REQUESTED','TIME_APPROVED','TIME_REJECTED','SCHEDULE_CHANGED','SCHEDULE_CANCELLED','CHECKLIST_ASSIGNED','CHECKLIST_SUBMITTED','CHECKLIST_RETURNED','CHECKLIST_RECORDED','EXIT_DURATION_EXCEEDED','MAX_EXITS_EXCEEDED','DOCUMENT_SUBMITTED','DOCUMENT_APPROVED','DOCUMENT_REJECTED','DOCUMENT_EXPIRING','DOCUMENT_EXPIRED','PPE_ALERT_CREATED','ZONE_ALERT_CREATED')",
 )
 @Check(
   'chk_notification_schedule_target',
@@ -74,7 +77,7 @@ export interface NotificationContent {
 )
 @Check(
   'chk_notification_ppe_target',
-  `((request_type<>'SAFETY_ALERT' AND event<>'PPE_ALERT_CREATED' AND contractor_id IS NOT NULL) OR (request_type='SAFETY_ALERT' AND event='PPE_ALERT_CREATED' AND recipient_role='SAFETY_OFFICER' AND contractor_id IS NULL AND worker_id IS NULL AND jsonb_typeof(content)='object' AND content ?& ARRAY['siteName','title','message','safetyAlert'] AND content - ARRAY['siteName','title','message','safetyAlert'] = '{}'::jsonb AND jsonb_typeof(content->'siteName')='string' AND length(content->>'siteName')>0 AND jsonb_typeof(content->'title')='string' AND length(content->>'title')>0 AND jsonb_typeof(content->'message')='string' AND length(content->>'message')>0 AND jsonb_typeof(content->'safetyAlert')='object' AND (content->'safetyAlert') ?& ARRAY['cameraId','cameraName','zoneId','zoneName','candidateSubtype'] AND (content->'safetyAlert') - ARRAY['cameraId','cameraName','zoneId','zoneName','candidateSubtype'] = '{}'::jsonb AND jsonb_typeof(content->'safetyAlert'->'cameraId')='string' AND COALESCE(content->'safetyAlert'->>'cameraId','') ~ '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$' AND jsonb_typeof(content->'safetyAlert'->'cameraName')='string' AND length(content->'safetyAlert'->>'cameraName') BETWEEN 1 AND 255 AND jsonb_typeof(content->'safetyAlert'->'candidateSubtype')='string' AND content->'safetyAlert'->>'candidateSubtype' IN ('PPE_HARD_HAT_MISSING','PPE_SAFETY_VEST_MISSING','PPE_GLOVES_MISSING','PPE_BOOTS_MISSING','PPE_GOGGLES_MISSING') AND ((jsonb_typeof(content->'safetyAlert'->'zoneId')='null' AND jsonb_typeof(content->'safetyAlert'->'zoneName')='null') OR (jsonb_typeof(content->'safetyAlert'->'zoneId')='string' AND COALESCE(content->'safetyAlert'->>'zoneId','') ~ '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$' AND jsonb_typeof(content->'safetyAlert'->'zoneName')='string' AND length(content->'safetyAlert'->>'zoneName') BETWEEN 1 AND 255)))) IS TRUE`,
+  `((event<>'ZONE_ALERT_CREATED' AND (((request_type<>'SAFETY_ALERT' AND event<>'PPE_ALERT_CREATED' AND contractor_id IS NOT NULL) OR (request_type='SAFETY_ALERT' AND event='PPE_ALERT_CREATED' AND recipient_role='SAFETY_OFFICER' AND contractor_id IS NULL AND worker_id IS NULL AND jsonb_typeof(content)='object' AND content ?& ARRAY['siteName','title','message','safetyAlert'] AND content - ARRAY['siteName','title','message','safetyAlert'] = '{}'::jsonb AND jsonb_typeof(content->'siteName')='string' AND length(content->>'siteName')>0 AND jsonb_typeof(content->'title')='string' AND length(content->>'title')>0 AND jsonb_typeof(content->'message')='string' AND length(content->>'message')>0 AND jsonb_typeof(content->'safetyAlert')='object' AND (content->'safetyAlert') ?& ARRAY['cameraId','cameraName','zoneId','zoneName','candidateSubtype'] AND (content->'safetyAlert') - ARRAY['cameraId','cameraName','zoneId','zoneName','candidateSubtype'] = '{}'::jsonb AND jsonb_typeof(content->'safetyAlert'->'cameraId')='string' AND COALESCE(content->'safetyAlert'->>'cameraId','') ~ '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$' AND jsonb_typeof(content->'safetyAlert'->'cameraName')='string' AND length(content->'safetyAlert'->>'cameraName') BETWEEN 1 AND 255 AND jsonb_typeof(content->'safetyAlert'->'candidateSubtype')='string' AND content->'safetyAlert'->>'candidateSubtype' IN ('PPE_HARD_HAT_MISSING','PPE_SAFETY_VEST_MISSING','PPE_GLOVES_MISSING','PPE_BOOTS_MISSING','PPE_GOGGLES_MISSING') AND ((jsonb_typeof(content->'safetyAlert'->'zoneId')='null' AND jsonb_typeof(content->'safetyAlert'->'zoneName')='null') OR (jsonb_typeof(content->'safetyAlert'->'zoneId')='string' AND COALESCE(content->'safetyAlert'->>'zoneId','') ~ '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$' AND jsonb_typeof(content->'safetyAlert'->'zoneName')='string' AND length(content->'safetyAlert'->>'zoneName') BETWEEN 1 AND 255)))) IS TRUE)) OR (${ZONE_ALERT_NOTIFICATION_TARGET_V1})) IS TRUE`,
 )
 export class UserNotificationEntity {
   @PrimaryColumn({ type: 'uuid', primaryKeyConstraintName: 'pk_user_notification' })
@@ -116,6 +119,7 @@ export class UserNotificationEntity {
   @Column({ type: 'varchar', length: 24 })
   event!:
     | import('@smartsite/contracts').PpeAlertNotificationEvent
+    | import('@smartsite/contracts').ZoneAlertNotificationEvent
     | import('@smartsite/contracts').WorkerDocumentNotificationEvent
     | SchedulingNotificationEvent
     | ScheduleAssignmentNotificationEvent

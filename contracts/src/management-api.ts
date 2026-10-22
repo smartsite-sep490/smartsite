@@ -447,6 +447,7 @@ export interface SafetyNotificationTarget {
   tab: 'incidents';
 }
 export type PpeAlertNotificationEvent = 'PPE_ALERT_CREATED';
+export type ZoneAlertNotificationEvent = 'ZONE_ALERT_CREATED';
 
 export interface SafetyAlertNotificationTarget {
   siteId: string;
@@ -467,6 +468,16 @@ export interface PpeAlertNotificationMetadata {
     | 'PPE_GOGGLES_MISSING';
 }
 
+export interface ZoneAlertNotificationMetadata extends Omit<
+  PpeAlertNotificationMetadata,
+  'candidateSubtype' | 'zoneId' | 'zoneName'
+> {
+  zoneId: string;
+  zoneName: string;
+  candidateSubtype:
+    'ZONE_ENTRY_PROHIBITED' | 'ZONE_ENTRY_UNAUTHORIZED' | 'ZONE_ENTRY_AUTHORIZATION_UNAVAILABLE';
+}
+
 export interface UserNotificationResponse {
   id: string;
   event:
@@ -476,6 +487,7 @@ export interface UserNotificationResponse {
     | import('./safety-checklist-api.js').ChecklistNotificationEvent
     | 'SAFETY_HANDOVER'
     | PpeAlertNotificationEvent
+    | ZoneAlertNotificationEvent
     | import('./attendance-api.js').AttendanceNotificationEvent;
   siteId: string;
   siteName: string;
@@ -484,7 +496,7 @@ export interface UserNotificationResponse {
   workDate?: string;
   fromShiftName?: string;
   toShiftName?: string;
-  safetyAlert?: PpeAlertNotificationMetadata;
+  safetyAlert?: PpeAlertNotificationMetadata | ZoneAlertNotificationMetadata;
   createdAt: string;
   readAt: string | null;
   target:

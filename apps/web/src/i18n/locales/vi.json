@@ -3918,5 +3918,10 @@
   "ppeNotifications.PPE_GOGGLES_MISSING": "Dấu hiệu thiếu kính bảo hộ",
   "ppeNotifications.body": "{{camera}} · {{zone}}: {{subtype}}. Vui lòng xem xét bằng chứng.",
   "ppeNotifications.noZone": "Chưa xác định Zone",
-  "ppeNotifications.targetUnavailable": "Công trường của cảnh báo này không khả dụng hoặc bạn không còn quyền truy cập. Chọn công trường được phân quyền để tiếp tục."
+  "ppeNotifications.targetUnavailable": "Công trường của cảnh báo này không khả dụng hoặc bạn không còn quyền truy cập. Chọn công trường được phân quyền để tiếp tục.",
+  "notifications.ZONE_ALERT_CREATED": "Cảnh báo khu vực cần xem xét",
+  "zoneNotifications.ZONE_ENTRY_PROHIBITED": "Đi vào khu vực cấm",
+  "zoneNotifications.ZONE_ENTRY_UNAUTHORIZED": "Dấu hiệu vào khu vực không có quyền",
+  "zoneNotifications.ZONE_ENTRY_AUTHORIZATION_UNAVAILABLE": "Chưa đủ dữ liệu xác minh quyền vào khu vực",
+  "zoneNotifications.body": "{{camera}} · {{zone}}: {{subtype}}. Vui lòng xem xét bằng chứng."
 }

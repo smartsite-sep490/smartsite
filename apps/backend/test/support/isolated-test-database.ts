@@ -19,9 +19,9 @@ export function createIsolatedTestDatabase(
     const migrations = productionOptions.migrations;
     assert(Array.isArray(migrations));
     const names = reviewedReleaseMigrationNames(migrations);
-    assert.equal(names.length, 73);
-    assert.equal(names.at(-1), 'AuthorizationHistoryCutover1793232000000');
-    productionOptions = { ...productionOptions, migrations: migrations.slice(0, -1) };
+    const cutoverIndex = names.indexOf('AuthorizationHistoryCutover1793232000000');
+    assert.equal(cutoverIndex, 72);
+    productionOptions = { ...productionOptions, migrations: migrations.slice(0, cutoverIndex) };
     assert.equal(reviewedReleaseMigrationNames(productionOptions.migrations).length, 72);
   }
   // Default is the actual release graph. Old branch fixtures opt into frozen24

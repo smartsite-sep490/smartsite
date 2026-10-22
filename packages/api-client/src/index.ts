@@ -86,6 +86,8 @@ export type {
   SchedulingNotificationTarget,
   PpeAlertNotificationEvent,
   PpeAlertNotificationMetadata,
+  ZoneAlertNotificationEvent,
+  ZoneAlertNotificationMetadata,
   SafetyAlertNotificationTarget,
   UserNotificationResponse,
   UserNotificationListResponse,

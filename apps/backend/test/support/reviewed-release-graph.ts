@@ -103,9 +103,11 @@ export function reviewedReleaseMigrationNames(migrations: unknown): string[] {
     ? [...release61, workerQr, ...documents, ...release72Extensions]
     : retained;
   const cutover = 'AuthorizationHistoryCutover1793232000000';
-  const expected = names.includes(cutover)
+  const release73 = names.includes(cutover)
     ? [...release61, workerQr, ...documents, ...release72Extensions, cutover]
     : predecessor;
+  const zoneNotifications = 'ZoneAlertNotifications1793318400000';
+  const expected = names.includes(zoneNotifications) ? [...release73, zoneNotifications] : release73;
   assert.deepEqual(names, expected, 'Exact reviewed release migration names and order');
   return names;
 }

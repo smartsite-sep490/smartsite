@@ -123,6 +123,8 @@ export class DurableGroupingService {
     const saved = await alertRepo.save(newAlert);
     if (saved.alertType === AlertType.PPE_VIOLATION) {
       await this.notifications.recordPpeAlert(manager, saved, candidate.cameraId);
+    } else if (saved.alertType === AlertType.RESTRICTED_ZONE_INTRUSION) {
+      await this.notifications.recordZoneAlert(manager, saved, candidate.cameraId);
     }
     return saved;
   }

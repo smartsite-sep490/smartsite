@@ -1,16 +1,19 @@
 import i18n, { translate as tr, uiLocale } from '../../i18n';
 import { localizeMessage } from '../../i18n/messages';
 import { localizedLabel } from '../../i18n/labels';
-import type { PpeAlertNotificationMetadata, UserNotificationResponse } from '@smartsite/api-client';
+import type { UserNotificationResponse } from '@smartsite/api-client';
 
-const PPE_ALERT_NOTIFICATION_SUBTYPES: ReadonlySet<
-  PpeAlertNotificationMetadata['candidateSubtype']
-> = new Set([
+const PPE_ALERT_NOTIFICATION_SUBTYPES: ReadonlySet<string> = new Set([
   'PPE_HARD_HAT_MISSING',
   'PPE_SAFETY_VEST_MISSING',
   'PPE_GLOVES_MISSING',
   'PPE_BOOTS_MISSING',
   'PPE_GOGGLES_MISSING',
+]);
+const ZONE_ALERT_NOTIFICATION_SUBTYPES = new Set([
+  'ZONE_ENTRY_PROHIBITED',
+  'ZONE_ENTRY_UNAUTHORIZED',
+  'ZONE_ENTRY_AUTHORIZATION_UNAVAILABLE',
 ]);
 
 export function notificationHref(notification: UserNotificationResponse, assignedWork = false) {
@@ -24,6 +27,21 @@ export function notificationHref(notification: UserNotificationResponse, assigne
 export function formatNotificationDisplayMessage(
   item: Pick<UserNotificationResponse, 'event' | 'message' | 'workDate' | 'safetyAlert'>,
 ): string {
+  if (item.event === 'ZONE_ALERT_CREATED') {
+    const alert = item.safetyAlert;
+    if (
+      !alert ||
+      !alert.cameraName?.trim() ||
+      !alert.zoneName?.trim() ||
+      !ZONE_ALERT_NOTIFICATION_SUBTYPES.has(alert.candidateSubtype)
+    )
+      return tr('notifications.ZONE_ALERT_CREATED');
+    return tr('zoneNotifications.body', {
+      camera: alert.cameraName,
+      zone: alert.zoneName,
+      subtype: tr(`zoneNotifications.${alert.candidateSubtype}`),
+    });
+  }
   if (item.event === 'PPE_ALERT_CREATED') {
     const alert = item.safetyAlert;
     if (
@@ -116,7 +134,11 @@ export function formatNotificationDisplayMessage(
 }
 
 export function formatNotificationTitle(item: Pick<UserNotificationResponse, 'event' | 'title'>) {
-  if (item.event.startsWith('DOCUMENT_') || item.event === 'PPE_ALERT_CREATED')
+  if (
+    item.event.startsWith('DOCUMENT_') ||
+    item.event === 'PPE_ALERT_CREATED' ||
+    item.event === 'ZONE_ALERT_CREATED'
+  )
     return tr(`notifications.${item.event}`);
   if (
     i18n.exists(`notifications.${item.event}`) &&

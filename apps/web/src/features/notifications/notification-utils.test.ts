@@ -11,6 +11,30 @@ afterEach(async () => {
   await i18n.changeLanguage('en');
 });
 
+it('formats a zone alert separately from PPE and links to its persisted alert', async () => {
+  const item = {
+    event: 'ZONE_ALERT_CREATED',
+    title: 'Zone alert requires review',
+    message: 'Stored fallback',
+    safetyAlert: {
+      cameraId: '11111111-1111-4111-8111-111111111111',
+      cameraName: 'Tapo demo',
+      zoneId: '22222222-2222-4222-8222-222222222222',
+      zoneName: 'Restricted demo',
+      candidateSubtype: 'ZONE_ENTRY_PROHIBITED',
+    },
+    target: { siteId: 'site-a', alertId: 'alert-a', tab: 'alerts' },
+  } as UserNotificationResponse;
+  await i18n.changeLanguage('en');
+  expect(formatNotificationTitle(item)).toBe('Zone alert requires review');
+  expect(formatNotificationDisplayMessage(item)).toContain('Tapo demo · Restricted demo');
+  expect(formatNotificationDisplayMessage(item)).toContain('Entry into a prohibited Zone');
+  await i18n.changeLanguage('vi');
+  expect(formatNotificationTitle(item)).toBe('Cảnh báo khu vực cần xem xét');
+  expect(formatNotificationDisplayMessage(item)).toContain('Đi vào khu vực cấm');
+  expect(notificationHref(item)).toBe('/incidents?siteId=site-a&alertId=alert-a&tab=alerts');
+});
+
 describe('notification-utils', () => {
   it.each(['SAFETY_CARD', 'HEALTH_CERTIFICATE', 'PERSONAL_INSURANCE'] as const)(
     'translates %s notification text without changing authored values',

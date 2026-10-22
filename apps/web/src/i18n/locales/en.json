@@ -3918,5 +3918,10 @@
   "ppeNotifications.PPE_GOGGLES_MISSING": "Possible missing safety goggles",
   "ppeNotifications.body": "{{camera}} · {{zone}}: {{subtype}}. Review the evidence.",
   "ppeNotifications.noZone": "Unspecified Zone",
-  "ppeNotifications.targetUnavailable": "This alert's site is unavailable or you no longer have access. Select an authorized site to continue."
+  "ppeNotifications.targetUnavailable": "This alert's site is unavailable or you no longer have access. Select an authorized site to continue.",
+  "notifications.ZONE_ALERT_CREATED": "Zone alert requires review",
+  "zoneNotifications.ZONE_ENTRY_PROHIBITED": "Entry into a prohibited Zone",
+  "zoneNotifications.ZONE_ENTRY_UNAUTHORIZED": "Possible entry without authorization",
+  "zoneNotifications.ZONE_ENTRY_AUTHORIZATION_UNAVAILABLE": "Zone authorization needs review",
+  "zoneNotifications.body": "{{camera}} · {{zone}}: {{subtype}}. Review the evidence."
 }
