@@ -1,0 +1,7 @@
+# Populated canonical72 authority cutover capability rehearsal
+
+Executed22October on one fresh owned5433schema using actual compiled Backendcb187d7. Root seeded originalglobalAdmin via UsersService.bootstrap, logged in via AuthService/AuthTokenService/JwtService, authenticated the originalWEBbearer and reused configurationCommandContext. Actual MainAuthorityBaselineService captured18sourceSTAGING metadata. An attributed CAMERA_STATUS_UPDATE command plus deliberate unattributed technical write populated revision/receipt/gap rows. No syntheticidentity was promoted to Worker/authority.
+
+Before migration:1epoch/1baseline/12revisions/2commitreceipts/11gaps; control pointer null and epochSTAGING. All93tables were captured. Candidate1793059200000 Up ran in one ownedtransaction; allcaptured rows preserved after excluding only newly added nullactivated_at/gapped_at fields. No oldactivation invented. UnusedDown restored prior schema/rows exactly. No migrationhistory row was inserted by this directcapability rehearsal.
+
+Proof: product-rollout-461c857-20261021-v1/authority72-populated-candidate-20261022011254750-b591a5f0/proof.json. Owned schema absent and preexisting namespace names exact; not an audit of allother-table bytes. Websitecurrent schema72/runtime untouched. This covers populatedSTAGING only, not arbitraryREADY/CLOSED preexisting adoption, realWorkeridentity, operationalmanifest, coordinatedmigrationregistration, deployment or fullproductacceptance. Independent Agy review of Root helper/runner remains pending.
