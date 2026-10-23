@@ -17,6 +17,19 @@ export type {
   AttendanceSummaryResponse,
 } from '@smartsite/contracts';
 export { SmartSiteManagementClient } from './management';
+export type {
+  SafetyEpisode,
+  SafetyEpisodeSummary,
+  SafetyEpisodeFinding,
+  SafetyEpisodeEvidenceRef,
+  SafetyEpisodePage,
+  SafetyEpisodeListOptions,
+  SafetyEpisodeInboxItem,
+  SafetyEpisodeInboxPage,
+  SafetyEpisodeInboxOptions,
+  SafetyEpisodeReadCommand,
+  SafetyEpisodeReadResponse,
+} from '@smartsite/contracts';
 export { registerSessionCredential, unregisterSessionCredential } from './session-expiry';
 export type { Mf05DemoStatus } from './mf05-demo';
 export { parseMf05DemoStatus } from './mf05-demo';

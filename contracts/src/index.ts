@@ -56,6 +56,7 @@ export type {
 export * from './observation-identity-management.js';
 export { resolveEventLocalEpisodeSubject } from './safety-episode-subject.js';
 export type { EventLocalEpisodeSubject } from './safety-episode-subject.js';
+export * from './safety-episode-api.js';
 
 export { canonicalizeJson, computeCanonicalPayloadHash } from './hashing/canonical-hash.js';
 

@@ -1,4 +1,14 @@
 import { captureSessionScopes, dispatchSessionExpired } from './session-expiry';
+import { parseSafetyEpisodeReadCommand } from '@smartsite/contracts';
+import type {
+  SafetyEpisode,
+  SafetyEpisodePage,
+  SafetyEpisodeListOptions,
+  SafetyEpisodeInboxPage,
+  SafetyEpisodeInboxOptions,
+  SafetyEpisodeReadCommand,
+  SafetyEpisodeReadResponse,
+} from '@smartsite/contracts';
 import type {
   GrantTeamZoneCommand,
   TeamZoneSetupResponse,
@@ -1974,6 +1984,80 @@ export class SmartSiteManagementClient {
   getSite(token: string, siteId: string) {
     return this.request<SiteResponse>('GET', `/sites/${pathId(siteId)}`, token);
   }
+  /** Prepared episode transport; callers must wait for Backend rollout before exposing this UI. */
+  listSafetyEpisodes(
+    token: string,
+    siteId: string,
+    options: SafetyEpisodeListOptions = {},
+    requestOptions?: RequestOptions,
+  ): Promise<SafetyEpisodePage> {
+    const query = new URLSearchParams();
+    for (const key of ['offset', 'limit', 'cameraId', 'zoneId'] as const)
+      if (options[key] !== undefined) query.set(key, String(options[key]));
+    const path = `/sites/${pathId(siteId)}/safety-episodes`;
+    return this.request(
+      'GET',
+      `${path}${query.size ? `?${query}` : ''}`,
+      token,
+      undefined,
+      undefined,
+      requestOptions,
+    );
+  }
+
+  getSafetyEpisode(
+    token: string,
+    siteId: string,
+    id: string,
+    requestOptions?: RequestOptions,
+  ): Promise<SafetyEpisode> {
+    return this.request(
+      'GET',
+      `/sites/${pathId(siteId)}/safety-episodes/${pathId(id)}`,
+      token,
+      undefined,
+      undefined,
+      requestOptions,
+    );
+  }
+
+  listSafetyEpisodeInbox(
+    token: string,
+    options: SafetyEpisodeInboxOptions = {},
+    requestOptions?: RequestOptions,
+  ): Promise<SafetyEpisodeInboxPage> {
+    const query = new URLSearchParams();
+    for (const key of ['offset', 'limit', 'siteId', 'readStatus'] as const)
+      if (options[key] !== undefined) query.set(key, String(options[key]));
+    return this.request(
+      'GET',
+      `/me/safety-episode-inbox${query.size ? `?${query}` : ''}`,
+      token,
+      undefined,
+      undefined,
+      requestOptions,
+    );
+  }
+
+  async readSafetyEpisodeInbox(
+    token: string,
+    id: string,
+    input: SafetyEpisodeReadCommand,
+    requestOptions?: RequestOptions,
+  ): Promise<SafetyEpisodeReadResponse> {
+    const body = parseSafetyEpisodeReadCommand(input);
+    if (!body)
+      throw new TypeError('Expected a positive safe integer seenRevision and no other fields');
+    return this.request(
+      'PATCH',
+      `/me/safety-episode-inbox/${pathId(id)}/read`,
+      token,
+      body,
+      undefined,
+      requestOptions,
+    );
+  }
+
   listSafetyAlerts(
     token: string,
     siteId: string,
