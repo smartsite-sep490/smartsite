@@ -48,6 +48,24 @@ snapshot without reconciling Main's attendance contract.
 
 ## Open integration work
 
+### Exact subject provenance extension — 23 October 2026
+
+`AlertDetectionSubject1793404800000` adds only
+`alert_detection_mapping.person_observation_index SMALLINT NULL`, constrained by
+`chk_mapping_person_observation_index` to0..255 (all current event schemas cap
+observations at256). It indexes the immutable event's original observations array;
+NULL means unresolved or legacy. It is neither a Worker ID nor a verified identity.
+The existing composite PK and both alert/event FKs retain their names and actions.
+No new table, index or FK to optional human identity decisions is introduced.
+
+Existing rows remain NULL; replay does not backfill them. New ingestion stores a
+value only when every candidate for a returned alertId has the same unique PERSON.
+The migration runs transactionally. Downgrade locks the mapping table before
+checking provenance and refuses to drop populated values. Apply this migration
+before the new Backend; old Backend remains compatible with the nullable column.
+The owner ERD baseline stays untouched. This extension is source/test scope, not
+approval or execution of a demo/cloud/production database cutover.
+
 The saved migrated58 catalog at pushed checkpoint `675d29e` was compared against
 the byte-pinned owner file:735 column type/nullability pairs and234 named foreign
 keys (columns, targets, delete/update actions) matched with zero differences.

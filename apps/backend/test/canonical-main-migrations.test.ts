@@ -74,10 +74,12 @@ test(
       'ZoneEntryPhysicalStorage1792454400000',
       'ExpandedPpeNotificationKinds1793145600000',
       'AuthorizationHistoryCutover1793232000000',
+      'ZoneAlertNotifications1793318400000',
+      'AlertDetectionSubject1793404800000',
     ];
     const expected = [...names, ...extensions];
     assert.deepEqual([...actual].sort(), [...expected].sort());
-    assert.equal(actual.length, 73);
+    assert.equal(actual.length, 75);
     assert.equal(new Set(actual).size, actual.length, 'migration registrations must be unique');
     assert.equal(new Set(expected).size, names.length + extensions.length);
     assert.equal(registered.synchronize, false);

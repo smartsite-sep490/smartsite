@@ -22,6 +22,7 @@ import {
   type Observation,
 } from '../../modules/safety/alerts/alert-candidate-evaluator.js';
 import { DurableGroupingService } from '../../modules/safety/alerts/durable-grouping.service.js';
+import { resolveAlertObservationSubjects } from '../../modules/safety/alerts/alert-observation-subjects.js';
 import { isEventIdConflict } from './typeorm-error.js';
 import { PublicHttpException } from '../../common/http/public-http-exception.js';
 import {
@@ -275,7 +276,7 @@ export class AiIngestionService {
         }
 
         // Group candidates and create AlertDetectionMapping only when PROCESSED
-        const alertIds: string[] = [];
+        const groupedCandidates: Array<{ alertId: string; trackId: number }> = [];
         if (status === EventProcessingStatus.PROCESSED && camera) {
           for (const candidate of candidates) {
             const alert = await this.durableGroupingService.groupCandidate(
@@ -284,15 +285,20 @@ export class AiIngestionService {
               candidate,
               capturedAt,
             );
-            alertIds.push(alert.id);
+            groupedCandidates.push({ alertId: alert.id, trackId: candidate.trackId });
           }
 
-          const uniqueAlertIds = Array.from(new Set(alertIds));
+          const subjects = resolveAlertObservationSubjects(
+            event.eventId,
+            event.observations as unknown as Observation[],
+            groupedCandidates,
+          );
           const mappingRepo = manager.getRepository(AlertDetectionMappingEntity);
-          for (const alertId of uniqueAlertIds) {
+          for (const [alertId, personObservationIndex] of subjects) {
             await mappingRepo.insert({
               alertId,
               eventId: event.eventId,
+              personObservationIndex,
             });
           }
         }
@@ -300,7 +306,7 @@ export class AiIngestionService {
         return {
           eventId: event.eventId,
           status,
-          alertIds: Array.from(new Set(alertIds)),
+          alertIds: Array.from(new Set(groupedCandidates.map((candidate) => candidate.alertId))),
         };
       });
     } catch (error) {
