@@ -54,6 +54,8 @@ export type {
 } from './qr-access-api.js';
 
 export * from './observation-identity-management.js';
+export { resolveEventLocalEpisodeSubject } from './safety-episode-subject.js';
+export type { EventLocalEpisodeSubject } from './safety-episode-subject.js';
 
 export { canonicalizeJson, computeCanonicalPayloadHash } from './hashing/canonical-hash.js';
 
