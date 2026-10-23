@@ -74,7 +74,7 @@ export function RealtimePreviewCanvas({
     // 3. Raw image and boxes are painted together; exact synchronized frame
     context.drawImage(image, 0, 0, frame.width, frame.height);
 
-    // 4. Zone polygons (in zone mode)
+    // Geometry-only preview polygons do not carry Backend access policy.
     if (mode === 'zone') {
       for (const region of frame.zonePolygons) {
         context.beginPath();
@@ -85,10 +85,8 @@ export function RealtimePreviewCanvas({
           else context.lineTo(px, py);
         });
         context.closePath();
-        context.fillStyle = 'rgba(223,34,37,0.12)';
-        context.strokeStyle = '#DF2225';
+        context.strokeStyle = '#94a3b8';
         context.lineWidth = 3;
-        context.fill();
         context.stroke();
       }
     }
@@ -191,6 +189,11 @@ export function RealtimePreviewCanvas({
 
   return (
     <div className="absolute inset-0 w-full h-full pointer-events-none">
+      {mode === 'zone' && preview.frame.zonePolygons.length > 0 && (
+        <span className="absolute bottom-2 left-2 z-10 rounded bg-slate-950/80 px-2 py-1 text-xs text-slate-200">
+          {t('ppe.previewCanvas.observationBoundaries')}
+        </span>
+      )}
       <canvas
         ref={canvasRef}
         role="region"

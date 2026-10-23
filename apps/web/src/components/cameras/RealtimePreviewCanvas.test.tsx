@@ -206,7 +206,7 @@ describe('RealtimePreviewCanvas - Exact Synchronization & Deterministic Overlay'
 
     // Zone polygon path rendered
     expect(mockContext.beginPath).toHaveBeenCalled();
-    expect(mockContext.fill).toHaveBeenCalled();
+    expect(mockContext.fill).not.toHaveBeenCalled();
     expect(mockContext.stroke).toHaveBeenCalled();
 
     // Zone active detection box rendered in red
@@ -215,6 +215,18 @@ describe('RealtimePreviewCanvas - Exact Synchronization & Deterministic Overlay'
       expect.any(Number),
       expect.any(Number),
     );
+  });
+
+  it('does not present geometry-only polygons as prohibited areas or tint the camera image', () => {
+    const strokes: unknown[] = [];
+    mockContext.stroke.mockImplementation(() => strokes.push(mockContext.strokeStyle));
+    const preview = createMockDecodedPreview({ detections: [], zoneDetections: [] });
+
+    render(<RealtimePreviewCanvas preview={preview} mode="zone" />);
+
+    expect(strokes).toEqual(['#94a3b8']);
+    expect(mockContext.fill).not.toHaveBeenCalled();
+    expect(screen.getByText('Observation boundaries · access policy is not shown')).toBeTruthy();
   });
 
   it('4. Flips label inside when Person bounding box touches top edge', () => {

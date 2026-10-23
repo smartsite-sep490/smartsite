@@ -840,6 +840,7 @@ export const PPE_EN_CATALOG = {
   'ppe.previewCanvas.experimentalObjectSummary':
     'Experimental object: {className} ({confidence}%).',
   'ppe.previewCanvas.currentFrameObservationsAria': 'Current frame observations',
+  'ppe.previewCanvas.observationBoundaries': 'Observation boundaries · access policy is not shown',
   'ppe.previewCanvas.frameDetailsAria': 'Frame observation details',
   'ppe.previewCanvas.frameObservationsCount': 'Frame ({count} observation(s))',
   'ppe.previewCanvas.regionParen': '(Region: {regionId})',
@@ -1884,6 +1885,7 @@ export const PPE_VI_CATALOG: Record<PpeTranslationKey, string> = {
   'ppe.previewCanvas.regionPrefix': 'Khu vực',
   'ppe.previewCanvas.experimentalObjectSummary': 'Vật thể thử nghiệm: {className} ({confidence}%).',
   'ppe.previewCanvas.currentFrameObservationsAria': 'Các quan sát trong khung hình hiện tại',
+  'ppe.previewCanvas.observationBoundaries': 'Ranh giới quan sát · không thể hiện chính sách ra vào',
   'ppe.previewCanvas.frameDetailsAria': 'Chi tiết quan sát trong khung hình',
   'ppe.previewCanvas.frameObservationsCount': 'Khung hình ({count} quan sát)',
   'ppe.previewCanvas.regionParen': '(Khu vực: {regionId})',
