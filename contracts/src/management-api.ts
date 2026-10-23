@@ -513,6 +513,10 @@ export interface UserNotificationListResponse {
   items: UserNotificationResponse[];
   total: number;
   unreadCount: number;
+  /** Currently authorized Sites with non-deleted notices, before filtering/pagination. */
+  sites?: { id: string; name: string }[];
+  /** Bell badge across currently authorized Sites; unreadCount follows the selected Site. */
+  allSitesUnreadCount?: number;
 }
 
 export interface NotificationReadResponse {

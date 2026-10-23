@@ -1,4 +1,8 @@
 {
+  "notification_bell.site_filter": "Lọc thông báo theo công trường",
+  "notification_bell.all_sites": "Tất cả công trường",
+  "notification_bell.selected_site_unavailable": "Công trường đã chọn không có thông báo khả dụng",
+  "notification_bell.actions_selected_site": "Số lượng trong danh sách và thao tác hàng loạt áp dụng cho công trường này. Chuông đếm tất cả công trường.",
   "security_gate_desk_view.entry_recorded": "Đã ghi nhận lượt vào. Chấm công đã được cập nhật tự động.",
   "security_gate_desk_view.exit_recorded": "Đã ghi nhận lượt ra. Chấm công đã được cập nhật tự động.",
   "attendance_days_view.overtime_request_sent": "Đã gửi yêu cầu tăng ca của bạn đến đại diện nhà thầu.",

@@ -1,5 +1,5 @@
 import { captureSessionScopes, dispatchSessionExpired } from './session-expiry';
-import { parseSafetyEpisodeReadCommand } from '@smartsite/contracts';
+import { parseSafetyEpisodeReadCommand } from '@smartsite/contracts/safety-episodes';
 import type {
   SafetyEpisode,
   SafetyEpisodePage,
@@ -765,13 +765,14 @@ export class SmartSiteManagementClient {
 
   listNotifications(
     token: string,
-    options: PageOptions & { readStatus?: 'ALL' | 'UNREAD' } = {},
+    options: PageOptions & { readStatus?: 'ALL' | 'UNREAD'; siteId?: string } = {},
     requestOptions?: RequestOptions,
   ): Promise<UserNotificationListResponse> {
     const query = new URLSearchParams();
     if (options.offset !== undefined) query.set('offset', String(options.offset));
     if (options.limit !== undefined) query.set('limit', String(options.limit));
     if (options.readStatus) query.set('readStatus', options.readStatus);
+    if (options.siteId !== undefined) query.set('siteId', options.siteId);
     return this.request(
       'GET',
       `/me/notifications?${query}`,
@@ -786,12 +787,14 @@ export class SmartSiteManagementClient {
     return this.request('PATCH', `/me/notifications/${pathId(id)}/read`, token);
   }
 
-  readAllNotifications(token: string): Promise<{ updated: number }> {
-    return this.request('PATCH', '/me/notifications/read-all', token);
+  readAllNotifications(token: string, siteId?: string): Promise<{ updated: number }> {
+    const query = siteId === undefined ? '' : `?${new URLSearchParams({ siteId })}`;
+    return this.request('PATCH', `/me/notifications/read-all${query}`, token);
   }
 
-  deleteReadNotifications(token: string): Promise<NotificationDeleteReadResponse> {
-    return this.request('DELETE', '/me/notifications/read', token);
+  deleteReadNotifications(token: string, siteId?: string): Promise<NotificationDeleteReadResponse> {
+    const query = siteId === undefined ? '' : `?${new URLSearchParams({ siteId })}`;
+    return this.request('DELETE', `/me/notifications/read${query}`, token);
   }
 
   deleteNotification(token: string, id: string): Promise<NotificationDeleteResponse> {

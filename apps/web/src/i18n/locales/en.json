@@ -1,4 +1,8 @@
 {
+  "notification_bell.site_filter": "Filter notifications by site",
+  "notification_bell.all_sites": "All sites",
+  "notification_bell.selected_site_unavailable": "Selected site has no available notifications",
+  "notification_bell.actions_selected_site": "List counts and bulk actions apply to this site. The bell counts all sites.",
   "security_gate_desk_view.entry_recorded": "This entry is recorded. Attendance has been updated automatically.",
   "security_gate_desk_view.exit_recorded": "This exit is recorded. Attendance has been updated automatically.",
   "attendance_days_view.overtime_request_sent": "Your overtime request was sent to your Contractor Representative.",

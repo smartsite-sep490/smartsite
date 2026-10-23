@@ -683,10 +683,12 @@ export class SchedulingNotificationService {
     readStatus: string = 'ALL',
     offset = 0,
     limit = 20,
+    siteId?: string,
   ): Promise<UserNotificationListResponse> {
     if (readStatus !== 'ALL' && readStatus !== 'UNREAD')
       invalid('Invalid notification read status');
     const pagination = page(offset, limit);
+    const siteFilter = siteId === undefined ? undefined : uuid(siteId);
     this.assertActor(actor);
     // A single repeatable snapshot keeps items, total and unreadCount consistent during delivery/read.
     return this.dataSource.transaction('REPEATABLE READ', async (manager) => {
@@ -696,7 +698,21 @@ export class SchedulingNotificationService {
         .where('n.recipient_user_id = :userId', { userId: actor.id })
         .andWhere('n.deleted_at IS NULL')
         .andWhere(scope);
-      const unreadCount = await query.clone().andWhere('n.read_at IS NULL').getCount();
+      const sites = await query
+        .clone()
+        .innerJoin(SiteEntity, 'site', 'site.id = n.site_id')
+        .select('site.id', 'id')
+        .addSelect('site.name', 'name')
+        .distinct(true)
+        .orderBy('site.name', 'ASC')
+        .addOrderBy('site.id', 'ASC')
+        .getRawMany<{ id: string; name: string }>();
+      const allSitesUnreadCount = await query.clone().andWhere('n.read_at IS NULL').getCount();
+      if (siteFilter !== undefined) query.andWhere('n.site_id = :siteFilter', { siteFilter });
+      const unreadCount =
+        siteFilter === undefined
+          ? allSitesUnreadCount
+          : await query.clone().andWhere('n.read_at IS NULL').getCount();
       if (readStatus === 'UNREAD') query.andWhere('n.read_at IS NULL');
       const [items, total] = await query
         .orderBy('n.created_at', 'DESC')
@@ -732,7 +748,13 @@ export class SchedulingNotificationService {
             };
         }
       }
-      return { items: items.map((n) => this.response(n)), total, unreadCount };
+      return {
+        items: items.map((n) => this.response(n)),
+        total,
+        unreadCount,
+        sites,
+        allSitesUnreadCount,
+      };
     });
   }
 
@@ -749,25 +771,31 @@ export class SchedulingNotificationService {
     return { id: rows[0].id, readAt: rows[0].read_at.toISOString() };
   }
 
-  async readAll(actor: AuthenticatedUser): Promise<{ updated: number }> {
+  async readAll(actor: AuthenticatedUser, siteId?: string): Promise<{ updated: number }> {
+    const siteFilter = siteId === undefined ? null : uuid(siteId);
     this.assertActor(actor);
     const result: [unknown[], number] = await this.dataSource.query(
       `
       UPDATE user_notification n SET read_at = CURRENT_TIMESTAMP
-      WHERE n.recipient_user_id = $1 AND n.read_at IS NULL AND n.deleted_at IS NULL AND ${scope} RETURNING n.id`,
-      [actor.id],
+      WHERE n.recipient_user_id = $1 AND n.read_at IS NULL AND n.deleted_at IS NULL
+        AND ($2::uuid IS NULL OR n.site_id=$2) AND ${scope} RETURNING n.id`,
+      [actor.id, siteFilter],
     );
     return { updated: result[1] };
   }
 
-  async deleteRead(actor: AuthenticatedUser): Promise<NotificationDeleteReadResponse> {
+  async deleteRead(
+    actor: AuthenticatedUser,
+    siteId?: string,
+  ): Promise<NotificationDeleteReadResponse> {
+    const siteFilter = siteId === undefined ? null : uuid(siteId);
     this.assertActor(actor);
     const result: [unknown[], number] = await this.dataSource.query(
       `
       UPDATE user_notification n SET deleted_at = CURRENT_TIMESTAMP
       WHERE n.recipient_user_id = $1 AND n.read_at IS NOT NULL AND n.deleted_at IS NULL
-        AND ${scope} RETURNING n.id`,
-      [actor.id],
+        AND ($2::uuid IS NULL OR n.site_id=$2) AND ${scope} RETURNING n.id`,
+      [actor.id, siteFilter],
     );
     return { deleted: result[1] };
   }

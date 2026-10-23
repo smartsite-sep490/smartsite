@@ -11,6 +11,7 @@
     ".": "./dist/index.js",
     "./ppe-items": "./dist/ppe-items.js",
     "./management": "./dist/management-api.js",
+    "./safety-episodes": "./dist/safety-episode-api.js",
     "./camera-preview": "./dist/camera-preview.js",
     "./camera-observation-zones": "./dist/camera-observation-zones.js",
     "./camera-configuration-image": "./dist/camera-configuration-image.js",
