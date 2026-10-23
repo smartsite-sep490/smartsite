@@ -38,6 +38,13 @@ export function ManagerContractorDetails({
   });
   const time = (value: string) =>
     new Date(value).toLocaleString(uiLocale(), { timeZone: timezone });
+  const permissionDate = (value: string) =>
+    new Date(value).toLocaleDateString(uiLocale(), {
+      timeZone: timezone,
+      day: '2-digit',
+      month: '2-digit',
+      year: 'numeric',
+    });
   const data = detail.data;
   return (
     <Dialog
@@ -119,7 +126,7 @@ export function ManagerContractorDetails({
                                 <li key={zone.id} className="flex items-center justify-between gap-2 text-xs">
                                   <span className="font-semibold text-[#041D2E]">{zone.name}</span>
                                   <span className="text-slate-400 shrink-0">
-                                    {time(zone.validFrom)} – {time(zone.validUntil)}
+                                    {permissionDate(zone.validFrom)} – {permissionDate(zone.validUntil)}
                                   </span>
                                 </li>
                               ))}
@@ -155,7 +162,7 @@ export function ManagerContractorDetails({
                       >
                         <p className="font-bold text-[#041D2E] text-sm">{zone.name}</p>
                         <p className="text-xs text-slate-400 shrink-0">
-                          {time(zone.validFrom)} – {time(zone.validUntil)}
+                          {permissionDate(zone.validFrom)} – {permissionDate(zone.validUntil)}
                         </p>
                       </li>
                     ))}

@@ -722,9 +722,7 @@ export function SafetyAlertsView({
   const selectedAlertId =
     sites.error || alerts.error
       ? ''
-      : requestedAlertId ||
-          canRetainReviewedAlert ||
-          canRetainDraftAlert
+      : requestedAlertId || canRetainReviewedAlert || canRetainDraftAlert
         ? requestedAlertId
         : (alerts.data?.items[0]?.id ?? '');
 
@@ -780,6 +778,39 @@ export function SafetyAlertsView({
       Boolean(canAlerts) &&
       workspaceTab === 'Alerts',
   });
+
+  const detailAccessDenied =
+    detail.error instanceof ApiError && [401, 403, 404].includes(detail.error.status ?? 0);
+  useEffect(() => {
+    if (!detailAccessDenied) return;
+    for (const prefix of [
+      'safety-alert-evidence',
+      'observation-identity-context',
+      'observation-identity-workers',
+      'observation-identity-decisions',
+    ]) {
+      const queryKey = [prefix, apiUrl, activeEffectiveScope, selectedSiteId, selectedAlertId];
+      void queryClient.cancelQueries({ queryKey });
+      queryClient.removeQueries({ queryKey });
+    }
+    const contextKey = [
+      'safety-workflow',
+      apiUrl,
+      activeEffectiveScope,
+      selectedSiteId,
+      'alert-context',
+      selectedAlertId,
+    ];
+    void queryClient.cancelQueries({ queryKey: contextKey });
+    queryClient.removeQueries({ queryKey: contextKey });
+  }, [
+    detailAccessDenied,
+    apiUrl,
+    activeEffectiveScope,
+    selectedSiteId,
+    selectedAlertId,
+    queryClient,
+  ]);
 
   const review = useMutation({
     meta: { safetySession: activeEffectiveScope },
@@ -1592,217 +1623,185 @@ export function SafetyAlertsView({
                 </button>
               </div>
             )}
-            {!sites.error && !alerts.error && !detail.error && detail.data && (
-              <div className="mt-4 space-y-5 min-w-0">
-                <TechnicalDetails>
-                  {tr('safety_alerts_view.alert_value_revision_value', {
-                    value1: detail.data.id,
-                    value2: detail.data.revision,
-                  })}
-                </TechnicalDetails>
-                <dl className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4 text-sm min-w-0">
-                  <div>
-                    <dt className="text-[#6B6B6B]">{tr('common.candidate_identity')}</dt>
-                    <dd className="mt-1 font-semibold text-[#2F3437] break-words">
-                      {detail.data.candidateWorkerId ?? tr('common.unknown')}
-                    </dd>
-                  </div>
-                  <div>
-                    <dt className="text-[#6B6B6B]">{tr('common.detections')}</dt>
-                    <dd className="mt-1 font-semibold text-[#2F3437]">
-                      {detail.data.detectionsTotal}
-                    </dd>
-                  </div>
-                  <div>
-                    <dt className="text-[#6B6B6B]">{tr('common.status')}</dt>
-                    <dd className="mt-1 font-semibold text-[#2F3437] break-words">
-                      <StatusBadge value={detail.data.status} />
-                    </dd>
-                  </div>
-                  <div>
-                    <dt className="text-[#6B6B6B]">{tr('common.first_seen')}</dt>
-                    <dd className="mt-1 font-semibold text-[#2F3437] break-words">
-                      {formatDate(detail.data.firstDetectedAt)}
-                    </dd>
-                  </div>
-                  <div>
-                    <dt className="text-[#6B6B6B]">{tr('common.last_seen')}</dt>
-                    <dd className="mt-1 font-semibold text-[#2F3437] break-words">
-                      {formatDate(detail.data.lastDetectedAt)}
-                    </dd>
-                  </div>
-                </dl>
-                <div role="status" aria-atomic="true">
-                  {reviewPending && (
-                    <p className="rounded-md bg-[#F7F6F3] p-2 text-xs text-[#6B6B6B]">
-                      {t('safety.alerts.recordingReviewDecision')}
-                    </p>
-                  )}
-                  {reviewSuccess && (
-                    <p className="rounded-md bg-[#EDF3EC] p-2 text-xs text-[#346538]">
-                      {tr('common.review_decision_recorded')}
-                    </p>
-                  )}
-                </div>
-                <div>
-                  <h3 className="text-sm font-bold text-[#2F3437]">
-                    {tr('common.evidence_amp_sources')}
-                  </h3>
-                  <div
-                    className={`mt-2 space-y-2 ${safetyOfficerSiteIds.has(selectedSiteId) ? '' : 'max-h-80 overflow-auto'}`}
-                  >
-                    {detail.data.detections.map((detection) => (
-                      <div
-                        key={`${detail.data.id}:${detection.eventId}`}
-                        className="rounded-md bg-[#F7F6F3] p-3 text-xs min-w-0"
-                      >
-                        <div className="flex justify-between gap-3">
-                          <span className="font-mono font-semibold text-[#2F3437]">
-                            {detection.cameraExternalId}
-                          </span>
-                          <span className="font-bold text-[#346538]">
-                            {formatLabel(detection.processingStatus)}
-                          </span>
-                        </div>
-                        <p className="mt-1 text-[#6B6B6B]">{formatDate(detection.capturedAt)}</p>
-                        <TechnicalDetails>
-                          {tr('common.observation')} <span>{detection.eventId}</span>
-                        </TechnicalDetails>
-                        {workflowUser && (
-                          <AlertWorkContext
-                            client={client}
-                            apiUrl={apiUrl}
-                            scope={activeEffectiveScope}
-                            token={effectiveToken}
-                            siteId={selectedSiteId}
-                            user={workflowUser}
-                            alertId={detail.data.id}
-                            revision={detail.data.revision}
-                          />
-                        )}
-                        <SafetyAlertEvidencePanel
-                          client={client}
-                          apiUrl={apiUrl}
-                          sessionScope={activeEffectiveScope}
-                          token={effectiveToken}
-                          siteId={selectedSiteId}
-                          alertId={detail.data.id}
-                          detection={detection}
-                          canReviewIdentity={safetyOfficerSiteIds.has(selectedSiteId)}
-                          onUnauthorized={() => handleChildUnauthorized(activeEffectiveScope)}
-                        />
-                      </div>
-                    ))}
-                    {detail.data.detections.length === 0 && (
-                      <p className="rounded-md bg-[#F7F6F3] p-3 text-sm text-[#6B6B6B]">
-                        {tr('safety_alerts_view.no_source_observation_is_linked_to_this_alert')}
+            {!sites.error &&
+              !alerts.error &&
+              !detail.error &&
+              detail.data &&
+              !detailAccessDenied && (
+                <div className="mt-4 space-y-5 min-w-0">
+                  <TechnicalDetails>
+                    {tr('safety_alerts_view.alert_value_revision_value', {
+                      value1: detail.data.id,
+                      value2: detail.data.revision,
+                    })}
+                  </TechnicalDetails>
+                  <dl className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4 text-sm min-w-0">
+                    <div>
+                      <dt className="text-[#6B6B6B]">{tr('common.candidate_identity')}</dt>
+                      <dd className="mt-1 font-semibold text-[#2F3437] break-words">
+                        {detail.data.candidateWorkerId ?? tr('common.unknown')}
+                      </dd>
+                    </div>
+                    <div>
+                      <dt className="text-[#6B6B6B]">{tr('common.detections')}</dt>
+                      <dd className="mt-1 font-semibold text-[#2F3437]">
+                        {detail.data.detectionsTotal}
+                      </dd>
+                    </div>
+                    <div>
+                      <dt className="text-[#6B6B6B]">{tr('common.status')}</dt>
+                      <dd className="mt-1 font-semibold text-[#2F3437] break-words">
+                        <StatusBadge value={detail.data.status} />
+                      </dd>
+                    </div>
+                    <div>
+                      <dt className="text-[#6B6B6B]">{tr('common.first_seen')}</dt>
+                      <dd className="mt-1 font-semibold text-[#2F3437] break-words">
+                        {formatDate(detail.data.firstDetectedAt)}
+                      </dd>
+                    </div>
+                    <div>
+                      <dt className="text-[#6B6B6B]">{tr('common.last_seen')}</dt>
+                      <dd className="mt-1 font-semibold text-[#2F3437] break-words">
+                        {formatDate(detail.data.lastDetectedAt)}
+                      </dd>
+                    </div>
+                  </dl>
+                  <div role="status" aria-atomic="true">
+                    {reviewPending && (
+                      <p className="rounded-md bg-[#F7F6F3] p-2 text-xs text-[#6B6B6B]">
+                        {t('safety.alerts.recordingReviewDecision')}
+                      </p>
+                    )}
+                    {reviewSuccess && (
+                      <p className="rounded-md bg-[#EDF3EC] p-2 text-xs text-[#346538]">
+                        {tr('common.review_decision_recorded')}
                       </p>
                     )}
                   </div>
-                </div>
-                {safetyOfficerSiteIds.has(selectedSiteId) &&
-                  (detail.data.status === 'PENDING_REVIEW' ||
-                    detail.data.status === 'NEEDS_MORE_EVIDENCE') && (
-                    <section className="rounded-lg border border-[#EAEAEA] bg-[#F7F6F3] p-3 sm:p-4 min-w-0">
-                      <h3 className="text-sm font-bold text-[#111111]">
-                        {tr('common.record_review_decision')}
-                      </h3>
-                      <p className="mt-1 text-xs leading-5 text-[#6B6B6B]">
-                        {tr(
-                          'safety_alerts_view.explain_the_evidence_behind_the_decision_the_reason_is_required_and_cannot_be_edit',
-                        )}
-                      </p>
-                      {detail.data.candidateSubtype === 'ZONE_ENTRY_AUTHORIZATION_UNAVAILABLE' && (
+                  <div>
+                    <h3 className="text-sm font-bold text-[#2F3437]">
+                      {tr('common.evidence_amp_sources')}
+                    </h3>
+                    <div
+                      className={`mt-2 space-y-2 ${safetyOfficerSiteIds.has(selectedSiteId) ? '' : 'max-h-80 overflow-auto'}`}
+                    >
+                      {detail.data.detections.map((detection) => (
                         <div
-                          role="status"
-                          data-testid="zone-entry-auth-unavailable-guidance"
-                          className="mt-3 rounded-md border border-[#1F6C9F]/20 bg-[#E1F3FE] p-2.5 text-xs text-[#1F6C9F] leading-relaxed"
+                          key={`${detail.data.id}:${detection.eventId}`}
+                          className="rounded-md bg-[#F7F6F3] p-3 text-xs min-w-0"
                         >
-                          <p className="font-semibold">
-                            {t('safety.alerts.zoneAuthUnavailableTitle')}
-                          </p>
-                          <p className="mt-0.5">{t('safety.alerts.zoneAuthUnavailableBody')}</p>
+                          <div className="flex justify-between gap-3">
+                            <span className="font-mono font-semibold text-[#2F3437]">
+                              {detection.cameraExternalId}
+                            </span>
+                            <span className="font-bold text-[#346538]">
+                              {formatLabel(detection.processingStatus)}
+                            </span>
+                          </div>
+                          <p className="mt-1 text-[#6B6B6B]">{formatDate(detection.capturedAt)}</p>
+                          <TechnicalDetails>
+                            {tr('common.observation')} <span>{detection.eventId}</span>
+                          </TechnicalDetails>
+                          {workflowUser && (
+                            <AlertWorkContext
+                              client={client}
+                              apiUrl={apiUrl}
+                              scope={activeEffectiveScope}
+                              token={effectiveToken}
+                              siteId={selectedSiteId}
+                              user={workflowUser}
+                              alertId={detail.data.id}
+                              revision={detail.data.revision}
+                            />
+                          )}
+                          <SafetyAlertEvidencePanel
+                            client={client}
+                            apiUrl={apiUrl}
+                            sessionScope={activeEffectiveScope}
+                            token={effectiveToken}
+                            siteId={selectedSiteId}
+                            alertId={detail.data.id}
+                            detection={detection}
+                            canReviewIdentity={safetyOfficerSiteIds.has(selectedSiteId)}
+                            onUnauthorized={() => handleChildUnauthorized(activeEffectiveScope)}
+                          />
                         </div>
+                      ))}
+                      {detail.data.detections.length === 0 && (
+                        <p className="rounded-md bg-[#F7F6F3] p-3 text-sm text-[#6B6B6B]">
+                          {tr('safety_alerts_view.no_source_observation_is_linked_to_this_alert')}
+                        </p>
                       )}
-                      <label
-                        htmlFor="review-reason-textarea"
-                        className="mt-3 block text-xs font-semibold text-[#2F3437]"
-                      >
-                        {tr('common.decision_reason')}{' '}
-                        <span className="font-normal text-[#6B6B6B]">
-                          {tr('common.minimum_5_characters')}
-                        </span>
-                      </label>
-                      <textarea
-                        id="review-reason-textarea"
-                        name="reviewReason"
-                        aria-label={tr('safety_alerts_view.decision_reason_minimum_5_characters')}
-                        value={reviewReason}
-                        onChange={(event) => setReviewReason(event.target.value)}
-                        minLength={5}
-                        maxLength={1000}
-                        rows={3}
-                        placeholder={tr(
-                          'safety_alerts_view.example_worker_is_clearly_visible_without_a_hard_hat_across_the_linked_observation',
+                    </div>
+                  </div>
+                  {safetyOfficerSiteIds.has(selectedSiteId) &&
+                    (detail.data.status === 'PENDING_REVIEW' ||
+                      detail.data.status === 'NEEDS_MORE_EVIDENCE') && (
+                      <section className="rounded-lg border border-[#EAEAEA] bg-[#F7F6F3] p-3 sm:p-4 min-w-0">
+                        <h3 className="text-sm font-bold text-[#111111]">
+                          {tr('common.record_review_decision')}
+                        </h3>
+                        <p className="mt-1 text-xs leading-5 text-[#6B6B6B]">
+                          {tr(
+                            'safety_alerts_view.explain_the_evidence_behind_the_decision_the_reason_is_required_and_cannot_be_edit',
+                          )}
+                        </p>
+                        {detail.data.candidateSubtype ===
+                          'ZONE_ENTRY_AUTHORIZATION_UNAVAILABLE' && (
+                          <div
+                            role="status"
+                            data-testid="zone-entry-auth-unavailable-guidance"
+                            className="mt-3 rounded-md border border-[#1F6C9F]/20 bg-[#E1F3FE] p-2.5 text-xs text-[#1F6C9F] leading-relaxed"
+                          >
+                            <p className="font-semibold">
+                              {t('safety.alerts.zoneAuthUnavailableTitle')}
+                            </p>
+                            <p className="mt-0.5">{t('safety.alerts.zoneAuthUnavailableBody')}</p>
+                          </div>
                         )}
-                        className="mt-1.5 w-full min-w-0 rounded-md border border-[#EAEAEA] bg-white px-3 py-2 text-sm outline-none focus:border-[#F66B17] focus:ring-2 focus:ring-[#F66B17]/10 placeholder:text-[#6B6B6B]"
-                      />
-                      {(() => {
-                        return (
-                          <>
-                            {reviewError && (
-                              <p
-                                role="alert"
-                                className="mt-2 rounded-md bg-[#FDEBEC] p-2 text-xs text-[#9F2F2D]"
-                              >
-                                {errorMessage(reviewError)}
-                              </p>
-                            )}
-                            <div className="mt-3 flex flex-wrap gap-2">
-                              <button
-                                type="button"
-                                disabled={reviewReason.trim().length < 5 || reviewPending}
-                                onClick={() => {
-                                  if (!detail.data) return;
-                                  review.mutate({
-                                    targetStatus: 'CONFIRMED',
-                                    targetScope: activeEffectiveScope,
-                                    targetSiteId: selectedSiteId,
-                                    targetAlertId: detail.data.id,
-                                    expectedRevision: detail.data.revision,
-                                    targetReason: reviewReason,
-                                  });
-                                }}
-                                className="rounded-md bg-[#9F2F2D] px-3 py-2 text-xs font-bold text-white hover:bg-[#7F2524] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#9F2F2D] disabled:cursor-not-allowed disabled:opacity-50"
-                              >
-                                {tr('common.confirm_violation')}
-                              </button>
-                              <button
-                                type="button"
-                                disabled={reviewReason.trim().length < 5 || reviewPending}
-                                onClick={() => {
-                                  if (!detail.data) return;
-                                  review.mutate({
-                                    targetStatus: 'DISMISSED',
-                                    targetScope: activeEffectiveScope,
-                                    targetSiteId: selectedSiteId,
-                                    targetAlertId: detail.data.id,
-                                    expectedRevision: detail.data.revision,
-                                    targetReason: reviewReason,
-                                  });
-                                }}
-                                className="rounded-md bg-[#111111] px-3 py-2 text-xs font-bold text-white hover:bg-[#333333] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#111111] disabled:cursor-not-allowed disabled:opacity-50"
-                              >
-                                {tr('common.dismiss_alert')}
-                              </button>
-                              {detail.data.status === 'PENDING_REVIEW' && (
+                        <label
+                          htmlFor="review-reason-textarea"
+                          className="mt-3 block text-xs font-semibold text-[#2F3437]"
+                        >
+                          {tr('common.decision_reason')}{' '}
+                          <span className="font-normal text-[#6B6B6B]">
+                            {tr('common.minimum_5_characters')}
+                          </span>
+                        </label>
+                        <textarea
+                          id="review-reason-textarea"
+                          name="reviewReason"
+                          aria-label={tr('safety_alerts_view.decision_reason_minimum_5_characters')}
+                          value={reviewReason}
+                          onChange={(event) => setReviewReason(event.target.value)}
+                          minLength={5}
+                          maxLength={1000}
+                          rows={3}
+                          placeholder={tr(
+                            'safety_alerts_view.example_worker_is_clearly_visible_without_a_hard_hat_across_the_linked_observation',
+                          )}
+                          className="mt-1.5 w-full min-w-0 rounded-md border border-[#EAEAEA] bg-white px-3 py-2 text-sm outline-none focus:border-[#F66B17] focus:ring-2 focus:ring-[#F66B17]/10 placeholder:text-[#6B6B6B]"
+                        />
+                        {(() => {
+                          return (
+                            <>
+                              {reviewError && (
+                                <p
+                                  role="alert"
+                                  className="mt-2 rounded-md bg-[#FDEBEC] p-2 text-xs text-[#9F2F2D]"
+                                >
+                                  {errorMessage(reviewError)}
+                                </p>
+                              )}
+                              <div className="mt-3 flex flex-wrap gap-2">
                                 <button
                                   type="button"
                                   disabled={reviewReason.trim().length < 5 || reviewPending}
                                   onClick={() => {
                                     if (!detail.data) return;
                                     review.mutate({
-                                      targetStatus: 'NEEDS_MORE_EVIDENCE',
+                                      targetStatus: 'CONFIRMED',
                                       targetScope: activeEffectiveScope,
                                       targetSiteId: selectedSiteId,
                                       targetAlertId: detail.data.id,
@@ -1810,70 +1809,107 @@ export function SafetyAlertsView({
                                       targetReason: reviewReason,
                                     });
                                   }}
-                                  className="rounded-md border border-[#1F6C9F]/30 bg-white px-3 py-2 text-xs font-bold text-[#1F6C9F] hover:bg-[#E1F3FE] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#1F6C9F] disabled:cursor-not-allowed disabled:opacity-50"
+                                  className="rounded-md bg-[#9F2F2D] px-3 py-2 text-xs font-bold text-white hover:bg-[#7F2524] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#9F2F2D] disabled:cursor-not-allowed disabled:opacity-50"
                                 >
-                                  {tr('common.request_more_evidence')}
+                                  {tr('common.confirm_violation')}
                                 </button>
-                              )}
-                            </div>
-                          </>
-                        );
-                      })()}
-                    </section>
-                  )}
-                {detail.data.status === 'CONFIRMED' &&
-                  !detail.data.incidentId &&
-                  workflowUser?.roleAssignments.some(
-                    (r) => r.role === 'SAFETY_OFFICER' && r.siteId === selectedSiteId,
-                  ) && (
-                    <button
-                      type="button"
-                      className="min-h-10 rounded-lg bg-[var(--action-primary)] px-4 py-2 text-sm font-semibold text-white hover:bg-[var(--action-primary-hover)]"
-                      onClick={() => {
-                        setIncidentReturn(relatedAlertFilter ? 'Overview' : undefined);
-                        setIncidentSourceAlert(detail.data!.id);
-                        setWorkspaceTab('Incidents');
-                      }}
-                    >
-                      {tr('safety_alerts_view.create_incident_from_alert')}
-                    </button>
-                  )}
-                <section className="min-w-0">
-                  <h3 className="text-sm font-bold text-[#2F3437]">
-                    {tr('common.review_history_value', { value1: detail.data.reviewsTotal })}
-                  </h3>
-                  <div className="mt-2 space-y-2">
-                    {detail.data.reviews.map((item) => (
-                      <article
-                        key={item.id}
-                        className="rounded-md border border-[#EAEAEA] p-3 text-xs min-w-0"
-                      >
-                        <div className="flex flex-wrap justify-between gap-2">
-                          <span className="font-bold text-[#2F3437] break-words">
-                            {formatLabel(item.fromStatus)} → {formatLabel(item.toStatus)}
-                          </span>
-                          <time className="text-[#6B6B6B]">{formatDate(item.createdAt)}</time>
-                        </div>
-                        <p className="mt-2 whitespace-pre-wrap break-words text-[#2F3437]">
-                          {item.reason}
-                        </p>
-                        <TechnicalDetails>
-                          {tr('safety_alerts_view.actor_value_revision_value', {
-                            value1: item.actorUserId,
-                            value2: item.alertRevision,
-                          })}
-                        </TechnicalDetails>
-                      </article>
-                    ))}
-                    {detail.data.reviews.length === 0 && (
-                      <p className="rounded-md bg-[#F7F6F3] p-3 text-sm text-[#6B6B6B]">
-                        {tr('safety_alerts_view.no_review_decision_has_been_recorded')}
-                      </p>
+                                <button
+                                  type="button"
+                                  disabled={reviewReason.trim().length < 5 || reviewPending}
+                                  onClick={() => {
+                                    if (!detail.data) return;
+                                    review.mutate({
+                                      targetStatus: 'DISMISSED',
+                                      targetScope: activeEffectiveScope,
+                                      targetSiteId: selectedSiteId,
+                                      targetAlertId: detail.data.id,
+                                      expectedRevision: detail.data.revision,
+                                      targetReason: reviewReason,
+                                    });
+                                  }}
+                                  className="rounded-md bg-[#111111] px-3 py-2 text-xs font-bold text-white hover:bg-[#333333] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#111111] disabled:cursor-not-allowed disabled:opacity-50"
+                                >
+                                  {tr('common.dismiss_alert')}
+                                </button>
+                                {detail.data.status === 'PENDING_REVIEW' && (
+                                  <button
+                                    type="button"
+                                    disabled={reviewReason.trim().length < 5 || reviewPending}
+                                    onClick={() => {
+                                      if (!detail.data) return;
+                                      review.mutate({
+                                        targetStatus: 'NEEDS_MORE_EVIDENCE',
+                                        targetScope: activeEffectiveScope,
+                                        targetSiteId: selectedSiteId,
+                                        targetAlertId: detail.data.id,
+                                        expectedRevision: detail.data.revision,
+                                        targetReason: reviewReason,
+                                      });
+                                    }}
+                                    className="rounded-md border border-[#1F6C9F]/30 bg-white px-3 py-2 text-xs font-bold text-[#1F6C9F] hover:bg-[#E1F3FE] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#1F6C9F] disabled:cursor-not-allowed disabled:opacity-50"
+                                  >
+                                    {tr('common.request_more_evidence')}
+                                  </button>
+                                )}
+                              </div>
+                            </>
+                          );
+                        })()}
+                      </section>
                     )}
-                  </div>
-                </section>
-              </div>
-            )}
+                  {detail.data.status === 'CONFIRMED' &&
+                    !detail.data.incidentId &&
+                    workflowUser?.roleAssignments.some(
+                      (r) => r.role === 'SAFETY_OFFICER' && r.siteId === selectedSiteId,
+                    ) && (
+                      <button
+                        type="button"
+                        className="min-h-10 rounded-lg bg-[var(--action-primary)] px-4 py-2 text-sm font-semibold text-white hover:bg-[var(--action-primary-hover)]"
+                        onClick={() => {
+                          setIncidentReturn(relatedAlertFilter ? 'Overview' : undefined);
+                          setIncidentSourceAlert(detail.data!.id);
+                          setWorkspaceTab('Incidents');
+                        }}
+                      >
+                        {tr('safety_alerts_view.create_incident_from_alert')}
+                      </button>
+                    )}
+                  <section className="min-w-0">
+                    <h3 className="text-sm font-bold text-[#2F3437]">
+                      {tr('common.review_history_value', { value1: detail.data.reviewsTotal })}
+                    </h3>
+                    <div className="mt-2 space-y-2">
+                      {detail.data.reviews.map((item) => (
+                        <article
+                          key={item.id}
+                          className="rounded-md border border-[#EAEAEA] p-3 text-xs min-w-0"
+                        >
+                          <div className="flex flex-wrap justify-between gap-2">
+                            <span className="font-bold text-[#2F3437] break-words">
+                              {formatLabel(item.fromStatus)} → {formatLabel(item.toStatus)}
+                            </span>
+                            <time className="text-[#6B6B6B]">{formatDate(item.createdAt)}</time>
+                          </div>
+                          <p className="mt-2 whitespace-pre-wrap break-words text-[#2F3437]">
+                            {item.reason}
+                          </p>
+                          <TechnicalDetails>
+                            {tr('safety_alerts_view.actor_value_revision_value', {
+                              value1: item.actorUserId,
+                              value2: item.alertRevision,
+                            })}
+                          </TechnicalDetails>
+                        </article>
+                      ))}
+                      {detail.data.reviews.length === 0 && (
+                        <p className="rounded-md bg-[#F7F6F3] p-3 text-sm text-[#6B6B6B]">
+                          {tr('safety_alerts_view.no_review_decision_has_been_recorded')}
+                        </p>
+                      )}
+                    </div>
+                  </section>
+                </div>
+              )}
           </aside>
         </div>
       )}

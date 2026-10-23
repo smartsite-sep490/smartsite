@@ -146,6 +146,12 @@ describe('Safety Alerts suppress stale protected content after scope revalidatio
     'a selected-detail%s removes its old observation and review controls',
     async (status) => {
       await openView();
+      const protectedKeys = [
+        ['safety-alert-evidence', apiUrl, scope, siteId, alertId, eventId, 0],
+        ['observation-identity-context', apiUrl, scope, siteId, alertId, eventId],
+        ['safety-workflow', apiUrl, scope, siteId, 'alert-context', alertId, 0],
+      ];
+      protectedKeys.forEach((key) => client.setQueryData(key, { privateFixture: true }));
       vi.mocked(SmartSiteManagementClient.prototype.getSafetyAlert).mockRejectedValue(
         new ApiError('http', 'Access revoked', status),
       );
@@ -156,6 +162,9 @@ describe('Safety Alerts suppress stale protected content after scope revalidatio
         });
       });
       await waitFor(() => expect(screen.queryByText(eventId)).toBeNull());
+      await waitFor(() => {
+        protectedKeys.forEach((key) => expect(client.getQueryData(key)).toBeUndefined());
+      });
       expect(screen.queryByText(eventId)).toBeNull();
       expect(screen.queryByText('PRIVATE-CAMERA-OBSERVATION')).toBeNull();
       expect(

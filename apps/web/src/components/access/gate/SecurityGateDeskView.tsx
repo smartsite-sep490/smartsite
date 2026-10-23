@@ -859,11 +859,11 @@ export function SecurityGateDeskView({
             {/* Description & Safe Reason Message */}
             <div className="mt-4 space-y-2">
               <p className="text-sm font-semibold text-slate-900">
-                {lastDecision?.reasonCode === 'NO_SCHEDULE'
-                  ? getSafeReasonMessage('NO_SCHEDULE')
+                {lastDecision?.reasonCode && uiState.type === 'DENIED'
+                  ? getSafeReasonMessage(lastDecision.reasonCode)
                   : uiState.safeDescription}
               </p>
-              {lastDecision?.reasonCode && lastDecision.reasonCode !== 'NO_SCHEDULE' && (
+              {lastDecision?.reasonCode && uiState.type !== 'DENIED' && (
                 <p className="text-xs font-medium text-slate-600">
                   {getSafeReasonMessage(lastDecision.reasonCode)}
                 </p>

@@ -109,6 +109,41 @@ afterEach(async () => {
 });
 
 describe('durable Web notification bell', () => {
+  it('marks a PPE notice read and opens the persisted alert without reviewing it', async () => {
+    await i18n.changeLanguage('en');
+    vi.mocked(SmartSiteManagementClient.prototype.listNotifications).mockResolvedValue({
+      ...page,
+      items: [
+        {
+          ...notification,
+          event: 'PPE_ALERT_CREATED',
+          title: 'PPE alert requires review',
+          target: { siteId: 'site-ppe', alertId: 'alert-ppe', tab: 'alerts' },
+          safetyAlert: {
+            cameraId: 'camera-ppe',
+            cameraName: 'Camera Alpha',
+            zoneId: null,
+            zoneName: null,
+            candidateSubtype: 'PPE_HARD_HAT_MISSING',
+          },
+        },
+      ],
+    });
+    const review = vi.spyOn(SmartSiteManagementClient.prototype, 'reviewSafetyAlert');
+    mount('safety-ppe');
+    fireEvent.click(await screen.findByRole('button', { name: /Notifications, 1/ }));
+    fireEvent.click(await screen.findByText('PPE alert requires review'));
+    await waitFor(() =>
+      expect(screen.getByTestId('location').textContent).toBe(
+        '/incidents?siteId=site-ppe&alertId=alert-ppe&tab=alerts',
+      ),
+    );
+    expect(vi.mocked(SmartSiteManagementClient.prototype.readNotification)).toHaveBeenCalledWith(
+      'synthetic-token',
+      notification.id,
+    );
+    expect(review).not.toHaveBeenCalled();
+  });
   it('keeps the translated notification title in the deletion dialog when language changes', async () => {
     vi.mocked(SmartSiteManagementClient.prototype.listNotifications).mockResolvedValue({
       ...page,

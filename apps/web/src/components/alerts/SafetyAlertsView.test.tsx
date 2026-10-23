@@ -1781,4 +1781,82 @@ describe('SafetyAlertsView Integration (Plan §15 A4 Parent View & Session Scope
     });
   });
 
+  it('shows an unavailable target instead of falling back to another Site for an alert link', async () => {
+    vi.spyOn(SmartSiteManagementClient.prototype, 'listSites').mockResolvedValue(mockSitesList);
+    const alerts = vi
+      .spyOn(SmartSiteManagementClient.prototype, 'listSafetyAlerts')
+      .mockResolvedValue({ items: [], total: 0 });
+    const detail = vi
+      .spyOn(SmartSiteManagementClient.prototype, 'getSafetyAlert')
+      .mockResolvedValue(mockAlertDetail);
+    render(
+      <QueryClientProvider client={queryClient}>
+        <SafetyAlertsView
+          apiUrl="http://local"
+          authenticatedSession={mockSafetyOfficerLoginResponse}
+          initialSiteId="site-unauthorized"
+          initialAlertId="alert-unauthorized"
+        />
+      </QueryClientProvider>,
+    );
+    expect((await screen.findByRole('alert')).textContent).toContain('no longer have access');
+    expect(alerts).not.toHaveBeenCalled();
+    expect(detail).not.toHaveBeenCalled();
+    expect((screen.getByLabelText('Site') as HTMLSelectElement).value).toBe('');
+  });
+
+  it('opens the exact alert when Site and alert change together without choosing the first list result', async () => {
+    const session = {
+      ...mockSafetyOfficerLoginResponse,
+      user: {
+        ...mockSafetyOfficerLoginResponse.user,
+        roleAssignments: ['site-alpha', 'site-beta'].map((siteId) => ({
+          role: 'SAFETY_OFFICER' as const,
+          siteId,
+        })),
+      },
+    };
+    vi.spyOn(SmartSiteManagementClient.prototype, 'listSites').mockResolvedValue({
+      items: [
+        ...mockSitesList.items,
+        { ...mockSitesList.items[0]!, id: 'site-beta', code: 'B', name: 'Site Beta' },
+      ],
+      total: 2,
+    });
+    vi.spyOn(SmartSiteManagementClient.prototype, 'listSafetyAlerts').mockResolvedValue({
+      items: [mockAlert],
+      total: 1,
+    });
+    const detail = vi
+      .spyOn(SmartSiteManagementClient.prototype, 'getSafetyAlert')
+      .mockImplementation(async (_token, siteId, id) => ({
+        ...mockAlertDetail,
+        siteId,
+        id,
+        detections: [],
+        detectionsTotal: 0,
+      }));
+    const tree = (siteId: string, alertId: string) => (
+      <QueryClientProvider client={queryClient}>
+        <SafetyAlertsView
+          apiUrl="http://local"
+          authenticatedSession={session}
+          initialSiteId={siteId}
+          initialAlertId={alertId}
+        />
+      </QueryClientProvider>
+    );
+    const view = render(tree('site-alpha', 'target-a'));
+    await screen.findByText(/Alert target-a · Revision 1/);
+    expect(
+      screen.getByRole('complementary', { name: 'Alert detail' }).className.split(/\s+/),
+    ).not.toContain('hidden');
+    view.rerender(tree('site-beta', 'target-b'));
+    expect(await screen.findByText(/Alert target-b · Revision 1/)).not.toBeNull();
+    expect(
+      screen.getByRole('complementary', { name: 'Alert detail' }).className.split(/\s+/),
+    ).not.toContain('hidden');
+    expect(screen.queryByText(/Alert target-a · Revision 1/)).toBeNull();
+    expect(detail.mock.calls.at(-1)?.slice(1, 3)).toEqual(['site-beta', 'target-b']);
+  });
 });

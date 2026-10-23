@@ -29,7 +29,8 @@ const manager: AccountResponse = {
 let actor: AccountResponse | undefined = admin;
 let token: string | null = 'synthetic-token';
 const logout = vi.fn();
-vi.mock('../auth/auth-session', () => ({
+vi.mock('../auth/auth-session', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('../auth/auth-session')>()),
   useAuth: () => ({ accessToken: token }),
   useCurrentUser: () => ({ data: actor, isPending: false, isError: false }),
   useLogout: () => ({ mutate: logout }),

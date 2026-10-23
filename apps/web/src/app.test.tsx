@@ -561,6 +561,50 @@ describe('App Navigation and Context Lifecycle', () => {
     deepLinkRender.unmount();
   });
 
+  it('opens a PPE notification URL at its exact Site and alert after reload', () => {
+    accountState.data = {
+      ...createDefaultUser(false),
+      roleAssignments: [{ role: 'SAFETY_OFFICER', siteId: 'site-ppe' }],
+    };
+    render(
+      <MemoryRouter initialEntries={['/incidents?siteId=site-ppe&alertId=alert-ppe&tab=alerts']}>
+        <QueryClientProvider client={queryClient}>
+          <App />
+        </QueryClientProvider>
+      </MemoryRouter>,
+    );
+    expect(screen.getByTestId('initial-site').textContent).toBe('site-ppe');
+    expect(screen.getByTestId('initial-alert').textContent).toBe('alert-ppe');
+  });
+
+  it('opens another PPE notification on the same route instead of retaining the first alert', async () => {
+    accountState.data = {
+      ...createDefaultUser(false),
+      roleAssignments: [{ role: 'SAFETY_OFFICER', siteId: 'site-ppe' }],
+    };
+    function NextNotification() {
+      const navigate = useNavigate();
+      return (
+        <button
+          onClick={() => navigate('/incidents?siteId=site-ppe&alertId=alert-second&tab=alerts')}
+        >
+          Next notification
+        </button>
+      );
+    }
+    render(
+      <MemoryRouter initialEntries={['/incidents?siteId=site-ppe&alertId=alert-first&tab=alerts']}>
+        <QueryClientProvider client={queryClient}>
+          <App />
+          <NextNotification />
+        </QueryClientProvider>
+      </MemoryRouter>,
+    );
+    expect(screen.getByTestId('initial-alert').textContent).toBe('alert-first');
+    await userEvent.setup().click(screen.getByRole('button', { name: 'Next notification' }));
+    expect(screen.getByTestId('initial-alert').textContent).toBe('alert-second');
+  });
+
   it.each([
     'SAFETY_OFFICER',
     'SITE_MANAGER',

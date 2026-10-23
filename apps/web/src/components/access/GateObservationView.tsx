@@ -1,10 +1,10 @@
+import { useManagementClient } from '../../features/auth/auth-session';
 import { localizedError } from '../../i18n/messages';
 import { localizedLabel, localizedGateName } from '../../i18n/labels';
 import { translate as tr } from '../../i18n';
-import { useMemo, useState } from 'react';
+import { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { useTranslation } from 'react-i18next';
-import { SmartSiteManagementClient } from '@smartsite/api-client';
 import { SITE_GATES } from '@smartsite/contracts/gate-permissions';
 import { uiLocale } from '../../i18n';
 import { IconAlertTriangle } from '../icons';
@@ -22,7 +22,7 @@ export function GateObservationView({
 }) {
   const { t } = useTranslation();
   const locale = uiLocale();
-  const client = useMemo(() => new SmartSiteManagementClient(apiUrl), [apiUrl]);
+  const client = useManagementClient(apiUrl);
   const [gateId, setGateId] = useState<string>(SITE_GATES[0].id);
 
   const logs = useQuery({

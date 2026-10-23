@@ -1,7 +1,7 @@
+import { useManagementClient } from '../../../features/auth/auth-session';
 import { translate as tr } from '../../../i18n';
 import { useMemo, useRef, useState, type FormEvent } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { SmartSiteManagementClient } from '@smartsite/api-client';
 import type {
   VisitResponse,
   VisitorGateCommand,
@@ -87,7 +87,7 @@ export function VisitorAccessView({
   mode: propMode,
 }: VisitorAccessViewProps) {
   const { t } = useTranslation();
-  const client = useMemo(() => new SmartSiteManagementClient(apiUrl), [apiUrl]);
+  const client = useManagementClient(apiUrl);
   const cache = useQueryClient();
   const key = ['access-control', apiUrl, sessionScope, 'visits', siteId];
   const historyKey = ['access-control', apiUrl, sessionScope, 'visitor-events', siteId];

@@ -113,7 +113,7 @@ export function ScheduleSetupView({ apiUrl }: ScheduleSetupViewProps) {
   const [selectedSiteId, setSelectedSiteId] = useState<string | null>(() =>
     new URLSearchParams(window.location.search).get('siteId'),
   );
-  const [activeTab, setActiveTab] = useState<'shifts' | 'version' | 'assignment'>(() =>
+  const [requestedTab, setActiveTab] = useState<'shifts' | 'version' | 'assignment'>(() =>
     new URLSearchParams(window.location.search).get('tab') === 'assignment'
       ? 'assignment'
       : 'shifts',
@@ -173,12 +173,33 @@ export function ScheduleSetupView({ apiUrl }: ScheduleSetupViewProps) {
   // MF07: only a Site Manager for the selected Site may create/delete shifts,
   // manage versions, and assign shifts to contractors. Admin may still view setup.
   const canManageShiftsAndVersions = isManager;
-  const canAssignWorker = isManager;
-  const canViewAssignments = isAdmin || isManager || isContractorRep;
+  const canAssignWorker = isContractorRep;
+  const canViewAssignments = isAdmin || isContractorRep;
+  const activeTab = requestedTab === 'assignment' && !canViewAssignments ? 'shifts' : requestedTab;
   const readScopes = useQuery({
-    queryKey: ['schedule-read-scopes', apiUrl, currentUser?.id],
-    queryFn: () => client.contractorDashboardScopes(accessToken!),
-    enabled: !!accessToken && isContractorRep && !canAssignWorker,
+    queryKey: ['schedule-read-scopes', apiUrl, currentUser?.id, activeSiteId, isManager],
+    queryFn: async () =>
+      isManager
+        ? {
+            items: (await client.accessSetup(accessToken!, activeSiteId!)).participations
+              .filter(
+                (p) =>
+                  Date.parse(p.validFrom) <= Date.now() &&
+                  (!p.validUntil || Date.parse(p.validUntil) > Date.now()),
+              )
+              .map((p) => ({
+                siteId: activeSiteId!,
+                contractorId: p.contractorId,
+                contractorName: p.name,
+              })),
+          }
+        : client.contractorDashboardScopes(accessToken!),
+    enabled:
+      !!accessToken &&
+      !!activeSiteId &&
+      canViewAssignments &&
+      (isManager || isContractorRep) &&
+      !canAssignWorker,
   });
   const readOptions = useMemo(
     () => readScopes.data?.items.filter((o) => o.siteId === activeSiteId) ?? [],
@@ -267,7 +288,9 @@ export function ScheduleSetupView({ apiUrl }: ScheduleSetupViewProps) {
         offset: 0,
         limit: 100,
       }),
-    enabled: Boolean(accessToken && activeSiteId && assignmentScope.contractorId),
+    enabled: Boolean(
+      accessToken && activeSiteId && canViewAssignments && assignmentScope.contractorId,
+    ),
   });
   const contractorTeams = useMemo(
     () => contractorTeamsQuery.data?.items ?? [],
@@ -281,7 +304,9 @@ export function ScheduleSetupView({ apiUrl }: ScheduleSetupViewProps) {
         offset: 0,
         limit: 200,
       }),
-    enabled: Boolean(accessToken && activeSiteId && assignmentScope.contractorId),
+    enabled: Boolean(
+      accessToken && activeSiteId && canViewAssignments && assignmentScope.contractorId,
+    ),
   });
   const contractorTeamWorkers = useMemo(
     () => contractorTeamWorkersQuery.data?.items ?? [],
@@ -1120,7 +1145,7 @@ export function ScheduleSetupView({ apiUrl }: ScheduleSetupViewProps) {
           {/* Assignment Form Card (4 cols) - Double-Bezel Architecture */}
           <div className="lg:col-span-4 rounded-3xl p-1.5 bg-gradient-to-b from-slate-100 to-slate-200/70 border border-slate-200/80 shadow-xs">
             <div className="bg-white rounded-[22px] p-5 border border-slate-100 shadow-[0_1px_3px_rgba(0,0,0,0.04)] space-y-4">
-              {!canAssignWorker && isContractorRep && (
+              {!canAssignWorker && isManager && (
                 <label>
                   {tr('common.contractor')}
                   <select
@@ -1140,7 +1165,6 @@ export function ScheduleSetupView({ apiUrl }: ScheduleSetupViewProps) {
               )}
               {canAssignWorker && (
                 <ScheduleAssignmentForm
-                  managerScope={isManager}
                   key={activeSiteId}
                   apiUrl={apiUrl}
                   token={accessToken!}

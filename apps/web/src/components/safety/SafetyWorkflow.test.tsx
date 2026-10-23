@@ -163,6 +163,22 @@ it('Contractor representative can resubmit a rejected action while retaining the
   fireEvent.change(screen.getByLabelText('Result description'), {
     target: { value: 'New result' },
   });
+  vi.stubGlobal(
+    'URL',
+    class extends URL {
+      static createObjectURL = () => 'blob:result';
+      static revokeObjectURL = vi.fn();
+    },
+  );
+  const validPhoto = new File(['photo'], 'result.jpg', { type: 'image/jpeg' });
+  const photoInput = screen.getByLabelText('Photo (optional JPEG, max 1 MiB)');
+  fireEvent.change(photoInput, { target: { files: [validPhoto] } });
+  fireEvent.change(photoInput, {
+    target: { files: [new File(['pdf'], 'wrong.pdf', { type: 'application/pdf' })] },
+  });
+  fireEvent.change(photoInput, {
+    target: { files: [new File([], 'empty.jpg', { type: 'image/jpeg' })] },
+  });
   fireEvent.click(
     within(screen.getByRole('dialog')).getByRole('button', { name: 'Report handling outcome' }),
   );
@@ -179,73 +195,104 @@ it('Contractor representative can resubmit a rejected action while retaining the
       commandId: expect.any(String),
     }),
     'action',
-    undefined,
+    validPhoto,
     expect.anything(),
   );
 });
-it('Manager conflict requests reload and next review uses the refreshed version', async () => {
-  const p = {
-    ...props,
-    user: {
-      ...props.user,
-      id: 'manager',
-      roleAssignments: [{ role: 'SITE_MANAGER' as const, siteId: 'site' }],
-    },
-  };
-  const task = {
-    id: 'task',
-    siteId: 'site',
-    zoneId: null,
-    kind: 'SAFETY_PATROL' as const,
-    sourceAlertId: null,
-    sourceIncidentId: null,
-    assignedTo: 'safety',
-    assignedBy: 'manager',
-    description: 'Patrol check',
-    dueAt: null,
-    status: 'COMPLETED' as const,
-    resultSummary: 'Checked',
-    resultEvidence: null,
-    completedAt: timestamp,
-    verifiedBy: null,
-    verifiedAt: null,
-    version: 3,
-    createdAt: timestamp,
-    updatedAt: timestamp,
-    audit: [],
-  };
-  vi.spyOn(props.client, 'listSafetyTasks').mockResolvedValue({ items: [task], total: 1 });
-  vi.spyOn(props.client, 'listSafetyAssignees').mockResolvedValue({ items: [], total: 0 });
-  vi.spyOn(props.client, 'getSafetyTask')
-    .mockResolvedValueOnce(task)
-    .mockResolvedValue({ ...task, version: 4 });
-  const command = vi
-    .spyOn(props.client, 'safetyTaskCommand')
-    .mockRejectedValueOnce(new ApiError('http', 'Conflict', 409))
-    .mockResolvedValue({
-      resource: {
-        ...task,
-        status: 'VERIFIED',
-        verifiedBy: 'manager',
-        verifiedAt: timestamp,
-        version: 5,
+it.each(['current', 'cancelled', 'offline'])(
+  'Manager conflict refresh retains the reason and blocks an unavailable task: %s',
+  async (outcome) => {
+    const p = {
+      ...props,
+      user: {
+        ...props.user,
+        id: 'manager',
+        roleAssignments: [{ role: 'SITE_MANAGER' as const, siteId: 'site' }],
       },
-      replayed: false,
+    };
+    const task = {
+      id: 'task',
+      siteId: 'site',
+      zoneId: null,
+      kind: 'SAFETY_PATROL' as const,
+      sourceAlertId: null,
+      sourceIncidentId: null,
+      assignedTo: 'safety',
+      assignedBy: 'manager',
+      description: 'Patrol check',
+      dueAt: null,
+      status: 'COMPLETED' as const,
+      resultSummary: 'Checked',
+      resultEvidence: null,
+      completedAt: timestamp,
+      verifiedBy: null,
+      verifiedAt: null,
+      version: 3,
+      createdAt: timestamp,
+      updatedAt: timestamp,
+      audit: [],
+    };
+    vi.spyOn(props.client, 'listSafetyTasks').mockResolvedValue({ items: [task], total: 1 });
+    vi.spyOn(props.client, 'listSafetyAssignees').mockResolvedValue({ items: [], total: 0 });
+    vi.spyOn(props.client, 'getSafetyTask')
+      .mockResolvedValueOnce(task)
+      .mockImplementation(async () => {
+        if (outcome === 'offline') throw new Error('Offline during refresh');
+        return { ...task, version: 4, status: outcome === 'cancelled' ? 'CANCELLED' : 'COMPLETED' };
+      });
+    const command = vi
+      .spyOn(props.client, 'safetyTaskCommand')
+      .mockRejectedValueOnce(new ApiError('http', 'Conflict', 409))
+      .mockResolvedValue({
+        resource: {
+          ...task,
+          status: 'VERIFIED',
+          verifiedBy: 'manager',
+          verifiedAt: timestamp,
+          version: 5,
+        },
+        replayed: false,
+      });
+    mount(<SafetyTasksView {...p} />);
+    fireEvent.click(await screen.findByRole('button', { name: /Patrol check/ }));
+    fireEvent.click(await screen.findByRole('button', { name: 'Review task' }));
+    fireEvent.change(await screen.findByLabelText('Task review reason'), {
+      target: { value: 'Confirmed' },
     });
-  mount(<SafetyTasksView {...p} />);
-  fireEvent.click(await screen.findByRole('button', { name: /Patrol check/ }));
-  fireEvent.click(await screen.findByRole('button', { name: 'Review task' }));
-  fireEvent.change(await screen.findByLabelText('Task review reason'), {
-    target: { value: 'Confirmed' },
-  });
-  fireEvent.click(screen.getByRole('button', { name: 'Record task review' }));
-  expect((await screen.findByRole('alert')).textContent).toContain('Reload');
-  fireEvent.click(screen.getByRole('button', { name: 'Reload data' }));
-  await waitFor(() => expect(screen.getByText(/Version 4/)).not.toBeNull());
-  fireEvent.click(screen.getByRole('button', { name: 'Record task review' }));
-  await waitFor(() => expect(command).toHaveBeenCalledTimes(2));
-  expect(command.mock.calls[1]?.[4]).toMatchObject({ expectedVersion: 4, reason: 'Confirmed' });
-});
+    fireEvent.click(screen.getByRole('button', { name: 'Record task review' }));
+    expect((await screen.findByRole('alert')).textContent).toContain('Reload');
+    fireEvent.click(screen.getByRole('button', { name: 'Reload data' }));
+    if (outcome === 'offline') {
+      await waitFor(() =>
+        expect(
+          screen.getByRole('button', { name: 'Record task review' }).matches(':disabled'),
+        ).toBe(true),
+      );
+      expect((screen.getByLabelText('Task review reason') as HTMLTextAreaElement).value).toBe(
+        'Confirmed',
+      );
+      expect(within(screen.getByRole('dialog')).getByRole('alert').textContent).toContain(
+        'Offline',
+      );
+      expect(command).toHaveBeenCalledTimes(1);
+      return;
+    }
+    await waitFor(() => expect(screen.getByText(/Version 4/)).not.toBeNull());
+    if (outcome === 'cancelled') {
+      expect(screen.getByRole('button', { name: 'Record task review' }).matches(':disabled')).toBe(
+        true,
+      );
+      expect((screen.getByLabelText('Task review reason') as HTMLTextAreaElement).value).toBe(
+        'Confirmed',
+      );
+      expect(command).toHaveBeenCalledTimes(1);
+      return;
+    }
+    fireEvent.click(screen.getByRole('button', { name: 'Record task review' }));
+    await waitFor(() => expect(command).toHaveBeenCalledTimes(2));
+    expect(command.mock.calls[1]?.[4]).toMatchObject({ expectedVersion: 4, reason: 'Confirmed' });
+  },
+);
 it('Logout cancels MF08 queries and removes sensitive caches before switching account', async () => {
   const login = {
     accessToken: 'security-token',

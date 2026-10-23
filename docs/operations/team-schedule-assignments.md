@@ -2,6 +2,16 @@
 
 Contractor Representatives open **Schedule Setup → Worker Assignment**. Only active, scoped Site/Contractor representatives can preview, create, list or change assignments. Site Managers still configure shift templates, unpaid lunch breaks and schedule versions; contractors may use only shifts granted to their contractor.
 
+Site Managers may read assignment history for their Site but cannot preview, create or change
+worker assignments without an explicitly assigned Contractor Representative role and contractor
+grant. This applies to both batch endpoints and the single-worker schedule endpoint. Backend checks
+the current active account, persisted role, representative grant and active contractor participation;
+stale token roles do not preserve write access. The Web assignment tab and form are shown to
+representatives. Manager-only accounts retain shift/version setup; the Worker Assignment tab is
+hidden and direct links to it display the Shifts tab instead. Manager assignment read APIs remain
+available within their Site scope.
+This authorization correction requires no migration or API payload changes.
+
 ## Assign and preview
 
 1. The form uses the authenticated contractor scope (or an authorized contractor from the dashboard link). Select **Team** or **Worker**, schedule version and shift. A team loads all active current members; uncheck members needing a different shift. There is no contractor selector that grants access to another contractor.
@@ -17,17 +27,19 @@ Ranges are limited to 366 calendar days and 5,000 worker-days per request. Empty
 
 - Team membership is captured when assigning; changing membership does not retroactively rewrite attendance or existing schedules.
 - After adding/transferring a member, the contractor gets **Choose whether to apply remaining team schedules**. It opens assignment setup scoped to that site/contractor/team and selects that worker.
-- Use the link in team management after adding/transferring a member to open assignment setup for that worker and team. Choose the remaining dates, shift and weekdays, then preview before confirming. Assignment batches contain only **Edit or cancel schedules**; the separate new-member autofill shortcut was removed.
+- Use the link in team management after adding/transferring a member to open assignment setup for that worker and team. Choose the remaining dates, shift and weekdays, then preview before confirming. Assignment batches contain only **Edit**; the separate new-member autofill shortcut was removed.
 - If a transferred worker already has future schedules from their old team, the preview reports those conflicts. Explicitly cancel the old batch's future schedules for that worker before assigning the new team's shift; completed/started attendance stays protected.
-- Exclude an individual when initially assigning the team, then assign the individual separately. Alternatively use **Edit or cancel schedules → Affected workers** to choose that individual.
+- Exclude an individual when initially assigning the team, then assign the individual separately. Alternatively use **Edit → Affected workers** to choose that individual.
 
 ## Change or cancel
+
+Batch summaries show the team/worker name, worker/day counts and dates in `dd/MM/yyyy` format. Single-day batches show the date once. The **Edit** button expands the change form within the batch.
 
 Open an assignment batch, choose **Change shift** or **Cancel schedules**, **This day only** or **From this date onward**, a date, all original members or one worker, and a required reason. Cancellation deactivates schedules and retains the rows/history. The main schedule table shows **Active / Inactive**.
 
 Started shifts and days with attendance cannot be changed/cancelled through this feature. Pending or approved linked leave/OT/change/swap requests also block modifications. A batch version prevents stale changes, request IDs preserve retries, and creation/change actions are audited. A conflict aborts all changes in the command. Changes are limited to schedules owned by that batch and the current contractor scope.
 
-Use **Edit or cancel schedules → Apply change to → All unstarted schedules in this batch** to correct an entire batch without selecting individual dates. Choose Change shift or Cancel schedules, all original members or one worker, and a reason. Backend selects active batch schedules whose original shift has not started, including today when its start is still in the future. Started schedules and worker-days with attendance are skipped; success reports changed and skipped schedule counts. Counts refer to worker-schedule rows, not distinct calendar dates. If none are eligible the command reports a conflict and makes no changes. A replacement that has already started, an unavailable shift, linked requests on eligible rows, or a schedule-history conflict still aborts the command. The existing day/from-date modes continue to fail atomically if their selection includes protected schedules.
+Use **Edit → Apply change to → All unstarted schedules in this batch** to correct an entire batch without selecting individual dates. Choose Change shift or Cancel schedules, all original members or one worker, and a reason. Backend selects active batch schedules whose original shift has not started, including today when its start is still in the future. Started schedules and worker-days with attendance are skipped; success reports changed and skipped schedule counts. Counts refer to worker-schedule rows, not distinct calendar dates. If none are eligible the command reports a conflict and makes no changes. A replacement that has already started, an unavailable shift, linked requests on eligible rows, or a schedule-history conflict still aborts the command. The existing day/from-date modes continue to fail atomically if their selection includes protected schedules.
 
 API compatibility example: `scope: "UNSTARTED"` on the existing change command selects all unstarted batch schedules; the required `workDate` is retained for compatibility but ignored in this mode. Responses add optional `changedCount` and `skippedCount`, also preserved for identical request-ID retries. No schema migration is required. Deploy the updated Backend before Web; older clients keep their existing DAY/FROM_DATE behavior.
 

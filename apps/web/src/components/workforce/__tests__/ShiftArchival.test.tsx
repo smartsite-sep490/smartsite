@@ -67,84 +67,106 @@ beforeEach(() => {
     },
   );
 });
-it('loads workers beyond the first page and uses the form contractor for the schedules table', async () => {
-  session.role = 'SITE_MANAGER';
-  const worker = (index: number) => ({
-    id: `worker-${index}`,
-    siteId: 'site-1',
-    contractorId: 'contractor',
-    userId: null,
-    externalId: `ID-${index}`,
-    displayName: `Member ${index}`,
-    isActive: true,
-    createdAt: '2030-01-01',
-  });
-  const read = vi
-    .mocked(SmartSiteManagementClient.prototype.listWorkers)
-    .mockImplementation(async (_token, _site, options) => ({
-      items: options?.offset
-        ? [worker(100)]
-        : Array.from({ length: 100 }, (_, index) => worker(index)),
-      total: 101,
-    }));
-  vi.spyOn(SmartSiteManagementClient.prototype, 'contractorDashboardScopes').mockResolvedValue({
-    items: [
-      {
-        siteId: 'site-1',
-        siteName: 'Synthetic',
-        siteCode: 'TEST',
-        contractorId: 'contractor',
-        contractorName: 'Synthetic',
-      },
-    ],
-  });
-  vi.spyOn(SmartSiteManagementClient.prototype, 'listContractorTeams').mockResolvedValue({
-    items: [],
-    total: 0,
-  });
-  vi.spyOn(SmartSiteManagementClient.prototype, 'listContractorTeamWorkers').mockResolvedValue({
-    items: [],
-    total: 0,
-  });
-  vi.spyOn(SmartSiteManagementClient.prototype, 'listScheduleAssignments').mockResolvedValue({
-    items: [],
-    total: 0,
-  });
-  vi.spyOn(SmartSiteManagementClient.prototype, 'accessSetup').mockResolvedValue({
-    canReviewAssignments: true,
-    canGrantContractorZones: true,
-    canGrantWorkerZones: false,
-    participations: [
-      {
-        id: 'p',
-        contractorId: 'contractor',
-        name: 'Synthetic',
-        validFrom: '2020-01-01T00:00:00Z',
-        validUntil: null,
-      },
-    ],
-    workers: [],
-    zones: [],
-    assignments: [],
-    contractorPermissions: [],
-    workerPermissions: [],
-  });
-  mount();
-  fireEvent.click(await screen.findByRole('tab', { name: /Worker Assignment/ }));
-  await waitFor(() =>
-    expect(read).toHaveBeenCalledWith('synthetic-token', 'site-1', { offset: 100, limit: 100 }),
-  );
-  await waitFor(() =>
-    expect(SmartSiteManagementClient.prototype.listWorkerSchedules).toHaveBeenCalledWith(
-      'synthetic-token',
-      'site-1',
-      expect.objectContaining({ contractorId: 'contractor' }),
-    ),
-  );
-  expect(screen.getByPlaceholderText('Worker name or ID...')).toBeTruthy();
-  fireEvent.click(screen.getByText('All workers'));
-  expect(await screen.findByText('Member 100')).toBeTruthy();
-});
+it.each(['CONTRACTOR_REPRESENTATIVE', 'SITE_MANAGER'])(
+  '%s shows assignments only for representatives and preserves manager shift setup',
+  async (role) => {
+    session.role = role;
+    const worker = (index: number) => ({
+      id: `worker-${index}`,
+      siteId: 'site-1',
+      contractorId: 'contractor',
+      userId: null,
+      externalId: `ID-${index}`,
+      displayName: `Member ${index}`,
+      isActive: true,
+      createdAt: '2030-01-01',
+    });
+    const read = vi
+      .mocked(SmartSiteManagementClient.prototype.listWorkers)
+      .mockImplementation(async (_token, _site, options) => ({
+        items: options?.offset
+          ? [worker(100)]
+          : Array.from({ length: 100 }, (_, index) => worker(index)),
+        total: 101,
+      }));
+    vi.spyOn(SmartSiteManagementClient.prototype, 'contractorDashboardScopes').mockResolvedValue({
+      items: [
+        {
+          siteId: 'site-1',
+          siteName: 'Synthetic',
+          siteCode: 'TEST',
+          contractorId: 'contractor',
+          contractorName: 'Synthetic',
+        },
+      ],
+    });
+    vi.spyOn(SmartSiteManagementClient.prototype, 'listContractorTeams').mockResolvedValue({
+      items: [],
+      total: 0,
+    });
+    vi.spyOn(SmartSiteManagementClient.prototype, 'listContractorTeamWorkers').mockResolvedValue({
+      items: [],
+      total: 0,
+    });
+    vi.spyOn(SmartSiteManagementClient.prototype, 'listScheduleAssignments').mockResolvedValue({
+      items: [],
+      total: 0,
+    });
+    vi.spyOn(SmartSiteManagementClient.prototype, 'accessSetup').mockResolvedValue({
+      canReviewAssignments: true,
+      canGrantContractorZones: true,
+      canGrantWorkerZones: false,
+      participations: [
+        {
+          id: 'p',
+          contractorId: 'contractor',
+          name: 'Synthetic',
+          validFrom: '2020-01-01T00:00:00Z',
+          validUntil: null,
+        },
+      ],
+      workers: [],
+      zones: [],
+      assignments: [],
+      contractorPermissions: [],
+      workerPermissions: [],
+    });
+    if (role === 'SITE_MANAGER') {
+      window.history.replaceState({}, '', '/schedule-setup?tab=assignment');
+    }
+    mount();
+    if (role === 'SITE_MANAGER') {
+      await screen.findByRole('tab', { name: /Shifts/ });
+      expect(screen.queryByRole('tab', { name: /Worker Assignment/ })).toBeNull();
+      expect(await screen.findByText('Day shift')).toBeTruthy();
+      expect(screen.getByRole('button', { name: 'New Shift' })).toBeTruthy();
+      expect(screen.queryByText('Assign schedules')).toBeNull();
+      expect(read).not.toHaveBeenCalled();
+      expect(SmartSiteManagementClient.prototype.listWorkerSchedules).not.toHaveBeenCalled();
+      return;
+    }
+    fireEvent.click(await screen.findByRole('tab', { name: /Worker Assignment/ }));
+    await waitFor(() =>
+      expect(read).toHaveBeenCalledWith('synthetic-token', 'site-1', { offset: 100, limit: 100 }),
+    );
+    await waitFor(() =>
+      expect(SmartSiteManagementClient.prototype.listWorkerSchedules).toHaveBeenCalledWith(
+        'synthetic-token',
+        'site-1',
+        expect.objectContaining({ contractorId: 'contractor' }),
+      ),
+    );
+    expect(screen.getByPlaceholderText('Worker name or ID...')).toBeTruthy();
+    if (role === 'CONTRACTOR_REPRESENTATIVE') {
+      expect(await screen.findByText('Assign schedules')).toBeTruthy();
+    } else {
+      expect(screen.queryByText('Assign schedules')).toBeNull();
+      expect(screen.queryByRole('button', { name: /Preview assignments/i })).toBeNull();
+    }
+    fireEvent.click(screen.getByText('All workers'));
+    expect(await screen.findByText('Member 100')).toBeTruthy();
+  },
+);
 afterEach(() => {
   cleanup();
   queries?.clear();

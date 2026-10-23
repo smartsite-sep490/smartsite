@@ -1,6 +1,5 @@
-import { useMemo } from 'react';
+import { useManagementClient } from '../../../features/auth/auth-session';
 import { useQuery } from '@tanstack/react-query';
-import { SmartSiteManagementClient } from '@smartsite/api-client';
 import { useTranslation } from 'react-i18next';
 import { translate as tr } from '../../../i18n';
 import { WORKFORCE_POLL_INTERVAL_MS } from '../constants/workforce.constants';
@@ -23,7 +22,7 @@ export function WorkerAbsenceSummary({
   toDate?: string;
 }) {
   useTranslation();
-  const client = useMemo(() => new SmartSiteManagementClient(apiUrl), [apiUrl]);
+  const client = useManagementClient(apiUrl);
   const absence = useQuery({
     queryKey: ['worker-absence-count', apiUrl, sessionScope, siteId, workerId, fromDate, toDate],
     enabled: !!workerId && !!token,

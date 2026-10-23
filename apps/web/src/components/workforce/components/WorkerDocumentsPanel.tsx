@@ -26,10 +26,6 @@ import {
   IconChevronDown,
 } from '../../icons';
 
-const isTestEnv =
-  import.meta.env.MODE === 'test' ||
-  (typeof process !== 'undefined' && process.env?.NODE_ENV === 'test');
-
 const fieldClass =
   'block w-full rounded-xl border border-slate-200 bg-slate-50/70 px-3.5 py-2.5 text-sm font-medium text-slate-800 placeholder:text-slate-400 focus:border-[#F66B17] focus:bg-white focus:ring-2 focus:ring-[#F66B17]/15 focus:outline-none transition-all shadow-2xs';
 
@@ -135,18 +131,30 @@ export function WorkerDocumentsPanel(p: Props) {
   const [preview, setPreview] = useState<{ url: string; type: string } | null>(null);
   const [expiries, setExpiries] = useState<Partial<Record<WorkerDocumentKind, string>>>({});
 
-  // Collapsible accordion state: In test environment, keep all open for test selectors. In browser, start collapsed or user-controlled.
   const allSections = ['IDENTITY', ...documentKinds];
-  const [expandedSections, setExpandedSections] = useState<string[]>(isTestEnv ? allSections : []);
+  const [sectionChoices, setSectionChoices] = useState<Record<string, boolean>>({});
+  const pendingSections = new Set(
+    profile.data?.documents.filter((d) => d.status === 'PENDING').map((d) => d.kind),
+  );
+  const expandedSections = allSections.filter(
+    (id) =>
+      sectionChoices[id] ??
+      (id === 'IDENTITY'
+        ? !!profile.data?.identityImages.length &&
+          profile.data.submissionStatus === 'PENDING_REVIEW'
+        : pendingSections.has(id as WorkerDocumentKind)),
+  );
 
   const toggleSection = (id: string) => {
-    setExpandedSections((prev) =>
-      prev.includes(id) ? prev.filter((item) => item !== id) : [...prev, id],
-    );
+    setSectionChoices((prev) => ({ ...prev, [id]: !expandedSections.includes(id) }));
   };
 
   const toggleAll = () => {
-    setExpandedSections((prev) => (prev.length === allSections.length ? [] : allSections));
+    setSectionChoices(
+      Object.fromEntries(
+        allSections.map((id) => [id, expandedSections.length !== allSections.length]),
+      ),
+    );
   };
 
   useEffect(

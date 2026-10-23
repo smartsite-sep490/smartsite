@@ -79,6 +79,12 @@ The current foundation contains shared infrastructure and the existing MF05/MF06
 Shift template archival, data retention and manual checks are documented in [Shift archival (MF03/MF07)](docs/operations/shift-archival.md).
 Team/worker assignment previews, finite weekly repetition and protected schedule changes are documented in [Team schedule assignments](docs/operations/team-schedule-assignments.md).
 
+Site Managers configure shifts, schedule versions and the shifts available to each contractor.
+Contractor Representatives preview, assign and change worker/team schedules within their own
+active Site/Contractor scope. Both single-worker and batch assignment APIs enforce this boundary;
+Site Managers can read assignments but need an explicit Contractor Representative role and grant
+to assign workers. No schema migration is required for this authorization correction.
+
 Scheduled no-shows, in-app notifications and worker calendar `ABSENT` status are documented in [Scheduled absence](docs/operations/attendance-absence.md). Apply the attendance-absence migration before enabling the updated Backend.
 
 The read-only attendance summary and worker reports, rate definitions and shared client usage are documented in [Attendance reporting API](docs/operations/attendance-reports.md).

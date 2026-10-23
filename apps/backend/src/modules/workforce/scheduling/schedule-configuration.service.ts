@@ -16,7 +16,8 @@ import { ShiftEntity } from '../../../database/entities/shift.entity.js';
 import { SiteEntity } from '../../../database/entities/site.entity.js';
 import { WorkerEntity } from '../../../database/entities/worker.entity.js';
 import { WorkerScheduleEntity } from '../../../database/entities/worker-schedule.entity.js';
-import { UserRole } from '../../../database/entities/user.entity.js';
+import { UserEntity, UserRole } from '../../../database/entities/user.entity.js';
+import { UserRoleAssignmentEntity } from '../../../database/entities/user-role-assignment.entity.js';
 import { ContractorRepresentativeAssignmentEntity } from '../../../database/entities/contractor-representative-assignment.entity.js';
 import { ContractorShiftAssignmentEntity } from '../../../database/entities/contractor-shift-assignment.entity.js';
 import { ContractorEntity } from '../../../database/entities/contractor.entity.js';
@@ -159,27 +160,30 @@ export class ScheduleConfigurationService {
     if (!this.hasSiteRole(user, UserRole.SITE_MANAGER, siteId)) this.forbidden();
   }
 
-  private async contractorScopeForReader(
+  private async contractorScopesForReader(
     user: AuthenticatedUser,
     siteId: string,
-  ): Promise<string | null> {
+  ): Promise<string[] | null> {
     this.assertPasswordChanged(user);
     if (this.isGlobalAdmin(user) || this.hasSiteRole(user, UserRole.SITE_MANAGER, siteId))
       return null;
 
     if (this.hasSiteRole(user, UserRole.CONTRACTOR_REPRESENTATIVE, siteId)) {
-      const assignment = await this.dataSource
+      const assignments = await this.dataSource
         .getRepository(ContractorRepresentativeAssignmentEntity)
-        .findOneBy({ siteId, userId: user.id });
-      if (
-        assignment &&
-        (await hasActiveContractorParticipation(
-          this.dataSource.manager,
-          assignment.contractorId,
-          siteId,
-        ))
-      )
-        return assignment.contractorId;
+        .findBy({ siteId, userId: user.id });
+      const contractorIds: string[] = [];
+      for (const assignment of assignments) {
+        if (
+          await hasActiveContractorParticipation(
+            this.dataSource.manager,
+            assignment.contractorId,
+            siteId,
+          )
+        )
+          contractorIds.push(assignment.contractorId);
+      }
+      if (contractorIds.length) return contractorIds;
     }
 
     if (this.hasSiteRole(user, UserRole.WORKER, siteId)) {
@@ -196,7 +200,7 @@ export class ScheduleConfigurationService {
           siteId,
         ))
       )
-        return worker.contractorId;
+        return [worker.contractorId];
     }
 
     this.forbidden();
@@ -209,8 +213,24 @@ export class ScheduleConfigurationService {
     worker: WorkerEntity,
     shiftId: string,
   ): Promise<void> {
-    this.assertScheduleWriter(user, siteId);
+    this.assertPasswordChanged(user);
+    if (!this.hasSiteRole(user, UserRole.CONTRACTOR_REPRESENTATIVE, siteId)) this.forbidden();
     if (!worker.contractorId) this.forbidden();
+
+    const activeUser = await manager.getRepository(UserEntity).findOneBy({
+      id: user.id,
+      isActive: true,
+      mustChangePassword: false,
+    });
+    const role = await manager.getRepository(UserRoleAssignmentEntity).existsBy({
+      userId: user.id,
+      siteId,
+      role: UserRole.CONTRACTOR_REPRESENTATIVE,
+    });
+    const representative = await manager
+      .getRepository(ContractorRepresentativeAssignmentEntity)
+      .existsBy({ siteId, contractorId: worker.contractorId, userId: user.id });
+    if (!activeUser || !role || !representative) this.forbidden();
 
     if (!(await hasActiveContractorParticipation(manager, worker.contractorId, siteId)))
       this.forbidden();
@@ -352,7 +372,8 @@ export class ScheduleConfigurationService {
     input: CreateWorkerScheduleDto,
   ): Promise<WorkerScheduleEntity> {
     const scopedSiteId = uuid(siteId).toLowerCase();
-    this.assertScheduleWriter(user, scopedSiteId);
+    this.assertPasswordChanged(user);
+    if (!this.hasSiteRole(user, UserRole.CONTRACTOR_REPRESENTATIVE, scopedSiteId)) this.forbidden();
     const scopedScheduleVersionId = uuid(scheduleVersionId);
     const value = command(CreateWorkerScheduleDto, input);
     return this.dataSource.transaction(async (manager) => {
@@ -414,19 +435,20 @@ export class ScheduleConfigurationService {
     siteId: string,
   ): Promise<{ items: ShiftEntity[]; total: number }> {
     const scopedSiteId = uuid(siteId).toLowerCase();
-    const contractorId = await this.contractorScopeForReader(user, scopedSiteId);
+    const contractorIds = await this.contractorScopesForReader(user, scopedSiteId);
     const query = this.dataSource
       .getRepository(ShiftEntity)
       .createQueryBuilder('shift')
       .where('shift.site_id = :siteId', { siteId: scopedSiteId });
-    if (contractorId) {
+    if (contractorIds) {
       query
         .innerJoin(
           ContractorShiftAssignmentEntity,
           'assignment',
           'assignment.shift_id = shift.id AND assignment.site_id = shift.site_id',
         )
-        .andWhere('assignment.contractor_id = :contractorId', { contractorId });
+        .andWhere('assignment.contractor_id IN (:...contractorIds)', { contractorIds })
+        .distinct(true);
     }
     const [items, total] = await query
       .orderBy('shift.startsAt', 'ASC')
@@ -492,13 +514,14 @@ export class ScheduleConfigurationService {
     limit = '50',
   ): Promise<{ items: ContractorShiftAssignmentEntity[]; total: number }> {
     const scopedSiteId = uuid(siteId).toLowerCase();
-    const contractorId = await this.contractorScopeForReader(user, scopedSiteId);
+    const contractorIds = await this.contractorScopesForReader(user, scopedSiteId);
     const pagination = page(Number(offset), Number(limit));
     const query = this.dataSource
       .getRepository(ContractorShiftAssignmentEntity)
       .createQueryBuilder('assignment')
       .where('assignment.site_id = :siteId', { siteId: scopedSiteId });
-    if (contractorId) query.andWhere('assignment.contractor_id = :contractorId', { contractorId });
+    if (contractorIds)
+      query.andWhere('assignment.contractor_id IN (:...contractorIds)', { contractorIds });
     const [items, total] = await query
       .orderBy('assignment.createdAt', 'DESC')
       .addOrderBy('assignment.id', 'ASC')

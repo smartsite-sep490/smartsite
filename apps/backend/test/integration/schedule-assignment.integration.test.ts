@@ -36,6 +36,7 @@ test('team assignments: scope, finite recurrence, stale preview, concurrent retr
   await source.initialize();
   const siteId = randomUUID(),
     contractorId = randomUUID(),
+    secondContractorId = randomUUID(),
     repId = randomUUID(),
     teamId = randomUUID(),
     workerIds = [randomUUID(), randomUUID()],
@@ -49,7 +50,7 @@ test('team assignments: scope, finite recurrence, stale preview, concurrent retr
     displayName: 'Synthetic rep',
     isActive: true,
     mustChangePassword: false,
-    roleAssignments: [{ role: UserRole.SITE_MANAGER, siteId }],
+    roleAssignments: [{ role: UserRole.CONTRACTOR_REPRESENTATIVE, siteId }],
   };
   const notifications = new SchedulingNotificationService(source);
   const service = new ScheduleAssignmentService(source, notifications);
@@ -70,7 +71,7 @@ test('team assignments: scope, finite recurrence, stale preview, concurrent retr
     });
     await source
       .getRepository(UserRoleAssignmentEntity)
-      .save({ id: randomUUID(), userId: repId, siteId, role: UserRole.SITE_MANAGER });
+      .save({ id: randomUUID(), userId: repId, siteId, role: UserRole.CONTRACTOR_REPRESENTATIVE });
     await source.getRepository(ContractorSiteParticipationEntity).save({
       id: randomUUID(),
       siteId,
@@ -184,6 +185,121 @@ test('team assignments: scope, finite recurrence, stale preview, concurrent retr
     const preview = await service.preview(rep, siteId, input);
     assert.equal(preview.assignmentCount, 40);
     assert.equal(preview.conflicts.length, 0);
+    const forbidden = (error: unknown) =>
+      error instanceof Error &&
+      'getStatus' in error &&
+      (error as { getStatus(): number }).getStatus() === 403;
+    // Persisted authorization must be checked even when the token still has the role.
+    await source.getRepository(UserEntity).update(repId, { isActive: false });
+    await assert.rejects(service.preview(rep, siteId, input), forbidden);
+    await source.getRepository(UserEntity).update(repId, { isActive: true });
+    await source.getRepository(ContractorRepresentativeAssignmentEntity).delete({ userId: repId });
+    await assert.rejects(service.preview(rep, siteId, input), forbidden);
+    await source.getRepository(ContractorRepresentativeAssignmentEntity).save({
+      id: randomUUID(),
+      siteId,
+      contractorId,
+      userId: repId,
+    });
+    await source
+      .getRepository(ContractorSiteParticipationEntity)
+      .update({ siteId, contractorId }, { isActive: false });
+    await assert.rejects(service.preview(rep, siteId, input), forbidden);
+    await source
+      .getRepository(ContractorSiteParticipationEntity)
+      .update({ siteId, contractorId }, { isActive: true });
+    await source.getRepository(ContractorShiftAssignmentEntity).delete({ siteId, shiftId });
+    await assert.rejects(service.preview(rep, siteId, input));
+    await source.getRepository(ContractorShiftAssignmentEntity).save({
+      id: randomUUID(),
+      siteId,
+      contractorId,
+      shiftId,
+    });
+    const reader = new ScheduleConfigurationService(source);
+    // A representative's second contractor must have its own granted shifts available.
+    await source.getRepository(ContractorEntity).save({
+      id: secondContractorId,
+      code: secondContractorId,
+      name: 'Second contractor',
+      isActive: true,
+    });
+    await source.getRepository(ContractorSiteParticipationEntity).save({
+      id: randomUUID(),
+      siteId,
+      contractorId: secondContractorId,
+      isActive: true,
+      validFrom: new Date('2020-01-01'),
+      validUntil: null,
+    });
+    await source.getRepository(ContractorRepresentativeAssignmentEntity).save({
+      id: randomUUID(),
+      siteId,
+      contractorId: secondContractorId,
+      userId: repId,
+    });
+    await source
+      .getRepository(ContractorShiftAssignmentEntity)
+      .delete({ siteId, shiftId: otherShift });
+    await source.getRepository(ContractorShiftAssignmentEntity).save({
+      id: randomUUID(),
+      siteId,
+      contractorId: secondContractorId,
+      shiftId: otherShift,
+    });
+    assert.deepEqual(
+      (await reader.listShifts(rep, siteId)).items.map((s) => s.id).sort(),
+      [shiftId, otherShift].sort(),
+    );
+    assert.ok(
+      (await reader.listShiftContractorAssignments(rep, siteId)).items.some(
+        (a) => a.contractorId === secondContractorId && a.shiftId === otherShift,
+      ),
+    );
+    await source.getRepository(ContractorRepresentativeAssignmentEntity).delete({
+      siteId,
+      contractorId: secondContractorId,
+      userId: repId,
+    });
+    assert.deepEqual(
+      (await reader.listShifts(rep, siteId)).items.map((s) => s.id),
+      [shiftId],
+    );
+    assert.equal((await reader.listShiftContractorAssignments(rep, siteId)).items.length, 1);
+    await source.getRepository(ContractorShiftAssignmentEntity).save({
+      id: randomUUID(),
+      siteId,
+      contractorId,
+      shiftId: otherShift,
+    });
+    const directInput = { workerId: workerIds[0]!, shiftId, workDate: '2030-12-02' };
+    const direct = await reader.createWorkerSchedule(rep, siteId, versionId, directInput);
+    assert.equal(direct.workerId, workerIds[0]);
+    await source.getRepository(WorkerScheduleEntity).delete(direct.id);
+    await source.getRepository(ContractorRepresentativeAssignmentEntity).delete({ userId: repId });
+    await assert.rejects(
+      reader.createWorkerSchedule(rep, siteId, versionId, directInput),
+      forbidden,
+    );
+    await source.getRepository(ContractorRepresentativeAssignmentEntity).save({
+      id: randomUUID(),
+      siteId,
+      contractorId,
+      userId: repId,
+    });
+    await source
+      .getRepository(UserRoleAssignmentEntity)
+      .update({ userId: repId, siteId }, { role: UserRole.SITE_MANAGER });
+    const manager = { ...rep, roleAssignments: [{ siteId, role: UserRole.SITE_MANAGER }] };
+    assert.equal((await service.list(manager, siteId, contractorId)).total, 0);
+    await assert.rejects(service.preview(manager, siteId, input), forbidden);
+    await assert.rejects(
+      reader.createWorkerSchedule(manager, siteId, versionId, directInput),
+      forbidden,
+    );
+    await source
+      .getRepository(UserRoleAssignmentEntity)
+      .update({ userId: repId, siteId }, { role: UserRole.CONTRACTOR_REPRESENTATIVE });
     await assert.rejects(service.preview({ ...rep, id: randomUUID() }, siteId, input));
     await assert.rejects(service.preview(rep, randomUUID(), input));
     await assert.rejects(service.preview(rep, siteId, { ...input, contractorId: randomUUID() }));
@@ -214,11 +330,10 @@ test('team assignments: scope, finite recurrence, stale preview, concurrent retr
     const batch = concurrent[0]!;
     assert.equal(concurrent[1]!.id, batch.id);
     assert.equal(await source.getRepository(WorkerScheduleEntity).countBy({ siteId }), 40);
-    const reader = new ScheduleConfigurationService(source);
     assert.equal((await reader.listWorkerSchedules(rep, siteId, { contractorId })).total, 40);
-    assert.equal(
-      (await reader.listWorkerSchedules(rep, siteId, { contractorId: randomUUID() })).total,
-      0,
+    await assert.rejects(
+      reader.listWorkerSchedules(rep, siteId, { contractorId: randomUUID() }),
+      forbidden,
     );
     await assert.rejects(
       reader.listWorkerSchedules({ ...rep, roleAssignments: [] }, siteId, { contractorId }),
@@ -595,6 +710,7 @@ test('team assignments: scope, finite recurrence, stale preview, concurrent retr
     await source.getRepository(UserEntity).delete(repId);
     await source.getRepository(UserEntity).delete(workerUserIds);
     await source.getRepository(ContractorEntity).delete(contractorId);
+    await source.getRepository(ContractorEntity).delete(secondContractorId);
     await source.getRepository(SiteEntity).delete(siteId);
     await source.destroy();
   }
