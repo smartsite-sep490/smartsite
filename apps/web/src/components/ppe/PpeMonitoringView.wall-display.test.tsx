@@ -84,15 +84,15 @@ vi.mock('../cameras/useScopedCameraPreview', () => ({
   },
 }));
 
+const baseSite: SiteResponse = {
+  id: 'site-alpha',
+  code: 'SITE-A',
+  name: 'Alpha Construction Site',
+  createdAt: '2026-09-30T00:00:00Z',
+};
+
 const mockSitesList: Page<SiteResponse> = {
-  items: [
-    {
-      id: 'site-alpha',
-      code: 'SITE-A',
-      name: 'Alpha Construction Site',
-      createdAt: '2026-09-30T00:00:00Z',
-    },
-  ],
+  items: [baseSite],
   total: 1,
 };
 
@@ -107,11 +107,16 @@ const baseCamera: CameraResponse = {
   createdAt: '2026-09-30T00:00:00Z',
 };
 
+const secondCamera: CameraResponse = {
+  ...baseCamera,
+  id: 'cam-2',
+  externalId: 'CAM-02',
+  code: 'CAM-02',
+  name: 'Camera 02',
+};
+
 const mockCamerasList: Page<CameraResponse> = {
-  items: [
-    baseCamera,
-    { ...baseCamera, id: 'cam-2', externalId: 'CAM-02', code: 'CAM-02', name: 'Camera 02' },
-  ],
+  items: [baseCamera, secondCamera],
   total: 2,
 };
 
@@ -231,9 +236,12 @@ describe('PpeMonitoringView 4-Source Wall Active Snapshot Binding (Audit Issue 1
     await user.click(screen.getByTestId('toggle-view-wall'));
     await screen.findByTestId('four-source-wall-grid');
 
-    const rightCard = within(screen.getByTestId('ai-detection-panel'));
     expect(screen.getByText('Live Monitored')).not.toBeNull();
     expect(screen.queryByText('Feed Standby')).toBeNull();
+    expect(screen.getByText('Live AI Observations Active')).not.toBeNull();
+
+    await user.click(screen.getByTestId('open-evidence-details-btn'));
+    const rightCard = within(screen.getByTestId('ai-detection-panel'));
     expect(rightCard.getByTestId('ai-evidence-badge').textContent).toBe(
       '00000000-0000-4000-8000-000000000001',
     );
@@ -249,7 +257,6 @@ describe('PpeMonitoringView 4-Source Wall Active Snapshot Binding (Audit Issue 1
     expect(episodeWarning.textContent).toContain('Current snapshot: Unknown');
     expect(rightCard.getByText('MISSING PPE DETECTED')).not.toBeNull();
     expect(rightCard.getByText('Missing PPE observed in snapshot.')).not.toBeNull();
-    expect(screen.getByText('Live AI Observations Active')).not.toBeNull();
     expect(
       (rightCard.getByRole('button', { name: 'Review Alert' }) as HTMLButtonElement).disabled,
     ).toBe(false);
@@ -290,11 +297,18 @@ describe('PpeMonitoringView 4-Source Wall Active Snapshot Binding (Audit Issue 1
     await screen.findByTestId('four-source-wall-grid');
     await user.click(screen.getByTestId('focus-btn-cam-2'));
 
-    const rightCard = within(screen.getByTestId('ai-detection-panel'));
     await waitFor(() => {
       expect(screen.getByText('Replay Mode')).not.toBeNull();
     });
     expect(screen.queryByText('Feed Standby')).toBeNull();
+    expect(screen.getByText('Replay AI Observations Active')).not.toBeNull();
+    expect(screen.queryByText('Live AI Observations Active')).toBeNull();
+    expect(
+      screen.getByText(/Technical PPE detections are rendered from recorded video replay stream/i),
+    ).not.toBeNull();
+
+    await user.click(screen.getByTestId('open-evidence-details-btn'));
+    const rightCard = within(screen.getByTestId('ai-detection-panel'));
     expect(rightCard.getByTestId('ai-evidence-badge').textContent).toBe(
       '00000000-0000-4000-8000-000000000002',
     );
@@ -303,11 +317,6 @@ describe('PpeMonitoringView 4-Source Wall Active Snapshot Binding (Audit Issue 1
     expect(rightCard.getByText('SCANNING SNAPSHOT')).not.toBeNull();
     expect(
       rightCard.getByText('Rendering recorded video replay stream from Camera Preview API.'),
-    ).not.toBeNull();
-    expect(screen.getByText('Replay AI Observations Active')).not.toBeNull();
-    expect(screen.queryByText('Live AI Observations Active')).toBeNull();
-    expect(
-      screen.getByText(/Technical PPE detections are rendered from recorded video replay stream/i),
     ).not.toBeNull();
   });
 
@@ -334,26 +343,41 @@ describe('PpeMonitoringView 4-Source Wall Active Snapshot Binding (Audit Issue 1
     await user.click(screen.getByTestId('toggle-view-wall'));
     await screen.findByTestId('four-source-wall-grid');
 
-    const rightCard = within(screen.getByTestId('ai-detection-panel'));
     expect(screen.getByText('Live Monitored')).not.toBeNull();
-    expect(rightCard.getAllByText('Track #7').length).toBeGreaterThan(0);
+    await user.click(screen.getByTestId('open-evidence-details-btn'));
+    expect(
+      within(screen.getByTestId('ai-detection-panel')).getAllByText('Track #7').length,
+    ).toBeGreaterThan(0);
+
+    await user.click(screen.getByRole('button', { name: 'Close dialog' }));
+    expect(screen.queryByTestId('ai-detection-panel')).toBeNull();
 
     await user.click(screen.getByTestId('focus-btn-cam-2'));
     await waitFor(() => {
       expect(screen.getByText('Feed Standby')).not.toBeNull();
     });
-    expect(rightCard.getByTestId('ai-evidence-badge').textContent).toBe('AI EVIDENCE UNAVAILABLE');
-    expect(rightCard.getByText('AI snapshot unavailable')).not.toBeNull();
-    expect(rightCard.getByTestId('ai-snapshot-unavailable-msg')).not.toBeNull();
-    expect(rightCard.queryByText('Track #7')).toBeNull();
+
+    await user.click(screen.getByTestId('open-evidence-details-btn'));
+    const unavailableCard = within(screen.getByTestId('ai-detection-panel'));
+    expect(unavailableCard.getByTestId('ai-evidence-badge').textContent).toBe(
+      'AI EVIDENCE UNAVAILABLE',
+    );
+    expect(unavailableCard.getByText('AI snapshot unavailable')).not.toBeNull();
+    expect(unavailableCard.getByTestId('ai-snapshot-unavailable-msg')).not.toBeNull();
+    expect(unavailableCard.queryByText('Track #7')).toBeNull();
     expect(
-      (rightCard.getByRole('button', { name: 'Review Alert' }) as HTMLButtonElement).disabled,
+      (unavailableCard.getByRole('button', { name: 'Review Alert' }) as HTMLButtonElement).disabled,
     ).toBe(true);
 
+    await user.click(screen.getByRole('button', { name: 'Close dialog' }));
     await user.click(screen.getByTestId('focus-btn-cam-1'));
     await waitFor(() => {
       expect(screen.getByText('Live Monitored')).not.toBeNull();
     });
+    await user.click(screen.getByTestId('open-evidence-details-btn'));
+    expect(
+      within(screen.getByTestId('ai-detection-panel')).getAllByText('Track #7').length,
+    ).toBeGreaterThan(0);
 
     vi.spyOn(SmartSiteManagementClient.prototype, 'listPreviewCameras').mockImplementation(
       () => new Promise(() => {}),
@@ -371,8 +395,18 @@ describe('PpeMonitoringView 4-Source Wall Active Snapshot Binding (Audit Issue 1
     );
 
     expect(screen.getByText('Feed Standby')).not.toBeNull();
-    expect(rightCard.getByTestId('ai-evidence-badge').textContent).toBe('AI EVIDENCE UNAVAILABLE');
+    expect(screen.queryByTestId('ai-detection-panel')).toBeNull();
     expect(screen.queryByText('Track #7')).toBeNull();
+
+    await user.click(screen.getByTestId('open-evidence-details-btn'));
+    const rotatedCard = within(screen.getByTestId('ai-detection-panel'));
+    expect(rotatedCard.getByTestId('ai-evidence-badge').textContent).toBe(
+      'AI EVIDENCE UNAVAILABLE',
+    );
+    expect(rotatedCard.queryByText('Track #7')).toBeNull();
+    expect(
+      (rotatedCard.getByRole('button', { name: 'Review Alert' }) as HTMLButtonElement).disabled,
+    ).toBe(true);
   });
 
   it('fails closed in 4-Source Wall mode when VITE_AI_WORK_PAUSED=true', async () => {
@@ -398,10 +432,76 @@ describe('PpeMonitoringView 4-Source Wall Active Snapshot Binding (Audit Issue 1
     expect(screen.getByText('AI Work Paused')).not.toBeNull();
     expect(screen.queryByText('Live Monitored')).toBeNull();
     expect(screen.queryByText('Replay Mode')).toBeNull();
-    expect(screen.getByTestId('ai-evidence-badge').textContent).toBe('AI WORK PAUSED');
-    expect(screen.getByTestId('ai-paused-empty-state')).not.toBeNull();
     expect(screen.getByTestId('wall-paused-cam-1')).not.toBeNull();
     expect(screen.queryByText('Track #7')).toBeNull();
+
+    await user.click(screen.getByTestId('open-evidence-details-btn'));
+    const pausedCard = within(screen.getByTestId('ai-detection-panel'));
+    expect(pausedCard.getByTestId('ai-evidence-badge').textContent).toBe('AI WORK PAUSED');
+    expect(pausedCard.getByTestId('ai-paused-empty-state')).not.toBeNull();
+    expect(pausedCard.queryByText('Track #7')).toBeNull();
     expect(previewStore.calls.every((call) => call.enabled === false)).toBe(true);
+  });
+
+  it('preserves 16:9 video-first wall viewport without max-h-[260px] cap, bounds long camera/site disclosure, and keeps focus/enlarge/evidence actions accessible', async () => {
+    const user = userEvent.setup();
+    const longCameraName =
+      'Camera 01 — North Tower Crane Perimeter High-Elevation Scaffold Assembly Sector Gate';
+    const longSiteName =
+      'Alpha Mega Industrial Construction Complex Phase II Structural Steel Sector';
+
+    vi.spyOn(SmartSiteManagementClient.prototype, 'listSites').mockResolvedValue({
+      items: [{ ...baseSite, name: longSiteName }],
+      total: 1,
+    });
+    vi.spyOn(SmartSiteManagementClient.prototype, 'listPreviewCameras').mockResolvedValue({
+      items: [{ ...baseCamera, name: longCameraName }, secondCamera],
+      total: 2,
+    });
+    previewStore.byCameraId['cam-1'] = {
+      preview: makePreview('CAM-01', []),
+      status: 'LIVE',
+      sourceKind: 'LIVE',
+    };
+    previewStore.byCameraId['cam-2'] = {
+      preview: null,
+      status: 'UNAVAILABLE',
+      sourceKind: null,
+    };
+
+    render(
+      <QueryClientProvider client={queryClient}>
+        <PpeMonitoringView sharedSession={officerSessionAlpha} />
+      </QueryClientProvider>,
+    );
+
+    await screen.findByRole('option', { name: new RegExp(longCameraName, 'i') });
+    await user.click(screen.getByTestId('toggle-view-wall'));
+
+    const grid = await screen.findByTestId('four-source-wall-grid');
+    expect(grid.className).toContain('items-start');
+
+    const tile1 = screen.getByTestId('wall-tile-cam-1');
+    expect(tile1.className).toContain('min-w-0');
+    expect(tile1.className).not.toContain('justify-between');
+
+    const videoViewport = screen.getByTestId('wall-video-viewport-cam-1');
+    expect(videoViewport.className).toContain('aspect-video');
+    expect(videoViewport.className).toContain('w-full');
+    expect(videoViewport.className).not.toContain('max-h-[260px]');
+
+    const unassignedSlot = screen.getByTestId('wall-unassigned-slot-3');
+    expect(unassignedSlot.className).toContain('aspect-video');
+    expect(unassignedSlot.className).not.toContain('max-h-[260px]');
+
+    const details = screen.getByTestId('wall-tile-details-cam-1');
+    const summary = within(details).getByText('Details');
+    await user.click(summary);
+    expect(details.hasAttribute('open')).toBe(true);
+    expect(within(details).getByText(longSiteName)).not.toBeNull();
+
+    expect(screen.getByTestId('focus-btn-cam-1').getAttribute('aria-pressed')).toBe('true');
+    expect(screen.getByTestId('enlarge-camera-btn-cam-1')).not.toBeNull();
+    expect(screen.getByTestId('tile-evidence-btn-cam-1')).not.toBeNull();
   });
 });

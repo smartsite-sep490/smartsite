@@ -175,7 +175,7 @@ export function FourSourceWallTile({
         camera: camera.name || camera.code,
       })}
       onClick={() => onSelect(camera.id)}
-      className={`relative rounded-2xl border transition-all flex flex-col justify-between overflow-hidden cursor-pointer select-none bg-[#0F141C] ${
+      className={`relative min-w-0 rounded-2xl border transition-all flex flex-col overflow-hidden cursor-pointer select-none bg-[#0F141C] ${
         isSelected
           ? 'border-[#0F172A] ring-2 ring-[#0F172A]/40 shadow-sm'
           : 'border-slate-800 hover:border-slate-700'
@@ -183,7 +183,7 @@ export function FourSourceWallTile({
     >
       {/* Top Header Bar — Concise camera display name + compact status */}
       <div className="relative z-10 px-3 py-2 bg-black/60 flex items-center justify-between text-white gap-2 pointer-events-none">
-        <div className="flex items-center gap-1.5 min-w-0 pr-1">
+        <div className="flex items-center gap-1.5 min-w-0 flex-1 pr-1">
           <span
             title={`${camera.name || camera.code} (${camera.code})`}
             className="font-bold text-xs tracking-wide text-white truncate"
@@ -237,8 +237,11 @@ export function FourSourceWallTile({
         </div>
       </div>
 
-      {/* Video Canvas Viewport — Primary camera image, uniform 16:9 aspect ratio, bounded height */}
-      <div className="relative aspect-video w-full max-h-[260px] bg-[#0F141C]">
+      {/* Video Canvas Viewport — Primary camera image, uniform 16:9 aspect ratio */}
+      <div
+        data-testid={`wall-video-viewport-${camera.id}`}
+        className="relative aspect-video w-full bg-[#0F141C]"
+      >
         {isAiWorkPaused ? (
           <div
             data-testid={`wall-paused-${camera.id}`}
@@ -306,7 +309,7 @@ export function FourSourceWallTile({
 
         {/* Empty live frame indicator: offline/empty cannot say safe — Strict Person detections terminology */}
         {preview && detectionsCount === 0 && (
-          <div className="absolute inset-x-2 bottom-8 flex justify-center pointer-events-none z-10">
+          <div className="absolute inset-x-2 bottom-2 flex justify-center pointer-events-none z-10">
             <div className="bg-black/70 px-2.5 py-1 rounded text-white/80 text-xs font-medium text-center truncate max-w-full">
               {t('ppe.wall.noPersonDetectionsDisclaimer')}
             </div>
@@ -316,8 +319,8 @@ export function FourSourceWallTile({
 
       {/* Bottom Summary Bar & Native Details Disclosure */}
       <div className="relative z-10 px-3 py-2 bg-black/60 flex flex-col gap-2 text-white text-xs">
-        <div className="flex flex-wrap items-center justify-between gap-2">
-          <div className="flex flex-wrap items-center gap-2 text-white/80 pointer-events-auto">
+        <div className="flex flex-wrap items-start justify-between gap-2">
+          <div className="flex flex-wrap items-center gap-2 min-w-0 text-white/80 pointer-events-auto">
             {!isAiWorkPaused && detectionsCount > 0 && (
               <span className="text-emerald-300 font-semibold text-xs">
                 {t('ppe.wall.personDetectionsCount', { count: detectionsCount })}
@@ -327,12 +330,12 @@ export function FourSourceWallTile({
             <details
               data-testid={`wall-tile-details-${camera.id}`}
               onClick={(e) => e.stopPropagation()}
-              className="text-xs text-white/80"
+              className="text-xs text-white/80 min-w-0"
             >
               <summary className="inline-flex items-center cursor-pointer font-semibold text-xs text-white/90 hover:text-white select-none px-3 py-2 rounded-lg bg-white/15 hover:bg-white/25 transition-colors">
                 {t('ppe.common.details')}
               </summary>
-              <div className="mt-2 pt-2 border-t border-white/15 space-y-1.5">
+              <div className="mt-2 pt-2 border-t border-white/15 space-y-1.5 max-h-32 overflow-y-auto overscroll-contain pr-1">
                 <CameraObservationZones
                   siteCode={siteCode}
                   siteName={siteName}
@@ -484,7 +487,7 @@ export function FourSourceWall({
   return (
     <div
       data-testid="four-source-wall-grid"
-      className="grid grid-cols-1 md:grid-cols-2 gap-3.5 w-full min-w-0"
+      className="grid grid-cols-1 md:grid-cols-2 items-start gap-3.5 w-full min-w-0"
     >
       {activeCameras.map((camera) => (
         <FourSourceWallTile
@@ -521,7 +524,7 @@ export function FourSourceWall({
           <div
             key={`unassigned-slot-${slotNumber}`}
             data-testid={`wall-unassigned-slot-${slotNumber}`}
-            className="rounded-2xl border border-dashed border-slate-200 bg-[#F8FAFC] aspect-video max-h-[260px] flex flex-col items-center justify-center p-4 text-center select-none"
+            className="rounded-2xl border border-dashed border-slate-200 bg-[#F8FAFC] aspect-video w-full flex flex-col items-center justify-center p-4 text-center select-none"
           >
             <div className="w-8 h-8 rounded-full bg-white border border-slate-200 shadow-xs flex items-center justify-center text-slate-600 mb-2 font-mono text-xs font-semibold">
               {slotNumber}
