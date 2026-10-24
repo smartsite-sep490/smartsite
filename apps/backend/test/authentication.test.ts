@@ -3,9 +3,10 @@ import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
 import { test } from 'node:test';
 import { ExecutionContext, UnauthorizedException, ValidationPipe } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
 import { JwtService } from '@nestjs/jwt';
 import { ThrottlerStorageService } from '@nestjs/throttler';
-import { validateEnvironment } from '../src/config/environment.js';
+import { validateEnvironment, type BackendEnvironment } from '../src/config/environment.js';
 import {
   AdminGuard,
   ChangePasswordThrottleGuard,
@@ -132,98 +133,109 @@ test('refresh tokens expose only a session id and hash their random secret', () 
     assert.throws(() => tokens.parseRefreshToken(malformed), UnauthorizedException);
 });
 
-test('auth controller separates Web cookies from Mobile refresh-token JSON', async () => {
-  const result = {
-    accessToken: 'access.jwt.value',
-    tokenType: 'Bearer' as const,
-    accessTokenExpiresAt: new Date(Date.now() + 900_000).toISOString(),
-    refreshToken: `${randomUUID()}.${'A'.repeat(43)}`,
-    refreshTokenExpiresAt: new Date(Date.now() + 86_400_000).toISOString(),
-    user: {
-      id: randomUUID(),
-      username: 'admin',
-      displayName: 'Admin',
-      roleAssignments: [{ role: UserRole.ADMIN, siteId: null }],
-      isActive: true,
-      mustChangePassword: false,
-    },
-  };
-  const auth = {
-    login: async () => result,
-    refresh: async () => result,
-    logout: async () => undefined,
-  };
-  const controller = new AuthController(auth as never, createTestConfig());
-  const cookies: Array<{ name: string; value: string; options: Record<string, unknown> }> = [];
-  const response = {
-    cookie: (name: string, value: string, options: Record<string, unknown>) => {
-      cookies.push({ name, value, options });
-    },
-    clearCookie: () => undefined,
-  };
-  const web = await controller.login(
-    { headers: { origin: 'http://localhost:5173' } } as never,
-    response as never,
-    { username: 'admin', password: 'password', clientType: AuthClientType.WEB },
-  );
-  assert.equal('refreshToken' in web, false);
-  assert.deepEqual(
-    {
-      name: cookies[0]?.name,
-      httpOnly: cookies[0]?.options.httpOnly,
-      sameSite: cookies[0]?.options.sameSite,
-      secure: cookies[0]?.options.secure,
-      path: cookies[0]?.options.path,
-    },
-    {
-      name: 'smartsite_refresh',
-      httpOnly: true,
-      sameSite: 'strict',
-      secure: false,
-      path: '/api/v1/auth',
-    },
-  );
-  const mobile = await controller.login({ headers: {} } as never, response as never, {
-    username: 'admin',
-    password: 'password',
-    clientType: AuthClientType.MOBILE,
-  });
-  assert.equal(mobile.refreshToken, result.refreshToken);
-  await assert.rejects(
-    controller.login(
-      { headers: { origin: 'https://lookalike.invalid' } } as never,
+for (const { environment, sameSite, secure } of [
+  { environment: 'production', sameSite: 'none', secure: true },
+  { environment: 'development', sameSite: 'strict', secure: false },
+  { environment: 'test', sameSite: 'strict', secure: false },
+] as const) {
+  test(`auth controller preserves cookie lifecycle and client boundaries in ${environment}`, async () => {
+    const result = {
+      accessToken: 'access.jwt.value',
+      tokenType: 'Bearer' as const,
+      accessTokenExpiresAt: new Date(Date.now() + 900_000).toISOString(),
+      refreshToken: `${randomUUID()}.${'A'.repeat(43)}`,
+      refreshTokenExpiresAt: new Date(Date.now() + 86_400_000).toISOString(),
+      user: {
+        id: randomUUID(),
+        username: 'admin',
+        displayName: 'Admin',
+        roleAssignments: [{ role: UserRole.ADMIN, siteId: null }],
+        isActive: true,
+        mustChangePassword: false,
+      },
+    };
+    const auth = {
+      login: async () => result,
+      refresh: async () => result,
+      logout: async () => undefined,
+      changePassword: async () => undefined,
+    };
+    const config = new ConfigService<BackendEnvironment, true>(
+      validateEnvironment({
+        NODE_ENV: environment,
+        DATABASE_URL:
+          'postgresql://smartsite_test:smartsite_test_only@localhost:5433/smartsite_test',
+        CORS_ORIGINS: 'http://localhost:5173',
+        AUTH_JWT_SECRET: 'cookie-test-jwt-secret-at-least-32-characters',
+        SMARTSITE_AI_SERVICE_TOKEN: 'cookie-test-service-token-at-least-32-characters',
+      }),
+    );
+    const controller = new AuthController(auth as never, config);
+    const cookies: Array<{ name: string; value: string; options: Record<string, unknown> }> = [];
+    const cleared: Array<{ name: string; options: Record<string, unknown> }> = [];
+    const response = {
+      cookie: (name: string, value: string, options: Record<string, unknown>) => {
+        cookies.push({ name, value, options });
+      },
+      clearCookie: (name: string, options: Record<string, unknown>) => {
+        cleared.push({ name, options });
+      },
+    };
+    const web = await controller.login(
+      { headers: { origin: 'http://localhost:5173' } } as never,
       response as never,
       { username: 'admin', password: 'password', clientType: AuthClientType.WEB },
-    ),
-    { status: 403 },
-  );
-  await assert.rejects(
-    controller.refresh(
-      {
-        headers: {
-          origin: 'http://localhost:5173',
-          cookie: `smartsite_refresh=${result.refreshToken}`,
-        },
-      } as never,
-      response as never,
-      { clientType: AuthClientType.WEB, refreshToken: result.refreshToken },
-    ),
-    { status: 401 },
-  );
-  await assert.rejects(
-    controller.logout(
-      {
-        headers: {
-          origin: 'http://localhost:5173',
-          cookie: `smartsite_refresh=${result.refreshToken}`,
-        },
-      } as never,
-      response as never,
-      { clientType: AuthClientType.WEB, refreshToken: result.refreshToken },
-    ),
-    { status: 401 },
-  );
-  for (const refreshToken of ['', null]) {
+    );
+    assert.equal('refreshToken' in web, false);
+    const cookieOptions = { httpOnly: true, sameSite, secure, path: '/api/v1/auth' };
+    const issuedCookie = {
+      name: 'smartsite_refresh',
+      value: result.refreshToken,
+      options: { ...cookieOptions, expires: new Date(result.refreshTokenExpiresAt) },
+    };
+    assert.deepEqual(cookies, [issuedCookie]);
+    const mobile = await controller.login({ headers: {} } as never, response as never, {
+      username: 'admin',
+      password: 'password',
+      clientType: AuthClientType.MOBILE,
+    });
+    assert.equal(mobile.refreshToken, result.refreshToken);
+    assert.equal(cookies.length, 1);
+    await assert.rejects(
+      controller.login(
+        { headers: { origin: 'https://lookalike.invalid' } } as never,
+        response as never,
+        { username: 'admin', password: 'password', clientType: AuthClientType.WEB },
+      ),
+      { status: 403 },
+    );
+    for (const origin of [undefined, 'https://lookalike.invalid']) {
+      const request = { headers: { origin, cookie: `smartsite_refresh=${result.refreshToken}` } };
+      await assert.rejects(
+        controller.login(request as never, response as never, {
+          username: 'admin',
+          password: 'password',
+          clientType: AuthClientType.WEB,
+        }),
+        { status: 403 },
+      );
+      await assert.rejects(
+        controller.refresh(request as never, response as never, { clientType: AuthClientType.WEB }),
+        { status: 403 },
+      );
+      await assert.rejects(
+        controller.logout(request as never, response as never, { clientType: AuthClientType.WEB }),
+        { status: 403 },
+      );
+    }
+    await assert.rejects(
+      controller.refresh(
+        { headers: { origin: 'http://localhost:5173' } } as never,
+        response as never,
+        { clientType: AuthClientType.WEB },
+      ),
+      { status: 401 },
+    );
     await assert.rejects(
       controller.refresh(
         {
@@ -233,7 +245,7 @@ test('auth controller separates Web cookies from Mobile refresh-token JSON', asy
           },
         } as never,
         response as never,
-        { clientType: AuthClientType.WEB, refreshToken } as never,
+        { clientType: AuthClientType.WEB, refreshToken: result.refreshToken },
       ),
       { status: 401 },
     );
@@ -246,41 +258,101 @@ test('auth controller separates Web cookies from Mobile refresh-token JSON', asy
           },
         } as never,
         response as never,
-        { clientType: AuthClientType.WEB, refreshToken } as never,
+        { clientType: AuthClientType.WEB, refreshToken: result.refreshToken },
       ),
       { status: 401 },
     );
-  }
-  await assert.rejects(
-    controller.refresh(
+    for (const refreshToken of ['', null]) {
+      await assert.rejects(
+        controller.refresh(
+          {
+            headers: {
+              origin: 'http://localhost:5173',
+              cookie: `smartsite_refresh=${result.refreshToken}`,
+            },
+          } as never,
+          response as never,
+          { clientType: AuthClientType.WEB, refreshToken } as never,
+        ),
+        { status: 401 },
+      );
+      await assert.rejects(
+        controller.logout(
+          {
+            headers: {
+              origin: 'http://localhost:5173',
+              cookie: `smartsite_refresh=${result.refreshToken}`,
+            },
+          } as never,
+          response as never,
+          { clientType: AuthClientType.WEB, refreshToken } as never,
+        ),
+        { status: 401 },
+      );
+    }
+    await assert.rejects(
+      controller.refresh(
+        {
+          headers: {
+            origin: 'http://localhost:5173',
+            cookie: `smartsite_refresh=${'R'.repeat(81)}`,
+          },
+        } as never,
+        response as never,
+        { clientType: AuthClientType.WEB },
+      ),
+      { status: 401 },
+    );
+    const webRefresh = await controller.refresh(
       {
         headers: {
           origin: 'http://localhost:5173',
-          cookie: `smartsite_refresh=${'R'.repeat(81)}`,
+          cookie: `smartsite_refresh=${result.refreshToken}`,
         },
       } as never,
       response as never,
       { clientType: AuthClientType.WEB },
-    ),
-    { status: 401 },
-  );
-  const webRefresh = await controller.refresh(
-    {
-      headers: {
-        origin: 'http://localhost:5173',
-        cookie: `smartsite_refresh=${result.refreshToken}`,
-      },
-    } as never,
-    response as never,
-    { clientType: AuthClientType.WEB },
-  );
-  assert.equal('refreshToken' in webRefresh, false);
-  const mobileRefresh = await controller.refresh({ headers: {} } as never, response as never, {
-    clientType: AuthClientType.MOBILE,
-    refreshToken: result.refreshToken,
+    );
+    assert.equal('refreshToken' in webRefresh, false);
+    assert.deepEqual(cookies, [issuedCookie, issuedCookie]);
+    const mobileRefresh = await controller.refresh({ headers: {} } as never, response as never, {
+      clientType: AuthClientType.MOBILE,
+      refreshToken: result.refreshToken,
+    });
+    assert.equal(mobileRefresh.refreshToken, result.refreshToken);
+    assert.equal(cookies.length, 2);
+
+    await controller.logout(
+      {
+        headers: {
+          origin: 'http://localhost:5173',
+          cookie: `smartsite_refresh=${result.refreshToken}`,
+        },
+      } as never,
+      response as never,
+      { clientType: AuthClientType.WEB },
+    );
+    await controller.changePassword(
+      { user: result.user, clientType: AuthClientType.WEB } as never,
+      response as never,
+      { currentPassword: 'password', newPassword: 'NewPassword123!' },
+    );
+    assert.deepEqual(cleared, [
+      { name: 'smartsite_refresh', options: cookieOptions },
+      { name: 'smartsite_refresh', options: cookieOptions },
+    ]);
+    await controller.logout({ headers: {} } as never, response as never, {
+      clientType: AuthClientType.MOBILE,
+      refreshToken: result.refreshToken,
+    });
+    await controller.changePassword(
+      { user: result.user, clientType: AuthClientType.MOBILE } as never,
+      response as never,
+      { currentPassword: 'password', newPassword: 'NewPassword123!' },
+    );
+    assert.equal(cleared.length, 2);
   });
-  assert.equal(mobileRefresh.refreshToken, result.refreshToken);
-});
+}
 
 test('auth request bodies reject invalid security-sensitive fields and unknown fields', async () => {
   const pipe = new ValidationPipe({
