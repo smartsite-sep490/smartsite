@@ -229,7 +229,15 @@ test('command reuse binds actor/body/subject; wrong scope and changed media neve
     await assert.rejects(f.decide(input, 0, f.actorIds[1]), publicError('CONFLICT'));
     await assert.rejects(f.decide(input, 1), publicError('CONFLICT'));
     await assert.rejects(
-      f.service.decide(f.otherSiteId, f.alertIds[0]!, f.eventId, 0, f.actorIds[0]!, f.resolve(1)),
+      f.service.decide(
+        f.otherSiteId,
+        f.alertIds[0]!,
+        f.eventId,
+        0,
+        f.actorIds[0]!,
+        f.resolve(1),
+        async () => undefined,
+      ),
       publicError('NOT_FOUND'),
     );
     await writeFile(f.filePath, Buffer.from([0xff, 0xd8, 0x02, 0xff, 0xd9]));
@@ -245,7 +253,15 @@ test('unavailable/missing/inactive Worker reader fails closed and preserves empt
   try {
     const unavailable = new ObservationIdentityResolutionService(dataSource, f.evidence);
     await assert.rejects(
-      unavailable.decide(f.siteId, f.alertIds[0]!, f.eventId, 0, f.actorIds[0]!, f.resolve()),
+      unavailable.decide(
+        f.siteId,
+        f.alertIds[0]!,
+        f.eventId,
+        0,
+        f.actorIds[0]!,
+        f.resolve(),
+        async () => undefined,
+      ),
       publicError('SERVICE_UNAVAILABLE'),
     );
     await assert.rejects(f.decide(f.resolve(0, randomUUID())), publicError('NOT_FOUND'));
@@ -398,6 +414,7 @@ test('Worker row remains locked until resolution transaction commits', async () 
     0,
     f.actorIds[0]!,
     f.resolve(),
+    async () => undefined,
   );
   try {
     await locked;

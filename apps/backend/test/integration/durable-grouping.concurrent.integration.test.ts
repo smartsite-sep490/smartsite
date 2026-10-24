@@ -29,7 +29,7 @@ test('DurableGroupingService: 10 concurrent transactions with identical site/gro
     const configService = createTestConfig({ ALERT_COOLDOWN_SECONDS: String(60) });
     const service = new DurableGroupingService(
       configService,
-      new SchedulingNotificationService(dataSource),
+      new SchedulingNotificationService(source),
     );
 
     const siteId = randomUUID();
@@ -84,7 +84,7 @@ test('DurableGroupingService: preserves lastDetectedAt when out-of-order candida
     const configService = createTestConfig({ ALERT_COOLDOWN_SECONDS: String(60) });
     const service = new DurableGroupingService(
       configService,
-      new SchedulingNotificationService(dataSource),
+      new SchedulingNotificationService(source),
     );
 
     const siteId = randomUUID();
@@ -142,7 +142,7 @@ test('DurableGroupingService: cooldown boundary creates a new alert once cooldow
     const configService = createTestConfig({ ALERT_COOLDOWN_SECONDS: String(10) });
     const service = new DurableGroupingService(
       configService,
-      new SchedulingNotificationService(dataSource),
+      new SchedulingNotificationService(source),
     );
 
     const siteId = randomUUID();
@@ -213,7 +213,7 @@ test('DurableGroupingService: never reopens DISMISSED or CLOSED alerts and creat
     const configService = createTestConfig({ ALERT_COOLDOWN_SECONDS: String(60) });
     const service = new DurableGroupingService(
       configService,
-      new SchedulingNotificationService(dataSource),
+      new SchedulingNotificationService(source),
     );
 
     const siteId = randomUUID();
@@ -298,7 +298,7 @@ test('DurableGroupingService: preserves human workflow status (e.g. CONFIRMED) a
     const configService = createTestConfig({ ALERT_COOLDOWN_SECONDS: String(60) });
     const service = new DurableGroupingService(
       configService,
-      new SchedulingNotificationService(dataSource),
+      new SchedulingNotificationService(source),
     );
 
     const siteId = randomUUID();
@@ -362,7 +362,7 @@ test('DurableGroupingService: never overwrites existing identity evidence', asyn
     const configService = createTestConfig({ ALERT_COOLDOWN_SECONDS: String(60) });
     const service = new DurableGroupingService(
       configService,
-      new SchedulingNotificationService(dataSource),
+      new SchedulingNotificationService(source),
     );
 
     const siteId = randomUUID();
@@ -438,7 +438,7 @@ test('DurableGroupingService: preserves null candidateWorkerId and pre-existing 
     const configService = createTestConfig({ ALERT_COOLDOWN_SECONDS: String(60) });
     const service = new DurableGroupingService(
       configService,
-      new SchedulingNotificationService(dataSource),
+      new SchedulingNotificationService(source),
     );
 
     const siteId = randomUUID();
@@ -515,7 +515,7 @@ test('DurableGroupingService: delayed candidate at t=30s groups into matching op
     const configService = createTestConfig({ ALERT_COOLDOWN_SECONDS: String(60) });
     const service = new DurableGroupingService(
       configService,
-      new SchedulingNotificationService(dataSource),
+      new SchedulingNotificationService(source),
     );
 
     const siteId = randomUUID();
@@ -608,7 +608,7 @@ test('DurableGroupingService: human concurrent identity update is preserved and 
     const configService = createTestConfig({ ALERT_COOLDOWN_SECONDS: String(60) });
     const service = new DurableGroupingService(
       configService,
-      new SchedulingNotificationService(dataSource),
+      new SchedulingNotificationService(source),
     );
 
     const siteId = randomUUID();
@@ -709,7 +709,7 @@ test('DurableGroupingService: human concurrent alert closure is respected and gr
     const configService = createTestConfig({ ALERT_COOLDOWN_SECONDS: String(60) });
     const service = new DurableGroupingService(
       configService,
-      new SchedulingNotificationService(dataSource),
+      new SchedulingNotificationService(source),
     );
 
     const siteId = randomUUID();
@@ -807,7 +807,7 @@ test('DurableGroupingService: candidate matching newer alert completes without b
     const configService = createTestConfig({ ALERT_COOLDOWN_SECONDS: String(60) });
     const service = new DurableGroupingService(
       configService,
-      new SchedulingNotificationService(dataSource),
+      new SchedulingNotificationService(source),
     );
 
     const siteId = randomUUID();
@@ -909,7 +909,7 @@ test('DurableGroupingService: handles maximum safe integer ALERT_COOLDOWN_SECOND
     const configService = createTestConfig({ ALERT_COOLDOWN_SECONDS: String(maxSafeSeconds) });
     const service = new DurableGroupingService(
       configService,
-      new SchedulingNotificationService(dataSource),
+      new SchedulingNotificationService(source),
     );
 
     const siteId = randomUUID();
@@ -960,7 +960,7 @@ test('DurableGroupingService: locks only top ordered eligible alert with LIMIT 1
     const configService = createTestConfig({ ALERT_COOLDOWN_SECONDS: String(60) });
     const service = new DurableGroupingService(
       configService,
-      new SchedulingNotificationService(dataSource),
+      new SchedulingNotificationService(source),
     );
 
     const siteId = randomUUID();

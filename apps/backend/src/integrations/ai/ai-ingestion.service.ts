@@ -3,7 +3,11 @@ import { ConfigService } from '@nestjs/config';
 import type { BackendEnvironment } from '../../config/environment.js';
 import { DataSource, type EntityManager, QueryFailedError } from 'typeorm';
 import type { QueryDeepPartialEntity } from 'typeorm/query-builder/QueryPartialEntity.js';
-import { computeCanonicalPayloadHash, validateObservationEvent } from '@smartsite/contracts';
+import {
+  computeCanonicalPayloadHash,
+  validateEightFamilyObservationEvent,
+  validateObservationEvent,
+} from '@smartsite/contracts';
 import { EventProcessingStatus } from '../../database/entities/enums.js';
 import { AiObservationEventEntity } from '../../database/entities/ai-observation-event.entity.js';
 import { AlertDetectionMappingEntity } from '../../database/entities/alert-detection-mapping.entity.js';
@@ -18,6 +22,7 @@ import {
   type Observation,
 } from '../../modules/safety/alerts/alert-candidate-evaluator.js';
 import { DurableGroupingService } from '../../modules/safety/alerts/durable-grouping.service.js';
+import { resolveAlertObservationSubjects } from '../../modules/safety/alerts/alert-observation-subjects.js';
 import { isEventIdConflict } from './typeorm-error.js';
 import { PublicHttpException } from '../../common/http/public-http-exception.js';
 import {
@@ -26,6 +31,7 @@ import {
 } from '../../modules/zones/zone-entry-authorization.service.js';
 import type { ZoneAuthorizationResult } from '../../modules/zones/zone-authorization.interface.js';
 import { parseNormalizedCapturedAt } from '../../common/parse-normalized-captured-at.js';
+import { Mf06IngestionEnqueueService } from '../../modules/safety/assessments/mf06-ingestion-enqueue.service.js';
 export { parseNormalizedCapturedAt } from '../../common/parse-normalized-captured-at.js';
 
 export interface AiIngestionResult {
@@ -59,6 +65,7 @@ export class AiIngestionService {
     private readonly configService: ConfigService<BackendEnvironment, true>,
     @Optional() clock?: () => Date,
     @Optional() zoneEntryAuthorization?: ZoneEntryAuthorizationService,
+    @Optional() private readonly mf06Enqueue?: Mf06IngestionEnqueueService,
   ) {
     this.clock = clock ?? (() => new Date());
     this.zoneEntryAuthorization = zoneEntryAuthorization ?? new ZoneEntryAuthorizationService();
@@ -77,7 +84,13 @@ export class AiIngestionService {
 
   async ingestEvent(payload: unknown): Promise<AiIngestionResult> {
     // 1. Validate contract schema and semantic geometry (Spec §15.1, §16)
-    const validationResult = validateObservationEvent(payload);
+    const validationResult =
+      payload &&
+      typeof payload === 'object' &&
+      'schemaVersion' in payload &&
+      payload.schemaVersion === '1.3.0'
+        ? validateEightFamilyObservationEvent(payload)
+        : validateObservationEvent(payload);
     if (!validationResult.isValid) {
       throw new PublicHttpException(HttpStatus.BAD_REQUEST, {
         code: 'VALIDATION_FAILED',
@@ -118,9 +131,20 @@ export class AiIngestionService {
     }
 
     // 4. Same-transaction context resolution, raw preservation, and alert grouping
+    const enqueueEnabled = this.configService.get('MF06_ENQUEUE_ENABLED', { infer: true }) === true;
+    if (enqueueEnabled && !this.mf06Enqueue) {
+      throw new PublicHttpException(HttpStatus.SERVICE_UNAVAILABLE, {
+        code: 'AI_INGESTION_UNAVAILABLE',
+        message: 'AI ingestion is temporarily unavailable',
+      });
+    }
     try {
       return await this.dataSource.transaction(async (manager: EntityManager) => {
-        const camera = await this.contextResolver.resolveCamera(manager, event.cameraExternalId);
+        const camera = await this.contextResolver.resolveCamera(
+          manager,
+          event.cameraExternalId,
+          enqueueEnabled,
+        );
 
         let status: EventProcessingStatus;
         let note: string | null = null;
@@ -158,6 +182,7 @@ export class AiIngestionService {
                   event.cameraExternalId,
                   obs['regionId'],
                   obs['geometryVersion'],
+                  enqueueEnabled,
                 );
                 if (ctx) {
                   contextMap.set(key, ctx);
@@ -242,12 +267,16 @@ export class AiIngestionService {
           rawEvent as unknown as QueryDeepPartialEntity<AiObservationEventEntity>,
         );
 
+        // Only this successful INSERT path may enqueue; duplicate catch never backfills.
+        // Admission or enqueue failure rolls back raw/request/job and original side effects.
+        if (enqueueEnabled) await this.mf06Enqueue!.enqueueFresh(manager, rawEvent);
+
         for (const decision of zoneDecisions) {
           await this.zoneEntryAuthorization.record(manager, decision.input, decision.result);
         }
 
         // Group candidates and create AlertDetectionMapping only when PROCESSED
-        const alertIds: string[] = [];
+        const groupedCandidates: Array<{ alertId: string; trackId: number }> = [];
         if (status === EventProcessingStatus.PROCESSED && camera) {
           for (const candidate of candidates) {
             const alert = await this.durableGroupingService.groupCandidate(
@@ -256,15 +285,20 @@ export class AiIngestionService {
               candidate,
               capturedAt,
             );
-            alertIds.push(alert.id);
+            groupedCandidates.push({ alertId: alert.id, trackId: candidate.trackId });
           }
 
-          const uniqueAlertIds = Array.from(new Set(alertIds));
+          const subjects = resolveAlertObservationSubjects(
+            event.eventId,
+            event.observations as unknown as Observation[],
+            groupedCandidates,
+          );
           const mappingRepo = manager.getRepository(AlertDetectionMappingEntity);
-          for (const alertId of uniqueAlertIds) {
+          for (const [alertId, personObservationIndex] of subjects) {
             await mappingRepo.insert({
               alertId,
               eventId: event.eventId,
+              personObservationIndex,
             });
           }
         }
@@ -272,7 +306,7 @@ export class AiIngestionService {
         return {
           eventId: event.eventId,
           status,
-          alertIds: Array.from(new Set(alertIds)),
+          alertIds: Array.from(new Set(groupedCandidates.map((candidate) => candidate.alertId))),
         };
       });
     } catch (error) {

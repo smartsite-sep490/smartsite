@@ -1,4 +1,5 @@
 import { Module } from '@nestjs/common';
+import { DatabaseModule } from '../../database/database.module.js';
 import { WorkerDocumentsModule } from './documents/worker-documents.module.js';
 import { WorkforceDirectoryModule } from './directory/directory.module.js';
 import { WorkerAccountsModule } from './directory/worker-accounts.module.js';
@@ -12,6 +13,7 @@ import { WorkforceManagementModule } from './management/management.module.js';
 
 @Module({
   imports: [
+    DatabaseModule,
     WorkerDocumentsModule,
     WorkforceDirectoryModule,
     WorkerAccountsModule,
@@ -27,6 +29,7 @@ import { WorkforceManagementModule } from './management/management.module.js';
     WorkforceDirectoryModule,
     WorkforceNotificationsModule,
     WorkforceIdentityModule,
+    WorkforceAccessModule,
     WorkforceManagementModule,
   ],
 })

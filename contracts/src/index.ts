@@ -1,4 +1,24 @@
 export const CONTRACTS_VERSION = '1.0.0';
+export {
+  parseCameraPreviewFrame,
+  parseCameraPreviewResponse,
+  EXPERIMENTAL_OBJECT_CLASSES,
+} from './camera-preview.js';
+export type {
+  AccessSetupResponse,
+  GrantContractorZoneCommand,
+  GrantWorkerZoneCommand,
+} from './access-setup-api.js';
+
+export type {
+  CameraPreviewFrame,
+  CameraPreviewDetection,
+  CameraPreviewResponse,
+} from './camera-preview.js';
+
+export { PPE_ITEMS } from './ppe-items.js';
+export type { PpeItem } from './ppe-items.js';
+
 export type * from './attendance-reports-api.js';
 export type {
   AttendanceDayStatus,
@@ -34,6 +54,9 @@ export type {
 } from './qr-access-api.js';
 
 export * from './observation-identity-management.js';
+export { resolveEventLocalEpisodeSubject } from './safety-episode-subject.js';
+export type { EventLocalEpisodeSubject } from './safety-episode-subject.js';
+export * from './safety-episode-api.js';
 
 export { canonicalizeJson, computeCanonicalPayloadHash } from './hashing/canonical-hash.js';
 
@@ -42,6 +65,7 @@ export { validateGeometries } from './validation/geometry-validator.js';
 export type { ValidationIssue } from './validation/geometry-validator.js';
 
 export { validateObservationEvent } from './validation/schema-validator.js';
+export { validateEightFamilyObservationEvent } from './validation/schema-validator.js';
 
 export { validateCameraRegionConfiguration } from './validation/schema-validator.js';
 
@@ -140,6 +164,8 @@ export type {
   SchedulingNotificationTarget,
   PpeAlertNotificationEvent,
   PpeAlertNotificationMetadata,
+  ZoneAlertNotificationEvent,
+  ZoneAlertNotificationMetadata,
   SafetyAlertNotificationTarget,
   UserNotificationResponse,
   UserNotificationListResponse,
@@ -153,6 +179,19 @@ export type {
   ShiftRequestResponse,
   AbsenceRequestResponse,
 } from './management-api.js';
+export type {
+  Mf06AssessmentResponse,
+  Mf06AssessmentPage,
+  Mf06RequestStatusResponse,
+  Mf06RequestStatusPage,
+} from './mf06-assessment-api.js';
+export {
+  parseMf06AssessmentResponse,
+  parseMf06AssessmentPage,
+  parseMf06RequestStatusResponse,
+  parseMf06RequestStatusPage,
+} from './mf06-assessment-api.js';
+
 export * from './safety-workflow-api.js';
 export * from './access-flow-api.js';
 export * from './access-setup-api.js';
@@ -163,5 +202,7 @@ export * from './manager-overview-api.js';
 
 export * from './safety-overview-api.js';
 export * from './safety-checklist-api.js';
+export * from './camera-observation-zones.js';
+export * from './camera-configuration-image.js';
 export type * from './worker-documents-api.js';
 export { healthCertificateExpiry } from './worker-document-dates.js';

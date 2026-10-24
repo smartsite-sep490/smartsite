@@ -4,7 +4,11 @@ import { test } from 'node:test';
 import { DataSource, type EntityManager } from 'typeorm';
 import { CameraConfigurationService } from '../src/modules/cameras/camera-configuration.service.js';
 import { SiteConfigurationService } from '../src/modules/sites/site-configuration.service.js';
-import { ZoneConfigurationService } from '../src/modules/zones/zone-configuration.service.js';
+import {
+  CreateZoneCommand,
+  ZoneConfigurationService,
+} from '../src/modules/zones/zone-configuration.service.js';
+import { command } from '../src/common/configuration/commands.js';
 import { CameraEntity } from '../src/database/entities/camera.entity.js';
 import { CameraObservationRegionEntity } from '../src/database/entities/camera-observation-region.entity.js';
 import { CameraStatus, ZoneRestrictionPolicy, ZoneType } from '../src/database/entities/enums.js';
@@ -31,7 +35,7 @@ test('internal commands reject extra fields and unsupported PPE before database 
       name: 'Zone',
       type: ZoneType.RESTRICTED,
       restrictionPolicy: ZoneRestrictionPolicy.NONE,
-      requiredPpe: ['GLOVES'],
+      requiredPpe: ['MASK'],
     }),
     invalid,
   );
@@ -89,6 +93,17 @@ test('internal commands reject extra fields and unsupported PPE before database 
     );
 });
 
+test('zone commands accept the supported expanded PPE items', () => {
+  const value = command(CreateZoneCommand, {
+    code: 'Z',
+    name: 'Zone',
+    type: ZoneType.RESTRICTED,
+    restrictionPolicy: ZoneRestrictionPolicy.NONE,
+    requiredPpe: ['GLOVES', 'BOOTS', 'GOGGLES'],
+  });
+  assert.deepEqual(value.requiredPpe, ['GLOVES', 'BOOTS', 'GOGGLES']);
+});
+
 test('reactivating a region refuses to exceed 64 active regions', async () => {
   const siteId = randomUUID();
   const cameraId = randomUUID();
@@ -120,6 +135,11 @@ test('reactivating a region refuses to exceed 64 active regions', async () => {
     },
   };
   const manager = {
+    // This unit fixture models a legacy database with no authority journal.
+    query: async (sql: string) => {
+      assert.match(sql, /FROM pg_class/);
+      return [{ n: 0 }];
+    },
     getRepository: (entity: unknown) =>
       entity === CameraEntity
         ? cameraRepository
@@ -128,7 +148,10 @@ test('reactivating a region refuses to exceed 64 active regions', async () => {
           : undefined,
   };
   const db = {
-    transaction: async (run: (value: typeof manager) => Promise<unknown>) => await run(manager),
+    transaction: async (
+      isolationOrRun: string | ((value: typeof manager) => Promise<unknown>),
+      run?: (value: typeof manager) => Promise<unknown>,
+    ) => await (typeof isolationOrRun === 'function' ? isolationOrRun : run!)(manager),
   } as unknown as DataSource;
   const service = new CameraConfigurationService(db, undefined as never, undefined as never);
   await assert.rejects(
@@ -169,6 +192,10 @@ test('camera status survives a reload and both lifecycle transitions advance the
     },
   };
   const manager = {
+    query: async (sql: string) => {
+      assert.match(sql, /FROM pg_class/);
+      return [{ n: 0 }];
+    },
     getRepository: (entity: unknown) =>
       entity === CameraEntity
         ? cameraRepository

@@ -1,6 +1,11 @@
 import { Module } from '@nestjs/common';
 import { DatabaseModule } from '../../../database/database.module.js';
 import { AuthModule } from '../../auth/auth.module.js';
+import { MainAssignmentCommandService } from '../../zones/main-assignment-command.service.js';
+import { MainParticipationCommandService } from '../../zones/main-participation-command.service.js';
+import { MainRepresentativeCommandService } from '../main-representative-command.service.js';
+import { MainWorkerRosterService } from '../main-worker-roster.service.js';
+import { MainWorkforceCreateService } from '../main-workforce-create.service.js';
 import { ContractorsController } from './contractors.controller.js';
 import { WorkforceConfigurationService } from './workforce-configuration.service.js';
 import { WorkforceController } from './workforce.controller.js';
@@ -23,7 +28,20 @@ import { ContractorParticipationQueryService } from './contractor-participation-
     WorkforceConfigurationService,
     ContractorOperationsService,
     ContractorParticipationQueryService,
+    MainAssignmentCommandService,
+    MainParticipationCommandService,
+    MainWorkforceCreateService,
+    MainWorkerRosterService,
+    MainRepresentativeCommandService,
   ],
-  exports: [WorkforceConfigurationService, ContractorOperationsService],
+  exports: [
+    WorkforceConfigurationService,
+    ContractorOperationsService,
+    MainAssignmentCommandService,
+    MainParticipationCommandService,
+    MainWorkforceCreateService,
+    MainWorkerRosterService,
+    MainRepresentativeCommandService,
+  ],
 })
 export class WorkforceDirectoryModule {}

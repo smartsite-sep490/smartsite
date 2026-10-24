@@ -1,4 +1,7 @@
-import { translate as tr } from '../../i18n';
+import { translate as tr, uiLanguage } from '../../i18n';
+import { translateKey } from '../../i18n/locale-context';
+import type { PpeItem } from '@smartsite/contracts/ppe-items';
+import '../../i18n/ppe-catalog';
 export interface VideoTestTimeline {
   currentTime: number;
   duration: number;
@@ -16,7 +19,7 @@ export interface AiTimelineObservation {
   trackId: number;
   confidence?: number;
   boundingBox?: NormalizedBoundingBox;
-  ppeItem?: 'HARD_HAT' | 'SAFETY_VEST';
+  ppeItem?: PpeItem;
   regionId?: string;
   status?: 'PRESENT' | 'MISSING';
 }
@@ -36,16 +39,24 @@ export interface AiVideoTimeline {
   entries: AiTimelineEntry[];
 }
 
+export type PpeStatusMap = {
+  HARD_HAT: 'PRESENT' | 'MISSING' | 'UNKNOWN';
+  SAFETY_VEST: 'PRESENT' | 'MISSING' | 'UNKNOWN';
+  GLOVES?: 'PRESENT' | 'MISSING' | 'UNKNOWN';
+  BOOTS?: 'PRESENT' | 'MISSING' | 'UNKNOWN';
+  GOGGLES?: 'PRESENT' | 'MISSING' | 'UNKNOWN';
+};
+
 export interface VideoTestDetection {
   active: boolean;
   alertState?: 'UNKNOWN' | 'PENDING_CONFIRMATION' | 'COMPLIANT' | 'CONFIRMED';
   boundingBox: NormalizedBoundingBox | null;
   cameraExternalId?: string;
   confidence: number | null;
-  confirmedMissingItems?: readonly ('HARD_HAT' | 'SAFETY_VEST')[];
+  confirmedMissingItems?: readonly PpeItem[];
   eventId: string;
   label: string;
-  ppeStatus: Record<'HARD_HAT' | 'SAFETY_VEST', 'PRESENT' | 'MISSING' | 'UNKNOWN'>;
+  ppeStatus: PpeStatusMap;
   regionId?: string;
   timecode: string;
   trackId: number | null;
@@ -124,11 +135,7 @@ function detectionFor(
       cameraExternalId: timeline?.cameraExternalId,
       confidence: null,
       eventId: timeline ? `${type}-NO-EVENT` : `${type}-WAITING-FOR-AI-RUN`,
-      get label() {
-        return timeline
-          ? tr('monitoring_utils.no_event', { flow: type })
-          : tr('messages.b311e13b57dd', { value1: type });
-      },
+      label: timeline ? `${type} NO EVENT` : tr('messages.b311e13b57dd', { value1: type }),
       ppeStatus: { HARD_HAT: 'UNKNOWN', SAFETY_VEST: 'UNKNOWN' },
       regionId: undefined,
       timecode: formatTimecode(videoTimeline.currentTime),
@@ -142,12 +149,9 @@ function detectionFor(
   );
   const detail =
     type === 'MF04'
-      ? `MISSING ${match.observation.ppeItem === 'HARD_HAT' ? 'HARD HAT' : 'SAFETY VEST'}`
-      : 'ZONE ENTRY';
-  const ppeStatus = { HARD_HAT: 'UNKNOWN', SAFETY_VEST: 'UNKNOWN' } as Record<
-    'HARD_HAT' | 'SAFETY_VEST',
-    'PRESENT' | 'MISSING' | 'UNKNOWN'
-  >;
+      ? `${tr('common.missing')} ${match.observation.ppeItem ? translateKey(uiLanguage(), `ppe.item.${match.observation.ppeItem}`) : 'PPE'}`
+      : tr('common.zone_entry');
+  const ppeStatus: PpeStatusMap = { HARD_HAT: 'UNKNOWN', SAFETY_VEST: 'UNKNOWN' };
   if (type === 'MF04') {
     for (const observation of match.entry.event.observations) {
       if (
@@ -206,10 +210,7 @@ export function getPpeVideoTestDetections(
     const person = match.entry.event.observations.find(
       (observation) => observation.type === 'PERSON' && observation.trackId === trackId,
     );
-    const ppeStatus = { HARD_HAT: 'UNKNOWN', SAFETY_VEST: 'UNKNOWN' } as Record<
-      'HARD_HAT' | 'SAFETY_VEST',
-      'PRESENT' | 'MISSING' | 'UNKNOWN'
-    >;
+    const ppeStatus: PpeStatusMap = { HARD_HAT: 'UNKNOWN', SAFETY_VEST: 'UNKNOWN' };
     const trackObservations = match.entry.event.observations.filter(
       (observation) => observation.type === 'PPE' && observation.trackId === trackId,
     );
@@ -226,8 +227,8 @@ export function getPpeVideoTestDetections(
       eventId: match.entry.event.eventId,
       get label() {
         return missingItem
-          ? `MF04 MISSING ${missingItem.ppeItem === 'HARD_HAT' ? 'HARD HAT' : 'SAFETY VEST'}`
-          : 'MF04 PPE OK';
+          ? `MF04 ${tr('common.missing')} ${missingItem.ppeItem ? translateKey(uiLanguage(), `ppe.item.${missingItem.ppeItem}`) : 'PPE'}`
+          : tr('common.mf04_ppe_ok');
       },
       ppeStatus,
       regionId: missingItem?.regionId ?? trackObservations[0]?.regionId,
@@ -273,7 +274,7 @@ export function getZoneVideoTestDetections(
       confidence: observation.confidence ?? person?.confidence ?? null,
       eventId: match.entry.event.eventId,
       get label() {
-        return 'MF05 ZONE ENTRY';
+        return tr('common.mf05_zone_entry');
       },
       ppeStatus: { HARD_HAT: 'UNKNOWN', SAFETY_VEST: 'UNKNOWN' },
       regionId: observation.regionId,

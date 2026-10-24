@@ -1,21 +1,28 @@
-import { participateContractor } from '../support/contractor-participation.js';
 import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
-import { after, test } from 'node:test';
-import source from '../support/test-data-source.js';
+import { after, before, test } from 'node:test';
+import { createIsolatedTestDatabase } from '../support/isolated-test-database.js';
+import { participateContractor } from '../support/contractor-participation.js';
 import { UsersService } from '../../src/modules/users/users.service.js';
 import { SiteRepresentativesService } from '../../src/modules/users/site-representatives.controller.js';
 import { SiteConfigurationService } from '../../src/modules/sites/site-configuration.service.js';
 import { WorkforceConfigurationService } from '../../src/modules/workforce/directory/workforce-configuration.service.js';
+import { MainWorkforceCreateService } from '../../src/modules/workforce/main-workforce-create.service.js';
 import { UserEntity, UserRole } from '../../src/database/entities/user.entity.js';
 import { UserRoleAssignmentEntity } from '../../src/database/entities/user-role-assignment.entity.js';
 
+const database = createIsolatedTestDatabase({ canonical: true });
+const source = database.dataSource;
+
+before(async () => {
+  await database.initialize();
+});
+
 after(async () => {
-  if (source.isInitialized) await source.destroy();
+  await database.dispose();
 });
 
 test('one manager per Site survives concurrent creation and replacement; different Sites remain independent', async () => {
-  if (!source.isInitialized) await source.initialize();
   const sites = new SiteConfigurationService(source);
   const users = new UsersService(source, sites);
   const site = await sites.create({ code: randomUUID(), name: 'Ownership test' });
@@ -49,30 +56,47 @@ test('one manager per Site survives concurrent creation and replacement; differe
 });
 
 test('Site Manager representative creation is atomic, scoped and supports multiple contractors', async () => {
-  if (!source.isInitialized) await source.initialize();
   const sites = new SiteConfigurationService(source);
   const users = new UsersService(source, sites);
   const workforce = new WorkforceConfigurationService(source);
   const reps = new SiteRepresentativesService(source, users, workforce);
   const site = await sites.create({ code: randomUUID(), name: 'Representative test' });
   const other = await sites.create({ code: randomUUID(), name: 'Other site' });
-  const first = await workforce.createContractor(site.id, {
-    code: `C-${randomUUID()}`,
-    name: 'First contractor',
-  });
-  const second = await workforce.createContractor(site.id, {
-    code: `C-${randomUUID()}`,
-    name: 'Second contractor',
-  });
-  await participateContractor(source, site.id, first.id);
-  await participateContractor(source, site.id, second.id);
   const input = () => ({
     username: `rep-${randomUUID()}`,
     displayName: 'Representative',
     temporaryPassword: 'TempDemo2026!',
   });
+  const manager = await users.create({
+    username: `manager-${randomUUID()}`,
+    displayName: 'Representative setup Manager',
+    temporaryPassword: 'TempDemo2026!',
+    roleAssignments: [{ role: UserRole.SITE_MANAGER, siteId: site.id }],
+  });
+  const otherManager = await users.create({
+    username: `manager-${randomUUID()}`,
+    displayName: 'Other Site Manager',
+    temporaryPassword: 'TempDemo2026!',
+    roleAssignments: [{ role: UserRole.SITE_MANAGER, siteId: other.id }],
+  });
+  const creation = new MainWorkforceCreateService(source);
+  const admin = await users.create({
+    username: `admin-${randomUUID()}`,
+    displayName: 'Catalog Admin',
+    temporaryPassword: 'TempDemo2026!',
+    roleAssignments: [{ role: UserRole.ADMIN, siteId: null }],
+  });
+  const createContractor = (name: string) =>
+    creation.createSiteContractor(
+      site.id,
+      { code: `C-${randomUUID()}`, name },
+      { actorUserId: admin!.id },
+    );
+  const first = await createContractor('First contractor');
+  const second = await createContractor('Second contractor');
   for (const contractor of [first, second]) {
-    const user = await reps.create(site.id, contractor.id, input());
+    await participateContractor(source, site.id, contractor.id);
+    const user = await reps.create(site.id, contractor.id, input(), { actorUserId: manager!.id });
     assert.deepEqual(user!.roleAssignments, [
       { role: UserRole.CONTRACTOR_REPRESENTATIVE, siteId: site.id },
     ]);
@@ -80,7 +104,9 @@ test('Site Manager representative creation is atomic, scoped and supports multip
   assert.equal((await users.listSiteRepresentatives(site.id)).total, 2);
   assert.equal((await users.listSiteRepresentatives(other.id)).total, 0);
   const failed = input();
-  await assert.rejects(reps.create(other.id, first.id, failed), { status: 404 });
+  await assert.rejects(reps.create(other.id, first.id, failed, { actorUserId: otherManager!.id }), {
+    status: 404,
+  });
   assert.equal(
     await source.getRepository(UserEntity).existsBy({ username: failed.username }),
     false,

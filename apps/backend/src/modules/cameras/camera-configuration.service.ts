@@ -1,4 +1,6 @@
+import { mainSiteManagerAuthorization } from '../../common/configuration/main-site-manager-authority.js';
 import { randomUUID } from 'node:crypto';
+import { readCameraObservationZones } from './camera-observation-zones.query.js';
 import { Injectable } from '@nestjs/common';
 import {
   parseCameraRegionConfigurationPayload,
@@ -33,6 +35,11 @@ import { CameraObservationRegionEntity } from '../../database/entities/camera-ob
 import { CameraStatus } from '../../database/entities/enums.js';
 import { SiteConfigurationService } from '../sites/site-configuration.service.js';
 import { ZoneConfigurationService } from '../zones/zone-configuration.service.js';
+import {
+  executeMainConfigurationCommand,
+  executeMainMetadataMutation,
+  type MainConfigurationCommandContext,
+} from '../../common/configuration/main-configuration-authority.js';
 
 const trim = ({ value }: { value: unknown }) => (typeof value === 'string' ? value.trim() : value);
 
@@ -104,17 +111,29 @@ export class CameraConfigurationService {
     private readonly sites: SiteConfigurationService,
   ) {}
 
-  async create(siteId: string, input: CreateCameraCommand): Promise<CameraEntity> {
+  async create(
+    siteId: string,
+    input: CreateCameraCommand,
+    context?: MainConfigurationCommandContext,
+  ): Promise<CameraEntity> {
     const value = command(CreateCameraCommand, input);
     await this.sites.get(siteId);
     try {
-      return await this.dataSource.getRepository(CameraEntity).save({
-        id: randomUUID(),
-        siteId,
-        ...value,
-        status: CameraStatus.ACTIVE,
-        configurationVersion: 1,
-      });
+      return await executeMainConfigurationCommand(
+        this.dataSource,
+        context,
+        'CAMERA_CREATE',
+        { siteId, value },
+        (manager) =>
+          manager.getRepository(CameraEntity).save({
+            id: randomUUID(),
+            siteId,
+            ...value,
+            status: CameraStatus.ACTIVE,
+            configurationVersion: 1,
+          }),
+        mainSiteManagerAuthorization(context, siteId),
+      );
     } catch (error) {
       knownUnique(error, ['uq_camera_external_id', 'uq_camera_site_code']);
     }
@@ -158,15 +177,26 @@ export class CameraConfigurationService {
     siteId: string,
     cameraId: string,
     input: RenameCameraCommand,
+    context?: MainConfigurationCommandContext,
   ): Promise<CameraEntity> {
     const value = command(RenameCameraCommand, input);
-    const camera = await this.get(siteId, cameraId);
-    if (camera.name === value.name) return camera;
-    await this.dataSource
-      .getRepository(CameraEntity)
-      .update({ id: camera.id, siteId }, { name: value.name });
-    camera.name = value.name;
-    return camera;
+    return executeMainMetadataMutation(
+      this.dataSource,
+      context,
+      async (manager) => {
+        const repository = manager.getRepository(CameraEntity);
+        const camera = await repository.findOne({
+          where: { id: uuid(cameraId), siteId: uuid(siteId) },
+          lock: { mode: 'pessimistic_write' },
+        });
+        if (!camera) return missing();
+        if (camera.name === value.name) return camera;
+        await repository.update({ id: camera.id, siteId: camera.siteId }, { name: value.name });
+        camera.name = value.name;
+        return camera;
+      },
+      mainSiteManagerAuthorization(context, siteId),
+    );
   }
 
   private async lockCamera(
@@ -272,29 +302,37 @@ export class CameraConfigurationService {
     siteId: string,
     cameraId: string,
     input: SetCameraStatusCommand,
+    context?: MainConfigurationCommandContext,
   ): Promise<CameraEntity> {
     const value = command(SetCameraStatusCommand, input);
-    return await this.dataSource.transaction(async (manager) => {
-      const camera = await this.lockCamera(
-        manager,
-        siteId,
-        cameraId,
-        value.expectedConfigurationVersion,
-      );
-      if (camera.status === value.status) return camera;
-      const activeRegions = await manager.getRepository(CameraObservationRegionEntity).find({
-        where: { cameraId, isActive: true },
-        order: { id: 'ASC' },
-      });
-      for (const region of activeRegions) {
-        this.bumpRegion(region);
-        await manager.getRepository(CameraObservationRegionEntity).save(region);
-      }
-      camera.status = value.status;
-      await this.bump(manager, camera);
-      await this.snapshot(manager, camera, true);
-      return camera;
-    });
+    return await executeMainConfigurationCommand(
+      this.dataSource,
+      context,
+      'CAMERA_STATUS_UPDATE',
+      { siteId, cameraId, value },
+      async (manager) => {
+        const camera = await this.lockCamera(
+          manager,
+          siteId,
+          cameraId,
+          value.expectedConfigurationVersion,
+        );
+        if (camera.status === value.status) return camera;
+        const activeRegions = await manager.getRepository(CameraObservationRegionEntity).find({
+          where: { cameraId, isActive: true },
+          order: { id: 'ASC' },
+        });
+        for (const region of activeRegions) {
+          this.bumpRegion(region);
+          await manager.getRepository(CameraObservationRegionEntity).save(region);
+        }
+        camera.status = value.status;
+        await this.bump(manager, camera);
+        await this.snapshot(manager, camera, true);
+        return camera;
+      },
+      mainSiteManagerAuthorization(context, siteId),
+    );
   }
 
   async listRegions(
@@ -316,6 +354,10 @@ export class CameraConfigurationService {
     return { items, total };
   }
 
+  async observationZones(siteId: string, cameraId: string, offset: number, limit: number) {
+    return readCameraObservationZones(this.dataSource, this.zones, siteId, cameraId, offset, limit);
+  }
+
   async getRegion(
     siteId: string,
     cameraId: string,
@@ -332,36 +374,44 @@ export class CameraConfigurationService {
     siteId: string,
     cameraId: string,
     input: CreateRegionCommand,
+    context?: MainConfigurationCommandContext,
   ): Promise<CameraObservationRegionEntity & { configurationVersion: number }> {
     const value = command(CreateRegionCommand, input);
     uuid(value.zoneId);
     this.checkPolygon(value.polygon);
-    return await this.dataSource.transaction(async (manager) => {
-      const camera = await this.lockCamera(
-        manager,
-        siteId,
-        cameraId,
-        value.expectedConfigurationVersion,
-      );
-      const zone = await this.zones.lockForRegion(manager, siteId, value.zoneId);
-      const count = await manager
-        .getRepository(CameraObservationRegionEntity)
-        .countBy({ cameraId, isActive: true });
-      if (count >= 64) conflict('Camera has the maximum number of active regions');
-      const region = await manager.getRepository(CameraObservationRegionEntity).save({
-        id: randomUUID(),
-        cameraId,
-        zoneId: zone.id,
-        polygon: value.polygon,
-        coordinateSpace: 'NORMALIZED_0_1',
-        version: 1,
-        isActive: true,
-      });
-      await this.zones.markLinked(manager, zone);
-      await this.bump(manager, camera);
-      await this.snapshot(manager, camera, true);
-      return Object.assign(region, { configurationVersion: camera.configurationVersion });
-    });
+    return await executeMainConfigurationCommand(
+      this.dataSource,
+      context,
+      'REGION_CREATE',
+      { siteId, cameraId, value },
+      async (manager) => {
+        const camera = await this.lockCamera(
+          manager,
+          siteId,
+          cameraId,
+          value.expectedConfigurationVersion,
+        );
+        const zone = await this.zones.lockForRegion(manager, siteId, value.zoneId);
+        const count = await manager
+          .getRepository(CameraObservationRegionEntity)
+          .countBy({ cameraId, isActive: true });
+        if (count >= 64) conflict('Camera has the maximum number of active regions');
+        const region = await manager.getRepository(CameraObservationRegionEntity).save({
+          id: randomUUID(),
+          cameraId,
+          zoneId: zone.id,
+          polygon: value.polygon,
+          coordinateSpace: 'NORMALIZED_0_1',
+          version: 1,
+          isActive: true,
+        });
+        await this.zones.markLinked(manager, zone);
+        await this.bump(manager, camera);
+        await this.snapshot(manager, camera, true);
+        return Object.assign(region, { configurationVersion: camera.configurationVersion });
+      },
+      mainSiteManagerAuthorization(context, siteId),
+    );
   }
 
   async updatePolygon(
@@ -369,6 +419,7 @@ export class CameraConfigurationService {
     cameraId: string,
     regionId: string,
     input: UpdateRegionPolygonCommand,
+    context?: MainConfigurationCommandContext,
   ): Promise<CameraObservationRegionEntity & { configurationVersion: number }> {
     const value = command(UpdateRegionPolygonCommand, input);
     this.checkPolygon(value.polygon);
@@ -382,6 +433,9 @@ export class CameraConfigurationService {
         region.polygon = value.polygon;
         return true;
       },
+      context,
+      'REGION_POLYGON_UPDATE',
+      { siteId, cameraId, regionId, value },
     );
   }
 
@@ -390,6 +444,7 @@ export class CameraConfigurationService {
     cameraId: string,
     regionId: string,
     input: SetRegionActiveCommand,
+    context?: MainConfigurationCommandContext,
   ): Promise<CameraObservationRegionEntity & { configurationVersion: number }> {
     const value = command(SetRegionActiveCommand, input);
     return await this.changeRegion(
@@ -402,6 +457,9 @@ export class CameraConfigurationService {
         region.isActive = value.isActive;
         return true;
       },
+      context,
+      'REGION_STATUS_UPDATE',
+      { siteId, cameraId, regionId, value },
     );
   }
 
@@ -411,25 +469,35 @@ export class CameraConfigurationService {
     regionId: string,
     expected: number,
     change: (region: CameraObservationRegionEntity) => boolean,
+    context: MainConfigurationCommandContext | undefined,
+    operation: 'REGION_POLYGON_UPDATE' | 'REGION_STATUS_UPDATE',
+    request: object,
   ): Promise<CameraObservationRegionEntity & { configurationVersion: number }> {
-    return await this.dataSource.transaction(async (manager) => {
-      const camera = await this.lockCamera(manager, siteId, cameraId, expected);
-      const repo = manager.getRepository(CameraObservationRegionEntity);
-      const region = await repo.findOneBy({ id: uuid(regionId), cameraId });
-      if (!region) missing();
-      const wasActive = region.isActive;
-      if (!change(region))
+    return await executeMainConfigurationCommand(
+      this.dataSource,
+      context,
+      operation,
+      request,
+      async (manager) => {
+        const camera = await this.lockCamera(manager, siteId, cameraId, expected);
+        const repo = manager.getRepository(CameraObservationRegionEntity);
+        const region = await repo.findOneBy({ id: uuid(regionId), cameraId });
+        if (!region) missing();
+        const wasActive = region.isActive;
+        if (!change(region))
+          return Object.assign(region, { configurationVersion: camera.configurationVersion });
+        if (region.isActive) {
+          const count = await repo.countBy({ cameraId, isActive: true });
+          if (count + Number(!wasActive) > 64)
+            conflict('Camera has the maximum number of active regions');
+        }
+        this.bumpRegion(region);
+        await repo.save(region);
+        await this.bump(manager, camera);
+        await this.snapshot(manager, camera, true);
         return Object.assign(region, { configurationVersion: camera.configurationVersion });
-      if (region.isActive) {
-        const count = await repo.countBy({ cameraId, isActive: true });
-        if (count + Number(!wasActive) > 64)
-          conflict('Camera has the maximum number of active regions');
-      }
-      this.bumpRegion(region);
-      await repo.save(region);
-      await this.bump(manager, camera);
-      await this.snapshot(manager, camera, true);
-      return Object.assign(region, { configurationVersion: camera.configurationVersion });
-    });
+      },
+      mainSiteManagerAuthorization(context, siteId),
+    );
   }
 }

@@ -1,0 +1,7 @@
+# Controlled authority cutover requires the original WEB session
+
+While preparing the operator entrypoint, Root reproduced a real protocol gap: a valid MOBILE bearer for the globalAdmin could activate MainAuthorityCutoverService even though the reviewed spec requires WEB. The new actual PostgreSQL test failed with Missing expected rejection and a synthetic commit; the disposable schema was removed. Initial loader-cleared TEST_DATABASE_URL and incomplete focused compiler pin outputs are retained as harness failures, not productRED.
+
+Fix at the shared service: require authenticatedWEB upfront and wrap the original configurationCommandContext reauthorization to recheck the authoritative session clientType inside the write transaction and postcommitreadback. A caller-forgedWEBmarker over aMOBILEtoken fails401 without command/epoch/baseline residue. Originalactor, globalAdmin, expectedpointerCAS, manifest/witness/latecommit semantics remain intact. No login/globalrole/businesspermission change or HTTProute added.
+
+Verification:16actualPG service cases passed in one run, including two newMOBILE/spoof-marker cases; independent newPG connection verified ownschema absent. TypeScript and changed2filelint0. Actualp8independentreport read and accepted its bounded findings; source/runtime service digests must refresh for any new release. No currentwebsite rollout/workeractivation/model/identity/productionacceptance.

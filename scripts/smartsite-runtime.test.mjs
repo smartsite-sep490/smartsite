@@ -5,6 +5,7 @@ import os from 'node:os';
 import path from 'node:path';
 import test from 'node:test';
 import { promisify } from 'node:util';
+import * as runtime from './smartsite-runtime-lib.mjs';
 
 import {
   buildAiEnvironment,
@@ -23,6 +24,23 @@ import {
 } from './smartsite-runtime-lib.mjs';
 
 const execFileAsync = promisify(execFile);
+
+test('uses the configured Backend URL for the browser build despite inherited Compose values', () => {
+  const inherited = { PATH: 'safe-path', SMARTSITE_WEB_API_URL: 'http://localhost:3000' };
+  const environment = runtime.buildComposeEnvironment({
+    baseEnv: inherited,
+    backendUrl: 'http://127.0.0.1:3000',
+    evidenceRoot: 'D:/SmartSiteData/evidence',
+    cameraId: 'camera-uuid',
+    serviceToken: 'synthetic-token',
+  });
+  assert.equal(environment.SMARTSITE_WEB_API_URL, 'http://127.0.0.1:3000');
+  assert.equal(environment.EVIDENCE_LOCAL_HOST_ROOT, 'D:/SmartSiteData/evidence');
+  assert.equal(environment.AI_CONFIGURATION_CAMERA_IDS, 'camera-uuid');
+  assert.equal(environment.SMARTSITE_AI_SERVICE_TOKEN, 'synthetic-token');
+  assert.equal(environment.PATH, inherited.PATH);
+  assert.equal(inherited.SMARTSITE_WEB_API_URL, 'http://localhost:3000');
+});
 
 test('accepts the argument separator passed through by pnpm scripts', () => {
   assert.deepEqual(parseRuntimeArguments(['--', 'status', '--config', 'D:/runtime/control.json']), {

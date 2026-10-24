@@ -1,10 +1,20 @@
 import { spawnSync } from 'node:child_process';
-import { readdirSync } from 'node:fs';
+import { cpSync, readdirSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 
 // Set before any application ESM imports, including ConfigModule.forRoot().
 process.env.NODE_ENV = 'test';
 const backendDirectory = fileURLToPath(new URL('../', import.meta.url));
+// Compiled runtime tests still inspect checked-in Dockerfile commands. CI does
+// not supply an archive override, so derive the checkout from this source script.
+process.env.SMARTSITE_TEST_SOURCE_REPO ??= fileURLToPath(new URL('../../../', import.meta.url));
+// Integrity tests read the original frozen TypeScript bytes and provenance,
+// which tsc does not emit beside the compiled historical test profile.
+cpSync(
+  new URL('../test/support/legacy24/', import.meta.url),
+  new URL('../.test-build/test/support/legacy24/', import.meta.url),
+  { recursive: true },
+);
 const { validateEnvironment } = await import('../.test-build/src/config/environment.js');
 for (const key of [
   ...Object.keys(validateEnvironment({ NODE_ENV: 'test' })),
@@ -16,6 +26,10 @@ for (const key of [
 }
 
 const integration = process.argv.includes('--integration');
+const strictWorkforce = process.argv.includes('--strict-workforce');
+if (strictWorkforce && !integration) {
+  throw new Error('--strict-workforce requires the isolated integration database.');
+}
 if (integration) {
   const { resolveTestDatabaseUrl } =
     await import('../.test-build/test/support/test-environment.js');
@@ -38,15 +52,34 @@ if (integration) {
 
 if (!process.exitCode) {
   const directory = integration ? '.test-build/test/integration' : '.test-build/test';
-  const files = readdirSync(new URL(`../${directory}/`, import.meta.url))
+  const allFiles = readdirSync(new URL(`../${directory}/`, import.meta.url))
     .filter((file) => file.endsWith('.test.js'))
-    .sort()
-    .map((file) => `${directory}/${file}`);
+    .sort();
+  // Application transaction gate; the full suite still checks TypeORM schema
+  // introspection separately and does not suppress its dependency warnings.
+  const workforceFiles = [
+    'mf07-scheduling-queries.integration.test.js',
+    'mf07-shared-contractor.integration.test.js',
+    'workforce-authority-writers.integration.test.js',
+    'workforce-review-reader.integration.test.js',
+    'workforce-zone-authority-history.integration.test.js',
+    'safety-business-http.integration.test.js',
+  ];
+  if (strictWorkforce && workforceFiles.some((file) => !allFiles.includes(file))) {
+    throw new Error(
+      'Strict Workforce integration files are missing; compile the complete test suite.',
+    );
+  }
+  const files = (strictWorkforce ? workforceFiles : allFiles).map((file) => `${directory}/${file}`);
   const result = spawnSync(
     process.execPath,
-    // Nest bootstrap fixtures spawn children; keep startup contention bounded
-    // when Turbo also runs the browser suite. Assertion/time limits stay intact.
-    ['--test', '--test-concurrency=1', ...files],
+    // Keep Nest child-process fixtures bounded on a shared desktop.
+    [
+      ...(strictWorkforce ? ['--throw-deprecation'] : []),
+      '--test',
+      '--test-concurrency=1',
+      ...files,
+    ],
     {
       cwd: backendDirectory,
       env: process.env,

@@ -41,6 +41,14 @@ const cameraRegionConfigurationSchemaPath = new URL(
   '../../schemas/v1/camera-region-configuration.json',
   import.meta.url,
 );
+const expandedObservationEventSchemaPath = new URL(
+  '../../schemas/v1.1/technical-observation-event.json',
+  import.meta.url,
+);
+const v12ObservationEventSchemaPath = new URL(
+  '../../schemas/v1.2/technical-observation-event.json',
+  import.meta.url,
+);
 const observationEventSchema: unknown = JSON.parse(
   readFileSync(observationEventSchemaPath, 'utf8'),
 );
@@ -67,6 +75,20 @@ const ajv = new resolvedAjvConstructor({
 resolvedAddFormats(ajv);
 
 const validateObservationEventSchema: CompiledSchemaValidator = ajv.compile(observationEventSchema);
+const validateExpandedObservationEventSchema: CompiledSchemaValidator = ajv.compile(
+  JSON.parse(readFileSync(expandedObservationEventSchemaPath, 'utf8')) as unknown,
+);
+const validateV12ObservationEventSchema: CompiledSchemaValidator = ajv.compile(
+  JSON.parse(readFileSync(v12ObservationEventSchemaPath, 'utf8')) as unknown,
+);
+const validateEightFamilySchema: CompiledSchemaValidator = ajv.compile(
+  JSON.parse(
+    readFileSync(
+      new URL('../../schemas/v1.3/technical-observation-event.json', import.meta.url),
+      'utf8',
+    ),
+  ) as unknown,
+);
 const validateCameraRegionConfigurationSchema: CompiledSchemaValidator = ajv.compile(
   cameraRegionConfigurationSchema,
 );
@@ -115,7 +137,17 @@ function schemaValidationIssues(
  * 2. Semantic cross-field bounding-box geometry (x1 < x2, y1 < y2) across observations and evidence.
  */
 export function validateObservationEvent(data: unknown): ValidationResult {
-  const issues = schemaValidationIssues(validateObservationEventSchema, data);
+  const version =
+    typeof data === 'object' && data !== null && 'schemaVersion' in data
+      ? data.schemaVersion
+      : undefined;
+  const validator =
+    version === '1.2.0'
+      ? validateV12ObservationEventSchema
+      : version === '1.1.0'
+        ? validateExpandedObservationEventSchema
+        : validateObservationEventSchema;
+  const issues = schemaValidationIssues(validator, data);
 
   const geometryIssues = validateGeometries(data);
   issues.push(...geometryIssues);
@@ -124,6 +156,13 @@ export function validateObservationEvent(data: unknown): ValidationResult {
     isValid: issues.length === 0,
     issues,
   };
+}
+
+/** Explicit eight-family candidate only; existing consumers retain their version admission. */
+export function validateEightFamilyObservationEvent(data: unknown): ValidationResult {
+  const issues = schemaValidationIssues(validateEightFamilySchema, data);
+  issues.push(...validateGeometries(data));
+  return { isValid: issues.length === 0, issues };
 }
 
 export function validateCameraRegionConfiguration(data: unknown): ValidationResult {

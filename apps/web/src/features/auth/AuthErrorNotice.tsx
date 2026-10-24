@@ -1,6 +1,6 @@
 import { ApiError } from '@smartsite/api-client';
 import { useTranslation } from 'react-i18next';
-import { translate as tr } from '../../i18n';
+import { translate as tr } from '../../i18n/runtime';
 import { authErrorMessage } from './auth-errors';
 
 export function AuthErrorNotice({ error, message }: { error: unknown; message?: string }) {

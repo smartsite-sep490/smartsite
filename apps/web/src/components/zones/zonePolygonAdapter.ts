@@ -55,6 +55,7 @@ export interface ResolveActivePolygonOptions {
 
 export interface SavePolygonMutationVariables {
   userId: string;
+  sessionScope?: string;
   token?: string;
   siteId: string;
   cameraId: string;
@@ -66,6 +67,7 @@ export interface SavePolygonMutationVariables {
 
 export interface ActiveScope {
   userId: string | null;
+  sessionScope?: string;
   siteId: string;
   cameraId: string;
   regionId: string;
@@ -355,6 +357,11 @@ export function isMutationScopeActive(
   variables: SavePolygonMutationVariables,
 ): boolean {
   if (!activeScope || !activeScope.userId) return false;
+  if (variables.sessionScope) {
+    if (!activeScope.sessionScope || activeScope.sessionScope !== variables.sessionScope) {
+      return false;
+    }
+  }
   return (
     activeScope.userId === variables.userId &&
     activeScope.siteId === variables.siteId &&
@@ -367,12 +374,13 @@ export function planMutationCompletion(
   apiUrl: string,
   variables: SavePolygonMutationVariables,
 ): MutationCallbackPlan {
+  const scopeKey = variables.sessionScope || variables.userId;
   return {
-    invalidateSiteCamerasKey: ['zone-admin', apiUrl, variables.userId, variables.siteId, 'cameras'],
+    invalidateSiteCamerasKey: ['zone-admin', apiUrl, scopeKey, variables.siteId, 'cameras'],
     invalidateCameraRegionsKey: [
       'zone-admin',
       apiUrl,
-      variables.userId,
+      scopeKey,
       variables.siteId,
       variables.cameraId,
       'regions',

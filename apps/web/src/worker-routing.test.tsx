@@ -185,7 +185,7 @@ it('fails closed with Retry if the profile is unavailable', async () => {
   mount('/dashboard');
   expect(screen.getByRole('alert')).toBeTruthy();
   expect(state.dashboardRender).not.toHaveBeenCalled();
-  fireEvent.click(screen.getByRole('button', { name: 'Try again' }));
+  fireEvent.click(screen.getByRole('button', { name: 'Retry' }));
   expect(state.refetch).toHaveBeenCalledOnce();
 });
 

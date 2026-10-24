@@ -11,14 +11,20 @@ import {
   UseGuards,
 } from '@nestjs/common';
 import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
-import { IsIn, IsOptional } from 'class-validator';
+import { IsIn, IsOptional, IsUUID, ValidateIf } from 'class-validator';
 import { command, invalid } from '../../../common/configuration/commands.js';
 import { pagination } from '../../../common/http/pagination.js';
 import type { AuthenticatedRequest } from '../../auth/auth.service.js';
 import { UserAuthGuard } from '../../auth/user-auth.guard.js';
 import { SchedulingNotificationService } from './scheduling-notification.service.js';
 
-class NotificationQuery {
+class NotificationSiteQuery {
+  @ValidateIf((_object, value) => value !== undefined)
+  @IsUUID()
+  siteId?: string;
+}
+
+class NotificationQuery extends NotificationSiteQuery {
   @IsOptional()
   @IsIn(['ALL', 'UNREAD'])
   readStatus?: 'ALL' | 'UNREAD';
@@ -50,13 +56,24 @@ export class NotificationsController {
       invalid();
     const value = command(NotificationQuery, filter);
     const page = pagination(offset, limit);
-    return this.notifications.list(request.user!, value.readStatus, page.offset, page.limit);
+    return this.notifications.list(
+      request.user!,
+      value.readStatus,
+      page.offset,
+      page.limit,
+      value.siteId,
+    );
   }
 
   @Patch('read-all')
-  async readAll(@Req() request: AuthenticatedRequest, @Body() body: unknown) {
+  async readAll(
+    @Req() request: AuthenticatedRequest,
+    @Body() body: unknown,
+    @Query() query: Record<string, unknown> = {},
+  ) {
     emptyBody(body);
-    const result = await this.notifications.readAll(request.user!);
+    const value = command(NotificationSiteQuery, query);
+    const result = await this.notifications.readAll(request.user!, value.siteId);
     this.logger.log({
       actorId: request.user!.id,
       action: 'notification.read-all',
@@ -72,8 +89,8 @@ export class NotificationsController {
     @Query() query: Record<string, unknown>,
   ) {
     emptyBody(body);
-    if (Object.keys(query).length) invalid();
-    const result = await this.notifications.deleteRead(request.user!);
+    const value = command(NotificationSiteQuery, query);
+    const result = await this.notifications.deleteRead(request.user!, value.siteId);
     this.logger.log({
       actorId: request.user!.id,
       action: 'notification.delete-read',

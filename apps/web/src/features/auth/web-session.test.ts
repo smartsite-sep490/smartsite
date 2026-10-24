@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { ApiError, type LoginResponse } from '@smartsite/api-client';
+import { captureSessionScopes } from '../../../../../packages/api-client/src/session-expiry';
 import { WebSession } from './web-session';
 
 const result = (token: string): LoginResponse => ({
@@ -19,6 +20,106 @@ const result = (token: string): LoginResponse => ({
 afterEach(() => vi.unstubAllGlobals());
 
 describe('Web session ownership', () => {
+  it('does not register a late bootstrap credential after its owner disconnects', async () => {
+    let release!: (value: LoginResponse) => void;
+    const client = {
+      refresh: vi.fn(
+        () =>
+          new Promise<LoginResponse>((resolve) => {
+            release = resolve;
+          }),
+      ),
+    };
+    const manager = new WebSession('https://late.example.test', client as never);
+    manager.connect();
+    const pending = manager.restore();
+    manager.dispose();
+    release(result('late-disposed-fixture'));
+    await pending;
+    expect(captureSessionScopes('late-disposed-fixture')).toEqual([]);
+  });
+
+  it('refuses silent refresh for an injected credential without an established account', async () => {
+    const client = { refresh: vi.fn().mockResolvedValue(result('other-account')) };
+    const manager = new WebSession('https://opaque.example.test', client as never);
+    manager.setAccessToken('unbound-account');
+    await expect(manager.adapter().refreshAccessToken('unbound-account')).rejects.toMatchObject({
+      status: 401,
+    });
+    expect(client.refresh).not.toHaveBeenCalled();
+  });
+
+  it('does not revoke a replacement session when an obsolete logout finally acquires the lock', async () => {
+    const operations: Array<() => Promise<unknown>> = [];
+    vi.stubGlobal('navigator', {
+      locks: {
+        request: (_name: string, operation: () => Promise<unknown>) =>
+          new Promise((resolve, reject) => {
+            operations.push(() => Promise.resolve().then(operation).then(resolve, reject));
+          }),
+      },
+    });
+    const client = { logout: vi.fn(async () => {}) };
+    const manager = new WebSession('https://queued.example.test', client as never);
+    manager.accept(result('old'));
+    const pending = manager.logout();
+    const rejected = expect(pending).rejects.toMatchObject({ code: 'cancelled' });
+    manager.setAccessToken('new');
+    await operations[0]!();
+    await rejected;
+    expect(client.logout).not.toHaveBeenCalled();
+    expect(manager.getSnapshot().token).toBe('new');
+  });
+
+  it('does not globally sign other tabs out when a login attempt fails', async () => {
+    const entries = new Map<string, string>();
+    const storage = {
+      getItem: (key: string) => entries.get(key) ?? null,
+      setItem: (key: string, value: string) => {
+        entries.set(key, value);
+      },
+      removeItem: (key: string) => {
+        entries.delete(key);
+      },
+    };
+    vi.stubGlobal('localStorage', storage);
+    vi.stubGlobal('sessionStorage', storage);
+    const client = { login: vi.fn().mockRejectedValue(new ApiError('http', 'Denied', 401)) };
+    const attempting = new WebSession('https://shared.example.test', client as never);
+    const otherTab = new WebSession('https://shared.example.test', {} as never);
+    await expect(attempting.login('user', 'wrong')).rejects.toMatchObject({ status: 401 });
+    expect(otherTab.canRestore()).toBe(true);
+  });
+
+  it('honors a legacy API-specific logout marker until a real login succeeds', async () => {
+    const entries = new Map([['smartsite:logout:https://legacy.example.test', '1']]);
+    const storage = {
+      getItem: (key: string) => entries.get(key) ?? null,
+      setItem: (key: string, value: string) => {
+        entries.set(key, value);
+      },
+      removeItem: (key: string) => {
+        entries.delete(key);
+      },
+    };
+    vi.stubGlobal('localStorage', storage);
+    vi.stubGlobal('sessionStorage', storage);
+    const client = { refresh: vi.fn(), login: vi.fn().mockResolvedValue(result('legacy-login')) };
+    const manager = new WebSession('https://legacy.example.test/', client as never);
+    expect(manager.canRestore()).toBe(false);
+    expect(await manager.restore()).toBeNull();
+    expect(client.refresh).not.toHaveBeenCalled();
+    await manager.login('user', 'password');
+    expect(manager.canRestore()).toBe(true);
+    expect(entries.has('smartsite:logout:https://legacy.example.test')).toBe(false);
+  });
+
+  it('returns an already-aborted signal when an obsolete epoch constructs an adapter', () => {
+    const manager = new WebSession('https://epoch.example.test', {} as never);
+    const oldEpoch = manager.getSnapshot().epoch;
+    manager.setAccessToken('replacement');
+    expect(manager.adapter(oldEpoch).signal.aborted).toBe(true);
+  });
   it('invalidates previous adapters when an explicit access token replaces the session', () => {
     const manager = new WebSession('https://api.example.test', {} as never);
     manager.accept(result('old'));

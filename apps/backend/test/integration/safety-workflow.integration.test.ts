@@ -839,7 +839,7 @@ test('MF08 migration reverses and re-applies inside an isolated PostgreSQL trans
     assert.equal(
       (
         await runner.query(
-          "SELECT count(*) AS n FROM information_schema.columns WHERE table_name='safety_alert' AND column_name='incident_id'",
+          "SELECT count(*) AS n FROM information_schema.columns WHERE table_schema=current_schema() AND table_name='safety_alert' AND column_name='incident_id'",
         )
       )[0].n,
       '0',
@@ -860,13 +860,13 @@ test('MF08 migration reverses and re-applies inside an isolated PostgreSQL trans
     assert.equal(
       (
         await runner.query(
-          "SELECT count(*) AS n FROM information_schema.columns WHERE table_name='safety_alert' AND column_name='incident_id'",
+          "SELECT count(*) AS n FROM information_schema.columns WHERE table_schema=current_schema() AND table_name='safety_alert' AND column_name='incident_id'",
         )
       )[0].n,
       '1',
     );
     const indexes = await runner.query(
-      "SELECT indexname FROM pg_indexes WHERE tablename='corrective_action_submission'",
+      "SELECT indexname FROM pg_indexes WHERE schemaname=current_schema() AND tablename='corrective_action_submission'",
     );
     assert.ok(
       indexes.some(

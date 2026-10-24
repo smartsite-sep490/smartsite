@@ -6,6 +6,7 @@ import {
   PASSWORD_MIN_LENGTH,
   PASSWORD_POLICY_MESSAGE,
 } from '../common/configuration/password-policy.js';
+import { mf06EnvironmentFields, refineMf06Environment } from './mf06-worker-environment.js';
 
 const LOCAL_DATABASE_URL = 'postgresql://smartsite:smartsite_local_only@localhost:5432/smartsite';
 const LOCAL_SERVICE_TOKEN = 'smartsite_local_dev_service_token_only';
@@ -126,6 +127,42 @@ const cameraIdsSchema = z
     return [...new Set(ids)];
   });
 
+const previewSourcesSchema = z
+  .string()
+  .default('{}')
+  .transform((value, context) => {
+    try {
+      const parsed: unknown = JSON.parse(value);
+      const valid = z
+        .record(
+          z.string().min(1).max(128),
+          z.string().refine((origin) => {
+            try {
+              const url = new URL(origin);
+              return (
+                ['http:', 'https:'].includes(url.protocol) &&
+                url.origin === origin &&
+                !url.username &&
+                !url.password
+              );
+            } catch {
+              return false;
+            }
+          }),
+        )
+        .safeParse(parsed);
+      if (valid.success && Object.keys(valid.data).length <= 128) return valid.data;
+    } catch {
+      /* Return only a static message; JSON can contain private configuration. */
+    }
+    context.addIssue({
+      code: 'custom',
+      message:
+        'must map camera external IDs to exact HTTP(S) origins without paths, credentials, queries or fragments',
+    });
+    return z.NEVER;
+  });
+
 export const backendEnvironmentSchema = z
   .object({
     WORKER_DOCUMENT_PYTHON: z
@@ -198,6 +235,7 @@ export const backendEnvironmentSchema = z
         'must not contain whitespace',
       )
       .optional(),
+    SMARTSITE_AI_PREVIEW_SOURCES: previewSourcesSchema,
     SMARTSITE_AI_IDENTITY_URL: z
       .string({ error: 'must be an absolute HTTP(S) URL without credentials' })
       .url('must be an absolute HTTP(S) URL without credentials')
@@ -215,6 +253,7 @@ export const backendEnvironmentSchema = z
     ALERT_COOLDOWN_SECONDS: integer(60, 1, MAX_SAFE_SECONDS),
     MAX_PAST_EVENT_AGE_SECONDS: integer(300, 1, MAX_SAFE_SECONDS),
     MAX_FUTURE_CLOCK_SKEW_SECONDS: integer(30, 1, MAX_SAFE_SECONDS),
+    ...mf06EnvironmentFields,
     LOG_LEVEL: z
       .enum(['fatal', 'error', 'warn', 'info', 'debug', 'trace', 'silent'], {
         error: 'must be fatal, error, warn, info, debug, trace, or silent',
@@ -295,6 +334,7 @@ export const backendEnvironmentSchema = z
   })
   .superRefine((config, context) => {
     productionDatabase(config, context);
+    refineMf06Environment(config, context, LOCAL_SERVICE_TOKEN);
     if (Boolean(config.RESEND_API_KEY) !== Boolean(config.RESEND_FROM_EMAIL)) {
       context.addIssue({
         code: 'custom',

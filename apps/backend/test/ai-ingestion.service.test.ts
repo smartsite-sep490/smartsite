@@ -230,6 +230,57 @@ function createSampleEvent(overrides: Record<string, unknown> = {}): Record<stri
   };
 }
 
+test('AiIngestionService: admits hash-bound v1.3 and rejects missing hash or invalid geometry before persistence', async () => {
+  const store: MockStore = {
+    cameras: [],
+    regions: [],
+    zones: [],
+    rawEvents: [],
+    alerts: [],
+    mappings: [],
+  };
+  const service = new AiIngestionService(
+    createMockDataSource(store),
+    new ObservationContextResolverService(),
+    new AlertCandidateEvaluator(new ZoneAuthorizationService()),
+    new DurableGroupingService(
+      createTestConfig(),
+      new SchedulingNotificationService(createMockDataSource(store)),
+    ),
+    createTestConfig(),
+    () => FIXED_NOW,
+  );
+  const payload = createSampleEvent({
+    schemaVersion: '1.3.0',
+    evidence: [
+      {
+        kind: 'FRAME',
+        uri: 'local://evidence/22222222-2222-4222-8222-222222222222/1/11111111-1111-4111-8111-111111111111.jpg',
+        sha256: 'a'.repeat(64),
+      },
+    ],
+  });
+  const result = await service.ingestEvent(payload);
+  assert.equal(result.status, EventProcessingStatus.SKIPPED_UNKNOWN_CAMERA);
+  assert.deepEqual(store.rawEvents[0]?.rawPayload, payload);
+  const badHash = structuredClone(payload);
+  delete (badHash.evidence as Array<Record<string, unknown>>)[0]!.sha256;
+  const badGeometry = structuredClone(payload);
+  (
+    (badGeometry.observations as Array<Record<string, unknown>>)[0]!.boundingBox as Record<
+      string,
+      unknown
+    >
+  ).x2 = 0.05;
+  for (const bad of [badHash, badGeometry, { ...payload, schemaVersion: '1.4.0' }]) {
+    await assert.rejects(
+      service.ingestEvent(bad),
+      (err: unknown) => err instanceof PublicHttpException && err.getStatus() === 400,
+    );
+  }
+  assert.equal(store.rawEvents.length, 1);
+});
+
 test('ingestion does not pass a conflicting candidate Worker into Zone decision or audit', async () => {
   const cameraId = '33333333-3333-4333-8333-333333333333';
   const siteId = '44444444-4444-4444-8444-444444444444';
@@ -328,6 +379,7 @@ test('ingestion does not pass a conflicting candidate Worker into Zone decision 
     );
     const payload = createSampleEvent({
       observations: [
+        { type: 'PERSON', trackId: 101 },
         ...ordered,
         { type: 'ZONE_ENTRY', trackId: 101, regionId, geometryVersion: 1 },
       ],

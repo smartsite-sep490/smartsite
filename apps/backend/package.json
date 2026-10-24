@@ -13,6 +13,7 @@
     "lint:fix": "eslint src test scripts --fix",
     "test": "pnpm build:contracts && node -e \"require('node:fs').rmSync('.test-build',{recursive:true,force:true})\" && tsc -p tsconfig.test.json && node scripts/run-tests.mjs",
     "test:integration": "pnpm build:contracts && node -e \"require('node:fs').rmSync('.test-build',{recursive:true,force:true})\" && tsc -p tsconfig.test.json && node scripts/run-tests.mjs --integration",
+    "test:integration:workforce": "pnpm run test:integration --strict-workforce",
     "typeorm": "typeorm",
     "db:migrate:run": "pnpm build && typeorm migration:run -d dist/database/typeorm.data-source.js",
     "db:migrate:revert": "pnpm build && typeorm migration:revert -d dist/database/typeorm.data-source.js",
@@ -43,6 +44,7 @@
     "qrcode": "1.5.4",
     "reflect-metadata": "0.2.2",
     "rxjs": "7.8.2",
+    "sharp": "0.35.5",
     "typeorm": "1.1.1",
     "zod": "4.6.5"
   },

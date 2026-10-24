@@ -5,7 +5,7 @@ import { mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { after, test } from 'node:test';
-import source from '../support/test-data-source.js';
+import { createIsolatedTestDatabase } from '../support/isolated-test-database.js';
 import type { WorkerDocumentResponse } from '@smartsite/contracts';
 import { healthCertificateExpiry } from '@smartsite/contracts';
 import { createTestConfig } from '../support/config.js';
@@ -40,11 +40,11 @@ import {
 } from '../../src/modules/workforce/documents/worker-compliance.js';
 import { evaluateWorkerAccess } from '../../src/modules/workforce/access/worker-access-evaluation.js';
 import { SchedulingNotificationService } from '../../src/modules/workforce/notifications/scheduling-notification.service.js';
-after(async () => {
-  if (source.isInitialized) await source.destroy();
-});
+const isolated = createIsolatedTestDatabase();
+const source = isolated.dataSource;
+after(() => isolated.dispose());
 test('Worker document onboarding, scoped review, expiry and approval-only renewals', async (t) => {
-  await source.initialize();
+  await isolated.initialize();
   const root = await mkdtemp(join(tmpdir(), 'smartsite-document-test-'));
   const siteId = randomUUID(),
     otherSite = randomUUID(),
@@ -131,15 +131,20 @@ test('Worker document onboarding, scoped review, expiry and approval-only renewa
       validFrom: new Date(Date.now() - 3600000),
       validUntil: new Date(Date.now() + 400 * 86400000),
     });
-    const result = await accounts.create(rep, contractorId, {
-      siteId,
-      username: `doc-${randomUUID().slice(0, 12)}`,
-      displayName: 'Synthetic document Worker',
-      nationalId: '000000000001',
-      phoneNumber: '0900000001',
-      gender: 'MALE',
-      address: 'Synthetic address',
-    });
+    const result = await accounts.create(
+      rep,
+      contractorId,
+      {
+        siteId,
+        username: `doc-${randomUUID().slice(0, 12)}`,
+        displayName: 'Synthetic document Worker',
+        nationalId: '000000000001',
+        phoneNumber: '0900000001',
+        gender: 'MALE',
+        address: 'Synthetic address',
+      },
+      { actorUserId: rep.id },
+    );
     ids.push(result.account.id);
     workerId = result.worker.id;
     const worker = await source.getRepository(WorkerEntity).findOneByOrFail({ id: workerId });

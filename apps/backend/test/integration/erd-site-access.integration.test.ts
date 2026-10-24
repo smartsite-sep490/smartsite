@@ -14,7 +14,6 @@ import {
   ZoneType,
   ZoneRestrictionPolicy,
   WorkerSiteZoneAssignmentEntity,
-  WorkerGatePermissionEntity,
   AccessAttemptEntity,
   GateEventEntity,
   AttendanceEventEntity,
@@ -23,19 +22,20 @@ import {
   ContractorRepresentativeAssignmentEntity,
   AccessAuditEntity,
 } from '../../src/database/entities/index.js';
-import { ContractorOperationsService } from '../../src/modules/workforce/directory/contractor-operations.service.js';
+import { MainAssignmentCommandService } from '../../src/modules/zones/main-assignment-command.service.js';
 import { SiteAccessSetupService } from '../../src/modules/workforce/access/site-access-setup.service.js';
 import { WorkerGatePermissionsService } from '../../src/modules/workforce/access/worker-gate-permissions.service.js';
 import { QrAccessService } from '../../src/modules/workforce/access/qr-access.service.js';
 import { AttendanceService } from '../../src/modules/workforce/attendance/attendance.service.js';
 import { ZoneEntryAuthorizationService } from '../../src/modules/zones/zone-entry-authorization.service.js';
-import dataSource from '../support/test-data-source.js';
-import { cleanupSiteAccess } from '../support/cleanup-site-access.js';
+import { createIsolatedTestDatabase } from '../support/isolated-test-database.js';
 import { assignTestShift } from '../support/assigned-shift.js';
 import { approvedWorkerDocuments } from '../support/approved-worker-documents.js';
 
+const database = createIsolatedTestDatabase({ canonical: true });
+const dataSource = database.dataSource;
+
 test('ERD: bounded permissions, gate confirmation, temporary passage and attendance corrections', async () => {
-  await dataSource.initialize();
   const siteId = randomUUID(),
     otherSiteId = randomUUID(),
     contractorId = randomUUID(),
@@ -59,12 +59,17 @@ test('ERD: bounded permissions, gate confirmation, temporary passage and attenda
     worker = actor(workerAccountId, UserRole.WORKER);
   const from = new Date(Date.now() - 60_000).toISOString(),
     until = new Date(Date.now() + 3600_000).toISOString();
-  const operations = new ContractorOperationsService(dataSource),
+  const operations = new MainAssignmentCommandService(dataSource),
     setup = new SiteAccessSetupService(dataSource),
     access = new QrAccessService(dataSource),
     attendance = new AttendanceService(dataSource);
   const gateId = 'gate-north-01';
   try {
+    await database.initialize();
+    const [{ owned_schema: ownedSchema }] = await dataSource.query(
+      'SELECT current_schema() AS owned_schema',
+    );
+    assert.match(ownedSchema, /^isolated_test_[0-9a-f]{32}$/);
     for (const id of [siteId, otherSiteId])
       await dataSource.getRepository(SiteEntity).save({ id, code: id, name: 'Synthetic ERD site' });
     for (const id of users)
@@ -123,56 +128,49 @@ test('ERD: bounded permissions, gate confirmation, temporary passage and attenda
       configurationLocked: false,
     });
     await assert.rejects(
-      operations.requestAssignment(rep, workerId, {
+      operations.publicRequest(
+        workerId,
+        {
+          siteId,
+          zoneIds: [zoneId],
+          validFrom: from,
+          validUntil: null,
+        },
+        { actorUserId: rep.id },
+      ),
+      /expiry/,
+    );
+    const assignment = await operations.publicRequest(
+      workerId,
+      {
         siteId,
         zoneIds: [zoneId],
         validFrom: from,
-        validUntil: null,
-      }),
-      /expiry/,
+        validUntil: until,
+      },
+      { actorUserId: rep.id },
     );
-    const assignment = await operations.requestAssignment(rep, workerId, {
-      siteId,
-      zoneIds: [zoneId],
-      validFrom: from,
-      validUntil: until,
+    await dataSource.getRepository(UserRoleAssignmentEntity).save({
+      id: randomUUID(),
+      userId: outsiderId,
+      role: UserRole.SITE_MANAGER,
+      siteId: otherSiteId,
     });
-    const observer = { ...manager, roleAssignments: [{ role: UserRole.ADMIN, siteId: null }] };
-    const observed = await setup.options(observer, siteId);
-    assert.equal(observed.canReviewAssignments, false);
-    assert.equal(observed.canGrantContractorZones, false);
-    assert.equal(observed.canGrantWorkerZones, false);
     await assert.rejects(
-      operations.siteManagerDecision(observer, assignment.id, { approve: true }),
-    );
-    await assert.rejects(
-      operations.siteManagerDecision(
-        {
-          ...rep,
-          roleAssignments: [...rep.roleAssignments, { role: UserRole.SITE_MANAGER, siteId }],
-        },
-        assignment.id,
-        { approve: true },
-      ),
-    );
-    await assert.rejects(
-      operations.siteManagerDecision(
-        actor(managerId, UserRole.SITE_MANAGER, otherSiteId),
+      operations.publicDecision(
         assignment.id,
         { approve: true, expectedVersion: 1 },
+        { actorUserId: outsiderId },
       ),
     );
-    await operations.siteManagerDecision(
-      {
-        ...manager,
-        roleAssignments: [...manager.roleAssignments, { role: UserRole.ADMIN, siteId: null }],
-      },
+    await operations.publicDecision(
       assignment.id,
       {
         approve: true,
         expectedVersion: 1,
         reviewNote: 'Validated participation',
       },
+      { actorUserId: manager.id },
     );
     assert.equal(
       (
@@ -350,7 +348,7 @@ test('ERD: bounded permissions, gate confirmation, temporary passage and attenda
     );
     await assert.rejects(
       attendance.reviewCorrection(
-        actor(workerAccountId, UserRole.CONTRACTOR_REPRESENTATIVE),
+        actor(workerAccountId, UserRole.SITE_MANAGER),
         siteId,
         correction.id,
         { approve: true, reviewNote: 'Self review denied' },
@@ -440,14 +438,22 @@ test('ERD: bounded permissions, gate confirmation, temporary passage and attenda
     const latestAssignment = await dataSource
       .getRepository(WorkerSiteZoneAssignmentEntity)
       .findOneByOrFail({ id: assignment.id });
-    await operations.revokeAssignment(manager, assignment.id, {
-      expectedVersion: latestAssignment.version,
-      reviewNote: 'Participation ended',
-    });
-    await operations.revokeAssignment(manager, assignment.id, {
-      expectedVersion: latestAssignment.version,
-      reviewNote: 'Participation ended',
-    });
+    await operations.publicRevoke(
+      assignment.id,
+      {
+        expectedVersion: latestAssignment.version,
+        reviewNote: 'Participation ended',
+      },
+      { actorUserId: manager.id },
+    );
+    await operations.publicRevoke(
+      assignment.id,
+      {
+        expectedVersion: latestAssignment.version,
+        reviewNote: 'Participation ended',
+      },
+      { actorUserId: manager.id },
+    );
     assert.equal(
       (
         await dataSource
@@ -459,23 +465,6 @@ test('ERD: bounded permissions, gate confirmation, temporary passage and attenda
     await passage('OUT', true);
     assert.ok((await dataSource.getRepository(AccessAuditEntity).findBy({ siteId })).length > 10);
   } finally {
-    await cleanupSiteAccess(dataSource, [siteId, otherSiteId]);
-    await dataSource.query('DELETE FROM worker_schedule WHERE site_id=$1', [siteId]);
-    await dataSource.query('DELETE FROM shift WHERE site_id=$1', [siteId]);
-    await dataSource.query('DELETE FROM schedule_version WHERE site_id=$1', [siteId]);
-    await dataSource.getRepository(WorkerGatePermissionEntity).delete({ siteId });
-    await dataSource.getRepository(WorkerSiteZoneAssignmentEntity).delete({ siteId });
-    await dataSource.getRepository(WorkerEntity).delete({ siteId });
-    await dataSource.getRepository(ContractorSiteParticipationEntity).delete({ siteId });
-    await dataSource.getRepository(ContractorRepresentativeGrantEntity).delete({ contractorId });
-    await dataSource
-      .getRepository(ContractorRepresentativeAssignmentEntity)
-      .delete({ contractorId });
-    await dataSource.getRepository(ContractorEntity).delete(contractorId);
-    await dataSource.getRepository(ZoneEntity).delete(zoneId);
-    await dataSource.getRepository(UserRoleAssignmentEntity).delete({ siteId });
-    await dataSource.getRepository(UserEntity).delete(users);
-    await dataSource.getRepository(SiteEntity).delete([siteId, otherSiteId]);
-    await dataSource.destroy();
+    await database.dispose();
   }
 });

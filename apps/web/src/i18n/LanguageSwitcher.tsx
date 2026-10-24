@@ -1,7 +1,7 @@
 import { useId, useState } from 'react';
 import * as Popover from '@radix-ui/react-popover';
 import { useTranslation } from 'react-i18next';
-import i18n, { type UiLanguage } from './index';
+import i18n, { type UiLanguage } from './runtime';
 
 function Flag({ language }: { language: UiLanguage }) {
   const clip = useId();

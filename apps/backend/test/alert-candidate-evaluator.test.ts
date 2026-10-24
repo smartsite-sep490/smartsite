@@ -4,6 +4,7 @@ import { ZoneRestrictionPolicy, ZoneType } from '../src/database/entities/enums.
 import type { ResolvedObservationContext } from '../src/modules/zones/observation-context-resolver.service.js';
 import {
   AlertCandidateEvaluator,
+  summarizeIdentityEvidenceByTrack,
   type EvaluationEvent,
 } from '../src/modules/safety/alerts/alert-candidate-evaluator.js';
 
@@ -13,6 +14,53 @@ const streamSessionId = '33333333-3333-4333-8333-333333333333';
 const zoneId = '44444444-4444-4444-8444-444444444444';
 const regionId = '55555555-5555-4555-8555-555555555555';
 const geometryVersion = 1;
+
+for (const [item, subtype] of [
+  ['GLOVES', 'PPE_GLOVES_MISSING'],
+  ['BOOTS', 'PPE_BOOTS_MISSING'],
+  ['GOGGLES', 'PPE_GOGGLES_MISSING'],
+] as const) {
+  test(`explicit ${item} missing has its own subtype, only where required`, () => {
+    const observation = {
+      type: 'PPE',
+      trackId: 101,
+      ppeItem: item,
+      status: 'MISSING',
+      regionId,
+      geometryVersion,
+    };
+    // Exercise the runtime boundary, including the pre-expansion legacy type.
+    const event = createBaseEvent([observation] as unknown as EvaluationEvent['observations']);
+    const evaluator = new AlertCandidateEvaluator();
+    const lookup = () => createTestContext({ requiredPpe: [item] });
+    const result = evaluator.evaluate(event, lookup);
+    assert.equal(result.length, 1);
+    assert.equal(result[0]?.candidateSubtype, subtype);
+    assert.equal(result[0]?.details.ppeItem, item);
+    assert.equal(evaluator.evaluate(event, () => createTestContext()).length, 0);
+    const presentEvent = createBaseEvent([
+      { ...observation, status: 'PRESENT' },
+    ] as unknown as EvaluationEvent['observations']);
+    assert.equal(evaluator.evaluate(presentEvent, lookup).length, 0);
+  });
+}
+
+test('unexpected PPE cannot fall through into vest alerts even with invalid policy input', () => {
+  const event = createBaseEvent([
+    {
+      type: 'PPE',
+      trackId: 101,
+      ppeItem: 'UNSUPPORTED',
+      status: 'MISSING',
+      regionId,
+      geometryVersion,
+    },
+  ] as unknown as EvaluationEvent['observations']);
+  const result = new AlertCandidateEvaluator().evaluate(event, () =>
+    createTestContext({ requiredPpe: ['UNSUPPORTED'] }),
+  );
+  assert.equal(result.length, 0);
+});
 
 function createTestContext(overrides?: {
   requiredPpe?: string[];
@@ -54,6 +102,7 @@ function createBaseEvent(observations: EvaluationEvent['observations']): Evaluat
 
 function identityConflictEvent(identities: EvaluationEvent['observations']): EvaluationEvent {
   return createBaseEvent([
+    { type: 'PERSON', trackId: 101 },
     ...identities,
     {
       type: 'PPE',
@@ -66,6 +115,142 @@ function identityConflictEvent(identities: EvaluationEvent['observations']): Eva
     { type: 'ZONE_ENTRY', trackId: 101, regionId, geometryVersion },
   ]);
 }
+
+test('identity summaries require exactly one same-event PERSON, irrespective of observation order', () => {
+  const identity = {
+    type: 'IDENTITY_CANDIDATE',
+    trackId: 7,
+    status: 'CANDIDATE',
+    candidateWorkerId: 'A',
+    similarityScore: 0.9,
+    qualityScore: 0.8,
+  } as const;
+  const personSets: EvaluationEvent['observations'][] = [
+    [],
+    [{ type: 'PERSON', trackId: 8 }],
+    [
+      { type: 'PERSON', trackId: 7 },
+      { type: 'PERSON', trackId: 7 },
+    ],
+    [
+      { type: 'PERSON', trackId: 7, boundingBox: { x1: 0.1, y1: 0.1, x2: 0.3, y2: 0.5 } },
+      { type: 'PERSON', trackId: 7 },
+    ],
+  ];
+  for (const persons of personSets) {
+    const claims: EvaluationEvent['observations'] = [
+      identity,
+      { type: 'IDENTITY_CANDIDATE', trackId: 7, status: 'UNKNOWN', qualityScore: 0.8 },
+      { type: 'IDENTITY_CANDIDATE', trackId: 7, status: 'UNAVAILABLE', qualityScore: 0.8 },
+    ];
+    for (const claim of claims) {
+      const eventObservations = [claim, ...persons];
+      for (const ordered of [eventObservations, [...eventObservations].reverse()]) {
+        const original = structuredClone(ordered);
+        assert.equal(summarizeIdentityEvidenceByTrack(ordered).size, 0);
+        assert.deepEqual(ordered, original);
+      }
+    }
+  }
+});
+
+test('identity summaries are event-local and do not carry a PERSON into the next event', () => {
+  const identity = {
+    type: 'IDENTITY_CANDIDATE',
+    trackId: 7,
+    status: 'CANDIDATE',
+    candidateWorkerId: 'A',
+  } as const;
+  assert.equal(
+    summarizeIdentityEvidenceByTrack([{ type: 'PERSON', trackId: 7 }, identity]).get(7)
+      ?.candidateWorkerId,
+    'A',
+  );
+  assert.equal(summarizeIdentityEvidenceByTrack([identity]).size, 0);
+});
+
+test('duplicate PERSONs on another track do not suppress a unique subject technical summary', () => {
+  const observations: EvaluationEvent['observations'] = [
+    { type: 'PERSON', trackId: 0 },
+    { type: 'IDENTITY_CANDIDATE', trackId: 0, status: 'CANDIDATE', candidateWorkerId: 'A' },
+    { type: 'PERSON', trackId: 8 },
+    { type: 'PERSON', trackId: 8 },
+    { type: 'IDENTITY_CANDIDATE', trackId: 8, status: 'CANDIDATE', candidateWorkerId: 'B' },
+  ];
+  for (const ordered of [observations, [...observations].reverse()]) {
+    const summaries = summarizeIdentityEvidenceByTrack(ordered);
+    assert.equal(summaries.size, 1);
+    // A crop box is not required for a technical summary; this is never verified identity.
+    assert.equal(summaries.get(0)?.candidateWorkerId, 'A');
+    assert.equal(summaries.has(8), false);
+  }
+});
+
+test('unbound identity leaves PPE/Zone alerts intact and passes no Worker candidate to authorization', () => {
+  const evaluator = new AlertCandidateEvaluator();
+  const context = createTestContext({
+    requiredPpe: ['HARD_HAT'],
+    restrictionPolicy: ZoneRestrictionPolicy.AUTHORIZATION_REQUIRED,
+  });
+  for (const persons of [
+    [],
+    [
+      { type: 'PERSON', trackId: 101 },
+      { type: 'PERSON', trackId: 101 },
+    ],
+  ] satisfies EvaluationEvent['observations'][]) {
+    const event = createBaseEvent([
+      ...persons,
+      {
+        type: 'IDENTITY_CANDIDATE',
+        trackId: 101,
+        status: 'CANDIDATE',
+        candidateWorkerId: 'A',
+        similarityScore: 0.9,
+        qualityScore: 0.8,
+      },
+      {
+        type: 'PPE',
+        trackId: 101,
+        ppeItem: 'HARD_HAT',
+        status: 'MISSING',
+        regionId,
+        geometryVersion,
+      },
+      { type: 'ZONE_ENTRY', trackId: 101, regionId, geometryVersion },
+    ]);
+    const original = structuredClone(event);
+    let lookups = 0;
+    const candidates = evaluator.evaluate(event, context, ({ candidateWorkerId }) => {
+      lookups += 1;
+      assert.equal(candidateWorkerId, undefined);
+      return {
+        status: 'UNAVAILABLE',
+        candidateSubtype: 'ZONE_ENTRY_AUTHORIZATION_UNAVAILABLE',
+        reasonCode: 'IDENTITY_UNAVAILABLE',
+      };
+    });
+    assert.equal(lookups, 1);
+    assert.deepEqual(candidates.map((candidate) => candidate.candidateSubtype).sort(), [
+      'PPE_HARD_HAT_MISSING',
+      'ZONE_ENTRY_AUTHORIZATION_UNAVAILABLE',
+    ]);
+    for (const candidate of candidates) {
+      assert.equal(candidate.candidateWorkerId, undefined);
+      assert.equal(candidate.identitySimilarityScore, undefined);
+      assert.equal(candidate.identityQualityScore, undefined);
+    }
+    assert.deepEqual(event, original);
+    // Also retain the actual policy evaluator's UNKNOWN != DENIED behavior.
+    assert.deepEqual(
+      evaluator
+        .evaluate(event, context)
+        .map((candidate) => candidate.candidateSubtype)
+        .sort(),
+      ['PPE_HARD_HAT_MISSING', 'ZONE_ENTRY_AUTHORIZATION_UNAVAILABLE'],
+    );
+  }
+});
 
 test('conflicting Worker candidates cannot select the last identity for PPE or Zone alerts', () => {
   const evaluator = new AlertCandidateEvaluator();
@@ -379,6 +564,8 @@ test('MF06 authorization lookup suppresses allowed entry and emits UNAUTHORIZED 
     restrictionPolicy: ZoneRestrictionPolicy.AUTHORIZATION_REQUIRED,
   });
   const event = createBaseEvent([
+    { type: 'PERSON', trackId: 110 },
+    { type: 'PERSON', trackId: 111 },
     {
       type: 'IDENTITY_CANDIDATE',
       trackId: 110,
@@ -419,6 +606,7 @@ test('Case 9: Candidate identity for same track is attached into evidence fields
   const evaluator = new AlertCandidateEvaluator();
   const context = createTestContext({ requiredPpe: ['HARD_HAT'] });
   const event = createBaseEvent([
+    { type: 'PERSON', trackId: 105 },
     {
       type: 'PPE',
       trackId: 105,

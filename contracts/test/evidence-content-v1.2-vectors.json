@@ -1,0 +1,45 @@
+{
+  "vectorVersion": "1.2.0-candidate-1",
+  "schemaVersion": "1.2.0",
+  "expectedCanonicalHash": "9e9ef3bb207a4ecbccdedd3dde7024d44bbabf43388a67713de3036b704c32a3",
+  "event": {
+    "eventId": "11111111-2222-4333-8444-555555555555",
+    "schemaVersion": "1.2.0",
+    "cameraExternalId": "cam-zone-north-01",
+    "streamSessionId": "aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee",
+    "capturedAt": "2026-10-20T06:00:00.000Z",
+    "frameDimensions": {
+      "width": 1920,
+      "height": 1080
+    },
+    "observations": [
+      {
+        "type": "ZONE_ENTRY",
+        "trackId": 7,
+        "regionId": "99999999-8888-4777-8666-555555555555",
+        "geometryVersion": 3,
+        "confidence": 0.95
+      }
+    ],
+    "evidence": [
+      {
+        "kind": "FRAME",
+        "uri": "local://frames/2026-10-20/event-11111111.jpg",
+        "sha256": "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
+      },
+      {
+        "kind": "CROP",
+        "uri": "local://crops/2026-10-20/event-11111111-track-7.jpg",
+        "trackId": 7,
+        "boundingBox": {
+          "x1": 0.1,
+          "y1": 0.2,
+          "x2": 0.4,
+          "y2": 0.8,
+          "coordinateSpace": "NORMALIZED_0_1"
+        },
+        "sha256": "fedcba9876543210fedcba9876543210fedcba9876543210fedcba9876543210"
+      }
+    ]
+  }
+}

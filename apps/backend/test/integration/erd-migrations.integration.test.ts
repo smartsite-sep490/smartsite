@@ -23,20 +23,9 @@ test('ERD migrations preserve legacy visitor counts, revoke old QR and refuse a 
         Number((a.name ?? a.constructor.name).slice(-13)) -
         Number((b.name ?? b.constructor.name).slice(-13)),
     );
-    const baseline = migrations.filter(
-      (m) =>
-        !(m.name ?? m.constructor.name).startsWith('Erd') &&
-        // Team Zone permissions depend on ERD Contractor permissions; they are not a legacy baseline.
-        !(m.name ?? m.constructor.name).startsWith('TeamZonePermissions') &&
-        !(m.name ?? m.constructor.name).startsWith('ContractorZoneRegrant') &&
-        !(m.name ?? m.constructor.name).startsWith('SingleTeamZone') &&
-        m.name !== 'ShiftBreak1791763200001' &&
-        m.name !== 'AttendanceAbsence1792022400000' &&
-        // Exit policies require attendance_day from the excluded MF03 migrations.
-        !(m.name ?? m.constructor.name).startsWith('ShiftExitGracePeriod') &&
-        !(m.name ?? m.constructor.name).startsWith('AttendanceExitNotifications') &&
-        !(m.name ?? m.constructor.name).startsWith('Mf03'),
-    );
+    const boundary = migrations.findIndex((m) => (m.name ?? m.constructor.name).startsWith('Erd'));
+    assert.ok(boundary > 0, 'Explicit pre-ERD release boundary required');
+    const baseline = migrations.slice(0, boundary);
     const access = migrations.filter((m) => (m.name ?? m.constructor.name).startsWith('Erd'));
     for (const migration of baseline) await migration.up(runner);
     for (const migration of access) await migration.up(runner);

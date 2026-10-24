@@ -4,7 +4,7 @@ import { fileURLToPath } from 'node:url';
 import ts from 'typescript';
 import { expect, it } from 'vitest';
 
-it('loads the public client without circular runtime imports in Metro', () => {
+it('keeps the public client runtime import graph acyclic', () => {
   const visited = new Set<string>();
   const visit = (file: string, ancestors: string[]) => {
     if (ancestors.includes(file)) {

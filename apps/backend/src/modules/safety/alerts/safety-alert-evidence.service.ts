@@ -6,7 +6,11 @@ import { dirname, isAbsolute, join } from 'node:path';
 import { isUUID } from 'class-validator';
 import { DataSource } from 'typeorm';
 import { createHash } from 'node:crypto';
-import { computeCanonicalPayloadHash, validateObservationEvent } from '@smartsite/contracts';
+import {
+  computeCanonicalPayloadHash,
+  validateObservationEvent,
+  validateEightFamilyObservationEvent,
+} from '@smartsite/contracts';
 import type { BackendEnvironment } from '../../../config/environment.js';
 import { invalid, missing, uuid } from '../../../common/configuration/commands.js';
 import { PublicHttpException } from '../../../common/http/public-http-exception.js';
@@ -144,6 +148,7 @@ export class SafetyAlertEvidenceService {
     const index = evidenceIndex(rawIndex);
 
     const { observationEvent } = await this.loadScopedEvent(siteId, alertId, event);
+    if (await this.hasConflictingSiteMapping(siteId, event)) return missing();
     const item = parseEvidenceItem(evidenceItems(observationEvent.rawPayload)[index]);
     if (!item) return missing();
     const local = parseLocalEvidenceUri(item.uri, event);
@@ -163,7 +168,13 @@ export class SafetyAlertEvidenceService {
     const index = evidenceIndex(rawIndex);
     const { observationEvent } = await this.loadScopedEvent(siteId, alertId, event);
     const raw = observationEvent.rawPayload;
-    if (!validateObservationEvent(raw).isValid) return this.reviewConflict();
+    const validation =
+      raw &&
+      typeof raw === 'object' &&
+      (raw as { schemaVersion?: unknown }).schemaVersion === '1.3.0'
+        ? validateEightFamilyObservationEvent(raw)
+        : validateObservationEvent(raw);
+    if (!validation.isValid) return this.reviewConflict();
     const payload = raw as { eventId: string; streamSessionId: string; cameraExternalId: string };
     if (
       observationEvent.payloadHash !== expectedEventHash ||
@@ -175,21 +186,30 @@ export class SafetyAlertEvidenceService {
     )
       return this.reviewConflict();
     // Historical Site ownership comes from alert mappings, never today's Camera configuration.
-    const conflictingSiteMapping = await this.dataSource
-      .getRepository(AlertDetectionMappingEntity)
-      .createQueryBuilder('mapping')
-      .innerJoin(SafetyAlertEntity, 'mappedAlert', 'mappedAlert.id = mapping.alertId')
-      .where('mapping.eventId = :eventId', { eventId: event })
-      .andWhere('mappedAlert.siteId <> :siteId', { siteId: uuid(siteId) })
-      .getExists();
-    if (conflictingSiteMapping) return this.reviewConflict();
+    if (await this.hasConflictingSiteMapping(siteId, event)) return this.reviewConflict();
     const item = parseEvidenceItem(evidenceItems(raw)[index]);
     if (!item || item.kind !== 'FRAME') return missing();
     const local = parseLocalEvidenceUri(item.uri, event);
     if (!local || local.streamSessionId.toLowerCase() !== payload.streamSessionId.toLowerCase())
       return missing();
     const content = await this.readLocalJpeg(local);
-    return { ...content, sha256: createHash('sha256').update(content.bytes).digest('hex') };
+    const sha256 = createHash('sha256').update(content.bytes).digest('hex');
+    if (
+      (raw as { schemaVersion?: unknown }).schemaVersion === '1.3.0' &&
+      (evidenceItems(raw)[index] as { sha256?: unknown }).sha256 !== sha256
+    )
+      return this.reviewConflict();
+    return { ...content, sha256 };
+  }
+
+  private hasConflictingSiteMapping(siteId: string, eventId: string): Promise<boolean> {
+    return this.dataSource
+      .getRepository(AlertDetectionMappingEntity)
+      .createQueryBuilder('mapping')
+      .innerJoin(SafetyAlertEntity, 'mappedAlert', 'mappedAlert.id = mapping.alertId')
+      .where('mapping.eventId = :eventId', { eventId: uuid(eventId) })
+      .andWhere('mappedAlert.siteId <> :siteId', { siteId: uuid(siteId) })
+      .getExists();
   }
 
   private reviewConflict(): never {

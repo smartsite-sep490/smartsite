@@ -113,6 +113,12 @@ test('identity FRAME digest retains historical Site scope and rejects contradict
     );
     assert.deepEqual(content.bytes, bytes);
     assert.equal(content.sha256, createHash('sha256').update(bytes).digest('hex'));
+    assert.deepEqual((await service.read(siteId, alertIds[0]!, eventId, '0')).bytes, bytes);
+    await assert.rejects(
+      service.read(otherSiteId, alertIds[0]!, eventId, '0'),
+      (error: unknown) =>
+        error instanceof PublicHttpException && error.publicPayload.code === 'NOT_FOUND',
+    );
     await assert.rejects(
       service.readFrameForIdentityReview(otherSiteId, alertIds[0]!, eventId, '0', payloadHash),
       (error: unknown) =>
@@ -126,6 +132,13 @@ test('identity FRAME digest retains historical Site scope and rejects contradict
       (error: unknown) =>
         error instanceof PublicHttpException && error.publicPayload.code === 'CONFLICT',
     );
+    for (const [index, mappedSite] of [siteId, otherSiteId].entries()) {
+      await assert.rejects(
+        service.read(mappedSite, alertIds[index]!, eventId, '0'),
+        (error: unknown) =>
+          error instanceof PublicHttpException && error.publicPayload.code === 'NOT_FOUND',
+      );
+    }
   } finally {
     await dataSource.getRepository(AlertDetectionMappingEntity).delete({ eventId });
     await dataSource.getRepository(SafetyAlertEntity).delete(alertIds);

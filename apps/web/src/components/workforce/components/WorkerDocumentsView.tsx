@@ -13,13 +13,22 @@ export function WorkerDocumentsView({ apiUrl }: { apiUrl: string }) {
   useTranslation();
   const location = useLocation();
   const params = new URLSearchParams(location.search);
-  const { accessToken } = useAuth();
+  const urlSiteId = params.get('siteId') ?? '';
+  const urlWorkerId = params.get('workerId') ?? undefined;
+  const { accessToken, sessionScope } = useAuth();
   const client = useManagementClient(apiUrl);
   const user = useCurrentUser(apiUrl);
-  const [requestedSite, setRequestedSite] = useState(params.get('siteId') ?? '');
+  const [requestedSite, setRequestedSite] = useState(urlSiteId);
+  const [prevSearch, setPrevSearch] = useState(location.search);
+  if (prevSearch !== location.search) {
+    setPrevSearch(location.search);
+    setRequestedSite(urlSiteId);
+  }
+
+  const effectiveScope = [apiUrl, sessionScope, user.data?.id].filter(Boolean).join(':');
 
   const sites = useQuery({
-    queryKey: ['worker-document-sites', apiUrl, user.data?.id],
+    queryKey: ['worker-document-sites', apiUrl, sessionScope, user.data?.id],
     enabled: !!accessToken,
     queryFn: ({ signal }) => loadAllPages((p) => client.listSites(accessToken!, p), signal),
   });
@@ -46,21 +55,37 @@ export function WorkerDocumentsView({ apiUrl }: { apiUrl: string }) {
       (r) => r.siteId === siteId && r.role === 'CONTRACTOR_REPRESENTATIVE',
     ) ?? false;
 
+  const isWorkerOnSite = Boolean(siteId) && !safety && !rep;
+
   const own = useQuery({
-    queryKey: ['worker-document-self', apiUrl, user.data?.id, siteId],
-    enabled: !!siteId && !safety && !rep,
+    queryKey: ['worker-document-self', apiUrl, sessionScope, user.data?.id, siteId],
+    enabled: !!accessToken && isWorkerOnSite,
     queryFn: () => client.myContractorTeam(accessToken!, siteId),
   });
 
-  if (user.isError || sites.isError || own.isError) {
-    const errorMsg = (user.error ?? sites.error ?? own.error)?.message;
+  const hasOwnError = isWorkerOnSite && own.isError;
+  if (user.isError || sites.isError || hasOwnError) {
+    const retryRelevant = () => {
+      if (user.isError) void user.refetch?.();
+      if (sites.isError) void sites.refetch();
+      if (hasOwnError) void own.refetch();
+    };
     return (
       <div
         role="alert"
-        className="rounded-2xl border border-red-200 bg-red-50 p-6 text-sm text-red-800 flex items-center gap-3 shadow-xs"
+        className="rounded-2xl border border-red-200 bg-red-50 p-6 text-sm text-red-800 flex items-center justify-between gap-3 shadow-xs"
       >
-        <IconAlertTriangle className="w-5 h-5 text-red-600 shrink-0" />
-        <span className="font-semibold">{errorMsg}</span>
+        <div className="flex items-center gap-3">
+          <IconAlertTriangle className="w-5 h-5 text-red-600 shrink-0" />
+          <span className="font-semibold">{tr('errors.unexpected')}</span>
+        </div>
+        <button
+          type="button"
+          onClick={retryRelevant}
+          className="px-3.5 py-1.5 rounded-xl bg-white border border-red-200 text-red-700 font-bold hover:bg-red-100 text-xs shadow-2xs transition-all shrink-0 cursor-pointer"
+        >
+          {tr('documents.refresh')}
+        </button>
       </div>
     );
   }
@@ -126,23 +151,23 @@ export function WorkerDocumentsView({ apiUrl }: { apiUrl: string }) {
         accessToken &&
         (safety || rep ? (
           <WorkerDocumentReviewView
-            key={siteId}
+            key={`${effectiveScope}:${siteId}:${urlWorkerId ?? ''}`}
             client={client}
             token={accessToken}
             siteId={siteId}
-            scope={apiUrl + ':' + user.data.id}
+            scope={effectiveScope}
             canReview={safety}
             canUpload={rep}
-            initialWorkerId={params.get('workerId') ?? undefined}
+            initialWorkerId={urlWorkerId}
           />
         ) : own.data?.workerId ? (
           <WorkerDocumentsPanel
-            key={siteId + own.data.workerId}
+            key={`${effectiveScope}:${siteId}:${own.data.workerId}`}
             client={client}
             token={accessToken}
             siteId={siteId}
             workerId={own.data.workerId}
-            scope={apiUrl + ':' + user.data.id}
+            scope={effectiveScope}
           />
         ) : null)}
     </div>

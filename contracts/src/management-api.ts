@@ -316,7 +316,8 @@ export interface ZoneEntryDecisionResponse {
 
 export interface ContractorResponse {
   id: string;
-  siteId: string;
+  /** Present only on scoped projections; main Contractor/create has no Site field. */
+  siteId?: string;
   code: string;
   name: string;
   isActive: boolean;
@@ -446,6 +447,7 @@ export interface SafetyNotificationTarget {
   tab: 'incidents';
 }
 export type PpeAlertNotificationEvent = 'PPE_ALERT_CREATED';
+export type ZoneAlertNotificationEvent = 'ZONE_ALERT_CREATED';
 
 export interface SafetyAlertNotificationTarget {
   siteId: string;
@@ -458,7 +460,22 @@ export interface PpeAlertNotificationMetadata {
   cameraName: string;
   zoneId: string | null;
   zoneName: string | null;
-  candidateSubtype: 'PPE_HARD_HAT_MISSING' | 'PPE_SAFETY_VEST_MISSING';
+  candidateSubtype:
+    | 'PPE_HARD_HAT_MISSING'
+    | 'PPE_SAFETY_VEST_MISSING'
+    | 'PPE_GLOVES_MISSING'
+    | 'PPE_BOOTS_MISSING'
+    | 'PPE_GOGGLES_MISSING';
+}
+
+export interface ZoneAlertNotificationMetadata extends Omit<
+  PpeAlertNotificationMetadata,
+  'candidateSubtype' | 'zoneId' | 'zoneName'
+> {
+  zoneId: string;
+  zoneName: string;
+  candidateSubtype:
+    'ZONE_ENTRY_PROHIBITED' | 'ZONE_ENTRY_UNAUTHORIZED' | 'ZONE_ENTRY_AUTHORIZATION_UNAVAILABLE';
 }
 
 export interface UserNotificationResponse {
@@ -470,6 +487,7 @@ export interface UserNotificationResponse {
     | import('./safety-checklist-api.js').ChecklistNotificationEvent
     | 'SAFETY_HANDOVER'
     | PpeAlertNotificationEvent
+    | ZoneAlertNotificationEvent
     | import('./attendance-api.js').AttendanceNotificationEvent;
   siteId: string;
   siteName: string;
@@ -478,7 +496,7 @@ export interface UserNotificationResponse {
   workDate?: string;
   fromShiftName?: string;
   toShiftName?: string;
-  safetyAlert?: PpeAlertNotificationMetadata;
+  safetyAlert?: PpeAlertNotificationMetadata | ZoneAlertNotificationMetadata;
   createdAt: string;
   readAt: string | null;
   target:
@@ -495,6 +513,10 @@ export interface UserNotificationListResponse {
   items: UserNotificationResponse[];
   total: number;
   unreadCount: number;
+  /** Currently authorized Sites with non-deleted notices, before filtering/pagination. */
+  sites?: { id: string; name: string }[];
+  /** Bell badge across currently authorized Sites; unreadCount follows the selected Site. */
+  allSitesUnreadCount?: number;
 }
 
 export interface NotificationReadResponse {

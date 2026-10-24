@@ -1,6 +1,19 @@
 # Contract Backend–AI
 
+Candidate v1.3 adds the explicit `validateEightFamilyObservationEvent` entrypoint
+for eight PPE families with evidence digests. Existing consumers do not opt in.
+See `../docs/operations/eight-family-observation-contract.md` for the positive-only
+Harness/Hook limits and open producer/model/full-flow acceptance gates.
+
 Thư mục này giữ contract chuẩn giữa `smartsite-ai` và SmartSite Backend.
+
+Observation envelope `1.1.0` bổ sung `GLOVES`, `BOOTS`, `GOGGLES` tại
+`schemas/v1.1/technical-observation-event.json`. Validator chọn schema theo
+`schemaVersion` chính xác; payload `1.0.0` vẫn chỉ cho phép mũ/vest, schema v1
+không đổi bytes. Các bounds, geometry và trạng thái PRESENT/MISSING giữ nguyên.
+Producer cũ tiếp tục dùng v1; producer mở rộng chỉ được bật khi consumer hỗ trợ
+v1.1 và model/item đã qua capability/evaluation gate. Enum và Zone policy không
+chứng minh model có khả năng detect item; không suy MISSING từ absence hoặc UNKNOWN.
 
 Contract v1 hiện có:
 
@@ -30,5 +43,17 @@ Khi nhận cùng một `configurationVersion`, hai phía canonical hóa toàn b�
 5. Không trỏ provenance vào một branch đang thay đổi; luôn dùng commit SHA bất biến.
 
 AI chỉ phát technical observations. Backend xác minh camera/region/Zone, quyết định quyền nghiệp vụ, giữ raw event, xử lý idempotency và quản lý Safety Alert/Incident.
+
+## Ứng viên checksum evidence v1.2
+
+Schema `schemas/v1.2/technical-observation-event.json` thêm phiên bản `1.2.0`,
+yêu cầu mỗi evidence item có `sha256` gồm đúng 64 ký tự hex chữ thường.
+Hash phải được tính từ bytes đã xuất; payload hash của sự kiện sẽ giữ digest này.
+Các schema v1/v1.1 không đổi và không nhận trường mới. Mảng evidence rỗng vẫn hợp
+lệ cho quan sát kỹ thuật, nhưng không đủ để chứng minh ảnh gốc cho MF06.
+
+Đây là ứng viên local, chưa rollout. Vẫn áp dụng quy trình Main trước, AI vendor
+sau; không tự nâng phiên bản producer hoặc sửa dữ liệu cũ. Chi tiết và các cổng
+còn mở tại `docs/operations/mf06-frame-content-binding-candidate.md` của repository.
 
 `src/management-api.ts` cũng định nghĩa các kiểu response TypeScript dùng chung cho Backend API, Web và Mobile. Safety Alert list/detail chỉ công bố các trường quản lý ổn định; detail có `detectionsTotal` và tối đa 100 detection summaries mới nhất, không công bố raw event payload. Đây là bổ sung tương thích ngược cho API quản lý; JSON Schema v1 giữa Backend và AI không thay đổi.

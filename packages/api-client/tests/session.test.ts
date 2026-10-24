@@ -1,7 +1,10 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { ApiError, SmartSiteManagementClient } from '../src/index';
 
-afterEach(() => vi.unstubAllGlobals());
+afterEach(() => {
+  vi.unstubAllGlobals();
+  vi.useRealTimers();
+});
 
 function session() {
   let token = 'old';
@@ -14,6 +17,39 @@ function session() {
 }
 
 describe('opt-in Web session transport', () => {
+  it('bounds a stalled session-backed current-user request without a caller timeout', async () => {
+    vi.useFakeTimers();
+    const fetch = vi.fn(() => new Promise<Response>(() => {}));
+    vi.stubGlobal('fetch', fetch);
+    let outcome = 'pending';
+    void new SmartSiteManagementClient('https://api.example.test', session())
+      .me('old')
+      .catch((error: ApiError) => {
+        outcome = error.code;
+      });
+    await vi.advanceTimersByTimeAsync(15_000);
+    expect(outcome).toBe('timeout');
+  });
+  it('cancels a current-user request through the caller signal', async () => {
+    const controller = new AbortController();
+    const fetch = vi.fn(
+      (_url: string, init: RequestInit) =>
+        new Promise<Response>((_resolve, reject) => {
+          init.signal?.addEventListener('abort', () =>
+            reject(new DOMException('Aborted', 'AbortError')),
+          );
+        }),
+    );
+    vi.stubGlobal('fetch', fetch);
+    const pending = new SmartSiteManagementClient('https://api.example.test').me('old', {
+      signal: controller.signal,
+    });
+    const rejection = expect(pending).rejects.toMatchObject({ code: 'cancelled' });
+    expect(fetch.mock.calls[0]?.[1].signal).toBeInstanceOf(AbortSignal);
+    controller.abort();
+    expect(fetch.mock.calls[0]?.[1].signal?.aborted).toBe(true);
+    await rejection;
+  });
   it('does not add a Web session timeout or signal to default Mobile auth requests', async () => {
     const fetch = vi.fn(async () => Response.json({ accessToken: 'mobile' }));
     vi.stubGlobal('fetch', fetch);
@@ -35,7 +71,9 @@ describe('opt-in Web session transport', () => {
           calls.push(init);
           if (calls.length === 1) return new Response('{}', { status: 401 });
           return kind === 'blob'
-            ? new Response(new Uint8Array([1]), { headers: { 'Content-Type': 'image/jpeg' } })
+            ? new Response(new Uint8Array([0xff, 0xd8, 0xff, 0xd9]), {
+                headers: { 'Content-Type': 'image/jpeg' },
+              })
             : Response.json({ items: [] });
         }),
       );

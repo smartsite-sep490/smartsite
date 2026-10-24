@@ -41,7 +41,14 @@ export interface ObservationIdentityContextRecords {
   }[];
 }
 
-/** HTTP callers require the dedicated identity-review guard before invoking this service. */
+/** Caller must revalidate session and same-Site capability using the supplied transaction. */
+export type ObservationIdentityMutationAuthority = (
+  manager: EntityManager,
+  actorUserId: string,
+  siteId: string,
+) => Promise<void>;
+
+/** Reads require the identity guard; writes additionally require a transaction-bound authority claim. */
 @Injectable()
 export class ObservationIdentityResolutionService {
   constructor(
@@ -57,6 +64,7 @@ export class ObservationIdentityResolutionService {
     personObservationIndex: number,
     actorUserId: string,
     input: unknown,
+    authorize: ObservationIdentityMutationAuthority,
   ): Promise<ObservationIdentityDecisionResult> {
     const scope = normalizeObservationIdentityScope({
       siteId,
@@ -67,7 +75,7 @@ export class ObservationIdentityResolutionService {
     });
     const command = parseObservationIdentityCommand(input);
     const hash = observationIdentityCommandHash(scope, command);
-    const replay = await this.findReplay(scope, command, hash);
+    const replay = await this.findReplay(scope, command, hash, authorize);
     if (replay) return replay;
 
     // No file IO or remote calls while any database lock is held.
@@ -87,13 +95,14 @@ export class ObservationIdentityResolutionService {
           conflict('Observation identity evidence has changed');
       } catch (error) {
         // An identical request may commit while this retry is reading expired media.
-        const concurrentReplay = await this.findReplay(scope, command, hash);
+        const concurrentReplay = await this.findReplay(scope, command, hash, authorize);
         if (concurrentReplay) return concurrentReplay;
         throw error;
       }
     }
 
     return this.dataSource.transaction(async (manager) => {
+      await authorize(manager, scope.actorUserId, scope.siteId);
       await this.lock(manager, `identity-command:${command.commandId}`);
       const lockedEvent = await this.loadScopedEvent(manager, scope);
       if (lockedEvent.payloadHash !== command.expectedEventHash)
@@ -263,8 +272,10 @@ export class ObservationIdentityResolutionService {
     scope: ObservationIdentityCommandScope,
     command: ObservationIdentityDecisionCommand,
     hash: string,
+    authorize: ObservationIdentityMutationAuthority,
   ): Promise<ObservationIdentityDecisionResult | null> {
     return this.dataSource.transaction(async (manager) => {
+      await authorize(manager, scope.actorUserId, scope.siteId);
       await this.lock(manager, `identity-command:${command.commandId}`);
       const event = await this.loadScopedEvent(manager, scope);
       if (event.payloadHash !== command.expectedEventHash)

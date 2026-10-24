@@ -1,3 +1,4 @@
+import { refuseLegacyMainWriter } from '../../../common/configuration/legacy-workforce-writer.js';
 import { randomUUID } from 'node:crypto';
 import { HttpStatus, Injectable } from '@nestjs/common';
 import { Transform } from 'class-transformer';
@@ -18,6 +19,7 @@ import {
   ValidateIf,
 } from 'class-validator';
 import { DataSource, In, type EntityManager } from 'typeorm';
+import { requireLegacyAuthoritySchema } from '../../zones/legacy-authority-schema.js';
 import {
   command,
   conflict,
@@ -258,14 +260,18 @@ export class ContractorOperationsService {
   }
 
   async createContractor(actor: WorkforceActor, input: CreateContractorCommand) {
+    await refuseLegacyMainWriter(this.dataSource.manager);
     this.assertAdmin(actor);
     const value = command(CreateContractorCommand, input);
     try {
-      return await this.dataSource.getRepository(ContractorEntity).save({
-        id: randomUUID(),
-        code: value.code,
-        name: value.name,
-        isActive: true,
+      return await this.dataSource.transaction(async (manager) => {
+        await requireLegacyAuthoritySchema(manager);
+        return manager.getRepository(ContractorEntity).save({
+          id: randomUUID(),
+          code: value.code,
+          name: value.name,
+          isActive: true,
+        });
       });
     } catch (error) {
       knownUnique(error, ['uq_contractor_code']);
@@ -277,11 +283,13 @@ export class ContractorOperationsService {
     contractorIdValue: string,
     input: CreateContractorParticipationCommand,
   ) {
+    await refuseLegacyMainWriter(this.dataSource.manager);
     const contractorId = uuid(contractorIdValue);
     const value = command(CreateContractorParticipationCommand, input);
     await this.requireSiteRole(actor, uuid(value.siteId), UserRole.SITE_MANAGER);
     const range = timeRange(value.validFrom, value.validUntil);
     return this.dataSource.transaction(async (manager) => {
+      await requireLegacyAuthoritySchema(manager);
       const contractor = await manager
         .getRepository(ContractorEntity)
         .findOneBy({ id: contractorId });
@@ -305,10 +313,12 @@ export class ContractorOperationsService {
     contractorIdValue: string,
     input: GrantContractorRepresentativeCommand,
   ) {
+    await refuseLegacyMainWriter(this.dataSource.manager);
     this.assertAdmin(actor);
     const contractorId = uuid(contractorIdValue);
     const value = command(GrantContractorRepresentativeCommand, input);
     return this.dataSource.transaction(async (manager) => {
+      await requireLegacyAuthoritySchema(manager);
       const [contractor, user] = await Promise.all([
         manager.getRepository(ContractorEntity).findOneBy({ id: contractorId }),
         manager.getRepository(UserEntity).findOneBy({ id: uuid(value.userId) }),
@@ -340,10 +350,12 @@ export class ContractorOperationsService {
     contractorIdValue: string,
     input: CreateContractorWorkerCommand,
   ) {
+    await refuseLegacyMainWriter(this.dataSource.manager);
     const contractorId = uuid(contractorIdValue);
     const value = command(CreateContractorWorkerCommand, input);
     const siteId = uuid(value.siteId);
     return this.dataSource.transaction(async (manager) => {
+      await requireLegacyAuthoritySchema(manager);
       await this.requireWorkerCreationAccess(manager, actor, contractorId, siteId);
       try {
         return await manager.getRepository(WorkerEntity).save({
@@ -376,6 +388,7 @@ export class ContractorOperationsService {
     workerIdValue: string,
     input: CreateWorkerSiteZoneAssignmentCommand,
   ) {
+    await refuseLegacyMainWriter(this.dataSource.manager);
     const workerId = uuid(workerIdValue);
     const value = command(CreateWorkerSiteZoneAssignmentCommand, input);
     const siteId = uuid(value.siteId);
@@ -384,6 +397,7 @@ export class ContractorOperationsService {
     const range = timeRange(value.validFrom, value.validUntil);
     if (!range.until) conflict('Worker assignment requires an expiry');
     return this.dataSource.transaction(async (manager) => {
+      await requireLegacyAuthoritySchema(manager);
       const worker = await manager.getRepository(WorkerEntity).findOneBy({ id: workerId, siteId });
       if (!worker?.contractorId || !worker.isActive) this.forbidden();
       await this.requireContractorRepresentative(manager, actor, worker.contractorId, siteId);
@@ -424,8 +438,10 @@ export class ContractorOperationsService {
   }
 
   async safetyReview(actor: WorkforceActor, requestIdValue: string) {
+    await refuseLegacyMainWriter(this.dataSource.manager);
     const requestId = uuid(requestIdValue);
     return this.dataSource.transaction(async (manager) => {
+      await requireLegacyAuthoritySchema(manager);
       const request = await manager
         .getRepository(WorkerSiteZoneAssignmentEntity)
         .createQueryBuilder('assignment')
@@ -459,9 +475,11 @@ export class ContractorOperationsService {
     requestIdValue: string,
     input: SiteManagerDecisionCommand,
   ) {
+    await refuseLegacyMainWriter(this.dataSource.manager);
     const requestId = uuid(requestIdValue);
     const value = command(SiteManagerDecisionCommand, input);
     return this.dataSource.transaction(async (manager) => {
+      await requireLegacyAuthoritySchema(manager);
       const request = await manager
         .getRepository(WorkerSiteZoneAssignmentEntity)
         .createQueryBuilder('assignment')
@@ -526,8 +544,10 @@ export class ContractorOperationsService {
     requestIdValue: string,
     input: RevokeWorkerAssignmentCommand,
   ) {
+    await refuseLegacyMainWriter(this.dataSource.manager);
     const value = command(RevokeWorkerAssignmentCommand, input);
     return this.dataSource.transaction(async (manager) => {
+      await requireLegacyAuthoritySchema(manager);
       const assignment = await manager
         .getRepository(WorkerSiteZoneAssignmentEntity)
         .findOne({ where: { id: uuid(requestIdValue) }, lock: { mode: 'pessimistic_write' } });

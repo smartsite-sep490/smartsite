@@ -1,47 +1,53 @@
-import { translate as tr } from '../../i18n';
+import { translate as tr } from '../../i18n/runtime';
 import { useTranslation } from 'react-i18next';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { SmartSiteManagementClient, type AccountResponse } from '@smartsite/api-client';
+import { SmartSiteManagementClient, ApiError, type AccountResponse } from '@smartsite/api-client';
 import {
   createContext,
   useContext,
-  useState,
   useEffect,
+  useLayoutEffect,
   useCallback,
   useMemo,
+  useRef,
+  useId,
   useSyncExternalStore,
 } from 'react';
-
 import { WebSession } from './web-session';
 
-// Create a context for the auth state so we don't have to prop-drill the token
 type AuthState = {
   manager?: WebSession;
   epoch?: number;
   logoutUnconfirmed?: boolean;
   passwordChanged?: boolean;
   accessToken: string | null;
+  sessionScope?: string;
   mustChangePassword?: boolean;
   setAccessToken: (token: string | null) => void;
   isSessionExpired: boolean;
-  triggerSessionExpired: () => void;
+  triggerSessionExpired: (expiredScope?: string) => void;
   dismissSessionExpired: () => void;
 };
-
 export const AuthContext = createContext<AuthState>({
   accessToken: null,
+  sessionScope: '',
   setAccessToken: () => {},
   isSessionExpired: false,
   triggerSessionExpired: () => {},
   dismissSessionExpired: () => {},
 });
 
-export function AuthProvider({ children }: { children: React.ReactNode }) {
+export function AuthProvider({
+  children,
+  apiUrl = import.meta.env.VITE_API_URL || 'http://localhost:3000',
+}: {
+  children: React.ReactNode;
+  apiUrl?: string;
+}) {
   const queryClient = useQueryClient();
-  const [manager] = useState(
-    () => new WebSession(import.meta.env.VITE_API_URL || 'http://localhost:3000'),
-  );
+  const manager = useMemo(() => new WebSession(apiUrl), [apiUrl]);
   const state = useSyncExternalStore(manager.subscribe, manager.getSnapshot);
+  const sessionScope = state.sessionScope;
   useEffect(() => {
     let epoch = manager.getSnapshot().epoch;
     const unsubscribe = manager.subscribe(() => {
@@ -50,23 +56,38 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       void queryClient.cancelQueries();
       queryClient.clear();
     });
-    manager.connect();
-    return () => {
-      unsubscribe();
-      manager.dispose();
-    };
+    return unsubscribe;
   }, [manager, queryClient]);
   const setAccessToken = useCallback(
-    (token: string | null) => {
-      manager.setAccessToken(token);
-    },
+    (token: string | null) => manager.setAccessToken(token),
     [manager],
   );
-  const triggerSessionExpired = useCallback(() => {
-    const token = manager.getSnapshot().token;
-    if (token) manager.adapter().onUnauthorized(token);
-  }, [manager]);
+  const triggerSessionExpired = useCallback(
+    (expiredScope = sessionScope) => {
+      const token = manager.getSnapshot().token;
+      if (!token || !expiredScope || expiredScope !== manager.getSnapshot().sessionScope) return;
+      manager.adapter().onUnauthorized(token);
+    },
+    [manager, sessionScope],
+  );
   const dismissSessionExpired = useCallback(() => manager.dismissExpired(), [manager]);
+  useLayoutEffect(() => {
+    manager.connect();
+    const expired = (event: Event) => {
+      if (!(event instanceof CustomEvent) || !event.detail || typeof event.detail !== 'object')
+        return;
+      const scopes: unknown = event.detail.sessionScopes;
+      const currentScope = manager.getSnapshot().sessionScope;
+      const token = manager.getSnapshot().token;
+      if (token && currentScope && Array.isArray(scopes) && scopes.includes(currentScope))
+        manager.adapter().onUnauthorized(token);
+    };
+    window.addEventListener('smartsite:session-expired', expired);
+    return () => {
+      window.removeEventListener('smartsite:session-expired', expired);
+      manager.dispose();
+    };
+  }, [manager]);
   return (
     <AuthContext.Provider
       value={{
@@ -75,6 +96,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         logoutUnconfirmed: state.logoutUnconfirmed,
         passwordChanged: state.passwordChanged,
         accessToken: state.token,
+        sessionScope,
         setAccessToken,
         isSessionExpired: state.expired,
         triggerSessionExpired,
@@ -85,31 +107,41 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     </AuthContext.Provider>
   );
 }
-
 export function useAuth() {
   return useContext(AuthContext);
 }
 
-// ── Session Expired Luxury Modal ──────────────────────────────────────────────
 export function SessionExpiredModal({ open, onReLogin }: { open: boolean; onReLogin: () => void }) {
   useTranslation();
-
+  const titleId = useId();
+  const descriptionId = useId();
+  const actionRef = useRef<HTMLButtonElement>(null);
+  useEffect(() => {
+    if (!open) return;
+    const previousFocus = document.activeElement;
+    actionRef.current?.focus();
+    const keepFocus = (event: KeyboardEvent) => {
+      if (event.key !== 'Tab') return;
+      event.preventDefault();
+      actionRef.current?.focus();
+    };
+    document.addEventListener('keydown', keepFocus);
+    return () => {
+      document.removeEventListener('keydown', keepFocus);
+      if (previousFocus instanceof HTMLElement && previousFocus.isConnected) previousFocus.focus();
+    };
+  }, [open]);
   if (!open) return null;
 
   return (
-    <div
-      role="dialog"
-      aria-modal="true"
-      aria-labelledby="session-expired-heading"
-      onKeyDown={(event) => {
-        if (event.key === 'Tab') {
-          event.preventDefault();
-          event.currentTarget.querySelector('button')?.focus();
-        }
-      }}
-      className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-[#041D2E]/80 backdrop-blur-md animate-in fade-in duration-300"
-    >
-      <div className="w-full max-w-md bg-white rounded-3xl border border-[#DCE6EF] shadow-[0_24px_64px_rgba(7,26,43,0.3)] p-6 sm:p-8 text-center space-y-5 relative overflow-hidden">
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-[#041D2E]/80 backdrop-blur-md animate-in fade-in duration-300">
+      <div
+        role="alertdialog"
+        aria-modal="true"
+        aria-labelledby={titleId}
+        aria-describedby={descriptionId}
+        className="w-full max-w-md bg-white rounded-3xl border border-[#DCE6EF] shadow-[0_24px_64px_rgba(7,26,43,0.3)] p-6 sm:p-8 text-center space-y-5 relative overflow-hidden"
+      >
         {/* Top Decorative Amber Accent */}
         <div className="absolute -top-12 left-1/2 -translate-x-1/2 w-48 h-24 bg-[#F66B17]/15 rounded-full blur-2xl pointer-events-none" />
 
@@ -132,13 +164,13 @@ export function SessionExpiredModal({ open, onReLogin }: { open: boolean; onReLo
 
         {/* Title & Description */}
         <div className="space-y-2">
-          <h2
-            id="session-expired-heading"
-            className="text-xl font-extrabold text-[#071A2B] tracking-tight"
-          >
+          <h2 id={titleId} className="text-xl font-extrabold text-[#071A2B] tracking-tight">
             {tr('auth-session.your_session_has_expired')}
           </h2>
-          <p className="text-xs font-medium text-[#607A96] leading-relaxed max-w-xs mx-auto">
+          <p
+            id={descriptionId}
+            className="text-xs font-medium text-[#607A96] leading-relaxed max-w-xs mx-auto"
+          >
             {tr(
               'auth-session.your_session_ended_automatically_for_security_please_sign_in_again_to_continue_wor',
             )}
@@ -147,8 +179,8 @@ export function SessionExpiredModal({ open, onReLogin }: { open: boolean; onReLo
 
         {/* Action Button */}
         <button
+          ref={actionRef}
           type="button"
-          autoFocus
           onClick={onReLogin}
           className="w-full py-3 px-5 rounded-xl bg-[#071A2B] text-white text-xs font-bold shadow-[0_4px_16px_rgba(7,26,43,0.25)] hover:bg-[#F66B17] hover:shadow-[0_4px_16px_rgba(246,107,23,0.35)] transition-all duration-300 cursor-pointer flex items-center justify-center gap-2 group"
         >
@@ -168,6 +200,8 @@ export function SessionExpiredModal({ open, onReLogin }: { open: boolean; onReLo
   );
 }
 
+// Queries and Mutations
+
 export function useManagementClient(apiUrl: string) {
   const { manager, epoch } = useAuth();
   return useMemo(
@@ -177,16 +211,27 @@ export function useManagementClient(apiUrl: string) {
 }
 
 export function useRestoreSession(apiUrl: string) {
-  const { manager, epoch, setAccessToken } = useAuth();
+  const { manager, epoch, accessToken, setAccessToken } = useAuth();
   return useQuery({
-    queryKey: manager ? ['auth', 'session', apiUrl, epoch] : ['auth', 'session'],
-    enabled: !manager || manager.canRestore(),
-    queryFn: async () => {
-      if (manager) return manager.restore();
-      if (sessionStorage.getItem('smartsite:signed-out')) return null;
-      const response = await new SmartSiteManagementClient(apiUrl).refresh('WEB');
+    queryKey: ['auth', 'session', apiUrl, epoch ?? 0],
+    enabled: !accessToken && (!manager || manager.canRestore()),
+    queryFn: async ({ signal }) => {
+      if (manager) return (await manager.restore()) ? true : null;
+      try {
+        if (
+          sessionStorage.getItem('smartsite:signed-out') ||
+          sessionStorage.getItem(`smartsite:logout:${apiUrl.replace(/\/+$/, '')}`)
+        )
+          return null;
+      } catch {
+        /* Storage may be disabled; the in-memory provider remains authoritative. */
+      }
+      const response = await new SmartSiteManagementClient(apiUrl).refresh('WEB', undefined, {
+        signal,
+      });
+      if (signal.aborted) return null;
       setAccessToken(response.accessToken);
-      return response;
+      return true;
     },
     retry: false,
     staleTime: Infinity,
@@ -199,22 +244,27 @@ export function useLogin(apiUrl: string) {
   const { manager, setAccessToken, dismissSessionExpired } = useAuth();
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: ({ username, password }: { username: string; password: string }) =>
-      manager
-        ? manager.login(username, password)
-        : new SmartSiteManagementClient(apiUrl).login(username, password, 'WEB'),
-    onSuccess: (data) => {
-      sessionStorage.removeItem('smartsite:signed-out');
+    gcTime: 0,
+    mutationFn: async ({ username, password }: { username: string; password: string }) => {
+      const response = manager
+        ? await manager.login(username, password)
+        : await new SmartSiteManagementClient(apiUrl).login(username, password, 'WEB');
+      try {
+        sessionStorage.removeItem('smartsite:signed-out');
+        sessionStorage.removeItem(`smartsite:logout:${apiUrl.replace(/\/+$/, '')}`);
+      } catch {
+        /* Authentication does not require browser storage. */
+      }
       if (!manager) {
         queryClient.clear();
-        setAccessToken(data.accessToken);
+        setAccessToken(response.accessToken);
       }
       dismissSessionExpired();
       queryClient.setQueryData(
-        manager ? ['auth', 'session', apiUrl, manager.getSnapshot().epoch] : ['auth', 'session'],
-        data,
+        ['auth', 'session', apiUrl, manager?.getSnapshot().epoch ?? 0],
+        true,
       );
-      queryClient.setQueryData(['auth', 'me', apiUrl], data.user);
+      return response.user;
     },
   });
 }
@@ -223,25 +273,37 @@ export function useLogout(apiUrl: string) {
   const { manager, setAccessToken, dismissSessionExpired } = useAuth();
   const queryClient = useQueryClient();
   return useMutation({
+    gcTime: 0,
     mutationFn: async () => {
       if (manager) return manager.logout();
-      sessionStorage.setItem('smartsite:signed-out', 'true');
+      try {
+        sessionStorage.setItem('smartsite:signed-out', 'true');
+        sessionStorage.setItem(`smartsite:logout:${apiUrl.replace(/\/+$/, '')}`, '1');
+      } catch {
+        /* Local credentials still clear synchronously below. */
+      }
       dismissSessionExpired();
       setAccessToken(null);
       void queryClient.cancelQueries();
       queryClient.clear();
-      queryClient.setQueryData(['auth', 'session'], null);
       return new SmartSiteManagementClient(apiUrl).logout('WEB');
     },
   });
 }
 
 export function useCurrentUser(apiUrl: string) {
-  const { accessToken } = useAuth();
+  const { accessToken, sessionScope, triggerSessionExpired } = useAuth();
   const client = useManagementClient(apiUrl);
   return useQuery<AccountResponse>({
-    queryKey: ['auth', 'me', apiUrl],
-    queryFn: () => client.me(accessToken!),
+    queryKey: ['auth', 'me', apiUrl, sessionScope],
+    queryFn: async ({ signal }) => {
+      try {
+        return await client.me(accessToken!, { signal });
+      } catch (error) {
+        if (error instanceof ApiError && error.status === 401) triggerSessionExpired(sessionScope);
+        throw error;
+      }
+    },
     enabled: !!accessToken,
     staleTime: 5 * 60 * 1000,
     retry: false,

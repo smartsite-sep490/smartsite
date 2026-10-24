@@ -153,7 +153,7 @@ test('auth controller separates Web cookies from Mobile refresh-token JSON', asy
     refresh: async () => result,
     logout: async () => undefined,
   };
-  const controller = new AuthController(auth as never, createTestConfig());
+  const controller = new AuthController(auth as never, createTestConfig(), {} as never);
   const cookies: Array<{ name: string; value: string; options: Record<string, unknown> }> = [];
   const response = {
     cookie: (name: string, value: string, options: Record<string, unknown>) => {
