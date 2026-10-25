@@ -246,7 +246,7 @@ test(
           setCookie &&
             /; HttpOnly/i.test(setCookie) &&
             /; Secure/i.test(setCookie) &&
-            /; SameSite=Strict/i.test(setCookie),
+            /; SameSite=None/i.test(setCookie),
         );
         cookie = setCookie.split(';')[0]!;
         secrets.push(token, cookie, cookie.slice(cookie.indexOf('=') + 1));
@@ -316,6 +316,7 @@ test(
     await t.test(
       'actual WEB logout revokes access to persisted configuration without deleting it',
       async () => {
+        assert.ok(cookie, 'Successful WEB login must provide the refresh cookie before logout');
         await request('/auth/logout', 204, { method: 'POST', cookie, body: { clientType: 'WEB' } });
         await request(`/sites/${siteId}/zones`, 401, { token });
         assert.equal(

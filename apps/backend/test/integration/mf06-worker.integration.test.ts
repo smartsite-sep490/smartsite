@@ -25,33 +25,17 @@ import {
   type Mf06AssessmentWorkPort,
 } from '../../src/modules/safety/assessments/mf06-assessment-worker.service.js';
 import { Mf06AssessmentStore } from '../../src/modules/safety/assessments/mf06-assessment-store.service.js';
-import { Mf06ImmutableAssessments1791590400004 } from '../../src/database/migrations/1791590400004-Mf06ImmutableAssessments.js';
-import { SafetyFaceProvenance1791590400003 } from '../../src/database/migrations/1791590400003-SafetyFaceProvenance.js';
 import { SafetyFaceProfileMetadataReader } from '../../src/modules/workforce/safety-face-profile.reader.js';
 
-const isolated = createIsolatedTestDatabase({ legacy: true });
+const isolated = createIsolatedTestDatabase({ canonical: true });
 const db = isolated.dataSource;
 before(async () => {
   await isolated.initialize();
-  const runner = db.createQueryRunner();
-  try {
-    await runner.startTransaction();
-    await new Mf06ImmutableAssessments1791590400004().up(runner);
-    if (!(await runner.hasColumn('face_profile', 'consent_method'))) {
-      await runner.query(`ALTER TABLE face_profile ADD COLUMN consent_method varchar(50) NOT NULL DEFAULT 'LEGACY_UNVERIFIED', ADD COLUMN deleted_at timestamptz;
-        ALTER TABLE face_profile DROP CONSTRAINT chk_face_profile_database_template, ADD CONSTRAINT chk_face_profile_database_template CHECK(status <> 'ACTIVE' OR (encrypted_template IS NOT NULL AND length(encrypted_template) BETWEEN 100 AND 32768));`);
-    }
-    await new SafetyFaceProvenance1791590400003().up(runner);
-    await runner.commitTransaction();
-  } finally {
-    if (runner.isTransactionActive) await runner.rollbackTransaction();
-    await runner.release();
-  }
 });
 after(() => isolated.dispose());
 beforeEach(async () => {
   await db.query(
-    "UPDATE mf06_assessment_job SET status='CANCELLED', head_revision=head_revision+1, lease_token=NULL,lease_expires_at=NULL,updated_at=clock_timestamp() WHERE status IN ('PENDING','CLAIMED')",
+    "UPDATE zone_entry_assessment_job SET status='CANCELLED', head_revision=head_revision+1, lease_token=NULL,lease_expires_at=NULL,updated_at=clock_timestamp() WHERE status IN ('PENDING','CLAIMED')",
   );
 });
 
@@ -132,7 +116,7 @@ async function fixture() {
     evidence: [],
   });
   const [request] = (await db.query(
-    'SELECT request_id,binding_hash FROM mf06_assessment_request WHERE event_id=$1',
+    'SELECT request_id,binding_hash FROM zone_entry_assessment_request WHERE event_id=$1',
     [eventId],
   )) as { request_id: string; binding_hash: string }[];
   assert.ok(request);
@@ -177,7 +161,7 @@ test('real ingestion→claim→SERIALIZABLE unavailable append preserves one ass
   assert.equal(await worker.runOnce(), 'COMPLETED');
   assert.equal(await worker.runOnce(), 'IDLE');
   const [row] = await db.query(
-    'SELECT j.status,count(a.assessment_id)::integer AS assessments FROM mf06_assessment_job j LEFT JOIN mf06_assessment a USING(request_id) WHERE j.request_id=$1 GROUP BY j.status',
+    'SELECT j.status,count(a.assessment_id)::integer AS assessments FROM zone_entry_assessment_job j LEFT JOIN zone_entry_assessment a USING(request_id) WHERE j.request_id=$1 GROUP BY j.status',
     [f.requestId],
   );
   assert.deepEqual(row, { status: 'SUCCEEDED', assessments: 1 });
@@ -202,15 +186,16 @@ test('ignored-signal preparation times out and late completion cannot append', a
   await Promise.resolve();
   await Promise.resolve();
   const [row] = await db.query(
-    'SELECT status,last_error_code FROM mf06_assessment_job WHERE request_id=$1',
+    'SELECT status,last_error_code FROM zone_entry_assessment_job WHERE request_id=$1',
     [f.requestId],
   );
   assert.deepEqual(row, { status: 'PENDING', last_error_code: 'RESOLVER_TIMEOUT' });
   assert.equal(
     (
-      await db.query('SELECT count(*)::integer AS total FROM mf06_assessment WHERE request_id=$1', [
-        f.requestId,
-      ])
+      await db.query(
+        'SELECT count(*)::integer AS total FROM zone_entry_assessment WHERE request_id=$1',
+        [f.requestId],
+      )
     )[0].total,
     0,
   );
@@ -239,9 +224,10 @@ test('serialization retries use a fresh transaction while prepare executes exact
   assert.equal(attempts, 3);
   assert.equal(
     (
-      await db.query('SELECT count(*)::integer AS total FROM mf06_assessment WHERE request_id=$1', [
-        f.requestId,
-      ])
+      await db.query(
+        'SELECT count(*)::integer AS total FROM zone_entry_assessment WHERE request_id=$1',
+        [f.requestId],
+      )
     )[0].total,
     1,
   );
@@ -261,7 +247,7 @@ test('database retry exhaustion returns the real claim to PENDING with its separ
   assert.equal(await new Mf06AssessmentWorker(db, leases(), work, options).runOnce(), 'RETRY');
   assert.equal(attempts, 3);
   const [row] = await db.query(
-    'SELECT status,last_error_code,attempt_count FROM mf06_assessment_job WHERE request_id=$1',
+    'SELECT status,last_error_code,attempt_count FROM zone_entry_assessment_job WHERE request_id=$1',
     [f.requestId],
   );
   assert.deepEqual(row, {
@@ -342,7 +328,7 @@ test('consent revoked during synthetic preparation is re-read in the real final 
   }
   assert.equal(await run, 'COMPLETED');
   const [row] = await db.query(
-    'SELECT outcome,reason_code,worker_id,profile_revision FROM mf06_assessment WHERE request_id=$1',
+    'SELECT outcome,reason_code,worker_id,profile_revision FROM zone_entry_assessment WHERE request_id=$1',
     [f.requestId],
   );
   assert.deepEqual(row, {
@@ -379,15 +365,19 @@ test('drain during finalization rolls back an append before commit and cancels i
   assert.equal(await run, 'CANCELLED');
   assert.equal(
     (
-      await db.query('SELECT count(*)::integer AS total FROM mf06_assessment WHERE request_id=$1', [
-        f.requestId,
-      ])
+      await db.query(
+        'SELECT count(*)::integer AS total FROM zone_entry_assessment WHERE request_id=$1',
+        [f.requestId],
+      )
     )[0].total,
     0,
   );
   assert.equal(
-    (await db.query('SELECT status FROM mf06_assessment_job WHERE request_id=$1', [f.requestId]))[0]
-      .status,
+    (
+      await db.query('SELECT status FROM zone_entry_assessment_job WHERE request_id=$1', [
+        f.requestId,
+      ])
+    )[0].status,
     'CANCELLED',
   );
 });

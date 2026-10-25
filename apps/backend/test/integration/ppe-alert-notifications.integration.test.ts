@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
-import { after, test } from 'node:test';
+import { after, before, test } from 'node:test';
 import { Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { Test } from '@nestjs/testing';
@@ -41,14 +41,17 @@ import { DurableGroupingService } from '../../src/modules/safety/alerts/durable-
 import { SchedulingNotificationService } from '../../src/modules/workforce/notifications/scheduling-notification.service.js';
 import { ObservationContextResolverService } from '../../src/modules/zones/observation-context-resolver.service.js';
 import { createTestConfig } from '../support/config.js';
-import dataSource from '../support/test-data-source.js';
+import { createIsolatedTestDatabase } from '../support/isolated-test-database.js';
+
+const isolated = createIsolatedTestDatabase(),
+  dataSource = isolated.dataSource;
+before(() => isolated.initialize());
 
 const fixtureSites: string[] = [],
   fixtureUsers: string[] = [];
 after(async () => {
-  if (!dataSource.isInitialized) await dataSource.initialize();
   try {
-    if (!fixtureSites.length) return;
+    if (!dataSource.isInitialized || !fixtureSites.length) return;
     await dataSource.getRepository(UserNotificationEntity).delete({ siteId: In(fixtureSites) });
     await dataSource.query(
       'DELETE FROM alert_detection_mapping WHERE alert_id IN (SELECT id FROM safety_alert WHERE site_id=ANY($1::uuid[]))',
@@ -70,12 +73,11 @@ after(async () => {
     await dataSource.getRepository(UserEntity).delete(fixtureUsers);
     await dataSource.getRepository(SiteEntity).delete(fixtureSites);
   } finally {
-    await dataSource.destroy();
+    await isolated.dispose();
   }
 });
 
 async function fixture() {
-  if (!dataSource.isInitialized) await dataSource.initialize();
   const siteId = randomUUID(),
     otherSiteId = randomUUID(),
     cameraId = randomUUID(),
@@ -308,7 +310,7 @@ test('PPE migration restores the old schema without erasing old notification his
     await q.query("DELETE FROM user_notification WHERE request_type='SAFETY_ALERT'");
     await migration.down(q);
     const [old] = await q.query(
-      "SELECT is_nullable FROM information_schema.columns WHERE table_schema='public' AND table_name='user_notification' AND column_name='contractor_id'",
+      "SELECT is_nullable FROM information_schema.columns WHERE table_schema=current_schema() AND table_name='user_notification' AND column_name='contractor_id'",
     );
     assert.equal(old.is_nullable, 'NO');
     const legacyId = randomUUID(),
@@ -477,7 +479,7 @@ test('no eligible recipient preserves the alert, records a gap, and does not bac
     0,
   );
   assert.ok(
-    warnings.some((w) => (w as { action?: string }).action === 'safety.ppe.notification.gap'),
+    warnings.some((w) => (w as { action?: string }).action === 'safety.alert.notification.gap'),
   );
   await f.account();
   await f.ingestion.ingestEvent(f.event());
@@ -546,7 +548,13 @@ test('read/delete is personal and never reviews alerts; current scope gates ever
   await dataSource
     .getRepository(UserRoleAssignmentEntity)
     .delete({ userId: f.safety.id, siteId: f.siteId });
-  assert.deepEqual(await f.notifications.list(f.safety), { items: [], total: 0, unreadCount: 0 });
+  assert.deepEqual(await f.notifications.list(f.safety), {
+    items: [],
+    total: 0,
+    unreadCount: 0,
+    sites: [],
+    allSitesUnreadCount: 0,
+  });
   await assert.rejects(f.notifications.read(f.safety, item.id));
   await assert.rejects(f.notifications.delete(f.safety, item.id));
   assert.equal((await f.notifications.readAll(f.safety)).updated, 0);
@@ -673,7 +681,13 @@ test('HTTP ingestion to inbox, alert and evidence enforces current session/user/
       .getRepository(UserRoleAssignmentEntity)
       .delete({ userId: f.safety.id, siteId: f.siteId });
     const revoked = await request('/me/notifications', safety.accessToken);
-    assert.deepEqual(await revoked.json(), { items: [], total: 0, unreadCount: 0 });
+    assert.deepEqual(await revoked.json(), {
+      items: [],
+      total: 0,
+      unreadCount: 0,
+      sites: [],
+      allSitesUnreadCount: 0,
+    });
     for (const [path, method, body] of [
       [`/me/notifications/${item.id}/read`, 'PATCH', {}],
       [`/me/notifications/${item.id}`, 'DELETE', undefined],

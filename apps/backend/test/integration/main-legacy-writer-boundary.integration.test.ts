@@ -4,6 +4,7 @@ import { randomUUID } from 'node:crypto';
 import { after, before, test } from 'node:test';
 import type { DataSource } from 'typeorm';
 import { createIsolatedTestDatabase } from '../support/isolated-test-database.js';
+import { ZONE_ENTRY_STORAGE_NAMES } from '../../src/common/configuration/zone-entry-storage-profile-v1.js';
 import { PublicHttpException } from '../../src/common/http/public-http-exception.js';
 import { WorkforceConfigurationService } from '../../src/modules/workforce/workforce-configuration.service.js';
 import {
@@ -157,14 +158,25 @@ const unavailable = (error: unknown) =>
   error.getStatus() === 503 &&
   (error.getResponse() as { code?: string }).code === 'SERVICE_UNAVAILABLE';
 async function counts(db: DataSource) {
+  const isCanonical = db === canonical.dataSource;
+  const commandTable = isCanonical
+    ? ZONE_ENTRY_STORAGE_NAMES.mf06_authority_command
+    : 'mf06_authority_command';
+  const factTable = isCanonical
+    ? ZONE_ENTRY_STORAGE_NAMES.mf06_authority_fact
+    : 'mf06_authority_fact';
+  const gapTable = isCanonical ? ZONE_ENTRY_STORAGE_NAMES.mf06_authority_gap : 'mf06_authority_gap';
+  const witnessTable = isCanonical
+    ? ZONE_ENTRY_STORAGE_NAMES.mf06_authority_commit_witness
+    : 'mf06_authority_commit_witness';
   return (
     await db.query(`SELECT (SELECT count(*)::int FROM contractor_representative_grant) AS grants,
   (SELECT count(*)::int FROM contractor_representative_assignment) AS assignments,
   (SELECT count(*)::int FROM worker) AS workers,(SELECT count(*)::int FROM contractor) AS contractors,
   (SELECT count(*)::int FROM contractor_site_participation) AS participations,
   (SELECT count(*)::int FROM worker_site_zone_assignment) AS allocations,
-  (SELECT count(*)::int FROM mf06_authority_command) AS commands,(SELECT count(*)::int FROM mf06_authority_fact) AS facts,
-  (SELECT count(*)::int FROM mf06_authority_gap) AS gaps,(SELECT count(*)::int FROM mf06_authority_commit_witness) AS witnesses`)
+  (SELECT count(*)::int FROM ${commandTable}) AS commands,(SELECT count(*)::int FROM ${factTable}) AS facts,
+  (SELECT count(*)::int FROM ${gapTable}) AS gaps,(SELECT count(*)::int FROM ${witnessTable}) AS witnesses`)
   )[0];
 }
 for (const [name, call] of calls)
@@ -280,7 +292,7 @@ for (const kind of ['GRANT', 'ASSIGN'] as const)
     assert.equal(result!.userId, f.target);
     const rows = await db.query(
       `SELECT c.actor_user_id,c.operation,f.source_kind,f.source_id,w.transaction_id=c.transaction_id AS witnessed
-  FROM mf06_authority_command c JOIN mf06_authority_fact f USING(command_id) JOIN mf06_authority_commit_witness w USING(command_id)
+  FROM ${ZONE_ENTRY_STORAGE_NAMES.mf06_authority_command} c JOIN ${ZONE_ENTRY_STORAGE_NAMES.mf06_authority_fact} f USING(command_id) JOIN ${ZONE_ENTRY_STORAGE_NAMES.mf06_authority_commit_witness} w USING(command_id)
   WHERE f.source_id=$1`,
       [result!.id],
     );

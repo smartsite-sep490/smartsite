@@ -13,7 +13,7 @@ const database = createIsolatedTestDatabase(),
 before(() => database.initialize());
 after(() => database.dispose());
 
-test('additive team capture preserves populated V1 epoch bytes, identities and historical reads', async () => {
+test('additive team capture preserves populated epoch bytes, identities and historical reads', async () => {
   const actor = randomUUID(),
     site = randomUUID(),
     zone = randomUUID();
@@ -61,15 +61,15 @@ test('additive team capture preserves populated V1 epoch bytes, identities and h
   assert.equal(prior.status, 'RECONSTRUCTED');
   const history = async () => ({
     baseline: await db.query(
-      'SELECT to_jsonb(b)::text body FROM mf06_authority_baseline b ORDER BY epoch_id',
+      'SELECT to_jsonb(b)::text body FROM authorization_history_baseline b ORDER BY epoch_id',
     ),
     facts: await db.query(
-      'SELECT to_jsonb(f)::text body FROM mf06_authority_fact f ORDER BY fact_id',
+      'SELECT to_jsonb(f)::text body FROM authorization_history_revision f ORDER BY fact_id',
     ),
     registry: await db.query(
-      'SELECT to_jsonb(s)::text body FROM mf06_authority_source s ORDER BY source_kind',
+      'SELECT to_jsonb(s)::text body FROM authorization_history_source s ORDER BY source_kind',
     ),
-    identity: await db.query("SELECT 'mf06_authority_baseline'::regclass::oid::text oid"),
+    identity: await db.query("SELECT 'authorization_history_baseline'::regclass::oid::text oid"),
   });
   const original = await history();
   assert.equal(original.baseline.length, 1);
@@ -86,6 +86,11 @@ test('additive team capture preserves populated V1 epoch bytes, identities and h
   } finally {
     await runner.release();
   }
+  assert.notEqual(
+    (await db.query("SELECT to_regclass('zone_team_authority_revision') AS relation"))[0].relation,
+    null,
+    'Candidate must actually execute, rather than silently skip the current namespace',
+  );
   assert.deepEqual(await history(), original);
   const reconstructed = await read();
   assert.equal(reconstructed.status, 'RECONSTRUCTED');

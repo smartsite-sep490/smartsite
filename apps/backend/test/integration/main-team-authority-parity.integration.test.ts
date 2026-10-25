@@ -18,7 +18,11 @@ before(async () => {
     'SELECT current_schema() AS schema,(SELECT count(*)::int FROM migrations) AS migrations',
   );
   assert.match(actual!.schema, /^isolated_test_[a-f0-9]{32}$/);
-  assert.equal(actual!.migrations, 66, 'Parity fixture must use the retained Main66 release graph');
+  assert.equal(
+    actual!.migrations,
+    75,
+    'Parity fixture must use the current canonical release graph',
+  );
 });
 after(async () => {
   await database.dispose();

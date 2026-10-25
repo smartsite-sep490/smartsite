@@ -44,7 +44,7 @@ import { Mf06IngestionEnqueueService } from '../../src/modules/safety/assessment
 // Database isolation and Synthetic Fixtures
 // -----------------------------------------------------------------------------
 
-const isolated = createIsolatedTestDatabase({ legacy: true });
+const isolated = createIsolatedTestDatabase({ canonical: true });
 const db = isolated.dataSource;
 
 before(async () => {
@@ -58,7 +58,7 @@ after(async () => {
 beforeEach(async () => {
   // Only this file's disposable schema; release earlier fixture capacity without deleting history.
   await db.query(
-    "UPDATE mf06_assessment_job SET status = 'CANCELLED', head_revision = head_revision + 1, updated_at = statement_timestamp(), lease_token = NULL, lease_expires_at = NULL WHERE status IN ('PENDING', 'CLAIMED')",
+    "UPDATE zone_entry_assessment_job SET status = 'CANCELLED', head_revision = head_revision + 1, updated_at = statement_timestamp(), lease_token = NULL, lease_expires_at = NULL WHERE status IN ('PENDING', 'CLAIMED')",
   );
 });
 
@@ -286,7 +286,7 @@ async function insertPriorJob(
   });
 
   await manager.query(
-    `INSERT INTO mf06_assessment_request (
+    `INSERT INTO zone_entry_assessment_request (
       request_id, event_id, payload_hash, person_observation_index, zone_observation_index,
       subject_binding_status, track_id, site_id, camera_id, camera_external_id,
       stream_session_id, region_id, geometry_version, zone_id, captured_at,
@@ -323,7 +323,7 @@ async function insertPriorJob(
     const leaseToken = status === 'CLAIMED' ? randomUUID() : null;
 
     await manager.query(
-      `INSERT INTO mf06_assessment_job (
+      `INSERT INTO zone_entry_assessment_job (
         request_id, status, attempt_count, head_revision, lease_token,
         lease_expires_at, next_attempt_at, deadline_at, created_at, updated_at
       ) VALUES ($1, $2, 0, 1, $3, $4, $5, $6, $7, $8)`,
@@ -336,7 +336,7 @@ async function insertPriorJob(
     const leaseExpiresAt = status === 'CLAIMED' ? new Date(now.getTime() + 60 * 1000) : null;
 
     await manager.query(
-      `INSERT INTO mf06_assessment_job (
+      `INSERT INTO zone_entry_assessment_job (
         request_id, status, attempt_count, head_revision, lease_token,
         lease_expires_at, next_attempt_at, deadline_at, created_at, updated_at
       ) VALUES ($1, $2, 0, 1, $3, $4, $5, $6, $7, $8)`,
@@ -365,9 +365,11 @@ describe('MF06 Ingestion Enqueue Service Integration Tests', () => {
     });
 
     // Temporarily rename assessment tables to prove default OFF never touches them
-    await db.query('ALTER TABLE mf06_assessment_job RENAME TO mf06_assessment_job_temp_off_hidden');
     await db.query(
-      'ALTER TABLE mf06_assessment_request RENAME TO mf06_assessment_request_temp_off_hidden',
+      'ALTER TABLE zone_entry_assessment_job RENAME TO mf06_assessment_job_temp_off_hidden',
+    );
+    await db.query(
+      'ALTER TABLE zone_entry_assessment_request RENAME TO mf06_assessment_request_temp_off_hidden',
     );
 
     try {
@@ -386,10 +388,10 @@ describe('MF06 Ingestion Enqueue Service Integration Tests', () => {
       assert.equal(rawCount, 1, 'Raw event must be preserved even when assessment is disabled');
     } finally {
       await db.query(
-        'ALTER TABLE mf06_assessment_request_temp_off_hidden RENAME TO mf06_assessment_request',
+        'ALTER TABLE mf06_assessment_request_temp_off_hidden RENAME TO zone_entry_assessment_request',
       );
       await db.query(
-        'ALTER TABLE mf06_assessment_job_temp_off_hidden RENAME TO mf06_assessment_job',
+        'ALTER TABLE mf06_assessment_job_temp_off_hidden RENAME TO zone_entry_assessment_job',
       );
     }
   });
@@ -962,7 +964,7 @@ describe('MF06 Ingestion Enqueue Service Integration Tests', () => {
 
     // Verify exactly 1 job in total
     const [{ total: totalJobs }] = await db.query(
-      "SELECT count(*)::integer AS total FROM mf06_assessment_job WHERE status IN ('PENDING','CLAIMED')",
+      "SELECT count(*)::integer AS total FROM zone_entry_assessment_job WHERE status IN ('PENDING','CLAIMED')",
     );
     assert.equal(totalJobs, 1, 'Total jobs in database must never exceed cap 1');
   });
@@ -1084,7 +1086,7 @@ describe('MF06 Ingestion Enqueue Service Integration Tests', () => {
   });
 
   it('Case 14: actual AppModule HTTP wires the default-gated provider without any model or identity resolver', async () => {
-    const owned = createIsolatedTestDatabase({ legacy: true });
+    const owned = createIsolatedTestDatabase({ canonical: true });
     await owned.initialize();
     const config = createTestConfig({
       MF06_ENQUEUE_ENABLED: 'true',

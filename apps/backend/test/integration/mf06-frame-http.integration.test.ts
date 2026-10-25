@@ -1,8 +1,9 @@
 import 'reflect-metadata';
 import assert from 'node:assert/strict';
 import { createHash, randomUUID } from 'node:crypto';
-import { mkdir, rmdir, unlink, writeFile } from 'node:fs/promises';
+import { mkdtemp, rmdir, unlink, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
+import { tmpdir } from 'node:os';
 import { test } from 'node:test';
 import { ConfigService } from '@nestjs/config';
 import type { NestExpressApplication } from '@nestjs/platform-express';
@@ -47,13 +48,11 @@ test('MF06 historical assessment frame HTTP enforces Site scope, exact requestId
   const schema = String((owned.dataSource.options as { schema: string }).schema);
   t.diagnostic(`ownedMf06FrameSchema=${schema}`);
 
-  const evidenceRoot = `D:/Ky9-FPT/SmartSiteData/tmp/mf06-frame-http-${randomUUID()}`;
-  assert.ok(evidenceRoot.startsWith('D:/Ky9-FPT/SmartSiteData/'));
+  const evidenceRoot = await mkdtemp(join(tmpdir(), 'smartsite-mf06-frame-http-'));
   const createdFiles: string[] = [];
   let app: NestExpressApplication | undefined;
 
   try {
-    await mkdir(evidenceRoot, { recursive: true });
     await owned.initialize();
     const db = owned.dataSource;
 

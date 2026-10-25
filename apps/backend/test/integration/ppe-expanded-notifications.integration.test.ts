@@ -29,7 +29,7 @@ const kinds = [
 ];
 
 test('five-kind notification canonical migrations, upgrade history, scope, deduplication and rollback', async (t) => {
-  const owned = createIsolatedTestDatabase();
+  const owned = createIsolatedTestDatabase({ preAuthorityCutover72: true });
   const db = owned.dataSource;
   const schema = (db.options as { schema: string }).schema;
   t.diagnostic(`ownedPpeNotificationSchema=${schema}`);

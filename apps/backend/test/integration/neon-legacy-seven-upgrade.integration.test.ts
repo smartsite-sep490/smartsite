@@ -210,10 +210,10 @@ test('observed seven-migration prefix upgrades populated synthetic data to the r
       'contractor_zone_permission',
       'worker_zone_permission',
       'safety_face_consent',
-      'mf06_assessment_request',
-      'mf06_assessment_job',
-      'mf06_assessment',
-      'mf06_authority_epoch',
+      'zone_entry_assessment_request',
+      'zone_entry_assessment_job',
+      'zone_entry_assessment',
+      'authorization_history_epoch',
     ])
       assert.equal(
         (await upgrade.query(`SELECT count(*)::int AS total FROM ${table}`))[0].total,
@@ -221,8 +221,9 @@ test('observed seven-migration prefix upgrades populated synthetic data to the r
         `Unexpected generated ${table}`,
       );
     assert.equal(
-      (await upgrade.query('SELECT epoch_id FROM mf06_authority_control WHERE singleton=1'))[0]
-        .epoch_id,
+      (
+        await upgrade.query('SELECT epoch_id FROM authorization_history_control WHERE singleton=1')
+      )[0].epoch_id,
       null,
     );
     assert.equal((await upgrade.runMigrations({ transaction: 'all' })).length, 0);
