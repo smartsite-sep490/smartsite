@@ -186,7 +186,7 @@ async function withApi(
 
 async function factsFor(id: string, actor: string) {
   return db.query(
-    'SELECT f.source_kind,c.actor_user_id,c.operation,f.transaction_id=c.transaction_id AS bound,w.transaction_id=c.transaction_id AS witnessed FROM mf06_authority_fact f JOIN mf06_authority_command c USING(command_id) LEFT JOIN mf06_authority_commit_witness w USING(command_id) WHERE f.source_id=$1 AND c.actor_user_id=$2',
+    'SELECT f.source_kind,c.actor_user_id,c.operation,f.transaction_id=c.transaction_id AS bound,w.transaction_id=c.transaction_id AS witnessed FROM authorization_history_revision f JOIN authorization_history_command c USING(command_id) LEFT JOIN authorization_history_commit_receipt w USING(command_id) WHERE f.source_id=$1 AND c.actor_user_id=$2',
     [id, actor],
   );
 }
@@ -315,13 +315,15 @@ for (const kind of ['CREATE', 'PREPARE', 'LINK'] as const) {
         } finally {
           await db.query('ALTER TABLE worker ENABLE TRIGGER trg_mf06_capture_worker');
         }
-        await db.query('ALTER TABLE mf06_authority_control RENAME TO mf06_authority_control_held');
+        await db.query(
+          'ALTER TABLE authorization_history_control RENAME TO mf06_authority_control_held',
+        );
         try {
           assert.equal((await call(kind)).status, 503);
           assert.equal(await boundCount(f, kind), 0);
         } finally {
           await db.query(
-            'ALTER TABLE mf06_authority_control_held RENAME TO mf06_authority_control',
+            'ALTER TABLE mf06_authority_control_held RENAME TO authorization_history_control',
           );
         }
       });
@@ -334,7 +336,7 @@ for (const kind of ['CREATE', 'PREPARE', 'LINK'] as const) {
       await withApi(f, async (call, _g, _l, apiDb) => {
         const original = apiDb.query.bind(apiDb);
         apiDb.query = (async (sql: string, params?: unknown[], runner?: QueryRunner) => {
-          if (sql.startsWith('INSERT INTO mf06_authority_commit_witness'))
+          if (sql.startsWith('INSERT INTO authorization_history_commit_receipt'))
             throw new Error('Synthetic witness refusal');
           return original(sql, params, runner);
         }) as typeof apiDb.query;
@@ -359,7 +361,7 @@ test('Worker account linkage captures immutable old/new user IDs without changin
     assert.equal((await call('LINK')).status, 200);
     const fact = (
       await db.query(
-        'SELECT before_payload,after_payload FROM mf06_authority_fact f JOIN mf06_authority_command c USING(command_id) WHERE f.source_id=$1 AND c.actor_user_id=$2',
+        'SELECT before_payload,after_payload FROM authorization_history_revision f JOIN authorization_history_command c USING(command_id) WHERE f.source_id=$1 AND c.actor_user_id=$2',
         [f.worker, f.actor],
       )
     )[0];

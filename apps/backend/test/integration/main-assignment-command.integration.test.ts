@@ -3,13 +3,6 @@ import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
 import { after, before, test } from 'node:test';
 import type { DataSource } from 'typeorm';
-import { QrAccess1791417600000 } from '../../src/database/migrations/1791417600000-QrAccess.js';
-import { ErdVisitorAccess1791504000000 } from '../../src/database/migrations/1791504000000-ErdVisitorAccess.js';
-import { ErdGateFlow1791504000001 } from '../../src/database/migrations/1791504000001-ErdGateFlow.js';
-import { ErdZonePermissions1791504000003 } from '../../src/database/migrations/1791504000003-ErdZonePermissions.js';
-import { ErdAccessAudit1791504000004 } from '../../src/database/migrations/1791504000004-ErdAccessAudit.js';
-import { ErdAccessPolicy1791504000006 } from '../../src/database/migrations/1791504000006-ErdAccessPolicy.js';
-import { Mf06MainAuthorityJournal1791590400002 } from '../../src/database/migrations/1791590400002-Mf06MainAuthorityJournal.js';
 import { createIsolatedTestDatabase } from '../support/isolated-test-database.js';
 
 interface Assignment {
@@ -42,7 +35,7 @@ interface Writer {
   revoke(input: unknown): Promise<Result>;
 }
 let WriterClass: (new (source: DataSource) => Writer) | undefined;
-const database = createIsolatedTestDatabase({ legacy: true }),
+const database = createIsolatedTestDatabase({ preAuthorityCutover72: true }),
   db = database.dataSource;
 before(async () => {
   try {
@@ -56,24 +49,6 @@ before(async () => {
   }
   if (!WriterClass) return;
   await database.initialize();
-  const runner = db.createQueryRunner();
-  try {
-    await runner.startTransaction();
-    for (const migration of [
-      new QrAccess1791417600000(),
-      new ErdVisitorAccess1791504000000(),
-      new ErdGateFlow1791504000001(),
-      new ErdZonePermissions1791504000003(),
-      new ErdAccessAudit1791504000004(),
-      new ErdAccessPolicy1791504000006(),
-      new Mf06MainAuthorityJournal1791590400002(),
-    ])
-      await migration.up(runner);
-    await runner.commitTransaction();
-  } finally {
-    if (runner.isTransactionActive) await runner.rollbackTransaction();
-    await runner.release();
-  }
 });
 after(async () => {
   await database.dispose();
@@ -210,7 +185,7 @@ test('request preserves PENDING version1, exact participation scope, requester a
   assert.deepEqual(
     (
       await db.query(
-        'SELECT f.source_kind,f.transaction_id=c.transaction_id AS same_tx FROM mf06_authority_fact f JOIN mf06_authority_command c USING(command_id) WHERE command_id=$1',
+        'SELECT f.source_kind,f.transaction_id=c.transaction_id AS same_tx FROM authorization_history_revision f JOIN authorization_history_command c USING(command_id) WHERE command_id=$1',
         [value.commandId],
       )
     ).map((r: { source_kind: string; same_tx: boolean }) => [r.source_kind, r.same_tx]),
@@ -510,16 +485,17 @@ test('audit failure rolls back assignment approval, Site version, command and fa
     assert.equal((await audits(f)).length, 1);
     assert.equal(
       (
-        await db.query('SELECT count(*)::int AS n FROM mf06_authority_fact WHERE command_id=$1', [
-          value.commandId,
-        ])
+        await db.query(
+          'SELECT count(*)::int AS n FROM authorization_history_revision WHERE command_id=$1',
+          [value.commandId],
+        )
       )[0].n,
       0,
     );
     assert.equal(
       (
         await db.query(
-          'SELECT count(*)::int AS n FROM mf06_authority_command WHERE command_id=$1',
+          'SELECT count(*)::int AS n FROM authorization_history_command WHERE command_id=$1',
           [value.commandId],
         )
       )[0].n,
@@ -535,14 +511,14 @@ test('postcommit witness failure returns unavailable but same-ID retry cannot du
   const f = await fixture(),
     value = input(f);
   await db.query(
-    `CREATE FUNCTION test_assignment_witness_failure() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN IF NEW.command_id='${value.commandId}'::uuid THEN RAISE EXCEPTION 'synthetic witness failure'; END IF;RETURN NEW; END $$;CREATE TRIGGER test_assignment_witness_failure BEFORE INSERT ON mf06_authority_commit_witness FOR EACH ROW EXECUTE FUNCTION test_assignment_witness_failure()`,
+    `CREATE FUNCTION test_assignment_witness_failure() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN IF NEW.command_id='${value.commandId}'::uuid THEN RAISE EXCEPTION 'synthetic witness failure'; END IF;RETURN NEW; END $$;CREATE TRIGGER test_assignment_witness_failure BEFORE INSERT ON authorization_history_commit_receipt FOR EACH ROW EXECUTE FUNCTION test_assignment_witness_failure()`,
   );
   try {
     await assert.rejects(f.service.request(value), status(503));
     assert.equal((await audits(f)).length, 1);
   } finally {
     await db.query(
-      'DROP TRIGGER test_assignment_witness_failure ON mf06_authority_commit_witness;DROP FUNCTION test_assignment_witness_failure()',
+      'DROP TRIGGER test_assignment_witness_failure ON authorization_history_commit_receipt;DROP FUNCTION test_assignment_witness_failure()',
     );
   }
   assert.equal((await f.service.request(value)).replayed, true);
@@ -553,19 +529,19 @@ test('assignment receipts cannot be overwritten, deleted or truncated', async ()
     value = input(f);
   await f.service.request(value);
   await assert.rejects(
-    db.query('UPDATE mf06_assignment_command_result SET result_hash=$2 WHERE command_id=$1', [
+    db.query('UPDATE worker_assignment_command_receipt SET result_hash=$2 WHERE command_id=$1', [
       value.commandId,
       'a'.repeat(64),
     ]),
   );
-  await assert.rejects(db.query('DELETE FROM mf06_assignment_command_result'));
-  await assert.rejects(db.query('TRUNCATE mf06_assignment_command_result'));
+  await assert.rejects(db.query('DELETE FROM worker_assignment_command_receipt'));
+  await assert.rejects(db.query('TRUNCATE worker_assignment_command_receipt'));
 });
 test('missing result schema fails closed without a partially created assignment', async () => {
   const f = await fixture(),
     value = input(f);
   await db.query(
-    'ALTER TABLE mf06_assignment_command_result RENAME TO test_hidden_assignment_result',
+    'ALTER TABLE worker_assignment_command_receipt RENAME TO test_hidden_assignment_result',
   );
   try {
     await assert.rejects(f.service.request(value), status(503));
@@ -581,7 +557,7 @@ test('missing result schema fails closed without a partially created assignment'
     );
   } finally {
     await db.query(
-      'ALTER TABLE test_hidden_assignment_result RENAME TO mf06_assignment_command_result',
+      'ALTER TABLE test_hidden_assignment_result RENAME TO worker_assignment_command_receipt',
     );
   }
 });
@@ -621,7 +597,7 @@ test('origin transactions cannot forge an assignment response, Contractor bindin
     try {
       await runner.startTransaction();
       await runner.query(
-        'INSERT INTO mf06_authority_command(command_id,actor_user_id,operation,request_hash) VALUES($1,$2,$3,$4)',
+        'INSERT INTO authorization_history_command(command_id,actor_user_id,operation,request_hash) VALUES($1,$2,$3,$4)',
         [
           commandId,
           f.actorUserId,
@@ -636,7 +612,7 @@ test('origin transactions cannot forge an assignment response, Contractor bindin
       if (forged === 'projection') projection.siteId = randomUUID();
       await assert.rejects(
         runner.query(
-          'INSERT INTO mf06_assignment_command_result(command_id,source_id,contractor_id,result_json,result_hash) VALUES($1,$2,$3,$4,$5)',
+          'INSERT INTO worker_assignment_command_receipt(command_id,source_id,contractor_id,result_json,result_hash) VALUES($1,$2,$3,$4,$5)',
           [
             commandId,
             original.assignment.id,
@@ -654,7 +630,7 @@ test('origin transactions cannot forge an assignment response, Contractor bindin
     assert.equal(
       (
         await db.query(
-          'SELECT count(*)::int AS n FROM mf06_authority_command WHERE command_id=$1',
+          'SELECT count(*)::int AS n FROM authorization_history_command WHERE command_id=$1',
           [commandId],
         )
       )[0].n,

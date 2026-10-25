@@ -53,7 +53,7 @@ async function fixture() {
   return { siteId, zoneId, context, input };
 }
 const commands = async () =>
-  (await db.query('SELECT count(*)::int n FROM mf06_authority_command'))[0].n;
+  (await db.query('SELECT count(*)::int n FROM authorization_history_command'))[0].n;
 
 test('current scoped Manager camera writes retain revision, permanent policy lock and journal witness', async () => {
   const f = await fixture();
@@ -105,9 +105,9 @@ test('current scoped Manager camera writes retain revision, permanent policy loc
   );
   const facts = await db.query(
     `SELECT c.actor_user_id,c.operation,f.transaction_id=c.transaction_id AS same_tx,
-      w.transaction_id=c.transaction_id AS witnessed FROM mf06_authority_fact f
-      JOIN mf06_authority_command c USING(command_id)
-      JOIN mf06_authority_commit_witness w USING(command_id)
+      w.transaction_id=c.transaction_id AS witnessed FROM authorization_history_revision f
+      JOIN authorization_history_command c USING(command_id)
+      JOIN authorization_history_commit_receipt w USING(command_id)
       WHERE f.source_id=ANY($1::uuid[])`,
     [[camera.id, region.id, f.zoneId]],
   );

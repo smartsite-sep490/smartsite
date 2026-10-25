@@ -15,7 +15,6 @@ import {
 } from '../../src/database/entities/index.js';
 import { parseNormalizedCapturedAt } from '../../src/common/parse-normalized-captured-at.js';
 import { createIsolatedTestDatabase } from '../support/isolated-test-database.js';
-import { Mf06ImmutableAssessments1791590400004 } from '../../src/database/migrations/1791590400004-Mf06ImmutableAssessments.js';
 import {
   Mf06AssessmentStore,
   type Mf06AssessmentAppendInput,
@@ -30,17 +29,11 @@ import {
 // Database isolation and Fixture Helpers
 // -----------------------------------------------------------------------------
 
-const isolated = createIsolatedTestDatabase({ legacy: true });
+const isolated = createIsolatedTestDatabase({ canonical: true });
 const db = isolated.dataSource;
 
 before(async () => {
   await isolated.initialize();
-  const runner = db.createQueryRunner();
-  try {
-    await new Mf06ImmutableAssessments1791590400004().up(runner);
-  } finally {
-    await runner.release();
-  }
 });
 
 after(() => isolated.dispose());
@@ -48,7 +41,7 @@ after(() => isolated.dispose());
 beforeEach(async () => {
   // Cancel any lingering non-terminal job heads respecting trigger head_revision + 1
   await db.query(`
-    UPDATE mf06_assessment_job
+    UPDATE zone_entry_assessment_job
     SET status = 'CANCELLED',
         lease_token = NULL,
         lease_expires_at = NULL,
@@ -58,7 +51,7 @@ beforeEach(async () => {
   `);
   const nonTerminal = (await db.query(`
     SELECT count(*)::int AS count
-    FROM mf06_assessment_job
+    FROM zone_entry_assessment_job
     WHERE status IN ('PENDING', 'CLAIMED')
   `)) as { count: number }[];
   assert.equal(nonTerminal[0]?.count, 0, 'All existing jobs must be terminal before each test');
@@ -148,7 +141,7 @@ async function createTestFixture(
   });
 
   await db.query(
-    `INSERT INTO mf06_assessment_request (
+    `INSERT INTO zone_entry_assessment_request (
       request_id, event_id, payload_hash, person_observation_index,
       zone_observation_index, subject_binding_status, track_id,
       site_id, camera_id, camera_external_id, stream_session_id,
@@ -201,7 +194,7 @@ async function insertPendingJob(
   const createdOffset = options.createdOffsetSeconds ?? 3600;
 
   await db.query(
-    `INSERT INTO mf06_assessment_job (
+    `INSERT INTO zone_entry_assessment_job (
       request_id, status, attempt_count, head_revision,
       lease_token, lease_expires_at,
       next_attempt_at, deadline_at,
@@ -244,7 +237,7 @@ async function insertClaimedJob(
   const createdOffset = options.createdOffsetSeconds ?? 3600;
 
   await db.query(
-    `INSERT INTO mf06_assessment_job (
+    `INSERT INTO zone_entry_assessment_job (
       request_id, status, attempt_count, head_revision,
       lease_token, lease_expires_at,
       next_attempt_at, deadline_at,
@@ -375,9 +368,10 @@ describe('Mf06JobLeaseService integration tests', () => {
       assert.equal(winner.headRevision, 2);
       assert.ok(typeof winner.leaseToken === 'string');
 
-      const [job] = (await db.query('SELECT * FROM mf06_assessment_job WHERE request_id = $1', [
-        fixture.requestId,
-      ])) as Record<string, unknown>[];
+      const [job] = (await db.query(
+        'SELECT * FROM zone_entry_assessment_job WHERE request_id = $1',
+        [fixture.requestId],
+      )) as Record<string, unknown>[];
       assert.ok(job);
       assert.equal(job.status, 'CLAIMED');
       assert.equal(job.attempt_count, 1);
@@ -400,9 +394,10 @@ describe('Mf06JobLeaseService integration tests', () => {
       await runner.connect();
       await runner.startTransaction();
       try {
-        await runner.query('SELECT * FROM mf06_assessment_job WHERE request_id = $1 FOR UPDATE', [
-          fixtureA.requestId,
-        ]);
+        await runner.query(
+          'SELECT * FROM zone_entry_assessment_job WHERE request_id = $1 FOR UPDATE',
+          [fixtureA.requestId],
+        );
 
         const claim = await service.claim();
         assert.ok(claim);
@@ -436,9 +431,10 @@ describe('Mf06JobLeaseService integration tests', () => {
       assert.equal(claim.attemptCount, 2);
       assert.equal(claim.headRevision, 3);
 
-      const [job] = (await db.query('SELECT * FROM mf06_assessment_job WHERE request_id = $1', [
-        fixture.requestId,
-      ])) as Record<string, unknown>[];
+      const [job] = (await db.query(
+        'SELECT * FROM zone_entry_assessment_job WHERE request_id = $1',
+        [fixture.requestId],
+      )) as Record<string, unknown>[];
       assert.ok(job);
       assert.equal(job.status, 'CLAIMED');
       assert.equal(job.attempt_count, 2);
@@ -461,9 +457,10 @@ describe('Mf06JobLeaseService integration tests', () => {
       const claim = await service.claim();
       assert.equal(claim, null, 'Must not claim job whose next_attempt_at is in future');
 
-      const [job] = (await db.query('SELECT * FROM mf06_assessment_job WHERE request_id = $1', [
-        fixture.requestId,
-      ])) as Record<string, unknown>[];
+      const [job] = (await db.query(
+        'SELECT * FROM zone_entry_assessment_job WHERE request_id = $1',
+        [fixture.requestId],
+      )) as Record<string, unknown>[];
       assert.ok(job);
       assert.equal(job.status, 'PENDING');
       assert.equal(job.attempt_count, 0);
@@ -515,9 +512,10 @@ describe('Mf06JobLeaseService integration tests', () => {
 
       assert.equal(claimResult, null, 'Pre-aborted claim must return null or throw');
 
-      const [job] = (await db.query('SELECT * FROM mf06_assessment_job WHERE request_id = $1', [
-        fixture.requestId,
-      ])) as Record<string, unknown>[];
+      const [job] = (await db.query(
+        'SELECT * FROM zone_entry_assessment_job WHERE request_id = $1',
+        [fixture.requestId],
+      )) as Record<string, unknown>[];
       assert.ok(job);
       assert.equal(job.status, 'PENDING');
       assert.equal(job.attempt_count, 0);
@@ -559,16 +557,18 @@ describe('Mf06JobLeaseService integration tests', () => {
         'Must skip/reap invalid jobs and claim valid job',
       );
 
-      const [job1] = (await db.query('SELECT * FROM mf06_assessment_job WHERE request_id = $1', [
-        fixture1.requestId,
-      ])) as Record<string, unknown>[];
+      const [job1] = (await db.query(
+        'SELECT * FROM zone_entry_assessment_job WHERE request_id = $1',
+        [fixture1.requestId],
+      )) as Record<string, unknown>[];
       assert.ok(job1);
       assert.equal(job1.status, 'FAILED');
       assert.equal(job1.last_error_code, 'DEADLINE_EXCEEDED');
 
-      const [job2] = (await db.query('SELECT * FROM mf06_assessment_job WHERE request_id = $1', [
-        fixture2.requestId,
-      ])) as Record<string, unknown>[];
+      const [job2] = (await db.query(
+        'SELECT * FROM zone_entry_assessment_job WHERE request_id = $1',
+        [fixture2.requestId],
+      )) as Record<string, unknown>[];
       assert.ok(job2);
       assert.equal(job2.status, 'FAILED');
       assert.equal(job2.last_error_code, 'ATTEMPTS_EXHAUSTED');
@@ -595,9 +595,10 @@ describe('Mf06JobLeaseService integration tests', () => {
         'Must not claim job whose headRevision >= 2147483646 to reserve head for finalize',
       );
 
-      const [job] = (await db.query('SELECT * FROM mf06_assessment_job WHERE request_id = $1', [
-        fixture.requestId,
-      ])) as Record<string, unknown>[];
+      const [job] = (await db.query(
+        'SELECT * FROM zone_entry_assessment_job WHERE request_id = $1',
+        [fixture.requestId],
+      )) as Record<string, unknown>[];
       assert.ok(job);
       assert.equal(job.status, 'FAILED');
       assert.equal(job.last_error_code, 'HEAD_REVISION_EXHAUSTED');
@@ -620,9 +621,10 @@ describe('Mf06JobLeaseService integration tests', () => {
       const expiredCount = await service.expire();
       assert.ok(expiredCount >= 1, 'Must reap expired deadline job even at revision 2147483646');
 
-      const [job] = (await db.query('SELECT * FROM mf06_assessment_job WHERE request_id = $1', [
-        fixture.requestId,
-      ])) as Record<string, unknown>[];
+      const [job] = (await db.query(
+        'SELECT * FROM zone_entry_assessment_job WHERE request_id = $1',
+        [fixture.requestId],
+      )) as Record<string, unknown>[];
       assert.ok(job);
       assert.equal(job.status, 'FAILED');
       assert.equal(job.last_error_code, 'DEADLINE_EXCEEDED');
@@ -680,9 +682,10 @@ describe('Mf06JobLeaseService integration tests', () => {
       });
       assert.equal(staleHeadCancel, 'STALE');
 
-      const [job] = (await db.query('SELECT * FROM mf06_assessment_job WHERE request_id = $1', [
-        fixture.requestId,
-      ])) as Record<string, unknown>[];
+      const [job] = (await db.query(
+        'SELECT * FROM zone_entry_assessment_job WHERE request_id = $1',
+        [fixture.requestId],
+      )) as Record<string, unknown>[];
       assert.ok(job);
       assert.equal(job.status, 'CLAIMED');
       assert.equal(job.head_revision, 2);
@@ -754,9 +757,10 @@ describe('Mf06JobLeaseService integration tests', () => {
       assert.equal(probe.alive, 1);
 
       // Original job row in database remains strictly intact
-      const [job] = (await db.query('SELECT * FROM mf06_assessment_job WHERE request_id = $1', [
-        fixture.requestId,
-      ])) as Record<string, unknown>[];
+      const [job] = (await db.query(
+        'SELECT * FROM zone_entry_assessment_job WHERE request_id = $1',
+        [fixture.requestId],
+      )) as Record<string, unknown>[];
       assert.ok(job);
       assert.equal(job.status, 'CLAIMED');
       assert.equal(job.head_revision, 2);
@@ -781,7 +785,7 @@ describe('Mf06JobLeaseService integration tests', () => {
 
       // Cycle 2: attempt 2
       await db.query(
-        `UPDATE mf06_assessment_job
+        `UPDATE zone_entry_assessment_job
          SET next_attempt_at = clock_timestamp() - interval '1 second',
              head_revision = head_revision + 1,
              updated_at = clock_timestamp()
@@ -796,7 +800,7 @@ describe('Mf06JobLeaseService integration tests', () => {
 
       // Cycle 3: attempt 3
       await db.query(
-        `UPDATE mf06_assessment_job
+        `UPDATE zone_entry_assessment_job
          SET next_attempt_at = clock_timestamp() - interval '1 second',
              head_revision = head_revision + 1,
              updated_at = clock_timestamp()
@@ -809,9 +813,10 @@ describe('Mf06JobLeaseService integration tests', () => {
       const retry3 = await service.retry(claim3, 'RESOLVER_TIMEOUT');
       assert.equal(retry3, 'FAILED', 'Third attempt failure must transition to FAILED');
 
-      const [job] = (await db.query('SELECT * FROM mf06_assessment_job WHERE request_id = $1', [
-        fixture.requestId,
-      ])) as Record<string, unknown>[];
+      const [job] = (await db.query(
+        'SELECT * FROM zone_entry_assessment_job WHERE request_id = $1',
+        [fixture.requestId],
+      )) as Record<string, unknown>[];
       assert.ok(job);
       assert.equal(job.status, 'FAILED');
       assert.equal(job.attempt_count, 3);
@@ -840,9 +845,10 @@ describe('Mf06JobLeaseService integration tests', () => {
       const outcome = await service.retry(claim, 'RESOLVER_TIMEOUT');
       assert.equal(outcome, 'FAILED');
 
-      const [job] = (await db.query('SELECT * FROM mf06_assessment_job WHERE request_id = $1', [
-        fixture.requestId,
-      ])) as Record<string, unknown>[];
+      const [job] = (await db.query(
+        'SELECT * FROM zone_entry_assessment_job WHERE request_id = $1',
+        [fixture.requestId],
+      )) as Record<string, unknown>[];
       assert.ok(job);
       assert.equal(job.status, 'FAILED');
       assert.equal(job.last_error_code, 'DEADLINE_EXCEEDED');
@@ -865,7 +871,7 @@ describe('Mf06JobLeaseService integration tests', () => {
       assert.equal(failOutcome, 'FAILED');
 
       const [failedJob] = (await db.query(
-        'SELECT * FROM mf06_assessment_job WHERE request_id = $1',
+        'SELECT * FROM zone_entry_assessment_job WHERE request_id = $1',
         [fixtureFail.requestId],
       )) as Record<string, unknown>[];
       assert.ok(failedJob);
@@ -882,7 +888,7 @@ describe('Mf06JobLeaseService integration tests', () => {
       assert.equal(cancelOutcome, 'CANCELLED');
 
       const [cancelledJob] = (await db.query(
-        'SELECT * FROM mf06_assessment_job WHERE request_id = $1',
+        'SELECT * FROM zone_entry_assessment_job WHERE request_id = $1',
         [fixtureCancel.requestId],
       )) as Record<string, unknown>[];
       assert.ok(cancelledJob);
@@ -905,7 +911,7 @@ describe('Mf06JobLeaseService integration tests', () => {
       });
 
       const [initialJob] = (await db.query(
-        'SELECT deadline_at FROM mf06_assessment_job WHERE request_id = $1',
+        'SELECT deadline_at FROM zone_entry_assessment_job WHERE request_id = $1',
         [fixture.requestId],
       )) as { deadline_at: Date }[];
 
@@ -916,7 +922,7 @@ describe('Mf06JobLeaseService integration tests', () => {
       assert.equal(outcome, 'RETRY');
 
       const [updatedJob] = (await db.query(
-        'SELECT status, deadline_at FROM mf06_assessment_job WHERE request_id = $1',
+        'SELECT status, deadline_at FROM zone_entry_assessment_job WHERE request_id = $1',
         [fixture.requestId],
       )) as { status: string; deadline_at: Date }[];
       assert.ok(initialJob && updatedJob);
@@ -963,16 +969,17 @@ describe('Mf06JobLeaseService integration tests', () => {
       assert.ok(reapedCount >= 3, 'Must transition expired deadline jobs');
 
       for (const f of expiredFixtures) {
-        const [job] = (await db.query('SELECT * FROM mf06_assessment_job WHERE request_id = $1', [
-          f.requestId,
-        ])) as Record<string, unknown>[];
+        const [job] = (await db.query(
+          'SELECT * FROM zone_entry_assessment_job WHERE request_id = $1',
+          [f.requestId],
+        )) as Record<string, unknown>[];
         assert.ok(job);
         assert.equal(job.status, 'FAILED');
         assert.equal(job.last_error_code, 'DEADLINE_EXCEEDED');
       }
 
       const [timelyJob] = (await db.query(
-        'SELECT * FROM mf06_assessment_job WHERE request_id = $1',
+        'SELECT * FROM zone_entry_assessment_job WHERE request_id = $1',
         [timelyFixture.requestId],
       )) as Record<string, unknown>[];
       assert.ok(timelyJob);
@@ -1000,9 +1007,10 @@ describe('Mf06JobLeaseService integration tests', () => {
       const expiredCount = await service.expire();
       assert.equal(expiredCount, 0, 'Must not expire job eligible for reclaim');
 
-      const [job] = (await db.query('SELECT * FROM mf06_assessment_job WHERE request_id = $1', [
-        fixture.requestId,
-      ])) as Record<string, unknown>[];
+      const [job] = (await db.query(
+        'SELECT * FROM zone_entry_assessment_job WHERE request_id = $1',
+        [fixture.requestId],
+      )) as Record<string, unknown>[];
       assert.ok(job);
       assert.equal(job.status, 'CLAIMED');
       assert.equal(job.head_revision, 2);
@@ -1100,7 +1108,7 @@ it('abort after actual claim row selection rolls back expired sweep and leaves z
   assert.equal(await service.claim(controller.signal), null);
   assert.equal(selected, true);
   const rows = (await db.query(
-    'SELECT status, attempt_count, head_revision FROM mf06_assessment_job WHERE request_id = ANY($1::uuid[])',
+    'SELECT status, attempt_count, head_revision FROM zone_entry_assessment_job WHERE request_id = ANY($1::uuid[])',
     [[expired.requestId, due.requestId]],
   )) as { status: string; attempt_count: number; head_revision: number }[];
   assert.equal(rows.length, 2);
@@ -1120,7 +1128,7 @@ it('expiry processes exactly one bounded batch when more than100 expired jobs ex
   });
   assert.equal(await service.expire(), 100);
   const [count] = (await db.query(
-    "SELECT count(*)::integer AS total FROM mf06_assessment_job WHERE status='PENDING'",
+    "SELECT count(*)::integer AS total FROM zone_entry_assessment_job WHERE status='PENDING'",
   )) as { total: number }[];
   assert.ok(count);
   assert.equal(count.total, 2);
@@ -1153,7 +1161,7 @@ it('retry cannot change a lease that expires after the clock read but before the
                   if (sql === 'SELECT clock_timestamp() AS now') {
                     delayed = true;
                     await inner.query(
-                      'SELECT pg_sleep(GREATEST(0, extract(epoch FROM (lease_expires_at-clock_timestamp())))::double precision + 0.02) FROM mf06_assessment_job WHERE request_id=$1',
+                      'SELECT pg_sleep(GREATEST(0, extract(epoch FROM (lease_expires_at-clock_timestamp())))::double precision + 0.02) FROM zone_entry_assessment_job WHERE request_id=$1',
                       [fixture.requestId],
                     );
                   }
@@ -1181,7 +1189,7 @@ it('retry cannot change a lease that expires after the clock read but before the
   assert.equal(await service.retry(claim, 'RESOLVER_TIMEOUT'), 'STALE');
   assert.equal(delayed, true);
   const [row] = (await db.query(
-    'SELECT status,head_revision,lease_token FROM mf06_assessment_job WHERE request_id=$1',
+    'SELECT status,head_revision,lease_token FROM zone_entry_assessment_job WHERE request_id=$1',
     [fixture.requestId],
   )) as { status: string; head_revision: number; lease_token: string }[];
   assert.deepEqual(row, { status: 'CLAIMED', head_revision: 2, lease_token: token });
@@ -1205,7 +1213,7 @@ it('claim cannot allocate a new attempt after its deadline passes between clock 
                   if (sql === 'SELECT clock_timestamp() AS now') {
                     delayed = true;
                     await inner.query(
-                      'SELECT pg_sleep(GREATEST(0, extract(epoch FROM (deadline_at-clock_timestamp())))::double precision + 0.02) FROM mf06_assessment_job WHERE request_id=$1',
+                      'SELECT pg_sleep(GREATEST(0, extract(epoch FROM (deadline_at-clock_timestamp())))::double precision + 0.02) FROM zone_entry_assessment_job WHERE request_id=$1',
                       [fixture.requestId],
                     );
                   }
@@ -1225,7 +1233,7 @@ it('claim cannot allocate a new attempt after its deadline passes between clock 
   assert.equal(await service.claim(), null);
   assert.equal(delayed, true);
   const [row] = await db.query(
-    'SELECT status,head_revision,attempt_count,lease_token FROM mf06_assessment_job WHERE request_id=$1',
+    'SELECT status,head_revision,attempt_count,lease_token FROM zone_entry_assessment_job WHERE request_id=$1',
     [fixture.requestId],
   );
   assert.deepEqual(row, {
@@ -1282,7 +1290,7 @@ it('retry backoff starts at the database write instead of being consumed by a st
   };
   assert.equal(await service.retry(claim, 'RESOLVER_TIMEOUT'), 'RETRY');
   const [row] = await db.query(
-    'SELECT next_attempt_at > clock_timestamp() AS future, extract(epoch FROM(next_attempt_at-updated_at))::double precision AS delay FROM mf06_assessment_job WHERE request_id=$1',
+    'SELECT next_attempt_at > clock_timestamp() AS future, extract(epoch FROM(next_attempt_at-updated_at))::double precision AS delay FROM zone_entry_assessment_job WHERE request_id=$1',
     [fixture.requestId],
   );
   assert.deepEqual(row, { future: true, delay: 1 });

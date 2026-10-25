@@ -1,8 +1,10 @@
 import 'reflect-metadata';
+import { MAIN_AUTHORITY_V2_SOURCES } from '../../src/common/configuration/main-team-authority-sources.js';
 import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
 import { test } from 'node:test';
 import { DatabaseService } from '../../src/database/database.service.js';
+import { ZONE_ENTRY_STORAGE_NAMES } from '../../src/common/configuration/zone-entry-storage-profile-v1.js';
 import { buildTypeOrmOptions } from '../../src/database/typeorm.options.js';
 import { ZoneEntryAuthorizationService } from '../../src/modules/zones/zone-entry-authorization.service.js';
 import { ZoneRestrictionPolicy } from '../../src/database/entities/enums.js';
@@ -14,7 +16,8 @@ import { reviewedReleaseMigrationNames } from '../support/reviewed-release-graph
 const repository = process.env.SMARTSITE_TEST_SOURCE_REPO;
 const snapshot = process.env.SMARTSITE_TEST_MAIN_SNAPSHOT;
 // Keep the historical release54 prefix: exclude the checklist, three attendance
-// additions, later visitor/manager notifications and Main QR/document additions.
+// additions, later visitor/manager notifications, Main QR/document additions,
+// and release72+ authority/storage/notification extensions.
 const afterRelease54 = new Set([
   'SafetyChecklists1792195200000',
   'AttendanceAbsence1792022400000',
@@ -28,6 +31,15 @@ const afterRelease54 = new Set([
   'WorkerDocumentIdentityChecks1792627200000',
   'WorkerDocumentSubmittedExpiry1792713600000',
   'WorkerHealthIssueDate1792800000000',
+  'PrepareNotificationCompatibility1792010000000',
+  'Mf06TeamAuthorityHistory1792281600000',
+  'CompleteNotificationCompatibility1792368000001',
+  'ZoneEntryPhysicalStorage1792454400000',
+  'PpeAlertNotifications1792886400000',
+  'ExpandedPpeNotificationKinds1793145600000',
+  'AuthorizationHistoryCutover1793232000000',
+  'ZoneAlertNotifications1793318400000',
+  'AlertDetectionSubject1793404800000',
 ]);
 for (const profile of [
   'fresh',
@@ -136,6 +148,12 @@ for (const profile of [
                   ['populated-main35', 'populated-legacy24'].includes(profile) &&
                   table === 'app_user' &&
                   c.column_name === 'must_change_password'
+                ) &&
+                // Team authority history extends ASSIGNMENT fields in the source registry.
+                !(
+                  profile === 'populated-release54' &&
+                  table === 'mf06_authority_source' &&
+                  c.column_name === 'fields'
                 ),
             )
             .map((c) => c.column_name);
@@ -153,14 +171,19 @@ for (const profile of [
             (profile === 'populated-release54' ? 54 : profile === 'populated-main35' ? 35 : 24) +
             (profile === 'populated-legacy24' ? 1 : 0),
         );
-        for (const { table, fields, rows } of inventory)
+        for (const { table, fields, rows } of inventory) {
+          const afterTable =
+            ZONE_ENTRY_STORAGE_NAMES[table as keyof typeof ZONE_ENTRY_STORAGE_NAMES] ?? table;
+          const where =
+            table === 'mf06_authority_source' ? " WHERE source_kind NOT LIKE 'TEAM%'" : '';
           assert.deepEqual(
             await db.query(
-              `SELECT to_jsonb(r)::text AS row FROM (SELECT ${fields.map((f) => `"${f}"`).join(',')} FROM "${table}") r ORDER BY to_jsonb(r)::text`,
+              `SELECT to_jsonb(r)::text AS row FROM (SELECT ${fields.map((f) => `"${f}"`).join(',')} FROM "${afterTable}"${where}) r ORDER BY to_jsonb(r)::text`,
             ),
             rows,
             table,
           );
+        }
       }
       assert.equal(db.migrations.length, expectedReleaseCount);
       assert.equal(await new DatabaseService(db).isReady(), true);
@@ -183,8 +206,27 @@ for (const profile of [
         applied.length,
         expectedReleaseCount + (profile === 'populated-legacy24' ? 1 : 0),
       );
+      const staleRelations = await db.query(
+        'SELECT c.relname FROM pg_class c JOIN pg_namespace n ON n.oid=c.relnamespace WHERE n.nspname=current_schema() AND c.relname = ANY($1::text[])',
+        [Object.keys(ZONE_ENTRY_STORAGE_NAMES)],
+      );
+      assert.deepEqual(staleRelations, []);
+      assert.deepEqual(
+        await db.query(
+          'SELECT source_kind,table_name,fields,protocol_version FROM authorization_history_source ORDER BY source_kind',
+        ),
+        MAIN_AUTHORITY_V2_SOURCES.map(([source_kind, table_name, fields]) => ({
+          source_kind,
+          table_name,
+          fields: [...fields],
+          protocol_version: 'MAIN_ROW_JOURNAL_V1',
+        })).sort((a, b) =>
+          a.source_kind < b.source_kind ? -1 : a.source_kind > b.source_kind ? 1 : 0,
+        ),
+        'Only the exact reviewed V2 registry transformation is allowed',
+      );
       assert.equal(
-        (await db.query('SELECT epoch_id FROM mf06_authority_control WHERE singleton=1'))[0]
+        (await db.query('SELECT epoch_id FROM authorization_history_control WHERE singleton=1'))[0]
           .epoch_id,
         null,
       );
@@ -195,6 +237,8 @@ for (const profile of [
         'safety_face_consent',
         'safety_face_consent_revocation',
       ]) {
+        const afterTable =
+          ZONE_ENTRY_STORAGE_NAMES[table as keyof typeof ZONE_ENTRY_STORAGE_NAMES] ?? table;
         const retained =
           profile === 'populated-release54'
             ? (inventory.find((entry) => entry.table === table)?.rows.length ?? 0)
@@ -202,15 +246,15 @@ for (const profile of [
               ? 1
               : 0;
         assert.equal(
-          Number((await db.query(`SELECT count(*) n FROM ${table}`))[0].n),
+          Number((await db.query(`SELECT count(*) n FROM ${afterTable}`))[0].n),
           retained,
-          table,
+          afterTable,
         );
       }
       if (profile !== 'fresh') {
         if (profile !== 'populated-release54') {
           const facts = await db.query(
-            'SELECT source_kind,source_id,operation,epoch_id,before_payload,after_payload FROM mf06_authority_fact',
+            'SELECT source_kind,source_id,operation,epoch_id,before_payload,after_payload FROM authorization_history_revision',
           );
           assert.equal(facts.length, 1);
           assert.equal(facts[0].source_kind, 'USER_ACCOUNT');

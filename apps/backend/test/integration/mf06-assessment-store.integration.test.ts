@@ -22,13 +22,11 @@ import {
   type MainAuthorityArchivePayload,
   sealMainAuthorityArchive,
 } from '../../src/modules/zones/main-authority-archive-codec.js';
-import { Mf06ImmutableAssessments1791590400004 } from '../../src/database/migrations/1791590400004-Mf06ImmutableAssessments.js';
 import {
   Mf06AssessmentStore,
   type Mf06AssessmentAppendInput,
 } from '../../src/modules/safety/assessments/mf06-assessment-store.service.js';
 import { createIsolatedTestDatabase } from '../support/isolated-test-database.js';
-import { LEGACY_ENTITIES } from '../support/legacy24/data-source.js';
 import { Mf06CandidateMetadataService } from '../../src/modules/safety/assessments/mf06-candidate-metadata.service.js';
 import { Mf06RequestContextReader } from '../../src/modules/safety/assessments/mf06-request-context.js';
 import { bindMf06FaceInvocation } from '../../src/modules/safety/assessments/mf06-face-binding.js';
@@ -43,21 +41,12 @@ import { ZoneEntryAuthorityArtifactEntity } from '../../src/database/entities/zo
 // Test Database & Harness Setup
 // -----------------------------------------------------------------------------
 
-const isolated = createIsolatedTestDatabase({ legacy: true });
+const isolated = createIsolatedTestDatabase({ canonical: true });
 const db = isolated.dataSource;
 const store = new Mf06AssessmentStore(db);
 
 before(async () => {
-  // This historical fixture explicitly installs B2 after the frozen request/job graph.
-  // Register its matching frozen projections only here, not in every legacy24 schema.
-  db.setOptions({ entities: [...LEGACY_ENTITIES] });
   await isolated.initialize();
-  const runner = db.createQueryRunner();
-  try {
-    await new Mf06ImmutableAssessments1791590400004().up(runner);
-  } finally {
-    await runner.release();
-  }
 });
 
 after(() => isolated.dispose());
@@ -109,12 +98,12 @@ const jobColumns = [
   'updated_at',
 ];
 
-type TableName = 'mf06_assessment_request' | 'mf06_assessment_job';
+type TableName = 'zone_entry_assessment_request' | 'zone_entry_assessment_job';
 
 function insert(table: TableName, row: Row) {
   const columnMap = {
-    mf06_assessment_request: requestColumns,
-    mf06_assessment_job: jobColumns,
+    zone_entry_assessment_request: requestColumns,
+    zone_entry_assessment_job: jobColumns,
   };
   const allowed = columnMap[table];
   const columns = allowed.filter((col) => Object.hasOwn(row, col));
@@ -332,10 +321,10 @@ function sealedPolicyInput(req: Row, token: string, siteId: string, zoneId: stri
 test('1. finalize appends first assessment, returns RECORDED with DB server clock, and transitions job to SUCCEEDED', async () => {
   const f = await fixture();
   const req = f.request();
-  await insert('mf06_assessment_request', req);
+  await insert('zone_entry_assessment_request', req);
   const token = randomUUID();
   await insert(
-    'mf06_assessment_job',
+    'zone_entry_assessment_job',
     job(req.request_id, { lease_token: token, head_revision: 2, attempt_count: 1 }),
   );
 
@@ -373,7 +362,7 @@ test('1. finalize appends first assessment, returns RECORDED with DB server cloc
     'assessedAt must reflect recent server clock',
   );
 
-  const assessRows = (await db.query('SELECT * FROM mf06_assessment WHERE request_id = $1', [
+  const assessRows = (await db.query('SELECT * FROM zone_entry_assessment WHERE request_id = $1', [
     req.request_id,
   ])) as Row[];
   assert.ok(assessRows[0]);
@@ -383,7 +372,7 @@ test('1. finalize appends first assessment, returns RECORDED with DB server cloc
   assert.equal(assessRows[0].reason_code, 'SERVICE_DISABLED');
 
   const jobRows = (await db.query(
-    'SELECT status, head_revision, lease_token, lease_expires_at, attempt_count FROM mf06_assessment_job WHERE request_id = $1',
+    'SELECT status, head_revision, lease_token, lease_expires_at, attempt_count FROM zone_entry_assessment_job WHERE request_id = $1',
     [req.request_id],
   )) as Row[];
   assert.ok(jobRows[0]);
@@ -397,10 +386,10 @@ test('1. finalize appends first assessment, returns RECORDED with DB server cloc
 test('2. same command and body returns REPLAY even after job SUCCEEDED; changed body returns CONFLICT with single DB row', async () => {
   const f = await fixture();
   const req = f.request();
-  await insert('mf06_assessment_request', req);
+  await insert('zone_entry_assessment_request', req);
   const token = randomUUID();
   await insert(
-    'mf06_assessment_job',
+    'zone_entry_assessment_job',
     job(req.request_id, { lease_token: token, head_revision: 2 }),
   );
 
@@ -425,7 +414,7 @@ test('2. same command and body returns REPLAY even after job SUCCEEDED; changed 
   assert.equal(resConflict.state, 'CONFLICT');
 
   const countRows = (await db.query(
-    'SELECT count(*)::int AS count FROM mf06_assessment WHERE request_id = $1',
+    'SELECT count(*)::int AS count FROM zone_entry_assessment WHERE request_id = $1',
     [req.request_id],
   )) as Row[];
   assert.ok(countRows[0]);
@@ -435,10 +424,10 @@ test('2. same command and body returns REPLAY even after job SUCCEEDED; changed 
 test('3. distinct command on already-completed request yields STALE or CONFLICT without appending', async () => {
   const f = await fixture();
   const req = f.request();
-  await insert('mf06_assessment_request', req);
+  await insert('zone_entry_assessment_request', req);
   const token = randomUUID();
   await insert(
-    'mf06_assessment_job',
+    'zone_entry_assessment_job',
     job(req.request_id, { lease_token: token, head_revision: 2 }),
   );
 
@@ -453,7 +442,7 @@ test('3. distinct command on already-completed request yields STALE or CONFLICT 
   );
 
   const countRows = (await db.query(
-    'SELECT count(*)::int AS count FROM mf06_assessment WHERE request_id = $1',
+    'SELECT count(*)::int AS count FROM zone_entry_assessment WHERE request_id = $1',
     [req.request_id],
   )) as Row[];
   assert.ok(countRows[0]);
@@ -463,10 +452,10 @@ test('3. distinct command on already-completed request yields STALE or CONFLICT 
 test('4. mismatched site, binding hash, lease token, or head revision returns STALE or UNAVAILABLE without DB append', async () => {
   const f = await fixture();
   const req = f.request();
-  await insert('mf06_assessment_request', req);
+  await insert('zone_entry_assessment_request', req);
   const token = randomUUID();
   await insert(
-    'mf06_assessment_job',
+    'zone_entry_assessment_job',
     job(req.request_id, { lease_token: token, head_revision: 2 }),
   );
 
@@ -501,14 +490,14 @@ test('4. mismatched site, binding hash, lease token, or head revision returns ST
   );
 
   const countRows = (await db.query(
-    'SELECT count(*)::int AS count FROM mf06_assessment WHERE request_id = $1',
+    'SELECT count(*)::int AS count FROM zone_entry_assessment WHERE request_id = $1',
     [req.request_id],
   )) as Row[];
   assert.ok(countRows[0]);
   assert.equal(countRows[0].count, 0, 'No row should be written on stale/mismatched claim');
 
   const jobRows = (await db.query(
-    'SELECT status, head_revision FROM mf06_assessment_job WHERE request_id = $1',
+    'SELECT status, head_revision FROM zone_entry_assessment_job WHERE request_id = $1',
     [req.request_id],
   )) as Row[];
   assert.ok(jobRows[0]);
@@ -519,10 +508,10 @@ test('4. mismatched site, binding hash, lease token, or head revision returns ST
 test('5. replay query retrieves recorded assessment when scoped correctly and returns null for mismatched site or command', async () => {
   const f = await fixture();
   const req = f.request();
-  await insert('mf06_assessment_request', req);
+  await insert('zone_entry_assessment_request', req);
   const token = randomUUID();
   await insert(
-    'mf06_assessment_job',
+    'zone_entry_assessment_job',
     job(req.request_id, { lease_token: token, head_revision: 2 }),
   );
 
@@ -556,10 +545,10 @@ test('6. concurrent finalize with identical body resolves to one RECORDED and on
   // Part A: Identical command and body executed concurrently
   const f1 = await fixture();
   const req1 = f1.request();
-  await insert('mf06_assessment_request', req1);
+  await insert('zone_entry_assessment_request', req1);
   const token1 = randomUUID();
   await insert(
-    'mf06_assessment_job',
+    'zone_entry_assessment_job',
     job(req1.request_id, { lease_token: token1, head_revision: 2 }),
   );
 
@@ -577,7 +566,7 @@ test('6. concurrent finalize with identical body resolves to one RECORDED and on
   assert.equal(resA.assessment.assessmentId, resB.assessment.assessmentId);
 
   const countRows1 = (await db.query(
-    'SELECT count(*)::int AS count FROM mf06_assessment WHERE request_id = $1',
+    'SELECT count(*)::int AS count FROM zone_entry_assessment WHERE request_id = $1',
     [req1.request_id],
   )) as Row[];
   assert.ok(countRows1[0]);
@@ -586,10 +575,10 @@ test('6. concurrent finalize with identical body resolves to one RECORDED and on
   // Part B: Same command with different bodies executed concurrently
   const f2 = await fixture();
   const req2 = f2.request();
-  await insert('mf06_assessment_request', req2);
+  await insert('zone_entry_assessment_request', req2);
   const token2 = randomUUID();
   await insert(
-    'mf06_assessment_job',
+    'zone_entry_assessment_job',
     job(req2.request_id, { lease_token: token2, head_revision: 2 }),
   );
 
@@ -613,7 +602,7 @@ test('6. concurrent finalize with identical body resolves to one RECORDED and on
   );
 
   const countRows2 = (await db.query(
-    'SELECT count(*)::int AS count FROM mf06_assessment WHERE request_id = $1',
+    'SELECT count(*)::int AS count FROM zone_entry_assessment WHERE request_id = $1',
     [req2.request_id],
   )) as Row[];
   assert.ok(countRows2[0]);
@@ -623,10 +612,10 @@ test('6. concurrent finalize with identical body resolves to one RECORDED and on
 test('7. policy-only assessment with sealed MainAuthorityArchive appends atomically, links artifact, and supports replay', async () => {
   const f = await fixture();
   const req = f.request();
-  await insert('mf06_assessment_request', req);
+  await insert('zone_entry_assessment_request', req);
   const token = randomUUID();
   await insert(
-    'mf06_assessment_job',
+    'zone_entry_assessment_job',
     job(req.request_id, { lease_token: token, head_revision: 2 }),
   );
 
@@ -685,14 +674,15 @@ test('7. policy-only assessment with sealed MainAuthorityArchive appends atomica
   assert.ok(res.assessment.authorityArtifact);
   assert.equal(res.assessment.authorityArtifact.sha256, archive.sha256);
 
-  const artRows = (await db.query('SELECT * FROM mf06_authority_artifact WHERE request_id = $1', [
-    req.request_id,
-  ])) as Row[];
+  const artRows = (await db.query(
+    'SELECT * FROM zone_entry_authority_artifact WHERE request_id = $1',
+    [req.request_id],
+  )) as Row[];
   assert.ok(artRows[0]);
   assert.equal(artRows[0].sha256, archive.sha256);
 
   const assessRows = (await db.query(
-    'SELECT authority_artifact_id FROM mf06_assessment WHERE request_id = $1',
+    'SELECT authority_artifact_id FROM zone_entry_assessment WHERE request_id = $1',
     [req.request_id],
   )) as Row[];
   assert.ok(assessRows[0]);
@@ -708,10 +698,10 @@ test('7. policy-only assessment with sealed MainAuthorityArchive appends atomica
 test('8. replay retains historical request and camera scope even after live camera deactivation or zone mutation', async () => {
   const f = await fixture();
   const req = f.request();
-  await insert('mf06_assessment_request', req);
+  await insert('zone_entry_assessment_request', req);
   const token = randomUUID();
   await insert(
-    'mf06_assessment_job',
+    'zone_entry_assessment_job',
     job(req.request_id, { lease_token: token, head_revision: 2 }),
   );
 
@@ -744,8 +734,8 @@ test('nested getters and inherited input fields are refused without invoking cal
   const f = await fixture();
   const req = f.request();
   const token = randomUUID();
-  await insert('mf06_assessment_request', req);
-  await insert('mf06_assessment_job', job(req.request_id, { lease_token: token }));
+  await insert('zone_entry_assessment_request', req);
+  await insert('zone_entry_assessment_job', job(req.request_id, { lease_token: token }));
   let hooks = 0;
   const original = sealedPolicyInput(req, token, f.siteId, f.zoneId);
   assert.ok(original.authorityArtifact);
@@ -767,7 +757,7 @@ test('nested getters and inherited input fields are refused without invoking cal
   const inheritedResult = await store.finalize(inherited);
   assert.equal(inheritedResult.state, 'UNAVAILABLE');
   const rows = (await db.query(
-    'SELECT count(*)::int AS n FROM mf06_assessment WHERE request_id=$1',
+    'SELECT count(*)::int AS n FROM zone_entry_assessment WHERE request_id=$1',
     [req.request_id],
   )) as Row[];
   assert.ok(rows[0]);
@@ -778,8 +768,8 @@ test('archive is snapshotted before first database await; caller mutation cannot
   const f = await fixture();
   const req = f.request();
   const token = randomUUID();
-  await insert('mf06_assessment_request', req);
-  await insert('mf06_assessment_job', job(req.request_id, { lease_token: token }));
+  await insert('zone_entry_assessment_request', req);
+  await insert('zone_entry_assessment_job', job(req.request_id, { lease_token: token }));
   const input = structuredClone(sealedPolicyInput(req, token, f.siteId, f.zoneId));
   const saved = structuredClone(input);
   let unblock: () => void = () => {};
@@ -820,8 +810,8 @@ test('replay refuses resealed archive corruption with captured time different fr
   const f = await fixture();
   const req = f.request();
   const token = randomUUID();
-  await insert('mf06_assessment_request', req);
-  await insert('mf06_assessment_job', job(req.request_id, { lease_token: token }));
+  await insert('zone_entry_assessment_request', req);
+  await insert('zone_entry_assessment_job', job(req.request_id, { lease_token: token }));
   const input = sealedPolicyInput(req, token, f.siteId, f.zoneId);
   const first = await store.finalize(input);
   assert.equal(first.state, 'RECORDED');
@@ -832,17 +822,17 @@ test('replay refuses resealed archive corruption with captured time different fr
   const corrupt = { ...body, sha256: hash };
   // Simulate privileged storage corruption in this disposable fixture schema only.
   await db.query(
-    'ALTER TABLE mf06_authority_artifact DISABLE TRIGGER trg_mf06_b2_artifact_immutable',
+    'ALTER TABLE zone_entry_authority_artifact DISABLE TRIGGER trg_mf06_b2_artifact_immutable',
   );
   try {
     await db.query(
-      `UPDATE mf06_authority_artifact SET body=$2::jsonb,sha256=$3,
+      `UPDATE zone_entry_authority_artifact SET body=$2::jsonb,sha256=$3,
       body_hash=encode(sha256(convert_to(($2::jsonb)::text,'UTF8')),'hex') WHERE request_id=$1`,
       [req.request_id, JSON.stringify(corrupt), hash],
     );
   } finally {
     await db.query(
-      'ALTER TABLE mf06_authority_artifact ENABLE TRIGGER trg_mf06_b2_artifact_immutable',
+      'ALTER TABLE zone_entry_authority_artifact ENABLE TRIGGER trg_mf06_b2_artifact_immutable',
     );
   }
   assert.equal(await store.replay(req.request_id as string, input.commandId, f.siteId), null);
@@ -853,10 +843,10 @@ test('replay refuses resealed archive corruption with captured time different fr
 test('9. invalid input (empty version, malformed hash, illegal outcome/reason pair) prevents DB write and returns UNAVAILABLE', async () => {
   const f = await fixture();
   const req = f.request();
-  await insert('mf06_assessment_request', req);
+  await insert('zone_entry_assessment_request', req);
   const token = randomUUID();
   await insert(
-    'mf06_assessment_job',
+    'zone_entry_assessment_job',
     job(req.request_id, { lease_token: token, head_revision: 2 }),
   );
 
@@ -895,21 +885,21 @@ test('9. invalid input (empty version, malformed hash, illegal outcome/reason pa
   );
 
   const countRows = (await db.query(
-    'SELECT count(*)::int AS count FROM mf06_assessment WHERE request_id = $1',
+    'SELECT count(*)::int AS count FROM zone_entry_assessment WHERE request_id = $1',
     [req.request_id],
   )) as Row[];
   assert.ok(countRows[0]);
   assert.equal(countRows[0].count, 0, 'No assessment may be written for invalid inputs');
 
   const artCount = (await db.query(
-    'SELECT count(*)::int AS count FROM mf06_authority_artifact WHERE request_id = $1',
+    'SELECT count(*)::int AS count FROM zone_entry_authority_artifact WHERE request_id = $1',
     [req.request_id],
   )) as Row[];
   assert.ok(artCount[0]);
   assert.equal(artCount[0].count, 0, 'No artifact may be written for invalid inputs');
 
   const jobRows = (await db.query(
-    'SELECT status, head_revision FROM mf06_assessment_job WHERE request_id = $1',
+    'SELECT status, head_revision FROM zone_entry_assessment_job WHERE request_id = $1',
     [req.request_id],
   )) as Row[];
   assert.ok(jobRows[0]);
@@ -921,8 +911,8 @@ test('caller finalization refuses absent/weak transactions without appending or 
   const f = await fixture();
   const req = f.request();
   const token = randomUUID();
-  await insert('mf06_assessment_request', req);
-  await insert('mf06_assessment_job', job(req.request_id, { lease_token: token }));
+  await insert('zone_entry_assessment_request', req);
+  await insert('zone_entry_assessment_job', job(req.request_id, { lease_token: token }));
   const input = defaultInput(req, token);
   assert.deepEqual(await store.finalizeInTransaction(db.manager, input), {
     state: 'UNAVAILABLE',
@@ -936,7 +926,7 @@ test('caller finalization refuses absent/weak transactions without appending or 
   });
   assert.equal(
     (
-      await db.query('SELECT count(*)::int AS n FROM mf06_assessment WHERE request_id=$1', [
+      await db.query('SELECT count(*)::int AS n FROM zone_entry_assessment WHERE request_id=$1', [
         req.request_id,
       ])
     )[0].n,
@@ -944,7 +934,9 @@ test('caller finalization refuses absent/weak transactions without appending or 
   );
   assert.equal(
     (
-      await db.query('SELECT status FROM mf06_assessment_job WHERE request_id=$1', [req.request_id])
+      await db.query('SELECT status FROM zone_entry_assessment_job WHERE request_id=$1', [
+        req.request_id,
+      ])
     )[0].status,
     'CLAIMED',
   );
@@ -954,8 +946,8 @@ test('caller rollback undoes authority archive, assessment and successful job he
   const f = await fixture();
   const req = f.request();
   const token = randomUUID();
-  await insert('mf06_assessment_request', req);
-  await insert('mf06_assessment_job', job(req.request_id, { lease_token: token }));
+  await insert('zone_entry_assessment_request', req);
+  await insert('zone_entry_assessment_job', job(req.request_id, { lease_token: token }));
   const input = sealedPolicyInput(req, token, f.siteId, f.zoneId);
   await assert.rejects(
     db.transaction('SERIALIZABLE', async (manager) => {
@@ -963,7 +955,7 @@ test('caller rollback undoes authority archive, assessment and successful job he
       assert.equal(result.state, 'RECORDED');
       assert.equal(
         (
-          await manager.query('SELECT status FROM mf06_assessment_job WHERE request_id=$1', [
+          await manager.query('SELECT status FROM zone_entry_assessment_job WHERE request_id=$1', [
             req.request_id,
           ])
         )[0].status,
@@ -973,7 +965,7 @@ test('caller rollback undoes authority archive, assessment and successful job he
     }),
     /SYNTHETIC_CALLER_ABORT_AFTER_APPEND/,
   );
-  for (const table of ['mf06_assessment', 'mf06_authority_artifact']) {
+  for (const table of ['zone_entry_assessment', 'zone_entry_authority_artifact']) {
     assert.equal(
       (
         await db.query(`SELECT count(*)::int AS n FROM ${table} WHERE request_id=$1`, [
@@ -985,9 +977,10 @@ test('caller rollback undoes authority archive, assessment and successful job he
   }
   assert.equal(
     (
-      await db.query('SELECT status,head_revision FROM mf06_assessment_job WHERE request_id=$1', [
-        req.request_id,
-      ])
+      await db.query(
+        'SELECT status,head_revision FROM zone_entry_assessment_job WHERE request_id=$1',
+        [req.request_id],
+      )
     )[0].status,
     'CLAIMED',
   );
@@ -1001,8 +994,8 @@ test('same caller manager records default-disabled B1 result without invoking an
   const f = await fixture();
   const req = f.request();
   const token = randomUUID();
-  await insert('mf06_assessment_request', req);
-  await insert('mf06_assessment_job', job(req.request_id, { lease_token: token }));
+  await insert('zone_entry_assessment_request', req);
+  await insert('zone_entry_assessment_job', job(req.request_id, { lease_token: token }));
   let profileCalls = 0;
   const candidates = new Mf06CandidateMetadataService({
     async findCurrentForSafety() {
@@ -1034,8 +1027,8 @@ test('caller transaction preserves original replay, body conflict and stale owne
   const f = await fixture();
   const req = f.request();
   const token = randomUUID();
-  await insert('mf06_assessment_request', req);
-  await insert('mf06_assessment_job', job(req.request_id, { lease_token: token }));
+  await insert('zone_entry_assessment_request', req);
+  await insert('zone_entry_assessment_job', job(req.request_id, { lease_token: token }));
   const input = defaultInput(req, token);
   const recorded = await db.transaction('SERIALIZABLE', (manager) =>
     store.finalizeInTransaction(manager, input),
@@ -1057,7 +1050,7 @@ test('caller transaction preserves original replay, body conflict and stale owne
   assert.equal(next.state, 'STALE');
   assert.equal(
     (
-      await db.query('SELECT count(*)::int AS n FROM mf06_assessment WHERE request_id=$1', [
+      await db.query('SELECT count(*)::int AS n FROM zone_entry_assessment WHERE request_id=$1', [
         req.request_id,
       ])
     )[0].n,
@@ -1078,7 +1071,11 @@ async function candidateFixture() {
           ALTER TABLE face_profile DROP CONSTRAINT chk_face_profile_database_template,
           ADD CONSTRAINT chk_face_profile_database_template CHECK(status <> 'ACTIVE' OR (encrypted_template IS NOT NULL AND length(encrypted_template) BETWEEN 100 AND 32768));`);
       }
-      await new SafetyFaceProvenance1791590400003().up(runner);
+      if (
+        !db.migrations.some((migration) => migration.name === 'SafetyFaceProvenance1791590400003')
+      ) {
+        await new SafetyFaceProvenance1791590400003().up(runner);
+      }
       await runner.commitTransaction();
       profileFixtureInstalled = true;
     } finally {
@@ -1095,8 +1092,8 @@ async function candidateFixture() {
     req.payload_hash,
   ]);
   const token = randomUUID();
-  await insert('mf06_assessment_request', req);
-  await insert('mf06_assessment_job', job(req.request_id, { lease_token: token }));
+  await insert('zone_entry_assessment_request', req);
+  await insert('zone_entry_assessment_job', job(req.request_id, { lease_token: token }));
   const actorId = randomUUID(),
     workerId = randomUUID(),
     profileId = randomUUID();
@@ -1258,8 +1255,8 @@ test('registered metadata reads actual candidate tables while default artifact q
   const f = await fixture();
   const req = f.request();
   const token = randomUUID();
-  await insert('mf06_assessment_request', req);
-  await insert('mf06_assessment_job', job(req.request_id, { lease_token: token }));
+  await insert('zone_entry_assessment_request', req);
+  await insert('zone_entry_assessment_job', job(req.request_id, { lease_token: token }));
   const result = await store.finalize(sealedPolicyInput(req, token, f.siteId, f.zoneId));
   assert.equal(result.state, 'RECORDED');
   if (result.state !== 'RECORDED') return;

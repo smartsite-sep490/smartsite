@@ -2,6 +2,7 @@ import 'reflect-metadata';
 import assert from 'node:assert/strict';
 import { createHash, randomUUID } from 'node:crypto';
 import { copyFile, mkdir, mkdtemp, readFile, writeFile } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { JwtService } from '@nestjs/jwt';
@@ -70,8 +71,9 @@ export async function createQualifiedAuthorityFixture() {
     const request = { headers: { authorization: `Bearer ${login.accessToken}` } };
     await guard.authenticateRequest(request);
 
-    const fixturePath = await mkdtemp('D:/Ky9-FPT/SmartSiteData/runs/qualified-reader-synthetic-');
-    const sourceRoot = process.env.CUTOVER_TEST_SOURCE_ROOT;
+    const fixturePath = await mkdtemp(join(tmpdir(), 'qualified-reader-synthetic-'));
+    const sourceRoot =
+      process.env.CUTOVER_TEST_SOURCE_ROOT ?? process.env.SMARTSITE_TEST_SOURCE_REPO;
     assert(sourceRoot, 'Explicit current source root is required');
     const files = [];
     for (const path of MAIN_AUTHORITY_CUTOVER_RELEASE_FILES) {

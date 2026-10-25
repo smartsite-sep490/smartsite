@@ -2,6 +2,7 @@ import 'reflect-metadata';
 import assert from 'node:assert/strict';
 import { randomUUID, createHash } from 'node:crypto';
 import { mkdtemp, mkdir, readFile, writeFile, copyFile } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { before, after, test } from 'node:test';
@@ -71,8 +72,8 @@ before(async () => {
   refreshToken = login.refreshToken;
   request = { headers: { authorization: `Bearer ${login.accessToken}` } };
   await guard.authenticateRequest(request);
-  fixturePath = await mkdtemp('D:/Ky9-FPT/SmartSiteData/runs/cutover-service-synthetic-');
-  const sourceRoot = process.env.CUTOVER_TEST_SOURCE_ROOT;
+  fixturePath = await mkdtemp(join(tmpdir(), 'cutover-service-synthetic-'));
+  const sourceRoot = process.env.CUTOVER_TEST_SOURCE_ROOT ?? process.env.SMARTSITE_TEST_SOURCE_REPO;
   assert(sourceRoot, 'Explicit current source root is required');
   const files = [];
   for (const path of MAIN_AUTHORITY_CUTOVER_RELEASE_FILES) {

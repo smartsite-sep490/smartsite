@@ -50,7 +50,7 @@ test('POST /sites/:siteId/access-setup/contractor-zone-permissions/dates enforce
   });
 
   const [controlRow] = (await database.dataSource.query(
-    'SELECT singleton, epoch_id FROM mf06_authority_control WHERE singleton = 1',
+    'SELECT singleton, epoch_id FROM authorization_history_control WHERE singleton = 1',
   )) as Array<{ singleton: number; epoch_id: string | null }>;
   assert.equal(controlRow?.singleton, 1);
   assert.equal(controlRow?.epoch_id, null);
@@ -177,7 +177,8 @@ test('POST /sites/:siteId/access-setup/contractor-zone-permissions/dates enforce
     const contractorId = randomUUID();
     const participationId = randomUUID();
     const participationValidFrom = new Date('2026-10-15T01:30:00.000Z');
-    const participationValidUntil = new Date('2026-10-20T00:00:00.000Z');
+    // Representative enrollment requires current participation; grant interval checks stay fixed.
+    const participationValidUntil = new Date(Date.now() + 365 * 24 * 60 * 60 * 1000);
 
     await database.dataSource.getRepository(ContractorEntity).save({
       id: contractorId,
@@ -227,11 +228,11 @@ test('POST /sites/:siteId/access-setup/contractor-zone-permissions/dates enforce
       0,
     );
     const initialPermissionFacts = (await database.dataSource.query(
-      "SELECT fact_id FROM mf06_authority_fact WHERE source_kind = 'CONTRACTOR_PERMISSION'",
+      "SELECT fact_id FROM authorization_history_revision WHERE source_kind = 'CONTRACTOR_PERMISSION'",
     )) as Array<{ fact_id: string }>;
     assert.equal(initialPermissionFacts.length, 0);
     const initialPermissionGaps = (await database.dataSource.query(
-      "SELECT gap_id FROM mf06_authority_gap WHERE source_kind = 'CONTRACTOR_PERMISSION'",
+      "SELECT gap_id FROM authorization_history_gap WHERE source_kind = 'CONTRACTOR_PERMISSION'",
     )) as Array<{ gap_id: string }>;
     assert.equal(initialPermissionGaps.length, 0);
 
@@ -275,7 +276,7 @@ test('POST /sites/:siteId/access-setup/contractor-zone-permissions/dates enforce
 
     const permissionFacts = (await database.dataSource.query(
       `SELECT fact_id, source_kind, source_id, command_id, transaction_id::text AS transaction_id, operation
-       FROM mf06_authority_fact
+       FROM authorization_history_revision
        WHERE source_kind = 'CONTRACTOR_PERMISSION' AND source_id = $1`,
       [granted.id],
     )) as Array<{
@@ -294,7 +295,7 @@ test('POST /sites/:siteId/access-setup/contractor-zone-permissions/dates enforce
 
     const permissionGaps = (await database.dataSource.query(
       `SELECT gap_id, reason
-       FROM mf06_authority_gap
+       FROM authorization_history_gap
        WHERE source_kind = 'CONTRACTOR_PERMISSION' AND source_id = $1`,
       [granted.id],
     )) as Array<{ gap_id: string; reason: string }>;
@@ -311,7 +312,7 @@ test('POST /sites/:siteId/access-setup/contractor-zone-permissions/dates enforce
 
     const commands = (await database.dataSource.query(
       `SELECT command_id, actor_user_id, operation, request_hash, transaction_id::text AS transaction_id
-       FROM mf06_authority_command
+       FROM authorization_history_command
        WHERE command_id = $1`,
       [fact.command_id],
     )) as Array<{
@@ -372,7 +373,7 @@ test('POST /sites/:siteId/access-setup/contractor-zone-permissions/dates enforce
 
     const witnesses = (await database.dataSource.query(
       `SELECT command_id, transaction_id::text AS transaction_id
-       FROM mf06_authority_commit_witness
+       FROM authorization_history_commit_receipt
        WHERE command_id = $1`,
       [fact.command_id],
     )) as Array<{ command_id: string; transaction_id: string }>;
@@ -507,8 +508,8 @@ test('POST /sites/:siteId/access-setup/contractor-zone-permissions/dates enforce
     const attributed = await database.dataSource.query(`
       SELECT f.source_kind,f.source_id,f.operation,c.operation AS command_operation,c.actor_user_id,
              w.command_id AS witness_id
-      FROM mf06_authority_fact f LEFT JOIN mf06_authority_command c USING(command_id)
-      LEFT JOIN mf06_authority_commit_witness w USING(command_id)
+      FROM authorization_history_revision f LEFT JOIN authorization_history_command c USING(command_id)
+      LEFT JOIN authorization_history_commit_receipt w USING(command_id)
       WHERE f.source_kind IN ('CONTRACTOR_PERMISSION','WORKER_PERMISSION')
       ORDER BY f.source_kind,f.source_id,f.revision`);
     assert.equal(attributed.length, 5); // 2 contractor inserts + 1 update, worker insert + update
@@ -546,7 +547,7 @@ test('POST /sites/:siteId/access-setup/contractor-zone-permissions/dates enforce
     );
     assert.deepEqual(
       await database.dataSource.query(
-        "SELECT gap_id FROM mf06_authority_gap WHERE source_kind IN ('CONTRACTOR_PERMISSION','WORKER_PERMISSION')",
+        "SELECT gap_id FROM authorization_history_gap WHERE source_kind IN ('CONTRACTOR_PERMISSION','WORKER_PERMISSION')",
       ),
       [],
     );
@@ -612,7 +613,7 @@ test('POST /sites/:siteId/access-setup/contractor-zone-permissions/dates enforce
       );
       assert.deepEqual(
         await database.dataSource.query(
-          'SELECT fact_id FROM mf06_authority_fact WHERE source_id=$1',
+          'SELECT fact_id FROM authorization_history_revision WHERE source_id=$1',
           [lateId],
         ),
         [],

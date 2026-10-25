@@ -241,7 +241,7 @@ test('actual public anchored Contractor grant retains main path, permission resp
     assert.equal(p.siteId, undefined);
     const fact = (
       await db.query(
-        'SELECT c.actor_user_id,c.operation FROM mf06_authority_fact f JOIN mf06_authority_command c USING(command_id) WHERE f.source_id=$1 ORDER BY revision DESC LIMIT 1',
+        'SELECT c.actor_user_id,c.operation FROM authorization_history_revision f JOIN authorization_history_command c USING(command_id) WHERE f.source_id=$1 ORDER BY revision DESC LIMIT 1',
         [f.cp],
       )
     )[0];
@@ -437,7 +437,8 @@ async function policy(f: Fixture) {
     .n as number;
 }
 async function commands() {
-  return (await db.query('SELECT count(*)::int AS n FROM mf06_authority_command'))[0].n as number;
+  return (await db.query('SELECT count(*)::int AS n FROM authorization_history_command'))[0]
+    .n as number;
 }
 async function role(f: Fixture, r: string, site = f.site) {
   await db.query('UPDATE user_role_assignment SET role=$2,site_id=$3 WHERE user_id=$1', [
@@ -469,7 +470,7 @@ test('four public permission writes bind original bearer, actor facts, witness, 
     assert.equal(claims, 4);
     assert.equal(await policy(f), 5);
     const facts = await db.query(
-      'SELECT c.operation,c.actor_user_id,f.transaction_id=c.transaction_id AS bound,w.transaction_id=c.transaction_id AS witnessed FROM mf06_authority_fact f JOIN mf06_authority_command c USING(command_id) LEFT JOIN mf06_authority_commit_witness w USING(command_id) WHERE f.source_id=ANY($1::uuid[]) ORDER BY c.operation',
+      'SELECT c.operation,c.actor_user_id,f.transaction_id=c.transaction_id AS bound,w.transaction_id=c.transaction_id AS witnessed FROM authorization_history_revision f JOIN authorization_history_command c USING(command_id) LEFT JOIN authorization_history_commit_receipt w USING(command_id) WHERE f.source_id=ANY($1::uuid[]) ORDER BY c.operation',
       [[f.cp, f.wp]],
     );
     assert.deepEqual(
@@ -749,9 +750,10 @@ test('public grants retain exact repeat requestId with no duplicate audit/fact/p
   assert.equal(await policy(f), v);
   assert.equal(
     (
-      await db.query('SELECT count(*)::int AS n FROM mf06_authority_fact WHERE source_id=$1', [
-        f.cp,
-      ])
+      await db.query(
+        'SELECT count(*)::int AS n FROM authorization_history_revision WHERE source_id=$1',
+        [f.cp],
+      )
     )[0].n,
     1,
   );
@@ -921,14 +923,18 @@ test('actual permission grant DTO rejects client actor/command, extra fields and
 });
 test('public permission partial journal and disabled permission/Site captures fail before source changes', async () => {
   const f = await fixture();
-  await db.query('ALTER TABLE mf06_authority_commit_witness RENAME TO test_permission_witness');
+  await db.query(
+    'ALTER TABLE authorization_history_commit_receipt RENAME TO test_permission_witness',
+  );
   try {
     await assert.rejects(
       service().publicGrantContractor(f.site, contractorInput(f), ctx(f)),
       status(503),
     );
   } finally {
-    await db.query('ALTER TABLE test_permission_witness RENAME TO mf06_authority_commit_witness');
+    await db.query(
+      'ALTER TABLE test_permission_witness RENAME TO authorization_history_commit_receipt',
+    );
   }
   for (const table of ['contractor_zone_permission', 'site']) {
     await db.query(`ALTER TABLE ${table} DISABLE TRIGGER trg_mf06_capture_${table}`);
@@ -958,7 +964,7 @@ test('permission source-fact failure rolls back grant, audit, policy and journal
     n = await commands(),
     v = await policy(f);
   await db.query(
-    "CREATE FUNCTION test_permission_fact_failure() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN RAISE EXCEPTION 'Synthetic failure';END $$;CREATE TRIGGER test_permission_fact_failure BEFORE INSERT ON mf06_authority_fact FOR EACH ROW EXECUTE FUNCTION test_permission_fact_failure()",
+    "CREATE FUNCTION test_permission_fact_failure() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN RAISE EXCEPTION 'Synthetic failure';END $$;CREATE TRIGGER test_permission_fact_failure BEFORE INSERT ON authorization_history_revision FOR EACH ROW EXECUTE FUNCTION test_permission_fact_failure()",
   );
   try {
     await assert.rejects(service().publicGrantContractor(f.site, contractorInput(f), ctx(f)));
@@ -978,14 +984,14 @@ test('permission source-fact failure rolls back grant, audit, policy and journal
     );
   } finally {
     await db.query(
-      'DROP TRIGGER test_permission_fact_failure ON mf06_authority_fact;DROP FUNCTION test_permission_fact_failure()',
+      'DROP TRIGGER test_permission_fact_failure ON authorization_history_revision;DROP FUNCTION test_permission_fact_failure()',
     );
   }
 });
 test('postcommit permission witness failure retains committed response and explicitly unconfirmed history', async () => {
   const f = await fixture();
   await db.query(
-    "CREATE FUNCTION test_permission_witness_failure() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN RAISE EXCEPTION 'Synthetic failure';END $$;CREATE TRIGGER test_permission_witness_failure BEFORE INSERT ON mf06_authority_commit_witness FOR EACH ROW EXECUTE FUNCTION test_permission_witness_failure()",
+    "CREATE FUNCTION test_permission_witness_failure() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN RAISE EXCEPTION 'Synthetic failure';END $$;CREATE TRIGGER test_permission_witness_failure BEFORE INSERT ON authorization_history_commit_receipt FOR EACH ROW EXECUTE FUNCTION test_permission_witness_failure()",
   );
   try {
     const p = await service().publicGrantContractor(f.site, contractorInput(f), ctx(f));
@@ -993,7 +999,7 @@ test('postcommit permission witness failure retains committed response and expli
     assert.equal(
       (
         await db.query(
-          'SELECT w.command_id FROM mf06_authority_fact f LEFT JOIN mf06_authority_commit_witness w USING(command_id) WHERE f.source_id=$1',
+          'SELECT w.command_id FROM authorization_history_revision f LEFT JOIN authorization_history_commit_receipt w USING(command_id) WHERE f.source_id=$1',
           [f.cp],
         )
       )[0].command_id,
@@ -1001,7 +1007,7 @@ test('postcommit permission witness failure retains committed response and expli
     );
   } finally {
     await db.query(
-      'DROP TRIGGER test_permission_witness_failure ON mf06_authority_commit_witness;DROP FUNCTION test_permission_witness_failure()',
+      'DROP TRIGGER test_permission_witness_failure ON authorization_history_commit_receipt;DROP FUNCTION test_permission_witness_failure()',
     );
   }
 });

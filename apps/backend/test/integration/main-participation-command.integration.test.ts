@@ -3,13 +3,6 @@ import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
 import { after, before, test } from 'node:test';
 import type { DataSource } from 'typeorm';
-import { QrAccess1791417600000 } from '../../src/database/migrations/1791417600000-QrAccess.js';
-import { ErdVisitorAccess1791504000000 } from '../../src/database/migrations/1791504000000-ErdVisitorAccess.js';
-import { ErdGateFlow1791504000001 } from '../../src/database/migrations/1791504000001-ErdGateFlow.js';
-import { ErdZonePermissions1791504000003 } from '../../src/database/migrations/1791504000003-ErdZonePermissions.js';
-import { ErdAccessAudit1791504000004 } from '../../src/database/migrations/1791504000004-ErdAccessAudit.js';
-import { ErdAccessPolicy1791504000006 } from '../../src/database/migrations/1791504000006-ErdAccessPolicy.js';
-import { Mf06MainAuthorityJournal1791590400002 } from '../../src/database/migrations/1791590400002-Mf06MainAuthorityJournal.js';
 import { createIsolatedTestDatabase } from '../support/isolated-test-database.js';
 interface Participation {
   id: string;
@@ -29,7 +22,7 @@ interface Writer {
   create(input: unknown): Promise<Result>;
 }
 let WriterClass: (new (source: DataSource) => Writer) | undefined;
-const database = createIsolatedTestDatabase({ legacy: true }),
+const database = createIsolatedTestDatabase({ preAuthorityCutover72: true }),
   db = database.dataSource;
 before(async () => {
   try {
@@ -44,24 +37,6 @@ before(async () => {
   }
   if (!WriterClass) return;
   await database.initialize();
-  const runner = db.createQueryRunner();
-  try {
-    await runner.startTransaction();
-    for (const migration of [
-      new QrAccess1791417600000(),
-      new ErdVisitorAccess1791504000000(),
-      new ErdGateFlow1791504000001(),
-      new ErdZonePermissions1791504000003(),
-      new ErdAccessAudit1791504000004(),
-      new ErdAccessPolicy1791504000006(),
-      new Mf06MainAuthorityJournal1791590400002(),
-    ])
-      await migration.up(runner);
-    await runner.commitTransaction();
-  } finally {
-    if (runner.isTransactionActive) await runner.rollbackTransaction();
-    await runner.release();
-  }
 });
 after(async () => {
   await database.dispose();
@@ -126,7 +101,7 @@ test('Admin creates exact main participation fields and same-transaction fact wi
   assert.deepEqual(
     (
       await db.query(
-        'SELECT f.source_kind,f.operation,f.transaction_id=c.transaction_id AS same_tx,w.transaction_id=c.transaction_id AS witnessed,r.source_id=f.source_id AS bound FROM mf06_authority_fact f JOIN mf06_authority_command c USING(command_id) JOIN mf06_authority_commit_witness w USING(command_id) JOIN mf06_participation_command_result r USING(command_id) WHERE command_id=$1',
+        'SELECT f.source_kind,f.operation,f.transaction_id=c.transaction_id AS same_tx,w.transaction_id=c.transaction_id AS witnessed,r.source_id=f.source_id AS bound FROM authorization_history_revision f JOIN authorization_history_command c USING(command_id) JOIN authorization_history_commit_receipt w USING(command_id) JOIN contractor_participation_command_receipt r USING(command_id) WHERE command_id=$1',
         [value.commandId],
       )
     )[0],
@@ -181,7 +156,7 @@ test('missing Site/Contractor fail404 without partial participation or command',
     assert.equal(
       (
         await db.query(
-          'SELECT count(*)::int AS n FROM mf06_authority_command WHERE command_id=$1',
+          'SELECT count(*)::int AS n FROM authorization_history_command WHERE command_id=$1',
           [value.commandId],
         )
       )[0].n,
@@ -250,7 +225,7 @@ test('source fact failure rolls back source, command and response', async () => 
   const f = await fixture(),
     value = input(f);
   await db.query(
-    `CREATE FUNCTION test_participation_fact_failure() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN IF NEW.source_kind='PARTICIPATION' AND NEW.command_id='${value.commandId}'::uuid THEN RAISE EXCEPTION 'synthetic fact failure';END IF;RETURN NEW;END $$;CREATE TRIGGER test_participation_fact_failure BEFORE INSERT ON mf06_authority_fact FOR EACH ROW EXECUTE FUNCTION test_participation_fact_failure()`,
+    `CREATE FUNCTION test_participation_fact_failure() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN IF NEW.source_kind='PARTICIPATION' AND NEW.command_id='${value.commandId}'::uuid THEN RAISE EXCEPTION 'synthetic fact failure';END IF;RETURN NEW;END $$;CREATE TRIGGER test_participation_fact_failure BEFORE INSERT ON authorization_history_revision FOR EACH ROW EXECUTE FUNCTION test_participation_fact_failure()`,
   );
   try {
     await assert.rejects(f.service.create(value));
@@ -258,7 +233,7 @@ test('source fact failure rolls back source, command and response', async () => 
     assert.equal(
       (
         await db.query(
-          'SELECT count(*)::int AS n FROM mf06_authority_command WHERE command_id=$1',
+          'SELECT count(*)::int AS n FROM authorization_history_command WHERE command_id=$1',
           [value.commandId],
         )
       )[0].n,
@@ -266,7 +241,7 @@ test('source fact failure rolls back source, command and response', async () => 
     );
   } finally {
     await db.query(
-      'DROP TRIGGER test_participation_fact_failure ON mf06_authority_fact;DROP FUNCTION test_participation_fact_failure()',
+      'DROP TRIGGER test_participation_fact_failure ON authorization_history_revision;DROP FUNCTION test_participation_fact_failure()',
     );
   }
 });
@@ -274,14 +249,14 @@ test('postcommit witness failure is503 and same-ID retry does not create another
   const f = await fixture(),
     value = input(f);
   await db.query(
-    `CREATE FUNCTION test_participation_witness_failure() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN IF NEW.command_id='${value.commandId}'::uuid THEN RAISE EXCEPTION 'synthetic witness failure';END IF;RETURN NEW;END $$;CREATE TRIGGER test_participation_witness_failure BEFORE INSERT ON mf06_authority_commit_witness FOR EACH ROW EXECUTE FUNCTION test_participation_witness_failure()`,
+    `CREATE FUNCTION test_participation_witness_failure() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN IF NEW.command_id='${value.commandId}'::uuid THEN RAISE EXCEPTION 'synthetic witness failure';END IF;RETURN NEW;END $$;CREATE TRIGGER test_participation_witness_failure BEFORE INSERT ON authorization_history_commit_receipt FOR EACH ROW EXECUTE FUNCTION test_participation_witness_failure()`,
   );
   try {
     await assert.rejects(f.service.create(value), status(503));
     assert.equal(await rowCount(f), 1);
   } finally {
     await db.query(
-      'DROP TRIGGER test_participation_witness_failure ON mf06_authority_commit_witness;DROP FUNCTION test_participation_witness_failure()',
+      'DROP TRIGGER test_participation_witness_failure ON authorization_history_commit_receipt;DROP FUNCTION test_participation_witness_failure()',
     );
   }
   assert.equal((await f.service.create(value)).replayed, true);
@@ -294,16 +269,16 @@ test('original response is database-hashed and cannot be changed/deleted/truncat
   assert.equal(
     (
       await db.query(
-        "SELECT result_hash=encode(sha256(convert_to(result_json::text,'UTF8')),'hex') AS valid FROM mf06_participation_command_result WHERE command_id=$1",
+        "SELECT result_hash=encode(sha256(convert_to(result_json::text,'UTF8')),'hex') AS valid FROM contractor_participation_command_receipt WHERE command_id=$1",
         [value.commandId],
       )
     )[0].valid,
     true,
   );
   for (const query of [
-    'DELETE FROM mf06_participation_command_result',
-    'TRUNCATE mf06_participation_command_result',
-    "UPDATE mf06_participation_command_result SET result_hash=repeat('a',64)",
+    'DELETE FROM contractor_participation_command_receipt',
+    'TRUNCATE contractor_participation_command_receipt',
+    "UPDATE contractor_participation_command_receipt SET result_hash=repeat('a',64)",
   ])
     await assert.rejects(
       db.query(query),
@@ -318,13 +293,13 @@ test('receipt cannot certify an old participation without an INSERT fact from th
     await runner.startTransaction();
     const commandId = randomUUID();
     await runner.query(
-      "INSERT INTO mf06_authority_command(command_id,actor_user_id,operation,request_hash) VALUES($1,$2,'MAIN_PARTICIPATION_CREATE',$3)",
+      "INSERT INTO authorization_history_command(command_id,actor_user_id,operation,request_hash) VALUES($1,$2,'MAIN_PARTICIPATION_CREATE',$3)",
       [commandId, f.actorUserId, 'b'.repeat(64)],
     );
     await runner.query("SELECT set_config('smartsite.mf06_command_id',$1,true)", [commandId]);
     await assert.rejects(
       runner.query(
-        "INSERT INTO mf06_participation_command_result(command_id,source_id,result_json,result_hash) VALUES($1,$2,mf06_participation_response($2),'')",
+        "INSERT INTO contractor_participation_command_receipt(command_id,source_id,result_json,result_hash) VALUES($1,$2,mf06_participation_response($2),'')",
         [commandId, original.participation.id],
       ),
       (e: unknown) => (e as { code?: string }).code === '23514',
@@ -338,7 +313,7 @@ test('missing result table fails503 and does not leave source or command rows', 
   const f = await fixture(),
     value = input(f);
   await db.query(
-    'ALTER TABLE mf06_participation_command_result RENAME TO test_hidden_participation_result',
+    'ALTER TABLE contractor_participation_command_receipt RENAME TO test_hidden_participation_result',
   );
   try {
     await assert.rejects(f.service.create(value), status(503));
@@ -346,7 +321,7 @@ test('missing result table fails503 and does not leave source or command rows', 
     assert.equal(
       (
         await db.query(
-          'SELECT count(*)::int AS n FROM mf06_authority_command WHERE command_id=$1',
+          'SELECT count(*)::int AS n FROM authorization_history_command WHERE command_id=$1',
           [value.commandId],
         )
       )[0].n,
@@ -354,7 +329,7 @@ test('missing result table fails503 and does not leave source or command rows', 
     );
   } finally {
     await db.query(
-      'ALTER TABLE test_hidden_participation_result RENAME TO mf06_participation_command_result',
+      'ALTER TABLE test_hidden_participation_result RENAME TO contractor_participation_command_receipt',
     );
   }
 });

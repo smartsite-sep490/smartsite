@@ -165,7 +165,7 @@ test('real public participation create records actor-bound same-transaction MF06
     assert.equal(p.isActive, true);
     const fact = (
       await db.query(
-        'SELECT c.actor_user_id,c.operation,f.transaction_id=c.transaction_id AS bound,w.transaction_id=c.transaction_id AS witnessed FROM mf06_authority_fact f JOIN mf06_authority_command c USING(command_id) LEFT JOIN mf06_authority_commit_witness w USING(command_id) WHERE f.source_id=$1 ORDER BY f.revision DESC LIMIT 1',
+        'SELECT c.actor_user_id,c.operation,f.transaction_id=c.transaction_id AS bound,w.transaction_id=c.transaction_id AS witnessed FROM authorization_history_revision f JOIN authorization_history_command c USING(command_id) LEFT JOIN authorization_history_commit_receipt w USING(command_id) WHERE f.source_id=$1 ORDER BY f.revision DESC LIMIT 1',
         [p.id],
       )
     )[0];
@@ -351,12 +351,16 @@ test('disabled participation capture and partial authority journal fail closed',
         'ALTER TABLE contractor_site_participation ENABLE TRIGGER trg_mf06_capture_contractor_site_participation',
       );
     }
-    await db.query('ALTER TABLE mf06_authority_control RENAME TO mf06_authority_control_held');
+    await db.query(
+      'ALTER TABLE authorization_history_control RENAME TO mf06_authority_control_held',
+    );
     try {
       assert.equal((await request(f.input)).status, 503);
       assert.equal(await count(f), 0);
     } finally {
-      await db.query('ALTER TABLE mf06_authority_control_held RENAME TO mf06_authority_control');
+      await db.query(
+        'ALTER TABLE mf06_authority_control_held RENAME TO authorization_history_control',
+      );
     }
   });
 });
@@ -367,7 +371,7 @@ test('public participation postcommit witness failure retains committed success 
     apiDb.query = async (...args: Parameters<DataSource['query']>) => {
       if (
         typeof args[0] === 'string' &&
-        args[0].startsWith('INSERT INTO mf06_authority_commit_witness')
+        args[0].startsWith('INSERT INTO authorization_history_commit_receipt')
       )
         throw new Error('Synthetic witness failure');
       return original(...args);
@@ -377,7 +381,7 @@ test('public participation postcommit witness failure retains committed success 
     const p = (await response.json()) as Participation;
     assert.equal(await count(f), 1);
     const rows = await db.query(
-      'SELECT w.command_id FROM mf06_authority_fact f LEFT JOIN mf06_authority_commit_witness w USING(command_id) WHERE f.source_id=$1',
+      'SELECT w.command_id FROM authorization_history_revision f LEFT JOIN authorization_history_commit_receipt w USING(command_id) WHERE f.source_id=$1',
       [p.id],
     );
     assert.equal(rows.length, 1);
