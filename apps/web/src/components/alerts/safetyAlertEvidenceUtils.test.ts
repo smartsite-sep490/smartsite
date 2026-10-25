@@ -96,13 +96,17 @@ describe('safetyAlertEvidenceUtils', () => {
       expect(evidenceErrorMessage(error)).toBe('Evidence is temporarily unavailable.');
     });
 
-    it('falls back to default ApiError message for other HTTP statuses', () => {
+    it('replaces server diagnostics with a safe availability message', () => {
       const error = new ApiError('http', 'Internal Server Error', 500);
-      expect(evidenceErrorMessage(error)).toBe('Internal Server Error');
+      expect(evidenceErrorMessage(error)).toBe(
+        'The service is temporarily unavailable. Please try again.',
+      );
     });
 
     it('handles generic Error and unknown errors gracefully', () => {
-      expect(evidenceErrorMessage(new Error('Network timeout'))).toBe('Network timeout');
+      expect(evidenceErrorMessage(new Error('Network timeout'))).toBe(
+        'Something went wrong. Please try again.',
+      );
       expect(evidenceErrorMessage('unexpected string')).toBe('Failed to load evidence image.');
     });
   });

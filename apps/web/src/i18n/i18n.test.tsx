@@ -139,7 +139,7 @@ it.each(['en', 'vi'] as const)(
     expect(attendanceDate(new Date('2026-10-12T18:00:00Z'), 'Asia/Ho_Chi_Minh')).toBe('2026-10-13');
     expect(localizeMessage('Username already exists')).not.toMatch(/^common\./);
     expect(localizedError('Unrecognized server failure')).toBe(
-      language === 'vi' ? vi['errors.unexpected'] : 'Unrecognized server failure',
+      language === 'vi' ? vi['errors.unexpected'] : en['errors.unexpected'],
     );
     expect(localizedLabel('PRIVATE_NEW_ENUM')).toBe('PRIVATE_NEW_ENUM');
     const notification = {
@@ -206,7 +206,7 @@ it('does not mistake Vietnamese names inside an unknown English error for transl
     vi['errors.attendance_reports_scope'],
   );
   await i18n.changeLanguage('en');
-  expect(localizedError(message)).toBe(message);
+  expect(localizedError(message)).toBe(en['errors.unexpected']);
   expect(localizedError(vi['errors.attendance_reports_scope'])).toBe(
     en['errors.attendance_reports_scope'],
   );

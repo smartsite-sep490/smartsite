@@ -249,7 +249,7 @@ it('retries incomplete document uploads without creating a second account', asyn
   mount();
   const user = await fill();
   await user.click(screen.getByRole('button', { name: 'Create Worker account' }));
-  await screen.findByText('Synthetic upload interruption');
+  await screen.findByText('Something went wrong. Please try again.');
   expect(screen.getByText(tr('documents.accountPending'))).toBeTruthy();
   await user.click(screen.getByRole('button', { name: 'Create Worker account' }));
   await screen.findByText(/Account worker001 and Worker profile created/);

@@ -82,7 +82,7 @@ it('retains the request ID when a failed permission assignment is retried', asyn
   await user.selectOptions(screen.getByLabelText('Contractor'), 'participation');
   await user.selectOptions(screen.getByLabelText('Zone'), 'zone');
   await user.click(screen.getByRole('button', { name: 'Assign Contractor Zone' }));
-  await screen.findByText('Connection unavailable');
+  await screen.findByText('Something went wrong. Please try again.');
   await user.click(screen.getByRole('button', { name: 'Assign Contractor Zone' }));
   await waitFor(() => expect(grant).toHaveBeenCalledTimes(2));
   expect(grant.mock.calls[0]?.[2].requestId).toBe(grant.mock.calls[1]?.[2].requestId);

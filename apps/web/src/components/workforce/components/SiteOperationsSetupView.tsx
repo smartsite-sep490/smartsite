@@ -1,5 +1,5 @@
 import { localizedLabel } from '../../../i18n/labels';
-import { localizedError } from '../../../i18n/messages';
+import { userErrorMessage } from '../../../i18n/messages';
 import { translate as tr } from '../../../i18n';
 import { useState, type FormEvent } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
@@ -144,7 +144,7 @@ export function SiteOperationsSetupView({
         className="flex items-center gap-2 rounded-xl bg-rose-50 border border-rose-200 p-4 text-xs font-semibold text-rose-800"
       >
         <IconAlertTriangle className="h-4 w-4 shrink-0 text-rose-600" />
-        <span>{localizedError(sites.error.message)}</span>
+        <span>{userErrorMessage(sites.error)}</span>
       </div>
     );
   }
@@ -222,7 +222,17 @@ export function SiteOperationsSetupView({
             className="flex items-center gap-2 rounded-xl bg-rose-50 border border-rose-200 p-3 text-xs font-semibold text-rose-800"
           >
             <IconAlertTriangle className="h-4 w-4 shrink-0 text-rose-600" />
-            <span>{(access.error || contractors.error)?.message}</span>
+            <span>{userErrorMessage(access.error || contractors.error)}</span>
+            <button
+              type="button"
+              className="underline focus-visible:outline-2"
+              onClick={() => {
+                void access.refetch();
+                void contractors.refetch();
+              }}
+            >
+              {t('common.retry')}
+            </button>
           </div>
         )}
 
@@ -304,7 +314,7 @@ export function SiteOperationsSetupView({
             className="flex items-center gap-2 rounded-xl bg-rose-50 border border-rose-200 p-3 text-xs font-semibold text-rose-800"
           >
             <IconAlertTriangle className="h-4 w-4 shrink-0 text-rose-600" />
-            <span>{localizedError(participate.error.message)}</span>
+            <span>{userErrorMessage(participate.error)}</span>
           </div>
         )}
       </section>
@@ -337,7 +347,7 @@ export function SiteOperationsSetupView({
                 className="flex items-center gap-2 rounded-xl bg-rose-50 border border-rose-200 p-3 text-xs font-semibold text-rose-800"
               >
                 <IconAlertTriangle className="h-4 w-4 shrink-0 text-rose-600" />
-                <span>{localizedError(zones.error.message)}</span>
+                <span>{userErrorMessage(zones.error)}</span>
               </div>
             )}
 
@@ -421,7 +431,7 @@ export function SiteOperationsSetupView({
                 className="flex items-center gap-2 rounded-xl bg-rose-50 border border-rose-200 p-3 text-xs font-semibold text-rose-800"
               >
                 <IconAlertTriangle className="h-4 w-4 shrink-0 text-rose-600" />
-                <span>{localizedError(createZone.error.message)}</span>
+                <span>{userErrorMessage(createZone.error)}</span>
               </div>
             )}
           </section>
@@ -452,7 +462,7 @@ export function SiteOperationsSetupView({
                 className="flex items-center gap-2 rounded-xl bg-rose-50 border border-rose-200 p-3 text-xs font-semibold text-rose-800"
               >
                 <IconAlertTriangle className="h-4 w-4 shrink-0 text-rose-600" />
-                <span>{localizedError(cameras.error.message)}</span>
+                <span>{userErrorMessage(cameras.error)}</span>
               </div>
             )}
 
@@ -523,7 +533,7 @@ export function SiteOperationsSetupView({
                 className="flex items-center gap-2 rounded-xl bg-rose-50 border border-rose-200 p-3 text-xs font-semibold text-rose-800"
               >
                 <IconAlertTriangle className="h-4 w-4 shrink-0 text-rose-600" />
-                <span>{localizedError(createCamera.error.message)}</span>
+                <span>{userErrorMessage(createCamera.error)}</span>
               </div>
             )}
           </section>

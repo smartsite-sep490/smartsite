@@ -15,6 +15,6 @@ export function authErrorMessage(error: unknown): string {
   if (error.status === 403) return tr('auth.error.forbidden');
   if (error.status === 401) return tr('auth.error.credentials');
   if (error.status === 400) return tr('auth.error.validation');
-  if (error.code === 'invalid-response') return tr('auth.error.response');
+  if (error.code === 'invalid-response') return tr('auth.error.server');
   return tr('auth.error.unexpected');
 }

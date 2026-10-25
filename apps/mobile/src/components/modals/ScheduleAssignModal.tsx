@@ -13,10 +13,11 @@ import {
   ScrollView,
 } from 'react-native';
 import { colors } from '../../theme/colors';
+import { errorMessage } from '../../features/shared/ui';
 import { useWorkspace } from '../../features/workspace/workspace-context';
 import { useScopedWorkers } from '../../features/workspace/use-scoped-workers';
 import { useQuery } from '@tanstack/react-query';
-import { allPages, localDate, useCommand, validDates } from '../../features/shared/data';
+import { allPages, localDate, required, useCommand, validDates } from '../../features/shared/data';
 import { useTranslation } from '../../i18n';
 import { IconCalendar, IconChevronDown } from '../common/Icons';
 
@@ -36,7 +37,7 @@ export function ScheduleAssignModal({ visible, onClose, onSuccess }: ScheduleAss
   const [selectedWorkerId, setSelectedWorkerId] = useState('');
   const [showShiftPicker, setShowShiftPicker] = useState(false);
   const [showWorkerPicker, setShowWorkerPicker] = useState(false);
-  const [localError, setLocalError] = useState<string | null>(null);
+  const [localError, setLocalError] = useState<unknown>(null);
   const command = useCommand();
 
   const workers = useScopedWorkers();
@@ -53,8 +54,8 @@ export function ScheduleAssignModal({ visible, onClose, onSuccess }: ScheduleAss
     try {
       setLocalError(null);
       validDates(fromDate, toDate);
-      if (!selectedShiftId) throw new Error(t('schedule.shift') + ': ' + t('common.noOptions'));
-      if (!selectedWorkerId) throw new Error(t('workforce.title') + ': ' + t('common.noOptions'));
+      required(selectedShiftId, t('schedule.shift'));
+      required(selectedWorkerId, t('workforce.title'));
 
       await command.mutateAsync(async () => {
         const versions = await client.listScheduleVersions(token, scope.siteId);
@@ -81,7 +82,7 @@ export function ScheduleAssignModal({ visible, onClose, onSuccess }: ScheduleAss
       onSuccess?.();
       onClose();
     } catch (err) {
-      setLocalError(err instanceof Error ? err.message : t('common.unexpectedError'));
+      setLocalError(err);
     }
   };
 
@@ -244,12 +245,7 @@ export function ScheduleAssignModal({ visible, onClose, onSuccess }: ScheduleAss
             {/* Error Message */}
             {Boolean(localError || command.error) && (
               <View style={styles.errorBox}>
-                <Text style={styles.errorText}>
-                  {localError ??
-                    (command.error instanceof Error
-                      ? command.error.message
-                      : t('common.unexpectedError'))}
-                </Text>
+                <Text style={styles.errorText}>{errorMessage(localError ?? command.error)}</Text>
               </View>
             )}
 

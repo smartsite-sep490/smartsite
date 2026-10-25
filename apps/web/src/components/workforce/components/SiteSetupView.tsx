@@ -1,4 +1,4 @@
-import { localizedError, localizeMessage } from '../../../i18n/messages';
+import { localizedError, localizeMessage, userErrorMessage } from '../../../i18n/messages';
 import { uiLocale } from '../../../i18n';
 import { translate as tr } from '../../../i18n';
 import { useTranslation } from 'react-i18next';
@@ -256,7 +256,7 @@ export function SiteSetupView({ apiUrl }: SiteSetupViewProps) {
     },
     onError: (err: unknown) => {
       if (err instanceof ApiError) {
-        setSiteError(err.message);
+        setSiteError(userErrorMessage(err));
       } else {
         setSiteError(tr('site_setup_view.failed_to_create_site_please_check_input_parameters'));
       }
@@ -281,7 +281,7 @@ export function SiteSetupView({ apiUrl }: SiteSetupViewProps) {
     },
     onError: (err: unknown) => {
       if (err instanceof ApiError) {
-        setContractorError(err.message);
+        setContractorError(userErrorMessage(err));
       } else {
         setContractorError(tr('site_setup_view.failed_to_create_contractor_please_check_inputs'));
       }
@@ -318,7 +318,7 @@ export function SiteSetupView({ apiUrl }: SiteSetupViewProps) {
     },
     onError: (err: unknown) => {
       if (err instanceof ApiError) {
-        setRepError(err.message);
+        setRepError(userErrorMessage(err));
       } else {
         setRepError(
           tr(
@@ -354,7 +354,7 @@ export function SiteSetupView({ apiUrl }: SiteSetupViewProps) {
     },
     onError: (err: unknown) => {
       if (err instanceof ApiError) {
-        setAssignRepError(err.message);
+        setAssignRepError(userErrorMessage(err));
       } else {
         setAssignRepError(
           tr(
@@ -391,9 +391,9 @@ export function SiteSetupView({ apiUrl }: SiteSetupViewProps) {
     },
     onError: (err: unknown) => {
       if (err instanceof ApiError) {
-        setManagerError(err.message);
+        setManagerError(userErrorMessage(err));
       } else if (err instanceof Error) {
-        setManagerError(err.message);
+        setManagerError(userErrorMessage(err));
       } else {
         setManagerError(
           tr(
@@ -432,7 +432,7 @@ export function SiteSetupView({ apiUrl }: SiteSetupViewProps) {
     },
     onError: (err: unknown) => {
       if (err instanceof ApiError) {
-        setCreateManagerError(err.message);
+        setCreateManagerError(userErrorMessage(err));
       } else {
         setCreateManagerError(
           tr(

@@ -1,5 +1,5 @@
 import { useManagementClient } from '../../../features/auth/auth-session';
-import { localizedError, localizeMessage } from '../../../i18n/messages';
+import { localizeMessage, userErrorMessage } from '../../../i18n/messages';
 import { translate as tr } from '../../../i18n';
 import { useTranslation } from 'react-i18next';
 import React, { useEffect, useRef, useState } from 'react';
@@ -250,7 +250,7 @@ export function ScheduleAssignmentForm({
           role="alert"
           className="text-xs text-red-600 font-semibold bg-red-50 p-2.5 rounded-xl border border-red-200"
         >
-          {localizedError(loadError.message)}{' '}
+          {userErrorMessage(loadError)}{' '}
           <button
             className="underline font-bold hover:text-red-800"
             onClick={() => {
@@ -677,7 +677,7 @@ export function ScheduleAssignmentForm({
           role="alert"
           className="text-xs text-red-700 bg-red-50 p-3 rounded-xl border border-red-200"
         >
-          {localizedError(preview.error.message)}
+          {userErrorMessage(preview.error)}
         </p>
       )}
       {save.error && (
@@ -685,7 +685,7 @@ export function ScheduleAssignmentForm({
           role="alert"
           className="text-xs text-red-700 bg-red-50 p-3 rounded-xl border border-red-200"
         >
-          {localizedError(save.error.message)}
+          {userErrorMessage(save.error)}
         </p>
       )}
       {message && (
@@ -765,7 +765,7 @@ export function ScheduleAssignmentForm({
         {batches.isPending && <p role="status">{tr('common.loading_batches')}</p>}
         {batches.error && (
           <p role="alert">
-            {localizedError(batches.error.message)}{' '}
+            {userErrorMessage(batches.error)}{' '}
             <button onClick={() => void batches.refetch()}>{tr('common.retry_batches')}</button>
           </p>
         )}
@@ -1005,7 +1005,7 @@ function BatchEditor({
       )}
       {mutation.error && (
         <p role="alert" className="text-xs text-red-700">
-          {localizedError(mutation.error.message)}
+          {userErrorMessage(mutation.error)}
         </p>
       )}
       {mutation.isSuccess && (

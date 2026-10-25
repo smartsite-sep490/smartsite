@@ -597,7 +597,7 @@ describe('ObservationIdentityReviewPanel Real DOM Interactions', () => {
     // 1st attempt: fails with Network transient timeout
     await user.click(submitBtn);
     await waitFor(() => {
-      expect(screen.getByText('Network transient timeout')).not.toBeNull();
+      expect(screen.getByText('Đã xảy ra lỗi. Vui lòng thử lại.')).not.toBeNull();
     });
     const firstCommandId = mockDecide.mock.calls[0]![5].commandId;
 

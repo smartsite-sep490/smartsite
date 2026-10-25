@@ -1,7 +1,7 @@
 import type { SmartSiteManagementClient } from '@smartsite/api-client';
 import { useManagementClient } from '../../../features/auth/auth-session';
 import { localizedLabel } from '../../../i18n/labels';
-import { localizedError } from '../../../i18n/messages';
+import { userErrorMessage } from '../../../i18n/messages';
 import { translate as tr, uiLocale } from '../../../i18n';
 import { useTranslation } from 'react-i18next';
 import { useEffect, useMemo, useState, type FormEvent } from 'react';
@@ -27,7 +27,7 @@ const pageSize = 20;
 
 function errorMessage(error: unknown): string {
   return error instanceof Error
-    ? localizedError(error.message)
+    ? userErrorMessage(error)
     : tr('access_control_view.the_request_could_not_be_completed');
 }
 

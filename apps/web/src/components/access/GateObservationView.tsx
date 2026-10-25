@@ -1,5 +1,5 @@
 import { useManagementClient } from '../../features/auth/auth-session';
-import { localizedError } from '../../i18n/messages';
+import { userErrorMessage } from '../../i18n/messages';
 import { localizedLabel, localizedGateName } from '../../i18n/labels';
 import { translate as tr } from '../../i18n';
 import { useState } from 'react';
@@ -79,7 +79,7 @@ export function GateObservationView({
           className="flex items-center gap-2 rounded-xl bg-rose-50 border border-rose-200 p-3 text-xs font-semibold text-rose-800"
         >
           <IconAlertTriangle className="h-4 w-4 shrink-0 text-rose-600" />
-          <span>{localizedError(logs.error.message)}</span>
+          <span>{userErrorMessage(logs.error)}</span>
         </div>
       )}
 

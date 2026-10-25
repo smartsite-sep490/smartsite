@@ -9,7 +9,7 @@ import type {
 } from '@smartsite/api-client';
 import { healthCertificateExpiry } from '@smartsite/api-client';
 import { translate as tr } from '../../../i18n';
-import { localizedError } from '../../../i18n/messages';
+import { userErrorMessage } from '../../../i18n/messages';
 import { DocumentMediaPicker } from './DocumentMediaPicker';
 import { DocumentIdentityNotice } from './DocumentIdentityNotice';
 import { documentKinds } from './worker-document-files';
@@ -189,7 +189,7 @@ export function WorkerDocumentsPanel(p: Props) {
       >
         <div className="flex items-center gap-2.5">
           <IconAlertTriangle className="w-5 h-5 text-red-600 shrink-0" />
-          <span className="font-semibold">{localizedError(profile.error.message)}</span>
+          <span className="font-semibold">{userErrorMessage(profile.error)}</span>
         </div>
         <button
           type="button"
@@ -290,7 +290,7 @@ export function WorkerDocumentsPanel(p: Props) {
           role="alert"
           className="rounded-xl border border-red-200 bg-red-50 p-3.5 text-xs font-semibold text-red-700 shadow-2xs"
         >
-          {localizedError(action.error.message)}
+          {userErrorMessage(action.error)}
         </div>
       )}
 

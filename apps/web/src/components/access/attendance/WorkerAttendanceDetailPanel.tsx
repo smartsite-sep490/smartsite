@@ -3,7 +3,7 @@ import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useQuery } from '@tanstack/react-query';
 import { translate as tr, uiLocale } from '../../../i18n';
-import { localizedError } from '../../../i18n/messages';
+import { userErrorMessage } from '../../../i18n/messages';
 import { attendanceHours, attendanceLabel } from './attendance-display';
 import { AttendanceStatusBadge } from './AttendanceStatusBadge';
 import { AttendanceDailyBarChart } from './AttendanceDailyBarChart';
@@ -211,7 +211,7 @@ export function WorkerAttendanceDetailPanel({
           role="alert"
           className="flex items-center justify-between p-4 rounded-2xl border border-red-200 bg-red-50 text-xs text-red-700"
         >
-          <span>{localizedError(workerQuery.error.message)}</span>
+          <span>{userErrorMessage(workerQuery.error)}</span>
           <button
             onClick={() => void workerQuery.refetch()}
             className="font-bold underline hover:no-underline"
@@ -480,7 +480,7 @@ export function WorkerAttendanceDetailPanel({
 
                 {dayDetailQuery.error && (
                   <p className="text-xs text-red-600 font-semibold">
-                    {localizedError(dayDetailQuery.error.message)}
+                    {userErrorMessage(dayDetailQuery.error)}
                   </p>
                 )}
 

@@ -1,5 +1,5 @@
 import { useManagementClient } from '../../../features/auth/auth-session';
-import { localizedError } from '../../../i18n/messages';
+import { userErrorMessage } from '../../../i18n/messages';
 import { localizedLabel } from '../../../i18n/labels';
 import { uiLocale } from '../../../i18n';
 import { translate as tr } from '../../../i18n';
@@ -34,7 +34,7 @@ export function ZoneDecisionHistory({
       {decisions.isPending && <p role="status">{tr('common.loading_entry_decisions')}</p>}
       {decisions.error && (
         <p role="alert">
-          {localizedError(decisions.error.message)}{' '}
+          {userErrorMessage(decisions.error)}{' '}
           <button onClick={() => void decisions.refetch()}>{tr('common.retry')}</button>
         </p>
       )}

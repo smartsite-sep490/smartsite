@@ -2,6 +2,8 @@
 
 Expo/React Native application for Workers and Contractor Representatives, using TanStack Query and the shared `@smartsite/api-client`. The application uses backend authentication and real workflows; it does not select roles from usernames or generate demo business data.
 
+Request failures use localized messages for connection problems, invalid sign-in details, expired sessions, permission, validation, conflicts and service availability. Unknown technical errors are replaced with a safe message; known local validation remains actionable and updates when the language changes. A missing service URL shows contact guidance rather than environment setup instructions.
+
 ## Worker and Contractor workflows
 
 After sign-in, choose an explicitly assigned role and Site. Representatives also choose an active Contractor scope. Changing scope unmounts drafts and aborts requests from the previous workspace. Accounts with multiple roles still see only the selected Worker/Contractor workspace; the Backend independently authorizes every request.

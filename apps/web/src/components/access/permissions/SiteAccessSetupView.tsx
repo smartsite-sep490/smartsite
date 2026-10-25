@@ -1,5 +1,5 @@
 import { useManagementClient } from '../../../features/auth/auth-session';
-import { localizedError } from '../../../i18n/messages';
+import { userErrorMessage } from '../../../i18n/messages';
 import { localizedLabel } from '../../../i18n/labels';
 import { uiLocale } from '../../../i18n';
 import { translate as tr } from '../../../i18n';
@@ -105,7 +105,7 @@ export function SiteAccessSetupView({
   if (setup.error)
     return (
       <div role="alert">
-        {localizedError(setup.error.message)}{' '}
+        {userErrorMessage(setup.error)}{' '}
         <button onClick={() => void setup.refetch()}>{tr('common.retry')}</button>
       </div>
     );
@@ -268,7 +268,7 @@ export function SiteAccessSetupView({
         )}
         {mutation.error && (
           <p role="alert" className="text-sm text-red-700">
-            {localizedError(mutation.error.message)}
+            {userErrorMessage(mutation.error)}
           </p>
         )}
         {mutation.isSuccess && (
@@ -336,10 +336,8 @@ export function SiteAccessSetupView({
             )}
           </div>
         ))}
-        {review.error && <p role="alert">{localizedError(review.error.message)}</p>}
-        {revokeAssignment.error && (
-          <p role="alert">{localizedError(revokeAssignment.error.message)}</p>
-        )}
+        {review.error && <p role="alert">{userErrorMessage(review.error)}</p>}
+        {revokeAssignment.error && <p role="alert">{userErrorMessage(revokeAssignment.error)}</p>}
       </section>
       <section className="space-y-3 rounded-2xl border bg-white p-6">
         <h3 className="font-bold">{tr('common.contractor_zone_permissions')}</h3>
@@ -393,7 +391,7 @@ export function SiteAccessSetupView({
             )}
           </div>
         ))}
-        {revoke.error && <p role="alert">{localizedError(revoke.error.message)}</p>}
+        {revoke.error && <p role="alert">{userErrorMessage(revoke.error)}</p>}
       </section>
     </div>
   );

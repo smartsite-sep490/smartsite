@@ -7,7 +7,8 @@ import { WorkerAttendanceDetailPanel } from './WorkerAttendanceDetailPanel';
 import i18n from '../../../i18n';
 
 const api = vi.hoisted(() => ({ attendanceWorkers: vi.fn(), attendanceDayDetail: vi.fn() }));
-vi.mock('@smartsite/api-client', () => ({
+vi.mock('@smartsite/api-client', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@smartsite/api-client')>()),
   SmartSiteManagementClient: class {
     constructor() {
       return api;

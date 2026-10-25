@@ -3,6 +3,11 @@ import { ApiError } from '@smartsite/api-client';
 import { authErrorMessage } from './auth-errors';
 
 describe('auth error messages', () => {
+  it('uses service guidance for an unreadable sign-in response', () => {
+    expect(authErrorMessage(new ApiError('invalid-response', 'PRIVATE_JSON', 200))).toBe(
+      'The service is temporarily unavailable. Please try again.',
+    );
+  });
   it('recognizes the actual network error code without exposing internal text', () => {
     expect(authErrorMessage(new ApiError('network', 'private internal host'))).toBe(
       'Could not connect. Check your connection and try again.',

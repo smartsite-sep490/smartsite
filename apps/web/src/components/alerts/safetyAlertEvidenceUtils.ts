@@ -1,6 +1,7 @@
 import { uiLocale } from '../../i18n';
 import { translate as tr } from '../../i18n';
 import { ApiError } from '@smartsite/api-client';
+import { userErrorMessage } from '../../i18n/messages';
 
 export function buildEvidenceQueryKey(
   apiUrl: string,
@@ -64,9 +65,9 @@ export function evidenceErrorMessage(error: unknown): string {
       return tr('safety_alert_evidence_utils.the_requested_evidence_image_is_no_longer_available');
     if (error.status === 503)
       return tr('safety_alert_evidence_utils.evidence_is_temporarily_unavailable');
-    return error.message;
+    return userErrorMessage(error);
   }
   return error instanceof Error
-    ? error.message
+    ? userErrorMessage(error)
     : tr('safety_alert_evidence_utils.failed_to_load_evidence_image');
 }

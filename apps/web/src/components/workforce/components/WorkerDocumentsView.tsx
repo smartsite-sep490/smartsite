@@ -4,6 +4,7 @@ import { useQuery } from '@tanstack/react-query';
 import { useTranslation } from 'react-i18next';
 import { useAuth, useCurrentUser, useManagementClient } from '../../../features/auth/auth-session';
 import { translate as tr } from '../../../i18n';
+import { userErrorMessage } from '../../../i18n/messages';
 import { WorkerDocumentsPanel } from './WorkerDocumentsPanel';
 import { WorkerDocumentReviewView } from '../../safety/WorkerDocumentReviewView';
 import { loadAllPages } from '../load-all-pages';
@@ -53,14 +54,21 @@ export function WorkerDocumentsView({ apiUrl }: { apiUrl: string }) {
   });
 
   if (user.isError || sites.isError || own.isError) {
-    const errorMsg = (user.error ?? sites.error ?? own.error)?.message;
+    const failed = user.isError ? user : sites.isError ? sites : own;
     return (
       <div
         role="alert"
         className="rounded-2xl border border-red-200 bg-red-50 p-6 text-sm text-red-800 flex items-center gap-3 shadow-xs"
       >
         <IconAlertTriangle className="w-5 h-5 text-red-600 shrink-0" />
-        <span className="font-semibold">{errorMsg}</span>
+        <span className="font-semibold">{userErrorMessage(failed.error)}</span>
+        <button
+          type="button"
+          className="font-semibold underline focus-visible:outline-2"
+          onClick={() => void failed.refetch()}
+        >
+          {tr('common.retry')}
+        </button>
       </div>
     );
   }

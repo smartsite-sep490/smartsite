@@ -1,5 +1,5 @@
 import { useManagementClient } from '../../../features/auth/auth-session';
-import { localizedError } from '../../../i18n/messages';
+import { userErrorMessage } from '../../../i18n/messages';
 import { localizedLabel } from '../../../i18n/labels';
 import { uiLocale } from '../../../i18n';
 import { translate as tr } from '../../../i18n';
@@ -464,7 +464,7 @@ export function AttendanceView({
   if (!hasReportsApi && !isWorker && overview.error)
     return (
       <div role="alert">
-        {localizedError(overview.error.message)}{' '}
+        {userErrorMessage(overview.error)}{' '}
         <button onClick={() => void overview.refetch()}>{tr('common.retry')}</button>
       </div>
     );
@@ -693,7 +693,7 @@ export function AttendanceView({
           </fieldset>
           {correction.error && (
             <p role="alert" className="text-xs text-red-600 font-semibold">
-              {localizedError(correction.error.message)}
+              {userErrorMessage(correction.error)}
             </p>
           )}
           {correction.isSuccess && (
@@ -835,7 +835,7 @@ export function AttendanceView({
           ))}
           {review.error && (
             <p role="alert" className="text-xs text-red-600 font-semibold">
-              {localizedError(review.error.message)}
+              {userErrorMessage(review.error)}
             </p>
           )}
         </div>
@@ -1001,7 +1001,7 @@ export function AttendanceView({
             role="alert"
             className="flex items-center justify-between p-4 rounded-2xl border border-red-200 bg-red-50 text-xs text-red-700"
           >
-            <span>{localizedError(summary.error.message)}</span>
+            <span>{userErrorMessage(summary.error)}</span>
             <button
               onClick={() => void summary.refetch()}
               className="font-bold underline hover:no-underline"
@@ -1183,7 +1183,7 @@ export function AttendanceView({
           {overview.isPending && <p role="status">{tr('common.loading_attendance')}</p>}
           {overview.error && (
             <div role="alert">
-              {localizedError(overview.error.message)}{' '}
+              {userErrorMessage(overview.error)}{' '}
               <button onClick={() => void overview.refetch()}>{tr('common.retry')}</button>
             </div>
           )}
