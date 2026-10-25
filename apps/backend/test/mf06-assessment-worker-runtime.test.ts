@@ -2,7 +2,8 @@ import 'reflect-metadata';
 import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
 import { mkdir, mkdtemp, readFile, writeFile } from 'node:fs/promises';
-import path, { dirname, join, resolve } from 'node:path';
+import { tmpdir } from 'node:os';
+import path, { dirname, isAbsolute, join, resolve } from 'node:path';
 import { before, describe, it } from 'node:test';
 import { fileURLToPath } from 'node:url';
 import { Logger, Module } from '@nestjs/common';
@@ -25,6 +26,7 @@ import {
 const here = dirname(fileURLToPath(import.meta.url));
 const runtimeRoot = resolve(here, '../src');
 const D_RUNS_ROOT = 'D:/Ky9-FPT/SmartSiteData/runs';
+const FIXTURE_RUNS_ROOT = process.platform === 'win32' ? D_RUNS_ROOT : tmpdir();
 
 const SAMPLE_CLAIM: Mf06JobClaim = Object.freeze({
   requestId: '11111111-1111-4111-8111-111111111111',
@@ -154,9 +156,12 @@ function createIdleDbStub(
 }
 
 async function createRetainedSyntheticCutoverFixture() {
-  await mkdir(D_RUNS_ROOT, { recursive: true });
-  const rootDir = await mkdtemp(`${D_RUNS_ROOT}/mf06-worker-runtime-synthetic-`);
-  assert.match(rootDir, /^[dD]:[\\/]/, 'Fixture root must be retained on D: drive');
+  await mkdir(FIXTURE_RUNS_ROOT, { recursive: true });
+  const rootDir = await mkdtemp(join(FIXTURE_RUNS_ROOT, 'mf06-worker-runtime-synthetic-'));
+  assert.equal(isAbsolute(rootDir), true, 'Fixture root must be a native absolute path');
+  if (process.platform === 'win32') {
+    assert.match(rootDir, /^[dD]:[\\/]/, 'Fixture root must be retained on D: drive');
+  }
 
   const releaseRoot = join(rootDir, 'release');
   const evidenceRoot = join(rootDir, 'evidence');

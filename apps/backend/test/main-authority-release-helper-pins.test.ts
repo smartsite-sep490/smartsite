@@ -1,7 +1,8 @@
 import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
 import { copyFile, mkdir, mkdtemp, readFile, writeFile } from 'node:fs/promises';
-import { dirname, join, resolve } from 'node:path';
+import { tmpdir } from 'node:os';
+import { dirname, isAbsolute, join, resolve } from 'node:path';
 import { before, test } from 'node:test';
 import { fileURLToPath } from 'node:url';
 import {
@@ -37,6 +38,8 @@ const sha256 = (bytes: Buffer | string): string => createHash('sha256').update(b
 
 const RELEASE_COMMIT = 'a'.repeat(40);
 const SOURCE_REGISTRY_HASH = 'd'.repeat(64);
+const D_RUNS_ROOT = 'D:/Ky9-FPT/SmartSiteData/runs';
+const FIXTURE_RUNS_ROOT = process.platform === 'win32' ? D_RUNS_ROOT : tmpdir();
 
 interface SyntheticCutoverManifest {
   version: 'MF06_REVIEWED_CUTOVER_RELEASE_V1';
@@ -85,9 +88,11 @@ async function writeRepinnedConfig(
 }
 
 before(async () => {
-  fixtureRoot = await mkdtemp('D:/Ky9-FPT/SmartSiteData/runs/cutover-helper-pins-synthetic-');
+  await mkdir(FIXTURE_RUNS_ROOT, { recursive: true });
+  fixtureRoot = await mkdtemp(join(FIXTURE_RUNS_ROOT, 'cutover-helper-pins-synthetic-'));
+  assert.equal(isAbsolute(fixtureRoot), true, 'Fixture root must be a native absolute path');
   const runtimeRoot = resolve(dirname(fileURLToPath(import.meta.url)), '../src');
-  const sourceRoot = process.env.CUTOVER_TEST_SOURCE_ROOT;
+  const sourceRoot = process.env.CUTOVER_TEST_SOURCE_ROOT ?? process.env.SMARTSITE_TEST_SOURCE_REPO;
   assert(sourceRoot, 'Explicit current source root is required');
 
   const files: Array<{ path: string; sha256: string }> = [];

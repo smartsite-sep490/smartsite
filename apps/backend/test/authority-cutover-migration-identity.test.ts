@@ -14,12 +14,29 @@ test('authority cutover is registered exactly once after all predecessor timesta
     typeof migration === 'function' ? migration.name : String(migration),
   );
   assert.equal(names.filter((name) => name === candidate.name).length, 1);
-  assert.equal(names.at(-1), candidate.name);
   assert.equal(candidate.name, 'AuthorizationHistoryCutover1793232000000');
-  assert(
-    Number(candidate.name.slice(-13)) >
-      Math.max(
-        ...names.filter((name) => name !== candidate.name).map((name) => Number(name.slice(-13))),
-      ),
-  );
+
+  const candidateIndex = names.indexOf(candidate.name);
+  assert(candidateIndex > 0);
+  assert.equal(registered[candidateIndex], AuthorizationHistoryCutover1793232000000);
+
+  const predecessors = names.slice(0, candidateIndex);
+  for (const requiredPredecessor of [
+    'Mf06MainAuthorityJournal1791590400002',
+    'Mf06TeamAuthorityHistory1792281600000',
+    'ZoneEntryPhysicalStorage1792454400000',
+    'ExpandedPpeNotificationKinds1793145600000',
+  ]) {
+    assert(
+      predecessors.includes(requiredPredecessor),
+      `Expected ${requiredPredecessor} to be registered before ${candidate.name}`,
+    );
+  }
+
+  const candidateTimestamp = Number(candidate.name.slice(-13));
+  assert(candidateTimestamp > Math.max(...predecessors.map((name) => Number(name.slice(-13)))));
+
+  for (const successor of names.slice(candidateIndex + 1)) {
+    assert(Number(successor.slice(-13)) > candidateTimestamp);
+  }
 });

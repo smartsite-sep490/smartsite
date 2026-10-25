@@ -1,4 +1,6 @@
 import assert from 'node:assert/strict';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import { Readable } from 'node:stream';
 import test from 'node:test';
 import { PublicHttpException } from '../src/common/http/public-http-exception.js';
@@ -13,15 +15,21 @@ import {
 } from '../src/scripts/activate-authority-cutover.js';
 
 const TOKEN = 'eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiIxIn0.c2ln';
+const CUTOVER_MANIFEST_PATH =
+  process.platform === 'win32'
+    ? 'D:/Ky9-FPT/SmartSiteData/release/manifest.json'
+    : join(tmpdir(), 'smartsite-data', 'release', 'manifest.json');
+const CUTOVER_RELEASE_ROOT =
+  process.platform === 'win32' ? 'D:/Ky9-FPT/SmartSite' : join(tmpdir(), 'smartsite');
 const VALID_ENV: Record<string, string | undefined> = {
   NODE_ENV: 'production',
   DATABASE_URL: 'postgresql://operator:strong_prod_pass_123@db.example.internal:5432/smartsite',
   CORS_ORIGINS: 'https://smartsite.example.com',
   AUTH_JWT_SECRET: 'prod_jwt_secret_minimum_32_characters_long_ok',
   SMARTSITE_AI_SERVICE_TOKEN: 'prod_ai_service_token_minimum_32_characters_ok',
-  MF06_CUTOVER_MANIFEST_PATH: 'D:/Ky9-FPT/SmartSiteData/release/manifest.json',
+  MF06_CUTOVER_MANIFEST_PATH: CUTOVER_MANIFEST_PATH,
   MF06_CUTOVER_MANIFEST_SHA256: 'a'.repeat(64),
-  MF06_CUTOVER_RELEASE_ROOT: 'D:/Ky9-FPT/SmartSite',
+  MF06_CUTOVER_RELEASE_ROOT: CUTOVER_RELEASE_ROOT,
   MF06_CUTOVER_RELEASE_COMMIT: 'b'.repeat(40),
 };
 

@@ -245,23 +245,23 @@ describe('MF06 B2 Assessment Entities Metadata Tests (Tests-First Specification)
       );
     });
 
-    it('binds ZoneEntryAuthorityArtifactEntity to table mf06_authority_artifact', () => {
+    it('binds ZoneEntryAuthorityArtifactEntity to table zone_entry_authority_artifact', () => {
       const table = getEntityTable(ZoneEntryAuthorityArtifactEntity);
       assert.ok(table, 'ZoneEntryAuthorityArtifactEntity must be decorated with @Entity()');
       assert.equal(
         table.name,
-        'mf06_authority_artifact',
-        "Table name must match migration DDL 'mf06_authority_artifact'",
+        'zone_entry_authority_artifact',
+        "Table name must match physical storage DDL 'zone_entry_authority_artifact'",
       );
     });
 
-    it('binds ZoneEntryAssessmentEntity to table mf06_assessment', () => {
+    it('binds ZoneEntryAssessmentEntity to table zone_entry_assessment', () => {
       const table = getEntityTable(ZoneEntryAssessmentEntity);
       assert.ok(table, 'ZoneEntryAssessmentEntity must be decorated with @Entity()');
       assert.equal(
         table.name,
-        'mf06_assessment',
-        "Table name must match migration DDL 'mf06_assessment'",
+        'zone_entry_assessment',
+        "Table name must match physical storage DDL 'zone_entry_assessment'",
       );
     });
 
@@ -354,7 +354,7 @@ describe('MF06 B2 Assessment Entities Metadata Tests (Tests-First Specification)
       assertHasUnique(ZoneEntryAuthorityArtifactEntity, ['artifactId', 'requestId']);
     });
 
-    it('configures foreign key to mf06_assessment_request(request_id) ON DELETE RESTRICT', () => {
+    it('configures foreign key to zone_entry_assessment_request(request_id) ON DELETE RESTRICT', () => {
       assertHasForeignKey(
         ZoneEntryAuthorityArtifactEntity,
         ZoneEntryAssessmentRequestEntity,
@@ -600,7 +600,7 @@ describe('MF06 B2 Assessment Entities Metadata Tests (Tests-First Specification)
       assertHasUnique(ZoneEntryAssessmentEntity, ['authorityArtifactId']);
     });
 
-    it('configures foreign key to mf06_assessment_request(request_id) ON DELETE RESTRICT', () => {
+    it('configures foreign key to zone_entry_assessment_request(request_id) ON DELETE RESTRICT', () => {
       assertHasForeignKey(
         ZoneEntryAssessmentEntity,
         ZoneEntryAssessmentRequestEntity,
@@ -610,7 +610,7 @@ describe('MF06 B2 Assessment Entities Metadata Tests (Tests-First Specification)
       );
     });
 
-    it('configures composite foreign key fk_mf06_assessment_artifact to mf06_authority_artifact(artifact_id, request_id) ON DELETE RESTRICT', () => {
+    it('configures composite foreign key fk_mf06_assessment_artifact to zone_entry_authority_artifact(artifact_id, request_id) ON DELETE RESTRICT', () => {
       assertHasForeignKey(
         ZoneEntryAssessmentEntity,
         ZoneEntryAuthorityArtifactEntity,
