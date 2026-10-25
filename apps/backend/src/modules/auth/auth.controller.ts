@@ -29,7 +29,7 @@ import {
   MinLength,
   ValidateIf,
 } from 'class-validator';
-import type { Request, Response } from 'express';
+import type { CookieOptions, Request, Response } from 'express';
 import { AuthService, type AuthenticatedRequest } from './auth.service.js';
 import { AccountResponseDto, LoginResponseDto } from '../../common/http/management-response.dto.js';
 import { ErrorResponseDto } from '../../common/http/error-response.dto.js';
@@ -151,23 +151,26 @@ export class AuthController {
     return input.refreshToken;
   }
 
+  private refreshCookieOptions(): CookieOptions {
+    const production = this.config.get('NODE_ENV', { infer: true }) === 'production';
+    // shortcut: cross-site cookies need browser support; use a same-site proxy if cookies are blocked.
+    return {
+      httpOnly: true,
+      sameSite: production ? 'none' : 'strict',
+      secure: production,
+      path: '/api/v1/auth',
+    };
+  }
+
   private setRefreshCookie(response: Response, token: string, expiresAt: string) {
     response.cookie(REFRESH_COOKIE, token, {
-      httpOnly: true,
-      sameSite: 'strict',
-      secure: this.config.get('NODE_ENV', { infer: true }) === 'production',
-      path: '/api/v1/auth',
+      ...this.refreshCookieOptions(),
       expires: new Date(expiresAt),
     });
   }
 
   private clearRefreshCookie(response: Response) {
-    response.clearCookie(REFRESH_COOKIE, {
-      httpOnly: true,
-      sameSite: 'strict',
-      secure: this.config.get('NODE_ENV', { infer: true }) === 'production',
-      path: '/api/v1/auth',
-    });
+    response.clearCookie(REFRESH_COOKIE, this.refreshCookieOptions());
   }
 
   private clientResponse(
