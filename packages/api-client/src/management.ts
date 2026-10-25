@@ -1,6 +1,7 @@
 import { captureSessionScopes, dispatchSessionExpired } from './session-expiry';
 import { parseSafetyEpisodeReadCommand } from '@smartsite/contracts/safety-episodes';
 import type {
+  SafetyObservationFindingsResponse,
   SafetyEpisode,
   SafetyEpisodePage,
   SafetyEpisodeListOptions,
@@ -2101,6 +2102,16 @@ export class SmartSiteManagementClient {
       undefined,
       requestOptions,
     );
+  }
+  listSafetyObservationFindings(
+    token: string, siteId: string, alertId: string, eventId: string,
+    options: PageOptions = {}, requestOptions?: RequestOptions,
+  ): Promise<SafetyObservationFindingsResponse> {
+    const query = new URLSearchParams();
+    if (options.offset !== undefined) query.set('offset', String(options.offset));
+    if (options.limit !== undefined) query.set('limit', String(options.limit));
+    return this.request('GET', `/sites/${pathId(siteId)}/safety-alerts/${pathId(alertId)}/detections/${pathId(eventId)}/findings?${query}`,
+      token, undefined, undefined, requestOptions);
   }
   getSafetyAlertEvidence(
     token: string,

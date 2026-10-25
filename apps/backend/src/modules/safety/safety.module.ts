@@ -15,6 +15,8 @@ import { ZonesModule } from '../zones/zones.module.js';
 import { AlertCandidateEvaluator } from './alerts/alert-candidate-evaluator.js';
 import { DurableGroupingService } from './alerts/durable-grouping.service.js';
 import { SafetyAlertQueryService } from './alerts/safety-alert-query.service.js';
+import { SafetyObservationFindingsService } from './alerts/safety-observation-findings.service.js';
+import { SafetyObservationFindingsController } from './alerts/safety-observation-findings.controller.js';
 import { SafetyAlertsController } from './alerts/safety-alerts.controller.js';
 import { SafetyAlertAccessGuard } from './alerts/safety-alert-access.guard.js';
 import { SafetyAlertReviewService } from './alerts/safety-alert-review.service.js';
@@ -52,6 +54,7 @@ import { Mf06AssessmentWorkerRuntime } from './assessments/mf06-assessment-worke
     SafetyChecklistController,
     SafetyOverviewController,
     SafetyAlertsController,
+    SafetyObservationFindingsController,
     ObservationIdentityController,
     Mf06AssessmentsController,
     Mf06RequestStatusesController,
@@ -69,6 +72,7 @@ import { Mf06AssessmentWorkerRuntime } from './assessments/mf06-assessment-worke
     Mf06AssessmentWorkerRuntime,
     DurableGroupingService,
     SafetyAlertQueryService,
+    SafetyObservationFindingsService,
     SafetyAlertReviewService,
     SafetyAlertEvidenceService,
     SafetyAlertAccessGuard,

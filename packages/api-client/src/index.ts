@@ -18,6 +18,7 @@ export type {
 } from '@smartsite/contracts';
 export { SmartSiteManagementClient } from './management';
 export type {
+  SafetyObservationFindingsResponse,
   SafetyEpisode,
   SafetyEpisodeSummary,
   SafetyEpisodeFinding,
