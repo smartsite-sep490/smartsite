@@ -85,3 +85,23 @@ An old or unknown generation, a hash not issued by Backend, or an older ACK cann
 advance current application state merely because its body parses. `LOADED` means
 configuration installed; it does not prove camera health, a processed frame or
 model quality. No application badge or worker sender is activated in this slice.
+
+## Structural JSON schemas
+
+The additive draft 2020-12 resources are
+[`v1/camera-configuration-bundle.json`](schemas/v1/camera-configuration-bundle.json)
+and [`v1/camera-configuration-ack.json`](schemas/v1/camera-configuration-ack.json).
+Register the unchanged `v1/camera-region-configuration.json` locally before
+compiling the bundle schema: its relative references reuse the existing source,
+version, coordinate and polygon definitions. No network lookup is needed.
+
+These schemas check structure. They cannot verify the bundle's canonical hash,
+unique region IDs across differing objects, polygon area/intersection, raw UTF-8
+or payload byte limits. Use the existing parsers for those checks. Tests explicitly
+show schema-valid tampered hashes, duplicate IDs and invalid polygon geometry
+being rejected by the bundle parser. Neither schema validates enrollment,
+permissions, issuance, receipt freshness or successful application.
+
+Schema files on a feature branch do not satisfy the immutable Main-provenance
+gate. Python vending, paired producer/consumer qualification and runtime use stay
+pending until the reviewed canonical Main commit is available.
