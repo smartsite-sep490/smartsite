@@ -27,4 +27,3 @@ Preview lifetime is bounded by the original source deadline02:41VN23 October; th
 Production gates remain open: actual browser/UI acceptance, supported live input coverage, independent model/wearer evaluation, identity/authority provenance, resource/soak/capacity, deployment and whole-product acceptance.
 
 Current runtime supersedes Flow41 above: Flow42/Node78076, expiry03:55VN23/10, unchanged Web36/schema73. See live-ingestion-demo-20261022.md for real LIVE PPE notification, MF06 frame, current worker/watcher owners and remaining polygon/lag gaps. All four current preview wrappers now have STOP/deadline drain (02:41VN23/10); the old core forced fallback is historical. Manager credentials: private DEMO-MANAGER-LOGIN.private.json in website-software-20261020-194252-c230b4de. Safety credentials: demo-ai-notification-20261022-v1/DEMO.private.md. No password in Git.
-

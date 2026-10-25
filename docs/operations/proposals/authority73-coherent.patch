@@ -26,7 +26,7 @@ diff --git a/apps/backend/test/support/isolated-test-database.ts b/apps/backend/
  import { DataSource } from 'typeorm';
  import { buildTypeOrmOptions } from '../../src/database/typeorm.options.js';
 @@ -7,10 +9,19 @@ import { Legacy24TestDataSource, LEGACY_ENTITIES } from './legacy24/data-source.
- 
+
  /** File-owned disposable schema. Never truncate audit belonging to another integration suite. */
  export function createIsolatedTestDatabase(
 -  profile: { canonical?: true; legacy?: never } | { legacy: true; canonical?: never } = {},
@@ -53,7 +53,7 @@ diff --git a/apps/backend/test/integration/authorization-history-control.integra
 @@ -13,7 +13,7 @@ import { executeMainConfigurationCommand } from '../../src/common/configuration/
  import type { EntityManager } from 'typeorm';
  import { hasNamedV2AuthorityCutoverPredecessor } from '../../src/common/configuration/authorization-history-cutover-predecessor-v1.js';
- 
+
 -const owned = createIsolatedTestDatabase();
 +const owned = createIsolatedTestDatabase({ preAuthorityCutover72: true });
  const db = owned.dataSource;
@@ -65,7 +65,7 @@ diff --git a/apps/backend/test/integration/main-authority-cutover-service.integr
 @@ -21,7 +21,7 @@ import {
    type MainAuthorityCutoverReleaseConfig,
  } from '../../src/modules/zones/main-authority-cutover-release.js';
- 
+
 -const owned = createIsolatedTestDatabase(),
 +const owned = createIsolatedTestDatabase({ preAuthorityCutover72: true }),
    db = owned.dataSource;
@@ -75,7 +75,7 @@ diff --git a/apps/backend/test/support/qualified-authority-fixture.ts b/apps/bac
 --- a/apps/backend/test/support/qualified-authority-fixture.ts
 +++ b/apps/backend/test/support/qualified-authority-fixture.ts
 @@ -23,7 +23,7 @@ const sha256 = (body: Buffer | string) => createHash('sha256').update(body).dige
- 
+
  /** One owned canonical schema and explicitly synthetic release; never an operational manifest. */
  export async function createQualifiedAuthorityFixture() {
 -  const owned = createIsolatedTestDatabase(),
@@ -164,7 +164,7 @@ diff --git a/apps/backend/test/authority-cutover-migration-identity.test.ts b/ap
 @@ -3,7 +3,7 @@ import { test } from 'node:test';
  import { AuthorizationHistoryCutover1793232000000 } from '../src/database/migrations/1793232000000-AuthorizationHistoryCutover.js';
  import { buildTypeOrmOptions } from '../src/database/typeorm.options.js';
- 
+
 -test('unregistered authority cutover candidate follows all registered migration timestamps', () => {
 +test('authority cutover is registered exactly once after all predecessor timestamps', () => {
    const candidate = new AuthorizationHistoryCutover1793232000000();
