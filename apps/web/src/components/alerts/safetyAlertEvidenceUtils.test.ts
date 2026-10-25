@@ -109,12 +109,14 @@ describe('safetyAlertEvidenceUtils', () => {
 
     it('does not display upstream exception text for other HTTP statuses', () => {
       const error = new ApiError('http', 'private-service-canary', 500);
-      expect(evidenceErrorMessage(error)).toBe('Failed to load evidence image.');
+      expect(evidenceErrorMessage(error)).toBe(
+        'The service is temporarily unavailable. Please try again.',
+      );
     });
 
     it('handles generic Error and unknown errors gracefully', () => {
       expect(evidenceErrorMessage(new Error('private-service-canary'))).toBe(
-        'Failed to load evidence image.',
+        'Something went wrong. Please try again.',
       );
       expect(evidenceErrorMessage('unexpected string')).toBe('Failed to load evidence image.');
     });
@@ -161,7 +163,7 @@ describe('safetyAlertEvidenceUtils', () => {
         'Dịch vụ bằng chứng trả về hình ảnh không hợp lệ. Vui lòng thử lại.',
       );
       expect(evidenceErrorMessage(new ApiError('http', 'raw-db-error-500', 500))).toBe(
-        'Không thể tải ảnh bằng chứng.',
+        'Dịch vụ tạm thời không khả dụng. Vui lòng thử lại.',
       );
 
       await i18n.changeLanguage('en');

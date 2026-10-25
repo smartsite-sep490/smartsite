@@ -310,7 +310,7 @@ it('reuses the same request ID after an unavailable response instead of creating
   fireEvent.click(screen.getByRole('button', { name: 'Preview assignments' }));
   await screen.findByText(/No conflicts found/);
   fireEvent.click(screen.getByRole('button', { name: 'Confirm assignments' }));
-  await screen.findByText('Response unavailable');
+  await screen.findByText('Something went wrong. Please try again.');
   fireEvent.click(screen.getByRole('button', { name: 'Confirm assignments' }));
   await waitFor(() => expect(save.mock.calls).toHaveLength(2));
   expect(save.mock.calls[0]?.[2].requestId).toBe(save.mock.calls[1]?.[2].requestId);
@@ -379,7 +379,7 @@ it('edits all unstarted batch schedules without choosing dates and reports prote
     target: { value: 'Correct future assignments' },
   });
   fireEvent.click(screen.getByRole('button', { name: 'Confirm schedule change' }));
-  await screen.findByText('Response unavailable');
+  await screen.findByText('Something went wrong. Please try again.');
   fireEvent.click(screen.getByRole('button', { name: 'Confirm schedule change' }));
   await screen.findByText(
     '3 schedule(s) updated. 2 started or attendance-protected schedule(s) skipped.',

@@ -1,4 +1,4 @@
-import { localizedError } from '../../../i18n/messages';
+import { userErrorMessage } from '../../../i18n/messages';
 import { translate as tr } from '../../../i18n';
 import { useTranslation } from 'react-i18next';
 import React, { useState } from 'react';
@@ -699,7 +699,7 @@ function WorkerAccountForm({
                   {tr('common.error')}
                 </p>
                 <p role="alert" className="text-sm font-semibold text-red-800 mt-0.5">
-                  {localizedError(create.error.message)}
+                  {userErrorMessage(create.error)}
                 </p>
               </div>
             </div>
@@ -1086,7 +1086,7 @@ function WorkerProfileForm({
       {update.isError && (
         <div className="rounded-lg border border-red-200 bg-red-50 p-3 flex items-center justify-between gap-3 text-xs text-red-800">
           <p role="alert" className="font-semibold">
-            {localizedError(update.error.message)}
+            {userErrorMessage(update.error)}
           </p>
           <button
             type="button"

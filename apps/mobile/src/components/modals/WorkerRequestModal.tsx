@@ -13,6 +13,7 @@ import {
   ScrollView,
 } from 'react-native';
 import { colors } from '../../theme/colors';
+import { errorMessage } from '../../features/shared/ui';
 import { useWorkspace } from '../../features/workspace/workspace-context';
 import { useQuery } from '@tanstack/react-query';
 import { allPages, localDate, required, useCommand } from '../../features/shared/data';
@@ -44,7 +45,7 @@ export function WorkerRequestModal({
   const [showScheduleDropdown, setShowScheduleDropdown] = useState(false);
   const [showSwapDropdown, setShowSwapDropdown] = useState(false);
   const [showShiftDropdown, setShowShiftDropdown] = useState(false);
-  const [localError, setLocalError] = useState<string | null>(null);
+  const [localError, setLocalError] = useState<unknown>(null);
   const command = useCommand();
 
   const schedules = useQuery({
@@ -90,36 +91,23 @@ export function WorkerRequestModal({
     try {
       setLocalError(null);
       const why = required(reason, t('schedule.reason'));
+      required(selectedScheduleId, t('schedule.shift'));
+      if (activeTab === 'swap') required(targetCoworkerId, t('schedule.coworkerSchedule'));
+      if (activeTab === 'change') required(targetShiftId, t('requests.alternativeShift'));
 
       await command.mutateAsync(async () => {
         if (activeTab === 'leave') {
-          if (!selectedScheduleId)
-            throw new Error(t('schedule.shift') + ': ' + t('requests.selectShiftPlaceholder'));
           await client.createAbsenceRequest(token, scope.siteId, {
             workerScheduleId: selectedScheduleId,
             reason: why,
           });
         } else if (activeTab === 'swap') {
-          if (!selectedScheduleId)
-            throw new Error(t('schedule.shift') + ': ' + t('requests.selectShiftPlaceholder'));
-          if (!targetCoworkerId)
-            throw new Error(
-              t('schedule.coworkerSchedule') + ': ' + t('requests.selectCoworkerPlaceholder'),
-            );
           await client.createShiftSwapRequest(token, scope.siteId, {
             requesterWorkerScheduleId: selectedScheduleId,
             coworkerWorkerScheduleId: targetCoworkerId,
             reason: why,
           });
         } else {
-          if (!selectedScheduleId)
-            throw new Error(t('schedule.shift') + ': ' + t('requests.selectShiftPlaceholder'));
-          if (!targetShiftId)
-            throw new Error(
-              t('requests.alternativeShift') +
-                ': ' +
-                t('requests.selectAlternativeShiftPlaceholder'),
-            );
           await client.createShiftChangeRequest(token, scope.siteId, {
             workerScheduleId: selectedScheduleId,
             toShiftId: targetShiftId,
@@ -131,7 +119,7 @@ export function WorkerRequestModal({
       onSuccess?.();
       onClose();
     } catch (err) {
-      setLocalError(err instanceof Error ? err.message : t('common.unexpectedError'));
+      setLocalError(err);
     }
   };
 
@@ -397,12 +385,7 @@ export function WorkerRequestModal({
             {/* Error Message */}
             {Boolean(localError || command.error) && (
               <View style={styles.errorBox}>
-                <Text style={styles.errorText}>
-                  {localError ??
-                    (command.error instanceof Error
-                      ? command.error.message
-                      : t('common.unexpectedError'))}
-                </Text>
+                <Text style={styles.errorText}>{errorMessage(localError ?? command.error)}</Text>
               </View>
             )}
 

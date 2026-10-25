@@ -39,9 +39,7 @@ export function buildAiWebSocketUrl(
     return {
       url: null,
       get error() {
-        return tr(
-          'monitoring_utils.realtime_ai_websocket_requires_an_authentication_token_set_vite_ai_backend_service',
-        );
+        return tr('errors.cameraUnavailable');
       },
     };
   }

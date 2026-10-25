@@ -7,6 +7,7 @@ import type { RelatedAlertFilter } from '../safety/safety-context';
 import { localizedLabel } from '../../i18n/labels';
 import { SAFETY_NAMESPACE, translate as tr, uiLanguage, uiLocale } from '../../i18n';
 import '../../i18n/ppe-catalog';
+import { userErrorMessage } from '../../i18n/messages';
 import { useTranslation } from 'react-i18next';
 import { StatusBadge, TechnicalDetails } from '../safety/SafetyWorkflowUi';
 import { IncidentView } from '../safety/IncidentView';
@@ -96,9 +97,9 @@ function errorMessage(error: unknown): string {
         'safety_alerts_view.this_alert_changed_while_you_were_reviewing_it_the_latest_record_has_been_loaded_r',
       );
     if (error.code === 'network') return tr('safety_alerts_view.could_not_connect_to_the_backend');
-    return tr('access_control_view.the_request_could_not_be_completed');
+    return userErrorMessage(error);
   }
-  return tr('access_control_view.the_request_could_not_be_completed');
+  return userErrorMessage(error);
 }
 
 function isUnauthorizedError(error: unknown): boolean {

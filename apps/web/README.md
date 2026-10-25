@@ -50,3 +50,7 @@ chuyển quan sát AI thành quyền truy cập tự động.
 Ảnh chỉ tải khi người dùng chọn xem. Lỗi tải lại hoặc metadata `available=false` ngăn ảnh cũ trong cache được dùng tiếp cho xác minh danh tính. Ảnh không hiển thị được có thông báo và nút tải lại; object URL lỗi được thu hồi. Không tự retry khi gặp lỗi; retry thủ công bị khóa với 401/403. Lỗi mạng/timeout/response được chuyển thành thông báo an toàn, không đưa nguyên exception lên giao diện.
 
 Xác minh danh tính vẫn cho phép luồng CLEAR không có ảnh nếu Backend xác nhận quyền và revision; không dùng một ảnh cũ/unavailable để thực hiện RESOLVE. Các quyết định/quyền vẫn do Backend kiểm tra, không suy ra từ tracker ID hoặc ảnh AI.
+
+## Thông báo lỗi UI
+
+Thông báo lỗi UI dùng nội dung EN/VI đã duyệt theo loại lỗi và HTTP status. Lỗi không nhận diện được dùng thông báo chung; không hiển thị nguyên văn exception, JSON lỗi hoặc request ID. Các lỗi nghiệp vụ đã biết vẫn có hướng dẫn sửa hoặc tải lại. Chi tiết kỹ thuật tiếp tục nằm trong phản hồi API/log của Backend; trang đăng nhập và đổi mật khẩu không có khối Error details.

@@ -5,6 +5,7 @@ import { MemoryRouter, useNavigate } from 'react-router-dom';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import {
   SmartSiteManagementClient,
+  ApiError,
   type AccountResponse,
   type WorkerComplianceResponse,
 } from '@smartsite/api-client';
@@ -117,6 +118,17 @@ function mount(initialUrl = '/worker-documents') {
     </QueryClientProvider>,
   );
 }
+
+it('shows a safe request error and retries document prerequisites', async () => {
+  vi.mocked(SmartSiteManagementClient.prototype.listSites).mockRejectedValueOnce(
+    new ApiError('invalid-response', 'PRIVATE_INVALID_JSON', 502),
+  );
+  mount();
+  expect((await screen.findByRole('alert')).textContent).toContain(tr('errors.unavailable'));
+  expect(document.body.textContent).not.toContain('PRIVATE_INVALID_JSON');
+  fireEvent.click(screen.getByRole('button', { name: tr('common.retry') }));
+  await screen.findByText(/Nguyễn Văn An/);
+});
 
 it('searches and filters the whole queue through the API and resets pagination', async () => {
   const list = vi.mocked(SmartSiteManagementClient.prototype.listWorkerCompliance);
@@ -423,7 +435,7 @@ it('renders safe generic error in both EN and VI without leaking SQL or connecti
   expect(within(enAlert).getByText(tr('errors.unexpected'))).toBeTruthy();
   expect(screen.queryByText(/SELECT \* FROM|postgres:\/\//)).toBeNull();
 
-  fireEvent.click(screen.getByRole('button', { name: tr('documents.refresh') }));
+  fireEvent.click(screen.getByRole('button', { name: tr('common.retry') }));
   await screen.findByText(/Nguyễn Văn An/);
   expect(listSites).toHaveBeenCalledTimes(2);
   expect(refetchCurrentUser).not.toHaveBeenCalled();
@@ -461,7 +473,7 @@ it('renders safe generic error in both EN and VI without leaking SQL or connecti
   expect(screen.queryByText(/SELECT \* FROM|postgres:\/\//)).toBeNull();
 
   listSites.mockClear();
-  fireEvent.click(screen.getByRole('button', { name: tr('documents.refresh') }));
+  fireEvent.click(screen.getByRole('button', { name: tr('common.retry') }));
   expect(await screen.findByText(/card\.jpg/)).toBeTruthy();
   expect(myTeam).toHaveBeenCalledTimes(2);
   expect(listSites).not.toHaveBeenCalled();

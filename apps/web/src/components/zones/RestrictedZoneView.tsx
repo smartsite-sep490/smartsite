@@ -1,6 +1,7 @@
 import { useManagementClient } from '../../features/auth/auth-session';
 import { useZoneApplicationSession } from './useZoneApplicationSession';
-import { localizedError, localizeMessage } from '../../i18n/messages';
+import { authErrorMessage } from '../../features/auth/auth-errors';
+import { localizedError, localizeMessage, userErrorMessage } from '../../i18n/messages';
 import { translate as tr } from '../../i18n';
 import { localizedLabel } from '../../i18n/labels';
 import { presentZoneLabel, presentZoneMessage } from './zonePresentation';
@@ -384,7 +385,7 @@ export function RestrictedZoneView({
       setSessionExpiredMessage(null);
     },
     onError: (err) => {
-      setLoginError(err instanceof Error ? err.message : tr('common.sign_in_failed'));
+      setLoginError(err instanceof ApiError ? authErrorMessage(err) : userErrorMessage(err));
     },
   });
 

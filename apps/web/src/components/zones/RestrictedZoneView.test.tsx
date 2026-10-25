@@ -5,7 +5,7 @@ import userEvent from '@testing-library/user-event';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { describe, expect, it, vi, beforeEach, afterEach } from 'vitest';
 import { RestrictedZoneView } from './RestrictedZoneView';
-import { SmartSiteManagementClient } from '@smartsite/api-client';
+import { ApiError, SmartSiteManagementClient } from '@smartsite/api-client';
 import type { LoginResponse, SiteResponse, Page } from '@smartsite/api-client';
 import {
   loadLocalDraft,
@@ -514,6 +514,24 @@ describe('RestrictedZoneView Backend Polygon Persistence & Scope Integration', (
       expect((comboboxes[1] as HTMLSelectElement).value).toBe('cam-1');
     });
   }
+
+  it('shows incorrect credentials for the embedded login without claiming an expired session', async () => {
+    vi.mocked(SmartSiteManagementClient.prototype.login).mockRejectedValueOnce(
+      new ApiError('http', 'PRIVATE_LOGIN_ERROR', 401),
+    );
+    const user = userEvent.setup();
+    render(
+      <QueryClientProvider client={queryClient}>
+        <RestrictedZoneView />
+      </QueryClientProvider>,
+    );
+    await user.type(screen.getByRole('textbox', { name: /Admin username/i }), 'admin');
+    await user.type(screen.getByLabelText(/Password/i), 'SyntheticPassword1!');
+    await user.click(screen.getByRole('button', { name: /Sign in as Admin/i }));
+    await screen.findByText('Your sign-in details are incorrect or this account cannot sign in.');
+    expect(screen.queryByText(/session has expired/i)).toBeNull();
+    expect(document.body.textContent).not.toContain('PRIVATE_LOGIN_ERROR');
+  });
 
   it('uses the application session and does not log out when leaving zone configuration', async () => {
     const view = render(

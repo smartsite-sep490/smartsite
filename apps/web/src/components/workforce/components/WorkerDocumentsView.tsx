@@ -4,6 +4,7 @@ import { useQuery } from '@tanstack/react-query';
 import { useTranslation } from 'react-i18next';
 import { useAuth, useCurrentUser, useManagementClient } from '../../../features/auth/auth-session';
 import { translate as tr } from '../../../i18n';
+import { userErrorMessage } from '../../../i18n/messages';
 import { WorkerDocumentsPanel } from './WorkerDocumentsPanel';
 import { WorkerDocumentReviewView } from '../../safety/WorkerDocumentReviewView';
 import { loadAllPages } from '../load-all-pages';
@@ -65,6 +66,7 @@ export function WorkerDocumentsView({ apiUrl }: { apiUrl: string }) {
 
   const hasOwnError = isWorkerOnSite && own.isError;
   if (user.isError || sites.isError || hasOwnError) {
+    const failed = user.isError ? user : sites.isError ? sites : own;
     const retryRelevant = () => {
       if (user.isError) void user.refetch?.();
       if (sites.isError) void sites.refetch();
@@ -77,14 +79,14 @@ export function WorkerDocumentsView({ apiUrl }: { apiUrl: string }) {
       >
         <div className="flex items-center gap-3">
           <IconAlertTriangle className="w-5 h-5 text-red-600 shrink-0" />
-          <span className="font-semibold">{tr('errors.unexpected')}</span>
+          <span className="font-semibold">{userErrorMessage(failed.error)}</span>
         </div>
         <button
           type="button"
           onClick={retryRelevant}
-          className="px-3.5 py-1.5 rounded-xl bg-white border border-red-200 text-red-700 font-bold hover:bg-red-100 text-xs shadow-2xs transition-all shrink-0 cursor-pointer"
+          className="px-3.5 py-1.5 rounded-xl bg-white border border-red-200 text-red-700 font-bold hover:bg-red-100 text-xs shadow-2xs transition-all shrink-0 cursor-pointer focus-visible:outline-2"
         >
-          {tr('documents.refresh')}
+          {tr('common.retry')}
         </button>
       </div>
     );

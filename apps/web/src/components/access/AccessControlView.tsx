@@ -1,5 +1,5 @@
 import { localizedLabel } from '../../i18n/labels';
-import { localizedError } from '../../i18n/messages';
+import { userErrorMessage } from '../../i18n/messages';
 import { translate as tr } from '../../i18n';
 import { useCallback, useState } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
@@ -133,7 +133,7 @@ export interface AccessControlViewProps {
 }
 
 function errorMessage(error: unknown): string {
-  return localizedError(error instanceof Error ? error.message : undefined);
+  return userErrorMessage(error);
 }
 
 export function AccessControlView({ apiUrl }: AccessControlViewProps) {

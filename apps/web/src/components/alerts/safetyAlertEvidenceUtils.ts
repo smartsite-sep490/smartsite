@@ -2,6 +2,7 @@ import { SAFETY_NAMESPACE, translate as tr, uiLocale } from '../../i18n';
 import { localizedLabel } from '../../i18n/labels';
 import '../../i18n/ppe-catalog';
 import { ApiError } from '@smartsite/api-client';
+import { userErrorMessage } from '../../i18n/messages';
 
 export function buildEvidenceQueryKey(
   apiUrl: string,
@@ -74,8 +75,11 @@ export function evidenceErrorMessage(error: unknown): string {
       return tr('safety.evidence.error.cancelled', { ns: SAFETY_NAMESPACE });
     if (error.code === 'invalid-response')
       return tr('safety.evidence.error.invalidResponse', { ns: SAFETY_NAMESPACE });
+    return userErrorMessage(error);
   }
-  return tr('safety_alert_evidence_utils.failed_to_load_evidence_image');
+  return error instanceof Error
+    ? userErrorMessage(error)
+    : tr('safety_alert_evidence_utils.failed_to_load_evidence_image');
 }
 
 export function formatCandidateSubtype(value: string): string {

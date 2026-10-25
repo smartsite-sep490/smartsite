@@ -244,6 +244,10 @@ it('keeps the confirmation available with an error when archival fails', async (
   mount();
   fireEvent.click(await screen.findByRole('button', { name: 'Archive' }));
   fireEvent.click(screen.getByRole('button', { name: 'Archive Shift' }));
-  expect(await screen.findByRole('alert')).toHaveProperty('textContent', 'Unable to archive shift');
+  expect(await screen.findByRole('alert')).toHaveProperty(
+    'textContent',
+    'Something went wrong. Please try again.',
+  );
+  expect(screen.queryByText('Unable to archive shift')).toBeNull();
   expect(screen.getByRole('button', { name: 'Archive Shift' })).toBeTruthy();
 });

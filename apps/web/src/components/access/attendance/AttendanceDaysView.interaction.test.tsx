@@ -24,7 +24,8 @@ const api = vi.hoisted(() => ({
   reviewAttendanceCorrection: vi.fn(),
   ignoreDuplicateAttendance: vi.fn(),
 }));
-vi.mock('@smartsite/api-client', () => ({
+vi.mock('@smartsite/api-client', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@smartsite/api-client')>()),
   SmartSiteManagementClient: class {
     constructor() {
       return api;
@@ -402,9 +403,11 @@ describe('MF03 interactive UI', () => {
     ).toBe(true);
     api.attendanceTimeRequests.mockRejectedValueOnce(new Error('Queue unavailable'));
     fireEvent.change(screen.getByLabelText('Queue type'), { target: { value: 'LEAVE' } });
-    await screen.findByText('Queue unavailable');
+    await screen.findByText('Something went wrong. Please try again.');
     await userEvent.click(screen.getByRole('button', { name: 'Retry time requests' }));
-    await waitFor(() => expect(screen.queryByText('Queue unavailable')).toBeNull());
+    await waitFor(() =>
+      expect(screen.queryByText('Something went wrong. Please try again.')).toBeNull(),
+    );
     fireEvent.change(screen.getByLabelText('Request status'), { target: { value: 'PENDING' } });
     await waitFor(() =>
       expect(api.attendanceTimeRequests).toHaveBeenLastCalledWith('synthetic-token', 'site-1', {
