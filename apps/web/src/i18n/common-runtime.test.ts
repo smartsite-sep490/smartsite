@@ -2,6 +2,7 @@
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import en from './locales/en.json';
 import viCatalog from './locales/vi.json';
+import boot from './boot-catalogs.json';
 
 beforeEach(() => {
   // No React render in this file: exercise a fresh production runtime initialization.
@@ -19,7 +20,7 @@ afterEach(() => {
 it('starts with boot strings only, then installs both complete canonical catalogs through the page gate', async () => {
   const runtime = await import('./runtime');
   const i18n = runtime.default;
-  expect(Object.keys(i18n.getResourceBundle('en', 'common'))).toHaveLength(41);
+  expect(i18n.getResourceBundle('en', 'common')).toEqual(boot.en);
   expect(i18n.exists('notifications.absent_message')).toBe(false);
   expect(runtime.translate('common.loading')).toBe(en['common.loading']);
   expect(document.title).toBe(en['app.documentTitle']);
@@ -31,8 +32,7 @@ it('starts with boot strings only, then installs both complete canonical catalog
   expect(runtime.translate('notifications.absent_message')).toBe(
     en['notifications.absent_message'],
   );
-  const boot = (await import('./boot-catalogs.json')).default;
-  expect(Object.keys(boot.en)).toHaveLength(41);
+  expect(Object.keys(boot.en).length).toBeLessThan(Object.keys(en).length);
 });
 
 it('retains the latest selected language and Safety resources when common catalogs finish loading', async () => {
