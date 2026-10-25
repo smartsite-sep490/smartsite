@@ -58,9 +58,7 @@ export function Mf06AssessmentFrame({
 }: Mf06AssessmentFrameProps) {
   registerMf06EvidenceCatalog();
   const { locale } = useLocale();
-  const { t: translateSafety } = useTranslation(SAFETY_NAMESPACE);
-  const t = (key: Mf06EvidenceTranslationKey, params?: Record<string, string>) =>
-    translateSafety(key, { lng: locale, ...params });
+  const { t } = useTranslation(SAFETY_NAMESPACE);
 
   const { siteId, assessmentId, requestId, eventId, capturedAt } = assessment;
   const currentScope: FrameScope = [
@@ -184,9 +182,9 @@ export function Mf06AssessmentFrame({
   return (
     <figure className="rounded-xl border border-zinc-200/80 bg-white p-3.5 space-y-2.5 text-xs">
       <div className="space-y-0.5">
-        <div className="text-[11px] font-semibold text-zinc-800">{t('mf06.evidence.title')}</div>
+        <div className="text-[11px] font-semibold text-zinc-800">{t('mf06.evidence.title', { lng: locale })}</div>
         <figcaption className="text-[11px] leading-relaxed text-zinc-500">
-          {t('mf06.evidence.caption')}
+          {t('mf06.evidence.caption', { lng: locale })}
         </figcaption>
       </div>
       {!activeState && (
@@ -197,7 +195,7 @@ export function Mf06AssessmentFrame({
           className="flex items-center justify-center gap-2 py-6 text-xs text-zinc-500"
         >
           <IconClock className="w-4 h-4 animate-spin shrink-0" />
-          <span>{t('mf06.evidence.loading')}</span>
+          <span>{t('mf06.evidence.loading', { lng: locale })}</span>
         </div>
       )}
       {isNotFound && (
@@ -205,7 +203,7 @@ export function Mf06AssessmentFrame({
           role="status"
           className="rounded-lg border border-zinc-200 bg-zinc-50 px-3 py-2.5 text-xs text-zinc-500"
         >
-          {t('mf06.evidence.notFound')}
+          {t('mf06.evidence.notFound', { lng: locale })}
         </div>
       )}
       {activeState?.status === 'error' && !isNotFound && (
@@ -215,7 +213,7 @@ export function Mf06AssessmentFrame({
         >
           <div className="flex items-center gap-2 font-medium">
             <IconAlertTriangle className="w-4 h-4 shrink-0" />
-            <span>{t(resolveErrorKey(activeState.error))}</span>
+            <span>{t(resolveErrorKey(activeState.error), { lng: locale })}</span>
           </div>
           {!isAccessDenied && (
             <button
@@ -226,7 +224,7 @@ export function Mf06AssessmentFrame({
               }}
               className="px-2.5 py-1 bg-rose-600 text-white rounded-md text-xs font-medium hover:bg-rose-700 transition cursor-pointer"
             >
-              {t('mf06.evidence.retry')}
+              {t('mf06.evidence.retry', { lng: locale })}
             </button>
           )}
         </div>
@@ -235,7 +233,7 @@ export function Mf06AssessmentFrame({
         <div className="flex items-center justify-center overflow-hidden rounded-lg border border-zinc-200 bg-zinc-50">
           <img
             src={activeState.objectUrl}
-            alt={t('mf06.evidence.alt', { capturedAt })}
+            alt={t('mf06.evidence.alt', { capturedAt, lng: locale })}
             onError={() => {
               activeState.revoke();
               if (!sameScope(latestScopeRef.current, activeState.scope)) return;

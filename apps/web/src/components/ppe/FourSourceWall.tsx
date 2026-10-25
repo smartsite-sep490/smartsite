@@ -346,7 +346,7 @@ export function FourSourceWallTile({
                   zonesState={zonesState}
                 />
                 <div className="flex flex-wrap items-center gap-2 text-xs font-mono text-white/60">
-                  <span>ID: {camera.id}</span>
+                  <span>{t('mf06.detail.field.cameraId')} {camera.id}</span>
                   {!isAiWorkPaused && (
                     <span>
                       {t('ppe.wall.cadenceLabel', { cadence: isSelected ? '500ms' : '1s' })}

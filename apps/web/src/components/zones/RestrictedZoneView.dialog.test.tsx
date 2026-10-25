@@ -77,6 +77,10 @@ function mockPreview(detection?: VideoTestDetection): DecodedPreview {
 describe('RestrictedZoneView - Incident Review Dialog Accessibility & Evidence Boundaries', () => {
   let queryClient: QueryClient;
 
+  async function openDetectionDetails(user: ReturnType<typeof userEvent.setup>) {
+    await user.click(screen.getByTestId('zone-details-toggle'));
+  }
+
   beforeEach(() => {
     queryClient = new QueryClient({
       defaultOptions: {
@@ -104,6 +108,7 @@ describe('RestrictedZoneView - Incident Review Dialog Accessibility & Evidence B
       </QueryClientProvider>,
     );
 
+    await openDetectionDetails(user);
     const triggerBtn = screen.getByRole('button', { name: /Review Incident/i });
     await user.click(triggerBtn);
 
@@ -121,6 +126,7 @@ describe('RestrictedZoneView - Incident Review Dialog Accessibility & Evidence B
       </QueryClientProvider>,
     );
 
+    await openDetectionDetails(user);
     const triggerBtn = screen.getByRole('button', { name: /Review Incident/i });
     await user.click(triggerBtn);
 
@@ -141,6 +147,7 @@ describe('RestrictedZoneView - Incident Review Dialog Accessibility & Evidence B
       </QueryClientProvider>,
     );
 
+    await openDetectionDetails(user);
     const triggerBtn = screen.getByRole('button', { name: /Review Incident/i });
     await user.click(triggerBtn);
 
@@ -171,6 +178,7 @@ describe('RestrictedZoneView - Incident Review Dialog Accessibility & Evidence B
       </QueryClientProvider>,
     );
 
+    await openDetectionDetails(user);
     const triggerBtn = screen.getByRole('button', { name: /Review Incident/i });
     triggerBtn.focus();
     expect(document.activeElement).toBe(triggerBtn);
@@ -194,6 +202,7 @@ describe('RestrictedZoneView - Incident Review Dialog Accessibility & Evidence B
       </QueryClientProvider>,
     );
 
+    await openDetectionDetails(user);
     const triggerBtn = screen.getByRole('button', { name: /Review Incident/i });
     await user.click(triggerBtn);
 
@@ -235,6 +244,7 @@ describe('RestrictedZoneView - Incident Review Dialog Accessibility & Evidence B
       </QueryClientProvider>,
     );
 
+    await openDetectionDetails(user);
     const triggerBtn = screen.getByRole('button', { name: /Review Incident/i });
     await user.click(triggerBtn);
     expect(screen.getByText(/Review & Action/i)).not.toBeNull();
@@ -269,6 +279,7 @@ describe('RestrictedZoneView - Incident Review Dialog Accessibility & Evidence B
       </QueryClientProvider>
     );
     const { rerender } = render(view());
+    await openDetectionDetails(user);
     await user.click(screen.getByRole('button', { name: /Review Incident/i }));
     expect(screen.getByRole('dialog', { name: /Review & Action/i })).not.toBeNull();
     previewState.preview = mockPreview(mockZoneDetection(8));
@@ -285,6 +296,7 @@ describe('RestrictedZoneView - Incident Review Dialog Accessibility & Evidence B
       </QueryClientProvider>
     );
     const { rerender } = render(view());
+    await openDetectionDetails(user);
     await user.click(screen.getByRole('button', { name: /Review Incident/i }));
     previewState.preview = mockPreview(mockZoneDetection(8));
     previewState.preview.frame.sequenceNumber = '8';
@@ -302,6 +314,7 @@ describe('RestrictedZoneView - Incident Review Dialog Accessibility & Evidence B
       </QueryClientProvider>,
     );
 
+    await openDetectionDetails(user);
     const triggerBtn = screen.getByRole('button', { name: /Review Incident/i });
     await user.click(triggerBtn);
     expect(screen.getByRole('dialog', { name: /Review & Action/i })).not.toBeNull();

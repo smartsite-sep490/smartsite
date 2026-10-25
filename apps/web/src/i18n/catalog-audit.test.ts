@@ -67,6 +67,7 @@ const catalogs: Record<string, Set<string>> = {
   safety: new Set([
     ...staticCatalogKeys('locale-context.ts', 'EN_CATALOG'),
     ...staticCatalogKeys('ppe-catalog.ts', 'PPE_EN_CATALOG'),
+    ...staticCatalogKeys('mf06-evidence-catalog.ts', 'MF06_EVIDENCE_EN_CATALOG'),
     ...staticCatalogKeys('../components/cameras/camera-setup-catalog.ts', 'en'),
   ]),
 };

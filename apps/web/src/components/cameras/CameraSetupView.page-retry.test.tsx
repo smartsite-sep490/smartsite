@@ -76,9 +76,10 @@ it('retains loaded count and linked-camera guidance after a transient next-page 
   await screen.findByText('Could not load configuration. Please try again.');
   expect(screen.getByText(camera.name)).toBeTruthy();
   expect(screen.getByText(count)).toBeTruthy();
-  expect(screen.getByText(linkedHint)).toBeTruthy();
+  expect(screen.queryByText(linkedHint)).toBeNull();
   fireEvent.click(screen.getByRole('button', { name: 'Load more cameras' }));
-  await screen.findByText('Linked Camera');
+  const linkedCameraHeading = await screen.findByText('Linked Camera');
+  expect(linkedCameraHeading.closest('li')?.getAttribute('aria-current')).toBe('true');
   expect(mocks.listCameras.mock.calls.map((call) => call[2].offset)).toEqual([0, 1, 1]);
   expect(screen.queryByText(linkedHint)).toBeNull();
 });

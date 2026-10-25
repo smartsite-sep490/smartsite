@@ -249,7 +249,7 @@ describe('PpeMonitoringView & ZonePpeSetupPanel Role/Scope Capability Boundaries
     await screen.findByRole('option', { name: /Alpha Construction Site/i });
 
     expect(screen.getByRole('button', { name: /Register camera/i })).toBeDefined();
-    expect(await screen.findByRole('button', { name: /Manage camera/i })).toBeDefined();
+    expect(screen.queryByRole('button', { name: /Manage camera/i })).toBeNull();
 
     await user.click(await screen.findByRole('button', { name: /Configure PPE by Zone/i }));
     expect(await screen.findByRole('dialog', { name: /Zone PPE configuration/i })).toBeDefined();
@@ -410,6 +410,8 @@ describe('PpeMonitoringView & ZonePpeSetupPanel Role/Scope Capability Boundaries
     );
 
     await screen.findByRole('option', { name: /Alpha Construction Site/i });
+    expect(screen.getByRole('button', { name: /Register camera/i })).toBeDefined();
+    expect(await screen.findByRole('button', { name: /Manage camera/i })).toBeDefined();
     await user.click(await screen.findByRole('button', { name: /Configure PPE by Zone/i }));
 
     expect(await screen.findByLabelText(/Zone Code/i)).toBeDefined();
@@ -443,6 +445,7 @@ describe('PpeMonitoringView & ZonePpeSetupPanel Role/Scope Capability Boundaries
       }),
     );
     expect(screen.queryByText(/ZONE-LATE/i)).toBeNull();
+    expect(screen.queryByRole('button', { name: /Register camera|Manage camera/i })).toBeNull();
 
     // On site-beta, user is ADMIN only (not SITE_MANAGER for site-beta): read-only Zone catalog only
     await user.click(screen.getByRole('button', { name: /Configure PPE by Zone/i }));

@@ -2658,7 +2658,7 @@ export function PpeMonitoringView({
                     )}
                     {selectedCamera && (
                       <p>
-                        <span className="text-white/60">ID:</span>{' '}
+                        <span className="text-white/60">{t('mf06.detail.field.cameraId')}</span>{' '}
                         <span className="font-mono">
                           {selectedCamera.code} · {selectedCamera.id}
                         </span>

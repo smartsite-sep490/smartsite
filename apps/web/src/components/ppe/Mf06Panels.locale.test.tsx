@@ -320,7 +320,9 @@ describe('MF06 request and history presentation locale', () => {
     expect(screen.getByText(succeededRequest.cameraId).closest('details')).toBeNull();
     expect(screen.getByText(succeededRequest.zoneId).closest('details')).toBeNull();
 
-    const details = screen.getByText('Thông tin kỹ thuật').closest('details');
+    const requestRow = screen.getByText(succeededRequest.cameraId).closest('li');
+    expect(requestRow).toBeTruthy();
+    const details = within(requestRow!).getByText('Thông tin kỹ thuật').closest('details');
     expect(details).toBeTruthy();
     expect(details?.open).toBe(false);
     expect(within(details!).getByText('Mã yêu cầu:')).toBeDefined();
@@ -338,6 +340,9 @@ describe('MF06 request and history presentation locale', () => {
     fireEvent.click(viewButton);
     const dialogVi = await screen.findByRole('dialog', { name: 'Đánh giá đã lưu' });
     expect(await within(dialogVi).findByText('Chưa xác định được danh tính')).toBeDefined();
+    const dialogDetails = within(dialogVi).getByText('Thông tin kỹ thuật').closest('details');
+    expect(dialogDetails).toBeTruthy();
+    expect(dialogDetails?.open).toBe(false);
 
     english();
     expect(screen.getByRole('tab', { name: 'Requests', hidden: true })).toBe(tab);
@@ -346,7 +351,7 @@ describe('MF06 request and history presentation locale', () => {
     expect(screen.getByRole('button', { name: 'View assessment', hidden: true })).toBe(viewButton);
     expect(viewButton.closest('details')).toBeNull();
 
-    const detailsEn = screen.getByText('Technical references').closest('details');
+    const detailsEn = within(requestRow!).getByText('Technical references').closest('details');
     expect(detailsEn).toBe(details);
     expect(detailsEn?.open).toBe(true);
     expect(within(detailsEn!).getByText('Request ID:')).toBeDefined();
@@ -355,13 +360,17 @@ describe('MF06 request and history presentation locale', () => {
 
     const dialogEn = screen.getByRole('dialog', { name: 'Recorded assessment' });
     expect(within(dialogEn).getByText('Identity Unavailable')).toBeDefined();
+    expect(within(dialogEn).getByText('Technical references').closest('details')).toBe(
+      dialogDetails,
+    );
 
     vietnamese();
     expect(screen.getByRole('tab', { name: 'Yêu cầu', hidden: true })).toBe(tab);
     expect(screen.getByRole('button', { name: 'Xem đánh giá', hidden: true })).toBe(viewButton);
-    expect(screen.getByText('Thông tin kỹ thuật').closest('details')).toBe(details);
+    expect(within(requestRow!).getByText('Thông tin kỹ thuật').closest('details')).toBe(details);
     expect(details?.open).toBe(true);
     expect(screen.getByRole('dialog', { name: 'Đánh giá đã lưu' })).toBe(dialogEn);
+    expect(within(dialogEn).getByText('Thông tin kỹ thuật').closest('details')).toBe(dialogDetails);
     expect(requests).toHaveBeenCalledTimes(1);
     expect(getAssessment).toHaveBeenCalledTimes(1);
     expect(history).not.toHaveBeenCalled();

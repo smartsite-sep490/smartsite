@@ -1,11 +1,20 @@
+// @vitest-environment jsdom
 import React from 'react';
-import { renderToStaticMarkup } from 'react-dom/server';
+import { cleanup, fireEvent, render, screen } from '@testing-library/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { PpeMonitoringView } from '../ppe/PpeMonitoringView';
 import { RestrictedZoneView } from '../zones/RestrictedZoneView';
 import type { DecodedPreview } from './useRealtimePreview';
 import type { VideoTestDetection } from './videoTestFixture';
+
+if (typeof globalThis.ResizeObserver !== 'function') {
+  globalThis.ResizeObserver = class {
+    observe() {}
+    unobserve() {}
+    disconnect() {}
+  } as unknown as typeof ResizeObserver;
+}
 
 const state = vi.hoisted(() => ({ preview: null as DecodedPreview | null }));
 vi.mock('./useScopedCameraPreview', () => ({
@@ -69,24 +78,35 @@ function preview(withPerson: boolean): DecodedPreview {
 }
 
 afterEach(() => {
+  cleanup();
   state.preview = null;
 });
+
+function renderInspectorMarkup(View: React.ComponentType): string {
+  const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+  const { baseElement, unmount } = render(
+    <QueryClientProvider client={client}>
+      <View />
+    </QueryClientProvider>,
+  );
+  try {
+    const trigger =
+      screen.queryByTestId('open-evidence-details-btn') ??
+      screen.getByTestId('zone-details-toggle');
+    fireEvent.click(trigger);
+    return baseElement.innerHTML;
+  } finally {
+    unmount();
+    client.clear();
+  }
+}
 
 describe.each([
   ['PPE', PpeMonitoringView],
   ['Restricted Zone', RestrictedZoneView],
 ] as const)('%s identity boundary', (_name, View) => {
   function render() {
-    const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
-    try {
-      return renderToStaticMarkup(
-        <QueryClientProvider client={client}>
-          <View />
-        </QueryClientProvider>,
-      );
-    } finally {
-      client.clear();
-    }
+    return renderInspectorMarkup(View);
   }
 
   it('shows an unidentified person track without claiming Worker identity or recognition score', () => {
@@ -151,13 +171,7 @@ describe('PpeMonitoringView baseline copy boundaries', () => {
       },
     };
 
-    const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
-    const markup = renderToStaticMarkup(
-      <QueryClientProvider client={client}>
-        <PpeMonitoringView />
-      </QueryClientProvider>,
-    );
-    client.clear();
+    const markup = renderInspectorMarkup(PpeMonitoringView);
 
     expect(markup).not.toContain('CORE PPE OBSERVED');
     expect(markup).toContain('HELMET AND VEST DETECTED');
@@ -202,13 +216,7 @@ describe('PpeMonitoringView baseline copy boundaries', () => {
       },
     };
 
-    const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
-    const markup = renderToStaticMarkup(
-      <QueryClientProvider client={client}>
-        <PpeMonitoringView />
-      </QueryClientProvider>,
-    );
-    client.clear();
+    const markup = renderInspectorMarkup(PpeMonitoringView);
 
     expect(markup).not.toContain('CORE PPE OBSERVED');
     expect(markup).toContain('CORE AND REPORTED PPE DETECTED');

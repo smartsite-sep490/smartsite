@@ -119,6 +119,10 @@ async function switchToEnglishViaPopover(user: ReturnType<typeof userEvent.setup
   await user.click(screen.getByRole('button', { name: 'English' }));
 }
 
+async function openEvidenceDetailsDialog(user: ReturnType<typeof userEvent.setup>) {
+  await user.click(await screen.findByTestId('open-evidence-details-btn'));
+}
+
 function preview(confirmed: boolean): DecodedPreview {
   return {
     image: {} as HTMLImageElement,
@@ -221,11 +225,13 @@ describe('localized PPE presentation keeps evidence and authority boundaries', (
     fixture.preview = preview(true);
     const user = userEvent.setup();
     render(<View />);
+    await openEvidenceDetailsDialog(user);
     await screen.findByText('Găng tay · Chưa xác định');
     const episode = await screen.findByTestId('confirmed-episode-warning-7-GLOVES');
     expect(episode.textContent).toContain('Đợt thiếu PPE đã xác nhận đang mở');
     expect(episode.textContent).toContain('Ảnh chụp hiện tại: Chưa xác định');
-    await switchToEnglishViaPopover(user);
+    if (!changeLocale) throw new Error('Locale setter fixture missing');
+    act(() => changeLocale?.('en'));
     await screen.findByText('Gloves · Unknown');
     expect(episode.textContent).toContain('Active confirmed episode: Missing · confirmed');
     expect(episode.textContent).toContain('Current snapshot: Unknown');
@@ -233,7 +239,9 @@ describe('localized PPE presentation keeps evidence and authority boundaries', (
 
   it('does not turn unknown into missing when the explicit confirmed item list is empty', async () => {
     fixture.preview = preview(false);
+    const user = userEvent.setup();
     render(<View />);
+    await openEvidenceDetailsDialog(user);
     await screen.findByText('Găng tay · Chưa xác định');
     expect(screen.queryByTestId('confirmed-episode-warning-7-GLOVES')).toBeNull();
   });
@@ -311,7 +319,9 @@ describe('localized PPE presentation keeps evidence and authority boundaries', (
     fixture.preview = preview(true);
     // The UTC wire value represents a fixed local display time, independent of host timezone.
     fixture.preview.frame.capturedAt = new Date(2026, 9, 14, 10, 11, 12).toISOString();
+    const user = userEvent.setup();
     render(<View />);
+    await openEvidenceDetailsDialog(user);
     const label = await screen.findByText('Thời điểm ghi nhận');
     if (!label.parentElement) throw new Error('Captured-time field missing');
     expect(within(label.parentElement).getByText('10:11:12')).toBeDefined();
@@ -340,7 +350,9 @@ describe('localized PPE presentation keeps evidence and authority boundaries', (
   it('does not invent a capture time when a synthetic snapshot has no capture timestamp', async () => {
     fixture.preview = preview(true);
     fixture.preview.frame.capturedAt = '';
+    const user = userEvent.setup();
     render(<View />);
+    await openEvidenceDetailsDialog(user);
     const label = await screen.findByText('Thời điểm ghi nhận');
     if (!label.parentElement) throw new Error('Captured-time field missing');
     expect(within(label.parentElement).getByText('—')).toBeDefined();
@@ -351,7 +363,9 @@ describe('localized PPE presentation keeps evidence and authority boundaries', (
     async (capturedAt) => {
       fixture.preview = preview(true);
       fixture.preview.frame.capturedAt = capturedAt;
+      const user = userEvent.setup();
       render(<View />);
+      await openEvidenceDetailsDialog(user);
       const label = await screen.findByText('Thời điểm ghi nhận');
       if (!label.parentElement) throw new Error('Captured-time field missing');
       expect(within(label.parentElement).getByText('—')).toBeDefined();
@@ -364,6 +378,7 @@ describe('localized PPE presentation keeps evidence and authority boundaries', (
     const user = userEvent.setup();
     render(<View />);
     await user.click(await screen.findByRole('button', { name: /Bằng chứng AI/ }));
+    await openEvidenceDetailsDialog(user);
     const panel = screen.getByTestId('ai-detection-panel');
     const label = within(panel).getByText('Thời điểm ghi nhận');
     if (!label.parentElement) throw new Error('Captured-time field missing');

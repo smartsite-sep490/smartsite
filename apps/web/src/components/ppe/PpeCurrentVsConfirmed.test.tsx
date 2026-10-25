@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import React from 'react';
-import { render, screen, cleanup } from '@testing-library/react';
+import { render, screen, cleanup, fireEvent } from '@testing-library/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { describe, expect, it, vi, beforeEach, afterEach } from 'vitest';
 import { SmartSiteManagementClient } from '@smartsite/api-client';
@@ -206,6 +206,11 @@ describe('PpeMonitoringView - Current Snapshot vs Active Confirmed Episode (MF05
     recordedVideoState.retry.mockClear();
   });
 
+  async function openEvidenceInspector() {
+    await screen.findByRole('option', { name: /Laptop Live Webcam/i });
+    fireEvent.click(screen.getByTestId('open-evidence-details-btn'));
+  }
+
   it('1. UNKNOWN+confirmed GLOVES: preserves current snapshot Unknown and renders separate compact warning for confirmed episode', async () => {
     const detection = createMockDetection({
       ppeStatus: {
@@ -224,6 +229,7 @@ describe('PpeMonitoringView - Current Snapshot vs Active Confirmed Episode (MF05
         <PpeMonitoringView sharedSession={testSession} />
       </QueryClientProvider>,
     );
+    await openEvidenceInspector();
 
     // Existing UI text for current evidence is present
     const currentEvidenceText = await screen.findByText(/Gloves · Unknown/i);
@@ -257,6 +263,7 @@ describe('PpeMonitoringView - Current Snapshot vs Active Confirmed Episode (MF05
         <PpeMonitoringView sharedSession={testSession} />
       </QueryClientProvider>,
     );
+    await openEvidenceInspector();
 
     // Existing UI text for current evidence is present
     const currentEvidenceText = await screen.findByText(/Gloves · Detected/i);
@@ -289,6 +296,7 @@ describe('PpeMonitoringView - Current Snapshot vs Active Confirmed Episode (MF05
         <PpeMonitoringView sharedSession={testSession} />
       </QueryClientProvider>,
     );
+    await openEvidenceInspector();
 
     await screen.findByText(/Gloves · Unknown/i);
     await screen.findByTestId('confirmed-episode-warning-7-GLOVES');
@@ -336,6 +344,7 @@ describe('PpeMonitoringView - Current Snapshot vs Active Confirmed Episode (MF05
         <PpeMonitoringView sharedSession={testSession} />
       </QueryClientProvider>,
     );
+    await openEvidenceInspector();
 
     await screen.findByText(/Gloves · Unknown/i);
 
@@ -363,6 +372,7 @@ describe('PpeMonitoringView - Current Snapshot vs Active Confirmed Episode (MF05
         <PpeMonitoringView sharedSession={testSession} />
       </QueryClientProvider>,
     );
+    await openEvidenceInspector();
 
     await screen.findByText(/Gloves · Unknown/i);
 
@@ -389,6 +399,7 @@ describe('PpeMonitoringView - Current Snapshot vs Active Confirmed Episode (MF05
         <PpeMonitoringView sharedSession={testSession} />
       </QueryClientProvider>,
     );
+    await openEvidenceInspector();
 
     await screen.findByText(/Gloves · Unknown/i);
     await screen.findByTestId('confirmed-episode-warning-7-GLOVES');
@@ -426,6 +437,7 @@ describe('PpeMonitoringView - Current Snapshot vs Active Confirmed Episode (MF05
         <PpeMonitoringView sharedSession={testSession} />
       </QueryClientProvider>,
     );
+    await openEvidenceInspector();
 
     // Current snapshot row displays Gloves · Not reported
     const currentEvidenceText = await screen.findByText(/Gloves · Not reported/i);

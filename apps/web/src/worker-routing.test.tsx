@@ -108,7 +108,7 @@ afterEach(() => {
 
 it('waits for the Worker profile after login without rendering Dashboard', async () => {
   const refresh = mount('/login');
-  expect(screen.getByText('Sign in form')).toBeTruthy();
+  expect(await screen.findByText('Sign in form')).toBeTruthy();
   state.accessToken = 'synthetic-token';
   refresh();
   expect(screen.getByRole('status')).toBeTruthy();

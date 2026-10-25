@@ -160,7 +160,10 @@ describe('PpeMonitoringView Scope & Metadata Security', () => {
     });
 
     // 5. Remaining second viewer successfully renders the resolved site metadata
-    expect(await screen.findByText(/Công trường Giám sát Chung/)).not.toBeNull();
+    expect(
+      await screen.findByRole('option', { name: /Công trường Giám sát Chung/ }),
+    ).not.toBeNull();
+    expect(screen.getAllByText(/Công trường Giám sát Chung/).length).toBeGreaterThanOrEqual(1);
 
     view2.unmount();
   });
@@ -256,7 +259,8 @@ describe('PpeMonitoringView Scope & Metadata Security', () => {
     );
 
     // 1. Wait for old site label to appear
-    expect(await screen.findByText(/Công trường Cũ Vùng A/)).not.toBeNull();
+    expect(await screen.findByRole('option', { name: /Công trường Cũ Vùng A/ })).not.toBeNull();
+    expect(screen.getAllByText(/Công trường Cũ Vùng A/).length).toBeGreaterThanOrEqual(1);
 
     // 2. Verify all Query Keys in cache DO NOT contain the raw token
     const initialQueries = queryClient.getQueryCache().getAll();
@@ -313,6 +317,7 @@ describe('PpeMonitoringView Scope & Metadata Security', () => {
     });
 
     // 7. New site label is now rendered
-    expect(await screen.findByText(/Công trường Mới Vùng B/)).not.toBeNull();
+    expect(await screen.findByRole('option', { name: /Công trường Mới Vùng B/ })).not.toBeNull();
+    expect(screen.getAllByText(/Công trường Mới Vùng B/).length).toBeGreaterThanOrEqual(1);
   });
 });
