@@ -2117,6 +2117,16 @@ describe('PpeMonitoringView Single-Runtime i18n Language Switching', () => {
       </QueryClientProvider>,
     );
 
+    await screen.findByRole('option', { name: /Camera 01/i });
+    await waitFor(() => {
+      expect((screen.getByRole('combobox', { name: 'Site' }) as HTMLSelectElement).value).toBe(
+        'site-alpha',
+      );
+      expect((screen.getByRole('combobox', { name: 'Camera' }) as HTMLSelectElement).value).toBe(
+        'cam-1',
+      );
+    });
+
     fireEvent.click(screen.getByTestId('open-evidence-details-btn'));
 
     // In English: current frame is Unknown, while confirmed episode warning is shown separately
