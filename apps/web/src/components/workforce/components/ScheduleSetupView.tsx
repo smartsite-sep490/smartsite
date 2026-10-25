@@ -1,4 +1,4 @@
-import { localizedError, localizeMessage } from '../../../i18n/messages';
+import { localizedError, localizeMessage, userErrorMessage } from '../../../i18n/messages';
 import { uiLocale } from '../../../i18n';
 import { translate as tr } from '../../../i18n';
 import { useTranslation } from 'react-i18next';
@@ -77,7 +77,8 @@ export function ScheduleSetupView({ apiUrl }: ScheduleSetupViewProps) {
   useTranslation();
 
   const { accessToken } = useAuth();
-  const { data: currentUser } = useCurrentUser(apiUrl);
+  const currentUserQuery = useCurrentUser(apiUrl);
+  const { data: currentUser } = currentUserQuery;
   const queryClient = useQueryClient();
   const client = useManagementClient(apiUrl);
 
@@ -147,11 +148,7 @@ export function ScheduleSetupView({ apiUrl }: ScheduleSetupViewProps) {
         const res = await client.listSites(accessToken!);
         return res.items;
       }
-      const sitePromises = scopedSiteIds.map((sId) =>
-        client.getSite(accessToken!, sId).catch(() => null),
-      );
-      const sites = await Promise.all(sitePromises);
-      return sites.filter((s): s is NonNullable<typeof s> => s !== null);
+      return Promise.all(scopedSiteIds.map((sId) => client.getSite(accessToken!, sId)));
     },
     enabled: Boolean(accessToken && canDiscoverSites),
   });
@@ -676,12 +673,45 @@ export function ScheduleSetupView({ apiUrl }: ScheduleSetupViewProps) {
         get label() {
           return tr('common.worker_assignment');
         },
-        count: schedulesTotal,
+        count: schedulesQuery.data?.total,
         icon: <IconUsers className="w-3.5 h-3.5 text-emerald-600" />,
       });
     }
     return items;
-  }, [shifts.length, versions.length, schedulesTotal, canViewAssignments]);
+  }, [shifts.length, versions.length, schedulesQuery.data?.total, canViewAssignments]);
+
+  const setupQueries = [
+    currentUserQuery,
+    sitesQuery,
+    shiftsQuery,
+    versionsQuery,
+    readScopes,
+    schedulesQuery,
+  ];
+  const failedInitialQuery = setupQueries.find(
+    (query) =>
+      query.isError &&
+      (query.data === undefined ||
+        (query.error instanceof ApiError && [401, 403].includes(query.error.status ?? 0))),
+  );
+  const failedRefreshQuery = setupQueries.find((query) => query.isError);
+
+  if (failedInitialQuery) {
+    return (
+      <div role="alert" className="space-y-3 rounded-xl border border-rose-200 bg-rose-50 p-4">
+        <p>{userErrorMessage(failedInitialQuery.error)}</p>
+        <Button onClick={() => void failedInitialQuery.refetch()}>{tr('common.retry')}</Button>
+      </div>
+    );
+  }
+
+  if (
+    currentUserQuery.isPending ||
+    (canDiscoverSites && sitesQuery.isPending) ||
+    (canAccess && activeSiteId && (shiftsQuery.isPending || versionsQuery.isPending))
+  ) {
+    return <p role="status">{tr('common.loading')}</p>;
+  }
 
   // ── Access Check ─────────────────────────────────────────────────────────
   if (!canAccess) {
@@ -744,17 +774,25 @@ export function ScheduleSetupView({ apiUrl }: ScheduleSetupViewProps) {
             variant="outline"
             size="md"
             onClick={() => {
+              sitesQuery.refetch();
               shiftsQuery.refetch();
               versionsQuery.refetch();
-              if (canAssignWorker) schedulesQuery.refetch();
+              if (canViewAssignments && assignmentScope.contractorId) schedulesQuery.refetch();
             }}
-            isLoading={shiftsQuery.isFetching || versionsQuery.isFetching}
+            isLoading={sitesQuery.isFetching || shiftsQuery.isFetching || versionsQuery.isFetching}
             leftIcon={<IconRefreshCw className="w-3.5 h-3.5 text-slate-500" />}
           >
             {tr('common.refresh')}
           </Button>
         </div>
       </div>
+
+      {failedRefreshQuery && (
+        <div role="alert" className="space-y-3 rounded-xl border border-rose-200 bg-rose-50 p-4">
+          <p>{userErrorMessage(failedRefreshQuery.error)}</p>
+          <Button onClick={() => void failedRefreshQuery.refetch()}>{tr('common.retry')}</Button>
+        </div>
+      )}
 
       {/* ── HIGH-END FLOATING TOAST NOTIFICATIONS ───────────────────────── */}
       <div className="fixed top-5 right-5 z-50 flex flex-col gap-3 pointer-events-none max-w-sm sm:max-w-md w-[calc(100vw-2.5rem)]">
@@ -1187,7 +1225,7 @@ export function ScheduleSetupView({ apiUrl }: ScheduleSetupViewProps) {
                       {tr('common.assigned_schedules')}
                     </h3>
                     <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold bg-slate-100 text-slate-700 border border-slate-200/80">
-                      {schedulesTotal}
+                      {schedulesQuery.data?.total ?? '—'}
                     </span>
                   </div>
                   {schedulesQuery.isFetching && (
