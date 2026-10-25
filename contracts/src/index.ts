@@ -1,4 +1,10 @@
 export const CONTRACTS_VERSION = '1.0.0';
+export { parseCameraConfigurationBundlePayload } from './camera-configuration-bundle.js';
+export type {
+  CameraConfigurationBundle,
+  CameraConfigurationBundleRegion,
+  CameraConfigurationBundleValidationResult,
+} from './camera-configuration-bundle.js';
 export {
   parseCameraPreviewFrame,
   parseCameraPreviewResponse,
