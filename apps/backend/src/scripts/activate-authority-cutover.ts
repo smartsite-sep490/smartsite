@@ -142,6 +142,7 @@ async function main(): Promise<void> {
   const dataSource = new DataSource(
     buildTypeOrmOptions({
       DATABASE_URL: env.DATABASE_URL,
+      DATABASE_SCHEMA: env.DATABASE_SCHEMA,
       DATABASE_TIMEOUT_MS: env.DATABASE_TIMEOUT_MS,
     }),
   );

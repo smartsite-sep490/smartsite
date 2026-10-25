@@ -43,5 +43,7 @@ test('actual local Compose gives the Backend 45s before forced stop, beyond its 
   const config = JSON.parse(result.stdout);
   assert.equal(config.services.backend.stop_grace_period, '45s');
   assert.equal(config.services.backend.build.dockerfile, 'infra/docker/backend.Dockerfile');
+  assert.equal(config.services.backend.environment.DATABASE_SCHEMA, 'public');
+  assert.equal(config.services.migrate.environment.DATABASE_SCHEMA, 'public');
   // Keep the tiny empty-env attempt artifact; no runtime .env or existing output is removed.
 });

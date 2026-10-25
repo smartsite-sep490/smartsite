@@ -40,6 +40,14 @@ export const postgresUrlSchema = z
     }
   }, 'must be a PostgreSQL URL with a host and database name');
 
+export const databaseSchemaSchema = z
+  .string({ error: 'must be a lowercase unquoted PostgreSQL schema identifier' })
+  .regex(/^[a-z_][a-z0-9_]{0,62}$/, 'must be a lowercase unquoted PostgreSQL schema identifier')
+  .refine(
+    (value) => !value.startsWith('pg_') && value !== 'information_schema',
+    'must not be a PostgreSQL system schema',
+  );
+
 const databaseFields = {
   NODE_ENV: z
     .enum(['development', 'test', 'production'], {
@@ -47,6 +55,7 @@ const databaseFields = {
     })
     .default('development'),
   DATABASE_URL: postgresUrlSchema.optional(),
+  DATABASE_SCHEMA: databaseSchemaSchema.optional(),
   DATABASE_TIMEOUT_MS: integer(2000, 100, 30000),
 };
 

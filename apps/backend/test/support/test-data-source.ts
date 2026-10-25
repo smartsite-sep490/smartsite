@@ -7,6 +7,7 @@ import { resolveTestDatabaseUrl } from './test-environment.js';
 export default new DataSource({
   ...buildTypeOrmOptions({
     DATABASE_URL: resolveTestDatabaseUrl(),
+    DATABASE_SCHEMA: 'public',
     DATABASE_TIMEOUT_MS: 2000,
   }),
 });

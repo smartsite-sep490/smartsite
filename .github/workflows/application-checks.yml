@@ -50,6 +50,7 @@ jobs:
       - name: Run TypeORM migrations
         env:
           DATABASE_URL: postgresql://smartsite:smartsite_local_only@127.0.0.1:5432/smartsite
+          DATABASE_SCHEMA: public
         run: pnpm --filter @smartsite/backend db:migrate:run
       - name: Start isolated test PostgreSQL container
         run: docker compose -f infra/compose.yaml --profile test up -d postgres-test --wait --wait-timeout 60

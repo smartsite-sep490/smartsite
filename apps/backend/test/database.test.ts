@@ -5,6 +5,31 @@ import path from 'node:path';
 import { test } from 'node:test';
 import { DataSource } from 'typeorm';
 import { buildTypeOrmOptions } from '../src/database/typeorm.options.js';
+
+test('explicit database schema binds TypeORM and raw PostgreSQL queries without a default', () => {
+  const input = {
+    DATABASE_URL: 'postgresql://unit:unit@localhost/unit',
+    DATABASE_SCHEMA: 'isolated_ci',
+  };
+  const options = buildTypeOrmOptions(input);
+  assert.equal((options as { schema?: string }).schema, 'isolated_ci');
+  assert.equal(options.extra.options, '-c search_path=isolated_ci');
+  const legacy = buildTypeOrmOptions({ DATABASE_URL: input.DATABASE_URL });
+  assert.equal((legacy as { schema?: string }).schema, undefined);
+  assert.equal(legacy.extra.options, undefined);
+});
+
+test('explicit schema rejects unsafe names and conflicting URL startup options', () => {
+  for (const DATABASE_SCHEMA of ['pg_catalog', 'information_schema', 'a.b', 'a;DROP', '']) {
+    const input = { DATABASE_URL: 'postgresql://unit:unit@localhost/unit', DATABASE_SCHEMA };
+    assert.throws(() => buildTypeOrmOptions(input));
+  }
+  const input = {
+    DATABASE_URL: 'postgresql://unit:private@localhost/unit?options=-c%20search_path%3Dother',
+    DATABASE_SCHEMA: 'isolated_ci',
+  };
+  assert.throws(() => buildTypeOrmOptions(input), /DATABASE_SCHEMA.*options/);
+});
 import { DatabaseService } from '../src/database/database.service.js';
 import { resolveCliEnvironment } from '../src/config/cli-environment.js';
 import { numericTransformer } from '../src/database/entities/numeric.transformer.js';

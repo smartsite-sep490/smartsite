@@ -1,3 +1,4 @@
+import { databaseSchemaSchema } from '../config/environment.js';
 import { PpeAlertNotifications1792886400000 } from './migrations/1792886400000-PpeAlertNotifications.js';
 import { ExpandedPpeNotificationKinds1793145600000 } from './migrations/1793145600000-ExpandedPpeNotificationKinds.js';
 import { AuthorizationHistoryCutover1793232000000 } from './migrations/1793232000000-AuthorizationHistoryCutover.js';
@@ -92,14 +93,19 @@ import { Mf07NotificationDeletion1791504000000 } from './migrations/179150400000
 
 export interface DatabaseConnectionConfig {
   DATABASE_URL: string;
+  DATABASE_SCHEMA?: string;
   DATABASE_TIMEOUT_MS?: number;
 }
 
 export function buildTypeOrmOptions(config: DatabaseConnectionConfig): DataSourceOptions {
   const timeoutMs = config.DATABASE_TIMEOUT_MS ?? 2000;
+  const schema = databaseSchemaSchema.optional().parse(config.DATABASE_SCHEMA);
+  if (schema !== undefined && new URL(config.DATABASE_URL).searchParams.has('options'))
+    throw new Error('DATABASE_SCHEMA cannot be combined with URL options');
   return {
     type: 'postgres',
     url: config.DATABASE_URL,
+    ...(schema === undefined ? {} : { schema }),
     synchronize: false,
     migrationsRun: false,
     connectTimeoutMS: timeoutMs,
@@ -187,6 +193,7 @@ export function buildTypeOrmOptions(config: DatabaseConnectionConfig): DataSourc
     ],
     logging: false,
     extra: {
+      ...(schema === undefined ? {} : { options: `-c search_path=${schema}` }),
       max: 5,
       connectionTimeoutMillis: timeoutMs,
       query_timeout: timeoutMs,
@@ -197,9 +204,14 @@ export function buildTypeOrmOptions(config: DatabaseConnectionConfig): DataSourc
   };
 }
 
-export function createTypeOrmOptions(databaseUrl: string, timeoutMs = 2000): DataSourceOptions {
+export function createTypeOrmOptions(
+  databaseUrl: string,
+  timeoutMs = 2000,
+  schema?: string,
+): DataSourceOptions {
   return buildTypeOrmOptions({
     DATABASE_URL: databaseUrl,
+    DATABASE_SCHEMA: schema,
     DATABASE_TIMEOUT_MS: timeoutMs,
   });
 }

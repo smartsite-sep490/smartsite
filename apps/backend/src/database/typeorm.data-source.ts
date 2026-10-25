@@ -7,6 +7,7 @@ const config = resolveCliEnvironment();
 export default new DataSource(
   buildTypeOrmOptions({
     DATABASE_URL: config.DATABASE_URL,
+    DATABASE_SCHEMA: config.DATABASE_SCHEMA,
     DATABASE_TIMEOUT_MS: config.DATABASE_TIMEOUT_MS,
   }),
 );
