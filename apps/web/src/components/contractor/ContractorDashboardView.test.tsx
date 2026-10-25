@@ -22,7 +22,8 @@ const api = vi.hoisted(() => ({
   revokeTeamZone: vi.fn(),
 }));
 
-vi.mock('@smartsite/api-client', () => ({
+vi.mock('@smartsite/api-client', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@smartsite/api-client')>()),
   SmartSiteManagementClient: class {
     constructor() {
       return api;
@@ -242,6 +243,14 @@ afterEach(() => {
 });
 
 describe('ContractorDashboardView Integration & UI Rules', () => {
+  it('keeps scope diagnostics private and allows retry', async () => {
+    api.contractorDashboardScopes.mockRejectedValueOnce(new Error('PRIVATE_SCOPE_FAILURE'));
+    renderView();
+    await screen.findByText('Something went wrong. Please try again.');
+    expect(document.body.textContent).not.toContain('PRIVATE_SCOPE_FAILURE');
+    fireEvent.click(screen.getByRole('button', { name: 'Retry' }));
+    await screen.findByRole('heading', { name: /Skyline Tower A/i });
+  });
   it('loads scopes, displays selected scope name/code, and renders KPI metrics from backend', async () => {
     renderView();
 

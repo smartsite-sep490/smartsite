@@ -1,5 +1,5 @@
 import { useManagementClient } from '../../../features/auth/auth-session';
-import { localizedError } from '../../../i18n/messages';
+import { localizedError, userErrorMessage } from '../../../i18n/messages';
 import { uiLocale } from '../../../i18n';
 import { localizedLabel } from '../../../i18n/labels';
 import { translate as tr } from '../../../i18n';
@@ -473,7 +473,7 @@ export function AttendanceDaysView({
         role="alert"
         className="flex items-center justify-between rounded-2xl border border-red-200 bg-red-50 p-5 text-sm text-red-700"
       >
-        <span>{localizedError(query.error.message)}</span>
+        <span>{userErrorMessage(query.error)}</span>
         <button
           onClick={() => void query.refetch()}
           className="flex items-center gap-1.5 rounded-lg border border-red-200 bg-white px-3 py-1.5 text-xs font-bold text-red-700 hover:bg-red-50 transition-colors"
@@ -1443,7 +1443,7 @@ export function AttendanceDaysView({
                 </div>
                 {request.error && (
                   <p role="alert" className="text-xs text-red-600 font-semibold">
-                    {localizedError(request.error.message)}
+                    {userErrorMessage(request.error)}
                   </p>
                 )}
               </form>
@@ -1505,7 +1505,7 @@ export function AttendanceDaysView({
                 role="alert"
                 className="flex items-center justify-between p-5 text-xs text-red-600"
               >
-                <span>{localizedError(timeRequests.error.message)}</span>
+                <span>{userErrorMessage(timeRequests.error)}</span>
                 <button
                   aria-label={tr('common.retry_time_requests')}
                   onClick={() => void timeRequests.refetch()}

@@ -9,7 +9,8 @@ const api = vi.hoisted(() => ({
   attendanceTimesheets: vi.fn(),
   attendanceDayDetail: vi.fn(),
 }));
-vi.mock('@smartsite/api-client', () => ({
+vi.mock('@smartsite/api-client', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@smartsite/api-client')>()),
   SmartSiteManagementClient: class {
     constructor() {
       return api;

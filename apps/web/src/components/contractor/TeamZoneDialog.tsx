@@ -1,5 +1,5 @@
 import { useManagementClient } from '../../features/auth/auth-session';
-import { localizedError } from '../../i18n/messages';
+import { userErrorMessage } from '../../i18n/messages';
 import { uiLocale } from '../../i18n';
 import { translate as tr } from '../../i18n';
 import { useTranslation } from 'react-i18next';
@@ -100,7 +100,7 @@ export function TeamZoneDialog({
           <p role="status">{tr('common.loading_team_zones')}</p>
         ) : data.isError ? (
           <div role="alert">
-            {tr('common.team_zones_unavailable')} {localizedError(data.error.message)}{' '}
+            {tr('common.team_zones_unavailable')} {userErrorMessage(data.error)}{' '}
             <button type="button" onClick={() => void data.refetch()}>
               {tr('common.retry')}
             </button>
@@ -184,7 +184,7 @@ export function TeamZoneDialog({
                 </button>
               </form>
             )}
-            {grant.isError && <p role="alert">{localizedError(grant.error.message)}</p>}
+            {grant.isError && <p role="alert">{userErrorMessage(grant.error)}</p>}
             {grant.isSuccess && <p role="status">{tr('common.team_zone_saved')}</p>}
             <h3 className="font-bold">{tr('common.assigned_team_zones')}</h3>
             {!data.data.permissions.length && (

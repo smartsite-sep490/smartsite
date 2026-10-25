@@ -1,4 +1,5 @@
 import { translate as tr } from '../../i18n';
+import { userErrorMessage } from '../../i18n/messages';
 import {
   ApiError,
   type ObservationIdentityContextResponse,
@@ -403,10 +404,10 @@ export function formatIdentityErrorMessage(error: unknown): string {
         'observation_identity_review_utils.dich_vu_nhan_dien_tam_thoi_khong_kha_dung_vui_long_thu_lai_sau',
       );
     }
-    return rawMessage;
+    return userErrorMessage(error);
   }
   if (error instanceof Error) {
-    return error.message;
+    return userErrorMessage(error);
   }
   return tr(
     'observation_identity_review_utils.a_xay_ra_loi_khong_xac_inh_trong_qua_trinh_xu_ly_nhan_dien',

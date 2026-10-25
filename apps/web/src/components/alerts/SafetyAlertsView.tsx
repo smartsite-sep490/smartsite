@@ -5,7 +5,7 @@ import { WorkerDocumentReviewView } from '../safety/WorkerDocumentReviewView';
 import { AlertWorkContext } from '../safety/AlertWorkContext';
 import type { RelatedAlertFilter } from '../safety/safety-context';
 import { localizedLabel } from '../../i18n/labels';
-import { localizedError } from '../../i18n/messages';
+import { userErrorMessage } from '../../i18n/messages';
 import { uiLocale } from '../../i18n';
 import { translate as tr } from '../../i18n';
 import { useTranslation } from 'react-i18next';
@@ -79,10 +79,10 @@ function errorMessage(error: unknown): string {
         'safety_alerts_view.this_alert_changed_while_you_were_reviewing_it_the_latest_record_has_been_loaded_r',
       );
     if (error.code === 'network') return tr('safety_alerts_view.could_not_connect_to_the_backend');
-    return localizedError(error.message);
+    return userErrorMessage(error);
   }
   return error instanceof Error
-    ? localizedError(error.message)
+    ? userErrorMessage(error)
     : tr('access_control_view.the_request_could_not_be_completed');
 }
 

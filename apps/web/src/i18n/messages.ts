@@ -1,4 +1,5 @@
-import { translate, uiLanguage } from './index';
+import { ApiError } from '@smartsite/api-client';
+import { translate } from './index';
 import en from './locales/en.json';
 import vi from './locales/vi.json';
 
@@ -54,9 +55,29 @@ export function localizeMessage(message: string): string {
 
 export function localizedError(message: string | undefined): string {
   if (!message) return translate('errors.unexpected');
-  // A person's Vietnamese name does not make an English server error Vietnamese.
-  // Only catalog matches establish a translated system message.
-  return (
-    resolveMessage(message) ?? (uiLanguage() === 'vi' ? translate('errors.unexpected') : message)
-  );
+  return resolveMessage(message) ?? translate('errors.unexpected');
+}
+
+export function userErrorMessage(error: unknown): string {
+  if (!(error instanceof ApiError))
+    return localizedError(error instanceof Error ? error.message : undefined);
+  if (error.code === 'network') return translate('errors.network');
+  if (error.code === 'timeout') return translate('errors.timeout');
+  if (error.code === 'cancelled') return translate('errors.cancelled');
+  if (error.status === 429)
+    return error.retryAfterSeconds
+      ? translate('errors.rateLimitDelay', { seconds: error.retryAfterSeconds })
+      : translate('errors.rateLimit');
+  if (error.status !== undefined && error.status >= 500) return translate('errors.unavailable');
+  if (error.status === 401) return translate('errors.sessionExpired');
+  if (error.status === 403) return translate('errors.forbidden');
+  if (error.status === 404) return translate('errors.notFound');
+  if (error.status === 400 || error.status === 409) {
+    return (
+      resolveMessage(error.message) ??
+      translate(error.status === 400 ? 'errors.validation' : 'errors.conflict')
+    );
+  }
+  if (error.code === 'invalid-response') return translate('errors.unavailable');
+  return translate('errors.unexpected');
 }

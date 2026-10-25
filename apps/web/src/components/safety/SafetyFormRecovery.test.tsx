@@ -172,7 +172,9 @@ it('a failed detail refresh preserves input and blocks sending with the stale ve
   expect((screen.getByLabelText('Notes: Tools') as HTMLTextAreaElement).value).toBe(
     'Checked original equipment',
   );
-  expect(within(screen.getByRole('dialog')).getByRole('alert').textContent).toContain('Offline');
+  expect(within(screen.getByRole('dialog')).getByRole('alert').textContent).toContain(
+    'Something went wrong. Please try again.',
+  );
   expect(submit).toHaveBeenCalledTimes(1);
 });
 

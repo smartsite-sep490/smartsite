@@ -1,4 +1,4 @@
-import { localizedError } from '../../i18n/messages';
+import { userErrorMessage } from '../../i18n/messages';
 import { translate as tr } from '../../i18n';
 import { useTranslation } from 'react-i18next';
 import {
@@ -135,14 +135,12 @@ export function RequestError({ error, retry }: { error: unknown; retry?: () => v
         ? tr('safety_workflow_ui.this_account_does_not_have_access')
         : error.status === 503 || error.status === 404
           ? tr('safety_workflow_ui.evidence_or_service_unavailable')
-          : error.message
-      : error instanceof Error
-        ? error.message
-        : tr('common.request_failed');
+          : userErrorMessage(error)
+      : userErrorMessage(error);
   return (
     <div className="space-y-3 rounded-lg border border-red-200 bg-[var(--semantic-red-bg)] p-3 text-sm text-[var(--semantic-red-text)]">
       <p role="alert">
-        {localizedError(message)}
+        {message}
         {conflict && <span className="block mt-1">{tr('safety_ux.conflict_guidance')}</span>}
       </p>
       {retry && (

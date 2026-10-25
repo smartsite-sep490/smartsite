@@ -272,7 +272,7 @@ it.each(['current', 'cancelled', 'offline'])(
         'Confirmed',
       );
       expect(within(screen.getByRole('dialog')).getByRole('alert').textContent).toContain(
-        'Offline',
+        'Something went wrong. Please try again.',
       );
       expect(command).toHaveBeenCalledTimes(1);
       return;

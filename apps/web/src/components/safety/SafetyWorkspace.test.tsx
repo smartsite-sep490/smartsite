@@ -307,7 +307,7 @@ it('a checklist notification clears the previous Overview team/date filter', asy
   fireEvent.click(await screen.findByRole('button', { name: 'View checklists for this date' }));
   expect(await screen.findByText(/Checklists: Context team/)).not.toBeNull();
   openLink('linked-other');
-  expect(await screen.findByText('Unavailable synthetic checklist')).not.toBeNull();
+  expect(await screen.findByText('Something went wrong. Please try again.')).not.toBeNull();
   expect(screen.queryByText(/Checklists: Context team/)).toBeNull();
 });
 

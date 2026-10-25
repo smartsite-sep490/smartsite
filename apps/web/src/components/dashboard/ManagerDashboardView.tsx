@@ -1,4 +1,4 @@
-import { localizedError } from '../../i18n/messages';
+import { userErrorMessage } from '../../i18n/messages';
 import { translate as tr } from '../../i18n';
 import { useTranslation } from 'react-i18next';
 import { useState } from 'react';
@@ -117,8 +117,7 @@ export function ManagerDashboardView({
             </p>
           ) : overview.isError ? (
             <div role="alert" className="text-sm text-red-600">
-              {tr('common.management_overview_unavailable')}{' '}
-              {localizedError(overview.error.message)}{' '}
+              {tr('common.management_overview_unavailable')} {userErrorMessage(overview.error)}{' '}
               <button
                 type="button"
                 onClick={() => void overview.refetch()}
