@@ -127,11 +127,15 @@ it('opens the active camera region dialog from its name without granting read-on
   expect(name.getAttribute('aria-haspopup')).toBe('dialog');
   fireEvent.click(name);
   expect(manager.open).toHaveBeenCalledWith('regions', activeCamera.id, name);
-  expect(screen.queryByRole('button', { name: inactiveCamera.name })).toBeNull();
+  const inactiveName = screen.getByRole('button', { name: inactiveCamera.name });
+  expect(inactiveName.getAttribute('aria-haspopup')).toBe('dialog');
+  fireEvent.click(inactiveName);
+  expect(manager.open).toHaveBeenCalledWith('manage', inactiveCamera.id, inactiveName);
   manager.unmount();
   mountCatalog({ user: adminUser });
   await screen.findByText(activeCamera.name);
   expect(screen.queryByRole('button', { name: activeCamera.name })).toBeNull();
+  expect(screen.queryByRole('button', { name: inactiveCamera.name })).toBeNull();
 });
 afterEach(() => {
   cleanup();

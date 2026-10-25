@@ -25,7 +25,7 @@ it.each(['UNKNOWN', 'PENDING_CONFIRMATION'] as const)(
         activeSourceKind="REPLAY"
       />,
     );
-    expect(screen.getByText('SCANNING SNAPSHOT')).toBeDefined();
+    expect(screen.getByText('AI EVIDENCE UNAVAILABLE')).toBeDefined();
     expect(screen.getByText('Camera snapshot is unavailable or offline.')).toBeDefined();
     expect(screen.queryByText('MISSING PPE DETECTED')).toBeNull();
     expect(screen.queryByText('HELMET AND VEST DETECTED')).toBeNull();

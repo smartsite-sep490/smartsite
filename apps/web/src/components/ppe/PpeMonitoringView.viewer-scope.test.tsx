@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import { ApiError, SmartSiteManagementClient } from '@smartsite/api-client';
@@ -82,7 +82,9 @@ it('guides a Site Manager to setup without requesting a forbidden preview list',
   const { onOpenSetup } = mount(manager);
   await screen.findByRole('option', { name: 'S1 · Site 1' });
   expect(SmartSiteManagementClient.prototype.listPreviewCameras).not.toHaveBeenCalled();
-  expect(await screen.findByText(guidance)).toBeTruthy();
+  expect(
+    await within(screen.getByRole('region', { name: 'Monitoring scope' })).findByText(guidance),
+  ).toBeTruthy();
   fireEvent.click(screen.getByRole('button', { name: 'Camera setup' }));
   expect(onOpenSetup).toHaveBeenCalledWith({ siteId: 'site-1', cameraId: undefined });
   expect(screen.queryByRole('button', { name: 'Retry cameras' })).toBeNull();
@@ -132,7 +134,9 @@ it('hides cached camera metadata immediately when the same session loses its vie
   await screen.findByRole('option', { name: 'C1 · Camera One' });
   changeSession(manager);
   expect(screen.queryByRole('option', { name: 'C1 · Camera One' })).toBeNull();
-  expect(await screen.findByText(guidance)).toBeTruthy();
+  expect(
+    await within(screen.getByRole('region', { name: 'Monitoring scope' })).findByText(guidance),
+  ).toBeTruthy();
 });
 
 it('does not expose a late camera page after the session loses its viewing role', async () => {
@@ -148,7 +152,9 @@ it('does not expose a late camera page after the session loses its viewing role'
   );
   changeSession(manager);
   resolvePage({ items: [camera], total: 1 });
-  expect(await screen.findByText(guidance)).toBeTruthy();
+  expect(
+    await within(screen.getByRole('region', { name: 'Monitoring scope' })).findByText(guidance),
+  ).toBeTruthy();
   expect(screen.queryByRole('option', { name: 'C1 · Camera One' })).toBeNull();
   expect(screen.queryByText('Loading cameras…')).toBeNull();
   expect(screen.queryByText('No cameras available in this site scope.')).toBeNull();
@@ -170,7 +176,7 @@ it.each([401, 403])(
     );
     changeSession({ ...manager, onSignOut });
     rejectPage(new ApiError('http', 'Unavailable', status, undefined));
-    await screen.findByText(guidance);
+    await within(screen.getByRole('region', { name: 'Monitoring scope' })).findByText(guidance);
     if (status === 401) await waitFor(() => expect(onSignOut).toHaveBeenCalledTimes(1));
     else expect(onSignOut).not.toHaveBeenCalled();
     expect(screen.queryByRole('button', { name: 'Retry cameras' })).toBeNull();

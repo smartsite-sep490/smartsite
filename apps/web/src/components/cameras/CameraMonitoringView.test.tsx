@@ -85,6 +85,33 @@ describe('CameraMonitoringView DOM Regression & Liveness Claim Prevention', () =
   });
 
   it('1. Neutral Parent Badge: never claims Live AI Active even when stream is disconnected or erroring', async () => {
+    vi.spyOn(SmartSiteManagementClient.prototype, 'listSites').mockResolvedValue({
+      items: [
+        {
+          id: 'site-alpha',
+          code: 'ALPHA',
+          name: 'Alpha Construction Site',
+          createdAt: '2026-10-01T00:00:00Z',
+        },
+      ],
+      total: 1,
+    });
+    vi.spyOn(SmartSiteManagementClient.prototype, 'listPreviewCameras').mockResolvedValue({
+      items: [
+        {
+          id: 'cam-gate-1',
+          siteId: 'site-alpha',
+          code: 'GATE-01',
+          configurationVersion: 1,
+          name: 'Main Gate Camera',
+          externalId: 'gate-cam-1',
+          status: 'ACTIVE' as const,
+          createdAt: '2026-10-01T00:00:00Z',
+        },
+      ],
+      total: 1,
+    });
+
     // Simulate stream in disconnected/error state
     vi.spyOn(useRealtimePreviewModule, 'useRealtimePreview').mockReturnValue({
       url: null,
@@ -101,15 +128,27 @@ describe('CameraMonitoringView DOM Regression & Liveness Claim Prevention', () =
       isLoading: false,
       isPolling: false,
       retry: vi.fn(),
-      cameraExternalId: null,
+      cameraExternalId: 'gate-cam-1',
       capturedAt: null,
-      siteId: null,
-      cameraId: null,
+      siteId: 'site-alpha',
+      cameraId: 'cam-gate-1',
     });
 
     render(
       <QueryClientProvider client={queryClient}>
-        <CameraMonitoringView />
+        <CameraMonitoringView
+          apiUrl="http://localhost:3000"
+          sharedSession={{
+            accessToken: 'test-token-1',
+            sessionScope: 'user-cam-admin:1',
+            user: {
+              id: 'user-cam-admin',
+              username: 'admin.cam',
+              displayName: 'Camera Admin',
+              roleAssignments: [{ role: 'ADMIN', siteId: null }],
+            },
+          }}
+        />
       </QueryClientProvider>,
     );
 

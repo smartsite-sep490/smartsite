@@ -1147,7 +1147,7 @@ describe('PpeMonitoringView 4-Source Wall & Display Presets', () => {
     // Enlarge again and return via top toolbar Back to grid button
     fireEvent.click(screen.getByTestId('enlarge-camera-btn-cam-1'));
     expect(await screen.findByTestId('single-camera-viewport')).not.toBeNull();
-    fireEvent.click(screen.getByTestId('back-to-grid-btn'));
+    fireEvent.click(screen.getByTestId('toggle-view-wall'));
     expect(await screen.findByTestId('four-source-wall-grid')).not.toBeNull();
     expect(screen.getByTestId('focused-badge-cam-1')).not.toBeNull();
   });
@@ -1200,24 +1200,26 @@ describe('PpeMonitoringView 4-Source Wall & Display Presets', () => {
     // 3. Unrelated fullscreen element/events must not be exited or trigger error notice
     const unrelatedDiv = document.createElement('div');
     document.body.appendChild(unrelatedDiv);
-    Object.defineProperty(document, 'fullscreenElement', {
-      configurable: true,
-      writable: true,
-      value: unrelatedDiv,
-    });
-    unrelatedDiv.dispatchEvent(new Event('fullscreenerror', { bubbles: true }));
-    expect(screen.queryByTestId('fullscreen-error-notice')).toBeNull();
+    try {
+      Object.defineProperty(document, 'fullscreenElement', {
+        configurable: true,
+        writable: true,
+        value: unrelatedDiv,
+      });
+      unrelatedDiv.dispatchEvent(new Event('fullscreenerror', { bubbles: true }));
+      expect(screen.queryByTestId('fullscreen-error-notice')).toBeNull();
 
-    fireEvent.click(screen.getByTestId('back-to-grid-btn'));
-    expect(exitMock).toHaveBeenCalledTimes(1); // Not called again for unrelated element
-
-    Object.defineProperty(document, 'fullscreenElement', {
-      configurable: true,
-      writable: true,
-      value: null,
-    });
-    unrelatedDiv.remove();
-    viewport.requestFullscreen = origRequest;
+      fireEvent.click(screen.getByTestId('single-viewport-back-to-grid-btn'));
+      expect(exitMock).toHaveBeenCalledTimes(1); // Not called again for unrelated element
+    } finally {
+      Object.defineProperty(document, 'fullscreenElement', {
+        configurable: true,
+        writable: true,
+        value: null,
+      });
+      unrelatedDiv.remove();
+      viewport.requestFullscreen = origRequest;
+    }
   });
 
   it('keeps Evidence & Details off the permanent wall grid and opens/closes on-demand PpeDialog via toolbar or tile Evidence triggers with Escape', async () => {
@@ -1364,7 +1366,7 @@ describe('PpeMonitoringView 4-Source Wall & Display Presets', () => {
       );
 
       await screen.findByTestId('single-camera-viewport');
-      fireEvent.click(screen.getByTestId('toggle-fullscreen-btn'));
+      fireEvent.click(await screen.findByTestId('toggle-fullscreen-btn'));
       expect(reqMock).toHaveBeenCalledTimes(1);
 
       // Unrelated element owns document.fullscreenElement while request #1 is pending
@@ -1378,7 +1380,7 @@ describe('PpeMonitoringView 4-Source Wall & Display Presets', () => {
       fireEvent.click(screen.getByTestId('single-viewport-back-to-grid-btn'));
       await screen.findByTestId('four-source-wall-grid');
       fireEvent.click(screen.getByTestId('enlarge-camera-btn-cam-1'));
-      await screen.findByTestId('single-camera-viewport');
+      await screen.findByTestId('toggle-fullscreen-btn');
 
       resolveFirstReq();
       await Promise.resolve();
@@ -1406,9 +1408,9 @@ describe('PpeMonitoringView 4-Source Wall & Display Presets', () => {
       resolveSecondReq();
       await Promise.resolve();
 
-      expect(screen.getByTestId('toggle-fullscreen-btn').getAttribute('aria-pressed')).toBe(
-        'false',
-      );
+      expect(
+        (await screen.findByTestId('toggle-fullscreen-btn')).getAttribute('aria-pressed'),
+      ).toBe('false');
       expect(exitMock).not.toHaveBeenCalled();
     } finally {
       Object.defineProperty(document, 'fullscreenElement', {
