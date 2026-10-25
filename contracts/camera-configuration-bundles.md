@@ -43,3 +43,45 @@ Before any Python producer/consumer or schema vending changes, publish the
 canonical JSON schema with immutable Main provenance and complete the remaining
 C03 persistence, reference and worker-admission steps. No new browser or API
 client should activate a speculative route from this transport definition.
+
+## Configuration acknowledgement — transport preparation
+
+`parseCameraConfigurationAcknowledgementPayload` validates a proposed worker ACK
+body from a JSON string or UTF-8 bytes, bounded to 4096 bytes. The root package
+exports its type, parser and `MAX_CAMERA_CONFIGURATION_ACK_BYTES`. It creates no
+endpoint or receipt. It does not extend the legacy configuration response.
+
+The body contains exactly these seven fields:
+
+```json
+{
+  "commandId": "11111111-2222-4333-8444-555555555551",
+  "workerGenerationId": "22222222-3333-4444-8555-666666666662",
+  "streamSessionId": "33333333-4444-4555-8666-777777777773",
+  "configurationVersion": 3,
+  "bundleSha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+  "viewRevision": 2,
+  "outcome": "LOADED"
+}
+```
+
+All three UUIDs use lowercase canonical spelling, versions are positive safe
+integers, and the hash is lowercase 64-character hex. `outcome` is `LOADED` or
+`REJECTED`. A `REJECTED` body may additionally contain `reasonCode`, an uppercase
+ASCII identifier of 1–64 characters: first character A–Z, then A–Z, 0–9 or `_`.
+This is an untrusted diagnostic code, not an authorization decision or display
+message. A `LOADED` body cannot contain a failure reason. Empty/null reasons,
+unknown fields, unsupported outcomes, malformed JSON/UTF-8 and oversized payloads
+are rejected using the existing validation issue codes.
+
+There is no sender timestamp or `schemaVersion` in this proposed command body.
+The server must record receipt time itself. The eventual endpoint/version
+negotiation and canonical JSON schema must be reviewed before Python integration.
+
+Passing this parser proves shape only. Backend still must authorize the camera,
+validate the enrolled generation and stream ownership, match the issued immutable
+bundle/view, enforce freshness and command idempotency, and persist the receipt.
+An old or unknown generation, a hash not issued by Backend, or an older ACK cannot
+advance current application state merely because its body parses. `LOADED` means
+configuration installed; it does not prove camera health, a processed frame or
+model quality. No application badge or worker sender is activated in this slice.

@@ -1,4 +1,12 @@
 export const CONTRACTS_VERSION = '1.0.0';
+export {
+  MAX_CAMERA_CONFIGURATION_ACK_BYTES,
+  parseCameraConfigurationAcknowledgementPayload,
+} from './camera-configuration-ack.js';
+export type {
+  CameraConfigurationAcknowledgement,
+  CameraConfigurationAcknowledgementValidationResult,
+} from './camera-configuration-ack.js';
 export { parseCameraConfigurationBundlePayload } from './camera-configuration-bundle.js';
 export type {
   CameraConfigurationBundle,
