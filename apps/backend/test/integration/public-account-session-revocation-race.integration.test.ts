@@ -526,8 +526,8 @@ test('public resetPassword (USER_PASSWORD_RESET) with real configurationCommandC
 
     const resetWitnessRows = (await dataSource.query(
       `SELECT c.operation, c.actor_user_id
-       FROM mf06_authority_command c
-       JOIN mf06_authority_commit_witness w ON w.command_id = c.command_id
+       FROM authorization_history_command c
+       JOIN authorization_history_commit_receipt w ON w.command_id = c.command_id
        WHERE c.operation = 'USER_PASSWORD_RESET' AND c.actor_user_id = $1`,
       [admin.id],
     )) as Array<{ operation: string; actor_user_id: string }>;
@@ -651,8 +651,8 @@ test('public setStatus deactivation (USER_ACCOUNT_STATUS) with real configuratio
 
     const statusWitnessRows = (await dataSource.query(
       `SELECT c.operation, c.actor_user_id
-       FROM mf06_authority_command c
-       JOIN mf06_authority_commit_witness w ON w.command_id = c.command_id
+       FROM authorization_history_command c
+       JOIN authorization_history_commit_receipt w ON w.command_id = c.command_id
        WHERE c.operation = 'USER_ACCOUNT_STATUS' AND c.actor_user_id = $1`,
       [admin.id],
     )) as Array<{ operation: string; actor_user_id: string }>;
@@ -788,8 +788,8 @@ test('public replaceRoleAssignments (USER_ROLE_REPLACE) with real configurationC
 
     const roleReplaceWitnessRows = (await dataSource.query(
       `SELECT c.operation, c.actor_user_id
-       FROM mf06_authority_command c
-       JOIN mf06_authority_commit_witness w ON w.command_id = c.command_id
+       FROM authorization_history_command c
+       JOIN authorization_history_commit_receipt w ON w.command_id = c.command_id
        WHERE c.operation = 'USER_ROLE_REPLACE' AND c.actor_user_id = $1`,
       [admin.id],
     )) as Array<{ operation: string; actor_user_id: string }>;
@@ -976,8 +976,8 @@ test('public changePassword (USER_PASSWORD_CHANGE) with real passwordChangeComma
 
     const changeWitnessRows = (await dataSource.query(
       `SELECT c.operation, c.actor_user_id
-       FROM mf06_authority_command c
-       JOIN mf06_authority_commit_witness w ON w.command_id = c.command_id
+       FROM authorization_history_command c
+       JOIN authorization_history_commit_receipt w ON w.command_id = c.command_id
        WHERE c.operation = 'USER_PASSWORD_CHANGE' AND c.actor_user_id = $1`,
       [targetUser.id],
     )) as Array<{ operation: string; actor_user_id: string }>;

@@ -1,4 +1,5 @@
 import 'reflect-metadata';
+import { MAIN_AUTHORITY_V2_SOURCES } from '../../src/common/configuration/main-team-authority-sources.js';
 import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
 import { before, after, test } from 'node:test';
@@ -109,7 +110,8 @@ test(
   async () => {
     const f = await fixture(),
       writer = db.createQueryRunner();
-    const before = (await db.query('SELECT count(*)::int AS n FROM mf06_authority_epoch'))[0].n;
+    const before = (await db.query('SELECT count(*)::int AS n FROM authorization_history_epoch'))[0]
+      .n;
     await writer.startTransaction();
     try {
       await writer.query('UPDATE zone SET required_ppe=ARRAY[$2::text] WHERE id=$1', [
@@ -121,13 +123,13 @@ test(
         (error: unknown) => error instanceof PublicHttpException && error.getStatus() === 503,
       );
       assert.equal(
-        (await db.query('SELECT count(*)::int AS n FROM mf06_authority_epoch'))[0].n,
+        (await db.query('SELECT count(*)::int AS n FROM authorization_history_epoch'))[0].n,
         before,
       );
       assert.equal(
         (
           await db.query(
-            'SELECT count(*)::int AS n FROM mf06_authority_command WHERE actor_user_id=$1',
+            'SELECT count(*)::int AS n FROM authorization_history_command WHERE actor_user_id=$1',
             [f.actor],
           )
         )[0].n,
@@ -145,7 +147,7 @@ test('completed capture remains stored but a revoked original bearer cannot rece
     original = db.query.bind(db);
   db.query = (async (sql: string, params?: unknown[], runner?: QueryRunner) => {
     const value = await original(sql, params, runner);
-    if (sql.startsWith('INSERT INTO mf06_authority_commit_witness'))
+    if (sql.startsWith('INSERT INTO authorization_history_commit_receipt'))
       await original('UPDATE auth_session SET revoked_at=clock_timestamp() WHERE user_id=$1', [
         f.actor,
       ]);
@@ -157,9 +159,9 @@ test('completed capture remains stored but a revoked original bearer cannot rece
     db.query = original;
   }
   const rows = await db.query(
-    `SELECT e.state,w.command_id AS witnessed FROM mf06_authority_baseline b
-    JOIN mf06_authority_epoch e USING(epoch_id) JOIN mf06_authority_command c USING(command_id)
-    LEFT JOIN mf06_authority_commit_witness w USING(command_id) WHERE c.actor_user_id=$1`,
+    `SELECT e.state,w.command_id AS witnessed FROM authorization_history_baseline b
+    JOIN authorization_history_epoch e USING(epoch_id) JOIN authorization_history_command c USING(command_id)
+    LEFT JOIN authorization_history_commit_receipt w USING(command_id) WHERE c.actor_user_id=$1`,
     [f.actor],
   );
   assert.equal(rows.length, 1);
@@ -198,11 +200,11 @@ test('caller-supplied baseline body, hashes and clock cannot replace the databas
     { epoch },
     async (manager) => {
       await manager.query(
-        'INSERT INTO mf06_authority_epoch(epoch_id,writer_manifest_hash) VALUES($1,$2)',
+        'INSERT INTO authorization_history_epoch(epoch_id,writer_manifest_hash) VALUES($1,$2)',
         [epoch, manifest],
       );
       return manager.query(
-        `INSERT INTO mf06_authority_baseline(epoch_id,command_id,captured_at,transaction_id,
+        `INSERT INTO authorization_history_baseline(epoch_id,command_id,captured_at,transaction_id,
       source_registry_hash,snapshot_hash,hash_algorithm,row_count,snapshot_json)
       VALUES($1,current_setting('smartsite.mf06_command_id')::uuid,'1900-01-01Z',pg_current_xact_id(),$2,$2,
       'POSTGRES_JSONB_TEXT_SHA256_V1',0,'{"forged":true}')
@@ -214,17 +216,35 @@ test('caller-supplied baseline body, hashes and clock cannot replace the databas
   assert.equal(rows.length, 1);
   assert.equal(rows[0].snapshot_json.forged, undefined);
   assert.equal(rows[0].snapshot_json.version, 'MF06_MAIN_BASELINE_JSONB_V1');
-  assert.equal(rows[0].snapshot_json.sources.length, 15);
+  assert.deepEqual(
+    rows[0].snapshot_json.sources.map(
+      ({
+        sourceKind,
+        tableName,
+        fields,
+      }: {
+        sourceKind: string;
+        tableName: string;
+        fields: string[];
+      }) => ({ sourceKind, tableName, fields }),
+    ),
+    MAIN_AUTHORITY_V2_SOURCES.map(([sourceKind, tableName, fields]) => ({
+      sourceKind,
+      tableName,
+      fields: [...fields],
+    })).sort((a, b) => (a.sourceKind < b.sourceKind ? -1 : a.sourceKind > b.sourceKind ? 1 : 0)),
+  );
   assert(rows[0].row_count > 0);
   assert.notEqual(rows[0].snapshot_hash, '0'.repeat(64));
   assert.equal(
-    (await db.query('SELECT state FROM mf06_authority_epoch WHERE epoch_id=$1', [epoch]))[0].state,
+    (await db.query('SELECT state FROM authorization_history_epoch WHERE epoch_id=$1', [epoch]))[0]
+      .state,
     'STAGING',
   );
   assert.equal(
     (
       await db.query(
-        "SELECT captured_at>'2026-01-01Z'::timestamptz AS live FROM mf06_authority_baseline WHERE epoch_id=$1",
+        "SELECT captured_at>'2026-01-01Z'::timestamptz AS live FROM authorization_history_baseline WHERE epoch_id=$1",
         [epoch],
       )
     )[0].live,
@@ -234,7 +254,8 @@ test('caller-supplied baseline body, hashes and clock cannot replace the databas
 
 test('a metadata payload above two MiB is refused even with a small row count', async () => {
   const f = await fixture();
-  const before = (await db.query('SELECT count(*)::int AS n FROM mf06_authority_epoch'))[0].n;
+  const before = (await db.query('SELECT count(*)::int AS n FROM authorization_history_epoch'))[0]
+    .n;
   // Privileged legacy rows can exceed normal DTO budgets; no model/media content is used.
   await db.query('UPDATE zone SET required_ppe=ARRAY[$2::text] WHERE id=$1', [
     f.zone,
@@ -246,7 +267,7 @@ test('a metadata payload above two MiB is refused even with a small row count', 
       (error: unknown) => error instanceof PublicHttpException && error.getStatus() === 413,
     );
     assert.equal(
-      (await db.query('SELECT count(*)::int AS n FROM mf06_authority_epoch'))[0].n,
+      (await db.query('SELECT count(*)::int AS n FROM authorization_history_epoch'))[0].n,
       before,
     );
   } finally {
