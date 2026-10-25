@@ -280,6 +280,7 @@ function SetupWorkspace({ apiUrl, session }: { apiUrl: string; session: SharedSe
     credentialId,
     siteId: site?.id ?? '',
     siteName: site?.name ?? '',
+    tourUserId: session.user.id,
     canManageCamera: capabilities.canManageRegions,
     onClose: () => {
       if (isCurrentDialog()) close();

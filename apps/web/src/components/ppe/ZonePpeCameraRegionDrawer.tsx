@@ -30,6 +30,7 @@ export interface ZonePpeCameraRegionDrawerProps {
   frozenReference: CameraConfigurationReference;
   candidateReference: CameraConfigurationReference | null;
   editingRegion?: EditingRegionScope | null;
+  tourUserId?: string | null;
   lastSavedDraft: string | null;
   onAcceptCandidateReference: (candidate: CameraConfigurationReference) => void;
   onCancelCandidateReview: () => void;
@@ -292,6 +293,7 @@ function ZonePpeCameraRegionDrawerContent(
         selectedZone={selectedZone}
         frozenReference={frozenReference}
         editingRegion={editingRegion}
+        tourUserId={props.tourUserId}
         isReferenceExpired={isReferenceExpired}
         isSaving={createRegionMutation.isPending}
       />

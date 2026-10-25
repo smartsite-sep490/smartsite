@@ -296,14 +296,17 @@ function SafetyTaskTourSession({ taskId, tourVersion, userId, steps }: SafetyTas
             className="fixed bottom-4 right-4 z-40 w-80 max-w-[calc(100vw-2rem)] rounded-2xl border border-slate-200 bg-white p-4 shadow-xl text-slate-900 space-y-3"
           >
             <div className="flex items-start justify-between gap-2">
-              <div>
+              <div className="min-w-0">
                 <p className="text-[11px] font-semibold uppercase tracking-wider text-slate-500">
                   {tr('tour.stepCounter', {
                     current: currentIndex + 1,
                     total: availableSteps.length,
                   })}
                 </p>
-                <h2 id={titleId} className="text-sm font-bold text-slate-900 mt-0.5">
+                <h2
+                  id={titleId}
+                  className="text-sm font-bold text-slate-900 mt-0.5 break-words [overflow-wrap:anywhere]"
+                >
                   {tr(currentStep.titleKey)}
                 </h2>
               </div>
@@ -312,24 +315,27 @@ function SafetyTaskTourSession({ taskId, tourVersion, userId, steps }: SafetyTas
                 data-testid="safety-task-tour-close"
                 aria-label={tr('tour.closeAria')}
                 onClick={() => closeTour(true)}
-                className="rounded-lg px-2 py-1 text-xs font-semibold text-slate-500 hover:bg-slate-100 hover:text-slate-900 cursor-pointer"
+                className="rounded-lg px-2 py-1 text-xs font-semibold text-slate-500 hover:bg-slate-100 hover:text-slate-900 cursor-pointer focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-slate-900"
               >
                 ×
               </button>
             </div>
-            <p id={bodyId} className="text-xs text-slate-600 leading-relaxed">
+            <p
+              id={bodyId}
+              className="text-xs text-slate-600 leading-relaxed break-words [overflow-wrap:anywhere]"
+            >
               {tr(currentStep.bodyKey)}
             </p>
-            <div className="flex items-center justify-between gap-2 pt-1 border-t border-slate-100">
+            <div className="flex flex-wrap items-center justify-between gap-2 pt-1 border-t border-slate-100">
               <button
                 type="button"
                 data-testid="safety-task-tour-skip"
                 onClick={() => finishWithStatus('SKIPPED')}
-                className="text-xs font-semibold text-slate-500 hover:text-slate-800 cursor-pointer"
+                className="rounded px-1.5 py-0.5 text-xs font-semibold text-slate-500 hover:text-slate-800 cursor-pointer focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-slate-900"
               >
                 {tr('tour.skipBtn')}
               </button>
-              <div className="flex items-center gap-1.5">
+              <div className="flex flex-wrap items-center gap-1.5">
                 {currentIndex > 0 && (
                   <button
                     type="button"
@@ -338,7 +344,7 @@ function SafetyTaskTourSession({ taskId, tourVersion, userId, steps }: SafetyTas
                       if (currentIndex <= 1) focusPrimaryRef.current = true;
                       setActiveStepId(availableSteps[currentIndex - 1]?.id ?? null);
                     }}
-                    className="rounded-lg border border-slate-200 bg-white px-2.5 py-1 text-xs font-semibold text-slate-700 hover:bg-slate-50 cursor-pointer"
+                    className="rounded-lg border border-slate-200 bg-white px-2.5 py-1 text-xs font-semibold text-slate-700 hover:bg-slate-50 cursor-pointer focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-slate-900"
                   >
                     {tr('tour.backBtn')}
                   </button>
@@ -354,7 +360,7 @@ function SafetyTaskTourSession({ taskId, tourVersion, userId, steps }: SafetyTas
                       setActiveStepId(availableSteps[currentIndex + 1]?.id ?? null);
                     }
                   }}
-                  className="rounded-lg bg-[#0F172A] px-3 py-1 text-xs font-semibold text-white hover:bg-slate-800 cursor-pointer"
+                  className="rounded-lg bg-[#0F172A] px-3 py-1 text-xs font-semibold text-white hover:bg-slate-800 cursor-pointer focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-slate-900"
                 >
                   {tr(isLastStep ? 'tour.doneBtn' : 'tour.nextBtn')}
                 </button>

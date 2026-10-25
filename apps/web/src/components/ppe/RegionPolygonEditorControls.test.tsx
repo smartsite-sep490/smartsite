@@ -278,8 +278,10 @@ describe('RegionPolygonEditorControls', () => {
       (screen.getByRole('button', { name: 'Save Region' }) as HTMLButtonElement).disabled,
     ).toBe(true);
 
-    // Saving state locks editing, view, coordinate add, cancel, and save controls
+    // Saving state locks editing, view, coordinate add, discard confirmation, cancel, and save controls
     const savingProps = createToolbarProps({
+      isConfirmingDiscard: true,
+      isDirty: true,
       isSaving: true,
     });
     rerender(
@@ -296,6 +298,8 @@ describe('RegionPolygonEditorControls', () => {
     );
 
     for (const label of [
+      'Keep Editing',
+      'Discard Changes',
       'Undo Point',
       'Delete Point',
       'Reset Drawing',

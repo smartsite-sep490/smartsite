@@ -30,6 +30,7 @@ export interface ZonePpeCameraRegionPanelProps {
   siteId: string;
   initialCameraId?: string;
   zones: ZoneResponse[];
+  tourUserId?: string | null;
   onSelectCamera?: (cameraId: string) => void;
   onDraftStateChange?: (state: { dirty: boolean; saving: boolean }) => void;
   onClose?: () => void;
@@ -137,6 +138,7 @@ function ZonePpeCameraRegionPanelContent({
   siteId,
   initialCameraId,
   zones,
+  tourUserId,
   onSelectCamera,
   onDraftStateChange,
   onClose,
@@ -862,6 +864,7 @@ function ZonePpeCameraRegionPanelContent({
             frozenReference={drawingScope.reference}
             candidateReference={candidateReference}
             editingRegion={drawingScope.editingRegion}
+            tourUserId={tourUserId}
             lastSavedDraft={lastSavedDraft}
             onAcceptCandidateReference={handleAcceptCandidateReference}
             onScopeRevoked={(status) => {

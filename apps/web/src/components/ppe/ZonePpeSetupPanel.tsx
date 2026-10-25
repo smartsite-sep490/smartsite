@@ -22,6 +22,7 @@ export interface ZonePpeSetupPanelProps {
   onSelectCamera?: (cameraId: string) => void;
   onClose: () => void;
   embedded?: boolean;
+  tourUserId?: string | null;
   onDraftStateChange?: (state: { dirty: boolean; saving: boolean }) => void;
 }
 
@@ -82,6 +83,7 @@ function ZonePpeSetupPanelInternal({
   onSelectCamera,
   onClose,
   embedded = false,
+  tourUserId,
   onDraftStateChange,
 }: ZonePpeSetupPanelInternalProps) {
   const { t } = useLocale();
@@ -1216,6 +1218,7 @@ function ZonePpeSetupPanelInternal({
               siteId={siteId}
               initialCameraId={initialCameraId}
               zones={scopedZones}
+              tourUserId={tourUserId}
             />
           ) : isZonesSettledEmpty ? (
             <div

@@ -30,13 +30,18 @@ vi.mock('../ppe/ZonePpeSetupDialog', () => ({
   ZonePpeSetupDialog: (p: {
     section?: string;
     initialCameraId?: string;
+    tourUserId?: string | null;
     onSelectCamera?: (cameraId: string) => void;
     canManageZones: boolean;
     canManageRegions: boolean;
   }) => {
     mocks.onSelectRegionCamera = p.onSelectCamera ?? null;
     return (
-      <div role="dialog" data-camera-id={p.initialCameraId ?? ''}>
+      <div
+        role="dialog"
+        data-camera-id={p.initialCameraId ?? ''}
+        data-tour-user-id={p.tourUserId ?? ''}
+      >
         Section {p.section ?? 'all'} Zones {String(p.canManageZones)} Regions{' '}
         {String(p.canManageRegions)}
       </div>
@@ -377,6 +382,7 @@ it('opens direct edit context for existing active and inactive cameras without f
   const regionDialog = screen.getByRole('dialog');
   expect(regionDialog.textContent).toBe('Section regions Zones true Regions true');
   expect(regionDialog.getAttribute('data-camera-id')).toBe('cam-2');
+  expect(regionDialog.getAttribute('data-tour-user-id')).toBe('manager');
 
   // Switching camera inside the region dialog syncs requestedCameraId and updates the catalog's selected camera context bar
   act(() => {
@@ -469,9 +475,9 @@ it('provides an optional setup tour bound to real stage elements, skips unauthor
     'camera-setup-save',
   );
   expect(
-    document
-      .querySelector('[data-tour-anchor="camera-setup-save"]')
-      ?.getAttribute('data-tour-active-anchor'),
+    screen
+      .getByRole('region', { name: 'Selected camera' })
+      .getAttribute('data-tour-active-anchor'),
   ).toBe('true');
   expect(
     screen.getByText(/does not confirm changes are applied or that the camera is live/i),

@@ -3113,7 +3113,7 @@ export function PpeMonitoringView({
                     <p className="text-[11px] font-medium text-slate-500">
                       {t('ppe.card.fieldWorkArea')}
                     </p>
-                    <p className="font-semibold text-slate-900 text-xs mt-0.5 truncate">
+                    <p className="font-semibold text-slate-900 text-xs mt-0.5 break-words [overflow-wrap:anywhere]">
                       {activeCameraContext.workArea}
                     </p>
                   </div>
@@ -3121,7 +3121,7 @@ export function PpeMonitoringView({
                     <p className="text-[11px] font-medium text-slate-500">
                       {t('ppe.card.fieldCamera')}
                     </p>
-                    <p className="font-semibold text-slate-900 text-xs mt-0.5 truncate">
+                    <p className="font-semibold text-slate-900 text-xs mt-0.5 break-words [overflow-wrap:anywhere]">
                       {activeCameraContext.camera}
                     </p>
                   </div>
@@ -3129,7 +3129,7 @@ export function PpeMonitoringView({
                     <p className="text-[11px] font-medium text-slate-500">
                       {t('ppe.card.fieldIdentity')}
                     </p>
-                    <p className="font-semibold text-slate-900 text-xs mt-0.5 truncate">
+                    <p className="font-semibold text-slate-900 text-xs mt-0.5 break-words [overflow-wrap:anywhere]">
                       {!preview || activeStatus === 'UNAVAILABLE'
                         ? t('ppe.card.identitySnapshotUnavailable')
                         : testDetection?.trackId !== null && testDetection?.trackId !== undefined
@@ -3196,7 +3196,7 @@ export function PpeMonitoringView({
                         {t('ppe.check.noTrackedIndividuals')}
                       </p>
                     ) : (
-                      ppeDetections.map((detection) => {
+                      ppeDetections.map((detection, detectionIdx) => {
                         const reportedExtended = EXPANDED_PPE_ITEMS.filter(
                           (item) =>
                             (detection.ppeStatus && detection.ppeStatus[item] !== undefined) ||
@@ -3209,11 +3209,13 @@ export function PpeMonitoringView({
 
                         return (
                           <div
-                            key={`ppe-check-${detection.trackId}`}
+                            key={`ppe-check-${detection.trackId ?? 'untracked'}-${detectionIdx}`}
                             className="rounded-xl bg-[#F8FAFC] border border-slate-200/70 p-2.5"
                           >
                             <p className="mb-1.5 text-xs font-bold text-slate-800 tabular-nums">
-                              {t('ppe.trackLabel', { id: detection.trackId ?? '' })}
+                              {detection.trackId !== null && detection.trackId !== undefined
+                                ? t('ppe.trackLabel', { id: detection.trackId })
+                                : `${t('ppe.untrackedLabel')} (${detectionIdx + 1})`}
                             </p>
                             <div className="space-y-0.5">
                               {itemsToDisplay.map((item) => {
@@ -3248,7 +3250,7 @@ export function PpeMonitoringView({
 
                                 return (
                                   <div
-                                    key={`${detection.trackId}-${item}`}
+                                    key={`${detection.trackId ?? 'untracked'}-${detectionIdx}-${item}`}
                                     className="py-1 border-b border-slate-200/70 last:border-0"
                                   >
                                     <div className="flex items-center justify-between text-xs">
@@ -3261,7 +3263,7 @@ export function PpeMonitoringView({
                                           <IconAlertTriangle className="w-3.5 h-3.5 text-amber-500 flex-shrink-0" />
                                         )}
                                         <span
-                                          className={`font-medium truncate ${
+                                          className={`font-medium break-words [overflow-wrap:anywhere] ${
                                             state === 'CONFIRMED_MISSING'
                                               ? 'text-[#DF2225] font-semibold'
                                               : state === 'PENDING_MISSING'
@@ -3332,12 +3334,14 @@ export function PpeMonitoringView({
                       <p className="text-[10px] font-medium text-slate-500">
                         {t('ppe.card.fieldTrackId')}
                       </p>
-                      <p className="font-semibold text-slate-700 text-[11px] mt-0.5 tabular-nums truncate">
+                      <p className="font-semibold text-slate-700 text-[11px] mt-0.5 tabular-nums break-words [overflow-wrap:anywhere]">
                         {!preview || activeStatus === 'UNAVAILABLE'
                           ? '—'
                           : ppeDetections
-                              .map((detection) =>
-                                t('ppe.trackLabel', { id: detection.trackId ?? '' }),
+                              .map((detection, detectionIdx) =>
+                                detection.trackId !== null && detection.trackId !== undefined
+                                  ? t('ppe.trackLabel', { id: detection.trackId })
+                                  : `${t('ppe.untrackedLabel')} (${detectionIdx + 1})`,
                               )
                               .join(', ') || '—'}
                       </p>
@@ -3372,8 +3376,19 @@ export function PpeMonitoringView({
                     <div className="pt-1 border-t border-slate-200/60 text-center">
                       <button
                         type="button"
-                        onClick={() => setIsDiagnosticsOpen(true)}
-                        className="text-xs font-semibold text-slate-600 hover:text-slate-900 transition-colors cursor-pointer"
+                        data-testid="evidence-open-diagnostics-btn"
+                        onClick={() => {
+                          setIsEvidenceOpen(false);
+                          setIsDiagnosticsOpen(true);
+                          queueMicrotask(() => {
+                            document
+                              .querySelector<HTMLElement>(
+                                '[data-testid="toggle-diagnostics-drawer"]',
+                              )
+                              ?.focus();
+                          });
+                        }}
+                        className="text-xs font-semibold text-slate-600 hover:text-slate-900 transition-colors cursor-pointer focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-slate-900 rounded px-1.5 py-0.5"
                       >
                         {modelObjects.detections.length > 0
                           ? t('ppe.card.rawObjectsCountLink', {
@@ -3453,6 +3468,7 @@ export function PpeMonitoringView({
           canManageZones={zonePpeCapabilities.canManageZones}
           canManageRegions={zonePpeCapabilities.canManageRegions}
           canReadZones={isGlobalAdmin}
+          tourUserId={effectiveUser?.id ?? null}
           onClose={() => setIsZonePpeOpen(false)}
         />
       )}
@@ -3969,12 +3985,18 @@ export function PpeMonitoringView({
                       <td className="py-2.5 px-3 font-mono text-slate-500 text-xs tabular-nums">
                         {evt.time}
                       </td>
-                      <td className="py-2.5 px-3 font-semibold text-slate-800 text-xs">
+                      <td
+                        id={`ppe-event-worker-${evt.rowKey}`}
+                        className="py-2.5 px-3 font-semibold text-slate-800 text-xs"
+                      >
                         {evt.worker}
                       </td>
                       <td className="py-2.5 px-3 font-mono text-slate-500 text-xs">{evt.camera}</td>
                       <td className="py-2.5 px-3 text-slate-600 text-xs">{evt.workArea}</td>
-                      <td className="py-2.5 px-3 text-[#9F2F2D] font-semibold text-xs">
+                      <td
+                        id={`ppe-event-issue-${evt.rowKey}`}
+                        className="py-2.5 px-3 text-[#9F2F2D] font-semibold text-xs"
+                      >
                         {evt.issue}
                       </td>
                       <td className="py-2.5 px-3 font-mono text-slate-500 text-xs tabular-nums">
@@ -3989,6 +4011,7 @@ export function PpeMonitoringView({
                         {(!isControlled || sharedSession !== null) && (
                           <button
                             type="button"
+                            aria-describedby={`ppe-event-worker-${evt.rowKey} ppe-event-issue-${evt.rowKey}`}
                             onClick={() =>
                               setSelectedReview({
                                 item: evt,
@@ -4001,7 +4024,7 @@ export function PpeMonitoringView({
                                 },
                               })
                             }
-                            className="px-3 py-1.5 rounded-lg bg-[#0F172A] hover:bg-slate-800 text-white text-xs font-semibold transition-colors shadow-xs"
+                            className="px-3 py-1.5 rounded-lg bg-[#0F172A] hover:bg-slate-800 text-white text-xs font-semibold transition-colors shadow-xs cursor-pointer focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-slate-900"
                           >
                             {t('ppe.action.reviewAlert')}
                           </button>

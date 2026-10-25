@@ -189,6 +189,8 @@ export function CameraSetupContextBar({
     <div className="mt-4 min-w-0 space-y-2.5 rounded-xl border border-slate-200/90 bg-slate-50/70 p-3 text-xs text-slate-700">
       {selectedCamera && (
         <div
+          role="region"
+          aria-label={t('cameraSetup.selectedHeading')}
           data-tour-anchor="camera-setup-save"
           className="min-w-0 flex flex-col justify-between gap-3 rounded-lg border border-slate-200/90 bg-white p-3 sm:flex-row sm:items-center"
         >

@@ -58,12 +58,13 @@ export interface RegionPolygonTaskTourProps {
   selectedZone: ZoneResponse;
   frozenReference: CameraConfigurationReference;
   editingRegion?: EditingRegionScope | null;
+  tourUserId?: string | null;
   isReferenceExpired?: boolean;
   isSaving?: boolean;
 }
 
 function buildPolygonTourScopeKey(
-  props: Omit<RegionPolygonTaskTourProps, 'isReferenceExpired' | 'isSaving'>,
+  props: Omit<RegionPolygonTaskTourProps, 'isReferenceExpired' | 'isSaving' | 'tourUserId'>,
 ): string {
   const referenceIdentity = getConfigurationReferenceIdentity(props.frozenReference);
   const editingRegionKey = props.editingRegion
@@ -140,7 +141,7 @@ export function RegionPolygonTaskTour(props: RegionPolygonTaskTourProps) {
       <SafetyTaskTour
         taskId="polygon"
         tourVersion={POLYGON_TOUR_VERSION}
-        userId={null}
+        userId={props.tourUserId ?? null}
         scopeKey={scopeKey}
         isAuthorized={isAuthorized}
         steps={steps}

@@ -168,6 +168,11 @@ export function FourSourceWallTile({
   const detectionsCount = preview?.frame.detections.length ?? 0;
   const modelObjectsCount = preview?.frame.modelObjects?.detections.length ?? 0;
   const cameraActionName = camera.name ? `${camera.name} (${camera.code})` : camera.code;
+  const parsedCapturedAt = capturedAt ? new Date(capturedAt) : null;
+  const formattedCapturedAt =
+    parsedCapturedAt && !Number.isNaN(parsedCapturedAt.getTime())
+      ? formatClockTime(parsedCapturedAt)
+      : '--:--:--';
 
   return (
     <div
@@ -233,7 +238,7 @@ export function FourSourceWallTile({
               }`}
             />
             <span className="font-mono text-xs font-semibold text-white/90">
-              {capturedAt ? formatClockTime(new Date(capturedAt)) : '--:--:--'}
+              {formattedCapturedAt}
             </span>
           </div>
         </div>
@@ -285,7 +290,7 @@ export function FourSourceWallTile({
             <p className="text-xs font-bold uppercase tracking-wider text-amber-300">
               {t('ppe.wall.snapshotUnavailable')}
             </p>
-            <p className="text-xs text-white/60 max-w-[200px] truncate">
+            <p className="text-xs text-white/60 max-w-xs break-words [overflow-wrap:anywhere]">
               {error || t('ppe.wall.noActiveSnapshot')}
             </p>
             {errorStatus === 429 && (
@@ -312,7 +317,7 @@ export function FourSourceWallTile({
         {/* Empty live frame indicator: offline/empty cannot say safe — Strict Person detections terminology */}
         {preview && detectionsCount === 0 && (
           <div className="absolute inset-x-2 bottom-2 flex justify-center pointer-events-none z-10">
-            <div className="bg-black/70 px-2.5 py-1 rounded text-white/80 text-xs font-medium text-center truncate max-w-full">
+            <div className="bg-black/70 px-2.5 py-1 rounded text-white/80 text-xs font-medium text-center break-words [overflow-wrap:anywhere] max-w-full">
               {t('ppe.wall.noPersonDetectionsDisclaimer')}
             </div>
           </div>

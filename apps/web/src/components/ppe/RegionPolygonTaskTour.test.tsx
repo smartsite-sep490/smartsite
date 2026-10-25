@@ -153,13 +153,14 @@ describe('RegionPolygonTaskTour', () => {
       </QueryClientProvider>,
     );
 
-  it('stays closed by default, walks 4 steps without mutating draft points or making API calls, and keeps progress session-only', () => {
+  it('stays closed by default, walks 4 steps without mutating draft points or making API calls, persists progress across logins for the same authorized tourUserId, isolates different users, and persists nothing when tourUserId is null', () => {
     const getCameraSpy = vi.spyOn(SmartSiteManagementClient.prototype, 'getCamera');
     const createSpy = vi.spyOn(SmartSiteManagementClient.prototype, 'createRegion');
     const updateSpy = vi.spyOn(SmartSiteManagementClient.prototype, 'updatePolygon');
     const fetchSpy = vi.spyOn(globalThis, 'fetch');
 
-    renderDrawer();
+    // 1. Unknown/null tourUserId persists nothing to localStorage (never substitutes sessionScope or token)
+    const view = renderDrawer({ tourUserId: null });
     expect(screen.queryByTestId('safety-task-tour')).toBeNull();
     addTriangle();
     expect(screen.getByText(/Points: 3 \/ 32/i)).toBeTruthy();
@@ -193,6 +194,36 @@ describe('RegionPolygonTaskTour', () => {
     expect(updateSpy).not.toHaveBeenCalled();
     expect(fetchSpy).not.toHaveBeenCalled();
     expect(window.localStorage.getItem(SAFETY_TOUR_STORAGE_KEY)).toBeNull();
+
+    // 2. Authorized tourUserId persists progress across a new sessionScope / credentialId login
+    rerenderDrawer(view, { tourUserId: 'user-manager-1', sessionScope: 'scope-login-1' });
+    expect(screen.getByTestId('safety-task-tour-trigger').textContent).toBe('Guided help');
+    fireEvent.click(screen.getByTestId('safety-task-tour-trigger'));
+    fireEvent.click(screen.getByTestId('safety-task-tour-skip'));
+    expect(JSON.parse(window.localStorage.getItem(SAFETY_TOUR_STORAGE_KEY) ?? '{}')).toEqual({
+      'user-manager-1:polygon:v1': { status: 'SKIPPED', tourVersion: 1 },
+    });
+
+    // Same user with a brand-new sessionScope, credentialId, and frozenReference retains "Replay guide"
+    rerenderDrawer(view, {
+      tourUserId: 'user-manager-1',
+      sessionScope: 'scope-login-2',
+      credentialId: 2,
+      internalNonce: 2,
+      frozenReference: createReference({
+        frame: { ...defaultReference.frame, sequenceNumber: '2' },
+      }),
+    });
+    expect(screen.getByTestId('safety-task-tour-trigger').textContent).toBe('Replay guide');
+
+    // 3. Different authorized user is isolated and sees "Guided help"
+    rerenderDrawer(view, {
+      tourUserId: 'user-manager-2',
+      sessionScope: 'scope-login-3',
+      credentialId: 3,
+      internalNonce: 3,
+    });
+    expect(screen.getByTestId('safety-task-tour-trigger').textContent).toBe('Guided help');
   });
 
   it('resets tour session on credential, site, camera, frozen reference, or editingRegion owner change, and hides when scope mismatches', () => {

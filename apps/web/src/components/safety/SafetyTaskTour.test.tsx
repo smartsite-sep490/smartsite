@@ -474,6 +474,19 @@ describe('SafetyTaskTour', () => {
       'alerts-case-summary',
     );
 
+    // All open tour card buttons expose focus-visible outlines and overflow wrapping on heading/body
+    for (const testId of [
+      'safety-task-tour-close',
+      'safety-task-tour-skip',
+      'safety-task-tour-back',
+      'safety-task-tour-next',
+    ]) {
+      expect(screen.getByTestId(testId).className).toContain('focus-visible:outline');
+    }
+    const tourCard = screen.getByTestId('safety-task-tour');
+    expect(tourCard.querySelector('h2')?.className).toContain('break-words');
+    expect(tourCard.querySelector('p[id]')?.className).toContain('break-words');
+
     // Hide alerts-case-summary -> falls forward to alerts-action-bar
     rerender(
       <AlertsTourHarness
