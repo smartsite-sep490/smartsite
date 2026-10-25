@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import React from 'react';
-import { render, screen, cleanup, fireEvent, waitFor, within } from '@testing-library/react';
+import { render, screen, cleanup, fireEvent, within } from '@testing-library/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { describe, expect, it, vi, beforeEach, afterEach } from 'vitest';
 import { SmartSiteManagementClient } from '@smartsite/api-client';
@@ -233,7 +233,18 @@ describe('PpeMonitoringView Evidence Modal Diagnostics, Null-Track Keys & Wrappi
     const diagnosticsToggle = screen.getByTestId('toggle-diagnostics-drawer');
     expect(diagnosticsToggle.getAttribute('aria-expanded')).toBe('false');
 
-    fireEvent.click(screen.getByTestId('open-evidence-details-btn'));
+    const openEvidenceBtn = screen.getByTestId('open-evidence-details-btn');
+    openEvidenceBtn.focus();
+    expect(document.activeElement).toBe(openEvidenceBtn);
+    fireEvent.click(openEvidenceBtn);
+    expect(screen.getByRole('dialog')).toBeTruthy();
+
+    fireEvent.keyDown(document, { key: 'Escape' });
+    expect(screen.queryByRole('dialog')).toBeNull();
+    expect(document.activeElement).toBe(openEvidenceBtn);
+
+    openEvidenceBtn.focus();
+    fireEvent.click(openEvidenceBtn);
     expect(screen.getByRole('dialog')).toBeTruthy();
 
     const diagnosticsBtn = screen.getByTestId('evidence-open-diagnostics-btn');
@@ -243,10 +254,7 @@ describe('PpeMonitoringView Evidence Modal Diagnostics, Null-Track Keys & Wrappi
     expect(diagnosticsToggle.getAttribute('aria-expanded')).toBe('true');
     expect(diagnosticsToggle.closest('[inert]')).toBeNull();
     expect(diagnosticsToggle.closest('[aria-hidden="true"]')).toBeNull();
-
-    await waitFor(() => {
-      expect(document.activeElement).toBe(diagnosticsToggle);
-    });
+    expect(document.activeElement).toBe(diagnosticsToggle);
   });
 
   it('renders multiple untracked person detections (trackId: null) without duplicate React keys and wraps long PPE/context text without single-line truncate', async () => {

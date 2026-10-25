@@ -369,6 +369,8 @@ export function PpeMonitoringView({
   const suppressFullscreenRef = useRef(false);
   const isMountedRef = useRef(true);
   const enteredSingleFromWallRef = useRef(false);
+  const diagnosticsToggleBtnRef = useRef<HTMLButtonElement | null>(null);
+  const pendingDiagnosticsFocusRef = useRef(false);
   const pendingFocusTargetRef = useRef<
     | { kind: 'single-enlarged' }
     | { kind: 'wall-tile'; cameraId: string; button: 'enlarge' | 'focus' }
@@ -413,6 +415,7 @@ export function PpeMonitoringView({
   useLayoutEffect(() => {
     expiredScopeRef.current = null;
     enteredSingleFromWallRef.current = false;
+    pendingDiagnosticsFocusRef.current = false;
     pendingFocusTargetRef.current = null;
   }, [currentScopeToken]);
 
@@ -732,6 +735,7 @@ export function PpeMonitoringView({
   useLayoutEffect(() => {
     activeSiteIdRef.current = selectedSiteId;
     enteredSingleFromWallRef.current = false;
+    pendingDiagnosticsFocusRef.current = false;
     pendingFocusTargetRef.current = null;
   }, [selectedSiteId]);
 
@@ -1631,6 +1635,22 @@ export function PpeMonitoringView({
       if (btn && btn.isConnected) btn.focus();
     }
   }, [viewMode, selectedCameraId]);
+
+  useEffect(() => {
+    if (!pendingDiagnosticsFocusRef.current || isEvidenceOpen || !isDiagnosticsOpen) {
+      return;
+    }
+    pendingDiagnosticsFocusRef.current = false;
+    const btn = diagnosticsToggleBtnRef.current;
+    if (
+      btn &&
+      btn.isConnected &&
+      !btn.closest('[inert], [aria-hidden="true"]') &&
+      !document.querySelector('[role="dialog"], [aria-modal="true"]')
+    ) {
+      btn.focus();
+    }
+  }, [isEvidenceOpen, isDiagnosticsOpen]);
 
   useEffect(() => {
     if (viewMode !== 'single') return;
@@ -3378,15 +3398,9 @@ export function PpeMonitoringView({
                         type="button"
                         data-testid="evidence-open-diagnostics-btn"
                         onClick={() => {
+                          pendingDiagnosticsFocusRef.current = true;
                           setIsEvidenceOpen(false);
                           setIsDiagnosticsOpen(true);
-                          queueMicrotask(() => {
-                            document
-                              .querySelector<HTMLElement>(
-                                '[data-testid="toggle-diagnostics-drawer"]',
-                              )
-                              ?.focus();
-                          });
                         }}
                         className="text-xs font-semibold text-slate-600 hover:text-slate-900 transition-colors cursor-pointer focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-slate-900 rounded px-1.5 py-0.5"
                       >
@@ -3685,6 +3699,7 @@ export function PpeMonitoringView({
             </div>
           </div>
           <button
+            ref={diagnosticsToggleBtnRef}
             type="button"
             data-testid="toggle-diagnostics-drawer"
             onClick={() => setIsDiagnosticsOpen((prev) => !prev)}
