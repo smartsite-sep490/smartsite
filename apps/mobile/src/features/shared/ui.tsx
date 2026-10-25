@@ -13,7 +13,7 @@ import {
 import { ApiError } from '@smartsite/api-client';
 import type { UseQueryResult } from '@tanstack/react-query';
 import { useTranslation, translate } from '../../i18n';
-import { localizeMessage } from '../../i18n/messages';
+import { localizedError } from '../../i18n/messages';
 
 export const palette = {
   navy: '#0F1E36',
@@ -23,15 +23,26 @@ export const palette = {
   bg: '#F8FAFC',
 };
 
-export function errorMessage(error: unknown) {
+export function errorMessage(error: unknown, context: 'login' | 'session' = 'session') {
   if (error instanceof ApiError) {
+    if (error.code === 'network') return translate('auth.networkError');
+    if (error.code === 'timeout') return translate('common.requestTimeout');
+    if (error.code === 'cancelled') return translate('validation.loadCancelled');
     if (error.status === 403) return translate('auth.permissionDenied');
-    if (error.status === 401) return translate('auth.sessionExpired');
-    if (error.status === 409) return translate('auth.conflictError');
-    if (error.code === 'network' || error.code === 'timeout') return translate('auth.networkError');
+    if (error.status === 401)
+      return translate(context === 'login' ? 'auth.invalidCredentials' : 'auth.sessionExpired');
+    if (error.status === 429)
+      return error.retryAfterSeconds
+        ? translate('common.requestRateLimitDelay', { seconds: error.retryAfterSeconds })
+        : translate('common.requestRateLimit');
+    if (error.status === 404) return translate('common.requestMissing');
+    if (error.status === 409) return localizedError(error.message, 'auth.conflictError');
+    if (error.status === 400) return localizedError(error.message, 'common.requestValidation');
+    if (error.code === 'invalid-response' || (error.status !== undefined && error.status >= 500))
+      return translate('common.serviceUnavailable');
   }
   return error instanceof Error
-    ? localizeMessage(error.message)
+    ? localizedError(error.message)
     : translate('common.unexpectedError');
 }
 
@@ -159,11 +170,11 @@ export function Body({ children }: PropsWithChildren) {
   );
 }
 
-export function ErrorNotice({ error }: { error: unknown }) {
+export function ErrorNotice({ error, context }: { error: unknown; context?: 'login' | 'session' }) {
   useTranslation();
   return error ? (
     <Text accessibilityRole="alert" style={styles.error}>
-      {errorMessage(error)}
+      {errorMessage(error, context)}
     </Text>
   ) : null;
 }

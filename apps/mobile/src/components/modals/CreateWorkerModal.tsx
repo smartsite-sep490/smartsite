@@ -25,7 +25,7 @@ import type {
 import { healthCertificateExpiry } from '@smartsite/api-client';
 import { Attachments } from '../../features/shared/uploads';
 import { documentKinds } from '../../features/contractor/worker-documents';
-import { Choice, Field, Hint } from '../../features/shared/ui';
+import { Choice, Field, Hint, errorMessage } from '../../features/shared/ui';
 
 interface CreateWorkerModalProps {
   visible: boolean;
@@ -50,7 +50,7 @@ export function CreateWorkerModal({ visible, onClose, onSuccess }: CreateWorkerM
   const [pendingAccount, setPendingAccount] = useState<ContractorWorkerAccountResponse | null>(
     null,
   );
-  const [localError, setLocalError] = useState<string | null>(null);
+  const [localError, setLocalError] = useState<unknown>(null);
   const command = useCommand();
   const validateImage = async (file: NativeUploadFile) => {
     const result = await client.checkDocumentImageQuality(
@@ -126,7 +126,7 @@ export function CreateWorkerModal({ visible, onClose, onSuccess }: CreateWorkerM
       onSuccess?.();
       onClose();
     } catch (err) {
-      setLocalError(err instanceof Error ? err.message : t('common.unexpectedError'));
+      setLocalError(err);
     }
   };
 
@@ -305,12 +305,7 @@ export function CreateWorkerModal({ visible, onClose, onSuccess }: CreateWorkerM
             {/* Error Message */}
             {Boolean(localError || command.error) && (
               <View style={styles.errorBox}>
-                <Text style={styles.errorText}>
-                  {localError ??
-                    (command.error instanceof Error
-                      ? command.error.message
-                      : t('common.unexpectedError'))}
-                </Text>
+                <Text style={styles.errorText}>{errorMessage(localError ?? command.error)}</Text>
               </View>
             )}
 

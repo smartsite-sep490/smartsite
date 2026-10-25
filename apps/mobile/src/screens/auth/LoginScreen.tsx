@@ -90,7 +90,7 @@ export function LoginScreen({ onLogin, pending, error }: LoginScreenProps) {
 
           {/* Heading */}
           <Text style={styles.heading}>{t('auth.login')}</Text>
-          <ErrorNotice error={error} />
+          <ErrorNotice error={error} context="login" />
 
           {/* Input: Username */}
           <View style={styles.inputWrapper}>
