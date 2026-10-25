@@ -269,10 +269,18 @@ describe('localized PPE presentation keeps evidence and authority boundaries', (
     );
     const user = userEvent.setup();
     render(<View />);
-    await screen.findByText('Bạn không có quyền truy cập tài nguyên này.');
+    await waitFor(() =>
+      expect(
+        within(screen.getByRole('alert')).getByText('Bạn không có quyền truy cập tài nguyên này.'),
+      ).toBeTruthy(),
+    );
     expect(screen.queryByText('private-driver-diagnostic')).toBeNull();
     await switchToEnglishViaPopover(user);
-    await screen.findByText('You do not have permission to access this resource.');
+    expect(
+      within(screen.getByRole('alert')).getByText(
+        'You do not have permission to access this resource.',
+      ),
+    ).toBeTruthy();
     expect(screen.queryByText('private-driver-diagnostic')).toBeNull();
   });
 

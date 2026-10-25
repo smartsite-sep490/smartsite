@@ -504,4 +504,246 @@ describe('PpeMonitoringView 4-Source Wall Active Snapshot Binding (Audit Issue 1
     expect(screen.getByTestId('enlarge-camera-btn-cam-1')).not.toBeNull();
     expect(screen.getByTestId('tile-evidence-btn-cam-1')).not.toBeNull();
   });
+
+  it('restores keyboard focus and returns from enlarged single view to 4-source wall on Escape after closing open evidence dialog, with fallback when camera 5+ is absent from bounded wall', async () => {
+    const user = userEvent.setup();
+    const cam3 = { ...baseCamera, id: 'cam-3', code: 'CAM-03', name: 'Camera 03' };
+    const cam4 = { ...baseCamera, id: 'cam-4', code: 'CAM-04', name: 'Camera 04' };
+    const cam5 = { ...baseCamera, id: 'cam-5', code: 'CAM-05', name: 'Camera 05' };
+    vi.spyOn(SmartSiteManagementClient.prototype, 'listSites').mockResolvedValue({
+      items: [baseSite],
+      total: 1,
+    });
+    vi.spyOn(SmartSiteManagementClient.prototype, 'listPreviewCameras').mockResolvedValue({
+      items: [baseCamera, secondCamera, cam3, cam4, cam5],
+      total: 5,
+    });
+    for (const [id, code] of [
+      ['cam-1', 'CAM-01'],
+      ['cam-2', 'CAM-02'],
+      ['cam-3', 'CAM-03'],
+      ['cam-4', 'CAM-04'],
+      ['cam-5', 'CAM-05'],
+    ] as const) {
+      previewStore.byCameraId[id] = {
+        preview: makePreview(code, []),
+        status: 'LIVE',
+        sourceKind: 'LIVE',
+      };
+    }
+
+    render(
+      <QueryClientProvider client={queryClient}>
+        <PpeMonitoringView sharedSession={officerSessionAlpha} />
+      </QueryClientProvider>,
+    );
+
+    await screen.findByRole('option', { name: /Camera 01/i });
+    await user.click(screen.getByTestId('toggle-view-wall'));
+    await screen.findByTestId('four-source-wall-grid');
+
+    await user.click(screen.getByTestId('enlarge-camera-btn-cam-2'));
+
+    const backBtn = await screen.findByTestId('single-viewport-back-to-grid-btn');
+    await waitFor(() => {
+      expect(document.activeElement).toBe(backBtn);
+    });
+
+    // Open on-demand evidence dialog while in enlarged single view
+    await user.click(screen.getByTestId('viewport-evidence-details-btn'));
+    expect(screen.getByRole('dialog')).not.toBeNull();
+
+    // First Escape closes only the evidence dialog and keeps enlarged single view active
+    await user.keyboard('{Escape}');
+    expect(screen.queryByRole('dialog')).toBeNull();
+    expect(screen.getByTestId('single-camera-viewport')).not.toBeNull();
+
+    // Second Escape returns to the 4-source wall, preserves cam-2 selection, and restores focus to cam-2 enlarge button
+    await user.keyboard('{Escape}');
+    await screen.findByTestId('four-source-wall-grid');
+    expect(screen.getByTestId('focused-badge-cam-2')).not.toBeNull();
+    await waitFor(() => {
+      expect(document.activeElement).toBe(screen.getByTestId('enlarge-camera-btn-cam-2'));
+    });
+
+    // Enlarge again, switch to cam-5 (absent from bounded 4-tile wall), and return to wall -> focuses stable authorized fallback (cam-1 enlarge button)
+    await user.click(screen.getByTestId('enlarge-camera-btn-cam-2'));
+    await screen.findByTestId('single-camera-viewport');
+    await user.click(screen.getByTestId('camera-chip-cam-5'));
+    await user.keyboard('{Escape}');
+    await screen.findByTestId('four-source-wall-grid');
+    expect(screen.queryByTestId('enlarge-camera-btn-cam-5')).toBeNull();
+    await waitFor(() => {
+      expect(document.activeElement).toBe(screen.getByTestId('enlarge-camera-btn-cam-1'));
+    });
+  });
+
+  it('opens optional monitor guided tour on demand in single view with Enlarge/Fullscreen anchor available, steps through authorized anchors, and closes on scope rotation', async () => {
+    const user = userEvent.setup();
+    window.localStorage.clear();
+    vi.spyOn(SmartSiteManagementClient.prototype, 'listSites').mockResolvedValue({
+      items: [baseSite],
+      total: 1,
+    });
+    vi.spyOn(SmartSiteManagementClient.prototype, 'listPreviewCameras').mockResolvedValue({
+      items: [baseCamera, secondCamera],
+      total: 2,
+    });
+
+    const { rerender } = render(
+      <QueryClientProvider client={queryClient}>
+        <PpeMonitoringView sharedSession={officerSessionAlpha} />
+      </QueryClientProvider>,
+    );
+
+    await screen.findByRole('option', { name: /Camera 01/i });
+    expect(screen.getByTestId('single-camera-viewport')).not.toBeNull();
+
+    const trigger = screen.getByTestId('safety-task-tour-trigger');
+    expect(screen.queryByTestId('safety-task-tour')).toBeNull();
+
+    await user.click(trigger);
+    const tour = screen.getByTestId('safety-task-tour');
+    expect(tour.getAttribute('data-tour-step')).toBe('monitor-scope');
+    // Safety Officer without SITE_MANAGER assignment has 4 monitor steps even in single view (Enlarge/Fullscreen anchor is toggle-fullscreen-btn)
+    expect(screen.getByText('Step 1 of 4')).not.toBeNull();
+    expect(screen.getByTestId('safety-task-tour-highlight')).not.toBeNull();
+
+    await user.click(screen.getByTestId('safety-task-tour-next'));
+    await user.click(screen.getByTestId('safety-task-tour-next'));
+    expect(screen.getByTestId('safety-task-tour').getAttribute('data-tour-step')).toBe(
+      'monitor-enlarge',
+    );
+    expect(
+      screen.getByTestId('toggle-fullscreen-btn').getAttribute('data-tour-active-anchor'),
+    ).toBe('true');
+
+    // Scope rotation immediately closes the tour without leaking stale steps
+    rerender(
+      <QueryClientProvider client={queryClient}>
+        <PpeMonitoringView
+          sharedSession={{
+            ...officerSessionAlpha,
+            sessionScope: 'scope-rotated-beta',
+          }}
+        />
+      </QueryClientProvider>,
+    );
+
+    expect(screen.queryByTestId('safety-task-tour')).toBeNull();
+  });
+
+  it('keeps a metadata failure distinct from an empty or inaccessible camera scope', async () => {
+    vi.mocked(SmartSiteManagementClient.prototype.listPreviewCameras).mockRejectedValue(
+      new Error('private-upstream-detail'),
+    );
+    render(
+      <QueryClientProvider client={queryClient}>
+        <PpeMonitoringView sharedSession={officerSessionAlpha} />
+      </QueryClientProvider>,
+    );
+    await waitFor(() => expect(screen.getAllByRole('alert').length).toBeGreaterThan(0));
+    const viewport = screen.getByTestId('single-camera-viewport');
+    expect(viewport.getAttribute('role')).toBe('status');
+    expect(viewport.textContent).not.toContain('contact an administrator');
+    expect(viewport.textContent).not.toContain('private-upstream-detail');
+    expect(viewport.className).not.toContain('aspect-video');
+  });
+
+  it('renders a compact no-selected-camera state without the huge unavailable camera canvas or duplicate back-to-grid controls when camera scope is empty or denied', async () => {
+    const siteManagerOnlySession: SharedSession = {
+      accessToken: 'token-site-mgr-only',
+      sessionScope: 'scope-site-mgr-only',
+      user: {
+        id: 'mgr-only-1',
+        displayName: 'Site Manager Alpha',
+        roleAssignments: [{ role: 'SITE_MANAGER', siteId: 'site-alpha' }],
+      },
+    };
+
+    const { rerender } = render(
+      <QueryClientProvider client={queryClient}>
+        <PpeMonitoringView sharedSession={siteManagerOnlySession} />
+      </QueryClientProvider>,
+    );
+
+    await screen.findByRole('option', { name: /Alpha Construction Site/i });
+
+    const deniedViewport = screen.getByTestId('single-camera-viewport');
+    expect(deniedViewport.className).not.toContain('aspect-video');
+    expect(deniedViewport.className).not.toContain('min-h-[320px]');
+    expect(deniedViewport.textContent).toContain('No camera selected');
+    expect(deniedViewport.textContent).toContain(
+      'This account does not have camera monitoring access to this site.',
+    );
+    expect(screen.queryByText('Camera Snapshot Unavailable')).toBeNull();
+    expect(screen.queryByTestId('back-to-grid-btn')).toBeNull();
+    expect(screen.queryByTestId('single-viewport-back-to-grid-btn')).toBeNull();
+
+    // When an authorized Safety Officer has an active camera, only one Back to grid control exists (inside the viewport header)
+    previewStore.byCameraId['cam-1'] = {
+      preview: makePreview('CAM-01', []),
+      status: 'LIVE',
+      sourceKind: 'LIVE',
+    };
+    rerender(
+      <QueryClientProvider client={queryClient}>
+        <PpeMonitoringView sharedSession={officerSessionAlpha} />
+      </QueryClientProvider>,
+    );
+
+    await screen.findByRole('option', { name: /Camera 01/i });
+    const activeViewport = screen.getByTestId('single-camera-viewport');
+    expect(activeViewport.className).toContain('aspect-video');
+    expect(screen.queryByTestId('back-to-grid-btn')).toBeNull();
+    expect(screen.getAllByRole('button', { name: 'Back to grid' })).toHaveLength(1);
+    expect(screen.getByTestId('single-viewport-back-to-grid-btn')).not.toBeNull();
+  });
+
+  it('shows SOURCE: CONNECTING and CONNECTING status pill in single-viewport-header while AI-analyzed snapshot is pending, before transitioning to UNAVAILABLE on failure', async () => {
+    previewStore.byCameraId['cam-1'] = {
+      preview: null,
+      status: 'CONNECTING',
+      sourceKind: null,
+    };
+
+    const { rerender } = render(
+      <QueryClientProvider client={queryClient}>
+        <PpeMonitoringView sharedSession={officerSessionAlpha} />
+      </QueryClientProvider>,
+    );
+
+    await screen.findByRole('option', { name: /Camera 01/i });
+
+    const viewport = screen.getByTestId('single-camera-viewport');
+    const viewportHeader = within(screen.getByTestId('single-viewport-header'));
+
+    expect(viewport.textContent).toContain('Connecting to camera snapshot (500ms)...');
+    expect(viewport.textContent).toContain('Authorized site and camera scope verified.');
+    expect(screen.queryByText('Camera Snapshot Unavailable')).toBeNull();
+
+    expect(viewportHeader.getByTestId('factual-source-label').textContent).toBe(
+      'SOURCE: CONNECTING',
+    );
+    expect(viewportHeader.getByText('CONNECTING')).not.toBeNull();
+    expect(viewportHeader.queryByText('UNAVAILABLE')).toBeNull();
+
+    previewStore.byCameraId['cam-1'] = {
+      preview: null,
+      status: 'UNAVAILABLE',
+      sourceKind: null,
+    };
+
+    rerender(
+      <QueryClientProvider client={queryClient}>
+        <PpeMonitoringView sharedSession={officerSessionAlpha} />
+      </QueryClientProvider>,
+    );
+
+    expect(viewportHeader.getByTestId('factual-source-label').textContent).toBe(
+      'SOURCE: UNAVAILABLE',
+    );
+    expect(viewportHeader.getByText('UNAVAILABLE')).not.toBeNull();
+    expect(screen.getByText('Camera Snapshot Unavailable')).not.toBeNull();
+  });
 });

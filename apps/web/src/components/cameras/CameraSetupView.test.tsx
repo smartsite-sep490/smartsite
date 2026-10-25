@@ -14,6 +14,7 @@ const mocks = vi.hoisted(() => ({
   listPreviewCameras: vi.fn(),
   client: {} as Record<string, unknown>,
   dialog: null as null | { onClose: () => void; onUnauthorized?: () => void },
+  onSelectRegionCamera: null as null | ((cameraId: string) => void),
 }));
 vi.mock('../../features/auth/auth-session', () => ({ useManagementClient: () => mocks.client }));
 vi.mock('./CameraRegistrationDialog', () => ({
@@ -28,14 +29,19 @@ vi.mock('./CameraManagementDialog', () => ({
 vi.mock('../ppe/ZonePpeSetupDialog', () => ({
   ZonePpeSetupDialog: (p: {
     section?: string;
+    initialCameraId?: string;
+    onSelectCamera?: (cameraId: string) => void;
     canManageZones: boolean;
     canManageRegions: boolean;
-  }) => (
-    <div role="dialog">
-      Section {p.section ?? 'all'} Zones {String(p.canManageZones)} Regions{' '}
-      {String(p.canManageRegions)}
-    </div>
-  ),
+  }) => {
+    mocks.onSelectRegionCamera = p.onSelectCamera ?? null;
+    return (
+      <div role="dialog" data-camera-id={p.initialCameraId ?? ''}>
+        Section {p.section ?? 'all'} Zones {String(p.canManageZones)} Regions{' '}
+        {String(p.canManageRegions)}
+      </div>
+    );
+  },
 }));
 
 const site = { id: 'site-1', code: 'S1', name: 'North Site', createdAt: '2026-10-16T00:00:00Z' };
@@ -75,6 +81,7 @@ function mount(session: SharedSession | null = manager(), entry = '/camera-setup
   return { cache, rerender: (value: SharedSession | null) => view.rerender(tree(value)) };
 }
 beforeEach(() => {
+  window.localStorage.clear();
   changeUiLanguage('en');
   mocks.listSites.mockReset().mockResolvedValue({ items: [site], total: 1 });
   mocks.listCameras.mockReset().mockResolvedValue({ items: [camera], total: 1 });
@@ -119,6 +126,7 @@ it('returns to monitoring with only a validated Site/camera context', async () =
 });
 afterEach(() => {
   cleanup();
+  window.localStorage.clear();
   vi.restoreAllMocks();
 });
 
@@ -317,5 +325,202 @@ it('shows current Main camera metadata to Admin without granting configuration w
   expect(screen.queryByRole('button', { name: 'Register camera' })).toBeNull();
   expect(screen.queryByRole('button', { name: 'Manage Gate camera' })).toBeNull();
   expect(screen.queryByRole('button', { name: 'Configure PPE by Zone' })).toBeNull();
+  expect(
+    screen.getByText(
+      'Read-only catalog scope: only the assigned Site Manager can register cameras, change status, or edit Zone and region policies.',
+    ),
+  ).toBeTruthy();
   expect(mocks.listPreviewCameras).not.toHaveBeenCalled();
+});
+
+it('opens direct edit context for existing active and inactive cameras without forcing re-registration', async () => {
+  const activeCamera = {
+    ...camera,
+    id: 'cam-2',
+    code: 'C2',
+    name: 'Yard camera',
+    externalId: 'private-yard-alias',
+    status: 'ACTIVE' as const,
+    configurationVersion: 4,
+  };
+  const secondActiveCamera = {
+    ...camera,
+    id: 'cam-3',
+    code: 'C3',
+    name: 'Perimeter camera',
+    externalId: 'private-perimeter-alias',
+    status: 'ACTIVE' as const,
+    configurationVersion: 6,
+  };
+  mocks.listCameras.mockResolvedValue({
+    items: [camera, activeCamera, secondActiveCamera],
+    total: 3,
+  });
+  mount(manager());
+  await screen.findByText(activeCamera.name);
+  expect(screen.getByText('2 enabled · 1 disabled')).toBeTruthy();
+  expect(screen.queryByText(/private-alias|private-yard-alias|private-perimeter-alias/)).toBeNull();
+  expect(screen.queryByText(/worker applied|camera moved/i)).toBeNull();
+
+  // Clicking an existing INACTIVE camera title opens Manage directly so it can be enabled in place
+  fireEvent.click(screen.getByRole('button', { name: camera.name }));
+  expect(screen.getByRole('dialog').textContent).toBe('Manage camera');
+  act(() => mocks.dialog?.onClose());
+
+  // Selecting the existing ACTIVE camera updates the context bar and opens region setup directly
+  fireEvent.click(screen.getByRole('button', { name: 'Select C2' }));
+  expect(screen.getByText('C2 · Yard camera')).toBeTruthy();
+  expect(
+    screen.getByText('Saved config version v4; worker application status unavailable.'),
+  ).toBeTruthy();
+  fireEvent.click(screen.getByRole('button', { name: 'Edit observation regions (C2)' }));
+  const regionDialog = screen.getByRole('dialog');
+  expect(regionDialog.textContent).toBe('Section regions Zones true Regions true');
+  expect(regionDialog.getAttribute('data-camera-id')).toBe('cam-2');
+
+  // Switching camera inside the region dialog syncs requestedCameraId and updates the catalog's selected camera context bar
+  act(() => {
+    mocks.onSelectRegionCamera?.('cam-3');
+  });
+  expect(screen.getByText('C3 · Perimeter camera')).toBeTruthy();
+  expect(
+    screen.getByText('Saved config version v6; worker application status unavailable.'),
+  ).toBeTruthy();
+  expect(screen.getByRole('button', { name: 'Selected C3' }).getAttribute('aria-pressed')).toBe(
+    'true',
+  );
+});
+
+it('distinguishes the four setup stages, per-Zone policy scope, and revision honesty in EN and VI', async () => {
+  mount(manager());
+  await screen.findByText(camera.name);
+  expect(screen.getByText('Stage 1 · Per-Zone PPE Policy')).toBeTruthy();
+  expect(screen.getByText('Stage 2 · Camera & Source ID')).toBeTruthy();
+  expect(screen.getByText('Stage 3 · Reference Image')).toBeTruthy();
+  expect(screen.getByText('Stage 4 · Observation Regions')).toBeTruthy();
+  expect(
+    screen.getByText('Saved config version v1; worker application status unavailable.'),
+  ).toBeTruthy();
+
+  await act(async () => changeUiLanguage('vi'));
+  expect(screen.getByText('Bước 1 · Chính sách PPE theo khu vực')).toBeTruthy();
+  expect(screen.getByText('Bước 4 · Vùng quan sát')).toBeTruthy();
+  expect(
+    screen.getByText('Phiên bản cấu hình đã lưu v1; chưa có trạng thái áp dụng của worker.'),
+  ).toBeTruthy();
+});
+
+it('provides an optional setup tour bound to real stage elements, skips unauthorized steps dynamically, and resets on Site or credential change', async () => {
+  const secondSite = {
+    id: 'site-2',
+    code: 'S2',
+    name: 'South Site',
+    createdAt: site.createdAt,
+  };
+  mocks.listSites.mockResolvedValue({ items: [site, secondSite], total: 2 });
+  mocks.listCameras.mockImplementation((_token, siteId: string) =>
+    Promise.resolve({ items: [{ ...camera, siteId }], total: 1 }),
+  );
+
+  const { rerender } = mount(manager(site.id));
+  await screen.findByText(camera.name);
+
+  const trigger = screen.getByTestId('safety-task-tour-trigger');
+  expect(trigger.textContent).toBe('Guided help');
+  expect(screen.queryByTestId('safety-task-tour')).toBeNull();
+
+  // Open tour as scoped Site Manager on assigned site-1: all 4 setup steps are available
+  fireEvent.click(trigger);
+  expect(screen.getByTestId('safety-task-tour').getAttribute('data-tour-step')).toBe(
+    'camera-setup-scope',
+  );
+  expect(screen.getByText('Step 1 of 4')).toBeTruthy();
+  expect(
+    document
+      .querySelector('[data-tour-anchor="camera-setup-scope"]')
+      ?.getAttribute('data-tour-active-anchor'),
+  ).toBe('true');
+
+  // Step 2: Register or Manage Camera
+  fireEvent.click(screen.getByTestId('safety-task-tour-next'));
+  expect(screen.getByTestId('safety-task-tour').getAttribute('data-tour-step')).toBe(
+    'camera-setup-source',
+  );
+  expect(
+    screen.getByRole('button', { name: 'Register camera' }).getAttribute('data-tour-active-anchor'),
+  ).toBe('true');
+  expect(screen.getByText(/does not confirm a live connection/i)).toBeTruthy();
+
+  // Step 3: Zone PPE Policies & Camera Regions
+  fireEvent.click(screen.getByTestId('safety-task-tour-next'));
+  expect(screen.getByTestId('safety-task-tour').getAttribute('data-tour-step')).toBe(
+    'camera-setup-zone-draw',
+  );
+  expect(
+    screen
+      .getByRole('button', { name: 'Configure PPE by Zone' })
+      .getAttribute('data-tour-active-anchor'),
+  ).toBe('true');
+  expect(screen.getByText(/Read-only access does not allow editing/i)).toBeTruthy();
+
+  // Step 4: Saved Configuration & Status (plain language copy in EN & VI)
+  fireEvent.click(screen.getByTestId('safety-task-tour-next'));
+  expect(screen.getByTestId('safety-task-tour').getAttribute('data-tour-step')).toBe(
+    'camera-setup-save',
+  );
+  expect(
+    document
+      .querySelector('[data-tour-anchor="camera-setup-save"]')
+      ?.getAttribute('data-tour-active-anchor'),
+  ).toBe('true');
+  expect(
+    screen.getByText(/does not confirm changes are applied or that the camera is live/i),
+  ).toBeTruthy();
+  expect(screen.queryByRole('dialog')).toBeNull();
+  expect(mocks.listPreviewCameras).not.toHaveBeenCalled();
+
+  await act(async () => changeUiLanguage('vi'));
+  expect(screen.getByText('Cấu hình Đã lưu & Trạng thái')).toBeTruthy();
+  expect(
+    screen.getByText(
+      /không xác nhận thay đổi đã được áp dụng hoặc camera đang hoạt động trực tiếp/i,
+    ),
+  ).toBeTruthy();
+  await act(async () => changeUiLanguage('en'));
+
+  // Switching to unassigned site-2 closes the open tour and dynamically skips write/camera steps
+  fireEvent.change(screen.getByRole('combobox', { name: 'Site' }), {
+    target: { value: secondSite.id },
+  });
+  expect(screen.queryByTestId('safety-task-tour')).toBeNull();
+  expect(screen.queryByRole('button', { name: 'Register camera' })).toBeNull();
+  expect(screen.queryByRole('button', { name: 'Configure PPE by Zone' })).toBeNull();
+
+  fireEvent.click(screen.getByTestId('safety-task-tour-trigger'));
+  expect(screen.getByText('Step 1 of 1')).toBeTruthy();
+  expect(screen.getByTestId('safety-task-tour').getAttribute('data-tour-step')).toBe(
+    'camera-setup-scope',
+  );
+
+  // Switching session to read-only Admin resets the tour and omits the write-only source step (3 steps)
+  rerender(admin);
+  await screen.findByText(camera.name);
+  expect(screen.queryByTestId('safety-task-tour')).toBeNull();
+
+  fireEvent.click(screen.getByTestId('safety-task-tour-trigger'));
+  expect(screen.getByText('Step 1 of 3')).toBeTruthy();
+  fireEvent.click(screen.getByTestId('safety-task-tour-next'));
+  expect(screen.getByTestId('safety-task-tour').getAttribute('data-tour-step')).toBe(
+    'camera-setup-zone-draw',
+  );
+  expect(
+    screen
+      .getByRole('button', { name: 'View area policies' })
+      .getAttribute('data-tour-active-anchor'),
+  ).toBe('true');
+
+  // Rotating accessToken closes the active tour immediately
+  rerender({ ...admin, accessToken: 'rotated-admin-token' });
+  await screen.findByText(camera.name);
+  expect(screen.queryByTestId('safety-task-tour')).toBeNull();
 });

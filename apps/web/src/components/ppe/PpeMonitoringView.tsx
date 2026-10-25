@@ -10,6 +10,7 @@ import {
   NEGATIVE_PPE_OBJECT_CLASSES,
 } from '../cameras/realtimePreview';
 import { useCallback, useEffect, useId, useLayoutEffect, useMemo, useRef, useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import {
   useInfiniteQuery,
   useQuery,
@@ -39,7 +40,9 @@ import { CameraManagementDialog } from '../cameras/CameraManagementDialog';
 import { PpeDialog } from './PpeDialog';
 import { Mf05DemoControlPanel } from './Mf05DemoControlPanel';
 import { FourSourceWall, type ScopedWallSnapshot } from './FourSourceWall';
-import { PpeResultVerdict } from './PpeResultVerdict';
+import { PpeResultVerdict, RECORDED_RAW_UNAVAILABLE_AI_KEY } from './PpeResultVerdict';
+import { SafetyTaskTour } from '../safety/SafetyTaskTour';
+import { MONITOR_TOUR_STEPS } from '../safety/safetyTaskTourModel';
 import { useLocale, type TranslationKey } from '../../i18n/ppe-locale';
 
 function isAuthOrScopeError(err: unknown): boolean {
@@ -201,7 +204,7 @@ import {
 } from '../cameras/monitoringUtils';
 import { useAuth, useManagementClient } from '../../features/auth/auth-session';
 import type { SharedSession } from '../../types/shared-session';
-import { translate as tr } from '../../i18n/runtime';
+import { SAFETY_NAMESPACE, translate as tr } from '../../i18n/runtime';
 import '../cameras/camera-setup-catalog';
 
 const authIdentities = new WeakMap<QueryClient, { token: string | null; id: number }>();
@@ -297,6 +300,7 @@ export function PpeMonitoringView({
 }: PpeMonitoringViewProps = {}) {
   const auth = useAuth();
   const { t } = useLocale();
+  const { t: tSafety } = useTranslation(SAFETY_NAMESPACE);
   const diagnosticsContentId = useId();
   const queryClient = useQueryClient();
   const isControlled = sharedSession !== undefined;
@@ -364,6 +368,12 @@ export function PpeMonitoringView({
   const fullscreenGenerationRef = useRef(0);
   const suppressFullscreenRef = useRef(false);
   const isMountedRef = useRef(true);
+  const enteredSingleFromWallRef = useRef(false);
+  const pendingFocusTargetRef = useRef<
+    | { kind: 'single-enlarged' }
+    | { kind: 'wall-tile'; cameraId: string; button: 'enlarge' | 'focus' }
+    | null
+  >(null);
   const [requestedSiteId, setSelectedSiteId] = useState<string>(initialSelection?.siteId ?? '');
   const [requestedCameraId, setSelectedCameraId] = useState<string>(
     initialSelection?.cameraId ?? '',
@@ -402,6 +412,8 @@ export function PpeMonitoringView({
   }
   useLayoutEffect(() => {
     expiredScopeRef.current = null;
+    enteredSingleFromWallRef.current = false;
+    pendingFocusTargetRef.current = null;
   }, [currentScopeToken]);
 
   // 1. Load authorized sites for user - Explicit Accumulative Pagination
@@ -719,6 +731,8 @@ export function PpeMonitoringView({
   }
   useLayoutEffect(() => {
     activeSiteIdRef.current = selectedSiteId;
+    enteredSingleFromWallRef.current = false;
+    pendingFocusTargetRef.current = null;
   }, [selectedSiteId]);
 
   const zonePpeCapabilities = useMemo(
@@ -995,15 +1009,18 @@ export function PpeMonitoringView({
   const userSelectedMode =
     requestedMediaMode?.scope === mediaScope ? requestedMediaMode.mode : defaultModeForCamera;
 
-  const effectiveStreamViewMode: 'live-raw' | 'recorded-raw' | 'ai-analyzed' = isSelectedCameraLive
-    ? userSelectedMode === 'live-raw' || userSelectedMode === 'ai-analyzed'
-      ? userSelectedMode
-      : 'live-raw'
-    : isSelectedCameraRecorded
-      ? userSelectedMode === 'recorded-raw' || userSelectedMode === 'ai-analyzed'
-        ? userSelectedMode
-        : 'recorded-raw'
-      : 'ai-analyzed';
+  const effectiveStreamViewMode: 'live-raw' | 'recorded-raw' | 'ai-analyzed' =
+    viewMode === 'wall'
+      ? 'ai-analyzed'
+      : isSelectedCameraLive
+        ? userSelectedMode === 'live-raw' || userSelectedMode === 'ai-analyzed'
+          ? userSelectedMode
+          : 'live-raw'
+        : isSelectedCameraRecorded
+          ? userSelectedMode === 'recorded-raw' || userSelectedMode === 'ai-analyzed'
+            ? userSelectedMode
+            : 'recorded-raw'
+          : 'ai-analyzed';
 
   const setStreamViewMode = (mode: 'live-raw' | 'recorded-raw' | 'ai-analyzed') =>
     setRequestedMediaMode({ scope: mediaScope, mode });
@@ -1204,7 +1221,9 @@ export function PpeMonitoringView({
           ? 'REPLAY'
           : activeStatus === 'LIVE'
             ? 'LIVE'
-            : 'UNAVAILABLE';
+            : activeStatus === 'CONNECTING'
+              ? 'CONNECTING'
+              : 'UNAVAILABLE';
 
   const displayedSourceBadgeClass =
     displayedSourceLabel === 'LIVE'
@@ -1536,6 +1555,8 @@ export function PpeMonitoringView({
   const handleEnlargeCamera = useCallback(
     (cameraId: string) => {
       void exitBrowserFullscreenIfActive();
+      enteredSingleFromWallRef.current = true;
+      pendingFocusTargetRef.current = { kind: 'single-enlarged' };
       setSelectedCameraId(cameraId);
       setViewMode('single');
       setFullscreenError(null);
@@ -1559,11 +1580,88 @@ export function PpeMonitoringView({
       setIsEvidenceOpen(true);
     });
   }, [exitBrowserFullscreenIfActive, t]);
+
   const handleReturnToWall = useCallback(() => {
     void exitBrowserFullscreenIfActive();
+    if (viewMode === 'single') {
+      pendingFocusTargetRef.current = {
+        kind: 'wall-tile',
+        cameraId: selectedCameraId,
+        button: enteredSingleFromWallRef.current ? 'enlarge' : 'focus',
+      };
+    }
+    enteredSingleFromWallRef.current = false;
     setFullscreenError(null);
     setViewMode('wall');
-  }, [exitBrowserFullscreenIfActive]);
+  }, [exitBrowserFullscreenIfActive, selectedCameraId, viewMode]);
+
+  useEffect(() => {
+    const pending = pendingFocusTargetRef.current;
+    if (!pending) return;
+    if (document.querySelector('[role="dialog"], [aria-modal="true"]')) {
+      pendingFocusTargetRef.current = null;
+      return;
+    }
+    if (pending.kind === 'single-enlarged' && viewMode === 'single') {
+      pendingFocusTargetRef.current = null;
+      const btn =
+        document.querySelector<HTMLElement>('[data-testid="single-viewport-back-to-grid-btn"]') ??
+        document.querySelector<HTMLElement>('[data-testid="back-to-grid-btn"]');
+      if (btn && btn.isConnected) btn.focus();
+    } else if (pending.kind === 'wall-tile' && viewMode === 'wall') {
+      pendingFocusTargetRef.current = null;
+      const preferred = pending.cameraId
+        ? pending.button === 'enlarge'
+          ? `[data-testid="enlarge-camera-btn-${pending.cameraId}"]`
+          : `[data-testid="focus-btn-${pending.cameraId}"]`
+        : '';
+      const sameTileFallback = pending.cameraId
+        ? `[data-testid="focus-btn-${pending.cameraId}"]`
+        : '';
+      const firstWallTileFallback =
+        pending.button === 'enlarge'
+          ? '[data-testid^="enlarge-camera-btn-"]'
+          : '[data-testid^="focus-btn-"]';
+      const btn =
+        (preferred ? document.querySelector<HTMLElement>(preferred) : null) ??
+        (sameTileFallback ? document.querySelector<HTMLElement>(sameTileFallback) : null) ??
+        document.querySelector<HTMLElement>(firstWallTileFallback) ??
+        document.querySelector<HTMLElement>('[data-testid^="focus-btn-"]') ??
+        document.querySelector<HTMLElement>('[data-testid="toggle-view-wall"]');
+      if (btn && btn.isConnected) btn.focus();
+    }
+  }, [viewMode, selectedCameraId]);
+
+  useEffect(() => {
+    if (viewMode !== 'single') return;
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key !== 'Escape' || event.defaultPrevented) return;
+      if (!enteredSingleFromWallRef.current) return;
+      if (document.fullscreenElement || pendingFullscreenRef.current) return;
+      if (
+        isEvidenceOpen ||
+        isZonePpeOpen ||
+        isRegisterCameraOpen ||
+        isManageCameraOpen ||
+        selectedReview !== null ||
+        document.querySelector('[role="dialog"], [data-testid="safety-task-tour"]')
+      ) {
+        return;
+      }
+      event.preventDefault();
+      handleReturnToWall();
+    };
+    window.addEventListener('keydown', onKeyDown);
+    return () => window.removeEventListener('keydown', onKeyDown);
+  }, [
+    viewMode,
+    isEvidenceOpen,
+    isZonePpeOpen,
+    isRegisterCameraOpen,
+    isManageCameraOpen,
+    selectedReview,
+    handleReturnToWall,
+  ]);
 
   const openReviewFromDetection = () => {
     if (!testDetection) return;
@@ -1617,6 +1715,15 @@ export function PpeMonitoringView({
         <h1 className="text-xl font-bold tracking-tight text-slate-900">{t('ppe.header.title')}</h1>
 
         <div className="flex items-center gap-2.5">
+          <SafetyTaskTour
+            taskId="monitor"
+            userId={effectiveUser?.id ?? null}
+            scopeKey={`${currentScopeToken}:${selectedSiteId}`}
+            isAuthorized={Boolean(
+              token && sessionScope && (!isControlled || sharedSession !== null),
+            )}
+            steps={MONITOR_TOUR_STEPS}
+          />
           <div className="flex items-center gap-2 px-3 py-1 rounded-full border border-slate-200/80 bg-white text-xs shadow-xs">
             <span
               className={`w-2 h-2 rounded-full ${
@@ -1704,6 +1811,7 @@ export function PpeMonitoringView({
       >
         <section
           aria-label={t('ppe.layout.monitoringScope')}
+          data-tour-anchor="monitor-scope"
           className="rounded-2xl border border-slate-200/90 bg-white px-4 py-3.5 shadow-xs flex flex-col justify-between gap-2.5 min-w-0 w-full max-w-full"
         >
           <div className="flex items-center justify-between gap-2 min-w-0">
@@ -2010,6 +2118,7 @@ export function PpeMonitoringView({
           (isGlobalAdmin || canOpenZonePpe || canRegisterCamera || canManageCamera) && (
             <section
               aria-label={t('ppe.layout.configuration')}
+              data-tour-anchor="monitor-setup"
               className="rounded-2xl border border-slate-200/80 bg-[#F8FAFC] px-4 py-3.5 shadow-xs flex flex-col justify-start self-start gap-2.5 min-w-0 w-full max-w-full"
             >
               <div className="flex items-center justify-between gap-2 min-w-0">
@@ -2035,6 +2144,9 @@ export function PpeMonitoringView({
         ) : (
           <section
             aria-label={t('ppe.layout.configuration')}
+            data-tour-anchor={
+              canOpenZonePpe || canRegisterCamera || canManageCamera ? 'monitor-setup' : undefined
+            }
             className={
               canOpenZonePpe || canRegisterCamera || canManageCamera || registrationFeedback
                 ? 'rounded-2xl border border-slate-200/80 bg-[#F8FAFC] px-4 py-3.5 shadow-xs flex flex-col justify-start self-start gap-2.5 min-w-0 w-full max-w-full'
@@ -2134,12 +2246,14 @@ export function PpeMonitoringView({
             className="flex items-center rounded-xl border border-slate-200/90 bg-[#F1F5F9] p-0.5 flex-shrink-0"
             role="group"
             aria-label={t('ppe.viewMode.groupAria')}
+            data-tour-anchor="monitor-view-mode"
           >
             <button
               type="button"
               data-testid="toggle-view-single"
               onClick={() => {
                 void exitBrowserFullscreenIfActive();
+                enteredSingleFromWallRef.current = false;
                 setFullscreenError(null);
                 setViewMode('single');
               }}
@@ -2168,18 +2282,6 @@ export function PpeMonitoringView({
               <span>{t('ppe.viewMode.wall')}</span>
             </button>
           </div>
-
-          {viewMode === 'single' && (
-            <button
-              type="button"
-              data-testid="back-to-grid-btn"
-              onClick={handleReturnToWall}
-              className="px-3 py-2 rounded-lg border border-slate-200 bg-slate-50 hover:bg-slate-100 text-xs font-semibold text-slate-700 hover:text-slate-900 transition-colors flex items-center gap-1.5 shrink-0 cursor-pointer focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-slate-600"
-            >
-              <IconGrid className="w-3.5 h-3.5" />
-              <span>{t('ppe.toolbar.backToGridBtn')}</span>
-            </button>
-          )}
 
           {/* Inline quick camera chips in Single Focus mode */}
           {visibleAuthorizedCameras.length > 0 && viewMode === 'single' && (
@@ -2244,6 +2346,11 @@ export function PpeMonitoringView({
             <button
               type="button"
               data-testid="wall-fullscreen-btn"
+              data-tour-anchor={
+                !previewCamerasQuery.data?.items.some((camera) => camera.status === 'ACTIVE')
+                  ? 'monitor-enlarge'
+                  : undefined
+              }
               aria-pressed={isBrowserFullscreen}
               onClick={() => void toggleBrowserFullscreen()}
               className="flex items-center gap-1.5 px-3 py-2 rounded-lg border border-slate-200 bg-white hover:bg-slate-50 text-xs font-semibold text-slate-800 transition-colors cursor-pointer shadow-xs focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-slate-900"
@@ -2258,6 +2365,7 @@ export function PpeMonitoringView({
           <button
             type="button"
             data-testid="open-evidence-details-btn"
+            data-tour-anchor="monitor-evidence"
             aria-haspopup="dialog"
             aria-expanded={isEvidenceOpen}
             onClick={openEvidenceDetails}
@@ -2362,6 +2470,41 @@ export function PpeMonitoringView({
               onTileUnmount={handleTileUnmount}
               isApplying={isApplying}
             />
+          </div>
+        ) : !selectedCamera && !preview ? (
+          <div
+            ref={singleViewportRef}
+            data-testid="single-camera-viewport"
+            role="status"
+            aria-live="polite"
+            className="rounded-2xl border border-slate-200/80 bg-white p-8 text-center space-y-2 shadow-sm w-full min-w-0"
+          >
+            <h3 className="text-sm font-bold text-slate-800">
+              {isCameraSettledEmpty ? t('ppe.wall.emptyTitle') : t('ppe.context.noCameraSelected')}
+            </h3>
+            <p className="text-xs text-slate-500">
+              {isControlled && sharedSession === null
+                ? t('ppe.sessionExpired.description')
+                : isCameraViewingRestricted
+                  ? t('ppe.scope.noCameraMonitoringAccess')
+                  : isSiteSettledEmpty
+                    ? t('ppe.empty.noSites')
+                    : isCameraSettledEmpty
+                      ? hasNextCameraPage
+                        ? t('ppe.empty.noCamerasLoadedYet')
+                        : t('ppe.wall.emptyDesc')
+                      : isSitesInitialLoading
+                        ? t('ppe.scope.loadingSites')
+                        : isCamerasInitialLoading
+                          ? t('ppe.scope.loadingCameras')
+                          : sitesError
+                            ? getSafePublicMetadataErrorMessage(sitesError, 'site', t)
+                            : camerasError
+                              ? getSafePublicMetadataErrorMessage(camerasError, 'camera', t)
+                              : isCamerasRefreshing
+                                ? t('ppe.scope.refreshingCameras')
+                                : t('ppe.context.noCameraSelected')}
+            </p>
           </div>
         ) : (
           <div
@@ -2695,6 +2838,7 @@ export function PpeMonitoringView({
                 <button
                   type="button"
                   data-testid="toggle-fullscreen-btn"
+                  data-tour-anchor="monitor-enlarge"
                   aria-pressed={isBrowserFullscreen}
                   onClick={() => void toggleBrowserFullscreen()}
                   className="px-3 py-2 rounded-lg bg-white/15 hover:bg-white/25 text-white text-xs font-semibold transition-colors flex items-center gap-1.5 cursor-pointer focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white"
@@ -3041,7 +3185,9 @@ export function PpeMonitoringView({
                           <p className="mt-1 text-xs text-slate-500">
                             {effectiveStreamViewMode === 'live-raw'
                               ? t('ppe.check.unavailableRawDesc')
-                              : t('ppe.check.unavailableDefaultDesc')}
+                              : effectiveStreamViewMode === 'recorded-raw'
+                                ? tSafety(RECORDED_RAW_UNAVAILABLE_AI_KEY)
+                                : t('ppe.check.unavailableDefaultDesc')}
                           </p>
                         </details>
                       </div>

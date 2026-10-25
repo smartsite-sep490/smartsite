@@ -1,4 +1,4 @@
-import { useEffect, useLayoutEffect, useRef, useState } from 'react';
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Link, useSearchParams } from 'react-router-dom';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
@@ -15,6 +15,11 @@ import './camera-setup-catalog';
 import { CameraSetupCatalog } from './CameraSetupCatalog';
 import type { CameraSetupOpenHandler, CameraSetupOpenKind } from './CameraSetupWorkflow';
 import { CAMERA_BUTTON_STYLES } from './camera-dialog-styles';
+import { SafetyTaskTour } from '../safety/SafetyTaskTour';
+import {
+  CAMERA_SETUP_TOUR_VERSION,
+  buildCameraSetupTourSteps,
+} from '../safety/safetyTaskTourModel';
 
 const button = CAMERA_BUTTON_STYLES.secondary;
 const surface = 'min-w-0 rounded-2xl border border-slate-200/90 bg-white px-5 py-4 shadow-xs';
@@ -101,6 +106,19 @@ function SetupWorkspace({ apiUrl, session }: { apiUrl: string; session: SharedSe
   );
   const rows = cameras.rows.filter((row) => row.siteId === site?.id);
   const canManageCameras = capabilities.canManageRegions && !cameras.baseError;
+  const canAccessTourZones = canManageCameras || capabilities.canManageZones || canReadZones;
+  const hasTourCameraContext = Boolean(
+    site && canReadCameras && !cameras.baseError && rows.length > 0,
+  );
+  const setupTourSteps = useMemo(
+    () =>
+      buildCameraSetupTourSteps({
+        canManageCameras,
+        canAccessZones: canAccessTourZones,
+        hasCameraContext: hasTourCameraContext,
+      }),
+    [canManageCameras, canAccessTourZones, hasTourCameraContext],
+  );
   const selectedCamera = rows.find((row) => row.id === dialog?.cameraId);
   const dialogScope = useRef({ dialog, siteId: site?.id });
   useLayoutEffect(() => {
@@ -295,6 +313,14 @@ function SetupWorkspace({ apiUrl, session }: { apiUrl: string; session: SharedSe
     );
   if (revoked || sites.status === 401 || cameras.status === 401 || selectedCameraStatus === 401)
     return <p role="alert">{t('cameraSetup.session')}</p>;
+  const tourScopeKey = `${apiUrl}:${session.sessionScope}:${credentialId}:${site?.id ?? 'none'}:${canManageCameras ? 'manage' : canReadZones ? 'read' : 'limited'}`;
+  const isTourAuthorized =
+    !revoked &&
+    !sites.baseError &&
+    !sites.settledEmpty &&
+    sites.status !== 401 &&
+    cameras.status !== 401 &&
+    selectedCameraStatus !== 401;
   return (
     <div className="mx-auto max-w-7xl space-y-5 pb-10">
       <header className="flex flex-wrap items-center justify-between gap-4 border-b border-slate-200/80 pb-4">
@@ -304,21 +330,35 @@ function SetupWorkspace({ apiUrl, session }: { apiUrl: string; session: SharedSe
           </h1>
           <p className="max-w-xl text-xs leading-5 text-slate-500">{t('cameraSetup.intro')}</p>
         </div>
-        {canOpenMonitoring && (
-          <nav
-            className="flex flex-wrap items-center gap-2 rounded-xl border border-slate-200/80 bg-slate-50/80 p-1"
-            aria-label={t('cameraSetup.monitor')}
-          >
-            <Link className={button} to={site ? `/ppe?${returnParams}` : '/ppe'}>
-              {t('cameraSetup.monitorPpe')}
-            </Link>
-            <Link className={button} to={site ? `/zones?${returnParams}` : '/zones'}>
-              {t('cameraSetup.monitorZones')}
-            </Link>
-          </nav>
-        )}
+        <div className="flex flex-wrap items-center gap-2">
+          <SafetyTaskTour
+            taskId="camera-setup"
+            tourVersion={CAMERA_SETUP_TOUR_VERSION}
+            userId={session.user.id}
+            scopeKey={tourScopeKey}
+            isAuthorized={isTourAuthorized}
+            steps={setupTourSteps}
+          />
+          {canOpenMonitoring && (
+            <nav
+              className="flex flex-wrap items-center gap-2 rounded-xl border border-slate-200/80 bg-slate-50/80 p-1"
+              aria-label={t('cameraSetup.monitor')}
+            >
+              <Link className={button} to={site ? `/ppe?${returnParams}` : '/ppe'}>
+                {t('cameraSetup.monitorPpe')}
+              </Link>
+              <Link className={button} to={site ? `/zones?${returnParams}` : '/zones'}>
+                {t('cameraSetup.monitorZones')}
+              </Link>
+            </nav>
+          )}
+        </div>
       </header>
-      <section className={surface} aria-label={t('cameraSetup.site')}>
+      <section
+        className={surface}
+        aria-label={t('cameraSetup.site')}
+        data-tour-anchor="camera-setup-scope"
+      >
         <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
           <div className="flex min-w-0 flex-1 flex-wrap items-center gap-3">
             <label
@@ -382,6 +422,8 @@ function SetupWorkspace({ apiUrl, session }: { apiUrl: string; session: SharedSe
         <CameraSetupCatalog
           key={site.id}
           siteId={site.id}
+          siteCode={site.code}
+          siteName={site.name}
           canOpenMonitoring={canOpenMonitoring && !sites.baseError && !cameras.baseError}
           capabilities={capabilities}
           canReadZones={canReadZones}

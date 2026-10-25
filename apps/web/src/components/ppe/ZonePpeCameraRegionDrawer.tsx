@@ -6,6 +6,7 @@ import { IconAlertTriangle } from '../icons';
 import { useLocale, type TranslationKey } from '../../i18n/ppe-locale';
 import { CameraRegionCandidateReviewPanel } from './CameraRegionReferenceControls';
 import { RegionPolygonCanvasEditor } from './RegionPolygonCanvasEditor';
+import { RegionPolygonTaskTour } from './RegionPolygonTaskTour';
 import {
   LocalRegionValidationError,
   type EditingRegionScope,
@@ -280,7 +281,20 @@ function ZonePpeCameraRegionDrawerContent(
   );
 
   return (
-    <div className="space-y-3">
+    <div data-tour-anchor="polygon-frozen-reference" className="space-y-3">
+      <RegionPolygonTaskTour
+        apiUrl={props.apiUrl}
+        sessionScope={props.sessionScope}
+        credentialId={props.credentialId}
+        internalNonce={props.internalNonce}
+        siteId={siteId}
+        selectedCamera={selectedCamera}
+        selectedZone={selectedZone}
+        frozenReference={frozenReference}
+        editingRegion={editingRegion}
+        isReferenceExpired={isReferenceExpired}
+        isSaving={createRegionMutation.isPending}
+      />
       {candidateReference && (
         <CameraRegionCandidateReviewPanel
           candidateReference={candidateReference}

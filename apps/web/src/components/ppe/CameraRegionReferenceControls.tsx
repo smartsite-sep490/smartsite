@@ -1,11 +1,30 @@
 import React from 'react';
+import { useTranslation } from 'react-i18next';
 import { ApiError } from '@smartsite/api-client';
 import { CAMERA_BUTTON_STYLES } from '../cameras/camera-dialog-styles';
 import { IconAlertTriangle } from '../icons';
+import { registerFeatureCatalog } from '../../i18n/feature-catalog-registry';
 import { useLocale } from '../../i18n/ppe-locale';
+import { SAFETY_NAMESPACE } from '../../i18n/runtime';
 import { getConfigurationReferenceErrorMessage } from './cameraRegionReferenceUtils';
 import type { NormalizedPoint } from './region-polygon-geometry';
 import type { CameraConfigurationReference } from './useCameraConfigurationReference';
+
+const DETAILS_DISCLOSURE_KEY = 'regionSetup.reference.detailsDisclosure';
+
+const en = {
+  [DETAILS_DISCLOSURE_KEY]: 'Reference details & timestamps',
+} as const;
+
+const vi: Record<keyof typeof en, string> = {
+  [DETAILS_DISCLOSURE_KEY]: 'Chi tiết & thời gian ảnh tham chiếu',
+};
+
+function ensureReferenceControlsCatalog(): void {
+  registerFeatureCatalog({ en, vi });
+}
+
+ensureReferenceControlsCatalog();
 
 export interface CameraRegionReferenceStatusCardProps {
   reference: CameraConfigurationReference | null;
@@ -28,7 +47,9 @@ export function CameraRegionReferenceStatusCard({
   isDrawingActive,
   onRequestReference,
 }: CameraRegionReferenceStatusCardProps) {
+  ensureReferenceControlsCatalog();
   const { t } = useLocale();
+  const { t: tSafety } = useTranslation(SAFETY_NAMESPACE);
   const errorMessage = getConfigurationReferenceErrorMessage(error, t);
   const isRevisionMismatch = Boolean(
     reference &&
@@ -38,14 +59,35 @@ export function CameraRegionReferenceStatusCard({
 
   return (
     <div className="min-w-0 space-y-2.5 rounded-2xl border border-slate-200/90 bg-slate-50/90 p-3.5 text-xs text-slate-700 shadow-xs">
-      <div className="flex flex-wrap items-start justify-between gap-2.5 min-w-0">
-        <div className="min-w-0 flex-1 space-y-0.5">
-          <p className="text-xs font-semibold text-[#111111] break-words">
+      <div className="min-w-0 flex flex-wrap items-center justify-between gap-2.5">
+        <div className="min-w-0 flex flex-1 flex-wrap items-center gap-2">
+          <p className="min-w-0 break-words [overflow-wrap:anywhere] text-xs font-semibold text-[#111111]">
             {t('regionSetup.reference.heading')}
           </p>
-          <p className="text-xs leading-relaxed text-[#6B6B6B] break-words">
-            {t('regionSetup.reference.purposeNote')}
-          </p>
+
+          {reference && (
+            <div className="min-w-0 flex flex-wrap items-center gap-1.5 font-mono text-[11px] tabular-nums">
+              <span
+                className={`inline-flex items-center rounded-full border px-2.5 py-0.5 font-bold uppercase tracking-wider ${
+                  reference.sourceKind === 'LIVE'
+                    ? 'border-emerald-200 bg-emerald-50 text-emerald-800'
+                    : 'border-amber-200 bg-amber-50 text-amber-900'
+                }`}
+              >
+                {reference.sourceKind}
+              </span>
+              <span className="inline-flex max-w-full items-center break-words rounded-full border border-slate-200 bg-white px-2.5 py-0.5 font-semibold text-slate-700">
+                {t('regionSetup.reference.revisionBadge', {
+                  version: reference.configurationVersion,
+                })}
+              </span>
+              {isExpired && (
+                <span className="inline-flex max-w-full items-center break-words rounded-full border border-rose-200 bg-rose-50 px-2.5 py-0.5 font-semibold text-rose-800">
+                  {t('regionSetup.reference.expiredBadge')}
+                </span>
+              )}
+            </div>
+          )}
         </div>
 
         <button
@@ -57,7 +99,7 @@ export function CameraRegionReferenceStatusCard({
               ? t('regionSetup.reference.reviewNewBtn')
               : t('regionSetup.reference.getBtn')
           }
-          className={CAMERA_BUTTON_STYLES.compactSecondary}
+          className={`${CAMERA_BUTTON_STYLES.compactSecondary} min-w-0 max-w-full break-words [overflow-wrap:anywhere] whitespace-normal text-left`}
         >
           {isDrawingActive
             ? isLoading
@@ -69,61 +111,67 @@ export function CameraRegionReferenceStatusCard({
         </button>
       </div>
 
-      {reference && (
-        <div className="flex flex-wrap items-center gap-2 pt-1 font-mono text-[11px] tabular-nums">
-          <span
-            className={`inline-flex items-center rounded-full border px-2.5 py-0.5 font-bold uppercase tracking-wider ${
-              reference.sourceKind === 'LIVE'
-                ? 'border-emerald-200 bg-emerald-50 text-emerald-800'
-                : 'border-amber-200 bg-amber-50 text-amber-900'
-            }`}
-          >
-            {reference.sourceKind}
-          </span>
-          <span className="inline-flex items-center rounded-full border border-slate-200 bg-white px-2.5 py-0.5 font-semibold text-slate-700">
-            {t('regionSetup.reference.revisionBadge', {
-              version: reference.configurationVersion,
-            })}
-          </span>
-          <span className="text-slate-600">
-            {t('regionSetup.reference.capturedAt', { time: reference.frame.capturedAt })}
-          </span>
-          <span className="text-slate-600">
-            {t('regionSetup.reference.expiresAt', { time: reference.referenceExpiresAt })}
-          </span>
-          {isExpired && (
-            <span className="inline-flex items-center rounded-full border border-rose-200 bg-rose-50 px-2.5 py-0.5 font-semibold text-rose-800">
-              {t('regionSetup.reference.expiredBadge')}
-            </span>
-          )}
-        </div>
-      )}
-
       {errorMessage && (
         <div
           role="alert"
-          className="rounded-xl border border-rose-200 bg-rose-50 p-2.5 text-xs text-rose-800 flex items-center gap-2"
+          className="min-w-0 flex items-start gap-2 rounded-xl border border-rose-200 bg-rose-50 p-2.5 text-xs text-rose-800"
         >
-          <IconAlertTriangle className="h-4 w-4 shrink-0 text-rose-600" />
-          <span>{errorMessage}</span>
+          <IconAlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-rose-600" />
+          <span className="min-w-0 break-words [overflow-wrap:anywhere]">{errorMessage}</span>
         </div>
       )}
 
       {!isDrawingActive && !reference && !errorMessage && (
-        <p className="text-xs text-slate-600">{t('regionSetup.reference.noneLoadedHint')}</p>
+        <p className="min-w-0 break-words [overflow-wrap:anywhere] text-xs text-slate-600">
+          {t('regionSetup.reference.noneLoadedHint')}
+        </p>
       )}
 
       {!isDrawingActive && reference && isExpired && (
-        <p className="text-xs text-amber-800">{t('regionSetup.reference.expiredHint')}</p>
+        <p className="min-w-0 break-words [overflow-wrap:anywhere] text-xs font-medium text-amber-800">
+          {t('regionSetup.reference.expiredHint')}
+        </p>
       )}
 
       {!isDrawingActive && reference && !isExpired && isRevisionMismatch && (
-        <p className="text-xs text-amber-800">
+        <p className="min-w-0 break-words [overflow-wrap:anywhere] text-xs font-medium text-amber-800">
           {t('regionSetup.reference.revisionChangedHint', {
             version: expectedConfigurationVersion!,
           })}
         </p>
       )}
+
+      <details
+        data-testid="reference-status-details"
+        className="group/ref-details min-w-0 text-[11px] text-slate-500"
+      >
+        <summary className="inline-flex cursor-pointer list-none items-center gap-1 rounded-md px-1.5 py-0.5 font-medium text-slate-500 hover:bg-slate-200/60 hover:text-slate-800 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-slate-900">
+          <span className="min-w-0 break-words [overflow-wrap:anywhere]">
+            {tSafety(DETAILS_DISCLOSURE_KEY)}
+          </span>
+          <span
+            aria-hidden="true"
+            className="shrink-0 text-[10px] text-slate-400 transition-transform duration-150 group-open/ref-details:rotate-180"
+          >
+            ▾
+          </span>
+        </summary>
+        <div className="mt-1.5 min-w-0 space-y-1.5 rounded-xl border border-slate-200/80 bg-white px-3 py-2 text-xs text-slate-600">
+          <p className="min-w-0 break-words [overflow-wrap:anywhere] leading-relaxed text-[#6B6B6B]">
+            {t('regionSetup.reference.purposeNote')}
+          </p>
+          {reference && (
+            <div className="min-w-0 flex flex-wrap items-center gap-x-3 gap-y-1 font-mono text-[11px] tabular-nums text-slate-600">
+              <span className="min-w-0 max-w-full break-all">
+                {t('regionSetup.reference.capturedAt', { time: reference.frame.capturedAt })}
+              </span>
+              <span className="min-w-0 max-w-full break-all">
+                {t('regionSetup.reference.expiresAt', { time: reference.referenceExpiresAt })}
+              </span>
+            </div>
+          )}
+        </div>
+      </details>
     </div>
   );
 }
@@ -145,7 +193,9 @@ export function CameraRegionCandidateReviewPanel({
   onAcceptCandidate,
   onCancelReview,
 }: CameraRegionCandidateReviewPanelProps) {
+  ensureReferenceControlsCatalog();
   const { t } = useLocale();
+  const { t: tSafety } = useTranslation(SAFETY_NAMESPACE);
   const { frame } = candidateReference;
 
   return (
@@ -154,26 +204,57 @@ export function CameraRegionCandidateReviewPanel({
       aria-label={t('regionSetup.reference.candidateHeading')}
       className="min-w-0 space-y-3 rounded-2xl border border-amber-300 bg-amber-50/90 p-3.5 text-xs text-amber-950"
     >
-      <div className="space-y-1">
-        <p className="text-xs font-bold text-[#111111]">
-          {t('regionSetup.reference.candidateHeading')}
-        </p>
-        <p className="text-xs leading-relaxed text-amber-900">
+      <div className="min-w-0 space-y-1.5">
+        <div className="min-w-0 flex flex-wrap items-center justify-between gap-2">
+          <p className="min-w-0 break-words [overflow-wrap:anywhere] text-xs font-bold text-[#111111]">
+            {t('regionSetup.reference.candidateHeading')}
+          </p>
+          <div className="min-w-0 flex flex-wrap items-center gap-1.5 font-mono text-[11px] tabular-nums text-amber-950">
+            <span className="rounded-md border border-amber-300 bg-white px-2 py-0.5 font-bold uppercase">
+              {candidateReference.sourceKind}
+            </span>
+            <span className="rounded-md border border-amber-300 bg-white px-2 py-0.5 font-semibold">
+              v{candidateReference.configurationVersion}
+            </span>
+            {isCandidateExpired && (
+              <span className="rounded-md border border-rose-200 bg-rose-50 px-2 py-0.5 font-semibold text-rose-800">
+                {t('regionSetup.reference.expiredBadge')}
+              </span>
+            )}
+          </div>
+        </div>
+        <p className="min-w-0 break-words [overflow-wrap:anywhere] text-xs leading-relaxed text-amber-900">
           {t('regionSetup.reference.candidateDescription', {
             version: candidateReference.configurationVersion,
           })}
         </p>
-        <div className="flex flex-wrap items-center gap-2 pt-1 font-mono text-[11px] tabular-nums text-amber-950">
-          <span className="rounded-md border border-amber-300 bg-white px-2 py-0.5 font-bold uppercase">
-            {candidateReference.sourceKind}
-          </span>
-          <span className="rounded-md border border-amber-300 bg-white px-2 py-0.5 font-semibold">
-            v{candidateReference.configurationVersion}
-          </span>
-          <span>{candidateReference.frame.capturedAt}</span>
-          <span>·</span>
-          <span>{candidateReference.referenceExpiresAt}</span>
-        </div>
+        <details
+          data-testid="candidate-reference-details"
+          className="group/candidate-details min-w-0 text-[11px] text-amber-900"
+        >
+          <summary className="inline-flex cursor-pointer list-none items-center gap-1 rounded-md px-1.5 py-0.5 font-medium text-amber-900 hover:bg-amber-100/80 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-amber-950">
+            <span className="min-w-0 break-words [overflow-wrap:anywhere]">
+              {tSafety(DETAILS_DISCLOSURE_KEY)}
+            </span>
+            <span
+              aria-hidden="true"
+              className="shrink-0 text-[10px] text-amber-700 transition-transform duration-150 group-open/candidate-details:rotate-180"
+            >
+              ▾
+            </span>
+          </summary>
+          <div className="mt-1.5 min-w-0 flex flex-wrap items-center gap-x-2 gap-y-1 rounded-xl border border-amber-200/90 bg-white/90 px-3 py-2 font-mono text-[11px] tabular-nums text-amber-950">
+            <span className="min-w-0 max-w-full break-all">
+              {t('regionSetup.reference.capturedAt', { time: candidateReference.frame.capturedAt })}
+            </span>
+            <span aria-hidden="true">·</span>
+            <span className="min-w-0 max-w-full break-all">
+              {t('regionSetup.reference.expiresAt', {
+                time: candidateReference.referenceExpiresAt,
+              })}
+            </span>
+          </div>
+        </details>
       </div>
 
       <div
@@ -218,12 +299,13 @@ export function CameraRegionCandidateReviewPanel({
         )}
       </div>
 
-      <div className="flex flex-wrap items-center gap-2">
+      <div className="min-w-0 flex flex-wrap items-center justify-end gap-2">
         <button
           type="button"
           onClick={onCancelReview}
           disabled={isSaving}
-          className={CAMERA_BUTTON_STYLES.compactSecondary}
+          data-control-priority="subordinate"
+          className={`${CAMERA_BUTTON_STYLES.compactSecondary} min-w-0 max-w-full break-words [overflow-wrap:anywhere] whitespace-normal text-left`}
         >
           {t('regionSetup.reference.cancelReviewBtn')}
         </button>
@@ -231,7 +313,8 @@ export function CameraRegionCandidateReviewPanel({
           type="button"
           onClick={onAcceptCandidate}
           disabled={isCandidateExpired || isSaving}
-          className={CAMERA_BUTTON_STYLES.primary}
+          data-control-priority="primary"
+          className={`${CAMERA_BUTTON_STYLES.primary} min-w-0 max-w-full break-words [overflow-wrap:anywhere] whitespace-normal text-left`}
         >
           {t('regionSetup.reference.useNewBtn')}
         </button>

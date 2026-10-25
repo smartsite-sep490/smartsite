@@ -1,6 +1,7 @@
 import { useTranslation } from 'react-i18next';
 import { SAFETY_NAMESPACE } from '../../i18n/runtime';
 import { CAMERA_BUTTON_STYLES } from './camera-dialog-styles';
+import { CameraSetupStageCards } from './CameraSetupContextPanel';
 
 export type CameraSetupOpenKind = 'register' | 'manage' | 'zones' | 'regions';
 export type CameraSetupOpenHandler = (
@@ -29,6 +30,7 @@ export function CameraSetupWorkflow({
           {showZonesAction && (
             <button
               type="button"
+              data-tour-anchor="camera-setup-zone-draw"
               className={CAMERA_BUTTON_STYLES.secondary}
               onClick={(event) => open('zones', undefined, event.currentTarget)}
             >
@@ -38,6 +40,7 @@ export function CameraSetupWorkflow({
           {canManageCameras && (
             <button
               type="button"
+              data-tour-anchor="camera-setup-source"
               className={CAMERA_BUTTON_STYLES.primary}
               onClick={(event) => open('register', undefined, event.currentTarget)}
             >
@@ -79,6 +82,7 @@ export function CameraSetupWorkflow({
             {t('cameraSetup.step3')}
           </li>
         </ol>
+        <CameraSetupStageCards />
       </details>
     </div>
   );

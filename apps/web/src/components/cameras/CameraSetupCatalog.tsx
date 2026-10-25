@@ -1,4 +1,4 @@
-import { useId, type ReactNode } from 'react';
+import { useId, useState, type ReactNode } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Link } from 'react-router-dom';
 import type { CameraResponse } from '@smartsite/contracts/management';
@@ -6,10 +6,13 @@ import { SAFETY_NAMESPACE } from '../../i18n/runtime';
 import type { ZonePpeCapabilities } from '../ppe/zone-ppe-scope';
 import type { useSetupCatalog } from './useSetupCatalog';
 import { CAMERA_BUTTON_STYLES } from './camera-dialog-styles';
+import { CameraSetupContextBar, CameraSetupRowMetadata } from './CameraSetupContextPanel';
 import { CameraSetupWorkflow, type CameraSetupOpenHandler } from './CameraSetupWorkflow';
 
 export function CameraSetupCatalog({
   siteId,
+  siteCode,
+  siteName,
   canOpenMonitoring = false,
   capabilities,
   canReadCameras,
@@ -21,6 +24,8 @@ export function CameraSetupCatalog({
   open,
 }: {
   siteId?: string;
+  siteCode?: string;
+  siteName?: string;
   canOpenMonitoring?: boolean;
   capabilities: ZonePpeCapabilities;
   canReadCameras: boolean;
@@ -33,9 +38,22 @@ export function CameraSetupCatalog({
 }) {
   const { t } = useTranslation(SAFETY_NAMESPACE);
   const catalogId = useId();
+  const [focusOverride, setFocusOverride] = useState<{
+    baseRequestedId: string | null | undefined;
+    cameraId: string;
+  } | null>(null);
+  const focusedCameraId =
+    focusOverride?.baseRequestedId === requestedCameraId ? focusOverride.cameraId : null;
+  const setFocusedCameraId = (cameraId: string) =>
+    setFocusOverride({ baseRequestedId: requestedCameraId, cameraId });
   const canManageCameras = capabilities.canManageRegions && !cameras.baseError;
   const canWriteZones = capabilities.canManageZones || canManageCameras;
   const hasLoadedCameraPages = Boolean(cameras.data?.pages.length) && !cameras.baseError;
+  const selectedCamera =
+    (focusedCameraId ? rows.find((row) => row.id === focusedCameraId) : undefined) ??
+    (requestedCameraId ? rows.find((row) => row.id === requestedCameraId) : undefined) ??
+    rows[0] ??
+    null;
   const showLinkedCameraNotice = Boolean(
     requestedCameraId &&
     !rows.some((row) => row.id === requestedCameraId) &&
@@ -73,6 +91,17 @@ export function CameraSetupCatalog({
         </div>
         {canReadCameras && (
           <>
+            {!cameras.baseError && (rows.length > 0 || !canManageCameras) && (
+              <CameraSetupContextBar
+                siteCode={siteCode}
+                siteName={siteName}
+                rows={rows}
+                selectedCamera={selectedCamera}
+                canManageCameras={canManageCameras}
+                canOpenMonitoring={canOpenMonitoring}
+                open={open}
+              />
+            )}
             {cameras.isPending && (
               <p
                 role="status"
@@ -86,9 +115,7 @@ export function CameraSetupCatalog({
               <ul className="mt-4 space-y-2.5">
                 {rows.map((row) => {
                   const isEnabled = row.status === 'ACTIVE';
-                  const isRequestedCamera = Boolean(
-                    requestedCameraId && row.id === requestedCameraId,
-                  );
+                  const isSelectedCamera = selectedCamera?.id === row.id;
                   const nameId = `${catalogId}-camera-name-${row.id}`;
                   const hintId = `${catalogId}-inactive-hint-${row.id}`;
                   const ppeMonitorId = `${catalogId}-camera-ppe-${row.id}`;
@@ -105,9 +132,9 @@ export function CameraSetupCatalog({
                     <li
                       key={row.id}
                       aria-labelledby={nameId}
-                      aria-current={isRequestedCamera ? 'true' : undefined}
+                      aria-current={isSelectedCamera ? 'true' : undefined}
                       className={`flex flex-col justify-between gap-4 rounded-xl border px-4 py-3.5 transition-colors sm:flex-row sm:items-center ${
-                        isRequestedCamera
+                        isSelectedCamera
                           ? 'border-slate-900 bg-slate-100/70 ring-1 ring-slate-900/10'
                           : 'border-slate-200/90 bg-slate-50/30 hover:border-slate-300 hover:bg-slate-50/80'
                       }`}
@@ -117,12 +144,15 @@ export function CameraSetupCatalog({
                           id={nameId}
                           className="break-words [overflow-wrap:anywhere] text-base font-semibold tracking-tight text-slate-900"
                         >
-                          {canManageCameras && isEnabled ? (
+                          {canManageCameras ? (
                             <button
                               type="button"
                               aria-haspopup="dialog"
                               className="cursor-pointer rounded-md text-left underline decoration-slate-300 underline-offset-4 hover:decoration-slate-900 focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-slate-900"
-                              onClick={(event) => open('regions', row.id, event.currentTarget)}
+                              onClick={(event) => {
+                                setFocusedCameraId(row.id);
+                                open(isEnabled ? 'regions' : 'manage', row.id, event.currentTarget);
+                              }}
                             >
                               {row.name}
                             </button>
@@ -130,36 +160,30 @@ export function CameraSetupCatalog({
                             row.name
                           )}
                         </h3>
-                        <dl className="flex flex-wrap items-center gap-x-3 gap-y-1.5 text-xs">
-                          <div className="min-w-0 inline-flex flex-wrap items-center gap-1.5">
-                            <dt className="text-slate-400">{t('cameraSetup.codeLabel')}</dt>
-                            <dd className="min-w-0 break-all rounded-md border border-slate-200/80 bg-white px-2 py-0.5 font-mono text-xs font-medium tabular-nums text-slate-700">
-                              {row.code}
-                            </dd>
-                          </div>
-                          <div className="inline-flex items-center gap-1.5">
-                            <dt className="sr-only">{t('cameraSetup.statusLabel')}</dt>
-                            <dd>
-                              <span
-                                className={`inline-flex items-center rounded-lg border px-2.5 py-0.5 text-xs font-medium break-words ${
-                                  isEnabled
-                                    ? 'border-slate-300 bg-white text-slate-800'
-                                    : 'border-slate-200 bg-slate-100 text-slate-600'
-                                }`}
-                              >
-                                {t(isEnabled ? 'cameraSetup.enabled' : 'cameraSetup.disabled')}
-                              </span>
-                            </dd>
-                          </div>
-                        </dl>
+                        <CameraSetupRowMetadata row={row} isEnabled={isEnabled} />
                         {!isEnabled && canManageCameras && (
                           <p id={hintId} className="text-xs leading-5 text-slate-500">
                             {t('cameraSetup.inactiveHint')}
                           </p>
                         )}
                       </div>
-                      {(canManageCameras || canMonitorRow) && (
+                      {(canManageCameras || canMonitorRow || rows.length > 1) && (
                         <div className="flex shrink-0 flex-wrap items-center gap-2 sm:self-center">
+                          {rows.length > 1 && (
+                            <button
+                              type="button"
+                              aria-pressed={isSelectedCamera}
+                              className={CAMERA_BUTTON_STYLES.compactSecondary}
+                              onClick={() => setFocusedCameraId(row.id)}
+                            >
+                              {t(
+                                isSelectedCamera
+                                  ? 'cameraSetup.selectedCameraBtn'
+                                  : 'cameraSetup.selectCameraBtn',
+                                { code: row.code },
+                              )}
+                            </button>
+                          )}
                           {canMonitorRow && (
                             <>
                               <Link
@@ -187,7 +211,10 @@ export function CameraSetupCatalog({
                                   type="button"
                                   className={button}
                                   aria-describedby={nameId}
-                                  onClick={(event) => open('regions', row.id, event.currentTarget)}
+                                  onClick={(event) => {
+                                    setFocusedCameraId(row.id);
+                                    open('regions', row.id, event.currentTarget);
+                                  }}
                                 >
                                   {t('cameraSetup.regionsAction')}
                                 </button>
@@ -197,7 +224,10 @@ export function CameraSetupCatalog({
                                 className={`${CAMERA_BUTTON_STYLES.compactSecondary} shrink-0`}
                                 aria-label={t('cameraSetup.manage', { name: row.name })}
                                 aria-describedby={!isEnabled ? hintId : undefined}
-                                onClick={(event) => open('manage', row.id, event.currentTarget)}
+                                onClick={(event) => {
+                                  setFocusedCameraId(row.id);
+                                  open('manage', row.id, event.currentTarget);
+                                }}
                               >
                                 {t('cameraSetup.manageAction')}
                               </button>

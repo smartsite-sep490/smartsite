@@ -42,6 +42,7 @@ export interface FourSourceWallTileProps {
   siteName?: string;
   camera: CameraResponse;
   isSelected: boolean;
+  isTourEnlargeAnchor?: boolean;
   onSelect: (cameraId: string) => void;
   onEnlarge?: (cameraId: string) => void;
   onOpenEvidence?: (cameraId: string) => void;
@@ -65,6 +66,7 @@ export function FourSourceWallTile({
   siteName,
   camera,
   isSelected,
+  isTourEnlargeAnchor,
   onSelect,
   onEnlarge,
   onOpenEvidence,
@@ -346,7 +348,9 @@ export function FourSourceWallTile({
                   zonesState={zonesState}
                 />
                 <div className="flex flex-wrap items-center gap-2 text-xs font-mono text-white/60">
-                  <span>{t('mf06.detail.field.cameraId')} {camera.id}</span>
+                  <span>
+                    {t('mf06.detail.field.cameraId')} {camera.id}
+                  </span>
                   {!isAiWorkPaused && (
                     <span>
                       {t('ppe.wall.cadenceLabel', { cadence: isSelected ? '500ms' : '1s' })}
@@ -383,6 +387,9 @@ export function FourSourceWallTile({
               <button
                 type="button"
                 data-testid={`enlarge-camera-btn-${camera.id}`}
+                data-tour-anchor={
+                  (isTourEnlargeAnchor ?? isSelected) ? 'monitor-enlarge' : undefined
+                }
                 aria-label={`${t('ppe.wall.enlargeCameraBtn')}: ${cameraActionName}`}
                 onClick={(e) => {
                   e.stopPropagation();
@@ -483,13 +490,14 @@ export function FourSourceWall({
 
   // Calculate unassigned slots if fewer than 4 cameras (no fabricated feeds)
   const unassignedCount = Math.max(0, 4 - activeCameras.length);
+  const hasSelectedInWall = activeCameras.some((c) => c.id === selectedCameraId);
 
   return (
     <div
       data-testid="four-source-wall-grid"
       className="grid grid-cols-1 md:grid-cols-2 items-start gap-3.5 w-full min-w-0"
     >
-      {activeCameras.map((camera) => (
+      {activeCameras.map((camera, idx) => (
         <FourSourceWallTile
           key={camera.id}
           apiUrl={apiUrl}
@@ -502,6 +510,7 @@ export function FourSourceWall({
           siteName={siteName}
           camera={camera}
           isSelected={camera.id === selectedCameraId}
+          isTourEnlargeAnchor={hasSelectedInWall ? camera.id === selectedCameraId : idx === 0}
           onSelect={onSelectCamera}
           onEnlarge={onEnlargeCamera}
           onOpenEvidence={onOpenEvidence}

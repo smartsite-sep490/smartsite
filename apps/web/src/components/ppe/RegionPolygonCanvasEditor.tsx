@@ -329,6 +329,7 @@ export function RegionPolygonCanvasEditor({
 
       {/* SVG Drawing Canvas on Frozen Frame */}
       <div
+        data-tour-anchor="polygon-canvas"
         className="relative w-full border border-slate-800 rounded-xl overflow-hidden bg-slate-950 select-none shadow-inner"
         style={{ aspectRatio: `${frame.width} / ${frame.height}` }}
       >

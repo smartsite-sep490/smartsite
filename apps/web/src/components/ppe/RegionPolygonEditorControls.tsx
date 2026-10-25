@@ -1,6 +1,29 @@
 import React from 'react';
+import { useTranslation } from 'react-i18next';
+import { registerFeatureCatalog } from '../../i18n/feature-catalog-registry';
 import { useLocale } from '../../i18n/ppe-locale';
+import { SAFETY_NAMESPACE } from '../../i18n/runtime';
 import { ZOOM_STEPS } from './region-polygon-geometry';
+
+registerFeatureCatalog({
+  en: {
+    'regionSetup.drawer.editingGroup': 'Point editing',
+    'regionSetup.drawer.viewGroup': 'Canvas view',
+  },
+  vi: {
+    'regionSetup.drawer.editingGroup': 'Chỉnh sửa điểm',
+    'regionSetup.drawer.viewGroup': 'Khung nhìn',
+  },
+});
+
+const PRIMARY_CONTROL_BUTTON_CLASS =
+  'rounded-xl border border-slate-200 bg-white px-2.5 py-1.5 text-xs font-semibold text-slate-800 shadow-2xs hover:bg-slate-50 transition-colors cursor-pointer disabled:opacity-40 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#0F172A]';
+
+const SUBORDINATE_DESTRUCTIVE_BUTTON_CLASS =
+  'rounded-lg border border-transparent bg-transparent px-2 py-1 text-xs font-medium text-slate-600 hover:border-rose-200 hover:bg-rose-50/70 hover:text-rose-800 transition-colors cursor-pointer disabled:opacity-40 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#0F172A]';
+
+const SUBORDINATE_VIEW_RESET_BUTTON_CLASS =
+  'rounded-lg border border-transparent bg-transparent px-2 py-1 text-xs font-medium text-slate-600 hover:border-slate-200 hover:bg-white hover:text-slate-900 transition-colors cursor-pointer disabled:opacity-40 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#0F172A]';
 
 export interface RegionPolygonEditorToolbarProps {
   editingRegion?: { id: string; version: number } | null;
@@ -56,6 +79,9 @@ export function RegionPolygonEditorToolbar({
   onAddCoordinatePoint,
 }: RegionPolygonEditorToolbarProps) {
   const { t } = useLocale();
+  const { t: tFeature } = useTranslation(SAFETY_NAMESPACE);
+  const editingGroupLabel = tFeature('regionSetup.drawer.editingGroup');
+  const viewGroupLabel = tFeature('regionSetup.drawer.viewGroup');
 
   return (
     <>
@@ -94,119 +120,165 @@ export function RegionPolygonEditorToolbar({
         </div>
       )}
 
-      <div className="flex flex-wrap items-center justify-between gap-2">
-        <div className="flex flex-wrap items-center gap-1.5">
-          <button
-            type="button"
-            onClick={onUndo}
-            disabled={!canUndo || isSaving}
-            className="rounded-xl border border-slate-200 bg-white px-2.5 py-1.5 text-xs font-semibold text-slate-700 hover:bg-slate-50 transition-colors cursor-pointer disabled:opacity-40 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#0F172A]"
-          >
-            {t('regionSetup.drawer.undoPoint')}
-          </button>
-          <button
-            type="button"
-            onClick={onReset}
-            disabled={pointsCount === 0 || isSaving}
-            className="rounded-xl border border-slate-200 bg-white px-2.5 py-1.5 text-xs font-semibold text-slate-700 hover:bg-slate-50 transition-colors cursor-pointer disabled:opacity-40 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#0F172A]"
-          >
-            {t('regionSetup.drawer.resetDrawing')}
-          </button>
-          <button
-            type="button"
-            onClick={onDeleteSelectedVertex}
-            disabled={!hasSelectedVertex || isSaving}
-            className="rounded-xl border border-slate-200 bg-white px-2.5 py-1.5 text-xs font-semibold text-slate-700 hover:bg-slate-50 transition-colors cursor-pointer disabled:opacity-40 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#0F172A]"
-          >
-            {t('regionSetup.drawer.deletePoint')}
-          </button>
-          <button
-            type="button"
-            onClick={() => onZoomStep(1)}
-            disabled={zoomIdx >= ZOOM_STEPS.length - 1 || isSaving}
-            className="rounded-xl border border-slate-200 bg-white px-2.5 py-1.5 text-xs font-semibold text-slate-700 hover:bg-slate-50 cursor-pointer disabled:opacity-40 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#0F172A]"
-          >
-            {t('regionSetup.drawer.zoomIn')}
-          </button>
-          <button
-            type="button"
-            onClick={() => onZoomStep(-1)}
-            disabled={zoomIdx <= 0 || isSaving}
-            className="rounded-xl border border-slate-200 bg-white px-2.5 py-1.5 text-xs font-semibold text-slate-700 hover:bg-slate-50 cursor-pointer disabled:opacity-40 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#0F172A]"
-          >
-            {t('regionSetup.drawer.zoomOut')}
-          </button>
-          <button
-            type="button"
-            onClick={onTogglePanMode}
-            disabled={zoom <= 1 || isSaving}
-            aria-pressed={isPanMode}
-            className={`rounded-xl border px-2.5 py-1.5 text-xs font-semibold transition-colors cursor-pointer disabled:opacity-40 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#0F172A] ${
-              isPanMode
-                ? 'border-[#0F172A] bg-[#0F172A] text-white hover:bg-slate-800'
-                : 'border-slate-200 bg-white text-slate-700 hover:bg-slate-50'
-            }`}
-          >
-            {t('regionSetup.drawer.panMode')}
-          </button>
-          <button
-            type="button"
-            onClick={onResetView}
-            disabled={zoom === 1 && pan[0] === 0 && pan[1] === 0}
-            className="rounded-xl border border-slate-200 bg-white px-2.5 py-1.5 text-xs font-semibold text-slate-700 hover:bg-slate-50 cursor-pointer disabled:opacity-40 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#0F172A]"
-          >
-            {t('regionSetup.drawer.resetView')}
-          </button>
-          <span
-            data-testid="region-zoom-level"
-            className="text-[11px] font-mono tabular-nums text-slate-600 px-1"
-          >
-            {zoom}x
-          </span>
-        </div>
-
-        <div className="text-xs text-slate-500 flex items-center gap-3">
-          <span className="font-semibold tabular-nums text-slate-800">
-            {t('regionSetup.drawer.pointsCount', { count: pointsCount })}
-          </span>
-        </div>
-      </div>
-
-      <div className="flex flex-wrap items-center gap-2 text-xs">
-        <label className="flex items-center gap-1 text-slate-600">
-          <span>{t('regionSetup.drawer.coordXLabel')}</span>
-          <input
-            type="number"
-            step="0.0001"
-            min="0"
-            max="1"
-            aria-label={t('regionSetup.drawer.coordXLabel')}
-            value={coordXInput}
-            onChange={(e) => onChangeCoordX(e.target.value)}
-            className="w-20 rounded-lg border border-slate-200 px-2 py-1 text-xs font-mono tabular-nums text-slate-800 focus-visible:border-[#0F172A] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#0F172A]"
-          />
-        </label>
-        <label className="flex items-center gap-1 text-slate-600">
-          <span>{t('regionSetup.drawer.coordYLabel')}</span>
-          <input
-            type="number"
-            step="0.0001"
-            min="0"
-            max="1"
-            aria-label={t('regionSetup.drawer.coordYLabel')}
-            value={coordYInput}
-            onChange={(e) => onChangeCoordY(e.target.value)}
-            className="w-20 rounded-lg border border-slate-200 px-2 py-1 text-xs font-mono tabular-nums text-slate-800 focus-visible:border-[#0F172A] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#0F172A]"
-          />
-        </label>
-        <button
-          type="button"
-          onClick={onAddCoordinatePoint}
-          disabled={isSaving}
-          className="rounded-xl border border-slate-200 bg-slate-50 px-2.5 py-1 text-xs font-semibold text-slate-700 hover:bg-slate-100 cursor-pointer disabled:opacity-40 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#0F172A]"
+      <div
+        data-tour-anchor="polygon-edit-controls"
+        className="grid grid-cols-1 gap-2.5 md:grid-cols-2"
+      >
+        <div
+          role="group"
+          aria-label={editingGroupLabel}
+          className="rounded-xl border border-slate-200/90 bg-slate-50/70 p-2.5 space-y-2"
         >
-          {t('regionSetup.drawer.addPoint')}
-        </button>
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <div className="flex items-center gap-2">
+              <span className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">
+                {editingGroupLabel}
+              </span>
+              <span className="rounded-md border border-slate-200/80 bg-white px-2 py-0.5 text-xs font-semibold tabular-nums text-slate-800">
+                {t('regionSetup.drawer.pointsCount', { count: pointsCount })}
+              </span>
+            </div>
+
+            <div className="flex flex-wrap items-center gap-1.5">
+              <button
+                type="button"
+                onClick={onUndo}
+                disabled={!canUndo || isSaving}
+                data-control-priority="primary"
+                className={PRIMARY_CONTROL_BUTTON_CLASS}
+              >
+                {t('regionSetup.drawer.undoPoint')}
+              </button>
+              <span aria-hidden="true" className="mx-0.5 h-4 w-px bg-slate-200/90" />
+              <button
+                type="button"
+                onClick={onDeleteSelectedVertex}
+                disabled={!hasSelectedVertex || isSaving}
+                data-control-priority="subordinate"
+                className={SUBORDINATE_DESTRUCTIVE_BUTTON_CLASS}
+              >
+                {t('regionSetup.drawer.deletePoint')}
+              </button>
+              <button
+                type="button"
+                onClick={onReset}
+                disabled={pointsCount === 0 || isSaving}
+                data-control-priority="subordinate"
+                className={SUBORDINATE_DESTRUCTIVE_BUTTON_CLASS}
+              >
+                {t('regionSetup.drawer.resetDrawing')}
+              </button>
+            </div>
+          </div>
+
+          <div className="flex flex-wrap items-center gap-2 border-t border-slate-200/70 pt-2 text-xs">
+            <label className="flex items-center gap-1 text-slate-600">
+              <span>{t('regionSetup.drawer.coordXLabel')}</span>
+              <input
+                type="number"
+                step="0.0001"
+                min="0"
+                max="1"
+                disabled={isSaving}
+                aria-label={t('regionSetup.drawer.coordXLabel')}
+                value={coordXInput}
+                onChange={(e) => onChangeCoordX(e.target.value)}
+                className="w-20 rounded-lg border border-slate-200 bg-white px-2 py-1 text-xs font-mono tabular-nums text-slate-800 disabled:opacity-40 focus-visible:border-[#0F172A] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#0F172A]"
+              />
+            </label>
+            <label className="flex items-center gap-1 text-slate-600">
+              <span>{t('regionSetup.drawer.coordYLabel')}</span>
+              <input
+                type="number"
+                step="0.0001"
+                min="0"
+                max="1"
+                disabled={isSaving}
+                aria-label={t('regionSetup.drawer.coordYLabel')}
+                value={coordYInput}
+                onChange={(e) => onChangeCoordY(e.target.value)}
+                className="w-20 rounded-lg border border-slate-200 bg-white px-2 py-1 text-xs font-mono tabular-nums text-slate-800 disabled:opacity-40 focus-visible:border-[#0F172A] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#0F172A]"
+              />
+            </label>
+            <button
+              type="button"
+              onClick={onAddCoordinatePoint}
+              disabled={isSaving}
+              data-control-priority="primary"
+              className={PRIMARY_CONTROL_BUTTON_CLASS}
+            >
+              {t('regionSetup.drawer.addPoint')}
+            </button>
+          </div>
+        </div>
+
+        <div
+          role="group"
+          aria-label={viewGroupLabel}
+          className="rounded-xl border border-slate-200/90 bg-slate-50/70 p-2.5 flex flex-col justify-between gap-2"
+        >
+          <div className="flex items-center justify-between gap-2">
+            <span className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">
+              {viewGroupLabel}
+            </span>
+            <span
+              data-testid="region-zoom-level"
+              className="rounded-md border border-slate-200/80 bg-white px-2 py-0.5 text-[11px] font-mono font-semibold tabular-nums text-slate-700"
+            >
+              {zoom}x
+            </span>
+          </div>
+
+          <div className="flex flex-wrap items-center justify-between gap-1.5 border-t border-slate-200/70 pt-2">
+            <div className="flex flex-wrap items-center gap-1.5">
+              <button
+                type="button"
+                onClick={() => onZoomStep(1)}
+                disabled={zoomIdx >= ZOOM_STEPS.length - 1 || isSaving}
+                data-control-priority="primary"
+                className={PRIMARY_CONTROL_BUTTON_CLASS}
+              >
+                {t('regionSetup.drawer.zoomIn')}
+              </button>
+              <button
+                type="button"
+                onClick={() => onZoomStep(-1)}
+                disabled={zoomIdx <= 0 || isSaving}
+                data-control-priority="primary"
+                className={PRIMARY_CONTROL_BUTTON_CLASS}
+              >
+                {t('regionSetup.drawer.zoomOut')}
+              </button>
+              <button
+                type="button"
+                onClick={onTogglePanMode}
+                disabled={zoom <= 1 || isSaving}
+                aria-pressed={isPanMode}
+                data-control-priority="primary"
+                className={`rounded-xl border px-2.5 py-1.5 text-xs font-semibold transition-colors cursor-pointer disabled:opacity-40 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#0F172A] ${
+                  isPanMode
+                    ? 'border-[#0F172A] bg-[#0F172A] text-white hover:bg-slate-800'
+                    : 'border-slate-200 bg-white text-slate-800 shadow-2xs hover:bg-slate-50'
+                }`}
+              >
+                {t('regionSetup.drawer.panMode')}
+              </button>
+            </div>
+
+            <div className="flex items-center gap-1">
+              <span aria-hidden="true" className="mx-0.5 h-4 w-px bg-slate-200/90" />
+              <button
+                type="button"
+                onClick={onResetView}
+                disabled={(zoom === 1 && pan[0] === 0 && pan[1] === 0) || isSaving}
+                data-control-priority="subordinate"
+                className={SUBORDINATE_VIEW_RESET_BUTTON_CLASS}
+              >
+                {t('regionSetup.drawer.resetView')}
+              </button>
+            </div>
+          </div>
+        </div>
       </div>
     </>
   );
@@ -230,7 +302,10 @@ export function RegionPolygonEditorFooter({
   const { t } = useLocale();
 
   return (
-    <div className="flex flex-wrap items-center justify-between gap-2 border-t border-slate-200/80 pt-3">
+    <div
+      data-tour-anchor="polygon-save-footer"
+      className="flex flex-wrap items-center justify-between gap-2 border-t border-slate-200/80 pt-3"
+    >
       <div className="text-[11px] text-slate-500">
         {t('regionSetup.drawer.shortcutsLabel')}{' '}
         <kbd className="px-1.5 py-0.5 bg-slate-100 rounded-md text-[10px] font-mono border border-slate-200">
