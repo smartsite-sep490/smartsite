@@ -13,15 +13,37 @@ const mocks = vi.hoisted(() => ({
   listCameras: vi.fn(),
   listPreviewCameras: vi.fn(),
   client: {} as Record<string, unknown>,
-  dialog: null as null | { onClose: () => void; onUnauthorized?: () => void },
+  registerDialog: null as null | {
+    onClose: () => void;
+    onCreated?: (camera: unknown) => void;
+    onUnauthorized?: () => void;
+  },
+  dialog: null as null | {
+    camera?: unknown;
+    onClose: () => void;
+    onUpdated?: (camera: unknown) => void;
+    onUnauthorized?: () => void;
+  },
   onSelectRegionCamera: null as null | ((cameraId: string) => void),
 }));
 vi.mock('../../features/auth/auth-session', () => ({ useManagementClient: () => mocks.client }));
 vi.mock('./CameraRegistrationDialog', () => ({
-  CameraRegistrationDialog: () => <div role="dialog">Register camera</div>,
+  CameraRegistrationDialog: (props: {
+    onClose: () => void;
+    onCreated?: (camera: unknown) => void;
+    onUnauthorized?: () => void;
+  }) => {
+    mocks.registerDialog = props;
+    return <div role="dialog">Register camera</div>;
+  },
 }));
 vi.mock('./CameraManagementDialog', () => ({
-  CameraManagementDialog: (props: { onClose: () => void; onUnauthorized?: () => void }) => {
+  CameraManagementDialog: (props: {
+    camera?: unknown;
+    onClose: () => void;
+    onUpdated?: (camera: unknown) => void;
+    onUnauthorized?: () => void;
+  }) => {
     mocks.dialog = props;
     return <div role="dialog">Manage camera</div>;
   },
@@ -91,6 +113,7 @@ beforeEach(() => {
   mocks.listSites.mockReset().mockResolvedValue({ items: [site], total: 1 });
   mocks.listCameras.mockReset().mockResolvedValue({ items: [camera], total: 1 });
   mocks.listPreviewCameras.mockReset();
+  mocks.registerDialog = null;
   mocks.dialog = null;
   mocks.client = {
     listSites: mocks.listSites,
@@ -475,9 +498,7 @@ it('provides an optional setup tour bound to real stage elements, skips unauthor
     'camera-setup-save',
   );
   expect(
-    screen
-      .getByRole('region', { name: 'Selected camera' })
-      .getAttribute('data-tour-active-anchor'),
+    screen.getByRole('region', { name: 'Selected camera' }).getAttribute('data-tour-active-anchor'),
   ).toBe('true');
   expect(
     screen.getByText(/does not confirm changes are applied or that the camera is live/i),
@@ -529,4 +550,149 @@ it('provides an optional setup tour bound to real stage elements, skips unauthor
   rerender({ ...admin, accessToken: 'rotated-admin-token' });
   await screen.findByText(camera.name);
   expect(screen.queryByTestId('safety-task-tour')).toBeNull();
+});
+
+it('updates camera setup state immediately on management save and invalidates same-site region/monitoring caches without touching other scopes', async () => {
+  const activeCam = {
+    ...camera,
+    status: 'ACTIVE' as const,
+    configurationVersion: 1,
+  };
+  let resolveRefetch!: (value: unknown) => void;
+  mocks.listCameras.mockResolvedValueOnce({ items: [activeCam], total: 1 }).mockImplementationOnce(
+    () =>
+      new Promise((resolve) => {
+        resolveRefetch = resolve;
+      }),
+  );
+
+  const { cache } = mount(manager(site.id), '/camera-setup?siteId=site-1&cameraId=cam-1');
+  await screen.findByText(activeCam.name);
+  expect(screen.getByText('1 enabled · 0 disabled')).toBeTruthy();
+  expect(
+    screen.getByText('Saved config version v1; worker application status unavailable.'),
+  ).toBeTruthy();
+
+  const sameSiteRegionCamerasKey = [
+    'ppe-monitoring',
+    'http://localhost:3000',
+    'session-1',
+    99,
+    site.id,
+    'cameras-for-region',
+  ];
+  const sameSiteCameraRegionsKey = [
+    'ppe-monitoring',
+    'http://localhost:3000',
+    'session-1',
+    99,
+    site.id,
+    'cameras',
+    activeCam.id,
+    'regions',
+  ];
+  const sameSiteZonesKey = [
+    'ppe-monitoring',
+    'http://localhost:3000',
+    'session-1',
+    1,
+    site.id,
+    'zones',
+  ];
+  const sameSiteZoneAdminKey = [
+    'zone-admin',
+    'http://localhost:3000',
+    'session-1',
+    site.id,
+    activeCam.id,
+  ];
+  const otherSiteRegionCamerasKey = [
+    'ppe-monitoring',
+    'http://localhost:3000',
+    'session-1',
+    99,
+    'site-2',
+    'cameras-for-region',
+  ];
+  const otherSessionRegionCamerasKey = [
+    'ppe-monitoring',
+    'http://localhost:3000',
+    'session-2',
+    99,
+    site.id,
+    'cameras-for-region',
+  ];
+  const otherApiZoneAdminKey = [
+    'zone-admin',
+    'http://other-api.local',
+    'session-1',
+    site.id,
+    activeCam.id,
+  ];
+
+  cache.setQueryData(sameSiteRegionCamerasKey, { items: [activeCam], total: 1 });
+  cache.setQueryData(sameSiteCameraRegionsKey, []);
+  cache.setQueryData(sameSiteZonesKey, []);
+  cache.setQueryData(sameSiteZoneAdminKey, []);
+  cache.setQueryData(otherSiteRegionCamerasKey, { items: [], total: 0 });
+  cache.setQueryData(otherSessionRegionCamerasKey, { items: [], total: 0 });
+  cache.setQueryData(otherApiZoneAdminKey, []);
+
+  fireEvent.click(screen.getByRole('button', { name: 'Manage Gate camera' }));
+  expect(mocks.dialog).toBeTruthy();
+
+  const updatedCam = {
+    ...activeCam,
+    name: 'Gate camera West',
+    status: 'INACTIVE' as const,
+    configurationVersion: 2,
+  };
+  await act(async () => {
+    mocks.dialog?.onUpdated?.(updatedCam);
+  });
+
+  // Verify cache entry updated immediately while listCameras refetch promise remains unresolved:
+  const setupCameraEntries = cache
+    .getQueriesData<{ pages: { items: (typeof updatedCam)[] }[] }>({ queryKey: ['camera-setup'] })
+    .filter(([qk]) => qk.includes('cameras'));
+  expect(setupCameraEntries[0]?.[1]?.pages[0]?.items[0]).toEqual(updatedCam);
+
+  // Await TanStack notifyManager observer flush while listCameras refetch is still pending:
+  expect(await screen.findByText('Gate camera West')).toBeTruthy();
+  await waitFor(() => {
+    expect(screen.getByText('0 enabled · 1 disabled')).toBeTruthy();
+    expect(
+      screen.getByText('Saved config version v2; worker application status unavailable.'),
+    ).toBeTruthy();
+    expect(mocks.dialog?.camera).toEqual(updatedCam);
+  });
+
+  // Older out-of-order configurationVersion must not overwrite v2 while refetch is still unresolved:
+  await act(async () => {
+    mocks.dialog?.onUpdated?.({
+      ...activeCam,
+      name: 'Stale v1 camera',
+      status: 'ACTIVE' as const,
+      configurationVersion: 1,
+    });
+  });
+  expect(screen.getByText('Gate camera West')).toBeTruthy();
+  expect(
+    screen.getByText('Saved config version v2; worker application status unavailable.'),
+  ).toBeTruthy();
+
+  // Same-site / same-session region and zone caches are invalidated before resolveRefetch:
+  expect(cache.getQueryState(sameSiteRegionCamerasKey)?.isInvalidated).toBe(true);
+  expect(cache.getQueryState(sameSiteCameraRegionsKey)?.isInvalidated).toBe(true);
+  expect(cache.getQueryState(sameSiteZonesKey)?.isInvalidated).toBe(true);
+  expect(cache.getQueryState(sameSiteZoneAdminKey)?.isInvalidated).toBe(true);
+
+  // Other site / session / API caches remain untouched:
+  expect(cache.getQueryState(otherSiteRegionCamerasKey)?.isInvalidated).toBe(false);
+  expect(cache.getQueryState(otherSessionRegionCamerasKey)?.isInvalidated).toBe(false);
+  expect(cache.getQueryState(otherApiZoneAdminKey)?.isInvalidated).toBe(false);
+
+  await act(async () => {
+    resolveRefetch({ items: [updatedCam], total: 1 });
+  });
 });

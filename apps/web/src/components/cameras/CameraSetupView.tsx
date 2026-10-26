@@ -11,6 +11,7 @@ import { ZonePpeSetupDialog } from '../ppe/ZonePpeSetupDialog';
 import { CameraRegistrationDialog } from './CameraRegistrationDialog';
 import { CameraManagementDialog } from './CameraManagementDialog';
 import { setupErrorStatus, useSetupCatalog } from './useSetupCatalog';
+import { publishUpdatedSetupCamera, refreshCameraSetupCaches } from './camera-setup-cache';
 import './camera-setup-catalog';
 import { CameraSetupCatalog } from './CameraSetupCatalog';
 import type { CameraSetupOpenHandler, CameraSetupOpenKind } from './CameraSetupWorkflow';
@@ -236,8 +237,9 @@ function SetupWorkspace({ apiUrl, session }: { apiUrl: string; session: SharedSe
       session.onSignOut?.();
     }
   }, [revoked, session]);
-  const refreshCameras = () => {
-    void cache.invalidateQueries({ queryKey: [...key, site?.id, 'cameras'] });
+  const refreshCameras = (cameraId?: string) => {
+    if (!site) return;
+    refreshCameraSetupCaches(cache, key, apiUrl, session.sessionScope, site.id, cameraId);
   };
   const unauthorized = () => {
     if (!isCurrentDialog()) return;
@@ -440,11 +442,19 @@ function SetupWorkspace({ apiUrl, session }: { apiUrl: string; session: SharedSe
         <CameraRegistrationDialog
           {...common}
           open
-          onCreated={() => {
-            if (isCurrentDialog()) {
-              close();
-              refreshCameras();
+          onCreated={(createdCamera?: CameraResponse) => {
+            if (
+              !isCurrentDialog() ||
+              !site ||
+              revoked ||
+              sites.baseError ||
+              cameras.baseError ||
+              (createdCamera && createdCamera.siteId !== site.id)
+            ) {
+              return;
             }
+            close();
+            refreshCameras(createdCamera?.id);
           }}
         />
       )}
@@ -453,8 +463,28 @@ function SetupWorkspace({ apiUrl, session }: { apiUrl: string; session: SharedSe
           {...common}
           open
           camera={selectedCamera}
-          onUpdated={() => {
-            if (isCurrentDialog()) refreshCameras();
+          onUpdated={(updatedCamera) => {
+            if (
+              !isCurrentDialog() ||
+              !site ||
+              revoked ||
+              sites.baseError ||
+              cameras.baseError ||
+              !updatedCamera ||
+              updatedCamera.id !== selectedCamera.id ||
+              updatedCamera.siteId !== site.id ||
+              updatedCamera.configurationVersion < selectedCamera.configurationVersion
+            ) {
+              return;
+            }
+            publishUpdatedSetupCamera(
+              cache,
+              key,
+              apiUrl,
+              session.sessionScope,
+              site.id,
+              updatedCamera,
+            );
           }}
         />
       )}

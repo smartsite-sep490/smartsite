@@ -1,5 +1,15 @@
 # Scoped LOC exceptions
 
+## Camera setup mutation publication, 27 October
+
+Root permits 30 additional lines in the existing CameraSetupView for current-dialog,
+Site, error and mutation-version guards. Query cancellation, version-checked cache
+publication and scoped invalidation are extracted into camera-setup-cache.ts below
+130 lines. Existing metadata paging and active preview/runtime responsibilities
+remain unchanged. Owner: Root; UI implementation: actual Agy p7. Extract workspace
+composition before further unrelated growth; this does not raise the normal limit
+or establish browser/production acceptance.
+
 ## Issued bundle delivery, 27 October
 
 Root permits one thin reader delegation in the existing Camera service; snapshot,
