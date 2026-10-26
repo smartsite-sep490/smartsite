@@ -278,14 +278,24 @@ export class AiIngestionService {
         // Group candidates and create AlertDetectionMapping only when PROCESSED
         const groupedCandidates: Array<{ alertId: string; trackId: number }> = [];
         if (status === EventProcessingStatus.PROCESSED && camera) {
-          for (const candidate of candidates) {
+          // Match incident-close lock order without rewriting observation/result order.
+          const ordered = candidates.map((candidate, originalIndex) => ({
+            candidate,
+            originalIndex,
+          }));
+          ordered.sort((left, right) => {
+            if (left.candidate.groupingKey < right.candidate.groupingKey) return -1;
+            if (left.candidate.groupingKey > right.candidate.groupingKey) return 1;
+            return 0;
+          });
+          for (const { candidate, originalIndex } of ordered) {
             const alert = await this.durableGroupingService.groupCandidate(
               manager,
               camera.siteId,
               candidate,
               capturedAt,
             );
-            groupedCandidates.push({ alertId: alert.id, trackId: candidate.trackId });
+            groupedCandidates[originalIndex] = { alertId: alert.id, trackId: candidate.trackId };
           }
 
           const subjects = resolveAlertObservationSubjects(
