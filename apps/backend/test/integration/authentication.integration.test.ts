@@ -54,8 +54,11 @@ const isPasswordChangeRequired = (error: unknown) =>
 
 test('auth migration, bootstrap, sessions, account lifecycle and last Admin rule', async () => {
   assert.ok(dataSource.isInitialized);
-  // Bootstrap requires an empty account table; this is the dedicated disposable test database.
-  await dataSource.query('TRUNCATE auth_session, user_role_assignment, app_user CASCADE');
+  // Bootstrap requires an empty account table; this file-owned isolated schema is freshly initialized.
+  assert.equal(
+    Number((await dataSource.query('SELECT COUNT(*)::int AS count FROM app_user'))[0].count),
+    0,
+  );
   const columns = (await dataSource.query(`
     SELECT table_name, column_name FROM information_schema.columns
     WHERE table_schema = current_schema() AND table_name IN ('app_user', 'auth_session', 'user_role_assignment')

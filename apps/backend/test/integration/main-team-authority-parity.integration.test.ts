@@ -20,7 +20,7 @@ before(async () => {
   assert.match(actual!.schema, /^isolated_test_[a-f0-9]{32}$/);
   assert.equal(
     actual!.migrations,
-    75,
+    77,
     'Parity fixture must use the current canonical release graph',
   );
 });

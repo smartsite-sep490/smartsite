@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
-import { after, before, test } from 'node:test';
+import { after, beforeEach, test } from 'node:test';
 import type { ExecutionContext } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import {
@@ -32,7 +32,10 @@ import { UserEntity, UserRole } from '../../src/database/entities/user.entity.js
 
 const isolatedDatabase = createIsolatedTestDatabase({ canonical: true });
 const dataSource = isolatedDatabase.dataSource;
-before(() => isolatedDatabase.initialize());
+beforeEach(async () => {
+  await isolatedDatabase.dispose();
+  await isolatedDatabase.initialize();
+});
 after(() => isolatedDatabase.dispose());
 
 interface BoundedBarrier {
@@ -344,7 +347,6 @@ function createInternalResetRowLockBarrierDataSource(
 
 test('internal READ COMMITTED resetPassword control (no context) revokes concurrent login session after target row lock', async () => {
   assert.ok(dataSource.isInitialized);
-  await dataSource.query('TRUNCATE auth_session, user_role_assignment, app_user CASCADE');
 
   const config = createTestConfig();
   const sites = new SiteConfigurationService(dataSource);
@@ -426,7 +428,6 @@ test('internal READ COMMITTED resetPassword control (no context) revokes concurr
 
 test('public resetPassword (USER_PASSWORD_RESET) with real configurationCommandContext revokes existing and concurrent login sessions', async () => {
   assert.ok(dataSource.isInitialized);
-  await dataSource.query('TRUNCATE auth_session, user_role_assignment, app_user CASCADE');
 
   const config = createTestConfig();
   const sites = new SiteConfigurationService(dataSource);
@@ -551,7 +552,6 @@ test('public resetPassword (USER_PASSWORD_RESET) with real configurationCommandC
 
 test('public setStatus deactivation (USER_ACCOUNT_STATUS) with real configurationCommandContext revokes existing and concurrent login sessions', async () => {
   assert.ok(dataSource.isInitialized);
-  await dataSource.query('TRUNCATE auth_session, user_role_assignment, app_user CASCADE');
 
   const config = createTestConfig();
   const sites = new SiteConfigurationService(dataSource);
@@ -681,7 +681,6 @@ test('public setStatus deactivation (USER_ACCOUNT_STATUS) with real configuratio
 
 test('public replaceRoleAssignments (USER_ROLE_REPLACE) with real configurationCommandContext revokes existing and concurrent login sessions', async () => {
   assert.ok(dataSource.isInitialized);
-  await dataSource.query('TRUNCATE auth_session, user_role_assignment, app_user CASCADE');
 
   const config = createTestConfig();
   const sites = new SiteConfigurationService(dataSource);
@@ -824,7 +823,6 @@ test('public replaceRoleAssignments (USER_ROLE_REPLACE) with real configurationC
 
 test('public changePassword (USER_PASSWORD_CHANGE) with real passwordChangeCommandContext revokes existing and concurrent login sessions', async () => {
   assert.ok(dataSource.isInitialized);
-  await dataSource.query('TRUNCATE auth_session, user_role_assignment, app_user CASCADE');
 
   const config = createTestConfig();
   const sites = new SiteConfigurationService(dataSource);
