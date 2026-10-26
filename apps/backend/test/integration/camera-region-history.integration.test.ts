@@ -19,6 +19,15 @@ import { createIsolatedTestDatabase } from '../support/isolated-test-database.js
 test('Region history preserves active state, cutover truth and atomic legacy mutations', async (t) => {
   const owned = createIsolatedTestDatabase();
   const db = owned.dataSource;
+  const migrations = db.options.migrations;
+  assert(Array.isArray(migrations));
+  const historyIndex = migrations.findIndex(
+    (migration) =>
+      typeof migration === 'function' &&
+      migration.name === 'CameraRegionGeometryRevisions1793577600000',
+  );
+  assert.equal(historyIndex, 76);
+  db.setOptions({ migrations: migrations.slice(0, historyIndex + 1) });
   const polygon = {
     coordinates: [
       [0, 0],

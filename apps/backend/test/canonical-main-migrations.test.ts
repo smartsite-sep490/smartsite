@@ -78,10 +78,11 @@ test(
       'AlertDetectionSubject1793404800000',
       'CameraConfigurationReferences1793491200000',
       'CameraRegionGeometryRevisions1793577600000',
+      'ZonePolicyRevisions1793664000000',
     ];
     const expected = [...names, ...extensions];
     assert.deepEqual([...actual].sort(), [...expected].sort());
-    assert.equal(actual.length, 77);
+    assert.equal(actual.length, 78);
     assert.equal(new Set(actual).size, actual.length, 'migration registrations must be unique');
     assert.equal(new Set(expected).size, names.length + extensions.length);
     assert.equal(registered.synchronize, false);

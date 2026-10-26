@@ -55,6 +55,8 @@ import {
 } from './camera-configuration-reference.entity.js';
 export * from './camera-configuration-reference.entity.js';
 import { ZoneEntity } from './zone.entity.js';
+import { ZonePolicyRevisionEntity } from './zone-policy-revision.entity.js';
+export * from './zone-policy-revision.entity.js';
 import { CameraObservationRegionEntity } from './camera-observation-region.entity.js';
 import { CameraRegionGeometryRevisionEntity } from './camera-region-geometry-revision.entity.js';
 export * from './camera-region-geometry-revision.entity.js';
@@ -191,6 +193,7 @@ export const ENTITIES = [
   CameraViewRevisionEntity,
   CameraConfigurationReferenceEntity,
   ZoneEntity,
+  ZonePolicyRevisionEntity,
   CameraObservationRegionEntity,
   CameraRegionGeometryRevisionEntity,
   AiObservationEventEntity,

@@ -1,5 +1,13 @@
 # Schema extension inventory
 
+## C03 Zone policy provenance extension
+
+`ZonePolicyRevisions1793664000000` adds the eight-column `zone_policy_revision`
+table. See [exact column/FK/rollback mapping](zone-policy-revisions.md) and the
+[additive DBML](zone-policy-revisions.dbml). Existing baseline ERD bytes, Zone
+columns and immutable Region history remain unchanged. This is the policy-history
+prerequisite; bundle issuance, worker application and rollout remain separate.
+
 The owner's70-table ERD remains the baseline. This inventory describes current
 implementation differences; it does not replace or approve a new ERD.
 

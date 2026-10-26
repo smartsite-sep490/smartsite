@@ -31,6 +31,7 @@ import {
 import { ZoneRestrictionPolicy, ZoneType } from '../../database/entities/enums.js';
 import { ZoneEntity } from '../../database/entities/zone.entity.js';
 import { SiteConfigurationService } from '../sites/site-configuration.service.js';
+import { appendZonePolicyRevision } from './zone-policy-revisions.js';
 
 const trim = ({ value }: { value: unknown }) => (typeof value === 'string' ? value.trim() : value);
 
@@ -98,15 +99,18 @@ export class ZoneConfigurationService {
         context,
         'ZONE_CREATE',
         { siteId, value },
-        (manager) =>
-          manager.getRepository(ZoneEntity).save({
+        async (manager) => {
+          const zone = await manager.getRepository(ZoneEntity).save({
             id: randomUUID(),
             siteId,
             ...value,
             code: value.code ?? `ZONE-${randomUUID().toUpperCase()}`,
             requiredPpe: [...value.requiredPpe].sort(),
             configurationLocked: false,
-          }),
+          });
+          await appendZonePolicyRevision(manager, zone, true);
+          return zone;
+        },
         context
           ? (manager) => authorizeMainSiteManager(manager, context.actorUserId, siteId)
           : undefined,
@@ -220,6 +224,7 @@ export class ZoneConfigurationService {
         zone.type = value.type;
         zone.restrictionPolicy = value.restrictionPolicy;
         zone.requiredPpe = requiredPpe;
+        await appendZonePolicyRevision(manager, zone);
         return zone;
       },
       context
