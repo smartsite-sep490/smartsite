@@ -16,6 +16,15 @@ import { createIsolatedTestDatabase } from '../support/isolated-test-database.js
 test('reference issuance retains unconfirmed history and refuses stale context in isolated PostgreSQL', async (t) => {
   const owned = createIsolatedTestDatabase();
   const db = owned.dataSource;
+  const migrations = db.options.migrations;
+  assert(Array.isArray(migrations));
+  const referenceIndex = migrations.findIndex(
+    (migration) =>
+      typeof migration === 'function' &&
+      migration.name === 'CameraConfigurationReferences1793491200000',
+  );
+  assert.equal(referenceIndex, 75);
+  db.setOptions({ migrations: migrations.slice(0, referenceIndex + 1) });
   try {
     await owned.initialize();
     const [last] = await db.query('SELECT name FROM migrations ORDER BY id DESC LIMIT 1');

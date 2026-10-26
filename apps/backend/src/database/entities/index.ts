@@ -56,6 +56,8 @@ import {
 export * from './camera-configuration-reference.entity.js';
 import { ZoneEntity } from './zone.entity.js';
 import { CameraObservationRegionEntity } from './camera-observation-region.entity.js';
+import { CameraRegionGeometryRevisionEntity } from './camera-region-geometry-revision.entity.js';
+export * from './camera-region-geometry-revision.entity.js';
 import { AiObservationEventEntity } from './ai-observation-event.entity.js';
 import { SafetyAlertEntity } from './safety-alert.entity.js';
 import { AlertDetectionMappingEntity } from './alert-detection-mapping.entity.js';
@@ -190,6 +192,7 @@ export const ENTITIES = [
   CameraConfigurationReferenceEntity,
   ZoneEntity,
   CameraObservationRegionEntity,
+  CameraRegionGeometryRevisionEntity,
   AiObservationEventEntity,
   SafetyAlertEntity,
   AlertDetectionMappingEntity,

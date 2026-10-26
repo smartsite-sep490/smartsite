@@ -94,3 +94,12 @@ The current repair leaves historical migration bytes unchanged.
 - Do not blindly replace `mf06_authority_*` with `zone_authority_*`: a retired
   branch schema already uses several of those names.
 - This repair does not migrate production or establish Face/identity/model trust.
+
+## Camera Region immutable state history
+
+`CameraRegionGeometryRevisions1793577600000` adds the14-column
+`camera_region_geometry_revision` table plus composite supporting unique keys on
+Region and authoring reference. It records polygon, active state, version and
+truthful cutover provenance in existing configuration transactions. See
+[column/FK mappings and rollback boundary](camera-region-geometry-revisions.md).
+This migration does not activate new reference-bound commands or change website/cloud databases.

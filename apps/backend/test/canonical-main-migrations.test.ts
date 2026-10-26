@@ -77,10 +77,11 @@ test(
       'ZoneAlertNotifications1793318400000',
       'AlertDetectionSubject1793404800000',
       'CameraConfigurationReferences1793491200000',
+      'CameraRegionGeometryRevisions1793577600000',
     ];
     const expected = [...names, ...extensions];
     assert.deepEqual([...actual].sort(), [...expected].sort());
-    assert.equal(actual.length, 76);
+    assert.equal(actual.length, 77);
     assert.equal(new Set(actual).size, actual.length, 'migration registrations must be unique');
     assert.equal(new Set(expected).size, names.length + extensions.length);
     assert.equal(registered.synchronize, false);
@@ -102,6 +103,17 @@ test(
       cameraConfigurationReferencesPath,
     );
     const historicalOptions = original('apps/backend/src/database/typeorm.options.ts').toString();
+    assert.equal(
+      digest(
+        readFileSync(
+          join(
+            repository,
+            'apps/backend/src/database/migrations/1793577600000-CameraRegionGeometryRevisions.ts',
+          ),
+        ),
+      ),
+      'd1e56010d1b22f668f2c4e95db518b4aae67d14f487ac3ab5887b13406917923',
+    );
     for (const match of historicalOptions.matchAll(/from '\.\/migrations\/([\w-]+)\.js'/g)) {
       const path = `apps/backend/src/database/migrations/${match[1]}.ts`;
       assert.equal(digest(readFileSync(join(repository, path))), digest(original(path)), path);

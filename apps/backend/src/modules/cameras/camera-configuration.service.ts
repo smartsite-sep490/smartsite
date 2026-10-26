@@ -1,6 +1,7 @@
 import { mainSiteManagerAuthorization } from '../../common/configuration/main-site-manager-authority.js';
 import { randomUUID } from 'node:crypto';
 import { readCameraObservationZones } from './camera-observation-zones.query.js';
+import { recordRegionRevision } from './camera-region-revisions.js';
 import { Injectable } from '@nestjs/common';
 import {
   parseCameraRegionConfigurationPayload,
@@ -328,6 +329,8 @@ export class CameraConfigurationService {
         }
         camera.status = value.status;
         await this.bump(manager, camera);
+        for (const region of activeRegions)
+          await recordRegionRevision(manager, camera, region, true);
         await this.snapshot(manager, camera, true);
         return camera;
       },
@@ -407,6 +410,7 @@ export class CameraConfigurationService {
         });
         await this.zones.markLinked(manager, zone);
         await this.bump(manager, camera);
+        await recordRegionRevision(manager, camera, region, false);
         await this.snapshot(manager, camera, true);
         return Object.assign(region, { configurationVersion: camera.configurationVersion });
       },
@@ -494,6 +498,7 @@ export class CameraConfigurationService {
         this.bumpRegion(region);
         await repo.save(region);
         await this.bump(manager, camera);
+        await recordRegionRevision(manager, camera, region, operation === 'REGION_STATUS_UPDATE');
         await this.snapshot(manager, camera, true);
         return Object.assign(region, { configurationVersion: camera.configurationVersion });
       },

@@ -41,6 +41,7 @@ const afterRelease54 = new Set([
   'ZoneAlertNotifications1793318400000',
   'AlertDetectionSubject1793404800000',
   'CameraConfigurationReferences1793491200000',
+  'CameraRegionGeometryRevisions1793577600000',
 ]);
 for (const profile of [
   'fresh',

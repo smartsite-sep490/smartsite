@@ -5,6 +5,7 @@ import { AuthorizationHistoryCutover1793232000000 } from './migrations/179323200
 import { ZoneAlertNotifications1793318400000 } from './migrations/1793318400000-ZoneAlertNotifications.js';
 import { AlertDetectionSubject1793404800000 } from './migrations/1793404800000-AlertDetectionSubject.js';
 import { CameraConfigurationReferences1793491200000 } from './migrations/1793491200000-CameraConfigurationReferences.js';
+import { CameraRegionGeometryRevisions1793577600000 } from './migrations/1793577600000-CameraRegionGeometryRevisions.js';
 import { PrepareNotificationCompatibility1792010000000 } from './migrations/1792010000000-PrepareNotificationCompatibility.js';
 import { Mf06TeamAuthorityHistory1792281600000 } from './migrations/1792281600000-Mf06TeamAuthorityHistory.js';
 import { CompleteNotificationCompatibility1792368000001 } from './migrations/1792368000001-CompleteNotificationCompatibility.js';
@@ -192,6 +193,7 @@ export function buildTypeOrmOptions(config: DatabaseConnectionConfig): DataSourc
       ZoneAlertNotifications1793318400000,
       AlertDetectionSubject1793404800000,
       CameraConfigurationReferences1793491200000,
+      CameraRegionGeometryRevisions1793577600000,
     ],
     logging: false,
     extra: {
