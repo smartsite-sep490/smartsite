@@ -50,6 +50,11 @@ import {
 export * from './qr-access.entity.js';
 import { CameraEntity } from './camera.entity.js';
 import {
+  CameraConfigurationBundleEntity,
+  CameraConfigurationBundleRegionEntity,
+} from './camera-configuration-bundle.entity.js';
+export * from './camera-configuration-bundle.entity.js';
+import {
   CameraConfigurationReferenceEntity,
   CameraViewRevisionEntity,
 } from './camera-configuration-reference.entity.js';
@@ -190,6 +195,8 @@ export const ENTITIES = [
   SafetyWorkflowAuditEntity,
   SiteEntity,
   CameraEntity,
+  CameraConfigurationBundleEntity,
+  CameraConfigurationBundleRegionEntity,
   CameraViewRevisionEntity,
   CameraConfigurationReferenceEntity,
   ZoneEntity,

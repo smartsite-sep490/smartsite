@@ -17,6 +17,13 @@ import { createIsolatedTestDatabase } from '../support/isolated-test-database.js
 test('Zone PPE policy history is immutable, truthful at cutover and atomic with commands', async (t) => {
   const owned = createIsolatedTestDatabase();
   const db = owned.dataSource;
+  const migrations = db.options.migrations;
+  assert(Array.isArray(migrations));
+  const policyIndex = migrations.findIndex(
+    (m) => typeof m === 'function' && m.name === 'ZonePolicyRevisions1793664000000',
+  );
+  assert.equal(policyIndex, 77);
+  db.setOptions({ migrations: migrations.slice(0, policyIndex + 1) });
   const siteId = randomUUID(),
     oldZoneId = randomUUID();
   const policy = {

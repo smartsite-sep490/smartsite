@@ -69,6 +69,11 @@ async function createFixture() {
     "INSERT INTO zone(id,site_id,code,name,type,restriction_policy) VALUES($1,$2,$1::uuid::text,'Synthetic Zone','RESTRICTED','AUTHORIZATION_REQUIRED')",
     [zoneId, siteId],
   );
+  await db.query(
+    `INSERT INTO zone_policy_revision(zone_id,policy_revision,site_id,zone_type,restriction_policy,required_ppe,is_cutover_baseline)
+    VALUES($1,1,$2,'RESTRICTED','AUTHORIZATION_REQUIRED','{}',true)`,
+    [zoneId, siteId],
+  );
   const context = await actor('SITE_MANAGER', siteId);
   const camera = await cameras.create(
     siteId,

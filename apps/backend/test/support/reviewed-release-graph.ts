@@ -137,9 +137,13 @@ export function reviewedReleaseMigrationNames(migrations: unknown): string[] {
   const regionRevisions = 'CameraRegionGeometryRevisions1793577600000';
   const release77 = names.includes(regionRevisions) ? [...release76, regionRevisions] : expected;
   const zonePolicies = 'ZonePolicyRevisions1793664000000';
-  const finalExpected = names.includes(zonePolicies)
+  const release78 = names.includes(zonePolicies)
     ? [...release76, regionRevisions, zonePolicies]
     : release77;
+  const cameraBundles = 'CameraConfigurationBundles1793750400000';
+  const finalExpected = names.includes(cameraBundles)
+    ? [...release76, regionRevisions, zonePolicies, cameraBundles]
+    : release78;
   assert.deepEqual(names, finalExpected, 'Exact reviewed release migration names and order');
   return names;
 }

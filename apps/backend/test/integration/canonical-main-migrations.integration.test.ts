@@ -43,6 +43,7 @@ const afterRelease54 = new Set([
   'CameraConfigurationReferences1793491200000',
   'CameraRegionGeometryRevisions1793577600000',
   'ZonePolicyRevisions1793664000000',
+  'CameraConfigurationBundles1793750400000',
 ]);
 for (const profile of [
   'fresh',

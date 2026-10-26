@@ -1,5 +1,6 @@
 import { mainSiteManagerAuthorization } from '../../common/configuration/main-site-manager-authority.js';
 import { randomUUID } from 'node:crypto';
+import { recordCameraConfigurationBundle } from './camera-configuration-bundles.js';
 import { readCameraObservationZones } from './camera-observation-zones.query.js';
 import {
   recordRegionRevision,
@@ -348,7 +349,12 @@ export class CameraConfigurationService {
         await this.bump(manager, camera);
         for (const region of activeRegions)
           await recordRegionRevision(manager, camera, region, true);
-        await this.snapshot(manager, camera, true);
+        await recordCameraConfigurationBundle(
+          manager,
+          camera,
+          await this.snapshot(manager, camera, true),
+          this.zones,
+        );
         return camera;
       },
       mainSiteManagerAuthorization(context, siteId),
@@ -471,7 +477,12 @@ export class CameraConfigurationService {
         await this.zones.markLinked(manager, zone);
         await this.bump(manager, camera);
         await recordRegionRevision(manager, camera, region, false, provenance);
-        await this.snapshot(manager, camera, true);
+        await recordCameraConfigurationBundle(
+          manager,
+          camera,
+          await this.snapshot(manager, camera, true),
+          this.zones,
+        );
         return regionMutationResult(region, camera.configurationVersion, provenance);
       },
       mainSiteManagerAuthorization(context, siteId),
@@ -599,7 +610,12 @@ export class CameraConfigurationService {
           operation === 'REGION_STATUS_UPDATE',
           provenance,
         );
-        await this.snapshot(manager, camera, true);
+        await recordCameraConfigurationBundle(
+          manager,
+          camera,
+          await this.snapshot(manager, camera, true),
+          this.zones,
+        );
         return regionMutationResult(region, camera.configurationVersion, provenance);
       },
       mainSiteManagerAuthorization(context, siteId),

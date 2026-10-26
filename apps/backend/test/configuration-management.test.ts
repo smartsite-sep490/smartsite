@@ -10,6 +10,7 @@ import {
 } from '../src/modules/zones/zone-configuration.service.js';
 import { command } from '../src/common/configuration/commands.js';
 import { CameraEntity } from '../src/database/entities/camera.entity.js';
+import { CameraViewRevisionEntity } from '../src/database/entities/camera-configuration-reference.entity.js';
 import { CameraObservationRegionEntity } from '../src/database/entities/camera-observation-region.entity.js';
 import { CameraStatus, ZoneRestrictionPolicy, ZoneType } from '../src/database/entities/enums.js';
 import { PublicHttpException } from '../src/common/http/public-http-exception.js';
@@ -192,6 +193,7 @@ test('camera status survives a reload and both lifecycle transitions advance the
     },
   };
   const manager = {
+    queryRunner: { isTransactionActive: true },
     query: async (sql: string) => {
       assert.match(sql, /FROM pg_class/);
       return [{ n: 0 }];
@@ -199,11 +201,13 @@ test('camera status survives a reload and both lifecycle transitions advance the
     getRepository: (entity: unknown) =>
       entity === CameraEntity
         ? cameraRepository
-        : {
-            async find() {
-              return [];
+        : entity === CameraViewRevisionEntity
+          ? { findOneBy: async () => null }
+          : {
+              async find() {
+                return [];
+              },
             },
-          },
   } as unknown as EntityManager;
   const db = {
     getRepository: manager.getRepository.bind(manager),

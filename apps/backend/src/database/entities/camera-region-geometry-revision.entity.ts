@@ -4,6 +4,7 @@ import { CameraConfigurationReferenceEntity } from './camera-configuration-refer
 import { UserEntity } from './user.entity.js';
 
 @Entity({ name: 'camera_region_geometry_revision' })
+@Unique('uq_region_revision_bundle_scope', ['regionId', 'geometryVersion', 'cameraId', 'zoneId'])
 @Unique('uq_region_revision_camera_configuration', ['cameraId', 'configurationVersion', 'regionId'])
 @ForeignKey(
   () => CameraObservationRegionEntity,

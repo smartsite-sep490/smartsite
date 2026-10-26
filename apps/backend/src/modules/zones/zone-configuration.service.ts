@@ -32,6 +32,7 @@ import { ZoneRestrictionPolicy, ZoneType } from '../../database/entities/enums.j
 import { ZoneEntity } from '../../database/entities/zone.entity.js';
 import { SiteConfigurationService } from '../sites/site-configuration.service.js';
 import { appendZonePolicyRevision } from './zone-policy-revisions.js';
+import { ZonePolicyRevisionEntity } from '../../database/entities/zone-policy-revision.entity.js';
 
 const trim = ({ value }: { value: unknown }) => (typeof value === 'string' ? value.trim() : value);
 
@@ -250,5 +251,25 @@ export class ZoneConfigurationService {
     if (zone.configurationLocked) return;
     await manager.getRepository(ZoneEntity).update({ id: zone.id }, { configurationLocked: true });
     zone.configurationLocked = true;
+  }
+
+  /** Configuration issuance uses persisted current policy, never a fabricated historical binding. */
+  async configurationPolicy(manager: EntityManager, siteId: string, zoneId: string) {
+    const zone = await manager.getRepository(ZoneEntity).findOneBy({ id: zoneId, siteId });
+    // Linked policy is permanently locked; do not introduce cross-camera Zone lock cycles.
+    if (!zone?.configurationLocked) conflict('Zone policy history is unavailable');
+    const policy = await manager.getRepository(ZonePolicyRevisionEntity).findOne({
+      where: { zoneId: zone.id, siteId },
+      order: { policyRevision: 'DESC' },
+    });
+    if (
+      !policy ||
+      policy.zoneType !== zone.type ||
+      policy.restrictionPolicy !== zone.restrictionPolicy ||
+      JSON.stringify([...policy.requiredPpe].sort()) !==
+        JSON.stringify([...zone.requiredPpe].sort())
+    )
+      conflict('Zone policy history is unavailable');
+    return policy;
   }
 }

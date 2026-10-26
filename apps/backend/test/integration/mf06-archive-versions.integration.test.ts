@@ -15,7 +15,7 @@ before(async () => {
   assert.match(db.options.schema ?? '', /^isolated_test_[a-f0-9]{32}$/);
   console.info('Owned archive-version test schema:', db.options.schema);
   await isolated.initialize();
-  assert.equal(db.migrations.length, 78);
+  assert.equal(db.migrations.length, 79);
   const migrationNames = db.migrations.map(
     (migration) => migration.name ?? migration.constructor.name,
   );

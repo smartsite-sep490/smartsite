@@ -1,5 +1,13 @@
 # Schema extension inventory
 
+## C03 immutable camera bundle extension
+
+`CameraConfigurationBundles1793750400000` adds a seven-column header and six-column
+Region binding table, with no duplicated polygon/PPE payload or backfilled bundle.
+See [column/FK/issuance/rollback mapping](camera-configuration-bundles.md) and
+[additive DBML](camera-configuration-bundles.dbml). This is persisted issuance;
+worker delivery, enrollment, ACK, current demo adoption and production remain open.
+
 ## C03 Zone policy provenance extension
 
 `ZonePolicyRevisions1793664000000` adds the eight-column `zone_policy_revision`

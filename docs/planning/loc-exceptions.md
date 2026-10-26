@@ -1,5 +1,16 @@
 # Scoped LOC exceptions
 
+## Immutable camera bundle issuance, 27 October
+
+Root permits three thin issuance calls on the existing oversized Camera service;
+new assembly/persistence logic stays in `camera-configuration-bundles.ts` below150
+lines and policy lookup stays with ZoneConfigurationService. Actual Agy p5 reviewed
+the production boundary. Splitting existing command transactions now risks divergent
+auth/locking/rollback; extract cohesive Region mutation orchestration before further
+large service additions. The new PostgreSQL journey slightly exceeds400 test lines
+but stays below700 and keeps its shared scenario/rollback state together. No test
+assertions are compressed or removed. Owner: Root; no general service growth granted.
+
 ## Reference-bound Region client, 26 October
 
 Root permits `packages/api-client/src/management.ts` 4052->4105 physical lines

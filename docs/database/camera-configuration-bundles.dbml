@@ -1,0 +1,37 @@
+// Additive mapping; combine with baseline and reference/geometry/policy extension tables.
+// External FK targets are existing physical tables, not redefined here. Not standalone restore SQL.
+Table camera_configuration_bundle {
+  camera_id uuid [not null]
+  configuration_version bigint [not null, note: '1..9007199254740991']
+  site_id uuid [not null]
+  camera_external_id varchar(128) [not null]
+  view_revision bigint [not null, note: '1..9007199254740991']
+  issued_at timestamptz [not null, note: 'Finite, exact millisecond Date used in canonical hash']
+  bundle_sha256 char(64) [not null, note: 'Lowercase hexadecimal SHA256']
+  indexes {
+    (camera_id, configuration_version) [pk, name: 'pk_camera_configuration_bundle']
+    (camera_id, bundle_sha256) [unique, name: 'uq_camera_bundle_hash']
+    (camera_id, view_revision, site_id) [name: 'idx_camera_bundle_view_scope']
+    (site_id, issued_at) [name: 'idx_camera_bundle_site_time']
+  }
+  Note: 'Append-only statement trigger; no backfill; populated rollback refuses.'
+}
+Table camera_configuration_bundle_region {
+  camera_id uuid [not null]
+  configuration_version bigint [not null]
+  region_id uuid [not null]
+  geometry_version integer [not null]
+  zone_id uuid [not null]
+  policy_revision bigint [not null]
+  indexes {
+    (camera_id, configuration_version, region_id) [pk, name: 'pk_camera_configuration_bundle_region']
+    (region_id, geometry_version, camera_id, zone_id) [name: 'idx_camera_bundle_region_geometry']
+    (zone_id, policy_revision) [name: 'idx_camera_bundle_region_policy']
+  }
+  Note: 'Append-only; versions constrained through existing positive-version FK targets.'
+}
+Ref fk_camera_bundle_view_scope: camera_configuration_bundle.(camera_id, view_revision, site_id) > camera_view_revision.(camera_id, revision, site_id) [delete: restrict]
+Ref fk_camera_bundle_region_header: camera_configuration_bundle_region.(camera_id, configuration_version) > camera_configuration_bundle.(camera_id, configuration_version) [delete: restrict]
+Ref fk_camera_bundle_region_geometry: camera_configuration_bundle_region.(region_id, geometry_version, camera_id, zone_id) > camera_region_geometry_revision.(region_id, geometry_version, camera_id, zone_id) [delete: restrict]
+Ref fk_camera_bundle_region_policy: camera_configuration_bundle_region.(zone_id, policy_revision) > zone_policy_revision.(zone_id, policy_revision) [delete: restrict]
+// Supporting UNIQUE uq_region_revision_bundle_scope added to camera_region_geometry_revision.
