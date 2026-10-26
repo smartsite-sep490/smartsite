@@ -18,6 +18,7 @@ import {
   type CameraConfigurationReference,
 } from './useCameraConfigurationReference';
 import { ZonePpeCameraRegionDrawer } from './ZonePpeCameraRegionDrawer';
+import { RegionGeometryConfirmationStatus } from './RegionGeometryConfirmationStatus';
 import { useCameraRegionMutationScope } from './useCameraRegionMutationScope';
 
 export interface ZonePpeCameraRegionPanelProps {
@@ -540,6 +541,7 @@ function ZonePpeCameraRegionPanelContent({
   const handleAcceptCandidateReference = (candidate: CameraConfigurationReference) => {
     if (isConfigurationReferenceExpiredAt(candidate, Date.now())) return;
     setIsCandidateReviewOpen(false);
+    setLastSavedDraft(null); // Fresh issuance permits reconfirming unchanged geometry.
     setDrawingScope((prev) => {
       if (!prev) return prev;
       return {
@@ -982,6 +984,9 @@ function ZonePpeCameraRegionPanelContent({
                           : t('regionSetup.list.statusInactive'),
                       })}
                     </span>
+                    <RegionGeometryConfirmationStatus
+                      geometryConfirmation={region.geometryConfirmation}
+                    />
                   </div>
                   <div className="flex items-center gap-2 shrink-0">
                     {editablePoints && (

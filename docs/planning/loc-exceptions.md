@@ -342,3 +342,15 @@ and do not minify tests to satisfy LOC. Root checked all changed caller fixtures
 actual Agy independent source review found no reported blocker. This exception
 is limited to C03 metadata/fixtures and does not change normal LOC limits or
 establish browser, physical camera, worker application or production acceptance.
+
+## Manual geometry confirmation visibility and reconfirmation, 27 October
+
+Root permits the existing Region panel1046->1051 physical lines for one
+confirmation-status component call/import and clearing the duplicate-draft marker
+only after explicit acceptance of a fresh reference. The new status component is
+below300 lines; parser and catalog responsibilities stay cohesive. The existing
+submission journey test is parameterized for changed vs unchanged coordinates,
+retaining old-reference duplicate rejection and new-reference confirmation.
+This scoped exception does not authorize unrelated panel growth, worker ACK,
+physical camera pose or production acceptance. Before more panel behavior, extract
+the cohesive Region-list/editor boundary rather than expanding the monolith.

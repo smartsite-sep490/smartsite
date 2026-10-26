@@ -89,3 +89,14 @@ Component/API checks are bounded software evidence. They do not prove real camer
 rendering, pointer behavior on a physical browser, accessibility with assistive
 technology, model accuracy, deployment or whole MF05/MF06 acceptance. The local
 integration checklist keeps those gates separate; mobile is outside this task.
+
+## Confirmation history on the Region list
+
+Each Region shows its persisted geometry confirmation: none recorded, confirmed
+on an image, or review required after the recorded view changed. Missing legacy
+metadata remains unconfirmed; malformed present metadata is unavailable. Optional
+details show the reference/view/time without exposing the raw actor UUID. These
+labels do not mean the camera or monitoring is ready. A freshly accepted reference
+can reconfirm unchanged coordinates; repeating a save on the old reference stays
+blocked. The explicit authoring-confirmation checkbox from C03 remains a separate
+open UI gate; these source changes do not close the full configuration journey.
