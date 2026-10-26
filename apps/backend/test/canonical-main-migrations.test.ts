@@ -76,10 +76,11 @@ test(
       'AuthorizationHistoryCutover1793232000000',
       'ZoneAlertNotifications1793318400000',
       'AlertDetectionSubject1793404800000',
+      'CameraConfigurationReferences1793491200000',
     ];
     const expected = [...names, ...extensions];
     assert.deepEqual([...actual].sort(), [...expected].sort());
-    assert.equal(actual.length, 75);
+    assert.equal(actual.length, 76);
     assert.equal(new Set(actual).size, actual.length, 'migration registrations must be unique');
     assert.equal(new Set(expected).size, names.length + extensions.length);
     assert.equal(registered.synchronize, false);
@@ -93,6 +94,13 @@ test(
         path,
       );
     }
+    const cameraConfigurationReferencesPath =
+      'apps/backend/src/database/migrations/1793491200000-CameraConfigurationReferences.ts';
+    assert.equal(
+      digest(readFileSync(join(repository, cameraConfigurationReferencesPath))),
+      'aa2dac2b7f872247d84add462b17526b4d99f882308328b022ce12cf89993b50',
+      cameraConfigurationReferencesPath,
+    );
     const historicalOptions = original('apps/backend/src/database/typeorm.options.ts').toString();
     for (const match of historicalOptions.matchAll(/from '\.\/migrations\/([\w-]+)\.js'/g)) {
       const path = `apps/backend/src/database/migrations/${match[1]}.ts`;

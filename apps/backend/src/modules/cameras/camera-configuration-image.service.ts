@@ -1,6 +1,7 @@
 import { createHash } from 'node:crypto';
 import { HttpStatus, Inject, Injectable, Optional, type OnModuleDestroy } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
+import type { EntityManager } from 'typeorm';
 import {
   CONFIGURATION_REFERENCE_LIFETIME_MS,
   decodeConfigurationJpeg,
@@ -48,8 +49,8 @@ export class CameraConfigurationImageService implements OnModuleDestroy {
     for (const controller of this.reads.values()) controller.abort();
   }
 
-  private async authorize(token: string, siteId: string): Promise<void> {
-    const { user } = await this.auth.authenticate(token);
+  async authorize(token: string, siteId: string, manager?: EntityManager): Promise<string> {
+    const { user } = await this.auth.authenticate(token, manager);
     if (user.mustChangePassword) {
       throw new PublicHttpException(HttpStatus.FORBIDDEN, {
         code: 'PASSWORD_CHANGE_REQUIRED',
@@ -72,6 +73,7 @@ export class CameraConfigurationImageService implements OnModuleDestroy {
       });
     }
     if (this.shuttingDown) unavailable();
+    return user.id;
   }
 
   private async camera(siteId: string, cameraId: string) {

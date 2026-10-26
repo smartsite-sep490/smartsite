@@ -111,7 +111,7 @@ export function reviewedReleaseMigrationNames(migrations: unknown): string[] {
     ? [...release73, zoneNotifications]
     : release73;
   const alertSubject = 'AlertDetectionSubject1793404800000';
-  const expected = names.includes(alertSubject)
+  const release75 = names.includes(alertSubject)
     ? [
         ...release61,
         workerQr,
@@ -122,6 +122,19 @@ export function reviewedReleaseMigrationNames(migrations: unknown): string[] {
         alertSubject,
       ]
     : release74;
+  const cameraReferences = 'CameraConfigurationReferences1793491200000';
+  const expected = names.includes(cameraReferences)
+    ? [
+        ...release61,
+        workerQr,
+        ...documents,
+        ...release72Extensions,
+        cutover,
+        zoneNotifications,
+        alertSubject,
+        cameraReferences,
+      ]
+    : release75;
   assert.deepEqual(names, expected, 'Exact reviewed release migration names and order');
   return names;
 }

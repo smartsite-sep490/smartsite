@@ -48,6 +48,19 @@ snapshot without reconciling Main's attendance contract.
 
 ## Open integration work
 
+### Camera authoring references — 26 October 2026
+
+`CameraConfigurationReferences1793491200000` adds two business-named tables,
+`camera_view_revision` and `camera_configuration_reference`, with 25 new columns
+and no alteration to the owner's baseline tables. The exact physical mapping,
+constraints, foreign keys and rollback boundary are documented in
+[camera-configuration-references.md](camera-configuration-references.md).
+Both records describe unconfirmed authoring provenance, not Worker identity,
+camera movement detection, verified geometry or worker application. Immutable
+reference metadata and retired contexts remain available for later binding.
+The source endpoint requires this migration; no runtime/demo/cloud database
+cutover is authorized by publishing it. Old image reads remain compatible.
+
 ### Exact subject provenance extension — 23 October 2026
 
 `AlertDetectionSubject1793404800000` adds only

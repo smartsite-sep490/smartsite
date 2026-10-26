@@ -40,6 +40,7 @@ const afterRelease54 = new Set([
   'AuthorizationHistoryCutover1793232000000',
   'ZoneAlertNotifications1793318400000',
   'AlertDetectionSubject1793404800000',
+  'CameraConfigurationReferences1793491200000',
 ]);
 for (const profile of [
   'fresh',

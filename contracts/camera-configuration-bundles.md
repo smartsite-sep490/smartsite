@@ -26,8 +26,22 @@ versioned polygon command must find its persisted server record, recheck current
 Site/camera grants and configuration/view revision, and bind the session, image
 hash and dimensions before writing. Camera stability, enrollment, application,
 historical provenance and model quality are not established by these fields.
-No reference issuance endpoint, persistence, migration or polygon-write cutover
-is activated by this contract. The actual C03 journey remains open.
+Backend source now includes `GET /sites/:siteId/cameras/:cameraId/configuration-reference`
+after migration `CameraConfigurationReferences1793491200000`. It returns
+`{ image, reference, viewValidity: 'UNCONFIRMED' }`, with the existing validated
+image response and a persisted metadata reference. Existing image-read roles
+and Site scope apply. Network image retrieval finishes before the transaction;
+the original bearer is reauthenticated inside the transaction, then the Camera
+row is locked and its status, Site, external ID and configuration version are
+checked again. PostgreSQL supplies `issuedAt`. Responses use `Cache-Control: no-store`.
+
+Only metadata is stored; there is no persisted image-download capability. Context
+changes create a new unconfirmed revision and retain prior references, without
+moving old polygons or asserting camera motion. A repeat GET issues a fresh
+reference, not an alert, policy command or applied-state receipt. The legacy
+`configuration-image` response is unchanged. Apply the migration before running
+this endpoint. No website/database cutover or runtime rollout follows from source
+publication; reference-bound polygon writes and the actual C03 journey remain open.
 
 The additive draft 2020-12 schema lives at
 `schemas/v1/camera-configuration-image-reference.json`. It validates exact JSON

@@ -26,7 +26,7 @@ const database = createIsolatedTestDatabase({ canonical: true });
 before(() => database.initialize());
 after(() => database.dispose());
 
-test('full AppModule configuration image works before any Region and withholds pixels after real session logout', async () => {
+test('full AppModule image/reference work before any Region and withhold pixels after real session logout', async () => {
   reviewedReleaseMigrationNames(database.dataSource.migrations);
   assert.equal(await database.dataSource.showMigrations(), false);
   const suffix = randomUUID().slice(0, 8);
@@ -203,6 +203,45 @@ test('full AppModule configuration image works before any Region and withholds p
     assert.equal(image.frame.imageSha256, sha);
     assert.equal(JSON.stringify(image).includes(serviceToken), false);
     assert.equal(sourceReads, 1);
+    const referencePath = `/sites/${site.id}/cameras/${camera.id}/configuration-reference`;
+    assert.equal((await request('GET', referencePath)).status, 401);
+    assert.equal(
+      (
+        await request(
+          'GET',
+          referencePath + '?referenceId=untrusted',
+          undefined,
+          session.accessToken,
+        )
+      ).status,
+      400,
+    );
+    assert.equal(
+      (
+        await request(
+          'GET',
+          `/sites/${randomUUID()}/cameras/${camera.id}/configuration-reference`,
+          undefined,
+          managerSession.accessToken,
+        )
+      ).status,
+      403,
+    );
+    assert.equal(sourceReads, 1);
+    const referenceResponse = await request('GET', referencePath, undefined, session.accessToken);
+    assert.equal(referenceResponse.status, 200);
+    assert.equal(referenceResponse.headers.get('cache-control'), 'no-store');
+    const snapshot = await referenceResponse.json();
+    assert.equal(snapshot.viewValidity, 'UNCONFIRMED');
+    assert.equal(snapshot.reference.cameraId, camera.id);
+    assert.equal(snapshot.reference.imageSha256, snapshot.image.frame.imageSha256);
+    assert.equal(snapshot.reference.configurationVersion, camera.configurationVersion);
+    assert.equal(snapshot.reference.viewRevision, 1);
+    const [persisted] = await database.dataSource.query(
+      'SELECT image_sha256 FROM camera_configuration_reference WHERE id=$1',
+      [snapshot.reference.referenceId],
+    );
+    assert.equal(persisted.image_sha256, sha);
     const regions = await request(
       'GET',
       `/sites/${site.id}/cameras/${camera.id}/regions`,
@@ -212,7 +251,7 @@ test('full AppModule configuration image works before any Region and withholds p
     assert.equal(regions.status, 200);
     assert.equal((await regions.json()).total, 0);
     hold = true;
-    const pending = request('GET', path, undefined, session.accessToken);
+    const pending = request('GET', referencePath, undefined, session.accessToken);
     await Promise.race([
       sourceEntered,
       pending.then(() => {
@@ -231,7 +270,12 @@ test('full AppModule configuration image works before any Region and withholds p
     assert.equal(deniedBody.includes('imageDataUrl'), false);
     assert.equal(deniedBody.includes(jpeg.toString('base64')), false);
     assert.equal((await request('GET', path, undefined, session.accessToken)).status, 401);
-    assert.equal(sourceReads, 2);
+    assert.equal((await request('GET', referencePath, undefined, session.accessToken)).status, 401);
+    assert.equal(sourceReads, 3);
+    const [referenceCount] = await database.dataSource.query(
+      'SELECT count(*)::int AS count FROM camera_configuration_reference',
+    );
+    assert.equal(referenceCount.count, 1);
   } finally {
     release();
     await app?.close();

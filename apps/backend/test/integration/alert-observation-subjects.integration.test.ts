@@ -29,6 +29,14 @@ import { createIsolatedTestDatabase } from '../support/isolated-test-database.js
 test('subject provenance survives upgrade, retry and rollback boundaries in isolated PostgreSQL', async (t) => {
   const owned = createIsolatedTestDatabase();
   const db = owned.dataSource;
+  const production = db.options.migrations;
+  assert(Array.isArray(production));
+  const subjectIndex = production.findIndex(
+    (migration) =>
+      typeof migration === 'function' && migration.name === 'AlertDetectionSubject1793404800000',
+  );
+  assert.equal(subjectIndex, 74);
+  db.setOptions({ migrations: production.slice(0, subjectIndex + 1) });
   try {
     await owned.initialize();
     const [column] = await db.query(`SELECT data_type,is_nullable FROM information_schema.columns
@@ -47,27 +55,23 @@ test('subject provenance survives upgrade, retry and rollback boundaries in isol
     await db
       .getRepository(SiteEntity)
       .insert({ id: siteId, code: 'SUBJECT-SITE', name: 'Synthetic Site' });
-    await db
-      .getRepository(CameraEntity)
-      .insert({
-        id: cameraId,
-        siteId,
-        externalId: cameraExternalId,
-        code: 'SUBJECT-CAMERA',
-        name: 'Synthetic Camera',
-        status: CameraStatus.ACTIVE,
-      });
-    await db
-      .getRepository(ZoneEntity)
-      .insert({
-        id: zoneId,
-        siteId,
-        code: 'SUBJECT-ZONE',
-        name: 'Synthetic Zone',
-        type: ZoneType.STANDARD,
-        restrictionPolicy: ZoneRestrictionPolicy.NONE,
-        requiredPpe: ['HARD_HAT', 'SAFETY_VEST', 'GLOVES'],
-      });
+    await db.getRepository(CameraEntity).insert({
+      id: cameraId,
+      siteId,
+      externalId: cameraExternalId,
+      code: 'SUBJECT-CAMERA',
+      name: 'Synthetic Camera',
+      status: CameraStatus.ACTIVE,
+    });
+    await db.getRepository(ZoneEntity).insert({
+      id: zoneId,
+      siteId,
+      code: 'SUBJECT-ZONE',
+      name: 'Synthetic Zone',
+      type: ZoneType.STANDARD,
+      restrictionPolicy: ZoneRestrictionPolicy.NONE,
+      requiredPpe: ['HARD_HAT', 'SAFETY_VEST', 'GLOVES'],
+    });
     await db.getRepository(CameraObservationRegionEntity).insert({
       id: regionId,
       cameraId,
@@ -112,34 +116,30 @@ test('subject provenance survives upgrade, retry and rollback boundaries in isol
     });
     const legacy = event([person(90), missing(90)]);
     const legacyAlertId = randomUUID();
-    await db
-      .getRepository(AiObservationEventEntity)
-      .insert({
-        eventId: legacy.eventId,
-        payloadHash: computeCanonicalPayloadHash(legacy),
-        cameraExternalId,
-        resolvedCameraId: cameraId,
-        streamSessionId: sessionId,
-        capturedAt: new Date(legacy.capturedAt),
-        receivedAt: new Date(),
-        rawPayload: legacy,
-        processingStatus: EventProcessingStatus.PROCESSED,
-        processingNote: null,
-      });
-    await db
-      .getRepository(SafetyAlertEntity)
-      .insert({
-        id: legacyAlertId,
-        siteId,
-        zoneId,
-        alertType: AlertType.PPE_VIOLATION,
-        candidateSubtype: 'PPE_HARD_HAT_MISSING',
-        groupingKey: 'SYNTHETIC-LEGACY',
-        status: AlertStatus.PENDING_REVIEW,
-        firstDetectedAt: new Date(legacy.capturedAt),
-        lastDetectedAt: new Date(legacy.capturedAt),
-        detectionCount: 1,
-      });
+    await db.getRepository(AiObservationEventEntity).insert({
+      eventId: legacy.eventId,
+      payloadHash: computeCanonicalPayloadHash(legacy),
+      cameraExternalId,
+      resolvedCameraId: cameraId,
+      streamSessionId: sessionId,
+      capturedAt: new Date(legacy.capturedAt),
+      receivedAt: new Date(),
+      rawPayload: legacy,
+      processingStatus: EventProcessingStatus.PROCESSED,
+      processingNote: null,
+    });
+    await db.getRepository(SafetyAlertEntity).insert({
+      id: legacyAlertId,
+      siteId,
+      zoneId,
+      alertType: AlertType.PPE_VIOLATION,
+      candidateSubtype: 'PPE_HARD_HAT_MISSING',
+      groupingKey: 'SYNTHETIC-LEGACY',
+      status: AlertStatus.PENDING_REVIEW,
+      firstDetectedAt: new Date(legacy.capturedAt),
+      lastDetectedAt: new Date(legacy.capturedAt),
+      detectionCount: 1,
+    });
     await db.query('INSERT INTO alert_detection_mapping(alert_id,event_id) VALUES($1,$2)', [
       legacyAlertId,
       legacy.eventId,

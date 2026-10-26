@@ -9,10 +9,10 @@ test('independent reviewed registry accepts current release and rejects unknown,
   }).migrations;
   assert(Array.isArray(registered));
   const names = reviewedReleaseMigrationNames(registered);
-  assert.equal(names.length, 75);
-  for (const count of [61, 62, 66, 72, 73, 74])
+  assert.equal(names.length, 76);
+  for (const count of [61, 62, 66, 72, 73, 74, 75])
     assert.equal(reviewedReleaseMigrationNames(registered.slice(0, count)).length, count);
-  assert.equal(names.at(-1), 'AlertDetectionSubject1793404800000');
+  assert.equal(names.at(-1), 'CameraConfigurationReferences1793491200000');
   assert.deepEqual(reviewedReleaseMigrationNames(names.map((name) => ({ name }))), names);
   const reordered = [...registered];
   [reordered[0], reordered[1]] = [reordered[1]!, reordered[0]!];

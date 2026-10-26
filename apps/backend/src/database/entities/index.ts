@@ -49,6 +49,11 @@ import {
 } from './qr-access.entity.js';
 export * from './qr-access.entity.js';
 import { CameraEntity } from './camera.entity.js';
+import {
+  CameraConfigurationReferenceEntity,
+  CameraViewRevisionEntity,
+} from './camera-configuration-reference.entity.js';
+export * from './camera-configuration-reference.entity.js';
 import { ZoneEntity } from './zone.entity.js';
 import { CameraObservationRegionEntity } from './camera-observation-region.entity.js';
 import { AiObservationEventEntity } from './ai-observation-event.entity.js';
@@ -181,6 +186,8 @@ export const ENTITIES = [
   SafetyWorkflowAuditEntity,
   SiteEntity,
   CameraEntity,
+  CameraViewRevisionEntity,
+  CameraConfigurationReferenceEntity,
   ZoneEntity,
   CameraObservationRegionEntity,
   AiObservationEventEntity,
