@@ -71,6 +71,7 @@ const catalogs: Record<string, Set<string>> = {
     ...staticCatalogKeys('../components/cameras/camera-setup-catalog.ts', 'en'),
     ...staticCatalogKeys('../components/cameras/CameraSetupContextPanel.tsx', 'en'),
     ...staticCatalogKeys('../components/safety/safetyTaskTourModel.ts', 'en'),
+    ...staticCatalogKeys('../components/safety/episodes/episode-catalog.ts', 'EPISODE_EN_CATALOG'),
   ]),
 };
 

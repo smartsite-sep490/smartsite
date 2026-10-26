@@ -10,7 +10,6 @@ import { formatCandidateSubtype } from '../../alerts/safetyAlertEvidenceUtils';
 import { buttonClass, cardClass } from '../safety-workflow';
 import { StatusBadge, TechnicalDetails } from '../SafetyWorkflowUi';
 import './episode-catalog';
-import type { EpisodeCatalogKey } from './episode-catalog';
 
 export interface SafetyEpisodeContextLabels {
   site?: string;
@@ -64,9 +63,7 @@ export function SafetyEpisodeDetail({
   onSelectFinding,
   onRequestEvidence,
 }: SafetyEpisodeDetailProps) {
-  const { t: rawT } = useTranslation(SAFETY_NAMESPACE);
-  const t = (key: EpisodeCatalogKey, options?: Record<string, string | number>) =>
-    rawT(key, options ? { replace: options } : undefined);
+  const { t } = useTranslation(SAFETY_NAMESPACE);
 
   const validDecision = isMatchingSubjectDecision(episode, episode.identityDecision)
     ? episode.identityDecision
@@ -194,7 +191,7 @@ export function SafetyEpisodeDetail({
         className="space-y-2.5 border-b border-[var(--border)] pb-3"
       >
         <h3 className="text-sm font-bold break-words [overflow-wrap:anywhere]">
-          {t('episode.detail.findingsHeading', { count: episode.findings.length })}
+          {t('episode.detail.findingsHeading', { replace: { count: episode.findings.length } })}
         </h3>
 
         {episode.findings.length === 0 ? (
