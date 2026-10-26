@@ -23,6 +23,15 @@ import { createIsolatedTestDatabase } from '../support/isolated-test-database.js
 test('issued camera bundles retain exact immutable geometry and PPE policy without read-side issuance', async (t) => {
   const owned = createIsolatedTestDatabase(),
     db = owned.dataSource;
+  const migrations = db.options.migrations;
+  assert(Array.isArray(migrations));
+  const bundleIndex = migrations.findIndex(
+    (migration) =>
+      typeof migration === 'function' &&
+      migration.name === 'CameraConfigurationBundles1793750400000',
+  );
+  assert.equal(bundleIndex, 78);
+  db.setOptions({ migrations: migrations.slice(0, bundleIndex + 1) });
   try {
     await owned.initialize();
     const headers = () =>

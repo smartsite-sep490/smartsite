@@ -119,3 +119,12 @@ Region and authoring reference. It records polygon, active state, version and
 truthful cutover provenance in existing configuration transactions. See
 [column/FK mappings and rollback boundary](camera-region-geometry-revisions.md).
 This migration does not activate new reference-bound commands or change website/cloud databases.
+
+## Camera worker generations and receipt storage
+
+`CameraWorkerGenerations1793836800000` adds ten-column `camera_worker_generation`
+and thirteen-column `camera_configuration_application_receipt`, with exact scoped
+Camera/bundle foreign keys and append-only/lifecycle guards. See
+[mapping, authority and rollback limits](camera-worker-generations.md).
+No enrollment or application state is backfilled; ACK admission and runtime use
+remain separate work. The owner ERD baseline and existing migration bytes are preserved.

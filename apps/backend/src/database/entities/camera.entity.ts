@@ -13,6 +13,7 @@ import { SiteEntity } from './site.entity.js';
 @Entity({ name: 'camera' })
 @Unique('uq_camera_external_id', ['externalId'])
 @Unique('uq_camera_site_code', ['siteId', 'code'])
+@Unique('uq_camera_generation_site', ['id', 'siteId'])
 @Check('chk_camera_configuration_version', 'configuration_version BETWEEN 1 AND 9007199254740991')
 export class CameraEntity {
   @PrimaryColumn({ name: 'id', type: 'uuid', primaryKeyConstraintName: 'pk_camera_id' })

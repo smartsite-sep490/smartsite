@@ -55,6 +55,11 @@ import {
 } from './camera-configuration-bundle.entity.js';
 export * from './camera-configuration-bundle.entity.js';
 import {
+  CameraWorkerGenerationEntity,
+  CameraConfigurationApplicationReceiptEntity,
+} from './camera-worker-generation.entity.js';
+export * from './camera-worker-generation.entity.js';
+import {
   CameraConfigurationReferenceEntity,
   CameraViewRevisionEntity,
 } from './camera-configuration-reference.entity.js';
@@ -197,6 +202,8 @@ export const ENTITIES = [
   CameraEntity,
   CameraConfigurationBundleEntity,
   CameraConfigurationBundleRegionEntity,
+  CameraWorkerGenerationEntity,
+  CameraConfigurationApplicationReceiptEntity,
   CameraViewRevisionEntity,
   CameraConfigurationReferenceEntity,
   ZoneEntity,
