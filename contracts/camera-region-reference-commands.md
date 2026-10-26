@@ -1,6 +1,6 @@
 # Reference-bound Region commands (MF05/MF06 C03)
 
-Additive management transport only; the versioned Backend write handlers and shared-client/FE activation are not implemented by this contract. Existing Region APIs remain unchanged. No AI contract vendoring or rollout is implied.
+Additive management transport. Backend service writers are implemented separately; HTTP/read-reopen/shared-client/FE activation is not supplied by these parsers. Existing Region APIs remain compatible. No AI contract vendoring or rollout is implied.
 
 Create example for `POST /sites/:siteId/cameras/:cameraId/reference-regions`:
 
@@ -25,4 +25,26 @@ Update at `PATCH /sites/:siteId/cameras/:cameraId/regions/:regionId/reference-po
 
 Successful shape validation does not prove the reference exists, belongs to the requested camera/site, remains current/unexpired, or that the actor is authorized. Backend must reauthorize the exact scoped Site Manager, lock/check the camera/reference/view versions, and append provenance atomically. A manual confirmation is distinct from physical pose validity or worker application. See the approved C03 implementation rulings in local-docs; no automatic stale retry or reference-free fallback.
 
-The planned write path requires an active camera and equality between the current camera revision, `expectedConfigurationVersion` and the persisted reference revision. After a successful save, another save needs a newly issued reference; the UI keeps draft points and refreshes without automatically resubmitting. Reconfirming identical coordinates against a fresh reference must record new provenance. These are requirements for the future handlers, not guarantees supplied by these parsers.
+The write path requires an active camera and equality between the current camera revision, `expectedConfigurationVersion` and the persisted reference revision. After a successful save, another save needs a newly issued reference; the UI keeps draft points and refreshes without automatically resubmitting. Reconfirming identical coordinates against a fresh reference records new provenance. These are Backend requirements, not guarantees supplied by shape parsing.
+
+`RegionResponse.geometryConfirmation` is additive and optional for legacy callers.
+`ReferenceRegionMutationResponse` requires this field on its Region. Exported from
+the root and `@smartsite/contracts/camera-region-geometry-confirmation`:
+
+```json
+{
+  "status": "MANUALLY_CONFIRMED",
+  "referenceId": "11111111-2222-4333-8444-555555555551",
+  "viewRevision": 2,
+  "confirmedByUserId": "22222222-3333-4444-8555-666666666662",
+  "confirmedAt": "2026-10-26T14:30:00.000Z"
+}
+```
+
+`UNCONFIRMED` requires all four provenance fields to be null. Confirmed states
+require all four fields; `confirmedAt` uses canonical UTC milliseconds from
+`Date.toISOString()`. A known retired view becomes `NEEDS_REVALIDATION`; authoring
+reference expiry alone does not erase historical confirmation. Missing legacy
+fields must not fabricate confirmation. These states never mean physical pose
+validity, worker `LOADED`, authorization, or model acceptance. Backend projection
+must match the loaded Region.version and scope before FE consumes this contract.

@@ -93,6 +93,7 @@ export interface RegionResponse {
   version: number;
   isActive: boolean;
   createdAt: string;
+  geometryConfirmation?: import('./camera-region-geometry-confirmation.js').RegionGeometryConfirmation;
 }
 
 export interface RegionMutationResponse {

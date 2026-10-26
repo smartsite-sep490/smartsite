@@ -264,9 +264,31 @@ test('software-only AppModule supports Site, scoped Zone and Camera metadata wit
       admin.accessToken,
     );
     assert.equal(regionList.status, 200);
-    const regions = (await regionList.json()) as { items: Array<{ id: string }>; total: number };
+    const regions = (await regionList.json()) as {
+      items: Array<{ id: string; geometryConfirmation: unknown }>;
+      total: number;
+    };
     assert.equal(regions.total, 1);
     assert.equal(regions.items[0]?.id, mutation.region.id);
+    const unconfirmed = {
+      status: 'UNCONFIRMED',
+      referenceId: null,
+      viewRevision: null,
+      confirmedByUserId: null,
+      confirmedAt: null,
+    };
+    assert.deepEqual(regions.items[0]?.geometryConfirmation, unconfirmed);
+    const reopened = await request(
+      'GET',
+      `${regionPath}/${mutation.region.id}`,
+      undefined,
+      admin.accessToken,
+    );
+    assert.equal(reopened.status, 200);
+    assert.deepEqual(
+      ((await reopened.json()) as { geometryConfirmation: unknown }).geometryConfirmation,
+      unconfirmed,
+    );
     const logout = await request('POST', '/auth/logout', {
       clientType: 'MOBILE',
       refreshToken: manager.refreshToken,

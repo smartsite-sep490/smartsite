@@ -12,6 +12,13 @@ authorization/rollback rules. Review extraction when integrating the remaining
 C03 HTTP/reader work; this does not authorize general growth. Focused tests and
 manual confirmation are not whole-flow, camera or production acceptance.
 
+The read/reopen slice extends this same service596→604 lines with thin batched
+projection calls; query logic lives in `camera-region-confirmation.query.ts`.
+The history integration file438→554 lines covers save/reopen, expiry retention,
+mixed-state pagination and Site isolation. Root retains the exception while
+reviewing the concrete Region mutation/read responsibility for the HTTP slice;
+the test remains below the700-line review threshold.
+
 ## Configuration-image client, 15 October
 
 `packages/api-client/src/management.ts` already exceeds500 lines. Root reviewed a

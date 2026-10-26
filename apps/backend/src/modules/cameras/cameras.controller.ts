@@ -34,6 +34,7 @@ import { ErrorResponseDto } from '../../common/http/error-response.dto.js';
 import { pagination } from '../../common/http/pagination.js';
 import type { CameraEntity } from '../../database/entities/camera.entity.js';
 import type { CameraObservationRegionEntity } from '../../database/entities/camera-observation-region.entity.js';
+import type { RegionGeometryConfirmation } from '@smartsite/contracts/camera-region-geometry-confirmation';
 import type { AuthenticatedRequest } from '../auth/auth.service.js';
 import { UserAuthGuard } from '../auth/user-auth.guard.js';
 import { SiteConfigurationGuard } from '../auth/site-configuration.guard.js';
@@ -61,7 +62,9 @@ function cameraResponse(camera: CameraEntity) {
   };
 }
 
-function regionResponse(region: CameraObservationRegionEntity) {
+function regionResponse(
+  region: CameraObservationRegionEntity & { geometryConfirmation?: RegionGeometryConfirmation },
+) {
   return {
     id: region.id,
     cameraId: region.cameraId,
@@ -71,6 +74,7 @@ function regionResponse(region: CameraObservationRegionEntity) {
     version: region.version,
     isActive: region.isActive,
     createdAt: region.createdAt,
+    ...(region.geometryConfirmation ? { geometryConfirmation: region.geometryConfirmation } : {}),
   };
 }
 

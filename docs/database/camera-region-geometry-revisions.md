@@ -59,7 +59,14 @@ expired/future-issued/stale/retired-view failures, same-site cross-camera denial
 role/session rejection, concurrent saves and rollback after history failure.
 The tests use synthetic image adapters, not real camera verification.
 
-HTTP routes, confirmation response/read-reopen projection, client/FE activation,
-historical policy resolution, worker ACK and physical camera-motion verification
-remain separate work. Roles and HTTP responses are unchanged. Apply the migration
-before running the updated writer; committing source changes no website database.
+Region GET/list responses now add `geometryConfirmation` from the immutable row
+matching the loaded Region.version. One scoped query enriches each page, without
+changing offsets or totals. Null/old provenance is `UNCONFIRMED`, a current known
+view is `MANUALLY_CONFIRMED`, and a retired view is `NEEDS_REVALIDATION`. An expired
+authoring reference does not erase confirmed history. This optional additive
+field preserves legacy response types; reference-bound response types require it.
+
+Reference-write HTTP routes, client/FE activation, historical policy resolution,
+worker ACK and physical camera-motion verification remain separate work. Roles
+are unchanged. Apply the migration before using these readers/writers; committing
+source changes no website database.

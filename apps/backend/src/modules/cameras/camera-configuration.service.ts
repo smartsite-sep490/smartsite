@@ -3,6 +3,10 @@ import { randomUUID } from 'node:crypto';
 import { readCameraObservationZones } from './camera-observation-zones.query.js';
 import { recordRegionRevision } from './camera-region-revisions.js';
 import {
+  attachRegionConfirmations,
+  type ConfirmedRegionEntity,
+} from './camera-region-confirmation.query.js';
+import {
   referenceActor,
   resolveRegionReference,
   type ReferenceRegionWrite,
@@ -352,7 +356,7 @@ export class CameraConfigurationService {
     cameraId: string,
     offset = 0,
     limit = 20,
-  ): Promise<{ items: CameraObservationRegionEntity[]; total: number }> {
+  ): Promise<{ items: ConfirmedRegionEntity[]; total: number }> {
     await this.get(siteId, cameraId);
     const pagination = page(offset, limit);
     const [items, total] = await this.dataSource
@@ -363,7 +367,10 @@ export class CameraConfigurationService {
         skip: pagination.offset,
         take: pagination.limit,
       });
-    return { items, total };
+    return {
+      items: await attachRegionConfirmations(this.dataSource, siteId, cameraId, items),
+      total,
+    };
   }
 
   async observationZones(siteId: string, cameraId: string, offset: number, limit: number) {
@@ -374,12 +381,13 @@ export class CameraConfigurationService {
     siteId: string,
     cameraId: string,
     regionId: string,
-  ): Promise<CameraObservationRegionEntity> {
+  ): Promise<ConfirmedRegionEntity> {
     await this.get(siteId, cameraId);
     const region = await this.dataSource
       .getRepository(CameraObservationRegionEntity)
       .findOneBy({ id: uuid(regionId), cameraId });
-    return region ?? missing();
+    if (!region) missing();
+    return (await attachRegionConfirmations(this.dataSource, siteId, cameraId, [region]))[0]!;
   }
 
   async createRegion(

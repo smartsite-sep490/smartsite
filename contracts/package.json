@@ -16,6 +16,7 @@
     "./camera-observation-zones": "./dist/camera-observation-zones.js",
     "./camera-configuration-image": "./dist/camera-configuration-image.js",
     "./camera-region-reference": "./dist/camera-region-reference-command.js",
+    "./camera-region-geometry-confirmation": "./dist/camera-region-geometry-confirmation.js",
     "./gate-permissions": "./dist/gate-permissions-api.js",
     "./mf06-assessments": "./dist/mf06-assessment-api.js",
     "./worker-document-dates": "./dist/worker-document-dates.js"

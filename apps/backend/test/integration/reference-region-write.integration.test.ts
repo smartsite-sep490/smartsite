@@ -436,3 +436,119 @@ test('history insertion failure rolls back region, camera, Zone lock and journal
     await db.query('DROP FUNCTION synthetic_region_history_failure()');
   }
 });
+
+test('read/reopen projects matching geometry provenance and revalidation without crossing site scope', async () => {
+  const f = await createFixture();
+  const legacy = await cameras.createRegion(
+    f.siteId,
+    f.camera.id,
+    {
+      zoneId: f.zoneId,
+      polygon: polygonA,
+      expectedConfigurationVersion: 1,
+    },
+    f.context,
+  );
+  const unconfirmed = {
+    status: 'UNCONFIRMED',
+    referenceId: null,
+    viewRevision: null,
+    confirmedByUserId: null,
+    confirmedAt: null,
+  };
+  assert.deepEqual(
+    Reflect.get(await cameras.getRegion(f.siteId, f.camera.id, legacy.id), 'geometryConfirmation'),
+    unconfirmed,
+  );
+  const issued = await f.references.read('synthetic-token', f.siteId, f.camera.id);
+  await patchRef(f, legacy.id, refBody(issued.reference.referenceId, 2, 1, polygonA));
+  const [history] = (await regionRevisions(legacy.id)).slice(-1);
+  const expected = {
+    status: 'MANUALLY_CONFIRMED',
+    referenceId: issued.reference.referenceId,
+    viewRevision: 1,
+    confirmedByUserId: f.context.actorUserId,
+    confirmedAt: history.confirmed_at.toISOString(),
+  };
+  assert.deepEqual(
+    Reflect.get(await cameras.getRegion(f.siteId, f.camera.id, legacy.id), 'geometryConfirmation'),
+    expected,
+  );
+  const page = await cameras.listRegions(f.siteId, f.camera.id, 0, 1);
+  assert.equal(page.total, 1);
+  assert.deepEqual(Reflect.get(page.items[0]!, 'geometryConfirmation'), expected);
+  f.rotateSession();
+  await f.references.read('synthetic-token', f.siteId, f.camera.id);
+  assert.deepEqual(
+    Reflect.get(await cameras.getRegion(f.siteId, f.camera.id, legacy.id), 'geometryConfirmation'),
+    { ...expected, status: 'NEEDS_REVALIDATION' },
+  );
+  const other = await createFixture();
+  await assert.rejects(cameras.getRegion(other.siteId, f.camera.id, legacy.id), status(404));
+  await assert.rejects(cameras.listRegions(other.siteId, f.camera.id), status(404));
+});
+
+test('expired authoring reference preserves historical confirmation and paged mixed Region states', async () => {
+  const f = await createFixture();
+  const issued = await f.references.read('synthetic-token', f.siteId, f.camera.id);
+  const past = new Date(Date.now() - 600_000);
+  const oldReferenceId = randomUUID();
+  await db.getRepository(CameraConfigurationReferenceEntity).insert({
+    id: oldReferenceId,
+    cameraId: f.camera.id,
+    siteId: f.siteId,
+    viewRevision: '1',
+    sessionId: issued.reference.sessionId,
+    sourceKind: 'LIVE',
+    width: 120,
+    height: 80,
+    imageSha256: 'a'.repeat(64),
+    configurationVersion: '1',
+    capturedAt: past,
+    issuedAt: past,
+    expiresAt: new Date(past.getTime() + 300_000),
+    issuedByUserId: f.context.actorUserId,
+  });
+  // Synthetic historical fixture; no elapsed-time sleeps or reference/history rewrites.
+  const id = randomUUID();
+  await db.query(
+    `INSERT INTO camera_observation_region
+    (id,camera_id,zone_id,polygon,coordinate_space,version,is_active)
+    VALUES($1,$2,$3,$4::jsonb,'NORMALIZED_0_1',1,true)`,
+    [id, f.camera.id, f.zoneId, JSON.stringify(polygonA)],
+  );
+  await db.query(
+    `INSERT INTO camera_region_geometry_revision
+    (region_id,geometry_version,camera_id,zone_id,configuration_version,coordinate_space,
+     polygon,is_active,reference_id,view_revision,confirmed_by_user_id,confirmed_at)
+    VALUES($1,1,$2,$3,1,'NORMALIZED_0_1',$4::jsonb,true,$5,1,$6,$7)`,
+    [
+      id,
+      f.camera.id,
+      f.zoneId,
+      JSON.stringify(polygonA),
+      oldReferenceId,
+      f.context.actorUserId,
+      new Date(past.getTime() + 1000),
+    ],
+  );
+  const legacy = await cameras.createRegion(
+    f.siteId,
+    f.camera.id,
+    { zoneId: f.zoneId, polygon: polygonB, expectedConfigurationVersion: 1 },
+    f.context,
+  );
+  const confirmation = (await cameras.getRegion(f.siteId, f.camera.id, id)).geometryConfirmation;
+  assert.equal(confirmation.status, 'MANUALLY_CONFIRMED');
+  assert.equal(confirmation.referenceId, oldReferenceId);
+  const seen = new Map();
+  for (const offset of [0, 1]) {
+    const result = await cameras.listRegions(f.siteId, f.camera.id, offset, 1);
+    assert.equal(result.total, 2);
+    assert.equal(result.items.length, 1);
+    seen.set(result.items[0]!.id, result.items[0]!.geometryConfirmation.status);
+  }
+  assert.equal(seen.get(id), 'MANUALLY_CONFIRMED');
+  assert.equal(seen.get(legacy.id), 'UNCONFIRMED');
+  assert.deepEqual((await cameras.listRegions(f.siteId, f.camera.id, 2, 1)).items, []);
+});
