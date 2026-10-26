@@ -19,6 +19,11 @@ mixed-state pagination and Site isolation. Root retains the exception while
 reviewing the concrete Region mutation/read responsibility for the HTTP slice;
 the test remains below the700-line review threshold.
 
+The HTTP slice changes604→608 service lines for an explicit mutation-result type
+and the existing two return sites. Confirmation response construction is shared
+in `camera-region-revisions.ts`; it uses same-transaction provenance rather than
+refetching a mutable Region after commit. Owner: Root; no unrelated service growth.
+
 ## Configuration-image client, 15 October
 
 `packages/api-client/src/management.ts` already exceeds500 lines. Root reviewed a

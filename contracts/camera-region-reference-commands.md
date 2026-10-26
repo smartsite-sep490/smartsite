@@ -1,6 +1,6 @@
 # Reference-bound Region commands (MF05/MF06 C03)
 
-Additive management transport. Backend service writers are implemented separately; HTTP/read-reopen/shared-client/FE activation is not supplied by these parsers. Existing Region APIs remain compatible. No AI contract vendoring or rollout is implied.
+Additive management transport. Backend HTTP/service writers and read-reopen projection are implemented; shared-client/FE activation remains separate work. Existing Region APIs remain compatible. Committing these handlers does not deploy them or vendor this contract into AI.
 
 Create example for `POST /sites/:siteId/cameras/:cameraId/reference-regions`:
 

@@ -3,6 +3,38 @@ import type { CameraEntity } from '../../database/entities/camera.entity.js';
 import type { CameraObservationRegionEntity } from '../../database/entities/camera-observation-region.entity.js';
 import { CameraRegionGeometryRevisionEntity } from '../../database/entities/camera-region-geometry-revision.entity.js';
 import type { RegionReferenceProvenance } from './camera-region-reference-write.js';
+import {
+  parseRegionGeometryConfirmation,
+  type RegionGeometryConfirmation,
+} from '@smartsite/contracts/camera-region-geometry-confirmation';
+
+export type RegionMutationResult = CameraObservationRegionEntity & {
+  configurationVersion: number;
+  geometryConfirmation?: RegionGeometryConfirmation;
+};
+
+/** Use the provenance just appended in this command, never a later mutable Region read. */
+export function regionMutationResult(
+  region: CameraObservationRegionEntity,
+  configurationVersion: number,
+  provenance?: RegionReferenceProvenance,
+): RegionMutationResult {
+  return Object.assign(
+    region,
+    { configurationVersion },
+    provenance
+      ? {
+          geometryConfirmation: parseRegionGeometryConfirmation({
+            status: 'MANUALLY_CONFIRMED',
+            referenceId: provenance.referenceId,
+            viewRevision: Number(provenance.viewRevision),
+            confirmedByUserId: provenance.confirmedByUserId,
+            confirmedAt: provenance.confirmedAt.toISOString(),
+          }),
+        }
+      : {},
+  );
+}
 
 export async function recordRegionRevision(
   manager: EntityManager,

@@ -7,12 +7,12 @@ locks and camera revision.
 
 ## Who configures what
 
-| Existing role | Zone setup | Camera/Region setup |
-| --- | --- | --- |
-| Site Manager assigned to the selected Site | Create and rename Zones; existing policy rules apply | Not available through Admin-only configuration APIs |
-| Global Admin | Read-only Zone catalog | Configure Camera observation Regions linked to existing Zones |
-| Both roles | Both capabilities for the assigned Site | Admin capability remains scoped to the selected resources |
-| Safety Officer | Monitoring only | No configuration controls |
+| Existing role                              | Zone setup                                           | Camera/Region setup                                           |
+| ------------------------------------------ | ---------------------------------------------------- | ------------------------------------------------------------- |
+| Site Manager assigned to the selected Site | Create and rename Zones; existing policy rules apply | Configure Camera observation Regions linked to existing Zones |
+| Global Admin                               | Read-only Zone catalog                               | Read-only Camera/Region catalog; no Manager bypass            |
+| Both roles                                 | Manager capabilities for the assigned Site           | Camera/Region writes require the assigned Site Manager role   |
+| Safety Officer                             | Monitoring only                                      | No configuration controls                                     |
 
 The Web derives explicit capabilities from the current account and selected
 Site. Changing Site, credentials or capability remounts the popup's scoped state.
@@ -46,6 +46,13 @@ saved polygon is blocked. The acknowledged geometry is the exact submitted snaps
 not draft state read after a request finishes.
 
 ## Current limits and acceptance
+
+The new reference-bound create/update HTTP routes return persisted manual
+confirmation and reject expired/stale references. Their shared-client/editor
+activation is pending; the legacy editor behavior below does not establish that
+new flow. Read APIs expose historical confirmation separately from camera pose
+and worker application. Current role policy follows Main's exact-site Manager
+rules, superseding the earlier Admin-only setup description.
 
 The editor requests an explicit configuration image through the shared Backend
 client. It does not poll analyzed previews, start capture or require AI to run.

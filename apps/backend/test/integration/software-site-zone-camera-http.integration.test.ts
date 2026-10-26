@@ -6,6 +6,7 @@ import { join } from 'node:path';
 import { after, before, test } from 'node:test';
 import { ConfigService } from '@nestjs/config';
 import { Test } from '@nestjs/testing';
+import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
 import { getDataSourceToken } from '@nestjs/typeorm';
 import type { NestExpressApplication } from '@nestjs/platform-express';
 import { DataSource } from 'typeorm';
@@ -18,6 +19,10 @@ import { UsersService } from '../../src/modules/users/users.service.js';
 import { SiteConfigurationService } from '../../src/modules/sites/site-configuration.service.js';
 import { UserRole } from '../../src/database/entities/user.entity.js';
 import { createIsolatedTestDatabase } from '../support/isolated-test-database.js';
+import {
+  CameraConfigurationReferenceEntity,
+  CameraViewRevisionEntity,
+} from '../../src/database/entities/camera-configuration-reference.entity.js';
 
 const database = createIsolatedTestDatabase({ canonical: true });
 before(() => database.initialize());
@@ -67,6 +72,21 @@ test('software-only AppModule supports Site, scoped Zone and Camera metadata wit
   try {
     await configureApplication(app);
     await app.listen(0, '127.0.0.1');
+    const documentation = SwaggerModule.createDocument(
+      app,
+      new DocumentBuilder().setTitle('Synthetic reference-command test').build(),
+    );
+    assert(
+      documentation.paths['/api/v1/sites/{siteId}/cameras/{cameraId}/reference-regions']?.post,
+    );
+    assert(
+      documentation.paths[
+        '/api/v1/sites/{siteId}/cameras/{cameraId}/regions/{regionId}/reference-polygon'
+      ]?.patch,
+    );
+    const confirmationSchema = documentation.components?.schemas?.ReferenceRegionResponseDto;
+    assert(confirmationSchema && 'required' in confirmationSchema);
+    assert(confirmationSchema.required?.includes('geometryConfirmation'));
     const url = await app.getUrl();
     assert.match(url, /^http:\/\/127\.0\.0\.1:\d+$/);
     const request = (method: string, path: string, body?: unknown, token?: string) =>
@@ -289,6 +309,114 @@ test('software-only AppModule supports Site, scoped Zone and Camera metadata wit
       ((await reopened.json()) as { geometryConfirmation: unknown }).geometryConfirmation,
       unconfirmed,
     );
+    const [{ id: managerId }] = await database.dataSource.query(
+      'SELECT id FROM app_user WHERE username=$1',
+      [`software-manager-${suffix}`],
+    );
+    const sessionId = randomUUID();
+    await database.dataSource.getRepository(CameraViewRevisionEntity).insert({
+      cameraId: camera.id,
+      revision: '1',
+      siteId: site.id,
+      sessionId,
+      sourceKind: 'LIVE',
+      width: 120,
+      height: 80,
+      viewValidity: 'UNCONFIRMED',
+      isCurrent: true,
+      createdAt: new Date(),
+      retiredAt: null,
+    });
+    const referenceBody = async (version: number) => {
+      const [{ now }] = await database.dataSource.query('SELECT clock_timestamp() AS now');
+      const referenceId = randomUUID();
+      await database.dataSource.getRepository(CameraConfigurationReferenceEntity).insert({
+        id: referenceId,
+        cameraId: camera.id,
+        siteId: site.id,
+        viewRevision: '1',
+        sessionId,
+        sourceKind: 'LIVE',
+        width: 120,
+        height: 80,
+        imageSha256: 'a'.repeat(64),
+        configurationVersion: String(version),
+        capturedAt: now,
+        issuedAt: now,
+        expiresAt: new Date(now.getTime() + 300_000),
+        issuedByUserId: managerId,
+      });
+      return {
+        expectedConfigurationVersion: version,
+        referenceId,
+        viewRevision: 1,
+        confirmReferenceView: true,
+        polygon,
+      };
+    };
+    const referencePath = `/sites/${site.id}/cameras/${camera.id}/reference-regions`;
+    const createInput = {
+      zoneId: zone.id,
+      ...(await referenceBody(mutation.configurationVersion)),
+    };
+    assert.equal((await request('POST', referencePath, createInput)).status, 401);
+    assert.equal(
+      (await request('POST', referencePath, createInput, admin.accessToken)).status,
+      403,
+    );
+    const referenceCreate = await request('POST', referencePath, createInput, manager.accessToken);
+    assert.equal(referenceCreate.status, 201);
+    const referenceMutation = (await referenceCreate.json()) as {
+      region: {
+        id: string;
+        version: number;
+        geometryConfirmation: {
+          status: string;
+          referenceId: string;
+          viewRevision: number;
+          confirmedByUserId: string;
+          confirmedAt: string;
+        };
+      };
+      configurationVersion: number;
+    };
+    assert.equal(referenceMutation.region.geometryConfirmation.status, 'MANUALLY_CONFIRMED');
+    assert.equal(
+      referenceMutation.region.geometryConfirmation.referenceId,
+      createInput.referenceId,
+    );
+    assert.equal(referenceMutation.region.geometryConfirmation.confirmedByUserId, managerId);
+    const patchPath = `${regionPath}/${referenceMutation.region.id}/reference-polygon`;
+    const patchInput = await referenceBody(referenceMutation.configurationVersion);
+    assert.equal(
+      (
+        await request(
+          'PATCH',
+          patchPath,
+          { ...patchInput, confirmedByUserId: managerId },
+          manager.accessToken,
+        )
+      ).status,
+      400,
+    );
+    const referenceUpdate = await request('PATCH', patchPath, patchInput, manager.accessToken);
+    assert.equal(referenceUpdate.status, 200);
+    const updated = (await referenceUpdate.json()) as typeof referenceMutation;
+    assert.equal(updated.region.version, 2);
+    assert.equal(updated.configurationVersion, referenceMutation.configurationVersion + 1);
+    assert.equal(updated.region.geometryConfirmation.referenceId, patchInput.referenceId);
+    const reread = await request(
+      'GET',
+      `${regionPath}/${updated.region.id}`,
+      undefined,
+      manager.accessToken,
+    );
+    assert.equal(reread.status, 200);
+    assert.deepEqual(
+      ((await reread.json()) as { geometryConfirmation: unknown }).geometryConfirmation,
+      updated.region.geometryConfirmation,
+    );
+    assert.equal((await request('PATCH', patchPath, patchInput, manager.accessToken)).status, 409);
     const logout = await request('POST', '/auth/logout', {
       clientType: 'MOBILE',
       refreshToken: manager.refreshToken,

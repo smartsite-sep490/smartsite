@@ -66,7 +66,12 @@ view is `MANUALLY_CONFIRMED`, and a retired view is `NEEDS_REVALIDATION`. An exp
 authoring reference does not erase confirmed history. This optional additive
 field preserves legacy response types; reference-bound response types require it.
 
-Reference-write HTTP routes, client/FE activation, historical policy resolution,
+Reference-write HTTP routes now accept the canonical request contract and return
+the manual confirmation just appended inside that command transaction. They use
+the existing exact-site Manager guard and reauthorization path. Legacy commands
+remain available; new commands never fall back to reference-free writes.
+
+Client/FE activation, historical policy resolution,
 worker ACK and physical camera-motion verification remain separate work. Roles
 are unchanged. Apply the migration before using these readers/writers; committing
 source changes no website database.

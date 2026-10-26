@@ -1,7 +1,11 @@
 import { mainSiteManagerAuthorization } from '../../common/configuration/main-site-manager-authority.js';
 import { randomUUID } from 'node:crypto';
 import { readCameraObservationZones } from './camera-observation-zones.query.js';
-import { recordRegionRevision } from './camera-region-revisions.js';
+import {
+  recordRegionRevision,
+  regionMutationResult,
+  type RegionMutationResult,
+} from './camera-region-revisions.js';
 import {
   attachRegionConfirmations,
   type ConfirmedRegionEntity,
@@ -404,7 +408,7 @@ export class CameraConfigurationService {
     cameraId: string,
     input: unknown,
     context?: MainConfigurationCommandContext,
-  ): Promise<CameraObservationRegionEntity & { configurationVersion: number }> {
+  ): Promise<RegionMutationResult> {
     const actorUserId = referenceActor(context);
     let value;
     try {
@@ -468,7 +472,7 @@ export class CameraConfigurationService {
         await this.bump(manager, camera);
         await recordRegionRevision(manager, camera, region, false, provenance);
         await this.snapshot(manager, camera, true);
-        return Object.assign(region, { configurationVersion: camera.configurationVersion });
+        return regionMutationResult(region, camera.configurationVersion, provenance);
       },
       mainSiteManagerAuthorization(context, siteId),
     );
@@ -505,7 +509,7 @@ export class CameraConfigurationService {
     regionId: string,
     input: unknown,
     context?: MainConfigurationCommandContext,
-  ): Promise<CameraObservationRegionEntity & { configurationVersion: number }> {
+  ): Promise<RegionMutationResult> {
     const actorUserId = referenceActor(context);
     let value;
     try {
@@ -596,7 +600,7 @@ export class CameraConfigurationService {
           provenance,
         );
         await this.snapshot(manager, camera, true);
-        return Object.assign(region, { configurationVersion: camera.configurationVersion });
+        return regionMutationResult(region, camera.configurationVersion, provenance);
       },
       mainSiteManagerAuthorization(context, siteId),
     );
