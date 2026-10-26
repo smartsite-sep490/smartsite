@@ -5,6 +5,7 @@ import { before, after, test } from 'node:test';
 import { QueryFailedError } from 'typeorm';
 import { Mf06AssessmentStore } from '../../src/modules/safety/assessments/mf06-assessment-store.service.js';
 import { createIsolatedTestDatabase } from '../support/isolated-test-database.js';
+import { reviewedReleaseMigrationNames } from '../support/reviewed-release-graph.js';
 import { storeVersionFixture } from '../support/mf06-store-version.fixture.js';
 import { Mf06TeamAuthorityHistory1792281600000 } from '../../src/database/migrations/1792281600000-Mf06TeamAuthorityHistory.js';
 
@@ -15,7 +16,7 @@ before(async () => {
   assert.match(db.options.schema ?? '', /^isolated_test_[a-f0-9]{32}$/);
   console.info('Owned archive-version test schema:', db.options.schema);
   await isolated.initialize();
-  assert.equal(db.migrations.length, 79);
+  assert.equal(db.migrations.length, reviewedReleaseMigrationNames(db.migrations).length);
   const migrationNames = db.migrations.map(
     (migration) => migration.name ?? migration.constructor.name,
   );
