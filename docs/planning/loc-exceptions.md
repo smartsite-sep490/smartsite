@@ -1,5 +1,17 @@
 # Scoped LOC exceptions
 
+## Reference-bound Region client, 26 October
+
+Root permits `packages/api-client/src/management.ts` 4052->4105 physical lines
+for two thin typed methods on the existing authenticated/cancellable transport.
+Request parsers live in contracts; response scope/revision/provenance validation
+lives in the separate `reference-region-mutation.ts` helper. The new test423 lines
+exceeds the400-line target but stays below700; fixtures and transport regressions
+are cohesive. Legacy methods and retry/expiry semantics remain unchanged. No
+unrelated manager growth is authorized; extract shared transport before further
+transport features. Owner: Root. Client checks do not activate the FE or establish
+browser/production acceptance.
+
 ## Reference-bound Region service commands, 26 October
 
 Root permits `apps/backend/src/modules/cameras/camera-configuration.service.ts`

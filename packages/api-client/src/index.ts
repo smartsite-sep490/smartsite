@@ -238,3 +238,19 @@ export type {
   ReviewWorkerDocumentCommand,
 } from '@smartsite/contracts';
 export type { DocumentImageQuality, WorkerIdentityImageResponse } from '@smartsite/contracts';
+
+export {
+  parseCreateReferenceRegionCommand,
+  parseUpdateReferenceRegionPolygonCommand,
+  type CreateReferenceRegionCommand,
+  type UpdateReferenceRegionPolygonCommand,
+} from '@smartsite/contracts/camera-region-reference';
+export {
+  parseRegionGeometryConfirmation,
+  type ConfirmedRegionGeometryConfirmation,
+  type ConfirmedRegionResponse,
+  type ReferenceRegionMutationResponse,
+  type RegionGeometryConfirmation,
+  type RegionGeometryConfirmationStatus,
+  type UnconfirmedRegionGeometryConfirmation,
+} from '@smartsite/contracts/camera-region-geometry-confirmation';
