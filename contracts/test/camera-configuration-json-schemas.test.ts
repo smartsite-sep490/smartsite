@@ -10,6 +10,7 @@ import {
 import { parseCameraConfigurationBundlePayload } from '../src/camera-configuration-bundle.js';
 import { computeCanonicalPayloadHash } from '../src/hashing/canonical-hash.js';
 import { PPE_ITEMS } from '../src/ppe-items.js';
+import { parseCameraConfigurationImageReference } from '../src/camera-configuration-image.js';
 
 interface CompiledValidator {
   (data: unknown): boolean;
@@ -54,6 +55,90 @@ function compileSchemas() {
     validateAck: ajv.compile(ackSchema),
   };
 }
+
+function imageReference() {
+  return {
+    schemaVersion: '1.0.0',
+    purpose: 'REGION_CONFIGURATION',
+    sourceKind: 'LIVE',
+    referenceId: '11111111-2222-4333-8444-555555555555',
+    siteId: '22222222-3333-4444-8555-666666666666',
+    cameraId: '33333333-4444-4555-8666-777777777777',
+    sessionId: '44444444-5555-4666-8777-888888888888',
+    imageSha256: 'a'.repeat(64),
+    width: 1280,
+    height: 720,
+    capturedAt: '2026-10-26T05:00:00Z',
+    issuedAt: '2026-10-26T05:00:01Z',
+    expiresAt: '2026-10-26T05:05:00Z',
+    configurationVersion: 3,
+    viewRevision: 2,
+  };
+}
+
+function compileReferenceSchema() {
+  const schema = loadSchema('../schemas/v1/camera-configuration-image-reference.json');
+  const ajv = new Ajv2020({ allErrors: true, strict: true });
+  addFormats(ajv);
+  assert.equal(
+    schema.$id,
+    'https://smartsite.local/contracts/v1/camera-configuration-image-reference.json',
+  );
+  return ajv.compile(schema);
+}
+
+test('image-reference schema compiles strictly and accepts LIVE, REPLAY and preserved offset vectors', () => {
+  const validate = compileReferenceSchema();
+  for (const value of [
+    imageReference(),
+    { ...imageReference(), sourceKind: 'REPLAY' },
+    { ...imageReference(), capturedAt: '2026-10-26T12:00:00+07:00' },
+  ]) {
+    assert.equal(validate(value), true);
+    assert.deepEqual(parseCameraConfigurationImageReference(value), value);
+  }
+});
+
+test('image-reference schema and parser reject malformed exact fields and boundaries', () => {
+  const validate = compileReferenceSchema();
+  const malformed: Record<string, unknown>[] = [
+    { ...imageReference(), imageDataUrl: 'not-metadata' },
+    { ...imageReference(), sourceKind: 'UNKNOWN' },
+    { ...imageReference(), referenceId: 'not-uuid' },
+    { ...imageReference(), sessionId: '' },
+    { ...imageReference(), configurationVersion: 0 },
+    { ...imageReference(), viewRevision: 1.5 },
+    { ...imageReference(), configurationVersion: Number.MAX_SAFE_INTEGER + 1 },
+    { ...imageReference(), width: 63 },
+    { ...imageReference(), height: 1281 },
+    { ...imageReference(), imageSha256: 'A'.repeat(64) },
+    { ...imageReference(), capturedAt: '2026-02-29T05:00:00Z' },
+    { ...imageReference(), issuedAt: '2026-10-26T05:00:60Z' },
+  ];
+  for (const key of Object.keys(imageReference())) {
+    const value = { ...imageReference() } as Record<string, unknown>;
+    delete value[key];
+    malformed.push(value);
+  }
+  for (const value of malformed) {
+    assert.equal(validate(value), false);
+    assert.throws(() => parseCameraConfigurationImageReference(value));
+  }
+});
+
+test('image-reference structural schema cannot establish time relations or server issuance', () => {
+  const validate = compileReferenceSchema();
+  for (const value of [
+    { ...imageReference(), expiresAt: '2026-10-26T05:05:01Z' },
+    { ...imageReference(), issuedAt: '2026-10-26T06:00:00Z' },
+    { ...imageReference(), expiresAt: '2026-10-26T04:00:00Z' },
+  ]) {
+    assert.equal(validate(value), true);
+    assert.throws(() => parseCameraConfigurationImageReference(value));
+  }
+  // Matching syntax and time still cannot prove that this UUID was issued by the server.
+  assert.equal(validate(imageReference()), true);
+});
 
 function baseBundleContent() {
   return {

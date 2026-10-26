@@ -27,7 +27,16 @@ Site/camera grants and configuration/view revision, and bind the session, image
 hash and dimensions before writing. Camera stability, enrollment, application,
 historical provenance and model quality are not established by these fields.
 No reference issuance endpoint, persistence, migration or polygon-write cutover
-is activated by this contract. Its JSON schema and actual C03 journey remain open.
+is activated by this contract. The actual C03 journey remains open.
+
+The additive draft 2020-12 schema lives at
+`schemas/v1/camera-configuration-image-reference.json`. It validates exact JSON
+fields, ranges and timestamp syntax/calendar format under strict AJV. It cannot
+compare timestamps to each other, establish the 5-minute lifetime, inspect
+persisted authority or determine current expiry; keep the runtime parser and
+server write-time checks. Tests explicitly retain structurally valid examples
+that the runtime parser rejects for invalid time relationships. This file is
+feature-branch authorship, not immutable Main provenance or Python schema vending.
 
 ## Bundle behavior
 
