@@ -101,6 +101,15 @@ export {
 
 export type { CameraRegionConfigurationValidationResult } from './validation/camera-region-configuration-validator.js';
 
+export {
+  parseCreateReferenceRegionCommand,
+  parseUpdateReferenceRegionPolygonCommand,
+} from './camera-region-reference-command.js';
+export type {
+  CreateReferenceRegionCommand,
+  UpdateReferenceRegionPolygonCommand,
+} from './camera-region-reference-command.js';
+
 export type {
   CameraObservationRegionConfiguration,
   CameraRegionConfiguration,
