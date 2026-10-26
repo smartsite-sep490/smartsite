@@ -26,6 +26,25 @@ export interface CameraConfigurationImageResponse extends CameraConfigurationSou
   referenceExpiresAt: string;
 }
 
+/** Metadata only. The Backend must match persisted issuance and current view/grants on use. */
+export interface CameraConfigurationImageReference {
+  readonly schemaVersion: '1.0.0';
+  readonly purpose: 'REGION_CONFIGURATION';
+  readonly sourceKind: 'LIVE' | 'REPLAY';
+  readonly referenceId: string;
+  readonly siteId: string;
+  readonly cameraId: string;
+  readonly sessionId: string;
+  readonly imageSha256: string;
+  readonly width: number;
+  readonly height: number;
+  readonly capturedAt: string;
+  readonly issuedAt: string;
+  readonly expiresAt: string;
+  readonly configurationVersion: number;
+  readonly viewRevision: number;
+}
+
 const uuid = /^[0-9a-f]{8}(-[0-9a-f]{4}){3}-[0-9a-f]{12}$/i;
 const frameKeys = [
   'cameraExternalId',
@@ -176,4 +195,45 @@ export function parseCameraConfigurationImageResponse(
     timestamp((value.frame as CameraConfigurationImageFrame).capturedAt);
   check(lifetime > 0 && lifetime <= CONFIGURATION_REFERENCE_LIFETIME_MS);
   return structuredClone(value) as unknown as CameraConfigurationImageResponse;
+}
+
+/** Structural validation does not establish server issuance, current expiry or camera stability. */
+export function parseCameraConfigurationImageReference(
+  value: unknown,
+): CameraConfigurationImageReference {
+  check(object(value));
+  exact(value, [
+    'schemaVersion',
+    'purpose',
+    'sourceKind',
+    'referenceId',
+    'siteId',
+    'cameraId',
+    'sessionId',
+    'imageSha256',
+    'width',
+    'height',
+    'capturedAt',
+    'issuedAt',
+    'expiresAt',
+    'configurationVersion',
+    'viewRevision',
+  ]);
+  check(value.schemaVersion === '1.0.0' && value.purpose === 'REGION_CONFIGURATION');
+  check(value.sourceKind === 'LIVE' || value.sourceKind === 'REPLAY');
+  for (const key of ['referenceId', 'siteId', 'cameraId', 'sessionId'])
+    check(text(value[key], 36) && uuid.test(value[key] as string));
+  check(text(value.imageSha256, 64) && /^[a-f0-9]{64}$/.test(value.imageSha256));
+  dimensions(value.width, value.height);
+  for (const key of ['configurationVersion', 'viewRevision'])
+    check(Number.isSafeInteger(value[key]) && (value[key] as number) > 0);
+  const captured = timestamp(value.capturedAt);
+  const issued = timestamp(value.issuedAt);
+  const expires = timestamp(value.expiresAt);
+  // Match existing image-read freshness bounds without extending a frame's reference lifetime.
+  check(issued - captured >= -1000 && issued - captured <= 2000);
+  check(
+    expires > issued && expires <= Math.min(captured, issued) + CONFIGURATION_REFERENCE_LIFETIME_MS,
+  );
+  return structuredClone(value) as unknown as CameraConfigurationImageReference;
 }

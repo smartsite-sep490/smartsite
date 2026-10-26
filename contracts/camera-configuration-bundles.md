@@ -1,5 +1,36 @@
 # Immutable camera configuration bundle — transport preparation
 
+## Configuration-image reference metadata
+
+`CameraConfigurationImageReference` and `parseCameraConfigurationImageReference`
+are additive transport preparation, exported by the package root and the existing
+browser-safe `@smartsite/contracts/camera-configuration-image` entry point.
+The legacy source-image and image-response formats are unchanged.
+
+The separate metadata object contains exactly `schemaVersion: '1.0.0'`,
+`purpose: 'REGION_CONFIGURATION'`, `sourceKind: 'LIVE' | 'REPLAY'`, UUIDs
+`referenceId`, `siteId`, `cameraId`, `sessionId`, lowercase SHA256 `imageSha256`,
+integer `width`/`height` in 64..1280, positive safe `configurationVersion` and
+`viewRevision`, and RFC3339 `capturedAt`, `issuedAt`, `expiresAt`.
+It carries no image bytes, source address, token, storage path or identity.
+
+The parser returns a detached copy and rejects unknown or missing fields. It
+retains valid timestamp spelling and UUID case, matching the legacy image
+transport. Issuance must be within 2000 ms after capture or 1000 ms before it,
+matching current image-read clock tolerance. Expiry must follow issuance and
+must not exceed 300000 ms after the earlier of capture and issuance. Parsing
+does not consult the receiver's clock; the Backend must check current expiry.
+
+A syntactically valid reference is not proof that it was issued. The future
+versioned polygon command must find its persisted server record, recheck current
+Site/camera grants and configuration/view revision, and bind the session, image
+hash and dimensions before writing. Camera stability, enrollment, application,
+historical provenance and model quality are not established by these fields.
+No reference issuance endpoint, persistence, migration or polygon-write cutover
+is activated by this contract. Its JSON schema and actual C03 journey remain open.
+
+## Bundle behavior
+
 This is a separate resource from the existing `CameraRegionConfiguration` v1.0.0
 endpoint. No endpoint, persistence, policy mutation, worker admission or application
 receipt is activated by these exports. The existing JSON schemas remain unchanged.
