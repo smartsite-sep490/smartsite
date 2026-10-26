@@ -46,6 +46,9 @@ time and external ID, then validate the canonical contract/hash again.
 
 Saved authoring confirmation is not physical camera-pose confirmation. Issuance
 does not mean a worker loaded anything, the camera is online, a model is accurate
-or historical events are admitted. The legacy worker endpoint remains unchanged;
-bundle delivery, enrolled worker generations and ACK/readiness are separate tasks.
+or historical events are admitted. The legacy worker endpoint remains unchanged.
+The separate [issued-bundle GET](../operations/camera-configuration-bundle-api.md)
+reconstructs and verifies stored content, current view/counter and Region provenance
+before conditional caching. It does not enroll worker generations or record ACKs.
+Enrollment, ACK/readiness and runtime adoption remain separate tasks.
 No website/cloud migration or rollout is performed by this source change.

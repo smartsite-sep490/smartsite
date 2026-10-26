@@ -166,6 +166,10 @@ test('issued camera bundles retain exact immutable geometry and PPE policy witho
           ).isValid,
           true,
         );
+        assert.deepEqual(await cameras.readConfigurationBundleForCamera(camera.id), {
+          ...content,
+          bundleSha256: header.bundle_sha256,
+        });
       },
     );
     await t.test(
@@ -176,6 +180,10 @@ test('issued camera bundles retain exact immutable geometry and PPE policy witho
         const issued = await reference();
         assert.equal(issued.reference.viewRevision, 2);
         assert.deepEqual(await headers(), original);
+        await assert.rejects(
+          cameras.readConfigurationBundleForCamera(camera.id),
+          (error: { getStatus?: () => number }) => error.getStatus?.() === 409,
+        );
         await cameras.updateReferencePolygon(
           site.id,
           camera.id,
@@ -194,6 +202,10 @@ test('issued camera bundles retain exact immutable geometry and PPE policy witho
         assert.deepEqual(current[0], original[0]);
         assert.equal(current[1].configuration_version, '3');
         assert.equal(current[1].view_revision, '2');
+        assert.equal(
+          (await cameras.readConfigurationBundleForCamera(camera.id)).configurationVersion,
+          3,
+        );
       },
     );
     await t.test(
@@ -305,6 +317,7 @@ test('issued camera bundles retain exact immutable geometry and PPE policy witho
           [camera.id],
         );
         assert.ok(empty);
+        assert.deepEqual((await cameras.readConfigurationBundleForCamera(camera.id)).regions, []);
         assert.deepEqual(
           await db.query(
             'SELECT * FROM camera_configuration_bundle_region WHERE camera_id=$1 AND configuration_version=7',
@@ -317,6 +330,10 @@ test('issued camera bundles retain exact immutable geometry and PPE policy witho
           camera.id,
           { expectedConfigurationVersion: 7, status: CameraStatus.INACTIVE },
           context,
+        );
+        await assert.rejects(
+          cameras.readConfigurationBundleForCamera(camera.id),
+          (error: { getStatus?: () => number }) => error.getStatus?.() === 409,
         );
         assert.deepEqual(
           await db.query(
@@ -348,6 +365,10 @@ test('issued camera bundles retain exact immutable geometry and PPE policy witho
         assert.equal(
           (await cameras.buildConfigurationForCamera(camera.id)).configurationVersion,
           10,
+        );
+        await assert.rejects(
+          cameras.readConfigurationBundleForCamera(camera.id),
+          (error: { getStatus?: () => number }) => error.getStatus?.() === 409,
         );
         assert.deepEqual(await headers(), beforeRead);
       },
@@ -433,6 +454,101 @@ test('issued camera bundles retain exact immutable geometry and PPE policy witho
             await assert.rejects(db.query(sql), (e: { code?: string }) => e.code === '23514');
         await assert.rejects(db.undoLastMigration(), /bundle history must be retained/);
         assert.equal((await headers()).length, 6);
+      },
+    );
+    await t.test(
+      'a valid hash cannot authorize an unconfirmed stored geometry binding',
+      async () => {
+        const active = (await cameras.listRegions(site.id, camera.id)).items.find(
+          (region) => region.isActive,
+        )!;
+        const issuedAt = new Date();
+        const content = {
+          schemaVersion: '1.0.0',
+          cameraId: camera.id,
+          cameraExternalId: camera.externalId,
+          configurationVersion: 10,
+          viewRevision: 3,
+          issuedAt: issuedAt.toISOString(),
+          regions: [
+            {
+              regionId: active.id,
+              geometryVersion: active.version,
+              coordinateSpace: active.coordinateSpace,
+              polygon: active.polygon,
+              zoneId: zone.id,
+              policyRevision: 1,
+              requiredPpe: ['HARD_HAT', 'SAFETY_VEST'],
+            },
+          ],
+        };
+        await db.query(
+          `INSERT INTO camera_configuration_bundle
+        (camera_id,configuration_version,site_id,camera_external_id,view_revision,issued_at,bundle_sha256)
+        VALUES($1,10,$2,$3,3,$4,$5)`,
+          [camera.id, site.id, camera.externalId, issuedAt, computeCanonicalPayloadHash(content)],
+        );
+        await db.query(
+          `INSERT INTO camera_configuration_bundle_region(camera_id,configuration_version,region_id,geometry_version,zone_id,policy_revision)
+        VALUES($1,10,$2,$3,$4,1)`,
+          [camera.id, active.id, active.version, zone.id],
+        );
+        await assert.rejects(
+          cameras.readConfigurationBundleForCamera(camera.id),
+          (error: { getStatus?: () => number }) => error.getStatus?.() === 503,
+        );
+      },
+    );
+    await t.test('a valid empty bundle hash cannot hide active desired Regions', async () => {
+      const issuedAt = new Date();
+      const content = {
+        schemaVersion: '1.0.0',
+        cameraId: camera.id,
+        cameraExternalId: camera.externalId,
+        configurationVersion: 11,
+        viewRevision: 3,
+        issuedAt: issuedAt.toISOString(),
+        regions: [],
+      };
+      await db.query('UPDATE camera SET configuration_version=11 WHERE id=$1', [camera.id]);
+      await db.query(
+        `INSERT INTO camera_configuration_bundle
+          (camera_id,configuration_version,site_id,camera_external_id,view_revision,issued_at,bundle_sha256)
+          VALUES($1,11,$2,$3,3,$4,$5)`,
+        [camera.id, site.id, camera.externalId, issuedAt, computeCanonicalPayloadHash(content)],
+      );
+      await assert.rejects(
+        cameras.readConfigurationBundleForCamera(camera.id),
+        (error: { getStatus?: () => number }) => error.getStatus?.() === 503,
+      );
+    });
+    await t.test(
+      'reader refuses unknown cameras and corrupt persisted hashes without leaking storage data',
+      async () => {
+        await assert.rejects(
+          cameras.readConfigurationBundleForCamera(randomUUID()),
+          (error: { getStatus?: () => number }) => error.getStatus?.() === 404,
+        );
+        const malformedCamera = await cameras.create(
+          site.id,
+          { code: randomUUID(), externalId: randomUUID(), name: 'Malformed storage fixture' },
+          context,
+        );
+        await references.read('synthetic-token', site.id, malformedCamera.id);
+        await db.query(
+          `INSERT INTO camera_configuration_bundle
+        (camera_id,configuration_version,site_id,camera_external_id,view_revision,issued_at,bundle_sha256)
+        VALUES($1,1,$2,$3,1,clock_timestamp(),$4)`,
+          [malformedCamera.id, site.id, malformedCamera.externalId, 'b'.repeat(64)],
+        );
+        await assert.rejects(
+          cameras.readConfigurationBundleForCamera(malformedCamera.id),
+          (error: { getStatus?: () => number; message?: string }) => {
+            assert.doesNotMatch(error.message ?? '', /SELECT|zone_policy|SmartSiteData|postgres/i);
+            return error.getStatus?.() === 503;
+          },
+        );
+        assert.equal((await headers()).length, 9);
       },
     );
   } finally {

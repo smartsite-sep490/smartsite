@@ -65,12 +65,7 @@ export class AiConfigurationController {
     @Headers('if-none-match') ifNoneMatch: string | undefined,
     @Res({ passthrough: true }) response: Response,
   ) {
-    const allowed = this.config.get('AI_CONFIGURATION_CAMERA_IDS', { infer: true });
-    if (!isUUID(cameraId) || !allowed.includes(cameraId.toLowerCase()))
-      throw new PublicHttpException(HttpStatus.NOT_FOUND, {
-        code: 'NOT_FOUND',
-        message: 'Configuration resource not found',
-      });
+    this.assertCameraAllowed(cameraId);
     const configuration = await this.cameras.buildConfigurationForCamera(cameraId);
     const etag = configurationEtag(configuration);
     response.setHeader('ETag', etag);
@@ -79,5 +74,39 @@ export class AiConfigurationController {
       return;
     }
     return configuration;
+  }
+
+  @Get(':cameraId/configuration-bundle')
+  @ApiOkResponse({
+    description:
+      'Persisted CameraConfigurationBundle 1.0.0; not worker application or camera health.',
+  })
+  @ApiNotModifiedResponse({
+    description: 'The validated current issued bundle matches the supplied ETag.',
+  })
+  @Header('Cache-Control', 'no-store')
+  async configurationBundle(
+    @Param('cameraId') cameraId: string,
+    @Headers('if-none-match') ifNoneMatch: string | undefined,
+    @Res({ passthrough: true }) response: Response,
+  ) {
+    this.assertCameraAllowed(cameraId);
+    const bundle = await this.cameras.readConfigurationBundleForCamera(cameraId);
+    const etag = `"sha256:${bundle.bundleSha256}"`;
+    response.setHeader('ETag', etag);
+    if (matchesIfNoneMatch(ifNoneMatch, etag)) {
+      response.status(HttpStatus.NOT_MODIFIED);
+      return;
+    }
+    return bundle;
+  }
+
+  private assertCameraAllowed(cameraId: string): void {
+    const allowed = this.config.get('AI_CONFIGURATION_CAMERA_IDS', { infer: true });
+    if (!isUUID(cameraId) || !allowed.includes(cameraId.toLowerCase()))
+      throw new PublicHttpException(HttpStatus.NOT_FOUND, {
+        code: 'NOT_FOUND',
+        message: 'Configuration resource not found',
+      });
   }
 }

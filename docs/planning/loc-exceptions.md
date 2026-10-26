@@ -1,5 +1,17 @@
 # Scoped LOC exceptions
 
+## Issued bundle delivery, 27 October
+
+Root permits one thin reader delegation in the existing Camera service; snapshot,
+provenance and canonical-hash logic live in the separate reader below150 lines.
+The existing PostgreSQL bundle journey stays below700 test lines while covering
+corrupt storage and current-state refusals; its cases share an intentional scenario.
+The existing AppModule HTTP journey receives scoped service-token/allowlist/ETag
+assertions. Actual Agy p5 reviewed the reader; Root then reproduced and fixed two
+stored-integrity omissions and read the review amendment. Owner: Root. Extract
+cohesive Camera orchestration before further large service additions; no general
+growth, worker ownership or production acceptance is granted by this exception.
+
 ## Immutable camera bundle issuance, 27 October
 
 Root permits three thin issuance calls on the existing oversized Camera service;

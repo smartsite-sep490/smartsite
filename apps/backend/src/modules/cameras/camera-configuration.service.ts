@@ -1,6 +1,7 @@
 import { mainSiteManagerAuthorization } from '../../common/configuration/main-site-manager-authority.js';
 import { randomUUID } from 'node:crypto';
 import { recordCameraConfigurationBundle } from './camera-configuration-bundles.js';
+import { readIssuedCameraConfigurationBundle } from './camera-configuration-bundle-reader.js';
 import { readCameraObservationZones } from './camera-observation-zones.query.js';
 import {
   recordRegionRevision,
@@ -315,6 +316,10 @@ export class CameraConfigurationService {
       if (!camera) missing();
       return this.snapshot(manager, camera);
     });
+  }
+
+  async readConfigurationBundleForCamera(cameraId: string) {
+    return readIssuedCameraConfigurationBundle(this.dataSource, uuid(cameraId).toLowerCase());
   }
 
   async setStatus(

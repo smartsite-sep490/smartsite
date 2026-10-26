@@ -417,6 +417,48 @@ test('software-only AppModule supports Site, scoped Zone and Camera metadata wit
       updated.region.geometryConfirmation,
     );
     assert.equal((await request('PATCH', patchPath, patchInput, manager.accessToken)).status, 409);
+    const bundlePath = `/integrations/ai/cameras/${camera.id}/configuration-bundle`;
+    assert(
+      documentation.paths['/api/v1/integrations/ai/cameras/{cameraId}/configuration-bundle']?.get,
+    );
+    assert.equal((await request('GET', bundlePath, undefined, manager.accessToken)).status, 401);
+    const serviceToken = environment.SMARTSITE_AI_SERVICE_TOKEN;
+    assert.equal((await request('GET', bundlePath, undefined, serviceToken)).status, 404);
+    environment.AI_CONFIGURATION_CAMERA_IDS.push(camera.id);
+    assert.equal((await request('GET', bundlePath, undefined, serviceToken)).status, 409);
+    const confirmedOriginal = await request(
+      'PATCH',
+      `${regionPath}/${mutation.region.id}/reference-polygon`,
+      await referenceBody(updated.configurationVersion),
+      manager.accessToken,
+    );
+    assert.equal(confirmedOriginal.status, 200);
+    const latest = (await confirmedOriginal.json()) as { configurationVersion: number };
+    const bundleResponse = await request('GET', bundlePath, undefined, serviceToken);
+    assert.equal(bundleResponse.status, 200);
+    assert.equal(bundleResponse.headers.get('cache-control'), 'no-store');
+    const bundle = (await bundleResponse.json()) as {
+      configurationVersion: number;
+      bundleSha256: string;
+      regions: unknown[];
+    };
+    assert.equal(bundle.configurationVersion, latest.configurationVersion);
+    assert.equal(bundle.regions.length, 2);
+    const etag = bundleResponse.headers.get('etag')!;
+    assert.equal(etag, `"sha256:${bundle.bundleSha256}"`);
+    const cached = () =>
+      fetch(`${url}/api/v1${bundlePath}`, {
+        headers: { Authorization: `Bearer ${serviceToken}`, 'If-None-Match': etag },
+      });
+    assert.equal((await cached()).status, 304);
+    const inactive = await request(
+      'PATCH',
+      `/sites/${site.id}/cameras/${camera.id}/status`,
+      { expectedConfigurationVersion: latest.configurationVersion, status: 'INACTIVE' },
+      manager.accessToken,
+    );
+    assert.equal(inactive.status, 200);
+    assert.equal((await cached()).status, 409);
     const logout = await request('POST', '/auth/logout', {
       clientType: 'MOBILE',
       refreshToken: manager.refreshToken,
