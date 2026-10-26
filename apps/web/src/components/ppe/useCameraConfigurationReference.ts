@@ -2,7 +2,6 @@ import {
   ApiError,
   CONFIGURATION_REFERENCE_LIFETIME_MS,
   SmartSiteManagementClient,
-  type CameraConfigurationImageResponse,
 } from '@smartsite/api-client';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useCallback, useLayoutEffect, useMemo, useRef, useState } from 'react';
@@ -15,13 +14,14 @@ import {
   resolveConfigurationReferenceScope,
   toSafeApiError,
   type ConfigurationReferenceScopeInput,
+  type ValidatedCameraConfigurationReference,
 } from './cameraConfigurationReferenceHelpers';
 
 export type UseCameraConfigurationReferenceOptions = ConfigurationReferenceScopeInput & {
   client?: SmartSiteManagementClient;
 };
 
-export type CameraConfigurationReference = CameraConfigurationImageResponse & {
+export type CameraConfigurationReference = ValidatedCameraConfigurationReference & {
   image: HTMLImageElement;
 };
 
@@ -132,7 +132,7 @@ export function useCameraConfigurationReference(
     setIsLoadingState(false);
   }
 
-  const query = useQuery<CameraConfigurationImageResponse | null, ApiError>({
+  const query = useQuery<ValidatedCameraConfigurationReference | null, ApiError>({
     queryKey,
     queryFn: async () => null,
     enabled: false,

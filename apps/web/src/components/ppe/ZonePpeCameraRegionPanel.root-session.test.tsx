@@ -5,6 +5,7 @@ import { SmartSiteManagementClient, type ManagementSession } from '@smartsite/ap
 import type { CameraResponse, ZoneResponse } from '@smartsite/contracts';
 import { afterEach, expect, it, vi } from 'vitest';
 import type { RegionPolygonCanvasEditorProps } from './RegionPolygonCanvasEditor';
+import { buildCanonicalReference } from './ZonePpeCameraRegionPanel.reference.fixtures';
 import { ZonePpeCameraRegionPanel } from './ZonePpeCameraRegionPanel';
 
 vi.mock('./RegionPolygonCanvasEditor', () => ({
@@ -54,9 +55,7 @@ const zone: ZoneResponse = {
   configurationLocked: false,
   createdAt: '2026-10-16T00:00:00Z',
 };
-const jpeg = Buffer.from([
-  255, 216, 255, 192, 0, 17, 8, 0, 80, 0, 120, 3, 1, 17, 0, 2, 17, 0, 3, 17, 0, 255, 217,
-]).toString('base64');
+const savedRegionId = '55555555-5555-4555-8555-555555555555';
 
 it.each(['reference', 'write'])(
   'forwards the owning client through the real panel to its %s leaf',
@@ -82,7 +81,7 @@ it.each(['reference', 'write'])(
     vi.stubGlobal(
       'fetch',
       vi.fn(async (url: string, init: RequestInit) => {
-        const isReference = url.includes('/configuration-image');
+        const isReference = url.includes('/configuration-reference');
         const isWrite = init.method === 'POST';
         if (isWrite) writes.push(JSON.parse(init.body as string));
         if (
@@ -92,32 +91,38 @@ it.each(['reference', 'write'])(
           injected401 = true;
           return Response.json({}, { status: 401 });
         }
+        const {
+          image: _decoded,
+          issuedReference,
+          ...image
+        } = buildCanonicalReference(
+          { siteId, cameraId, configurationVersion: 1 },
+          { cameraExternalId: camera.externalId, capturedAt: new Date(Date.now()).toISOString() },
+        );
+        void _decoded; // Decoded browser image is excluded from the HTTP fixture.
         if (isReference) {
-          const now = Date.now();
           return Response.json({
-            siteId,
-            cameraId,
-            schemaVersion: 1,
-            purpose: 'REGION_CONFIGURATION',
-            configurationVersion: 1,
-            sourceKind: 'LIVE',
-            referenceExpiresAt: new Date(now + 300_000).toISOString(),
-            frame: {
-              cameraExternalId: camera.externalId,
-              width: 120,
-              height: 80,
-              sessionId: '33333333-3333-4333-8333-333333333333',
-              sequenceNumber: '1',
-              capturedAt: new Date(now).toISOString(),
-              imageDataUrl: `data:image/jpeg;base64,${jpeg}`,
-              imageSha256: 'a'.repeat(64),
-            },
+            image,
+            reference: issuedReference,
+            viewValidity: 'UNCONFIRMED',
           });
         }
         if (isWrite)
           return Response.json({
             configurationVersion: 2,
-            region: { id: 'fixture-saved-region', cameraId, zoneId: zone.id },
+            region: {
+              id: savedRegionId,
+              cameraId,
+              zoneId: zone.id,
+              version: 1,
+              geometryConfirmation: {
+                status: 'MANUALLY_CONFIRMED',
+                referenceId: issuedReference.referenceId,
+                viewRevision: issuedReference.viewRevision,
+                confirmedByUserId: '66666666-6666-4666-8666-666666666666',
+                confirmedAt: '2026-10-16T00:00:00.000Z',
+              },
+            },
           });
         if (url.includes('/regions')) return Response.json({ items: [], total: 0 });
         if (url.endsWith(`/cameras/${cameraId}`)) return Response.json(camera);
@@ -151,11 +156,17 @@ it.each(['reference', 'write'])(
     fireEvent.click(start);
     fireEvent.click(screen.getByText('Fixture polygon'));
     fireEvent.click(screen.getByText('Fixture save'));
-    await screen.findByText(/fixture-saved-region/);
+    await screen.findByText(new RegExp(`Saved region "${savedRegionId}" \\(v1\\)`));
     expect(session.refreshAccessToken).toHaveBeenCalledExactlyOnceWith('synthetic-old');
     expect(session.onUnauthorized).not.toHaveBeenCalled();
     expect(writes).toHaveLength(failureAt === 'write' ? 2 : 1);
-    expect(writes[0]).toMatchObject({ zoneId: zone.id, expectedConfigurationVersion: 1 });
+    expect(writes[0]).toMatchObject({
+      zoneId: zone.id,
+      expectedConfigurationVersion: 1,
+      referenceId: '77777777-7777-4777-8777-000000000101',
+      viewRevision: 1,
+      confirmReferenceView: true,
+    });
     if (failureAt === 'write') expect(writes[1]).toEqual(writes[0]);
   },
 );

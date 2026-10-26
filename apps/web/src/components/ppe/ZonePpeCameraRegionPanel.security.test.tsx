@@ -50,6 +50,8 @@ const state = vi.hoisted(() => ({
 vi.mock('./useCameraConfigurationReference', () => ({
   useCameraConfigurationReference: (options: { enabled: boolean }) => {
     const nowMs = Date.now();
+    const capturedAt = new Date(nowMs).toISOString();
+    const referenceExpiresAt = new Date(nowMs + 300_000).toISOString();
     const reference: CameraConfigurationReference | null = options.enabled
       ? {
           siteId: 'site-a',
@@ -58,16 +60,33 @@ vi.mock('./useCameraConfigurationReference', () => ({
           purpose: 'REGION_CONFIGURATION',
           configurationVersion: state.configurationVersion,
           sourceKind: state.sourceKind,
-          referenceExpiresAt: new Date(nowMs + 300_000).toISOString(),
+          referenceExpiresAt,
           frame: {
             width: 640,
             height: 480,
             cameraExternalId: state.externalId,
             imageDataUrl: 'data:image/jpeg;base64,/9j/2Q==',
-            capturedAt: new Date(nowMs).toISOString(),
+            capturedAt,
             sessionId: '00000000-0000-4000-8000-000000000001',
             sequenceNumber: '1',
             imageSha256: 'a'.repeat(64),
+          },
+          issuedReference: {
+            schemaVersion: '1.0.0',
+            purpose: 'REGION_CONFIGURATION',
+            sourceKind: state.sourceKind,
+            referenceId: '00000000-0000-4000-8000-000000000105',
+            siteId: 'site-a',
+            cameraId: 'camera-a',
+            sessionId: '00000000-0000-4000-8000-000000000001',
+            imageSha256: 'a'.repeat(64),
+            width: 640,
+            height: 480,
+            capturedAt,
+            issuedAt: capturedAt,
+            expiresAt: referenceExpiresAt,
+            configurationVersion: state.configurationVersion,
+            viewRevision: 1,
           },
           image: {} as HTMLImageElement,
         }
@@ -158,7 +177,7 @@ it('cancels old credential camera-detail read before any region POST after scope
         resolveDetail = resolve;
       }),
   );
-  const post = vi.spyOn(SmartSiteManagementClient.prototype, 'createRegion');
+  const post = vi.spyOn(SmartSiteManagementClient.prototype, 'createReferenceRegion');
   const { rerender } = render(view());
   await draw();
   fireEvent.click(screen.getByRole('button', { name: /Save Region/i }));
@@ -187,7 +206,7 @@ it('does not reuse frozen pixels or finish an old POST when token rotates with u
         resolveDetail = resolve;
       }),
   );
-  const post = vi.spyOn(SmartSiteManagementClient.prototype, 'createRegion');
+  const post = vi.spyOn(SmartSiteManagementClient.prototype, 'createReferenceRegion');
   const { rerender } = render(view());
   await draw();
   fireEvent.click(screen.getByRole('button', { name: /Save Region/i }));
@@ -213,7 +232,7 @@ it('does not resurrect a frozen drawing when credentials rotate A to B and back 
 
 it('clears success and scopes duplicate prevention to the selected Zone', async () => {
   const post = vi
-    .spyOn(SmartSiteManagementClient.prototype, 'createRegion')
+    .spyOn(SmartSiteManagementClient.prototype, 'createReferenceRegion')
     .mockImplementation(async (_token, _site, _camera, input) => ({
       region: {
         id: 'created-region',
@@ -224,6 +243,13 @@ it('clears success and scopes duplicate prevention to the selected Zone', async 
         version: 1,
         isActive: true,
         createdAt: '2026-10-07T00:00:00Z',
+        geometryConfirmation: {
+          status: 'MANUALLY_CONFIRMED',
+          referenceId: input.referenceId,
+          viewRevision: input.viewRevision,
+          confirmedByUserId: '00000000-0000-4000-8000-000000000999',
+          confirmedAt: '2026-10-07T00:00:00.000Z',
+        },
       },
       configurationVersion: 8,
     }));
@@ -243,7 +269,7 @@ it('rejects wrong-site fresh camera metadata before POST even when initial list 
     ...camera,
     siteId: 'other-site',
   });
-  const post = vi.spyOn(SmartSiteManagementClient.prototype, 'createRegion');
+  const post = vi.spyOn(SmartSiteManagementClient.prototype, 'createReferenceRegion');
   render(view());
   await draw();
   fireEvent.click(screen.getByRole('button', { name: /Save Region/i }));
@@ -254,25 +280,34 @@ it('rejects wrong-site fresh camera metadata before POST even when initial list 
 });
 
 it('uses the actual offset and scaled image surface to save normalized polygon coordinates', async () => {
-  const post = vi.spyOn(SmartSiteManagementClient.prototype, 'createRegion').mockResolvedValue({
-    region: {
-      id: 'new-region',
-      cameraId: camera.id,
-      zoneId: zones[0]!.id,
-      polygon: {
-        coordinates: [
-          [0.1, 0.1],
-          [0.8, 0.1],
-          [0.8, 0.8],
-        ],
+  const post = vi
+    .spyOn(SmartSiteManagementClient.prototype, 'createReferenceRegion')
+    .mockResolvedValue({
+      region: {
+        id: 'new-region',
+        cameraId: camera.id,
+        zoneId: zones[0]!.id,
+        polygon: {
+          coordinates: [
+            [0.1, 0.1],
+            [0.8, 0.1],
+            [0.8, 0.8],
+          ],
+        },
+        coordinateSpace: 'NORMALIZED_0_1',
+        version: 1,
+        isActive: true,
+        createdAt: '2026-10-07T00:00:00Z',
+        geometryConfirmation: {
+          status: 'MANUALLY_CONFIRMED',
+          referenceId: '00000000-0000-4000-8000-000000000105',
+          viewRevision: 1,
+          confirmedByUserId: '00000000-0000-4000-8000-000000000999',
+          confirmedAt: '2026-10-07T00:00:00.000Z',
+        },
       },
-      coordinateSpace: 'NORMALIZED_0_1',
-      version: 1,
-      isActive: true,
-      createdAt: '2026-10-07T00:00:00Z',
-    },
-    configurationVersion: 8,
-  });
+      configurationVersion: 8,
+    });
   render(view());
   await draw();
   fireEvent.click(screen.getByRole('button', { name: /Save Region/i }));
@@ -291,6 +326,9 @@ it('uses the actual offset and scaled image surface to save normalized polygon c
         ],
       },
       expectedConfigurationVersion: 7,
+      referenceId: '00000000-0000-4000-8000-000000000105',
+      viewRevision: 1,
+      confirmReferenceView: true,
     },
     { signal: expect.any(AbortSignal) },
   );
@@ -309,7 +347,7 @@ it('rejects out-of-image clicks instead of silently clamping them into a boundar
 it.each(['private-service-canary', 'Polygon private-service-canary'])(
   'does not expose arbitrary upstream exception text to the operator: %s',
   async (message) => {
-    vi.spyOn(SmartSiteManagementClient.prototype, 'createRegion').mockRejectedValue(
+    vi.spyOn(SmartSiteManagementClient.prototype, 'createReferenceRegion').mockRejectedValue(
       new Error(message),
     );
     render(view());

@@ -328,3 +328,17 @@ extracting it solely for this fix would scatter the cache-key contract. No new
 mutation or authorization policy is introduced. The related test remains below
 400 lines. Extract a cohesive cache-key utility before further cross-page cache
 features; this exception does not increase the normal source-size target.
+
+## Issued-reference editor activation, 27 October
+
+Root permits the existing drawer346->379 and reference helper301->325 physical
+lines for issued-reference command plumbing and response confirmation; hook307
+and coherence utility169 remain bounded existing responsibilities. No new UI
+architecture or capture/polling behavior is introduced. Existing oversized panel
+fixture suite is retained rather than dropping lifecycle coverage; new coherent
+issuance fixtures and write assertions also affect tests above400 lines. They
+retain one scoped journey per file; review extraction before unrelated growth,
+and do not minify tests to satisfy LOC. Root checked all changed caller fixtures,
+actual Agy independent source review found no reported blocker. This exception
+is limited to C03 metadata/fixtures and does not change normal LOC limits or
+establish browser, physical camera, worker application or production acceptance.

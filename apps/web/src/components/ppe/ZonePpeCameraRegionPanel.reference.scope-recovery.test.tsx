@@ -251,6 +251,9 @@ describe('ZonePpeCameraRegionPanel Configuration Reference 404 Scope Recovery vs
       expect.objectContaining({
         zoneId: ZONE_1,
         expectedConfigurationVersion: 5,
+        referenceId: '77777777-7777-4777-8777-000000000502',
+        viewRevision: 2,
+        confirmReferenceView: true,
       }),
       expect.objectContaining({ signal: expect.any(AbortSignal) }),
     );
@@ -288,9 +291,9 @@ describe('ZonePpeCameraRegionPanel Configuration Reference 404 Scope Recovery vs
       ...baseCamera,
       configurationVersion: 3,
     });
-    vi.spyOn(SmartSiteManagementClient.prototype, 'updatePolygon').mockRejectedValueOnce(
-      new ApiError('http', 'Secret region 404 missing', 404),
-    );
+    const { updateSpy } = stubRegionMutationSpies();
+    updateSpy.mockRejectedValueOnce(new ApiError('http', 'Secret region 404 missing', 404));
+    const legacyUpdateSpy = vi.spyOn(SmartSiteManagementClient.prototype, 'updatePolygon');
 
     const { rerenderWith } = renderReferencePanel(queryClient);
 
@@ -302,6 +305,8 @@ describe('ZonePpeCameraRegionPanel Configuration Reference 404 Scope Recovery vs
     expect(screen.queryByText(/Secret region 404 missing/i)).toBeNull();
     expect(screen.queryByLabelText(/Camera Region Drawing Canvas/i)).toBeNull();
     expect(refHookState.lastOptions?.enabled).toBe(false);
+    expect(updateSpy).toHaveBeenCalledTimes(1);
+    expect(legacyUpdateSpy).not.toHaveBeenCalled();
 
     // Switch to Camera B: can request reference, but Edit Geometry / Start Drawing require fresh B reference
     await user.selectOptions(screen.getByLabelText(/Select Camera/i), CAM_2);
@@ -375,9 +380,11 @@ describe('ZonePpeCameraRegionPanel Configuration Reference 404 Scope Recovery vs
         ...baseCamera,
         configurationVersion: 3,
       });
-      vi.spyOn(SmartSiteManagementClient.prototype, 'createRegion').mockRejectedValueOnce(
+      const { createSpy } = stubRegionMutationSpies();
+      createSpy.mockRejectedValueOnce(
         new ApiError('http', `Secret account denial ${status}`, status),
       );
+      const legacyCreateSpy = vi.spyOn(SmartSiteManagementClient.prototype, 'createRegion');
 
       const { rerenderWith } = renderReferencePanel(queryClient);
 
@@ -388,6 +395,8 @@ describe('ZonePpeCameraRegionPanel Configuration Reference 404 Scope Recovery vs
       expect(await screen.findByRole('alert')).toBeDefined();
       expect(screen.queryByText(/Secret account denial/i)).toBeNull();
       expect(refHookState.lastOptions?.enabled).toBe(false);
+      expect(createSpy).toHaveBeenCalledTimes(1);
+      expect(legacyCreateSpy).not.toHaveBeenCalled();
 
       // Switching to Camera B within the same site/account scope must stay blocked after 401/403
       await user.selectOptions(screen.getByLabelText(/Select Camera/i), CAM_2);

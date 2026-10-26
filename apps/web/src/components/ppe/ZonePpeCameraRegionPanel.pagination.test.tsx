@@ -448,6 +448,8 @@ it('cancels late camera pages and isolates cached metadata on token rotation wit
 async function drawFixture() {
   // Mock pixels only: this never starts capture, loads a model, or contacts an AI service.
   const nowMs = Date.now();
+  const capturedAt = new Date(nowMs).toISOString();
+  const referenceExpiresAt = new Date(nowMs + 300_000).toISOString();
   const reference: CameraConfigurationReference = {
     siteId: 'site-a',
     cameraId: 'cam-1',
@@ -455,16 +457,33 @@ async function drawFixture() {
     purpose: 'REGION_CONFIGURATION',
     configurationVersion: 3,
     sourceKind: 'LIVE',
-    referenceExpiresAt: new Date(nowMs + 300_000).toISOString(),
+    referenceExpiresAt,
     frame: {
       width: 640,
       height: 480,
       cameraExternalId: 'source-1',
       sessionId: '00000000-0000-4000-8000-000000000001',
       sequenceNumber: '1',
-      capturedAt: new Date(nowMs).toISOString(),
+      capturedAt,
       imageDataUrl: 'data:image/jpeg;base64,/9j/2Q==',
       imageSha256: 'a'.repeat(64),
+    },
+    issuedReference: {
+      schemaVersion: '1.0.0',
+      purpose: 'REGION_CONFIGURATION',
+      sourceKind: 'LIVE',
+      referenceId: '00000000-0000-4000-8000-000000000102',
+      siteId: 'site-a',
+      cameraId: 'cam-1',
+      sessionId: '00000000-0000-4000-8000-000000000001',
+      imageSha256: 'a'.repeat(64),
+      width: 640,
+      height: 480,
+      capturedAt,
+      issuedAt: capturedAt,
+      expiresAt: referenceExpiresAt,
+      configurationVersion: 3,
+      viewRevision: 1,
     },
     image: {} as HTMLImageElement,
   };

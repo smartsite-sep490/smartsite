@@ -79,6 +79,9 @@ function LocaleToggle() {
   );
 }
 
+const DEFAULT_REF_ID = '00000000-0000-4000-8000-000000000101';
+const DEFAULT_ACTOR_ID = '00000000-0000-4000-8000-000000000999';
+
 function mockConfigurationReference(
   overrides: Partial<Omit<CameraConfigurationReference, 'frame' | 'image'>> = {},
   frameOverrides: Partial<CameraConfigurationReference['frame']> = {},
@@ -91,6 +94,17 @@ function mockConfigurationReference(
     new Date(
       (Number.isFinite(capturedMs) ? capturedMs : nowMs) + CONFIGURATION_REFERENCE_LIFETIME_MS,
     ).toISOString();
+  const frame = {
+    sessionId: '00000000-0000-4000-8000-000000000001',
+    sequenceNumber: '1',
+    cameraExternalId: 'CAM-EXT-01',
+    capturedAt,
+    width: 640,
+    height: 480,
+    imageDataUrl: 'data:image/jpeg;base64,/9j/2Q==',
+    imageSha256: 'a'.repeat(64),
+    ...frameOverrides,
+  };
   return {
     schemaVersion: 1,
     purpose: 'REGION_CONFIGURATION',
@@ -100,16 +114,23 @@ function mockConfigurationReference(
     sourceKind: 'LIVE',
     referenceExpiresAt,
     ...overrides,
-    frame: {
-      sessionId: '00000000-0000-4000-8000-000000000001',
-      sequenceNumber: '1',
-      cameraExternalId: 'CAM-EXT-01',
-      capturedAt,
-      width: 640,
-      height: 480,
-      imageDataUrl: 'data:image/jpeg;base64,/9j/2Q==',
-      imageSha256: 'a'.repeat(64),
-      ...frameOverrides,
+    frame,
+    issuedReference: overrides.issuedReference ?? {
+      schemaVersion: '1.0.0',
+      purpose: 'REGION_CONFIGURATION',
+      sourceKind: overrides.sourceKind ?? 'LIVE',
+      referenceId: DEFAULT_REF_ID,
+      siteId: overrides.siteId ?? 'site-alpha',
+      cameraId: overrides.cameraId ?? 'cam-1',
+      sessionId: frame.sessionId,
+      imageSha256: frame.imageSha256,
+      width: frame.width,
+      height: frame.height,
+      capturedAt: frame.capturedAt,
+      issuedAt: frame.capturedAt,
+      expiresAt: referenceExpiresAt,
+      configurationVersion: overrides.configurationVersion ?? 3,
+      viewRevision: 1,
     },
     image: {} as HTMLImageElement,
   };
@@ -431,24 +452,32 @@ describe('ZonePpeCameraRegionPanel localization (vi/en)', () => {
   it('retains open polygon draft points and re-translates validation and saved feedback across vi/en switches with unchanged mutation payload', async () => {
     const user = userEvent.setup();
     const listCamerasSpy = vi.spyOn(SmartSiteManagementClient.prototype, 'listCameras');
+    const trianglePolygon = {
+      coordinates: [
+        [0.1, 0.1],
+        [0.8, 0.1],
+        [0.8, 0.8],
+      ] as [number, number][],
+    };
     const createRegionSpy = vi
-      .spyOn(SmartSiteManagementClient.prototype, 'createRegion')
+      .spyOn(SmartSiteManagementClient.prototype, 'createReferenceRegion')
       .mockResolvedValueOnce({
         region: {
           id: 'reg-vi-99',
           cameraId: 'cam-1',
           zoneId: 'zone-1',
-          polygon: {
-            coordinates: [
-              [0.1, 0.1],
-              [0.8, 0.1],
-              [0.8, 0.8],
-            ],
-          },
+          polygon: trianglePolygon,
           coordinateSpace: 'NORMALIZED_0_1',
           version: 1,
           isActive: true,
           createdAt: '2026-10-14T07:00:00Z',
+          geometryConfirmation: {
+            status: 'MANUALLY_CONFIRMED',
+            referenceId: DEFAULT_REF_ID,
+            viewRevision: 1,
+            confirmedByUserId: DEFAULT_ACTOR_ID,
+            confirmedAt: '2026-10-14T07:00:00.000Z',
+          },
         },
         configurationVersion: 4,
       });
@@ -515,14 +544,11 @@ describe('ZonePpeCameraRegionPanel localization (vi/en)', () => {
       'cam-1',
       {
         zoneId: 'zone-1',
-        polygon: {
-          coordinates: [
-            [0.1, 0.1],
-            [0.8, 0.1],
-            [0.8, 0.8],
-          ],
-        },
+        polygon: trianglePolygon,
         expectedConfigurationVersion: 3,
+        referenceId: DEFAULT_REF_ID,
+        viewRevision: 1,
+        confirmReferenceView: true,
       },
       expect.objectContaining({ signal: expect.any(AbortSignal) }),
     );
@@ -546,7 +572,7 @@ describe('ZonePpeCameraRegionPanel localization (vi/en)', () => {
   it('re-translates 409 version conflict across vi and en while preserving polygon draft without automatic POST retry', async () => {
     const user = userEvent.setup();
     const createRegionSpy = vi
-      .spyOn(SmartSiteManagementClient.prototype, 'createRegion')
+      .spyOn(SmartSiteManagementClient.prototype, 'createReferenceRegion')
       .mockRejectedValueOnce(new ApiError('http', 'raw-conflict-409-diag', 409));
 
     render(
@@ -599,7 +625,7 @@ describe('ZonePpeCameraRegionPanel localization (vi/en)', () => {
     vi.spyOn(SmartSiteManagementClient.prototype, 'listRegions')
       .mockRejectedValueOnce(new ApiError('http', 'raw-region-403-trace', 403))
       .mockResolvedValue(mockRegionsPage);
-    vi.spyOn(SmartSiteManagementClient.prototype, 'createRegion').mockRejectedValue(
+    vi.spyOn(SmartSiteManagementClient.prototype, 'createReferenceRegion').mockRejectedValue(
       new ApiError('http', 'raw-save-region-403-trace', 403),
     );
 

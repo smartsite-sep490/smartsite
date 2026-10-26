@@ -5,9 +5,10 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import {
   CONFIGURATION_REFERENCE_LIFETIME_MS,
   SmartSiteManagementClient,
+  type ReferenceRegionMutationResponse,
   type ZoneResponse,
 } from '@smartsite/api-client';
-import type { CameraResponse, RegionMutationResponse } from '@smartsite/contracts';
+import type { CameraResponse } from '@smartsite/contracts';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import i18n from '../../i18n';
 import { SAFETY_TOUR_STORAGE_KEY } from '../safety/safetyTaskTourModel';
@@ -32,55 +33,90 @@ const TRIANGLE: [number, number][] = [
   [0.8, 0.8],
 ];
 
-const createCamera = (overrides: Partial<CameraResponse> = {}): CameraResponse => ({
-  id: 'cam-1',
-  siteId: 'site-alpha',
-  externalId: 'CAM-EXT-01',
-  code: 'CAM-01',
-  name: 'Scaffold Camera 01',
-  status: 'ACTIVE',
-  configurationVersion: 3,
-  createdAt: '2026-09-30T00:00:00Z',
-  ...overrides,
-});
+function createCamera(overrides: Partial<CameraResponse> = {}): CameraResponse {
+  return {
+    id: 'cam-1',
+    siteId: 'site-alpha',
+    externalId: 'CAM-EXT-01',
+    code: 'CAM-01',
+    name: 'Scaffold Camera 01',
+    status: 'ACTIVE',
+    configurationVersion: 3,
+    createdAt: '2026-09-30T00:00:00Z',
+    ...overrides,
+  };
+}
 
-const createZone = (overrides: Partial<ZoneResponse> = {}): ZoneResponse => ({
-  id: 'zone-1',
-  siteId: 'site-alpha',
-  code: 'ZONE-A1',
-  name: 'Hazardous Scaffold Area',
-  type: 'HAZARDOUS',
-  restrictionPolicy: 'NONE',
-  requiredPpe: ['HARD_HAT', 'SAFETY_VEST'],
-  configurationLocked: false,
-  createdAt: '2026-10-07T00:00:00Z',
-  ...overrides,
-});
+function createZone(overrides: Partial<ZoneResponse> = {}): ZoneResponse {
+  return {
+    id: 'zone-1',
+    siteId: 'site-alpha',
+    code: 'ZONE-A1',
+    name: 'Hazardous Scaffold Area',
+    type: 'HAZARDOUS',
+    restrictionPolicy: 'NONE',
+    requiredPpe: ['HARD_HAT', 'SAFETY_VEST'],
+    configurationLocked: false,
+    createdAt: '2026-10-07T00:00:00Z',
+    ...overrides,
+  };
+}
 
 function createReference(
-  overrides: Partial<CameraConfigurationReference> = {},
+  overrides: Partial<Omit<CameraConfigurationReference, 'issuedReference'>> = {},
 ): CameraConfigurationReference {
   const nowMs = Date.now();
+  const referenceExpiresAt =
+    overrides.referenceExpiresAt ??
+    new Date(nowMs + CONFIGURATION_REFERENCE_LIFETIME_MS).toISOString();
+  const expiresAtMs = Date.parse(referenceExpiresAt);
+  const defaultCapturedAtMs = Number.isFinite(expiresAtMs)
+    ? Math.min(nowMs, expiresAtMs - CONFIGURATION_REFERENCE_LIFETIME_MS)
+    : nowMs;
+  const capturedAt = overrides.frame?.capturedAt ?? new Date(defaultCapturedAtMs).toISOString();
+  const siteId = overrides.siteId ?? 'site-alpha';
+  const cameraId = overrides.cameraId ?? 'cam-1';
+  const configurationVersion = overrides.configurationVersion ?? 3;
+  const sourceKind = overrides.sourceKind ?? 'LIVE';
+  const frame = {
+    sessionId: '00000000-0000-4000-8000-000000000001',
+    sequenceNumber: '1',
+    cameraExternalId: 'CAM-EXT-01',
+    capturedAt,
+    width: 640,
+    height: 480,
+    imageDataUrl: 'data:image/jpeg;base64,/9j/2Q==',
+    imageSha256: 'a'.repeat(64),
+    ...overrides.frame,
+  };
   return {
     schemaVersion: 1,
     purpose: 'REGION_CONFIGURATION',
-    siteId: 'site-alpha',
-    cameraId: 'cam-1',
-    configurationVersion: 3,
-    sourceKind: 'LIVE',
-    referenceExpiresAt: new Date(nowMs + CONFIGURATION_REFERENCE_LIFETIME_MS).toISOString(),
-    frame: {
-      sessionId: '00000000-0000-4000-8000-000000000001',
-      sequenceNumber: '1',
-      cameraExternalId: 'CAM-EXT-01',
-      capturedAt: new Date(nowMs).toISOString(),
-      width: 640,
-      height: 480,
-      imageDataUrl: 'data:image/jpeg;base64,/9j/2Q==',
-      imageSha256: 'a'.repeat(64),
+    siteId,
+    cameraId,
+    configurationVersion,
+    sourceKind,
+    referenceExpiresAt,
+    ...overrides,
+    frame,
+    issuedReference: {
+      schemaVersion: '1.0.0',
+      purpose: 'REGION_CONFIGURATION',
+      sourceKind,
+      referenceId: '00000000-0000-4000-8000-000000000099',
+      siteId,
+      cameraId,
+      sessionId: frame.sessionId,
+      imageSha256: frame.imageSha256,
+      width: frame.width,
+      height: frame.height,
+      capturedAt: frame.capturedAt,
+      issuedAt: frame.capturedAt,
+      expiresAt: referenceExpiresAt,
+      configurationVersion,
+      viewRevision: 1,
     },
     image: {} as HTMLImageElement,
-    ...overrides,
   };
 }
 
@@ -155,6 +191,14 @@ describe('RegionPolygonTaskTour', () => {
 
   it('stays closed by default, walks 4 steps without mutating draft points or making API calls, persists progress across logins for the same authorized tourUserId, isolates different users, and persists nothing when tourUserId is null', () => {
     const getCameraSpy = vi.spyOn(SmartSiteManagementClient.prototype, 'getCamera');
+    const createReferenceSpy = vi.spyOn(
+      SmartSiteManagementClient.prototype,
+      'createReferenceRegion',
+    );
+    const updateReferenceSpy = vi.spyOn(
+      SmartSiteManagementClient.prototype,
+      'updateReferencePolygon',
+    );
     const createSpy = vi.spyOn(SmartSiteManagementClient.prototype, 'createRegion');
     const updateSpy = vi.spyOn(SmartSiteManagementClient.prototype, 'updatePolygon');
     const fetchSpy = vi.spyOn(globalThis, 'fetch');
@@ -190,6 +234,8 @@ describe('RegionPolygonTaskTour', () => {
       expect(screen.getByRole('button', { name })).toBeTruthy();
     }
     expect(getCameraSpy).not.toHaveBeenCalled();
+    expect(createReferenceSpy).not.toHaveBeenCalled();
+    expect(updateReferenceSpy).not.toHaveBeenCalled();
     expect(createSpy).not.toHaveBeenCalled();
     expect(updateSpy).not.toHaveBeenCalled();
     expect(fetchSpy).not.toHaveBeenCalled();
@@ -322,12 +368,12 @@ describe('RegionPolygonTaskTour', () => {
   });
 
   it('adapts available steps when reference is expired or save is in flight without unlocking disabled controls', async () => {
-    let resolveSave!: (value: RegionMutationResponse) => void;
+    let resolveSave!: (value: ReferenceRegionMutationResponse) => void;
     vi.spyOn(SmartSiteManagementClient.prototype, 'getCamera').mockResolvedValue(
       createCamera({ configurationVersion: 5 }),
     );
-    vi.spyOn(SmartSiteManagementClient.prototype, 'createRegion').mockImplementation(
-      () => new Promise<RegionMutationResponse>((resolve) => void (resolveSave = resolve)),
+    vi.spyOn(SmartSiteManagementClient.prototype, 'createReferenceRegion').mockImplementation(
+      () => new Promise<ReferenceRegionMutationResponse>((resolve) => void (resolveSave = resolve)),
     );
 
     const view = renderDrawer({
@@ -373,6 +419,13 @@ describe('RegionPolygonTaskTour', () => {
           version: 1,
           isActive: true,
           createdAt: '2026-10-07T12:00:00Z',
+          geometryConfirmation: {
+            status: 'MANUALLY_CONFIRMED',
+            referenceId: '00000000-0000-4000-8000-000000000099',
+            viewRevision: 1,
+            confirmedByUserId: '00000000-0000-4000-8000-000000000077',
+            confirmedAt: '2026-10-07T12:00:00.000Z',
+          },
         },
         configurationVersion: 6,
       });

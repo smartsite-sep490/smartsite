@@ -239,7 +239,7 @@ describe('ZonePpeCameraRegionPanel Configuration Reference Journeys', () => {
       serverCamera = { ...serverCamera, configurationVersion: 4 };
     });
 
-    renderReferencePanel(queryClient);
+    const { rerenderWith } = renderReferencePanel(queryClient);
 
     await user.click(await screen.findByRole('button', { name: /Start Drawing Region/i }));
     await addTriangleViaInputs(user);
@@ -279,12 +279,30 @@ describe('ZonePpeCameraRegionPanel Configuration Reference Journeys', () => {
           ],
         },
         expectedConfigurationVersion: 3,
+        referenceId: '77777777-7777-4777-8777-000000000301',
+        viewRevision: 1,
+        confirmReferenceView: true,
       },
       expect.objectContaining({ signal: expect.any(AbortSignal) }),
     );
 
-    // 4. Subsequent edit uses acknowledged configurationVersion 4 and triggers no automatic model apply
+    // 4. Subsequent edit requires confirming a v4 reference before saving at configurationVersion 4, with no automatic model apply
     await addPointViaInputs(user, '0.2', '0.7');
+    await user.click(screen.getByRole('button', { name: /Save Region/i }));
+    expect((await screen.findByRole('alert')).textContent).toMatch(
+      /Configuration version conflict/i,
+    );
+    expect(updateSpy).not.toHaveBeenCalled();
+
+    refHookState.requestImpl = async () => {
+      refHookState.reference = buildCanonicalReference(
+        { configurationVersion: 4 },
+        { sequenceNumber: '2', capturedAt: '2026-10-15T09:01:00.000Z' },
+      );
+    };
+    await user.click(screen.getByRole('button', { name: /Review new reference/i }));
+    rerenderWith();
+    await user.click(screen.getByRole('button', { name: /Use new reference/i }));
     await user.click(screen.getByRole('button', { name: /Save Region/i }));
     expect(await screen.findByText(/Saved region "reg-created-1" \(v2\)/i)).toBeDefined();
     expect(updateSpy).toHaveBeenCalledWith(
@@ -292,7 +310,12 @@ describe('ZonePpeCameraRegionPanel Configuration Reference Journeys', () => {
       SITE_A,
       CAM_1,
       'reg-created-1',
-      expect.objectContaining({ expectedConfigurationVersion: 4 }),
+      expect.objectContaining({
+        expectedConfigurationVersion: 4,
+        referenceId: '77777777-7777-4777-8777-000000000402',
+        viewRevision: 2,
+        confirmReferenceView: true,
+      }),
       expect.objectContaining({ signal: expect.any(AbortSignal) }),
     );
     expect(demoApplySpy).not.toHaveBeenCalled();
@@ -363,7 +386,12 @@ describe('ZonePpeCameraRegionPanel Configuration Reference Journeys', () => {
       'admin-jwt-token',
       SITE_A,
       CAM_1,
-      expect.objectContaining({ expectedConfigurationVersion: 4 }),
+      expect.objectContaining({
+        expectedConfigurationVersion: 4,
+        referenceId: '77777777-7777-4777-8777-000000000402',
+        viewRevision: 2,
+        confirmReferenceView: true,
+      }),
       expect.objectContaining({ signal: expect.any(AbortSignal) }),
     );
 

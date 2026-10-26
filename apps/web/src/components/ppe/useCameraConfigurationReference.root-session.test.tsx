@@ -60,24 +60,49 @@ function fixture() {
 
 function imageResponse() {
   const now = Date.now();
+  const capturedAt = new Date(now).toISOString();
+  const referenceExpiresAt = new Date(now + 300_000).toISOString();
+  const sessionId = '33333333-3333-4333-8333-333333333333';
+  const referenceId = '44444444-4444-4444-8444-444444444444';
+  const imageSha256 = 'a'.repeat(64);
   return Response.json({
-    siteId,
-    cameraId,
-    schemaVersion: 1,
-    purpose: 'REGION_CONFIGURATION',
-    configurationVersion: 1,
-    sourceKind: 'LIVE',
-    referenceExpiresAt: new Date(now + 300_000).toISOString(),
-    frame: {
-      cameraExternalId: 'fixture-camera',
+    image: {
+      siteId,
+      cameraId,
+      schemaVersion: 1,
+      purpose: 'REGION_CONFIGURATION',
+      configurationVersion: 1,
+      sourceKind: 'LIVE',
+      referenceExpiresAt,
+      frame: {
+        cameraExternalId: 'fixture-camera',
+        width: 120,
+        height: 80,
+        sessionId,
+        sequenceNumber: '1',
+        capturedAt,
+        imageDataUrl: `data:image/jpeg;base64,${jpeg}`,
+        imageSha256,
+      },
+    },
+    reference: {
+      schemaVersion: '1.0.0',
+      purpose: 'REGION_CONFIGURATION',
+      sourceKind: 'LIVE',
+      referenceId,
+      siteId,
+      cameraId,
+      sessionId,
+      imageSha256,
       width: 120,
       height: 80,
-      sessionId: '33333333-3333-4333-8333-333333333333',
-      sequenceNumber: '1',
-      capturedAt: new Date(now).toISOString(),
-      imageDataUrl: `data:image/jpeg;base64,${jpeg}`,
-      imageSha256: 'a'.repeat(64),
+      capturedAt,
+      issuedAt: capturedAt,
+      expiresAt: referenceExpiresAt,
+      configurationVersion: 1,
+      viewRevision: 1,
     },
+    viewValidity: 'UNCONFIRMED',
   });
 }
 
@@ -98,6 +123,10 @@ it('refreshes through the supplied owning client before decoding the explicit re
   expect(seen).toEqual(['Bearer synthetic-old', 'Bearer synthetic-new']);
   expect(session.refreshAccessToken).toHaveBeenCalledExactlyOnceWith('synthetic-old');
   expect(result.current.reference?.cameraId).toBe(cameraId);
+  expect(result.current.reference?.issuedReference.referenceId).toBe(
+    '44444444-4444-4444-8444-444444444444',
+  );
+  expect(result.current.reference?.issuedReference.viewRevision).toBe(1);
   expect(result.current.reference?.image.src).toBe(`data:image/jpeg;base64,${jpeg}`);
   expect(session.onUnauthorized).not.toHaveBeenCalled();
 });

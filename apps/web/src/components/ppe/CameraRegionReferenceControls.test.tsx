@@ -11,28 +11,53 @@ import {
 import type { CameraConfigurationReference } from './useCameraConfigurationReference';
 
 function buildReference(
-  overrides: Partial<Omit<CameraConfigurationReference, 'frame' | 'image'>> = {},
+  overrides: Partial<
+    Omit<CameraConfigurationReference, 'frame' | 'image' | 'issuedReference'>
+  > = {},
   frameOverrides: Partial<CameraConfigurationReference['frame']> = {},
 ): CameraConfigurationReference {
+  const siteId = overrides.siteId ?? 'site-alpha';
+  const cameraId = overrides.cameraId ?? 'cam-1';
+  const configurationVersion = overrides.configurationVersion ?? 3;
+  const sourceKind = overrides.sourceKind ?? 'LIVE';
+  const referenceExpiresAt = overrides.referenceExpiresAt ?? '2026-10-25T09:05:00.000Z';
+  const frame = {
+    sessionId: '00000000-0000-4000-8000-000000000001',
+    sequenceNumber: '1',
+    cameraExternalId: 'CAM-EXT-01',
+    capturedAt: '2026-10-25T09:00:00.000Z',
+    width: 640,
+    height: 480,
+    imageDataUrl: 'data:image/jpeg;base64,/9j/2Q==',
+    imageSha256: 'a'.repeat(64),
+    ...frameOverrides,
+  };
   return {
     schemaVersion: 1,
-    siteId: 'site-alpha',
-    cameraId: 'cam-1',
+    siteId,
+    cameraId,
     purpose: 'REGION_CONFIGURATION',
-    configurationVersion: 3,
-    sourceKind: 'LIVE',
-    referenceExpiresAt: '2026-10-25T09:05:00.000Z',
+    configurationVersion,
+    sourceKind,
+    referenceExpiresAt,
     ...overrides,
-    frame: {
-      sessionId: '00000000-0000-4000-8000-000000000001',
-      sequenceNumber: '1',
-      cameraExternalId: 'CAM-EXT-01',
-      capturedAt: '2026-10-25T09:00:00.000Z',
-      width: 640,
-      height: 480,
-      imageDataUrl: 'data:image/jpeg;base64,/9j/2Q==',
-      imageSha256: 'a'.repeat(64),
-      ...frameOverrides,
+    frame,
+    issuedReference: {
+      schemaVersion: '1.0.0',
+      purpose: 'REGION_CONFIGURATION',
+      sourceKind,
+      referenceId: '00000000-0000-4000-8000-000000000099',
+      siteId,
+      cameraId,
+      sessionId: frame.sessionId,
+      imageSha256: frame.imageSha256,
+      width: frame.width,
+      height: frame.height,
+      capturedAt: frame.capturedAt,
+      issuedAt: frame.capturedAt,
+      expiresAt: referenceExpiresAt,
+      configurationVersion,
+      viewRevision: 1,
     },
     image: {} as HTMLImageElement,
   };

@@ -6,7 +6,9 @@ import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import {
   ApiError,
   SmartSiteManagementClient,
+  type CameraConfigurationImageReference,
   type CameraConfigurationImageResponse,
+  type CameraConfigurationReferenceResponse,
 } from '@smartsite/api-client';
 import { useCameraConfigurationReference } from './useCameraConfigurationReference';
 
@@ -24,25 +26,61 @@ const now = Date.parse('2026-10-15T09:00:00.000Z');
 const bytes = [
   255, 216, 255, 192, 0, 17, 8, 0, 80, 0, 120, 3, 1, 17, 0, 2, 17, 0, 3, 17, 0, 255, 217,
 ];
-const payload: CameraConfigurationImageResponse = {
-  schemaVersion: 1,
-  purpose: 'REGION_CONFIGURATION',
-  sourceKind: 'LIVE',
-  siteId: options.siteId,
-  cameraId: options.cameraId,
-  configurationVersion: 4,
-  referenceExpiresAt: new Date(now + 300_000).toISOString(),
-  frame: {
-    cameraExternalId: 'camera-a',
-    sessionId: options.siteId,
-    sequenceNumber: '1',
-    capturedAt: new Date(now).toISOString(),
-    width: 120,
-    height: 80,
-    imageDataUrl: `data:image/jpeg;base64,${Buffer.from(bytes).toString('base64')}`,
-    imageSha256: 'a'.repeat(64),
-  },
-};
+const sessionId = '33333333-3333-4333-8333-333333333333';
+const defaultReferenceId = '44444444-4444-4444-8444-444444444444';
+const imageDataUrl = `data:image/jpeg;base64,${Buffer.from(bytes).toString('base64')}`;
+
+function buildPayload(
+  overrides: {
+    capturedAtMs?: number;
+    sequenceNumber?: string;
+    referenceId?: string;
+    viewRevision?: number;
+  } = {},
+): CameraConfigurationReferenceResponse {
+  const capturedAtMs = overrides.capturedAtMs ?? now;
+  const capturedAt = new Date(capturedAtMs).toISOString();
+  const referenceExpiresAt = new Date(capturedAtMs + 300_000).toISOString();
+  const image: CameraConfigurationImageResponse = {
+    schemaVersion: 1,
+    purpose: 'REGION_CONFIGURATION',
+    sourceKind: 'LIVE',
+    siteId: options.siteId,
+    cameraId: options.cameraId,
+    configurationVersion: 4,
+    referenceExpiresAt,
+    frame: {
+      cameraExternalId: 'camera-a',
+      sessionId,
+      sequenceNumber: overrides.sequenceNumber ?? '1',
+      capturedAt,
+      width: 120,
+      height: 80,
+      imageDataUrl,
+      imageSha256: 'a'.repeat(64),
+    },
+  };
+  const reference: CameraConfigurationImageReference = {
+    schemaVersion: '1.0.0',
+    purpose: 'REGION_CONFIGURATION',
+    sourceKind: image.sourceKind,
+    referenceId: overrides.referenceId ?? defaultReferenceId,
+    siteId: image.siteId,
+    cameraId: image.cameraId,
+    sessionId: image.frame.sessionId,
+    imageSha256: image.frame.imageSha256,
+    width: image.frame.width,
+    height: image.frame.height,
+    capturedAt: image.frame.capturedAt,
+    issuedAt: image.frame.capturedAt,
+    expiresAt: image.referenceExpiresAt,
+    configurationVersion: image.configurationVersion,
+    viewRevision: overrides.viewRevision ?? 1,
+  };
+  return { image, reference, viewValidity: 'UNCONFIRMED' };
+}
+
+const payload: CameraConfigurationReferenceResponse = buildPayload();
 let decode: () => Promise<void>;
 let images: FakeImage[];
 class FakeImage {
@@ -83,9 +121,10 @@ function mount() {
 }
 
 it('cancels and releases a held decoder immediately on disable without waiting for decode settlement', async () => {
-  vi.spyOn(SmartSiteManagementClient.prototype, 'getCameraConfigurationImage').mockResolvedValue(
-    payload,
-  );
+  vi.spyOn(
+    SmartSiteManagementClient.prototype,
+    'getCameraConfigurationReference',
+  ).mockResolvedValue(payload);
   decode = () => new Promise(() => {});
   const { result, rerender, queryClient } = mount();
   let settled = false;
@@ -96,7 +135,7 @@ it('cancels and releases a held decoder immediately on disable without waiting f
     await Promise.resolve();
   });
   expect(images.length).toBe(1);
-  expect(images[0]!.src).toBe(payload.frame.imageDataUrl);
+  expect(images[0]!.src).toBe(payload.image.frame.imageDataUrl);
   rerender({ ...options, enabled: false });
   await act(async () => {
     await Promise.resolve();
@@ -113,9 +152,10 @@ it('cancels and releases a held decoder immediately on disable without waiting f
 });
 
 it('bounds a decoder that never settles and releases its image rather than leaving the action pending', async () => {
-  vi.spyOn(SmartSiteManagementClient.prototype, 'getCameraConfigurationImage').mockResolvedValue(
-    payload,
-  );
+  vi.spyOn(
+    SmartSiteManagementClient.prototype,
+    'getCameraConfigurationReference',
+  ).mockResolvedValue(payload);
   decode = () => new Promise(() => {});
   const { result } = mount();
   let settled = false;
@@ -137,7 +177,7 @@ it('bounds a decoder that never settles and releases its image rather than leavi
 
 it('does not expose arbitrary transport text or private backend details through its error object', async () => {
   const privateText = 'rtsp://private-user:private-password@private-camera/stream';
-  const client = vi.spyOn(SmartSiteManagementClient.prototype, 'getCameraConfigurationImage');
+  const client = vi.spyOn(SmartSiteManagementClient.prototype, 'getCameraConfigurationReference');
   const { result } = mount();
   for (const failure of [new Error(privateText), new ApiError('http', privateText, 503)]) {
     client.mockRejectedValueOnce(failure);
@@ -151,14 +191,16 @@ it('does not expose arbitrary transport text or private backend details through 
 });
 
 it('withholds an expired reference on render even when the browser expiry timer has not fired', async () => {
-  vi.spyOn(SmartSiteManagementClient.prototype, 'getCameraConfigurationImage').mockResolvedValue(
-    payload,
-  );
+  vi.spyOn(
+    SmartSiteManagementClient.prototype,
+    'getCameraConfigurationReference',
+  ).mockResolvedValue(payload);
   const { result, rerender, queryClient } = mount();
   await act(async () => {
     await result.current.request();
   });
   expect(result.current.reference).not.toBeNull();
+  expect(result.current.reference?.issuedReference.referenceId).toBe(defaultReferenceId);
   vi.setSystemTime(now + 300_001);
   rerender({ ...options });
   expect(result.current.reference).toBeNull();
@@ -172,9 +214,10 @@ it('withholds an expired reference on render even when the browser expiry timer 
 });
 
 it('settles same-scope query cancellation without leaving the action loading', async () => {
-  vi.spyOn(SmartSiteManagementClient.prototype, 'getCameraConfigurationImage').mockResolvedValue(
-    payload,
-  );
+  vi.spyOn(
+    SmartSiteManagementClient.prototype,
+    'getCameraConfigurationReference',
+  ).mockResolvedValue(payload);
   decode = () => new Promise(() => {});
   const { result, queryClient } = mount();
   await act(async () => {
@@ -191,9 +234,10 @@ it('settles same-scope query cancellation without leaving the action loading', a
 });
 
 it('does not cancel an active decode for equivalent normalized scope inputs', async () => {
-  vi.spyOn(SmartSiteManagementClient.prototype, 'getCameraConfigurationImage').mockResolvedValue(
-    payload,
-  );
+  vi.spyOn(
+    SmartSiteManagementClient.prototype,
+    'getCameraConfigurationReference',
+  ).mockResolvedValue(payload);
   let finish!: () => void;
   decode = () =>
     new Promise<void>((resolve) => {
@@ -206,18 +250,20 @@ it('does not cancel an active decode for equivalent normalized scope inputs', as
     await Promise.resolve();
   });
   rerender({ ...options, apiUrl: options.apiUrl + '/' });
-  expect(images[0]!.src).toBe(payload.frame.imageDataUrl);
+  expect(images[0]!.src).toBe(payload.image.frame.imageDataUrl);
   await act(async () => {
     finish();
     await pending;
   });
   expect(result.current.reference?.configurationVersion).toBe(4);
+  expect(result.current.reference?.issuedReference.referenceId).toBe(defaultReferenceId);
 });
 
 it('rejects an already expired reference before allocating or decoding image pixels', async () => {
-  vi.spyOn(SmartSiteManagementClient.prototype, 'getCameraConfigurationImage').mockResolvedValue(
-    payload,
-  );
+  vi.spyOn(
+    SmartSiteManagementClient.prototype,
+    'getCameraConfigurationReference',
+  ).mockResolvedValue(payload);
   vi.setSystemTime(now + 300_001);
   const { result } = mount();
   await act(async () => {
@@ -229,7 +275,7 @@ it('rejects an already expired reference before allocating or decoding image pix
 
 it('accepts the new reference when the old reference expires during a held refresh', async () => {
   const client = vi
-    .spyOn(SmartSiteManagementClient.prototype, 'getCameraConfigurationImage')
+    .spyOn(SmartSiteManagementClient.prototype, 'getCameraConfigurationReference')
     .mockResolvedValueOnce(payload);
   const { result } = mount();
   await act(async () => {
@@ -238,7 +284,7 @@ it('accepts the new reference when the old reference expires during a held refre
   await act(async () => {
     await vi.advanceTimersByTimeAsync(299_900);
   });
-  let finish!: (value: CameraConfigurationImageResponse) => void;
+  let finish!: (value: CameraConfigurationReferenceResponse) => void;
   client.mockImplementationOnce(
     () =>
       new Promise((resolve) => {
@@ -255,26 +301,30 @@ it('accepts the new reference when the old reference expires during a held refre
   });
   expect(result.current.reference).toBeNull();
   await act(async () => {
-    finish({
-      ...payload,
-      referenceExpiresAt: new Date(Date.now() + 300_000).toISOString(),
-      frame: {
-        ...payload.frame,
+    finish(
+      buildPayload({
+        capturedAtMs: Date.now(),
         sequenceNumber: '2',
-        capturedAt: new Date(Date.now()).toISOString(),
-      },
-    });
+        referenceId: '55555555-5555-4555-8555-555555555555',
+        viewRevision: 2,
+      }),
+    );
     await pending;
   });
   expect(result.current.reference?.frame.sequenceNumber).toBe('2');
+  expect(result.current.reference?.issuedReference.referenceId).toBe(
+    '55555555-5555-4555-8555-555555555555',
+  );
+  expect(result.current.reference?.issuedReference.viewRevision).toBe(2);
   expect(images[0]!.src).toBe('');
-  expect(images[1]!.src).toBe(payload.frame.imageDataUrl);
+  expect(images[1]!.src).toBe(payload.image.frame.imageDataUrl);
 });
 
 it('keeps an authorized reference isolated from a disabled empty-token sibling using the same query client', async () => {
-  vi.spyOn(SmartSiteManagementClient.prototype, 'getCameraConfigurationImage').mockResolvedValue(
-    payload,
-  );
+  vi.spyOn(
+    SmartSiteManagementClient.prototype,
+    'getCameraConfigurationReference',
+  ).mockResolvedValue(payload);
   const active = mount();
   await act(async () => {
     await active.result.current.request();
@@ -286,5 +336,5 @@ it('keeps an authorized reference isolated from a disabled empty-token sibling u
   });
   active.rerender({ ...options, apiUrl: options.apiUrl + '/' });
   expect(active.result.current.reference?.configurationVersion).toBe(4);
-  expect(images[0]!.src).toBe(payload.frame.imageDataUrl);
+  expect(images[0]!.src).toBe(payload.image.frame.imageDataUrl);
 });

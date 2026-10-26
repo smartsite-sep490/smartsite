@@ -1,13 +1,18 @@
 import {
   ApiError,
   CONFIGURATION_REFERENCE_LIFETIME_MS,
-  parseCameraConfigurationImageResponse,
+  parseCameraConfigurationReferenceResponse,
   type ApiErrorCode,
+  type CameraConfigurationImageReference,
   type CameraConfigurationImageResponse,
   type SmartSiteManagementClient,
 } from '@smartsite/api-client';
 
 export const CONFIGURATION_DECODE_TIMEOUT_MS = 2_000;
+
+export type ValidatedCameraConfigurationReference = CameraConfigurationImageResponse & {
+  issuedReference: CameraConfigurationImageReference;
+};
 
 export interface ConfigurationReferenceScopeInput {
   apiUrl: string;
@@ -84,13 +89,31 @@ export function resolveConfigurationReferenceScope(
   };
 }
 
-export function getEffectiveExpiryMs(response: CameraConfigurationImageResponse): number {
+export function getEffectiveExpiryMs(
+  response: Pick<CameraConfigurationImageResponse, 'referenceExpiresAt'> & {
+    frame: Pick<CameraConfigurationImageResponse['frame'], 'capturedAt'>;
+    issuedReference?: Pick<CameraConfigurationImageReference, 'issuedAt' | 'expiresAt'> | null;
+  },
+): number {
+  if (!response.issuedReference) return Number.NEGATIVE_INFINITY;
   const expiresAtMs = Date.parse(response.referenceExpiresAt);
   const capturedAtMs = Date.parse(response.frame.capturedAt);
-  if (!Number.isFinite(expiresAtMs) || !Number.isFinite(capturedAtMs)) {
+  const issuedAtMs = Date.parse(response.issuedReference.issuedAt);
+  const issuedExpiresAtMs = Date.parse(response.issuedReference.expiresAt);
+  if (
+    !Number.isFinite(expiresAtMs) ||
+    !Number.isFinite(capturedAtMs) ||
+    !Number.isFinite(issuedAtMs) ||
+    !Number.isFinite(issuedExpiresAtMs) ||
+    issuedExpiresAtMs !== expiresAtMs ||
+    issuedExpiresAtMs <= issuedAtMs ||
+    issuedAtMs - capturedAtMs < -1000 ||
+    issuedAtMs - capturedAtMs > 2000
+  ) {
     return Number.NEGATIVE_INFINITY;
   }
-  return Math.min(expiresAtMs, capturedAtMs + CONFIGURATION_REFERENCE_LIFETIME_MS);
+  const earliestOriginMs = Math.min(capturedAtMs, issuedAtMs);
+  return Math.min(expiresAtMs, earliestOriginMs + CONFIGURATION_REFERENCE_LIFETIME_MS);
 }
 
 const HTTP_STATUS_MESSAGES: Record<number, string> = {
@@ -212,10 +235,11 @@ export async function validateAndDecodeReference(
   trimmedExternalId: string,
   signal: AbortSignal,
   isStale: () => boolean,
-): Promise<{ parsed: CameraConfigurationImageResponse; image: HTMLImageElement }> {
-  let parsed: CameraConfigurationImageResponse;
+): Promise<{ parsed: ValidatedCameraConfigurationReference; image: HTMLImageElement }> {
+  let parsed: ValidatedCameraConfigurationReference;
   try {
-    parsed = parseCameraConfigurationImageResponse(raw);
+    const envelope = parseCameraConfigurationReferenceResponse(raw);
+    parsed = { ...envelope.image, issuedReference: envelope.reference };
   } catch {
     throw new ApiError('invalid-response', getSafeErrorMessage('invalid-response'));
   }
@@ -265,7 +289,7 @@ export async function executeConfigurationReferenceFetch(params: {
   querySignal: AbortSignal;
   isStale: () => boolean;
   onDecodedImage: (image: HTMLImageElement) => void;
-}): Promise<CameraConfigurationImageResponse> {
+}): Promise<ValidatedCameraConfigurationReference> {
   const { controller, querySignal, isStale } = params;
   const onQueryAbort = () => controller.abort();
   if (querySignal.aborted) {
@@ -275,7 +299,7 @@ export async function executeConfigurationReferenceFetch(params: {
   }
 
   try {
-    const raw = await params.client.getCameraConfigurationImage(
+    const raw = await params.client.getCameraConfigurationReference(
       params.token,
       params.siteId,
       params.cameraId,

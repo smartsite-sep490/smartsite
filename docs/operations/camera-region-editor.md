@@ -38,20 +38,24 @@ gesture without turning later hover into a drag.
 An existing Region opens with a frozen camera configuration revision. Preflight
 and PATCH must respect that revision. A409 retains the draft and requires review;
 Web never silently adopts a newer revision or falls back to creating a new Region.
-Explicit comparison/reconfirmation recovery is a remaining product task.
+A new image is presented as a candidate; the operator must explicitly accept it
+before it replaces the frozen reference. This does not prove physical camera pose
+continuity or worker application.
 
 Saving a new Region transitions the open editor to the returned Region identity
-and revision. A second modified save updates that Region. A repeat of the identical
+and revision. A second modified save updates that Region only after accepting a
+new issued reference at the returned configuration revision. A repeat of the identical
 saved polygon is blocked. The acknowledged geometry is the exact submitted snapshot,
 not draft state read after a request finishes.
 
 ## Current limits and acceptance
 
-The new reference-bound create/update HTTP routes return persisted manual
-confirmation and reject expired/stale references. Their shared-client/editor
-activation is pending; the legacy editor behavior below does not establish that
-new flow. Read APIs expose historical confirmation separately from camera pose
-and worker application. Current role policy follows Main's exact-site Manager
+The editor source loads the issued-reference envelope and saves through the new
+reference-bound shared-client create/update methods. Requests bind the frozen
+reference ID, view revision and configuration version; success requires matching
+persisted manual confirmation. Expired, unissued or incoherent metadata cannot
+be saved. Read APIs expose historical confirmation separately from camera pose
+and worker application. Source integration is not current-demo or browser rollout. Current role policy follows Main's exact-site Manager
 rules, superseding the earlier Admin-only setup description.
 
 The editor requests an explicit configuration image through the shared Backend
@@ -72,7 +76,8 @@ A rejected mutation is not proof the same bearer can keep trying indefinitely.
 Both create and update use the frozen reference revision through a cancellable
 camera preflight. They recheck identity, active status, expiry and revision before
 writing. A conflict retains the draft without automatic retry, rebase or create
-fallback. Acknowledged own saves can advance the revision for subsequent edits.
+fallback. An acknowledged own save advances the Region revision; a new issued reference
+must be reviewed before another changed save. The old reference is not rebased.
 
 An already-owned capture-only source is still required for real configuration
 pixels. Physical-source ownership, manual viewpoint review and browser interaction

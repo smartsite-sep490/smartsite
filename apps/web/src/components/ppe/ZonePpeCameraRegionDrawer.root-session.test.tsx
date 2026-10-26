@@ -31,8 +31,24 @@ afterEach(() => {
   cleanup();
   vi.unstubAllGlobals();
 });
+const cameraId = '22222222-2222-4222-8222-222222222222';
+const zoneId = '33333333-3333-4333-8333-333333333333';
+const regionId = '44444444-4444-4444-8444-444444444444';
+const referenceId = '55555555-5555-4555-8555-555555555555';
+const confirmedRegion = {
+  id: regionId,
+  cameraId,
+  zoneId,
+  geometryConfirmation: {
+    status: 'MANUALLY_CONFIRMED',
+    referenceId,
+    viewRevision: 1,
+    confirmedByUserId: '66666666-6666-4666-8666-666666666666',
+    confirmedAt: '2026-10-16T00:00:00.000Z',
+  },
+};
 const camera: CameraResponse = {
-  id: 'camera',
+  id: cameraId,
   siteId: 'site',
   externalId: 'fixture-camera',
   code: 'CAM',
@@ -42,7 +58,7 @@ const camera: CameraResponse = {
   createdAt: '2026-10-16T00:00:00Z',
 };
 const zone: ZoneResponse = {
-  id: 'zone',
+  id: zoneId,
   siteId: 'site',
   code: 'ZONE',
   name: 'Fixture zone',
@@ -54,23 +70,42 @@ const zone: ZoneResponse = {
 };
 function reference(): CameraConfigurationReference {
   const now = Date.now();
+  const capturedAt = new Date(now).toISOString();
+  const referenceExpiresAt = new Date(now + 300_000).toISOString();
   return {
     siteId: 'site',
-    cameraId: 'camera',
+    cameraId,
     schemaVersion: 1,
     purpose: 'REGION_CONFIGURATION',
     configurationVersion: 1,
     sourceKind: 'LIVE',
-    referenceExpiresAt: new Date(now + 300_000).toISOString(),
+    referenceExpiresAt,
     frame: {
       cameraExternalId: 'fixture-camera',
       sessionId: '11111111-1111-4111-8111-111111111111',
       sequenceNumber: '1',
-      capturedAt: new Date(now).toISOString(),
+      capturedAt,
       width: 640,
       height: 480,
       imageDataUrl: 'data:image/jpeg;base64,/9j/2Q==',
       imageSha256: 'a'.repeat(64),
+    },
+    issuedReference: {
+      schemaVersion: '1.0.0',
+      purpose: 'REGION_CONFIGURATION',
+      sourceKind: 'LIVE',
+      referenceId,
+      siteId: 'site',
+      cameraId,
+      sessionId: '11111111-1111-4111-8111-111111111111',
+      imageSha256: 'a'.repeat(64),
+      width: 640,
+      height: 480,
+      capturedAt,
+      issuedAt: capturedAt,
+      expiresAt: referenceExpiresAt,
+      configurationVersion: 1,
+      viewRevision: 1,
     },
     image: {} as HTMLImageElement,
   };
@@ -141,7 +176,7 @@ it('uses the owning client for one authenticated retry with unchanged polygon an
       if (auth === 'Bearer synthetic-old') return Response.json({}, { status: 401 });
       return Response.json({
         configurationVersion: 2,
-        region: { id: 'region', cameraId: 'camera', zoneId: 'zone' },
+        region: confirmedRegion,
       });
     }),
   );
@@ -150,7 +185,13 @@ it('uses the owning client for one authenticated retry with unchanged polygon an
   await waitFor(() => expect(saved).toHaveBeenCalledOnce());
   expect(posts.map((row) => row.auth)).toEqual(['Bearer synthetic-old', 'Bearer synthetic-new']);
   expect(posts[1]!.payload).toEqual(posts[0]!.payload);
-  expect(posts[0]!.payload).toMatchObject({ expectedConfigurationVersion: 1, zoneId: 'zone' });
+  expect(posts[0]!.payload).toMatchObject({
+    expectedConfigurationVersion: 1,
+    zoneId,
+    referenceId,
+    viewRevision: 1,
+    confirmReferenceView: true,
+  });
   expect(session.refreshAccessToken).toHaveBeenCalledOnce();
   expect(revoked).not.toHaveBeenCalled();
 });
@@ -243,7 +284,7 @@ it('suppresses an old write result when its owning client is replaced', async ()
   release(
     Response.json({
       configurationVersion: 2,
-      region: { id: 'region', cameraId: 'camera', zoneId: 'zone' },
+      region: confirmedRegion,
     }),
   );
   await new Promise((resolve) => setTimeout(resolve, 30));
@@ -262,7 +303,7 @@ it.each([200, 409])(
           : status === 200
             ? Response.json({
                 configurationVersion: 2,
-                region: { id: 'region', cameraId: 'camera', zoneId: 'zone' },
+                region: confirmedRegion,
               })
             : Response.json({}, { status: 409 }),
       ),
@@ -281,7 +322,7 @@ it.each([200, 409])(
         roles,
         'site',
         'selected-camera',
-        'camera',
+        cameraId,
       ],
     ] as const;
     const foreignKeys = [

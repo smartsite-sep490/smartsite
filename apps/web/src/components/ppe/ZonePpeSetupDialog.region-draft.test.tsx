@@ -7,9 +7,10 @@ import {
   CONFIGURATION_REFERENCE_LIFETIME_MS,
   SmartSiteManagementClient,
   type Page,
+  type ReferenceRegionMutationResponse,
   type ZoneResponse,
 } from '@smartsite/api-client';
-import type { CameraResponse, RegionMutationResponse, RegionResponse } from '@smartsite/contracts';
+import type { CameraResponse, RegionResponse } from '@smartsite/contracts';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import i18n from '../../i18n';
 import { ZonePpeSetupDialog } from './ZonePpeSetupDialog';
@@ -79,8 +80,13 @@ vi.mock('./useCameraConfigurationReference', () => ({
   }),
 }));
 
+const DEFAULT_REF_ID = '00000000-0000-4000-8000-000000000106';
+const DEFAULT_ACTOR_ID = '00000000-0000-4000-8000-000000000999';
+
 function createSyntheticReference(siteId = 'site-alpha'): CameraConfigurationReference {
   const nowMs = Date.now();
+  const capturedAt = new Date(nowMs).toISOString();
+  const referenceExpiresAt = new Date(nowMs + CONFIGURATION_REFERENCE_LIFETIME_MS).toISOString();
   return {
     schemaVersion: 1,
     purpose: 'REGION_CONFIGURATION',
@@ -88,16 +94,33 @@ function createSyntheticReference(siteId = 'site-alpha'): CameraConfigurationRef
     cameraId: 'cam-1',
     configurationVersion: 3,
     sourceKind: 'LIVE',
-    referenceExpiresAt: new Date(nowMs + CONFIGURATION_REFERENCE_LIFETIME_MS).toISOString(),
+    referenceExpiresAt,
     frame: {
       sessionId: '00000000-0000-4000-8000-000000000001',
       sequenceNumber: '1',
       cameraExternalId: 'CAM-EXT-01',
-      capturedAt: new Date(nowMs).toISOString(),
+      capturedAt,
       width: 640,
       height: 480,
       imageDataUrl: 'data:image/jpeg;base64,/9j/2Q==',
       imageSha256: 'a'.repeat(64),
+    },
+    issuedReference: {
+      schemaVersion: '1.0.0',
+      purpose: 'REGION_CONFIGURATION',
+      sourceKind: 'LIVE',
+      referenceId: DEFAULT_REF_ID,
+      siteId,
+      cameraId: 'cam-1',
+      sessionId: '00000000-0000-4000-8000-000000000001',
+      imageSha256: 'a'.repeat(64),
+      width: 640,
+      height: 480,
+      capturedAt,
+      issuedAt: capturedAt,
+      expiresAt: referenceExpiresAt,
+      configurationVersion: 3,
+      viewRevision: 1,
     },
     image: {} as HTMLImageElement,
   };
@@ -263,10 +286,10 @@ describe('ZonePpeSetupDialog region polygon draft & save guards', () => {
   );
 
   it('blocks outer close button, backdrop, and Escape while Region save is pending, then closes cleanly after save', async () => {
-    let resolveSave!: (value: RegionMutationResponse) => void;
-    vi.spyOn(SmartSiteManagementClient.prototype, 'createRegion').mockImplementation(
+    let resolveSave!: (value: ReferenceRegionMutationResponse) => void;
+    vi.spyOn(SmartSiteManagementClient.prototype, 'createReferenceRegion').mockImplementation(
       () =>
-        new Promise<RegionMutationResponse>((resolve) => {
+        new Promise<ReferenceRegionMutationResponse>((resolve) => {
           resolveSave = resolve;
         }),
     );
@@ -308,6 +331,13 @@ describe('ZonePpeSetupDialog region polygon draft & save guards', () => {
           version: 1,
           isActive: true,
           createdAt: '2026-10-07T12:00:00Z',
+          geometryConfirmation: {
+            status: 'MANUALLY_CONFIRMED',
+            referenceId: DEFAULT_REF_ID,
+            viewRevision: 1,
+            confirmedByUserId: DEFAULT_ACTOR_ID,
+            confirmedAt: '2026-10-07T12:00:00.000Z',
+          },
         },
         configurationVersion: 4,
       });

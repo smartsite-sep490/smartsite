@@ -1,6 +1,12 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { useMutation, useQueryClient, type QueryClient } from '@tanstack/react-query';
-import { ApiError, SmartSiteManagementClient, type ZoneResponse } from '@smartsite/api-client';
+import {
+  ApiError,
+  parseRegionGeometryConfirmation,
+  SmartSiteManagementClient,
+  type ReferenceRegionMutationResponse,
+  type ZoneResponse,
+} from '@smartsite/api-client';
 import type { CameraResponse, RegionMutationResponse } from '@smartsite/contracts';
 import { IconAlertTriangle } from '../icons';
 import { useLocale, type TranslationKey } from '../../i18n/ppe-locale';
@@ -162,7 +168,10 @@ function ZonePpeCameraRegionDrawerContent(
       if (!isMountedRef.current || controller.signal.aborted) {
         throw new LocalRegionValidationError('regionSetup.error.cancelled');
       }
-      if (isConfigurationReferenceExpiredAt(frozenReference, Date.now())) {
+      if (
+        isConfigurationReferenceExpiredAt(frozenReference, Date.now()) ||
+        !isConfigurationReferenceScopeMatched(frozenReference, siteId, selectedCamera)
+      ) {
         throw new LocalRegionValidationError('regionSetup.error.referenceExpired');
       }
       if (
@@ -175,36 +184,57 @@ function ZonePpeCameraRegionDrawerContent(
         throw new LocalRegionValidationError('regionSetup.error.cameraChangedOrInactive');
       }
 
-      const expectedConfigurationVersion = editingRegion
-        ? editingRegion.expectedConfigurationVersion
-        : frozenReference.configurationVersion;
-      if (freshCamera.configurationVersion !== expectedConfigurationVersion) {
+      const expectedConfigurationVersion = frozenReference.configurationVersion;
+      if (
+        frozenReference.issuedReference.configurationVersion !== expectedConfigurationVersion ||
+        (editingRegion &&
+          editingRegion.expectedConfigurationVersion !== expectedConfigurationVersion) ||
+        freshCamera.configurationVersion !== expectedConfigurationVersion
+      ) {
         throw new ApiError('http', 'Configuration version conflict', 409);
       }
 
       const reqOpts = { signal: controller.signal };
-      const polygon = { coordinates: submittedPoints };
+      const baseCommand = {
+        expectedConfigurationVersion,
+        referenceId: frozenReference.issuedReference.referenceId,
+        viewRevision: frozenReference.issuedReference.viewRevision,
+        confirmReferenceView: true as const,
+        polygon: { coordinates: submittedPoints },
+      };
       if (editingRegion) {
-        return client.updatePolygon(
+        return client.updateReferencePolygon(
           props.token,
           siteId,
           selectedCamera.id,
           editingRegion.id,
-          { polygon, expectedConfigurationVersion },
+          baseCommand,
           reqOpts,
         );
       }
-      return client.createRegion(
+      return client.createReferenceRegion(
         props.token,
         siteId,
         selectedCamera.id,
-        { zoneId: selectedZone.id, polygon, expectedConfigurationVersion },
+        { ...baseCommand, zoneId: selectedZone.id },
         reqOpts,
       );
     },
-    onSuccess: (data: RegionMutationResponse, submittedPoints: NormalizedPoint[]) => {
+    onSuccess: (data: ReferenceRegionMutationResponse, submittedPoints: NormalizedPoint[]) => {
       if (!isMountedRef.current) return;
+      let confirmed: boolean;
+      try {
+        const confirmation = parseRegionGeometryConfirmation(data.region?.geometryConfirmation);
+        confirmed =
+          confirmation.status === 'MANUALLY_CONFIRMED' &&
+          confirmation.referenceId === frozenReference.issuedReference.referenceId &&
+          confirmation.viewRevision === frozenReference.issuedReference.viewRevision;
+      } catch {
+        confirmed = false;
+      }
       if (
+        !confirmed ||
+        data.configurationVersion !== frozenReference.configurationVersion + 1 ||
         data.region.cameraId !== selectedCamera.id ||
         data.region.zoneId !== selectedZone.id ||
         (editingRegion && data.region.id !== editingRegion.id)
@@ -241,7 +271,10 @@ function ZonePpeCameraRegionDrawerContent(
 
   const handleSaveRegion = () => {
     if (createRegionMutation.isPending) return;
-    if (isConfigurationReferenceExpiredAt(frozenReference, Date.now())) {
+    if (
+      isConfigurationReferenceExpiredAt(frozenReference, Date.now()) ||
+      !isConfigurationReferenceScopeMatched(frozenReference, siteId, selectedCamera)
+    ) {
       return setValidationErrorKey('regionSetup.error.referenceExpired');
     }
     const geoErrorKey = validatePolygonGeometry(draftPoints);

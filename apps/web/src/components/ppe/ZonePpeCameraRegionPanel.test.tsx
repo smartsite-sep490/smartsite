@@ -9,8 +9,13 @@ import {
   ApiError,
   CONFIGURATION_REFERENCE_LIFETIME_MS,
 } from '@smartsite/api-client';
-import type { Page, ZoneResponse } from '@smartsite/api-client';
-import type { CameraResponse, RegionResponse, RegionMutationResponse } from '@smartsite/contracts';
+import type {
+  CameraConfigurationImageReference,
+  Page,
+  ReferenceRegionMutationResponse,
+  ZoneResponse,
+} from '@smartsite/api-client';
+import type { CameraResponse, RegionResponse } from '@smartsite/contracts';
 import { ZonePpeCameraRegionPanel } from './ZonePpeCameraRegionPanel';
 import { PpeDialog } from './PpeDialog';
 import type {
@@ -79,9 +84,15 @@ vi.mock('./useCameraConfigurationReference', () => ({
   },
 }));
 
+const DEFAULT_REF_ID = '00000000-0000-4000-8000-000000000099';
+const DEFAULT_ACTOR_ID = '00000000-0000-4000-8000-000000000077';
+
 function mockConfigurationReference(
-  overrides: Partial<Omit<CameraConfigurationReference, 'frame' | 'image'>> = {},
+  overrides: Partial<
+    Omit<CameraConfigurationReference, 'frame' | 'image' | 'issuedReference'>
+  > = {},
   frameOverrides: Partial<CameraConfigurationReference['frame']> = {},
+  issuedOverrides: Partial<CameraConfigurationImageReference> = {},
 ): CameraConfigurationReference {
   const nowMs = Date.now();
   const capturedAt = frameOverrides.capturedAt ?? new Date(nowMs).toISOString();
@@ -91,27 +102,79 @@ function mockConfigurationReference(
     new Date(
       (Number.isFinite(capturedMs) ? capturedMs : nowMs) + CONFIGURATION_REFERENCE_LIFETIME_MS,
     ).toISOString();
+  const siteId = overrides.siteId ?? 'site-alpha';
+  const cameraId = overrides.cameraId ?? 'cam-1';
+  const configurationVersion = overrides.configurationVersion ?? 3;
+  const sourceKind = overrides.sourceKind ?? 'LIVE';
+  const frame = {
+    sessionId: '00000000-0000-4000-8000-000000000001',
+    sequenceNumber: '1',
+    cameraExternalId: 'CAM-EXT-01',
+    capturedAt,
+    width: 640,
+    height: 480,
+    imageDataUrl: 'data:image/jpeg;base64,/9j/2Q==',
+    imageSha256: 'a'.repeat(64),
+    ...frameOverrides,
+  };
   return {
     schemaVersion: 1,
     purpose: 'REGION_CONFIGURATION',
-    siteId: 'site-alpha',
-    cameraId: 'cam-1',
-    configurationVersion: 3,
-    sourceKind: 'LIVE',
+    siteId,
+    cameraId,
+    configurationVersion,
+    sourceKind,
     referenceExpiresAt,
     ...overrides,
-    frame: {
-      sessionId: '00000000-0000-4000-8000-000000000001',
-      sequenceNumber: '1',
-      cameraExternalId: 'CAM-EXT-01',
-      capturedAt,
-      width: 640,
-      height: 480,
-      imageDataUrl: 'data:image/jpeg;base64,/9j/2Q==',
-      imageSha256: 'a'.repeat(64),
-      ...frameOverrides,
+    frame,
+    issuedReference: {
+      schemaVersion: '1.0.0',
+      purpose: 'REGION_CONFIGURATION',
+      sourceKind,
+      referenceId: DEFAULT_REF_ID,
+      siteId,
+      cameraId,
+      sessionId: frame.sessionId,
+      imageSha256: frame.imageSha256,
+      width: frame.width,
+      height: frame.height,
+      capturedAt: frame.capturedAt,
+      issuedAt: frame.capturedAt,
+      expiresAt: referenceExpiresAt,
+      configurationVersion,
+      viewRevision: 1,
+      ...issuedOverrides,
     },
     image: {} as HTMLImageElement,
+  };
+}
+
+function mockConfirmedMutation(
+  id: string,
+  coordinates: [number, number][],
+  configurationVersion = 4,
+  regionOverrides: Partial<ReferenceRegionMutationResponse['region']> = {},
+): ReferenceRegionMutationResponse {
+  return {
+    region: {
+      id,
+      cameraId: 'cam-1',
+      zoneId: 'zone-1',
+      polygon: { coordinates },
+      coordinateSpace: 'NORMALIZED_0_1',
+      version: 1,
+      isActive: true,
+      createdAt: '2026-10-07T12:00:00Z',
+      geometryConfirmation: {
+        status: 'MANUALLY_CONFIRMED',
+        referenceId: DEFAULT_REF_ID,
+        viewRevision: 1,
+        confirmedByUserId: DEFAULT_ACTOR_ID,
+        confirmedAt: '2026-10-07T12:00:00.000Z',
+      },
+      ...regionOverrides,
+    },
+    configurationVersion,
   };
 }
 
@@ -497,7 +560,7 @@ describe('ZonePpeCameraRegionPanel (MF05 Camera-Region Linking - Corrected Suite
   // --------------------------------------------------------------------------
   it('validates min 3 points, rejects any repeated vertices, zero-degenerate area and overlapping edges', async () => {
     const user = userEvent.setup();
-    const createRegionSpy = vi.spyOn(SmartSiteManagementClient.prototype, 'createRegion');
+    const createRegionSpy = vi.spyOn(SmartSiteManagementClient.prototype, 'createReferenceRegion');
 
     render(
       <QueryClientProvider client={queryClient}>
@@ -647,7 +710,8 @@ describe('ZonePpeCameraRegionPanel (MF05 Camera-Region Linking - Corrected Suite
       status: 'INACTIVE', // Inactive camera!
       configurationVersion: 7,
     });
-    const createRegionSpy = vi.spyOn(SmartSiteManagementClient.prototype, 'createRegion');
+    const createRegionSpy = vi.spyOn(SmartSiteManagementClient.prototype, 'createReferenceRegion');
+    const legacyCreateSpy = vi.spyOn(SmartSiteManagementClient.prototype, 'createRegion');
 
     render(
       <QueryClientProvider client={queryClient}>
@@ -674,6 +738,7 @@ describe('ZonePpeCameraRegionPanel (MF05 Camera-Region Linking - Corrected Suite
 
     // Blocked before POST
     expect(createRegionSpy).not.toHaveBeenCalled();
+    expect(legacyCreateSpy).not.toHaveBeenCalled();
     expect(await screen.findByText(/Camera metadata changed or became inactive/i)).toBeDefined();
 
     // 6B: Valid fresh camera matching frozen reference revision 7 saves and shows regionId and version
@@ -682,35 +747,32 @@ describe('ZonePpeCameraRegionPanel (MF05 Camera-Region Linking - Corrected Suite
       status: 'ACTIVE',
       configurationVersion: 7,
     });
-    createRegionSpy.mockResolvedValueOnce({
-      region: {
-        id: 'reg-new-99',
-        cameraId: 'cam-1',
-        zoneId: 'zone-1',
-        polygon: {
-          coordinates: [
-            [0.1, 0.1],
-            [0.8, 0.1],
-            [0.8, 0.8],
-          ],
-        },
-        coordinateSpace: 'NORMALIZED_0_1',
-        version: 1,
-        isActive: true,
-        createdAt: '2026-10-07T12:00:00Z',
-      },
-      configurationVersion: 8,
-    });
+    createRegionSpy.mockResolvedValueOnce(
+      mockConfirmedMutation(
+        'reg-new-99',
+        [
+          [0.1, 0.1],
+          [0.8, 0.1],
+          [0.8, 0.8],
+        ],
+        8,
+      ),
+    );
 
     await user.click(saveBtn);
 
     expect(createRegionSpy).toHaveBeenCalledTimes(1);
+    expect(legacyCreateSpy).not.toHaveBeenCalled();
     expect(createRegionSpy).toHaveBeenCalledWith(
       'mock-token-xyz',
       'site-alpha',
       'cam-1',
       {
         zoneId: 'zone-1',
+        expectedConfigurationVersion: 7,
+        referenceId: DEFAULT_REF_ID,
+        viewRevision: 1,
+        confirmReferenceView: true,
         polygon: {
           coordinates: [
             [0.1, 0.1],
@@ -718,7 +780,6 @@ describe('ZonePpeCameraRegionPanel (MF05 Camera-Region Linking - Corrected Suite
             [0.8, 0.8],
           ],
         },
-        expectedConfigurationVersion: 7,
       },
       expect.objectContaining({ signal: expect.any(AbortSignal) }),
     );
@@ -757,26 +818,14 @@ describe('ZonePpeCameraRegionPanel (MF05 Camera-Region Linking - Corrected Suite
     const user = userEvent.setup();
 
     const createRegionSpy = vi
-      .spyOn(SmartSiteManagementClient.prototype, 'createRegion')
-      .mockResolvedValue({
-        region: {
-          id: 'reg-dup',
-          cameraId: 'cam-1',
-          zoneId: 'zone-1',
-          polygon: {
-            coordinates: [
-              [0.1, 0.1],
-              [0.8, 0.1],
-              [0.8, 0.8],
-            ],
-          },
-          coordinateSpace: 'NORMALIZED_0_1',
-          version: 1,
-          isActive: true,
-          createdAt: '2026-10-07T12:00:00Z',
-        },
-        configurationVersion: 5,
-      });
+      .spyOn(SmartSiteManagementClient.prototype, 'createReferenceRegion')
+      .mockResolvedValue(
+        mockConfirmedMutation('reg-dup', [
+          [0.1, 0.1],
+          [0.8, 0.1],
+          [0.8, 0.8],
+        ]),
+      );
 
     render(
       <QueryClientProvider client={queryClient}>
@@ -821,11 +870,11 @@ describe('ZonePpeCameraRegionPanel (MF05 Camera-Region Linking - Corrected Suite
   it('prevents double submissions while region creation mutation is in-flight', async () => {
     const user = userEvent.setup();
 
-    let resolveMutation!: (value: RegionMutationResponse) => void;
+    let resolveMutation!: (value: ReferenceRegionMutationResponse) => void;
     const createRegionSpy = vi
-      .spyOn(SmartSiteManagementClient.prototype, 'createRegion')
+      .spyOn(SmartSiteManagementClient.prototype, 'createReferenceRegion')
       .mockReturnValue(
-        new Promise<RegionMutationResponse>((resolve) => {
+        new Promise<ReferenceRegionMutationResponse>((resolve) => {
           resolveMutation = resolve;
         }),
       );
@@ -861,25 +910,13 @@ describe('ZonePpeCameraRegionPanel (MF05 Camera-Region Linking - Corrected Suite
     expect(createRegionSpy).toHaveBeenCalledTimes(1);
 
     await act(async () => {
-      resolveMutation({
-        region: {
-          id: 'reg-inflight',
-          cameraId: 'cam-1',
-          zoneId: 'zone-1',
-          polygon: {
-            coordinates: [
-              [0.1, 0.1],
-              [0.8, 0.1],
-              [0.8, 0.8],
-            ],
-          },
-          coordinateSpace: 'NORMALIZED_0_1',
-          version: 1,
-          isActive: true,
-          createdAt: '2026-10-07T12:00:00Z',
-        },
-        configurationVersion: 4,
-      });
+      resolveMutation(
+        mockConfirmedMutation('reg-inflight', [
+          [0.1, 0.1],
+          [0.8, 0.1],
+          [0.8, 0.8],
+        ]),
+      );
     });
 
     expect(await screen.findByText(/Saved region "reg-inflight" \(v1\)/i)).toBeDefined();
@@ -923,26 +960,14 @@ describe('ZonePpeCameraRegionPanel (MF05 Camera-Region Linking - Corrected Suite
   it('preserves valid frozen reference image, numeric draft points, and save capability during transient source failure (503)', async () => {
     const user = userEvent.setup();
     const createRegionSpy = vi
-      .spyOn(SmartSiteManagementClient.prototype, 'createRegion')
-      .mockResolvedValueOnce({
-        region: {
-          id: 'reg-transient-1',
-          cameraId: 'cam-1',
-          zoneId: 'zone-1',
-          polygon: {
-            coordinates: [
-              [0.1, 0.1],
-              [0.8, 0.1],
-              [0.8, 0.8],
-            ],
-          },
-          coordinateSpace: 'NORMALIZED_0_1',
-          version: 1,
-          isActive: true,
-          createdAt: '2026-10-07T12:00:00Z',
-        },
-        configurationVersion: 4,
-      });
+      .spyOn(SmartSiteManagementClient.prototype, 'createReferenceRegion')
+      .mockResolvedValueOnce(
+        mockConfirmedMutation('reg-transient-1', [
+          [0.1, 0.1],
+          [0.8, 0.1],
+          [0.8, 0.8],
+        ]),
+      );
 
     const { rerender } = render(
       <QueryClientProvider client={queryClient}>
@@ -1010,7 +1035,7 @@ describe('ZonePpeCameraRegionPanel (MF05 Camera-Region Linking - Corrected Suite
 
     const getCameraSpy = vi.spyOn(SmartSiteManagementClient.prototype, 'getCamera');
     const createRegionSpy = vi
-      .spyOn(SmartSiteManagementClient.prototype, 'createRegion')
+      .spyOn(SmartSiteManagementClient.prototype, 'createReferenceRegion')
       .mockRejectedValueOnce(new ApiError('http', 'Configuration version conflict', 409));
 
     render(
@@ -1054,25 +1079,18 @@ describe('ZonePpeCameraRegionPanel (MF05 Camera-Region Linking - Corrected Suite
     const user = userEvent.setup();
 
     // 12A: Mismatched returned cameraId
-    vi.spyOn(SmartSiteManagementClient.prototype, 'createRegion').mockResolvedValueOnce({
-      region: {
-        id: 'reg-wrong',
-        cameraId: 'cam-WRONG',
-        zoneId: 'zone-1',
-        polygon: {
-          coordinates: [
-            [0.1, 0.1],
-            [0.8, 0.1],
-            [0.8, 0.8],
-          ],
-        },
-        coordinateSpace: 'NORMALIZED_0_1',
-        version: 1,
-        isActive: true,
-        createdAt: '2026-10-07T12:00:00Z',
-      },
-      configurationVersion: 4,
-    });
+    vi.spyOn(SmartSiteManagementClient.prototype, 'createReferenceRegion').mockResolvedValueOnce(
+      mockConfirmedMutation(
+        'reg-wrong',
+        [
+          [0.1, 0.1],
+          [0.8, 0.1],
+          [0.8, 0.8],
+        ],
+        4,
+        { cameraId: 'cam-WRONG' },
+      ),
+    );
 
     async function openDraft() {
       const view = render(
@@ -1109,7 +1127,7 @@ describe('ZonePpeCameraRegionPanel (MF05 Camera-Region Linking - Corrected Suite
     ).toBeDefined();
 
     // 12B: 401 Unauthorized safe text
-    vi.spyOn(SmartSiteManagementClient.prototype, 'createRegion').mockRejectedValueOnce(
+    vi.spyOn(SmartSiteManagementClient.prototype, 'createReferenceRegion').mockRejectedValueOnce(
       new ApiError('http', 'Secret auth token leak: eyJhbGciOi...', 401),
     );
     await user.click(saveBtn);
@@ -1121,7 +1139,7 @@ describe('ZonePpeCameraRegionPanel (MF05 Camera-Region Linking - Corrected Suite
     unmount();
     ({ saveBtn, unmount } = await openDraft());
     // 12C: 403 Forbidden safe text
-    vi.spyOn(SmartSiteManagementClient.prototype, 'createRegion').mockRejectedValueOnce(
+    vi.spyOn(SmartSiteManagementClient.prototype, 'createReferenceRegion').mockRejectedValueOnce(
       new ApiError('http', 'Secret RBAC denial trace at internal/auth', 403),
     );
     await user.click(saveBtn);
@@ -1133,7 +1151,7 @@ describe('ZonePpeCameraRegionPanel (MF05 Camera-Region Linking - Corrected Suite
     unmount();
     ({ saveBtn } = await openDraft());
     // 12D: Network raw error leakage prevented
-    vi.spyOn(SmartSiteManagementClient.prototype, 'createRegion').mockRejectedValueOnce(
+    vi.spyOn(SmartSiteManagementClient.prototype, 'createReferenceRegion').mockRejectedValueOnce(
       new Error('fetch failed at http://192.168.1.99:8080/private-internal-route'),
     );
     await user.click(saveBtn);
@@ -1431,25 +1449,13 @@ describe('ZonePpeCameraRegionPanel (MF05 Camera-Region Linking - Corrected Suite
   it('immediately clears stale success feedback and lastSavedDraft when zone or camera selection changes', async () => {
     const user = userEvent.setup();
 
-    vi.spyOn(SmartSiteManagementClient.prototype, 'createRegion').mockResolvedValue({
-      region: {
-        id: 'reg-saved-zone-1',
-        cameraId: 'cam-1',
-        zoneId: 'zone-1',
-        polygon: {
-          coordinates: [
-            [0.1, 0.1],
-            [0.8, 0.1],
-            [0.8, 0.8],
-          ],
-        },
-        coordinateSpace: 'NORMALIZED_0_1',
-        version: 1,
-        isActive: true,
-        createdAt: '2026-10-07T12:00:00Z',
-      },
-      configurationVersion: 4,
-    });
+    vi.spyOn(SmartSiteManagementClient.prototype, 'createReferenceRegion').mockResolvedValue(
+      mockConfirmedMutation('reg-saved-zone-1', [
+        [0.1, 0.1],
+        [0.8, 0.1],
+        [0.8, 0.8],
+      ]),
+    );
 
     render(
       <QueryClientProvider client={queryClient}>
@@ -1537,10 +1543,15 @@ describe('ZonePpeCameraRegionPanel (MF05 Camera-Region Linking - Corrected Suite
   // --------------------------------------------------------------------------
   // 19. REOPEN EXISTING REGION, UPDATE POLYGON WITHOUT CREATE FALLBACK & ROUND-TRIP
   // --------------------------------------------------------------------------
-  it('reopens existing region geometry, updates via updatePolygon without createRegion fallback on 409, and round-trips saved coordinates', async () => {
+  it('reopens existing region geometry, updates via updateReferencePolygon without create/legacy fallback on 409, and round-trips saved coordinates', async () => {
     const user = userEvent.setup();
-    const createRegionSpy = vi.spyOn(SmartSiteManagementClient.prototype, 'createRegion');
-    const updatePolygonSpy = vi.spyOn(SmartSiteManagementClient.prototype, 'updatePolygon');
+    const createRegionSpy = vi.spyOn(SmartSiteManagementClient.prototype, 'createReferenceRegion');
+    const legacyCreateSpy = vi.spyOn(SmartSiteManagementClient.prototype, 'createRegion');
+    const legacyUpdateSpy = vi.spyOn(SmartSiteManagementClient.prototype, 'updatePolygon');
+    const updatePolygonSpy = vi.spyOn(
+      SmartSiteManagementClient.prototype,
+      'updateReferencePolygon',
+    );
 
     render(
       <QueryClientProvider client={queryClient}>
@@ -1573,7 +1584,7 @@ describe('ZonePpeCameraRegionPanel (MF05 Camera-Region Linking - Corrected Suite
     fireEvent.keyDown(vertex1, { key: 'ArrowRight', shiftKey: true });
     expect(vertex1.getAttribute('cx')).toBe('73.984'); // 0.1156 * 640
 
-    // 19A: 409 conflict on updatePolygon refreshes camera version without auto-retry and NEVER falls back to createRegion
+    // 19A: 409 conflict on updateReferencePolygon refreshes camera version without auto-retry and NEVER falls back
     updatePolygonSpy.mockRejectedValueOnce(
       new ApiError('http', 'Configuration version conflict', 409),
     );
@@ -1582,11 +1593,13 @@ describe('ZonePpeCameraRegionPanel (MF05 Camera-Region Linking - Corrected Suite
 
     expect(updatePolygonSpy).toHaveBeenCalledTimes(1);
     expect(createRegionSpy).not.toHaveBeenCalled();
+    expect(legacyCreateSpy).not.toHaveBeenCalled();
+    expect(legacyUpdateSpy).not.toHaveBeenCalled();
     expect(
       await screen.findByText(/Configuration version conflict\. Camera configuration was updated/i),
     ).toBeDefined();
 
-    // 19B: Successful updatePolygon updates region version and round-trips new geometry on reopen
+    // 19B: Successful updateReferencePolygon updates region version and round-trips new geometry on reopen
     const updatedCoords: [number, number][] = [
       [0.1156, 0.1],
       [0.5, 0.1],
@@ -1603,14 +1616,9 @@ describe('ZonePpeCameraRegionPanel (MF05 Camera-Region Linking - Corrected Suite
       ],
       total: 1,
     });
-    updatePolygonSpy.mockResolvedValueOnce({
-      region: {
-        ...mockRegionsList.items[0]!,
-        polygon: { coordinates: updatedCoords },
-        version: 3,
-      },
-      configurationVersion: 4,
-    });
+    updatePolygonSpy.mockResolvedValueOnce(
+      mockConfirmedMutation('reg-1', updatedCoords, 4, { version: 3 }),
+    );
 
     await user.click(saveBtn);
     expect(updatePolygonSpy).toHaveBeenCalledTimes(2);
@@ -1620,12 +1628,17 @@ describe('ZonePpeCameraRegionPanel (MF05 Camera-Region Linking - Corrected Suite
       'cam-1',
       'reg-1',
       {
-        polygon: { coordinates: updatedCoords },
         expectedConfigurationVersion: 3,
+        referenceId: DEFAULT_REF_ID,
+        viewRevision: 1,
+        confirmReferenceView: true,
+        polygon: { coordinates: updatedCoords },
       },
       expect.objectContaining({ signal: expect.any(AbortSignal) }),
     );
     expect(createRegionSpy).not.toHaveBeenCalled();
+    expect(legacyCreateSpy).not.toHaveBeenCalled();
+    expect(legacyUpdateSpy).not.toHaveBeenCalled();
     expect(await screen.findByText(/Saved region "reg-1" \(v3\)/i)).toBeDefined();
 
     // Close clean saved editor and reopen to verify round-tripped v3 coordinates
@@ -1639,7 +1652,7 @@ describe('ZonePpeCameraRegionPanel (MF05 Camera-Region Linking - Corrected Suite
   // --------------------------------------------------------------------------
   // 20. EXISTING-REGION OPTIMISTIC REVISION: PREFLIGHT STALE CFG VERSION BLOCK
   // --------------------------------------------------------------------------
-  it('existing-region optimistic revision: blocks updatePolygon and shows safe 409 conflict while retaining draft when getCamera preflight returns cfg2 after opening at cfg1', async () => {
+  it('existing-region optimistic revision: blocks updateReferencePolygon and shows safe 409 conflict while retaining draft when getCamera preflight returns cfg2 after opening at cfg1', async () => {
     vi.stubEnv('VITE_AI_WORK_PAUSED', 'false');
     const user = userEvent.setup();
     refState.reference = mockConfigurationReference({ configurationVersion: 1 });
@@ -1658,12 +1671,7 @@ describe('ZonePpeCameraRegionPanel (MF05 Camera-Region Linking - Corrected Suite
       total: 1,
     });
     vi.spyOn(SmartSiteManagementClient.prototype, 'listRegions').mockResolvedValue({
-      items: [
-        {
-          ...mockRegionsList.items[0]!,
-          version: 1,
-        },
-      ],
+      items: [{ ...mockRegionsList.items[0]!, version: 1 }],
       total: 1,
     });
 
@@ -1671,11 +1679,13 @@ describe('ZonePpeCameraRegionPanel (MF05 Camera-Region Linking - Corrected Suite
       .spyOn(SmartSiteManagementClient.prototype, 'getCamera')
       .mockResolvedValue(camCfg2);
     const updatePolygonSpy = vi
-      .spyOn(SmartSiteManagementClient.prototype, 'updatePolygon')
+      .spyOn(SmartSiteManagementClient.prototype, 'updateReferencePolygon')
       .mockRejectedValue(new ApiError('http', 'Configuration version conflict', 409));
     const createRegionSpy = vi
-      .spyOn(SmartSiteManagementClient.prototype, 'createRegion')
+      .spyOn(SmartSiteManagementClient.prototype, 'createReferenceRegion')
       .mockRejectedValue(new Error('Unexpected create fallback in isolated fixture'));
+    const legacyUpdateSpy = vi.spyOn(SmartSiteManagementClient.prototype, 'updatePolygon');
+    const legacyCreateSpy = vi.spyOn(SmartSiteManagementClient.prototype, 'createRegion');
 
     render(
       <QueryClientProvider client={queryClient}>
@@ -1710,6 +1720,8 @@ describe('ZonePpeCameraRegionPanel (MF05 Camera-Region Linking - Corrected Suite
     expect(getCameraSpy).toHaveBeenCalledTimes(1);
     expect(updatePolygonSpy).not.toHaveBeenCalled();
     expect(createRegionSpy).not.toHaveBeenCalled();
+    expect(legacyUpdateSpy).not.toHaveBeenCalled();
+    expect(legacyCreateSpy).not.toHaveBeenCalled();
     expect(screen.queryByText(/Saved region/i)).toBeNull();
     expect(screen.getByLabelText(/Camera Region Drawing Canvas/i)).toBeDefined();
     expect(screen.getByRole('button', { name: /Vertex 1/i }).getAttribute('cx')).toBe('73.984');
@@ -1718,7 +1730,7 @@ describe('ZonePpeCameraRegionPanel (MF05 Camera-Region Linking - Corrected Suite
   // --------------------------------------------------------------------------
   // 21. EXISTING-REGION OPTIMISTIC REVISION: CONCURRENT WRITE 409 AFTER GET
   // --------------------------------------------------------------------------
-  it('existing-region optimistic revision: sends expectedConfigurationVersion 1 on updatePolygon and does not auto-retry or fallback to createRegion when PATCH rejects with 409 and refetch sees cfg2', async () => {
+  it('existing-region optimistic revision: sends expectedConfigurationVersion 1 on updateReferencePolygon and does not auto-retry or fallback when PATCH rejects with 409 and refetch sees cfg2', async () => {
     vi.stubEnv('VITE_AI_WORK_PAUSED', 'false');
     const user = userEvent.setup();
     refState.reference = mockConfigurationReference({ configurationVersion: 1 });
@@ -1737,12 +1749,7 @@ describe('ZonePpeCameraRegionPanel (MF05 Camera-Region Linking - Corrected Suite
       .mockResolvedValueOnce({ items: [camCfg1], total: 1 })
       .mockResolvedValue({ items: [camCfg2], total: 1 });
     vi.spyOn(SmartSiteManagementClient.prototype, 'listRegions').mockResolvedValue({
-      items: [
-        {
-          ...mockRegionsList.items[0]!,
-          version: 1,
-        },
-      ],
+      items: [{ ...mockRegionsList.items[0]!, version: 1 }],
       total: 1,
     });
 
@@ -1750,11 +1757,13 @@ describe('ZonePpeCameraRegionPanel (MF05 Camera-Region Linking - Corrected Suite
       .spyOn(SmartSiteManagementClient.prototype, 'getCamera')
       .mockResolvedValue(camCfg1);
     const updatePolygonSpy = vi
-      .spyOn(SmartSiteManagementClient.prototype, 'updatePolygon')
+      .spyOn(SmartSiteManagementClient.prototype, 'updateReferencePolygon')
       .mockRejectedValue(new ApiError('http', 'Configuration version conflict', 409));
     const createRegionSpy = vi
-      .spyOn(SmartSiteManagementClient.prototype, 'createRegion')
+      .spyOn(SmartSiteManagementClient.prototype, 'createReferenceRegion')
       .mockRejectedValue(new Error('Unexpected create fallback in isolated fixture'));
+    const legacyUpdateSpy = vi.spyOn(SmartSiteManagementClient.prototype, 'updatePolygon');
+    const legacyCreateSpy = vi.spyOn(SmartSiteManagementClient.prototype, 'createRegion');
 
     render(
       <QueryClientProvider client={queryClient}>
@@ -1798,6 +1807,10 @@ describe('ZonePpeCameraRegionPanel (MF05 Camera-Region Linking - Corrected Suite
       'cam-1',
       'reg-1',
       {
+        expectedConfigurationVersion: 1,
+        referenceId: DEFAULT_REF_ID,
+        viewRevision: 1,
+        confirmReferenceView: true,
         polygon: {
           coordinates: [
             [0.1156, 0.1],
@@ -1806,11 +1819,12 @@ describe('ZonePpeCameraRegionPanel (MF05 Camera-Region Linking - Corrected Suite
             [0.1, 0.5],
           ],
         },
-        expectedConfigurationVersion: 1,
       },
       expect.objectContaining({ signal: expect.any(AbortSignal) }),
     );
     expect(createRegionSpy).not.toHaveBeenCalled();
+    expect(legacyUpdateSpy).not.toHaveBeenCalled();
+    expect(legacyCreateSpy).not.toHaveBeenCalled();
     expect(screen.queryByText(/Saved region/i)).toBeNull();
     expect(screen.getByLabelText(/Camera Region Drawing Canvas/i)).toBeDefined();
     expect(screen.getByRole('button', { name: /Vertex 1/i }).getAttribute('cx')).toBe('73.984');
@@ -1820,12 +1834,16 @@ describe('ZonePpeCameraRegionPanel (MF05 Camera-Region Linking - Corrected Suite
   // 22. POST-SAVE STALE CONFIG REVISION ON ZONE SWITCH: KEEP OLD REFERENCE UNMODIFIED,
   //     KEEP DRAWING DISABLED, SHOW LOCALIZED FRESH-IMAGE HINT, RESTORE ON FRESH V4 REQUEST
   // --------------------------------------------------------------------------
-  it('keeps old reference unmodified and drawing disabled with a visible localized fresh-image hint after save advances camera config 3->4 and Zone switches, then restores drawing after requesting a fresh v4 reference', async () => {
+  it('keeps old reference unmodified, blocks second save without a newly issued v4 reference, keeps drawing disabled on Zone switch with fresh-image hint, and restores drawing after requesting a fresh v4 reference', async () => {
     const user = userEvent.setup();
     const initialRefV3 = mockConfigurationReference({ configurationVersion: 3 });
     refState.reference = initialRefV3;
     refState.requestImpl = async () => {
-      refState.reference = mockConfigurationReference({ configurationVersion: 4 });
+      refState.reference = mockConfigurationReference(
+        { configurationVersion: 4 },
+        {},
+        { referenceId: '00000000-0000-4000-8000-000000000104', viewRevision: 2 },
+      );
     };
 
     const camV3: CameraResponse = {
@@ -1845,46 +1863,17 @@ describe('ZonePpeCameraRegionPanel (MF05 Camera-Region Linking - Corrected Suite
       .spyOn(SmartSiteManagementClient.prototype, 'getCamera')
       .mockResolvedValueOnce(camV3)
       .mockResolvedValue(camV4);
-    vi.spyOn(SmartSiteManagementClient.prototype, 'createRegion').mockResolvedValueOnce({
-      region: {
-        id: 'reg-zone-1-saved',
-        cameraId: 'cam-1',
-        zoneId: 'zone-1',
-        polygon: {
-          coordinates: [
-            [0.1, 0.1],
-            [0.8, 0.1],
-            [0.8, 0.8],
-          ],
-        },
-        coordinateSpace: 'NORMALIZED_0_1',
-        version: 1,
-        isActive: true,
-        createdAt: '2026-10-07T12:00:00Z',
-      },
-      configurationVersion: 4,
-    });
-    const updatePolygonSpy = vi
-      .spyOn(SmartSiteManagementClient.prototype, 'updatePolygon')
-      .mockResolvedValueOnce({
-        region: {
-          id: 'reg-zone-1-saved',
-          cameraId: 'cam-1',
-          zoneId: 'zone-1',
-          polygon: {
-            coordinates: [
-              [0.1156, 0.1],
-              [0.8, 0.1],
-              [0.8, 0.8],
-            ],
-          },
-          coordinateSpace: 'NORMALIZED_0_1',
-          version: 2,
-          isActive: true,
-          createdAt: '2026-10-07T12:00:00Z',
-        },
-        configurationVersion: 4,
-      });
+    vi.spyOn(SmartSiteManagementClient.prototype, 'createReferenceRegion').mockResolvedValueOnce(
+      mockConfirmedMutation('reg-zone-1-saved', [
+        [0.1, 0.1],
+        [0.8, 0.1],
+        [0.8, 0.8],
+      ]),
+    );
+    const updatePolygonSpy = vi.spyOn(
+      SmartSiteManagementClient.prototype,
+      'updateReferencePolygon',
+    );
 
     const { rerender } = render(
       <QueryClientProvider client={queryClient}>
@@ -1914,31 +1903,17 @@ describe('ZonePpeCameraRegionPanel (MF05 Camera-Region Linking - Corrected Suite
     expect(screen.getByText('Config v3')).toBeDefined();
     expect(screen.queryByText('Config v4')).toBeNull();
 
-    // Continued editing of the just-saved region remains active and uses updated CAS (4) while image stays Config v3
+    // One reference authorizes one versioned save: attempting a second save while frozenReference is still v3 conflicts closed
     expect(screen.getByText(/Editing Region reg-zone-1-saved \(v1\)/i)).toBeDefined();
     const vertex1 = screen.getByRole('button', { name: /Vertex 1/i });
     act(() => vertex1.focus());
     fireEvent.keyDown(vertex1, { key: 'ArrowRight', shiftKey: true });
     await user.click(screen.getByRole('button', { name: /Save Region/i }));
-    expect(await screen.findByText(/Saved region "reg-zone-1-saved" \(v2\)/i)).toBeDefined();
+    expect(
+      await screen.findByText(/Configuration version conflict\. Camera configuration was updated/i),
+    ).toBeDefined();
     expect(getCameraSpy).toHaveBeenCalledTimes(2);
-    expect(updatePolygonSpy).toHaveBeenCalledWith(
-      'mock-token-xyz',
-      'site-alpha',
-      'cam-1',
-      'reg-zone-1-saved',
-      {
-        polygon: {
-          coordinates: [
-            [0.1156, 0.1],
-            [0.8, 0.1],
-            [0.8, 0.8],
-          ],
-        },
-        expectedConfigurationVersion: 4,
-      },
-      expect.objectContaining({ signal: expect.any(AbortSignal) }),
-    );
+    expect(updatePolygonSpy).not.toHaveBeenCalled();
     expect(screen.getByText('Config v3')).toBeDefined();
     expect(screen.queryByText('Config v4')).toBeNull();
 

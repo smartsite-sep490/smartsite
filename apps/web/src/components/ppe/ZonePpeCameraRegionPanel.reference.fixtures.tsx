@@ -7,6 +7,7 @@ import {
   CONFIGURATION_REFERENCE_LIFETIME_MS,
   SmartSiteManagementClient,
   parseCameraConfigurationImageResponse,
+  type CameraConfigurationImageReference,
   type CameraConfigurationImageResponse,
   type Page,
   type ZoneResponse,
@@ -58,6 +59,7 @@ export const SYNTHETIC_JPEG_120X80 = Buffer.from([
 export function buildCanonicalReference(
   overrides: Partial<CameraConfigurationImageResponse> = {},
   frameOverrides: Partial<CameraConfigurationImageResponse['frame']> = {},
+  issuedOverrides: Partial<CameraConfigurationImageReference> = {},
 ): CameraConfigurationReference {
   const capturedAt = frameOverrides.capturedAt ?? new Date(Date.now()).toISOString();
   const expiresAt =
@@ -84,10 +86,33 @@ export function buildCanonicalReference(
       ...frameOverrides,
     },
   });
+  const parsedSeq = Number.parseInt(dto.frame.sequenceNumber, 10);
+  const viewRevision = Number.isSafeInteger(parsedSeq) && parsedSeq >= 1 ? parsedSeq : 1;
+  const suffix = String(dto.configurationVersion * 100 + viewRevision)
+    .padStart(12, '0')
+    .slice(-12);
+  const issuedReference: CameraConfigurationImageReference = {
+    schemaVersion: '1.0.0',
+    purpose: 'REGION_CONFIGURATION',
+    sourceKind: dto.sourceKind,
+    referenceId: `77777777-7777-4777-8777-${suffix}`,
+    siteId: dto.siteId,
+    cameraId: dto.cameraId,
+    sessionId: dto.frame.sessionId,
+    imageSha256: dto.frame.imageSha256,
+    width: dto.frame.width,
+    height: dto.frame.height,
+    capturedAt: dto.frame.capturedAt,
+    issuedAt: dto.frame.capturedAt,
+    expiresAt: dto.referenceExpiresAt,
+    configurationVersion: dto.configurationVersion,
+    viewRevision,
+    ...issuedOverrides,
+  };
   const image = new Image();
   Object.defineProperty(image, 'naturalWidth', { value: dto.frame.width, configurable: true });
   Object.defineProperty(image, 'naturalHeight', { value: dto.frame.height, configurable: true });
-  return { ...dto, image };
+  return { ...dto, issuedReference, image };
 }
 
 export const mockZones: ZoneResponse[] = [
@@ -189,7 +214,7 @@ export async function addTriangleViaInputs(
 
 export function stubRegionMutationSpies(onCreated?: () => void) {
   const createSpy = vi
-    .spyOn(SmartSiteManagementClient.prototype, 'createRegion')
+    .spyOn(SmartSiteManagementClient.prototype, 'createReferenceRegion')
     .mockImplementation(async (_token, _siteId, cameraId, payload) => {
       onCreated?.();
       return {
@@ -202,12 +227,19 @@ export function stubRegionMutationSpies(onCreated?: () => void) {
           version: 1,
           isActive: true,
           createdAt: '2026-10-15T09:01:00Z',
+          geometryConfirmation: {
+            status: 'MANUALLY_CONFIRMED',
+            referenceId: payload.referenceId,
+            viewRevision: payload.viewRevision,
+            confirmedByUserId: '00000000-0000-4000-8000-000000000999',
+            confirmedAt: '2026-10-15T09:01:00.000Z',
+          },
         },
         configurationVersion: payload.expectedConfigurationVersion + 1,
       };
     });
   const updateSpy = vi
-    .spyOn(SmartSiteManagementClient.prototype, 'updatePolygon')
+    .spyOn(SmartSiteManagementClient.prototype, 'updateReferencePolygon')
     .mockImplementation(async (_token, _siteId, cameraId, regionId, payload) => ({
       region: {
         id: regionId,
@@ -218,6 +250,13 @@ export function stubRegionMutationSpies(onCreated?: () => void) {
         version: 2,
         isActive: true,
         createdAt: '2026-10-15T09:01:00Z',
+        geometryConfirmation: {
+          status: 'MANUALLY_CONFIRMED',
+          referenceId: payload.referenceId,
+          viewRevision: payload.viewRevision,
+          confirmedByUserId: '00000000-0000-4000-8000-000000000999',
+          confirmedAt: '2026-10-15T09:01:00.000Z',
+        },
       },
       configurationVersion: payload.expectedConfigurationVersion + 1,
     }));

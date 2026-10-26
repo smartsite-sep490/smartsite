@@ -280,6 +280,9 @@ describe('ZonePpeCameraRegionPanel Configuration Reference Review & Negative Jou
       expect.objectContaining({
         zoneId: ZONE_1,
         expectedConfigurationVersion: 3,
+        referenceId: '77777777-7777-4777-8777-000000000301',
+        viewRevision: 1,
+        confirmReferenceView: true,
       }),
       expect.objectContaining({ signal: expect.any(AbortSignal) }),
     );
@@ -294,9 +297,9 @@ describe('ZonePpeCameraRegionPanel Configuration Reference Review & Negative Jou
       .spyOn(SmartSiteManagementClient.prototype, 'getCamera')
       .mockResolvedValue({ ...baseCamera, configurationVersion: 3 });
     const createSpy = vi
-      .spyOn(SmartSiteManagementClient.prototype, 'createRegion')
+      .spyOn(SmartSiteManagementClient.prototype, 'createReferenceRegion')
       .mockRejectedValueOnce(new ApiError('http', 'Secret SQL 409 conflict', 409));
-    const updateSpy = vi.spyOn(SmartSiteManagementClient.prototype, 'updatePolygon');
+    const updateSpy = vi.spyOn(SmartSiteManagementClient.prototype, 'updateReferencePolygon');
 
     renderReferencePanel(queryClient);
 
@@ -324,6 +327,9 @@ describe('ZonePpeCameraRegionPanel Configuration Reference Review & Negative Jou
       expect.objectContaining({
         zoneId: ZONE_1,
         expectedConfigurationVersion: 3,
+        referenceId: '77777777-7777-4777-8777-000000000301',
+        viewRevision: 1,
+        confirmReferenceView: true,
       }),
       expect.objectContaining({ signal: expect.any(AbortSignal) }),
     );
@@ -348,7 +354,7 @@ describe('ZonePpeCameraRegionPanel Configuration Reference Review & Negative Jou
         .spyOn(SmartSiteManagementClient.prototype, 'getCamera')
         .mockResolvedValue({ ...baseCamera, configurationVersion: 3 });
       const createSpy = vi
-        .spyOn(SmartSiteManagementClient.prototype, 'createRegion')
+        .spyOn(SmartSiteManagementClient.prototype, 'createReferenceRegion')
         .mockRejectedValueOnce(
           new ApiError('http', `Secret createRegion denial ${status}`, status),
         );

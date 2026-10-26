@@ -23,6 +23,45 @@ export interface EditingRegionScope {
   initialPoints: NormalizedPoint[];
 }
 
+const CANONICAL_UUID_RE = /^[0-9a-f]{8}(-[0-9a-f]{4}){3}-[0-9a-f]{12}$/i;
+const SHA256_HEX_RE = /^[a-f0-9]{64}$/;
+
+function isIssuedReferenceCoherent(reference: CameraConfigurationReference): boolean {
+  const issued = reference.issuedReference;
+  if (!issued || typeof issued !== 'object') return false;
+  return (
+    issued.schemaVersion === '1.0.0' &&
+    issued.purpose === 'REGION_CONFIGURATION' &&
+    issued.sourceKind === reference.sourceKind &&
+    (issued.sourceKind === 'LIVE' || issued.sourceKind === 'REPLAY') &&
+    typeof issued.referenceId === 'string' &&
+    CANONICAL_UUID_RE.test(issued.referenceId) &&
+    typeof issued.viewRevision === 'number' &&
+    Number.isSafeInteger(issued.viewRevision) &&
+    issued.viewRevision >= 1 &&
+    typeof issued.configurationVersion === 'number' &&
+    Number.isSafeInteger(issued.configurationVersion) &&
+    issued.configurationVersion === reference.configurationVersion &&
+    typeof issued.siteId === 'string' &&
+    issued.siteId.trim().length > 0 &&
+    issued.siteId.trim().toLowerCase() === reference.siteId.trim().toLowerCase() &&
+    typeof issued.cameraId === 'string' &&
+    issued.cameraId.trim().length > 0 &&
+    issued.cameraId.trim().toLowerCase() === reference.cameraId.trim().toLowerCase() &&
+    typeof issued.sessionId === 'string' &&
+    issued.sessionId.trim().length > 0 &&
+    issued.sessionId.trim().toLowerCase() === reference.frame.sessionId.trim().toLowerCase() &&
+    typeof issued.imageSha256 === 'string' &&
+    SHA256_HEX_RE.test(issued.imageSha256) &&
+    issued.imageSha256 === reference.frame.imageSha256 &&
+    issued.width === reference.frame.width &&
+    issued.height === reference.frame.height &&
+    Date.parse(issued.capturedAt) === Date.parse(reference.frame.capturedAt) &&
+    Date.parse(issued.expiresAt) === Date.parse(reference.referenceExpiresAt) &&
+    Number.isFinite(getEffectiveExpiryMs(reference))
+  );
+}
+
 export function isConfigurationReferenceScopeMatched(
   reference: CameraConfigurationReference | null | undefined,
   siteId: string,
@@ -34,7 +73,8 @@ export function isConfigurationReferenceScopeMatched(
     reference.cameraId.trim().toLowerCase() === camera.id.trim().toLowerCase() &&
     reference.frame.cameraExternalId === camera.externalId &&
     Number.isSafeInteger(reference.configurationVersion) &&
-    reference.configurationVersion >= 1
+    reference.configurationVersion >= 1 &&
+    isIssuedReferenceCoherent(reference)
   );
 }
 
@@ -57,6 +97,8 @@ export function isSameConfigurationReference(
     a.cameraId === b.cameraId &&
     a.configurationVersion === b.configurationVersion &&
     a.referenceExpiresAt === b.referenceExpiresAt &&
+    a.issuedReference?.referenceId === b.issuedReference?.referenceId &&
+    a.issuedReference?.viewRevision === b.issuedReference?.viewRevision &&
     a.frame.sessionId === b.frame.sessionId &&
     a.frame.sequenceNumber === b.frame.sequenceNumber &&
     a.frame.capturedAt === b.frame.capturedAt &&
@@ -73,6 +115,8 @@ export function getConfigurationReferenceIdentity(
     reference.cameraId,
     reference.configurationVersion,
     reference.referenceExpiresAt,
+    reference.issuedReference?.referenceId ?? '',
+    reference.issuedReference?.viewRevision ?? '',
     reference.frame.sessionId,
     reference.frame.sequenceNumber,
     reference.frame.capturedAt,

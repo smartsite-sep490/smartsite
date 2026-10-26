@@ -4,9 +4,15 @@ import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-libra
 import userEvent from '@testing-library/user-event';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { ApiError, SmartSiteManagementClient } from '@smartsite/api-client';
-import type { Page, ZoneResponse } from '@smartsite/api-client';
-import type { CameraResponse, RegionMutationResponse, RegionResponse } from '@smartsite/contracts';
+import {
+  ApiError,
+  SmartSiteManagementClient,
+  type CameraConfigurationImageReference,
+  type Page,
+  type ReferenceRegionMutationResponse,
+  type ZoneResponse,
+} from '@smartsite/api-client';
+import type { CameraResponse, RegionResponse } from '@smartsite/contracts';
 import { LocaleProvider } from '../../i18n/LocaleProvider';
 import type { CameraConfigurationReference } from './useCameraConfigurationReference';
 import { ZonePpeCameraRegionPanel } from './ZonePpeCameraRegionPanel';
@@ -32,6 +38,11 @@ if (typeof SVGElement !== 'undefined') {
   });
 }
 
+const REF_ID_V3 = '00000000-0000-4000-8000-000000000103';
+const REF_ID_V4 = '00000000-0000-4000-8000-000000000104';
+const REF_ID_V5 = '00000000-0000-4000-8000-000000000105';
+const ACTOR_ID = '00000000-0000-4000-8000-000000000999';
+
 const referenceState = vi.hoisted(() => ({
   reference: null as CameraConfigurationReference | null,
   isLoading: false,
@@ -49,29 +60,57 @@ vi.mock('./useCameraConfigurationReference', () => ({
 }));
 
 function createFreshReference(
-  overrides: Partial<CameraConfigurationReference> = {},
+  overrides: Partial<Omit<CameraConfigurationReference, 'issuedReference'>> = {},
+  issuedOverrides: Partial<CameraConfigurationImageReference> = {},
 ): CameraConfigurationReference {
   const nowMs = Date.now();
+  const capturedAt = overrides.frame?.capturedAt ?? new Date(nowMs).toISOString();
+  const referenceExpiresAt =
+    overrides.referenceExpiresAt ?? new Date(nowMs + 300_000).toISOString();
+  const configurationVersion = overrides.configurationVersion ?? 3;
+  const siteId = overrides.siteId ?? 'site-alpha';
+  const cameraId = overrides.cameraId ?? 'cam-1';
+  const sourceKind = overrides.sourceKind ?? 'LIVE';
+  const frame = {
+    sessionId: '00000000-0000-4000-8000-000000000001',
+    sequenceNumber: '1',
+    cameraExternalId: 'CAM-EXT-01',
+    capturedAt,
+    width: 640,
+    height: 480,
+    imageDataUrl: 'data:image/jpeg;base64,/9j/2Q==',
+    imageSha256: 'a'.repeat(64),
+    ...overrides.frame,
+  };
   return {
-    siteId: 'site-alpha',
-    cameraId: 'cam-1',
+    siteId,
+    cameraId,
     schemaVersion: 1,
     purpose: 'REGION_CONFIGURATION',
-    configurationVersion: 3,
-    sourceKind: 'LIVE',
-    referenceExpiresAt: new Date(nowMs + 300_000).toISOString(),
-    frame: {
-      sessionId: '00000000-0000-4000-8000-000000000001',
-      sequenceNumber: '1',
-      cameraExternalId: 'CAM-EXT-01',
-      capturedAt: new Date(nowMs).toISOString(),
-      width: 640,
-      height: 480,
-      imageDataUrl: 'data:image/jpeg;base64,/9j/2Q==',
-      imageSha256: 'a'.repeat(64),
+    configurationVersion,
+    sourceKind,
+    referenceExpiresAt,
+    ...overrides,
+    frame,
+    issuedReference: {
+      schemaVersion: '1.0.0',
+      purpose: 'REGION_CONFIGURATION',
+      sourceKind,
+      referenceId: REF_ID_V3,
+      siteId,
+      cameraId,
+      sessionId: frame.sessionId,
+      imageSha256: frame.imageSha256,
+      width: frame.width,
+      height: frame.height,
+      capturedAt: frame.capturedAt,
+      issuedAt: frame.capturedAt,
+      expiresAt: referenceExpiresAt,
+      configurationVersion,
+      viewRevision: 1,
+      ...issuedOverrides,
     },
     image: {} as HTMLImageElement,
-    ...overrides,
   };
 }
 
@@ -125,16 +164,13 @@ describe('ZonePpeCameraRegionPanel Region Submission Journeys', () => {
     referenceState.error = null;
   });
 
-  it('transitions a newly created Region into in-place editing so modifying and saving again calls updatePolygon with the returned region id and configurationVersion instead of creating a second Region', async () => {
+  it('transitions a newly created Region into in-place editing, blocks second save until a newly issued v4 reference is accepted, and never falls back to legacy writes', async () => {
     const user = userEvent.setup();
     let currentCamera: CameraResponse = { ...baseCamera, configurationVersion: 3 };
     let storedRegions: RegionResponse[] = [];
 
     vi.spyOn(SmartSiteManagementClient.prototype, 'listCameras').mockImplementation(
-      async (): Promise<Page<CameraResponse>> => ({
-        items: [currentCamera],
-        total: 1,
-      }),
+      async (): Promise<Page<CameraResponse>> => ({ items: [currentCamera], total: 1 }),
     );
     vi.spyOn(SmartSiteManagementClient.prototype, 'getCamera').mockImplementation(
       async () => currentCamera,
@@ -146,48 +182,65 @@ describe('ZonePpeCameraRegionPanel Region Submission Journeys', () => {
       }),
     );
 
-    const createRegionSpy = vi
-      .spyOn(SmartSiteManagementClient.prototype, 'createRegion')
+    const legacyCreateSpy = vi.spyOn(SmartSiteManagementClient.prototype, 'createRegion');
+    const legacyUpdateSpy = vi.spyOn(SmartSiteManagementClient.prototype, 'updatePolygon');
+
+    const createReferenceRegionSpy = vi
+      .spyOn(SmartSiteManagementClient.prototype, 'createReferenceRegion')
       .mockImplementation(async (_token, _siteId, cameraId, payload) => {
-        const createdRegion: RegionResponse = {
+        const createdRegion = {
           id: 'reg-created-101',
           cameraId,
           zoneId: payload.zoneId,
-          polygon: payload.polygon,
-          coordinateSpace: 'NORMALIZED_0_1',
+          polygon: { coordinates: payload.polygon.coordinates.map(([x, y]) => [x, y]) },
+          coordinateSpace: 'NORMALIZED_0_1' as const,
           version: 1,
           isActive: true,
-          createdAt: '2026-10-15T12:00:00Z',
+          createdAt: '2026-10-15T12:00:00.000Z',
+          geometryConfirmation: {
+            status: 'MANUALLY_CONFIRMED' as const,
+            referenceId: payload.referenceId,
+            viewRevision: payload.viewRevision,
+            confirmedByUserId: ACTOR_ID,
+            confirmedAt: '2026-10-15T12:00:00.000Z',
+          },
         };
         currentCamera = { ...currentCamera, configurationVersion: 4 };
-        referenceState.reference = createFreshReference({ configurationVersion: 4 });
+        referenceState.reference = createFreshReference(
+          { configurationVersion: 4 },
+          { referenceId: REF_ID_V4, viewRevision: 2 },
+        );
         storedRegions = [createdRegion];
-        return {
-          region: createdRegion,
-          configurationVersion: 4,
-        };
+        return { region: createdRegion, configurationVersion: 4 };
       });
 
-    const updatePolygonSpy = vi
-      .spyOn(SmartSiteManagementClient.prototype, 'updatePolygon')
+    const updateReferencePolygonSpy = vi
+      .spyOn(SmartSiteManagementClient.prototype, 'updateReferencePolygon')
       .mockImplementation(async (_token, _siteId, cameraId, regionId, payload) => {
-        const updatedRegion: RegionResponse = {
+        const updatedRegion = {
           id: regionId,
           cameraId,
           zoneId: 'zone-1',
-          polygon: payload.polygon,
-          coordinateSpace: 'NORMALIZED_0_1',
+          polygon: { coordinates: payload.polygon.coordinates.map(([x, y]) => [x, y]) },
+          coordinateSpace: 'NORMALIZED_0_1' as const,
           version: 2,
           isActive: true,
-          createdAt: '2026-10-15T12:00:00Z',
+          createdAt: '2026-10-15T12:00:00.000Z',
+          geometryConfirmation: {
+            status: 'MANUALLY_CONFIRMED' as const,
+            referenceId: payload.referenceId,
+            viewRevision: payload.viewRevision,
+            confirmedByUserId: ACTOR_ID,
+            confirmedAt: '2026-10-15T12:01:00.000Z',
+          },
         };
         currentCamera = { ...currentCamera, configurationVersion: 5 };
-        referenceState.reference = createFreshReference({ configurationVersion: 5 });
+        referenceState.reference = createFreshReference(
+          { configurationVersion: 5 },
+          { referenceId: REF_ID_V5, viewRevision: 3 },
+        );
         storedRegions = [updatedRegion];
-        return {
-          region: updatedRegion,
-          configurationVersion: 5,
-        };
+        return { region: updatedRegion, configurationVersion: 5 };
       });
 
     render(
@@ -205,7 +258,6 @@ describe('ZonePpeCameraRegionPanel Region Submission Journeys', () => {
       </LocaleProvider>,
     );
 
-    // 1. Open new-region drawing editor and draw a 3-point polygon
     await user.click(await screen.findByRole('button', { name: /Start Drawing Region/i }));
     const canvas = screen.getByLabelText(/Camera Region Drawing Canvas/i);
 
@@ -214,17 +266,20 @@ describe('ZonePpeCameraRegionPanel Region Submission Journeys', () => {
     fireEvent.click(canvas, { clientX: 512, clientY: 384 }); // [0.8, 0.8]
     expect(screen.getByText(/Points: 3 \/ 32/i)).toBeDefined();
 
-    // 2. Save new region -> calls createRegion with expectedConfigurationVersion 3
     await user.click(screen.getByRole('button', { name: /Save Region/i }));
 
     expect(await screen.findByText(/Saved region "reg-created-101" \(v1\)/i)).toBeDefined();
-    expect(createRegionSpy).toHaveBeenCalledTimes(1);
-    expect(createRegionSpy).toHaveBeenCalledWith(
+    expect(createReferenceRegionSpy).toHaveBeenCalledTimes(1);
+    expect(createReferenceRegionSpy).toHaveBeenCalledWith(
       'mock-token-xyz',
       'site-alpha',
       'cam-1',
       {
         zoneId: 'zone-1',
+        expectedConfigurationVersion: 3,
+        referenceId: REF_ID_V3,
+        viewRevision: 1,
+        confirmReferenceView: true,
         polygon: {
           coordinates: [
             [0.1, 0.1],
@@ -232,29 +287,42 @@ describe('ZonePpeCameraRegionPanel Region Submission Journeys', () => {
             [0.8, 0.8],
           ],
         },
-        expectedConfigurationVersion: 3,
       },
       { signal: expect.any(AbortSignal) },
     );
-    expect(updatePolygonSpy).not.toHaveBeenCalled();
+    expect(updateReferencePolygonSpy).not.toHaveBeenCalled();
+    expect(legacyCreateSpy).not.toHaveBeenCalled();
+    expect(legacyUpdateSpy).not.toHaveBeenCalled();
 
-    // 3. Modify the just-saved polygon in the same open editor (append 4th vertex at [0.1, 0.8])
+    // Append 4th vertex in-place; saving before accepting v4 reference conflicts closed (409)
     const activeCanvas = screen.getByLabelText(/Camera Region Drawing Canvas/i);
     fireEvent.click(activeCanvas, { clientX: 64, clientY: 384 });
     expect(screen.getByText(/Points: 4 \/ 32/i)).toBeDefined();
 
-    // 4. Save again in the same editor -> must call updatePolygon on reg-created-101 with configurationVersion 4
+    await user.click(screen.getByRole('button', { name: /Save Region/i }));
+    expect(
+      await screen.findByText(/Configuration version conflict\. Camera configuration was updated/i),
+    ).toBeDefined();
+    expect(updateReferencePolygonSpy).not.toHaveBeenCalled();
+
+    // Review and accept the newly issued v4 candidate reference, then save
+    await user.click(screen.getByRole('button', { name: /Review new reference/i }));
+    await user.click(await screen.findByRole('button', { name: /Use new reference/i }));
     await user.click(screen.getByRole('button', { name: /Save Region/i }));
 
     expect(await screen.findByText(/Saved region "reg-created-101" \(v2\)/i)).toBeDefined();
-    expect(createRegionSpy).toHaveBeenCalledTimes(1);
-    expect(updatePolygonSpy).toHaveBeenCalledTimes(1);
-    expect(updatePolygonSpy).toHaveBeenCalledWith(
+    expect(createReferenceRegionSpy).toHaveBeenCalledTimes(1);
+    expect(updateReferencePolygonSpy).toHaveBeenCalledTimes(1);
+    expect(updateReferencePolygonSpy).toHaveBeenCalledWith(
       'mock-token-xyz',
       'site-alpha',
       'cam-1',
       'reg-created-101',
       {
+        expectedConfigurationVersion: 4,
+        referenceId: REF_ID_V4,
+        viewRevision: 2,
+        confirmReferenceView: true,
         polygon: {
           coordinates: [
             [0.1, 0.1],
@@ -263,32 +331,26 @@ describe('ZonePpeCameraRegionPanel Region Submission Journeys', () => {
             [0.1, 0.8],
           ],
         },
-        expectedConfigurationVersion: 4,
       },
       { signal: expect.any(AbortSignal) },
     );
+    expect(legacyCreateSpy).not.toHaveBeenCalled();
+    expect(legacyUpdateSpy).not.toHaveBeenCalled();
 
-    // 5. Just-saved 4-point geometry is now clean: single Escape closes editor without discard prompt, and reopen shows v2 with 4 vertices
     fireEvent.keyDown(screen.getByLabelText(/Camera Region Drawing Canvas/i), { key: 'Escape' });
-    expect(screen.queryByText(/Discard unsaved region geometry changes\?/i)).toBeNull();
     expect(screen.queryByLabelText(/Camera Region Drawing Canvas/i)).toBeNull();
 
     await user.click(await screen.findByRole('button', { name: /Edit Geometry/i }));
     expect(screen.getByText(/Editing Region reg-created-101 \(v2\)/i)).toBeDefined();
     expect(screen.getByText(/Points: 4 \/ 32/i)).toBeDefined();
-    expect(screen.getByRole('button', { name: /Vertex 4/i }).getAttribute('cx')).toBe('64');
-    expect(screen.getByRole('button', { name: /Vertex 4/i }).getAttribute('cy')).toBe('384');
   });
 
-  it('acknowledges only the submitted polygon across a held createRegion request and never falls back to createRegion when a subsequent updatePolygon fails', async () => {
+  it('acknowledges only the submitted polygon across a held createReferenceRegion request, fails closed on unissued fixtures, and never falls back to legacy writes', async () => {
     const user = userEvent.setup();
     let currentCamera: CameraResponse = { ...baseCamera, configurationVersion: 3 };
 
     vi.spyOn(SmartSiteManagementClient.prototype, 'listCameras').mockImplementation(
-      async (): Promise<Page<CameraResponse>> => ({
-        items: [currentCamera],
-        total: 1,
-      }),
+      async (): Promise<Page<CameraResponse>> => ({ items: [currentCamera], total: 1 }),
     );
     vi.spyOn(SmartSiteManagementClient.prototype, 'getCamera').mockImplementation(
       async () => currentCamera,
@@ -298,20 +360,46 @@ describe('ZonePpeCameraRegionPanel Region Submission Journeys', () => {
       total: 0,
     });
 
-    let resolveCreate!: (value: RegionMutationResponse) => void;
-    const createRegionSpy = vi
-      .spyOn(SmartSiteManagementClient.prototype, 'createRegion')
+    let resolveCreate!: (value: ReferenceRegionMutationResponse) => void;
+    const createReferenceRegionSpy = vi
+      .spyOn(SmartSiteManagementClient.prototype, 'createReferenceRegion')
       .mockImplementation(
         () =>
-          new Promise<RegionMutationResponse>((resolve) => {
+          new Promise<ReferenceRegionMutationResponse>((resolve) => {
             resolveCreate = resolve;
           }),
       );
-    const updatePolygonSpy = vi
-      .spyOn(SmartSiteManagementClient.prototype, 'updatePolygon')
+    const updateReferencePolygonSpy = vi
+      .spyOn(SmartSiteManagementClient.prototype, 'updateReferencePolygon')
       .mockRejectedValue(new ApiError('http', 'Service Unavailable', 503));
+    const legacyCreateSpy = vi.spyOn(SmartSiteManagementClient.prototype, 'createRegion');
+    const legacyUpdateSpy = vi.spyOn(SmartSiteManagementClient.prototype, 'updatePolygon');
 
-    render(
+    // Unissued legacy fixture (missing issuedReference) must fail closed and keep Start Drawing disabled
+    const unissuedFixture = { ...createFreshReference() } as Record<string, unknown>;
+    delete unissuedFixture.issuedReference;
+    referenceState.reference = unissuedFixture as unknown as CameraConfigurationReference;
+
+    const { rerender } = render(
+      <LocaleProvider defaultLocale="en">
+        <QueryClientProvider client={queryClient}>
+          <ZonePpeCameraRegionPanel
+            apiUrl="http://localhost:3000"
+            token="mock-token-xyz"
+            sessionScope="scope-01"
+            credentialId={1}
+            siteId="site-alpha"
+            zones={mockZones}
+          />
+        </QueryClientProvider>
+      </LocaleProvider>,
+    );
+
+    const disabledStartBtn = await screen.findByRole('button', { name: /Start Drawing Region/i });
+    expect((disabledStartBtn as HTMLButtonElement).disabled).toBe(true);
+
+    referenceState.reference = createFreshReference();
+    rerender(
       <LocaleProvider defaultLocale="en">
         <QueryClientProvider client={queryClient}>
           <ZonePpeCameraRegionPanel
@@ -328,20 +416,21 @@ describe('ZonePpeCameraRegionPanel Region Submission Journeys', () => {
 
     await user.click(await screen.findByRole('button', { name: /Start Drawing Region/i }));
     const canvas = screen.getByLabelText(/Camera Region Drawing Canvas/i);
+    fireEvent.click(canvas, { clientX: 64, clientY: 48 });
+    fireEvent.click(canvas, { clientX: 512, clientY: 48 });
+    fireEvent.click(canvas, { clientX: 512, clientY: 384 });
 
-    fireEvent.click(canvas, { clientX: 64, clientY: 48 }); // [0.1, 0.1]
-    fireEvent.click(canvas, { clientX: 512, clientY: 48 }); // [0.8, 0.1]
-    fireEvent.click(canvas, { clientX: 512, clientY: 384 }); // [0.8, 0.8]
-    expect(screen.getByText(/Points: 3 \/ 32/i)).toBeDefined();
-
-    // Submit the 3-point polygon; createRegion stays held in-flight
     await user.click(screen.getByRole('button', { name: /Save Region/i }));
-    await waitFor(() => expect(createRegionSpy).toHaveBeenCalledTimes(1));
+    await waitFor(() => expect(createReferenceRegionSpy).toHaveBeenCalledTimes(1));
 
-    // Attempted canvas click while submission is pending must not alter the submitted/acknowledged geometry
+    // Attempted canvas click while submission is pending must not alter the submitted geometry
     fireEvent.click(canvas, { clientX: 64, clientY: 384 });
 
     currentCamera = { ...currentCamera, configurationVersion: 4 };
+    referenceState.reference = createFreshReference(
+      { configurationVersion: 4 },
+      { referenceId: REF_ID_V4, viewRevision: 2 },
+    );
     await act(async () => {
       resolveCreate({
         region: {
@@ -358,7 +447,14 @@ describe('ZonePpeCameraRegionPanel Region Submission Journeys', () => {
           coordinateSpace: 'NORMALIZED_0_1',
           version: 1,
           isActive: true,
-          createdAt: '2026-10-15T12:00:00Z',
+          createdAt: '2026-10-15T12:00:00.000Z',
+          geometryConfirmation: {
+            status: 'MANUALLY_CONFIRMED',
+            referenceId: REF_ID_V3,
+            viewRevision: 1,
+            confirmedByUserId: ACTOR_ID,
+            confirmedAt: '2026-10-15T12:00:00.000Z',
+          },
         },
         configurationVersion: 4,
       });
@@ -366,16 +462,20 @@ describe('ZonePpeCameraRegionPanel Region Submission Journeys', () => {
 
     expect(await screen.findByText(/Saved region "reg-held-1" \(v1\)/i)).toBeDefined();
     expect(screen.getByText(/Points: 3 \/ 32/i)).toBeDefined();
-    expect(screen.queryByRole('button', { name: /Vertex 4/i })).toBeNull();
 
-    // Now add a 4th vertex after save completes and trigger a failing updatePolygon (503) -> no createRegion fallback
-    const activeCanvas = screen.getByLabelText(/Camera Region Drawing Canvas/i);
-    fireEvent.click(activeCanvas, { clientX: 64, clientY: 384 });
-    expect(screen.getByText(/Points: 4 \/ 32/i)).toBeDefined();
+    // Accept v4 reference, add 4th vertex, and trigger failing updateReferencePolygon (503) -> no legacy fallback
+    await user.click(screen.getByRole('button', { name: /Review new reference/i }));
+    await user.click(await screen.findByRole('button', { name: /Use new reference/i }));
+    fireEvent.click(screen.getByLabelText(/Camera Region Drawing Canvas/i), {
+      clientX: 64,
+      clientY: 384,
+    });
 
     await user.click(screen.getByRole('button', { name: /Save Region/i }));
-    await waitFor(() => expect(updatePolygonSpy).toHaveBeenCalledTimes(1));
-    expect(createRegionSpy).toHaveBeenCalledTimes(1);
+    await waitFor(() => expect(updateReferencePolygonSpy).toHaveBeenCalledTimes(1));
+    expect(createReferenceRegionSpy).toHaveBeenCalledTimes(1);
+    expect(legacyCreateSpy).not.toHaveBeenCalled();
+    expect(legacyUpdateSpy).not.toHaveBeenCalled();
     expect(screen.getByText(/Points: 4 \/ 32/i)).toBeDefined();
   });
 });

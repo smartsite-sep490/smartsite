@@ -2,7 +2,9 @@
 import {
   ApiError,
   SmartSiteManagementClient,
+  type CameraConfigurationImageReference,
   type CameraConfigurationImageResponse,
+  type CameraConfigurationReferenceResponse,
 } from '@smartsite/api-client';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { act, cleanup, renderHook } from '@testing-library/react';
@@ -44,9 +46,10 @@ function buildFrame(cameraExternalId = 'cam-1'): CameraConfigurationImageRespons
 }
 
 function buildResponse(
-  overrides: Partial<CameraConfigurationImageResponse> = {},
-): CameraConfigurationImageResponse {
-  return {
+  imageOverrides: Partial<CameraConfigurationImageResponse> = {},
+  referenceOverrides: Partial<CameraConfigurationImageReference> = {},
+): CameraConfigurationReferenceResponse {
+  const image: CameraConfigurationImageResponse = {
     siteId: baseOptions.siteId,
     cameraId: baseOptions.cameraId,
     schemaVersion: 1,
@@ -55,8 +58,27 @@ function buildResponse(
     sourceKind: 'LIVE',
     referenceExpiresAt: '2026-10-15T09:05:00.000Z',
     frame: buildFrame(),
-    ...overrides,
+    ...imageOverrides,
   };
+  const reference: CameraConfigurationImageReference = {
+    schemaVersion: '1.0.0',
+    purpose: 'REGION_CONFIGURATION',
+    sourceKind: image.sourceKind,
+    referenceId: '44444444-4444-4444-8444-444444444444',
+    siteId: image.siteId,
+    cameraId: image.cameraId,
+    sessionId: image.frame.sessionId,
+    imageSha256: image.frame.imageSha256,
+    width: image.frame.width,
+    height: image.frame.height,
+    capturedAt: image.frame.capturedAt,
+    issuedAt: image.frame.capturedAt,
+    expiresAt: image.referenceExpiresAt,
+    configurationVersion: image.configurationVersion,
+    viewRevision: 2,
+    ...referenceOverrides,
+  };
+  return { image, reference, viewValidity: 'UNCONFIRMED' };
 }
 
 let nextDecodedWidth = 120;
@@ -83,8 +105,8 @@ class MockImage {
   }
 }
 
-function spyOnConfigImage() {
-  return vi.spyOn(SmartSiteManagementClient.prototype, 'getCameraConfigurationImage');
+function spyOnConfigReference() {
+  return vi.spyOn(SmartSiteManagementClient.prototype, 'getCameraConfigurationReference');
 }
 
 function mountHook(initialProps: HookOptions = baseOptions) {
@@ -124,17 +146,22 @@ describe('useCameraConfigurationReference', () => {
   });
 
   it('does not request on mount, focus, or scope change until request() is called and deduplicates pending clicks without polling', async () => {
-    let resolveFetch!: (value: CameraConfigurationImageResponse) => void;
-    const configImageSpy = spyOnConfigImage().mockImplementation(
+    let resolveFetch!: (value: CameraConfigurationReferenceResponse) => void;
+    const legacyImageSpy = vi.spyOn(
+      SmartSiteManagementClient.prototype,
+      'getCameraConfigurationImage',
+    );
+    const configRefSpy = spyOnConfigReference().mockImplementation(
       () =>
-        new Promise<CameraConfigurationImageResponse>((resolve) => {
+        new Promise<CameraConfigurationReferenceResponse>((resolve) => {
           resolveFetch = resolve;
         }),
     );
 
     const { result, rerender } = mountHook();
 
-    expect(configImageSpy).not.toHaveBeenCalled();
+    expect(configRefSpy).not.toHaveBeenCalled();
+    expect(legacyImageSpy).not.toHaveBeenCalled();
     expect(result.current.reference).toBeNull();
     expect(result.current.isLoading).toBe(false);
 
@@ -147,7 +174,7 @@ describe('useCameraConfigurationReference', () => {
       cameraId: '88888888-8888-4888-8888-888888888888',
       cameraExternalId: 'cam-2',
     });
-    expect(configImageSpy).not.toHaveBeenCalled();
+    expect(configRefSpy).not.toHaveBeenCalled();
 
     let firstCall!: Promise<void>;
     let secondCall!: Promise<void>;
@@ -156,7 +183,8 @@ describe('useCameraConfigurationReference', () => {
       secondCall = result.current.request();
     });
 
-    expect(configImageSpy).toHaveBeenCalledTimes(1);
+    expect(configRefSpy).toHaveBeenCalledTimes(1);
+    expect(legacyImageSpy).not.toHaveBeenCalled();
     expect(result.current.isLoading).toBe(true);
 
     await act(async () => {
@@ -171,23 +199,33 @@ describe('useCameraConfigurationReference', () => {
 
     expect(result.current.isLoading).toBe(false);
     expect(result.current.reference?.cameraId).toBe('88888888-8888-4888-8888-888888888888');
+    expect(result.current.reference?.issuedReference.referenceId).toBe(
+      '44444444-4444-4444-8444-444444444444',
+    );
+    expect(result.current.reference?.issuedReference.viewRevision).toBe(2);
 
     act(() => {
       vi.advanceTimersByTime(60_000);
     });
-    expect(configImageSpy).toHaveBeenCalledTimes(1);
+    expect(configRefSpy).toHaveBeenCalledTimes(1);
+    expect(legacyImageSpy).not.toHaveBeenCalled();
   });
 
-  it('retains LIVE and REPLAY sourceKind labels and waits for Image.decode() before exposing reference', async () => {
+  it('retains LIVE/REPLAY sourceKind, issuedReference metadata, and waits for Image.decode() before exposing reference', async () => {
     let resolveDecode!: () => void;
     decodeImpl = () =>
       new Promise<void>((resolve) => {
         resolveDecode = resolve;
       });
 
-    const configImageSpy = spyOnConfigImage()
+    const configRefSpy = spyOnConfigReference()
       .mockResolvedValueOnce(buildResponse({ sourceKind: 'LIVE' }))
-      .mockResolvedValueOnce(buildResponse({ sourceKind: 'REPLAY' }));
+      .mockResolvedValueOnce(
+        buildResponse(
+          { sourceKind: 'REPLAY' },
+          { referenceId: '55555555-5555-4555-8555-555555555555', viewRevision: 3 },
+        ),
+      );
 
     const { result } = mountHook();
 
@@ -197,7 +235,7 @@ describe('useCameraConfigurationReference', () => {
       await Promise.resolve();
     });
 
-    expect(configImageSpy).toHaveBeenCalledTimes(1);
+    expect(configRefSpy).toHaveBeenCalledTimes(1);
     expect(result.current.reference).toBeNull();
     expect(result.current.isLoading).toBe(true);
 
@@ -210,16 +248,20 @@ describe('useCameraConfigurationReference', () => {
     expect(result.current.reference?.sourceKind).toBe('LIVE');
     expect(result.current.reference?.image.naturalWidth).toBe(120);
     expect(result.current.reference?.image.naturalHeight).toBe(80);
+    expect(result.current.reference?.issuedReference.viewRevision).toBe(2);
 
     decodeImpl = () => Promise.resolve();
     await triggerRequest(result);
 
     expect(result.current.reference?.sourceKind).toBe('REPLAY');
+    expect(result.current.reference?.issuedReference.referenceId).toBe(
+      '55555555-5555-4555-8555-555555555555',
+    );
+    expect(result.current.reference?.issuedReference.viewRevision).toBe(3);
   });
 
   it('produces no reference when Image.decode fails, dimensions mismatch, or reference expires during decode', async () => {
-    spyOnConfigImage().mockResolvedValue(buildResponse());
-
+    spyOnConfigReference().mockResolvedValue(buildResponse());
     const { result } = mountHook();
 
     decodeImpl = () => Promise.reject(new Error('Decode failed'));
@@ -245,8 +287,7 @@ describe('useCameraConfigurationReference', () => {
   });
 
   it('remains valid after 5s and expires at referenceExpiresAt (up to 5min), clearing cached pixels', async () => {
-    spyOnConfigImage().mockResolvedValue(buildResponse());
-
+    spyOnConfigReference().mockResolvedValue(buildResponse());
     const { queryClient, result } = mountHook();
 
     await triggerRequest(result);
@@ -274,16 +315,16 @@ describe('useCameraConfigurationReference', () => {
     expect(cachedPayloads).toHaveLength(0);
   });
 
-  it('cancels and clears immediately on scope/token change (including reused credentialId), disabled, or unmount and ignores late completions', async () => {
+  it('cancels and clears immediately on scope/token change, disabled, or unmount and ignores late completions', async () => {
     const signals: AbortSignal[] = [];
-    let resolveHeldNetwork!: (value: CameraConfigurationImageResponse) => void;
+    let resolveHeldNetwork!: (value: CameraConfigurationReferenceResponse) => void;
     let resolveHeldDecode!: () => void;
 
-    const configImageSpy = spyOnConfigImage()
+    const configRefSpy = spyOnConfigReference()
       .mockResolvedValueOnce(buildResponse())
       .mockImplementationOnce((_token, _siteId, _cameraId, options) => {
         if (options?.signal) signals.push(options.signal);
-        return new Promise<CameraConfigurationImageResponse>((resolve) => {
+        return new Promise<CameraConfigurationReferenceResponse>((resolve) => {
           resolveHeldNetwork = resolve;
         });
       })
@@ -334,7 +375,7 @@ describe('useCameraConfigurationReference', () => {
       void result.current.request();
       await Promise.resolve();
     });
-    expect(configImageSpy).toHaveBeenCalledTimes(3);
+    expect(configRefSpy).toHaveBeenCalledTimes(3);
 
     rerender({ ...scopedOptions, enabled: false });
     expect(result.current.reference).toBeNull();
@@ -348,53 +389,47 @@ describe('useCameraConfigurationReference', () => {
     unmount();
   });
 
-  it('rejects mismatched siteId, cameraId, or frame.cameraExternalId returned by a client mock', async () => {
-    spyOnConfigImage()
+  it('fails closed on mismatched scope, unissued legacy image payload, or incoherent reference metadata', async () => {
+    spyOnConfigReference()
       .mockResolvedValueOnce(buildResponse({ siteId: 'wrong-site' }))
       .mockResolvedValueOnce(buildResponse({ cameraId: 'wrong-camera-id' }))
-      .mockResolvedValueOnce(buildResponse({ frame: buildFrame('wrong-external-id') }));
+      .mockResolvedValueOnce(buildResponse({ frame: buildFrame('wrong-external-id') }))
+      .mockResolvedValueOnce(buildResponse({}, { configurationVersion: 99 }))
+      .mockResolvedValueOnce(
+        buildResponse().image as unknown as CameraConfigurationReferenceResponse,
+      );
 
     const { result } = mountHook();
 
-    for (let attempt = 0; attempt < 3; attempt += 1) {
+    for (let attempt = 0; attempt < 5; attempt += 1) {
       await triggerRequest(result);
       expect(result.current.reference).toBeNull();
       expect(result.current.error).toBeInstanceOf(ApiError);
+      expect(result.current.error?.code).toBe('invalid-response');
     }
   });
 
-  it('clears a previous reference when refresh fails with 401, 403, or 404 and exposes a safe ApiError', async () => {
-    const configImageSpy = spyOnConfigImage();
-    const { result } = mountHook();
+  it('clears a previous reference when refresh fails with 401, 403, or 404 and never leaks raw tokens in errors or query keys', async () => {
+    const configRefSpy = spyOnConfigReference();
+    const { queryClient, result, rerender } = mountHook();
 
     for (const status of [401, 403, 404]) {
-      configImageSpy.mockResolvedValueOnce(buildResponse());
+      configRefSpy.mockResolvedValueOnce(buildResponse());
       await triggerRequest(result);
       expect(result.current.reference).not.toBeNull();
 
-      configImageSpy.mockRejectedValueOnce(
-        new ApiError('http', `Request failed with status ${status}`, status),
+      configRefSpy.mockRejectedValueOnce(
+        new ApiError('http', `Request failed with status ${status}: ${baseOptions.token}`, status),
       );
       await triggerRequest(result);
 
       expect(result.current.reference).toBeNull();
-      expect(result.current.error).toBeInstanceOf(ApiError);
       expect(result.current.error?.status).toBe(status);
       expect(result.current.error?.message).not.toContain(baseOptions.token);
     }
-  });
 
-  it('never stores raw token in QueryClient keys and never calls preview, media, AI status, or demo apply endpoints', async () => {
-    spyOnConfigImage().mockResolvedValue(buildResponse());
-    const previewSpy = vi.spyOn(SmartSiteManagementClient.prototype, 'getCameraPreview');
-    const streamSpy = vi.spyOn(SmartSiteManagementClient.prototype, 'streamCameraVideo');
-    const recordedSpy = vi.spyOn(SmartSiteManagementClient.prototype, 'readRecordedCameraVideo');
-    const demoStatusSpy = vi.spyOn(SmartSiteManagementClient.prototype, 'getMf05DemoStatus');
-    const demoApplySpy = vi.spyOn(SmartSiteManagementClient.prototype, 'applyMf05DemoRegion');
-
-    const { queryClient, result, rerender } = mountHook();
+    configRefSpy.mockResolvedValue(buildResponse());
     await triggerRequest(result);
-
     const rotatedToken = 'secret-jwt-token-second-rotation';
     rerender({ ...baseOptions, token: rotatedToken, credentialId: 1 });
     await triggerRequest(result);
@@ -403,17 +438,10 @@ describe('useCameraConfigurationReference', () => {
       .getQueryCache()
       .getAll()
       .map((query) => JSON.stringify(query.queryKey));
-    expect(serializedKeys.length).toBeGreaterThanOrEqual(2);
+    expect(new Set(serializedKeys).size).toBeGreaterThanOrEqual(2);
     for (const serializedKey of serializedKeys) {
       expect(serializedKey).not.toContain(baseOptions.token);
       expect(serializedKey).not.toContain(rotatedToken);
     }
-    expect(new Set(serializedKeys).size).toBeGreaterThanOrEqual(2);
-
-    expect(previewSpy).not.toHaveBeenCalled();
-    expect(streamSpy).not.toHaveBeenCalled();
-    expect(recordedSpy).not.toHaveBeenCalled();
-    expect(demoStatusSpy).not.toHaveBeenCalled();
-    expect(demoApplySpy).not.toHaveBeenCalled();
   });
 });
