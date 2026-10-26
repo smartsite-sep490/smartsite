@@ -2,6 +2,15 @@ import { mainSiteManagerAuthorization } from '../../common/configuration/main-si
 import { randomUUID } from 'node:crypto';
 import { readCameraObservationZones } from './camera-observation-zones.query.js';
 import { recordRegionRevision } from './camera-region-revisions.js';
+import {
+  referenceActor,
+  resolveRegionReference,
+  type ReferenceRegionWrite,
+} from './camera-region-reference-write.js';
+import {
+  parseCreateReferenceRegionCommand,
+  parseUpdateReferenceRegionPolygonCommand,
+} from '@smartsite/contracts/camera-region-reference';
 import { Injectable } from '@nestjs/common';
 import {
   parseCameraRegionConfigurationPayload,
@@ -379,6 +388,42 @@ export class CameraConfigurationService {
     input: CreateRegionCommand,
     context?: MainConfigurationCommandContext,
   ): Promise<CameraObservationRegionEntity & { configurationVersion: number }> {
+    return this.createRegionMutation(siteId, cameraId, input, context);
+  }
+
+  async createReferenceRegion(
+    siteId: string,
+    cameraId: string,
+    input: unknown,
+    context?: MainConfigurationCommandContext,
+  ): Promise<CameraObservationRegionEntity & { configurationVersion: number }> {
+    const actorUserId = referenceActor(context);
+    let value;
+    try {
+      value = parseCreateReferenceRegionCommand(input);
+    } catch {
+      return invalid();
+    }
+    return this.createRegionMutation(
+      siteId,
+      cameraId,
+      {
+        zoneId: value.zoneId,
+        polygon: value.polygon,
+        expectedConfigurationVersion: value.expectedConfigurationVersion,
+      },
+      context,
+      { command: value, actorUserId },
+    );
+  }
+
+  private async createRegionMutation(
+    siteId: string,
+    cameraId: string,
+    input: CreateRegionCommand,
+    context: MainConfigurationCommandContext | undefined,
+    reference?: ReferenceRegionWrite,
+  ): Promise<CameraObservationRegionEntity & { configurationVersion: number }> {
     const value = command(CreateRegionCommand, input);
     uuid(value.zoneId);
     this.checkPolygon(value.polygon);
@@ -386,7 +431,7 @@ export class CameraConfigurationService {
       this.dataSource,
       context,
       'REGION_CREATE',
-      { siteId, cameraId, value },
+      { siteId, cameraId, value, ...(reference ? { reference: reference.command } : {}) },
       async (manager) => {
         const camera = await this.lockCamera(
           manager,
@@ -399,6 +444,9 @@ export class CameraConfigurationService {
           .getRepository(CameraObservationRegionEntity)
           .countBy({ cameraId, isActive: true });
         if (count >= 64) conflict('Camera has the maximum number of active regions');
+        const provenance = reference
+          ? await resolveRegionReference(manager, camera, reference)
+          : undefined;
         const region = await manager.getRepository(CameraObservationRegionEntity).save({
           id: randomUUID(),
           cameraId,
@@ -410,7 +458,7 @@ export class CameraConfigurationService {
         });
         await this.zones.markLinked(manager, zone);
         await this.bump(manager, camera);
-        await recordRegionRevision(manager, camera, region, false);
+        await recordRegionRevision(manager, camera, region, false, provenance);
         await this.snapshot(manager, camera, true);
         return Object.assign(region, { configurationVersion: camera.configurationVersion });
       },
@@ -440,6 +488,36 @@ export class CameraConfigurationService {
       context,
       'REGION_POLYGON_UPDATE',
       { siteId, cameraId, regionId, value },
+    );
+  }
+
+  async updateReferencePolygon(
+    siteId: string,
+    cameraId: string,
+    regionId: string,
+    input: unknown,
+    context?: MainConfigurationCommandContext,
+  ): Promise<CameraObservationRegionEntity & { configurationVersion: number }> {
+    const actorUserId = referenceActor(context);
+    let value;
+    try {
+      value = parseUpdateReferenceRegionPolygonCommand(input);
+    } catch {
+      return invalid();
+    }
+    return this.changeRegion(
+      siteId,
+      cameraId,
+      regionId,
+      value.expectedConfigurationVersion,
+      (region) => {
+        region.polygon = value.polygon;
+        return true;
+      },
+      context,
+      'REGION_POLYGON_UPDATE',
+      { siteId, cameraId, regionId, value },
+      { command: value, actorUserId },
     );
   }
 
@@ -476,6 +554,7 @@ export class CameraConfigurationService {
     context: MainConfigurationCommandContext | undefined,
     operation: 'REGION_POLYGON_UPDATE' | 'REGION_STATUS_UPDATE',
     request: object,
+    reference?: ReferenceRegionWrite,
   ): Promise<CameraObservationRegionEntity & { configurationVersion: number }> {
     return await executeMainConfigurationCommand(
       this.dataSource,
@@ -487,6 +566,9 @@ export class CameraConfigurationService {
         const repo = manager.getRepository(CameraObservationRegionEntity);
         const region = await repo.findOneBy({ id: uuid(regionId), cameraId });
         if (!region) missing();
+        const provenance = reference
+          ? await resolveRegionReference(manager, camera, reference)
+          : undefined;
         const wasActive = region.isActive;
         if (!change(region))
           return Object.assign(region, { configurationVersion: camera.configurationVersion });
@@ -498,7 +580,13 @@ export class CameraConfigurationService {
         this.bumpRegion(region);
         await repo.save(region);
         await this.bump(manager, camera);
-        await recordRegionRevision(manager, camera, region, operation === 'REGION_STATUS_UPDATE');
+        await recordRegionRevision(
+          manager,
+          camera,
+          region,
+          operation === 'REGION_STATUS_UPDATE',
+          provenance,
+        );
         await this.snapshot(manager, camera, true);
         return Object.assign(region, { configurationVersion: camera.configurationVersion });
       },

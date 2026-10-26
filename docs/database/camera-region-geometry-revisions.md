@@ -45,7 +45,21 @@ UPDATE, DELETE and TRUNCATE are rejected. Empty rollback is supported; populated
 rollback refuses to discard history. Up/down require a transaction and five-second
 lock timeout, acquiring Camera before Region/history locks.
 
-Reference-bound polygon commands, historical policy resolution, worker ACK and
-physical camera-motion verification remain separate work. Roles and HTTP responses
-are unchanged. Apply this migration before running the updated writer; committing
-source does not change any website database.
+The reference-bound service commands `createReferenceRegion` and
+`updateReferencePolygon` require authenticated, current Site Manager authority.
+Under the existing command transaction, Camera then current-view locks protect
+the scoped reference, configuration/view counters and DB-clock expiry checks.
+The confirmer and confirmation time are server-owned. A fresh confirmation of
+identical coordinates still advances both counters and appends history; a stale
+reference cannot authorize a second save. Manual geometry confirmation does not
+confirm physical camera pose or worker application.
+
+Focused PostgreSQL coverage includes same-coordinate reconfirmation, separate
+expired/future-issued/stale/retired-view failures, same-site cross-camera denial,
+role/session rejection, concurrent saves and rollback after history failure.
+The tests use synthetic image adapters, not real camera verification.
+
+HTTP routes, confirmation response/read-reopen projection, client/FE activation,
+historical policy resolution, worker ACK and physical camera-motion verification
+remain separate work. Roles and HTTP responses are unchanged. Apply the migration
+before running the updated writer; committing source changes no website database.

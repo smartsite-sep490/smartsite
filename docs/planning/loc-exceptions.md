@@ -1,5 +1,17 @@
 # Scoped LOC exceptions
 
+## Reference-bound Region service commands, 26 October
+
+Root permits `apps/backend/src/modules/cameras/camera-configuration.service.ts`
+to grow from508 physical lines for two reference-bound entry points sharing the
+existing command transaction, camera lock, Zone rules and revision writer.
+Reference validation is extracted into `camera-region-reference-write.ts`.
+Owner: Root; independent service review: actual Agy p7. Splitting the existing
+mutation paths just for this addition would broaden the change and risk divergent
+authorization/rollback rules. Review extraction when integrating the remaining
+C03 HTTP/reader work; this does not authorize general growth. Focused tests and
+manual confirmation are not whole-flow, camera or production acceptance.
+
 ## Configuration-image client, 15 October
 
 `packages/api-client/src/management.ts` already exceeds500 lines. Root reviewed a
