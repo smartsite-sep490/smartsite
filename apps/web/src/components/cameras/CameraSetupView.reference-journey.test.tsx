@@ -9,6 +9,7 @@ import {
   CONFIGURATION_REFERENCE_LIFETIME_MS,
   SmartSiteManagementClient,
   type CameraConfigurationImageResponse,
+  type CameraConfigurationReferenceResponse,
   type Page,
 } from '@smartsite/api-client';
 import type { CameraResponse, RegionResponse, SiteResponse } from '@smartsite/contracts';
@@ -99,12 +100,12 @@ class MockReferenceImage {
 function buildCameraReferenceDto(
   camera: CameraResponse = secondActiveCamera,
   overrides: Partial<CameraConfigurationImageResponse> = {},
-): CameraConfigurationImageResponse {
+): CameraConfigurationReferenceResponse {
   const capturedAt = new Date(BASE_TIME_MS).toISOString();
   const referenceExpiresAt = new Date(
     BASE_TIME_MS + CONFIGURATION_REFERENCE_LIFETIME_MS,
   ).toISOString();
-  return {
+  const image: CameraConfigurationImageResponse = {
     schemaVersion: 1,
     purpose: 'REGION_CONFIGURATION',
     sourceKind: 'LIVE',
@@ -124,6 +125,27 @@ function buildCameraReferenceDto(
       imageSha256: 'a'.repeat(64),
       ...overrides.frame,
     },
+  };
+  return {
+    image,
+    reference: {
+      schemaVersion: '1.0.0',
+      purpose: 'REGION_CONFIGURATION',
+      sourceKind: image.sourceKind,
+      referenceId: 'a5555555-5555-4555-8555-55555555555a',
+      siteId: image.siteId,
+      cameraId: image.cameraId,
+      sessionId: image.frame.sessionId,
+      imageSha256: image.frame.imageSha256,
+      width: image.frame.width,
+      height: image.frame.height,
+      capturedAt: image.frame.capturedAt,
+      issuedAt: image.frame.capturedAt,
+      expiresAt: image.referenceExpiresAt,
+      configurationVersion: image.configurationVersion,
+      viewRevision: 1,
+    },
+    viewValidity: 'UNCONFIRMED',
   };
 }
 
@@ -403,7 +425,7 @@ describe('CameraSetupView -> ZonePpeSetupDialog -> ZonePpeCameraRegionPanel -> u
   it('opens Regions for the selected active camera row without auto-requesting an image, then fetches and renders the typed configuration reference on explicit click with no preview/AI calls', async () => {
     const user = userEvent.setup();
     const configImageSpy = vi
-      .spyOn(SmartSiteManagementClient.prototype, 'getCameraConfigurationImage')
+      .spyOn(SmartSiteManagementClient.prototype, 'getCameraConfigurationReference')
       .mockResolvedValue(buildCameraReferenceDto(secondActiveCamera));
     const listPreviewSpy = vi.spyOn(SmartSiteManagementClient.prototype, 'listPreviewCameras');
     const getPreviewSpy = vi.spyOn(SmartSiteManagementClient.prototype, 'getCameraPreview');
@@ -481,14 +503,14 @@ describe('CameraSetupView -> ZonePpeSetupDialog -> ZonePpeCameraRegionPanel -> u
 
   it('aborts an in-flight configuration image request and clears reference state on session rotation or logout without leaking late responses', async () => {
     const user = userEvent.setup();
-    let resolveLateReference!: (value: CameraConfigurationImageResponse) => void;
+    let resolveLateReference!: (value: CameraConfigurationReferenceResponse) => void;
     let capturedSignal: AbortSignal | undefined;
 
     const configImageSpy = vi
-      .spyOn(SmartSiteManagementClient.prototype, 'getCameraConfigurationImage')
+      .spyOn(SmartSiteManagementClient.prototype, 'getCameraConfigurationReference')
       .mockImplementation((_token, _siteId, _cameraId, options) => {
         capturedSignal = options?.signal;
-        return new Promise<CameraConfigurationImageResponse>((resolve) => {
+        return new Promise<CameraConfigurationReferenceResponse>((resolve) => {
           resolveLateReference = resolve;
         });
       });

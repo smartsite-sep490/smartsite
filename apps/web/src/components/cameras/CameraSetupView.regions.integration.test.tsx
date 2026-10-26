@@ -70,6 +70,7 @@ beforeEach(() => {
   for (const method of [
     'getCameraPreview',
     'getCameraConfigurationImage',
+    'getCameraConfigurationReference',
     'streamCameraVideo',
     'readRecordedCameraVideo',
     'getMf05DemoStatus',
@@ -109,6 +110,7 @@ function expectNoMediaWork() {
   for (const method of [
     'getCameraPreview',
     'getCameraConfigurationImage',
+    'getCameraConfigurationReference',
     'streamCameraVideo',
     'readRecordedCameraVideo',
     'getMf05DemoStatus',
