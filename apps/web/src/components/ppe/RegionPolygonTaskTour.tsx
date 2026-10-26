@@ -98,7 +98,7 @@ registerFeatureCatalog({
       'Use Undo, Reset, Delete Point, Zoom, Pan, or the X/Y inputs to fine-tune corners. Editing buttons lock while a save is in progress.',
     'tour.polygon.save.title': 'Save or Cancel',
     'tour.polygon.save.body':
-      'Click Save Region to store the boundary, or Cancel (or Esc) to close. Saving a region updates configuration only and does not mean live camera monitoring is active.',
+      'Review the drawn region against the reference image, tick the confirmation checkbox, then click Save Region (or Cancel / Esc to close). Any point edit or new reference image requires ticking confirmation again. Saving updates configuration only and does not mean live camera monitoring is active.',
   },
   vi: {
     'tour.polygon.reference.title': 'Kiểm tra Ảnh tham chiếu',
@@ -112,7 +112,7 @@ registerFeatureCatalog({
       'Dùng Hoàn tác, Đặt lại, Xóa điểm, Thu phóng, Kéo khung hoặc ô nhập X/Y để tinh chỉnh góc. Các nút chỉnh sửa sẽ khóa khi đang lưu.',
     'tour.polygon.save.title': 'Lưu hoặc Hủy',
     'tour.polygon.save.body':
-      'Nhấn Lưu vùng để lưu ranh giới, hoặc Hủy (hoặc Esc) để đóng. Lưu vùng chỉ cập nhật cấu hình, không đồng nghĩa giám sát camera trực tiếp đã hoạt động.',
+      'Kiểm tra vùng vừa vẽ khớp với ảnh tham chiếu, tích ô xác nhận rồi nhấn Lưu vùng (hoặc Hủy / Esc để đóng). Mọi chỉnh sửa điểm hoặc ảnh tham chiếu mới đều cần tích xác nhận lại. Lưu vùng chỉ cập nhật cấu hình, không đồng nghĩa giám sát camera trực tiếp đã hoạt động.',
   },
 });
 

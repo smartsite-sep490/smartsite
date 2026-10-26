@@ -222,12 +222,20 @@ describe('RegionPolygonTaskTour', () => {
     ] as const) {
       expectTourStep(stepId);
       expect(screen.getByText(title)).toBeTruthy();
+      if (isDone) {
+        expect(
+          screen.getByText(
+            /Review the drawn region against the reference image, tick the confirmation checkbox, then click Save Region.*Any point edit or new reference image requires ticking confirmation again/i,
+          ),
+        ).toBeTruthy();
+      }
       fireEvent.click(
         screen.getByTestId(isDone ? 'safety-task-tour-done' : 'safety-task-tour-next'),
       );
     }
     expect(screen.queryByTestId('safety-task-tour')).toBeNull();
     expect(trigger.textContent).toBe('Replay guide');
+    expect((screen.getByRole('checkbox') as HTMLInputElement).checked).toBe(false);
 
     expect(screen.getByText(/Points: 3 \/ 32/i)).toBeTruthy();
     for (const name of ['Vertex 1 (0.1, 0.1)', 'Vertex 2 (0.8, 0.1)', 'Vertex 3 (0.8, 0.8)']) {
@@ -408,6 +416,14 @@ describe('RegionPolygonTaskTour', () => {
     expect((screen.getByRole('button', { name: /Add Point/i }) as HTMLButtonElement).disabled).toBe(
       true,
     );
+    await act(async () => {
+      await i18n.changeLanguage('vi');
+    });
+    expect(
+      screen.getByText(
+        /Kiểm tra vùng vừa vẽ khớp với ảnh tham chiếu, tích ô xác nhận rồi nhấn Lưu vùng.*Mọi chỉnh sửa điểm hoặc ảnh tham chiếu mới đều cần tích xác nhận lại/i,
+      ),
+    ).toBeTruthy();
 
     await act(async () => {
       resolveSave({
