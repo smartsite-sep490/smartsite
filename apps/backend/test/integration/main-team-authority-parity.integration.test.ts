@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
 import { after, before, test } from 'node:test';
 import { createIsolatedTestDatabase } from '../support/isolated-test-database.js';
+import { reviewedReleaseMigrationNames } from '../support/reviewed-release-graph.js';
 import { teamArchiveFixture } from '../support/main-team-authority.fixture.js';
 import { sealMainAuthorityArchive } from '../../src/modules/zones/main-authority-archive-codec.js';
 import { projectMainArchivedPermissions } from '../../src/modules/zones/main-archived-permission-projection.js';
@@ -18,10 +19,16 @@ before(async () => {
     'SELECT current_schema() AS schema,(SELECT count(*)::int FROM migrations) AS migrations',
   );
   assert.match(actual!.schema, /^isolated_test_[a-f0-9]{32}$/);
+  const expected = reviewedReleaseMigrationNames(db.migrations);
   assert.equal(
     actual!.migrations,
-    77,
+    expected.length,
     'Parity fixture must use the current canonical release graph',
+  );
+  const installed: { name: string }[] = await db.query('SELECT name FROM migrations ORDER BY id');
+  assert.deepEqual(
+    installed.map((row) => row.name),
+    [...expected].sort((a, b) => Number(a.slice(-13)) - Number(b.slice(-13))),
   );
 });
 after(async () => {
