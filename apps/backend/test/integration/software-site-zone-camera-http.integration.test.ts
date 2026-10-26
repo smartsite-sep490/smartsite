@@ -19,6 +19,7 @@ import { UsersService } from '../../src/modules/users/users.service.js';
 import { SiteConfigurationService } from '../../src/modules/sites/site-configuration.service.js';
 import { UserRole } from '../../src/database/entities/user.entity.js';
 import { createIsolatedTestDatabase } from '../support/isolated-test-database.js';
+import { provisionCameraWorkerGeneration } from '../../src/modules/cameras/camera-worker-generations.js';
 import {
   CameraConfigurationReferenceEntity,
   CameraViewRevisionEntity,
@@ -440,6 +441,7 @@ test('software-only AppModule supports Site, scoped Zone and Camera metadata wit
     const bundle = (await bundleResponse.json()) as {
       configurationVersion: number;
       bundleSha256: string;
+      viewRevision: number;
       regions: unknown[];
     };
     assert.equal(bundle.configurationVersion, latest.configurationVersion);
@@ -451,6 +453,49 @@ test('software-only AppModule supports Site, scoped Zone and Camera metadata wit
         headers: { Authorization: `Bearer ${serviceToken}`, 'If-None-Match': etag },
       });
     assert.equal((await cached()).status, 304);
+    const generation = await provisionCameraWorkerGeneration(
+      database.dataSource,
+      camera.id,
+      environment.AI_CONFIGURATION_CAMERA_IDS,
+      60000,
+    );
+    const ackBody = {
+      commandId: randomUUID(),
+      workerGenerationId: generation.workerGenerationId,
+      streamSessionId: generation.streamSessionId,
+      configurationVersion: bundle.configurationVersion,
+      bundleSha256: bundle.bundleSha256,
+      viewRevision: bundle.viewRevision,
+      outcome: 'LOADED',
+    };
+    const acknowledge = () =>
+      fetch(`${url}/api/v1/integrations/ai/cameras/${camera.id}/configuration-ack`, {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${serviceToken}`,
+          'Content-Type': 'application/json',
+          'x-worker-generation-secret': generation.secret,
+        },
+        body: JSON.stringify(ackBody),
+      });
+    const receipt = await acknowledge();
+    assert.equal(receipt.status, 200);
+    assert.equal(receipt.headers.get('cache-control'), 'no-store');
+    assert.equal(((await receipt.json()) as { replayed: boolean }).replayed, false);
+    const replay = await acknowledge();
+    assert.equal(replay.status, 200);
+    assert.equal(((await replay.json()) as { replayed: boolean }).replayed, true);
+    assert.equal(
+      Number(
+        (
+          await database.dataSource.query(
+            'SELECT count(*) AS count FROM camera_configuration_application_receipt WHERE camera_id=$1',
+            [camera.id],
+          )
+        )[0].count,
+      ),
+      1,
+    );
     const inactive = await request(
       'PATCH',
       `/sites/${site.id}/cameras/${camera.id}/status`,
@@ -459,6 +504,7 @@ test('software-only AppModule supports Site, scoped Zone and Camera metadata wit
     );
     assert.equal(inactive.status, 200);
     assert.equal((await cached()).status, 409);
+    assert.equal((await acknowledge()).status, 409);
     const logout = await request('POST', '/auth/logout', {
       clientType: 'MOBILE',
       refreshToken: manager.refreshToken,

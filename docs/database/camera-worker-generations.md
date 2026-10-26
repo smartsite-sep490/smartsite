@@ -35,10 +35,11 @@ only a SHA-256 digest is stored, and the plaintext is returned once to the trust
 caller. Never expose these functions as shared-token self-enrollment or a business
 user endpoint, place their secret in a URL, or log/return it to the Web app.
 
-This slice has no deployment CLI, ACK recorder/HTTP handler, application-status
-reader, heartbeat renewal or worker launcher integration. Those consumers must
-enforce current generation/session/expiry before replay, validate the exact issued
-bundle and reject receipt regression. GET/304 and these storage tables cannot
+The [ACK recorder and HTTP handler](../operations/camera-configuration-ack-api.md)
+now enforce current generation/session/expiry before replay, validate the exact issued
+bundle and reject receipt regression within that generation. A deployment CLI,
+application-status reader, heartbeat renewal and worker launcher integration
+remain separate work. GET/304 and these storage tables cannot
 produce a truthful `LOADED` badge by themselves. Physical pose, camera/model health
 and production acceptance remain separate gates. Test schemas are isolated on 5433;
 this migration has not changed the website, cloud or production database.

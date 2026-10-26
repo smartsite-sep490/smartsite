@@ -2,6 +2,7 @@ import { mainSiteManagerAuthorization } from '../../common/configuration/main-si
 import { randomUUID } from 'node:crypto';
 import { recordCameraConfigurationBundle } from './camera-configuration-bundles.js';
 import { readIssuedCameraConfigurationBundle } from './camera-configuration-bundle-reader.js';
+import { recordCameraConfigurationAcknowledgement } from './camera-configuration-acknowledgement.js';
 import { readCameraObservationZones } from './camera-observation-zones.query.js';
 import {
   recordRegionRevision,
@@ -320,6 +321,10 @@ export class CameraConfigurationService {
 
   async readConfigurationBundleForCamera(cameraId: string) {
     return readIssuedCameraConfigurationBundle(this.dataSource, uuid(cameraId).toLowerCase());
+  }
+
+  async acknowledgeConfigurationForCamera(cameraId: string, secret: string, input: unknown) {
+    return recordCameraConfigurationAcknowledgement(this.dataSource, cameraId, secret, input);
   }
 
   async setStatus(
