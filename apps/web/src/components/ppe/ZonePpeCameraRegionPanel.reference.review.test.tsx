@@ -17,6 +17,7 @@ import {
   addTriangleViaInputs,
   baseCamera,
   buildCanonicalReference,
+  confirmReferenceViewCheckbox,
   installReferencePanelDomPolyfills,
   renderReferencePanel,
   stubCameraAndRegionPages,
@@ -156,6 +157,7 @@ describe('ZonePpeCameraRegionPanel Configuration Reference Review & Negative Jou
 
     await user.click(await screen.findByRole('button', { name: /Start Drawing Region/i }));
     await addTriangleViaInputs(user);
+    await confirmReferenceViewCheckbox(user);
 
     // 60s elapsed: frozen draft reference (expires at +300s) is still valid when candidate request fails with 503
     vi.mocked(Date.now).mockReturnValue(BASE_TIME_MS + 60_000);
@@ -193,6 +195,7 @@ describe('ZonePpeCameraRegionPanel Configuration Reference Review & Negative Jou
 
     await user.click(await screen.findByRole('button', { name: /Start Drawing Region/i }));
     await addTriangleViaInputs(user);
+    await confirmReferenceViewCheckbox(user);
 
     // Candidate v4 has a 60s remaining lifetime (expires at 09:01:00Z, before frozen v3 at 09:05:00Z)
     refHookState.requestImpl = async () => {
@@ -246,6 +249,7 @@ describe('ZonePpeCameraRegionPanel Configuration Reference Review & Negative Jou
 
     await user.click(await screen.findByRole('button', { name: /Start Drawing Region/i }));
     await addTriangleViaInputs(user);
+    await confirmReferenceViewCheckbox(user);
 
     vi.mocked(Date.now).mockReturnValue(BASE_TIME_MS + 30_000);
     refHookState.requestImpl = async () => {
@@ -266,6 +270,7 @@ describe('ZonePpeCameraRegionPanel Configuration Reference Review & Negative Jou
     ).not.toBeNull();
     expect(screen.getByText(/Points: 3 \/ 32/i)).toBeDefined();
 
+    await confirmReferenceViewCheckbox(user);
     await user.click(screen.getByRole('button', { name: /Save Region/i }));
     expect(getCameraSpy).toHaveBeenCalledWith(
       'admin-jwt-token',
@@ -305,7 +310,9 @@ describe('ZonePpeCameraRegionPanel Configuration Reference Review & Negative Jou
 
     await user.click(await screen.findByRole('button', { name: /Start Drawing Region/i }));
     await addTriangleViaInputs(user);
+    await confirmReferenceViewCheckbox(user);
 
+    await confirmReferenceViewCheckbox(user);
     await user.click(screen.getByRole('button', { name: /Save Region/i }));
 
     expect((await screen.findByRole('alert')).textContent).toMatch(
@@ -381,6 +388,7 @@ describe('ZonePpeCameraRegionPanel Configuration Reference Review & Negative Jou
         screen.getByLabelText(/Candidate Reference Preview Canvas/i).querySelector('image'),
       ).not.toBeNull();
 
+      await confirmReferenceViewCheckbox(user);
       await user.click(screen.getByRole('button', { name: /Save Region/i }));
 
       expect(await screen.findByRole('alert')).toBeDefined();

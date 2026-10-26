@@ -26,6 +26,7 @@ export interface RegionPolygonCanvasEditorProps {
   };
   isImageStale: boolean;
   isSaving: boolean;
+  canSave?: boolean;
   onChangePoints: (next: NormalizedPoint[]) => void;
   onValidationError: (errorKey: TranslationKey | null) => void;
   onClearServerError?: () => void;
@@ -41,6 +42,7 @@ export function RegionPolygonCanvasEditor({
   frame,
   isImageStale,
   isSaving,
+  canSave = true,
   onChangePoints,
   onValidationError,
   onClearServerError,
@@ -415,6 +417,7 @@ export function RegionPolygonCanvasEditor({
         pointsCount={points.length}
         isSaving={isSaving}
         isImageStale={isImageStale}
+        canSave={canSave}
         onRequestCancel={handleRequestCancel}
         onSaveRegion={onSaveRegion}
       />

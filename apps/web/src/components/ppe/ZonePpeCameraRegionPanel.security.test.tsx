@@ -180,6 +180,7 @@ it('cancels old credential camera-detail read before any region POST after scope
   const post = vi.spyOn(SmartSiteManagementClient.prototype, 'createReferenceRegion');
   const { rerender } = render(view());
   await draw();
+  fireEvent.click(screen.getByRole('checkbox'));
   fireEvent.click(screen.getByRole('button', { name: /Save Region/i }));
   await waitFor(() => expect(resolveDetail).toBeDefined());
   rerender(view('token-b', 2));
@@ -209,6 +210,7 @@ it('does not reuse frozen pixels or finish an old POST when token rotates with u
   const post = vi.spyOn(SmartSiteManagementClient.prototype, 'createReferenceRegion');
   const { rerender } = render(view());
   await draw();
+  fireEvent.click(screen.getByRole('checkbox'));
   fireEvent.click(screen.getByRole('button', { name: /Save Region/i }));
   await waitFor(() => expect(resolveDetail).toBeDefined());
   rerender(view('token-b', 1));
@@ -255,11 +257,13 @@ it('clears success and scopes duplicate prevention to the selected Zone', async 
     }));
   render(view());
   await draw();
+  fireEvent.click(screen.getByRole('checkbox'));
   fireEvent.click(screen.getByRole('button', { name: /Save Region/i }));
   await screen.findByText(/Saved region/i);
   fireEvent.change(screen.getByLabelText(/Select Zone/i), { target: { value: 'zone-b' } });
   expect(screen.queryByText(/Saved region/i)).toBeNull();
   await draw();
+  fireEvent.click(screen.getByRole('checkbox'));
   fireEvent.click(screen.getByRole('button', { name: /Save Region/i }));
   await waitFor(() => expect(post).toHaveBeenCalledTimes(2));
 });
@@ -272,6 +276,7 @@ it('rejects wrong-site fresh camera metadata before POST even when initial list 
   const post = vi.spyOn(SmartSiteManagementClient.prototype, 'createReferenceRegion');
   render(view());
   await draw();
+  fireEvent.click(screen.getByRole('checkbox'));
   fireEvent.click(screen.getByRole('button', { name: /Save Region/i }));
   await waitFor(() => expect(SmartSiteManagementClient.prototype.getCamera).toHaveBeenCalled());
   await act(async () => {});
@@ -310,6 +315,7 @@ it('uses the actual offset and scaled image surface to save normalized polygon c
     });
   render(view());
   await draw();
+  fireEvent.click(screen.getByRole('checkbox'));
   fireEvent.click(screen.getByRole('button', { name: /Save Region/i }));
   await waitFor(() => expect(post).toHaveBeenCalled());
   expect(post).toHaveBeenCalledWith(
@@ -352,6 +358,7 @@ it.each(['private-service-canary', 'Polygon private-service-canary'])(
     );
     render(view());
     await draw();
+    fireEvent.click(screen.getByRole('checkbox'));
     fireEvent.click(screen.getByRole('button', { name: /Save Region/i }));
     await waitFor(() => expect(screen.getAllByRole('alert').length).toBeGreaterThan(0));
     expect(screen.queryByText(/private-service-canary/)).toBeNull();

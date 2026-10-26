@@ -98,5 +98,8 @@ metadata remains unconfirmed; malformed present metadata is unavailable. Optiona
 details show the reference/view/time without exposing the raw actor UUID. These
 labels do not mean the camera or monitoring is ready. A freshly accepted reference
 can reconfirm unchanged coordinates; repeating a save on the old reference stays
-blocked. The explicit authoring-confirmation checkbox from C03 remains a separate
-open UI gate; these source changes do not close the full configuration journey.
+blocked. Saving also requires an initially unchecked confirmation that the drawn
+region matches the frozen image. Any geometry edit (including Undo back to the
+same coordinates) or accepted replacement image clears that confirmation. Pending,
+expired or wrong-scope references cannot be confirmed or saved. This is operator
+authoring consent, not physical camera-pose or worker-application proof.

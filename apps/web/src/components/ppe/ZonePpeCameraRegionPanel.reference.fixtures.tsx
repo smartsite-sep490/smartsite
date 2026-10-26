@@ -212,6 +212,17 @@ export async function addTriangleViaInputs(
   }
 }
 
+export async function confirmReferenceViewCheckbox(
+  user: ReturnType<typeof userEvent.setup>,
+): Promise<void> {
+  const checkbox = screen.getByRole('checkbox', {
+    name: /I checked that the drawn region matches this reference image|Tôi đã kiểm tra vùng vừa vẽ khớp với ảnh tham chiếu này/i,
+  }) as HTMLInputElement;
+  if (!checkbox.checked) {
+    await user.click(checkbox);
+  }
+}
+
 export function stubRegionMutationSpies(onCreated?: () => void) {
   const createSpy = vi
     .spyOn(SmartSiteManagementClient.prototype, 'createReferenceRegion')

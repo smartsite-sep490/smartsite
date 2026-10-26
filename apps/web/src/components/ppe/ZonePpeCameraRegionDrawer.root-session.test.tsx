@@ -162,6 +162,8 @@ function mount() {
 function submit() {
   fireEvent.click(screen.getByText('Fixture polygon'));
   fireEvent.click(screen.getByText('Fixture save'));
+  fireEvent.click(screen.getByRole('checkbox'));
+  fireEvent.click(screen.getByText('Fixture save'));
 }
 
 it('uses the owning client for one authenticated retry with unchanged polygon and revision', async () => {

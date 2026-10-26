@@ -13,9 +13,11 @@ import { useLocale, type TranslationKey } from '../../i18n/ppe-locale';
 import { CameraRegionCandidateReviewPanel } from './CameraRegionReferenceControls';
 import { RegionPolygonCanvasEditor } from './RegionPolygonCanvasEditor';
 import { RegionPolygonTaskTour } from './RegionPolygonTaskTour';
+import { RegionReferenceViewConsentCheckbox } from './RegionReferenceViewConsentCheckbox';
 import {
   LocalRegionValidationError,
   type EditingRegionScope,
+  getConfigurationReferenceIdentity,
   isConfigurationReferenceExpiredAt,
   isConfigurationReferenceScopeMatched,
   useConfigurationReferenceExpired,
@@ -123,6 +125,7 @@ function ZonePpeCameraRegionDrawerContent(
   const [draftPoints, setDraftPoints] = useState<NormalizedPoint[]>(() =>
     initialPoints.map(([x, y]) => [x, y]),
   );
+  const [confirmedConsentKey, setConfirmedConsentKey] = useState<string | null>(null);
   const [validationErrorKey, setValidationErrorKey] = useState<TranslationKey | null>(null);
   const [serverErrorKey, setServerErrorKey] = useState<TranslationKey | null>(null);
 
@@ -131,6 +134,17 @@ function ZonePpeCameraRegionDrawerContent(
 
   const isReferenceExpired = useConfigurationReferenceExpired(frozenReference);
   const isCandidateExpired = useConfigurationReferenceExpired(candidateReference);
+  const currentDraftKey = JSON.stringify(draftPoints);
+  const currentConsentBindingKey = `${getConfigurationReferenceIdentity(frozenReference)}::${currentDraftKey}`;
+  const isReferenceScopeValid = isConfigurationReferenceScopeMatched(
+    frozenReference,
+    siteId,
+    selectedCamera,
+  );
+  const isReferenceViewConfirmed =
+    !isReferenceExpired &&
+    isReferenceScopeValid &&
+    confirmedConsentKey === currentConsentBindingKey;
 
   const isMountedRef = useRef(true);
   const abortControllerRef = useRef<AbortController | null>(null);
@@ -149,7 +163,8 @@ function ZonePpeCameraRegionDrawerContent(
     mutationFn: async (submittedPoints: NormalizedPoint[]) => {
       const geoErrorKey = validatePolygonGeometry(submittedPoints);
       if (geoErrorKey) throw new LocalRegionValidationError(geoErrorKey);
-      if (JSON.stringify(submittedPoints) === lastSavedDraft) {
+      const submittedDraftKey = JSON.stringify(submittedPoints);
+      if (submittedDraftKey === lastSavedDraft) {
         throw new LocalRegionValidationError('regionSetup.validation.alreadySaved');
       }
       if (
@@ -158,6 +173,11 @@ function ZonePpeCameraRegionDrawerContent(
       ) {
         throw new LocalRegionValidationError('regionSetup.error.referenceExpired');
       }
+      const submittedConsentKey = `${getConfigurationReferenceIdentity(frozenReference)}::${submittedDraftKey}`;
+      if (!isReferenceViewConfirmed || confirmedConsentKey !== submittedConsentKey) {
+        throw new LocalRegionValidationError('regionSetup.error.saveDefault');
+      }
+      const confirmReferenceView: true = isReferenceViewConfirmed;
 
       const controller = new AbortController();
       abortControllerRef.current = controller;
@@ -199,7 +219,7 @@ function ZonePpeCameraRegionDrawerContent(
         expectedConfigurationVersion,
         referenceId: frozenReference.issuedReference.referenceId,
         viewRevision: frozenReference.issuedReference.viewRevision,
-        confirmReferenceView: true as const,
+        confirmReferenceView,
         polygon: { coordinates: submittedPoints },
       };
       if (editingRegion) {
@@ -269,6 +289,11 @@ function ZonePpeCameraRegionDrawerContent(
     },
   });
 
+  const handleDraftPointsChange = (nextPoints: NormalizedPoint[]) => {
+    setConfirmedConsentKey(null);
+    setDraftPoints(nextPoints);
+  };
+
   const handleSaveRegion = () => {
     if (createRegionMutation.isPending) return;
     if (
@@ -279,9 +304,10 @@ function ZonePpeCameraRegionDrawerContent(
     }
     const geoErrorKey = validatePolygonGeometry(draftPoints);
     if (geoErrorKey) return setValidationErrorKey(geoErrorKey);
-    if (JSON.stringify(draftPoints) === lastSavedDraft) {
+    if (currentDraftKey === lastSavedDraft) {
       return setValidationErrorKey('regionSetup.validation.alreadySaved');
     }
+    if (!isReferenceViewConfirmed) return;
     setValidationErrorKey(null);
     setServerErrorKey(null);
     createRegionMutation.mutate(draftPoints.map(([x, y]) => [x, y]));
@@ -296,13 +322,13 @@ function ZonePpeCameraRegionDrawerContent(
     ) {
       return;
     }
+    setConfirmedConsentKey(null);
     setValidationErrorKey(null);
     setServerErrorKey(null);
     props.onAcceptCandidateReference(candidateReference);
   };
 
   const { width, height, imageDataUrl } = frozenReference.frame;
-  const currentDraftKey = JSON.stringify(draftPoints);
   const isDirty =
     currentDraftKey !== JSON.stringify(initialPoints) && currentDraftKey !== lastSavedDraft;
   useEffect(() => {
@@ -313,6 +339,8 @@ function ZonePpeCameraRegionDrawerContent(
     () => ({ width, height, imageDataUrl }),
     [height, imageDataUrl, width],
   );
+  const isConsentDisabled =
+    createRegionMutation.isPending || isReferenceExpired || !isReferenceScopeValid;
 
   return (
     <div data-tour-anchor="polygon-frozen-reference" className="space-y-3">
@@ -358,6 +386,20 @@ function ZonePpeCameraRegionDrawerContent(
           <span>{serverError}</span>
         </div>
       )}
+      <RegionReferenceViewConsentCheckbox
+        checked={isReferenceViewConfirmed}
+        disabled={isConsentDisabled}
+        onCheckedChange={(nextChecked) => {
+          if (
+            createRegionMutation.isPending ||
+            isConfigurationReferenceExpiredAt(frozenReference, Date.now()) ||
+            !isReferenceScopeValid
+          ) {
+            return;
+          }
+          setConfirmedConsentKey(nextChecked ? currentConsentBindingKey : null);
+        }}
+      />
       <RegionPolygonCanvasEditor
         points={draftPoints}
         initialPoints={initialPoints}
@@ -368,7 +410,8 @@ function ZonePpeCameraRegionDrawerContent(
         frame={canvasFrame}
         isImageStale={isReferenceExpired}
         isSaving={createRegionMutation.isPending}
-        onChangePoints={setDraftPoints}
+        canSave={isReferenceViewConfirmed}
+        onChangePoints={handleDraftPointsChange}
         onValidationError={setValidationErrorKey}
         onClearServerError={() => setServerErrorKey(null)}
         onSaveRegion={handleSaveRegion}

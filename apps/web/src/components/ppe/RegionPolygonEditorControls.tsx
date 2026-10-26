@@ -290,6 +290,7 @@ export interface RegionPolygonEditorFooterProps {
   pointsCount: number;
   isSaving: boolean;
   isImageStale?: boolean;
+  canSave?: boolean;
   onRequestCancel: () => void;
   onSaveRegion: () => void;
 }
@@ -298,6 +299,7 @@ export function RegionPolygonEditorFooter({
   pointsCount,
   isSaving,
   isImageStale = false,
+  canSave = true,
   onRequestCancel,
   onSaveRegion,
 }: RegionPolygonEditorFooterProps) {
@@ -331,7 +333,7 @@ export function RegionPolygonEditorFooter({
         <button
           type="button"
           onClick={onSaveRegion}
-          disabled={pointsCount < 3 || isSaving || isImageStale}
+          disabled={pointsCount < 3 || isSaving || isImageStale || !canSave}
           className="rounded-xl bg-[#0F172A] px-4 py-2 text-xs font-semibold text-white hover:bg-slate-800 transition-colors cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed flex items-center gap-1.5 shadow-xs focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#0F172A]"
         >
           {isSaving ? (

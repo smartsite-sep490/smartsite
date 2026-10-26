@@ -21,6 +21,7 @@ import {
   addTriangleViaInputs,
   baseCamera,
   buildCanonicalReference,
+  confirmReferenceViewCheckbox,
   existingRegionFixture,
   installReferencePanelDomPolyfills,
   mockZones,
@@ -147,6 +148,7 @@ describe('ZonePpeCameraRegionPanel Configuration Reference 404 Scope Recovery vs
       screen.getByLabelText(/Camera Region Drawing Canvas/i).querySelector('image'),
     ).not.toBeNull();
 
+    await confirmReferenceViewCheckbox(user);
     await user.click(screen.getByRole('button', { name: /Save Region/i }));
 
     expect(await screen.findByRole('alert')).toBeDefined();
@@ -241,6 +243,7 @@ describe('ZonePpeCameraRegionPanel Configuration Reference 404 Scope Recovery vs
       screen.getByLabelText(/Camera Region Drawing Canvas/i).querySelector('image'),
     ).not.toBeNull();
     await addTriangleViaInputs(user);
+    await confirmReferenceViewCheckbox(user);
     await user.click(screen.getByRole('button', { name: /Save Region/i }));
 
     expect(createSpy).toHaveBeenCalledTimes(2);
@@ -299,6 +302,7 @@ describe('ZonePpeCameraRegionPanel Configuration Reference 404 Scope Recovery vs
 
     await user.click(await screen.findByRole('button', { name: /Edit Geometry/i }));
     await addPointViaInputs(user, '0.25', '0.75');
+    await confirmReferenceViewCheckbox(user);
     await user.click(screen.getByRole('button', { name: /Save Region/i }));
 
     expect(await screen.findByRole('alert')).toBeDefined();
@@ -390,6 +394,7 @@ describe('ZonePpeCameraRegionPanel Configuration Reference 404 Scope Recovery vs
 
       await user.click(await screen.findByRole('button', { name: /Start Drawing Region/i }));
       await addTriangleViaInputs(user);
+      await confirmReferenceViewCheckbox(user);
       await user.click(screen.getByRole('button', { name: /Save Region/i }));
 
       expect(await screen.findByRole('alert')).toBeDefined();

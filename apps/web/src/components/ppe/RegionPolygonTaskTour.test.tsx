@@ -397,6 +397,7 @@ describe('RegionPolygonTaskTour', () => {
     });
 
     addTriangle();
+    fireEvent.click(screen.getByRole('checkbox'));
     fireEvent.click(screen.getByRole('button', { name: /Save Region/i }));
     await waitFor(() => expect(resolveSave).toBeTypeOf('function'));
 

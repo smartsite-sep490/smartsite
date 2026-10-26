@@ -19,6 +19,7 @@ import type {
   UseCameraConfigurationReferenceResult,
 } from './useCameraConfigurationReference';
 import { ZonePpeCameraRegionPanel } from './ZonePpeCameraRegionPanel';
+import { confirmReferenceViewCheckbox } from './ZonePpeCameraRegionPanel.reference.fixtures';
 
 if (typeof globalThis.ResizeObserver !== 'function') {
   globalThis.ResizeObserver = class {
@@ -512,6 +513,7 @@ describe('ZonePpeCameraRegionPanel localization (vi/en)', () => {
     fireEvent.click(canvas, { clientX: 320, clientY: 48 });
     expect(screen.getByText('Số điểm: 3 / 32')).toBeDefined();
 
+    await confirmReferenceViewCheckbox(user);
     await user.click(screen.getByRole('button', { name: 'Lưu vùng quan sát' }));
     expect(
       await screen.findByText('Diện tích đa giác không được bằng 0 hoặc suy biến.'),
@@ -534,6 +536,7 @@ describe('ZonePpeCameraRegionPanel localization (vi/en)', () => {
     });
     fireEvent.click(screen.getByText('switch-vi'));
 
+    await confirmReferenceViewCheckbox(user);
     const saveBtnVi = await screen.findByRole('button', { name: 'Lưu vùng quan sát' });
     await user.click(saveBtnVi);
 
@@ -597,6 +600,7 @@ describe('ZonePpeCameraRegionPanel localization (vi/en)', () => {
     fireEvent.click(canvas, { clientX: 512, clientY: 48 });
     fireEvent.click(canvas, { clientX: 512, clientY: 384 });
 
+    await confirmReferenceViewCheckbox(user);
     await user.click(screen.getByRole('button', { name: 'Lưu vùng quan sát' }));
 
     expect(
@@ -686,6 +690,7 @@ describe('ZonePpeCameraRegionPanel localization (vi/en)', () => {
     fireEvent.click(canvas, { clientX: 512, clientY: 48 });
     fireEvent.click(canvas, { clientX: 512, clientY: 384 });
 
+    await confirmReferenceViewCheckbox(user);
     await user.click(screen.getByRole('button', { name: 'Lưu vùng quan sát' }));
 
     expect(await screen.findByText('Bạn không có quyền thực hiện thao tác này.')).toBeDefined();

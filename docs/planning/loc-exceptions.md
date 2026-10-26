@@ -354,3 +354,12 @@ retaining old-reference duplicate rejection and new-reference confirmation.
 This scoped exception does not authorize unrelated panel growth, worker ACK,
 physical camera pose or production acceptance. Before more panel behavior, extract
 the cohesive Region-list/editor boundary rather than expanding the monolith.
+
+## Explicit reference-view consent, 27 October
+
+The existing Drawer receives the scoped C03 consent state, dual pre-network save
+checks and reset on geometry edit/candidate acceptance. The new checkbox stays
+below 100 lines; Canvas/Footer receive only an optional canSave flag. Existing
+large caller fixtures gain explicit checkbox interaction without removed assertions
+or unrelated refactors. This exception does not permit broader panel growth or
+claim worker application, physical pose, browser rendering or production acceptance.

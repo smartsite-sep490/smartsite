@@ -17,6 +17,7 @@ import type {
 } from '@smartsite/api-client';
 import type { CameraResponse, RegionResponse } from '@smartsite/contracts';
 import { ZonePpeCameraRegionPanel } from './ZonePpeCameraRegionPanel';
+import { confirmReferenceViewCheckbox } from './ZonePpeCameraRegionPanel.reference.fixtures';
 import { PpeDialog } from './PpeDialog';
 import type {
   CameraConfigurationReference,
@@ -595,6 +596,7 @@ describe('ZonePpeCameraRegionPanel (MF05 Camera-Region Linking - Corrected Suite
     // 4C: Zero degenerate area (collinear points with area = 0) -> rejected (zero degenerate only)
     fireEvent.click(svgCanvas, { clientX: 300, clientY: 100 });
     expect(screen.getByText(/Points: 3 \/ 32/i)).toBeDefined();
+    await confirmReferenceViewCheckbox(user);
     await user.click(saveBtn);
     expect(await screen.findByText(/Polygon area must not be zero or degenerate/i)).toBeDefined();
     expect(createRegionSpy).not.toHaveBeenCalled();
@@ -609,6 +611,7 @@ describe('ZonePpeCameraRegionPanel (MF05 Camera-Region Linking - Corrected Suite
     fireEvent.click(svgCanvas, { clientX: 384, clientY: 48 });
     expect(screen.getByText(/Points: 4 \/ 32/i)).toBeDefined();
 
+    await confirmReferenceViewCheckbox(user);
     await user.click(saveBtn);
     expect(
       await screen.findByText(/Polygon edges must not self-intersect or overlap/i),
@@ -733,6 +736,7 @@ describe('ZonePpeCameraRegionPanel (MF05 Camera-Region Linking - Corrected Suite
     fireEvent.click(svgCanvas, { clientX: 512, clientY: 48 });
     fireEvent.click(svgCanvas, { clientX: 512, clientY: 384 });
 
+    await confirmReferenceViewCheckbox(user);
     const saveBtn = screen.getByRole('button', { name: /Save Region/i });
     await user.click(saveBtn);
 
@@ -852,6 +856,7 @@ describe('ZonePpeCameraRegionPanel (MF05 Camera-Region Linking - Corrected Suite
     fireEvent.click(svgCanvas, { clientX: 512, clientY: 48 });
     fireEvent.click(svgCanvas, { clientX: 512, clientY: 384 });
 
+    await confirmReferenceViewCheckbox(user);
     const saveBtn = screen.getByRole('button', { name: /Save Region/i });
     await user.click(saveBtn);
 
@@ -859,6 +864,7 @@ describe('ZonePpeCameraRegionPanel (MF05 Camera-Region Linking - Corrected Suite
 
     // Save second time with same draft points -> blocked
     await screen.findByText(/Saved region "reg-dup" \(v1\)/i);
+    await confirmReferenceViewCheckbox(user);
     await user.click(screen.getByRole('button', { name: /Save Region/i }));
     expect(await screen.findByText(/This polygon draft has already been saved/i)).toBeDefined();
     expect(createRegionSpy).toHaveBeenCalledTimes(1);
@@ -899,6 +905,7 @@ describe('ZonePpeCameraRegionPanel (MF05 Camera-Region Linking - Corrected Suite
     fireEvent.click(svgCanvas, { clientX: 512, clientY: 48 });
     fireEvent.click(svgCanvas, { clientX: 512, clientY: 384 });
 
+    await confirmReferenceViewCheckbox(user);
     const saveBtn = screen.getByRole('button', { name: /Save Region/i });
     await user.click(saveBtn);
 
@@ -1019,6 +1026,7 @@ describe('ZonePpeCameraRegionPanel (MF05 Camera-Region Linking - Corrected Suite
     ).toBeDefined();
 
     // User can still save region against the unexpired frozen reference
+    await confirmReferenceViewCheckbox(user);
     const saveBtn = screen.getByRole('button', { name: /Save Region/i });
     expect((saveBtn as HTMLButtonElement).disabled).toBe(false);
     await user.click(saveBtn);
@@ -1058,6 +1066,7 @@ describe('ZonePpeCameraRegionPanel (MF05 Camera-Region Linking - Corrected Suite
     fireEvent.click(svgCanvas, { clientX: 512, clientY: 48 });
     fireEvent.click(svgCanvas, { clientX: 512, clientY: 384 });
 
+    await confirmReferenceViewCheckbox(user);
     const saveBtn = screen.getByRole('button', { name: /Save Region/i });
     await user.click(saveBtn);
 
@@ -1112,6 +1121,7 @@ describe('ZonePpeCameraRegionPanel (MF05 Camera-Region Linking - Corrected Suite
       fireEvent.click(svgCanvas, { clientX: 64, clientY: 48 });
       fireEvent.click(svgCanvas, { clientX: 512, clientY: 48 });
       fireEvent.click(svgCanvas, { clientX: 512, clientY: 384 });
+      await confirmReferenceViewCheckbox(user);
 
       return {
         saveBtn: screen.getByRole('button', { name: /Save Region/i }),
@@ -1362,6 +1372,7 @@ describe('ZonePpeCameraRegionPanel (MF05 Camera-Region Linking - Corrected Suite
     fireEvent.click(svgCanvas, { clientX: 512, clientY: 48 });
     fireEvent.click(svgCanvas, { clientX: 512, clientY: 384 });
     expect(screen.getByText(/Points: 3 \/ 32/i)).toBeDefined();
+    await confirmReferenceViewCheckbox(user);
 
     // Still valid after 10s (beyond 5s monitoring preview TTL, within 5-minute referenceExpiresAt)
     act(() => {
@@ -1477,6 +1488,7 @@ describe('ZonePpeCameraRegionPanel (MF05 Camera-Region Linking - Corrected Suite
     fireEvent.click(svgCanvas, { clientX: 512, clientY: 48 });
     fireEvent.click(svgCanvas, { clientX: 512, clientY: 384 });
 
+    await confirmReferenceViewCheckbox(user);
     const saveBtn = screen.getByRole('button', { name: /Save Region/i });
     await user.click(saveBtn);
 
@@ -1588,6 +1600,7 @@ describe('ZonePpeCameraRegionPanel (MF05 Camera-Region Linking - Corrected Suite
     updatePolygonSpy.mockRejectedValueOnce(
       new ApiError('http', 'Configuration version conflict', 409),
     );
+    await confirmReferenceViewCheckbox(user);
     const saveBtn = screen.getByRole('button', { name: /Save Region/i });
     await user.click(saveBtn);
 
@@ -1709,6 +1722,7 @@ describe('ZonePpeCameraRegionPanel (MF05 Camera-Region Linking - Corrected Suite
     fireEvent.keyDown(vertex1, { key: 'ArrowRight', shiftKey: true });
     expect(vertex1.getAttribute('cx')).toBe('73.984');
 
+    await confirmReferenceViewCheckbox(user);
     const saveBtn = screen.getByRole('button', { name: /Save Region/i });
     await user.click(saveBtn);
 
@@ -1787,6 +1801,7 @@ describe('ZonePpeCameraRegionPanel (MF05 Camera-Region Linking - Corrected Suite
     fireEvent.keyDown(vertex1, { key: 'ArrowRight', shiftKey: true });
     expect(vertex1.getAttribute('cx')).toBe('73.984');
 
+    await confirmReferenceViewCheckbox(user);
     const saveBtn = screen.getByRole('button', { name: /Save Region/i });
     await user.click(saveBtn);
 
@@ -1895,6 +1910,7 @@ describe('ZonePpeCameraRegionPanel (MF05 Camera-Region Linking - Corrected Suite
     fireEvent.click(svgCanvas, { clientX: 512, clientY: 48 });
     fireEvent.click(svgCanvas, { clientX: 512, clientY: 384 });
 
+    await confirmReferenceViewCheckbox(user);
     await user.click(screen.getByRole('button', { name: /Save Region/i }));
     expect(await screen.findByText(/Saved region "reg-zone-1-saved" \(v1\)/i)).toBeDefined();
     await waitFor(() => {
@@ -1908,6 +1924,7 @@ describe('ZonePpeCameraRegionPanel (MF05 Camera-Region Linking - Corrected Suite
     const vertex1 = screen.getByRole('button', { name: /Vertex 1/i });
     act(() => vertex1.focus());
     fireEvent.keyDown(vertex1, { key: 'ArrowRight', shiftKey: true });
+    await confirmReferenceViewCheckbox(user);
     await user.click(screen.getByRole('button', { name: /Save Region/i }));
     expect(
       await screen.findByText(/Configuration version conflict\. Camera configuration was updated/i),

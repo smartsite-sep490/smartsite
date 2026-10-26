@@ -26,6 +26,7 @@ import {
   addTriangleViaInputs,
   baseCamera,
   buildCanonicalReference,
+  confirmReferenceViewCheckbox,
   existingRegionFixture,
   installReferencePanelDomPolyfills,
   renderReferencePanel,
@@ -203,6 +204,7 @@ describe('ZonePpeCameraRegionPanel Configuration Reference Journeys', () => {
 
     await user.click(await screen.findByRole('button', { name: /Start Drawing Region/i }));
     await addTriangleViaInputs(user);
+    await confirmReferenceViewCheckbox(user);
     expect(screen.getByText(/Points: 3 \/ 32/i)).toBeDefined();
 
     // Advance 10s (past old 5s monitoring preview TTL, within 5-minute referenceExpiresAt)
@@ -243,6 +245,7 @@ describe('ZonePpeCameraRegionPanel Configuration Reference Journeys', () => {
 
     await user.click(await screen.findByRole('button', { name: /Start Drawing Region/i }));
     await addTriangleViaInputs(user);
+    await confirmReferenceViewCheckbox(user);
 
     // 1. Camera revision drifted to 4 while reference is frozen at 3 -> refuses create with 409
     await user.click(screen.getByRole('button', { name: /Save Region/i }));
@@ -288,6 +291,7 @@ describe('ZonePpeCameraRegionPanel Configuration Reference Journeys', () => {
 
     // 4. Subsequent edit requires confirming a v4 reference before saving at configurationVersion 4, with no automatic model apply
     await addPointViaInputs(user, '0.2', '0.7');
+    await confirmReferenceViewCheckbox(user);
     await user.click(screen.getByRole('button', { name: /Save Region/i }));
     expect((await screen.findByRole('alert')).textContent).toMatch(
       /Configuration version conflict/i,
@@ -303,6 +307,7 @@ describe('ZonePpeCameraRegionPanel Configuration Reference Journeys', () => {
     await user.click(screen.getByRole('button', { name: /Review new reference/i }));
     rerenderWith();
     await user.click(screen.getByRole('button', { name: /Use new reference/i }));
+    await confirmReferenceViewCheckbox(user);
     await user.click(screen.getByRole('button', { name: /Save Region/i }));
     expect(await screen.findByText(/Saved region "reg-created-1" \(v2\)/i)).toBeDefined();
     expect(updateSpy).toHaveBeenCalledWith(
@@ -338,6 +343,7 @@ describe('ZonePpeCameraRegionPanel Configuration Reference Journeys', () => {
     await addPointViaInputs(user, '0.25', '0.75');
     expect(screen.getByText(/Points: 4 \/ 32/i)).toBeDefined();
 
+    await confirmReferenceViewCheckbox(user);
     await user.click(screen.getByRole('button', { name: /Save Region/i }));
     expect((await screen.findByRole('alert')).textContent).toMatch(
       /Configuration version conflict/i,
@@ -381,6 +387,7 @@ describe('ZonePpeCameraRegionPanel Configuration Reference Journeys', () => {
     // 2. Confirming 'Use new reference' retains points and binds editor to candidate v4
     await user.click(screen.getByRole('button', { name: /Use new reference/i }));
     expect(screen.getByText(/Points: 3 \/ 32/i)).toBeDefined();
+    await confirmReferenceViewCheckbox(user);
     await user.click(screen.getByRole('button', { name: /Save Region/i }));
     expect(createSpy).toHaveBeenCalledWith(
       'admin-jwt-token',

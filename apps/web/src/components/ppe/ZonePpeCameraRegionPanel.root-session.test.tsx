@@ -155,6 +155,7 @@ it.each(['reference', 'write'])(
     await waitFor(() => expect((start as HTMLButtonElement).disabled).toBe(false));
     fireEvent.click(start);
     fireEvent.click(screen.getByText('Fixture polygon'));
+    fireEvent.click(screen.getByRole('checkbox'));
     fireEvent.click(screen.getByText('Fixture save'));
     await screen.findByText(new RegExp(`Saved region "${savedRegionId}" \\(v1\\)`));
     expect(session.refreshAccessToken).toHaveBeenCalledExactlyOnceWith('synthetic-old');

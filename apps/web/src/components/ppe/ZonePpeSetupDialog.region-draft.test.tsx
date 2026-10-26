@@ -297,6 +297,7 @@ describe('ZonePpeSetupDialog region polygon draft & save guards', () => {
     render(<RegionDialogHarness />);
     await openPolygonDraftWithThreeVertices();
 
+    fireEvent.click(screen.getByRole('checkbox'));
     fireEvent.click(screen.getByRole('button', { name: /Save Region/i }));
     await waitFor(() => expect(resolveSave).toBeTypeOf('function'));
 

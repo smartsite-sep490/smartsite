@@ -16,6 +16,7 @@ import type { CameraResponse, RegionResponse } from '@smartsite/contracts';
 import { LocaleProvider } from '../../i18n/LocaleProvider';
 import type { CameraConfigurationReference } from './useCameraConfigurationReference';
 import { ZonePpeCameraRegionPanel } from './ZonePpeCameraRegionPanel';
+import { confirmReferenceViewCheckbox } from './ZonePpeCameraRegionPanel.reference.fixtures';
 
 if (typeof globalThis.ResizeObserver !== 'function') {
   globalThis.ResizeObserver = class {
@@ -268,7 +269,37 @@ describe('ZonePpeCameraRegionPanel Region Submission Journeys', () => {
       fireEvent.click(canvas, { clientX: 512, clientY: 384 }); // [0.8, 0.8]
       expect(screen.getByText(/Points: 3 \/ 32/i)).toBeDefined();
 
-      await user.click(screen.getByRole('button', { name: /Save Region/i }));
+      const getConsentCheckbox = () =>
+        screen.getByRole('checkbox', {
+          name: /I checked that the drawn region matches this reference image/i,
+        }) as HTMLInputElement;
+      const getSaveButton = () =>
+        screen.getByRole('button', { name: /Save Region/i }) as HTMLButtonElement;
+
+      expect(getConsentCheckbox().checked).toBe(false);
+      expect(getSaveButton().disabled).toBe(true);
+      await user.click(getSaveButton());
+      expect(createReferenceRegionSpy).not.toHaveBeenCalled();
+
+      await confirmReferenceViewCheckbox(user);
+      expect(getConsentCheckbox().checked).toBe(true);
+      expect(getSaveButton().disabled).toBe(false);
+
+      // Edit geometry then Undo back to identical 3-point coordinates: consent must stay unchecked
+      fireEvent.click(canvas, { clientX: 64, clientY: 384 });
+      expect(screen.getByText(/Points: 4 \/ 32/i)).toBeDefined();
+      expect(getConsentCheckbox().checked).toBe(false);
+      await user.click(screen.getByRole('button', { name: /Undo Point/i }));
+      expect(screen.getByText(/Points: 3 \/ 32/i)).toBeDefined();
+      expect(getConsentCheckbox().checked).toBe(false);
+      expect(getSaveButton().disabled).toBe(true);
+      await user.click(getSaveButton());
+      expect(createReferenceRegionSpy).not.toHaveBeenCalled();
+
+      await confirmReferenceViewCheckbox(user);
+      expect(getConsentCheckbox().checked).toBe(true);
+      expect(getSaveButton().disabled).toBe(false);
+      await user.click(getSaveButton());
 
       expect(await screen.findByText(/Saved region "reg-created-101" \(v1\)/i)).toBeDefined();
       expect(createReferenceRegionSpy).toHaveBeenCalledTimes(1);
@@ -297,13 +328,20 @@ describe('ZonePpeCameraRegionPanel Region Submission Journeys', () => {
       expect(legacyUpdateSpy).not.toHaveBeenCalled();
 
       // Append 4th vertex in-place; saving before accepting v4 reference conflicts closed (409)
+      await confirmReferenceViewCheckbox(user);
+      expect(getConsentCheckbox().checked).toBe(true);
       const activeCanvas = screen.getByLabelText(/Camera Region Drawing Canvas/i);
-      if (!sameCoordinates) fireEvent.click(activeCanvas, { clientX: 64, clientY: 384 });
+      if (!sameCoordinates) {
+        fireEvent.click(activeCanvas, { clientX: 64, clientY: 384 });
+        expect(getConsentCheckbox().checked).toBe(false);
+        expect(getSaveButton().disabled).toBe(true);
+        await confirmReferenceViewCheckbox(user);
+      }
       expect(
         screen.getByText(sameCoordinates ? /Points: 3 \/ 32/i : /Points: 4 \/ 32/i),
       ).toBeDefined();
 
-      await user.click(screen.getByRole('button', { name: /Save Region/i }));
+      await user.click(getSaveButton());
       expect(
         await screen.findByText(
           sameCoordinates
@@ -316,7 +354,13 @@ describe('ZonePpeCameraRegionPanel Region Submission Journeys', () => {
       // Review and accept the newly issued v4 candidate reference, then save
       await user.click(screen.getByRole('button', { name: /Review new reference/i }));
       await user.click(await screen.findByRole('button', { name: /Use new reference/i }));
-      await user.click(screen.getByRole('button', { name: /Save Region/i }));
+      expect(getConsentCheckbox().checked).toBe(false);
+      expect(getSaveButton().disabled).toBe(true);
+      await user.click(getSaveButton());
+      expect(updateReferencePolygonSpy).not.toHaveBeenCalled();
+
+      await confirmReferenceViewCheckbox(user);
+      await user.click(getSaveButton());
 
       expect(await screen.findByText(/Saved region "reg-created-101" \(v2\)/i)).toBeDefined();
       expect(createReferenceRegionSpy).toHaveBeenCalledTimes(1);
@@ -431,8 +475,14 @@ describe('ZonePpeCameraRegionPanel Region Submission Journeys', () => {
     fireEvent.click(canvas, { clientX: 512, clientY: 48 });
     fireEvent.click(canvas, { clientX: 512, clientY: 384 });
 
+    const getConsentCheckbox = () =>
+      screen.getByRole('checkbox', {
+        name: /I checked that the drawn region matches this reference image/i,
+      }) as HTMLInputElement;
+    await confirmReferenceViewCheckbox(user);
     await user.click(screen.getByRole('button', { name: /Save Region/i }));
     await waitFor(() => expect(createReferenceRegionSpy).toHaveBeenCalledTimes(1));
+    expect(getConsentCheckbox().disabled).toBe(true);
 
     // Attempted canvas click while submission is pending must not alter the submitted geometry
     fireEvent.click(canvas, { clientX: 64, clientY: 384 });
@@ -475,13 +525,20 @@ describe('ZonePpeCameraRegionPanel Region Submission Journeys', () => {
     expect(screen.getByText(/Points: 3 \/ 32/i)).toBeDefined();
 
     // Accept v4 reference, add 4th vertex, and trigger failing updateReferencePolygon (503) -> no legacy fallback
+    await confirmReferenceViewCheckbox(user);
+    expect(getConsentCheckbox().checked).toBe(true);
     await user.click(screen.getByRole('button', { name: /Review new reference/i }));
     await user.click(await screen.findByRole('button', { name: /Use new reference/i }));
+    expect(getConsentCheckbox().checked).toBe(false);
+    await confirmReferenceViewCheckbox(user);
+    expect(getConsentCheckbox().checked).toBe(true);
     fireEvent.click(screen.getByLabelText(/Camera Region Drawing Canvas/i), {
       clientX: 64,
       clientY: 384,
     });
+    expect(getConsentCheckbox().checked).toBe(false);
 
+    await confirmReferenceViewCheckbox(user);
     await user.click(screen.getByRole('button', { name: /Save Region/i }));
     await waitFor(() => expect(updateReferencePolygonSpy).toHaveBeenCalledTimes(1));
     expect(createReferenceRegionSpy).toHaveBeenCalledTimes(1);
