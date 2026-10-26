@@ -184,15 +184,25 @@ import {
 
 import { ApiError, parseBackendErrorEnvelope, type RequestOptions } from './errors';
 import { parseCameraObservationZones } from '@smartsite/contracts/camera-observation-zones';
-import type { CameraConfigurationImageResponse } from '@smartsite/contracts/camera-configuration-image';
+import type {
+  CameraConfigurationImageReference,
+  CameraConfigurationImageResponse,
+  CameraConfigurationReferenceResponse,
+} from '@smartsite/contracts/camera-configuration-image';
 import {
   discardAbortedResponse,
   MAX_CONFIGURATION_IMAGE_RESPONSE_BYTES,
+  MAX_CONFIGURATION_REFERENCE_RESPONSE_BYTES,
   parseScopedCameraConfigurationImage,
+  parseScopedCameraConfigurationReference,
   readBoundedResponseJson,
 } from './bounded-json';
 import { parseMf05DemoStatus, type Mf05DemoStatus } from './mf05-demo';
-export type { CameraConfigurationImageResponse };
+export type {
+  CameraConfigurationImageReference,
+  CameraConfigurationImageResponse,
+  CameraConfigurationReferenceResponse,
+};
 /** React Native FormData uses URI-backed files instead of browser File objects. */
 export type NativeUploadFile = { uri: string; name: string; type: string };
 export type UploadFile = File | NativeUploadFile;
@@ -1446,6 +1456,24 @@ export class SmartSiteManagementClient {
     );
     return parseScopedCameraConfigurationImage(result, siteId, cameraId);
   }
+  async getCameraConfigurationReference(
+    token: string,
+    siteId: string,
+    cameraId: string,
+    options?: RequestOptions,
+  ): Promise<CameraConfigurationReferenceResponse> {
+    const result = await this.request<unknown>(
+      'GET',
+      `/sites/${pathId(siteId)}/cameras/${pathId(cameraId)}/configuration-reference`,
+      token,
+      undefined,
+      undefined,
+      { ...options, timeoutMs: options?.timeoutMs ?? 3000 },
+      { cache: 'no-store', redirect: 'error' },
+      MAX_CONFIGURATION_REFERENCE_RESPONSE_BYTES,
+    );
+    return parseScopedCameraConfigurationReference(result, siteId, cameraId);
+  }
   getSafetyOverview(
     token: string,
     siteId: string,
@@ -2104,14 +2132,24 @@ export class SmartSiteManagementClient {
     );
   }
   listSafetyObservationFindings(
-    token: string, siteId: string, alertId: string, eventId: string,
-    options: PageOptions = {}, requestOptions?: RequestOptions,
+    token: string,
+    siteId: string,
+    alertId: string,
+    eventId: string,
+    options: PageOptions = {},
+    requestOptions?: RequestOptions,
   ): Promise<SafetyObservationFindingsResponse> {
     const query = new URLSearchParams();
     if (options.offset !== undefined) query.set('offset', String(options.offset));
     if (options.limit !== undefined) query.set('limit', String(options.limit));
-    return this.request('GET', `/sites/${pathId(siteId)}/safety-alerts/${pathId(alertId)}/detections/${pathId(eventId)}/findings?${query}`,
-      token, undefined, undefined, requestOptions);
+    return this.request(
+      'GET',
+      `/sites/${pathId(siteId)}/safety-alerts/${pathId(alertId)}/detections/${pathId(eventId)}/findings?${query}`,
+      token,
+      undefined,
+      undefined,
+      requestOptions,
+    );
   }
   getSafetyAlertEvidence(
     token: string,

@@ -45,6 +45,12 @@ export interface CameraConfigurationImageReference {
   readonly viewRevision: number;
 }
 
+export interface CameraConfigurationReferenceResponse {
+  readonly image: CameraConfigurationImageResponse;
+  readonly reference: CameraConfigurationImageReference;
+  readonly viewValidity: 'UNCONFIRMED';
+}
+
 const uuid = /^[0-9a-f]{8}(-[0-9a-f]{4}){3}-[0-9a-f]{12}$/i;
 const frameKeys = [
   'cameraExternalId',
@@ -236,4 +242,28 @@ export function parseCameraConfigurationImageReference(
     expires > issued && expires <= Math.min(captured, issued) + CONFIGURATION_REFERENCE_LIFETIME_MS,
   );
   return structuredClone(value) as unknown as CameraConfigurationImageReference;
+}
+
+/** Validates payload coherence only, not persisted Backend authority or JPEG cryptographic integrity. */
+export function parseCameraConfigurationReferenceResponse(
+  value: unknown,
+): CameraConfigurationReferenceResponse {
+  check(object(value));
+  exact(value, ['image', 'reference', 'viewValidity']);
+  check(value.viewValidity === 'UNCONFIRMED');
+  const image = parseCameraConfigurationImageResponse(value.image);
+  const reference = parseCameraConfigurationImageReference(value.reference);
+  check(
+    image.siteId.toLowerCase() === reference.siteId.toLowerCase() &&
+      image.cameraId.toLowerCase() === reference.cameraId.toLowerCase() &&
+      image.frame.sessionId.toLowerCase() === reference.sessionId.toLowerCase() &&
+      image.sourceKind === reference.sourceKind &&
+      image.frame.imageSha256 === reference.imageSha256 &&
+      image.frame.width === reference.width &&
+      image.frame.height === reference.height &&
+      image.configurationVersion === reference.configurationVersion &&
+      timestamp(image.frame.capturedAt) === timestamp(reference.capturedAt) &&
+      timestamp(image.referenceExpiresAt) === timestamp(reference.expiresAt),
+  );
+  return { image, reference, viewValidity: 'UNCONFIRMED' };
 }

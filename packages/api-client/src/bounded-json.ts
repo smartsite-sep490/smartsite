@@ -1,10 +1,14 @@
 import {
   parseCameraConfigurationImageResponse,
+  parseCameraConfigurationReferenceResponse,
   type CameraConfigurationImageResponse,
+  type CameraConfigurationReferenceResponse,
 } from '@smartsite/contracts/camera-configuration-image';
 import { ApiError } from './errors';
 
 export const MAX_CONFIGURATION_IMAGE_RESPONSE_BYTES = 1_500_000;
+export const MAX_CONFIGURATION_REFERENCE_RESPONSE_BYTES =
+  MAX_CONFIGURATION_IMAGE_RESPONSE_BYTES + 4_096;
 
 export type BodyReadRunner = <T>(read: () => Promise<T>, signal?: AbortSignal) => Promise<T>;
 
@@ -127,5 +131,29 @@ export function parseScopedCameraConfigurationImage(
     return image;
   } catch {
     throw new ApiError('invalid-response', 'Backend returned invalid camera configuration image.');
+  }
+}
+
+export function parseScopedCameraConfigurationReference(
+  payload: unknown,
+  siteId: string,
+  cameraId: string,
+): CameraConfigurationReferenceResponse {
+  try {
+    const response = parseCameraConfigurationReferenceResponse(payload);
+    if (
+      response.image.siteId.toLowerCase() !== siteId.toLowerCase() ||
+      response.image.cameraId.toLowerCase() !== cameraId.toLowerCase() ||
+      response.reference.siteId.toLowerCase() !== siteId.toLowerCase() ||
+      response.reference.cameraId.toLowerCase() !== cameraId.toLowerCase()
+    ) {
+      throw new Error('Scope mismatch');
+    }
+    return response;
+  } catch {
+    throw new ApiError(
+      'invalid-response',
+      'Backend returned invalid camera configuration reference.',
+    );
   }
 }

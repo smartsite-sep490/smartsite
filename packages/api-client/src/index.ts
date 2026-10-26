@@ -148,6 +148,8 @@ export type {
   CameraConfigurationImageFrame,
   CameraConfigurationSourceImage,
   CameraConfigurationImageResponse,
+  CameraConfigurationImageReference,
+  CameraConfigurationReferenceResponse,
 } from '@smartsite/contracts/camera-configuration-image';
 export {
   CONFIGURATION_REFERENCE_LIFETIME_MS,
@@ -155,8 +157,13 @@ export {
   decodeConfigurationJpeg,
   parseCameraConfigurationSourceImage,
   parseCameraConfigurationImageResponse,
+  parseCameraConfigurationImageReference,
+  parseCameraConfigurationReferenceResponse,
 } from '@smartsite/contracts/camera-configuration-image';
-export { MAX_CONFIGURATION_IMAGE_RESPONSE_BYTES } from './bounded-json';
+export {
+  MAX_CONFIGURATION_IMAGE_RESPONSE_BYTES,
+  MAX_CONFIGURATION_REFERENCE_RESPONSE_BYTES,
+} from './bounded-json';
 /** baseUrl is the backend origin (or reverse-proxy prefix), without /api/v1. */
 export async function getBackendHealth(
   baseUrl: string,
