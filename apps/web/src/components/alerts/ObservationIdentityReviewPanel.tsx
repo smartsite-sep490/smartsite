@@ -698,6 +698,17 @@ function ObservationIdentitySubjectForm({
           query.queryKey[6] === currentSubject.personObservationIndex,
       });
 
+      // Reset alert work context for all alerts/revisions in this site/session scope
+      // so stale verified worker/contractor/team data is cleared before active refetch
+      void queryClient.resetQueries({
+        predicate: (query) =>
+          query.queryKey[0] === 'safety-workflow' &&
+          query.queryKey[1] === apiUrl &&
+          query.queryKey[2] === sessionScope &&
+          query.queryKey[3] === siteId &&
+          query.queryKey[4] === 'alert-context',
+      });
+
       setSelectedWorkerId('');
       setReason('');
       setCommandTracker(null);

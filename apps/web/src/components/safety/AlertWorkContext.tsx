@@ -26,7 +26,7 @@ export function AlertWorkContext(p: WorkflowProps & { alertId: string; revision:
       <h3 className="font-bold">{tr('safety_workspace.work_context')}</h3>
       {query.isPending && <p className="text-sm">{tr('safety_workspace.loading_context')}</p>}
       <RequestError error={query.error} retry={() => void query.refetch()} />
-      {query.data && (
+      {query.isSuccess && query.data && (
         <>
           <p className="text-sm">
             {tr('safety_workspace.zone_value1_camera_value2', {

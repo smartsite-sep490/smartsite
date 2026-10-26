@@ -1,21 +1,24 @@
-import i18n from '../../i18n';
+import i18n, { translate } from '../../i18n';
 import { beforeEach as beforeLocaleTest } from 'vitest';
 beforeLocaleTest(async () => {
   await i18n.changeLanguage('vi');
 });
 // @vitest-environment jsdom
 import React from 'react';
-import { render, screen, waitFor, fireEvent, cleanup, act } from '@testing-library/react';
+import { render, screen, waitFor, fireEvent, cleanup, act, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { describe, expect, it, vi, beforeEach, afterEach } from 'vitest';
 import { ApiError } from '@smartsite/api-client';
 import type {
+  AccountResponse,
   SmartSiteManagementClient,
   SafetyAlertDetectionResponse,
+  SafetyAlertWorkContextResponse,
   ObservationIdentityContextResponse,
   ObservationIdentityWorkerResponse,
 } from '@smartsite/api-client';
+import { AlertWorkContext } from '../safety/AlertWorkContext';
 import { ObservationIdentityReviewPanel } from './ObservationIdentityReviewPanel';
 import { computeViewedEvidenceSha256 } from './observationIdentityReviewUtils';
 
@@ -2742,5 +2745,364 @@ describe('ObservationIdentityReviewPanel Real DOM Interactions', () => {
     for (const { url } of allAllocatedRecords) {
       expect(allRevokedUrls.has(url)).toBe(true);
     }
+  });
+
+  it('RESOLVE refreshes mounted AlertWorkContext and clears same-site sibling alert-context cache, while CLEAR removes revoked worker/contractor/team immediately while refetch is pending and keeps it hidden on 403 error without touching other api/session/site caches', async () => {
+    vi.stubGlobal(
+      'createImageBitmap',
+      vi.fn().mockResolvedValue({
+        width: 1920,
+        height: 1080,
+        close: vi.fn(),
+      }),
+    );
+
+    const user = userEvent.setup();
+    const syntheticBlob = createValidSyntheticJpeg('work-context-sync-evidence');
+    const validHash = await computeViewedEvidenceSha256(syntheticBlob);
+
+    const apiUrl = 'https://api.example';
+    const sessionScope = 'session-work-context-sync';
+    const siteId = '00000000-0000-4000-8000-000000000001';
+    const alertId = '00000000-0000-4000-8000-000000000002';
+    const alertRevision = 3;
+
+    const workflowUser: AccountResponse = {
+      id: '00000000-0000-4000-8000-000000000888',
+      username: 'safety.officer',
+      displayName: 'Safety Officer Alpha',
+      roleAssignments: [{ role: 'SAFETY_OFFICER', siteId }],
+      isActive: true,
+      mustChangePassword: false,
+    };
+
+    const initialIdentityContext = createMockContext({
+      frames: [{ index: 0, kind: 'FRAME', sha256: validHash, available: true }],
+    });
+    let currentIdentityContext = initialIdentityContext;
+
+    const unknownWorkContext: SafetyAlertWorkContextResponse = {
+      capturedAt: '2026-09-30T10:00:00Z',
+      identity: 'UNKNOWN',
+      zoneName: 'Khu vực đào đất phía Bắc',
+      cameraName: 'CAM-01',
+      workers: [],
+      relatedTeams: [],
+      warning: 'Recorded team/Zone context supports verification.',
+    };
+
+    const verifiedWorkContext: SafetyAlertWorkContextResponse = {
+      capturedAt: '2026-09-30T10:00:00Z',
+      identity: 'VERIFIED',
+      zoneName: 'Khu vực đào đất phía Bắc',
+      cameraName: 'CAM-01',
+      workers: [
+        {
+          id: '00000000-0000-4000-8000-000000000777',
+          displayName: 'Nguyễn Văn A',
+          contractorId: '00000000-0000-4000-8000-000000000601',
+          contractorName: 'Nhà thầu Xây dựng Alpha',
+          teamId: '00000000-0000-4000-8000-000000000602',
+          teamName: 'Tổ cốt thép số 1',
+        },
+      ],
+      relatedTeams: [],
+      warning: 'Recorded team/Zone context supports verification.',
+    };
+
+    const siblingContextKey = [
+      'safety-workflow',
+      apiUrl,
+      sessionScope,
+      siteId,
+      'alert-context',
+      '00000000-0000-4000-8000-000000000099',
+      2,
+    ] as const;
+    const otherApiKey = [
+      'safety-workflow',
+      'https://other-api.example',
+      sessionScope,
+      siteId,
+      'alert-context',
+      alertId,
+      alertRevision,
+    ] as const;
+    const otherSessionKey = [
+      'safety-workflow',
+      apiUrl,
+      'other-session-scope',
+      siteId,
+      'alert-context',
+      alertId,
+      alertRevision,
+    ] as const;
+    const otherSiteKey = [
+      'safety-workflow',
+      apiUrl,
+      sessionScope,
+      '00000000-0000-4000-8000-000000000999',
+      'alert-context',
+      alertId,
+      alertRevision,
+    ] as const;
+
+    const siblingSeedContext: SafetyAlertWorkContextResponse = {
+      ...unknownWorkContext,
+      zoneName: 'Khu vực sibling cùng người',
+    };
+    const otherApiCachedContext: SafetyAlertWorkContextResponse = {
+      ...verifiedWorkContext,
+      zoneName: 'Other API Zone',
+    };
+    const otherSessionCachedContext: SafetyAlertWorkContextResponse = {
+      ...verifiedWorkContext,
+      zoneName: 'Other Session Zone',
+    };
+    const otherSiteCachedContext: SafetyAlertWorkContextResponse = {
+      ...verifiedWorkContext,
+      zoneName: 'Other Site Zone',
+    };
+
+    queryClient.setQueryData(siblingContextKey, siblingSeedContext);
+    queryClient.setQueryData(otherApiKey, otherApiCachedContext);
+    queryClient.setQueryData(otherSessionKey, otherSessionCachedContext);
+    queryClient.setQueryData(otherSiteKey, otherSiteCachedContext);
+
+    let rejectClearWorkContextRefetch!: (error: unknown) => void;
+    const pendingClearWorkContextPromise = new Promise<SafetyAlertWorkContextResponse>(
+      (_resolve, reject) => {
+        rejectClearWorkContextRefetch = reject;
+      },
+    );
+
+    const mockGetAlertWorkContext = vi
+      .fn()
+      .mockResolvedValueOnce(unknownWorkContext)
+      .mockResolvedValueOnce(verifiedWorkContext)
+      .mockRejectedValueOnce(new ApiError('http', 'Forbidden', 403))
+      .mockResolvedValueOnce(verifiedWorkContext)
+      .mockImplementationOnce(() => pendingClearWorkContextPromise);
+
+    const mockDecide = vi.fn().mockImplementation(async (_t, _s, _a, _e, _p, cmd) => {
+      if (cmd.action === 'RESOLVE') {
+        currentIdentityContext = {
+          ...initialIdentityContext,
+          subjects: [
+            {
+              ...initialIdentityContext.subjects[0]!,
+              revision: 1,
+              canResolve: true,
+              canClear: true,
+              clearBlockReason: null,
+              latestManualDecision: {
+                id: '00000000-0000-4000-8000-000000000501',
+                revision: 1,
+                action: 'RESOLVE',
+                workerId: '00000000-0000-4000-8000-000000000777',
+                actorUserId: workflowUser.id,
+                reason: cmd.reason,
+                scope: 'EXACT_OBSERVATION',
+                verificationMethod: 'MANUAL',
+                recordedAt: '2026-10-01T08:05:00Z',
+              },
+            },
+            initialIdentityContext.subjects[1]!,
+          ],
+        };
+        return {
+          recordedDecision: currentIdentityContext.subjects[0]!.latestManualDecision,
+          latestRevision: 1,
+          replayed: false,
+        };
+      }
+      currentIdentityContext = {
+        ...initialIdentityContext,
+        subjects: [
+          {
+            ...initialIdentityContext.subjects[0]!,
+            revision: 2,
+            canResolve: true,
+            canClear: false,
+            clearBlockReason: 'NO_ACTIVE_RESOLUTION',
+            latestManualDecision: {
+              id: '00000000-0000-4000-8000-000000000502',
+              revision: 2,
+              action: 'CLEAR',
+              workerId: null,
+              actorUserId: workflowUser.id,
+              reason: cmd.reason,
+              scope: 'EXACT_OBSERVATION',
+              verificationMethod: 'MANUAL',
+              recordedAt: '2026-10-01T08:10:00Z',
+            },
+          },
+          initialIdentityContext.subjects[1]!,
+        ],
+      };
+      return {
+        recordedDecision: currentIdentityContext.subjects[0]!.latestManualDecision,
+        latestRevision: 2,
+        replayed: false,
+      };
+    });
+
+    const mockClient = {
+      getObservationIdentityContext: vi
+        .fn()
+        .mockImplementation(() => Promise.resolve(currentIdentityContext)),
+      listObservationIdentityWorkers: vi.fn().mockResolvedValue(mockWorkersList),
+      listObservationIdentityDecisions: vi.fn().mockResolvedValue({ items: [], total: 0 }),
+      decideObservationIdentity: mockDecide,
+      getAlertWorkContext: mockGetAlertWorkContext,
+    } as unknown as SmartSiteManagementClient;
+
+    render(
+      <QueryClientProvider client={queryClient}>
+        <ObservationIdentityReviewPanel
+          client={mockClient}
+          apiUrl={apiUrl}
+          sessionScope={sessionScope}
+          token="test-token"
+          siteId={siteId}
+          alertId={alertId}
+          detection={createMockDetection()}
+          evidenceIndex={0}
+          evidenceBlob={syntheticBlob}
+        />
+        <div data-testid="mounted-alert-work-context">
+          <AlertWorkContext
+            client={mockClient}
+            apiUrl={apiUrl}
+            scope={sessionScope}
+            token="test-token"
+            siteId={siteId}
+            user={workflowUser}
+            alertId={alertId}
+            revision={alertRevision}
+          />
+        </div>
+      </QueryClientProvider>,
+    );
+
+    const workContextRegion = within(screen.getByTestId('mounted-alert-work-context'));
+    const unknownWorkerText = translate(
+      'safety_workspace.worker_unknown_safety_must_verify_the_responsible_contractor_before_handing_over',
+    );
+    const loadingContextText = translate('safety_workspace.loading_context');
+
+    // 1. Initial AlertWorkContext shows unknown worker state
+    expect(await workContextRegion.findByText(unknownWorkerText)).not.toBeNull();
+    expect(workContextRegion.queryByText('Nguyễn Văn A')).toBeNull();
+    expect(mockGetAlertWorkContext).toHaveBeenCalledTimes(1);
+
+    // 2. Safety Officer resolves Person #0 as Nguyễn Văn A
+    const tab0 = await screen.findByRole('tab', { name: /ĐỐI TƯỢNG #0/i });
+    await user.click(tab0);
+
+    const img = await screen.findByAltText('Khung hình bằng chứng quan sát');
+    fireEvent.load(img);
+
+    await waitFor(() => {
+      expect(screen.getByTestId('person-bounding-box-overlay')).not.toBeNull();
+    });
+
+    const workerSelect = (await screen.findByLabelText(
+      /Chọn nhân viên.*danh bạ/i,
+    )) as HTMLSelectElement;
+    await user.selectOptions(workerSelect, '00000000-0000-4000-8000-000000000777');
+
+    const reasonInput = screen.getByLabelText(/Lý do đánh giá/i);
+    await user.type(reasonInput, 'Xác nhận công nhân Nguyễn Văn A từ ảnh bằng chứng');
+
+    const resolveBtn = screen.getByRole('button', {
+      name: /Xác nhận danh tính/i,
+    });
+    await user.click(resolveBtn);
+
+    await waitFor(() => {
+      expect(mockDecide).toHaveBeenCalledTimes(1);
+    });
+
+    // 3. RESOLVE refreshes mounted AlertWorkContext to display known worker, contractor, and team
+    await waitFor(() => {
+      expect(mockGetAlertWorkContext).toHaveBeenCalledTimes(2);
+    });
+    expect(await workContextRegion.findByText('Nguyễn Văn A')).not.toBeNull();
+    expect(workContextRegion.getByText(/Nhà thầu Xây dựng Alpha/)).not.toBeNull();
+    expect(workContextRegion.getByText(/Tổ cốt thép số 1/)).not.toBeNull();
+    expect(workContextRegion.queryByText(unknownWorkerText)).toBeNull();
+
+    // Same-site sibling alert-context cache was cleared; other api/session/site caches remain untouched
+    expect(queryClient.getQueryData(siblingContextKey)).toBeUndefined();
+    expect(queryClient.getQueryData(otherApiKey)).toEqual(otherApiCachedContext);
+    expect(queryClient.getQueryData(otherSessionKey)).toEqual(otherSessionCachedContext);
+    expect(queryClient.getQueryData(otherSiteKey)).toEqual(otherSiteCachedContext);
+
+    // 3b. Direct background refetch failure (403) while query.data is populated must fail closed and hide cached worker/contractor/team
+    await queryClient.invalidateQueries({
+      queryKey: [
+        'safety-workflow',
+        apiUrl,
+        sessionScope,
+        siteId,
+        'alert-context',
+        alertId,
+        alertRevision,
+      ],
+    });
+    expect(await workContextRegion.findByRole('alert')).not.toBeNull();
+    expect(workContextRegion.queryByText('Nguyễn Văn A')).toBeNull();
+    expect(workContextRegion.queryByText(/Nhà thầu Xây dựng Alpha/)).toBeNull();
+    expect(workContextRegion.queryByText(/Tổ cốt thép số 1/)).toBeNull();
+
+    // Retry recovers verified work context before testing CLEAR
+    await user.click(workContextRegion.getByRole('button', { name: translate('common.retry') }));
+    expect(await workContextRegion.findByText('Nguyễn Văn A')).not.toBeNull();
+    expect(mockGetAlertWorkContext).toHaveBeenCalledTimes(4);
+
+    // 4. Re-seed same-site sibling cache with verified worker data before testing CLEAR
+    queryClient.setQueryData(siblingContextKey, verifiedWorkContext);
+    expect(queryClient.getQueryData(siblingContextKey)).toEqual(verifiedWorkContext);
+
+    // 5. Safety Officer submits CLEAR while next getAlertWorkContext refetch stays pending
+    const clearRadio = await screen.findByLabelText(/Thu hồi xác minh \(CLEAR\)/i);
+    await user.click(clearRadio);
+
+    const clearReasonInput = screen.getByLabelText(/Lý do đánh giá/i);
+    await user.type(clearReasonInput, 'Thu hồi xác minh danh tính để kiểm tra lại');
+
+    const clearBtn = screen.getByRole('button', {
+      name: /Thu hồi xác minh/i,
+    });
+    await user.click(clearBtn);
+
+    await waitFor(() => {
+      expect(mockDecide).toHaveBeenCalledTimes(2);
+      expect(mockGetAlertWorkContext).toHaveBeenCalledTimes(5);
+    });
+
+    // Immediately while refetch is pending, revoked worker/contractor/team must be removed from DOM
+    expect(workContextRegion.queryByText('Nguyễn Văn A')).toBeNull();
+    expect(workContextRegion.queryByText(/Nhà thầu Xây dựng Alpha/)).toBeNull();
+    expect(workContextRegion.queryByText(/Tổ cốt thép số 1/)).toBeNull();
+    expect(workContextRegion.getByText(loadingContextText)).not.toBeNull();
+
+    // Same-site sibling alert-context cache is immediately cleared; other api/session/site caches stay untouched
+    expect(queryClient.getQueryData(siblingContextKey)).toBeUndefined();
+    expect(queryClient.getQueryData(otherApiKey)).toEqual(otherApiCachedContext);
+    expect(queryClient.getQueryData(otherSessionKey)).toEqual(otherSessionCachedContext);
+    expect(queryClient.getQueryData(otherSiteKey)).toEqual(otherSiteCachedContext);
+
+    // 6. When the pending getAlertWorkContext refetch fails with 403, revoked identity stays hidden
+    await act(async () => {
+      rejectClearWorkContextRefetch(new ApiError('http', 'Forbidden', 403));
+      await pendingClearWorkContextPromise.catch(() => undefined);
+    });
+
+    expect(await workContextRegion.findByRole('alert')).not.toBeNull();
+    expect(workContextRegion.queryByText('Nguyễn Văn A')).toBeNull();
+    expect(workContextRegion.queryByText(/Nhà thầu Xây dựng Alpha/)).toBeNull();
+    expect(workContextRegion.queryByText(/Tổ cốt thép số 1/)).toBeNull();
   });
 });
