@@ -50,6 +50,29 @@ export const EPISODE_EN_CATALOG = {
   'episode.detail.techEvidenceLine':
     'Evidence event {{eventId}} · observations[{{personIndex}}] · evidence #{{evidenceIndex}} · sha256 {{sha256}}',
   'episode.detail.techWorkflowLine': 'Incident {{incidentId}} · Actions {{actionIds}}',
+  'episode.inbox.regionAria': 'Safety episode inbox',
+  'episode.inbox.heading': 'Safety episode inbox',
+  'episode.inbox.scopeNote':
+    'Each entry represents one observed person in an image. Findings still require individual review.',
+  'episode.inbox.totalBadge': 'Total: {{total}}',
+  'episode.inbox.unreadSummaryBadge': 'Unread: {{unread}}',
+  'episode.inbox.partialSummary': 'Showing {{shown}} of {{total}} episodes',
+  'episode.inbox.siteGroupSummary': '{{shown}} episodes · {{unread}} unread',
+  'episode.inbox.loading': 'Loading safety episode inbox…',
+  'episode.inbox.refreshing': 'Refreshing safety episode inbox…',
+  'episode.inbox.empty': 'No safety episodes in your inbox.',
+  'episode.inbox.unreadBadge': 'Unread',
+  'episode.inbox.readBadge': 'Read',
+  'episode.inbox.selectEpisodeBtn': 'Inspect person episode',
+  'episode.inbox.selectedEpisodeBtn': 'Selected episode',
+  'episode.inbox.markReadBtn': 'Mark read (rev #{{revision}})',
+  'episode.inbox.markingReadBtn': 'Marking read…',
+  'episode.inbox.loadMoreBtn': 'Load more episodes',
+  'episode.inbox.loadingMoreBtn': 'Loading more episodes…',
+  'episode.inbox.techInboxLine':
+    'Inbox item {{inboxId}} · Episode {{episodeId}} · Content revision #{{contentRevision}} · Seen revision #{{seenRevision}}',
+  'episode.inbox.techDeliveryLine':
+    'First delivered {{firstDeliveredAt}} · Updated {{updatedAt}} · Reported findingCount {{findingCount}}',
 } as const;
 
 export type EpisodeCatalogKey = keyof typeof EPISODE_EN_CATALOG;
@@ -104,6 +127,29 @@ export const EPISODE_VI_CATALOG: Record<EpisodeCatalogKey, string> = {
   'episode.detail.techEvidenceLine':
     'Sự kiện bằng chứng {{eventId}} · observations[{{personIndex}}] · bằng chứng #{{evidenceIndex}} · sha256 {{sha256}}',
   'episode.detail.techWorkflowLine': 'Sự cố {{incidentId}} · Hành động {{actionIds}}',
+  'episode.inbox.regionAria': 'Hộp thư hồ sơ quan sát an toàn',
+  'episode.inbox.heading': 'Hộp thư hồ sơ quan sát an toàn',
+  'episode.inbox.scopeNote':
+    'Mỗi mục tương ứng một người quan sát được trong ảnh. Từng phát hiện vẫn cần xem xét riêng.',
+  'episode.inbox.totalBadge': 'Tổng: {{total}}',
+  'episode.inbox.unreadSummaryBadge': 'Chưa đọc: {{unread}}',
+  'episode.inbox.partialSummary': 'Đang hiển thị {{shown}} / {{total}} hồ sơ',
+  'episode.inbox.siteGroupSummary': '{{shown}} hồ sơ · {{unread}} chưa đọc',
+  'episode.inbox.loading': 'Đang tải hộp thư hồ sơ quan sát an toàn…',
+  'episode.inbox.refreshing': 'Đang làm mới hộp thư hồ sơ quan sát an toàn…',
+  'episode.inbox.empty': 'Chưa có hồ sơ quan sát an toàn nào trong hộp thư.',
+  'episode.inbox.unreadBadge': 'Chưa đọc',
+  'episode.inbox.readBadge': 'Đã đọc',
+  'episode.inbox.selectEpisodeBtn': 'Xem hồ sơ người này',
+  'episode.inbox.selectedEpisodeBtn': 'Đang chọn hồ sơ',
+  'episode.inbox.markReadBtn': 'Đánh dấu đã đọc (bản #{{revision}})',
+  'episode.inbox.markingReadBtn': 'Đang đánh dấu đã đọc…',
+  'episode.inbox.loadMoreBtn': 'Tải thêm hồ sơ',
+  'episode.inbox.loadingMoreBtn': 'Đang tải thêm hồ sơ…',
+  'episode.inbox.techInboxLine':
+    'Mục hộp thư {{inboxId}} · Hồ sơ {{episodeId}} · Phiên bản nội dung #{{contentRevision}} · Phiên bản đã xem #{{seenRevision}}',
+  'episode.inbox.techDeliveryLine':
+    'Phân phối đầu tiên {{firstDeliveredAt}} · Cập nhật {{updatedAt}} · Số phát hiện báo cáo {{findingCount}}',
 };
 
 registerFeatureCatalog({ en: EPISODE_EN_CATALOG, vi: EPISODE_VI_CATALOG });
