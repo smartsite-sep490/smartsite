@@ -3,6 +3,10 @@ import type { CameraResponse } from '@smartsite/contracts/management';
 import { registerFeatureCatalog } from '../../i18n/feature-catalog-registry';
 import { SAFETY_NAMESPACE } from '../../i18n/runtime';
 import { CAMERA_BUTTON_STYLES } from './camera-dialog-styles';
+import {
+  CameraApplicationStatusSummary,
+  type CameraApplicationStatusContext,
+} from './CameraApplicationStatusSummary';
 import type { CameraSetupOpenHandler } from './CameraSetupWorkflow';
 
 const en = {
@@ -168,6 +172,7 @@ export interface CameraSetupContextBarProps {
   canManageCameras: boolean;
   canOpenMonitoring: boolean;
   open: CameraSetupOpenHandler;
+  statusContext?: CameraApplicationStatusContext;
 }
 
 export function CameraSetupContextBar({
@@ -178,6 +183,7 @@ export function CameraSetupContextBar({
   canManageCameras,
   canOpenMonitoring,
   open,
+  statusContext,
 }: CameraSetupContextBarProps) {
   const { t } = useTranslation(SAFETY_NAMESPACE);
   const activeCount = rows.filter((row) => row.status === 'ACTIVE').length;
@@ -209,6 +215,9 @@ export function CameraSetupContextBar({
                     : 'cameraSetup.selectedInactiveNext',
                 )}
               </p>
+            )}
+            {statusContext && (
+              <CameraApplicationStatusSummary camera={selectedCamera} context={statusContext} />
             )}
           </div>
 
@@ -276,7 +285,7 @@ export function CameraSetupContextBar({
           </span>
         </summary>
         <div className="mt-1.5 min-w-0 space-y-1 rounded-lg border border-slate-200/80 bg-white px-3 py-2 leading-4 text-slate-600">
-          {selectedCamera && (
+          {selectedCamera && !statusContext && (
             <p className="break-words [overflow-wrap:anywhere]">
               {t('cameraSetup.savedConfigVersionStatus', {
                 version: selectedCamera.configurationVersion,

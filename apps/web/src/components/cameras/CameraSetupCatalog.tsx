@@ -6,6 +6,7 @@ import { SAFETY_NAMESPACE } from '../../i18n/runtime';
 import type { ZonePpeCapabilities } from '../ppe/zone-ppe-scope';
 import type { useSetupCatalog } from './useSetupCatalog';
 import { CAMERA_BUTTON_STYLES } from './camera-dialog-styles';
+import type { CameraApplicationStatusContext } from './CameraApplicationStatusSummary';
 import { CameraSetupContextBar, CameraSetupRowMetadata } from './CameraSetupContextPanel';
 import { CameraSetupWorkflow, type CameraSetupOpenHandler } from './CameraSetupWorkflow';
 
@@ -22,6 +23,7 @@ export function CameraSetupCatalog({
   requestedCameraId = null,
   cameraError,
   open,
+  statusContext,
 }: {
   siteId?: string;
   siteCode?: string;
@@ -35,6 +37,7 @@ export function CameraSetupCatalog({
   requestedCameraId?: string | null;
   cameraError: ReactNode;
   open: CameraSetupOpenHandler;
+  statusContext?: CameraApplicationStatusContext;
 }) {
   const { t } = useTranslation(SAFETY_NAMESPACE);
   const catalogId = useId();
@@ -100,6 +103,7 @@ export function CameraSetupCatalog({
                 canManageCameras={canManageCameras}
                 canOpenMonitoring={canOpenMonitoring}
                 open={open}
+                statusContext={statusContext}
               />
             )}
             {cameras.isPending && (

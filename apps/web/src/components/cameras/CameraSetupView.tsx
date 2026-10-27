@@ -436,6 +436,18 @@ function SetupWorkspace({ apiUrl, session }: { apiUrl: string; session: SharedSe
           requestedCameraId={params.get('cameraId')}
           cameraError={errorNotice(cameras)}
           open={open}
+          statusContext={{
+            setupKey: key,
+            token: session.accessToken,
+            siteId: site.id,
+            client,
+            enabled: Boolean(canReadCameras && !revoked && !sites.baseError && !cameras.baseError),
+            onUnauthorized: () => {
+              if (mounted.current && dialogScope.current.siteId === site.id) {
+                setRevoked(true);
+              }
+            },
+          }}
         />
       )}
       {site && activeDialog?.kind === 'register' && canManageCameras && (

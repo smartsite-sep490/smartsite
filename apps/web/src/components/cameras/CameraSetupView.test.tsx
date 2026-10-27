@@ -12,6 +12,7 @@ const mocks = vi.hoisted(() => ({
   listSites: vi.fn(),
   listCameras: vi.fn(),
   listPreviewCameras: vi.fn(),
+  getCameraApplicationStatus: vi.fn(),
   client: {} as Record<string, unknown>,
   registerDialog: null as null | {
     onClose: () => void;
@@ -113,6 +114,7 @@ beforeEach(() => {
   mocks.listSites.mockReset().mockResolvedValue({ items: [site], total: 1 });
   mocks.listCameras.mockReset().mockResolvedValue({ items: [camera], total: 1 });
   mocks.listPreviewCameras.mockReset();
+  mocks.getCameraApplicationStatus.mockReset();
   mocks.registerDialog = null;
   mocks.dialog = null;
   mocks.client = {
@@ -695,4 +697,245 @@ it('updates camera setup state immediately on management save and invalidates sa
   await act(async () => {
     resolveRefetch({ items: [updatedCam], total: 1 });
   });
+});
+
+it('displays concise LOADED status, Details disclosure, EN/VI copy, manual refresh, and expires LOADED after 60s total receipt age via monotonic fake timers without network calls', async () => {
+  vi.useFakeTimers({ shouldAdvanceTime: true });
+  try {
+    const uuidSite = {
+      ...site,
+      id: '11111111-1111-4111-8111-111111111111',
+    };
+    const uuidCam = {
+      ...camera,
+      id: '22222222-2222-4222-8222-222222222222',
+      siteId: uuidSite.id,
+      status: 'ACTIVE' as const,
+      configurationVersion: 2,
+    };
+    mocks.listSites.mockResolvedValue({ items: [uuidSite], total: 1 });
+    mocks.listCameras.mockResolvedValue({ items: [uuidCam], total: 1 });
+    mocks.client.getCameraApplicationStatus = mocks.getCameraApplicationStatus;
+    mocks.getCameraApplicationStatus.mockResolvedValueOnce({
+      cameraId: uuidCam.id,
+      siteId: uuidSite.id,
+      desiredRevision: 2,
+      reportedRevision: 2,
+      applicationState: 'LOADED',
+      observedAt: '2026-10-27T05:00:40.000Z',
+      lastReceiptAt: '2026-10-27T05:00:00.000Z',
+      viewValidity: 'UNCONFIRMED',
+      reasonCode: null,
+    });
+
+    mount(manager(uuidSite.id));
+    expect(await screen.findByText('Worker loaded v2')).toBeTruthy();
+    expect(screen.getByText('Saved v2 · Worker reported: v2')).toBeTruthy();
+    expect(screen.getByText('Physical camera view is unconfirmed.')).toBeTruthy();
+    expect(
+      screen.getByTestId('camera-application-status').getAttribute('data-application-state'),
+    ).toBe('LOADED');
+    expect(
+      screen.getByText(
+        'Observed: 2026-10-27T05:00:40.000Z · Last receipt: 2026-10-27T05:00:00.000Z',
+      ),
+    ).toBeTruthy();
+    expect(
+      screen.getByText('Configuration receipt does not prove live stream or model health.'),
+    ).toBeTruthy();
+    expect(mocks.listPreviewCameras).not.toHaveBeenCalled();
+    expect(mocks.getCameraApplicationStatus).toHaveBeenCalledTimes(1);
+
+    await act(async () => changeUiLanguage('vi'));
+    expect(screen.getByText('Đã lưu v2 · Worker báo cáo: v2')).toBeTruthy();
+    expect(screen.getByText('Worker đã nạp v2')).toBeTruthy();
+    expect(screen.getByText('Góc nhìn vật lý chưa được xác nhận.')).toBeTruthy();
+    await act(async () => changeUiLanguage('en'));
+
+    // Server observedAt - lastReceiptAt = 40s, so 20s local freshness budget remains.
+    await act(async () => {
+      vi.advanceTimersByTime(19_000);
+    });
+    expect(screen.getByText('Worker loaded v2')).toBeTruthy();
+    expect(mocks.getCameraApplicationStatus).toHaveBeenCalledTimes(1);
+
+    // Advancing the remaining 1s reaches 60s total receipt age and expires LOADED locally without network:
+    await act(async () => {
+      vi.advanceTimersByTime(1_000);
+    });
+    expect(screen.queryByText('Worker loaded v2')).toBeNull();
+    expect(screen.getByText('Application receipt is old')).toBeTruthy();
+    expect(
+      screen.getByTestId('camera-application-status').getAttribute('data-application-state'),
+    ).toBe('STALE');
+    expect(
+      screen.getByText(
+        'Reason: Historical worker claim / old receipt past 60s window; does not mean camera is offline. (APPLICATION_RECEIPT_STALE)',
+      ),
+    ).toBeTruthy();
+    expect(mocks.getCameraApplicationStatus).toHaveBeenCalledTimes(1);
+  } finally {
+    vi.useRealTimers();
+  }
+});
+
+it('distinguishes UNCONFIRMED, PENDING, REJECTED, and STALE states and hides stale LOADED on pending refresh, error, version bump, or 401', async () => {
+  const onSignOut = vi.fn();
+  const uuidSite = {
+    ...site,
+    id: '11111111-1111-4111-8111-111111111111',
+  };
+  const uuidCam = {
+    ...camera,
+    id: '22222222-2222-4222-8222-222222222222',
+    siteId: uuidSite.id,
+    status: 'ACTIVE' as const,
+    configurationVersion: 2,
+  };
+  mocks.listSites.mockResolvedValue({ items: [uuidSite], total: 1 });
+  mocks.listCameras.mockResolvedValue({ items: [uuidCam], total: 1 });
+  mocks.client.getCameraApplicationStatus = mocks.getCameraApplicationStatus;
+
+  const baseStatus = {
+    cameraId: uuidCam.id,
+    siteId: uuidSite.id,
+    desiredRevision: 2,
+    observedAt: '2026-10-27T05:00:10.000Z',
+  };
+
+  mocks.getCameraApplicationStatus
+    .mockResolvedValueOnce({
+      ...baseStatus,
+      reportedRevision: null,
+      applicationState: 'UNCONFIRMED',
+      lastReceiptAt: null,
+      viewValidity: 'UNAVAILABLE',
+      reasonCode: 'NO_APPLICATION_RECEIPT',
+    })
+    .mockResolvedValueOnce({
+      ...baseStatus,
+      reportedRevision: null,
+      applicationState: 'PENDING',
+      lastReceiptAt: null,
+      viewValidity: 'NEEDS_REVALIDATION',
+      reasonCode: 'CONFIGURATION_NOT_ISSUED',
+    })
+    .mockResolvedValueOnce({
+      ...baseStatus,
+      reportedRevision: 2,
+      applicationState: 'REJECTED',
+      lastReceiptAt: '2026-10-27T05:00:05.000Z',
+      viewValidity: 'UNCONFIRMED',
+      reasonCode: 'BUNDLE_HASH_MISMATCH',
+    })
+    .mockResolvedValueOnce({
+      ...baseStatus,
+      reportedRevision: 2,
+      applicationState: 'LOADED',
+      lastReceiptAt: '2026-10-27T05:00:08.000Z',
+      viewValidity: 'UNCONFIRMED',
+      reasonCode: null,
+    });
+
+  mount({ ...manager(uuidSite.id), onSignOut });
+  expect(await screen.findByText('Worker application unconfirmed')).toBeTruthy();
+  expect(screen.getByText('Saved v2 · Worker reported: none')).toBeTruthy();
+  expect(screen.getByText('Reference view is unavailable.')).toBeTruthy();
+
+  fireEvent.click(screen.getByRole('button', { name: 'Refresh status' }));
+  expect(await screen.findByText('Pending worker application')).toBeTruthy();
+  expect(screen.getByText('Reference view needs revalidation.')).toBeTruthy();
+  expect(
+    screen.getByText('Reason: Configuration bundle is not issued yet. (CONFIGURATION_NOT_ISSUED)'),
+  ).toBeTruthy();
+
+  fireEvent.click(screen.getByRole('button', { name: 'Refresh status' }));
+  expect(await screen.findByText('Worker rejected v2')).toBeTruthy();
+  expect(
+    screen.getByText('Reason: Worker reported reason code. (BUNDLE_HASH_MISMATCH)'),
+  ).toBeTruthy();
+
+  fireEvent.click(screen.getByRole('button', { name: 'Refresh status' }));
+  expect(await screen.findByText('Worker loaded v2')).toBeTruthy();
+
+  // Pending manual refresh hides LOADED immediately and fails closed on error:
+  let rejectRefresh!: (err: unknown) => void;
+  mocks.getCameraApplicationStatus.mockImplementationOnce(
+    () =>
+      new Promise((_, reject) => {
+        rejectRefresh = reject;
+      }),
+  );
+  fireEvent.click(screen.getByRole('button', { name: 'Refresh status' }));
+  await waitFor(() => {
+    expect(screen.queryByText('Worker loaded v2')).toBeNull();
+    expect(
+      screen.getByText('Saved config version v2; worker application status unavailable.'),
+    ).toBeTruthy();
+  });
+  await act(async () => {
+    rejectRefresh(new ApiError('http', 'Unavailable', 503));
+  });
+  expect(await screen.findByText('Could not verify worker application status.')).toBeTruthy();
+  expect(screen.queryByText('Worker loaded v2')).toBeNull();
+
+  // Restore LOADED v2, then bump configurationVersion (v2 -> v3) via camera update:
+  mocks.getCameraApplicationStatus.mockResolvedValueOnce({
+    ...baseStatus,
+    reportedRevision: 2,
+    applicationState: 'LOADED',
+    lastReceiptAt: '2026-10-27T05:00:08.000Z',
+    viewValidity: 'UNCONFIRMED',
+    reasonCode: null,
+  });
+  fireEvent.click(screen.getByRole('button', { name: 'Refresh status' }));
+  expect(await screen.findByText('Worker loaded v2')).toBeTruthy();
+
+  let resolveV3Status!: (value: unknown) => void;
+  const v3StatusPromise = new Promise((resolve) => {
+    resolveV3Status = resolve;
+  });
+  const transitionSignals: AbortSignal[] = [];
+  mocks.getCameraApplicationStatus.mockImplementation(
+    (_token: string, _siteId: string, _cameraId: string, options?: { signal?: AbortSignal }) => {
+      if (options?.signal) transitionSignals.push(options.signal);
+      return v3StatusPromise;
+    },
+  );
+  const updatedV3Cam = {
+    ...uuidCam,
+    configurationVersion: 3,
+  };
+  mocks.listCameras.mockResolvedValue({ items: [updatedV3Cam], total: 1 });
+  fireEvent.click(screen.getByRole('button', { name: 'Manage Gate camera' }));
+  await act(async () => {
+    mocks.dialog?.onUpdated?.(updatedV3Cam);
+  });
+  await waitFor(() => {
+    expect(screen.queryByText('Worker loaded v2')).toBeNull();
+    expect(
+      screen.getByText('Saved config version v3; worker application status unavailable.'),
+    ).toBeTruthy();
+    expect(transitionSignals.length).toBeGreaterThanOrEqual(2);
+  });
+  expect(transitionSignals[0]?.aborted).toBe(true);
+  expect(transitionSignals.at(-1)?.aborted).toBe(false);
+  await act(async () => {
+    resolveV3Status({
+      ...baseStatus,
+      desiredRevision: 3,
+      reportedRevision: 3,
+      applicationState: 'LOADED',
+      lastReceiptAt: '2026-10-27T05:00:09.000Z',
+      viewValidity: 'UNCONFIRMED',
+      reasonCode: null,
+    });
+  });
+  expect(await screen.findByText('Worker loaded v3')).toBeTruthy();
+
+  // 401 on application status revokes setup scope and signs out once:
+  mocks.getCameraApplicationStatus.mockRejectedValueOnce(new ApiError('http', 'Expired', 401));
+  fireEvent.click(screen.getByRole('button', { name: 'Refresh status' }));
+  await screen.findByText('Sign in to manage configuration.');
+  expect(onSignOut).toHaveBeenCalledOnce();
 });

@@ -16,6 +16,9 @@ export function refreshCameraSetupCaches(
     .invalidateQueries({ queryKey: [...setupKey, siteId, 'selected-camera'] })
     .catch(() => undefined);
   void cache
+    .resetQueries({ queryKey: [...setupKey, siteId, 'application-status'] })
+    .catch(() => undefined);
+  void cache
     .invalidateQueries({
       // Region metadata owns a separate opaque credential nonce.
       // Invalidate the exact Site/session family rather than guessing that nonce.
@@ -49,8 +52,10 @@ export function publishUpdatedSetupCamera(
 ): void {
   const camerasKey = [...setupKey, siteId, 'cameras'];
   const selectedLookupKey = [...setupKey, siteId, 'selected-camera', updatedCamera.id];
+  const appStatusKey = [...setupKey, siteId, 'application-status', updatedCamera.id];
   void cache.cancelQueries({ queryKey: camerasKey });
   void cache.cancelQueries({ queryKey: selectedLookupKey });
+  void cache.cancelQueries({ queryKey: appStatusKey });
   cache.setQueriesData<{
     pages: { items: CameraResponse[]; total: number }[];
     pageParams: unknown[];

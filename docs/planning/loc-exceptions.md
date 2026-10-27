@@ -396,3 +396,17 @@ below 100 lines; Canvas/Footer receive only an optional canSave flag. Existing
 large caller fixtures gain explicit checkbox interaction without removed assertions
 or unrelated refactors. This exception does not permit broader panel growth or
 claim worker application, physical pose, browser rendering or production acceptance.
+
+## Camera application-status integration, 27 October
+
+Owner/reviewer: Root. The existing CameraSetupView remains above500 lines
+(511->523) for passing scoped status context; configuration/dialog ownership stays
+in that workspace. Existing CameraSetupView.test.tsx grows from below700 to above900
+for two full query/mutation/auth lifecycle journeys using its established mocked
+client and dialog harness. Retain these regression assertions rather than copy
+or weaken the harness solely for this delivery. Extract the shared setup-test
+harness and application-status journeys before further status feature growth.
+The new status UI and feature-local translation catalog are split by responsibility
+and target below300 lines each. This exception permits only this C03 metadata
+integration, with Root checking cache isolation, expiration and revocation; it
+is not browser/worker runtime or production acceptance.

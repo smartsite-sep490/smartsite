@@ -33,3 +33,12 @@ The reader uses one repeatable-read transaction and the same validated immutable
 bundle reader as the worker delivery endpoint. Invalid persisted issuance returns
 a safe unavailable error. Receipts are selected by configuration version and then
 database receipt order, within the selected generation only.
+
+Camera Setup displays this metadata for the selected camera only. Its compact
+summary shows saved/reported versions, application state, a separate physical-view
+warning and manual refresh. A collapsed Details section contains timestamps,
+reason and the stream/model limitation. Refresh pending/errors, changed scope or
+changed saved revision hide the previous claim. A monotonic local timer consumes
+the remaining 60-second receipt window and rechecks on focus/visibility; no image
+or preview request is made by this component. A 401 uses existing scoped sign-out.
+These UI checks are DOM/state evidence, not browser rendering or camera acceptance.
