@@ -1,4 +1,8 @@
 import {
+  parseCameraApplicationStatus,
+  type CameraApplicationStatus,
+} from '@smartsite/contracts/camera-application-status';
+import {
   parseCameraConfigurationImageResponse,
   parseCameraConfigurationReferenceResponse,
   type CameraConfigurationImageResponse,
@@ -6,6 +10,7 @@ import {
 } from '@smartsite/contracts/camera-configuration-image';
 import { ApiError } from './errors';
 
+export const MAX_CAMERA_APPLICATION_STATUS_RESPONSE_BYTES = 4_096;
 export const MAX_CONFIGURATION_IMAGE_RESPONSE_BYTES = 1_500_000;
 export const MAX_CONFIGURATION_REFERENCE_RESPONSE_BYTES =
   MAX_CONFIGURATION_IMAGE_RESPONSE_BYTES + 4_096;
@@ -155,5 +160,25 @@ export function parseScopedCameraConfigurationReference(
       'invalid-response',
       'Backend returned invalid camera configuration reference.',
     );
+  }
+}
+
+export function parseScopedCameraApplicationStatus(
+  payload: unknown,
+  siteId: string,
+  cameraId: string,
+): CameraApplicationStatus {
+  try {
+    const status = parseCameraApplicationStatus(payload);
+    if (
+      !status ||
+      status.siteId.toLowerCase() !== siteId.toLowerCase() ||
+      status.cameraId.toLowerCase() !== cameraId.toLowerCase()
+    ) {
+      throw new Error('Scope mismatch');
+    }
+    return status;
+  } catch {
+    throw new ApiError('invalid-response', 'Backend returned invalid camera application status.');
   }
 }

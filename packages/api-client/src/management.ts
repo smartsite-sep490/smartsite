@@ -192,6 +192,7 @@ import {
 
 import { ApiError, parseBackendErrorEnvelope, type RequestOptions } from './errors';
 import { parseCameraObservationZones } from '@smartsite/contracts/camera-observation-zones';
+import type { CameraApplicationStatus } from '@smartsite/contracts/camera-application-status';
 import type {
   CameraConfigurationImageReference,
   CameraConfigurationImageResponse,
@@ -199,14 +200,17 @@ import type {
 } from '@smartsite/contracts/camera-configuration-image';
 import {
   discardAbortedResponse,
+  MAX_CAMERA_APPLICATION_STATUS_RESPONSE_BYTES,
   MAX_CONFIGURATION_IMAGE_RESPONSE_BYTES,
   MAX_CONFIGURATION_REFERENCE_RESPONSE_BYTES,
+  parseScopedCameraApplicationStatus,
   parseScopedCameraConfigurationImage,
   parseScopedCameraConfigurationReference,
   readBoundedResponseJson,
 } from './bounded-json';
 import { parseMf05DemoStatus, type Mf05DemoStatus } from './mf05-demo';
 export type {
+  CameraApplicationStatus,
   CameraConfigurationImageReference,
   CameraConfigurationImageResponse,
   CameraConfigurationReferenceResponse,
@@ -1481,6 +1485,24 @@ export class SmartSiteManagementClient {
       MAX_CONFIGURATION_REFERENCE_RESPONSE_BYTES,
     );
     return parseScopedCameraConfigurationReference(result, siteId, cameraId);
+  }
+  async getCameraApplicationStatus(
+    token: string,
+    siteId: string,
+    cameraId: string,
+    options?: RequestOptions,
+  ): Promise<CameraApplicationStatus> {
+    const result = await this.request<unknown>(
+      'GET',
+      `/sites/${pathId(siteId)}/cameras/${pathId(cameraId)}/application-status`,
+      token,
+      undefined,
+      undefined,
+      { ...options, timeoutMs: options?.timeoutMs ?? 3000 },
+      { cache: 'no-store', redirect: 'error' },
+      MAX_CAMERA_APPLICATION_STATUS_RESPONSE_BYTES,
+    );
+    return parseScopedCameraApplicationStatus(result, siteId, cameraId);
   }
   getSafetyOverview(
     token: string,

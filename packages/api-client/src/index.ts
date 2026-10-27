@@ -144,6 +144,10 @@ export {
   type CameraVideoStreamOptions,
   type CameraMediaStreamValidationState,
 } from './camera-media-stream';
+export {
+  parseCameraApplicationStatus,
+  type CameraApplicationStatus,
+} from '@smartsite/contracts/camera-application-status';
 export type {
   CameraConfigurationImageFrame,
   CameraConfigurationSourceImage,
@@ -161,6 +165,7 @@ export {
   parseCameraConfigurationReferenceResponse,
 } from '@smartsite/contracts/camera-configuration-image';
 export {
+  MAX_CAMERA_APPLICATION_STATUS_RESPONSE_BYTES,
   MAX_CONFIGURATION_IMAGE_RESPONSE_BYTES,
   MAX_CONFIGURATION_REFERENCE_RESPONSE_BYTES,
 } from './bounded-json';

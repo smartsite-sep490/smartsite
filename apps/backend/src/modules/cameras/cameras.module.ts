@@ -11,6 +11,8 @@ import { CameraConfigurationImageController } from './camera-configuration-image
 import { CameraConfigurationImageService } from './camera-configuration-image.service.js';
 import { CameraConfigurationReferenceController } from './camera-configuration-reference.controller.js';
 import { CameraConfigurationReferenceService } from './camera-configuration-reference.service.js';
+import { CameraApplicationStatusController } from './camera-application-status.controller.js';
+import { CameraApplicationStatusService } from './camera-application-status.service.js';
 
 @Module({
   imports: [DatabaseModule, SitesModule, ZonesModule, AuthModule],
@@ -19,8 +21,10 @@ import { CameraConfigurationReferenceService } from './camera-configuration-refe
     CameraPreviewController,
     CameraConfigurationImageController,
     CameraConfigurationReferenceController,
+    CameraApplicationStatusController,
   ],
   providers: [
+    CameraApplicationStatusService,
     CameraConfigurationService,
     CameraPreviewService,
     CameraConfigurationImageService,

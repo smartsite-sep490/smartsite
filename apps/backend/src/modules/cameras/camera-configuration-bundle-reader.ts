@@ -1,4 +1,4 @@
-import type { DataSource } from 'typeorm';
+import type { DataSource, EntityManager } from 'typeorm';
 import {
   parseCameraConfigurationBundlePayload,
   computeCanonicalPayloadHash,
@@ -25,31 +25,46 @@ export async function readIssuedCameraConfigurationBundle(
   cameraId: string,
 ): Promise<CameraConfigurationBundle> {
   try {
-    return await source.transaction('REPEATABLE READ', async (manager) => {
-      const camera = await manager.getRepository(CameraEntity).findOneBy({ id: cameraId });
-      if (!camera) missing();
-      if (camera.status !== CameraStatus.ACTIVE)
-        conflict('Issued camera configuration is unavailable');
-      const header = await manager.getRepository(CameraConfigurationBundleEntity).findOneBy({
-        cameraId,
-        siteId: camera.siteId,
-        configurationVersion: String(camera.configurationVersion),
-      });
-      if (!header) conflict('Issued camera configuration is unavailable');
-      if (header.cameraExternalId !== camera.externalId)
-        conflict('Issued camera configuration is unavailable');
-      const view = await manager.getRepository(CameraViewRevisionEntity).findOneBy({
-        cameraId,
-        siteId: camera.siteId,
-        revision: header.viewRevision,
-        isCurrent: true,
-      });
-      if (!view) conflict('Issued camera configuration is unavailable');
-      if (!(header.issuedAt instanceof Date) || !Number.isFinite(header.issuedAt.getTime()))
-        unavailable();
-      const rows: Array<
-        Record<string, unknown> & { policyRevision: string; requiredPpe: string[] }
-      > = await manager.query(
+    return await source.transaction('REPEATABLE READ', (manager) =>
+      readIssuedCameraBundleInTransaction(manager, cameraId),
+    );
+  } catch (error) {
+    if (error instanceof PublicHttpException) throw error;
+    unavailable();
+  }
+}
+
+/** Reuses the caller's snapshot so status and validated issuance cannot disagree across reads. */
+export async function readIssuedCameraBundleInTransaction(
+  manager: EntityManager,
+  cameraId: string,
+): Promise<CameraConfigurationBundle> {
+  if (!manager.queryRunner?.isTransactionActive)
+    throw new Error('Camera bundle requires a transaction');
+  try {
+    const camera = await manager.getRepository(CameraEntity).findOneBy({ id: cameraId });
+    if (!camera) missing();
+    if (camera.status !== CameraStatus.ACTIVE)
+      conflict('Issued camera configuration is unavailable');
+    const header = await manager.getRepository(CameraConfigurationBundleEntity).findOneBy({
+      cameraId,
+      siteId: camera.siteId,
+      configurationVersion: String(camera.configurationVersion),
+    });
+    if (!header) conflict('Issued camera configuration is unavailable');
+    if (header.cameraExternalId !== camera.externalId)
+      conflict('Issued camera configuration is unavailable');
+    const view = await manager.getRepository(CameraViewRevisionEntity).findOneBy({
+      cameraId,
+      siteId: camera.siteId,
+      revision: header.viewRevision,
+      isCurrent: true,
+    });
+    if (!view) conflict('Issued camera configuration is unavailable');
+    if (!(header.issuedAt instanceof Date) || !Number.isFinite(header.issuedAt.getTime()))
+      unavailable();
+    const rows: Array<Record<string, unknown> & { policyRevision: string; requiredPpe: string[] }> =
+      await manager.query(
         `
         SELECT b.region_id AS "regionId",b.geometry_version AS "geometryVersion",g.coordinate_space AS "coordinateSpace",
           g.polygon,b.zone_id AS "zoneId",b.policy_revision AS "policyRevision",p.required_ppe AS "requiredPpe",
@@ -60,58 +75,57 @@ export async function readIssuedCameraConfigurationBundle(
         WHERE b.camera_id=$1 AND b.configuration_version=$2 ORDER BY b.region_id ASC LIMIT 65`,
         [cameraId, header.configurationVersion],
       );
-      if (
-        rows.length > 64 ||
-        rows.some(
-          (row) =>
-            row.active !== true ||
-            typeof row.referenceId !== 'string' ||
-            row.viewRevision !== header.viewRevision,
-        )
+    if (
+      rows.length > 64 ||
+      rows.some(
+        (row) =>
+          row.active !== true ||
+          typeof row.referenceId !== 'string' ||
+          row.viewRevision !== header.viewRevision,
       )
-        unavailable();
-      const current = await manager.getRepository(CameraObservationRegionEntity).find({
-        where: { cameraId, isActive: true },
-        order: { id: 'ASC' },
-        take: 65,
-      });
-      if (
-        current.length !== rows.length ||
-        current.some((region, index) => {
-          const row = rows[index]!;
-          return (
-            region.id !== row.regionId ||
-            region.version !== row.geometryVersion ||
-            region.zoneId !== row.zoneId ||
-            region.coordinateSpace !== row.coordinateSpace ||
-            computeCanonicalPayloadHash(region.polygon) !== computeCanonicalPayloadHash(row.polygon)
-          );
-        })
-      )
-        unavailable();
-      const parsed = parseCameraConfigurationBundlePayload(
-        JSON.stringify({
-          schemaVersion: '1.0.0',
-          cameraId,
-          cameraExternalId: header.cameraExternalId,
-          configurationVersion: Number(header.configurationVersion),
-          viewRevision: Number(header.viewRevision),
-          issuedAt: header.issuedAt.toISOString(),
-          bundleSha256: header.bundleSha256,
-          regions: rows.map((row) => ({
-            regionId: row.regionId,
-            geometryVersion: row.geometryVersion,
-            coordinateSpace: row.coordinateSpace,
-            polygon: row.polygon,
-            zoneId: row.zoneId,
-            policyRevision: Number(row.policyRevision),
-            requiredPpe: [...row.requiredPpe].sort(),
-          })),
-        }),
-      );
-      if (!parsed.isValid || !parsed.value) unavailable();
-      return parsed.value;
+    )
+      unavailable();
+    const current = await manager.getRepository(CameraObservationRegionEntity).find({
+      where: { cameraId, isActive: true },
+      order: { id: 'ASC' },
+      take: 65,
     });
+    if (
+      current.length !== rows.length ||
+      current.some((region, index) => {
+        const row = rows[index]!;
+        return (
+          region.id !== row.regionId ||
+          region.version !== row.geometryVersion ||
+          region.zoneId !== row.zoneId ||
+          region.coordinateSpace !== row.coordinateSpace ||
+          computeCanonicalPayloadHash(region.polygon) !== computeCanonicalPayloadHash(row.polygon)
+        );
+      })
+    )
+      unavailable();
+    const parsed = parseCameraConfigurationBundlePayload(
+      JSON.stringify({
+        schemaVersion: '1.0.0',
+        cameraId,
+        cameraExternalId: header.cameraExternalId,
+        configurationVersion: Number(header.configurationVersion),
+        viewRevision: Number(header.viewRevision),
+        issuedAt: header.issuedAt.toISOString(),
+        bundleSha256: header.bundleSha256,
+        regions: rows.map((row) => ({
+          regionId: row.regionId,
+          geometryVersion: row.geometryVersion,
+          coordinateSpace: row.coordinateSpace,
+          polygon: row.polygon,
+          zoneId: row.zoneId,
+          policyRevision: Number(row.policyRevision),
+          requiredPpe: [...row.requiredPpe].sort(),
+        })),
+      }),
+    );
+    if (!parsed.isValid || !parsed.value) unavailable();
+    return parsed.value;
   } catch (error) {
     if (error instanceof PublicHttpException) throw error;
     unavailable();

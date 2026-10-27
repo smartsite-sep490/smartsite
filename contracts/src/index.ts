@@ -1,4 +1,6 @@
 export const CONTRACTS_VERSION = '1.0.0';
+export { parseCameraApplicationStatus } from './camera-application-status.js';
+export type { CameraApplicationStatus } from './camera-application-status.js';
 export {
   MAX_CAMERA_CONFIGURATION_ACK_BYTES,
   parseCameraConfigurationAcknowledgementPayload,

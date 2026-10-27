@@ -453,6 +453,56 @@ test('software-only AppModule supports Site, scoped Zone and Camera metadata wit
         headers: { Authorization: `Bearer ${serviceToken}`, 'If-None-Match': etag },
       });
     assert.equal((await cached()).status, 304);
+    const applicationStatusPath = `/sites/${site.id}/cameras/${camera.id}/application-status`;
+    assert.equal((await request('GET', applicationStatusPath)).status, 401);
+    assert.equal(
+      (await request('GET', applicationStatusPath, undefined, admin.accessToken)).status,
+      200,
+    );
+    assert.equal(
+      (
+        await request(
+          'GET',
+          applicationStatusPath + '?maxAgeMs=3600000',
+          undefined,
+          manager.accessToken,
+        )
+      ).status,
+      400,
+    );
+    assert.equal(
+      (
+        await request(
+          'GET',
+          `/sites/${randomUUID()}/cameras/${camera.id}/application-status`,
+          undefined,
+          manager.accessToken,
+        )
+      ).status,
+      403,
+    );
+    assert.equal(
+      (
+        await request(
+          'GET',
+          `/sites/${site.id}/cameras/${randomUUID()}/application-status`,
+          undefined,
+          manager.accessToken,
+        )
+      ).status,
+      404,
+    );
+    const unconfirmedStatus = await request(
+      'GET',
+      applicationStatusPath,
+      undefined,
+      manager.accessToken,
+    );
+    assert.equal(unconfirmedStatus.status, 200);
+    assert.equal(
+      ((await unconfirmedStatus.json()) as { applicationState: string }).applicationState,
+      'UNCONFIRMED',
+    );
     const generation = await provisionCameraWorkerGeneration(
       database.dataSource,
       camera.id,
@@ -482,6 +532,24 @@ test('software-only AppModule supports Site, scoped Zone and Camera metadata wit
     assert.equal(receipt.status, 200);
     assert.equal(receipt.headers.get('cache-control'), 'no-store');
     assert.equal(((await receipt.json()) as { replayed: boolean }).replayed, false);
+    const applicationStatus = await request(
+      'GET',
+      applicationStatusPath,
+      undefined,
+      manager.accessToken,
+    );
+    assert.equal(applicationStatus.status, 200);
+    assert.equal(applicationStatus.headers.get('cache-control'), 'no-store');
+    const application = (await applicationStatus.json()) as {
+      applicationState: string;
+      viewValidity: string;
+    };
+    assert.equal(application.applicationState, 'LOADED');
+    assert.equal(application.viewValidity, 'UNCONFIRMED');
+    assert.equal(
+      (await request('GET', applicationStatusPath, undefined, serviceToken)).status,
+      401,
+    );
     const replay = await acknowledge();
     assert.equal(replay.status, 200);
     assert.equal(((await replay.json()) as { replayed: boolean }).replayed, true);
@@ -505,6 +573,17 @@ test('software-only AppModule supports Site, scoped Zone and Camera metadata wit
     assert.equal(inactive.status, 200);
     assert.equal((await cached()).status, 409);
     assert.equal((await acknowledge()).status, 409);
+    const inactiveApplicationStatus = await request(
+      'GET',
+      applicationStatusPath,
+      undefined,
+      manager.accessToken,
+    );
+    assert.equal(inactiveApplicationStatus.status, 200);
+    assert.equal(
+      ((await inactiveApplicationStatus.json()) as { applicationState: string }).applicationState,
+      'STALE',
+    );
     const logout = await request('POST', '/auth/logout', {
       clientType: 'MOBILE',
       refreshToken: manager.refreshToken,
