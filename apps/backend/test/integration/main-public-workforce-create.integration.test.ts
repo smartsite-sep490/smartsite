@@ -21,6 +21,9 @@ const database = createIsolatedTestDatabase({ canonical: true }),
   db = database.dataSource;
 before(async () => {
   await database.initialize();
+  const [{ schemaName }] = await db.query('SELECT current_schema() AS "schemaName"');
+  assert.match(schemaName, /^isolated_test_[0-9a-f]{32}$/);
+  console.info(`FRAME_TEST_SCHEMA:${schemaName}`);
   await installMainAuthorityCandidate(db);
 });
 after(async () => {
@@ -28,12 +31,12 @@ after(async () => {
 });
 type Kind = 'CONTRACTOR' | 'WORKER' | 'SITE_CONTRACTOR';
 
-for (const role of ['SITE_MANAGER', 'CONTRACTOR_REPRESENTATIVE', 'SAFETY_OFFICER']) {
-  test(`Site Contractor catalog creation refuses ${role} without global Admin`, async () => {
+for (const role of ['ADMIN', 'CONTRACTOR_REPRESENTATIVE', 'SAFETY_OFFICER']) {
+  test(`Site Contractor catalog creation refuses ${role} without its Site Manager assignment`, async () => {
     const f = await fixture();
     await db.query('UPDATE user_role_assignment SET role=$1,site_id=$2 WHERE user_id=$3', [
       role,
-      f.site,
+      role === 'ADMIN' ? null : f.site,
       f.actor,
     ]);
     await withApi(f, async (call) => {
@@ -71,7 +74,7 @@ test('Site Contractor catalog keeps optional codes, same-code reuse and name con
   });
 });
 
-async function fixture(kind: Kind = 'CONTRACTOR') {
+async function fixture(kind: Kind = 'SITE_CONTRACTOR') {
   const f = {
     actor: randomUUID(),
     site: randomUUID(),
@@ -96,8 +99,12 @@ async function fixture(kind: Kind = 'CONTRACTOR') {
   await db.query('INSERT INTO user_role_assignment(id,user_id,role,site_id) VALUES($1,$2,$3,$4)', [
     randomUUID(),
     f.actor,
-    kind === 'WORKER' ? 'CONTRACTOR_REPRESENTATIVE' : 'ADMIN',
-    kind === 'WORKER' ? f.site : null,
+    kind === 'WORKER'
+      ? 'CONTRACTOR_REPRESENTATIVE'
+      : kind === 'CONTRACTOR'
+        ? 'ADMIN'
+        : 'SITE_MANAGER',
+    kind === 'CONTRACTOR' ? null : f.site,
   ]);
   if (kind === 'WORKER')
     await db.query(
@@ -211,7 +218,14 @@ async function createdCount(f: Fixture, kind: Kind) {
     )
   )[0].n as number;
 }
-for (const kind of ['CONTRACTOR', 'WORKER', 'SITE_CONTRACTOR'] as const) {
+test('retired unscoped Contractor POST cannot create a catalog entry even for Admin', async () => {
+  const f = await fixture('CONTRACTOR');
+  await withApi(f, async (call) => {
+    assert.equal((await call('CONTRACTOR')).status, 404);
+    assert.equal(await createdCount(f, 'CONTRACTOR'), 0);
+  });
+});
+for (const kind of ['WORKER', 'SITE_CONTRACTOR'] as const) {
   test(
     'public ' + kind + ' create emits actor-bound same-transaction MF06 source fact and witness',
     async () => {
@@ -273,7 +287,7 @@ for (const kind of ['CONTRACTOR', 'WORKER', 'SITE_CONTRACTOR'] as const) {
     },
   );
 }
-for (const kind of ['CONTRACTOR', 'WORKER', 'SITE_CONTRACTOR'] as const) {
+for (const kind of ['WORKER', 'SITE_CONTRACTOR'] as const) {
   test(
     'public ' +
       kind +
@@ -333,7 +347,7 @@ for (const kind of ['CONTRACTOR', 'WORKER', 'SITE_CONTRACTOR'] as const) {
           if (change === 'LOGOUT') assert.equal((await logout()).status, 204);
           if (change === 'ROLE')
             await db.query(
-              "UPDATE user_role_assignment SET role='SITE_MANAGER',site_id=$2 WHERE user_id=$1",
+              "UPDATE user_role_assignment SET role='SAFETY_OFFICER',site_id=$2 WHERE user_id=$1",
               [f.actor, f.site],
             );
           if (change === 'DEACTIVATE')
@@ -409,7 +423,7 @@ for (const kind of ['CONTRACTOR', 'WORKER', 'SITE_CONTRACTOR'] as const) {
     },
   );
 }
-test('Contractor creation requires global Admin while Worker creation accepts only exact scoped Representative with grant', async () => {
+test('Site Contractor creation refuses Representatives while Worker creation accepts only exact scoped Representative with grant', async () => {
   const f = await fixture();
   await withApi(f, async (call) => {
     assert.equal((await call('WORKER')).status, 403);
@@ -417,7 +431,7 @@ test('Contractor creation requires global Admin while Worker creation accepts on
       "UPDATE user_role_assignment SET role='CONTRACTOR_REPRESENTATIVE',site_id=$2 WHERE user_id=$1",
       [f.actor, f.site],
     );
-    assert.equal((await call('CONTRACTOR')).status, 403);
+    assert.equal((await call('SITE_CONTRACTOR')).status, 403);
     assert.equal((await call('WORKER')).status, 403);
     await db.query(
       'INSERT INTO contractor_representative_grant(id,user_id,contractor_id) VALUES($1,$2,$3)',
@@ -430,7 +444,7 @@ test('Contractor creation requires global Admin while Worker creation accepts on
     );
     assert.equal((await call('WORKER', { ...f.workerInput, siteId: otherSite })).status, 403);
     assert.equal((await call('WORKER')).status, 201);
-    assert.equal(await createdCount(f, 'CONTRACTOR'), 0);
+    assert.equal(await createdCount(f, 'SITE_CONTRACTOR'), 0);
     assert.equal(await createdCount(f, 'WORKER'), 1);
   });
 });

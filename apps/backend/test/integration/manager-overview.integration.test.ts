@@ -39,22 +39,7 @@ test('manager overview: generated codes, Site isolation, current roster and date
   const site = await sites.create({ code: randomUUID(), name: 'Manager overview fixture' });
   const other = await sites.create({ code: randomUUID(), name: 'Other overview fixture' });
   const userId = randomUUID(),
-    foreignManagerId = randomUUID(),
-    catalogAdminId = randomUUID();
-  await source.getRepository(UserEntity).save({
-    id: catalogAdminId,
-    username: catalogAdminId,
-    displayName: 'Catalog Admin',
-    passwordHash: 'synthetic-unused',
-    isActive: true,
-    mustChangePassword: false,
-  });
-  await source.getRepository(UserRoleAssignmentEntity).save({
-    id: randomUUID(),
-    userId: catalogAdminId,
-    role: UserRole.ADMIN,
-    siteId: null,
-  });
+    foreignManagerId = randomUUID();
   await source.getRepository(UserEntity).save({
     id: userId,
     username: userId,
@@ -82,7 +67,7 @@ test('manager overview: generated codes, Site isolation, current roster and date
   });
   const createContractor = (siteId: string, input: { name: string; code?: string }) =>
     workforce.createSiteContractor(siteId, input, {
-      actorUserId: catalogAdminId,
+      actorUserId: siteId === site.id ? userId : foreignManagerId,
     });
   const actor: AuthenticatedUser = {
     id: userId,

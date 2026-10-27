@@ -80,17 +80,11 @@ test('Site Manager representative creation is atomic, scoped and supports multip
     roleAssignments: [{ role: UserRole.SITE_MANAGER, siteId: other.id }],
   });
   const creation = new MainWorkforceCreateService(source);
-  const admin = await users.create({
-    username: `admin-${randomUUID()}`,
-    displayName: 'Catalog Admin',
-    temporaryPassword: 'TempDemo2026!',
-    roleAssignments: [{ role: UserRole.ADMIN, siteId: null }],
-  });
   const createContractor = (name: string) =>
     creation.createSiteContractor(
       site.id,
       { code: `C-${randomUUID()}`, name },
-      { actorUserId: admin!.id },
+      { actorUserId: manager!.id },
     );
   const first = await createContractor('First contractor');
   const second = await createContractor('Second contractor');

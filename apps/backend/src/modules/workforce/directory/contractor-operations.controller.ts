@@ -19,7 +19,6 @@ import { MainParticipationCommandService } from '../../zones/main-participation-
 import { MainWorkforceCreateService } from '../main-workforce-create.service.js';
 import { MainRepresentativeCommandService } from '../main-representative-command.service.js';
 import {
-  CreateContractorCommand,
   CreateContractorParticipationCommand,
   CreateContractorWorkerCommand,
   GrantContractorRepresentativeCommand,
@@ -45,22 +44,6 @@ export class ContractorOperationsController {
     private readonly auth: UserAuthGuard,
     private readonly creation: MainWorkforceCreateService,
   ) {}
-
-  @Post()
-  @UseGuards(AdminGuard)
-  @ApiCreatedResponse()
-  async create(@Req() request: AuthenticatedRequest, @Body() input: CreateContractorCommand) {
-    const contractor = await this.creation.createContractor(
-      input,
-      configurationCommandContext(request, this.auth),
-    );
-    this.logger.log({
-      actorId: request.user!.id,
-      action: 'contractor.create',
-      resourceId: contractor.id,
-    });
-    return contractor;
-  }
 
   @Post(':contractorId/participations')
   @ApiCreatedResponse()

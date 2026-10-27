@@ -20,6 +20,7 @@ import {
   CreateContractorWorkerCommand,
 } from './directory/contractor-operations.service.js';
 import { CreateContractorDto } from './directory/dto/workforce.dto.js';
+import { mainSiteManagerAuthorization } from '../../common/configuration/main-site-manager-authority.js';
 
 function forbidden(): never {
   throw new PublicHttpException(403, { code: 'FORBIDDEN', message: 'Forbidden' });
@@ -62,6 +63,7 @@ export class MainWorkforceCreateService {
           });
           return contractor;
         },
+        mainSiteManagerAuthorization(context, siteId),
       );
     } catch (error) {
       knownUnique(error, ['uq_contractor_code']);

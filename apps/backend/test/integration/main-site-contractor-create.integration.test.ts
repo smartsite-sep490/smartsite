@@ -21,6 +21,9 @@ const database = createIsolatedTestDatabase({ canonical: true }),
   db = database.dataSource;
 before(async () => {
   await database.initialize();
+  const [{ schemaName }] = await db.query('SELECT current_schema() AS "schemaName"');
+  assert.match(schemaName, /^isolated_test_[0-9a-f]{32}$/);
+  console.info(`FRAME_TEST_SCHEMA:${schemaName}`);
   await installMainAuthorityCandidate(db);
 });
 after(async () => {
@@ -42,8 +45,8 @@ async function fixture() {
     f.site,
   ]);
   await db.query(
-    "INSERT INTO user_role_assignment(id,user_id,role,site_id) VALUES($1,$2,'ADMIN',NULL)",
-    [randomUUID(), f.actor],
+    "INSERT INTO user_role_assignment(id,user_id,role,site_id) VALUES($1,$2,'SITE_MANAGER',$3)",
+    [randomUUID(), f.actor, f.site],
   );
   await db.query(
     "INSERT INTO contractor(id,code,name) VALUES($1,$1::uuid::text,'Synthetic Contractor')",
@@ -148,7 +151,7 @@ async function factsFor(id: string) {
     [id],
   );
 }
-test('Admin Contractor catalog create emits its actor-bound fact without granting Site participation', async () => {
+test('Site Manager Contractor catalog create emits its actor-bound fact without granting Site participation', async () => {
   const f = await fixture();
   await withApi(f, async (call) => {
     const response = await call('CONTRACTOR');
@@ -169,7 +172,7 @@ test('Admin Contractor catalog create emits its actor-bound fact without grantin
     assert.equal(c[0].operation, 'SITE_CONTRACTOR_CREATE');
   });
 });
-test('Admin Contractor reuse across Sites preserves the catalog without granting participation or facts', async () => {
+test('Site Manager requires the target Site assignment before reusing the catalog without participation or facts', async () => {
   const f = await fixture();
   const other = randomUUID();
   await db.query(
@@ -177,6 +180,11 @@ test('Admin Contractor reuse across Sites preserves the catalog without granting
     [other],
   );
   await withApi(f, async (call) => {
+    assert.equal((await call('CONTRACTOR', undefined, other)).status, 403);
+    await db.query(
+      "INSERT INTO user_role_assignment(id,user_id,role,site_id) VALUES($1,$2,'SITE_MANAGER',$3)",
+      [randomUUID(), f.actor, other],
+    );
     const response = await call(
       'CONTRACTOR',
       { code: f.contractor, name: 'Synthetic Contractor' },
@@ -262,13 +270,13 @@ for (const mode of ['OPEN', 'FINITE', 'EXPIRED', 'FUTURE', 'INACTIVE'] as const)
       assert.equal((await db.query('SELECT count(*)::int AS n FROM audit_log'))[0].n, audits);
     });
   });
-test('Admin Contractor strictDTO400/missingSite404/name or inactive409 do not create participation', async () => {
+test('Site Manager Contractor strictDTO400/unassignedSite403/name or inactive409 do not create participation', async () => {
   const f = await fixture();
   await withApi(f, async (call) => {
     for (const extra of [{ actorUserId: f.actor }, { commandId: randomUUID() }])
       assert.equal((await call('CONTRACTOR', { ...f.contractorInput, ...extra })).status, 400);
-    assert.equal((await call('CONTRACTOR', undefined, 'bad-id')).status, 400);
-    assert.equal((await call('CONTRACTOR', undefined, randomUUID())).status, 404);
+    assert.equal((await call('CONTRACTOR', undefined, 'bad-id')).status, 403);
+    assert.equal((await call('CONTRACTOR', undefined, randomUUID())).status, 403);
     assert.equal(
       (await call('CONTRACTOR', { code: f.contractor, name: 'Different name' })).status,
       409,
@@ -290,19 +298,22 @@ test('Admin Contractor strictDTO400/missingSite404/name or inactive409 do not cr
     );
   });
 });
-for (const role of ['SITE_MANAGER', 'CONTRACTOR_REPRESENTATIVE', 'WORKER'] as const)
-  test('Contractor catalog refuses ' + role + ' without global Admin', async () => {
-    const f = await fixture();
-    await db.query('UPDATE user_role_assignment SET role=$2,site_id=$3 WHERE user_id=$1', [
-      f.actor,
-      role,
-      f.site,
-    ]);
-    await withApi(f, async (call) => {
-      assert.equal((await call('CONTRACTOR')).status, 403);
-      assert.equal(await countCreated(f), 0);
-    });
-  });
+for (const role of ['ADMIN', 'CONTRACTOR_REPRESENTATIVE', 'WORKER'] as const)
+  test(
+    'Contractor catalog refuses ' + role + ' without the target Site Manager assignment',
+    async () => {
+      const f = await fixture();
+      await db.query('UPDATE user_role_assignment SET role=$2,site_id=$3 WHERE user_id=$1', [
+        f.actor,
+        role,
+        role === 'ADMIN' ? null : f.site,
+      ]);
+      await withApi(f, async (call) => {
+        assert.equal((await call('CONTRACTOR')).status, 403);
+        assert.equal(await countCreated(f), 0);
+      });
+    },
+  );
 for (const change of ['LOGOUT', 'ROLE', 'DEACTIVATE', 'TEMP_PASSWORD'] as const)
   test(
     'site Contractor ' + change + ' before transaction claim leaves both sources absent',
@@ -336,7 +347,7 @@ for (const change of ['LOGOUT', 'ROLE', 'DEACTIVATE', 'TEMP_PASSWORD'] as const)
           if (change === 'LOGOUT') assert.equal((await logout()).status, 204);
           if (change === 'ROLE')
             await db.query(
-              "UPDATE user_role_assignment SET role='SITE_MANAGER',site_id=$2 WHERE user_id=$1",
+              "UPDATE user_role_assignment SET role='SAFETY_OFFICER',site_id=$2 WHERE user_id=$1",
               [f.actor, f.site],
             );
           if (change === 'DEACTIVATE')
