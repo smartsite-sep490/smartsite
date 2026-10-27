@@ -38,6 +38,14 @@ export async function provisionCameraWorkerGeneration(
   cameraId: string,
   allowedCameraIds: readonly string[],
   leaseMs: number,
+  deliver?: (
+    credential: Readonly<{
+      workerGenerationId: string;
+      streamSessionId: string;
+      secret: string;
+      expiresAt: string;
+    }>,
+  ) => Promise<void>,
 ) {
   cameraId = allowedCamera(cameraId, allowedCameraIds);
   if (!Number.isSafeInteger(leaseMs) || leaseMs < 1000 || leaseMs > 86400000) invalid();
@@ -64,12 +72,15 @@ export async function provisionCameraWorkerGeneration(
       { isCurrent: false, supersededAt: now },
     );
     await generations.insert(generation);
-    return {
+    const credential = {
       workerGenerationId: generation.id,
       streamSessionId: generation.streamSessionId,
       secret,
       expiresAt: generation.expiresAt.toISOString(),
     };
+    // Bounded local delivery must finish before commit; failure preserves the previous generation.
+    await deliver?.(credential);
+    return credential;
   });
 }
 

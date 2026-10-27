@@ -1,6 +1,9 @@
 import 'reflect-metadata';
 import assert from 'node:assert/strict';
 import { createHash, randomUUID } from 'node:crypto';
+import { mkdtemp, readFile } from 'node:fs/promises';
+import path from 'node:path';
+import { tmpdir } from 'node:os';
 import { test } from 'node:test';
 import type { DataSource } from 'typeorm';
 import {
@@ -8,6 +11,10 @@ import {
   revokeCameraWorkerGeneration,
 } from '../../src/modules/cameras/camera-worker-generations.js';
 import { createIsolatedTestDatabase } from '../support/isolated-test-database.js';
+import { resolveTestDatabaseUrl } from '../support/test-environment.js';
+import { provisionCameraWorker } from '../../src/scripts/provision-camera-worker.js';
+
+const fixtureRoot = process.platform === 'win32' ? 'D:/Ky9-FPT/SmartSiteData/runs' : tmpdir();
 
 type Provision = (
   source: DataSource,
@@ -100,6 +107,19 @@ test('operator generations supersede atomically and never persist plaintext cred
       assert.equal((await rows()).length, 0);
     });
     const first = await provision!(db, cameraId, [cameraId], 60000);
+    await t.test(
+      'failed credential delivery rolls back issuance and preserves current generation',
+      async () => {
+        const before = await rows();
+        await assert.rejects(
+          provisionCameraWorkerGeneration(db, cameraId, [cameraId], 60000, async () => {
+            throw new Error('Synthetic local delivery failure');
+          }),
+          /Synthetic local delivery failure/,
+        );
+        assert.deepEqual(await rows(), before);
+      },
+    );
     await t.test('server allocates session and secret, only its digest is stored', async () => {
       assert.match(first.secret, /^[A-Za-z0-9_-]{43}$/);
       const [stored] = await rows();
@@ -127,6 +147,45 @@ test('operator generations supersede atomically and never persist plaintext cred
       assert.notEqual(issued[0]!.secret, issued[1]!.secret);
       assert.notEqual(issued[0]!.streamSessionId, issued[1]!.streamSessionId);
     });
+    await t.test(
+      'actual operator command delivers credentials only for its explicit owned database target',
+      async () => {
+        const directory = await mkdtemp(path.join(fixtureRoot, 'worker-generation-pg-test-'));
+        const output = path.join(directory, 'credential.json');
+        const connection = resolveTestDatabaseUrl();
+        const url = new URL(connection);
+        assert.equal(db.options.type, 'postgres');
+        if (db.options.type !== 'postgres') throw new Error('Dedicated PostgreSQL required');
+        const schema = String(db.options.schema);
+        await provisionCameraWorker(
+          [
+            '--camera-id',
+            cameraId,
+            '--lease-ms',
+            '60000',
+            '--output',
+            output,
+            '--database-identity',
+            `${url.hostname}:${url.port}/${url.pathname.slice(1)}/${schema}`,
+          ],
+          {
+            DATABASE_URL: connection,
+            DATABASE_SCHEMA: schema,
+            AI_CONFIGURATION_CAMERA_IDS: cameraId,
+          },
+        );
+        const delivered = JSON.parse(await readFile(output, 'utf8'));
+        const current = (await rows()).find((row: { is_current: boolean }) => row.is_current);
+        assert.equal(delivered.cameraId, cameraId);
+        assert.equal(delivered.workerGenerationId, current.id);
+        assert.equal(delivered.streamSessionId, current.stream_session_id);
+        assert.equal(
+          createHash('sha256').update(delivered.secret).digest('hex'),
+          current.credential_sha256,
+        );
+        assert(!JSON.stringify(current).includes(delivered.secret));
+      },
+    );
     await t.test('lifecycle and cross-site storage fail closed', async () => {
       await assert.rejects(
         db.query('UPDATE camera_worker_generation SET credential_sha256=$2 WHERE id=$1', [
