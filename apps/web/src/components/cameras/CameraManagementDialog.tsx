@@ -1,4 +1,12 @@
-import { useId, useLayoutEffect, useMemo, useRef, useState, type FormEvent } from 'react';
+import {
+  useCallback,
+  useId,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  useState,
+  type FormEvent,
+} from 'react';
 import { ApiError, SmartSiteManagementClient } from '@smartsite/api-client';
 import type { CameraResponse } from '@smartsite/contracts/management';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
@@ -13,6 +21,7 @@ import {
   CameraFeedbackNotice,
   CameraManagementMetadataCard,
 } from './CameraDialogPrimitives';
+import { resolveDialogCloseTrigger } from './camera-dialog-focus';
 import { CAMERA_BUTTON_STYLES, CAMERA_FIELD_STYLES } from './camera-dialog-styles';
 
 const clientIds = new WeakMap<SmartSiteManagementClient, number>();
@@ -223,6 +232,10 @@ function ScopedCameraManagementDialog(
   });
   const [confirmDiscard, setConfirmDiscard] = useState(false);
   const lastFocusedRef = useRef<HTMLElement | null>(null);
+  const cancelStatusConfirmRef = useRef<(() => boolean) | null>(null);
+  const registerStatusCancel = useCallback((handler: (() => boolean) | null) => {
+    cancelStatusConfirmRef.current = handler;
+  }, []);
 
   useLayoutEffect(() => {
     if (!confirmDiscard && lastFocusedRef.current) {
@@ -234,12 +247,15 @@ function ScopedCameraManagementDialog(
     }
   }, [confirmDiscard]);
 
-  const handleAttemptClose = () => {
-    if (draftState.saving || confirmDiscard) return;
+  const handleAttemptClose = (trigger?: unknown) => {
+    if (draftState.saving) return;
+    if (cancelStatusConfirmRef.current?.()) return;
+    if (confirmDiscard) {
+      setConfirmDiscard(false);
+      return;
+    }
     if (draftState.dirty) {
-      if (document.activeElement instanceof HTMLElement) {
-        lastFocusedRef.current = document.activeElement;
-      }
+      lastFocusedRef.current = resolveDialogCloseTrigger(trigger);
       setConfirmDiscard(true);
       return;
     }
@@ -276,6 +292,7 @@ function ScopedCameraManagementDialog(
             {...props}
             onDraftStateChange={setDraftState}
             onCancelRequest={handleAttemptClose}
+            onRegisterStatusCancel={registerStatusCancel}
           />
         </fieldset>
       </div>
@@ -288,7 +305,8 @@ function ScopedCameraManagementForm(
     client: SmartSiteManagementClient;
     scopeKey: string;
     onDraftStateChange: (state: { dirty: boolean; saving: boolean }) => void;
-    onCancelRequest: () => void;
+    onCancelRequest: (trigger?: HTMLElement | null) => void;
+    onRegisterStatusCancel: (handler: (() => boolean) | null) => void;
   },
 ) {
   const { t } = useLocale();
@@ -345,6 +363,7 @@ function ScopedCameraManagementForm(
   const refreshButtonRef = useRef<HTMLButtonElement>(null);
   const cancelButtonRef = useRef<HTMLButtonElement>(null);
   const pendingStatusFocusTargetRef = useRef<'none' | 'trigger' | 'conflict' | 'cancel'>('none');
+  const pendingCancelStatusFocusRef = useRef(false);
 
   useLayoutEffect(() => {
     activeRef.current = true;
@@ -356,6 +375,26 @@ function ScopedCameraManagementForm(
   const isDirty = draftName !== currentCamera.name;
   const isSaving = savingName || savingStatus || isRefreshing;
   const onDraftStateChange = props.onDraftStateChange;
+  const onRegisterStatusCancel = props.onRegisterStatusCancel;
+
+  useLayoutEffect(() => {
+    onRegisterStatusCancel(() => {
+      if (!confirmStatusChange || isSaving) return false;
+      pendingCancelStatusFocusRef.current = true;
+      setConfirmStatusChange(false);
+      return true;
+    });
+    return () => {
+      onRegisterStatusCancel(null);
+    };
+  }, [onRegisterStatusCancel, confirmStatusChange, isSaving]);
+
+  useLayoutEffect(() => {
+    if (!confirmStatusChange && pendingCancelStatusFocusRef.current) {
+      pendingCancelStatusFocusRef.current = false;
+      statusTriggerRef.current?.focus();
+    }
+  }, [confirmStatusChange]);
 
   useLayoutEffect(() => {
     onDraftStateChange({ dirty: isDirty, saving: isSaving });
@@ -656,7 +695,7 @@ function ScopedCameraManagementForm(
           ref={cancelButtonRef}
           type="button"
           disabled={isSaving}
-          onClick={props.onCancelRequest}
+          onClick={() => props.onCancelRequest(cancelButtonRef.current)}
           className={CAMERA_BUTTON_STYLES.secondary}
         >
           {t('zoneSetup.action.cancel')}

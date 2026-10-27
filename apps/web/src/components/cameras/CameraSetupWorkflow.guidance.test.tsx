@@ -139,14 +139,12 @@ describe('CameraSetupWorkflow & Header Intro Guidance vs Role Capabilities', () 
     fireEvent.click(helpSummary);
     expect(helpDetails.open).toBe(true);
 
-    const guide = within(helpDetails).getByRole('list', { name: 'Setup steps' });
-    expect(within(guide).getByText('Create site areas and PPE requirements.')).toBeTruthy();
-    expect(within(guide).getByText('Register each camera in configuration.')).toBeTruthy();
-    expect(
-      within(guide).getByText(
-        'Link observation regions to areas. Source verification is separate.',
-      ),
-    ).toBeTruthy();
+    const guide = within(helpDetails).getByRole('list', { name: 'Four-stage setup reference' });
+    expect(within(guide).getAllByRole('listitem')).toHaveLength(4);
+    expect(within(guide).getByText('Stage 1 · Per-Zone PPE Policy')).toBeTruthy();
+    expect(within(guide).getByText('Stage 2 · Camera & Source ID')).toBeTruthy();
+    expect(within(guide).getByText('Stage 3 · Reference Image')).toBeTruthy();
+    expect(within(guide).getByText('Stage 4 · Observation Regions')).toBeTruthy();
     expect(within(helpDetails).queryByRole('button')).toBeNull();
 
     const activeRow = within(camerasSection)
@@ -198,7 +196,9 @@ describe('CameraSetupWorkflow & Header Intro Guidance vs Role Capabilities', () 
       throw new Error('Expected native details/summary for setup help.');
     }
     expect(helpDetails.open).toBe(false);
-    expect(within(helpDetails).getByRole('list', { name: 'Setup steps' })).toBeTruthy();
+    expect(
+      within(helpDetails).getByRole('list', { name: 'Four-stage setup reference' }),
+    ).toBeTruthy();
 
     expect(within(camerasSection).getByRole('button', { name: 'View area policies' })).toBeTruthy();
     expect(
@@ -242,7 +242,9 @@ describe('CameraSetupWorkflow & Header Intro Guidance vs Role Capabilities', () 
     expect(helpDetails.open).toBe(false);
     fireEvent.click(helpSummary);
     expect(helpDetails.open).toBe(true);
-    expect(within(helpDetails).getByRole('list', { name: 'Setup steps' })).toBeTruthy();
+    expect(
+      within(helpDetails).getByRole('list', { name: 'Four-stage setup reference' }),
+    ).toBeTruthy();
 
     for (const name of [
       'Configure PPE by Zone',
@@ -263,6 +265,8 @@ describe('CameraSetupWorkflow & Header Intro Guidance vs Role Capabilities', () 
       screen.getByText('Quản lý công trường được phân công thiết lập camera và vùng quan sát.'),
     ).toBeTruthy();
     expect(screen.queryByText('Quản lý công trường quy định PPE cho từng khu vực.')).toBeNull();
-    expect(within(helpDetails).getByRole('list', { name: 'Thứ tự thiết lập' })).toBeTruthy();
+    expect(
+      within(helpDetails).getByRole('list', { name: 'Tham chiếu 4 bước thiết lập' }),
+    ).toBeTruthy();
   });
 });

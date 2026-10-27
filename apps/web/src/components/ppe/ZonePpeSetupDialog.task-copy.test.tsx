@@ -145,8 +145,8 @@ describe('Zone task copy and workflow landmark alignment', () => {
     fireEvent.click(helpSummary);
     expect(helpDetails.open).toBe(true);
 
-    const stepList = within(helpDetails).getByRole('list', { name: 'Setup steps' });
-    expect(within(stepList).getAllByRole('listitem')).toHaveLength(3);
+    const stepList = within(helpDetails).getByRole('list', { name: 'Four-stage setup reference' });
+    expect(within(stepList).getAllByRole('listitem')).toHaveLength(4);
     expect(within(helpDetails).queryByRole('button')).toBeNull();
 
     await act(async () => {
@@ -154,6 +154,8 @@ describe('Zone task copy and workflow landmark alignment', () => {
     });
     expect(helpDetails.open).toBe(true);
     expect(screen.getByText('Hướng dẫn thiết lập').closest('summary')).toBe(helpSummary);
-    expect(within(helpDetails).getByRole('list', { name: 'Thứ tự thiết lập' })).toBeTruthy();
+    expect(
+      within(helpDetails).getByRole('list', { name: 'Tham chiếu 4 bước thiết lập' }),
+    ).toBeTruthy();
   });
 });

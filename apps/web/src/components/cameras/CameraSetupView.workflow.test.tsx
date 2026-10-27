@@ -132,9 +132,9 @@ it('makes the ordered setup workflow visible with one action per task and separa
   fireEvent.click(helpSummary);
   expect(helpDetails.open).toBe(true);
 
-  const guide = within(helpDetails).getByRole('list', { name: 'Setup steps' });
+  const guide = within(helpDetails).getByRole('list', { name: 'Four-stage setup reference' });
   expect(guide.tagName).toBe('OL');
-  expect(within(guide).getAllByRole('listitem')).toHaveLength(3);
+  expect(within(guide).getAllByRole('listitem')).toHaveLength(4);
   expect(within(guide).queryByRole('button')).toBeNull();
 
   for (const name of ['Configure PPE by Zone', 'Register camera', 'Link observation regions']) {
@@ -207,7 +207,9 @@ it('preserves a policy task on locale changes and removes it on role withdrawal'
   await act(async () => changeUiLanguage('vi'));
   expect(screen.getByRole('dialog')).toBe(dialog);
   const translatedCameras = screen.getByRole('region', { name: 'Camera' });
-  expect(within(translatedCameras).getByRole('list', { name: 'Thứ tự thiết lập' })).toBeTruthy();
+  expect(
+    within(translatedCameras).getByRole('list', { name: 'Tham chiếu 4 bước thiết lập' }),
+  ).toBeTruthy();
   expect(within(translatedCameras).getByRole('button', { name: 'Gắn vùng quan sát' })).toBeTruthy();
   rerender({
     ...manager,

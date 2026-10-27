@@ -324,3 +324,43 @@ it('switches EN -> VI -> EN while preserving dirty drafts, discard confirmation,
     expectedConfigurationVersion: 3,
   });
 });
+
+it('cancels inline status confirmation and discard confirmation on Escape or Keep editing while preserving the dialog, dirty draft, and trigger focus', () => {
+  const view = mount();
+  const nameInput = screen.getByRole('textbox', { name: 'Camera name' }) as HTMLInputElement;
+  fill('North gate draft');
+
+  const deactivateBtn = screen.getByRole('button', { name: 'Deactivate camera' });
+  deactivateBtn.focus();
+  fireEvent.click(deactivateBtn);
+  expect(screen.getByRole('button', { name: 'Confirm deactivation' })).toBeTruthy();
+
+  fireEvent.keyDown(document.activeElement!, { key: 'Escape' });
+  expect(screen.queryByRole('button', { name: 'Confirm deactivation' })).toBeNull();
+  expect(screen.queryByText('Discard unsaved camera changes?')).toBeNull();
+  expect(view.props.onClose).not.toHaveBeenCalled();
+  expect(nameInput.value).toBe('North gate draft');
+  expect(document.activeElement).toBe(screen.getByRole('button', { name: 'Deactivate camera' }));
+
+  const cancelBtn = screen.getByRole('button', { name: 'Cancel' });
+  fireEvent.click(cancelBtn);
+  expect(screen.getByText('Discard unsaved camera changes?')).toBeTruthy();
+  expect(document.activeElement).toBe(screen.getByRole('button', { name: 'Keep editing' }));
+
+  fireEvent.click(screen.getByRole('button', { name: 'Keep editing' }));
+  expect(screen.queryByText('Discard unsaved camera changes?')).toBeNull();
+  expect(view.props.onClose).not.toHaveBeenCalled();
+  expect(nameInput.value).toBe('North gate draft');
+  expect(document.activeElement).toBe(cancelBtn);
+
+  nameInput.focus();
+  fireEvent.keyDown(nameInput, { key: 'Escape' });
+  expect(screen.getByText('Discard unsaved camera changes?')).toBeTruthy();
+  expect(document.activeElement).toBe(screen.getByRole('button', { name: 'Keep editing' }));
+
+  fireEvent.keyDown(document.activeElement!, { key: 'Escape' });
+  expect(screen.queryByText('Discard unsaved camera changes?')).toBeNull();
+  expect(view.props.onClose).not.toHaveBeenCalled();
+  expect(nameInput.value).toBe('North gate draft');
+  expect(document.activeElement).toBe(nameInput);
+});

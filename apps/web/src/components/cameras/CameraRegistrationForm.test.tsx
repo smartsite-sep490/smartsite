@@ -6,6 +6,7 @@ import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import type { CameraResponse } from '@smartsite/contracts/management';
 import { SmartSiteManagementClient } from '@smartsite/api-client';
 import i18n from '../../i18n';
+import { CameraRegistrationDialog } from './CameraRegistrationDialog';
 import { CameraRegistrationForm, type CameraRegistrationFormProps } from './CameraRegistrationForm';
 
 const siteA = '33333333-3333-4333-8333-333333333333';
@@ -496,4 +497,75 @@ it('switches EN -> VI -> EN while preserving dirty drafts, discard confirmation,
     name: 'Cổng chính',
     externalId: 'source-vi-01',
   });
+});
+
+it('cancels discard confirmation on Keep editing and Escape in both standalone form and dialog consumers while preserving drafts and restoring trigger focus', () => {
+  const view = mount();
+  fill();
+
+  const standaloneCancelBtn = screen.getByRole('button', { name: 'Cancel' });
+  fireEvent.click(standaloneCancelBtn);
+  expect(screen.getByText('Discard unsaved camera changes?')).toBeTruthy();
+  expect(document.activeElement).toBe(screen.getByRole('button', { name: 'Keep editing' }));
+
+  fireEvent.click(screen.getByRole('button', { name: 'Keep editing' }));
+  expect(screen.queryByText('Discard unsaved camera changes?')).toBeNull();
+  expect(view.props.onCancel).not.toHaveBeenCalled();
+  expect((screen.getByLabelText('Camera name') as HTMLInputElement).value).toBe('Gate camera');
+  expect(document.activeElement).toBe(standaloneCancelBtn);
+
+  fireEvent.click(standaloneCancelBtn);
+  expect(screen.getByText('Discard unsaved camera changes?')).toBeTruthy();
+  fireEvent.keyDown(document.activeElement!, { key: 'Escape' });
+  expect(screen.queryByText('Discard unsaved camera changes?')).toBeNull();
+  expect(view.props.onCancel).not.toHaveBeenCalled();
+  expect((screen.getByLabelText('Camera name') as HTMLInputElement).value).toBe('Gate camera');
+  expect(document.activeElement).toBe(standaloneCancelBtn);
+
+  view.unmount();
+
+  const onClose = vi.fn();
+  const dialogQueries = new QueryClient({
+    defaultOptions: { mutations: { retry: false, gcTime: 0 } },
+  });
+  clients.push(dialogQueries);
+  render(
+    <QueryClientProvider client={dialogQueries}>
+      <CameraRegistrationDialog
+        open
+        onClose={onClose}
+        apiUrl="https://backend.invalid"
+        token="token-a-private"
+        sessionScope="session-a"
+        credentialId={1}
+        siteId={siteA}
+        siteName="Site A"
+        canManageCamera
+      />
+    </QueryClientProvider>,
+  );
+
+  fill();
+  const dialogCancelBtn = screen.getByRole('button', { name: 'Cancel' });
+  fireEvent.click(dialogCancelBtn);
+  expect(screen.getByText('Discard unsaved camera changes?')).toBeTruthy();
+  expect(document.activeElement).toBe(screen.getByRole('button', { name: 'Keep editing' }));
+
+  fireEvent.click(screen.getByRole('button', { name: 'Keep editing' }));
+  expect(screen.queryByText('Discard unsaved camera changes?')).toBeNull();
+  expect(onClose).not.toHaveBeenCalled();
+  expect((screen.getByLabelText('Camera name') as HTMLInputElement).value).toBe('Gate camera');
+  expect(document.activeElement).toBe(dialogCancelBtn);
+
+  const nameInput = screen.getByLabelText('Camera name') as HTMLInputElement;
+  nameInput.focus();
+  fireEvent.keyDown(nameInput, { key: 'Escape' });
+  expect(screen.getByText('Discard unsaved camera changes?')).toBeTruthy();
+  expect(document.activeElement).toBe(screen.getByRole('button', { name: 'Keep editing' }));
+
+  fireEvent.keyDown(document.activeElement!, { key: 'Escape' });
+  expect(screen.queryByText('Discard unsaved camera changes?')).toBeNull();
+  expect(onClose).not.toHaveBeenCalled();
+  expect(nameInput.value).toBe('Gate camera');
+  expect(document.activeElement).toBe(nameInput);
 });

@@ -21,7 +21,7 @@ export interface CameraRegistrationFormProps {
   onUnauthorized?: () => void;
   onCancel?: () => void;
   /** A containing dialog can own the discard decision; standalone forms confirm locally. */
-  onCancelRequest?: () => void;
+  onCancelRequest?: (trigger?: HTMLElement | null) => void;
   onDraftStateChange?: (state: { dirty: boolean; saving: boolean }) => void;
 }
 
@@ -171,6 +171,8 @@ function ScopedCameraRegistrationForm(
   const [confirmDiscard, setConfirmDiscard] = useState(false);
   const active = useRef(false);
   const submitting = useRef(false);
+  const cancelButtonRef = useRef<HTMLButtonElement>(null);
+  const lastFocusedRef = useRef<HTMLElement | null>(null);
   const dirty = Object.values(draft).some((value) => value.length > 0);
   const onDraftStateChange = props.onDraftStateChange;
   useLayoutEffect(() => {
@@ -179,6 +181,15 @@ function ScopedCameraRegistrationForm(
       active.current = false;
     };
   }, []);
+  useLayoutEffect(() => {
+    if (!confirmDiscard && lastFocusedRef.current) {
+      const elementToFocus = lastFocusedRef.current;
+      lastFocusedRef.current = null;
+      if (elementToFocus.isConnected) {
+        elementToFocus.focus();
+      }
+    }
+  }, [confirmDiscard]);
 
   const create = useMutation({
     mutationKey: ['camera-registration', props.scopeKey],
@@ -239,17 +250,35 @@ function ScopedCameraRegistrationForm(
   const cancel = () => {
     if (submitting.current) return;
     if (props.onCancelRequest) {
-      props.onCancelRequest();
+      props.onCancelRequest(cancelButtonRef.current);
       return;
     }
-    if (dirty) setConfirmDiscard(true);
-    else props.onCancel?.();
+    if (dirty) {
+      lastFocusedRef.current = cancelButtonRef.current;
+      setConfirmDiscard(true);
+    } else {
+      props.onCancel?.();
+    }
+  };
+  const handleKeepEditing = () => {
+    if (create.isPending) return;
+    if (!lastFocusedRef.current) {
+      lastFocusedRef.current = cancelButtonRef.current;
+    }
+    setConfirmDiscard(false);
   };
   return (
     <form
       aria-label={t('ppe.admin.registerCamera')}
       noValidate
       onSubmit={submit}
+      onKeyDown={(event) => {
+        if (confirmDiscard && !create.isPending && event.key === 'Escape') {
+          event.preventDefault();
+          event.stopPropagation();
+          handleKeepEditing();
+        }
+      }}
       className="min-w-0 space-y-4"
     >
       <div className="min-w-0 rounded-2xl border border-slate-200/90 bg-slate-50/90 p-3.5 text-xs leading-relaxed text-[#6B6B6B] shadow-xs break-words">
@@ -300,10 +329,7 @@ function ScopedCameraRegistrationForm(
       {confirmDiscard && (
         <CameraDiscardBanner
           disabled={create.isPending}
-          onKeepEditing={() => {
-            setConfirmDiscard(false);
-            document.getElementById(`${id}-cancel`)?.focus();
-          }}
+          onKeepEditing={handleKeepEditing}
           onDiscardChanges={() => {
             setDraft({ code: '', name: '', externalId: '' });
             setConfirmDiscard(false);
@@ -314,6 +340,7 @@ function ScopedCameraRegistrationForm(
       <div className="flex flex-wrap items-center justify-end gap-2.5 border-t border-slate-200 pt-3.5">
         {(props.onCancel || props.onCancelRequest) && (
           <button
+            ref={cancelButtonRef}
             id={`${id}-cancel`}
             type="button"
             disabled={create.isPending}

@@ -168,7 +168,7 @@ it('grants register, zone PPE, and camera-specific manage actions only to the sc
     screen.getByText('The assigned Site Manager configures cameras and observation regions.'),
   ).toBeTruthy();
   expect(screen.queryByText('The Site Manager defines PPE requirements for each area.')).toBeNull();
-  expect(screen.getByRole('list', { name: 'Setup steps' })).toBeTruthy();
+  expect(screen.getByRole('list', { name: 'Four-stage setup reference' })).toBeTruthy();
   adminView.unmount();
 
   const foreignView = mountCatalog({ user: foreignManagerUser });
@@ -327,7 +327,7 @@ it('translates EN and VI catalog labels, metadata fields, configuration statuses
     throw new Error('Expected native details/summary for setup help.');
   }
   expect(helpDetails.open).toBe(false);
-  expect(screen.getByRole('list', { name: 'Setup steps' })).toBeTruthy();
+  expect(screen.getByRole('list', { name: 'Four-stage setup reference' })).toBeTruthy();
   expect(screen.getByRole('button', { name: 'Link observation regions' })).toBeTruthy();
   expect(screen.getAllByText('Camera code').length).toBeGreaterThan(0);
   expect(screen.getAllByText('Configuration status').length).toBeGreaterThan(0);
@@ -339,7 +339,7 @@ it('translates EN and VI catalog labels, metadata fields, configuration statuses
   await act(async () => changeUiLanguage('vi'));
   expect(screen.getByRole('region', { name: 'Camera' })).toBeTruthy();
   expect(screen.getByText('Hướng dẫn thiết lập').closest('summary')).toBe(helpSummary);
-  expect(screen.getByRole('list', { name: 'Thứ tự thiết lập' })).toBeTruthy();
+  expect(screen.getByRole('list', { name: 'Tham chiếu 4 bước thiết lập' })).toBeTruthy();
   expect(screen.getByRole('button', { name: 'Đăng ký camera' })).toBeTruthy();
   expect(screen.getByRole('button', { name: 'Cấu hình PPE theo khu vực' })).toBeTruthy();
   expect(screen.getByRole('button', { name: 'Gắn vùng quan sát' })).toBeTruthy();

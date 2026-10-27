@@ -94,6 +94,41 @@ describe('Zone form unsaved close boundary', () => {
       );
     },
   );
+  it.each(['keep-editing', 'escape'] as const)(
+    'keeps focus inside the original editable dialog and preserves draft after backdrop-triggered discard is dismissed via %s',
+    (dismissVia) => {
+      render(<Harness />);
+      const zoneCodeInput = screen.getByRole('textbox', { name: 'Zone Code' }) as HTMLInputElement;
+      zoneCodeInput.focus();
+      changeDraft();
+      expect(document.activeElement).toBe(zoneCodeInput);
+
+      // Clicking the non-focusable backdrop blurs the active control before click fires.
+      zoneCodeInput.blur();
+      fireEvent.click(screen.getByTestId('ppe-dialog-backdrop'));
+
+      const discardDialog = confirm();
+      const keepEditingButton = within(discardDialog).getByRole('button', {
+        name: 'Keep editing',
+      });
+      expect(document.activeElement).toBe(keepEditingButton);
+
+      if (dismissVia === 'keep-editing') {
+        fireEvent.click(keepEditingButton);
+      } else {
+        fireEvent.keyDown(keepEditingButton, { key: 'Escape' });
+      }
+
+      expect(screen.queryByRole('dialog', { name: 'Discard unsaved Zone changes?' })).toBeNull();
+      const activeDialog = form();
+      expect(
+        (within(activeDialog).getByRole('textbox', { name: 'Zone Code' }) as HTMLInputElement)
+          .value,
+      ).toBe('ASSEMBLY');
+      expect(activeDialog.contains(document.activeElement)).toBe(true);
+      expect(document.activeElement).toBe(zoneCodeInput);
+    },
+  );
   it('closes a pristine form without a discard prompt', () => {
     render(<Harness />);
     fireEvent.click(within(form()).getByRole('button', { name: 'Close dialog' }));

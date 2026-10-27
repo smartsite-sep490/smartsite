@@ -4,6 +4,7 @@ import type { CameraResponse } from '@smartsite/contracts/management';
 import { useLocale } from '../../i18n/ppe-locale';
 import { PpeDialog } from '../ppe/PpeDialog';
 import { CameraDiscardBanner } from './CameraDialogPrimitives';
+import { resolveDialogCloseTrigger } from './camera-dialog-focus';
 import { CameraRegistrationForm } from './CameraRegistrationForm';
 
 export interface CameraRegistrationDialogProps {
@@ -58,12 +59,14 @@ export function CameraRegistrationDialog({
     }
   }, [confirmDiscard]);
 
-  const handleAttemptClose = () => {
-    if (draftState.saving || confirmDiscard) return;
+  const handleAttemptClose = (trigger?: unknown) => {
+    if (draftState.saving) return;
+    if (confirmDiscard) {
+      setConfirmDiscard(false);
+      return;
+    }
     if (draftState.dirty) {
-      if (document.activeElement instanceof HTMLElement) {
-        lastFocusedRef.current = document.activeElement;
-      }
+      lastFocusedRef.current = resolveDialogCloseTrigger(trigger);
       setConfirmDiscard(true);
       return;
     }

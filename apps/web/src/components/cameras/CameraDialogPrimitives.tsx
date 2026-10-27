@@ -27,7 +27,16 @@ export function CameraDiscardBanner({
   }, [disabled]);
 
   return (
-    <div className="min-w-0 space-y-2.5 rounded-2xl border border-amber-200 bg-amber-50/90 p-3.5">
+    <div
+      onKeyDown={(event) => {
+        if (!disabled && event.key === 'Escape') {
+          event.preventDefault();
+          event.stopPropagation();
+          onKeepEditing();
+        }
+      }}
+      className="min-w-0 space-y-2.5 rounded-2xl border border-amber-200 bg-amber-50/90 p-3.5"
+    >
       <p id={promptId} className="text-sm font-medium leading-relaxed text-amber-950 break-words">
         {t('cameraSetup.discardPrompt')}
       </p>
@@ -181,9 +190,7 @@ export function CameraActivationSection({
       cancelConfirmRef.current?.focus();
     } else if (shouldRestoreTriggerFocusRef.current) {
       shouldRestoreTriggerFocusRef.current = false;
-      if (!document.activeElement || document.activeElement === document.body) {
-        resolvedTriggerRef.current?.focus();
-      }
+      resolvedTriggerRef.current?.focus();
     }
   }, [confirmStatusChange, resolvedTriggerRef]);
 
@@ -221,6 +228,14 @@ export function CameraActivationSection({
       {confirmStatusChange && (
         <div
           ref={resolvedConfirmContainerRef}
+          onKeyDown={(event) => {
+            if (!disabled && event.key === 'Escape') {
+              event.preventDefault();
+              event.stopPropagation();
+              shouldRestoreTriggerFocusRef.current = true;
+              onCancelConfirm();
+            }
+          }}
           className="min-w-0 space-y-2.5 rounded-2xl border border-amber-200 bg-amber-50/90 p-3.5"
         >
           <p

@@ -1,9 +1,12 @@
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import { useLocale } from '../../i18n/ppe-locale';
 import { PpeDialog } from './PpeDialog';
 import { ZonePpeSetupPanel, type ZonePpeSetupPanelProps } from './ZonePpeSetupPanel';
 import { getZonePpeScopeKey } from './zone-ppe-scope';
+
+const focusableSelector =
+  'button:not(:disabled), input:not(:disabled), select:not(:disabled), textarea:not(:disabled), a[href], [tabindex]:not([tabindex="-1"])';
 
 /** Owns closing the Zone form; authorization/scope changes still unmount it. */
 export function ZonePpeSetupDialog(props: ZonePpeSetupPanelProps) {
@@ -21,11 +24,27 @@ function ScopedZonePpeSetupDialog(props: ZonePpeSetupPanelProps) {
   const { t } = useLocale();
   const [draft, setDraft] = useState({ dirty: false, saving: false });
   const [confirmDiscard, setConfirmDiscard] = useState(false);
+  const panelContainerRef = useRef<HTMLDivElement>(null);
+  const lastFocusedRef = useRef<HTMLElement | null>(null);
   const isRegionsSection = props.section === 'regions';
   const requestClose = () => {
     if (draft.saving) return;
-    if (draft.dirty) setConfirmDiscard(true);
-    else props.onClose();
+    if (draft.dirty) {
+      const dialog = panelContainerRef.current?.closest<HTMLElement>('[role="dialog"]');
+      if (dialog && !dialog.contains(document.activeElement)) {
+        const fallback =
+          (lastFocusedRef.current?.isConnected && !lastFocusedRef.current.matches(':disabled')
+            ? lastFocusedRef.current
+            : null) ??
+          panelContainerRef.current?.querySelector<HTMLElement>(focusableSelector) ??
+          dialog.querySelector<HTMLElement>(focusableSelector) ??
+          dialog;
+        fallback.focus();
+      }
+      setConfirmDiscard(true);
+    } else {
+      props.onClose();
+    }
   };
   return (
     <PpeDialog
@@ -45,7 +64,21 @@ function ScopedZonePpeSetupDialog(props: ZonePpeSetupPanelProps) {
       onClose={requestClose}
       closeDisabled={draft.saving}
     >
-      <ZonePpeSetupPanel {...props} embedded onClose={requestClose} onDraftStateChange={setDraft} />
+      <div
+        ref={panelContainerRef}
+        onFocusCapture={(event) => {
+          if (event.target instanceof HTMLElement) {
+            lastFocusedRef.current = event.target;
+          }
+        }}
+      >
+        <ZonePpeSetupPanel
+          {...props}
+          embedded
+          onClose={requestClose}
+          onDraftStateChange={setDraft}
+        />
+      </div>
       <PpeDialog
         open={confirmDiscard}
         title={t('zoneSetup.dialog.discardTitle')}

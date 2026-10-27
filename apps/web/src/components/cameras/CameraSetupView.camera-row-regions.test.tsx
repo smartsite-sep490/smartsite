@@ -163,7 +163,9 @@ describe('CameraSetupView workspace hierarchy & per-camera region binding', () =
       throw new Error('Expected native details/summary for setup help.');
     }
     expect(helpDetails.open).toBe(false);
-    expect(within(helpDetails).getByRole('list', { name: 'Setup steps' })).toBeTruthy();
+    expect(
+      within(helpDetails).getByRole('list', { name: 'Four-stage setup reference' }),
+    ).toBeTruthy();
     expect(within(helpDetails).queryByRole('button')).toBeNull();
 
     const gateRow = screen.getByRole('heading', { name: gateCamera.name }).closest('li');
