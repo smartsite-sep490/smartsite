@@ -31,6 +31,7 @@ const ownedCameras = new Set<string>();
 const systemEnvironment = new Set(['PATH', 'Path', 'SystemRoot', 'WINDIR', 'TEMP', 'TMP']);
 const workerEnvironment = new Set([
   'SMARTSITE_AI_BACKEND_SERVICE_TOKEN',
+  'SMARTSITE_AI_BACKEND_INGESTION_URL',
   'SMARTSITE_AI_WORKER_SOURCE',
   'EVIDENCE_LOCAL_ROOT',
   'PYTHONDONTWRITEBYTECODE',
