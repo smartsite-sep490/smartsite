@@ -1,3 +1,4 @@
+import { Mf06FrameDelivery } from './Mf06FrameDelivery';
 import React, { useMemo, useEffect, useRef, useState, useCallback } from 'react';
 import { useQueryClient, useQuery, type QueryClient } from '@tanstack/react-query';
 import {
@@ -534,6 +535,8 @@ export function Mf06AssessmentDetailDialog({
                 v{record.evaluatorVersion}
               </span>
             </div>
+
+            <Mf06FrameDelivery delivery={record.frameDelivery} />
 
             {token && (
               <Mf06AssessmentFrame

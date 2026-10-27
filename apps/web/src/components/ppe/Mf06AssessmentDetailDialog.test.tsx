@@ -83,6 +83,35 @@ describe('Mf06AssessmentDetailDialog', () => {
     } as unknown as SmartSiteManagementClient;
   });
 
+  it.each([
+    ['PARTIAL', 1, 'Frame data incomplete · 1/2 parts'],
+    ['COMPLETE', 2, 'All frame data received · 2/2 parts'],
+  ] as const)('shows %s on the bound detail', async (status, receivedParts, label) => {
+    mockGetMf06Assessment.mockResolvedValue({
+      ...sampleRecord,
+      frameDelivery: {
+        frameId: '00000000-0000-4000-8000-000000000401',
+        sequenceNumber: '9007199254740994',
+        partCount: 2,
+        receivedParts,
+        status,
+      },
+    });
+    mount(() => (
+      <Mf06AssessmentDetailDialog
+        open
+        onClose={vi.fn()}
+        target={sampleTarget}
+        token={TOKEN_1}
+        siteId={SITE_1}
+        credentialId={CREDENTIAL_1}
+        client={mockClient}
+      />
+    ));
+    expect(await screen.findByText(label)).toBeTruthy();
+    expect(screen.getByText('Identity Unavailable')).toBeTruthy();
+    expect(screen.getByText('Unavailable')).toBeTruthy();
+  });
   it('renders dialog with title "Recorded assessment" and fetches assessment via client', async () => {
     mount(() => (
       <Mf06AssessmentDetailDialog
@@ -120,6 +149,13 @@ describe('Mf06AssessmentDetailDialog', () => {
     mockGetMf06Assessment.mockResolvedValue({
       ...sampleRecord,
       requestId: '99999999-9999-4999-8999-999999999999',
+      frameDelivery: {
+        frameId: '00000000-0000-4000-8000-000000000401',
+        sequenceNumber: '9007199254740994',
+        partCount: 2,
+        receivedParts: 1,
+        status: 'PARTIAL',
+      },
     });
 
     mount(() => (
@@ -138,6 +174,7 @@ describe('Mf06AssessmentDetailDialog', () => {
       await screen.findByText(/Assessment record does not match expected request context/i),
     ).toBeTruthy();
     expect(screen.queryByText('Identity Unavailable')).toBeNull();
+    expect(screen.queryByText(/Frame data incomplete/)).toBeNull();
   });
 
   it('rejects mismatch on capturedAt microsecond precision (.123456 vs .123457)', async () => {

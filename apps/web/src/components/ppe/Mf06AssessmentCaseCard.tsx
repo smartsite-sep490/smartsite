@@ -1,3 +1,4 @@
+import { Mf06FrameDelivery } from './Mf06FrameDelivery';
 import React from 'react';
 import { type Mf06AssessmentResponse } from '@smartsite/api-client';
 import { IconCheck, IconX, IconAlertTriangle } from '../icons';
@@ -138,6 +139,8 @@ export function Mf06AssessmentCaseCard({
           {t('mf06.history.viewAssessment')}
         </button>
       </div>
+
+      <Mf06FrameDelivery delivery={assessment.frameDelivery} />
 
       <p className="text-xs text-zinc-700 ">
         <span className="font-medium text-zinc-500 ">{t('mf06.case.reasonLabel')}</span>{' '}

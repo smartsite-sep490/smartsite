@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import React from 'react';
-import { render, screen, fireEvent, cleanup } from '@testing-library/react';
+import { render, screen, fireEvent, cleanup, act } from '@testing-library/react';
 import { describe, it, expect, vi, afterEach } from 'vitest';
 import type { CameraResponse, Mf06AssessmentResponse } from '@smartsite/api-client';
 import { Mf06AssessmentCaseCard } from './Mf06AssessmentCaseCard';
@@ -35,6 +35,96 @@ function makeAssessment(overrides: Partial<Mf06AssessmentResponse> = {}): Mf06As
 }
 
 describe('Mf06AssessmentCaseCard', () => {
+  it('updates delivery after refresh and locale change, then clears it for legacy data', async () => {
+    const partial = makeAssessment({
+      outcome: 'UNAVAILABLE',
+      reasonCode: 'IDENTITY_UNAVAILABLE',
+      frameDelivery: {
+        frameId: '00000000-0000-4000-8000-000000000401',
+        sequenceNumber: '9007199254740994',
+        partCount: 2,
+        receivedParts: 1,
+        status: 'PARTIAL',
+      },
+    });
+    const view = (assessment: Mf06AssessmentResponse) => (
+      <LocaleProvider defaultLocale="en">
+        <ul>
+          <Mf06AssessmentCaseCard
+            assessment={assessment}
+            referencesKey="scope"
+            onViewAssessment={vi.fn()}
+          />
+        </ul>
+      </LocaleProvider>
+    );
+    const { rerender } = render(view(partial));
+    expect(screen.getByText('Frame data incomplete · 1/2 parts')).toBeTruthy();
+    rerender(
+      view({
+        ...partial,
+        frameDelivery: { ...partial.frameDelivery!, receivedParts: 2, status: 'COMPLETE' },
+      }),
+    );
+    expect(screen.queryByText('Frame data incomplete · 1/2 parts')).toBeNull();
+    expect(screen.getByText('All frame data received · 2/2 parts')).toBeTruthy();
+    await act(async () => {
+      await i18n.changeLanguage('vi');
+    });
+    expect(screen.getByText('Đã nhận đủ dữ liệu khung hình · 2/2 phần')).toBeTruthy();
+    rerender(view(makeAssessment()));
+    expect(screen.queryByText(/2\/2/)).toBeNull();
+    await act(async () => {
+      await i18n.changeLanguage('en');
+    });
+  });
+
+  it.each([
+    ['PARTIAL', 1, 'Frame data incomplete · 1/2 parts'],
+    ['COMPLETE', 2, 'All frame data received · 2/2 parts'],
+  ] as const)('shows %s delivery independently of outcome', (status, receivedParts, label) => {
+    const assessment = makeAssessment({
+      outcome: 'UNAVAILABLE',
+      reasonCode: 'IDENTITY_UNAVAILABLE',
+      frameDelivery: {
+        frameId: '00000000-0000-4000-8000-000000000401',
+        sequenceNumber: '9007199254740994',
+        partCount: 2,
+        receivedParts,
+        status,
+      },
+    });
+    render(
+      <LocaleProvider defaultLocale="en">
+        <ul>
+          <Mf06AssessmentCaseCard
+            assessment={assessment}
+            referencesKey="scope"
+            onViewAssessment={vi.fn()}
+          />
+        </ul>
+      </LocaleProvider>,
+    );
+    expect(screen.getByText(label)).toBeTruthy();
+    expect(screen.getByText('Unavailable')).toBeTruthy();
+    expect(screen.getByText('Identity Unavailable')).toBeTruthy();
+    expect(screen.queryByText('Allowed')).toBeNull();
+  });
+  it('does not invent delivery for legacy records', () => {
+    render(
+      <LocaleProvider defaultLocale="en">
+        <ul>
+          <Mf06AssessmentCaseCard
+            assessment={makeAssessment()}
+            referencesKey="scope"
+            onViewAssessment={vi.fn()}
+          />
+        </ul>
+      </LocaleProvider>,
+    );
+    expect(screen.queryByText(/Frame data incomplete|All frame data received/)).toBeNull();
+  });
+
   afterEach(() => {
     cleanup();
   });
