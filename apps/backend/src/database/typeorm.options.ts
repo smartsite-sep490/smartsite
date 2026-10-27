@@ -9,6 +9,7 @@ import { CameraRegionGeometryRevisions1793577600000 } from './migrations/1793577
 import { ZonePolicyRevisions1793664000000 } from './migrations/1793664000000-ZonePolicyRevisions.js';
 import { CameraConfigurationBundles1793750400000 } from './migrations/1793750400000-CameraConfigurationBundles.js';
 import { CameraWorkerGenerations1793836800000 } from './migrations/1793836800000-CameraWorkerGenerations.js';
+import { ObservationFrameParts1794009600000 } from './migrations/1794009600000-ObservationFrameParts.js';
 import { PrepareNotificationCompatibility1792010000000 } from './migrations/1792010000000-PrepareNotificationCompatibility.js';
 import { Mf06TeamAuthorityHistory1792281600000 } from './migrations/1792281600000-Mf06TeamAuthorityHistory.js';
 import { CompleteNotificationCompatibility1792368000001 } from './migrations/1792368000001-CompleteNotificationCompatibility.js';
@@ -200,6 +201,7 @@ export function buildTypeOrmOptions(config: DatabaseConnectionConfig): DataSourc
       ZonePolicyRevisions1793664000000,
       CameraConfigurationBundles1793750400000,
       CameraWorkerGenerations1793836800000,
+      ObservationFrameParts1794009600000,
     ],
     logging: false,
     extra: {

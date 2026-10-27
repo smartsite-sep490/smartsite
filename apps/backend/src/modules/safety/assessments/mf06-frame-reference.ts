@@ -1,4 +1,4 @@
-import { computeCanonicalPayloadHash } from '@smartsite/contracts';
+import { computeCanonicalPayloadHash, type ObservationFramePartition } from '@smartsite/contracts';
 import { snapshotMf06Json } from './mf06-json-snapshot.js';
 import { validateMf06ObservationEvent } from './mf06-observation-event.js';
 
@@ -10,9 +10,10 @@ export interface Mf06ExpectedFrameEvent {
 
 /** Technical reference only; does not establish media bytes, identity or authority. */
 export interface Mf06FrameReference {
+  readonly framePartition?: Readonly<ObservationFramePartition>;
   readonly eventId: string;
   readonly streamSessionId: string;
-  readonly sequenceNumber: number;
+  readonly sequenceNumber: number | string;
   readonly uri: string;
   readonly sha256: string;
   readonly payloadHash: string;
@@ -31,6 +32,36 @@ const isSha256 = (v: unknown): v is string => typeof v === 'string' && SHA256_RE
 const isPosSafeInt = (v: unknown): v is number =>
   typeof v === 'number' && Number.isSafeInteger(v) && v >= 1;
 
+/** Keep legacy numeric references while preserving v1.4 uint64 sequences exactly. */
+export function mf06FrameSequenceText(
+  reference: Pick<Mf06FrameReference, 'sequenceNumber' | 'framePartition'>,
+): string | null {
+  const value = reference.sequenceNumber;
+  const part = reference.framePartition;
+  if (part === undefined) {
+    return typeof value === 'number' && Number.isSafeInteger(value) && value >= 0
+      ? String(value)
+      : null;
+  }
+  if (
+    typeof value !== 'string' ||
+    !/^(0|[1-9][0-9]{0,19})$/.test(value) ||
+    BigInt(value) > 18_446_744_073_709_551_615n ||
+    part.sequenceNumber !== value ||
+    typeof part.frameId !== 'string' ||
+    !UUID_RE.test(part.frameId) ||
+    part.frameId !== part.frameId.toLowerCase() ||
+    !Number.isInteger(part.partIndex) ||
+    !Number.isInteger(part.partCount) ||
+    part.partCount < 1 ||
+    part.partCount > 1024 ||
+    part.partIndex < 0 ||
+    part.partIndex >= part.partCount
+  )
+    return null;
+  return value;
+}
+
 export function selectMf06FrameReference(
   raw: unknown,
   expected: Mf06ExpectedFrameEvent,
@@ -39,7 +70,8 @@ export function selectMf06FrameReference(
     const exp = asRecord(snapshotMf06Json(expected));
     const saved = snapshotMf06Json(raw);
     const rec = asRecord(saved);
-    if (!exp || !rec || !['1.2.0', '1.3.0'].includes(rec.schemaVersion as string)) return null;
+    if (!exp || !rec || !['1.2.0', '1.3.0', '1.4.0'].includes(rec.schemaVersion as string))
+      return null;
 
     const { eventId: expEventId, streamSessionId: expSessionId, payloadHash } = exp;
     if (!isUuid(expEventId) || !isUuid(expSessionId) || !isSha256(payloadHash)) return null;
@@ -67,7 +99,11 @@ export function selectMf06FrameReference(
     const height = dims?.height;
     if (!isPosSafeInt(width) || !isPosSafeInt(height) || !Array.isArray(rec.evidence)) return null;
 
-    let selected: { sequenceNumber: number; uri: string; sha256: string } | null = null;
+    const partition =
+      rec.schemaVersion === '1.4.0'
+        ? (rec.framePartition as unknown as ObservationFramePartition)
+        : undefined;
+    let selected: { sequenceNumber: number | string; uri: string; sha256: string } | null = null;
     for (const entry of rec.evidence) {
       const item = asRecord(entry);
       if (!item || item.kind !== 'FRAME') continue;
@@ -75,13 +111,14 @@ export function selectMf06FrameReference(
       const match = LOCAL_FRAME_URI_RE.exec(item.uri);
       if (!match) return null;
       const [, uriSessionId = '', seqText = '', uriEventId = ''] = match;
-      const sequenceNumber = Number(seqText);
+      const sequenceNumber = partition ? seqText : Number(seqText);
       if (
         uriSessionId.toLowerCase() !== streamSessionId ||
         uriEventId.toLowerCase() !== eventId ||
-        !Number.isSafeInteger(sequenceNumber) ||
-        sequenceNumber < 0 ||
-        String(sequenceNumber) !== seqText
+        mf06FrameSequenceText({
+          sequenceNumber,
+          framePartition: partition,
+        }) !== seqText
       ) {
         return null;
       }
@@ -102,6 +139,7 @@ export function selectMf06FrameReference(
       sha256: selected.sha256,
       payloadHash,
       frameDimensions: Object.freeze({ width, height }),
+      ...(partition ? { framePartition: Object.freeze({ ...partition }) } : {}),
     });
   } catch {
     return null;

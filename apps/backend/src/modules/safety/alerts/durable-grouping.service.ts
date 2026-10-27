@@ -7,6 +7,13 @@ import { AlertStatus, AlertType } from '../../../database/entities/enums.js';
 import { SafetyAlertEntity } from '../../../database/entities/safety-alert.entity.js';
 import type { AlertCandidate } from './alert-candidate-evaluator.js';
 import { SchedulingNotificationService } from '../../workforce/notifications/scheduling-notification.service.js';
+import { PublicHttpException } from '../../../common/http/public-http-exception.js';
+
+export interface AdmittedObservationFrame {
+  readonly cameraId: string;
+  readonly streamSessionId: string;
+  readonly frameId: string;
+}
 
 const OPEN_ALERT_STATUSES = [
   AlertStatus.PENDING_REVIEW,
@@ -35,10 +42,51 @@ export class DurableGroupingService {
     siteId: string,
     candidate: AlertCandidate,
     capturedAt: Date,
+    frame?: AdmittedObservationFrame,
   ): Promise<SafetyAlertEntity> {
     const lockKey = `${siteId}:${candidate.groupingKey}`;
     // 1. Transaction-scoped advisory lock serializes concurrent grouping calls for this site & groupingKey
     await manager.query('SELECT pg_advisory_xact_lock(hashtext($1))', [lockKey]);
+
+    if (frame) {
+      if (
+        !manager.queryRunner?.isTransactionActive ||
+        frame.cameraId !== candidate.cameraId ||
+        frame.streamSessionId !== candidate.streamSessionId.toLowerCase()
+      ) {
+        throw new PublicHttpException(503, {
+          code: 'AI_INGESTION_UNAVAILABLE',
+          message: 'AI ingestion is temporarily unavailable',
+        });
+      }
+      const previous = await manager.query<Array<{ id: string }>>(
+        `SELECT DISTINCT a.id FROM safety_alert a
+         JOIN alert_detection_mapping m ON m.alert_id=a.id
+         JOIN ai_observation_event e ON e.event_id=m.event_id
+         WHERE a.site_id=$1 AND a.grouping_key=$2 AND e.resolved_camera_id=$3
+           AND e.stream_session_id=$4 AND e.raw_payload->>'schemaVersion'='1.4.0'
+           AND e.raw_payload#>>'{framePartition,frameId}'=$5 LIMIT 2`,
+        [siteId, candidate.groupingKey, frame.cameraId, frame.streamSessionId, frame.frameId],
+      );
+      if (previous.length > 1) {
+        throw new PublicHttpException(503, {
+          code: 'AI_INGESTION_UNAVAILABLE',
+          message: 'AI ingestion is temporarily unavailable',
+        });
+      }
+      if (previous[0]) {
+        const existing = await manager
+          .getRepository(SafetyAlertEntity)
+          .findOneBy({ id: previous[0].id });
+        if (!existing)
+          throw new PublicHttpException(503, {
+            code: 'AI_INGESTION_UNAVAILABLE',
+            message: 'AI ingestion is temporarily unavailable',
+          });
+        // A delayed sibling adds its evidence, even if review closed the original alert.
+        return existing;
+      }
+    }
 
     const cooldownMs = this.getCooldownMs();
     const capturedMs = capturedAt.getTime();

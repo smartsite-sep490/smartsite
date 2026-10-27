@@ -16,6 +16,7 @@ import {
 import { selectMf06FrameReference } from './mf06-frame-reference.js';
 import { readMf06FrameMedia, type Mf06VerifiedFrameMedia } from './mf06-frame-media.reader.js';
 import { inspectMf06StoredBinding } from './mf06-request-context.js';
+import { readMf06FrameDeliveries } from './mf06-frame-delivery.js';
 
 export interface Mf06ExpectedFrameBinding {
   readonly requestId: string;
@@ -27,9 +28,10 @@ const SNAPSHOT_RELATIONS = [
   'zone_entry_assessment',
   'zone_entry_authority_artifact',
   'zone_entry_assessment_request',
+  'ai_observation_event',
 ] as const;
 
-const FRAME_SNAPSHOT_RELATIONS = [...SNAPSHOT_RELATIONS, 'ai_observation_event'] as const;
+const FRAME_SNAPSHOT_RELATIONS = SNAPSHOT_RELATIONS;
 
 @Injectable()
 export class Mf06AssessmentQueryService {
@@ -58,7 +60,7 @@ export class Mf06AssessmentQueryService {
         if (!record) throw this.unavailable();
         items.push(this.project(record));
       }
-      return { items, total, ...pagination };
+      return { items: await this.deliveries(manager, items), total, ...pagination };
     });
   }
   async get(siteId: string, assessmentId: string): Promise<Mf06AssessmentResponse> {
@@ -71,7 +73,9 @@ export class Mf06AssessmentQueryService {
         id,
       );
       if (!record) return missing();
-      return this.project(record);
+      const [item] = await this.deliveries(manager, [this.project(record)]);
+      if (!item) throw this.unavailable();
+      return item;
     });
   }
 
@@ -172,6 +176,13 @@ export class Mf06AssessmentQueryService {
     } catch {
       throw this.unavailable();
     }
+  }
+  private async deliveries(manager: EntityManager, items: Mf06AssessmentResponse[]) {
+    const deliveries = await readMf06FrameDeliveries(manager, items);
+    return items.map((item) => {
+      const frameDelivery = deliveries.get(item.eventId);
+      return frameDelivery ? parseMf06AssessmentResponse({ ...item, frameDelivery }) : item;
+    });
   }
   private unavailable() {
     return new PublicHttpException(HttpStatus.SERVICE_UNAVAILABLE, {

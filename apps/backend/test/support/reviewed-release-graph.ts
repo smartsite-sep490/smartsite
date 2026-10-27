@@ -148,6 +148,10 @@ export function reviewedReleaseMigrationNames(migrations: unknown): string[] {
   const finalExpected = names.includes(workerGenerations)
     ? [...release76, regionRevisions, zonePolicies, cameraBundles, workerGenerations]
     : release79;
-  assert.deepEqual(names, finalExpected, 'Exact reviewed release migration names and order');
+  const frameParts = 'ObservationFrameParts1794009600000';
+  const withFrameParts = names.includes(frameParts)
+    ? [...release76, regionRevisions, zonePolicies, cameraBundles, workerGenerations, frameParts]
+    : finalExpected;
+  assert.deepEqual(names, withFrameParts, 'Exact reviewed release migration names and order');
   return names;
 }

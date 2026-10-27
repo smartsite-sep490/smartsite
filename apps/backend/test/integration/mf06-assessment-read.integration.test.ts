@@ -36,6 +36,7 @@ import { Mf06IngestionEnqueueService } from '../../src/modules/safety/assessment
 import { Mf06JobLeaseService } from '../../src/modules/safety/assessments/mf06-job-lease.service.js';
 import { Mf06AssessmentStore } from '../../src/modules/safety/assessments/mf06-assessment-store.service.js';
 import { Mf06AssessmentQueryService } from '../../src/modules/safety/assessments/mf06-assessment-query.service.js';
+import { parseMf06AssessmentResponse, parseMf06AssessmentPage } from '@smartsite/contracts';
 
 test('actual AppModule assessment reads enforce scope/auth/default OFF/query boundaries and safe empty pages', async (t) => {
   const isolated = createIsolatedTestDatabase({ canonical: true }),
@@ -88,10 +89,24 @@ test('actual AppModule assessment reads enforce scope/auth/default OFF/query bou
     ?.responses?.['200'] as {
     content?: Record<string, { schema?: { properties?: Record<string, unknown> } }>;
   };
+  const documentedSchema = documented?.content?.['application/json']?.schema as {
+    required?: string[];
+    properties?: Record<
+      string,
+      { required?: string[]; additionalProperties?: boolean; properties?: Record<string, unknown> }
+    >;
+  };
   assert.equal(
-    Object.keys(documented?.content?.['application/json']?.schema?.properties ?? {}).length,
-    13,
-    'OpenAPI must declare the safe13-field response',
+    Object.keys(documentedSchema?.properties ?? {}).length,
+    14,
+    'OpenAPI must retain safe13 legacy fields and declare optional frame delivery',
+  );
+  assert.equal(documentedSchema.required?.length, 13);
+  assert.equal(documentedSchema.required?.includes('frameDelivery'), false);
+  assert.equal(documentedSchema.properties?.frameDelivery?.additionalProperties, false);
+  assert.deepEqual(
+    documentedSchema.properties?.frameDelivery?.required?.slice().sort(),
+    ['frameId', 'sequenceNumber', 'partCount', 'receivedParts', 'status'].sort(),
   );
   const base = `${await app.getUrl()}/api/v1`;
   const login = await fetch(`${base}/auth/login`, {
@@ -117,6 +132,36 @@ test('actual AppModule assessment reads enforce scope/auth/default OFF/query bou
   assert.equal((await read(`/sites/${site}/mf06-assessments?limit=101`)).status, 400);
   assert.equal((await read(`/sites/${site}/mf06-assessments?unknown=1`)).status, 400);
   assert.equal((await read(`/sites/${site}/mf06-assessments/${randomUUID()}`)).status, 404);
+  const partition = {
+    frameId: randomUUID(),
+    sequenceNumber: '18446744073709551615',
+    partIndex: 1,
+    partCount: 2,
+  };
+  const partial = await seedAssessment(db, 'UNAVAILABLE', site, partition);
+  const detail = await read(`/sites/${site}/mf06-assessments/${partial.assessmentId}`);
+  assert.equal(detail.status, 200);
+  assert.equal(detail.headers.get('cache-control'), 'private, no-store');
+  const projected = parseMf06AssessmentResponse(await detail.json());
+  assert.deepEqual(projected.frameDelivery, {
+    frameId: partition.frameId,
+    sequenceNumber: partition.sequenceNumber,
+    partCount: 2,
+    receivedParts: 1,
+    status: 'PARTIAL',
+  });
+  assert.equal(projected.outcome, 'UNAVAILABLE');
+  const populated = await read(`/sites/${site}/mf06-assessments`);
+  assert.equal(populated.status, 200);
+  assert.deepEqual(parseMf06AssessmentPage(await populated.json()).items[0], projected);
+  assert.equal(
+    (await read(`/sites/${otherSite}/mf06-assessments/${partial.assessmentId}`)).status,
+    403,
+  );
+  assert.equal(
+    (await read(`/sites/${site}/mf06-assessments/${partial.assessmentId}`, '')).status,
+    401,
+  );
   (config as unknown as ConfigService<Record<string, unknown>>).set(
     'MF06_ASSESSMENT_READ_ENABLED',
     false,
@@ -241,6 +286,12 @@ async function seedAssessment(
   db: DataSource,
   provenance: 'UNAVAILABLE' | 'SYNTHETIC_TEST',
   existingSite?: string,
+  framePartition?: {
+    frameId: string;
+    sequenceNumber: string;
+    partIndex: number;
+    partCount: number;
+  },
 ) {
   const siteId = existingSite ?? randomUUID(),
     cameraId = randomUUID(),
@@ -280,6 +331,7 @@ async function seedAssessment(
   const config = createTestConfig({
     MF06_ENQUEUE_ENABLED: 'true',
     MF06_ENQUEUE_MAX_OUTSTANDING: '100',
+    AI_PARTITIONED_FRAME_ENABLED: framePartition ? 'true' : 'false',
   });
   const ingest = new AiIngestionService(
     db,
@@ -293,7 +345,8 @@ async function seedAssessment(
   );
   await ingest.ingestEvent({
     eventId,
-    schemaVersion: '1.0.0',
+    schemaVersion: framePartition ? '1.4.0' : '1.0.0',
+    ...(framePartition ? { framePartition } : {}),
     cameraExternalId: cameraId,
     streamSessionId: randomUUID(),
     capturedAt: new Date().toISOString(),

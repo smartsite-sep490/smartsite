@@ -149,7 +149,7 @@ export class Mf06CandidateMetadataService {
       raw &&
       typeof raw === 'object' &&
       'schemaVersion' in raw &&
-      ['1.2.0', '1.3.0'].includes(raw.schemaVersion as string)
+      ['1.2.0', '1.3.0', '1.4.0'].includes(raw.schemaVersion as string)
     ) {
       const frame = selectMf06FrameReference(raw, stored.request);
       if (!frame || frame.sha256 !== savedCrop.frameSha256) return unavailable('INVALID_BINDING');

@@ -262,6 +262,10 @@ export const backendEnvironmentSchema = z
     ALERT_COOLDOWN_SECONDS: integer(60, 1, MAX_SAFE_SECONDS),
     MAX_PAST_EVENT_AGE_SECONDS: integer(300, 1, MAX_SAFE_SECONDS),
     MAX_FUTURE_CLOCK_SKEW_SECONDS: integer(30, 1, MAX_SAFE_SECONDS),
+    AI_PARTITIONED_FRAME_ENABLED: z
+      .enum(['false', 'true'])
+      .default('false')
+      .transform((value) => value === 'true'),
     ...mf06EnvironmentFields,
     LOG_LEVEL: z
       .enum(['fatal', 'error', 'warn', 'info', 'debug', 'trace', 'silent'], {

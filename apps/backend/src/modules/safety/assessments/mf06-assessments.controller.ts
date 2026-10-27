@@ -82,6 +82,24 @@ const safeAssessmentSchema = {
     },
     evaluatorVersion: { type: 'string' as const, minLength: 1, maxLength: 128 },
     provenance: { type: 'string' as const, enum: ['UNAVAILABLE', 'TRUSTED_SERVICE'] },
+    frameDelivery: {
+      type: 'object' as const,
+      additionalProperties: false,
+      required: ['frameId', 'sequenceNumber', 'partCount', 'receivedParts', 'status'],
+      properties: {
+        frameId: { type: 'string' as const, format: 'uuid' },
+        sequenceNumber: {
+          type: 'string' as const,
+          pattern: '^(0|[1-9][0-9]{0,19})$',
+          description: 'Exact decimal uint64, at most18446744073709551615; never a JSON number.',
+        },
+        partCount: { type: 'integer' as const, minimum: 1, maximum: 1024 },
+        receivedParts: { type: 'integer' as const, minimum: 1, maximum: 1024 },
+        status: { type: 'string' as const, enum: ['PARTIAL', 'COMPLETE'] },
+      },
+      description:
+        'Distinct persisted parts for one camera/session/frame in the read snapshot. COMPLETE requires receivedParts=partCount; PARTIAL requires fewer. Missing metadata never means complete. Not evaluation, media, identity or authorization completeness.',
+    },
   },
   description:
     'Recorded assessment at the original scope and time; not current permission, Worker identity or a persisted alert.',

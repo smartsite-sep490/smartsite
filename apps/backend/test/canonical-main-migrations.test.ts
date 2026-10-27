@@ -81,10 +81,11 @@ test(
       'ZonePolicyRevisions1793664000000',
       'CameraConfigurationBundles1793750400000',
       'CameraWorkerGenerations1793836800000',
+      'ObservationFrameParts1794009600000',
     ];
     const expected = [...names, ...extensions];
     assert.deepEqual([...actual].sort(), [...expected].sort());
-    assert.equal(actual.length, 80);
+    assert.equal(actual.length, 81);
     assert.equal(new Set(actual).size, actual.length, 'migration registrations must be unique');
     assert.equal(new Set(expected).size, names.length + extensions.length);
     assert.equal(registered.synchronize, false);

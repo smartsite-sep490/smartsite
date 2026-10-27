@@ -3,7 +3,7 @@ import { randomUUID } from 'node:crypto';
 import { computeCanonicalPayloadHash } from '@smartsite/contracts';
 import { AiObservationEventEntity } from '../../../database/entities/ai-observation-event.entity.js';
 import { EventProcessingStatus } from '../../../database/entities/enums.js';
-import { reviewRawEventIsConsistent } from '../identity/observation-identity-event.js';
+import { readConsistentMf06RawEvent } from './mf06-observation-event.js';
 import { selectZoneEntrySubject } from '../identity/observation-identity-subject.js';
 
 /**
@@ -50,7 +50,7 @@ export class Mf06EnqueueService {
       .getOne();
     if (!storedEvent || storedEvent.payloadHash !== payloadHash) return [];
     try {
-      if (!reviewRawEventIsConsistent(storedEvent)) return [];
+      if (!readConsistentMf06RawEvent(storedEvent)) return [];
     } catch {
       return [];
     }

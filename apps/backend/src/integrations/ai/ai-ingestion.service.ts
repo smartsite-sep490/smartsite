@@ -7,6 +7,7 @@ import {
   computeCanonicalPayloadHash,
   validateEightFamilyObservationEvent,
   validateObservationEvent,
+  validatePartitionedObservationEvent,
 } from '@smartsite/contracts';
 import { EventProcessingStatus } from '../../database/entities/enums.js';
 import { AiObservationEventEntity } from '../../database/entities/ai-observation-event.entity.js';
@@ -32,6 +33,7 @@ import {
 import type { ZoneAuthorizationResult } from '../../modules/zones/zone-authorization.interface.js';
 import { parseNormalizedCapturedAt } from '../../common/parse-normalized-captured-at.js';
 import { Mf06IngestionEnqueueService } from '../../modules/safety/assessments/mf06-ingestion-enqueue.service.js';
+import { admitPartitionedFrame } from './partitioned-frame-admission.js';
 export { parseNormalizedCapturedAt } from '../../common/parse-normalized-captured-at.js';
 
 export interface AiIngestionResult {
@@ -88,9 +90,15 @@ export class AiIngestionService {
       payload &&
       typeof payload === 'object' &&
       'schemaVersion' in payload &&
-      payload.schemaVersion === '1.3.0'
-        ? validateEightFamilyObservationEvent(payload)
-        : validateObservationEvent(payload);
+      payload.schemaVersion === '1.4.0' &&
+      this.configService.get('AI_PARTITIONED_FRAME_ENABLED', { infer: true }) === true
+        ? validatePartitionedObservationEvent(payload)
+        : payload &&
+            typeof payload === 'object' &&
+            'schemaVersion' in payload &&
+            payload.schemaVersion === '1.3.0'
+          ? validateEightFamilyObservationEvent(payload)
+          : validateObservationEvent(payload);
     if (!validationResult.isValid) {
       throw new PublicHttpException(HttpStatus.BAD_REQUEST, {
         code: 'VALIDATION_FAILED',
@@ -145,6 +153,9 @@ export class AiIngestionService {
           event.cameraExternalId,
           enqueueEnabled,
         );
+        const frameScope = camera
+          ? await admitPartitionedFrame(manager, event, camera.id)
+          : undefined;
 
         let status: EventProcessingStatus;
         let note: string | null = null;
@@ -294,6 +305,7 @@ export class AiIngestionService {
               camera.siteId,
               candidate,
               capturedAt,
+              frameScope,
             );
             groupedCandidates[originalIndex] = { alertId: alert.id, trackId: candidate.trackId };
           }
@@ -352,6 +364,13 @@ export class AiIngestionService {
           typeof rawConstraint === 'string' && /^[A-Za-z0-9_]{1,128}$/.test(rawConstraint)
             ? rawConstraint
             : 'UNKNOWN';
+
+        if (code === '23505' && constraint === 'uq_ai_event_frame_part') {
+          throw new PublicHttpException(HttpStatus.CONFLICT, {
+            code: 'CONFLICT',
+            message: 'Frame part conflicts with an already admitted frame',
+          });
+        }
 
         this.logger.error({
           message: 'AI ingestion persistence failed',

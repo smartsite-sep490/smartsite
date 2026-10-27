@@ -9,7 +9,7 @@ import {
 } from '../identity/safety-subject-cropper.js';
 import type { ObservationSubjectRef } from '../identity/observation-identity.types.js';
 import { projectObservationSubjectRef } from '../identity/observation-identity-subject-ref.js';
-import type { Mf06FrameReference } from './mf06-frame-reference.js';
+import { mf06FrameSequenceText, type Mf06FrameReference } from './mf06-frame-reference.js';
 import { snapshotMf06Json } from './mf06-json-snapshot.js';
 
 const LIMITS = { maxFrameBytes: 1_048_576, maxFramePixels: 16_000_000, maxCropBytes: 1_048_576 };
@@ -108,8 +108,7 @@ export async function readMf06FrameMedia(
       !UUID.test(ref.streamSessionId) ||
       !HASH.test(ref.sha256) ||
       !HASH.test(ref.payloadHash) ||
-      !Number.isSafeInteger(ref.sequenceNumber) ||
-      ref.sequenceNumber < 0
+      mf06FrameSequenceText(ref) === null
     )
       return null;
     const { width, height } = ref.frameDimensions;
@@ -172,8 +171,7 @@ export async function readMf06SubjectMedia(
       !UUID.test(ref.streamSessionId) ||
       !HASH.test(ref.sha256) ||
       !HASH.test(ref.payloadHash) ||
-      !Number.isSafeInteger(ref.sequenceNumber) ||
-      ref.sequenceNumber < 0
+      mf06FrameSequenceText(ref) === null
     )
       return null;
     if (
