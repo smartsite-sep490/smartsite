@@ -156,7 +156,11 @@ function SafetyTaskTourSession({ taskId, tourVersion, userId, steps }: SafetyTas
     prevStepIdRef.current = currentStep.id;
 
     const active = document.activeElement;
-    const lost = !active || active === document.body || active === document.documentElement;
+    const lost =
+      !active ||
+      active === document.body ||
+      active === document.documentElement ||
+      (active instanceof HTMLElement && !isElementAvailable(active));
     if (
       (focusPrimaryRef.current || stepChangedToFirst || lost) &&
       !hasBlockingDialog(triggerRef.current)

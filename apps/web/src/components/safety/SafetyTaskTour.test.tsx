@@ -534,4 +534,32 @@ describe('SafetyTaskTour', () => {
     );
     expect(screen.queryByTestId('safety-task-tour')).toBeNull();
   });
+
+  it('reclaims focus to Next when the active step anchor is hidden in place while holding focus', async () => {
+    renderMonitorFixture({ userId: 'user-focus-hidden-1', includeSetupAnchor: true });
+    const viewModeAnchor = screen.getByTestId('anchor-view-mode');
+    const innerControl = document.createElement('button');
+    innerControl.type = 'button';
+    viewModeAnchor.appendChild(innerControl);
+
+    fireEvent.click(screen.getByTestId('safety-task-tour-trigger'));
+    fireEvent.click(screen.getByTestId('safety-task-tour-next'));
+    expect(screen.getByTestId('safety-task-tour').getAttribute('data-tour-step')).toBe(
+      'monitor-view-mode',
+    );
+
+    innerControl.focus();
+    expect(document.activeElement).toBe(innerControl);
+
+    act(() => {
+      viewModeAnchor.hidden = true;
+    });
+
+    await waitFor(() => {
+      expect(screen.getByTestId('safety-task-tour').getAttribute('data-tour-step')).toBe(
+        'monitor-enlarge',
+      );
+      expect(document.activeElement).toBe(screen.getByTestId('safety-task-tour-next'));
+    });
+  });
 });
