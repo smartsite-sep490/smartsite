@@ -246,10 +246,7 @@ export class UsersService {
       .getCount();
   }
 
-  async createAdministrative(
-    input: CreateUserDto,
-    context?: MainConfigurationCommandContext,
-  ) {
+  async createAdministrative(input: CreateUserDto, context?: MainConfigurationCommandContext) {
     const value = command(CreateUserDto, input);
     if (value.roleAssignments.some((r) => r.role === UserRole.CONTRACTOR_REPRESENTATIVE))
       throw new ForbiddenException('Representatives must be created by their Site Manager');
@@ -489,6 +486,35 @@ export class UsersService {
         await manager.getRepository(UserEntity).save(user);
         if (!value.isActive) await this.revokeSessions(manager, id);
         return publicUser(user, assignments);
+      },
+    );
+  }
+
+  async revokeSiteManager(
+    userId: string,
+    siteId: string,
+    context: MainConfigurationCommandContext,
+  ) {
+    const id = uuid(userId).toLowerCase();
+    const scopedSiteId = uuid(siteId).toLowerCase();
+    return executeMainConfigurationCommand(
+      this.dataSource,
+      context,
+      'USER_SITE_MANAGER_REVOKE',
+      { userId: id, siteId: scopedSiteId },
+      async (manager) => {
+        const user = await manager.getRepository(UserEntity).findOne({
+          where: { id },
+          lock: { mode: 'pessimistic_write' },
+        });
+        if (!user) throw new NotFoundException();
+        const result = await manager.getRepository(UserRoleAssignmentEntity).delete({
+          userId: id,
+          siteId: scopedSiteId,
+          role: UserRole.SITE_MANAGER,
+        });
+        if (result.affected) await this.revokeSessions(manager, id);
+        return this.response(manager, user);
       },
     );
   }

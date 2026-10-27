@@ -21,6 +21,7 @@ type Operation =
   | 'USER_CONTRACTOR_WORKER_ACCOUNT_CREATE'
   | 'USER_ACCOUNT_STATUS'
   | 'USER_ROLE_REPLACE'
+  | 'USER_SITE_MANAGER_REVOKE'
   | 'USER_PASSWORD_RESET'
   | 'USER_PASSWORD_CHANGE'
   | 'SITE_CREATE'
@@ -174,7 +175,9 @@ export async function executeMainConfigurationCommand<T>(
                   'contractor_representative_grant',
                   'contractor_representative_assignment',
                 ]
-              : operation === 'USER_ACCOUNT_CREATE' || operation === 'USER_ROLE_REPLACE'
+              : operation === 'USER_ACCOUNT_CREATE' ||
+                  operation === 'USER_ROLE_REPLACE' ||
+                  operation === 'USER_SITE_MANAGER_REVOKE'
                 ? ['app_user', 'user_role_assignment']
                 : operation === 'USER_ACCOUNT_STATUS' ||
                     operation === 'USER_PASSWORD_RESET' ||
