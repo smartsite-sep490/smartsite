@@ -195,16 +195,16 @@ describe('CameraMonitoringView DOM Regression & Liveness Claim Prevention', () =
 
     // Initial tab is PPE Monitoring (MF05)
     expect(
-      screen.getByRole('button', { name: /PPE Monitoring.*MF05/i }).getAttribute('aria-pressed'),
+      screen.getByRole('button', { name: /PPE Monitoring/i }).getAttribute('aria-pressed'),
     ).toBe('true');
-    const zonesTabButton = screen.getByRole('button', { name: /Restricted Zones.*MF06/i });
+    const zonesTabButton = screen.getByRole('button', { name: /Restricted Zones/i });
     expect(zonesTabButton.getAttribute('aria-pressed')).toBe('false');
 
     // Switch to Restricted Zones sub-tab
     await user.click(zonesTabButton);
     expect(zonesTabButton.getAttribute('aria-pressed')).toBe('true');
     expect(
-      screen.getByRole('button', { name: /PPE Monitoring.*MF05/i }).getAttribute('aria-pressed'),
+      screen.getByRole('button', { name: /PPE Monitoring/i }).getAttribute('aria-pressed'),
     ).toBe('false');
 
     // Parent header remains strictly neutral
@@ -219,12 +219,12 @@ describe('CameraMonitoringView DOM Regression & Liveness Claim Prevention', () =
         <CameraMonitoringView onSubTabChange={onSubTabChange} />
       </QueryClientProvider>,
     );
-    await userEvent.setup().click(screen.getByRole('button', { name: /Restricted Zones.*MF06/i }));
+    await userEvent.setup().click(screen.getByRole('button', { name: /Restricted Zones/i }));
     expect(onSubTabChange).toHaveBeenCalledWith('zones');
     expect(screen.getByRole('heading', { name: 'Backend Camera Configuration' })).not.toBeNull();
     expect(screen.queryByRole('heading', { name: 'PPE Compliance Monitoring' })).toBeNull();
     expect(
-      screen.getByRole('button', { name: /Restricted Zones.*MF06/i }).getAttribute('aria-pressed'),
+      screen.getByRole('button', { name: /Restricted Zones/i }).getAttribute('aria-pressed'),
     ).toBe('true');
   });
 
@@ -235,11 +235,11 @@ describe('CameraMonitoringView DOM Regression & Liveness Claim Prevention', () =
         <CameraMonitoringView activeSubTab="ppe" onSubTabChange={onSubTabChange} />
       </QueryClientProvider>,
     );
-    await userEvent.setup().click(screen.getByRole('button', { name: /Restricted Zones.*MF06/i }));
+    await userEvent.setup().click(screen.getByRole('button', { name: /Restricted Zones/i }));
     expect(onSubTabChange).toHaveBeenCalledWith('zones');
     expect(screen.getByRole('heading', { name: 'PPE Compliance Monitoring' })).not.toBeNull();
     expect(
-      screen.getByRole('button', { name: /PPE Monitoring.*MF05/i }).getAttribute('aria-pressed'),
+      screen.getByRole('button', { name: /PPE Monitoring/i }).getAttribute('aria-pressed'),
     ).toBe('true');
   });
 });
@@ -373,7 +373,7 @@ describe('CameraMonitoringView Single-Runtime i18n & Scoped Boundaries', () => {
     vi.unstubAllEnvs();
   });
 
-  it('1. Language switch (en -> vi -> en) retranslates header and sub-tabs while preserving MF05/MF06 codes, SharedSession scope, and opaque query keys', async () => {
+  it('1. Language switch (en -> vi -> en) retranslates header and sub-tabs while preserving SharedSession scope, and opaque query keys', async () => {
     vi.spyOn(useScopedCameraPreviewModule, 'useScopedCameraPreview').mockReturnValue({
       preview: null,
       status: 'UNAVAILABLE',
@@ -417,10 +417,10 @@ describe('CameraMonitoringView Single-Runtime i18n & Scoped Boundaries', () => {
     });
     expect(screen.getByText('Vision Workspace')).not.toBeNull();
     expect(
-      screen.getByRole('button', { name: /PPE Monitoring.*MF05/i }).getAttribute('aria-pressed'),
+      screen.getByRole('button', { name: /PPE Monitoring/i }).getAttribute('aria-pressed'),
     ).toBe('true');
     expect(
-      screen.getByRole('button', { name: /Restricted Zones.*MF06/i }).getAttribute('aria-pressed'),
+      screen.getByRole('button', { name: /Restricted Zones/i }).getAttribute('aria-pressed'),
     ).toBe('false');
 
     // Switch to Vietnamese
@@ -431,10 +431,10 @@ describe('CameraMonitoringView Single-Runtime i18n & Scoped Boundaries', () => {
     expect(screen.getByText('Giám sát camera')).not.toBeNull();
     expect(screen.getByText('Không gian thị giác máy tính')).not.toBeNull();
     expect(
-      screen.getByRole('button', { name: /Giám sát bảo hộ.*MF05/i }).getAttribute('aria-pressed'),
+      screen.getByRole('button', { name: /Giám sát bảo hộ/i }).getAttribute('aria-pressed'),
     ).toBe('true');
     expect(
-      screen.getByRole('button', { name: /Khu vực hạn chế.*MF06/i }).getAttribute('aria-pressed'),
+      screen.getByRole('button', { name: /Khu vực hạn chế/i }).getAttribute('aria-pressed'),
     ).toBe('false');
 
     // Switch back to English
@@ -444,7 +444,7 @@ describe('CameraMonitoringView Single-Runtime i18n & Scoped Boundaries', () => {
 
     expect(screen.getByText('Camera Monitoring')).not.toBeNull();
     expect(
-      screen.getByRole('button', { name: /PPE Monitoring.*MF05/i }).getAttribute('aria-pressed'),
+      screen.getByRole('button', { name: /PPE Monitoring/i }).getAttribute('aria-pressed'),
     ).toBe('true');
 
     // Verify no query key in TanStack Query cache contains raw accessToken or service camera streamUrl
@@ -508,7 +508,7 @@ describe('CameraMonitoringView Single-Runtime i18n & Scoped Boundaries', () => {
       await i18n.changeLanguage('vi');
     });
 
-    await user.click(screen.getByRole('button', { name: /Khu vực hạn chế.*MF06/i }));
+    await user.click(screen.getByRole('button', { name: /Khu vực hạn chế/i }));
 
     await act(async () => {
       await i18n.changeLanguage('en');

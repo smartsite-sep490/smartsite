@@ -25,7 +25,7 @@ afterEach(() => {
   vi.restoreAllMocks();
 });
 
-it('manager sees only their Site and can configure Zones without administrative organization creation', async () => {
+it('manager creates contractors for their Site and configures Zones without administrative Site creation', async () => {
   vi.spyOn(SmartSiteManagementClient.prototype, 'listSites').mockResolvedValue({
     items: ['a', 'b'].map((id) => ({
       id: `site-${id}`,
@@ -106,8 +106,9 @@ it('manager sees only their Site and can configure Zones without administrative 
       <SiteSetupView apiUrl="https://api.example.test" />
     </QueryClientProvider>,
   );
-  await screen.findByRole('heading', { name: 'Contractor & Zone Setup' });
   await screen.findByRole('button', { name: 'New Zone' });
+  expect(screen.queryByRole('heading', { name: 'Contractor & Zone Setup' })).toBeNull();
+  expect(screen.queryByRole('heading', { name: 'Site Operations Configuration' })).toBeNull();
   expect(screen.queryByText('Site b')).toBeNull();
   expect(screen.queryByRole('button', { name: 'New Site' })).toBeNull();
   expect(
@@ -118,8 +119,14 @@ it('manager sees only their Site and can configure Zones without administrative 
     offset: 0,
     limit: 100,
   });
-  expect(screen.queryByRole('button', { name: 'Add Contractor' })).toBeNull();
-  expect(createContractor).not.toHaveBeenCalled();
+  await user.click(screen.getByRole('button', { name: 'Add Contractor' }));
+  await user.type(screen.getByLabelText(/Contractor name/i), 'New contractor');
+  await user.click(screen.getByRole('button', { name: 'Register Contractor' }));
+  await waitFor(() =>
+    expect(createContractor).toHaveBeenCalledWith('manager-token', 'site-a', {
+      name: 'New contractor',
+    }),
+  );
   await user.click(screen.getByRole('button', { name: 'New Zone' }));
   expect(screen.queryByLabelText('Zone code')).toBeNull();
   await user.type(screen.getByLabelText('Zone name'), 'Work area');

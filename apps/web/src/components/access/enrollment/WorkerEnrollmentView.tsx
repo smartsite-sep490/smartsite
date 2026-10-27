@@ -978,9 +978,6 @@ export function WorkerEnrollmentView({
                   value1: CONSENT_VERSION,
                 })}
               </h3>
-              <p className="text-xs text-slate-500">
-                {tr('worker_enrollment_view.mf01_worker_biometric_consent_compliance')}
-              </p>
             </div>
           </div>
 

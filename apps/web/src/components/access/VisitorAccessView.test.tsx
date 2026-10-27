@@ -290,3 +290,199 @@ it('renders priority approval queue when canApprove is true and allows one-click
 
   cache.clear();
 });
+
+it('separates registration status from physical presence and provides combined filtering with On-Site', async () => {
+  await i18n.changeLanguage('en');
+  const user = userEvent.setup();
+
+  const vPending: VisitResponse = {
+    ...visit,
+    id: 'v-pending',
+    visitorName: 'Alice Pending',
+    status: 'PENDING',
+    enteredCount: 0,
+    exitedCount: 0,
+    presence: 'OUTSIDE',
+  };
+
+  const vApprovedOnSite: VisitResponse = {
+    ...visit,
+    id: 'v-approved',
+    visitorName: 'Bob Approved Inside',
+    status: 'APPROVED',
+    groupSize: 2,
+    enteredCount: 2,
+    exitedCount: 1,
+    presence: 'INSIDE',
+  };
+
+  const vCheckedOut: VisitResponse = {
+    ...visit,
+    id: 'v-checked-out',
+    visitorName: 'Charlie Checked Out',
+    status: 'APPROVED',
+    enteredCount: 2,
+    exitedCount: 2,
+    presence: 'OUTSIDE',
+  };
+
+  const vExpiredInside: VisitResponse = {
+    ...visit,
+    id: 'v-expired-inside',
+    visitorName: 'Diana Expired Inside',
+    status: 'EXPIRED',
+    groupSize: 3,
+    enteredCount: 3,
+    exitedCount: 1,
+    presence: 'INSIDE',
+  };
+
+  const vCancelledInside: VisitResponse = {
+    ...visit,
+    id: 'v-cancelled-inside',
+    visitorName: 'Eve Cancelled Inside',
+    status: 'CANCELLED',
+    groupSize: 5,
+    enteredCount: 3,
+    exitedCount: 1,
+    presence: 'INSIDE',
+  };
+
+  const vNeedsReview: VisitResponse = {
+    ...visit,
+    id: 'v-needs-review',
+    visitorName: 'Frank Needs Review',
+    status: 'APPROVED',
+    groupSize: 4,
+    enteredCount: 2,
+    exitedCount: 0,
+    presence: 'NEEDS_REVIEW',
+  };
+
+  vi.spyOn(SmartSiteManagementClient.prototype, 'listVisits').mockResolvedValue({
+    items: [vPending, vApprovedOnSite, vCheckedOut, vExpiredInside, vCancelledInside, vNeedsReview],
+    total: 6,
+  });
+  vi.spyOn(SmartSiteManagementClient.prototype, 'listVisitorEvents').mockResolvedValue({
+    items: [],
+  });
+
+  const cache = new QueryClient({
+    defaultOptions: { queries: { retry: false }, mutations: { retry: false } },
+  });
+
+  render(
+    <QueryClientProvider client={cache}>
+      <VisitorAccessView
+        apiUrl="https://api.example.test"
+        token="test"
+        siteId="site-a"
+        sessionScope="test"
+        canApprove={false}
+        canManualCheckout
+      />
+    </QueryClientProvider>,
+  );
+
+  // 1. Verify all 4 physical presence representations are visible
+  expect(await screen.findByText('Not yet entered')).toBeTruthy();
+  expect(screen.getByText('On-site (1/2)')).toBeTruthy();
+  expect(screen.getByText('Everyone checked out')).toBeTruthy();
+  expect(screen.getByText('Needs review')).toBeTruthy();
+
+  // 2. Filter by EXPIRED
+  const expiredTab = screen.getByRole('button', { name: /^Expired/i });
+  await user.click(expiredTab);
+  expect(screen.getByText('Diana Expired Inside')).toBeTruthy();
+  expect(screen.queryByText('Alice Pending')).toBeNull();
+  expect(screen.queryByText('Bob Approved Inside')).toBeNull();
+
+  // 3. Combined Filter: Toggle On-Site while on EXPIRED
+  const onSiteToggle = screen.getByRole('button', { name: /On-Site only/i });
+  await user.click(onSiteToggle);
+  // Diana is EXPIRED AND has people on-site, so she remains visible
+  expect(screen.getByText('Diana Expired Inside')).toBeTruthy();
+
+  // 4. Combined Filter: Switch to CANCELLED with On-Site active
+  const cancelledTab = screen.getByRole('button', { name: /^Cancelled/i });
+  await user.click(cancelledTab);
+  expect(screen.getByText('Eve Cancelled Inside')).toBeTruthy();
+  expect(screen.queryByText('Diana Expired Inside')).toBeNull();
+
+  // 5. Switch to ALL with On-Site active -> all 4 visits with people inside appear
+  const allTab = screen.getByRole('button', { name: /^All\s*\d+/i });
+  await user.click(allTab);
+  expect(screen.getByText('Bob Approved Inside')).toBeTruthy();
+  expect(screen.getByText('Diana Expired Inside')).toBeTruthy();
+  expect(screen.getByText('Eve Cancelled Inside')).toBeTruthy();
+  expect(screen.getByText('Frank Needs Review')).toBeTruthy();
+  // Not on site:
+  expect(screen.queryByText('Alice Pending')).toBeNull();
+  expect(screen.queryByText('Charlie Checked Out')).toBeNull();
+
+  cache.clear();
+});
+
+it('displays summary cards with visit counts vs headcounts and bounded list indicator', async () => {
+  await i18n.changeLanguage('en');
+
+  const v1: VisitResponse = {
+    ...visit,
+    id: 'v-1',
+    visitorName: 'Visitor 1',
+    status: 'APPROVED',
+  };
+  const v2: VisitResponse = {
+    ...visit,
+    id: 'v-2',
+    visitorName: 'Visitor 2',
+    status: 'PENDING',
+  };
+
+  vi.spyOn(SmartSiteManagementClient.prototype, 'listVisits').mockResolvedValue({
+    items: [v1, v2],
+    total: 120,
+    summary: {
+      totalVisits: 120,
+      pendingVisits: 25,
+      approvedValidVisits: 75,
+      onSitePeople: 18,
+    },
+  });
+  vi.spyOn(SmartSiteManagementClient.prototype, 'listVisitorEvents').mockResolvedValue({
+    items: [],
+  });
+
+  const cache = new QueryClient({
+    defaultOptions: { queries: { retry: false }, mutations: { retry: false } },
+  });
+
+  render(
+    <QueryClientProvider client={cache}>
+      <VisitorAccessView
+        apiUrl="https://api.example.test"
+        token="test"
+        siteId="site-a"
+        sessionScope="test"
+        canApprove
+      />
+    </QueryClientProvider>,
+  );
+
+  // Check metrics values
+  expect(await screen.findByText('120')).toBeTruthy();
+  expect(screen.getByText('25')).toBeTruthy();
+  expect(screen.getByText('75')).toBeTruthy();
+  expect(screen.getByText('18')).toBeTruthy();
+
+  // Check distinct units (visits vs people)
+  const visitsUnits = screen.getAllByText('visits');
+  expect(visitsUnits.length).toBe(3); // Total, Pending, Approved & Valid
+  const peopleUnits = screen.getAllByText('people');
+  expect(peopleUnits.length).toBe(1); // Currently On-Site
+
+  // Check bounded list indicator
+  expect(screen.getByText('Showing latest 2 of 120 registrations')).toBeTruthy();
+
+  cache.clear();
+});

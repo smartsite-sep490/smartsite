@@ -14,7 +14,6 @@ import {
 } from '../icons';
 import { GateObservationView } from './GateObservationView';
 import { SecurityGateDeskView } from './gate/SecurityGateDeskView';
-import { WorkerEnrollmentView } from './enrollment/WorkerEnrollmentView';
 import { VisitorAccessView } from './visitor/VisitorAccessView';
 import { WorkerGatePermissionsView } from './permissions/WorkerGatePermissionsView';
 import { SiteAccessSetupView } from './permissions/SiteAccessSetupView';
@@ -34,7 +33,6 @@ type AccessSubTab =
   | 'attendance'
   | 'zone-permissions'
   | 'gate-desk'
-  | 'worker-enrollment'
   | 'gate-permissions'
   | 'visitor-passes'
   | 'visitor-gate'
@@ -53,7 +51,7 @@ interface TabDefinition {
 const ACCESS_TABS: readonly TabDefinition[] = [
   {
     id: 'attendance',
-    code: 'MF03',
+    code: 'Timesheet',
     label: 'Attendance',
     subLabel: 'Hours & approvals',
     description: 'Daily work hours, overtime, leave and attendance corrections',
@@ -84,14 +82,6 @@ const ACCESS_TABS: readonly TabDefinition[] = [
     description:
       'Physical gate security desk for real-time facial verification and check-in/out of workers',
     icon: IconCamera,
-  },
-  {
-    id: 'worker-enrollment',
-    code: 'Biometrics',
-    label: 'Worker Biometrics',
-    subLabel: '3-Angle Face Enrollment',
-    description: 'Guided capture workflow for multi-angle face enrollment and template encryption',
-    icon: IconUsers,
   },
   {
     id: 'gate-permissions',
@@ -191,18 +181,11 @@ export function AccessControlView({ apiUrl }: AccessControlViewProps) {
     if (tab.id === 'worker-qr') {
       return siteRoles.includes('WORKER');
     }
-    if (tab.id === 'worker-enrollment') {
-      return siteRoles.includes('CONTRACTOR_REPRESENTATIVE');
-    }
     if (tab.id === 'gate-permissions') {
       return isGlobalAdmin || siteRoles.includes('SITE_MANAGER');
     }
     if (tab.id === 'zone-permissions') {
-      return (
-        isGlobalAdmin ||
-        siteRoles.includes('SITE_MANAGER') ||
-        siteRoles.includes('CONTRACTOR_REPRESENTATIVE')
-      );
+      return isGlobalAdmin;
     }
     if (tab.id === 'gate-desk') {
       return siteRoles.includes('SECURITY_OFFICER');
@@ -228,9 +211,11 @@ export function AccessControlView({ apiUrl }: AccessControlViewProps) {
       ? 'worker-qr'
       : siteRoles.includes('SECURITY_OFFICER') && !isGlobalAdmin
         ? 'gate-desk'
-        : siteRoles.includes('SITE_MANAGER')
-          ? 'visitor-passes'
-          : visibleTabs[0]?.id;
+        : visibleTabs[0]?.id;
+  const attendanceWorkspace =
+    !isGlobalAdmin &&
+    !securityOnly &&
+    siteRoles.some((role) => ['SITE_MANAGER', 'CONTRACTOR_REPRESENTATIVE'].includes(role));
 
   const logout = () => {
     setRequestedSiteId('');
@@ -296,139 +281,160 @@ export function AccessControlView({ apiUrl }: AccessControlViewProps) {
   return (
     <div className="mx-auto max-w-[1360px] space-y-5 pb-12 text-[#182232]">
       {/* Top Banner / Identity Header */}
-      <header className="rounded-xl border border-[#EAEAEA] bg-white p-5 shadow-xs">
-        <div className="flex flex-wrap items-center justify-between gap-4">
-          <div className="space-y-1">
-            <div className="flex items-center gap-2.5">
-              <span className="inline-flex items-center gap-1.5 rounded-full bg-orange-50 px-2.5 py-0.5 text-[11px] font-bold uppercase tracking-wider text-[#F66B17] border border-orange-200/60">
-                <span className="h-1.5 w-1.5 rounded-full bg-[#F66B17]" />
-                {t('access.systemBadge')}
-              </span>
-              <span className="hidden sm:inline-block rounded-full bg-[#F7F6F3] border border-[#EAEAEA] px-2.5 py-0.5 text-[10px] font-semibold uppercase tracking-wider text-[#6B6B6B]">
-                {t('access.portalBadge')}
-              </span>
+      {!attendanceWorkspace && (
+        <header className="rounded-xl border border-[#EAEAEA] bg-white p-5 shadow-xs">
+          <div className="flex flex-wrap items-center justify-between gap-4">
+            <div className="space-y-1">
+              {!attendanceWorkspace && (
+                <div className="flex items-center gap-2.5">
+                  <span className="inline-flex items-center gap-1.5 rounded-full bg-orange-50 px-2.5 py-0.5 text-[11px] font-bold uppercase tracking-wider text-[#F66B17] border border-orange-200/60">
+                    <span className="h-1.5 w-1.5 rounded-full bg-[#F66B17]" />
+                    {t('access.systemBadge')}
+                  </span>
+                  <span className="hidden sm:inline-block rounded-full bg-[#F7F6F3] border border-[#EAEAEA] px-2.5 py-0.5 text-[10px] font-semibold uppercase tracking-wider text-[#6B6B6B]">
+                    {t('access.portalBadge')}
+                  </span>
+                </div>
+              )}
+              <h1 className="text-2xl font-bold tracking-tight text-[#111111]">
+                {securityOnly
+                  ? t('security.title')
+                  : attendanceWorkspace
+                    ? t('access.tabs.attendance.label')
+                    : t('access.title')}
+              </h1>
             </div>
-            <h1 className="text-2xl font-bold tracking-tight text-[#111111]">
-              {securityOnly ? t('security.title') : t('access.title')}
-            </h1>
-            <p className="text-xs text-[#6B6B6B] max-w-2xl leading-relaxed">
-              {securityOnly ? t('security.description') : t('access.description')}
-            </p>
-          </div>
 
-          {/* User Profile Chip & Session Actions */}
-          <div className="flex items-center gap-3">
-            <div className="flex items-center gap-3 rounded-lg border border-[#EAEAEA] bg-[#FBFBFA] px-3.5 py-2">
-              <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-[#111111] text-xs font-bold text-white">
-                {currentUser.displayName.slice(0, 2).toUpperCase()}
+            {/* User Profile Chip & Session Actions */}
+            <div className="flex items-center gap-3">
+              <div className="flex items-center gap-3 rounded-lg border border-[#EAEAEA] bg-[#FBFBFA] px-3.5 py-2">
+                <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-[#111111] text-xs font-bold text-white">
+                  {currentUser.displayName.slice(0, 2).toUpperCase()}
+                </div>
+                <div className="text-left">
+                  <span className="block text-xs font-bold text-[#2F3437] leading-tight">
+                    {currentUser.displayName}
+                  </span>
+                  <span className="inline-flex items-center gap-1 text-[10px] font-bold text-emerald-700 uppercase">
+                    <span className="h-1.5 w-1.5 rounded-full bg-emerald-600" />
+                    {isGlobalAdmin
+                      ? t('access.globalAdmin')
+                      : securityOnly
+                        ? t('accounts.role.SECURITY_OFFICER')
+                        : siteRoles.map(localizedLabel).join(' · ')}
+                  </span>
+                </div>
               </div>
-              <div className="text-left">
-                <span className="block text-xs font-bold text-[#2F3437] leading-tight">
-                  {currentUser.displayName}
-                </span>
-                <span className="inline-flex items-center gap-1 text-[10px] font-bold text-emerald-700 uppercase">
-                  <span className="h-1.5 w-1.5 rounded-full bg-emerald-600" />
-                  {isGlobalAdmin
-                    ? t('access.globalAdmin')
-                    : securityOnly
-                      ? t('accounts.role.SECURITY_OFFICER')
-                      : siteRoles.map(localizedLabel).join(' · ')}
-                </span>
-              </div>
+              <button
+                onClick={logout}
+                type="button"
+                disabled={logoutMutation.isPending}
+                className="flex items-center gap-1.5 rounded-lg border border-[#EAEAEA] bg-white px-3.5 py-2 text-xs font-bold text-[#2F3437] transition-colors hover:border-red-200 hover:bg-red-50 hover:text-red-700 cursor-pointer"
+              >
+                <span>{t('access.signOut')}</span>
+              </button>
             </div>
-            <button
-              onClick={logout}
-              type="button"
-              disabled={logoutMutation.isPending}
-              className="flex items-center gap-1.5 rounded-lg border border-[#EAEAEA] bg-white px-3.5 py-2 text-xs font-bold text-[#2F3437] transition-colors hover:border-red-200 hover:bg-red-50 hover:text-red-700 cursor-pointer"
-            >
-              <span>{t('access.signOut')}</span>
-            </button>
           </div>
-        </div>
-      </header>
+        </header>
+      )}
 
       {/* Modern Sub-Navigation Tabs */}
-      <nav
-        aria-label={tr('common.access_control_tabs')}
-        className={
-          securityOnly
-            ? 'grid grid-cols-1 gap-3 sm:grid-cols-2'
-            : `grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 ${
-                visibleTabs.length >= 6
-                  ? 'lg:grid-cols-6'
-                  : visibleTabs.length === 5
-                    ? 'lg:grid-cols-5'
-                    : visibleTabs.length === 4
-                      ? 'lg:grid-cols-4'
-                      : 'lg:grid-cols-3'
-              } gap-3`
-        }
-      >
-        {visibleTabs.map((tab) => {
-          const isActive = activeTab === tab.id;
-          const TabIcon = tab.icon;
-          return (
-            <button
-              type="button"
-              key={tab.id}
-              data-testid={`access-tab-${tab.id}`}
-              aria-current={isActive ? 'page' : undefined}
-              onClick={() => setAccessSubTab(tab.id)}
-              className={`group relative flex flex-col justify-between rounded-xl border p-4 text-left transition-all duration-150 ${
-                isActive
-                  ? 'border-[#F66B17] bg-white ring-1 ring-[#F66B17]/20 shadow-xs'
-                  : 'border-[#EAEAEA] bg-white hover:bg-[#FBFBFA] hover:border-[#D0D0CE]'
-              }`}
-            >
-              {/* Top Row: Icon + Module Code Badge */}
-              <div className="flex items-center justify-between w-full">
-                <div
-                  className={`flex h-10 w-10 items-center justify-center rounded-lg transition-colors ${
-                    isActive ? 'bg-orange-50 text-[#F66B17]' : 'bg-[#F7F6F3] text-[#6B6B6B]'
-                  }`}
-                >
-                  <TabIcon className="h-5 w-5" />
-                </div>
-                {!securityOnly && (
-                  <span
-                    className={`rounded-md px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider transition-colors ${
-                      isActive
-                        ? 'bg-orange-50 text-[#F66B17] border border-orange-200/80'
-                        : 'bg-[#F7F6F3] text-[#6B6B6B] border border-[#EAEAEA]'
-                    }`}
-                  >
-                    {tab.code}
-                  </span>
-                )}
-              </div>
-
-              {/* Bottom Content: Labels */}
-              <div className="mt-3.5">
-                <h3
-                  className={`text-sm font-bold tracking-tight transition-colors ${
-                    isActive ? 'text-[#111111]' : 'text-[#2F3437] group-hover:text-[#111111]'
-                  }`}
+      {!(attendanceWorkspace && visibleTabs.length === 1) && (
+        <nav
+          aria-label={tr('common.access_control_tabs')}
+          className={
+            securityOnly
+              ? 'grid grid-cols-1 gap-3 sm:grid-cols-2'
+              : `grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 ${
+                  visibleTabs.length >= 6
+                    ? 'lg:grid-cols-6'
+                    : visibleTabs.length === 5
+                      ? 'lg:grid-cols-5'
+                      : visibleTabs.length === 4
+                        ? 'lg:grid-cols-4'
+                        : 'lg:grid-cols-3'
+                } gap-3`
+          }
+        >
+          {visibleTabs.map((tab) => {
+            const isActive = activeTab === tab.id;
+            const TabIcon = tab.icon;
+            if (attendanceWorkspace && tab.id === 'attendance') {
+              return (
+                <button
+                  key={tab.id}
+                  type="button"
+                  data-testid={`access-tab-${tab.id}`}
+                  aria-current={isActive ? 'page' : undefined}
+                  onClick={() => setAccessSubTab(tab.id)}
+                  className="self-center justify-self-start rounded-lg px-3 py-2 text-sm font-semibold text-[#071A2B] hover:bg-white focus-visible:outline-2 focus-visible:outline-[#F66B17]"
                 >
                   {tab.label}
-                </h3>
-                <p
-                  className={`mt-0.5 text-xs line-clamp-1 transition-colors ${
-                    isActive ? 'font-medium text-[#F66B17]' : 'text-[#6B6B6B]'
-                  }`}
-                >
-                  {tab.subLabel}
-                </p>
-              </div>
+                </button>
+              );
+            }
+            return (
+              <button
+                type="button"
+                key={tab.id}
+                data-testid={`access-tab-${tab.id}`}
+                aria-current={isActive ? 'page' : undefined}
+                onClick={() => setAccessSubTab(tab.id)}
+                className={`group relative flex flex-col justify-between rounded-xl p-4 text-left transition-all duration-150 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#F66B17] ${
+                  isActive
+                    ? 'border border-[#F66B17] bg-white ring-1 ring-[#F66B17]/20 shadow-xs'
+                    : 'border border-[#EAEAEA] bg-white hover:bg-[#FBFBFA] hover:border-[#D0D0CE]'
+                }`}
+              >
+                {/* Top Row: Icon + Module Code Badge */}
+                <div className="flex items-center justify-between w-full">
+                  <div
+                    className={`flex h-10 w-10 items-center justify-center rounded-lg transition-colors ${
+                      isActive ? 'bg-orange-50 text-[#F66B17]' : 'bg-[#F7F6F3] text-[#6B6B6B]'
+                    }`}
+                  >
+                    <TabIcon className="h-5 w-5" />
+                  </div>
+                  {!securityOnly && (
+                    <span
+                      className={`rounded-md px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider transition-colors ${
+                        isActive
+                          ? 'bg-orange-50 text-[#F66B17] border border-orange-200/80'
+                          : 'bg-[#F7F6F3] text-[#6B6B6B] border border-[#EAEAEA]'
+                      }`}
+                    >
+                      {tab.code}
+                    </span>
+                  )}
+                </div>
 
-              {/* Active Bottom Indicator Accent */}
-              {isActive && (
-                <div className="absolute inset-x-4 -bottom-px h-0.5 rounded-full bg-[#F66B17]" />
-              )}
-            </button>
-          );
-        })}
-      </nav>
+                {/* Bottom Content: Labels */}
+                <div className="mt-3.5">
+                  <h3
+                    className={`text-sm font-bold tracking-tight transition-colors ${
+                      isActive ? 'text-[#111111]' : 'text-[#2F3437] group-hover:text-[#111111]'
+                    }`}
+                  >
+                    {tab.label}
+                  </h3>
+                  <p
+                    className={`mt-0.5 text-xs line-clamp-1 transition-colors ${
+                      isActive ? 'font-medium text-[#F66B17]' : 'text-[#6B6B6B]'
+                    }`}
+                  >
+                    {tab.subLabel}
+                  </p>
+                </div>
+
+                {/* Active Bottom Indicator Accent */}
+                {isActive && (
+                  <div className="absolute inset-x-4 -bottom-px h-0.5 rounded-full bg-[#F66B17]" />
+                )}
+              </button>
+            );
+          })}
+        </nav>
+      )}
 
       {/* Unified Global Site Selector Strip */}
       <section className="flex flex-wrap items-center justify-between gap-4 rounded-xl border border-[#EAEAEA] bg-white p-3.5 shadow-xs">
@@ -543,17 +549,6 @@ export function AccessControlView({ apiUrl }: AccessControlViewProps) {
               selectedSiteId={siteId}
               sites={sites.data?.items ?? []}
               onSelectSite={setRequestedSiteId}
-            />
-          )}
-
-          {activeTab === 'worker-enrollment' && (
-            <WorkerEnrollmentView
-              canManageAccounts={false}
-              key={`${sessionScope}:${siteId}`}
-              apiUrl={apiUrl}
-              token={token}
-              sessionScope={sessionScope}
-              siteId={siteId}
             />
           )}
 

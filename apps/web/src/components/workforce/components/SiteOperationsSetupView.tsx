@@ -8,6 +8,8 @@ import { useManagementClient, useAuth, useCurrentUser } from '../../../features/
 import type { ZoneResponse } from '@smartsite/contracts';
 import { uiLocale } from '../../../i18n';
 import { IconCamera, IconShield, IconPlus, IconUsers, IconAlertTriangle } from '../../icons';
+import { SmartDatePicker } from '../../ui';
+import { participationDates } from './participation-dates';
 
 const fieldInput =
   'w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-800 shadow-2xs hover:border-slate-300 focus:outline-none focus:ring-2 focus:ring-[#F66B17]/20 focus:border-[#F66B17] transition-all';
@@ -38,6 +40,7 @@ export function SiteOperationsSetupView({
   const [contractorId, setContractorId] = useState('');
   const [validFrom, setValidFrom] = useState('');
   const [validUntil, setValidUntil] = useState('');
+  const invalidParticipationRange = Boolean(validFrom && validUntil && validUntil < validFrom);
 
   const key = ['site-operations', apiUrl, user?.id];
 
@@ -117,8 +120,7 @@ export function SiteOperationsSetupView({
     mutationFn: () =>
       client.createContractorParticipation(accessToken!, contractorId, {
         siteId,
-        validFrom: new Date(validFrom).toISOString(),
-        validUntil: validUntil ? new Date(validUntil).toISOString() : null,
+        ...participationDates(validFrom, validUntil),
       }),
     onSuccess: invalidate,
   });
@@ -161,21 +163,25 @@ export function SiteOperationsSetupView({
     <div className="space-y-6 text-[#2F3437]">
       {/* Header section */}
       <section className="rounded-2xl border border-slate-200/90 bg-white p-5 shadow-xs">
-        <div className="flex flex-wrap items-center justify-between gap-4 border-b border-slate-100 pb-4">
-          <div className="space-y-1">
-            <div className="flex min-w-0 max-w-full flex-wrap items-center gap-2">
-              <span className="inline-flex items-center gap-1.5 rounded-full bg-orange-50 px-2.5 py-0.5 text-[11px] font-bold uppercase tracking-wider text-[#F66B17] border border-orange-200/60">
-                <span className="h-1.5 w-1.5 rounded-full bg-[#F66B17]" />
-                {tr('integrated_ui.site_operations')}
-              </span>
-              <span className="rounded-full bg-slate-100 border border-slate-200 px-2.5 py-0.5 text-[10px] font-semibold uppercase tracking-wider text-slate-600">
-                {canManage ? tr('integrated_ui.manager') : tr('integrated_ui.observer')}
-              </span>
+        <div
+          className={`flex flex-wrap items-center justify-between gap-4 ${participationOnly ? '' : 'border-b border-slate-100 pb-4'}`}
+        >
+          {!participationOnly && (
+            <div className="space-y-1">
+              <div className="flex min-w-0 max-w-full flex-wrap items-center gap-2">
+                <span className="inline-flex items-center gap-1.5 rounded-full bg-orange-50 px-2.5 py-0.5 text-[11px] font-bold uppercase tracking-wider text-[#F66B17] border border-orange-200/60">
+                  <span className="h-1.5 w-1.5 rounded-full bg-[#F66B17]" />
+                  {tr('integrated_ui.site_operations')}
+                </span>
+                <span className="rounded-full bg-slate-100 border border-slate-200 px-2.5 py-0.5 text-[10px] font-semibold uppercase tracking-wider text-slate-600">
+                  {canManage ? tr('integrated_ui.manager') : tr('integrated_ui.observer')}
+                </span>
+              </div>
+              <h1 className="text-xl font-extrabold tracking-tight text-[#111111]">
+                {canManage ? t('siteOps.titleManage') : t('siteOps.titleObserve')}
+              </h1>
             </div>
-            <h1 className="text-xl font-extrabold tracking-tight text-[#111111]">
-              {canManage ? t('siteOps.titleManage') : t('siteOps.titleObserve')}
-            </h1>
-          </div>
+          )}
 
           <div className="flex min-w-0 max-w-full flex-wrap items-center gap-2">
             <label className="flex min-w-0 max-w-full flex-wrap items-center gap-2 text-xs font-bold text-slate-700">
@@ -262,7 +268,13 @@ export function SiteOperationsSetupView({
         {canManage && (
           <form
             className="flex flex-wrap items-end gap-3 pt-3 border-t border-slate-100"
-            onSubmit={(e) => submit(e, participate)}
+            onSubmit={(e) => {
+              if (!validFrom || invalidParticipationRange) {
+                e.preventDefault();
+                return;
+              }
+              submit(e, participate);
+            }}
           >
             <div className="space-y-1 text-xs">
               <label className="font-bold text-slate-700">{t('siteOps.contractorLabel')}</label>
@@ -282,30 +294,42 @@ export function SiteOperationsSetupView({
                   ))}
               </select>
             </div>
-            <div className="space-y-1 text-xs">
-              <label className="font-bold text-slate-700">{t('siteOps.from')}</label>
-              <input
-                className={fieldInput}
-                type="datetime-local"
-                required
+            <div className="w-full sm:w-64">
+              <SmartDatePicker
+                label={t('siteOps.from')}
+                fieldRequired
                 value={validFrom}
-                onChange={(e) => setValidFrom(e.target.value)}
+                onChange={setValidFrom}
+                disablePast={false}
               />
             </div>
-            <div className="space-y-1 text-xs">
-              <label className="font-bold text-slate-700">{t('siteOps.until')}</label>
-              <input
-                className={fieldInput}
-                type="datetime-local"
-                min={validFrom}
+            <div className="w-full sm:w-64">
+              <SmartDatePicker
+                label={t('siteOps.until')}
                 value={validUntil}
-                onChange={(e) => setValidUntil(e.target.value)}
+                onChange={setValidUntil}
+                disablePast={false}
+                clearable
+                min={validFrom || undefined}
+                error={
+                  invalidParticipationRange
+                    ? t('contractor_zone_setup.end_date_must_be_on_or_after_start_date')
+                    : undefined
+                }
               />
             </div>
-            <button className={primaryButton} disabled={participate.isPending}>
+            <button
+              className={primaryButton}
+              disabled={participate.isPending || !validFrom || invalidParticipationRange}
+            >
               <IconPlus className="w-3.5 h-3.5" />
               <span>{t('siteOps.addParticipation')}</span>
             </button>
+            <p className="w-full text-xs text-slate-500">
+              {t('siteOps.participationDateHint', {
+                timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
+              })}
+            </p>
           </form>
         )}
         {participate.error && (

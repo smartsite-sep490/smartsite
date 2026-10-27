@@ -90,6 +90,7 @@ import {
 import type {
   CreateVisitCommand,
   VisitResponse,
+  VisitListResponse,
   QrPassResponse,
   VisitorPassResponse,
   QrFallbackResponse,
@@ -670,6 +671,12 @@ export class SmartSiteManagementClient {
       items: Array<{ id: string; name: string; code: string }>;
     }>('GET', '/visitor-registration/sites');
   }
+  listVisitorManagers(siteId: string) {
+    return this.request<{ items: Array<{ id: string; displayName: string }> }>(
+      'GET',
+      `/visitor-registration/sites/${pathId(siteId)}/managers`,
+    );
+  }
   registerVisit(siteId: string, input: CreateVisitCommand) {
     return this.request<VisitResponse>(
       'POST',
@@ -685,11 +692,7 @@ export class SmartSiteManagementClient {
     });
   }
   listVisits(token: string, siteId: string) {
-    return this.request<{ items: VisitResponse[] }>(
-      'GET',
-      `/sites/${pathId(siteId)}/visits`,
-      token,
-    );
+    return this.request<VisitListResponse>('GET', `/sites/${pathId(siteId)}/visits`, token);
   }
   retryVisitorEmail(token: string, siteId: string, visitId: string) {
     return this.request<VisitResponse>(
@@ -1991,6 +1994,13 @@ export class SmartSiteManagementClient {
       `/users/${pathId(userId)}/role-assignments`,
       token,
       { roleAssignments },
+    );
+  }
+  revokeSiteManager(token: string, userId: string, siteId: string) {
+    return this.request<void>(
+      'DELETE',
+      `/users/${pathId(userId)}/site-manager/${pathId(siteId)}`,
+      token,
     );
   }
   createSiteRepresentative(

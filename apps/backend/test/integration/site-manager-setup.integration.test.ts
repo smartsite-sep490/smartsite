@@ -10,6 +10,11 @@ import { WorkforceConfigurationService } from '../../src/modules/workforce/direc
 import { MainWorkforceCreateService } from '../../src/modules/workforce/main-workforce-create.service.js';
 import { UserEntity, UserRole } from '../../src/database/entities/user.entity.js';
 import { UserRoleAssignmentEntity } from '../../src/database/entities/user-role-assignment.entity.js';
+import { AuthService } from '../../src/modules/auth/auth.service.js';
+import { AuthTokenService } from '../../src/modules/auth/auth-token.service.js';
+import { JwtService } from '@nestjs/jwt';
+import { AuthClientType } from '../../src/database/entities/auth-session.entity.js';
+import { createTestConfig } from '../support/config.js';
 
 const database = createIsolatedTestDatabase({ canonical: true });
 const source = database.dataSource;
@@ -20,6 +25,46 @@ before(async () => {
 
 after(async () => {
   await database.dispose();
+});
+
+test('revoking a single Site Manager assignment releases the Site, preserves other roles and revokes sessions', async () => {
+  if (!source.isInitialized) await source.initialize();
+  const sites = new SiteConfigurationService(source);
+  const users = new UsersService(source, sites);
+  const auth = new AuthService(source, new AuthTokenService(new JwtService(), createTestConfig()));
+  const admin = await users.create({
+    username: `revoke-admin-${randomUUID()}`,
+    displayName: 'Synthetic revoke Admin',
+    temporaryPassword: 'TempDemo2026!',
+    roleAssignments: [{ role: UserRole.ADMIN, siteId: null }],
+  });
+  const context = { actorUserId: admin.id };
+  const site = await sites.create({ code: randomUUID(), name: 'Revocation site' });
+  const other = await sites.create({ code: randomUUID(), name: 'Other revocation site' });
+  const account = await users.create({
+    username: `manager-${randomUUID()}`,
+    displayName: 'Manager',
+    temporaryPassword: 'TempDemo2026!',
+    roleAssignments: [
+      { role: UserRole.SITE_MANAGER, siteId: site.id },
+      { role: UserRole.SAFETY_OFFICER, siteId: other.id },
+    ],
+  });
+  const login = await auth.login(account.username, 'TempDemo2026!', AuthClientType.MOBILE);
+  await users.revokeSiteManager(account.id, other.id, context);
+  assert.equal((await auth.authenticate(login.accessToken)).user.id, account.id);
+  const updated = await users.revokeSiteManager(account.id, site.id, context);
+  assert.deepEqual(updated.roleAssignments, [{ role: UserRole.SAFETY_OFFICER, siteId: other.id }]);
+  await assert.rejects(auth.authenticate(login.accessToken));
+  await users.revokeSiteManager(account.id, site.id, context);
+  const next = await users.create({
+    username: `manager-${randomUUID()}`,
+    displayName: 'Next',
+    temporaryPassword: 'TempDemo2026!',
+    roleAssignments: [{ role: UserRole.SITE_MANAGER, siteId: site.id }],
+  });
+  const empty = await users.revokeSiteManager(next.id, site.id, context);
+  assert.deepEqual(empty.roleAssignments, []);
 });
 
 test('one manager per Site survives concurrent creation and replacement; different Sites remain independent', async () => {

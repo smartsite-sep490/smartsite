@@ -7,6 +7,7 @@ import { NotificationBell } from '../../features/notifications/NotificationBell'
 import { translate as tr, useLocale } from '../../i18n';
 import { LanguageSwitcher } from '../../i18n/LanguageSwitcher';
 import '../cameras/camera-setup-catalog';
+import { getWorkforceTabs } from '../workforce/utils/workforce-tabs';
 import {
   IconAlertTriangle,
   IconBuilding,
@@ -29,7 +30,6 @@ export type ActiveTab =
   | 'dashboard'
   | 'contractor-teams'
   | 'assigned-work'
-  | 'worker-summary'
   | 'worker-documents'
   | 'workforce'
   | 'worker-onboarding'
@@ -96,6 +96,9 @@ export function AppLayout({ currentTab: propCurrentTab, onSelectTab, children }:
 
   const allowedTabs = workspaceTabs(currentUser?.roleAssignments ?? []);
   const workerOnly = roles.length === 1 && roles[0] === 'WORKER';
+  const attendanceWorkspace =
+    !roles.includes('ADMIN') &&
+    roles.some((role) => ['SITE_MANAGER', 'CONTRACTOR_REPRESENTATIVE'].includes(role));
   const navGroups = [
     {
       label: tr('shell.workspace'),
@@ -105,7 +108,6 @@ export function AppLayout({ currentTab: propCurrentTab, onSelectTab, children }:
         { id: 'assigned-work', label: tr('shell.assignedWork'), icon: IconUsers },
         { id: 'worker-onboarding', label: tr('shell.workerOnboarding'), icon: IconUsers },
         { id: 'worker-documents', label: tr('documents.title'), icon: IconUsers },
-        { id: 'worker-summary', label: tr('shell.workerSummary'), icon: IconDashboard },
         {
           id: 'workforce',
           label: tr(workerOnly ? 'shell.mySchedule' : 'shell.workforce'),
@@ -114,7 +116,17 @@ export function AppLayout({ currentTab: propCurrentTab, onSelectTab, children }:
         { id: 'accounts', label: tr('accounts.title'), icon: IconUsers },
         { id: 'site-setup', label: tr('shell.siteSetup'), icon: IconBuilding },
         { id: 'schedule-setup', label: tr('shell.schedule'), icon: IconCalendar },
-        { id: 'access', label: tr(workerOnly ? 'shell.myQr' : 'shell.access'), icon: IconKey },
+        {
+          id: 'access',
+          label: tr(
+            workerOnly
+              ? 'shell.myQr'
+              : attendanceWorkspace
+                ? 'access.tabs.attendance.label'
+                : 'shell.access',
+          ),
+          icon: attendanceWorkspace && !workerOnly ? IconCalendar : IconKey,
+        },
       ].filter((item) => allowedTabs.includes(item.id)),
     },
     {
@@ -128,6 +140,34 @@ export function AppLayout({ currentTab: propCurrentTab, onSelectTab, children }:
       ].filter((item) => allowedTabs.includes(item.id)),
     },
   ].filter((group) => group.items.length > 0);
+
+  const currentItem = navGroups
+    .flatMap((group) => group.items)
+    .find((item) => item.id === activeTab);
+  const searchParams = new URLSearchParams(location.search);
+  const selectedSiteId =
+    searchParams.get('siteId') ?? currentUser?.roleAssignments.find((r) => r.siteId)?.siteId;
+  const workforceRoles = (currentUser?.roleAssignments ?? [])
+    .filter((r) => r.siteId === selectedSiteId || (r.role === 'ADMIN' && r.siteId === null))
+    .map((r) => r.role);
+  const workforceTabs = getWorkforceTabs(workforceRoles);
+  const requestedWorkforceTab = searchParams.get('tab');
+  const workforceTab =
+    requestedWorkforceTab === 'review' && workforceTabs.showReview
+      ? 'review'
+      : requestedWorkforceTab === 'schedule' && workforceTabs.showSchedule
+        ? 'schedule'
+        : workforceTabs.defaultTab;
+  const pageLabel =
+    currentPath === 'account/password'
+      ? tr('auth.password.title')
+      : activeTab === 'dashboard' && roles.includes('SITE_MANAGER')
+        ? tr('common.site_management_overview')
+        : (currentItem?.label ?? '');
+  const functionLabel =
+    activeTab === 'workforce' && (workforceTabs.showReview || workforceTabs.showSchedule)
+      ? tr(workforceTab === 'review' ? 'shell.contractorReview' : 'app_layout.my_schedule_requests')
+      : '';
 
   return (
     <div className="min-h-screen bg-[var(--surface-canvas)] text-[var(--text-body)] font-sans flex">
@@ -296,11 +336,53 @@ export function AppLayout({ currentTab: propCurrentTab, onSelectTab, children }:
         {/* Top Header Bar */}
         <header className="min-h-16 py-2 bg-white border-b border-slate-200/80 px-4 sm:px-6 lg:px-8 flex flex-wrap items-center justify-between gap-3 shrink-0 sticky top-0 z-20">
           {/* Left: Brand/Context info */}
-          <div className="flex items-center gap-2 sm:gap-4 min-w-0">
-            <span className="text-xs font-semibold text-slate-500 uppercase tracking-wider truncate">
-              {tr('common.smartsite_operations_platform')}
-            </span>
-          </div>
+          {activeTab === 'schedule-setup' ||
+          (activeTab === 'site-setup' &&
+            roles.includes('SITE_MANAGER') &&
+            !roles.includes('ADMIN')) ||
+          (activeTab === 'workforce' && workforceTabs.showReview && workforceTab === 'review') ? (
+            <div className="flex items-center gap-3 min-w-0">
+              <div
+                aria-hidden="true"
+                className="w-10 h-10 rounded-xl bg-[#071A2B] text-white flex items-center justify-center shadow-xs shrink-0"
+              >
+                {activeTab === 'site-setup' ? (
+                  <IconBuilding className="w-5 h-5 text-[#F66B17]" />
+                ) : activeTab === 'workforce' ? (
+                  <IconShield className="w-5 h-5 text-[#F66B17]" />
+                ) : (
+                  <IconCalendar className="w-5 h-5 text-[#F66B17]" />
+                )}
+              </div>
+              <div className="min-w-0">
+                <div className="flex items-center gap-2">
+                  <span className="text-xs font-semibold text-slate-500 truncate">
+                    {activeTab === 'site-setup'
+                      ? tr('integrated_ui.site_operations')
+                      : activeTab === 'workforce'
+                        ? `${tr('common.workforce_operations')} · ${tr('common.shift_approvals')}`
+                        : tr('common.workforce_management')}
+                  </span>
+                </div>
+                <h1 className="text-xl font-bold tracking-tight text-[#071A2B] truncate">
+                  {activeTab === 'site-setup'
+                    ? tr('siteOps.titleManage')
+                    : activeTab === 'workforce'
+                      ? tr('common.contractor_review')
+                      : tr('common.schedule_setup')}
+                </h1>
+              </div>
+            </div>
+          ) : (
+            <div className="min-w-0 flex flex-col gap-0.5">
+              <span className="truncate text-[10px] font-bold uppercase tracking-wider text-[#62748E]">
+                {pageLabel}
+              </span>
+              {functionLabel && (
+                <span className="truncate text-sm font-bold text-[#071A2B]">{functionLabel}</span>
+              )}
+            </div>
+          )}
 
           {/* Right: Language Switcher, Notification, User Profile & Logout */}
           <div className="flex items-center gap-3 shrink-0">

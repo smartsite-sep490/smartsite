@@ -4,7 +4,12 @@ import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
 import { test } from 'node:test';
 import { command } from '../src/common/configuration/commands.js';
-import { requireSiteRole, requireGate } from '../src/modules/workforce/access/qr-access.service.js';
+import {
+  requireSiteRole,
+  requireGate,
+  visitResponse,
+} from '../src/modules/workforce/access/qr-access.service.js';
+import type { VisitorVisitEntity } from '../src/database/entities/qr-access.entity.js';
 import {
   RegisterVisitCommand,
   VerifyVisitorQrCommand,
@@ -100,7 +105,172 @@ test('QR commands reject fabricated authorization, subject IDs, invalid counts a
   assert.throws(() =>
     command(RegisterVisitCommand, { ...registration, validFrom: '2026-10-03T10:00:00' }),
   );
-  assert.throws(() =>
+  assert.doesNotThrow(() =>
     command(RegisterVisitCommand, { ...registration, siteManagerId: randomUUID() }),
+  );
+  assert.throws(() => command(RegisterVisitCommand, { ...registration, siteManagerId: 'invalid' }));
+});
+
+test('visitResponse enforces expiration consistently and preserves canonical statuses', () => {
+  const baseEntity = {
+    id: randomUUID(),
+    siteId: randomUUID(),
+    representativeVisitorId: randomUUID(),
+    siteManagerId: randomUUID(),
+    version: 1,
+    reviewNote: null,
+    accessKeyHash: 'hash',
+    visitorName: 'Synthetic Visitor',
+    company: 'Test Corp',
+    contact: '0123456789',
+    hostName: 'Host Person',
+    purpose: 'Inspection',
+    targetArea: 'Main Zone',
+    groupSize: 2,
+    members: [],
+    email: null,
+    language: 'en' as const,
+    bookingCodeHash: null,
+    bookingCodeCiphertext: null,
+    emailStatus: 'NOT_REQUESTED' as const,
+    emailAttempts: 0,
+    emailAttemptedAt: null,
+    emailSentAt: null,
+    emailNextAttemptAt: null,
+    gateId: 'gate-north-01',
+    validFrom: new Date(Date.now() - 3600_000),
+    validUntil: new Date(Date.now() + 3600_000),
+    status: 'PENDING' as const,
+    enteredCount: 0,
+    exitedCount: 0,
+    decidedByUserId: null,
+    decidedAt: null,
+    createdAt: new Date(),
+    updatedAt: new Date(),
+  } as VisitorVisitEntity;
+
+  // Active PENDING remains PENDING
+  assert.equal(visitResponse(baseEntity).status, 'PENDING');
+
+  // Overdue PENDING evaluates to EXPIRED
+  const overduePending = {
+    ...baseEntity,
+    validUntil: new Date(Date.now() - 10_000),
+  };
+  assert.equal(visitResponse(overduePending).status, 'EXPIRED');
+
+  // Active APPROVED remains APPROVED
+  const activeApproved = {
+    ...baseEntity,
+    status: 'APPROVED' as const,
+  };
+  assert.equal(visitResponse(activeApproved).status, 'APPROVED');
+
+  // Overdue APPROVED evaluates to EXPIRED
+  const overdueApproved = {
+    ...baseEntity,
+    status: 'APPROVED' as const,
+    validUntil: new Date(Date.now() - 10_000),
+  };
+  assert.equal(visitResponse(overdueApproved).status, 'EXPIRED');
+
+  // Past REJECTED and CANCELLED stay unchanged
+  const overdueRejected = {
+    ...baseEntity,
+    status: 'REJECTED' as const,
+    validUntil: new Date(Date.now() - 10_000),
+  };
+  assert.equal(visitResponse(overdueRejected).status, 'REJECTED');
+
+  const overdueCancelled = {
+    ...baseEntity,
+    status: 'CANCELLED' as const,
+    validUntil: new Date(Date.now() - 10_000),
+  };
+  assert.equal(visitResponse(overdueCancelled).status, 'CANCELLED');
+});
+
+test('visitResponse computes presence states and preserves NEEDS_REVIEW for uncertain attendance', () => {
+  const baseEntity = {
+    id: randomUUID(),
+    siteId: randomUUID(),
+    representativeVisitorId: randomUUID(),
+    siteManagerId: randomUUID(),
+    version: 1,
+    reviewNote: null,
+    accessKeyHash: 'hash',
+    visitorName: 'Synthetic Visitor',
+    company: 'Test Corp',
+    contact: '0123456789',
+    hostName: 'Host Person',
+    purpose: 'Inspection',
+    targetArea: 'Main Zone',
+    groupSize: 4,
+    members: [],
+    email: null,
+    language: 'en' as const,
+    bookingCodeHash: null,
+    bookingCodeCiphertext: null,
+    emailStatus: 'NOT_REQUESTED' as const,
+    emailAttempts: 0,
+    emailAttemptedAt: null,
+    emailSentAt: null,
+    emailNextAttemptAt: null,
+    gateId: 'gate-north-01',
+    validFrom: new Date(),
+    validUntil: new Date(Date.now() + 3600_000),
+    status: 'APPROVED' as const,
+    enteredCount: 0,
+    exitedCount: 0,
+    decidedByUserId: null,
+    decidedAt: null,
+    createdAt: new Date(),
+    updatedAt: new Date(),
+  } as VisitorVisitEntity;
+
+  // Not yet entered
+  assert.equal(visitResponse(baseEntity).presence, 'OUTSIDE');
+
+  // Whole group inside without roster
+  assert.equal(
+    visitResponse({ ...baseEntity, enteredCount: 4, exitedCount: 0 }).presence,
+    'INSIDE',
+  );
+
+  // Partial group inside without roster -> NEEDS_REVIEW (legacy uncertain)
+  assert.equal(
+    visitResponse({ ...baseEntity, enteredCount: 2, exitedCount: 0 }).presence,
+    'NEEDS_REVIEW',
+  );
+
+  // Partial group inside WITH roster -> INSIDE
+  const rosterMembers = [
+    {
+      id: 'm1',
+      fullName: 'A',
+      identityNumber: '1',
+      registeredFullName: 'A',
+      registeredIdentityNumber: '1',
+      inside: true,
+    },
+    {
+      id: 'm2',
+      fullName: 'B',
+      identityNumber: '2',
+      registeredFullName: 'B',
+      registeredIdentityNumber: '2',
+      inside: false,
+    },
+  ];
+  assert.equal(
+    visitResponse({ ...baseEntity, members: rosterMembers, enteredCount: 1, exitedCount: 0 })
+      .presence,
+    'INSIDE',
+  );
+
+  // Everyone checked out
+  assert.equal(
+    visitResponse({ ...baseEntity, enteredCount: 4, exitedCount: 4 }).presence,
+    'OUTSIDE',
   );
 });

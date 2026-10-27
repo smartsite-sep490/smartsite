@@ -563,11 +563,6 @@ export function AttendanceDaysView({
                 <h2 className="text-base font-bold text-[#071A2B]">
                   {tr('common.daily_work_hours')}
                 </h2>
-                {!isWorker && (
-                  <p className="text-[11px] text-slate-400 font-medium">
-                    {tr('attendance_days_view.mf03_attendance_timesheets')}
-                  </p>
-                )}
               </div>
             </div>
             <div className="flex items-center gap-2">

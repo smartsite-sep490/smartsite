@@ -366,27 +366,7 @@ export function WorkforceManagerReviewTab({
       )}
 
       {/* 1. Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-4 border-b border-slate-200/80">
-        <div className="flex flex-wrap items-center gap-3 max-w-full">
-          <div className="w-10 h-10 rounded-xl bg-[#071A2B] text-white flex items-center justify-center shadow-xs shrink-0">
-            <IconShield className="w-5 h-5 text-[#F66B17]" />
-          </div>
-          <div>
-            <div className="flex items-center gap-2">
-              <span className="text-[10px] font-bold uppercase tracking-[0.16em] text-slate-500">
-                {tr('common.workforce_operations')}
-              </span>
-              <span className="text-slate-300">•</span>
-              <span className="text-[10px] font-bold uppercase tracking-[0.16em] text-slate-500">
-                {tr('common.shift_approvals')}
-              </span>
-            </div>
-            <h1 className="text-xl font-bold tracking-tight text-[#071A2B]">
-              {tr('common.contractor_review')}
-            </h1>
-          </div>
-        </div>
-
+      <div className="flex justify-end pb-4 border-b border-slate-200/80">
         <Button
           variant="outline"
           size="md"

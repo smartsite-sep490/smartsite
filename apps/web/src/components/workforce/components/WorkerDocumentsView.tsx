@@ -8,7 +8,7 @@ import { userErrorMessage } from '../../../i18n/messages';
 import { WorkerDocumentsPanel } from './WorkerDocumentsPanel';
 import { WorkerDocumentReviewView } from '../../safety/WorkerDocumentReviewView';
 import { loadAllPages } from '../load-all-pages';
-import { IconBuilding2, IconShield, IconLoader, IconAlertTriangle } from '../../icons';
+import { IconBuilding2, IconLoader, IconAlertTriangle } from '../../icons';
 
 export function WorkerDocumentsView({ apiUrl }: { apiUrl: string }) {
   useTranslation();
@@ -95,21 +95,12 @@ export function WorkerDocumentsView({ apiUrl }: { apiUrl: string }) {
   return (
     <div className="mx-auto max-w-6xl space-y-7 pb-12">
       {/* Hero Header */}
-      <header className="rounded-2xl border border-slate-200/90 bg-white p-6 sm:p-8 shadow-xs relative overflow-hidden">
+      <header className="rounded-2xl border border-slate-200/90 bg-white p-5 sm:p-6 shadow-xs relative overflow-hidden">
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-6 relative z-10">
-          <div className="space-y-2">
-            <div className="inline-flex items-center gap-2 px-2.5 py-1 rounded-md bg-orange-50 border border-orange-200/80 text-[11px] font-black uppercase tracking-wider text-[#F66B17]">
-              <span>MF01</span>
-              <span>·</span>
-              <IconShield className="w-3.5 h-3.5" />
-              <span>{tr('documents.title')}</span>
-            </div>
+          <div>
             <h1 className="text-2xl sm:text-3xl font-black text-[#041D2E] tracking-tight">
               {tr('documents.title')}
             </h1>
-            <p className="text-sm text-slate-600 max-w-2xl leading-relaxed">
-              {tr('documents.hint')}
-            </p>
           </div>
 
           {/* Site Selector Card */}

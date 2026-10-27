@@ -254,7 +254,7 @@ describe('Site Access ERD integration', () => {
     await user.click(screen.getByRole('button', { name: /sign out/i }));
     expect(authSessionMock.logout).toHaveBeenCalledTimes(1);
   });
-  it('Representative sees scoped assignment/Zone setup without Admin account or gate controls', async () => {
+  it('Representative opens Attendance without Zone Permissions or Worker Biometrics', async () => {
     authSessionMock.user = {
       ...mockAdminLoginResponse.user,
       roleAssignments: [{ role: 'CONTRACTOR_REPRESENTATIVE', siteId: 'site-alpha' }],
@@ -265,11 +265,15 @@ describe('Site Access ERD integration', () => {
       canGrantContractorZones: false,
     });
     mount();
-    await screen.findByRole('heading', { name: 'Worker assignments and Zone permissions' });
+    await screen.findByText('Recent attendance');
+    expect(screen.queryByTestId('access-tab-attendance')).toBeNull();
+    expect(screen.queryByRole('banner')).toBeNull();
+    expect(screen.queryByRole('button', { name: /sign out/i })).toBeNull();
     expect(screen.queryByRole('button', { name: /Security Gate Desk/i })).toBeNull();
     expect(screen.queryByRole('button', { name: 'Approve' })).toBeNull();
     expect(screen.queryByRole('button', { name: 'Revoke Contractor Zone' })).toBeNull();
-    expect(screen.getByRole('button', { name: /Worker Biometrics/i })).toBeTruthy();
+    expect(screen.queryByRole('button', { name: /Worker Biometrics/i })).toBeNull();
+    expect(screen.queryByRole('button', { name: /Zone Permissions/i })).toBeNull();
   });
   it('Site Manager can open its approval queue and configure Site permissions', async () => {
     authSessionMock.user = {
@@ -281,7 +285,7 @@ describe('Site Access ERD integration', () => {
     await screen.findByRole('button', { name: /Visitor Passes|Khách viếng thăm/i });
     await user.click(screen.getByRole('button', { name: /Visitor Passes|Khách viếng thăm/i }));
     await screen.findByText('No visitor pass requests at this site.');
-    expect(screen.getByRole('button', { name: /Zone Permissions/i })).toBeTruthy();
+    expect(screen.queryByRole('button', { name: /Zone Permissions/i })).toBeNull();
     expect(screen.queryByRole('button', { name: /Worker Biometrics/i })).toBeNull();
   });
   it('Worker sees personal QR and attendance without gate operations or self-enrollment', async () => {

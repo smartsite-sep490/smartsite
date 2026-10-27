@@ -69,6 +69,7 @@ export class RegisterVisitCommand implements CreateVisitCommand {
   @Transform(trim) @IsEmail() @MaxLength(254) email!: string;
   @IsOptional() @IsIn(['en', 'vi']) language?: 'en' | 'vi';
   @Transform(trim) @IsString() @IsNotEmpty() @MaxLength(255) hostName!: string;
+  @IsOptional() @IsUUID() siteManagerId?: string;
   @Transform(trim) @IsString() @IsNotEmpty() @MaxLength(1000) purpose!: string;
   @Transform(trim) @IsString() @IsNotEmpty() @MaxLength(255) targetArea!: string;
   @IsInt() @Min(1) @Max(1000) groupSize!: number;

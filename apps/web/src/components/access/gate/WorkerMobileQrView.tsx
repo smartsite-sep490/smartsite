@@ -54,11 +54,6 @@ export function WorkerMobileQrView({
               <h2 className="text-xl font-bold tracking-tight text-white">
                 {tr('worker_mobile_qr_view.fallback_qr_value', { value1: workerName })}
               </h2>
-              <p className="mt-0.5 text-xs text-slate-300">
-                {tr(
-                  'worker_mobile_qr_view.emergency_gate_access_fallback_when_webcam_fails_or_face_verification_is_inconclus',
-                )}
-              </p>
             </div>
           </div>
         </div>

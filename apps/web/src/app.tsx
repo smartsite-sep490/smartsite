@@ -101,11 +101,6 @@ const ContractorDashboardView = lazyWithCommonCatalogs(() =>
 const AssignedWorkView = lazyWithCommonCatalogs(() =>
   import('./components/contractor/AssignedWorkView').then((m) => ({ default: m.AssignedWorkView })),
 );
-const WorkerDashboardView = lazyWithCommonCatalogs(() =>
-  import('./components/dashboard/WorkerDashboardView').then((m) => ({
-    default: m.WorkerDashboardView,
-  })),
-);
 
 const apiUrl = import.meta.env.VITE_API_URL || 'http://localhost:3000';
 
@@ -307,10 +302,6 @@ function ProtectedRoutes({ defaultAuthTab, alertsContext, onNavigate }: Protecte
               path="/assigned-work"
               element={<AssignedWorkView apiUrl={apiUrl} token={accessToken!} user={currentUser} />}
             />
-            <Route
-              path="/worker-summary"
-              element={<WorkerDashboardView apiUrl={apiUrl} onNavigate={onNavigate} />}
-            />
             <Route path="/workforce" element={<WorkforceView apiUrl={apiUrl} />} />
             <Route path="/worker-onboarding" element={<WorkerOnboardingView apiUrl={apiUrl} />} />
             <Route path="/worker-documents" element={<WorkerDocumentsView apiUrl={apiUrl} />} />
@@ -463,7 +454,7 @@ export function App() {
   if (restoringSession.isError && !accessToken) {
     return (
       <main className="min-h-screen flex items-center justify-center bg-slate-50 p-6">
-        <section className="max-w-md space-y-4 rounded-xl border bg-white p-6">
+        <section role="alert" className="max-w-md space-y-4 rounded-xl border bg-white p-6">
           <h1 className="font-bold">{tr('auth.session.restore')}</h1>
           <AuthErrorNotice error={restoringSession.error} />
           <button

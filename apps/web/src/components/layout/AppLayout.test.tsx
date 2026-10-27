@@ -122,6 +122,84 @@ function navigationFor(
   return within(screen.getByRole('navigation', { name: 'Main navigation' }));
 }
 
+it('shows the current workspace and workforce function in the header without global search', async () => {
+  profileState.data = {
+    ...createDefaultProfile(),
+    roleAssignments: ['CONTRACTOR_REPRESENTATIVE', 'WORKER'].map((role) => ({
+      role,
+      siteId: 'site-a',
+    })),
+  };
+  render(
+    <MemoryRouter initialEntries={['/workforce?tab=review']}>
+      <AppLayout>Content</AppLayout>
+    </MemoryRouter>,
+  );
+  const header = within(screen.getByRole('banner'));
+  expect(header.getByText('Workforce Operations · Shift Approvals')).toBeTruthy();
+  expect(header.getByRole('heading', { name: 'Contractor Review' })).toBeTruthy();
+  expect(header.queryByRole('textbox', { name: 'Search SmartSite' })).toBeNull();
+  await userEvent.setup().click(screen.getByRole('button', { name: 'Attendance' }));
+  expect(header.getByText('Attendance')).toBeTruthy();
+  expect(header.queryByText('Contractor Review')).toBeNull();
+});
+
+it('shows Site Operations Configuration in the manager header', () => {
+  profileState.data = {
+    ...createDefaultProfile(),
+    roleAssignments: ['SITE_MANAGER'].map((role) => ({ role, siteId: 'site-a' })),
+  };
+  render(
+    <MemoryRouter initialEntries={['/site-setup']}>
+      <AppLayout>Content</AppLayout>
+    </MemoryRouter>,
+  );
+  const header = within(screen.getByRole('banner'));
+  expect(header.getByRole('heading', { name: 'Site Operations Configuration' })).toBeTruthy();
+});
+
+it('renders the complete Schedule Setup heading cluster in the global top header and localizes it', async () => {
+  profileState.data = {
+    ...createDefaultProfile(),
+    roleAssignments: ['SITE_MANAGER'].map((role) => ({ role, siteId: 'site-a' })),
+  };
+  const { rerender } = render(
+    <MemoryRouter initialEntries={['/schedule-setup']}>
+      <AppLayout>Schedule Content</AppLayout>
+    </MemoryRouter>,
+  );
+  const header = within(screen.getByRole('banner'));
+  expect(header.getByRole('heading', { level: 1, name: 'Schedule Setup' })).toBeTruthy();
+  expect(header.getByText('Workforce Management')).toBeTruthy();
+
+  // Test Vietnamese localization in the header cluster
+  await i18n.changeLanguage('vi');
+  rerender(
+    <MemoryRouter initialEntries={['/schedule-setup']}>
+      <AppLayout>Schedule Content</AppLayout>
+    </MemoryRouter>,
+  );
+  const viHeader = within(screen.getByRole('banner'));
+  expect(viHeader.getByRole('heading', { level: 1, name: 'Thiết lập lịch làm việc' })).toBeTruthy();
+  expect(viHeader.getByText('Quản lý nhân lực')).toBeTruthy();
+
+  // Revert language back to English
+  await i18n.changeLanguage('en');
+});
+
+it('uses the role-appropriate workforce default', () => {
+  profileState.data = {
+    ...createDefaultProfile(),
+    roleAssignments: ['CONTRACTOR_REPRESENTATIVE'].map((role) => ({ role, siteId: 'site-a' })),
+  };
+  render(
+    <MemoryRouter initialEntries={['/workforce']}>
+      <AppLayout>Content</AppLayout>
+    </MemoryRouter>,
+  );
+  expect(within(screen.getByRole('banner')).getByText('Contractor Review')).toBeTruthy();
+});
+
 it.each([
   [['CONTRACTOR_REPRESENTATIVE'], true],
   [['CONTRACTOR_REPRESENTATIVE', 'SAFETY_OFFICER'], false],
@@ -251,7 +329,7 @@ describe('Role-specific navigation and NotificationBell integration', () => {
     ['CONTRACTOR_REPRESENTATIVE', 'SITE_MANAGER'],
   ])('unions contractor workspaces and Site Access for roles %j', (...userRoles) => {
     const navigation = navigationFor(userRoles);
-    expect(navigation.getByRole('button', { name: 'Site Access' })).toBeTruthy();
+    expect(navigation.getByRole('button', { name: 'Attendance' })).toBeTruthy();
     expect(navigation.getByRole('button', { name: 'Worker teams' })).toBeTruthy();
     expect(navigation.getByRole('button', { name: 'Schedule Setup' })).toBeTruthy();
     expect(navigation.getByRole('button', { name: 'Worker profiles & accounts' })).toBeTruthy();
@@ -275,11 +353,11 @@ describe('Role-specific navigation and NotificationBell integration', () => {
     },
   );
 
-  it('Site Manager sees Main setup, workforce and Site Access without Contractor onboarding', () => {
+  it('Site Manager sees Main setup, workforce and Attendance without Contractor onboarding', () => {
     const navigation = navigationFor(['SITE_MANAGER']);
     expect(navigation.getByRole('button', { name: 'Site Setup' })).toBeTruthy();
     expect(navigation.getByRole('button', { name: 'Schedule Setup' })).toBeTruthy();
-    expect(navigation.getByRole('button', { name: 'Site Access' })).toBeTruthy();
+    expect(navigation.getByRole('button', { name: 'Attendance' })).toBeTruthy();
     expect(navigation.getByRole('button', { name: 'Workforce' })).toBeTruthy();
     expect(navigation.getByRole('button', { name: 'Camera setup' })).toBeTruthy();
     expect(navigation.queryByRole('button', { name: 'Worker profiles & accounts' })).toBeNull();
@@ -294,7 +372,7 @@ describe('Role-specific navigation and NotificationBell integration', () => {
     ).toBeTruthy();
   });
 
-  it('Worker-only account sees My overview, My Schedule & Requests and My QR Pass, and disables NotificationBell when mustChangePassword is true', () => {
+  it('Worker-only account sees schedule and QR without retired overview, and disables NotificationBell when mustChangePassword is true', () => {
     profileState.data = {
       id: 'worker-user-1',
       username: 'worker.demo',
@@ -309,7 +387,7 @@ describe('Role-specific navigation and NotificationBell integration', () => {
     const navigation = within(screen.getByRole('navigation', { name: 'Main navigation' }));
     expect(navigation.getByRole('button', { name: 'My Schedule & Requests' })).toBeTruthy();
     expect(navigation.getByRole('button', { name: 'My QR Pass' })).toBeTruthy();
-    expect(navigation.getByRole('button', { name: 'My overview' })).toBeTruthy();
+    expect(navigation.queryByRole('button', { name: 'My overview' })).toBeNull();
     expect(navigation.queryByRole('button', { name: 'Dashboard' })).toBeNull();
     expect(navigation.queryByRole('button', { name: 'Site Access' })).toBeNull();
     expect(navigation.queryByRole('button', { name: 'PPE Monitoring' })).toBeNull();
@@ -363,7 +441,7 @@ describe('Shared runtime language switching in AppLayout', () => {
     expect(enNav.getByRole('button', { name: 'Worker profiles & accounts' })).toBeDefined();
     expect(enNav.getByRole('button', { name: 'Site Setup' })).toBeDefined();
     expect(enNav.getByRole('button', { name: 'Workforce' })).toBeDefined();
-    expect(enNav.getByRole('button', { name: 'Site Access' })).toBeDefined();
+    expect(enNav.getByRole('button', { name: 'Attendance' })).toBeDefined();
     expect(screen.getByText('Site Manager')).toBeDefined();
 
     // Collapse the navigation rail before switching language
@@ -380,7 +458,9 @@ describe('Shared runtime language switching in AppLayout', () => {
     expect(viNav.getByRole('button', { name: 'Hồ sơ & tài khoản công nhân' })).toBeDefined();
     expect(viNav.getByRole('button', { name: 'Thiết lập công trường' })).toBeDefined();
     expect(viNav.getByRole('button', { name: 'Nhân sự' })).toBeDefined();
-    expect(viNav.getByRole('button', { name: 'Kiểm soát ra vào' })).toBeDefined();
+    expect(
+      viNav.getByRole('button', { name: i18n.t('access.tabs.attendance.label') }),
+    ).toBeDefined();
 
     // Collapsed rail state, active route semantics, skip link, and role badge update in place
     expect(screen.getByRole('button', { name: 'Mở rộng thanh bên' })).toBeDefined();
@@ -467,6 +547,12 @@ it('limits a Security-only account to site access and identifies its role', () =
   expect(navigation.getAllByRole('button')).toHaveLength(1);
   expect(navigation.getByRole('button', { name: 'Site Access' })).toBeTruthy();
   expect(screen.getByText('Security Officer')).toBeTruthy();
+});
+
+it('does not show My Overview in Worker navigation', () => {
+  const navigation = navigationFor(['WORKER']);
+  expect(navigation.queryByRole('button', { name: i18n.t('shell.workerSummary') })).toBeNull();
+  expect(navigation.getByRole('button', { name: i18n.t('shell.mySchedule') })).toBeTruthy();
 });
 
 it('keeps Safety navigation scoped and opens the password action from main', async () => {

@@ -139,20 +139,34 @@ test('Admin Site setup and scoped Manager Zone setup feed an allowlisted AI snap
     });
     assert.equal(managerLogin.status, 200);
     const managerToken = ((await managerLogin.json()) as { accessToken: string }).accessToken;
+    const managerId = ((await managerResponse.json()) as { id: string }).id;
+    const revokePath = `${url}/api/v1/users/${managerId}/site-manager/${site.id}`;
+    assert.equal((await fetch(revokePath, { method: 'DELETE' })).status, 401);
+    assert.equal(
+      (
+        await fetch(revokePath, {
+          method: 'DELETE',
+          headers: { Authorization: `Bearer ${managerToken}` },
+        })
+      ).status,
+      403,
+    );
     const contractorPath = `/sites/${site.id}/contractors`;
     const contractorInput = { code: `CTR-${suffix}`, name: 'HTTP contractor' };
-    assert.equal((await post(contractorPath, contractorInput, managerToken)).status, 403);
+    assert.equal((await post(contractorPath, contractorInput, adminToken)).status, 403);
+    assert.equal((await post(contractorPath, contractorInput)).status, 401);
+    assert.equal((await post('/contractors', contractorInput, adminToken)).status, 404);
     assert.equal(
       (await post(`/sites/${randomUUID()}/contractors`, contractorInput, managerToken)).status,
       403,
     );
-    const contractorResponse = await post(contractorPath, contractorInput, adminToken);
+    const contractorResponse = await post(contractorPath, contractorInput, managerToken);
     assert.equal(contractorResponse.status, 201);
     const contractor = (await contractorResponse.json()) as { id: string };
     const generatedContractor = await post(
       contractorPath,
       { name: 'Automatic code contractor' },
-      adminToken,
+      managerToken,
     );
     assert.equal(generatedContractor.status, 201);
     const generatedBody = (await generatedContractor.clone().json()) as { id: string };

@@ -10,13 +10,14 @@ import { SiteConfigurationService } from '../../src/modules/sites/site-configura
 import { QrAccessService } from '../../src/modules/workforce/access/qr-access.service.js';
 import { AuthClientType, UserRole } from '../../src/database/entities/index.js';
 import { createTestConfig } from '../support/config.js';
-import dataSource from '../support/test-data-source.js';
-import { cleanupSiteAccess } from '../support/cleanup-site-access.js';
+import { createIsolatedTestDatabase } from '../support/isolated-test-database.js';
 
 test('new Site Manager can use the supplied password for visitor workflows and voluntarily change it', async () => {
-  await dataSource.initialize();
+  const isolated = createIsolatedTestDatabase(),
+    dataSource = isolated.dataSource;
+  await isolated.initialize();
   const siteId = randomUUID();
-  const userIds: string[] = [];
+
   const sites = new SiteConfigurationService(dataSource);
   const users = new UsersService(dataSource, sites);
   const auth = new AuthService(
@@ -55,7 +56,43 @@ test('new Site Manager can use the supplied password for visitor workflows and v
       temporaryPassword: 'InitialDemo2026!',
       roleAssignments: [{ role: UserRole.SITE_MANAGER, siteId }],
     });
-    userIds.push(account.id);
+
+    assert.deepEqual((await access.publicManagers(siteId)).items, [
+      { id: account.id, displayName: 'Synthetic Site Manager' },
+    ]);
+    await assert.rejects(
+      access.register(siteId, {
+        ...registration,
+        requestId: randomUUID(),
+        siteManagerId: randomUUID(),
+      }),
+    );
+    const selected = await access.register(siteId, {
+      ...registration,
+      requestId: randomUUID(),
+      siteManagerId: account.id,
+      hostName: 'Synthetic Site Manager',
+    });
+    assert.equal(selected.siteManagerId, account.id);
+    await assert.rejects(
+      access.register(siteId, {
+        ...registration,
+        requestId: randomUUID(),
+        siteManagerId: account.id,
+        hostName: 'Another person',
+      }),
+    );
+    await dataSource.query('UPDATE app_user SET is_active = FALSE WHERE id = $1', [account.id]);
+    assert.deepEqual((await access.publicManagers(siteId)).items, []);
+    await assert.rejects(
+      access.register(siteId, {
+        ...registration,
+        requestId: randomUUID(),
+        siteManagerId: account.id,
+        hostName: 'Synthetic Site Manager',
+      }),
+    );
+    await dataSource.query('UPDATE app_user SET is_active = TRUE WHERE id = $1', [account.id]);
     const temporary = await auth.login(account.username, 'InitialDemo2026!', AuthClientType.MOBILE);
     assert.equal(temporary.user.mustChangePassword, false);
     const initialVisit = await access.register(siteId, registration);
@@ -99,7 +136,7 @@ test('new Site Manager can use the supplied password for visitor workflows and v
       temporaryPassword: 'InitialDemo2026!',
       roleAssignments: [{ role: UserRole.SECURITY_OFFICER, siteId }],
     });
-    userIds.push(securityAccount.id);
+
     await auth.changePassword(securityAccount.id, 'InitialDemo2026!', 'NewDemo2026!');
     const security = (
       await auth.login(securityAccount.username, 'NewDemo2026!', AuthClientType.MOBILE)
@@ -120,21 +157,6 @@ test('new Site Manager can use the supplied password for visitor workflows and v
     assert.equal(entry.visit.enteredCount, 20);
     assert.equal(entry.visit.decidedByUserId, account.id);
   } finally {
-    try {
-      await cleanupSiteAccess(dataSource, [siteId]);
-      await dataSource.query(
-        'DELETE FROM qr_credential WHERE visit_id IN (SELECT id FROM visitor_visit WHERE site_id=$1)',
-        [siteId],
-      );
-      await dataSource.query(
-        'DELETE FROM visitor_gate_event WHERE visit_id IN (SELECT id FROM visitor_visit WHERE site_id=$1)',
-        [siteId],
-      );
-      await dataSource.query('DELETE FROM visitor_visit WHERE site_id=$1', [siteId]);
-      await dataSource.query('DELETE FROM app_user WHERE id=ANY($1)', [userIds]);
-      await dataSource.query('DELETE FROM site WHERE id=$1', [siteId]);
-    } finally {
-      await dataSource.destroy();
-    }
+    await isolated.dispose();
   }
 });
