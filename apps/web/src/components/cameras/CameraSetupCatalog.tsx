@@ -137,10 +137,10 @@ export function CameraSetupCatalog({
                       key={row.id}
                       aria-labelledby={nameId}
                       aria-current={isSelectedCamera ? 'true' : undefined}
-                      className={`flex flex-col justify-between gap-4 rounded-xl border px-4 py-3.5 transition-colors sm:flex-row sm:items-center ${
+                      className={`flex flex-col justify-between gap-3.5 rounded-xl border px-4 py-3.5 transition-colors sm:flex-row sm:items-center ${
                         isSelectedCamera
-                          ? 'border-slate-900 bg-slate-100/70 ring-1 ring-slate-900/10'
-                          : 'border-slate-200/90 bg-slate-50/30 hover:border-slate-300 hover:bg-slate-50/80'
+                          ? 'border-slate-900 bg-slate-50/90 shadow-2xs ring-1 ring-slate-900/10'
+                          : 'border-slate-200/90 bg-white hover:border-slate-300 hover:bg-slate-50/50'
                       }`}
                     >
                       <div className="min-w-0 flex-1 space-y-1.5">
@@ -166,7 +166,12 @@ export function CameraSetupCatalog({
                         </h3>
                         <CameraSetupRowMetadata row={row} isEnabled={isEnabled} />
                         {!isEnabled && canManageCameras && (
-                          <p id={hintId} className="text-xs leading-5 text-slate-500">
+                          <p
+                            id={hintId}
+                            className={
+                              isSelectedCamera ? 'sr-only' : 'text-xs leading-5 text-slate-500'
+                            }
+                          >
                             {t('cameraSetup.inactiveHint')}
                           </p>
                         )}
@@ -177,7 +182,11 @@ export function CameraSetupCatalog({
                             <button
                               type="button"
                               aria-pressed={isSelectedCamera}
-                              className={CAMERA_BUTTON_STYLES.compactSecondary}
+                              className={
+                                isSelectedCamera
+                                  ? `${CAMERA_BUTTON_STYLES.compactSecondary} border-slate-900 bg-slate-900/5 text-slate-900`
+                                  : CAMERA_BUTTON_STYLES.compactSecondary
+                              }
                               onClick={() => setFocusedCameraId(row.id)}
                             >
                               {t(
@@ -209,7 +218,13 @@ export function CameraSetupCatalog({
                             </>
                           )}
                           {canManageCameras && (
-                            <>
+                            <div
+                              className={`flex flex-wrap items-center gap-2 ${
+                                rows.length > 1 || canMonitorRow
+                                  ? 'sm:border-l sm:border-slate-200 sm:pl-2'
+                                  : ''
+                              }`}
+                            >
                               {isEnabled && (
                                 <button
                                   type="button"
@@ -235,7 +250,7 @@ export function CameraSetupCatalog({
                               >
                                 {t('cameraSetup.manageAction')}
                               </button>
-                            </>
+                            </div>
                           )}
                         </div>
                       )}

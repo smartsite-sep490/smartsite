@@ -4,11 +4,8 @@ import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import type { CameraResponse } from '@smartsite/contracts/management';
 import { changeUiLanguage } from '../../i18n/runtime';
 import './camera-setup-catalog';
-import {
-  CameraSetupContextBar,
-  CameraSetupRowMetadata,
-  CameraSetupStageCards,
-} from './CameraSetupContextPanel';
+import { CameraSetupContextBar, CameraSetupRowMetadata } from './CameraSetupContextPanel';
+import { CameraSetupWorkflow } from './CameraSetupWorkflow';
 
 const baseCamera: CameraResponse = {
   id: 'cam-1',
@@ -30,22 +27,32 @@ afterEach(() => {
   vi.restoreAllMocks();
 });
 
-it('keeps the four-step setup explanation inside an accessible optional disclosure with plain EN/VI copy', async () => {
-  const { container } = render(<CameraSetupStageCards />);
+it('keeps the four-step setup explanation inside a single un-nested setup guide disclosure with plain EN/VI copy', async () => {
+  const { container } = render(
+    <CameraSetupWorkflow
+      canWriteZones={false}
+      canReadZones={false}
+      canManageCameras={false}
+      open={vi.fn()}
+    />,
+  );
 
-  const disclosure = screen.getByTestId('camera-setup-stages-disclosure') as HTMLDetailsElement;
-  expect(disclosure.tagName).toBe('DETAILS');
-  expect(disclosure.open).toBe(false);
+  const disclosures = container.querySelectorAll('details');
+  expect(disclosures).toHaveLength(1);
+  const helpDisclosure = disclosures[0] as HTMLDetailsElement;
+  expect(helpDisclosure.open).toBe(false);
+  expect(helpDisclosure.querySelector('details')).toBeNull();
   expect(container.querySelector('.lg\\:grid-cols-4')).toBeNull();
 
-  const summaryText = screen.getByText('Four-stage setup reference');
+  const summaryText = screen.getByText('Setup guide');
   const summary = summaryText.closest('summary');
   expect(summary).toBeTruthy();
 
   fireEvent.click(summary!);
-  expect(disclosure.open).toBe(true);
+  expect(helpDisclosure.open).toBe(true);
 
-  const stageList = within(disclosure).getByRole('list', {
+  const stageSection = within(helpDisclosure).getByTestId('camera-setup-stages-disclosure');
+  const stageList = within(stageSection).getByRole('list', {
     name: 'Four-stage setup reference',
   });
   expect(stageList.tagName).toBe('OL');

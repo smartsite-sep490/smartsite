@@ -27,12 +27,11 @@ import {
   IconCheck,
   IconX,
   IconAlertTriangle,
-  IconGrid,
   IconShield,
-  IconEye,
   IconCamera,
   IconMaximize,
 } from '../icons';
+import { PpeMonitoringToolbar, PpeSingleViewportHeader } from './PpeMonitoringToolbar';
 import { ZonePpeSetupDialog } from './ZonePpeSetupDialog';
 import { deriveZonePpeCapabilities } from './zone-ppe-scope';
 import { CameraRegistrationDialog } from '../cameras/CameraRegistrationDialog';
@@ -2259,154 +2258,27 @@ export function PpeMonitoringView({
       </div>
 
       {/* Viewing Controls Bar: View Mode Switcher, Quick Camera Strip, Polling Cadence & On-Demand Evidence Trigger */}
-      <div className="flex flex-wrap items-center justify-between gap-2.5 rounded-2xl border border-slate-200/80 bg-white px-3.5 py-2 shadow-xs min-w-0 w-full max-w-full">
-        <div className="flex flex-wrap items-center gap-2.5 min-w-0 flex-1">
-          {/* View Mode Switcher: Single Focus vs 4-Source Wall */}
-          <div
-            className="flex items-center rounded-xl border border-slate-200/90 bg-[#F1F5F9] p-0.5 flex-shrink-0"
-            role="group"
-            aria-label={t('ppe.viewMode.groupAria')}
-            data-tour-anchor="monitor-view-mode"
-          >
-            <button
-              type="button"
-              data-testid="toggle-view-single"
-              onClick={() => {
-                void exitBrowserFullscreenIfActive();
-                enteredSingleFromWallRef.current = false;
-                setFullscreenError(null);
-                setViewMode('single');
-              }}
-              className={`px-3 py-1 text-xs font-semibold rounded-lg transition-colors flex items-center gap-1.5 cursor-pointer focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-slate-600 ${
-                viewMode === 'single'
-                  ? 'bg-white text-slate-900 shadow-xs'
-                  : 'text-slate-600 hover:text-slate-900'
-              }`}
-              aria-pressed={viewMode === 'single'}
-            >
-              <IconEye className="w-3.5 h-3.5" />
-              <span>{t('ppe.viewMode.single')}</span>
-            </button>
-            <button
-              type="button"
-              data-testid="toggle-view-wall"
-              onClick={handleReturnToWall}
-              className={`px-3 py-1 text-xs font-semibold rounded-lg transition-colors flex items-center gap-1.5 cursor-pointer focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-slate-600 ${
-                viewMode === 'wall'
-                  ? 'bg-white text-slate-900 shadow-xs'
-                  : 'text-slate-600 hover:text-slate-900'
-              }`}
-              aria-pressed={viewMode === 'wall'}
-            >
-              <IconGrid className="w-3.5 h-3.5" />
-              <span>{t('ppe.viewMode.wall')}</span>
-            </button>
-          </div>
-
-          {/* Inline quick camera chips in Single Focus mode */}
-          {visibleAuthorizedCameras.length > 0 && viewMode === 'single' && (
-            <>
-              <span className="hidden sm:block h-4 w-px bg-slate-200 shrink-0" aria-hidden="true" />
-              <div
-                data-testid="camera-overview-strip"
-                className="flex items-center gap-1.5 overflow-x-auto custom-scrollbar min-w-0 py-0.5"
-              >
-                {previewCamerasQuery.data.items.map((cam) => {
-                  const isCurrent = cam.id === selectedCameraId;
-                  const camCtx = resolveCameraAndWorkArea(cam.name || cam.code);
-                  return (
-                    <button
-                      key={`cam-chip-${cam.id}`}
-                      type="button"
-                      data-testid={`camera-chip-${cam.id}`}
-                      aria-pressed={isCurrent}
-                      onClick={() => setSelectedCameraId(cam.id)}
-                      className={`flex items-center gap-1.5 px-2.5 py-1 rounded-lg border text-xs transition-colors shrink-0 cursor-pointer focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-slate-600 ${
-                        isCurrent
-                          ? 'border-slate-900 bg-slate-900 text-white font-medium'
-                          : 'border-slate-200 bg-slate-50 hover:bg-white text-slate-700'
-                      }`}
-                    >
-                      <span
-                        className={`w-1.5 h-1.5 rounded-full ${
-                          isCurrent ? 'bg-emerald-400' : 'bg-slate-400'
-                        }`}
-                        title={
-                          isCurrent
-                            ? t('ppe.overview.selectedTitle')
-                            : t('ppe.overview.selectTitle')
-                        }
-                        aria-label={isCurrent ? t('ppe.overview.selectedAria') : undefined}
-                      />
-                      <span className="truncate max-w-[140px]">{camCtx.camera}</span>
-                    </button>
-                  );
-                })}
-              </div>
-            </>
-          )}
-        </div>
-
-        <div className="flex flex-wrap items-center gap-2 flex-shrink-0">
-          {!isAiWorkPaused && viewMode === 'wall' && (
-            <div className="flex items-center gap-2 rounded-lg border border-slate-200/70 bg-slate-50/80 px-2.5 py-1 flex-shrink-0 min-w-0">
-              <span className="text-[11px] font-mono text-slate-600 tabular-nums truncate">
-                {t('ppe.cadence.wall')}
-              </span>
-              {previewCamerasQuery.data?.items.some((camera) => camera.status === 'ACTIVE') && (
-                <span
-                  className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse flex-shrink-0"
-                  title={t('ppe.cadence.pollingWallTitle')}
-                />
-              )}
-            </div>
-          )}
-
-          {viewMode === 'wall' && (
-            <button
-              type="button"
-              data-testid="wall-fullscreen-btn"
-              data-tour-anchor={
-                !previewCamerasQuery.data?.items.some((camera) => camera.status === 'ACTIVE')
-                  ? 'monitor-enlarge'
-                  : undefined
-              }
-              aria-pressed={isBrowserFullscreen}
-              onClick={() => void toggleBrowserFullscreen()}
-              className="flex items-center gap-1.5 px-3 py-2 rounded-lg border border-slate-200 bg-white hover:bg-slate-50 text-xs font-semibold text-slate-800 transition-colors cursor-pointer shadow-xs focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-slate-900"
-            >
-              <IconMaximize className="w-3.5 h-3.5 text-slate-700 shrink-0" />
-              <span>
-                {t(isBrowserFullscreen ? 'ppe.fullscreen.exitBtn' : 'ppe.fullscreen.enterBtn')}
-              </span>
-            </button>
-          )}
-
-          <button
-            type="button"
-            data-testid="open-evidence-details-btn"
-            data-tour-anchor="monitor-evidence"
-            aria-haspopup="dialog"
-            aria-expanded={isEvidenceOpen}
-            onClick={openEvidenceDetails}
-            className="flex items-center gap-1.5 px-3 py-2 rounded-lg border border-slate-200 bg-white hover:bg-slate-50 text-xs font-semibold text-slate-800 transition-colors cursor-pointer shadow-xs focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-slate-900"
-          >
-            <IconShield className="w-3.5 h-3.5 text-slate-700 shrink-0" />
-            <span>{t('ppe.toolbar.evidenceDetailsBtn')}</span>
-          </button>
-
-          {(!isControlled || sharedSession !== null) && !isEvidenceOpen && (
-            <button
-              type="button"
-              onClick={openReviewFromDetection}
-              disabled={!testDetection}
-              className="px-3 py-2 rounded-lg bg-[#0F172A] hover:bg-slate-800 text-white text-xs font-semibold transition-colors disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer shadow-xs"
-            >
-              {t('ppe.action.reviewAlert')}
-            </button>
-          )}
-        </div>
-      </div>
+      <PpeMonitoringToolbar
+        viewMode={viewMode}
+        cameras={previewCamerasQuery.data.items}
+        selectedCameraId={selectedCameraId}
+        isAiWorkPaused={isAiWorkPaused}
+        isBrowserFullscreen={isBrowserFullscreen}
+        isEvidenceOpen={isEvidenceOpen}
+        canShowReviewAction={!isControlled || sharedSession !== null}
+        hasTestDetection={Boolean(testDetection)}
+        onSelectSingleView={() => {
+          void exitBrowserFullscreenIfActive();
+          enteredSingleFromWallRef.current = false;
+          setFullscreenError(null);
+          setViewMode('single');
+        }}
+        onReturnToWall={handleReturnToWall}
+        onSelectCamera={(camId) => setSelectedCameraId(camId)}
+        onToggleFullscreen={() => void toggleBrowserFullscreen()}
+        onOpenEvidenceDetails={openEvidenceDetails}
+        onReviewAlert={openReviewFromDetection}
+      />
 
       {/* Main Interactive Viewport: Full-Width Camera Surveillance (Single Enlarged View or 4-Source Wall) */}
       <div data-testid="ppe-monitoring-layout" className="grid grid-cols-1 gap-4 items-start">
@@ -2787,99 +2659,22 @@ export function PpeMonitoringView({
             </div>
 
             {/* Top Camera Metadata: Concise Camera Name + Status & Enlarge/Fullscreen Controls */}
-            <div
-              data-testid="single-viewport-header"
-              className="relative z-10 px-4 py-2.5 bg-slate-950/75 border-b border-white/10 flex flex-wrap items-center justify-between gap-2 text-white"
-            >
-              <div className="flex flex-wrap items-center gap-2 min-w-0 pr-2">
-                <span
-                  title={`${activeCameraContext.camera} · ${activeCameraContext.workArea}`}
-                  className="font-bold text-sm tracking-wide text-white truncate"
-                >
-                  {activeCameraContext.camera}
-                </span>
-
-                <details
-                  data-testid="single-viewport-details"
-                  className="text-xs text-white/80 pointer-events-auto"
-                >
-                  <summary className="inline-flex items-center cursor-pointer font-semibold text-xs text-white/90 hover:text-white select-none px-3 py-2 rounded-lg bg-white/15 hover:bg-white/25 transition-colors">
-                    {t('ppe.common.details')}
-                  </summary>
-                  <div className="mt-1.5 rounded-lg bg-slate-900/95 border border-white/15 px-3 py-2 text-xs text-white/85 space-y-1 shadow-md">
-                    <p>
-                      <span className="text-white/60">{t('ppe.card.fieldWorkArea')}:</span>{' '}
-                      <span className="font-semibold">{activeCameraContext.workArea}</span>
-                    </p>
-                    {selectedSite && (
-                      <p>
-                        <span className="text-white/60">{t('ppe.scope.siteLabel')}:</span>{' '}
-                        <span className="font-mono">
-                          {selectedSite.code} · {selectedSite.name}
-                        </span>
-                      </p>
-                    )}
-                    {selectedCamera && (
-                      <p>
-                        <span className="text-white/60">{t('mf06.detail.field.cameraId')}</span>{' '}
-                        <span className="font-mono">
-                          {selectedCamera.code} · {selectedCamera.id}
-                        </span>
-                      </p>
-                    )}
-                  </div>
-                </details>
-              </div>
-
-              <div className="flex flex-wrap items-center gap-2 pointer-events-auto">
-                <span
-                  data-testid="factual-source-label"
-                  className={`px-2.5 py-1 rounded-md text-xs font-bold tracking-wider uppercase border ${displayedSourceBadgeClass}`}
-                >
-                  {t('ppe.viewport.sourceBadge', { source: displayedSourceLabel })}
-                </span>
-                <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-md bg-black/60 flex-shrink-0">
-                  <span className={`w-1.5 h-1.5 rounded-full ${displayedDotClass}`} />
-                  <span className="font-mono text-xs font-semibold text-white tracking-wider tabular-nums">
-                    {displayedStatusText}
-                  </span>
-                </div>
-
-                <button
-                  type="button"
-                  data-testid="single-viewport-back-to-grid-btn"
-                  onClick={handleReturnToWall}
-                  className="px-3 py-2 rounded-lg bg-white/15 hover:bg-white/25 text-white text-xs font-semibold transition-colors flex items-center gap-1.5 cursor-pointer focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white"
-                >
-                  <IconGrid className="w-3.5 h-3.5" />
-                  <span>{t('ppe.toolbar.backToGridBtn')}</span>
-                </button>
-
-                <button
-                  type="button"
-                  data-testid="toggle-fullscreen-btn"
-                  data-tour-anchor="monitor-enlarge"
-                  aria-pressed={isBrowserFullscreen}
-                  onClick={() => void toggleBrowserFullscreen()}
-                  className="px-3 py-2 rounded-lg bg-white/15 hover:bg-white/25 text-white text-xs font-semibold transition-colors flex items-center gap-1.5 cursor-pointer focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white"
-                >
-                  <IconMaximize className="w-3.5 h-3.5" />
-                  <span>
-                    {t(isBrowserFullscreen ? 'ppe.fullscreen.exitBtn' : 'ppe.fullscreen.enterBtn')}
-                  </span>
-                </button>
-
-                <button
-                  type="button"
-                  data-testid="viewport-evidence-details-btn"
-                  onClick={openEvidenceDetails}
-                  className="px-3 py-2 rounded-lg bg-white/15 hover:bg-white/25 text-white text-xs font-semibold transition-colors flex items-center gap-1.5 cursor-pointer focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white"
-                >
-                  <IconShield className="w-3.5 h-3.5" />
-                  <span>{t('ppe.common.evidence')}</span>
-                </button>
-              </div>
-            </div>
+            <PpeSingleViewportHeader
+              cameraLabel={activeCameraContext.camera}
+              workAreaLabel={activeCameraContext.workArea}
+              siteSummary={selectedSite ? `${selectedSite.code} · ${selectedSite.name}` : null}
+              cameraSummary={
+                selectedCamera ? `${selectedCamera.code} · ${selectedCamera.id}` : null
+              }
+              displayedSourceLabel={displayedSourceLabel}
+              displayedSourceBadgeClass={displayedSourceBadgeClass}
+              displayedDotClass={displayedDotClass}
+              displayedStatusText={displayedStatusText}
+              isBrowserFullscreen={isBrowserFullscreen}
+              onReturnToWall={handleReturnToWall}
+              onToggleFullscreen={() => void toggleBrowserFullscreen()}
+              onOpenEvidenceDetails={openEvidenceDetails}
+            />
 
             {fullscreenError && (
               <div
