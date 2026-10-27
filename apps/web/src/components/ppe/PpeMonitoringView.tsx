@@ -642,7 +642,13 @@ export function PpeMonitoringView({
   if (isSitesBaseError && isManageCameraOpen) {
     setIsManageCameraOpen(false);
   }
-  if (isSitesBaseError && isEvidenceOpen) {
+  if (
+    (isSitesBaseError ||
+      isCamerasBaseError ||
+      !canViewSiteCameras ||
+      (isControlled && sharedSession === null)) &&
+    isEvidenceOpen
+  ) {
     setIsEvidenceOpen(false);
   }
   if (isSitesBaseError && isBrowserFullscreen) {
@@ -681,6 +687,9 @@ export function PpeMonitoringView({
     !previewCamerasInfiniteQuery.isFetching &&
     visibleAuthorizedCameras.length === 0,
   );
+  if (isCameraSettledEmpty && isEvidenceOpen) {
+    setIsEvidenceOpen(false);
+  }
 
   const isCamerasRefreshing = Boolean(
     canViewSiteCameras &&
@@ -862,9 +871,13 @@ export function PpeMonitoringView({
   const currentCameraScope = `${currentScopeToken}:${selectedSiteId}:${selectedCameraId}`;
   const [prevCameraScope, setPrevCameraScope] = useState(currentCameraScope);
   if (prevCameraScope !== currentCameraScope) {
+    const hadSelectedCamera = !prevCameraScope.endsWith(':');
     setPrevCameraScope(currentCameraScope);
     if (applyingCameraScope !== null) {
       setApplyingCameraScope(null);
+    }
+    if (hadSelectedCamera && isEvidenceOpen) {
+      setIsEvidenceOpen(false);
     }
   }
   const isApplying = Boolean(applyingCameraScope && applyingCameraScope === currentCameraScope);
@@ -2833,7 +2846,14 @@ export function PpeMonitoringView({
 
       {/* On-Demand Evidence & Details Dialog (House PpeDialog with Escape/Close/Focus-Return) */}
       <PpeDialog
-        open={isEvidenceOpen}
+        open={
+          isEvidenceOpen &&
+          canViewSiteCameras &&
+          !isSitesBaseError &&
+          !isCamerasBaseError &&
+          !isCameraSettledEmpty &&
+          (!isControlled || sharedSession !== null)
+        }
         onClose={() => setIsEvidenceOpen(false)}
         title={t('ppe.card.headerTitle')}
         description={`${activeCameraContext.camera} · ${activeCameraContext.workArea}`}
@@ -3233,6 +3253,8 @@ export function PpeMonitoringView({
                 visibleAuthorizedSites.some((s) => s.id === selectedSiteId) &&
                 sitesInfiniteQuery.isSuccess &&
                 !isSitesBaseError &&
+                !isCamerasBaseError &&
+                !isCameraSettledEmpty &&
                 !isSitesInitialLoading &&
                 ![sitesQuery.error, previewCamerasQuery.error, meQuery.error].some(
                   (error) => error instanceof ApiError && error.status === 401,

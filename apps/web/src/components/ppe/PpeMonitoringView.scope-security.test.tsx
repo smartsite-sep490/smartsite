@@ -1,10 +1,10 @@
 // @vitest-environment jsdom
 import React from 'react';
-import { render, screen, cleanup, act } from '@testing-library/react';
+import { render, screen, cleanup, act, fireEvent, within } from '@testing-library/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { describe, expect, it, vi, beforeEach, afterEach } from 'vitest';
-import { SmartSiteManagementClient } from '@smartsite/api-client';
-import type { Page, SiteResponse } from '@smartsite/api-client';
+import { ApiError, SmartSiteManagementClient } from '@smartsite/api-client';
+import type { CameraResponse, Page, SiteResponse } from '@smartsite/api-client';
 import type { SharedSessionUser } from '../../types/shared-session';
 import { PpeMonitoringView } from './PpeMonitoringView';
 
@@ -319,5 +319,165 @@ describe('PpeMonitoringView Scope & Metadata Security', () => {
     // 7. New site label is now rendered
     expect(await screen.findByRole('option', { name: /Công trường Mới Vùng B/ })).not.toBeNull();
     expect(screen.getAllByText(/Công trường Mới Vùng B/).length).toBeGreaterThanOrEqual(1);
+  });
+
+  it('closes Evidence dialog and clears protected camera detail/actions when camera metadata fails with 403 while preserving permitted site controls', async () => {
+    const queryClient = createTestQueryClient();
+    const onNavigate = vi.fn();
+
+    vi.spyOn(SmartSiteManagementClient.prototype, 'listSites').mockResolvedValue({
+      items: [
+        {
+          id: 'site-shared-id',
+          code: 'SITE-SH01',
+          name: 'Công trường Giám sát Chung',
+          createdAt: '2026-10-01T00:00:00Z',
+        },
+      ],
+      total: 1,
+    });
+
+    let rejectCamerasWith403 = false;
+    vi.spyOn(SmartSiteManagementClient.prototype, 'listPreviewCameras').mockImplementation(() => {
+      if (rejectCamerasWith403) {
+        return Promise.reject(new ApiError('http', 'Forbidden', 403));
+      }
+      return Promise.resolve({
+        items: [
+          {
+            id: 'cam-shared-01',
+            siteId: 'site-shared-id',
+            externalId: 'ext-cam-01',
+            code: 'CAM-SH01',
+            name: 'Camera Cổng Chính',
+            status: 'ACTIVE',
+            configurationVersion: 1,
+            createdAt: '2026-10-01T00:00:00Z',
+          } satisfies CameraResponse,
+        ],
+        total: 1,
+      });
+    });
+
+    render(
+      <QueryClientProvider client={queryClient}>
+        <PpeMonitoringView
+          sharedSession={{
+            accessToken: 'token-evidence-403-test',
+            sessionScope: 'scope-evidence-403-test',
+            user: fixtureUser,
+          }}
+          onNavigate={onNavigate}
+        />
+      </QueryClientProvider>,
+    );
+
+    expect(
+      await screen.findByRole('option', { name: /CAM-SH01 · Camera Cổng Chính/ }),
+    ).not.toBeNull();
+
+    fireEvent.click(screen.getByTestId('open-evidence-details-btn'));
+    const panel = screen.getByTestId('ai-detection-panel');
+    expect(within(panel).getByText(/CAM-SH01 · Camera Cổng Chính/)).not.toBeNull();
+    expect(screen.getByTestId('evidence-view-safety-alerts-btn')).not.toBeNull();
+
+    rejectCamerasWith403 = true;
+    await act(async () => {
+      await queryClient.invalidateQueries({ predicate: (q) => q.queryKey.includes('cameras') });
+    });
+
+    expect(await screen.findByRole('alert', { hidden: true })).not.toBeNull();
+    expect(screen.queryByTestId('ai-detection-panel')).toBeNull();
+    expect(screen.queryByText(/Camera Cổng Chính/)).toBeNull();
+    expect(screen.queryByTestId('evidence-view-safety-alerts-btn')).toBeNull();
+    expect(screen.getByRole('alert')).not.toBeNull();
+    expect(
+      screen.getByRole('option', { name: /SITE-SH01 · Công trường Giám sát Chung/ }),
+    ).not.toBeNull();
+  });
+
+  it('closes Evidence dialog and clears protected camera detail/actions upon same-session camera-view role revocation while preserving permitted site controls', async () => {
+    const queryClient = createTestQueryClient();
+    const onNavigate = vi.fn();
+
+    vi.spyOn(SmartSiteManagementClient.prototype, 'listSites').mockResolvedValue({
+      items: [
+        {
+          id: 'site-shared-id',
+          code: 'SITE-SH01',
+          name: 'Công trường Giám sát Chung',
+          createdAt: '2026-10-01T00:00:00Z',
+        },
+      ],
+      total: 1,
+    });
+
+    vi.spyOn(SmartSiteManagementClient.prototype, 'listPreviewCameras').mockResolvedValue({
+      items: [
+        {
+          id: 'cam-shared-01',
+          siteId: 'site-shared-id',
+          externalId: 'ext-cam-01',
+          code: 'CAM-SH01',
+          name: 'Camera Cổng Chính',
+          status: 'ACTIVE',
+          configurationVersion: 1,
+          createdAt: '2026-10-01T00:00:00Z',
+        } satisfies CameraResponse,
+      ],
+      total: 1,
+    });
+
+    const sessionBase = {
+      accessToken: 'token-evidence-role-revoke-test',
+      sessionScope: 'scope-evidence-role-revoke-test',
+    };
+
+    const { rerender } = render(
+      <QueryClientProvider client={queryClient}>
+        <PpeMonitoringView
+          sharedSession={{ ...sessionBase, user: fixtureUser }}
+          onNavigate={onNavigate}
+        />
+      </QueryClientProvider>,
+    );
+
+    expect(
+      await screen.findByRole('option', { name: /CAM-SH01 · Camera Cổng Chính/ }),
+    ).not.toBeNull();
+
+    fireEvent.click(screen.getByTestId('open-evidence-details-btn'));
+    const panel = screen.getByTestId('ai-detection-panel');
+    expect(within(panel).getByText(/CAM-SH01 · Camera Cổng Chính/)).not.toBeNull();
+    expect(screen.getByTestId('evidence-view-safety-alerts-btn')).not.toBeNull();
+
+    rerender(
+      <QueryClientProvider client={queryClient}>
+        <PpeMonitoringView
+          sharedSession={{
+            ...sessionBase,
+            user: {
+              ...fixtureUser,
+              roleAssignments: [{ role: 'WORKER', siteId: 'site-shared-id' }],
+            },
+          }}
+          onNavigate={onNavigate}
+        />
+      </QueryClientProvider>,
+    );
+
+    expect(
+      (
+        await screen.findAllByText(
+          /không có quyền giám sát camera|does not have camera monitoring access/i,
+        )
+      ).length,
+    ).toBeGreaterThanOrEqual(1);
+    expect(screen.queryByTestId('ai-detection-panel')).toBeNull();
+    expect(screen.queryByText(/Camera Cổng Chính/)).toBeNull();
+    expect(screen.queryByTestId('evidence-view-safety-alerts-btn')).toBeNull();
+    expect(
+      screen.getByRole('option', { name: /SITE-SH01 · Công trường Giám sát Chung/ }),
+    ).not.toBeNull();
   });
 });
