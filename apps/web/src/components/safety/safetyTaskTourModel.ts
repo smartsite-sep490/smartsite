@@ -113,6 +113,10 @@ export function buildCameraSetupTourSteps(
 const en = {
   'tour.triggerBtn': 'Guided help',
   'tour.replayBtn': 'Replay guide',
+  'tour.invite.aria': 'First-use guided help',
+  'tour.invite.prompt': 'New to this workspace? Take a quick guided tour.',
+  'tour.invite.startBtn': 'Start guide',
+  'tour.invite.skipBtn': 'Skip',
   'tour.regionAria': 'Guided task tour',
   'tour.stepCounter': 'Step {{current}} of {{total}}',
   'tour.nextBtn': 'Next',
@@ -164,6 +168,10 @@ const en = {
 const vi: Record<keyof typeof en, string> = {
   'tour.triggerBtn': 'Hướng dẫn nhanh',
   'tour.replayBtn': 'Xem lại hướng dẫn',
+  'tour.invite.aria': 'Hướng dẫn sử dụng lần đầu',
+  'tour.invite.prompt': 'Mới dùng màn hình này? Xem hướng dẫn nhanh các bước chính.',
+  'tour.invite.startBtn': 'Bắt đầu hướng dẫn',
+  'tour.invite.skipBtn': 'Bỏ qua',
   'tour.regionAria': 'Hướng dẫn thao tác',
   'tour.stepCounter': 'Bước {{current}} / {{total}}',
   'tour.nextBtn': 'Tiếp theo',

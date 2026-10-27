@@ -562,4 +562,174 @@ describe('SafetyTaskTour', () => {
       expect(document.activeElement).toBe(screen.getByTestId('safety-task-tour-next'));
     });
   });
+
+  it('shows a compact non-modal first-use invitation when progress is empty and permitted anchors exist, and Start guide opens step 1 without forced modal or auto-submit', async () => {
+    const onPageAction = vi.fn();
+    render(
+      <LocaleProvider defaultLocale="en">
+        <div>
+          <SafetyTaskTour
+            taskId="monitor"
+            tourVersion={MONITOR_TOUR_VERSION}
+            userId="user-first-use-1"
+            scopeKey="scope-first-use:site-1"
+            isAuthorized={true}
+            steps={MONITOR_TOUR_STEPS}
+          />
+          <section data-tour-anchor="monitor-scope" data-testid="anchor-scope">
+            Scope selector
+          </section>
+          <button
+            type="button"
+            data-tour-anchor="monitor-evidence"
+            data-testid="anchor-evidence"
+            onClick={onPageAction}
+          >
+            Inspect evidence
+          </button>
+        </div>
+      </LocaleProvider>,
+    );
+
+    expect(screen.queryByTestId('safety-task-tour')).toBeNull();
+    expect(screen.queryByRole('dialog')).toBeNull();
+    expect(document.querySelector('[inert]')).toBeNull();
+
+    const invitation = await screen.findByTestId('safety-task-tour-invitation');
+    expect(invitation.getAttribute('role')).not.toBe('dialog');
+    expect(invitation.getAttribute('aria-modal')).toBeNull();
+
+    const startBtn = screen.getByTestId('safety-task-tour-invitation-start');
+    const skipBtn = screen.getByTestId('safety-task-tour-invitation-skip');
+    expect(startBtn.textContent).toBe('Start guide');
+    expect(skipBtn.textContent).toBe('Skip');
+
+    fireEvent.click(startBtn);
+
+    expect(screen.queryByTestId('safety-task-tour-invitation')).toBeNull();
+    const tour = screen.getByTestId('safety-task-tour');
+    expect(tour.getAttribute('data-tour-step')).toBe('monitor-scope');
+    expect(screen.getByText('Step 1 of 2')).toBeTruthy();
+    expect(document.activeElement).toBe(screen.getByTestId('safety-task-tour-next'));
+    expect(onPageAction).not.toHaveBeenCalled();
+    expect(readSafetyTourProgress('user-first-use-1', 'monitor', MONITOR_TOUR_VERSION)).toBeNull();
+  });
+
+  it('persists SKIPPED when dismissing the first-use invitation, suppresses future prompts, and keeps manual Replay guide available', async () => {
+    const { unmount } = renderMonitorFixture({
+      userId: 'user-first-use-skip-1',
+      includeSetupAnchor: false,
+      locale: 'vi',
+    });
+
+    const invitation = await screen.findByTestId('safety-task-tour-invitation');
+    expect(invitation).toBeTruthy();
+    const trigger = screen.getByTestId('safety-task-tour-trigger');
+    expect(trigger.textContent).toBe('Hướng dẫn nhanh');
+
+    const startBtn = screen.getByTestId('safety-task-tour-invitation-start');
+    const skipBtn = screen.getByTestId('safety-task-tour-invitation-skip');
+    expect(startBtn.textContent).toBe('Bắt đầu hướng dẫn');
+    expect(skipBtn.textContent).toBe('Bỏ qua');
+
+    fireEvent.click(skipBtn);
+
+    expect(screen.queryByTestId('safety-task-tour-invitation')).toBeNull();
+    expect(readSafetyTourProgress('user-first-use-skip-1', 'monitor', MONITOR_TOUR_VERSION)).toBe(
+      'SKIPPED',
+    );
+    expect(trigger.textContent).toBe('Xem lại hướng dẫn');
+    await waitFor(() => {
+      expect(document.activeElement).toBe(trigger);
+    });
+
+    // Manual replay still opens the tour from step 1
+    fireEvent.click(trigger);
+    expect(screen.getByTestId('safety-task-tour').getAttribute('data-tour-step')).toBe(
+      'monitor-scope',
+    );
+    expect(screen.queryByTestId('safety-task-tour-invitation')).toBeNull();
+
+    unmount();
+
+    // Remounting with prior SKIPPED progress never re-prompts the invitation
+    renderMonitorFixture({
+      userId: 'user-first-use-skip-1',
+      includeSetupAnchor: false,
+      locale: 'en',
+    });
+    expect(screen.getByTestId('safety-task-tour-trigger').textContent).toBe('Replay guide');
+    expect(screen.queryByTestId('safety-task-tour-invitation')).toBeNull();
+  });
+
+  it('never prompts when no authorized anchors exist or scope is unauthorized, and hides the invitation if anchors or permissions are revoked', async () => {
+    function DynamicInvitationHarness({
+      isAuthorized,
+      allowFilter,
+      hideFilterDom = false,
+    }: {
+      isAuthorized: boolean;
+      allowFilter: boolean;
+      hideFilterDom?: boolean;
+    }) {
+      const steps = buildAlertsTourSteps({
+        hasQueueFilter: allowFilter,
+        hasSelectedCase: false,
+        canRecordReview: false,
+        hasFollowupContext: false,
+      });
+      return (
+        <LocaleProvider defaultLocale="en">
+          <div>
+            <SafetyTaskTour
+              taskId="alerts"
+              tourVersion={ALERTS_TOUR_VERSION}
+              userId="user-invite-guard-1"
+              scopeKey="scope-alerts:guard-1"
+              isAuthorized={isAuthorized}
+              steps={steps}
+            />
+            <section
+              data-tour-anchor="alerts-queue-filter"
+              className={hideFilterDom ? 'sr-only' : ''}
+            >
+              Queue filter
+            </section>
+          </div>
+        </LocaleProvider>
+      );
+    }
+
+    const { rerender } = render(
+      <DynamicInvitationHarness isAuthorized={false} allowFilter={true} />,
+    );
+    expect(screen.queryByTestId('safety-task-tour-trigger')).toBeNull();
+    expect(screen.queryByTestId('safety-task-tour-invitation')).toBeNull();
+
+    // Authorized scope, but no permitted steps (allowFilter=false) -> never prompts
+    rerender(<DynamicInvitationHarness isAuthorized={true} allowFilter={false} />);
+    expect(screen.getByTestId('safety-task-tour-trigger')).toBeTruthy();
+    expect(screen.queryByTestId('safety-task-tour-invitation')).toBeNull();
+
+    // Permitted step, but DOM anchor is hidden (.sr-only) -> observed via MutationObserver after commit
+    rerender(
+      <DynamicInvitationHarness isAuthorized={true} allowFilter={true} hideFilterDom={true} />,
+    );
+    await waitFor(() => {
+      expect(screen.queryByTestId('safety-task-tour-invitation')).toBeNull();
+    });
+
+    // Permitted step and visible DOM anchor -> prompts first-use invitation
+    rerender(
+      <DynamicInvitationHarness isAuthorized={true} allowFilter={true} hideFilterDom={false} />,
+    );
+    expect(await screen.findByTestId('safety-task-tour-invitation')).toBeTruthy();
+
+    // Revoking step permission hides the invitation immediately without opening the tour
+    rerender(
+      <DynamicInvitationHarness isAuthorized={true} allowFilter={false} hideFilterDom={false} />,
+    );
+    expect(screen.queryByTestId('safety-task-tour-invitation')).toBeNull();
+    expect(screen.queryByTestId('safety-task-tour')).toBeNull();
+  });
 });

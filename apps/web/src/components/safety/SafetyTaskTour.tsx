@@ -7,12 +7,14 @@ import {
   MONITOR_TOUR_VERSION,
   isElementAvailable,
   readSafetyTourProgress,
+  sanitizeTourUserId,
   writeSafetyTourProgress,
   type SafetyTaskId,
   type SafetyTaskTourProps,
   type SafetyTourProgressStatus,
   type SafetyTourStepSpec,
 } from './safetyTaskTourModel';
+import { SafetyTourInvitation } from './SafetyTourInvitation';
 
 const HIGHLIGHT_PROPS: readonly [string, string][] = [
   ['outline', '2px solid #0F172A'],
@@ -103,6 +105,13 @@ function SafetyTaskTourSession({ taskId, tourVersion, userId, steps }: SafetyTas
 
   const currentStep = currentIndex >= 0 ? availableSteps[currentIndex] : null;
   const isTourVisible = isOpen && currentStep !== null;
+  const isInviteEligible = sanitizeTourUserId(userId) !== null && progress === null && !isOpen;
+  const hasAvailableAnchor = availableSteps.length > 0;
+  const hasAvailableAnchorRef = useRef(hasAvailableAnchor);
+
+  useEffect(() => {
+    hasAvailableAnchorRef.current = hasAvailableAnchor;
+  }, [hasAvailableAnchor]);
 
   if (isOpen && !currentStep) {
     setIsOpen(false);
@@ -112,18 +121,32 @@ function SafetyTaskTourSession({ taskId, tourVersion, userId, steps }: SafetyTas
   }
 
   useEffect(() => {
-    if (!isOpen || typeof MutationObserver === 'undefined') return;
-    const obs = new MutationObserver(() => {
-      const hasAnyPermittedAnchor = stepsRef.current.some(
+    if ((!isOpen && !isInviteEligible) || typeof document === 'undefined') return;
+    const getHasAnyPermittedAnchor = () =>
+      stepsRef.current.some(
         (step) =>
           (!step.isAllowed || step.isAllowed()) &&
           isElementAvailable(document.querySelector<HTMLElement>(step.anchorSelector)),
       );
-      if (!hasAnyPermittedAnchor) {
-        closeTour(true);
-        return;
-      }
+
+    const initialHasAny = getHasAnyPermittedAnchor();
+    if (!isOpen && initialHasAny !== hasAvailableAnchorRef.current) {
+      hasAvailableAnchorRef.current = initialHasAny;
       setDomTick((n) => n + 1);
+    }
+    if (typeof MutationObserver === 'undefined') return;
+    const obs = new MutationObserver(() => {
+      const hasAnyPermittedAnchor = getHasAnyPermittedAnchor();
+      if (isOpen) {
+        if (!hasAnyPermittedAnchor) {
+          closeTour(true);
+          return;
+        }
+        setDomTick((n) => n + 1);
+      } else if (hasAnyPermittedAnchor !== hasAvailableAnchorRef.current) {
+        hasAvailableAnchorRef.current = hasAnyPermittedAnchor;
+        setDomTick((n) => n + 1);
+      }
     });
     obs.observe(document.body, {
       childList: true,
@@ -132,7 +155,7 @@ function SafetyTaskTourSession({ taskId, tourVersion, userId, steps }: SafetyTas
       attributeFilter: ['class', 'hidden', 'style', 'data-tour-anchor', 'aria-hidden', 'inert'],
     });
     return () => obs.disconnect();
-  }, [isOpen, closeTour]);
+  }, [isOpen, isInviteEligible, closeTour]);
 
   useEffect(() => {
     if (!isTourVisible || !currentStep) {
@@ -252,10 +275,24 @@ function SafetyTaskTourSession({ taskId, tourVersion, userId, steps }: SafetyTas
     closeTour(true);
   };
 
+  const startTour = () => {
+    const firstStep = steps.find(
+      (step) =>
+        (!step.isAllowed || step.isAllowed()) &&
+        isElementAvailable(document.querySelector<HTMLElement>(step.anchorSelector)),
+    );
+    if (!firstStep) return;
+    focusPrimaryRef.current = true;
+    setDomTick((n) => n + 1);
+    setActiveStepId(firstStep.id);
+    setIsOpen(true);
+  };
+
   const isLastStep = currentIndex + 1 >= availableSteps.length;
+  const showInvitation = isInviteEligible && !isTourVisible && availableSteps.length > 0;
 
   return (
-    <div className="relative inline-flex items-center">
+    <div className="relative inline-flex flex-wrap items-center gap-2 max-w-full">
       <button
         ref={triggerRef}
         type="button"
@@ -266,21 +303,23 @@ function SafetyTaskTourSession({ taskId, tourVersion, userId, steps }: SafetyTas
             closeTour(true);
             return;
           }
-          const firstStep = steps.find(
-            (step) =>
-              (!step.isAllowed || step.isAllowed()) &&
-              isElementAvailable(document.querySelector<HTMLElement>(step.anchorSelector)),
-          );
-          if (!firstStep) return;
-          focusPrimaryRef.current = true;
-          setDomTick((n) => n + 1);
-          setActiveStepId(firstStep.id);
-          setIsOpen(true);
+          startTour();
         }}
         className="px-3 py-1 rounded-full border border-slate-200/90 bg-white hover:bg-slate-50 text-xs font-semibold text-slate-700 hover:text-slate-900 transition-colors cursor-pointer shadow-xs focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-slate-900"
       >
         {progress ? tr('tour.replayBtn') : tr('tour.triggerBtn')}
       </button>
+
+      {showInvitation && (
+        <SafetyTourInvitation
+          ariaLabel={tr('tour.invite.aria')}
+          promptText={tr('tour.invite.prompt')}
+          startLabel={tr('tour.invite.startBtn')}
+          skipLabel={tr('tour.invite.skipBtn')}
+          onStart={startTour}
+          onSkip={() => finishWithStatus('SKIPPED')}
+        />
+      )}
 
       {isTourVisible && currentStep && (
         <>
