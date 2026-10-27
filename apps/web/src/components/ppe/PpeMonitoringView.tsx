@@ -870,15 +870,26 @@ export function PpeMonitoringView({
     import.meta.env.VITE_MF05_DEMO_CONTROLS === true;
   const currentCameraScope = `${currentScopeToken}:${selectedSiteId}:${selectedCameraId}`;
   const [prevCameraScope, setPrevCameraScope] = useState(currentCameraScope);
+  const [evidenceCameraScope, setEvidenceCameraScope] = useState<string | null>(null);
   if (prevCameraScope !== currentCameraScope) {
     const hadSelectedCamera = !prevCameraScope.endsWith(':');
     setPrevCameraScope(currentCameraScope);
     if (applyingCameraScope !== null) {
       setApplyingCameraScope(null);
     }
-    if (hadSelectedCamera && isEvidenceOpen) {
+    if (!hadSelectedCamera && isEvidenceOpen && evidenceCameraScope === prevCameraScope) {
+      setEvidenceCameraScope(currentCameraScope);
+    } else if (hadSelectedCamera && isEvidenceOpen && evidenceCameraScope !== currentCameraScope) {
       setIsEvidenceOpen(false);
+      setEvidenceCameraScope(null);
     }
+  } else if (
+    isEvidenceOpen &&
+    evidenceCameraScope !== null &&
+    evidenceCameraScope !== currentCameraScope
+  ) {
+    setIsEvidenceOpen(false);
+    setEvidenceCameraScope(null);
   }
   const isApplying = Boolean(applyingCameraScope && applyingCameraScope === currentCameraScope);
   const activeCameraScopeRef = useRef(currentCameraScope);
@@ -1580,22 +1591,41 @@ export function PpeMonitoringView({
     [exitBrowserFullscreenIfActive],
   );
 
-  const openEvidenceDetails = useCallback(() => {
-    if (!document.fullscreenElement && !pendingFullscreenRef.current) {
-      setIsEvidenceOpen(true);
-      return;
-    }
-    const scope = activeFullscreenScopeRef.current;
-    // The body portal is visible only after native fullscreen has exited.
-    void exitBrowserFullscreenIfActive().then(() => {
-      if (!isMountedRef.current || activeFullscreenScopeRef.current !== scope) return;
-      if (document.fullscreenElement) {
-        setFullscreenError(t('ppe.fullscreen.errorFailed'));
+  const openEvidenceDetails = useCallback(
+    (targetCameraId?: string) => {
+      const nextCameraId = typeof targetCameraId === 'string' ? targetCameraId : selectedCameraId;
+      const targetCameraScope = `${currentScopeToken}:${selectedSiteId}:${nextCameraId}`;
+      if (typeof targetCameraId === 'string') {
+        setSelectedCameraId(targetCameraId);
+      }
+      if (!document.fullscreenElement && !pendingFullscreenRef.current) {
+        setEvidenceCameraScope(targetCameraScope);
+        setIsEvidenceOpen(true);
         return;
       }
-      setIsEvidenceOpen(true);
-    });
-  }, [exitBrowserFullscreenIfActive, t]);
+      const scope = activeFullscreenScopeRef.current;
+      // The body portal is visible only after native fullscreen has exited.
+      const exitPromise = exitBrowserFullscreenIfActive();
+      const exitGen = fullscreenGenerationRef.current;
+      void exitPromise.then(() => {
+        if (
+          !isMountedRef.current ||
+          fullscreenGenerationRef.current !== exitGen ||
+          activeFullscreenScopeRef.current !== scope ||
+          activeCameraScopeRef.current !== targetCameraScope
+        ) {
+          return;
+        }
+        if (document.fullscreenElement) {
+          setFullscreenError(t('ppe.fullscreen.errorFailed'));
+          return;
+        }
+        setEvidenceCameraScope(targetCameraScope);
+        setIsEvidenceOpen(true);
+      });
+    },
+    [exitBrowserFullscreenIfActive, t, selectedCameraId, currentScopeToken, selectedSiteId],
+  );
 
   const handleReturnToWall = useCallback(() => {
     void exitBrowserFullscreenIfActive();
@@ -2352,8 +2382,7 @@ export function PpeMonitoringView({
               onSelectCamera={(camId) => setSelectedCameraId(camId)}
               onEnlargeCamera={handleEnlargeCamera}
               onOpenEvidence={(camId) => {
-                setSelectedCameraId(camId);
-                openEvidenceDetails();
+                openEvidenceDetails(camId);
               }}
               cameras={
                 previewCamerasQuery.data?.items.filter((camera) => camera.status === 'ACTIVE') ?? []

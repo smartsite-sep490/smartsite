@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import React from 'react';
-import { render, screen, cleanup, fireEvent, within, waitFor } from '@testing-library/react';
+import { render, screen, cleanup, fireEvent, within, waitFor, act } from '@testing-library/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { describe, expect, it, vi, beforeEach, afterEach } from 'vitest';
 import { SmartSiteManagementClient } from '@smartsite/api-client';
@@ -1610,6 +1610,75 @@ describe('PpeMonitoringView 4-Source Wall & Display Presets', () => {
       await queryClient.invalidateQueries();
       await waitFor(() => expect(exit).toHaveBeenCalledTimes(2));
       expect(screen.getByTestId('wall-fullscreen-btn').getAttribute('aria-pressed')).toBe('false');
+    } finally {
+      if (originalElement) Object.defineProperty(document, 'fullscreenElement', originalElement);
+      else Reflect.deleteProperty(document, 'fullscreenElement');
+      if (originalExit) Object.defineProperty(document, 'exitFullscreen', originalExit);
+      else Reflect.deleteProperty(document, 'exitFullscreen');
+    }
+  });
+
+  it('does not open a late Evidence dialog when a deferred wall exitFullscreen resolves after an intervening same-scope fullscreen exit/toggle', async () => {
+    const originalElement = Object.getOwnPropertyDescriptor(document, 'fullscreenElement');
+    const originalExit = Object.getOwnPropertyDescriptor(document, 'exitFullscreen');
+    let resolveFirstExit!: () => void;
+    const exit = vi
+      .fn()
+      .mockImplementationOnce(
+        () =>
+          new Promise<void>((resolve) => {
+            resolveFirstExit = () => {
+              Object.defineProperty(document, 'fullscreenElement', {
+                configurable: true,
+                value: null,
+              });
+              resolve();
+            };
+          }),
+      )
+      .mockImplementation(async () => {
+        Object.defineProperty(document, 'fullscreenElement', { configurable: true, value: null });
+      });
+
+    try {
+      Object.defineProperty(document, 'fullscreenElement', { configurable: true, value: null });
+      Object.defineProperty(document, 'exitFullscreen', { configurable: true, value: exit });
+      render(
+        <QueryClientProvider client={queryClient}>
+          <PpeMonitoringView apiUrl="http://localhost:3000" sharedSession={testSharedSession} />
+        </QueryClientProvider>,
+      );
+
+      fireEvent.click(await screen.findByTestId('toggle-view-wall'));
+      const evidenceBtn = await screen.findByTestId('tile-evidence-btn-cam-1');
+      const wall = screen.getByTestId('wall-view-container');
+      wall.requestFullscreen = vi.fn(async () => {
+        Object.defineProperty(document, 'fullscreenElement', { configurable: true, value: wall });
+      });
+
+      fireEvent.click(screen.getByTestId('wall-fullscreen-btn'));
+      await waitFor(() =>
+        expect(screen.getByTestId('wall-fullscreen-btn').getAttribute('aria-pressed')).toBe('true'),
+      );
+      expect(exit).toHaveBeenCalledTimes(0);
+
+      // Click Evidence on cam-1 while wall fullscreen is active; exitFullscreen #1 stays pending
+      fireEvent.click(evidenceBtn);
+      expect(exit).toHaveBeenCalledTimes(1);
+      expect(screen.queryByRole('dialog')).toBeNull();
+
+      // Intervening fullscreen toggle/exit in the SAME site and camera scope while exit #1 is pending
+      fireEvent.click(screen.getByTestId('wall-fullscreen-btn'));
+      await waitFor(() => expect(exit).toHaveBeenCalledTimes(2));
+
+      // Now resolve the deferred exit #1 inside act; stale continuation must NOT open Evidence dialog
+      await act(async () => {
+        resolveFirstExit();
+        await Promise.resolve();
+      });
+
+      expect(screen.queryByRole('dialog')).toBeNull();
+      expect(screen.queryByTestId('ai-detection-panel')).toBeNull();
     } finally {
       if (originalElement) Object.defineProperty(document, 'fullscreenElement', originalElement);
       else Reflect.deleteProperty(document, 'fullscreenElement');
