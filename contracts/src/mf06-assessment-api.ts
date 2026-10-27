@@ -24,6 +24,14 @@ export interface Mf06AssessmentResponse {
     | 'UNAUTHORIZED';
   evaluatorVersion: string;
   provenance: 'UNAVAILABLE' | 'TRUSTED_SERVICE';
+  /** Delivery completeness only; never means evaluation, evidence or identity is complete. */
+  frameDelivery?: {
+    frameId: string;
+    sequenceNumber: string;
+    partCount: number;
+    receivedParts: number;
+    status: 'PARTIAL' | 'COMPLETE';
+  };
 }
 export interface Mf06AssessmentPage {
   items: Mf06AssessmentResponse[];
@@ -78,9 +86,30 @@ function time(value: unknown): value is string {
   const date = new Date(value);
   return Number.isFinite(date.getTime()) && date.toISOString().slice(0, 19) === value.slice(0, 19);
 }
+function delivery(value: unknown): boolean {
+  return (
+    record(value, ['frameId', 'sequenceNumber', 'partCount', 'receivedParts', 'status']) &&
+    typeof value.frameId === 'string' &&
+    uuid.test(value.frameId) &&
+    value.frameId === value.frameId.toLowerCase() &&
+    typeof value.sequenceNumber === 'string' &&
+    /^(0|[1-9][0-9]{0,19})$/.test(value.sequenceNumber) &&
+    BigInt(value.sequenceNumber) <= 18446744073709551615n &&
+    Number.isInteger(value.partCount) &&
+    Number(value.partCount) >= 1 &&
+    Number(value.partCount) <= 1024 &&
+    Number.isInteger(value.receivedParts) &&
+    Number(value.receivedParts) >= 1 &&
+    Number(value.receivedParts) <= Number(value.partCount) &&
+    value.status === (value.receivedParts === value.partCount ? 'COMPLETE' : 'PARTIAL')
+  );
+}
 export function parseMf06AssessmentResponse(value: unknown): Mf06AssessmentResponse {
   if (
-    !record(value, keys) ||
+    !(
+      record(value, keys) ||
+      (record(value, [...keys, 'frameDelivery']) && delivery(value.frameDelivery))
+    ) ||
     keys
       .slice(0, 6)
       .some((key) => typeof value[key] !== 'string' || !uuid.test(value[key] as string)) ||

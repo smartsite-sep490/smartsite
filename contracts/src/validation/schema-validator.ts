@@ -11,6 +11,13 @@ export interface ValidationResult {
   issues: ValidationIssue[];
 }
 
+export interface ObservationFramePartition {
+  frameId: string;
+  sequenceNumber: string;
+  partIndex: number;
+  partCount: number;
+}
+
 interface AjvValidationError {
   instancePath: string;
   message?: string;
@@ -89,6 +96,14 @@ const validateEightFamilySchema: CompiledSchemaValidator = ajv.compile(
     ),
   ) as unknown,
 );
+const validatePartitionedFrameSchema: CompiledSchemaValidator = ajv.compile(
+  JSON.parse(
+    readFileSync(
+      new URL('../../schemas/v1.4/technical-observation-event.json', import.meta.url),
+      'utf8',
+    ),
+  ) as unknown,
+);
 const validateCameraRegionConfigurationSchema: CompiledSchemaValidator = ajv.compile(
   cameraRegionConfigurationSchema,
 );
@@ -162,6 +177,48 @@ export function validateObservationEvent(data: unknown): ValidationResult {
 export function validateEightFamilyObservationEvent(data: unknown): ValidationResult {
   const issues = schemaValidationIssues(validateEightFamilySchema, data);
   issues.push(...validateGeometries(data));
+  return { isValid: issues.length === 0, issues };
+}
+
+/** Explicit opt-in only; legacy admission never treats part metadata as established frame trust. */
+export function validatePartitionedObservationEvent(data: unknown): ValidationResult {
+  const issues = schemaValidationIssues(validatePartitionedFrameSchema, data);
+  issues.push(...validateGeometries(data));
+  if (issues.length) return { isValid: false, issues };
+  const payload = data as {
+    framePartition: ObservationFramePartition;
+    observations: Array<{ type: string; trackId: number }>;
+  };
+  const frame = payload.framePartition;
+  if (frame.partIndex >= frame.partCount) {
+    issues.push({
+      code: 'SCHEMA_VIOLATION',
+      path: '/framePartition/partIndex',
+      message: 'partIndex must be less than partCount',
+    });
+  }
+  if (BigInt(frame.sequenceNumber) > 18_446_744_073_709_551_615n) {
+    issues.push({
+      code: 'SCHEMA_VIOLATION',
+      path: '/framePartition/sequenceNumber',
+      message: 'sequenceNumber must be an unsigned 64-bit decimal integer',
+    });
+  }
+  const people = new Map<number, number>();
+  for (const observation of payload.observations) {
+    if (observation.type === 'PERSON') {
+      people.set(observation.trackId, (people.get(observation.trackId) ?? 0) + 1);
+    }
+  }
+  payload.observations.forEach((observation, index) => {
+    if (people.get(observation.trackId) !== 1) {
+      issues.push({
+        code: 'SCHEMA_VIOLATION',
+        path: `/observations/${index}/trackId`,
+        message: 'Each track requires exactly one PERSON in the same part',
+      });
+    }
+  });
   return { isValid: issues.length === 0, issues };
 }
 

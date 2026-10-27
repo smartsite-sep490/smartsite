@@ -56,3 +56,38 @@ test('pagination rejects invalid totals, offsets, sizes, duplicate IDs and overs
   ])
     assert.throws(() => parseMf06AssessmentPage(bad), /Invalid MF06/);
 });
+
+test('assessment delivery preserves exact source sequence and distinguishes partial from complete', () => {
+  const frameDelivery = {
+    frameId: row.eventId,
+    sequenceNumber: '18446744073709551615',
+    partCount: 2,
+    receivedParts: 1,
+    status: 'PARTIAL',
+  };
+  for (const delivery of [
+    frameDelivery,
+    { ...frameDelivery, receivedParts: 2, status: 'COMPLETE' },
+  ]) {
+    assert.deepEqual(parseMf06AssessmentResponse({ ...row, frameDelivery: delivery }), {
+      ...row,
+      frameDelivery: delivery,
+    });
+  }
+  for (const bad of [
+    { ...frameDelivery, status: 'COMPLETE' },
+    { ...frameDelivery, receivedParts: 2 },
+    { ...frameDelivery, receivedParts: 0 },
+    { ...frameDelivery, receivedParts: 3 },
+    { ...frameDelivery, partCount: 1025 },
+    { ...frameDelivery, sequenceNumber: '18446744073709551616' },
+    { ...frameDelivery, sequenceNumber: '01' },
+    { ...frameDelivery, sequenceNumber: 1 },
+    { ...frameDelivery, eventId: row.eventId },
+    null,
+  ])
+    assert.throws(
+      () => parseMf06AssessmentResponse({ ...row, frameDelivery: bad }),
+      /Invalid MF06/,
+    );
+});
