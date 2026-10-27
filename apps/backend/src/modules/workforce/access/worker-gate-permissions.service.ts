@@ -5,6 +5,12 @@ import { DataSource, IsNull, type EntityManager } from 'typeorm';
 import { SITE_GATES, type WorkerGatePermissionsResponse } from '@smartsite/contracts';
 import { command, conflict, missing, uuid } from '../../../common/configuration/commands.js';
 import {
+  executeMainConfigurationCommand,
+  type MainConfigurationCommandContext,
+} from '../../../common/configuration/main-configuration-authority.js';
+import { mainSiteManagerAuthorization } from '../../../common/configuration/main-site-manager-authority.js';
+import { PublicHttpException } from '../../../common/http/public-http-exception.js';
+import {
   WorkerEntity,
   WorkerGatePermissionEntity,
   UserRole,
@@ -79,72 +85,83 @@ export class WorkerGatePermissionsService {
     siteIdValue: string,
     workerIdValue: string,
     input: SetGatePermissionsCommand,
+    context?: MainConfigurationCommandContext,
   ) {
     requireSiteRole(actor, siteIdValue, [UserRole.SITE_MANAGER], false);
     const siteId = uuid(siteIdValue),
       workerId = uuid(workerIdValue);
     const value = command(SetGatePermissionsCommand, input);
-    return this.dataSource.transaction(async (manager) => {
-      const worker = await this.requireWorker(manager, siteId, workerId, true);
-      const current = await this.snapshot(manager, siteId, workerId);
-      if (
-        current.items
-          .map((item) => item.id)
-          .sort()
-          .join(',') !== [...value.expectedPermissionIds].sort().join(',')
-      )
-        conflict('Gate permissions changed. Reload before saving.');
-      const now = new Date();
-      const assignments = await manager
-        .getRepository(WorkerSiteZoneAssignmentEntity)
-        .find({ where: { workerId, siteId }, order: { validFrom: 'DESC', id: 'ASC' } });
-      const assignment = assignments.find(
-        (a) => a.status === 'APPROVED' && a.siteContractorId && a.validUntil && a.validUntil > now,
-      );
-      if (value.gateIds.length && (!worker.isActive || !assignment))
-        conflict('An approved worker assignment with an expiry is required');
-      if (value.gateIds.length && assignment) {
-        const participation = await manager
-          .getRepository(ContractorSiteParticipationEntity)
-          .findOneBy({ id: assignment.siteContractorId!, siteId, isActive: true });
+    if (context && uuid(context.actorUserId).toLowerCase() !== uuid(actor.id).toLowerCase())
+      throw new PublicHttpException(403, { code: 'FORBIDDEN', message: 'Forbidden' });
+    return executeMainConfigurationCommand(
+      this.dataSource,
+      context,
+      'WORKER_GATE_PERMISSIONS_SET',
+      { siteId, workerId, ...value },
+      async (manager) => {
+        const worker = await this.requireWorker(manager, siteId, workerId, true);
+        const current = await this.snapshot(manager, siteId, workerId);
         if (
-          !participation ||
-          participation.contractorId !== worker.contractorId ||
-          participation.validFrom > assignment.validFrom ||
-          (participation.validUntil && participation.validUntil < assignment.validUntil!)
+          current.items
+            .map((item) => item.id)
+            .sort()
+            .join(',') !== [...value.expectedPermissionIds].sort().join(',')
         )
-          conflict('Assignment exceeds active contractor participation');
-      }
-      await manager
-        .getRepository(WorkerGatePermissionEntity)
-        .update(
-          { workerId, siteId, revokedAt: IsNull() },
-          { revokedAt: now, revokedByUserId: actor.id },
+          conflict('Gate permissions changed. Reload before saving.');
+        const now = new Date();
+        const assignments = await manager
+          .getRepository(WorkerSiteZoneAssignmentEntity)
+          .find({ where: { workerId, siteId }, order: { validFrom: 'DESC', id: 'ASC' } });
+        const assignment = assignments.find(
+          (a) =>
+            a.status === 'APPROVED' && a.siteContractorId && a.validUntil && a.validUntil > now,
         );
-      for (const gateId of value.gateIds)
-        await manager.getRepository(WorkerGatePermissionEntity).save({
-          id: randomUUID(),
-          workerId,
+        if (value.gateIds.length && (!worker.isActive || !assignment))
+          conflict('An approved worker assignment with an expiry is required');
+        if (value.gateIds.length && assignment) {
+          const participation = await manager
+            .getRepository(ContractorSiteParticipationEntity)
+            .findOneBy({ id: assignment.siteContractorId!, siteId, isActive: true });
+          if (
+            !participation ||
+            participation.contractorId !== worker.contractorId ||
+            participation.validFrom > assignment.validFrom ||
+            (participation.validUntil && participation.validUntil < assignment.validUntil!)
+          )
+            conflict('Assignment exceeds active contractor participation');
+        }
+        await manager
+          .getRepository(WorkerGatePermissionEntity)
+          .update(
+            { workerId, siteId, revokedAt: IsNull() },
+            { revokedAt: now, revokedByUserId: actor.id },
+          );
+        for (const gateId of value.gateIds)
+          await manager.getRepository(WorkerGatePermissionEntity).save({
+            id: randomUUID(),
+            workerId,
+            siteId,
+            gateId,
+            validFrom: assignment!.validFrom > now ? assignment!.validFrom : now,
+            validUntil: assignment!.validUntil,
+            workerAssignmentId: assignment!.id,
+            createdByUserId: actor.id,
+            revokedAt: null,
+            revokedByUserId: null,
+          });
+        await auditAccess(
+          manager,
+          actor.id,
           siteId,
-          gateId,
-          validFrom: assignment!.validFrom > now ? assignment!.validFrom : now,
-          validUntil: assignment!.validUntil,
-          workerAssignmentId: assignment!.id,
-          createdByUserId: actor.id,
-          revokedAt: null,
-          revokedByUserId: null,
-        });
-      await auditAccess(
-        manager,
-        actor.id,
-        siteId,
-        'GATE_PERMISSIONS_CHANGED',
-        'worker',
-        worker.id,
-        null,
-        { gateIds: value.gateIds, assignmentId: assignment?.id ?? null },
-      );
-      return this.snapshot(manager, siteId, workerId);
-    });
+          'GATE_PERMISSIONS_CHANGED',
+          'worker',
+          worker.id,
+          null,
+          { gateIds: value.gateIds, assignmentId: assignment?.id ?? null },
+        );
+        return this.snapshot(manager, siteId, workerId);
+      },
+      mainSiteManagerAuthorization(context, siteId),
+    );
   }
 }

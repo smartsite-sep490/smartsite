@@ -1,4 +1,9 @@
-import { computeCanonicalPayloadHash, validateObservationEvent } from '@smartsite/contracts';
+import {
+  computeCanonicalPayloadHash,
+  validateObservationEvent,
+  validateEightFamilyObservationEvent,
+  validatePartitionedObservationEvent,
+} from '@smartsite/contracts';
 import { parseNormalizedCapturedAt } from '../../../common/parse-normalized-captured-at.js';
 import type { AiObservationEventEntity } from '../../../database/entities/ai-observation-event.entity.js';
 
@@ -9,11 +14,15 @@ export function reviewEventIsConsistent(event: AiObservationEventEntity): boolea
 /** Historical raw evidence can remain intact after Camera's foreign key is SET NULL. */
 export function reviewRawEventIsConsistent(event: AiObservationEventEntity): boolean {
   const raw = event.rawPayload;
-  if (
-    !validateObservationEvent(raw).isValid ||
-    computeCanonicalPayloadHash(raw) !== event.payloadHash
-  )
-    return false;
+  const version =
+    raw && typeof raw === 'object' ? (raw as { schemaVersion?: unknown }).schemaVersion : undefined;
+  const validation =
+    version === '1.4.0'
+      ? validatePartitionedObservationEvent(raw)
+      : version === '1.3.0'
+        ? validateEightFamilyObservationEvent(raw)
+        : validateObservationEvent(raw);
+  if (!validation.isValid || computeCanonicalPayloadHash(raw) !== event.payloadHash) return false;
   const header = raw as {
     eventId: string;
     cameraExternalId: string;

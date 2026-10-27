@@ -44,14 +44,14 @@ export class HealthController {
   @Get('ready')
   @ApiOkResponse({
     type: ReadyHealthResponse,
-    description: 'PostgreSQL accepts a readiness query.',
+    description: 'PostgreSQL is reachable and this release has no required migration pending.',
   })
   @ApiServiceUnavailableResponse({
     type: ErrorResponseDto,
-    description: 'PostgreSQL is unavailable.',
+    description: 'PostgreSQL or the required migration history is unavailable.',
   })
   async ready(): Promise<ReadyHealthResponse> {
-    if (!(await this.database.isReachable())) {
+    if (!(await this.database.isReady())) {
       throw new PublicHttpException(HttpStatus.SERVICE_UNAVAILABLE, {
         code: 'DATABASE_UNAVAILABLE',
         message: 'Database unavailable',

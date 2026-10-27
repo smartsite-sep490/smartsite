@@ -22,6 +22,9 @@ test('Notification boundary rejects unknown filters, invalid pagination and arbi
     { limit: '101' },
     { offset: '-1' },
     { limit: ['20'] },
+    { siteId: '' },
+    { siteId: null },
+    { siteId: ['11111111-1111-4111-8111-111111111111'] },
   ]) {
     assert.throws(() => controller.list(request, query), invalid);
   }
@@ -34,6 +37,39 @@ test('Notification boundary rejects unknown filters, invalid pagination and arbi
     controller.deleteRead(request, undefined, { recipientUserId: 'other' }),
     invalid,
   );
+  for (const query of [{ siteId: '' }, { siteId: null }, { recipientUserId: 'other' }]) {
+    await assert.rejects(controller.readAll(request, undefined, query), invalid);
+    await assert.rejects(controller.deleteRead(request, undefined, query), invalid);
+  }
+});
+
+test('Site-filtered notification routes forward the validated filter and authenticated actor', async () => {
+  const actor = { id: 'current-user' };
+  const siteId = '11111111-1111-4111-8111-111111111111';
+  const seen: unknown[][] = [];
+  const controller = new NotificationsController({
+    list: (...args: unknown[]) => {
+      seen.push(args);
+      return {};
+    },
+    readAll: async (...args: unknown[]) => {
+      seen.push(args);
+      return { updated: 0 };
+    },
+    deleteRead: async (...args: unknown[]) => {
+      seen.push(args);
+      return { deleted: 0 };
+    },
+  } as unknown as SchedulingNotificationService);
+  const request = { user: actor } as AuthenticatedRequest;
+  controller.list(request, { siteId, readStatus: 'UNREAD', offset: '20', limit: '20' });
+  await controller.readAll(request, undefined, { siteId });
+  await controller.deleteRead(request, undefined, { siteId });
+  assert.deepEqual(seen, [
+    [actor, 'UNREAD', 20, 20, siteId],
+    [actor, siteId],
+    [actor, siteId],
+  ]);
 });
 
 test('deleting read notifications delegates only the authenticated actor', async () => {

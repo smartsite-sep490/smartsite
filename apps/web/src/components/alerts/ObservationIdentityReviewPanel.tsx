@@ -6,21 +6,20 @@ import { translate as tr } from '../../i18n';
 import { useTranslation } from 'react-i18next';
 import { useEffect, useId, useMemo, useRef, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { ArrowClockwise } from '@phosphor-icons/react/dist/csr/ArrowClockwise';
+import { CheckCircle } from '@phosphor-icons/react/dist/csr/CheckCircle';
+import { ClockCounterClockwise } from '@phosphor-icons/react/dist/csr/ClockCounterClockwise';
+import { Info } from '@phosphor-icons/react/dist/csr/Info';
+import { ShieldCheck } from '@phosphor-icons/react/dist/csr/ShieldCheck';
+import { User } from '@phosphor-icons/react/dist/csr/User';
+import { Warning } from '@phosphor-icons/react/dist/csr/Warning';
+import { XCircle } from '@phosphor-icons/react/dist/csr/XCircle';
 import {
-  ArrowClockwise,
-  CheckCircle,
-  ClockCounterClockwise,
-  Info,
-  ShieldCheck,
-  User,
-  Warning,
-  XCircle,
-} from '@phosphor-icons/react';
-import type {
-  ObservationIdentityDecisionCommand,
-  ObservationIdentityWorkerResponse,
-  SafetyAlertDetectionResponse,
-  SmartSiteManagementClient,
+  ApiError,
+  type ObservationIdentityDecisionCommand,
+  type ObservationIdentityWorkerResponse,
+  type SafetyAlertDetectionResponse,
+  type SmartSiteManagementClient,
 } from '@smartsite/api-client';
 import {
   buildObservationIdentityContextQueryKey,
@@ -40,6 +39,19 @@ import {
   type ObservationIdentitySubjectResponse,
 } from './observationIdentityReviewUtils';
 
+function isUnauthorizedError(error: unknown): boolean {
+  if (error instanceof ApiError && error.status === 401) return true;
+  if (
+    error &&
+    typeof error === 'object' &&
+    'status' in error &&
+    (error as { status: unknown }).status === 401
+  ) {
+    return true;
+  }
+  return false;
+}
+
 export interface ObservationIdentityReviewPanelProps {
   client: SmartSiteManagementClient;
   apiUrl: string;
@@ -50,6 +62,7 @@ export interface ObservationIdentityReviewPanelProps {
   detection: SafetyAlertDetectionResponse;
   evidenceIndex: number | null;
   evidenceBlob: Blob | null;
+  onUnauthorized?: () => void;
 }
 
 export function ObservationIdentityReviewPanel(props: ObservationIdentityReviewPanelProps) {
@@ -91,6 +104,7 @@ function ObservationIdentityReviewPanelScoped({
   detection,
   evidenceIndex,
   evidenceBlob,
+  onUnauthorized,
 }: ObservationIdentityReviewPanelProps) {
   useTranslation();
 
@@ -126,6 +140,12 @@ function ObservationIdentityReviewPanelScoped({
     staleTime: 10_000,
     gcTime: 0,
   });
+
+  useEffect(() => {
+    if (isUnauthorizedError(contextQuery.error)) {
+      onUnauthorized?.();
+    }
+  }, [contextQuery.error, onUnauthorized]);
 
   const subjects = useMemo(() => contextQuery.data?.subjects ?? [], [contextQuery.data]);
 
@@ -170,6 +190,12 @@ function ObservationIdentityReviewPanelScoped({
     staleTime: 30_000,
     gcTime: 0,
   });
+
+  useEffect(() => {
+    if (isUnauthorizedError(workersQuery.error)) {
+      onUnauthorized?.();
+    }
+  }, [workersQuery.error, onUnauthorized]);
 
   const workers = useMemo(() => workersQuery.data?.items ?? [], [workersQuery.data]);
 
@@ -469,6 +495,7 @@ function ObservationIdentityReviewPanelScoped({
           blobDigestError={blobDigestError}
           dimensionsError={dimensionsError}
           onRefetchContext={() => void contextQuery.refetch()}
+          onUnauthorized={onUnauthorized}
         />
       ) : (
         <div
@@ -511,6 +538,7 @@ interface ObservationIdentitySubjectFormProps {
   blobDigestError: string | null;
   dimensionsError: string | null;
   onRefetchContext: () => void;
+  onUnauthorized?: () => void;
 }
 
 function ObservationIdentitySubjectForm({
@@ -540,6 +568,7 @@ function ObservationIdentitySubjectForm({
   blobDigestError,
   dimensionsError,
   onRefetchContext,
+  onUnauthorized,
 }: ObservationIdentitySubjectFormProps) {
   useTranslation();
 
@@ -558,6 +587,7 @@ function ObservationIdentitySubjectForm({
   const [isFrameReady, setIsFrameReady] = useState<boolean>(false);
 
   const isSubmittingRef = useRef<boolean>(false);
+  const isMountedRef = useRef<boolean>(true);
   const mutationAbortControllerRef = useRef<AbortController | null>(null);
 
   const handleWorkerPageChange = (newOffset: number) => {
@@ -568,7 +598,9 @@ function ObservationIdentitySubjectForm({
   };
 
   useEffect(() => {
+    isMountedRef.current = true;
     return () => {
+      isMountedRef.current = false;
       mutationAbortControllerRef.current?.abort();
     };
   }, []);
@@ -615,6 +647,12 @@ function ObservationIdentitySubjectForm({
     gcTime: 0,
   });
 
+  useEffect(() => {
+    if (isUnauthorizedError(decisionsQuery.error)) {
+      onUnauthorized?.();
+    }
+  }, [decisionsQuery.error, onUnauthorized]);
+
   // Mutation
   const mutation = useMutation({
     mutationFn: (cmd: ObservationIdentityDecisionCommand) => {
@@ -632,6 +670,8 @@ function ObservationIdentitySubjectForm({
       );
     },
     onSuccess: (result) => {
+      // Abort is advisory: a retired subject/session must ignore a late transport result.
+      if (!isMountedRef.current) return;
       isSubmittingRef.current = false;
       setLastReplayed(result.replayed);
       setSubmitError(null);
@@ -658,11 +698,23 @@ function ObservationIdentitySubjectForm({
           query.queryKey[6] === currentSubject.personObservationIndex,
       });
 
+      // Reset alert work context for all alerts/revisions in this site/session scope
+      // so stale verified worker/contractor/team data is cleared before active refetch
+      void queryClient.resetQueries({
+        predicate: (query) =>
+          query.queryKey[0] === 'safety-workflow' &&
+          query.queryKey[1] === apiUrl &&
+          query.queryKey[2] === sessionScope &&
+          query.queryKey[3] === siteId &&
+          query.queryKey[4] === 'alert-context',
+      });
+
       setSelectedWorkerId('');
       setReason('');
       setCommandTracker(null);
     },
     onError: (error) => {
+      if (!isMountedRef.current) return;
       isSubmittingRef.current = false;
       const formatted = formatIdentityErrorMessage(error);
       setSubmitError(formatted);
@@ -671,6 +723,9 @@ function ObservationIdentitySubjectForm({
         (error as { status?: number }).status === 409
       ) {
         setIsStaleConflict(true);
+      }
+      if (isUnauthorizedError(error)) {
+        onUnauthorized?.();
       }
     },
   });

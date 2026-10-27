@@ -1,45 +1,47 @@
+import { workspaceTabs } from '../../features/auth/workspace-access';
 import React, { ReactNode, useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import { useLocation, useNavigate } from 'react-router-dom';
+import { useCurrentUser, useLogout } from '../../features/auth/auth-session';
+import { NotificationBell } from '../../features/notifications/NotificationBell';
+import { translate as tr, useLocale } from '../../i18n';
+import { LanguageSwitcher } from '../../i18n/LanguageSwitcher';
+import '../cameras/camera-setup-catalog';
+import { getWorkforceTabs } from '../workforce/utils/workforce-tabs';
 import {
-  IconDashboard,
-  IconUsers,
-  IconKey,
-  IconHardHat,
   IconAlertTriangle,
-  IconHome,
   IconBuilding,
   IconCalendar,
+  IconCamera,
   IconChevronLeft,
   IconChevronRight,
-  IconCamera,
-  IconShield,
+  IconDashboard,
+  IconHardHat,
+  IconHome,
+  IconKey,
   IconLogOut,
+  IconShield,
+  IconUsers,
 } from '../icons';
-
-import { useLogout, useCurrentUser } from '../../features/auth/auth-session';
-import { NotificationBell } from '../../features/notifications/NotificationBell';
-import { useTranslation } from 'react-i18next';
-import { LanguageSwitcher } from '../../i18n/LanguageSwitcher';
-import { workspaceTabs } from '../../features/auth/workspace-access';
-import { getWorkforceTabs } from '../workforce/utils/workforce-tabs';
 
 const apiUrl = import.meta.env.VITE_API_URL || 'http://localhost:3000';
 
 export type ActiveTab =
   | 'dashboard'
-  | 'assigned-work'
   | 'contractor-teams'
-  | 'worker-onboarding'
+  | 'assigned-work'
   | 'worker-documents'
   | 'workforce'
+  | 'worker-onboarding'
   | 'site-setup'
-  | 'accounts'
   | 'schedule-setup'
   | 'access'
   | 'live-monitoring'
   | 'ppe'
+  | 'camera-setup'
   | 'zones'
   | 'incidents'
+  | 'accounts'
   | 'iot'
   | 'progress'
   | 'landing';
@@ -51,7 +53,8 @@ interface AppLayoutProps {
 }
 
 export function AppLayout({ currentTab: propCurrentTab, onSelectTab, children }: AppLayoutProps) {
-  const { t } = useTranslation();
+  useTranslation();
+  const { t } = useLocale();
   const [isCollapsed, setIsCollapsed] = useState(false);
   const location = useLocation();
   const navigate = useNavigate();
@@ -69,61 +72,53 @@ export function AppLayout({ currentTab: propCurrentTab, onSelectTab, children }:
   };
 
   // useCurrentUser calls /auth/me using the live accessToken; works after hard refresh.
-  const { data: currentUser } = useCurrentUser(apiUrl);
-  const displayName = currentUser?.username || t('shell.user');
+  // Fail closed when profile query errors even if TanStack Query retains cached data.
+  const { data: profile, isError: profileUnavailable } = useCurrentUser(apiUrl);
+  const currentUser = profileUnavailable ? undefined : profile;
+  const displayName = currentUser?.username || t('layout.accountFallback');
   const roles: string[] = currentUser?.roleAssignments?.map((r) => r.role) || [];
   const userRole = roles.includes('ADMIN')
-    ? t('shell.systemAdmin')
+    ? t('role.ADMIN')
     : roles.includes('SITE_MANAGER')
-      ? t('shell.siteManager')
-      : roles.includes('CONTRACTOR_REPRESENTATIVE')
-        ? t('shell.contractorRep')
-        : roles.includes('WORKER')
-          ? t('shell.worker')
-          : roles.includes('SECURITY_OFFICER')
-            ? t('accounts.role.SECURITY_OFFICER')
-            : roles.includes('SAFETY_OFFICER')
-              ? t('accounts.role.SAFETY_OFFICER')
-              : t('shell.authenticated');
+      ? t('role.SITE_MANAGER')
+      : roles.includes('SAFETY_OFFICER')
+        ? t('role.SAFETY_OFFICER')
+        : roles.includes('CONTRACTOR_REPRESENTATIVE')
+          ? t('role.CONTRACTOR_REPRESENTATIVE')
+          : roles.includes('WORKER')
+            ? t('role.WORKER')
+            : roles.includes('SECURITY_OFFICER')
+              ? tr('accounts.role.SECURITY_OFFICER')
+              : currentUser
+                ? t('role.authenticatedUser')
+                : t('role.unverified');
   const userInitials = displayName.slice(0, 2).toUpperCase();
 
-  // Keep main's Safety presentation without changing the other role workspaces.
-  // Navigation and business capabilities still use the scoped role policy below.
-  const mainSafetyUi =
-    roles.includes('SAFETY_OFFICER') &&
-    [
-      'dashboard',
-      'live-monitoring',
-      'ppe',
-      'zones',
-      'incidents',
-      'worker-documents',
-      'account/password',
-    ].includes(activeTab);
   const allowedTabs = workspaceTabs(currentUser?.roleAssignments ?? []);
   const workerOnly = roles.length === 1 && roles[0] === 'WORKER';
-  const attendanceWorkspace = !roles.includes('ADMIN') &&
+  const attendanceWorkspace =
+    !roles.includes('ADMIN') &&
     roles.some((role) => ['SITE_MANAGER', 'CONTRACTOR_REPRESENTATIVE'].includes(role));
   const navGroups = [
     {
-      label: t('shell.workspace'),
+      label: tr('shell.workspace'),
       items: [
-        { id: 'dashboard', label: t('shell.dashboard'), icon: IconDashboard },
-        { id: 'contractor-teams', label: t('shell.contractorTeams'), icon: IconUsers },
-        { id: 'assigned-work', label: t('shell.assignedWork'), icon: IconUsers },
-        { id: 'worker-onboarding', label: t('shell.workerOnboarding'), icon: IconUsers },
-        { id: 'worker-documents', label: t('documents.title'), icon: IconUsers },
+        { id: 'dashboard', label: tr('shell.dashboard'), icon: IconDashboard },
+        { id: 'contractor-teams', label: tr('shell.contractorTeams'), icon: IconUsers },
+        { id: 'assigned-work', label: tr('shell.assignedWork'), icon: IconUsers },
+        { id: 'worker-onboarding', label: tr('shell.workerOnboarding'), icon: IconUsers },
+        { id: 'worker-documents', label: tr('documents.title'), icon: IconUsers },
         {
           id: 'workforce',
-          label: t(workerOnly ? 'shell.mySchedule' : 'shell.workforce'),
+          label: tr(workerOnly ? 'shell.mySchedule' : 'shell.workforce'),
           icon: IconUsers,
         },
-        { id: 'accounts', label: t('accounts.title'), icon: IconUsers },
-        { id: 'site-setup', label: t('shell.siteSetup'), icon: IconBuilding },
-        { id: 'schedule-setup', label: t('shell.schedule'), icon: IconCalendar },
+        { id: 'accounts', label: tr('accounts.title'), icon: IconUsers },
+        { id: 'site-setup', label: tr('shell.siteSetup'), icon: IconBuilding },
+        { id: 'schedule-setup', label: tr('shell.schedule'), icon: IconCalendar },
         {
           id: 'access',
-          label: t(
+          label: tr(
             workerOnly
               ? 'shell.myQr'
               : attendanceWorkspace
@@ -135,12 +130,13 @@ export function AppLayout({ currentTab: propCurrentTab, onSelectTab, children }:
       ].filter((item) => allowedTabs.includes(item.id)),
     },
     {
-      label: t('shell.safety'),
+      label: tr('shell.safety'),
       items: [
-        { id: 'live-monitoring', label: t('shell.live'), icon: IconCamera },
-        { id: 'ppe', label: t('shell.ppe'), icon: IconHardHat },
-        { id: 'zones', label: t('shell.zones'), icon: IconShield },
-        { id: 'incidents', label: t('shell.incidents'), icon: IconAlertTriangle },
+        { id: 'live-monitoring', label: tr('shell.live'), icon: IconCamera },
+        { id: 'camera-setup', label: tr('cameraSetup.title', { ns: 'safety' }), icon: IconCamera },
+        { id: 'ppe', label: tr('shell.ppe'), icon: IconHardHat },
+        { id: 'zones', label: tr('shell.zones'), icon: IconShield },
+        { id: 'incidents', label: tr('shell.incidents'), icon: IconAlertTriangle },
       ].filter((item) => allowedTabs.includes(item.id)),
     },
   ].filter((group) => group.items.length > 0);
@@ -164,42 +160,47 @@ export function AppLayout({ currentTab: propCurrentTab, onSelectTab, children }:
         : workforceTabs.defaultTab;
   const pageLabel =
     currentPath === 'account/password'
-      ? t('auth.password.title')
+      ? tr('auth.password.title')
       : activeTab === 'dashboard' && roles.includes('SITE_MANAGER')
-        ? t('common.site_management_overview')
+        ? tr('common.site_management_overview')
         : (currentItem?.label ?? '');
   const functionLabel =
     activeTab === 'workforce' && (workforceTabs.showReview || workforceTabs.showSchedule)
-      ? t(workforceTab === 'review' ? 'shell.contractorReview' : 'app_layout.my_schedule_requests')
+      ? tr(workforceTab === 'review' ? 'shell.contractorReview' : 'app_layout.my_schedule_requests')
       : '';
 
   return (
     <div className="min-h-screen bg-[var(--surface-canvas)] text-[var(--text-body)] font-sans flex">
-      {/* Left Sidebar: Warm neutral shell */}
+      <a
+        href="#smartsite-main-content"
+        onClick={(event) => {
+          event.preventDefault();
+          document.getElementById('smartsite-main-content')?.focus();
+        }}
+        className="sr-only focus:not-sr-only focus:fixed focus:left-3 focus:top-3 focus:z-50 focus:rounded-xl focus:bg-white focus:px-4 focus:py-3 focus:text-slate-900 focus:shadow-sm"
+      >
+        {t('layout.skipToMain')}
+      </a>
+      {/* Left Sidebar: Refined utilitarian charcoal shell */}
       <aside
         className={`${
-          mainSafetyUi
-            ? isCollapsed
-              ? 'w-16 sm:w-20'
-              : 'w-16 sm:w-20 lg:w-64'
-            : isCollapsed
-              ? 'w-20'
-              : 'w-20 lg:w-64'
-        } bg-gradient-to-b from-[#071320] via-[#04121D] to-[#020B13] text-white flex flex-col justify-between shrink-0 select-none border-r border-white/10 transition-all duration-300 ease-in-out sticky top-0 h-screen z-30 shadow-2xl`}
+          isCollapsed ? 'w-16 lg:w-20' : 'w-16 lg:w-64'
+        } bg-[#0C1017] text-white flex flex-col justify-between shrink-0 select-none border-r border-[#1E2633] transition-all duration-300 ease-in-out sticky top-0 h-dvh z-30`}
       >
-        <div>
+        <div className="flex min-h-0 flex-1 flex-col">
           {/* Brand & Collapse/Expand Toggle Header */}
           <div
-            className={`p-3 lg:p-4 border-b border-white/10 flex items-center ${
+            className={`p-3 lg:p-4 shrink-0 border-b border-[#1E2633] flex items-center ${
               isCollapsed ? 'flex-col gap-3 justify-center' : 'justify-center lg:justify-between'
             }`}
           >
-            {/* Brand Logo */}
-            <div
-              className="flex items-center gap-3 cursor-pointer group"
+            {/* Brand Logo Button */}
+            <button
+              type="button"
               onClick={() => navigate('/')}
-              title={t('shell.home')}
-              aria-label={t('shell.home')}
+              title={tr('common.smartsite_homepage')}
+              aria-label={tr('common.smartsite_homepage')}
+              className="flex items-center gap-3 cursor-pointer group text-left border-none bg-transparent p-0 focus:outline-none focus-visible:ring-2 focus-visible:ring-[#F66B17] rounded-md"
             >
               <div className="w-9 h-9 rounded-xl overflow-hidden shrink-0 shadow-[0_0_20px_rgba(246,107,23,0.25)] transition-transform group-hover:scale-105 border border-white/10 bg-white p-0.5 flex items-center justify-center">
                 <img
@@ -210,25 +211,23 @@ export function AppLayout({ currentTab: propCurrentTab, onSelectTab, children }:
               </div>
               {!isCollapsed && (
                 <div className="hidden lg:flex flex-col whitespace-nowrap overflow-hidden transition-opacity duration-200">
-                  <div className="text-lg font-black tracking-tight leading-none text-white">
-                    Smart
-                    <span className="text-[#FF7A1A] bg-gradient-to-r from-[#FF7A1A] to-[#FF9B42] bg-clip-text text-transparent">
-                      Site
-                    </span>
+                  <div className="text-base font-bold tracking-tight leading-none text-white">
+                    Smart<span className="text-[#F66B17]">Site</span>
                   </div>
-                  <span className="text-[9px] font-mono tracking-widest text-slate-400 uppercase mt-0.5 font-semibold">
-                    {t('shell.operations')}
+                  <span className="text-[9px] font-mono tracking-widest text-[#8C9BAE] uppercase mt-0.5 font-semibold">
+                    {tr('common.operations')}
                   </span>
                 </div>
               )}
-            </div>
+            </button>
 
-            {/* Toggle Button for Sidebar to/nhỏ */}
+            {/* Toggle Button for Sidebar collapse/expand (desktop only, rail is fixed w-16 on mobile) */}
             <button
+              type="button"
               onClick={() => setIsCollapsed(!isCollapsed)}
-              className="hidden lg:flex w-7 h-7 rounded-lg bg-white/5 hover:bg-white/10 border border-white/10 items-center justify-center text-slate-400 hover:text-white transition-all cursor-pointer shadow-xs active:scale-95"
-              title={t(isCollapsed ? 'shell.expand' : 'shell.collapse')}
-              aria-label={isCollapsed ? t('shell.expand') : t('shell.collapse')}
+              className="hidden lg:flex w-6 h-6 rounded-md bg-white/5 hover:bg-white/10 border border-white/10 items-center justify-center text-[#8C9BAE] hover:text-white transition-all cursor-pointer active:scale-95 focus:outline-none focus-visible:ring-1 focus-visible:ring-white/40"
+              title={isCollapsed ? tr('common.expand_sidebar') : tr('common.collapse_sidebar')}
+              aria-label={isCollapsed ? tr('common.expand_sidebar') : tr('common.collapse_sidebar')}
             >
               {isCollapsed ? (
                 <IconChevronRight className="w-3.5 h-3.5" />
@@ -239,14 +238,14 @@ export function AppLayout({ currentTab: propCurrentTab, onSelectTab, children }:
           </div>
 
           {/* Navigation Section */}
-          <div className="px-3 py-4 flex-1 overflow-y-auto custom-scrollbar">
-            <nav className="space-y-6" aria-label={t('shell.navigation')}>
-              {navGroups.map((group, groupIdx) => (
-                <div key={groupIdx} className="space-y-1.5">
+          <div className="px-2 lg:px-3 py-4 min-h-0 flex-1 overflow-y-auto overscroll-contain custom-scrollbar">
+            <nav className="space-y-6" aria-label={tr('common.main_navigation')}>
+              {(currentUser ? navGroups : []).map((group, groupIdx) => (
+                <div key={groupIdx} className="space-y-1">
                   {!isCollapsed && (
                     <div className="hidden lg:flex px-3 mb-2 items-center gap-1.5">
-                      <span className="w-1 h-1 rounded-full bg-[#FF7A1A]/70" />
-                      <p className="text-[10px] font-mono font-bold uppercase tracking-[0.2em] text-slate-400/80">
+                      <span className="w-1 h-1 rounded-full bg-[#F66B17]" />
+                      <p className="text-[10px] font-mono font-bold uppercase tracking-[0.18em] text-[#8C9BAE]">
                         {group.label}
                       </p>
                     </div>
@@ -258,17 +257,17 @@ export function AppLayout({ currentTab: propCurrentTab, onSelectTab, children }:
                       <button
                         key={item.id}
                         onClick={() => handleNav(item.id)}
-                        title={isCollapsed ? item.label : undefined}
+                        title={item.label}
                         aria-label={item.label}
                         aria-current={isActive ? 'page' : undefined}
                         className={`w-full min-h-11 lg:min-h-0 flex items-center ${
                           isCollapsed
-                            ? 'justify-center px-0 py-2.5'
-                            : 'justify-between px-3.5 py-2.5'
-                        } rounded-xl text-xs font-medium transition-all duration-200 cursor-pointer relative group border ${
+                            ? 'justify-center px-0 py-2.5 rounded-xl min-h-11'
+                            : 'justify-center lg:justify-between px-0 lg:px-3.5 py-2.5 rounded-xl min-h-11'
+                        } text-xs font-medium transition-colors cursor-pointer relative group ${
                           isActive
-                            ? 'bg-gradient-to-r from-[#FF7A1A]/20 via-[#FF7A1A]/10 to-transparent text-white font-semibold border-[#FF7A1A]/35 shadow-[0_0_20px_rgba(246,107,23,0.12)]'
-                            : 'text-slate-300/80 hover:text-white hover:bg-white/[0.06] border-transparent hover:border-white/5 hover:translate-x-0.5'
+                            ? 'bg-white/10 text-white font-semibold'
+                            : 'text-[#8C9BAE] hover:text-white hover:bg-white/5'
                         }`}
                       >
                         <div
@@ -279,10 +278,8 @@ export function AppLayout({ currentTab: propCurrentTab, onSelectTab, children }:
                           }`}
                         >
                           <Icon
-                            className={`w-4 h-4 shrink-0 transition-transform duration-200 group-hover:scale-110 ${
-                              isActive
-                                ? 'text-[#FF7A1A] filter drop-shadow-[0_0_8px_rgba(246,107,23,0.6)]'
-                                : 'text-slate-400 group-hover:text-slate-200'
+                            className={`w-4 h-4 shrink-0 transition-colors ${
+                              isActive ? 'text-[#F66B17]' : 'text-[#8C9BAE] group-hover:text-white'
                             }`}
                           />
                           <span
@@ -294,10 +291,13 @@ export function AppLayout({ currentTab: propCurrentTab, onSelectTab, children }:
                           </span>
                         </div>
                         {isActive && !isCollapsed && (
-                          <span className="w-1.5 h-4 rounded-full bg-gradient-to-b from-[#FF8833] to-[#F66B17] shadow-[0_0_8px_rgba(246,107,23,0.8)]" />
+                          <>
+                            <span className="hidden lg:block w-1 h-3.5 rounded-full bg-[#F66B17]" />
+                            <span className="lg:hidden absolute left-1 w-1 h-4 rounded-full bg-[#F66B17]" />
+                          </>
                         )}
                         {isActive && isCollapsed && (
-                          <span className="absolute left-1 w-1 h-5 rounded-full bg-gradient-to-b from-[#FF8833] to-[#F66B17] shadow-[0_0_8px_rgba(246,107,23,0.8)]" />
+                          <span className="absolute left-1 w-1 h-4 rounded-full bg-[#F66B17]" />
                         )}
                       </button>
                     );
@@ -309,19 +309,22 @@ export function AppLayout({ currentTab: propCurrentTab, onSelectTab, children }:
         </div>
 
         {/* Bottom Homepage Link */}
-        <div className="p-2 lg:p-3 border-t border-white/10">
+        <div className="shrink-0 p-2 lg:p-3 border-t border-[#1E2633]">
           <button
+            type="button"
             onClick={() => navigate('/')}
-            title={isCollapsed ? t('shell.publicHome') : undefined}
-            aria-label={t('shell.publicHome')}
-            className={`w-full min-h-11 lg:min-h-0 flex items-center ${
-              isCollapsed ? 'justify-center p-2.5' : 'gap-3 px-3 py-2.5'
-            } rounded-xl text-xs font-medium text-slate-300 hover:text-white bg-white/[0.03] hover:bg-white/[0.07] border border-white/10 hover:border-white/20 transition-all cursor-pointer shadow-xs group`}
+            title={isCollapsed ? tr('common.public_smartsite_homepage') : undefined}
+            aria-label={tr('common.public_smartsite_homepage')}
+            className={`w-full flex items-center ${
+              isCollapsed
+                ? 'justify-center p-2.5'
+                : 'justify-center lg:justify-start gap-0 lg:gap-3 px-2 lg:px-3 py-2.5'
+            } rounded-lg text-xs font-medium text-[#8C9BAE] hover:text-white bg-white/5 hover:bg-white/10 border border-white/10 transition-colors cursor-pointer group focus:outline-none focus-visible:ring-1 focus-visible:ring-white/40`}
           >
-            <IconHome className="w-4 h-4 text-[#FF7A1A] shrink-0 group-hover:scale-110 transition-transform filter drop-shadow-[0_0_6px_rgba(246,107,23,0.4)]" />
+            <IconHome className="w-4 h-4 text-[#F66B17] shrink-0" />
             {!isCollapsed && (
               <span className="hidden lg:inline whitespace-nowrap overflow-hidden font-medium">
-                {t('shell.publicHome')}
+                {tr('common.public_smartsite_homepage')}
               </span>
             )}
           </button>
@@ -329,34 +332,44 @@ export function AppLayout({ currentTab: propCurrentTab, onSelectTab, children }:
       </aside>
 
       {/* Main Content Area */}
-      <div className="flex-1 flex flex-col min-w-0 bg-[var(--surface-canvas)]">
+      <div className="flex-1 flex flex-col min-w-0 bg-[#F8FAFC]">
         {/* Top Header Bar */}
-        <header
-          className={
-            mainSafetyUi
-              ? 'h-16 bg-white border-b border-slate-200 px-3 sm:px-6 lg:px-8 flex items-center justify-between gap-3 shrink-0 sticky top-0 z-20 shadow-xs'
-              : 'h-16 bg-white border-b border-[#E2E8F0] px-6 sm:px-8 flex items-center justify-between gap-3 shrink-0 sticky top-0 z-20 shadow-xs'
-          }
-        >
+        <header className="min-h-16 py-2 bg-white border-b border-slate-200/80 px-4 sm:px-6 lg:px-8 flex flex-wrap items-center justify-between gap-3 shrink-0 sticky top-0 z-20">
           {/* Left: Brand/Context info */}
           {activeTab === 'schedule-setup' ||
-          (activeTab === 'site-setup' && roles.includes('SITE_MANAGER') && !roles.includes('ADMIN')) ||
+          (activeTab === 'site-setup' &&
+            roles.includes('SITE_MANAGER') &&
+            !roles.includes('ADMIN')) ||
           (activeTab === 'workforce' && workforceTabs.showReview && workforceTab === 'review') ? (
             <div className="flex items-center gap-3 min-w-0">
               <div
                 aria-hidden="true"
                 className="w-10 h-10 rounded-xl bg-[#071A2B] text-white flex items-center justify-center shadow-xs shrink-0"
               >
-                {activeTab === 'site-setup' ? <IconBuilding className="w-5 h-5 text-[#F66B17]" /> : activeTab === 'workforce' ? <IconShield className="w-5 h-5 text-[#F66B17]" /> : <IconCalendar className="w-5 h-5 text-[#F66B17]" />}
+                {activeTab === 'site-setup' ? (
+                  <IconBuilding className="w-5 h-5 text-[#F66B17]" />
+                ) : activeTab === 'workforce' ? (
+                  <IconShield className="w-5 h-5 text-[#F66B17]" />
+                ) : (
+                  <IconCalendar className="w-5 h-5 text-[#F66B17]" />
+                )}
               </div>
               <div className="min-w-0">
                 <div className="flex items-center gap-2">
                   <span className="text-xs font-semibold text-slate-500 truncate">
-                    {activeTab === 'site-setup' ? t('integrated_ui.site_operations') : activeTab === 'workforce' ? `${t('common.workforce_operations')} · ${t('common.shift_approvals')}` : t('common.workforce_management')}
+                    {activeTab === 'site-setup'
+                      ? tr('integrated_ui.site_operations')
+                      : activeTab === 'workforce'
+                        ? `${tr('common.workforce_operations')} · ${tr('common.shift_approvals')}`
+                        : tr('common.workforce_management')}
                   </span>
                 </div>
                 <h1 className="text-xl font-bold tracking-tight text-[#071A2B] truncate">
-                  {activeTab === 'site-setup' ? t('siteOps.titleManage') : activeTab === 'workforce' ? t('common.contractor_review') : t('common.schedule_setup')}
+                  {activeTab === 'site-setup'
+                    ? tr('siteOps.titleManage')
+                    : activeTab === 'workforce'
+                      ? tr('common.contractor_review')
+                      : tr('common.schedule_setup')}
                 </h1>
               </div>
             </div>
@@ -371,10 +384,9 @@ export function AppLayout({ currentTab: propCurrentTab, onSelectTab, children }:
             </div>
           )}
 
-          {/* Right: Search, Notification, Profile */}
-          <div className="flex items-center gap-2 sm:gap-4 shrink-0">
-            {!mainSafetyUi && <LanguageSwitcher />}
-            {mainSafetyUi && <LanguageSwitcher />}
+          {/* Right: Language Switcher, Notification, User Profile & Logout */}
+          <div className="flex items-center gap-3 shrink-0">
+            <LanguageSwitcher />
             <NotificationBell
               assignedWork={
                 allowedTabs.includes('assigned-work') && !allowedTabs.includes('incidents')
@@ -386,36 +398,33 @@ export function AppLayout({ currentTab: propCurrentTab, onSelectTab, children }:
             />
 
             {/* User Profile */}
-            <div className="flex items-center gap-2.5 pl-3 border-l border-[#E2E8F0]">
-              <div className="w-8 h-8 rounded-full bg-[#041D2E] text-white flex items-center justify-center font-bold text-xs tracking-wider">
+            <div className="flex items-center gap-2.5">
+              <div className="w-8 h-8 rounded-full bg-[#0F172A] text-white flex items-center justify-center font-bold text-xs tracking-wider shadow-xs">
                 {userInitials}
               </div>
-              <div
-                className={`text-left leading-tight hidden sm:block${mainSafetyUi ? ' max-w-36 truncate' : ''}`}
-              >
-                <p className="font-semibold text-xs text-[#041D2E]">{displayName}</p>
-                <p className="text-[11px] text-[#62748E]">{userRole}</p>
+              <div className="text-left leading-tight hidden sm:block max-w-36 truncate">
+                <p className="font-semibold text-xs text-slate-900">{displayName}</p>
+                <p className="text-[11px] text-slate-500">{userRole}</p>
               </div>
             </div>
 
-            {mainSafetyUi && (
-              <button
-                type="button"
-                onClick={() => navigate('/account/password')}
-                className="p-2 rounded-lg text-[#62748E] hover:bg-slate-100 focus-visible:outline-2"
-                title={t('auth.password.title')}
-                aria-label={t('auth.password.title')}
-              >
-                <IconKey className="w-4 h-4" />
-              </button>
-            )}
+            <button
+              type="button"
+              onClick={() => navigate('/account/password')}
+              className="p-2 rounded-lg text-[#62748E] hover:bg-slate-100 focus-visible:outline-2"
+              title={tr('auth.password.title')}
+              aria-label={tr('auth.password.title')}
+            >
+              <IconKey className="w-4 h-4" />
+            </button>
             {/* Logout Button */}
             <button
+              type="button"
               onClick={() => logoutMutation.mutate()}
               disabled={logoutMutation.isPending}
-              className="p-2 ml-1 rounded-lg hover:bg-red-50 text-[#62748E] hover:text-red-500 transition-all active:scale-90 relative cursor-pointer"
-              title={t('shell.logout')}
-              aria-label={t('shell.logout')}
+              className="flex h-11 w-11 items-center justify-center ml-1 rounded-xl hover:bg-red-50 text-slate-500 hover:text-red-500 transition-all active:scale-90 relative cursor-pointer focus:outline-none focus-visible:ring-1 focus-visible:ring-red-400"
+              title={tr('common.logout')}
+              aria-label={tr('common.logout')}
             >
               <IconLogOut className="w-4 h-4" />
             </button>
@@ -423,7 +432,13 @@ export function AppLayout({ currentTab: propCurrentTab, onSelectTab, children }:
         </header>
 
         {/* Viewport Content */}
-        <main className="flex-1 min-w-0 p-4 sm:p-6 lg:p-8">{children}</main>
+        <main
+          id="smartsite-main-content"
+          tabIndex={-1}
+          className="flex-1 min-w-0 p-3 sm:p-6 lg:p-8"
+        >
+          {children}
+        </main>
       </div>
     </div>
   );

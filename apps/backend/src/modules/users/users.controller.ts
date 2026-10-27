@@ -34,6 +34,7 @@ import { ErrorResponseDto } from '../../common/http/error-response.dto.js';
 import { pagination } from '../../common/http/pagination.js';
 import { type AuthenticatedRequest } from '../auth/auth.service.js';
 import { AdminGuard, UserAuthGuard } from '../auth/user-auth.guard.js';
+import { configurationCommandContext } from '../auth/configuration-command-context.js';
 import {
   CreateUserDto,
   ReplaceRoleAssignmentsDto,
@@ -55,12 +56,18 @@ import {
 @Controller('users')
 export class UsersController {
   private readonly logger = new Logger(UsersController.name);
-  constructor(private readonly users: UsersService) {}
+  constructor(
+    private readonly users: UsersService,
+    private readonly auth: UserAuthGuard,
+  ) {}
 
   @Post()
   @ApiCreatedResponse({ type: AccountResponseDto })
   async create(@Req() request: AuthenticatedRequest, @Body() input: CreateUserDto) {
-    const user = await this.users.createAdministrative(input);
+    const user = await this.users.createAdministrative(
+      input,
+      configurationCommandContext(request, this.auth),
+    );
     this.logger.log({ actorId: request.user!.id, action: 'user.create', resourceId: user.id });
     return user;
   }
@@ -85,7 +92,11 @@ export class UsersController {
     @Param('userId') userId: string,
     @Body() input: ReplaceRoleAssignmentsDto,
   ) {
-    const user = await this.users.replaceRoleAssignments(userId, input);
+    const user = await this.users.replaceRoleAssignments(
+      userId,
+      input,
+      configurationCommandContext(request, this.auth),
+    );
     this.logger.log({
       actorId: request.user!.id,
       action: 'user.role-assignments.replace',
@@ -101,7 +112,11 @@ export class UsersController {
     @Param('userId') userId: string,
     @Param('siteId') siteId: string,
   ) {
-    await this.users.revokeSiteManager(userId, siteId);
+    await this.users.revokeSiteManager(
+      userId,
+      siteId,
+      configurationCommandContext(request, this.auth),
+    );
     this.logger.log({
       actorId: request.user!.id,
       action: 'user.site-manager.revoke',
@@ -117,7 +132,12 @@ export class UsersController {
     @Param('userId') userId: string,
     @Body() input: SetUserStatusDto,
   ) {
-    const user = await this.users.setStatus(request.user!.id, userId, input);
+    const user = await this.users.setStatus(
+      request.user!.id,
+      userId,
+      input,
+      configurationCommandContext(request, this.auth),
+    );
     this.logger.log({ actorId: request.user!.id, action: 'user.status', resourceId: user.id });
     return user;
   }
@@ -129,7 +149,7 @@ export class UsersController {
     @Param('userId') userId: string,
     @Body() input: ResetPasswordDto,
   ) {
-    await this.users.resetPassword(userId, input);
+    await this.users.resetPassword(userId, input, configurationCommandContext(request, this.auth));
     this.logger.log({
       actorId: request.user!.id,
       action: 'user.reset-password',

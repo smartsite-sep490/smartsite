@@ -1,13 +1,19 @@
-import { describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it } from 'vitest';
 import { ApiError } from '@smartsite/api-client';
+import i18n from '../../i18n';
 import {
   buildEvidenceQueryKey,
   evidenceErrorMessage,
+  formatCandidateSubtype,
   formatEvidenceAltText,
   formatEvidenceKind,
 } from './safetyAlertEvidenceUtils';
 
 describe('safetyAlertEvidenceUtils', () => {
+  afterEach(async () => {
+    await i18n.changeLanguage('en');
+  });
+
   describe('buildEvidenceQueryKey', () => {
     it('isolates cached evidence by API endpoint and authenticated user', () => {
       const first = buildEvidenceQueryKey(
@@ -91,23 +97,101 @@ describe('safetyAlertEvidenceUtils', () => {
       );
     });
 
+    it('translates HTTP 429 to rate-limit message without exposing raw backend text', () => {
+      const error = new ApiError('http', 'rate-limit-token-canary https://internal.local', 429);
+      expect(evidenceErrorMessage(error)).toBe('Too many requests. Wait before trying again.');
+    });
+
     it('translates HTTP 503 to evidence temporarily unavailable message', () => {
       const error = new ApiError('http', 'Service Unavailable', 503);
       expect(evidenceErrorMessage(error)).toBe('Evidence is temporarily unavailable.');
     });
 
-    it('replaces server diagnostics with a safe availability message', () => {
-      const error = new ApiError('http', 'Internal Server Error', 500);
+    it('does not display upstream exception text for other HTTP statuses', () => {
+      const error = new ApiError('http', 'private-service-canary', 500);
       expect(evidenceErrorMessage(error)).toBe(
         'The service is temporarily unavailable. Please try again.',
       );
     });
 
     it('handles generic Error and unknown errors gracefully', () => {
-      expect(evidenceErrorMessage(new Error('Network timeout'))).toBe(
+      expect(evidenceErrorMessage(new Error('private-service-canary'))).toBe(
         'Something went wrong. Please try again.',
       );
       expect(evidenceErrorMessage('unexpected string')).toBe('Failed to load evidence image.');
+    });
+
+    it.each([
+      ['network', 'Cannot reach the evidence service. Check your connection and try again.'],
+      ['timeout', 'Loading evidence timed out. Please try again.'],
+      ['cancelled', 'Evidence loading was cancelled.'],
+      ['invalid-response', 'The evidence service returned an invalid image. Please try again.'],
+    ] as const)('gives actionable %s feedback without raw exception details', (code, message) => {
+      expect(evidenceErrorMessage(new ApiError(code, 'private-service-canary'))).toBe(message);
+    });
+
+    it('localizes fixed safe messages across EN and VI without leaking raw backend errors', async () => {
+      await i18n.changeLanguage('vi');
+
+      expect(formatEvidenceKind('FRAME')).toBe('Khung hình');
+      expect(formatEvidenceKind('CROP')).toBe('Ảnh cắt');
+      expect(evidenceErrorMessage(new ApiError('http', 'secret-token', 401))).toBe(
+        'Phiên đăng nhập không còn hợp lệ. Hãy đăng nhập lại.',
+      );
+      expect(evidenceErrorMessage(new ApiError('http', 'secret-token', 403))).toBe(
+        'Tài khoản này không có quyền xem bằng chứng của công trường đã chọn.',
+      );
+      expect(evidenceErrorMessage(new ApiError('http', 'secret-token', 404))).toBe(
+        'Ảnh bằng chứng được yêu cầu không còn khả dụng.',
+      );
+      expect(evidenceErrorMessage(new ApiError('http', 'secret-token', 429))).toBe(
+        'Quá nhiều yêu cầu. Vui lòng chờ trước khi thử lại.',
+      );
+      expect(evidenceErrorMessage(new ApiError('http', 'secret-token', 503))).toBe(
+        'Bằng chứng tạm thời không khả dụng.',
+      );
+      expect(evidenceErrorMessage(new ApiError('network', 'http://10.0.0.1/secret'))).toBe(
+        'Không thể kết nối tới dịch vụ bằng chứng. Hãy kiểm tra kết nối và thử lại.',
+      );
+      expect(evidenceErrorMessage(new ApiError('timeout', 'http://10.0.0.1/secret'))).toBe(
+        'Quá thời gian tải bằng chứng. Vui lòng thử lại.',
+      );
+      expect(evidenceErrorMessage(new ApiError('cancelled', 'http://10.0.0.1/secret'))).toBe(
+        'Đã hủy tải bằng chứng.',
+      );
+      expect(evidenceErrorMessage(new ApiError('invalid-response', 'corrupt-header'))).toBe(
+        'Dịch vụ bằng chứng trả về hình ảnh không hợp lệ. Vui lòng thử lại.',
+      );
+      expect(evidenceErrorMessage(new ApiError('http', 'raw-db-error-500', 500))).toBe(
+        'Dịch vụ tạm thời không khả dụng. Vui lòng thử lại.',
+      );
+
+      await i18n.changeLanguage('en');
+      expect(evidenceErrorMessage(new ApiError('http', 'secret-token', 429))).toBe(
+        'Too many requests. Wait before trying again.',
+      );
+    });
+  });
+
+  describe('formatCandidateSubtype', () => {
+    it('retains strict machine-mapped subtype labels across PPE and zone entries', async () => {
+      expect(formatCandidateSubtype('PPE_HARD_HAT_MISSING')).toBe('Missing Hard Hat');
+      expect(formatCandidateSubtype('PPE_SAFETY_VEST_MISSING')).toBe('Missing Safety Vest');
+      expect(formatCandidateSubtype('PPE_GLOVES_MISSING')).toBe('Missing Gloves');
+      expect(formatCandidateSubtype('PPE_BOOTS_MISSING')).toBe('Missing Boots');
+      expect(formatCandidateSubtype('PPE_GOGGLES_MISSING')).toBe('Missing Goggles');
+      expect(formatCandidateSubtype('ZONE_ENTRY_VIOLATION')).toBe('Zone Entry Violation');
+      expect(formatCandidateSubtype('ZONE_ENTRY_UNAUTHORIZED')).toBe('Unauthorized Zone Entry');
+      expect(formatCandidateSubtype('ZONE_ENTRY_AUTHORIZATION_UNAVAILABLE')).toBe(
+        'Authorization Unavailable',
+      );
+      expect(formatCandidateSubtype('RESTRICTED_ZONE_INTRUSION')).toBe('Restricted Zone Intrusion');
+
+      await i18n.changeLanguage('vi');
+      expect(formatCandidateSubtype('PPE_HARD_HAT_MISSING')).toBe('Thiếu mũ bảo hộ');
+      expect(formatCandidateSubtype('ZONE_ENTRY_AUTHORIZATION_UNAVAILABLE')).toBe(
+        'Không thể xác minh quyền vào khu vực',
+      );
     });
   });
 });

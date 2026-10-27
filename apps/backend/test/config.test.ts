@@ -1,7 +1,11 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { resolveBootstrapEnvironment } from '../src/config/bootstrap-environment.js';
-import { validateEnvironment } from '../src/config/environment.js';
+import {
+  databaseEnvironmentSchema,
+  parseEnvironment,
+  validateEnvironment,
+} from '../src/config/environment.js';
 import { runtimeEnvironmentOptions } from '../src/config/runtime-environment.js';
 import path from 'node:path';
 import fs from 'node:fs';
@@ -475,4 +479,54 @@ test('timing variables reject non-positive, non-integer, or out-of-range values 
   assert.equal(custom.ALERT_COOLDOWN_SECONDS, 120);
   assert.equal(custom.MAX_PAST_EVENT_AGE_SECONDS, 600);
   assert.equal(custom.MAX_FUTURE_CLOCK_SKEW_SECONDS, 45);
+});
+
+test('DATABASE_SCHEMA is optional and accepts only unquoted non-system lowercase identifiers without coercion or secret echo', () => {
+  assert.equal(validateEnvironment({}).DATABASE_SCHEMA, undefined);
+  assert.equal(parseEnvironment(databaseEnvironmentSchema, {}).DATABASE_SCHEMA, undefined);
+
+  for (const validSchema of ['public', 'smartsite_app', '_tenant_01', 'a'.repeat(63)]) {
+    assert.equal(
+      validateEnvironment({ DATABASE_SCHEMA: validSchema }).DATABASE_SCHEMA,
+      validSchema,
+    );
+    assert.equal(
+      parseEnvironment(databaseEnvironmentSchema, { DATABASE_SCHEMA: validSchema }).DATABASE_SCHEMA,
+      validSchema,
+    );
+  }
+
+  for (const invalidSchema of [
+    '',
+    ' public',
+    'public ',
+    '"secret_schema_value"',
+    "'secret_schema_value'",
+    'public.secret_schema_value',
+    'Secret_Schema_Value',
+    '1secret_schema_value',
+    'secret-schema-value',
+    `s${'a'.repeat(63)}`,
+    'pg_catalog',
+    'pg_temp_1',
+    'pg_secret_schema_value',
+    'information_schema',
+    12345,
+    null,
+  ]) {
+    for (const run of [
+      () => validateEnvironment({ DATABASE_SCHEMA: invalidSchema }),
+      () => parseEnvironment(databaseEnvironmentSchema, { DATABASE_SCHEMA: invalidSchema }),
+    ]) {
+      assert.throws(run, (error: unknown) => {
+        assert.ok(error instanceof Error);
+        assert.match(error.message, /DATABASE_SCHEMA/);
+        assert.doesNotMatch(
+          error.message,
+          /secret_schema_value|Secret_Schema_Value|secret-schema-value|pg_catalog|information_schema|12345/,
+        );
+        return true;
+      });
+    }
+  }
 });

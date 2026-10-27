@@ -1,7 +1,8 @@
 import { translate as tr } from '../../i18n';
 import { useTranslation } from 'react-i18next';
 import { useEffect, useRef, useState } from 'react';
-import { PauseIcon, PlayIcon } from '@phosphor-icons/react';
+import { PauseIcon } from '@phosphor-icons/react/dist/csr/Pause';
+import { PlayIcon } from '@phosphor-icons/react/dist/csr/Play';
 import gsap from 'gsap';
 import { ScrollTrigger } from 'gsap/ScrollTrigger';
 

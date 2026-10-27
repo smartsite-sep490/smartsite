@@ -62,12 +62,15 @@ export function NotificationBell({
 }) {
   useTranslation();
 
-  const { accessToken } = useAuth();
+  const { accessToken, sessionScope } = useAuth();
   const client = useManagementClient(apiUrl);
   const queryClient = useQueryClient();
   const navigate = useNavigate();
   const [open, setOpen] = useState(false);
   const [readStatus, setReadStatus] = useState<'ALL' | 'UNREAD'>('ALL');
+  const filterScope = JSON.stringify([apiUrl, userId, sessionScope]);
+  const [selectedSite, setSelectedSite] = useState({ scope: filterScope, id: '', name: '' });
+  const siteId = selectedSite.scope === filterScope ? selectedSite.id || undefined : undefined;
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [targetSingleDelete, setTargetSingleDelete] = useState<UserNotificationResponse | null>(
     null,
@@ -80,15 +83,15 @@ export function NotificationBell({
         ? tr('common.notification_deleted')
         : tr('counts.deletedNotifications', { count: deletedCount });
   const hasSession = !!accessToken;
-  const key = ['notifications', apiUrl, userId];
+  const key = ['notifications', apiUrl, userId, sessionScope];
 
   const query = useInfiniteQuery({
-    queryKey: [...key, readStatus],
+    queryKey: [...key, readStatus, siteId],
     initialPageParam: 0,
     queryFn: ({ signal, pageParam }) =>
       client.listNotifications(
         accessToken!,
-        { readStatus, offset: pageParam, limit: 20 },
+        { readStatus, offset: pageParam, limit: 20, ...(siteId ? { siteId } : {}) },
         { signal, timeoutMs: 10_000 },
       ),
     getNextPageParam: (last, _pages, offset) =>
@@ -114,10 +117,10 @@ export function NotificationBell({
 
   useEffect(
     () => () => {
-      void queryClient.cancelQueries({ queryKey: ['notifications', apiUrl, userId] });
-      queryClient.removeQueries({ queryKey: ['notifications', apiUrl, userId] });
+      void queryClient.cancelQueries({ queryKey: ['notifications', apiUrl, userId, sessionScope] });
+      queryClient.removeQueries({ queryKey: ['notifications', apiUrl, userId, sessionScope] });
     },
-    [apiUrl, userId, queryClient, hasSession],
+    [apiUrl, userId, queryClient, hasSession, sessionScope],
   );
 
   const markRead = useMutation({
@@ -131,14 +134,20 @@ export function NotificationBell({
   });
 
   const markAll = useMutation({
-    mutationFn: () => client.readAllNotifications(accessToken!),
+    mutationFn: () =>
+      siteId
+        ? client.readAllNotifications(accessToken!, siteId)
+        : client.readAllNotifications(accessToken!),
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: key });
     },
   });
 
   const deleteRead = useMutation({
-    mutationFn: () => client.deleteReadNotifications(accessToken!),
+    mutationFn: () =>
+      siteId
+        ? client.deleteReadNotifications(accessToken!, siteId)
+        : client.deleteReadNotifications(accessToken!),
     onSuccess: async (result) => {
       setConfirmDelete(false);
       setDeletedCount(result.deleted);
@@ -161,6 +170,10 @@ export function NotificationBell({
   const actionPending =
     markRead.isPending || markAll.isPending || deleteRead.isPending || deleteSingle.isPending;
   const firstPage = query.data?.pages[0];
+  const bellCount = unavailable
+    ? undefined
+    : (firstPage?.allSitesUnreadCount ?? (siteId ? undefined : count));
+  const sites = firstPage?.sites ?? [];
   const readCount =
     readStatus === 'ALL' && firstPage ? Math.max(0, firstPage.total - firstPage.unreadCount) : 0;
 
@@ -188,19 +201,19 @@ export function NotificationBell({
         <button
           type="button"
           aria-label={
-            count === undefined
+            bellCount === undefined
               ? tr('common.notifications')
-              : tr('common.notifications_value_unread', { value1: count })
+              : tr('common.notifications_value_unread', { value1: bellCount })
           }
           className="relative flex items-center justify-center w-9 h-9 rounded-xl border border-slate-200/90 bg-white hover:bg-slate-50 hover:border-slate-300 text-slate-600 hover:text-[#071A2B] shadow-2xs transition-all duration-200 active:scale-95 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#F66B17] cursor-pointer"
         >
           <IconBell className="w-4 h-4 text-slate-600 group-hover:text-[#071A2B]" />
-          {count !== undefined && count > 0 && (
+          {bellCount !== undefined && bellCount > 0 && (
             <span
               className="absolute -top-1 -right-1 min-w-[18px] h-[18px] rounded-full bg-[#F66B17] text-white font-bold text-[9px] flex items-center justify-center px-1 shadow-[0_2px_6px_rgba(246,107,23,0.4)] border-2 border-white animate-in zoom-in duration-200"
               aria-hidden="true"
             >
-              {count > 99 ? '99+' : count}
+              {bellCount > 99 ? '99+' : bellCount}
             </span>
           )}
           {unavailable && (
@@ -248,6 +261,50 @@ export function NotificationBell({
           </div>
 
           {/* Segmented Filter Control */}
+          {(sites.length > 1 || siteId) && (
+            <div className="px-4 pt-3 pb-1">
+              <label className="block text-xs font-medium text-slate-600">
+                {tr('notification_bell.site_filter')}
+                <select
+                  value={siteId ?? ''}
+                  disabled={actionPending || query.isPending}
+                  className="mt-1 w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 focus-visible:outline-2"
+                  onChange={(event) => {
+                    const id = event.target.value;
+                    setSelectedSite({
+                      scope: filterScope,
+                      id,
+                      name: sites.find((site) => site.id === id)?.name ?? '',
+                    });
+                    setConfirmDelete(false);
+                    setTargetSingleDelete(null);
+                    setDeletedCount(null);
+                    deleteRead.reset();
+                    deleteSingle.reset();
+                  }}
+                >
+                  <option value="">{tr('notification_bell.all_sites')}</option>
+                  {siteId && !sites.some((site) => site.id === siteId) && (
+                    <option value={siteId}>
+                      {query.isPending
+                        ? selectedSite.name
+                        : tr('notification_bell.selected_site_unavailable')}
+                    </option>
+                  )}
+                  {sites.map((site) => (
+                    <option key={site.id} value={site.id}>
+                      {site.name}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              {siteId && (
+                <p className="mt-1 text-xs text-slate-500">
+                  {tr('notification_bell.actions_selected_site')}
+                </p>
+              )}
+            </div>
+          )}
           <div
             className="px-4 py-2 border-b border-slate-100/80 bg-white"
             aria-label={tr('common.notification_filter')}

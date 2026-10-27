@@ -13,6 +13,7 @@ import { createTypeOrmOptions } from './typeorm.options.js';
         createTypeOrmOptions(
           config.getOrThrow('DATABASE_URL', { infer: true }),
           config.getOrThrow('DATABASE_TIMEOUT_MS', { infer: true }),
+          config.get('DATABASE_SCHEMA', { infer: true }),
         ),
     }),
   ],

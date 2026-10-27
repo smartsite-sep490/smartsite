@@ -1,0 +1,56 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://smartsite.local/contracts/v1/camera-configuration-image-reference.json",
+  "title": "CameraConfigurationImageReference",
+  "description": "Structural metadata only; runtime parser checks freshness/TTL relations and Backend verifies persisted issuance, scope, current view and expiry.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schemaVersion",
+    "purpose",
+    "sourceKind",
+    "referenceId",
+    "siteId",
+    "cameraId",
+    "sessionId",
+    "imageSha256",
+    "width",
+    "height",
+    "capturedAt",
+    "issuedAt",
+    "expiresAt",
+    "configurationVersion",
+    "viewRevision"
+  ],
+  "properties": {
+    "schemaVersion": { "const": "1.0.0" },
+    "purpose": { "const": "REGION_CONFIGURATION" },
+    "sourceKind": { "enum": ["LIVE", "REPLAY"] },
+    "referenceId": { "$ref": "#/$defs/uuid" },
+    "siteId": { "$ref": "#/$defs/uuid" },
+    "cameraId": { "$ref": "#/$defs/uuid" },
+    "sessionId": { "$ref": "#/$defs/uuid" },
+    "imageSha256": { "type": "string", "pattern": "^[a-f0-9]{64}$" },
+    "width": { "$ref": "#/$defs/dimension" },
+    "height": { "$ref": "#/$defs/dimension" },
+    "capturedAt": { "$ref": "#/$defs/timestamp" },
+    "issuedAt": { "$ref": "#/$defs/timestamp" },
+    "expiresAt": { "$ref": "#/$defs/timestamp" },
+    "configurationVersion": { "$ref": "#/$defs/version" },
+    "viewRevision": { "$ref": "#/$defs/version" }
+  },
+  "$defs": {
+    "uuid": {
+      "type": "string",
+      "pattern": "^[0-9a-fA-F]{8}(-[0-9a-fA-F]{4}){3}-[0-9a-fA-F]{12}$"
+    },
+    "dimension": { "type": "integer", "minimum": 64, "maximum": 1280 },
+    "version": { "type": "integer", "minimum": 1, "maximum": 9007199254740991 },
+    "timestamp": {
+      "type": "string",
+      "maxLength": 64,
+      "format": "date-time",
+      "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-5][0-9](\\.[0-9]{1,6})?(Z|[+-][0-9]{2}:[0-9]{2})$"
+    }
+  }
+}

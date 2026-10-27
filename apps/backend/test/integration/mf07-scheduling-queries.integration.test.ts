@@ -10,7 +10,7 @@ import { getDataSourceToken } from '@nestjs/typeorm';
 import type { NestExpressApplication } from '@nestjs/platform-express';
 import { PARAMS_PROVIDER_TOKEN } from 'nestjs-pino';
 import { DataSource } from 'typeorm';
-import dataSource from '../support/test-data-source.js';
+import { createIsolatedTestDatabase } from '../support/isolated-test-database.js';
 import { AppModule } from '../../src/app.module.js';
 import { configureApplication } from '../../src/configure-app.js';
 import { validateEnvironment, type BackendEnvironment } from '../../src/config/environment.js';
@@ -38,8 +38,17 @@ import {
 } from '../../src/database/entities/contractor-team.entity.js';
 
 test('MF07 scheduling queries enforce role and scope boundaries', async (t) => {
-  if (dataSource.isInitialized) await dataSource.destroy();
-  await dataSource.initialize();
+  const isolatedDatabase = createIsolatedTestDatabase({ canonical: true });
+  const { dataSource } = isolatedDatabase;
+  const resources: { app?: NestExpressApplication } = {};
+  t.after(async () => {
+    try {
+      if (resources.app) await resources.app.close();
+    } finally {
+      await isolatedDatabase.dispose();
+    }
+  });
+  await isolatedDatabase.initialize();
   const environment = validateEnvironment({
     NODE_ENV: 'test',
     DATABASE_URL: process.env.TEST_DATABASE_URL,
@@ -60,12 +69,9 @@ test('MF07 scheduling queries enforce role and scope boundaries', async (t) => {
     logger: false,
     bodyParser: false,
   });
+  resources.app = app;
   await configureApplication(app);
   await app.listen(0, '127.0.0.1');
-  t.after(async () => {
-    await app.close();
-    if (dataSource.isInitialized) await dataSource.destroy();
-  });
   const url = await app.getUrl();
   const baseUrl = url.replace('127.0.0.1', 'localhost');
 
@@ -1156,7 +1162,4 @@ test('MF07 scheduling queries enforce role and scope boundaries', async (t) => {
     await rollback.rollbackTransaction();
     await rollback.release();
   }
-
-  await app.close();
-  if (dataSource.isInitialized) await dataSource.destroy();
 });

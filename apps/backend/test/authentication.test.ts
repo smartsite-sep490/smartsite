@@ -170,7 +170,7 @@ for (const { environment, sameSite, secure } of [
         SMARTSITE_AI_SERVICE_TOKEN: 'cookie-test-service-token-at-least-32-characters',
       }),
     );
-    const controller = new AuthController(auth as never, config);
+    const controller = new AuthController(auth as never, config, {} as never);
     const cookies: Array<{ name: string; value: string; options: Record<string, unknown> }> = [];
     const cleared: Array<{ name: string; options: Record<string, unknown> }> = [];
     const response = {

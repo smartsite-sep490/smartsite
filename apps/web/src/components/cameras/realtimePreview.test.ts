@@ -175,4 +175,122 @@ describe('exact-frame preview', () => {
     expect(failures).toBe(1);
     expect(committed).toEqual(['2']);
   });
+
+  it('accepts optional expanded PPE items and preserves absent keys as undefined', () => {
+    const frame = parseRealtimePreview({
+      ...packet,
+      detections: [
+        {
+          trackId: 10,
+          confidence: 0.95,
+          active: false,
+          label: 'Person',
+          boundingBox: { x1: 0.1, y1: 0.1, x2: 0.5, y2: 0.9 },
+          ppeStatus: {
+            HARD_HAT: 'PRESENT',
+            SAFETY_VEST: 'PRESENT',
+            GLOVES: 'PRESENT',
+            BOOTS: 'MISSING',
+            GOGGLES: 'UNKNOWN',
+          },
+          confirmedMissingItems: ['BOOTS'],
+        },
+      ],
+    });
+    const det = frame.detections[0]!;
+    expect(det.ppeStatus.HARD_HAT).toBe('PRESENT');
+    expect(det.ppeStatus.SAFETY_VEST).toBe('PRESENT');
+    expect(det.ppeStatus.GLOVES).toBe('PRESENT');
+    expect(det.ppeStatus.BOOTS).toBe('MISSING');
+    expect(det.ppeStatus.GOGGLES).toBe('UNKNOWN');
+    expect(det.confirmedMissingItems).toEqual(['BOOTS']);
+
+    // When optional keys are absent, they must NOT be defaulted to PRESENT or UNKNOWN
+    const minimalFrame = parseRealtimePreview({
+      ...packet,
+      detections: [
+        {
+          trackId: 11,
+          confidence: 0.9,
+          active: false,
+          label: 'Person',
+          boundingBox: { x1: 0.1, y1: 0.1, x2: 0.5, y2: 0.9 },
+          ppeStatus: {
+            HARD_HAT: 'PRESENT',
+            SAFETY_VEST: 'PRESENT',
+          },
+        },
+      ],
+    });
+    const minDet = minimalFrame.detections[0]!;
+    expect(minDet.ppeStatus.GLOVES).toBeUndefined();
+    expect(minDet.ppeStatus.BOOTS).toBeUndefined();
+    expect(minDet.ppeStatus.GOGGLES).toBeUndefined();
+  });
+
+  it('rejects foreign PPE items outside the 5 supported classes', () => {
+    expect(() =>
+      parseRealtimePreview({
+        ...packet,
+        detections: [
+          {
+            trackId: 12,
+            confidence: 0.9,
+            active: false,
+            label: 'Person',
+            boundingBox: { x1: 0.1, y1: 0.1, x2: 0.5, y2: 0.9 },
+            ppeStatus: {
+              HARD_HAT: 'PRESENT',
+              SAFETY_VEST: 'PRESENT',
+              HARNESS: 'PRESENT',
+            },
+          },
+        ],
+      }),
+    ).toThrow(/Invalid preview PPE status/);
+  });
+
+  it('rejects duplicate or invalid items in confirmedMissingItems', () => {
+    // Duplicate item
+    expect(() =>
+      parseRealtimePreview({
+        ...packet,
+        detections: [
+          {
+            trackId: 13,
+            confidence: 0.9,
+            active: false,
+            label: 'Person',
+            boundingBox: { x1: 0.1, y1: 0.1, x2: 0.5, y2: 0.9 },
+            ppeStatus: {
+              HARD_HAT: 'MISSING',
+              SAFETY_VEST: 'PRESENT',
+            },
+            confirmedMissingItems: ['HARD_HAT', 'HARD_HAT'],
+          },
+        ],
+      }),
+    ).toThrow(/Invalid preview PPE items/);
+
+    // Foreign item
+    expect(() =>
+      parseRealtimePreview({
+        ...packet,
+        detections: [
+          {
+            trackId: 14,
+            confidence: 0.9,
+            active: false,
+            label: 'Person',
+            boundingBox: { x1: 0.1, y1: 0.1, x2: 0.5, y2: 0.9 },
+            ppeStatus: {
+              HARD_HAT: 'PRESENT',
+              SAFETY_VEST: 'PRESENT',
+            },
+            confirmedMissingItems: ['HARNESS'],
+          },
+        ],
+      }),
+    ).toThrow(/Invalid preview PPE items/);
+  });
 });

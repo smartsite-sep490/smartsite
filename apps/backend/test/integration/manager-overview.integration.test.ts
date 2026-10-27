@@ -2,12 +2,12 @@ import { participateContractor } from '../support/contractor-participation.js';
 import 'reflect-metadata';
 import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
-import { after, test } from 'node:test';
-import source from '../support/test-data-source.js';
+import { after, before, test } from 'node:test';
+import { createIsolatedTestDatabase } from '../support/isolated-test-database.js';
 import { ManagerOverviewService } from '../../src/modules/workforce/management/manager-overview.service.js';
 import { SiteConfigurationService } from '../../src/modules/sites/site-configuration.service.js';
 import { ZoneConfigurationService } from '../../src/modules/zones/zone-configuration.service.js';
-import { WorkforceConfigurationService } from '../../src/modules/workforce/directory/workforce-configuration.service.js';
+import { MainWorkforceCreateService } from '../../src/modules/workforce/main-workforce-create.service.js';
 import type { AuthenticatedUser } from '../../src/modules/auth/auth.service.js';
 import {
   UserEntity,
@@ -26,19 +26,20 @@ import {
   ZoneRestrictionPolicy,
 } from '../../src/database/entities/index.js';
 
-after(async () => {
-  if (source.isInitialized) await source.destroy();
-});
+const database = createIsolatedTestDatabase({ canonical: true });
+const source = database.dataSource;
+before(() => database.initialize());
+after(() => database.dispose());
 
 test('manager overview: generated codes, Site isolation, current roster and dated Zone/schedule aggregation', async () => {
-  await source.initialize();
   const sites = new SiteConfigurationService(source),
-    workforce = new WorkforceConfigurationService(source),
+    workforce = new MainWorkforceCreateService(source),
     zones = new ZoneConfigurationService(source, sites),
     service = new ManagerOverviewService(source);
   const site = await sites.create({ code: randomUUID(), name: 'Manager overview fixture' });
   const other = await sites.create({ code: randomUUID(), name: 'Other overview fixture' });
-  const userId = randomUUID();
+  const userId = randomUUID(),
+    foreignManagerId = randomUUID();
   await source.getRepository(UserEntity).save({
     id: userId,
     username: userId,
@@ -50,6 +51,24 @@ test('manager overview: generated codes, Site isolation, current roster and date
   await source
     .getRepository(UserRoleAssignmentEntity)
     .save({ id: randomUUID(), userId, siteId: site.id, role: UserRole.SITE_MANAGER });
+  await source.getRepository(UserEntity).save({
+    id: foreignManagerId,
+    username: foreignManagerId,
+    displayName: 'Other Site Manager',
+    passwordHash: 'synthetic-unused',
+    isActive: true,
+    mustChangePassword: false,
+  });
+  await source.getRepository(UserRoleAssignmentEntity).save({
+    id: randomUUID(),
+    userId: foreignManagerId,
+    siteId: other.id,
+    role: UserRole.SITE_MANAGER,
+  });
+  const createContractor = (siteId: string, input: { name: string; code?: string }) =>
+    workforce.createSiteContractor(siteId, input, {
+      actorUserId: siteId === site.id ? userId : foreignManagerId,
+    });
   const actor: AuthenticatedUser = {
     id: userId,
     username: userId,
@@ -59,9 +78,9 @@ test('manager overview: generated codes, Site isolation, current roster and date
     roleAssignments: [{ role: UserRole.SITE_MANAGER, siteId: site.id }],
   };
   const contractors = await Promise.all([
-    workforce.createContractor(site.id, { name: 'Alpha' }),
-    workforce.createContractor(site.id, { name: 'Beta' }),
-    workforce.createContractor(other.id, { name: 'Foreign' }),
+    createContractor(site.id, { name: 'Alpha' }),
+    createContractor(site.id, { name: 'Beta' }),
+    createContractor(other.id, { name: 'Foreign' }),
   ]);
   assert.equal(new Set(contractors.map((c) => c.code)).size, 3);
   contractors.forEach((c) => assert.match(c.code, /^CTR-[0-9A-F-]{36}$/));
@@ -82,9 +101,9 @@ test('manager overview: generated codes, Site isolation, current roster and date
   ]);
   assert.notEqual(zone.code, expiredZone.code);
   assert.match(zone.code, /^ZONE-[0-9A-F-]{36}$/);
-  await assert.rejects(workforce.createContractor(site.id, { name: '' }), { status: 400 });
+  await assert.rejects(createContractor(site.id, { name: '' }), { status: 400 });
   await assert.rejects(zones.create(site.id, { ...zoneInput, code: '' }), { status: 400 });
-  const explicit = await workforce.createContractor(other.id, {
+  const explicit = await createContractor(other.id, {
     code: 'LEGACY-' + randomUUID(),
     name: 'Legacy',
   });

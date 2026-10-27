@@ -163,21 +163,25 @@ export function SiteOperationsSetupView({
     <div className="space-y-6 text-[#2F3437]">
       {/* Header section */}
       <section className="rounded-2xl border border-slate-200/90 bg-white p-5 shadow-xs">
-        <div className={`flex flex-wrap items-center justify-between gap-4 ${participationOnly ? '' : 'border-b border-slate-100 pb-4'}`}>
-          {!participationOnly && <div className="space-y-1">
-            <div className="flex min-w-0 max-w-full flex-wrap items-center gap-2">
-              <span className="inline-flex items-center gap-1.5 rounded-full bg-orange-50 px-2.5 py-0.5 text-[11px] font-bold uppercase tracking-wider text-[#F66B17] border border-orange-200/60">
-                <span className="h-1.5 w-1.5 rounded-full bg-[#F66B17]" />
-                {tr('integrated_ui.site_operations')}
-              </span>
-              <span className="rounded-full bg-slate-100 border border-slate-200 px-2.5 py-0.5 text-[10px] font-semibold uppercase tracking-wider text-slate-600">
-                {canManage ? tr('integrated_ui.manager') : tr('integrated_ui.observer')}
-              </span>
+        <div
+          className={`flex flex-wrap items-center justify-between gap-4 ${participationOnly ? '' : 'border-b border-slate-100 pb-4'}`}
+        >
+          {!participationOnly && (
+            <div className="space-y-1">
+              <div className="flex min-w-0 max-w-full flex-wrap items-center gap-2">
+                <span className="inline-flex items-center gap-1.5 rounded-full bg-orange-50 px-2.5 py-0.5 text-[11px] font-bold uppercase tracking-wider text-[#F66B17] border border-orange-200/60">
+                  <span className="h-1.5 w-1.5 rounded-full bg-[#F66B17]" />
+                  {tr('integrated_ui.site_operations')}
+                </span>
+                <span className="rounded-full bg-slate-100 border border-slate-200 px-2.5 py-0.5 text-[10px] font-semibold uppercase tracking-wider text-slate-600">
+                  {canManage ? tr('integrated_ui.manager') : tr('integrated_ui.observer')}
+                </span>
+              </div>
+              <h1 className="text-xl font-extrabold tracking-tight text-[#111111]">
+                {canManage ? t('siteOps.titleManage') : t('siteOps.titleObserve')}
+              </h1>
             </div>
-            <h1 className="text-xl font-extrabold tracking-tight text-[#111111]">
-              {canManage ? t('siteOps.titleManage') : t('siteOps.titleObserve')}
-            </h1>
-          </div>}
+          )}
 
           <div className="flex min-w-0 max-w-full flex-wrap items-center gap-2">
             <label className="flex min-w-0 max-w-full flex-wrap items-center gap-2 text-xs font-bold text-slate-700">

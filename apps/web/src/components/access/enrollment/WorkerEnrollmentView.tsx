@@ -744,7 +744,11 @@ export function WorkerEnrollmentView({
       <section className="flex flex-wrap items-center justify-between gap-4 rounded-2xl border border-slate-200/90 bg-white p-5 shadow-xs">
         <div className="flex flex-wrap items-center gap-3.5">
           <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-gradient-to-tr from-slate-900 to-slate-800 text-sm font-bold text-white shadow-xs">
-            {(accounts.data?.find((user) => user.id === accountId)?.displayName ?? 'WS')
+            {(
+              accounts.data?.find((user) => user.id === accountId)?.displayName ??
+              (!canManageAccounts ? selectedWorker?.displayName : undefined) ??
+              'WS'
+            )
               .slice(0, 2)
               .toUpperCase()}
           </div>
@@ -755,12 +759,17 @@ export function WorkerEnrollmentView({
               </span>
               <span className="font-mono text-xs font-bold text-slate-900">
                 {accounts.data?.find((user) => user.id === accountId)?.username ??
-                  tr('common.no_account_selected')}
+                  (!canManageAccounts ? selectedWorker?.displayName : undefined) ??
+                  (canManageAccounts
+                    ? tr('common.no_account_selected')
+                    : tr('common.no_worker_selected'))}
               </span>
             </div>
             <p className="mt-0.5 text-xs text-slate-600 font-medium">
               {selectedWorker?.displayName ??
-                tr('worker_enrollment_view.select_an_account_before_enrolling_face_biometrics')}
+                (canManageAccounts
+                  ? tr('worker_enrollment_view.select_an_account_before_enrolling_face_biometrics')
+                  : tr('worker_gate_permissions_view.select_a_worker_from_this_site'))}
               {selectedWorker?.externalId
                 ? tr('worker_enrollment_view.worker_id_value', {
                     value1: selectedWorker.externalId,

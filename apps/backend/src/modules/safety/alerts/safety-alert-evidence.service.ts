@@ -6,13 +6,19 @@ import { dirname, isAbsolute, join } from 'node:path';
 import { isUUID } from 'class-validator';
 import { DataSource } from 'typeorm';
 import { createHash } from 'node:crypto';
-import { computeCanonicalPayloadHash, validateObservationEvent } from '@smartsite/contracts';
+import {
+  computeCanonicalPayloadHash,
+  validateObservationEvent,
+  validateEightFamilyObservationEvent,
+  validatePartitionedObservationEvent,
+} from '@smartsite/contracts';
 import type { BackendEnvironment } from '../../../config/environment.js';
 import { invalid, missing, uuid } from '../../../common/configuration/commands.js';
 import { PublicHttpException } from '../../../common/http/public-http-exception.js';
 import { AiObservationEventEntity } from '../../../database/entities/ai-observation-event.entity.js';
 import { AlertDetectionMappingEntity } from '../../../database/entities/alert-detection-mapping.entity.js';
 import { SafetyAlertEntity } from '../../../database/entities/safety-alert.entity.js';
+import { reviewRawEventIsConsistent } from '../identity/observation-identity-event.js';
 
 const MAX_EVIDENCE_ITEMS = 256;
 const MAX_LOCAL_JPEG_BYTES = 1_048_576;
@@ -45,7 +51,7 @@ interface ParsedEvidenceItem {
 
 interface ParsedLocalEvidenceUri {
   streamSessionId: string;
-  sequenceNumber: number;
+  sequenceNumber: string;
   eventId: string;
 }
 
@@ -76,21 +82,44 @@ function parseEvidenceItem(value: unknown): ParsedEvidenceItem | undefined {
 function parseLocalEvidenceUri(
   uri: string,
   expectedEventId: string,
+  expectedSequence: unknown = undefined,
 ): ParsedLocalEvidenceUri | undefined {
   const match = LOCAL_EVIDENCE_URI.exec(uri);
   if (!match) return undefined;
   const [, streamSessionId, sequence, eventId] = match;
   if (
     !streamSessionId ||
+    !sequence ||
     !eventId ||
     !isUUID(streamSessionId) ||
     !isUUID(eventId) ||
     eventId.toLowerCase() !== expectedEventId.toLowerCase()
   )
     return undefined;
-  const sequenceNumber = Number(sequence);
-  if (!Number.isSafeInteger(sequenceNumber) || sequenceNumber < 0) return undefined;
-  return { streamSessionId, sequenceNumber, eventId };
+  if (expectedSequence === undefined) {
+    const sequenceNumber = Number(sequence);
+    if (!Number.isSafeInteger(sequenceNumber) || sequenceNumber < 0) return undefined;
+  } else if (
+    typeof expectedSequence !== 'string' ||
+    sequence !== expectedSequence ||
+    !/^(0|[1-9][0-9]{0,19})$/.test(sequence) ||
+    BigInt(sequence) > 18_446_744_073_709_551_615n
+  )
+    return undefined;
+  return { streamSessionId, sequenceNumber: sequence, eventId };
+}
+
+function partitionSequenceNumber(raw: unknown): unknown {
+  if (
+    !raw ||
+    typeof raw !== 'object' ||
+    (raw as { schemaVersion?: unknown }).schemaVersion !== '1.4.0'
+  )
+    return undefined;
+  const partition = (raw as { framePartition?: unknown }).framePartition;
+  return partition && typeof partition === 'object' && 'sequenceNumber' in partition
+    ? partition.sequenceNumber
+    : null;
 }
 
 function evidenceIndex(value: unknown): number {
@@ -128,7 +157,9 @@ export class SafetyAlertEvidenceService {
           kind: item.kind,
           ...(item.trackId === undefined ? {} : { trackId: item.trackId }),
           available:
-            configuredRoot !== undefined && parseLocalEvidenceUri(item.uri, eventId) !== undefined,
+            configuredRoot !== undefined &&
+            parseLocalEvidenceUri(item.uri, eventId, partitionSequenceNumber(rawPayload)) !==
+              undefined,
         },
       ];
     });
@@ -144,11 +175,29 @@ export class SafetyAlertEvidenceService {
     const index = evidenceIndex(rawIndex);
 
     const { observationEvent } = await this.loadScopedEvent(siteId, alertId, event);
-    const item = parseEvidenceItem(evidenceItems(observationEvent.rawPayload)[index]);
+    if (await this.hasConflictingSiteMapping(siteId, event)) return missing();
+    const raw = observationEvent.rawPayload;
+    const partitioned =
+      raw &&
+      typeof raw === 'object' &&
+      (raw as { schemaVersion?: unknown }).schemaVersion === '1.4.0';
+    if (partitioned && !reviewRawEventIsConsistent(observationEvent)) return this.reviewConflict();
+    const item = parseEvidenceItem(evidenceItems(raw)[index]);
     if (!item) return missing();
-    const local = parseLocalEvidenceUri(item.uri, event);
+    const local = parseLocalEvidenceUri(
+      item.uri,
+      event,
+      partitionSequenceNumber(observationEvent.rawPayload),
+    );
     if (!local) return missing();
-    return this.readLocalJpeg(local);
+    const content = await this.readLocalJpeg(local);
+    if (
+      partitioned &&
+      (evidenceItems(raw)[index] as { sha256?: unknown }).sha256 !==
+        createHash('sha256').update(content.bytes).digest('hex')
+    )
+      return this.reviewConflict();
+    return content;
   }
 
   /** New review commands require immutable full-frame evidence, not a track-scoped crop. */
@@ -163,7 +212,17 @@ export class SafetyAlertEvidenceService {
     const index = evidenceIndex(rawIndex);
     const { observationEvent } = await this.loadScopedEvent(siteId, alertId, event);
     const raw = observationEvent.rawPayload;
-    if (!validateObservationEvent(raw).isValid) return this.reviewConflict();
+    const version =
+      raw && typeof raw === 'object'
+        ? (raw as { schemaVersion?: unknown }).schemaVersion
+        : undefined;
+    const validation =
+      version === '1.4.0'
+        ? validatePartitionedObservationEvent(raw)
+        : version === '1.3.0'
+          ? validateEightFamilyObservationEvent(raw)
+          : validateObservationEvent(raw);
+    if (!validation.isValid) return this.reviewConflict();
     const payload = raw as { eventId: string; streamSessionId: string; cameraExternalId: string };
     if (
       observationEvent.payloadHash !== expectedEventHash ||
@@ -175,21 +234,30 @@ export class SafetyAlertEvidenceService {
     )
       return this.reviewConflict();
     // Historical Site ownership comes from alert mappings, never today's Camera configuration.
-    const conflictingSiteMapping = await this.dataSource
-      .getRepository(AlertDetectionMappingEntity)
-      .createQueryBuilder('mapping')
-      .innerJoin(SafetyAlertEntity, 'mappedAlert', 'mappedAlert.id = mapping.alertId')
-      .where('mapping.eventId = :eventId', { eventId: event })
-      .andWhere('mappedAlert.siteId <> :siteId', { siteId: uuid(siteId) })
-      .getExists();
-    if (conflictingSiteMapping) return this.reviewConflict();
+    if (await this.hasConflictingSiteMapping(siteId, event)) return this.reviewConflict();
     const item = parseEvidenceItem(evidenceItems(raw)[index]);
     if (!item || item.kind !== 'FRAME') return missing();
-    const local = parseLocalEvidenceUri(item.uri, event);
+    const local = parseLocalEvidenceUri(item.uri, event, partitionSequenceNumber(raw));
     if (!local || local.streamSessionId.toLowerCase() !== payload.streamSessionId.toLowerCase())
       return missing();
     const content = await this.readLocalJpeg(local);
-    return { ...content, sha256: createHash('sha256').update(content.bytes).digest('hex') };
+    const sha256 = createHash('sha256').update(content.bytes).digest('hex');
+    if (
+      (version === '1.3.0' || version === '1.4.0') &&
+      (evidenceItems(raw)[index] as { sha256?: unknown }).sha256 !== sha256
+    )
+      return this.reviewConflict();
+    return { ...content, sha256 };
+  }
+
+  private hasConflictingSiteMapping(siteId: string, eventId: string): Promise<boolean> {
+    return this.dataSource
+      .getRepository(AlertDetectionMappingEntity)
+      .createQueryBuilder('mapping')
+      .innerJoin(SafetyAlertEntity, 'mappedAlert', 'mappedAlert.id = mapping.alertId')
+      .where('mapping.eventId = :eventId', { eventId: uuid(eventId) })
+      .andWhere('mappedAlert.siteId <> :siteId', { siteId: uuid(siteId) })
+      .getExists();
   }
 
   private reviewConflict(): never {

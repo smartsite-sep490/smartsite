@@ -26,7 +26,11 @@ vi.mock('./features/auth/auth-session', () => ({
     dismissSessionExpired: vi.fn(),
   }),
   useLogout: () => ({ mutate: vi.fn() }),
-  useRestoreSession: () => ({ isLoading: state.restoring, isError: state.restoreError, refetch: state.restoreRefetch }),
+  useRestoreSession: () => ({
+    isLoading: state.restoring,
+    isError: state.restoreError,
+    refetch: state.restoreRefetch,
+  }),
   useCurrentUser: () => ({
     data: state.profile,
     isPending: state.profilePending,
@@ -112,7 +116,7 @@ it('offers retry without redirecting to login when session restoration temporari
   expect(screen.getByRole('alert')).toBeTruthy();
   expect(screen.queryByText('Sign in form')).toBeNull();
   expect(screen.getByTestId('location').textContent).toBe('/workforce');
-  fireEvent.click(screen.getByRole('button', { name: /try again/i }));
+  fireEvent.click(screen.getByRole('button', { name: 'Retry' }));
   expect(state.restoreRefetch).toHaveBeenCalledOnce();
 });
 afterEach(() => {
@@ -122,7 +126,7 @@ afterEach(() => {
 
 it('waits for the Worker profile after login without rendering Dashboard', async () => {
   const refresh = mount('/login');
-  expect(screen.getByText('Sign in form')).toBeTruthy();
+  expect(await screen.findByText('Sign in form')).toBeTruthy();
   state.accessToken = 'synthetic-token';
   refresh();
   expect(screen.getByRole('status')).toBeTruthy();
@@ -207,7 +211,7 @@ it('fails closed with Retry if the profile is unavailable', async () => {
   mount('/dashboard');
   expect(screen.getByRole('alert')).toBeTruthy();
   expect(state.dashboardRender).not.toHaveBeenCalled();
-  fireEvent.click(screen.getByRole('button', { name: 'Try again' }));
+  fireEvent.click(screen.getByRole('button', { name: 'Retry' }));
   expect(state.refetch).toHaveBeenCalledOnce();
 });
 

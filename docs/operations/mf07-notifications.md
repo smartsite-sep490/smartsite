@@ -10,8 +10,9 @@ Coworker refusal uses `SWAP_DECLINED`, distinct from contractor `REQUEST_REJECTE
 
 Authenticated APIs:
 
-- `GET /api/v1/me/notifications?readStatus=ALL|UNREAD&offset=0&limit=20`:
-  `{ items, total, unreadCount }`, newest first, maximum limit 100.
+- `GET /api/v1/me/notifications?readStatus=ALL|UNREAD&offset=0&limit=20&siteId=<uuid>`:
+  `{ items, total, unreadCount, sites, allSitesUnreadCount }`, newest first, maximum limit 100.
+  `siteId` is optional; details below apply to all existing notification event types.
 - `PATCH /api/v1/me/notifications/:id/read`: returns `{ id, readAt }`; idempotent.
 - `PATCH /api/v1/me/notifications/read-all`: returns `{ updated }`; idempotent.
 - `GET /api/v1/sites/:siteId/shift-change-requests/:requestId` and
@@ -85,7 +86,8 @@ This differs from Worker request change/swap, which remains available until the 
 
 ## Delete read notifications
 
-`DELETE /api/v1/me/notifications/read` has no body or filters and returns `{ "deleted": 3 }`.
+`DELETE /api/v1/me/notifications/read` has no body, accepts an optional `siteId` query filter,
+and returns `{ "deleted": 3 }`.
 This additive personal API dismisses all currently accessible, already-read notifications owned
 by the authenticated account, including records beyond the loaded page. Unread notifications,
 other accounts, revoked Site/Contractor scope, scheduling requests and schedules are untouched.
@@ -105,3 +107,23 @@ again. The migration adds a nullable timestamp and a constraint requiring delete
 ## Safety handover integration — 06/10/2026
 
 MF08 uses the same inbox, read/delete APIs and Web bell. SAFETY_HANDOVER targets /incidents with siteId/incidentId/actionId; scheduling targets remain /workforce. Safety notices use current incident contractor, active grants/participation and an assigned non-superseded handover. Scheduling keeps its original representative assignment policy. New event delivery is transactional and deduplicated by command/recipient; reading or dismissing a notice does not handle or delete the Incident.
+
+## Multiple Sites — 23/10/2026
+
+- List, `PATCH /me/notifications/read-all` and `DELETE /me/notifications/read` accept the same
+  optional `siteId` UUID. Omission retains all-authorized-Sites behavior. Empty, malformed,
+  null or repeated values are rejected; a valid but inaccessible Site returns no rows/updates.
+- `total` also follows `readStatus`; `unreadCount` follows Site scope before pagination.
+  `allSitesUnreadCount` is the bell badge across all currently authorized Sites. Selecting one
+  Site must not conceal the existence of unread notices at another Site.
+- `sites` contains distinct current Site IDs/names with accessible, non-deleted notices,
+  before Site/read-status filters and pagination. This is an inbox facet, not a list of all
+  assigned Sites. Revoked recipient grants remove both notices and facet entries.
+- Items, both counts and facets share one repeatable-read snapshot. Bulk commands retain the
+  existing current recipient/role/Contractor checks and add the selected Site predicate.
+- Web switches to a fresh scoped query on selection, disables bulk actions during initial
+  loading/errors, and retains an unavailable selection instead of silently acting on all Sites.
+  A new authenticated session resets the selection and discards the old session cache.
+- Deploy Backend before Web. Optional response fields keep older clients compatible; older
+  Backend responses show no Site filter. There is no new migration or recipient grant.
+  This does not group PPE findings, change delivery, create episodes or resolve Worker identity.

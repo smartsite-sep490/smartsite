@@ -1,8 +1,10 @@
-import { translate as tr } from '../../i18n';
+import { SAFETY_NAMESPACE, translate as tr } from '../../i18n';
+import '../../i18n/ppe-catalog';
 import { useTranslation } from 'react-i18next';
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import {
+  ApiError,
   SmartSiteManagementClient,
   type SafetyAlertDetectionResponse,
 } from '@smartsite/api-client';
@@ -14,6 +16,19 @@ import {
 } from './safetyAlertEvidenceUtils';
 import { ObservationIdentityReviewPanel } from './ObservationIdentityReviewPanel';
 
+function isUnauthorizedError(error: unknown): boolean {
+  if (error instanceof ApiError && error.status === 401) return true;
+  if (
+    error &&
+    typeof error === 'object' &&
+    'status' in error &&
+    (error as { status: unknown }).status === 401
+  ) {
+    return true;
+  }
+  return false;
+}
+
 export interface SafetyAlertEvidencePanelProps {
   client: SmartSiteManagementClient;
   apiUrl: string;
@@ -23,6 +38,7 @@ export interface SafetyAlertEvidencePanelProps {
   alertId: string;
   detection: SafetyAlertDetectionResponse;
   canReviewIdentity?: boolean;
+  onUnauthorized?: () => void;
 }
 
 export function SafetyAlertEvidencePanel({
@@ -34,10 +50,13 @@ export function SafetyAlertEvidencePanel({
   alertId,
   detection,
   canReviewIdentity = false,
+  onUnauthorized,
 }: SafetyAlertEvidencePanelProps) {
   useTranslation();
 
   const [selectedEvidenceIndex, setSelectedEvidenceIndex] = useState<number | null>(null);
+  const [unavailableImageBlob, setUnavailableImageBlob] = useState<Blob | null>(null);
+  const handleImageUnavailable = useCallback((blob: Blob) => setUnavailableImageBlob(blob), []);
 
   const evidenceList = detection.evidence ?? [];
   const selectedItem =
@@ -79,7 +98,26 @@ export function SafetyAlertEvidencePanel({
       isSelectedAvailable,
     staleTime: 0,
     gcTime: 0,
+    retry: false,
+    refetchOnWindowFocus: false,
+    refetchOnReconnect: false,
   });
+
+  // TanStack retains the last successful data after a refetch fails. That blob
+  // must not remain usable for identity review once access/availability is lost.
+  const reviewedEvidenceBlob =
+    isSelectedAvailable && evidenceQuery.isSuccess && evidenceQuery.data !== unavailableImageBlob
+      ? (evidenceQuery.data ?? null)
+      : null;
+  const isAccessDenied =
+    evidenceQuery.error instanceof ApiError &&
+    (evidenceQuery.error.status === 401 || evidenceQuery.error.status === 403);
+
+  useEffect(() => {
+    if (isUnauthorizedError(evidenceQuery.error)) {
+      onUnauthorized?.();
+    }
+  }, [evidenceQuery.error, onUnauthorized]);
 
   const handleToggle = (index: number) => {
     setSelectedEvidenceIndex((current) => (current === index ? null : index));
@@ -103,6 +141,7 @@ export function SafetyAlertEvidencePanel({
               detection={detection}
               evidenceIndex={null}
               evidenceBlob={null}
+              onUnauthorized={onUnauthorized}
             />
           </div>
         )}
@@ -181,8 +220,11 @@ export function SafetyAlertEvidencePanel({
               <span>{evidenceErrorMessage(evidenceQuery.error)}</span>
               <button
                 type="button"
-                onClick={() => void evidenceQuery.refetch()}
-                className="font-bold text-[#9F2F2D] underline hover:no-underline"
+                disabled={isAccessDenied || evidenceQuery.isFetching}
+                onClick={() => {
+                  if (!isAccessDenied && !evidenceQuery.isFetching) void evidenceQuery.refetch();
+                }}
+                className="font-bold text-[#9F2F2D] underline hover:no-underline disabled:opacity-50 disabled:cursor-not-allowed focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#9F2F2D]"
               >
                 {tr('common.retry')}
               </button>
@@ -195,6 +237,11 @@ export function SafetyAlertEvidencePanel({
                 <EvidenceImage
                   key={`${detection.eventId}:${selectedItem.index}:${evidenceQuery.dataUpdatedAt}`}
                   blob={evidenceQuery.data}
+                  onUnavailable={handleImageUnavailable}
+                  onRetry={() => {
+                    if (!evidenceQuery.isFetching) void evidenceQuery.refetch();
+                  }}
+                  isRetrying={evidenceQuery.isFetching}
                   alt={formatEvidenceAltText(
                     selectedItem.kind,
                     detection.cameraExternalId,
@@ -217,6 +264,16 @@ export function SafetyAlertEvidencePanel({
                   {tr('common.close_image')}
                 </button>
               </div>
+              {selectedItem.kind === 'FRAME' && (
+                <p className="px-0.5 text-[11px] leading-relaxed text-[#6B6B6B]">
+                  {tr('safety.evidence.frameCaptionBase', { ns: SAFETY_NAMESPACE })}{' '}
+                  {canReviewIdentity
+                    ? tr('safety.evidence.frameCaptionIdentityReview', { ns: SAFETY_NAMESPACE })
+                    : tr('safety.evidence.frameCaptionSourceObservations', {
+                        ns: SAFETY_NAMESPACE,
+                      })}
+                </p>
+              )}
             </div>
           )}
         </div>
@@ -233,7 +290,8 @@ export function SafetyAlertEvidencePanel({
             alertId={alertId}
             detection={detection}
             evidenceIndex={selectedEvidenceIndex}
-            evidenceBlob={evidenceQuery.data ?? null}
+            evidenceBlob={reviewedEvidenceBlob}
+            onUnauthorized={onUnauthorized}
           />
         </div>
       )}
@@ -241,12 +299,26 @@ export function SafetyAlertEvidencePanel({
   );
 }
 
-function EvidenceImage({ blob, alt }: { blob: Blob; alt: string }) {
+function EvidenceImage({
+  blob,
+  alt,
+  onUnavailable,
+  onRetry,
+  isRetrying,
+}: {
+  blob: Blob;
+  alt: string;
+  onUnavailable: (blob: Blob) => void;
+  onRetry: () => void;
+  isRetrying: boolean;
+}) {
   useTranslation();
 
-  const [blobUrlState, setBlobUrlState] = useState<{ blob: Blob; url: string } | null>(null);
+  const [blobUrlState, setBlobUrlState] = useState<{ blob: Blob; url: string | null } | null>(null);
+  const [failedImageBlob, setFailedImageBlob] = useState<Blob | null>(null);
 
   useEffect(() => {
+    if (failedImageBlob === blob) return;
     let active = true;
     let allocatedUrl: string | null = null;
     try {
@@ -255,14 +327,13 @@ function EvidenceImage({ blob, alt }: { blob: Blob; alt: string }) {
       allocatedUrl = null;
     }
 
-    if (allocatedUrl) {
-      const urlToSet = allocatedUrl;
-      queueMicrotask(() => {
-        if (active) {
-          setBlobUrlState({ blob, url: urlToSet });
-        }
-      });
-    }
+    const urlToSet = allocatedUrl;
+    queueMicrotask(() => {
+      if (active) {
+        setBlobUrlState({ blob, url: urlToSet });
+        if (!urlToSet) onUnavailable(blob);
+      }
+    });
 
     return () => {
       active = false;
@@ -274,9 +345,30 @@ function EvidenceImage({ blob, alt }: { blob: Blob; alt: string }) {
         }
       }
     };
-  }, [blob]);
+  }, [blob, failedImageBlob, onUnavailable]);
 
   const activeObjectUrl = blob && blobUrlState?.blob === blob ? blobUrlState.url : null;
+
+  if (failedImageBlob === blob || (blobUrlState?.blob === blob && !blobUrlState.url)) {
+    return (
+      <div
+        role="alert"
+        className="flex min-h-32 w-full flex-col items-center justify-center gap-3 p-4 text-center text-xs text-[#9F2F2D]"
+      >
+        <span>{tr('safety.evidence.unreadableImageMessage', { ns: SAFETY_NAMESPACE })}</span>
+        <button
+          type="button"
+          onClick={onRetry}
+          disabled={isRetrying}
+          className="rounded border border-[#9F2F2D]/30 px-3 py-2 font-semibold disabled:opacity-50 disabled:cursor-not-allowed focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#9F2F2D]"
+        >
+          {isRetrying
+            ? tr('safety.evidence.loadingImage', { ns: SAFETY_NAMESPACE })
+            : tr('safety.evidence.retryImage', { ns: SAFETY_NAMESPACE })}
+        </button>
+      </div>
+    );
+  }
 
   if (!activeObjectUrl) {
     return (
@@ -294,5 +386,15 @@ function EvidenceImage({ blob, alt }: { blob: Blob; alt: string }) {
     );
   }
 
-  return <img src={activeObjectUrl} alt={alt} className="max-h-72 w-auto object-contain" />;
+  return (
+    <img
+      src={activeObjectUrl}
+      alt={alt}
+      onError={() => {
+        setFailedImageBlob(blob);
+        onUnavailable(blob);
+      }}
+      className="max-h-72 w-auto object-contain"
+    />
+  );
 }

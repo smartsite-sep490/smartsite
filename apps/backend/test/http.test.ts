@@ -2,6 +2,8 @@ import 'reflect-metadata';
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import type { TestContext } from 'node:test';
+import { createConnection } from 'node:net';
+import { setTimeout as delay } from 'node:timers/promises';
 import { ConfigService } from '@nestjs/config';
 import {
   BadRequestException,
@@ -26,6 +28,7 @@ import { configureApplication } from '../src/configure-app.js';
 import { validateEnvironment } from '../src/config/environment.js';
 import type { BackendEnvironment } from '../src/config/environment.js';
 import { createLoggerParams } from '../src/observability/logger.js';
+import { BoundedExpressAdapter } from '../src/common/http/bounded-express-adapter.js';
 
 class InputDto {
   @IsInt()
@@ -42,6 +45,12 @@ class QueryDto {
 
 @Controller('test-foundation')
 class FoundationTestController {
+  holdOperation?: () => Promise<{ committed: boolean }>;
+
+  @Get('hold')
+  hold() {
+    return this.holdOperation?.() ?? { committed: false };
+  }
   @Post('dto')
   @HttpCode(200)
   validate(@Body() input: InputDto) {
@@ -111,19 +120,26 @@ async function startApplication(
   options: {
     production?: boolean;
     unavailable?: boolean;
+    pendingMigrations?: boolean;
+    drainTimeoutMs?: number;
     httpLimit?: number;
     aiLimit?: number;
   } = {},
 ) {
   const dataSource = {
     isInitialized: !options.unavailable,
+    options: { type: 'postgres' as const },
+    driver: { schema: 'synthetic_owned_schema' },
+    migrations: [{ name: 'SyntheticFoundation1789689600000' }],
     destroyed: false,
     async query(sql: string) {
-      assert.equal(sql, 'SELECT 1');
+      assert.equal(sql, 'SELECT "name", "timestamp" FROM "synthetic_owned_schema"."migrations"');
       if (this.isInitialized === false) {
         throw new Error('postgresql://app:private-password@private-host/db');
       }
-      return [{ '?column?': 1 }];
+      return options.pendingMigrations
+        ? []
+        : [{ name: 'SyntheticFoundation1789689600000', timestamp: '1789689600000' }];
     },
     async destroy() {
       this.destroyed = true;
@@ -166,10 +182,17 @@ async function startApplication(
     .overrideProvider(DataSource)
     .useValue(dataSource)
     .compile();
-  const app = module.createNestApplication<NestExpressApplication>({
+  const applicationOptions = {
     logger: false,
     bodyParser: false,
-  });
+  } as const;
+  const app =
+    options.drainTimeoutMs === undefined
+      ? module.createNestApplication<NestExpressApplication>(applicationOptions)
+      : module.createNestApplication<NestExpressApplication>(
+          new BoundedExpressAdapter(options.drainTimeoutMs),
+          applicationOptions,
+        );
   await configureApplication(app);
 
   await app.listen(0, '127.0.0.1');
@@ -204,6 +227,124 @@ test('readiness tracks database failure and recovery without exposing connection
   assert.equal(body.database, 'down');
   dataSource.isInitialized = true;
   assert.equal((await fetch(`${url}/api/v1/health/ready`)).status, 200);
+});
+
+test('actual health HTTP route refuses incomplete release migrations with the existing safe envelope', async (t) => {
+  const { url, logLines } = await startApplication(t, { pendingMigrations: true });
+  const response = await fetch(`${url}/api/v1/health/ready`, {
+    headers: { 'X-Request-Id': 'migration-readiness-fixture' },
+  });
+  const body = await assertError(response, 503);
+  assert.equal(body.code, 'DATABASE_UNAVAILABLE');
+  assert.equal(body.message, 'Database unavailable');
+  assert.equal(body.requestId, 'migration-readiness-fixture');
+  assert.equal(body.database, 'down');
+  assert.equal(JSON.stringify(body).includes('SyntheticFoundation'), false);
+  assert.equal(JSON.stringify(body).includes('synthetic_owned_schema'), false);
+  assert.equal(
+    logLines.some((line) => line.includes('private-password')),
+    false,
+  );
+  assert.equal((await fetch(`${url}/api/v1/health/live`)).status, 200);
+});
+
+test('bounded native app.close disconnects an incomplete request body instead of waiting indefinitely', async (t) => {
+  const { app, url, dataSource } = await startApplication(t, { drainTimeoutMs: 40 });
+  const target = new URL(url);
+  const socket = createConnection({ host: '127.0.0.1', port: Number(target.port) });
+  socket.on('error', () => {});
+  await new Promise<void>((resolve, reject) => {
+    socket.once('connect', resolve);
+    socket.once('error', reject);
+  });
+  const connections = async () =>
+    new Promise<number>((resolve, reject) => {
+      app
+        .getHttpServer()
+        .getConnections((error: Error | null, count: number) =>
+          error ? reject(error) : resolve(count),
+        );
+    });
+  const requestAdmitted = new Promise<void>((resolve) => {
+    app.getHttpServer().once('request', resolve);
+  });
+  socket.write(
+    'POST /api/v1/test-foundation/dto HTTP/1.1\r\nHost: localhost\r\nContent-Type: application/json\r\nContent-Length: 100\r\n\r\n{"count":',
+  );
+  await requestAdmitted;
+  assert.equal(await connections(), 1);
+  const closing = app.close();
+  try {
+    const outcome = await Promise.race([closing.then(() => 'closed'), delay(300, 'still-waiting')]);
+    assert.equal(
+      outcome,
+      'closed',
+      'incomplete client body must not hold shutdown past its fixture budget',
+    );
+    assert.equal(dataSource.destroyed, true);
+    assert.equal((app.getHttpAdapter() as BoundedExpressAdapter).drainDeadlineExceeded, true);
+  } finally {
+    socket.destroy();
+    await closing;
+  }
+});
+
+test('bounded shutdown retains an already admitted fixture command until completion within budget', async (t) => {
+  const { app, url, dataSource } = await startApplication(t, { drainTimeoutMs: 500 });
+  let start!: () => void, release!: () => void;
+  const started = new Promise<void>((resolve) => {
+    start = resolve;
+  });
+  const held = new Promise<void>((resolve) => {
+    release = resolve;
+  });
+  app.get(FoundationTestController).holdOperation = async () => {
+    start();
+    await held;
+    assert.equal(dataSource.destroyed, false, 'pool must remain open during admitted command');
+    return { committed: true };
+  };
+  const pending = fetch(`${url}/api/v1/test-foundation/hold`, {
+    headers: { Connection: 'close' },
+  });
+  await started;
+  const closing = app.close();
+  try {
+    await delay(10);
+    assert.equal(dataSource.destroyed, false);
+    release();
+    const response = await pending;
+    assert.equal(response.status, 200);
+    assert.deepEqual(await response.json(), { committed: true });
+    await closing;
+    assert.equal(dataSource.destroyed, true);
+    assert.equal((app.getHttpAdapter() as BoundedExpressAdapter).drainDeadlineExceeded, false);
+  } finally {
+    release();
+    await pending.catch(() => {});
+    await closing;
+  }
+});
+
+test('requests arriving after drain begins get safe503 before controller work', async (t) => {
+  const { app, url } = await startApplication(t, { drainTimeoutMs: 100 });
+  let calls = 0;
+  app.get(FoundationTestController).holdOperation = async () => {
+    calls++;
+    return { committed: true };
+  };
+  const adapter = app.getHttpAdapter() as BoundedExpressAdapter;
+  adapter.beforeClose();
+  const response = await fetch(`${url}/api/v1/test-foundation/hold`, {
+    headers: { 'X-Request-Id': 'draining-fixture', Origin: 'http://localhost:5173' },
+  });
+  const body = await assertError(response, 503);
+  assert.equal(body.code, 'SERVICE_UNAVAILABLE');
+  assert.equal(body.requestId, 'draining-fixture');
+  assert.equal(response.headers.get('connection'), 'close');
+  assert.equal(response.headers.get('x-content-type-options'), 'nosniff');
+  assert.equal(response.headers.get('access-control-allow-origin'), 'http://localhost:5173');
+  assert.equal(calls, 0);
 });
 
 async function assertError(response: Response, status: number) {

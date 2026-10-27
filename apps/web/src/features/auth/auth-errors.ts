@@ -1,5 +1,5 @@
 import { ApiError } from '@smartsite/api-client';
-import { translate as tr } from '../../i18n';
+import { translate as tr } from '../../i18n/runtime';
 
 export function authErrorMessage(error: unknown): string {
   if (!(error instanceof ApiError)) return tr('auth.error.unexpected');

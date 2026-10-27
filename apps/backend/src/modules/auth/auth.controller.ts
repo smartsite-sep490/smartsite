@@ -34,6 +34,7 @@ import { AuthService, type AuthenticatedRequest } from './auth.service.js';
 import { AccountResponseDto, LoginResponseDto } from '../../common/http/management-response.dto.js';
 import { ErrorResponseDto } from '../../common/http/error-response.dto.js';
 import { ChangePasswordThrottleGuard, UserAuthGuard } from './user-auth.guard.js';
+import { passwordChangeCommandContext } from './configuration-command-context.js';
 import { AuthClientType } from '../../database/entities/auth-session.entity.js';
 import type { BackendEnvironment } from '../../config/environment.js';
 import { PublicHttpException } from '../../common/http/public-http-exception.js';
@@ -90,6 +91,7 @@ export class AuthController {
   constructor(
     private readonly auth: AuthService,
     private readonly config: ConfigService<BackendEnvironment, true>,
+    private readonly userAuth: UserAuthGuard,
   ) {}
 
   private requireWebOrigin(request: Request) {
@@ -224,6 +226,7 @@ export class AuthController {
   }
 
   @Get('me')
+  @Header('Cache-Control', 'no-store')
   @ApiBearerAuth('user-token')
   @UseGuards(UserAuthGuard)
   @ApiOkResponse({ type: AccountResponseDto })
@@ -240,7 +243,12 @@ export class AuthController {
     @Res({ passthrough: true }) response: Response,
     @Body() input: ChangePasswordDto,
   ) {
-    await this.auth.changePassword(request.user!.id, input.currentPassword, input.newPassword);
+    await this.auth.changePassword(
+      request.user!.id,
+      input.currentPassword,
+      input.newPassword,
+      passwordChangeCommandContext(request, this.userAuth),
+    );
     this.logger.log({
       actorId: request.user!.id,
       action: 'user.change-password',

@@ -67,7 +67,9 @@ const documentScope = `EXISTS(SELECT 1 FROM app_user u WHERE u.id=n.recipient_us
 const ppeAlertScope = `n.recipient_role='SAFETY_OFFICER'
  AND EXISTS(SELECT 1 FROM app_user u WHERE u.id=n.recipient_user_id AND u.is_active AND NOT u.must_change_password)
  AND EXISTS(SELECT 1 FROM user_role_assignment r WHERE r.user_id=n.recipient_user_id AND r.site_id=n.site_id AND r.role='SAFETY_OFFICER')
- AND EXISTS(SELECT 1 FROM safety_alert a WHERE a.id=n.request_id AND a.site_id=n.site_id AND a.alert_type='PPE_VIOLATION')`;
+ AND EXISTS(SELECT 1 FROM safety_alert a WHERE a.id=n.request_id AND a.site_id=n.site_id
+   AND ((n.event='PPE_ALERT_CREATED' AND a.alert_type='PPE_VIOLATION')
+     OR (n.event='ZONE_ALERT_CREATED' AND a.alert_type='RESTRICTED_ZONE_INTRUSION')))`;
 const scope = `((n.request_type IN ('CHANGE','SWAP','ATTENDANCE','SCHEDULE') AND (${schedulingScope}) AND NOT (n.request_type='ATTENDANCE' AND n.event='TIME_REQUESTED' AND n.recipient_role<>'CONTRACTOR_REPRESENTATIVE')) OR (n.request_type='SAFETY' AND (${safetyScope})) OR (n.request_type='CHECKLIST' AND (${checklistScope})) OR (n.request_type='DOCUMENT' AND (${documentScope})) OR (n.request_type='SAFETY_ALERT' AND (${ppeAlertScope})))`;
 type SchedulingRequest = ShiftChangeRequestEntity | ShiftSwapRequestEntity;
 type Recipient = Pick<
@@ -87,9 +89,42 @@ export class SchedulingNotificationService {
   ): Promise<number> {
     if (
       alert.alertType !== 'PPE_VIOLATION' ||
-      !['PPE_HARD_HAT_MISSING', 'PPE_SAFETY_VEST_MISSING'].includes(alert.candidateSubtype)
+      ![
+        'PPE_HARD_HAT_MISSING',
+        'PPE_SAFETY_VEST_MISSING',
+        'PPE_GLOVES_MISSING',
+        'PPE_BOOTS_MISSING',
+        'PPE_GOGGLES_MISSING',
+      ].includes(alert.candidateSubtype)
     )
       invalid('Invalid PPE notification alert');
+    return this.recordSafetyAlert(manager, alert, cameraId, 'PPE_ALERT_CREATED');
+  }
+
+  async recordZoneAlert(
+    manager: EntityManager,
+    alert: SafetyAlertEntity,
+    cameraId: string,
+  ): Promise<number> {
+    if (
+      alert.alertType !== 'RESTRICTED_ZONE_INTRUSION' ||
+      !alert.zoneId ||
+      ![
+        'ZONE_ENTRY_PROHIBITED',
+        'ZONE_ENTRY_UNAUTHORIZED',
+        'ZONE_ENTRY_AUTHORIZATION_UNAVAILABLE',
+      ].includes(alert.candidateSubtype)
+    )
+      invalid('Invalid Zone notification alert');
+    return this.recordSafetyAlert(manager, alert, cameraId, 'ZONE_ALERT_CREATED');
+  }
+
+  private async recordSafetyAlert(
+    manager: EntityManager,
+    alert: SafetyAlertEntity,
+    cameraId: string,
+    event: 'PPE_ALERT_CREATED' | 'ZONE_ALERT_CREATED',
+  ): Promise<number> {
     const recipients: { id: string }[] = await manager.query(
       `SELECT DISTINCT u.id FROM app_user u JOIN user_role_assignment r ON r.user_id=u.id
        WHERE u.is_active AND NOT u.must_change_password AND r.site_id=$1 AND r.role='SAFETY_OFFICER' ORDER BY u.id`,
@@ -98,7 +133,7 @@ export class SchedulingNotificationService {
     if (!recipients.length) {
       // This records a gap observed in the transaction, never a delivery acknowledgement.
       this.logger.warn({
-        action: 'safety.ppe.notification.gap',
+        action: 'safety.alert.notification.gap',
         siteId: alert.siteId,
         alertId: alert.id,
         recipients: 0,
@@ -113,11 +148,15 @@ export class SchedulingNotificationService {
        WHERE s.id=$1 AND ($3::uuid IS NULL OR z.id IS NOT NULL)`,
         [alert.siteId, cameraId, alert.zoneId],
       );
-    if (!context) invalid('Invalid PPE notification context');
+    if (!context) invalid('Invalid safety notification context');
     const content = {
       siteName: context.site_name,
-      title: 'PPE alert requires review',
-      message: 'Review the PPE observation.',
+      title:
+        event === 'PPE_ALERT_CREATED' ? 'PPE alert requires review' : 'Zone alert requires review',
+      message:
+        event === 'PPE_ALERT_CREATED'
+          ? 'Review the PPE observation.'
+          : 'Review the Zone entry observation.',
       safetyAlert: {
         cameraId,
         cameraName: context.camera_name,
@@ -130,9 +169,9 @@ export class SchedulingNotificationService {
     for (const recipient of recipients) {
       const rows: { id: string }[] = await manager.query(
         `INSERT INTO user_notification(id,recipient_user_id,site_id,contractor_id,worker_id,recipient_role,request_type,request_id,event,content)
-         VALUES($1,$2,$3,NULL,NULL,'SAFETY_OFFICER','SAFETY_ALERT',$4,'PPE_ALERT_CREATED',$5::jsonb)
+         VALUES($1,$2,$3,NULL,NULL,'SAFETY_OFFICER','SAFETY_ALERT',$4,$5,$6::jsonb)
          ON CONFLICT ON CONSTRAINT uq_notification_event_recipient DO NOTHING RETURNING id`,
-        [randomUUID(), recipient.id, alert.siteId, alert.id, JSON.stringify(content)],
+        [randomUUID(), recipient.id, alert.siteId, alert.id, event, JSON.stringify(content)],
       );
       inserted += rows.length;
     }
@@ -644,10 +683,12 @@ export class SchedulingNotificationService {
     readStatus: string = 'ALL',
     offset = 0,
     limit = 20,
+    siteId?: string,
   ): Promise<UserNotificationListResponse> {
     if (readStatus !== 'ALL' && readStatus !== 'UNREAD')
       invalid('Invalid notification read status');
     const pagination = page(offset, limit);
+    const siteFilter = siteId === undefined ? undefined : uuid(siteId);
     this.assertActor(actor);
     // A single repeatable snapshot keeps items, total and unreadCount consistent during delivery/read.
     return this.dataSource.transaction('REPEATABLE READ', async (manager) => {
@@ -657,7 +698,21 @@ export class SchedulingNotificationService {
         .where('n.recipient_user_id = :userId', { userId: actor.id })
         .andWhere('n.deleted_at IS NULL')
         .andWhere(scope);
-      const unreadCount = await query.clone().andWhere('n.read_at IS NULL').getCount();
+      const sites = await query
+        .clone()
+        .innerJoin(SiteEntity, 'site', 'site.id = n.site_id')
+        .select('site.id', 'id')
+        .addSelect('site.name', 'name')
+        .distinct(true)
+        .orderBy('site.name', 'ASC')
+        .addOrderBy('site.id', 'ASC')
+        .getRawMany<{ id: string; name: string }>();
+      const allSitesUnreadCount = await query.clone().andWhere('n.read_at IS NULL').getCount();
+      if (siteFilter !== undefined) query.andWhere('n.site_id = :siteFilter', { siteFilter });
+      const unreadCount =
+        siteFilter === undefined
+          ? allSitesUnreadCount
+          : await query.clone().andWhere('n.read_at IS NULL').getCount();
       if (readStatus === 'UNREAD') query.andWhere('n.read_at IS NULL');
       const [items, total] = await query
         .orderBy('n.created_at', 'DESC')
@@ -693,7 +748,13 @@ export class SchedulingNotificationService {
             };
         }
       }
-      return { items: items.map((n) => this.response(n)), total, unreadCount };
+      return {
+        items: items.map((n) => this.response(n)),
+        total,
+        unreadCount,
+        sites,
+        allSitesUnreadCount,
+      };
     });
   }
 
@@ -710,25 +771,31 @@ export class SchedulingNotificationService {
     return { id: rows[0].id, readAt: rows[0].read_at.toISOString() };
   }
 
-  async readAll(actor: AuthenticatedUser): Promise<{ updated: number }> {
+  async readAll(actor: AuthenticatedUser, siteId?: string): Promise<{ updated: number }> {
+    const siteFilter = siteId === undefined ? null : uuid(siteId);
     this.assertActor(actor);
     const result: [unknown[], number] = await this.dataSource.query(
       `
       UPDATE user_notification n SET read_at = CURRENT_TIMESTAMP
-      WHERE n.recipient_user_id = $1 AND n.read_at IS NULL AND n.deleted_at IS NULL AND ${scope} RETURNING n.id`,
-      [actor.id],
+      WHERE n.recipient_user_id = $1 AND n.read_at IS NULL AND n.deleted_at IS NULL
+        AND ($2::uuid IS NULL OR n.site_id=$2) AND ${scope} RETURNING n.id`,
+      [actor.id, siteFilter],
     );
     return { updated: result[1] };
   }
 
-  async deleteRead(actor: AuthenticatedUser): Promise<NotificationDeleteReadResponse> {
+  async deleteRead(
+    actor: AuthenticatedUser,
+    siteId?: string,
+  ): Promise<NotificationDeleteReadResponse> {
+    const siteFilter = siteId === undefined ? null : uuid(siteId);
     this.assertActor(actor);
     const result: [unknown[], number] = await this.dataSource.query(
       `
       UPDATE user_notification n SET deleted_at = CURRENT_TIMESTAMP
       WHERE n.recipient_user_id = $1 AND n.read_at IS NOT NULL AND n.deleted_at IS NULL
-        AND ${scope} RETURNING n.id`,
-      [actor.id],
+        AND ($2::uuid IS NULL OR n.site_id=$2) AND ${scope} RETURNING n.id`,
+      [actor.id, siteFilter],
     );
     return { deleted: result[1] };
   }

@@ -1,0 +1,17 @@
+// Additive extension to ERD-Logical.dbml; existing baseline tables are not redefined.
+Table zone_policy_revision {
+  zone_id uuid [not null]
+  policy_revision bigint [not null, note: '1..9007199254740991; exact bigint']
+  site_id uuid [not null]
+  zone_type varchar(32) [not null, note: 'STANDARD | RESTRICTED | HAZARDOUS']
+  restriction_policy varchar(32) [not null, note: 'NONE | PROHIBITED_FOR_ALL | AUTHORIZATION_REQUIRED']
+  required_ppe text[] [not null, note: 'Closed5 distinct values, no NULL; empty permitted; SQL CHECK in migration']
+  is_cutover_baseline boolean [not null, default: false]
+  recorded_at timestamptz [not null, default: `clock_timestamp()`, note: 'Finite; current cutover time is not original policy time']
+  indexes {
+    (zone_id, policy_revision) [pk, name: 'pk_zone_policy_revision']
+    (site_id, recorded_at) [name: 'idx_zone_policy_revision_site_time']
+  }
+  Note: 'Append-only UPDATE/DELETE/TRUNCATE trigger protect_zone_policy_history. Populated rollback refuses. DBML is documentation, not an executable migration.'
+}
+Ref fk_zone_policy_revision_scope: zone_policy_revision.(zone_id, site_id) > zone.(id, site_id) [delete: restrict]

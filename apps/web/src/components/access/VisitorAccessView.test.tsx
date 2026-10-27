@@ -482,9 +482,7 @@ it('displays summary cards with visit counts vs headcounts and bounded list indi
   expect(peopleUnits.length).toBe(1); // Currently On-Site
 
   // Check bounded list indicator
-  expect(
-    screen.getByText('Showing latest 2 of 120 registrations'),
-  ).toBeTruthy();
+  expect(screen.getByText('Showing latest 2 of 120 registrations')).toBeTruthy();
 
   cache.clear();
 });

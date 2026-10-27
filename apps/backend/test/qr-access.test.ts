@@ -4,7 +4,11 @@ import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
 import { test } from 'node:test';
 import { command } from '../src/common/configuration/commands.js';
-import { requireSiteRole, requireGate, visitResponse } from '../src/modules/workforce/access/qr-access.service.js';
+import {
+  requireSiteRole,
+  requireGate,
+  visitResponse,
+} from '../src/modules/workforce/access/qr-access.service.js';
 import type { VisitorVisitEntity } from '../src/database/entities/qr-access.entity.js';
 import {
   RegisterVisitCommand,
@@ -241,11 +245,26 @@ test('visitResponse computes presence states and preserves NEEDS_REVIEW for unce
 
   // Partial group inside WITH roster -> INSIDE
   const rosterMembers = [
-    { id: 'm1', fullName: 'A', identityNumber: '1', registeredFullName: 'A', registeredIdentityNumber: '1', inside: true },
-    { id: 'm2', fullName: 'B', identityNumber: '2', registeredFullName: 'B', registeredIdentityNumber: '2', inside: false },
+    {
+      id: 'm1',
+      fullName: 'A',
+      identityNumber: '1',
+      registeredFullName: 'A',
+      registeredIdentityNumber: '1',
+      inside: true,
+    },
+    {
+      id: 'm2',
+      fullName: 'B',
+      identityNumber: '2',
+      registeredFullName: 'B',
+      registeredIdentityNumber: '2',
+      inside: false,
+    },
   ];
   assert.equal(
-    visitResponse({ ...baseEntity, members: rosterMembers, enteredCount: 1, exitedCount: 0 }).presence,
+    visitResponse({ ...baseEntity, members: rosterMembers, enteredCount: 1, exitedCount: 0 })
+      .presence,
     'INSIDE',
   );
 

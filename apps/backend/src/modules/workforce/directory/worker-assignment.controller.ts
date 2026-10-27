@@ -6,7 +6,6 @@ import {
   ApiCreatedResponse,
   ApiForbiddenResponse,
   ApiNotFoundResponse,
-  ApiOkResponse,
   ApiServiceUnavailableResponse,
   ApiTags,
   ApiTooManyRequestsResponse,
@@ -15,12 +14,13 @@ import {
 import { ErrorResponseDto } from '../../../common/http/error-response.dto.js';
 import type { AuthenticatedRequest } from '../../auth/auth.service.js';
 import { UserAuthGuard } from '../../auth/user-auth.guard.js';
+import { configurationCommandContext } from '../../auth/configuration-command-context.js';
+import { MainAssignmentCommandService } from '../../zones/main-assignment-command.service.js';
 import {
-  ContractorOperationsService,
   CreateWorkerSiteZoneAssignmentCommand,
   SiteManagerDecisionCommand,
   RevokeWorkerAssignmentCommand,
-} from './contractor-operations.service.js';
+} from '../worker-assignment.commands.js';
 
 @ApiTags('worker-site-zone-assignments')
 @ApiBearerAuth('user-token')
@@ -36,15 +36,23 @@ import {
 export class WorkerAssignmentController {
   private readonly logger = new Logger(WorkerAssignmentController.name);
 
-  constructor(private readonly contractors: ContractorOperationsService) {}
+  constructor(
+    private readonly assignments: MainAssignmentCommandService,
+    private readonly auth: UserAuthGuard,
+  ) {}
 
   @Post('site-zone-assignment-requests/:requestId/revoke')
+  @ApiCreatedResponse()
   revoke(
     @Req() request: AuthenticatedRequest,
     @Param('requestId') requestId: string,
     @Body() input: RevokeWorkerAssignmentCommand,
   ) {
-    return this.contractors.revokeAssignment(request.user!, requestId, input);
+    return this.assignments.publicRevoke(
+      requestId,
+      input,
+      configurationCommandContext(request, this.auth),
+    );
   }
 
   @Post('workers/:workerId/site-zone-assignment-requests')
@@ -54,7 +62,11 @@ export class WorkerAssignmentController {
     @Param('workerId') workerId: string,
     @Body() input: CreateWorkerSiteZoneAssignmentCommand,
   ) {
-    const assignment = await this.contractors.requestAssignment(request.user!, workerId, input);
+    const assignment = await this.assignments.publicRequest(
+      workerId,
+      input,
+      configurationCommandContext(request, this.auth),
+    );
     this.logger.log({
       actorId: request.user!.id,
       action: 'worker.assignment.request',
@@ -66,9 +78,12 @@ export class WorkerAssignmentController {
   }
 
   @Post('site-zone-assignment-requests/:requestId/safety-review')
-  @ApiOkResponse()
+  @ApiCreatedResponse()
   async safetyReview(@Req() request: AuthenticatedRequest, @Param('requestId') requestId: string) {
-    const assignment = await this.contractors.safetyReview(request.user!, requestId);
+    const assignment = await this.assignments.publicSafetyReview(
+      requestId,
+      configurationCommandContext(request, this.auth),
+    );
     this.logger.log({
       actorId: request.user!.id,
       action: 'worker.assignment.safety-review',
@@ -80,13 +95,17 @@ export class WorkerAssignmentController {
   }
 
   @Post('site-zone-assignment-requests/:requestId/site-manager-decision')
-  @ApiOkResponse()
+  @ApiCreatedResponse()
   async siteManagerDecision(
     @Req() request: AuthenticatedRequest,
     @Param('requestId') requestId: string,
     @Body() input: SiteManagerDecisionCommand,
   ) {
-    const assignment = await this.contractors.siteManagerDecision(request.user!, requestId, input);
+    const assignment = await this.assignments.publicDecision(
+      requestId,
+      input,
+      configurationCommandContext(request, this.auth),
+    );
     this.logger.log({
       actorId: request.user!.id,
       action: 'worker.assignment.site-manager-decision',

@@ -135,7 +135,7 @@ export async function observationIdentityFixture() {
     expectedEvidenceSha256: createHash('sha256').update(jpeg).digest('hex'),
   });
   const decide = (input: unknown, index = 0, actor = actorIds[0]!, alert = alertIds[0]!) =>
-    service.decide(siteId, alert, eventId, index, actor, input);
+    service.decide(siteId, alert, eventId, index, actor, input, async () => undefined);
   return {
     siteId,
     otherSiteId,

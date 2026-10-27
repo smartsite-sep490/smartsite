@@ -1,0 +1,16 @@
+# Proposed authority73 source integration
+
+Prepared against `3828cea`; now integrated into local source only, NOT the serving schema. `authority73-coherent.patch` preserves the original nine-file proposal for review; it is historical and must not be applied again:
+
+- Register the existing forward migration once, after all current timestamps. No migration SQL edits.
+- Add an explicit test-only predecessor72 selection, validating the exact reviewed73 graph before removing its last migration. Default tests continue to use the real release graph.
+- Three manually upgrading fixtures opt into predecessor72, preserving baseline-before-upgrade coverage and avoiding duplicate Up.
+- Extend strict independent migration allowlist and metadata/identity proofs to73, preserving61/62/66/72, Main byte comparisons and malformed/duplicate/reordered rejection.
+
+Root prepared this after Agy p7 reported exhausted quota; no Agy implementation or independent approval is claimed. `git apply --check` passes against the unchanged source. A complete copied source/test tree with this patch compiles; four metadata/source cases pass with zero skips and without initializing PostgreSQL. Compile caught a readonly options assignment; the candidate now uses an object spread. Both failed and passing logs remain under the rollout directory as `coherent73-types-v1.log`, `coherent73-types-v2.log`, `coherent73-metadata-v1.log`.
+
+Actual PostgreSQL checks: 28 control/cutover cases and 14 qualified-reader/capture-time cases passed in two separate runs, zero skips. Both independent cleanup connections confirmed the isolated schema namespace inventory returned to its prior names. This covers all three changed fixtures through their real callers, without changing the serving schema. First integration attempt failed because the focused compile omitted a runtime-pinned module; rebuilding all Backend source fixed that harness omission. Logs: `coherent73-fixtures-v1.log` (failure), `coherent73-fixtures-v2.log`, `coherent73-readers-v1.log`; compile `coherent73-types-v3.log` and `v4.log` exit0. Synthetic fixtures are not field identity or production acceptance.
+
+Final Root review strengthened the test allowlist: cutover requires all72 predecessor registrations, rejecting retained61 plus cutover. Four metadata/source checks passed again on actual source; focused TypeScript and nine-file lint exit0. Earlier42 real-PG cases cover the same migration and fixture logic; the final delta only strengthens allowlist validation and formats source. No unchanged DB suite repeated.
+
+Pending: independent review when available; freeze committed build/runtime pins and finish the concrete local lifecycle package. Current owner approval covers serving schema72, not73 or the new nullable epoch activation/gap timestamps. No website restart, schema change, history activation or model application is authorized by this proposal. Existing prior registered73 sandbox clone/fresh-main proof does not replace these changed fixture checks.

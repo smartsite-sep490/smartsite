@@ -20,6 +20,16 @@ export enum FaceProfileStatus {
   "status <> 'ACTIVE' OR (encrypted_template IS NOT NULL AND length(encrypted_template) BETWEEN 100 AND 32768)",
 )
 export class FaceProfileEntity {
+  /** Database-owned provenance revision; never part of a public profile projection. */
+  @Column({
+    name: 'safety_revision',
+    type: 'uuid',
+    generated: 'uuid',
+    select: false,
+    insert: false,
+    update: false,
+  })
+  safetyRevision!: string;
   @Column({ name: 'consent_method', type: 'varchar', length: 50, default: 'LEGACY_UNVERIFIED' })
   consentMethod!: string;
   @Column({ name: 'deleted_at', type: 'timestamptz', nullable: true }) deletedAt!: Date | null;

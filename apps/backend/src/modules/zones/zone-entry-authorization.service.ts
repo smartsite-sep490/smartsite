@@ -2,10 +2,7 @@ import { randomUUID } from 'node:crypto';
 import { Injectable } from '@nestjs/common';
 import type { EntityManager } from 'typeorm';
 import { WorkerEntity } from '../../database/entities/worker.entity.js';
-import {
-  ZoneAccessGrantEntity,
-  ZoneAccessEffect,
-} from '../../database/entities/zone-access-grant.entity.js';
+import { ZoneAccessEffect } from '../../database/entities/zone-access-grant.entity.js';
 import { ZoneEntryDecisionEntity } from '../../database/entities/zone-entry-decision.entity.js';
 import { ZoneRestrictionPolicy } from '../../database/entities/enums.js';
 import type { ZoneAuthorizationResult } from './zone-authorization.interface.js';
@@ -46,9 +43,33 @@ export class ZoneEntryAuthorizationService {
       isActive: true,
     });
     if (!worker) return this.policy.authorizeZoneEntry({ restrictionPolicy });
+    if (!(input.candidateWorkerId ?? worker.externalId)) {
+      return this.policy.authorizeZoneEntry({ restrictionPolicy });
+    }
+    const unavailable = () =>
+      this.policy.authorizeZoneEntry(
+        { restrictionPolicy },
+        {
+          candidateWorkerId: input.candidateWorkerId ?? worker.externalId,
+          workerId: worker.id,
+          evaluatedAt: input.evaluatedAt,
+          authorizationDataAvailable: false,
+          grants: [],
+        },
+      );
+    if (!Number.isFinite(input.evaluatedAt.getTime())) return unavailable();
 
-    const permissions = await manager.query<{ validFrom: Date; validUntil: Date }[]>(
-      `SELECT wp.valid_from AS "validFrom",wp.valid_until AS "validUntil"
+    // Retained-main current-state predicate. This is not captured-time history:
+    // mutable eligibility rows do not certify their previous state at evaluatedAt.
+    let permissions: { effect: ZoneAccessEffect | 'INVALID_TIME' }[];
+    // A PostgreSQL missing-relation error aborts the caller's transaction.
+    // Isolate this compatibility read so UNAVAILABLE can still be recorded.
+    const runner = manager.queryRunner;
+    const withinTransaction = runner?.isTransactionActive ?? false;
+    if (withinTransaction) await runner!.startTransaction();
+    try {
+      permissions = await manager.query<{ effect: ZoneAccessEffect | 'INVALID_TIME' }[]>(
+        `SELECT 'ALLOW' AS effect
       FROM worker_zone_permission wp
       JOIN worker_site_zone_assignment a ON a.id=wp.worker_assignment_id
       JOIN contractor_zone_permission cp ON cp.id=wp.contractor_zone_permission_id AND cp.site_contractor_id=a.site_contractor_id
@@ -56,17 +77,19 @@ export class ZoneEntryAuthorizationService {
       JOIN contractor c ON c.id=p.contractor_id
       WHERE a.worker_id=$1 AND a.site_id=$2 AND cp.zone_id=$3 AND p.site_id=a.site_id
         AND p.contractor_id=$4 AND p.is_active AND c.is_active AND a.status='APPROVED'
-        AND a.valid_until IS NOT NULL AND a.valid_from<=$5 AND a.valid_until>$5
+        AND a.valid_until IS NOT NULL AND isfinite(a.valid_from) AND isfinite(a.valid_until)
+        AND isfinite(wp.valid_from) AND isfinite(wp.valid_until)
+        AND isfinite(cp.valid_from) AND isfinite(cp.valid_until)
+        AND isfinite(p.valid_from) AND (p.valid_until IS NULL OR isfinite(p.valid_until))
+        AND a.valid_from<=$5 AND a.valid_until>$5
         AND wp.valid_from<=$5 AND wp.valid_until>$5 AND cp.valid_from<=$5 AND cp.valid_until>$5
         AND p.valid_from<=$5 AND (p.valid_until IS NULL OR p.valid_until>$5)
         AND wp.valid_from>=a.valid_from AND wp.valid_until<=a.valid_until
         AND wp.valid_from>=cp.valid_from AND wp.valid_until<=cp.valid_until
         AND wp.valid_from>=p.valid_from AND (p.valid_until IS NULL OR wp.valid_until<=p.valid_until)
-        AND (wp.revoked_at IS NULL OR wp.revoked_at>$5) AND (cp.revoked_at IS NULL OR cp.revoked_at>$5)`,
-      [worker.id, input.siteId, input.zoneId, worker.contractorId, input.evaluatedAt],
-    );
-    const teamPermissions = await manager.query<{ validFrom: Date; validUntil: Date }[]>(
-      `SELECT tp.valid_from AS "validFrom",tp.valid_until AS "validUntil" FROM team_zone_permission tp
+        AND (wp.revoked_at IS NULL OR wp.revoked_at>$5) AND (cp.revoked_at IS NULL OR cp.revoked_at>$5)
+      UNION ALL
+      SELECT 'ALLOW' AS effect FROM team_zone_permission tp
       JOIN contractor_team t ON t.id=tp.team_id AND t.site_id=$2 AND t.contractor_id=$4 AND t.is_active
       JOIN contractor_team_membership tm ON tm.team_id=t.id AND tm.site_id=t.site_id AND tm.contractor_id=t.contractor_id AND tm.worker_id=$1 AND tm.joined_at<=$5 AND (tm.left_at IS NULL OR tm.left_at>$5)
       JOIN contractor_zone_permission cp ON cp.id=tp.contractor_zone_permission_id AND cp.zone_id=$3
@@ -78,31 +101,38 @@ export class ZoneEntryAuthorizationService {
       AND p.valid_from<=$5 AND (p.valid_until IS NULL OR p.valid_until>$5)
       AND a.valid_from<=$5 AND a.valid_until>$5
       AND tp.valid_from>=cp.valid_from AND tp.valid_until<=cp.valid_until
-      AND tp.valid_from>=p.valid_from AND (p.valid_until IS NULL OR tp.valid_until<=p.valid_until)`,
-      [worker.id, input.siteId, input.zoneId, worker.contractorId, input.evaluatedAt],
-    );
-    const grants = [...permissions, ...teamPermissions].map((p) => ({
-      effect: 'ALLOW' as const,
-      validFrom: p.validFrom,
-      validUntil: p.validUntil,
-      revokedAt: null,
-    }));
-    const denies = await manager.getRepository(ZoneAccessGrantEntity).findBy({
-      siteId: input.siteId,
-      zoneId: input.zoneId,
-      workerId: worker.id,
-      effect: ZoneAccessEffect.DENY,
-    });
-    return this.policy.authorizeZoneEntry(
-      { restrictionPolicy },
-      {
-        candidateWorkerId: input.candidateWorkerId ?? worker.externalId,
-        workerId: worker.id,
-        evaluatedAt: input.evaluatedAt,
-        authorizationDataAvailable: true,
-        grants: [...grants, ...denies],
-      },
-    );
+      AND tp.valid_from>=p.valid_from AND (p.valid_until IS NULL OR tp.valid_until<=p.valid_until)
+      UNION ALL
+      SELECT 'DENY' AS effect FROM zone_access_grant d
+      WHERE d.worker_id=$1 AND d.site_id=$2 AND d.zone_id=$3 AND d.effect='DENY'
+        AND d.valid_from<=$5 AND (d.valid_until IS NULL OR d.valid_until>$5)
+        AND (d.revoked_at IS NULL OR d.revoked_at>$5)
+      UNION ALL
+      SELECT 'INVALID_TIME' AS effect FROM zone_access_grant d
+      WHERE d.worker_id=$1 AND d.site_id=$2 AND d.zone_id=$3 AND d.effect='DENY'
+        AND (NOT isfinite(d.valid_from)
+          OR (d.valid_until IS NOT NULL AND (NOT isfinite(d.valid_until) OR d.valid_until<=d.valid_from))
+          OR (d.revoked_at IS NOT NULL AND NOT isfinite(d.revoked_at)))`,
+        [worker.id, input.siteId, input.zoneId, worker.contractorId, input.evaluatedAt],
+      );
+      if (withinTransaction) await runner!.commitTransaction();
+    } catch (error) {
+      if (withinTransaction) await runner!.rollbackTransaction();
+      // Unreconciled old schemas cannot fall back to legacy flat ALLOW grants.
+      const code = (error as { code?: string }).code;
+      if (code !== '42P01' && code !== '42703') throw error;
+      return unavailable();
+    }
+    // PostgreSQL evaluates both effects in one statement snapshot with its full
+    // timestamp precision. Do not round its interval endpoints through JS Date
+    // or fabricate timestamps for these already evaluated permission effects.
+    const effects: ZoneAccessEffect[] = [];
+    for (const { effect } of permissions) {
+      if (effect !== ZoneAccessEffect.ALLOW && effect !== ZoneAccessEffect.DENY)
+        return unavailable();
+      effects.push(effect);
+    }
+    return this.policy.authorizeActivePermissions(worker.id, effects);
   }
 
   async record(

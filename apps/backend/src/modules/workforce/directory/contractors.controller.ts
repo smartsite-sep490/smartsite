@@ -7,6 +7,7 @@ import {
   ApiForbiddenResponse,
   ApiNotFoundResponse,
   ApiOkResponse,
+  ApiServiceUnavailableResponse,
   ApiTags,
   ApiTooManyRequestsResponse,
   ApiUnauthorizedResponse,
@@ -20,6 +21,9 @@ import { UserAuthGuard } from '../../auth/user-auth.guard.js';
 import { pagination } from '../../../common/http/pagination.js';
 import { AssignContractorRepresentativeDto, CreateContractorDto } from './dto/workforce.dto.js';
 import { WorkforceConfigurationService } from './workforce-configuration.service.js';
+import { configurationCommandContext } from '../../auth/configuration-command-context.js';
+import { MainWorkforceCreateService } from '../main-workforce-create.service.js';
+import { MainRepresentativeCommandService } from '../main-representative-command.service.js';
 
 function contractorResponse(contractor: ContractorEntity, siteId: string) {
   return {
@@ -50,12 +54,18 @@ function representativeAssignmentResponse(assignment: ContractorRepresentativeAs
 @ApiNotFoundResponse({ type: ErrorResponseDto })
 @ApiConflictResponse({ type: ErrorResponseDto })
 @ApiTooManyRequestsResponse({ type: ErrorResponseDto })
+@ApiServiceUnavailableResponse({ type: ErrorResponseDto })
 @UseGuards(UserAuthGuard)
 @Controller('sites/:siteId')
 export class ContractorsController {
   private readonly logger = new Logger(ContractorsController.name);
 
-  constructor(private readonly workforce: WorkforceConfigurationService) {}
+  constructor(
+    private readonly workforce: WorkforceConfigurationService,
+    private readonly creation: MainWorkforceCreateService,
+    private readonly auth: UserAuthGuard,
+    private readonly representatives: MainRepresentativeCommandService,
+  ) {}
 
   @Post('contractors')
   @UseGuards(SiteManagerGuard)
@@ -65,7 +75,11 @@ export class ContractorsController {
     @Param('siteId') siteId: string,
     @Body() input: CreateContractorDto,
   ) {
-    const contractor = await this.workforce.createContractor(siteId, input);
+    const contractor = await this.creation.createSiteContractor(
+      siteId,
+      input,
+      configurationCommandContext(request, this.auth),
+    );
     this.logger.log({
       actorId: request.user!.id,
       action: 'contractor.create',
@@ -90,7 +104,12 @@ export class ContractorsController {
     @Param('contractorId') contractorId: string,
     @Body() input: AssignContractorRepresentativeDto,
   ) {
-    const assignment = await this.workforce.assignRepresentative(siteId, contractorId, input);
+    const assignment = await this.representatives.assign(
+      siteId,
+      contractorId,
+      input,
+      configurationCommandContext(request, this.auth),
+    );
     this.logger.log({
       actorId: request.user!.id,
       action: 'contractor.representative.assign',

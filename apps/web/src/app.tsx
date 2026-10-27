@@ -1,21 +1,18 @@
-import { translate as tr } from './i18n';
+import { lazyWithCommonCatalogs } from './i18n/lazy-common-page';
+import { workspaceTabs, defaultWorkspace } from './features/auth/workspace-access';
+import { translate as tr } from './i18n/runtime';
+import { useTranslation } from 'react-i18next';
 import React, { useState } from 'react';
 import { Routes, Route, Navigate, useNavigate, useLocation } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import {
   getBackendHealth,
+  ApiError,
   type SafetyAlertStatus,
   type SafetyAlertType,
 } from '@smartsite/api-client';
-import { AppLayout, type ActiveTab } from './components/layout/AppLayout';
-import { LiveMonitoringView } from './components/live/LiveMonitoringView';
-import { RestrictedZoneView } from './components/zones/RestrictedZoneView';
-import { PpeMonitoringView } from './components/ppe/PpeMonitoringView';
-import { DashboardView } from './components/dashboard/DashboardView';
-import { LandingPage } from './components/landing/LandingPage';
-import { SafetyAlertsView } from './components/alerts/SafetyAlertsView';
-import { AccessControlView } from './components/access/AccessControlView';
-import { VisitorRegistrationView } from './components/access/visitor/VisitorRegistrationView';
+import type { ActiveTab } from './components/layout/AppLayout';
+import { DeferredAppLayout as AppLayout } from './deferred-app-layout';
 import {
   useAuth,
   useRestoreSession,
@@ -23,19 +20,87 @@ import {
   useLogout,
   SessionExpiredModal,
 } from './features/auth/auth-session';
-import { LoginScreen } from './features/auth/LoginScreen';
-import { RegisterScreen } from './features/auth/RegisterScreen';
-import { ChangePasswordScreen } from './features/auth/ChangePasswordScreen';
-import { WorkforceView } from './components/workforce/components/WorkforceView';
-import { SiteSetupView } from './components/workforce/components/SiteSetupView';
-import { ScheduleSetupView } from './components/workforce/components/ScheduleSetupView';
-import { useTranslation } from 'react-i18next';
-import { AccountsView } from './features/accounts/AccountsView';
-import { AssignedWorkView } from './components/contractor/AssignedWorkView';
-import { ContractorDashboardView } from './components/contractor/ContractorDashboardView';
-import { WorkerOnboardingView } from './components/workforce/components/WorkerOnboardingView';
-import { WorkerDocumentsView } from './components/workforce/components/WorkerDocumentsView';
-import { workspaceTabs, defaultWorkspace } from './features/auth/workspace-access';
+import type { SharedSession } from './types/shared-session';
+import { AuthErrorNotice } from './features/auth/AuthErrorNotice';
+import { PageLoadingFallback, RouteErrorBoundary } from './route-load-boundary';
+
+// Code-split page components with React.lazy to avoid eagerly loading all views into the entry bundle.
+// Keep auth/session guards static; defer page, login, and layout implementations.
+const LandingPage = lazyWithCommonCatalogs(() =>
+  import('./components/landing/LandingPage').then((m) => ({ default: m.LandingPage })),
+);
+const LoginScreen = lazyWithCommonCatalogs(() =>
+  import('./features/auth/LoginScreen').then((m) => ({ default: m.LoginScreen })),
+);
+const RegisterScreen = lazyWithCommonCatalogs(() =>
+  import('./features/auth/RegisterScreen').then((m) => ({ default: m.RegisterScreen })),
+);
+const ChangePasswordScreen = lazyWithCommonCatalogs(() =>
+  import('./features/auth/ChangePasswordScreen').then((m) => ({ default: m.ChangePasswordScreen })),
+);
+const DashboardView = lazyWithCommonCatalogs(() =>
+  import('./components/dashboard/DashboardView').then((m) => ({ default: m.DashboardView })),
+);
+const WorkforceView = lazyWithCommonCatalogs(() =>
+  import('./components/workforce/components/WorkforceView').then((m) => ({
+    default: m.WorkforceView,
+  })),
+);
+const SiteSetupView = lazyWithCommonCatalogs(() =>
+  import('./components/workforce/components/SiteSetupView').then((m) => ({
+    default: m.SiteSetupView,
+  })),
+);
+const ScheduleSetupView = lazyWithCommonCatalogs(() =>
+  import('./components/workforce/components/ScheduleSetupView').then((m) => ({
+    default: m.ScheduleSetupView,
+  })),
+);
+const WorkerOnboardingView = lazyWithCommonCatalogs(() =>
+  import('./components/workforce/components/WorkerOnboardingView').then((m) => ({
+    default: m.WorkerOnboardingView,
+  })),
+);
+const WorkerDocumentsView = lazyWithCommonCatalogs(() =>
+  import('./components/workforce/components/WorkerDocumentsView').then((m) => ({
+    default: m.WorkerDocumentsView,
+  })),
+);
+const AccountsView = lazyWithCommonCatalogs(() =>
+  import('./features/accounts/AccountsView').then((m) => ({ default: m.AccountsView })),
+);
+const AccessControlView = lazyWithCommonCatalogs(() =>
+  import('./components/access/AccessControlView').then((m) => ({ default: m.AccessControlView })),
+);
+const VisitorRegistrationView = lazyWithCommonCatalogs(() =>
+  import('./components/access/visitor/VisitorRegistrationView').then((m) => ({
+    default: m.VisitorRegistrationView,
+  })),
+);
+const LiveMonitoringView = lazyWithCommonCatalogs(() =>
+  import('./components/live/LiveMonitoringView').then((m) => ({ default: m.LiveMonitoringView })),
+);
+const PpeMonitoringView = lazyWithCommonCatalogs(() =>
+  import('./components/ppe/PpeMonitoringView').then((m) => ({ default: m.PpeMonitoringView })),
+);
+const CameraSetupView = lazyWithCommonCatalogs(() =>
+  import('./components/cameras/CameraSetupView').then((m) => ({ default: m.CameraSetupView })),
+);
+const RestrictedZoneView = lazyWithCommonCatalogs(() =>
+  import('./components/zones/RestrictedZoneView').then((m) => ({ default: m.RestrictedZoneView })),
+);
+const SafetyAlertsView = lazyWithCommonCatalogs(() =>
+  import('./components/alerts/SafetyAlertsView').then((m) => ({ default: m.SafetyAlertsView })),
+);
+
+const ContractorDashboardView = lazyWithCommonCatalogs(() =>
+  import('./components/contractor/ContractorDashboardView').then((m) => ({
+    default: m.ContractorDashboardView,
+  })),
+);
+const AssignedWorkView = lazyWithCommonCatalogs(() =>
+  import('./components/contractor/AssignedWorkView').then((m) => ({ default: m.AssignedWorkView })),
+);
 
 const apiUrl = import.meta.env.VITE_API_URL || 'http://localhost:3000';
 
@@ -52,157 +117,271 @@ interface ProtectedRoutesProps {
   onNavigate: (tab: ActiveTab, context?: AlertsNavigationContext) => void;
 }
 
-function ProtectedRoutes({ defaultAuthTab, alertsContext, onNavigate }: ProtectedRoutesProps) {
-  const { t } = useTranslation();
-  const { accessToken } = useAuth();
-  const currentUser = useCurrentUser(apiUrl);
-  const profile = currentUser;
-  const logout = useLogout(apiUrl);
-  const location = useLocation();
-  const navigate = useNavigate();
-  const incidentLink = new URLSearchParams(location.search);
+function profileRecoveryMessage(error: unknown): string {
+  if (error instanceof ApiError) {
+    if (error.status === 401) {
+      return tr('safety_alert_evidence_utils.your_session_is_no_longer_valid_sign_in_again');
+    }
+    if (error.status === 403) {
+      return tr('app.profile_recovery.forbidden');
+    }
+    if (error.code === 'network') {
+      return tr('app.profile_recovery.network');
+    }
+    if (error.code === 'timeout') return tr('app.profile_recovery.timeout');
+    if (error.status === 503) return tr('app.profile_recovery.unavailable');
+    if (error.code === 'invalid-response') return tr('app.profile_recovery.invalid_response');
+  }
+  return tr('app.profile_recovery.default');
+}
 
+function ProtectedRoutes({ defaultAuthTab, alertsContext, onNavigate }: ProtectedRoutesProps) {
+  useTranslation();
+  const navigate = useNavigate();
+
+  const location = useLocation();
+  const incidentLink = new URLSearchParams(location.search);
+  const { accessToken, sessionScope: providerScope } = useAuth();
+  const {
+    data: currentUser,
+    isPending: isUserPending,
+    isFetching: isUserFetching,
+    isError: isUserError,
+    error: userError,
+    refetch: refetchUser,
+  } = useCurrentUser(apiUrl);
+  const logoutMutation = useLogout(apiUrl);
+
+  const handleSignOut = React.useCallback(() => {
+    logoutMutation.mutate();
+  }, [logoutMutation]);
+
+  const sharedSession = React.useMemo<SharedSession | null>(() => {
+    if (!accessToken || !currentUser || !providerScope || isUserError) return null;
+    return {
+      accessToken,
+      user: {
+        id: currentUser.id,
+        displayName: currentUser.displayName,
+        roleAssignments: currentUser.roleAssignments,
+        username: currentUser.username,
+        mustChangePassword: currentUser.mustChangePassword,
+      },
+      sessionScope: providerScope,
+      onSignOut: handleSignOut,
+    };
+  }, [accessToken, currentUser, providerScope, handleSignOut, isUserError]);
+
+  // Auth gate remains outside AppLayout and Suspense; unauthenticated sessions fail closed
   if (!accessToken) {
     return <Navigate to="/login" replace />;
   }
 
-  if (currentUser.isPending) {
+  // A failed background refetch keeps cached profile data in TanStack Query.
+  // Do not use that stale profile to reopen operational pages before recovery.
+  if (isUserError) {
+    const profileDenied =
+      userError instanceof ApiError && (userError.status === 401 || userError.status === 403);
     return (
-      <main className="min-h-screen flex items-center justify-center" role="status">
-        {t('auth.loadingAccount')}
-      </main>
+      <AppLayout onSelectTab={onNavigate} onLoadSignOut={handleSignOut}>
+        <div
+          role="alert"
+          className="mx-auto max-w-lg rounded-2xl border border-slate-200/80 bg-white p-7 text-center shadow-sm"
+        >
+          <p className="text-xs font-bold uppercase tracking-widest text-[#9F2F2D]">
+            {tr('common.error')}
+          </p>
+          <h2 className="mt-2 text-xl font-bold text-slate-900">
+            {tr('workforce_view.could_not_load_user_profile')}
+          </h2>
+          <p className="mt-2 text-sm text-slate-500">{profileRecoveryMessage(userError)}</p>
+          <div className="mt-6 flex justify-center gap-3">
+            <button
+              type="button"
+              disabled={profileDenied || isUserFetching}
+              onClick={() => {
+                if (!profileDenied && !isUserFetching) void refetchUser();
+              }}
+              className="rounded-xl bg-[#0F172A] px-4 py-2 text-sm font-semibold text-white hover:bg-slate-800 transition-colors cursor-pointer shadow-xs disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              {isUserFetching ? tr('app.profile_recovery.retrying') : tr('common.retry')}
+            </button>
+            <button
+              type="button"
+              onClick={handleSignOut}
+              className="rounded-xl border border-slate-200 px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50 transition-colors cursor-pointer shadow-xs"
+            >
+              {tr('common.sign_out')}
+            </button>
+          </div>
+        </div>
+      </AppLayout>
     );
   }
-  if (currentUser.isError) {
+
+  if (isUserPending || !currentUser) {
     return (
-      <main className="min-h-screen flex flex-col items-center justify-center gap-4">
-        <p role="alert">{t('auth.loadAccountError')}</p>
-        <button type="button" onClick={() => currentUser.refetch()}>
-          {t('accounts.retry')}
-        </button>
-      </main>
+      <AppLayout onSelectTab={onNavigate} onLoadSignOut={handleSignOut}>
+        <div
+          role="status"
+          aria-label={tr('common.loading_your_account_8fa5b7')}
+          aria-live="polite"
+          className="flex h-96 flex-col items-center justify-center gap-3"
+        >
+          <div className="w-8 h-8 rounded-full border-2 border-[#0F172A] border-t-transparent animate-spin" />
+          <span className="text-xs font-medium text-slate-500">
+            {tr('common.loading_your_account_8fa5b7')}
+          </span>
+        </div>
+      </AppLayout>
     );
   }
-  const allowedTabs = workspaceTabs(currentUser.data?.roleAssignments ?? []);
-  const fallback = defaultWorkspace(currentUser.data?.roleAssignments ?? []);
+
+  const allowedTabs = workspaceTabs(currentUser.roleAssignments ?? []);
   if (allowedTabs.length === 0) {
     return (
       <main className="p-8" role="status">
-        {t('auth.noAssignedRoles')}
-        <button type="button" className="ml-4 underline" onClick={() => logout.mutate()}>
-          {t('shell.signOut')}
+        {tr('auth.noAssignedRoles')}
+        <button type="button" className="ml-4 underline" onClick={handleSignOut}>
+          {tr('shell.signOut')}
         </button>
       </main>
     );
   }
   if (
     location.pathname !== '/account/password' &&
-    !allowedTabs.includes(location.pathname.slice(1))
+    !allowedTabs.includes(location.pathname.replace(/^\//, '').replace(/\/$/, ''))
   ) {
-    return <Navigate to={`/${fallback}`} replace />;
+    return <Navigate to={`/${defaultWorkspace(currentUser.roleAssignments ?? [])}`} replace />;
   }
 
+  const openCameraSetup = (context?: { siteId: string; cameraId?: string }) => {
+    const params = new URLSearchParams(context ? { siteId: context.siteId } : {});
+    if (context?.cameraId) params.set('cameraId', context.cameraId);
+    navigate(params.size ? `/camera-setup?${params}` : '/camera-setup');
+  };
+
   return (
-    <AppLayout onSelectTab={onNavigate}>
-      <Routes>
-        <Route
-          path="/account/password"
-          element={
-            <ChangePasswordScreen
-              apiUrl={apiUrl}
-              onCancel={() => navigate(`/${fallback}`)}
-              onComplete={() =>
-                navigate('/login', { state: { passwordChanged: true }, replace: true })
+    <AppLayout onSelectTab={onNavigate} onLoadSignOut={handleSignOut}>
+      <RouteErrorBoundary key={location.pathname}>
+        <React.Suspense fallback={<PageLoadingFallback />}>
+          <Routes>
+            <Route path="/" element={<Navigate to={`/${defaultAuthTab}`} replace />} />
+            <Route
+              path="/dashboard"
+              element={
+                defaultAuthTab === 'incidents' ? (
+                  <Navigate to="/incidents" replace />
+                ) : defaultAuthTab === 'workforce' ? (
+                  <Navigate to="/workforce" replace />
+                ) : (
+                  <DashboardView
+                    apiUrl={apiUrl}
+                    onNavigate={(tab, context) => onNavigate(tab, context)}
+                  />
+                )
               }
             />
-          }
-        />
-        <Route path="/" element={<Navigate to={`/${defaultAuthTab}`} replace />} />
-        <Route
-          path="/dashboard"
-          element={
-            defaultAuthTab === 'incidents' ? (
-              <Navigate to="/incidents" replace />
-            ) : defaultAuthTab === 'workforce' ? (
-              <Navigate to="/workforce" replace />
-            ) : (
-              <DashboardView onNavigate={(tab) => onNavigate(tab)} />
-            )
-          }
-        />
-        <Route path="/workforce" element={<WorkforceView apiUrl={apiUrl} />} />
-        <Route path="/site-setup" element={<SiteSetupView apiUrl={apiUrl} />} />
-        <Route path="/accounts" element={<AccountsView apiUrl={apiUrl} />} />
-        <Route
-          path="/assigned-work"
-          element={
-            <AssignedWorkView apiUrl={apiUrl} token={accessToken} user={currentUser.data!} />
-          }
-        />
-        <Route
-          path="/contractor-teams"
-          element={<ContractorDashboardView apiUrl={apiUrl} onNavigate={onNavigate} />}
-        />
-        <Route path="/worker-onboarding" element={<WorkerOnboardingView apiUrl={apiUrl} />} />
-        <Route path="/worker-documents" element={<WorkerDocumentsView apiUrl={apiUrl} />} />
-        <Route path="/schedule-setup" element={<ScheduleSetupView apiUrl={apiUrl} />} />
-        <Route path="/access" element={<AccessControlView apiUrl={apiUrl} />} />
-        <Route
-          path="/live-monitoring"
-          element={<LiveMonitoringView onNavigate={(tab) => onNavigate(tab)} />}
-        />
-        <Route
-          path="/ppe"
-          element={<PpeMonitoringView onNavigate={(tab, context) => onNavigate(tab, context)} />}
-        />
-        <Route
-          path="/zones"
-          element={
-            <RestrictedZoneView
-              authenticatedSession={{ accessToken, user: currentUser.data! }}
-              onSignOut={() => logout.mutate()}
-              apiUrl={apiUrl}
-              onNavigate={(tab, context) => onNavigate(tab, context)}
+            <Route
+              path="/account/password"
+              element={
+                <ChangePasswordScreen
+                  apiUrl={apiUrl}
+                  onCancel={() => navigate(`/${defaultAuthTab}`)}
+                  onComplete={() =>
+                    navigate('/login', { state: { passwordChanged: true }, replace: true })
+                  }
+                />
+              }
             />
-          }
-        />
-        <Route
-          path="/incidents"
-          element={
-            profile.data ? (
-              <SafetyAlertsView
-                key={
-                  profile.data.id +
-                  JSON.stringify(alertsContext ?? {}) +
-                  (incidentLink.has('alertId') ? location.search : '')
-                }
-                authenticatedSession={{ accessToken, user: profile.data }}
-                onSignOut={() => logout.mutate()}
-                apiUrl={apiUrl}
-                initialSiteId={incidentLink.get('siteId') ?? alertsContext?.siteId}
-                initialIncidentId={incidentLink.get('incidentId') ?? undefined}
-                initialActionId={incidentLink.get('actionId') ?? undefined}
-                initialDocumentWorkerId={
-                  incidentLink.get('tab') === 'documents'
-                    ? (incidentLink.get('workerId') ?? undefined)
-                    : undefined
-                }
-                initialAlertId={incidentLink.get('alertId') ?? alertsContext?.alertId}
-                initialStatus={incidentLink.has('alertId') ? undefined : alertsContext?.status}
-                initialType={incidentLink.has('alertId') ? undefined : alertsContext?.alertType}
-              />
-            ) : profile.isError ? (
-              <div role="alert">
-                {t('auth.loadAccountError')}{' '}
-                <button onClick={() => void profile.refetch()}>{t('accounts.retry')}</button>
-              </div>
-            ) : (
-              <p role="status">{t('auth.loadingAccount')}</p>
-            )
-          }
-        />
-        <Route path="*" element={<Navigate to={`/${defaultAuthTab}`} replace />} />
-      </Routes>
+            <Route
+              path="/contractor-teams"
+              element={<ContractorDashboardView apiUrl={apiUrl} onNavigate={onNavigate} />}
+            />
+            <Route
+              path="/assigned-work"
+              element={<AssignedWorkView apiUrl={apiUrl} token={accessToken!} user={currentUser} />}
+            />
+            <Route path="/workforce" element={<WorkforceView apiUrl={apiUrl} />} />
+            <Route path="/worker-onboarding" element={<WorkerOnboardingView apiUrl={apiUrl} />} />
+            <Route path="/worker-documents" element={<WorkerDocumentsView apiUrl={apiUrl} />} />
+            <Route path="/accounts" element={<AccountsView apiUrl={apiUrl} />} />
+            <Route path="/site-setup" element={<SiteSetupView apiUrl={apiUrl} />} />
+            <Route path="/schedule-setup" element={<ScheduleSetupView apiUrl={apiUrl} />} />
+            <Route path="/access" element={<AccessControlView apiUrl={apiUrl} />} />
+            <Route
+              path="/live-monitoring"
+              element={
+                <LiveMonitoringView
+                  onNavigate={(tab) => onNavigate(tab)}
+                  canOpenCameraSetup={allowedTabs.includes('camera-setup')}
+                />
+              }
+            />
+            <Route
+              path="/camera-setup"
+              element={<CameraSetupView apiUrl={apiUrl} sharedSession={sharedSession} />}
+            />
+            <Route
+              path="/ppe"
+              element={
+                <PpeMonitoringView
+                  key={location.search}
+                  apiUrl={apiUrl}
+                  sharedSession={sharedSession}
+                  initialSelection={{
+                    siteId: new URLSearchParams(location.search).get('siteId') ?? undefined,
+                    cameraId: new URLSearchParams(location.search).get('cameraId') ?? undefined,
+                  }}
+                  onOpenSetup={openCameraSetup}
+                  onNavigate={(tab, context) => onNavigate(tab, context)}
+                />
+              }
+            />
+            <Route
+              path="/zones"
+              element={
+                <RestrictedZoneView
+                  key={location.search}
+                  apiUrl={apiUrl}
+                  sharedSession={sharedSession}
+                  initialSelection={{
+                    siteId: new URLSearchParams(location.search).get('siteId') ?? undefined,
+                    cameraId: new URLSearchParams(location.search).get('cameraId') ?? undefined,
+                  }}
+                  onOpenSetup={openCameraSetup}
+                  onNavigate={(tab, context) => onNavigate(tab, context)}
+                />
+              }
+            />
+            <Route
+              path="/incidents"
+              element={
+                <SafetyAlertsView
+                  key={`${currentUser.id}:${JSON.stringify(alertsContext ?? {})}${incidentLink.has('alertId') ? location.search : ''}`}
+                  apiUrl={apiUrl}
+                  sharedSession={sharedSession}
+                  authenticatedSession={{ accessToken, user: currentUser }}
+                  onSignOut={handleSignOut}
+                  initialSiteId={incidentLink.get('siteId') ?? alertsContext?.siteId}
+                  initialIncidentId={incidentLink.get('incidentId') ?? undefined}
+                  initialChecklistId={incidentLink.get('checklistId') ?? undefined}
+                  initialActionId={incidentLink.get('actionId') ?? undefined}
+                  initialDocumentWorkerId={
+                    incidentLink.get('tab') === 'documents'
+                      ? (incidentLink.get('workerId') ?? undefined)
+                      : undefined
+                  }
+                  initialAlertId={incidentLink.get('alertId') ?? alertsContext?.alertId}
+                  initialStatus={incidentLink.has('alertId') ? undefined : alertsContext?.status}
+                  initialType={incidentLink.has('alertId') ? undefined : alertsContext?.alertType}
+                />
+              }
+            />
+            <Route path="*" element={<Navigate to={`/${defaultAuthTab}`} replace />} />
+          </Routes>
+        </React.Suspense>
+      </RouteErrorBoundary>
     </AppLayout>
   );
 }
@@ -214,7 +393,13 @@ function PublicOnlyRoute({
   children: React.ReactNode;
   defaultAuthTab: string;
 }) {
+  useTranslation();
+
   const { accessToken } = useAuth();
+  const profile = useCurrentUser(apiUrl);
+  if (accessToken && profile.isPending) {
+    return <PageLoadingFallback />;
+  }
   if (accessToken) {
     return <Navigate to={`/${defaultAuthTab}`} replace />;
   }
@@ -222,18 +407,25 @@ function PublicOnlyRoute({
 }
 
 export function App() {
-  const { t } = useTranslation();
+  useTranslation();
+
   const navigate = useNavigate();
-  const { accessToken, isSessionExpired, dismissSessionExpired } = useAuth();
-  const sessionRestore = useRestoreSession(apiUrl);
-  const { isLoading: isRestoringSession } = sessionRestore;
-  const currentUserQuery = useCurrentUser(apiUrl);
-  const currentUser = currentUserQuery.data;
+  const location = useLocation();
+  const {
+    accessToken,
+    isSessionExpired,
+    dismissSessionExpired,
+    logoutUnconfirmed,
+    passwordChanged,
+  } = useAuth();
+  const restoringSession = useRestoreSession(apiUrl);
+  const isRestoringSession = restoringSession.isLoading;
+  const { data: currentUser } = useCurrentUser(apiUrl);
 
   const defaultAuthTab = defaultWorkspace(currentUser?.roleAssignments ?? []);
   const [alertsContext, setAlertsContext] = useState<AlertsNavigationContext | undefined>();
 
-  // Backend live health check
+  // Backend live health check (locale-invariant queryKey)
   useQuery({
     queryKey: ['backend', apiUrl, 'health'],
     queryFn: ({ signal }) => getBackendHealth(apiUrl, { signal }),
@@ -246,11 +438,12 @@ export function App() {
     navigate(`/${tab}`);
   };
 
-  if (isRestoringSession || (accessToken && !currentUser && !currentUserQuery.isError)) {
+  if (isRestoringSession) {
     return (
       <div
         role="status"
         aria-label={tr('common.loading_account_permissions')}
+        aria-live="polite"
         className="min-h-screen bg-[#041D2E] flex items-center justify-center"
       >
         <div className="w-8 h-8 rounded-full border-2 border-[#F66B17] border-t-transparent animate-spin" />
@@ -258,39 +451,22 @@ export function App() {
     );
   }
 
-  if (!accessToken && sessionRestore.isError) {
+  if (restoringSession.isError && !accessToken) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-slate-50 p-6">
-        <div role="alert" className="space-y-4 rounded-xl border border-slate-200 bg-white p-6 text-center">
-          <h1 className="text-lg font-bold text-slate-900">{t('auth.restoreError')}</h1>
-          <p className="text-sm text-slate-600">{t('auth.restoreErrorDesc')}</p>
-          <button type="button" onClick={() => void sessionRestore.refetch()} className="rounded-lg bg-[#071A2B] px-4 py-2 text-sm font-semibold text-white focus-visible:outline-2 focus-visible:outline-blue-600">
-            {t('accounts.retry')}
-          </button>
-        </div>
-      </div>
-    );
-  }
-
-  if (accessToken && currentUserQuery.isError) {
-    return (
-      <div className="min-h-screen flex items-center justify-center bg-slate-50 p-6">
-        <div
-          role="alert"
-          className="space-y-4 rounded-xl border border-slate-200 bg-white p-6 text-center"
-        >
-          <h1 className="text-lg font-bold text-slate-900">{t('auth.loadAccountError')}</h1>
-          <p className="text-sm text-slate-600">{t('auth.loadAccountErrorDesc')}</p>
+      <main className="min-h-screen flex items-center justify-center bg-slate-50 p-6">
+        <section role="alert" className="max-w-md space-y-4 rounded-xl border bg-white p-6">
+          <h1 className="font-bold">{tr('auth.session.restore')}</h1>
+          <AuthErrorNotice error={restoringSession.error} />
           <button
             type="button"
-            disabled={currentUserQuery.isFetching}
-            onClick={() => void currentUserQuery.refetch()}
-            className="rounded-lg bg-[#071A2B] px-4 py-2 text-sm font-semibold text-white disabled:opacity-50 focus-visible:outline-2 focus-visible:outline-blue-600"
+            disabled={restoringSession.isFetching}
+            onClick={() => void restoringSession.refetch()}
+            className="rounded-lg bg-[#071A2B] text-white px-4 py-2"
           >
-            {t('accounts.retry')}
+            {tr('common.retry')}
           </button>
-        </div>
-      </div>
+        </section>
+      </main>
     );
   }
 
@@ -300,15 +476,19 @@ export function App() {
         <Route
           path="/"
           element={
-            <LandingPage
-              onEnterApp={(tab) => {
-                if (accessToken) {
-                  navigate(tab ? `/${tab}` : `/${defaultAuthTab}`);
-                } else {
-                  navigate('/login');
-                }
-              }}
-            />
+            <RouteErrorBoundary key={location.pathname}>
+              <React.Suspense fallback={<PageLoadingFallback />}>
+                <LandingPage
+                  onEnterApp={(tab) => {
+                    if (accessToken) {
+                      navigate(tab ? `/${tab}` : `/${defaultAuthTab}`);
+                    } else {
+                      navigate('/login');
+                    }
+                  }}
+                />
+              </React.Suspense>
+            </RouteErrorBoundary>
           }
         />
 
@@ -316,29 +496,52 @@ export function App() {
           path="/login"
           element={
             <PublicOnlyRoute defaultAuthTab={defaultAuthTab}>
-              <LoginScreen
-                onBack={() => navigate('/')}
-                onNavigateToRegister={() => navigate('/register')}
-              />
+              <RouteErrorBoundary key={location.pathname}>
+                <React.Suspense fallback={<PageLoadingFallback />}>
+                  <LoginScreen
+                    notice={
+                      logoutUnconfirmed
+                        ? tr('auth.session.logoutWarning')
+                        : passwordChanged || location.state?.passwordChanged
+                          ? tr('auth.password.success')
+                          : undefined
+                    }
+                    onBack={() => navigate('/')}
+                    onNavigateToRegister={() => navigate('/register')}
+                  />
+                </React.Suspense>
+              </RouteErrorBoundary>
             </PublicOnlyRoute>
           }
         />
+
         <Route
           path="/visits/register"
-          element={<VisitorRegistrationView apiUrl={apiUrl} onBack={() => navigate('/login')} />}
+          element={
+            <RouteErrorBoundary key={location.pathname}>
+              <React.Suspense fallback={<PageLoadingFallback />}>
+                <VisitorRegistrationView apiUrl={apiUrl} onBack={() => navigate('/login')} />
+              </React.Suspense>
+            </RouteErrorBoundary>
+          }
         />
 
         <Route
           path="/register"
           element={
             <PublicOnlyRoute defaultAuthTab={defaultAuthTab}>
-              <RegisterScreen
-                onBackToLogin={() => navigate('/login')}
-                onBackToSite={() => navigate('/')}
-              />
+              <RouteErrorBoundary key={location.pathname}>
+                <React.Suspense fallback={<PageLoadingFallback />}>
+                  <RegisterScreen
+                    onBackToLogin={() => navigate('/login')}
+                    onBackToSite={() => navigate('/')}
+                  />
+                </React.Suspense>
+              </RouteErrorBoundary>
             </PublicOnlyRoute>
           }
         />
+
         <Route
           path="/*"
           element={

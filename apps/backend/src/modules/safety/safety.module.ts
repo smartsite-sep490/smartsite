@@ -15,6 +15,8 @@ import { ZonesModule } from '../zones/zones.module.js';
 import { AlertCandidateEvaluator } from './alerts/alert-candidate-evaluator.js';
 import { DurableGroupingService } from './alerts/durable-grouping.service.js';
 import { SafetyAlertQueryService } from './alerts/safety-alert-query.service.js';
+import { SafetyObservationFindingsService } from './alerts/safety-observation-findings.service.js';
+import { SafetyObservationFindingsController } from './alerts/safety-observation-findings.controller.js';
 import { SafetyAlertsController } from './alerts/safety-alerts.controller.js';
 import { SafetyAlertAccessGuard } from './alerts/safety-alert-access.guard.js';
 import { SafetyAlertReviewService } from './alerts/safety-alert-review.service.js';
@@ -31,6 +33,12 @@ import {
 } from './identity/worker-reference.port.js';
 import { DataSource } from 'typeorm';
 import { ZoneAccessManagementService } from '../zones/zone-access-management.service.js';
+import { Mf06IngestionEnqueueService } from './assessments/mf06-ingestion-enqueue.service.js';
+import { Mf06AssessmentQueryService } from './assessments/mf06-assessment-query.service.js';
+import { Mf06AssessmentsController } from './assessments/mf06-assessments.controller.js';
+import { Mf06RequestStatusQueryService } from './assessments/mf06-request-status-query.service.js';
+import { Mf06RequestStatusesController } from './assessments/mf06-request-statuses.controller.js';
+import { Mf06AssessmentWorkerRuntime } from './assessments/mf06-assessment-worker-runtime.service.js';
 
 @Module({
   imports: [
@@ -46,7 +54,10 @@ import { ZoneAccessManagementService } from '../zones/zone-access-management.ser
     SafetyChecklistController,
     SafetyOverviewController,
     SafetyAlertsController,
+    SafetyObservationFindingsController,
     ObservationIdentityController,
+    Mf06AssessmentsController,
+    Mf06RequestStatusesController,
     SafetyWorkflowController,
   ],
   providers: [
@@ -55,13 +66,21 @@ import { ZoneAccessManagementService } from '../zones/zone-access-management.ser
     SafetyWorkflowService,
     SafetyUploadService,
     AlertCandidateEvaluator,
+    Mf06IngestionEnqueueService,
+    Mf06AssessmentQueryService,
+    Mf06RequestStatusQueryService,
+    Mf06AssessmentWorkerRuntime,
     DurableGroupingService,
     SafetyAlertQueryService,
+    SafetyObservationFindingsService,
     SafetyAlertReviewService,
     SafetyAlertEvidenceService,
     SafetyAlertAccessGuard,
     ObservationIdentityAccessGuard,
-    { provide: WORKER_REFERENCE_READER, useExisting: WorkforceConfigurationService },
+    {
+      provide: WORKER_REFERENCE_READER,
+      useExisting: WorkforceConfigurationService,
+    },
     {
       provide: ObservationIdentityResolutionService,
       inject: [DataSource, SafetyAlertEvidenceService, WORKER_REFERENCE_READER],
@@ -87,6 +106,6 @@ import { ZoneAccessManagementService } from '../zones/zone-access-management.ser
       ) => new ObservationIdentityContextService(resolutions, evidence, zones, workers),
     },
   ],
-  exports: [AlertCandidateEvaluator, DurableGroupingService],
+  exports: [AlertCandidateEvaluator, DurableGroupingService, Mf06IngestionEnqueueService],
 })
 export class SafetyModule {}

@@ -1,5 +1,12 @@
 import { randomUUID } from 'node:crypto';
+import { authorizeMainSiteManager } from '../../common/configuration/main-site-manager-authority.js';
 import { Injectable } from '@nestjs/common';
+import { PPE_ITEMS } from '@smartsite/contracts';
+import {
+  executeMainConfigurationCommand,
+  executeMainMetadataMutation,
+  type MainConfigurationCommandContext,
+} from '../../common/configuration/main-configuration-authority.js';
 import { Transform } from 'class-transformer';
 import {
   ArrayUnique,
@@ -12,7 +19,7 @@ import {
   Matches,
   MaxLength,
 } from 'class-validator';
-import { DataSource, type EntityManager } from 'typeorm';
+import { DataSource, In, type EntityManager } from 'typeorm';
 import {
   command,
   conflict,
@@ -24,6 +31,8 @@ import {
 import { ZoneRestrictionPolicy, ZoneType } from '../../database/entities/enums.js';
 import { ZoneEntity } from '../../database/entities/zone.entity.js';
 import { SiteConfigurationService } from '../sites/site-configuration.service.js';
+import { appendZonePolicyRevision } from './zone-policy-revisions.js';
+import { ZonePolicyRevisionEntity } from '../../database/entities/zone-policy-revision.entity.js';
 
 const trim = ({ value }: { value: unknown }) => (typeof value === 'string' ? value.trim() : value);
 
@@ -47,7 +56,7 @@ export class CreateZoneCommand {
   restrictionPolicy!: ZoneRestrictionPolicy;
   @IsArray()
   @ArrayUnique()
-  @IsIn(['HARD_HAT', 'SAFETY_VEST'], { each: true })
+  @IsIn(PPE_ITEMS, { each: true })
   requiredPpe!: string[];
 }
 
@@ -67,7 +76,7 @@ export class UpdateZonePolicyCommand {
   restrictionPolicy!: ZoneRestrictionPolicy;
   @IsArray()
   @ArrayUnique()
-  @IsIn(['HARD_HAT', 'SAFETY_VEST'], { each: true })
+  @IsIn(PPE_ITEMS, { each: true })
   requiredPpe!: string[];
 }
 
@@ -78,18 +87,35 @@ export class ZoneConfigurationService {
     private readonly sites: SiteConfigurationService,
   ) {}
 
-  async create(siteId: string, input: CreateZoneCommand): Promise<ZoneEntity> {
+  async create(
+    siteId: string,
+    input: CreateZoneCommand,
+    context?: MainConfigurationCommandContext,
+  ): Promise<ZoneEntity> {
     const value = command(CreateZoneCommand, input);
     await this.sites.get(siteId);
     try {
-      return await this.dataSource.getRepository(ZoneEntity).save({
-        id: randomUUID(),
-        siteId,
-        ...value,
-        code: value.code ?? `ZONE-${randomUUID().toUpperCase()}`,
-        requiredPpe: [...value.requiredPpe].sort(),
-        configurationLocked: false,
-      });
+      return await executeMainConfigurationCommand(
+        this.dataSource,
+        context,
+        'ZONE_CREATE',
+        { siteId, value },
+        async (manager) => {
+          const zone = await manager.getRepository(ZoneEntity).save({
+            id: randomUUID(),
+            siteId,
+            ...value,
+            code: value.code ?? `ZONE-${randomUUID().toUpperCase()}`,
+            requiredPpe: [...value.requiredPpe].sort(),
+            configurationLocked: false,
+          });
+          await appendZonePolicyRevision(manager, zone, true);
+          return zone;
+        },
+        context
+          ? (manager) => authorizeMainSiteManager(manager, context.actorUserId, siteId)
+          : undefined,
+      );
     } catch (error) {
       knownUnique(error, ['uq_zone_site_code']);
     }
@@ -101,6 +127,17 @@ export class ZoneConfigurationService {
       (await this.dataSource.getRepository(ZoneEntity).findOneBy({ siteId, id: zoneId }))?.name ??
       null
     );
+  }
+  async observationReferences(manager: EntityManager, siteId: string, zoneIds: string[]) {
+    uuid(siteId);
+    if (zoneIds.length > 64) conflict('Too many observation Zone references');
+    if (zoneIds.length === 0) return [];
+    zoneIds.forEach(uuid);
+    return manager.getRepository(ZoneEntity).find({
+      where: { siteId, id: In(zoneIds) },
+      select: { id: true, code: true, name: true },
+      order: { id: 'ASC' },
+    });
   }
   async get(siteId: string, zoneId: string): Promise<ZoneEntity> {
     const zone = await this.dataSource
@@ -125,48 +162,76 @@ export class ZoneConfigurationService {
     return { items, total };
   }
 
-  async rename(siteId: string, zoneId: string, input: RenameZoneCommand): Promise<ZoneEntity> {
+  async rename(
+    siteId: string,
+    zoneId: string,
+    input: RenameZoneCommand,
+    context?: MainConfigurationCommandContext,
+  ): Promise<ZoneEntity> {
     const value = command(RenameZoneCommand, input);
-    const zone = await this.get(siteId, zoneId);
-    if (zone.name === value.name) return zone;
-    await this.dataSource
-      .getRepository(ZoneEntity)
-      .update({ id: zone.id, siteId }, { name: value.name });
-    zone.name = value.name;
-    return zone;
+    return executeMainMetadataMutation(
+      this.dataSource,
+      context,
+      async (manager) => {
+        const repository = manager.getRepository(ZoneEntity);
+        const zone = await repository.findOne({
+          where: { id: uuid(zoneId), siteId: uuid(siteId) },
+          lock: { mode: 'pessimistic_write' },
+        });
+        if (!zone) return missing();
+        if (zone.name === value.name) return zone;
+        await repository.update({ id: zone.id, siteId: zone.siteId }, { name: value.name });
+        zone.name = value.name;
+        return zone;
+      },
+      context
+        ? (manager) => authorizeMainSiteManager(manager, context.actorUserId, siteId)
+        : undefined,
+    );
   }
 
   async updatePolicy(
     siteId: string,
     zoneId: string,
     input: UpdateZonePolicyCommand,
+    context?: MainConfigurationCommandContext,
   ): Promise<ZoneEntity> {
     const value = command(UpdateZonePolicyCommand, input);
     uuid(siteId);
     uuid(zoneId);
-    return await this.dataSource.transaction(async (manager) => {
-      const zone = await this.lockForRegion(manager, siteId, zoneId);
-      const requiredPpe = [...value.requiredPpe].sort();
-      if (
-        zone.type === value.type &&
-        zone.restrictionPolicy === value.restrictionPolicy &&
-        JSON.stringify([...zone.requiredPpe].sort()) === JSON.stringify(requiredPpe)
-      )
+    return await executeMainConfigurationCommand(
+      this.dataSource,
+      context,
+      'ZONE_POLICY_UPDATE',
+      { siteId, zoneId, value },
+      async (manager) => {
+        const zone = await this.lockForRegion(manager, siteId, zoneId);
+        const requiredPpe = [...value.requiredPpe].sort();
+        if (
+          zone.type === value.type &&
+          zone.restrictionPolicy === value.restrictionPolicy &&
+          JSON.stringify([...zone.requiredPpe].sort()) === JSON.stringify(requiredPpe)
+        )
+          return zone;
+        if (zone.configurationLocked) conflict('Zone policy is locked after a region is linked');
+        await manager.getRepository(ZoneEntity).update(
+          { id: zone.id },
+          {
+            type: value.type,
+            restrictionPolicy: value.restrictionPolicy,
+            requiredPpe,
+          },
+        );
+        zone.type = value.type;
+        zone.restrictionPolicy = value.restrictionPolicy;
+        zone.requiredPpe = requiredPpe;
+        await appendZonePolicyRevision(manager, zone);
         return zone;
-      if (zone.configurationLocked) conflict('Zone policy is locked after a region is linked');
-      await manager.getRepository(ZoneEntity).update(
-        { id: zone.id },
-        {
-          type: value.type,
-          restrictionPolicy: value.restrictionPolicy,
-          requiredPpe,
-        },
-      );
-      zone.type = value.type;
-      zone.restrictionPolicy = value.restrictionPolicy;
-      zone.requiredPpe = requiredPpe;
-      return zone;
-    });
+      },
+      context
+        ? (manager) => authorizeMainSiteManager(manager, context.actorUserId, siteId)
+        : undefined,
+    );
   }
 
   async lockForRegion(manager: EntityManager, siteId: string, zoneId: string): Promise<ZoneEntity> {
@@ -186,5 +251,25 @@ export class ZoneConfigurationService {
     if (zone.configurationLocked) return;
     await manager.getRepository(ZoneEntity).update({ id: zone.id }, { configurationLocked: true });
     zone.configurationLocked = true;
+  }
+
+  /** Configuration issuance uses persisted current policy, never a fabricated historical binding. */
+  async configurationPolicy(manager: EntityManager, siteId: string, zoneId: string) {
+    const zone = await manager.getRepository(ZoneEntity).findOneBy({ id: zoneId, siteId });
+    // Linked policy is permanently locked; do not introduce cross-camera Zone lock cycles.
+    if (!zone?.configurationLocked) conflict('Zone policy history is unavailable');
+    const policy = await manager.getRepository(ZonePolicyRevisionEntity).findOne({
+      where: { zoneId: zone.id, siteId },
+      order: { policyRevision: 'DESC' },
+    });
+    if (
+      !policy ||
+      policy.zoneType !== zone.type ||
+      policy.restrictionPolicy !== zone.restrictionPolicy ||
+      JSON.stringify([...policy.requiredPpe].sort()) !==
+        JSON.stringify([...zone.requiredPpe].sort())
+    )
+      conflict('Zone policy history is unavailable');
+    return policy;
   }
 }

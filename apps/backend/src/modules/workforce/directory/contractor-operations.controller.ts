@@ -14,8 +14,11 @@ import {
 import { ErrorResponseDto } from '../../../common/http/error-response.dto.js';
 import type { AuthenticatedRequest } from '../../auth/auth.service.js';
 import { AdminGuard, UserAuthGuard } from '../../auth/user-auth.guard.js';
+import { configurationCommandContext } from '../../auth/configuration-command-context.js';
+import { MainParticipationCommandService } from '../../zones/main-participation-command.service.js';
+import { MainWorkforceCreateService } from '../main-workforce-create.service.js';
+import { MainRepresentativeCommandService } from '../main-representative-command.service.js';
 import {
-  ContractorOperationsService,
   CreateContractorParticipationCommand,
   CreateContractorWorkerCommand,
   GrantContractorRepresentativeCommand,
@@ -35,7 +38,12 @@ import {
 export class ContractorOperationsController {
   private readonly logger = new Logger(ContractorOperationsController.name);
 
-  constructor(private readonly contractors: ContractorOperationsService) {}
+  constructor(
+    private readonly representatives: MainRepresentativeCommandService,
+    private readonly participations: MainParticipationCommandService,
+    private readonly auth: UserAuthGuard,
+    private readonly creation: MainWorkforceCreateService,
+  ) {}
 
   @Post(':contractorId/participations')
   @ApiCreatedResponse()
@@ -44,10 +52,10 @@ export class ContractorOperationsController {
     @Param('contractorId') contractorId: string,
     @Body() input: CreateContractorParticipationCommand,
   ) {
-    const participation = await this.contractors.createParticipation(
-      request.user!,
+    const participation = await this.participations.publicCreate(
       contractorId,
       input,
+      configurationCommandContext(request, this.auth),
     );
     this.logger.log({
       actorId: request.user!.id,
@@ -67,7 +75,11 @@ export class ContractorOperationsController {
     @Param('contractorId') contractorId: string,
     @Body() input: GrantContractorRepresentativeCommand,
   ) {
-    const grant = await this.contractors.grantRepresentative(request.user!, contractorId, input);
+    const grant = await this.representatives.grant(
+      contractorId,
+      input,
+      configurationCommandContext(request, this.auth),
+    );
     this.logger.log({
       actorId: request.user!.id,
       action: 'contractor.representative.grant',
@@ -85,7 +97,11 @@ export class ContractorOperationsController {
     @Param('contractorId') contractorId: string,
     @Body() input: CreateContractorWorkerCommand,
   ) {
-    const worker = await this.contractors.createWorker(request.user!, contractorId, input);
+    const worker = await this.creation.createWorker(
+      contractorId,
+      input,
+      configurationCommandContext(request, this.auth),
+    );
     this.logger.log({
       actorId: request.user!.id,
       action: 'contractor.worker.create',

@@ -1,7 +1,7 @@
 import 'reflect-metadata';
 import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
-import { after, test } from 'node:test';
+import { after, before, test } from 'node:test';
 import { ConfigService } from '@nestjs/config';
 import { Test } from '@nestjs/testing';
 import { getDataSourceToken } from '@nestjs/typeorm';
@@ -9,21 +9,28 @@ import type { NestExpressApplication } from '@nestjs/platform-express';
 import { parseCameraRegionConfigurationPayload } from '@smartsite/contracts';
 import { PARAMS_PROVIDER_TOKEN } from 'nestjs-pino';
 import { DataSource } from 'typeorm';
-import dataSource from '../support/test-data-source.js';
+import { createIsolatedTestDatabase } from '../support/isolated-test-database.js';
 import { AppModule } from '../../src/app.module.js';
 import { configureApplication } from '../../src/configure-app.js';
+import type { ErrorResponseDto } from '../../src/common/http/error-response.dto.js';
 import { validateEnvironment, type BackendEnvironment } from '../../src/config/environment.js';
 import { createLoggerParams } from '../../src/observability/logger.js';
 import { UsersService } from '../../src/modules/users/users.service.js';
 import { UserRole } from '../../src/database/entities/user.entity.js';
 import { SiteConfigurationService } from '../../src/modules/sites/site-configuration.service.js';
 
+const database = createIsolatedTestDatabase({ canonical: true }),
+  dataSource = database.dataSource;
+
+before(async () => {
+  await database.initialize();
+});
+
 after(async () => {
-  if (dataSource.isInitialized) await dataSource.destroy();
+  await database.dispose();
 });
 
 test('Admin Site setup and scoped Manager Zone setup feed an allowlisted AI snapshot and versioned observation', async () => {
-  await dataSource.initialize();
   const suffix = randomUUID().slice(0, 8);
   const temporaryPassword = 'TempAdmin123!';
   const newPassword = 'PermanentAdmin123!';
@@ -135,7 +142,15 @@ test('Admin Site setup and scoped Manager Zone setup feed an allowlisted AI snap
     const managerId = ((await managerResponse.json()) as { id: string }).id;
     const revokePath = `${url}/api/v1/users/${managerId}/site-manager/${site.id}`;
     assert.equal((await fetch(revokePath, { method: 'DELETE' })).status, 401);
-    assert.equal((await fetch(revokePath, { method: 'DELETE', headers: { Authorization: `Bearer ${managerToken}` } })).status, 403);
+    assert.equal(
+      (
+        await fetch(revokePath, {
+          method: 'DELETE',
+          headers: { Authorization: `Bearer ${managerToken}` },
+        })
+      ).status,
+      403,
+    );
     const contractorPath = `/sites/${site.id}/contractors`;
     const contractorInput = { code: `CTR-${suffix}`, name: 'HTTP contractor' };
     assert.equal((await post(contractorPath, contractorInput, adminToken)).status, 403);
@@ -289,17 +304,16 @@ test('Admin Site setup and scoped Manager Zone setup feed an allowlisted AI snap
     assert.equal(cameraResponse.status, 201);
     const camera = (await cameraResponse.json()) as { id: string; configurationVersion: number };
     environment.AI_CONFIGURATION_CAMERA_IDS.push(camera.id);
-    const zoneResponse = await post(
-      `/sites/${site.id}/zones`,
-      {
-        code: `ZONE-${suffix}`,
-        name: 'Restricted gate',
-        type: 'RESTRICTED',
-        restrictionPolicy: 'AUTHORIZATION_REQUIRED',
-        requiredPpe: [],
-      },
-      managerToken,
-    );
+    const zoneInput = {
+      code: `ZONE-${suffix}`,
+      name: 'Restricted gate',
+      type: 'RESTRICTED',
+      restrictionPolicy: 'AUTHORIZATION_REQUIRED',
+      requiredPpe: [],
+    };
+    assert.equal((await post(`/sites/${site.id}/zones`, zoneInput, adminToken)).status, 403);
+    assert.equal((await post(`/sites/${randomUUID()}/zones`, zoneInput, managerToken)).status, 403);
+    const zoneResponse = await post(`/sites/${site.id}/zones`, zoneInput, managerToken);
     assert.equal(zoneResponse.status, 201);
     const zone = (await zoneResponse.json()) as { id: string };
     const setupOptions = await fetch(`${url}/api/v1/sites/${site.id}/access-setup`, {
@@ -380,23 +394,65 @@ test('Admin Site setup and scoped Manager Zone setup feed an allowlisted AI snap
       managerToken,
     );
     assert.equal(timezoneLessGrant.status, 400);
-    const grantResponse = await post(
+    const grantValidFrom = new Date(Date.now() + 60_000).toISOString();
+    const unavailableGrant = await post(
+      `/sites/${site.id}/zones/${zone.id}/access-grants`,
+      { workerId: worker.id, effect: 'ALLOW', validFrom: grantValidFrom, validUntil: null },
+      managerToken,
+    );
+    assert.equal(unavailableGrant.status, 409);
+    const unavailableBody = (await unavailableGrant.json()) as ErrorResponseDto;
+    assert.equal(unavailableBody.code, 'CONFLICT');
+    assert.equal(unavailableBody.success, false);
+    assert.equal(unavailableBody.statusCode, 409);
+
+    // A canonical Contractor date permission was created above. It does not
+    // make the legacy flat worker ALLOW route valid or establish Worker identity.
+    const flatAllowWithContractorPermission = await post(
+      `/sites/${site.id}/zones/${zone.id}/access-grants`,
+      {
+        workerId: worker.id,
+        effect: 'ALLOW',
+        validFrom: grantValidFrom,
+        validUntil: null,
+      },
+      managerToken,
+    );
+    assert.equal(flatAllowWithContractorPermission.status, 409);
+    const flatAllowBody = (await flatAllowWithContractorPermission.json()) as ErrorResponseDto;
+    assert.equal(flatAllowBody.code, 'CONFLICT');
+    const emptyGrantList = await fetch(
+      `${url}/api/v1/sites/${site.id}/zones/${zone.id}/access-grants`,
+      { headers: { Authorization: `Bearer ${adminToken}` } },
+    );
+    assert.equal(emptyGrantList.status, 200);
+    assert.equal(((await emptyGrantList.json()) as { total: number }).total, 0);
+
+    const denyGrantResponse = await post(
       `/sites/${site.id}/zones/${zone.id}/access-grants`,
       {
         workerId: worker.id,
         effect: 'DENY',
+        // Main's independent DENY does not require an approved assignment window.
         validFrom: '2026-09-28T00:00:00.000Z',
         validUntil: null,
       },
       managerToken,
     );
-    assert.equal(grantResponse.status, 201);
+    assert.equal(denyGrantResponse.status, 201);
+    const denyGrantBody = (await denyGrantResponse.json()) as { id: string; effect: string };
+    assert.equal(denyGrantBody.effect, 'DENY');
+
     const grantList = await fetch(`${url}/api/v1/sites/${site.id}/zones/${zone.id}/access-grants`, {
       headers: { Authorization: `Bearer ${adminToken}` },
     });
     assert.equal(grantList.status, 200);
-    const grantListBody = (await grantList.json()) as { items: { id: string }[]; total: number };
+    const grantListBody = (await grantList.json()) as {
+      items: { id: string; effect: string }[];
+      total: number;
+    };
     assert.equal(grantListBody.total, 1);
+    assert.equal(grantListBody.items[0]!.effect, 'DENY');
     const regionResponse = await post(
       `/sites/${site.id}/cameras/${camera.id}/regions`,
       {

@@ -39,7 +39,7 @@ describe('notification API client', () => {
     expect(result.unreadCount).toBe(1);
   });
   it('deletes read notifications through the authenticated bodyless personal endpoint', async () => {
-    const fetchMock = vi.fn(
+    const fetchMock = vi.fn<typeof fetch>(
       async () => new Response(JSON.stringify({ deleted: 3 }), { status: 200 }),
     );
     vi.stubGlobal('fetch', fetchMock);
@@ -54,10 +54,10 @@ describe('notification API client', () => {
         headers: expect.objectContaining({ Authorization: 'Bearer synthetic-token' }),
       }),
     );
-    expect((fetchMock.mock.calls as unknown as [string, RequestInit][])[0][1].body).toBeUndefined();
+    expect(fetchMock.mock.calls[0]?.[1]?.body).toBeUndefined();
   });
   it('encodes server-paginated mixed request filters and preserves authentication', async () => {
-    const fetchMock = vi.fn(
+    const fetchMock = vi.fn<typeof fetch>(
       async () =>
         new Response(
           JSON.stringify({
@@ -81,7 +81,7 @@ describe('notification API client', () => {
     );
   });
   it('uses authenticated personal APIs, encoded IDs and explicit filters', async () => {
-    const fetchMock = vi.fn(
+    const fetchMock = vi.fn<typeof fetch>(
       async () =>
         new Response(JSON.stringify({ items: [], total: 0, unreadCount: 0 }), { status: 200 }),
     );

@@ -4,6 +4,8 @@ import { EventProcessingStatus } from './enums.js';
 
 @Entity({ name: 'ai_observation_event' })
 @Index('idx_event_camera_session_captured', ['cameraExternalId', 'streamSessionId', 'capturedAt'])
+@Index('uq_ai_event_frame_part', { synchronize: false })
+@Index('idx_ai_event_source_frame', { synchronize: false })
 export class AiObservationEventEntity {
   @PrimaryColumn({
     name: 'event_id',

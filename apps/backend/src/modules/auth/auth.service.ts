@@ -1,4 +1,8 @@
 import { randomUUID, timingSafeEqual } from 'node:crypto';
+import {
+  executeMainConfigurationCommand,
+  type MainConfigurationCommandContext,
+} from '../../common/configuration/main-configuration-authority.js';
 import { HttpStatus, Injectable, UnauthorizedException } from '@nestjs/common';
 import { DataSource, type EntityManager } from 'typeorm';
 import { PublicHttpException } from '../../common/http/public-http-exception.js';
@@ -113,18 +117,43 @@ export class AuthService {
     };
   }
 
-  async authenticate(token: string) {
-    const claims = await this.tokens.verifyAccessToken(token);
-    const session = await this.dataSource.getRepository(AuthSessionEntity).findOneBy({
-      id: claims.sessionId,
-      userId: claims.userId,
-    });
-    if (!session || session.revokedAt !== null || session.expiresAt.getTime() <= Date.now())
+  /** A supplied mutation manager pins account/session authority until that transaction ends. */
+  async authenticate(token: string, mutationManager?: EntityManager) {
+    if (mutationManager && !mutationManager.queryRunner?.isTransactionActive)
       throw new UnauthorizedException();
-    const user = await this.dataSource.getRepository(UserEntity).findOneBy({ id: session.userId });
+    const claims = await this.tokens.verifyAccessToken(token);
+    const manager = mutationManager ?? this.dataSource.manager;
+    // Account first matches status/role/password writers; logout locks the session only.
+    const user = mutationManager
+      ? await manager
+          .getRepository(UserEntity)
+          .createQueryBuilder('user')
+          .setLock('pessimistic_read')
+          .where('user.id = :id', { id: claims.userId })
+          .getOne()
+      : await manager.getRepository(UserEntity).findOneBy({ id: claims.userId });
     if (!user?.isActive) throw new UnauthorizedException();
+    const session = mutationManager
+      ? await manager
+          .getRepository(AuthSessionEntity)
+          .createQueryBuilder('session')
+          .setLock('pessimistic_read')
+          .where('session.id = :id', { id: claims.sessionId })
+          .andWhere('session.userId = :userId', { userId: claims.userId })
+          .getOne()
+      : await manager.getRepository(AuthSessionEntity).findOneBy({
+          id: claims.sessionId,
+          userId: claims.userId,
+        });
+    if (
+      !session ||
+      session.revokedAt !== null ||
+      session.expiresAt.getTime() <= Date.now() ||
+      claims.expiresAt.getTime() <= Date.now()
+    )
+      throw new UnauthorizedException();
     return {
-      user: await this.userResponse(this.dataSource.manager, user),
+      user: await this.userResponse(manager, user),
       sessionId: session.id,
       clientType: session.clientType,
     };
@@ -205,6 +234,7 @@ export class AuthService {
     userId: string,
     currentPassword: string,
     newPassword: string,
+    context?: MainConfigurationCommandContext,
   ): Promise<void> {
     if (!validPassword(newPassword))
       throw new PublicHttpException(HttpStatus.BAD_REQUEST, {
@@ -215,29 +245,39 @@ export class AuthService {
     if (!user || !(await verifyPassword(currentPassword, user.passwordHash)))
       throw new UnauthorizedException();
     const replacement = await hashPassword(newPassword);
-    await this.dataSource.transaction(async (manager) => {
-      const current = await manager
-        .getRepository(UserEntity)
-        .createQueryBuilder('user')
-        .setLock('pessimistic_write')
-        .where('user.id = :id', { id: userId })
-        .getOne();
-      if (!current?.isActive || current.passwordHash !== user.passwordHash)
-        throw new UnauthorizedException();
-      await manager.getRepository(UserEntity).update(
-        { id: userId },
-        {
-          passwordHash: replacement,
-          mustChangePassword: false,
-        },
-      );
-      await manager
-        .getRepository(AuthSessionEntity)
-        .createQueryBuilder()
-        .update()
-        .set({ revokedAt: new Date() })
-        .where('user_id = :userId AND revoked_at IS NULL', { userId })
-        .execute();
-    });
+    if (context && context.actorUserId !== userId) throw new UnauthorizedException();
+    await executeMainConfigurationCommand(
+      this.dataSource,
+      context,
+      'USER_PASSWORD_CHANGE',
+      { userId },
+      async (manager) => {
+        const current = await manager
+          .getRepository(UserEntity)
+          .createQueryBuilder('user')
+          .setLock('pessimistic_write')
+          .where('user.id = :id', { id: userId })
+          .getOne();
+        if (!current?.isActive || current.passwordHash !== user.passwordHash)
+          throw new UnauthorizedException();
+        await manager.getRepository(UserEntity).update(
+          { id: userId },
+          {
+            passwordHash: replacement,
+            mustChangePassword: false,
+          },
+        );
+        await manager
+          .getRepository(AuthSessionEntity)
+          .createQueryBuilder()
+          .update()
+          .set({ revokedAt: new Date() })
+          .where('user_id = :userId AND revoked_at IS NULL', { userId })
+          .execute();
+      },
+      // Self-target binding above plus transactional bearer/account checks replace
+      // the management helper's default Admin requirement for this existing route.
+      async () => {},
+    );
   }
 }

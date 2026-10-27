@@ -321,6 +321,7 @@ it('Logout cancels MF08 queries and removes sensitive caches before switching ac
   fireEvent.change(screen.getByLabelText('Username'), { target: { value: 'security' } });
   fireEvent.change(screen.getByLabelText('Password'), { target: { value: 'Password123!' } });
   fireEvent.click(screen.getByRole('button', { name: 'Sign in' }));
+  await screen.findByRole('option', { name: 'A · A' });
   fireEvent.click(await screen.findByRole('button', { name: /^Incidents$/ }));
   await waitFor(() => expect(signal).toBeDefined());
   expect(screen.queryByLabelText('Alert type')).toBeNull();
@@ -899,6 +900,7 @@ it('reuses the app session, clears workspace data on navigation and delegates si
     onSignOut,
   };
   const view = mount(<SafetyAlertsView apiUrl="http://local" {...sessionProps} />);
+  await screen.findByRole('option', { name: 'A · Site A' });
   fireEvent.click(await screen.findByRole('button', { name: /^Incidents$/ }));
   expect(await screen.findByText('No incidents found.')).not.toBeNull();
   fireEvent.click(screen.getByRole('button', { name: 'Sign out Contractor representative' }));

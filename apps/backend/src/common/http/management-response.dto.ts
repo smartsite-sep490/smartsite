@@ -1,4 +1,5 @@
 import { ApiProperty } from '@nestjs/swagger';
+import { RegionGeometryConfirmationResponseDto } from './region-geometry-confirmation-response.dto.js';
 import {
   AlertStatus,
   AlertType,
@@ -73,6 +74,8 @@ export class RegionResponseDto {
   @ApiProperty() version!: number;
   @ApiProperty() isActive!: boolean;
   @ApiProperty({ format: 'date-time' }) createdAt!: string;
+  @ApiProperty({ type: RegionGeometryConfirmationResponseDto, required: false })
+  geometryConfirmation?: RegionGeometryConfirmationResponseDto;
 }
 
 export class RegionMutationResponseDto {

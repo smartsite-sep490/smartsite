@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it } from 'vitest';
 import i18n, { translate } from '../../i18n';
-import type { UserNotificationResponse } from '@smartsite/api-client';
+import type { PpeAlertNotificationMetadata, UserNotificationResponse } from '@smartsite/api-client';
 import {
   notificationHref,
   formatNotificationDisplayMessage,
@@ -9,6 +9,30 @@ import {
 
 afterEach(async () => {
   await i18n.changeLanguage('en');
+});
+
+it('formats a zone alert separately from PPE and links to its persisted alert', async () => {
+  const item = {
+    event: 'ZONE_ALERT_CREATED',
+    title: 'Zone alert requires review',
+    message: 'Stored fallback',
+    safetyAlert: {
+      cameraId: '11111111-1111-4111-8111-111111111111',
+      cameraName: 'Tapo demo',
+      zoneId: '22222222-2222-4222-8222-222222222222',
+      zoneName: 'Restricted demo',
+      candidateSubtype: 'ZONE_ENTRY_PROHIBITED',
+    },
+    target: { siteId: 'site-a', alertId: 'alert-a', tab: 'alerts' },
+  } as UserNotificationResponse;
+  await i18n.changeLanguage('en');
+  expect(formatNotificationTitle(item)).toBe('Zone alert requires review');
+  expect(formatNotificationDisplayMessage(item)).toContain('Tapo demo · Restricted demo');
+  expect(formatNotificationDisplayMessage(item)).toContain('Entry into a prohibited Zone');
+  await i18n.changeLanguage('vi');
+  expect(formatNotificationTitle(item)).toBe('Cảnh báo khu vực cần xem xét');
+  expect(formatNotificationDisplayMessage(item)).toContain('Đi vào khu vực cấm');
+  expect(notificationHref(item)).toBe('/incidents?siteId=site-a&alertId=alert-a&tab=alerts');
 });
 
 describe('notification-utils', () => {
@@ -301,5 +325,132 @@ it('switches generated time-request notices both ways without translating author
   );
   expect(formatNotificationTitle({ event: 'TIME_REQUESTED', title: 'TIME REQUESTED' })).toBe(
     'Time request',
+  );
+});
+
+it.each([
+  ['PPE_HARD_HAT_MISSING', 'Possible missing hard hat', 'Dấu hiệu thiếu mũ bảo hộ'],
+  ['PPE_SAFETY_VEST_MISSING', 'Possible missing safety vest', 'Dấu hiệu thiếu áo phản quang'],
+  ['PPE_GLOVES_MISSING', 'Possible missing safety gloves', 'Dấu hiệu thiếu găng tay bảo hộ'],
+  ['PPE_BOOTS_MISSING', 'Possible missing safety boots', 'Dấu hiệu thiếu giày bảo hộ'],
+  ['PPE_GOGGLES_MISSING', 'Possible missing safety goggles', 'Dấu hiệu thiếu kính bảo hộ'],
+] as const)(
+  'formats PPE_ALERT_CREATED notifications for %s in English and Vietnamese',
+  async (candidateSubtype, enSubtype, viSubtype) => {
+    const item = {
+      event: 'PPE_ALERT_CREATED' as const,
+      title: 'PPE_ALERT_CREATED',
+      message: 'Stored fallback message',
+      safetyAlert: {
+        cameraId: '11111111-1111-4111-8111-111111111111',
+        cameraName: 'Gate Camera 01',
+        zoneId: '22222222-2222-4222-8222-222222222222',
+        zoneName: 'Excavation North',
+        candidateSubtype,
+      },
+    };
+
+    await i18n.changeLanguage('en');
+    expect(formatNotificationTitle(item)).toBe('PPE alert requires review');
+    expect(formatNotificationDisplayMessage(item)).toBe(
+      `Gate Camera 01 · Excavation North: ${enSubtype}. Review the evidence.`,
+    );
+
+    await i18n.changeLanguage('vi');
+    expect(formatNotificationTitle({ event: item.event, title: 'PPE alert requires review' })).toBe(
+      'Cảnh báo PPE cần xem xét',
+    );
+    expect(formatNotificationDisplayMessage(item)).toBe(
+      `Gate Camera 01 · Excavation North: ${viSubtype}. Vui lòng xem xét bằng chứng.`,
+    );
+  },
+);
+
+it('uses noZone copy when PPE alert zoneName is absent and neutral fallback when safetyAlert metadata is missing', async () => {
+  const withoutZone = {
+    event: 'PPE_ALERT_CREATED' as const,
+    message: 'Stored fallback message',
+    safetyAlert: {
+      cameraId: '11111111-1111-4111-8111-111111111111',
+      cameraName: 'Cam West 02',
+      zoneId: null,
+      zoneName: null,
+      candidateSubtype: 'PPE_GLOVES_MISSING' as const,
+    },
+  };
+  const withoutMetadata = {
+    event: 'PPE_ALERT_CREATED' as const,
+    message: 'Unstructured fallback text',
+  };
+  const malformedSubtype = {
+    event: 'PPE_ALERT_CREATED' as const,
+    message: 'Unstructured fallback text',
+    safetyAlert: {
+      cameraId: '11111111-1111-4111-8111-111111111111',
+      cameraName: 'Cam West 02',
+      zoneId: null,
+      zoneName: null,
+      candidateSubtype: 'body' as PpeAlertNotificationMetadata['candidateSubtype'],
+    },
+  };
+
+  await i18n.changeLanguage('en');
+  expect(formatNotificationDisplayMessage(withoutZone)).toBe(
+    'Cam West 02 · Unspecified Zone: Possible missing safety gloves. Review the evidence.',
+  );
+  expect(formatNotificationDisplayMessage(withoutMetadata)).toBe('PPE alert requires review');
+  expect(formatNotificationDisplayMessage(malformedSubtype)).toBe('PPE alert requires review');
+
+  await i18n.changeLanguage('vi');
+  expect(formatNotificationDisplayMessage(withoutZone)).toBe(
+    'Cam West 02 · Chưa xác định Zone: Dấu hiệu thiếu găng tay bảo hộ. Vui lòng xem xét bằng chứng.',
+  );
+  expect(formatNotificationDisplayMessage(withoutMetadata)).toBe('Cảnh báo PPE cần xem xét');
+  expect(formatNotificationDisplayMessage(malformedSubtype)).toBe('Cảnh báo PPE cần xem xét');
+});
+
+it('routes alertId notification targets to /incidents regardless of assignedWork while preserving existing routes', () => {
+  const ppeAlertNotification: UserNotificationResponse = {
+    id: 'notice-ppe-1',
+    event: 'PPE_ALERT_CREATED',
+    siteId: 'site/a',
+    siteName: 'Synthetic site',
+    title: 'PPE alert requires review',
+    message:
+      'Gate Camera 01 · Excavation North: Possible missing safety boots. Review the evidence.',
+    safetyAlert: {
+      cameraId: '11111111-1111-4111-8111-111111111111',
+      cameraName: 'Gate Camera 01',
+      zoneId: '22222222-2222-4222-8222-222222222222',
+      zoneName: 'Excavation North',
+      candidateSubtype: 'PPE_BOOTS_MISSING',
+    },
+    createdAt: '2026-10-21T01:00:00Z',
+    readAt: null,
+    target: { siteId: 'site/a', alertId: 'alert/1', tab: 'alerts' },
+  };
+  expect(notificationHref(ppeAlertNotification, false)).toBe(
+    '/incidents?siteId=site%2Fa&alertId=alert%2F1&tab=alerts',
+  );
+  expect(notificationHref(ppeAlertNotification, true)).toBe(
+    '/incidents?siteId=site%2Fa&alertId=alert%2F1&tab=alerts',
+  );
+
+  const checklistNotification: UserNotificationResponse = {
+    id: 'notice-checklist-1',
+    event: 'CHECKLIST_ASSIGNED',
+    siteId: 'site-a',
+    siteName: 'Synthetic site',
+    title: 'Checklist assigned',
+    message: 'Inspect scaffolding',
+    createdAt: '2026-10-21T01:00:00Z',
+    readAt: null,
+    target: { siteId: 'site-a', checklistId: 'checklist-1', tab: 'checklists' },
+  };
+  expect(notificationHref(checklistNotification, false)).toBe(
+    '/incidents?siteId=site-a&checklistId=checklist-1&tab=checklists',
+  );
+  expect(notificationHref(checklistNotification, true)).toBe(
+    '/assigned-work?siteId=site-a&checklistId=checklist-1&tab=checklists',
   );
 });

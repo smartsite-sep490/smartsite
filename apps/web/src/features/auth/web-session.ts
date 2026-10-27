@@ -1,12 +1,15 @@
 import {
   ApiError,
   SmartSiteManagementClient,
+  registerSessionCredential,
+  unregisterSessionCredential,
   type LoginResponse,
   type ManagementSession,
 } from '@smartsite/api-client';
 
 type Snapshot = {
   token: string | null;
+  sessionScope: string;
   response: LoginResponse | null;
   epoch: number;
   expired: boolean;
@@ -19,6 +22,7 @@ const cancelled = () => new ApiError('cancelled', 'Session changed.');
 export class WebSession {
   private snapshot: Snapshot = {
     token: null,
+    sessionScope: '',
     response: null,
     epoch: 0,
     expired: false,
@@ -30,13 +34,16 @@ export class WebSession {
   private controller = new AbortController();
   private pendingRefresh?: Promise<LoginResponse>;
   private channel?: BroadcastChannel;
+  private connected = false;
   private readonly name: string;
+  private readonly legacyLogoutKey: string;
 
   constructor(
     apiUrl: string,
     private readonly client = new SmartSiteManagementClient(apiUrl),
   ) {
     this.name = `smartsite:auth:${apiUrl.replace(/\/+$/, '')}`;
+    this.legacyLogoutKey = `smartsite:logout:${apiUrl.replace(/\/+$/, '')}`;
   }
   getSnapshot = () => this.snapshot;
   canRestore = () => !this.signedOut();
@@ -57,17 +64,22 @@ export class WebSession {
       if (value === false) {
         localStorage.removeItem(`${this.name}:signed-out`);
         sessionStorage.removeItem('smartsite:signed-out');
+        sessionStorage.removeItem(this.legacyLogoutKey);
       }
       return (
         this.locallySignedOut ||
         localStorage.getItem(`${this.name}:signed-out`) === 'true' ||
-        sessionStorage.getItem('smartsite:signed-out') === 'true'
+        sessionStorage.getItem('smartsite:signed-out') === 'true' ||
+        sessionStorage.getItem(this.legacyLogoutKey) !== null
       );
     } catch {
       return this.locallySignedOut;
     }
   }
   connect() {
+    this.connected = true;
+    if (this.snapshot.token)
+      registerSessionCredential(this.snapshot.token, this.snapshot.sessionScope);
     if (typeof BroadcastChannel === 'undefined' || this.channel) return;
     this.channel = new BroadcastChannel(this.name);
     this.channel.onmessage = (event: MessageEvent<unknown>) => {
@@ -77,6 +89,9 @@ export class WebSession {
     };
   }
   dispose() {
+    this.connected = false;
+    if (this.snapshot.token)
+      unregisterSessionCredential(this.snapshot.token, this.snapshot.sessionScope);
     this.channel?.close();
     this.channel = undefined;
   }
@@ -86,11 +101,14 @@ export class WebSession {
     return operation();
   }
   clear(expired: boolean) {
+    if (this.snapshot.token)
+      unregisterSessionCredential(this.snapshot.token, this.snapshot.sessionScope);
     this.controller.abort();
     this.controller = new AbortController();
     this.pendingRefresh = undefined;
     this.update({
       token: null,
+      sessionScope: '',
       response: null,
       epoch: this.snapshot.epoch + 1,
       expired,
@@ -105,17 +123,30 @@ export class WebSession {
     this.clear(false);
     if (token) {
       this.signedOut(false);
-      this.update({ token });
+      const sessionScope = crypto.randomUUID();
+      if (this.connected) registerSessionCredential(token, sessionScope);
+      this.update({ token, sessionScope });
     }
   }
   accept(response: LoginResponse) {
-    this.update({ token: response.accessToken, response, expired: false, passwordChanged: false });
+    if (this.snapshot.token)
+      unregisterSessionCredential(this.snapshot.token, this.snapshot.sessionScope);
+    const sessionScope = crypto.randomUUID();
+    if (this.connected) registerSessionCredential(response.accessToken, sessionScope);
+    this.update({
+      token: response.accessToken,
+      sessionScope,
+      response,
+      expired: false,
+      passwordChanged: false,
+    });
   }
   private assertEpoch(epoch: number) {
     if (epoch !== this.snapshot.epoch) throw cancelled();
   }
   async login(username: string, password: string) {
-    this.signedOut(true);
+    // An unsuccessful attempt must not write a shared logout marker for other tabs.
+    this.locallySignedOut = true;
     this.clear(false);
     const epoch = this.snapshot.epoch;
     const response = await this.lock(async () => {
@@ -135,7 +166,10 @@ export class WebSession {
     this.signOutLocally();
     const epoch = this.snapshot.epoch;
     try {
-      await this.lock(() => this.client.logout('WEB', undefined, { timeoutMs: 15_000 }));
+      await this.lock(() => {
+        this.assertEpoch(epoch);
+        return this.client.logout('WEB', undefined, { timeoutMs: 15_000 });
+      });
     } catch (error) {
       if (epoch === this.snapshot.epoch) this.update({ logoutUnconfirmed: true });
       throw error;
@@ -194,7 +228,7 @@ export class WebSession {
   }
   adapter(epoch = this.snapshot.epoch): ManagementSession {
     return {
-      signal: this.controller.signal,
+      signal: epoch === this.snapshot.epoch ? this.controller.signal : AbortSignal.abort(),
       getAccessToken: () => {
         this.assertEpoch(epoch);
         if (!this.snapshot.token) throw cancelled();
@@ -203,6 +237,10 @@ export class WebSession {
       refreshAccessToken: async (failedToken) => {
         this.assertEpoch(epoch);
         if (this.snapshot.token && failedToken !== this.snapshot.token) return this.snapshot.token;
+        // Legacy injected tokens have no verified account binding. Reauthentication is
+        // required instead of retrying their in-flight work with an unrelated cookie.
+        if (this.snapshot.token && !this.snapshot.response)
+          throw new ApiError('http', 'Reauthentication is required.', 401);
         return (await this.refresh()).accessToken;
       },
       onUnauthorized: (failedToken) => {

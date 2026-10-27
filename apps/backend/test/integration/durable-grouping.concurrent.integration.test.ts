@@ -4,9 +4,15 @@ import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
 import { after, test } from 'node:test';
 import { DataSource, type QueryRunner } from 'typeorm';
-import { AlertStatus, AlertType } from '../../src/database/entities/enums.js';
+import {
+  AlertStatus,
+  AlertType,
+  ZoneRestrictionPolicy,
+  ZoneType,
+} from '../../src/database/entities/enums.js';
 import { SafetyAlertEntity } from '../../src/database/entities/safety-alert.entity.js';
 import { SiteEntity } from '../../src/database/entities/site.entity.js';
+import { ZoneEntity } from '../../src/database/entities/zone.entity.js';
 import dataSource from '../support/test-data-source.js';
 import type { AlertCandidate } from '../../src/modules/safety/alerts/alert-candidate-evaluator.js';
 import { DurableGroupingService } from '../../src/modules/safety/alerts/durable-grouping.service.js';
@@ -29,7 +35,7 @@ test('DurableGroupingService: 10 concurrent transactions with identical site/gro
     const configService = createTestConfig({ ALERT_COOLDOWN_SECONDS: String(60) });
     const service = new DurableGroupingService(
       configService,
-      new SchedulingNotificationService(dataSource),
+      new SchedulingNotificationService(source),
     );
 
     const siteId = randomUUID();
@@ -84,7 +90,7 @@ test('DurableGroupingService: preserves lastDetectedAt when out-of-order candida
     const configService = createTestConfig({ ALERT_COOLDOWN_SECONDS: String(60) });
     const service = new DurableGroupingService(
       configService,
-      new SchedulingNotificationService(dataSource),
+      new SchedulingNotificationService(source),
     );
 
     const siteId = randomUUID();
@@ -142,15 +148,25 @@ test('DurableGroupingService: cooldown boundary creates a new alert once cooldow
     const configService = createTestConfig({ ALERT_COOLDOWN_SECONDS: String(10) });
     const service = new DurableGroupingService(
       configService,
-      new SchedulingNotificationService(dataSource),
+      new SchedulingNotificationService(source),
     );
 
     const siteId = randomUUID();
+    const zoneId = randomUUID();
     try {
       await source.getRepository(SiteEntity).save({
         id: siteId,
         code: `SITE-COOLDOWN-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
         name: 'Cooldown Boundary Site',
+      });
+      await source.getRepository(ZoneEntity).save({
+        id: zoneId,
+        siteId,
+        code: `ZONE-COOLDOWN-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
+        name: 'Cooldown Boundary Zone',
+        type: ZoneType.RESTRICTED,
+        restrictionPolicy: ZoneRestrictionPolicy.PROHIBITED_FOR_ALL,
+        requiredPpe: [],
       });
 
       const groupingKey = `ZONE_ENTRY_PROHIBITED:cam-cd:sess-cd:zone-z1:${Date.now()}`;
@@ -160,6 +176,7 @@ test('DurableGroupingService: cooldown boundary creates a new alert once cooldow
         cameraId: randomUUID(),
         streamSessionId: randomUUID(),
         trackId: 1003,
+        zoneId,
         groupingKey,
         details: {},
       };
@@ -203,6 +220,7 @@ test('DurableGroupingService: cooldown boundary creates a new alert once cooldow
       assert.equal(alerts[1]!.status, AlertStatus.PENDING_REVIEW);
     } finally {
       await source.getRepository(SafetyAlertEntity).delete({ siteId });
+      await source.getRepository(ZoneEntity).delete({ siteId });
       await source.getRepository(SiteEntity).delete({ id: siteId });
     }
   });
@@ -213,15 +231,25 @@ test('DurableGroupingService: never reopens DISMISSED or CLOSED alerts and creat
     const configService = createTestConfig({ ALERT_COOLDOWN_SECONDS: String(60) });
     const service = new DurableGroupingService(
       configService,
-      new SchedulingNotificationService(dataSource),
+      new SchedulingNotificationService(source),
     );
 
     const siteId = randomUUID();
+    const zoneId = randomUUID();
     try {
       await source.getRepository(SiteEntity).save({
         id: siteId,
         code: `SITE-DISMISSED-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
         name: 'Dismissed Test Site',
+      });
+      await source.getRepository(ZoneEntity).save({
+        id: zoneId,
+        siteId,
+        code: `ZONE-DISMISSED-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
+        name: 'Dismissed Test Zone',
+        type: ZoneType.RESTRICTED,
+        restrictionPolicy: ZoneRestrictionPolicy.PROHIBITED_FOR_ALL,
+        requiredPpe: [],
       });
 
       const groupingKey = `ZONE_ENTRY_PROHIBITED:cam-c2:sess-s2:zone-z1:${Date.now()}`;
@@ -231,7 +259,7 @@ test('DurableGroupingService: never reopens DISMISSED or CLOSED alerts and creat
       await source.getRepository(SafetyAlertEntity).save({
         id: randomUUID(),
         siteId,
-        zoneId: null,
+        zoneId,
         alertType: AlertType.RESTRICTED_ZONE_INTRUSION,
         candidateSubtype: 'ZONE_ENTRY_PROHIBITED',
         groupingKey,
@@ -245,7 +273,7 @@ test('DurableGroupingService: never reopens DISMISSED or CLOSED alerts and creat
       await source.getRepository(SafetyAlertEntity).save({
         id: randomUUID(),
         siteId,
-        zoneId: null,
+        zoneId,
         alertType: AlertType.RESTRICTED_ZONE_INTRUSION,
         candidateSubtype: 'ZONE_ENTRY_PROHIBITED',
         groupingKey,
@@ -261,6 +289,7 @@ test('DurableGroupingService: never reopens DISMISSED or CLOSED alerts and creat
         cameraId: randomUUID(),
         streamSessionId: randomUUID(),
         trackId: 1004,
+        zoneId,
         groupingKey,
         details: {},
       };
@@ -288,6 +317,7 @@ test('DurableGroupingService: never reopens DISMISSED or CLOSED alerts and creat
       assert.equal(alerts[2]!.detectionCount, 1);
     } finally {
       await source.getRepository(SafetyAlertEntity).delete({ siteId });
+      await source.getRepository(ZoneEntity).delete({ siteId });
       await source.getRepository(SiteEntity).delete({ id: siteId });
     }
   });
@@ -298,7 +328,7 @@ test('DurableGroupingService: preserves human workflow status (e.g. CONFIRMED) a
     const configService = createTestConfig({ ALERT_COOLDOWN_SECONDS: String(60) });
     const service = new DurableGroupingService(
       configService,
-      new SchedulingNotificationService(dataSource),
+      new SchedulingNotificationService(source),
     );
 
     const siteId = randomUUID();
@@ -362,7 +392,7 @@ test('DurableGroupingService: never overwrites existing identity evidence', asyn
     const configService = createTestConfig({ ALERT_COOLDOWN_SECONDS: String(60) });
     const service = new DurableGroupingService(
       configService,
-      new SchedulingNotificationService(dataSource),
+      new SchedulingNotificationService(source),
     );
 
     const siteId = randomUUID();
@@ -438,7 +468,7 @@ test('DurableGroupingService: preserves null candidateWorkerId and pre-existing 
     const configService = createTestConfig({ ALERT_COOLDOWN_SECONDS: String(60) });
     const service = new DurableGroupingService(
       configService,
-      new SchedulingNotificationService(dataSource),
+      new SchedulingNotificationService(source),
     );
 
     const siteId = randomUUID();
@@ -515,7 +545,7 @@ test('DurableGroupingService: delayed candidate at t=30s groups into matching op
     const configService = createTestConfig({ ALERT_COOLDOWN_SECONDS: String(60) });
     const service = new DurableGroupingService(
       configService,
-      new SchedulingNotificationService(dataSource),
+      new SchedulingNotificationService(source),
     );
 
     const siteId = randomUUID();
@@ -608,7 +638,7 @@ test('DurableGroupingService: human concurrent identity update is preserved and 
     const configService = createTestConfig({ ALERT_COOLDOWN_SECONDS: String(60) });
     const service = new DurableGroupingService(
       configService,
-      new SchedulingNotificationService(dataSource),
+      new SchedulingNotificationService(source),
     );
 
     const siteId = randomUUID();
@@ -709,7 +739,7 @@ test('DurableGroupingService: human concurrent alert closure is respected and gr
     const configService = createTestConfig({ ALERT_COOLDOWN_SECONDS: String(60) });
     const service = new DurableGroupingService(
       configService,
-      new SchedulingNotificationService(dataSource),
+      new SchedulingNotificationService(source),
     );
 
     const siteId = randomUUID();
@@ -807,7 +837,7 @@ test('DurableGroupingService: candidate matching newer alert completes without b
     const configService = createTestConfig({ ALERT_COOLDOWN_SECONDS: String(60) });
     const service = new DurableGroupingService(
       configService,
-      new SchedulingNotificationService(dataSource),
+      new SchedulingNotificationService(source),
     );
 
     const siteId = randomUUID();
@@ -909,7 +939,7 @@ test('DurableGroupingService: handles maximum safe integer ALERT_COOLDOWN_SECOND
     const configService = createTestConfig({ ALERT_COOLDOWN_SECONDS: String(maxSafeSeconds) });
     const service = new DurableGroupingService(
       configService,
-      new SchedulingNotificationService(dataSource),
+      new SchedulingNotificationService(source),
     );
 
     const siteId = randomUUID();
@@ -960,7 +990,7 @@ test('DurableGroupingService: locks only top ordered eligible alert with LIMIT 1
     const configService = createTestConfig({ ALERT_COOLDOWN_SECONDS: String(60) });
     const service = new DurableGroupingService(
       configService,
-      new SchedulingNotificationService(dataSource),
+      new SchedulingNotificationService(source),
     );
 
     const siteId = randomUUID();

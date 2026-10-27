@@ -1,10 +1,14 @@
 import {
   Controller,
+  Body,
   Get,
   Header,
   Headers,
   HttpStatus,
   Param,
+  Post,
+  Req,
+  HttpCode,
   Res,
   UseGuards,
 } from '@nestjs/common';
@@ -19,8 +23,12 @@ import {
   ApiTags,
   ApiUnauthorizedResponse,
 } from '@nestjs/swagger';
-import type { Response } from 'express';
-import { computeCanonicalPayloadHash } from '@smartsite/contracts';
+import type { Request, Response } from 'express';
+import {
+  computeCanonicalPayloadHash,
+  parseCameraConfigurationAcknowledgementPayload,
+} from '@smartsite/contracts';
+import { invalid } from '../../common/configuration/commands.js';
 import { ErrorResponseDto } from '../../common/http/error-response.dto.js';
 import { isUUID } from 'class-validator';
 import type { BackendEnvironment } from '../../config/environment.js';
@@ -65,12 +73,7 @@ export class AiConfigurationController {
     @Headers('if-none-match') ifNoneMatch: string | undefined,
     @Res({ passthrough: true }) response: Response,
   ) {
-    const allowed = this.config.get('AI_CONFIGURATION_CAMERA_IDS', { infer: true });
-    if (!isUUID(cameraId) || !allowed.includes(cameraId.toLowerCase()))
-      throw new PublicHttpException(HttpStatus.NOT_FOUND, {
-        code: 'NOT_FOUND',
-        message: 'Configuration resource not found',
-      });
+    this.assertCameraAllowed(cameraId);
     const configuration = await this.cameras.buildConfigurationForCamera(cameraId);
     const etag = configurationEtag(configuration);
     response.setHeader('ETag', etag);
@@ -79,5 +82,71 @@ export class AiConfigurationController {
       return;
     }
     return configuration;
+  }
+
+  @Get(':cameraId/configuration-bundle')
+  @ApiOkResponse({
+    description:
+      'Persisted CameraConfigurationBundle 1.0.0; not worker application or camera health.',
+  })
+  @ApiNotModifiedResponse({
+    description: 'The validated current issued bundle matches the supplied ETag.',
+  })
+  @Header('Cache-Control', 'no-store')
+  async configurationBundle(
+    @Param('cameraId') cameraId: string,
+    @Headers('if-none-match') ifNoneMatch: string | undefined,
+    @Res({ passthrough: true }) response: Response,
+  ) {
+    this.assertCameraAllowed(cameraId);
+    const bundle = await this.cameras.readConfigurationBundleForCamera(cameraId);
+    const etag = `"sha256:${bundle.bundleSha256}"`;
+    response.setHeader('ETag', etag);
+    if (matchesIfNoneMatch(ifNoneMatch, etag)) {
+      response.status(HttpStatus.NOT_MODIFIED);
+      return;
+    }
+    return bundle;
+  }
+
+  private assertCameraAllowed(cameraId: string): void {
+    const allowed = this.config.get('AI_CONFIGURATION_CAMERA_IDS', { infer: true });
+    if (!isUUID(cameraId) || !allowed.includes(cameraId.toLowerCase()))
+      throw new PublicHttpException(HttpStatus.NOT_FOUND, {
+        code: 'NOT_FOUND',
+        message: 'Configuration resource not found',
+      });
+  }
+
+  @Post(':cameraId/configuration-ack')
+  @HttpCode(200)
+  @Header('Cache-Control', 'no-store')
+  @ApiOkResponse({
+    description: 'Persisted worker application claim; not current readiness or camera health.',
+  })
+  async configurationAcknowledgement(
+    @Param('cameraId') cameraId: string,
+    @Req() request: Request,
+    @Body() body: unknown,
+  ) {
+    this.assertCameraAllowed(cameraId);
+    const secret = request.headers['x-worker-generation-secret'];
+    let occurrences = 0;
+    for (let index = 0; index < request.rawHeaders.length; index += 2)
+      if (request.rawHeaders[index]?.toLowerCase() === 'x-worker-generation-secret') occurrences++;
+    if (occurrences !== 1 || typeof secret !== 'string' || !/^[A-Za-z0-9_-]{43}$/.test(secret))
+      throw new PublicHttpException(401, {
+        code: 'UNAUTHORIZED',
+        message: 'Worker credential is invalid',
+      });
+    const serialized = JSON.stringify(body);
+    if (typeof serialized !== 'string') invalid();
+    const parsed = parseCameraConfigurationAcknowledgementPayload(serialized);
+    if (!parsed.isValid || !parsed.value) invalid();
+    return this.cameras.acknowledgeConfigurationForCamera(
+      cameraId.toLowerCase(),
+      secret,
+      parsed.value,
+    );
   }
 }

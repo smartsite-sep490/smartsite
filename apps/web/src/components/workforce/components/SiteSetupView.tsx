@@ -644,25 +644,27 @@ export function SiteSetupView({ apiUrl }: SiteSetupViewProps) {
       )}
       {/* 1. Header & Quick Actions */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-4 border-b border-slate-200/80">
-        {isAdmin && <div className="flex min-w-0 items-center gap-3">
-          <div className="w-10 h-10 rounded-xl bg-[#071A2B] text-white flex items-center justify-center shadow-xs shrink-0">
-            <IconBuilding className="w-5 h-5 text-[#F66B17]" />
-          </div>
-          <div className="min-w-0">
-            <div className="flex flex-wrap items-center gap-2">
-              <span className="text-[10px] font-bold uppercase tracking-[0.16em] text-slate-500">
-                {tr('common.administration')}
-              </span>
-              <span className="text-slate-300">•</span>
-              <span className="text-[10px] font-bold uppercase tracking-[0.16em] text-slate-500">
-                {tr('common.workspace_setup')}
-              </span>
+        {isAdmin && (
+          <div className="flex min-w-0 items-center gap-3">
+            <div className="w-10 h-10 rounded-xl bg-[#071A2B] text-white flex items-center justify-center shadow-xs shrink-0">
+              <IconBuilding className="w-5 h-5 text-[#F66B17]" />
             </div>
-            <h1 className="text-xl font-bold tracking-tight text-[#071A2B]">
-              {isAdmin ? tr('common.site_setup') : tr('site_setup_view.contractor_zone_setup')}
-            </h1>
+            <div className="min-w-0">
+              <div className="flex flex-wrap items-center gap-2">
+                <span className="text-[10px] font-bold uppercase tracking-[0.16em] text-slate-500">
+                  {tr('common.administration')}
+                </span>
+                <span className="text-slate-300">•</span>
+                <span className="text-[10px] font-bold uppercase tracking-[0.16em] text-slate-500">
+                  {tr('common.workspace_setup')}
+                </span>
+              </div>
+              <h1 className="text-xl font-bold tracking-tight text-[#071A2B]">
+                {isAdmin ? tr('common.site_setup') : tr('site_setup_view.contractor_zone_setup')}
+              </h1>
+            </div>
           </div>
-        </div>}
+        )}
 
         <div className="flex items-center gap-2.5">
           <button
