@@ -226,6 +226,7 @@ export function WorkforceView({ apiUrl: apiUrlProp }: { apiUrl: string }) {
               setUserSelectedTab(tab);
               const next = new URLSearchParams(searchParams);
               for (const key of ['tab', 'view', 'requestType', 'requestId']) next.delete(key);
+              next.set('tab', tab);
               setSearchParams(next);
             }}
           />

@@ -5,6 +5,7 @@ import type {
   QrPassResponse,
   VisitorPassResponse,
   VisitResponse,
+  VisitListResponse,
   VisitorGateEventResponse,
   WorkerQrVerificationResponse,
 } from '@smartsite/contracts';
@@ -92,6 +93,9 @@ export function requireGate(gateId: string) {
   if (!SITE_GATES.some((g) => g.id === gateId)) invalid('Invalid gate identifier');
 }
 export function visitResponse(v: VisitorVisitEntity, zoneIds: string[] = []): VisitResponse {
+  const isExpired =
+    v.validUntil.getTime() <= Date.now() && (v.status === 'PENDING' || v.status === 'APPROVED');
+  const status = isExpired ? 'EXPIRED' : v.status;
   return {
     id: v.id,
     siteId: v.siteId,
@@ -108,7 +112,7 @@ export function visitResponse(v: VisitorVisitEntity, zoneIds: string[] = []): Vi
     gateId: v.gateId,
     validFrom: v.validFrom.toISOString(),
     validUntil: v.validUntil.toISOString(),
-    status: v.status,
+    status,
     enteredCount: v.enteredCount,
     exitedCount: v.exitedCount,
     createdAt: v.createdAt.toISOString(),
@@ -644,6 +648,26 @@ export class QrAccessService {
       .find({ where: { siteId }, order: { name: 'ASC', id: 'ASC' }, take: 100 });
     return { items: zones.map((z) => ({ id: z.id, name: z.name })) };
   }
+  async publicManagers(siteId: string) {
+    uuid(siteId);
+    const assignments = await this.source
+      .getRepository(UserRoleAssignmentEntity)
+      .createQueryBuilder('role')
+      .innerJoin(
+        UserEntity,
+        'account',
+        'account.id = role.user_id AND account.is_active = TRUE AND account.must_change_password = FALSE',
+      )
+      .select('account.id', 'id')
+      .addSelect('account.display_name', 'displayName')
+      .where('role.site_id = :siteId AND role.role = :role', {
+        siteId,
+        role: UserRole.SITE_MANAGER,
+      })
+      .orderBy('account.display_name', 'ASC')
+      .getRawMany<{ id: string; displayName: string }>();
+    return { items: assignments };
+  }
   async register(siteId: string, input: RegisterVisitCommand): Promise<VisitResponse> {
     uuid(siteId);
     const value = command(RegisterVisitCommand, input);
@@ -670,7 +694,16 @@ export class QrAccessService {
       .addOrderBy('role.id', 'ASC')
       .getOne();
     if (!assignedManager) conflict('This site has no active Site Manager to approve visits');
-    const { requestId, accessKey, zoneIds = [], members: registeredMembers, ...details } = value;
+    if (value.siteManagerId && value.siteManagerId !== assignedManager.userId)
+      conflict('Selected Site Manager is unavailable for this site');
+    const {
+      requestId,
+      accessKey,
+      zoneIds = [],
+      members: registeredMembers,
+      siteManagerId: selectedManagerId,
+      ...details
+    } = value;
     return this.source.transaction(async (manager) => {
       await manager.query('SELECT pg_advisory_xact_lock(hashtext($1))', [
         `visit-registration:${requestId}`,
@@ -690,6 +723,8 @@ export class QrAccessService {
           .findOneBy({ id: assignedManager.userId, isActive: true, mustChangePassword: false });
         if (!activeManager || !managerAccount)
           conflict('Site Manager assignment changed. Retry registration');
+        if (selectedManagerId && value.hostName !== managerAccount.displayName)
+          conflict('Site Manager details changed. Retry registration');
         const representative = await manager.getRepository(VisitorEntity).save({
           id: randomUUID(),
           fullName: value.visitorName,
@@ -742,6 +777,7 @@ export class QrAccessService {
         .getRepository(VisitZoneEntity)
         .findBy({ visitId: visit.id });
       const sameDetails =
+        (!selectedManagerId || visit.siteManagerId === selectedManagerId) &&
         visit.visitorName === value.visitorName &&
         visit.company === value.company &&
         (visit.email ?? null) === (value.email ?? null) &&
@@ -774,16 +810,46 @@ export class QrAccessService {
       return visitResponse(visit, zoneIds);
     });
   }
-  async listVisits(actor: WorkforceActor, siteId: string) {
+  async listVisits(actor: WorkforceActor, siteId: string): Promise<VisitListResponse> {
     requireSiteRole(actor, siteId, [UserRole.SITE_MANAGER, UserRole.SECURITY_OFFICER]);
-    const items = await this.source
+    await this.source
       .getRepository(VisitorVisitEntity)
-      .find({ where: { siteId }, order: { createdAt: 'DESC', id: 'DESC' }, take: 100 });
+      .createQueryBuilder()
+      .update(VisitorVisitEntity)
+      .set({
+        status: 'EXPIRED',
+        version: () => '"version" + 1',
+      })
+      .where('site_id = :siteId', { siteId })
+      .andWhere('status IN (:...statuses)', { statuses: ['PENDING', 'APPROVED'] })
+      .andWhere('valid_until <= :now', { now: new Date() })
+      .execute();
+
+    const [items, total] = await this.source
+      .getRepository(VisitorVisitEntity)
+      .findAndCount({ where: { siteId }, order: { createdAt: 'DESC', id: 'DESC' }, take: 100 });
     const zones = items.length
       ? await this.source
           .getRepository(VisitZoneEntity)
           .findBy({ visitId: In(items.map((v) => v.id)), revokedAt: IsNull() })
       : [];
+    const now = new Date();
+    const summaryRow = await this.source
+      .getRepository(VisitorVisitEntity)
+      .createQueryBuilder('v')
+      .select('COUNT(*)', 'totalVisits')
+      .addSelect(`COUNT(CASE WHEN v.status = 'PENDING' THEN 1 END)`, 'pendingVisits')
+      .addSelect(
+        `COUNT(CASE WHEN v.status = 'APPROVED' AND v.valid_until > :now THEN 1 END)`,
+        'approvedValidVisits',
+      )
+      .addSelect(
+        `COALESCE(SUM(CASE WHEN v.entered_count > v.exited_count THEN v.entered_count - v.exited_count ELSE 0 END), 0)`,
+        'onSitePeople',
+      )
+      .where('v.site_id = :siteId', { siteId, now })
+      .getRawOne();
+
     return {
       items: items.map((v) =>
         visitResponse(
@@ -791,6 +857,13 @@ export class QrAccessService {
           zones.filter((z) => z.visitId === v.id).map((z) => z.zoneId),
         ),
       ),
+      total,
+      summary: {
+        totalVisits: Number(summaryRow?.totalVisits ?? total),
+        pendingVisits: Number(summaryRow?.pendingVisits ?? 0),
+        approvedValidVisits: Number(summaryRow?.approvedValidVisits ?? 0),
+        onSitePeople: Number(summaryRow?.onSitePeople ?? 0),
+      },
     };
   }
   async retryVisitorEmail(actor: WorkforceActor, siteId: string, visitId: string) {
@@ -854,12 +927,20 @@ export class QrAccessService {
         );
       if (value.expectedVersion !== undefined && value.expectedVersion !== visit.version)
         conflict('Visit changed. Reload before reviewing');
+      if (
+        visit.validUntil.getTime() <= Date.now() &&
+        ['PENDING', 'APPROVED'].includes(visit.status)
+      ) {
+        visit.status = 'EXPIRED';
+        visit.version += 1;
+        await repo.save(visit);
+      }
       if (value.status === 'CANCELLED') {
         if (!['PENDING', 'APPROVED'].includes(visit.status)) conflict('Visit cannot be cancelled');
         if (!value.reviewNote) invalid('A cancellation reason is required');
       } else {
-        if (visit.status !== 'PENDING') conflict('Visit has already been reviewed');
         if (visit.validUntil.getTime() <= Date.now()) conflict('Visit schedule has expired');
+        if (visit.status !== 'PENDING') conflict('Visit has already been reviewed');
       }
       visit.status = value.status;
       visit.decidedByUserId = actor.id;
@@ -1098,6 +1179,14 @@ export class QrAccessService {
         });
         if (!visit) invalid('Invalid QR credential');
         if (visit.gateId !== gateId) forbidden('Visit is not approved for this gate');
+        if (
+          visit.validUntil.getTime() <= Date.now() &&
+          ['PENDING', 'APPROVED'].includes(visit.status)
+        ) {
+          visit.status = 'EXPIRED';
+          visit.version += 1;
+          await manager.getRepository(VisitorVisitEntity).save(visit);
+        }
         const direction =
           visit.enteredCount > visit.exitedCount ? ('OUT' as const) : ('IN' as const);
         if (
@@ -1118,6 +1207,14 @@ export class QrAccessService {
         lock: { mode: 'pessimistic_write' },
       });
       if (!visit) forbidden();
+      if (
+        visit.validUntil.getTime() <= Date.now() &&
+        ['PENDING', 'APPROVED'].includes(visit.status)
+      ) {
+        visit.status = 'EXPIRED';
+        visit.version += 1;
+        await manager.getRepository(VisitorVisitEntity).save(visit);
+      }
       const credential = await this.credential(manager, value.token, 'preview');
       if (credential.siteId !== siteId || visit.gateId !== gateId)
         forbidden('Visit is not approved for this gate');
@@ -1207,6 +1304,14 @@ export class QrAccessService {
         lock: { mode: 'pessimistic_write' },
       });
       if (!visit) forbidden();
+      if (
+        visit.validUntil.getTime() <= Date.now() &&
+        ['PENDING', 'APPROVED'].includes(visit.status)
+      ) {
+        visit.status = 'EXPIRED';
+        visit.version += 1;
+        await manager.getRepository(VisitorVisitEntity).save(visit);
+      }
       const credential = permanent
         ? null
         : await this.credential(manager, value.token, fingerprint);

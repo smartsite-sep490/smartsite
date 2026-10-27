@@ -56,12 +56,11 @@ export function DocumentFileInputs({
   useTranslation();
   return (
     <div className="space-y-4 sm:col-span-2">
-      <div className="rounded-xl border border-slate-200/90 bg-slate-50/70 p-4 shadow-2xs">
-        <p className="text-xs font-bold text-slate-800 flex items-center gap-2">
-          <IconShield className="w-4 h-4 text-[#F66B17]" />
-          <span>{tr('documents.hint')}</span>
+      <div className="rounded-xl border border-slate-200/90 bg-slate-50/70 p-3.5 shadow-2xs">
+        <p className="text-xs font-medium text-slate-600 flex items-center gap-2">
+          <IconShield className="w-4 h-4 text-[#F66B17] shrink-0" />
+          <span>{tr('documents.fileHint')}</span>
         </p>
-        <p className="text-xs text-slate-500 mt-1 leading-relaxed">{tr('documents.fileHint')}</p>
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
@@ -220,10 +219,15 @@ export function WorkerDocumentsPanel(p: Props) {
               {data.displayName.charAt(0).toUpperCase()}
             </div>
             <div className="min-w-0">
-              <h3 className="text-base sm:text-lg font-black text-[#041D2E] tracking-tight truncate">
-                {tr('documents.title')} — {data.displayName} ({data.externalId})
-              </h3>
-              <p className="font-mono text-xs font-semibold text-slate-500">
+              <div className="flex items-center gap-2">
+                <h3 className="text-base sm:text-lg font-black text-[#041D2E] tracking-tight truncate">
+                  {data.displayName}
+                </h3>
+                <span className="font-mono text-xs font-bold px-2 py-0.5 rounded-md bg-slate-200/80 text-slate-700 shrink-0">
+                  {data.externalId}
+                </span>
+              </div>
+              <p className="font-mono text-xs font-semibold text-slate-500 mt-0.5">
                 {tr('documents.nationalId')}: {data.nationalId ?? '—'} ·{' '}
                 {tr('documents.phoneNumber')}: {data.phoneNumber ?? '—'}
               </p>
@@ -281,8 +285,6 @@ export function WorkerDocumentsPanel(p: Props) {
             <span>{tr('documents.expiring')}</span>
           </div>
         )}
-
-        <p className="text-[11px] text-slate-500">{tr('documents.hint')}</p>
       </div>
 
       {action.isError && (

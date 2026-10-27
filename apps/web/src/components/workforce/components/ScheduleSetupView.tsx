@@ -732,59 +732,40 @@ export function ScheduleSetupView({ apiUrl }: ScheduleSetupViewProps) {
 
   return (
     <div className="space-y-5 animate-in fade-in duration-300">
-      {/* 1. Header & Quick Actions */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-4 border-b border-slate-200/80">
-        <div className="flex items-center gap-3">
-          <div className="w-10 h-10 rounded-xl bg-[#071A2B] text-white flex items-center justify-center shadow-xs shrink-0">
-            <IconCalendar className="w-5 h-5 text-[#F66B17]" />
+      {/* 1. Quick Actions */}
+      <div className="flex flex-wrap items-center justify-end gap-2.5 pb-4 border-b border-slate-200/80">
+        {availableSites.length > 1 && (
+          <div className="flex items-center gap-1.5 min-w-[200px]">
+            <span className="text-xs font-semibold text-slate-500 hidden sm:inline shrink-0">
+              {tr('common.site')}
+            </span>
+            <SmartSelect
+              size="sm"
+              value={activeSiteId || ''}
+              onChange={(val) => setSelectedSiteId(val)}
+              className="w-full"
+              options={availableSites.map((site) => ({
+                value: site.id,
+                label: `${site.name} (${site.code})`,
+              }))}
+            />
           </div>
-          <div>
-            <div className="flex items-center gap-2">
-              <span className="text-xs font-semibold text-slate-500">
-                {tr('common.workforce_management')}
-              </span>
-            </div>
-            <h1 className="text-xl font-bold tracking-tight text-[#071A2B]">
-              {tr('common.schedule_setup')}
-            </h1>
-          </div>
-        </div>
+        )}
 
-        {/* Site Switcher & Refresh */}
-        <div className="flex flex-wrap items-center gap-2.5 max-w-full">
-          {availableSites.length > 1 && (
-            <div className="flex items-center gap-1.5 min-w-[200px]">
-              <span className="text-xs font-semibold text-slate-500 hidden sm:inline shrink-0">
-                {tr('common.site')}
-              </span>
-              <SmartSelect
-                size="sm"
-                value={activeSiteId || ''}
-                onChange={(val) => setSelectedSiteId(val)}
-                className="w-full"
-                options={availableSites.map((site) => ({
-                  value: site.id,
-                  label: `${site.name} (${site.code})`,
-                }))}
-              />
-            </div>
-          )}
-
-          <Button
-            variant="outline"
-            size="md"
-            onClick={() => {
-              sitesQuery.refetch();
-              shiftsQuery.refetch();
-              versionsQuery.refetch();
-              if (canViewAssignments && assignmentScope.contractorId) schedulesQuery.refetch();
-            }}
-            isLoading={sitesQuery.isFetching || shiftsQuery.isFetching || versionsQuery.isFetching}
-            leftIcon={<IconRefreshCw className="w-3.5 h-3.5 text-slate-500" />}
-          >
-            {tr('common.refresh')}
-          </Button>
-        </div>
+        <Button
+          variant="outline"
+          size="md"
+          onClick={() => {
+            sitesQuery.refetch();
+            shiftsQuery.refetch();
+            versionsQuery.refetch();
+            if (canViewAssignments && assignmentScope.contractorId) schedulesQuery.refetch();
+          }}
+          isLoading={sitesQuery.isFetching || shiftsQuery.isFetching || versionsQuery.isFetching}
+          leftIcon={<IconRefreshCw className="w-3.5 h-3.5 text-slate-500" />}
+        >
+          {tr('common.refresh')}
+        </Button>
       </div>
 
       {failedRefreshQuery && (
@@ -1098,7 +1079,7 @@ export function ScheduleSetupView({ apiUrl }: ScheduleSetupViewProps) {
                         ) : (
                           assignedContractorList.map((c) => (
                             <Badge key={c.id} variant="neutral">
-                              {c.code}
+                              {c.name}
                             </Badge>
                           ))
                         )}

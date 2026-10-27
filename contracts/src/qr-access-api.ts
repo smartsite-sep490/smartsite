@@ -29,6 +29,8 @@ export interface CreateVisitCommand {
   email: string;
   language?: 'en' | 'vi';
   hostName: string;
+  /** Selected Site Manager; optional for compatibility with older clients. */
+  siteManagerId?: string;
   purpose: string;
   targetArea: string;
   groupSize: number;
@@ -66,6 +68,17 @@ export interface VisitResponse {
   exitedCount: number;
   createdAt: string;
   decidedByUserId: string | null;
+}
+export interface VisitSummaryResponse {
+  totalVisits: number;
+  pendingVisits: number;
+  approvedValidVisits: number;
+  onSitePeople: number;
+}
+export interface VisitListResponse {
+  items: VisitResponse[];
+  total?: number;
+  summary?: VisitSummaryResponse;
 }
 export interface QrPassResponse {
   /** Worker: 8-character single-use code; Visitor: booking code. Encode this exact value in QR. */

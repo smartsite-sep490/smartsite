@@ -16,7 +16,6 @@ import type { AuthenticatedRequest } from '../../auth/auth.service.js';
 import { AdminGuard, UserAuthGuard } from '../../auth/user-auth.guard.js';
 import {
   ContractorOperationsService,
-  CreateContractorCommand,
   CreateContractorParticipationCommand,
   CreateContractorWorkerCommand,
   GrantContractorRepresentativeCommand,
@@ -37,19 +36,6 @@ export class ContractorOperationsController {
   private readonly logger = new Logger(ContractorOperationsController.name);
 
   constructor(private readonly contractors: ContractorOperationsService) {}
-
-  @Post()
-  @UseGuards(AdminGuard)
-  @ApiCreatedResponse()
-  async create(@Req() request: AuthenticatedRequest, @Body() input: CreateContractorCommand) {
-    const contractor = await this.contractors.createContractor(request.user!, input);
-    this.logger.log({
-      actorId: request.user!.id,
-      action: 'contractor.create',
-      resourceId: contractor.id,
-    });
-    return contractor;
-  }
 
   @Post(':contractorId/participations')
   @ApiCreatedResponse()

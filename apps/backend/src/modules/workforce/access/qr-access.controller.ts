@@ -27,6 +27,9 @@ export class VisitorRegistrationController {
   @Get('sites/:siteId/zones') zones(@Param('siteId') siteId: string) {
     return this.access.publicZones(siteId);
   }
+  @Get('sites/:siteId/managers') managers(@Param('siteId') siteId: string) {
+    return this.access.publicManagers(siteId);
+  }
   @Post('sites/:siteId/visits') register(
     @Param('siteId') siteId: string,
     @Body() input: RegisterVisitCommand,

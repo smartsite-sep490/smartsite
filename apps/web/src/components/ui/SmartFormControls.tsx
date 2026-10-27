@@ -640,6 +640,7 @@ export function SmartDatePicker({
             side="bottom"
             sideOffset={8}
             align="start"
+            avoidCollisions={false}
             collisionPadding={12}
             className="z-50 w-auto max-w-[calc(100vw-24px)]"
             style={{ outline: 'none' }}
@@ -649,6 +650,8 @@ export function SmartDatePicker({
                 locale={uiLanguage() === 'vi' ? vi : enUS}
                 labels={calendarLabels()}
                 mode="single"
+                fixedWeeks
+                showOutsideDays
                 selected={validDate}
                 defaultMonth={validDate}
                 onSelect={handleSelect}
@@ -963,6 +966,7 @@ export function SmartTimePicker({
             side="bottom"
             sideOffset={8}
             align="start"
+            avoidCollisions={false}
             collisionPadding={12}
             className="z-50"
             aria-label={
@@ -1009,6 +1013,8 @@ export interface SmartDateTimePickerProps {
   error?: string;
   id?: string;
   disablePast?: boolean;
+  minuteStep?: number;
+  clearable?: boolean;
 }
 
 export function SmartDateTimePicker({
@@ -1020,6 +1026,8 @@ export function SmartDateTimePicker({
   error,
   id: propId,
   disablePast = true,
+  minuteStep = 5,
+  clearable = false,
 }: SmartDateTimePickerProps) {
   useTranslation();
 
@@ -1099,8 +1107,9 @@ export function SmartDateTimePicker({
             side="bottom"
             sideOffset={8}
             align="start"
+            avoidCollisions={false}
             collisionPadding={12}
-            className="z-50 w-auto max-w-[calc(100vw-24px)]"
+            className="z-50 w-auto max-w-[calc(100vw-24px)] max-h-[85vh] overflow-y-auto"
             style={{ outline: 'none' }}
           >
             <div className="bg-white rounded-2xl border border-[#DCE6EF] shadow-[0_16px_48px_rgba(7,26,43,0.14)] overflow-hidden p-1">
@@ -1108,15 +1117,35 @@ export function SmartDateTimePicker({
                 locale={uiLanguage() === 'vi' ? vi : enUS}
                 labels={calendarLabels()}
                 mode="single"
+                fixedWeeks
+                showOutsideDays
                 selected={selectedDay}
+                defaultMonth={selectedDay}
                 onSelect={handleSelectDay}
                 disabled={disablePast ? { before: today } : undefined}
                 classNames={rdpClassNames as Parameters<typeof DayPicker>[0]['classNames']}
               />
               {/* Luxury Time row */}
               <div className="border-t border-[#F5F8FB] pt-2 px-1 pb-1 bg-[#F9FAFC] rounded-b-xl flex justify-center">
-                <LuxuryTimeSelector timeStr={timeStr} embedded onChange={handleTimeChange} />
+                <LuxuryTimeSelector
+                  timeStr={timeStr}
+                  embedded
+                  onChange={handleTimeChange}
+                  minuteStep={minuteStep}
+                />
               </div>
+              {clearable && value && (
+                <button
+                  type="button"
+                  className="w-full rounded-xl px-3 py-2 text-xs font-bold text-[#607A96] hover:bg-slate-100"
+                  onClick={() => {
+                    onChange('');
+                    setOpen(false);
+                  }}
+                >
+                  {tr('common.clear')}
+                </button>
+              )}
             </div>
           </Popover.Content>
         </Popover.Portal>

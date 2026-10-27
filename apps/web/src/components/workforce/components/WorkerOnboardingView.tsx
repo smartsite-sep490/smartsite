@@ -134,20 +134,10 @@ export function WorkerOnboardingView({ apiUrl }: { apiUrl: string }) {
       {/* Hero Header */}
       <header className="rounded-2xl border border-slate-200/90 bg-white p-6 sm:p-8 shadow-xs relative overflow-hidden">
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-6 relative z-10">
-          <div className="space-y-2">
-            <div className="inline-flex items-center gap-2 px-2.5 py-1 rounded-md bg-orange-50 border border-orange-200/80 text-[11px] font-black uppercase tracking-wider text-[#F66B17]">
-              <span>MF01</span>
-              <span>·</span>
-              <span>{tr('common.worker_onboarding')}</span>
-            </div>
+          <div>
             <h1 className="text-2xl sm:text-3xl font-black text-[#041D2E] tracking-tight">
               {tr('common.worker_onboarding')}
             </h1>
-            <p className="text-sm text-slate-600 max-w-2xl leading-relaxed">
-              {tr(
-                'worker_onboarding_view.create_accounts_and_manage_workers_belonging_to_your_contractor_at_this_site_regis',
-              )}
-            </p>
           </div>
 
           {/* Site Selector Card */}

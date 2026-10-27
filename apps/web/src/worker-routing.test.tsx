@@ -9,6 +9,8 @@ import { App } from './app';
 const state = vi.hoisted(() => ({
   accessToken: null as string | null,
   restoring: false,
+  restoreError: false,
+  restoreRefetch: vi.fn(),
   profile: undefined as { roleAssignments: { role: string; siteId: string | null }[] } | undefined,
   profilePending: true,
   profileError: false,
@@ -24,7 +26,7 @@ vi.mock('./features/auth/auth-session', () => ({
     dismissSessionExpired: vi.fn(),
   }),
   useLogout: () => ({ mutate: vi.fn() }),
-  useRestoreSession: () => ({ isLoading: state.restoring }),
+  useRestoreSession: () => ({ isLoading: state.restoring, isError: state.restoreError, refetch: state.restoreRefetch }),
   useCurrentUser: () => ({
     data: state.profile,
     isPending: state.profilePending,
@@ -94,12 +96,24 @@ function profile(roles: string[]) {
 beforeEach(() => {
   state.accessToken = null;
   state.restoring = false;
+  state.restoreError = false;
+  state.restoreRefetch.mockReset();
   state.profile = undefined;
   state.profilePending = true;
   state.profileError = false;
   state.refetch.mockReset();
   state.dashboardRender.mockReset();
   state.loginSuccess = undefined;
+});
+
+it('offers retry without redirecting to login when session restoration temporarily fails', () => {
+  state.restoreError = true;
+  mount('/workforce');
+  expect(screen.getByRole('alert')).toBeTruthy();
+  expect(screen.queryByText('Sign in form')).toBeNull();
+  expect(screen.getByTestId('location').textContent).toBe('/workforce');
+  fireEvent.click(screen.getByRole('button', { name: /try again/i }));
+  expect(state.restoreRefetch).toHaveBeenCalledOnce();
 });
 afterEach(() => {
   cleanup();
@@ -141,6 +155,14 @@ it('redirects a Worker opening or refreshing /dashboard to /workforce', async ()
   refresh();
   await screen.findByText('Worker schedule');
   expect(state.dashboardRender).not.toHaveBeenCalled();
+});
+
+it('redirects a Worker opening the removed overview to My Schedule', async () => {
+  state.accessToken = 'synthetic-token';
+  profile(['WORKER']);
+  mount('/worker-summary');
+  await screen.findByText('Worker schedule');
+  expect(screen.getByTestId('location').textContent).toBe('/workforce');
 });
 
 it.each(['WORKER', 'CONTRACTOR_REPRESENTATIVE'])(

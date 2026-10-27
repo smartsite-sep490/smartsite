@@ -44,7 +44,6 @@ export function GateObservationView({
           <h2 className="text-xl font-extrabold tracking-tight text-[#111111]">
             {t('gateObservation.title')}
           </h2>
-          <p className="text-xs text-[#6B6B6B]">{t('gateObservation.subtitle')}</p>
         </div>
 
         <div className="flex min-w-0 max-w-full flex-wrap items-center gap-2">
