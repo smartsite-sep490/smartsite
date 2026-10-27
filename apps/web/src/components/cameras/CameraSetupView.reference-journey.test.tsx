@@ -176,6 +176,23 @@ describe('CameraSetupView -> ZonePpeSetupDialog -> ZonePpeCameraRegionPanel -> u
 
     stubCameraAndRegionPages([baseCamera, secondActiveCamera], [] satisfies RegionResponse[]);
 
+    vi.spyOn(SmartSiteManagementClient.prototype, 'getCameraApplicationStatus').mockImplementation(
+      async (_token, siteId, cameraId) => ({
+        siteId,
+        cameraId,
+        desiredRevision:
+          cameraId === secondActiveCamera.id
+            ? secondActiveCamera.configurationVersion
+            : baseCamera.configurationVersion,
+        reportedRevision: null,
+        applicationState: 'UNCONFIRMED',
+        viewValidity: 'UNCONFIRMED',
+        observedAt: new Date(BASE_TIME_MS).toISOString(),
+        lastReceiptAt: null,
+        reasonCode: 'NO_APPLICATION_RECEIPT',
+      }),
+    );
+
     queryClient = new QueryClient({
       defaultOptions: { queries: { retry: false, gcTime: 0 }, mutations: { retry: false } },
     });

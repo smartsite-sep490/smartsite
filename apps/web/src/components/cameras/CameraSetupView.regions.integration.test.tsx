@@ -67,6 +67,17 @@ beforeEach(() => {
     items: [],
     total: 0,
   });
+  vi.spyOn(SmartSiteManagementClient.prototype, 'getCameraApplicationStatus').mockResolvedValue({
+    siteId: site.id,
+    cameraId: camera.id,
+    desiredRevision: camera.configurationVersion,
+    reportedRevision: null,
+    applicationState: 'UNCONFIRMED',
+    viewValidity: 'UNCONFIRMED',
+    observedAt: new Date(site.createdAt).toISOString(),
+    lastReceiptAt: null,
+    reasonCode: 'NO_APPLICATION_RECEIPT',
+  });
   for (const method of [
     'getCameraPreview',
     'getCameraConfigurationImage',
