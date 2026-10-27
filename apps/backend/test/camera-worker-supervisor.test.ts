@@ -1,25 +1,94 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import path from 'node:path';
+import { tmpdir } from 'node:os';
 import { spawn } from 'node:child_process';
 import { once } from 'node:events';
+import { setTimeout as delay } from 'node:timers/promises';
 import {
   superviseCameraWorker,
   workerChildEnvironment,
 } from '../src/scripts/camera-worker-supervisor.js';
 
 const cameraId = '11111111-1111-4111-8111-111111111111';
+const root = process.platform === 'win32' ? 'D:/Ky9-FPT/SmartSiteData/runs' : tmpdir();
 function options(id = cameraId) {
   return {
     cameraId: id,
     allowedCameraIds: [id],
-    credentialDirectory: path.resolve(process.env.TEMP!),
-    outboxPath: path.resolve(process.env.TEMP!, 'existing-outbox.sqlite3'),
+    credentialDirectory: path.resolve(root),
+    outboxPath: path.resolve(root, 'existing-outbox.sqlite3'),
     databaseIdentity: '127.0.0.1:5433/smartsite_test/owned',
     leaseMs: 60000,
     maximumStarts: 2,
   };
 }
+
+test('lease deadline stops a stuck worker and awaits exit before issuing its replacement', async () => {
+  const controller = new AbortController();
+  const fallback = setTimeout(() => controller.abort(), 3200);
+  const order: string[] = [];
+  try {
+    const result = await superviseCameraWorker(
+      { ...options('55555555-5555-4555-8555-555555555555'), leaseMs: 1000 },
+      {
+        issue: async () => {
+          order.push('issue');
+        },
+        launch: async () => {
+          let finish!: (value: { code: null; termination: 'FORCED' }) => void;
+          const exited = new Promise<{ code: null; termination: 'FORCED' }>((resolve) => {
+            finish = resolve;
+          });
+          return {
+            exited,
+            stop: async () => {
+              order.push('stop');
+              await delay(20);
+              order.push('exit');
+              finish({ code: null, termination: 'FORCED' });
+            },
+          };
+        },
+        backoff: async () => {},
+      },
+      controller.signal,
+    );
+    assert.equal(result.status, 'EXHAUSTED');
+    assert.deepEqual(order, ['issue', 'stop', 'exit', 'issue', 'stop', 'exit']);
+    assert.deepEqual(result.exits, [
+      { code: null, termination: 'FORCED' },
+      { code: null, termination: 'FORCED' },
+    ]);
+  } finally {
+    clearTimeout(fallback);
+  }
+});
+
+test('issuance that consumes the lease cannot launch an expired generation', async () => {
+  let launched = false;
+  await assert.rejects(
+    superviseCameraWorker(
+      { ...options('66666666-6666-4666-8666-666666666666'), leaseMs: 1000 },
+      {
+        issue: async () => {
+          await delay(1050);
+        },
+        launch: async () => {
+          launched = true;
+          return {
+            exited: Promise.resolve({ code: 0, termination: 'EXITED' as const }),
+            stop: async () => {},
+          };
+        },
+        backoff: async () => {},
+      },
+      new AbortController().signal,
+    ),
+    /operator reconciliation/,
+  );
+  assert.equal(launched, false);
+});
 
 test('each replacement awaits prior exit, issues a fresh artifact and retains the outbox', async () => {
   const order: string[] = [],
@@ -170,70 +239,75 @@ test('child environment is an allowlist, never inherits issuer/database/admin cr
   assert.throws(() => workerChildEnvironment({}, { DATABASE_URL: 'secret' }));
 });
 
-test(
-  'prototype drives and awaits an actual owned fake process with a restricted environment',
-  { timeout: 5000 },
-  async (t) => {
-    const controller = new AbortController();
-    let stopped = false;
-    const result = await superviseCameraWorker(
-      { ...options('33333333-3333-4333-8333-333333333333'), maximumStarts: 1 },
-      {
-        issue: async () => {},
-        launch: async () => {
-          const child = spawn(
-            process.execPath,
-            [
-              '--input-type=module',
-              '-e',
-              `
+for (const mode of ['cancellation', 'lease'] as const)
+  test(
+    `prototype drives and awaits an actual owned fake process on ${mode} with a restricted environment`,
+    { timeout: 5000 },
+    async (t) => {
+      const controller = new AbortController();
+      let stopped = false;
+      const result = await superviseCameraWorker(
+        {
+          ...options('33333333-3333-4333-8333-333333333333'),
+          maximumStarts: 1,
+          leaseMs: mode === 'lease' ? 1000 : 60000,
+        },
+        {
+          issue: async () => {},
+          launch: async () => {
+            const child = spawn(
+              process.execPath,
+              [
+                '--input-type=module',
+                '-e',
+                `
         if (process.env.DATABASE_URL || process.env.DIRECT_URL || process.env.SMARTSITE_AI_ISSUER_TOKEN) process.exit(9);
         process.stdout.write('ready');
         process.stdin.once('data', () => process.exit(0));
         process.stdin.resume();
       `,
-            ],
-            {
-              windowsHide: true,
-              shell: false,
-              stdio: ['pipe', 'pipe', 'pipe'],
-              env: workerChildEnvironment(
-                {
-                  ...process.env,
-                  DATABASE_URL: 'fixture-issuer-secret',
-                  DIRECT_URL: 'fixture-secret',
-                  SMARTSITE_AI_ISSUER_TOKEN: 'fixture-secret',
-                },
-                {},
-              ),
-            },
-          );
-          t.after(() => {
-            if (child.exitCode === null) child.kill();
-          });
-          const exited = once(child, 'exit').then(([code]) => ({
-            code: code as number | null,
-            termination: 'EXITED' as const,
-          }));
-          const [ready] = await once(child.stdout, 'data');
-          assert.equal(ready.toString(), 'ready');
-          controller.abort();
-          return {
-            exited,
-            stop: async () => {
-              stopped = true;
-              child.stdin.end('stop');
-            },
-          };
+              ],
+              {
+                windowsHide: true,
+                shell: false,
+                stdio: ['pipe', 'pipe', 'pipe'],
+                env: workerChildEnvironment(
+                  {
+                    ...process.env,
+                    DATABASE_URL: 'fixture-issuer-secret',
+                    DIRECT_URL: 'fixture-secret',
+                    SMARTSITE_AI_ISSUER_TOKEN: 'fixture-secret',
+                  },
+                  {},
+                ),
+              },
+            );
+            t.after(() => {
+              if (child.exitCode === null) child.kill();
+            });
+            const exited = once(child, 'exit').then(([code]) => ({
+              code: code as number | null,
+              termination: 'EXITED' as const,
+            }));
+            const [ready] = await once(child.stdout, 'data');
+            assert.equal(ready.toString(), 'ready');
+            if (mode === 'cancellation') controller.abort();
+            return {
+              exited,
+              stop: async () => {
+                stopped = true;
+                child.stdin.end('stop');
+              },
+            };
+          },
         },
-      },
-      controller.signal,
-    );
-    assert.equal(result.status, 'CANCELLED');
-    assert.equal(stopped, true);
-    assert.deepEqual(result.exits, [{ code: 0, termination: 'EXITED' }]);
-  },
-);
+        controller.signal,
+      );
+      assert.equal(result.status, mode === 'cancellation' ? 'CANCELLED' : 'EXHAUSTED');
+      assert.equal(stopped, true);
+      assert.deepEqual(result.exits, [{ code: 0, termination: 'EXITED' }]);
+    },
+  );
 
 test('test prototype refuses non-test database identity before issuance', async () => {
   let issued = false;

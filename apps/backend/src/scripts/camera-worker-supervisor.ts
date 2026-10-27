@@ -98,10 +98,13 @@ export async function superviseCameraWorker(
         `${cameraId}-${randomUUID()}.json`,
       );
       uncertain = true;
+      // Start before issuance so slow provisioning never extends the child's lease budget.
+      const deadline = performance.now() + options.leaseMs;
       // An issuance error may follow a committed transaction: never automatically retry it.
       await ports.issue(issuerArguments({ ...options, cameraId }, credentialFile));
       uncertain = false;
       if (signal.aborted) return { status: 'CANCELLED', starts, exits };
+      if (performance.now() >= deadline) throw new Error('Issuance consumed worker lease');
       uncertain = true;
       const worker = await ports.launch({
         cameraId,
@@ -115,17 +118,23 @@ export async function superviseCameraWorker(
         signal.addEventListener('abort', aborted, { once: true });
         if (signal.aborted) aborted();
       });
+      const leaseTimer = new AbortController();
       try {
-        const exit = await Promise.race([worker.exited, cancellation]);
-        if (exit === 'CANCELLED') {
+        const expiry = delay(Math.max(0, deadline - performance.now()), 'EXPIRED' as const, {
+          signal: leaseTimer.signal,
+        });
+        const exit = await Promise.race([worker.exited, cancellation, expiry]);
+        if (typeof exit === 'string') {
           await worker.stop();
           exits.push(await worker.exited);
           uncertain = false;
-          return { status: 'CANCELLED', starts, exits };
+          if (signal.aborted) return { status: 'CANCELLED', starts, exits };
+        } else {
+          exits.push(exit);
+          uncertain = false;
         }
-        exits.push(exit);
-        uncertain = false;
       } finally {
+        leaseTimer.abort();
         signal.removeEventListener('abort', aborted);
       }
       if (starts < options.maximumStarts) {

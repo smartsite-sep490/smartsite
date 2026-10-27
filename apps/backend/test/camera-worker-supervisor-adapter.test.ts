@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import path from 'node:path';
+import { tmpdir } from 'node:os';
 import { mkdtemp, writeFile } from 'node:fs/promises';
 import {
   workerRuntimeCommand,
@@ -8,7 +9,7 @@ import {
 } from '../src/scripts/camera-worker-supervisor-adapter.js';
 
 const cameraId = '11111111-1111-4111-8111-111111111111';
-const root = path.resolve(process.env.TEMP!);
+const root = process.platform === 'win32' ? 'D:/Ky9-FPT/SmartSiteData/runs' : tmpdir();
 const input = {
   pythonExecutable: path.join(root, 'python.exe'),
   manifestFile: path.join(root, 'reviewed.json'),
