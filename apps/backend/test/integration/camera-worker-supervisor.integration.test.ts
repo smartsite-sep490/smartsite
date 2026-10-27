@@ -7,31 +7,41 @@ import path from 'node:path';
 import { tmpdir } from 'node:os';
 import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
+import { ConfigService } from '@nestjs/config';
+import { Test } from '@nestjs/testing';
+import { getDataSourceToken } from '@nestjs/typeorm';
+import type { NestExpressApplication } from '@nestjs/platform-express';
+import { DataSource } from 'typeorm';
+import { PARAMS_PROVIDER_TOKEN } from 'nestjs-pino';
+import { AppModule } from '../../src/app.module.js';
+import { configureApplication } from '../../src/configure-app.js';
+import { validateEnvironment, type BackendEnvironment } from '../../src/config/environment.js';
+import { createLoggerParams } from '../../src/observability/logger.js';
 import { CameraEntity } from '../../src/database/entities/camera.entity.js';
 import { operatorSupervisorPorts } from '../../src/scripts/camera-worker-supervisor-adapter.js';
 import {
   superviseCameraWorker,
   workerChildEnvironment,
 } from '../../src/scripts/camera-worker-supervisor.js';
-import { recordCameraConfigurationAcknowledgement } from '../../src/modules/cameras/camera-configuration-acknowledgement.js';
+import { readCameraApplicationStatus } from '../../src/modules/cameras/camera-application-status.js';
 import { recordCameraConfigurationBundle } from '../../src/modules/cameras/camera-configuration-bundles.js';
 import { revokeCameraWorkerGeneration } from '../../src/modules/cameras/camera-worker-generations.js';
 import { ZoneConfigurationService } from '../../src/modules/zones/zone-configuration.service.js';
 import { SiteConfigurationService } from '../../src/modules/sites/site-configuration.service.js';
 import { createIsolatedTestDatabase } from '../support/isolated-test-database.js';
 import { resolveTestDatabaseUrl } from '../support/test-environment.js';
+import { supervisorFakeWorker as workerProbe } from '../support/supervisor-fake-worker.js';
 
 const execute = promisify(execFile);
-const status = (value: number) => (error: unknown) =>
-  (error as { getStatus?: () => number }).getStatus?.() === value;
 const python = process.env.SUPERVISOR_TEST_PYTHON;
 
 test(
-  'trusted supervisor uses committed generations and retains a real one-time worker outbox',
+  'trusted supervisor renews HTTP runtime ACKs and retains a real one-time worker outbox',
   { skip: !python, timeout: 60000 },
   async () => {
     const owned = createIsolatedTestDatabase();
     const db = owned.dataSource;
+    let app: NestExpressApplication | undefined;
     try {
       await owned.initialize();
       assert.ok('schema' in db.options);
@@ -57,6 +67,46 @@ test(
       const manifestFile = path.join(dir, 'unused-manifest.json');
       await writeFile(manifestFile, '{}');
       const outboxPath = path.join(dir, 'retained.sqlite3');
+      const serviceToken = 'synthetic-supervisor-service-token-only';
+      const config = new ConfigService<BackendEnvironment, true>(
+        validateEnvironment({
+          NODE_ENV: 'test',
+          DATABASE_URL: resolveTestDatabaseUrl(),
+          SMARTSITE_AI_SERVICE_TOKEN: serviceToken,
+          AI_CONFIGURATION_CAMERA_IDS: cameraId,
+          MF06_ENQUEUE_ENABLED: 'false',
+          MF06_ASSESSMENT_READ_ENABLED: 'false',
+          STORAGE_LOCAL_ROOT: dir,
+        }),
+      );
+      const module = await Test.createTestingModule({ imports: [AppModule] })
+        .overrideProvider(ConfigService)
+        .useValue(config)
+        .overrideProvider(PARAMS_PROVIDER_TOKEN)
+        .useValue(createLoggerParams(config, { write: () => undefined }))
+        .overrideProvider(getDataSourceToken())
+        .useValue(db)
+        .overrideProvider(DataSource)
+        .useValue(db)
+        .compile();
+      app = module.createNestApplication<NestExpressApplication>({
+        logger: false,
+        bodyParser: false,
+      });
+      await configureApplication(app);
+      await app.listen(0, '127.0.0.1');
+      const origin = await app.getUrl();
+      assert.match(origin, /^http:\/\/127\.0\.0\.1:\d+$/);
+      const acknowledge = (secret: string, body: unknown) =>
+        fetch(`${origin}/api/v1/integrations/ai/cameras/${cameraId}/configuration-ack`, {
+          method: 'POST',
+          headers: {
+            Authorization: `Bearer ${serviceToken}`,
+            'Content-Type': 'application/json',
+            'x-worker-generation-secret': secret,
+          },
+          body: JSON.stringify(body),
+        });
       const env = {
         ...process.env,
         DATABASE_URL: resolveTestDatabaseUrl(),
@@ -132,41 +182,43 @@ test(
               'SELECT bundle_sha256 FROM camera_configuration_bundle WHERE camera_id=$1 AND configuration_version=$2',
               [cameraId, version],
             );
-            const body = {
-              commandId: randomUUID(),
-              workerGenerationId: credential.workerGenerationId,
-              streamSessionId: credential.streamSessionId,
-              configurationVersion: version,
-              bundleSha256: bundle.bundle_sha256,
-              viewRevision: version,
-              outcome: 'LOADED',
-            };
-            await recordCameraConfigurationAcknowledgement(db, cameraId, credential.secret, body);
-            acknowledgements.push(body);
+            const beforeFrame = await readCameraApplicationStatus(db, siteId, cameraId, 60000);
+            assert.equal(beforeFrame.applicationState, 'UNCONFIRMED');
+            assert.equal(beforeFrame.reasonCode, 'NO_APPLICATION_RECEIPT');
             if (version === 2)
-              await assert.rejects(
-                recordCameraConfigurationAcknowledgement(
-                  db,
-                  cameraId,
-                  credentials[0]!.secret,
-                  acknowledgements[0],
-                ),
-                status(409),
+              assert.equal(
+                (await acknowledge(credentials[0]!.secret, acknowledgements[0])).status,
+                409,
               );
             const run = await execute(
               python!,
               ['-I', '-B', '-c', workerProbe, context.credentialFile, context.outboxPath],
               {
                 windowsHide: true,
-                env: workerChildEnvironment(process.env, {}),
-                timeout: 5000,
+                env: workerChildEnvironment(process.env, {
+                  SMARTSITE_AI_BACKEND_SERVICE_TOKEN: serviceToken,
+                  SMARTSITE_AI_BACKEND_INGESTION_URL: origin,
+                }),
+                timeout: 10000,
                 maxBuffer: 8192,
               },
             );
             const proof = JSON.parse(run.stdout);
             assert.equal(proof.pending, 1);
             assert.equal(proof.claims, version);
+            assert.equal(proof.preFrameAckCount, 0);
+            assert.equal(proof.httpStatus, 200);
+            assert.equal(proof.ack.workerGenerationId, credential.workerGenerationId);
+            assert.equal(proof.ack.streamSessionId, credential.streamSessionId);
+            assert.equal(proof.ack.configurationVersion, version);
+            assert.equal(proof.ack.bundleSha256, bundle.bundle_sha256);
+            assert.equal(proof.ack.viewRevision, version);
+            acknowledgements.push(proof.ack);
+            const application = await readCameraApplicationStatus(db, siteId, cameraId, 60000);
+            assert.equal(application.applicationState, 'LOADED');
+            assert.equal(application.viewValidity, 'UNCONFIRMED');
             pythonProofs.push(proof);
+            // The helper exits cleanly; this fake port models a worker failure after its ACK.
             return {
               exited: Promise.resolve({ code: 1, termination: 'EXITED' as const }),
               stop: async () => {
@@ -193,14 +245,10 @@ test(
         [cameraId],
         credentials[1]!.workerGenerationId,
       );
-      await assert.rejects(
-        recordCameraConfigurationAcknowledgement(
-          db,
-          cameraId,
-          credentials[1]!.secret,
-          acknowledgements[1],
-        ),
-        status(409),
+      assert.equal((await acknowledge(credentials[1]!.secret, acknowledgements[1])).status, 409);
+      assert.equal(
+        (await readCameraApplicationStatus(db, siteId, cameraId, 60000)).applicationState,
+        'STALE',
       );
       await db.query("UPDATE camera SET status='INACTIVE' WHERE id=$1", [cameraId]);
       await assert.rejects(
@@ -217,39 +265,14 @@ test(
       );
       assert.equal(generations.count, 2);
       console.info(
-        'SUPERVISOR_PG_PASS:two committed generations/two receipts/old+revoked ACK denied/inactive issuance denied/retained SQLite pending event',
+        'SUPERVISOR_PG_PASS:two committed generations/two HTTP runtime receipts/old+revoked HTTP ACK denied/inactive issuance denied/retained SQLite pending event',
       );
     } finally {
-      await owned.dispose();
+      try {
+        await app?.close();
+      } finally {
+        await owned.dispose();
+      }
     }
   },
 );
-
-const workerProbe = String.raw`
-import asyncio,json,sqlite3,sys
-from pathlib import Path
-from datetime import UTC,datetime
-from uuid import UUID,uuid4
-from smartsite_ai.integrations.worker_generation import load_worker_generation
-from smartsite_ai.integrations.outbox import SqliteEventOutbox
-from smartsite_ai.domain.observations import TechnicalObservationEvent
-async def main():
- credential=Path(sys.argv[1]);outbox=Path(sys.argv[2]);raw=json.loads(credential.read_text())
- binding=load_worker_generation(credential,UUID(raw['cameraId']),now=datetime.now(UTC))
- queue=SqliteEventOutbox(outbox)
- await queue.claim_worker_session(UUID(binding.camera_id),UUID(binding.worker_generation_id),UUID(binding.stream_session_id))
- try:await queue.claim_worker_session(UUID(binding.camera_id),UUID(binding.worker_generation_id),UUID(binding.stream_session_id))
- except RuntimeError:pass
- else:raise AssertionError('duplicate generation claim accepted')
- record=outbox.with_suffix('.event.json')
- if not record.exists():
-  event=TechnicalObservationEvent.create(event_id=str(uuid4()),camera_external_id='G4-FAKE',stream_session_id=binding.stream_session_id,captured_at=datetime.now(UTC).isoformat(timespec='milliseconds').replace('+00:00','Z'),frame_dimensions={'width':2,'height':2},observations=[{'type':'PERSON','trackId':1,'confidence':0.9,'boundingBox':{'x1':0.1,'y1':0.1,'x2':0.9,'y2':0.9,'coordinateSpace':'NORMALIZED_0_1'}}])
-  await queue.enqueue(event)
-  record.write_text(json.dumps({'eventId':str(event.event_id)}))
- counts=await queue.counts()
- pending=await queue.ready()
- assert len(pending)==1 and str(pending[0].event.event_id)==json.loads(record.read_text())['eventId']
- with sqlite3.connect(outbox) as connection:claims=connection.execute('SELECT count(*) FROM worker_session_claim').fetchone()[0]
- print(json.dumps({'claims':claims,'pending':counts.pending,'eventId':json.loads(record.read_text())['eventId']}))
-asyncio.run(main())
-`;
