@@ -143,6 +143,18 @@ function boundHookNamespace(call: ts.CallExpression): string {
   )
     return 'common';
   if (binding && ts.isParameter(binding)) {
+    if (binding.type && ts.isTypeReferenceNode(binding.type)) {
+      const translator = imported(binding.type.typeName);
+      const namespace = binding.type.typeArguments?.[0];
+      if (
+        translator?.name === 'TFunction' &&
+        translator.module === 'i18next' &&
+        namespace &&
+        ts.isLiteralTypeNode(namespace) &&
+        ts.isStringLiteral(namespace.literal)
+      )
+        return namespace.literal.text;
+    }
     const keyType =
       binding.type && ts.isFunctionTypeNode(binding.type)
         ? binding.type.parameters[0]?.type
@@ -304,6 +316,30 @@ it.each([
     'unknown',
   ],
   ["function helper(t:unknown){return t('ppe.header.title',{ns:'safety'});}", 'unknown'],
+  [
+    "import type {TFunction} from 'i18next'; function helper(t:TFunction<'common'>){return t('visitor.presenceNeedsReview');}",
+    'common',
+  ],
+  [
+    "import type {TFunction as Translator} from 'i18next'; function helper(t:Translator<'safety'>){return t('ppe.header.title');}",
+    'safety',
+  ],
+  [
+    "import type {TFunction} from './unrelated'; function helper(t:TFunction<'common'>){return t('common.retry');}",
+    'unknown',
+  ],
+  [
+    "import type {TFunction} from 'i18next'; function helper(){type TFunction<T>=unknown; return function(t:TFunction<'common'>){return t('common.retry');}}",
+    'unknown',
+  ],
+  [
+    "import type {TFunction} from 'i18next'; function helper(t:TFunction){return t('common.retry');}",
+    'unknown',
+  ],
+  [
+    "import type {TFunction} from 'i18next'; function helper(t:TFunction<'common'|'safety'>){return t('common.retry');}",
+    'unknown',
+  ],
   [
     "import {useLocale} from './ppe-locale'; function View(){const {t=unknownTranslator}=useLocale(); return t('ppe.header.title');}",
     'unknown',

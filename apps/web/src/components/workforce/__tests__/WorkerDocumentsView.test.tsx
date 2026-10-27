@@ -412,13 +412,16 @@ it('updates selected site and initialWorkerId when URL query params change in-pl
   expect((screen.getByLabelText(tr('common.site_fa7955')) as HTMLSelectElement).value).toBe(
     'site-b',
   );
-  expect(await screen.findByText(/Trần Thị Bình \(W002\)/)).toBeTruthy();
+  const worker2Heading = await screen.findByRole('heading', { name: 'Trần Thị Bình' });
+  expect(within(worker2Heading.parentElement!).getByText('W002')).toBeTruthy();
 
   fireEvent.click(screen.getByRole('button', { name: 'jump-site-b-worker-3' }));
   await waitFor(() =>
     expect(getDetail).toHaveBeenCalledWith('synthetic-token', 'site-b', 'worker-3'),
   );
-  expect(await screen.findByText(/Lê Văn Cường \(W003\)/)).toBeTruthy();
+  const worker3Heading = await screen.findByRole('heading', { name: 'Lê Văn Cường' });
+  expect(within(worker3Heading.parentElement!).getByText('W003')).toBeTruthy();
+  expect(screen.queryByRole('heading', { name: 'Trần Thị Bình' })).toBeNull();
 });
 
 it('renders safe generic error in both EN and VI without leaking SQL or connection strings and retries only the relevant failed query', async () => {

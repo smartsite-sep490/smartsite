@@ -10,6 +10,7 @@ import type {
 } from '@smartsite/contracts';
 import { SITE_GATES } from '@smartsite/contracts/gate-permissions';
 import { useTranslation } from 'react-i18next';
+import type { TFunction } from 'i18next';
 import { uiLocale } from '../../../i18n';
 import { QrScannerView } from '../gate/QrScannerView';
 import { visitorError } from '../visitor-error';
@@ -67,10 +68,7 @@ export type VisitorAccessMode = 'all' | 'approvals' | 'gate' | 'observer';
 
 type StatusFilter = 'ALL' | 'PENDING' | 'APPROVED' | 'REJECTED' | 'CANCELLED' | 'EXPIRED';
 
-function getPresenceInfo(
-  v: VisitResponse,
-  t: (key: string, options?: Record<string, unknown>) => string,
-) {
+function getPresenceInfo(v: VisitResponse, t: TFunction<'common'>) {
   const inside = Math.max(0, v.enteredCount - v.exitedCount);
   if (v.presence === 'NEEDS_REVIEW') {
     return {
