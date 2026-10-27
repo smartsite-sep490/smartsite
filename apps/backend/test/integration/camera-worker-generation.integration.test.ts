@@ -13,8 +13,10 @@ import {
 import { createIsolatedTestDatabase } from '../support/isolated-test-database.js';
 import { resolveTestDatabaseUrl } from '../support/test-environment.js';
 import { provisionCameraWorker } from '../../src/scripts/provision-camera-worker.js';
+import { CameraWorkerGenerations1793836800000 } from '../../src/database/migrations/1793836800000-CameraWorkerGenerations.js';
 
 const fixtureRoot = process.platform === 'win32' ? 'D:/Ky9-FPT/SmartSiteData/runs' : tmpdir();
+const workerGenerationMigration = new CameraWorkerGenerations1793836800000();
 
 type Provision = (
   source: DataSource,
@@ -38,6 +40,11 @@ test('reviewed release persists owned worker generations and immutable configura
   const owned = createIsolatedTestDatabase();
   try {
     await owned.initialize();
+    const [{ schemaName }] = await owned.dataSource.query(
+      'SELECT current_schema() AS "schemaName"',
+    );
+    assert.match(schemaName, /^isolated_test_[0-9a-f]{32}$/);
+    console.info(`FRAME_TEST_SCHEMA:${schemaName}`);
     const tables = await owned.dataSource.query(
       `SELECT to_regclass('camera_worker_generation') AS generation,
         to_regclass('camera_configuration_application_receipt') AS receipt`,
@@ -55,13 +62,18 @@ test('reviewed release persists owned worker generations and immutable configura
         "INSERT INTO camera(id,site_id,external_id,code,name) VALUES($1,$2,$1::uuid::text,$1::uuid::text,'Preserved camera')",
         [cameraId, siteId],
       );
-      await owned.dataSource.undoLastMigration();
+      // Later migrations must not change which rollback is under test.
+      await owned.dataSource.transaction((manager) =>
+        workerGenerationMigration.down(manager.queryRunner!),
+      );
       assert.equal(
         (await owned.dataSource.query("SELECT to_regclass('camera_worker_generation') AS name"))[0]
           .name,
         null,
       );
-      await owned.dataSource.runMigrations();
+      await owned.dataSource.transaction((manager) =>
+        workerGenerationMigration.up(manager.queryRunner!),
+      );
       assert.equal(
         (await owned.dataSource.query('SELECT id FROM camera WHERE id=$1', [cameraId]))[0].id,
         cameraId,
@@ -286,7 +298,10 @@ test('operator generations supersede atomically and never persist plaintext cred
         (await rows()).find((row: { id: string }) => row.id === current.id).revoked_at.getTime(),
         revoked.revoked_at.getTime(),
       );
-      await assert.rejects(db.undoLastMigration(), /populated worker generation history/);
+      await assert.rejects(
+        db.transaction((manager) => workerGenerationMigration.down(manager.queryRunner!)),
+        /populated worker generation history/,
+      );
     });
   } finally {
     await owned.dispose();

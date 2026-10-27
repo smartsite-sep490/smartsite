@@ -14,14 +14,20 @@ import {
   ZoneType,
 } from '../../src/database/entities/index.js';
 import { parseNormalizedCapturedAt } from '../../src/integrations/ai/ai-ingestion.service.js';
-import dataSource from '../support/test-data-source.js';
+import { createIsolatedTestDatabase } from '../support/isolated-test-database.js';
 
 async function withDataSource<T>(fn: (source: DataSource) => Promise<T>): Promise<T> {
-  if (!dataSource.isInitialized) await dataSource.initialize();
+  const owned = createIsolatedTestDatabase();
   try {
-    return await fn(dataSource);
+    await owned.initialize();
+    const [{ schemaName }] = await owned.dataSource.query(
+      'SELECT current_schema() AS "schemaName"',
+    );
+    assert.match(schemaName, /^isolated_test_[0-9a-f]{32}$/);
+    console.info(`FRAME_TEST_SCHEMA:${schemaName}`);
+    return await fn(owned.dataSource);
   } finally {
-    if (dataSource.isInitialized) await dataSource.destroy();
+    await owned.dispose();
   }
 }
 
