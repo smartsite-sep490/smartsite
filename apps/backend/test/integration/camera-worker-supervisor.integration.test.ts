@@ -7,6 +7,8 @@ import path from 'node:path';
 import { tmpdir } from 'node:os';
 import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
+import { createServer, request as httpRequest, type Server } from 'node:http';
+import { once } from 'node:events';
 import { ConfigService } from '@nestjs/config';
 import { Test } from '@nestjs/testing';
 import { getDataSourceToken } from '@nestjs/typeorm';
@@ -36,12 +38,13 @@ const execute = promisify(execFile);
 const python = process.env.SUPERVISOR_TEST_PYTHON;
 
 test(
-  'trusted supervisor renews HTTP runtime ACKs and retains a real one-time worker outbox',
+  'trusted supervisor renews HTTP ACKs and replays its queued event after response loss',
   { skip: !python, timeout: 60000 },
   async () => {
     const owned = createIsolatedTestDatabase();
     const db = owned.dataSource;
     let app: NestExpressApplication | undefined;
+    let deliveryProxy: Server | undefined;
     try {
       await owned.initialize();
       assert.ok('schema' in db.options);
@@ -97,6 +100,46 @@ test(
       await app.listen(0, '127.0.0.1');
       const origin = await app.getUrl();
       assert.match(origin, /^http:\/\/127\.0\.0\.1:\d+$/);
+      const ingestions: { status: number; body: { status: string; alertIds: string[] } }[] = [];
+      deliveryProxy = createServer((incoming, response) => {
+        if (incoming.method !== 'POST' || incoming.url !== '/api/v1/integrations/ai/events') {
+          response.writeHead(404).end();
+          return;
+        }
+        const upstream = httpRequest(
+          `${origin}/api/v1/integrations/ai/events`,
+          {
+            method: 'POST',
+            headers: {
+              Authorization: `Bearer ${serviceToken}`,
+              'Content-Type': 'application/json',
+            },
+          },
+          (reply) => {
+            const chunks: Buffer[] = [];
+            reply.on('data', (chunk) => chunks.push(Buffer.from(chunk)));
+            reply.on('error', () => response.destroy());
+            reply.on('end', () => {
+              const body = Buffer.concat(chunks);
+              ingestions.push({ status: reply.statusCode!, body: JSON.parse(body.toString()) });
+              // Commit succeeds; lose the first response before the worker can record delivery.
+              if (ingestions.length === 1 && reply.statusCode === 202) response.destroy();
+              else
+                response
+                  .writeHead(reply.statusCode!, { 'Content-Type': 'application/json' })
+                  .end(body);
+            });
+          },
+        );
+        upstream.on('error', () => response.destroy());
+        upstream.setTimeout(5000, () => upstream.destroy());
+        incoming.pipe(upstream);
+      });
+      deliveryProxy.listen(0, '127.0.0.1');
+      await once(deliveryProxy, 'listening');
+      const deliveryAddress = deliveryProxy.address();
+      assert(deliveryAddress && typeof deliveryAddress !== 'string');
+      const deliveryOrigin = `http://127.0.0.1:${deliveryAddress.port}`;
       const acknowledge = (secret: string, body: unknown) =>
         fetch(`${origin}/api/v1/integrations/ai/cameras/${cameraId}/configuration-ack`, {
           method: 'POST',
@@ -130,7 +173,12 @@ test(
         [];
       const acknowledgements: Record<string, unknown>[] = [];
       const outputs: string[] = [];
-      const pythonProofs: { claims: number; pending: number; eventId: string }[] = [];
+      const pythonProofs: {
+        claims: number;
+        pending: number;
+        eventId: string;
+        eventHash: string;
+      }[] = [];
       const result = await superviseCameraWorker(
         options,
         {
@@ -192,7 +240,15 @@ test(
               );
             const run = await execute(
               python!,
-              ['-I', '-B', '-c', workerProbe, context.credentialFile, context.outboxPath],
+              [
+                '-I',
+                '-B',
+                '-c',
+                workerProbe,
+                context.credentialFile,
+                context.outboxPath,
+                deliveryOrigin,
+              ],
               {
                 windowsHide: true,
                 env: workerChildEnvironment(process.env, {
@@ -204,7 +260,9 @@ test(
               },
             );
             const proof = JSON.parse(run.stdout);
-            assert.equal(proof.pending, 1);
+            assert.equal(proof.pending, version === 1 ? 1 : 0);
+            assert.equal(proof.delivered, version === 1 ? 0 : 1);
+            assert.equal(proof.terminal, 0);
             assert.equal(proof.claims, version);
             assert.equal(proof.preFrameAckCount, 0);
             assert.equal(proof.httpStatus, 200);
@@ -217,6 +275,14 @@ test(
             const application = await readCameraApplicationStatus(db, siteId, cameraId, 60000);
             assert.equal(application.applicationState, 'LOADED');
             assert.equal(application.viewValidity, 'UNCONFIRMED');
+            const stored = await db.query('SELECT * FROM ai_observation_event WHERE event_id=$1', [
+              proof.eventId,
+            ]);
+            assert.equal(stored.length, 1);
+            assert.equal(stored[0].resolved_camera_id, cameraId);
+            assert.equal(stored[0].stream_session_id, credentials[0]!.streamSessionId);
+            assert.equal(stored[0].payload_hash, proof.eventHash);
+            assert.equal(stored[0].processing_status, 'SKIPPED_NO_CANDIDATE');
             pythonProofs.push(proof);
             // The helper exits cleanly; this fake port models a worker failure after its ACK.
             return {
@@ -234,6 +300,16 @@ test(
       assert.equal(new Set(outputs).size, 2);
       assert.notEqual(credentials[0]!.streamSessionId, credentials[1]!.streamSessionId);
       assert.equal(pythonProofs[0]!.eventId, pythonProofs[1]!.eventId);
+      assert.equal(pythonProofs[0]!.eventHash, pythonProofs[1]!.eventHash);
+      assert.deepEqual(
+        ingestions.map((row) => row.status),
+        [202, 202],
+      );
+      assert.deepEqual(
+        ingestions.map((row) => row.body.status),
+        ['SKIPPED_NO_CANDIDATE', 'DUPLICATE_ACCEPTED'],
+      );
+      assert(ingestions.every((row) => row.body.alertIds.length === 0));
       const [receipts] = await db.query(
         'SELECT count(*)::int AS count FROM camera_configuration_application_receipt WHERE camera_id=$1',
         [cameraId],
@@ -265,13 +341,23 @@ test(
       );
       assert.equal(generations.count, 2);
       console.info(
-        'SUPERVISOR_PG_PASS:two committed generations/two HTTP runtime receipts/old+revoked HTTP ACK denied/inactive issuance denied/retained SQLite pending event',
+        'SUPERVISOR_PG_PASS:two generations/HTTP ACKs/retained event delivered after response loss/exact duplicate/no synthetic Person-only alert',
       );
     } finally {
       try {
-        await app?.close();
+        if (deliveryProxy?.listening) {
+          const closed = new Promise<void>((resolve, reject) =>
+            deliveryProxy!.close((error) => (error ? reject(error) : resolve())),
+          );
+          deliveryProxy.closeAllConnections();
+          await closed;
+        }
       } finally {
-        await owned.dispose();
+        try {
+          await app?.close();
+        } finally {
+          await owned.dispose();
+        }
       }
     }
   },
