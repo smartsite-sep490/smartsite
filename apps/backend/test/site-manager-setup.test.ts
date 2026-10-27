@@ -1,4 +1,3 @@
-import { AdminGuard } from '../src/modules/auth/user-auth.guard.js';
 import 'reflect-metadata';
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
@@ -7,6 +6,7 @@ import { GUARDS_METADATA } from '@nestjs/common/constants.js';
 import { SiteManagerGuard } from '../src/modules/auth/site-manager.guard.js';
 import { UserRole } from '../src/database/entities/user.entity.js';
 import { ContractorsController } from '../src/modules/workforce/directory/contractors.controller.js';
+import { ContractorOperationsController } from '../src/modules/workforce/directory/contractor-operations.controller.js';
 import { ZonesController } from '../src/modules/zones/zones.controller.js';
 import {
   SiteRepresentativesController,
@@ -45,6 +45,7 @@ test('Site Manager setup requires matching scope and denies Admin, other roles, 
 });
 
 test('all setup provisioning HTTP routes use the scoped guard', () => {
+  assert.equal('create' in ContractorOperationsController.prototype, false);
   for (const method of ['create', 'rename', 'updatePolicy'] as const) {
     assert.ok(
       Reflect.getMetadata(GUARDS_METADATA, ZonesController.prototype[method]).includes(
@@ -57,7 +58,7 @@ test('all setup provisioning HTTP routes use the scoped guard', () => {
   }
   assert.ok(
     Reflect.getMetadata(GUARDS_METADATA, ContractorsController.prototype.create).includes(
-      AdminGuard,
+      SiteManagerGuard,
     ),
   );
   for (const method of ['assignRepresentative', 'listRepresentativeAssignments'] as const) {

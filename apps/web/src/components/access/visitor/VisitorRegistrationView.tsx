@@ -60,6 +60,11 @@ export function VisitorRegistrationView({
     enabled: !!selectedSiteId && !reference,
     queryFn: () => client.listVisitorZones(selectedSiteId),
   });
+  const managers = useQuery({
+    queryKey: ['visitor-registration', apiUrl, selectedSiteId, 'managers'],
+    enabled: !!selectedSiteId && !reference,
+    queryFn: () => client.listVisitorManagers(selectedSiteId),
+  });
   const pass = useQuery({
     queryKey: ['visitor-registration', apiUrl, reference?.visitId, reference?.accessKey],
     enabled: !!reference,
@@ -91,6 +96,13 @@ export function VisitorRegistrationView({
     event.preventDefault();
     setFormError('');
     const f = new FormData(event.currentTarget);
+    const selectedManager = managers.data?.items.find(
+      (manager) => manager.id === f.get('siteManagerId'),
+    );
+    if (!selectedManager) {
+      setFormError('visitor.managerRequired');
+      return;
+    }
     const size = Number(groupSize);
     const roster =
       size > 1
@@ -117,7 +129,8 @@ export function VisitorRegistrationView({
       visitorName: String(f.get('visitorName')).trim(),
       company: String(f.get('company')).trim(),
       contact: String(f.get('contact')).trim(),
-      hostName: String(f.get('hostName')).trim(),
+      hostName: selectedManager.displayName,
+      siteManagerId: selectedManager.id,
       purpose: String(f.get('purpose')).trim(),
       targetArea: String(f.get('targetArea')).trim(),
       groupSize: size,
@@ -738,7 +751,24 @@ export function VisitorRegistrationView({
                   </select>
                 </label>
 
-                {textField('hostName', 'visitor.host')}
+                <label className="block text-xs font-bold text-slate-700">
+                  {t('visitor.host')}
+                  <select
+                    key={selectedSiteId}
+                    name="siteManagerId"
+                    className={field}
+                    required
+                    disabled={managers.isPending || !!managers.error}
+                    defaultValue=""
+                  >
+                    <option value="">{t('visitor.selectManager')}</option>
+                    {managers.data?.items.map((manager) => (
+                      <option key={manager.id} value={manager.id}>
+                        {manager.displayName}
+                      </option>
+                    ))}
+                  </select>
+                </label>
                 {textField('targetArea', 'visitor.area')}
 
                 <div className="sm:col-span-2">
@@ -761,6 +791,28 @@ export function VisitorRegistrationView({
               )}
               {sites.data?.items.length === 0 && (
                 <p className="text-xs text-slate-500">{t('visitor.noSites')}</p>
+              )}
+              {managers.isPending && selectedSiteId && (
+                <p role="status" className="text-xs text-slate-500">
+                  {t('visitor.loadingManagers')}
+                </p>
+              )}
+              {managers.error && (
+                <p role="alert" className="text-xs font-semibold text-rose-700">
+                  {t('visitor.managersError')}{' '}
+                  <button
+                    type="button"
+                    className="underline"
+                    onClick={() => void managers.refetch()}
+                  >
+                    {t('visitor.retry')}
+                  </button>
+                </p>
+              )}
+              {managers.data?.items.length === 0 && (
+                <p role="alert" className="text-xs text-amber-700">
+                  {t('visitor.noManagers')}
+                </p>
               )}
 
               {/* Zones */}

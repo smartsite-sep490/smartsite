@@ -48,11 +48,6 @@ export function CameraMonitoringView({
                   {tr('common.vision_workspace')}
                 </span>
               </div>
-              <p className="text-xs text-[#6B6B6B] mt-0.5">
-                {tr(
-                  'camera_monitoring_view.real_time_computer_vision_stream_analysis_for_safety_compliance_perimeter_security',
-                )}
-              </p>
             </div>
           </div>
         </div>
@@ -72,15 +67,6 @@ export function CameraMonitoringView({
               className={`w-4 h-4 ${activeTab === 'ppe' ? 'text-[#F66B17]' : 'text-slate-400'}`}
             />
             <span>{tr('common.ppe_monitoring')}</span>
-            <span
-              className={`text-[10px] px-1.5 py-0.5 rounded font-mono ${
-                activeTab === 'ppe'
-                  ? 'bg-[#F7F6F3] text-[#2F3437] font-bold'
-                  : 'bg-[#EAEAEA] text-[#6B6B6B]'
-              }`}
-            >
-              {tr('common.mf04')}
-            </span>
           </button>
 
           <button
@@ -96,15 +82,6 @@ export function CameraMonitoringView({
               className={`w-4 h-4 ${activeTab === 'zones' ? 'text-[#F66B17]' : 'text-slate-400'}`}
             />
             <span>{tr('common.restricted_zones')}</span>
-            <span
-              className={`text-[10px] px-1.5 py-0.5 rounded font-mono ${
-                activeTab === 'zones'
-                  ? 'bg-[#F7F6F3] text-[#2F3437] font-bold'
-                  : 'bg-[#EAEAEA] text-[#6B6B6B]'
-              }`}
-            >
-              MF05
-            </span>
           </button>
         </div>
       </div>

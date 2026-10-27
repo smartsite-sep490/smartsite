@@ -9,7 +9,6 @@ import {
   IconHome,
   IconBuilding,
   IconCalendar,
-  IconSearch,
   IconChevronLeft,
   IconChevronRight,
   IconCamera,
@@ -22,6 +21,7 @@ import { NotificationBell } from '../../features/notifications/NotificationBell'
 import { useTranslation } from 'react-i18next';
 import { LanguageSwitcher } from '../../i18n/LanguageSwitcher';
 import { workspaceTabs } from '../../features/auth/workspace-access';
+import { getWorkforceTabs } from '../workforce/utils/workforce-tabs';
 
 const apiUrl = import.meta.env.VITE_API_URL || 'http://localhost:3000';
 
@@ -29,7 +29,6 @@ export type ActiveTab =
   | 'dashboard'
   | 'assigned-work'
   | 'contractor-teams'
-  | 'worker-summary'
   | 'worker-onboarding'
   | 'worker-documents'
   | 'workforce'
@@ -103,6 +102,8 @@ export function AppLayout({ currentTab: propCurrentTab, onSelectTab, children }:
     ].includes(activeTab);
   const allowedTabs = workspaceTabs(currentUser?.roleAssignments ?? []);
   const workerOnly = roles.length === 1 && roles[0] === 'WORKER';
+  const attendanceWorkspace = !roles.includes('ADMIN') &&
+    roles.some((role) => ['SITE_MANAGER', 'CONTRACTOR_REPRESENTATIVE'].includes(role));
   const navGroups = [
     {
       label: t('shell.workspace'),
@@ -112,7 +113,6 @@ export function AppLayout({ currentTab: propCurrentTab, onSelectTab, children }:
         { id: 'assigned-work', label: t('shell.assignedWork'), icon: IconUsers },
         { id: 'worker-onboarding', label: t('shell.workerOnboarding'), icon: IconUsers },
         { id: 'worker-documents', label: t('documents.title'), icon: IconUsers },
-        { id: 'worker-summary', label: t('shell.workerSummary'), icon: IconDashboard },
         {
           id: 'workforce',
           label: t(workerOnly ? 'shell.mySchedule' : 'shell.workforce'),
@@ -121,7 +121,17 @@ export function AppLayout({ currentTab: propCurrentTab, onSelectTab, children }:
         { id: 'accounts', label: t('accounts.title'), icon: IconUsers },
         { id: 'site-setup', label: t('shell.siteSetup'), icon: IconBuilding },
         { id: 'schedule-setup', label: t('shell.schedule'), icon: IconCalendar },
-        { id: 'access', label: t(workerOnly ? 'shell.myQr' : 'shell.access'), icon: IconKey },
+        {
+          id: 'access',
+          label: t(
+            workerOnly
+              ? 'shell.myQr'
+              : attendanceWorkspace
+                ? 'access.tabs.attendance.label'
+                : 'shell.access',
+          ),
+          icon: attendanceWorkspace && !workerOnly ? IconCalendar : IconKey,
+        },
       ].filter((item) => allowedTabs.includes(item.id)),
     },
     {
@@ -134,6 +144,34 @@ export function AppLayout({ currentTab: propCurrentTab, onSelectTab, children }:
       ].filter((item) => allowedTabs.includes(item.id)),
     },
   ].filter((group) => group.items.length > 0);
+
+  const currentItem = navGroups
+    .flatMap((group) => group.items)
+    .find((item) => item.id === activeTab);
+  const searchParams = new URLSearchParams(location.search);
+  const selectedSiteId =
+    searchParams.get('siteId') ?? currentUser?.roleAssignments.find((r) => r.siteId)?.siteId;
+  const workforceRoles = (currentUser?.roleAssignments ?? [])
+    .filter((r) => r.siteId === selectedSiteId || (r.role === 'ADMIN' && r.siteId === null))
+    .map((r) => r.role);
+  const workforceTabs = getWorkforceTabs(workforceRoles);
+  const requestedWorkforceTab = searchParams.get('tab');
+  const workforceTab =
+    requestedWorkforceTab === 'review' && workforceTabs.showReview
+      ? 'review'
+      : requestedWorkforceTab === 'schedule' && workforceTabs.showSchedule
+        ? 'schedule'
+        : workforceTabs.defaultTab;
+  const pageLabel =
+    currentPath === 'account/password'
+      ? t('auth.password.title')
+      : activeTab === 'dashboard' && roles.includes('SITE_MANAGER')
+        ? t('common.site_management_overview')
+        : (currentItem?.label ?? '');
+  const functionLabel =
+    activeTab === 'workforce' && (workforceTabs.showReview || workforceTabs.showSchedule)
+      ? t(workforceTab === 'review' ? 'shell.contractorReview' : 'app_layout.my_schedule_requests')
+      : '';
 
   return (
     <div className="min-h-screen bg-[var(--surface-canvas)] text-[var(--text-body)] font-sans flex">
@@ -297,48 +335,45 @@ export function AppLayout({ currentTab: propCurrentTab, onSelectTab, children }:
           className={
             mainSafetyUi
               ? 'h-16 bg-white border-b border-slate-200 px-3 sm:px-6 lg:px-8 flex items-center justify-between gap-3 shrink-0 sticky top-0 z-20 shadow-xs'
-              : 'h-16 bg-white border-b border-[#E2E8F0] px-6 sm:px-8 flex items-center justify-between shrink-0 sticky top-0 z-20 shadow-xs'
+              : 'h-16 bg-white border-b border-[#E2E8F0] px-6 sm:px-8 flex items-center justify-between gap-3 shrink-0 sticky top-0 z-20 shadow-xs'
           }
         >
           {/* Left: Brand/Context info */}
-          <div
-            className={
-              mainSafetyUi
-                ? 'hidden xl:flex min-w-0 items-center gap-4'
-                : 'hidden sm:flex items-center gap-4'
-            }
-          >
-            <span
-              className={
-                mainSafetyUi
-                  ? 'text-xs font-bold text-slate-500 uppercase tracking-wider'
-                  : 'text-xs font-semibold text-[#62748E] uppercase tracking-wider'
-              }
-            >
-              {t('shell.platform')}
-            </span>
-          </div>
+          {activeTab === 'schedule-setup' ||
+          (activeTab === 'site-setup' && roles.includes('SITE_MANAGER') && !roles.includes('ADMIN')) ||
+          (activeTab === 'workforce' && workforceTabs.showReview && workforceTab === 'review') ? (
+            <div className="flex items-center gap-3 min-w-0">
+              <div
+                aria-hidden="true"
+                className="w-10 h-10 rounded-xl bg-[#071A2B] text-white flex items-center justify-center shadow-xs shrink-0"
+              >
+                {activeTab === 'site-setup' ? <IconBuilding className="w-5 h-5 text-[#F66B17]" /> : activeTab === 'workforce' ? <IconShield className="w-5 h-5 text-[#F66B17]" /> : <IconCalendar className="w-5 h-5 text-[#F66B17]" />}
+              </div>
+              <div className="min-w-0">
+                <div className="flex items-center gap-2">
+                  <span className="text-xs font-semibold text-slate-500 truncate">
+                    {activeTab === 'site-setup' ? t('integrated_ui.site_operations') : activeTab === 'workforce' ? `${t('common.workforce_operations')} · ${t('common.shift_approvals')}` : t('common.workforce_management')}
+                  </span>
+                </div>
+                <h1 className="text-xl font-bold tracking-tight text-[#071A2B] truncate">
+                  {activeTab === 'site-setup' ? t('siteOps.titleManage') : activeTab === 'workforce' ? t('common.contractor_review') : t('common.schedule_setup')}
+                </h1>
+              </div>
+            </div>
+          ) : (
+            <div className="min-w-0 flex flex-col gap-0.5">
+              <span className="truncate text-[10px] font-bold uppercase tracking-wider text-[#62748E]">
+                {pageLabel}
+              </span>
+              {functionLabel && (
+                <span className="truncate text-sm font-bold text-[#071A2B]">{functionLabel}</span>
+              )}
+            </div>
+          )}
 
           {/* Right: Search, Notification, Profile */}
           <div className="flex items-center gap-2 sm:gap-4 shrink-0">
             {!mainSafetyUi && <LanguageSwitcher />}
-            {/* Search Input */}
-            <div className="relative w-56 hidden lg:block">
-              <IconSearch
-                className={`w-4 h-4 ${mainSafetyUi ? 'text-slate-400' : 'text-[var(--text-secondary)]'} absolute left-3 top-1/2 -translate-y-1/2`}
-              />
-              <input
-                type="text"
-                placeholder={t('shell.search')}
-                aria-label={t('shell.search')}
-                className={
-                  mainSafetyUi
-                    ? 'w-full pl-9 pr-3 py-1.5 rounded-xl border border-slate-200 bg-slate-50 text-xs font-medium text-slate-800 focus:outline-none focus:border-[#F66B17] focus:ring-2 focus:ring-[#F66B17]/15 focus:bg-white transition-all placeholder:text-slate-400'
-                    : 'w-full pl-9 pr-3 py-1.5 rounded-md border border-[var(--border)] bg-[var(--surface-bone)] text-xs text-[var(--text-body)] focus:outline-none focus:border-[var(--accent)] focus:bg-white transition-all placeholder:text-[var(--text-secondary)]'
-                }
-              />
-            </div>
-
             {mainSafetyUi && <LanguageSwitcher />}
             <NotificationBell
               assignedWork={

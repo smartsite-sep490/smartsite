@@ -31,6 +31,8 @@ export type {
   VisitorAttendanceInput,
   VisitorAttendanceResponse,
   VisitorQrPreviewResponse,
+  VisitSummaryResponse,
+  VisitListResponse,
 } from './qr-access-api.js';
 
 export * from './observation-identity-management.js';

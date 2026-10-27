@@ -301,11 +301,6 @@ export function ZonePermissionsView({
         <section className="rounded-xl border border-[#EAEAEA] bg-white p-5 shadow-xs">
           <div>
             <h2 className="text-lg font-bold text-[#111111]">{tr('common.worker_roster')}</h2>
-            <p className="mt-1 text-sm text-[#6B6B6B]">
-              {tr(
-                'zone_permissions_view.create_the_worker_record_used_by_trusted_identity_verification',
-              )}
-            </p>
           </div>
           <form
             onSubmit={submitWorker}
@@ -376,11 +371,6 @@ export function ZonePermissionsView({
             <h2 className="text-lg font-bold text-[#111111]">
               {tr('common.zone_permissions_645a46')}
             </h2>
-            <p className="mt-1 text-sm text-[#6B6B6B]">
-              {tr(
-                'zone_permissions_view.explicit_deny_takes_priority_when_backend_evaluates_entry_at_event_time',
-              )}
-            </p>
           </div>
           {selectedZone && !canManageGrants && (
             <p className="mt-4 rounded-xl border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900">
@@ -551,11 +541,6 @@ export function ZonePermissionsView({
             <h2 className="text-lg font-bold text-[#111111]">
               {tr('common.entry_decision_audit')}
             </h2>
-            <p className="mt-1 text-sm text-[#6B6B6B]">
-              {tr(
-                'zone_permissions_view.allowed_denied_and_fail_closed_unavailable_outcomes_produced_by_backend',
-              )}
-            </p>
           </div>
           <label className="text-xs font-bold uppercase tracking-wider text-[#6B6B6B]">
             {tr('common.status')}

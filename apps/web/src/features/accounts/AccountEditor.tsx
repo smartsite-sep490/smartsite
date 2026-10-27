@@ -337,15 +337,35 @@ export function AccountEditor({
                           ))}
                         </select>
                       </label>
-                      <button
-                        type="button"
-                        className="inline-flex min-h-10 items-center justify-center gap-1 rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-600 hover:text-rose-700 hover:border-rose-200 hover:bg-rose-50 transition-all cursor-pointer disabled:opacity-40 disabled:pointer-events-none"
-                        disabled={assignments.length === 1}
-                        aria-label={t('accounts.removeRoleNumber', { number: index + 1 })}
-                        onClick={() => setAssignments((rows) => rows.filter((_, i) => i !== index))}
-                      >
-                        {t('accounts.removeRole')}
-                      </button>
+                      <div className="flex flex-wrap gap-2">
+                        {(assignment.role === 'SAFETY_OFFICER' ||
+                          assignment.role === 'SECURITY_OFFICER') && (
+                          <button
+                            type="button"
+                            className="inline-flex min-h-10 items-center justify-center rounded-xl border border-orange-200 bg-white px-3 py-2 text-xs font-semibold text-[#C6530E] hover:bg-orange-50 focus-visible:outline-2"
+                            aria-label={t('accounts.addSiteForRole', { number: index + 1 })}
+                            onClick={() =>
+                              setAssignments((rows) => [
+                                ...rows,
+                                { role: assignment.role, siteId: '' },
+                              ])
+                            }
+                          >
+                            {t('accounts.addSite')}
+                          </button>
+                        )}
+                        <button
+                          type="button"
+                          className="inline-flex min-h-10 items-center justify-center gap-1 rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-600 hover:text-rose-700 hover:border-rose-200 hover:bg-rose-50 transition-all cursor-pointer disabled:opacity-40 disabled:pointer-events-none"
+                          disabled={assignments.length === 1}
+                          aria-label={t('accounts.removeRoleNumber', { number: index + 1 })}
+                          onClick={() =>
+                            setAssignments((rows) => rows.filter((_, i) => i !== index))
+                          }
+                        >
+                          {t('accounts.removeRole')}
+                        </button>
+                      </div>
                     </div>
                   ))}
                 </div>

@@ -84,6 +84,37 @@ function mount() {
   );
 }
 
+it('shows the contractor name on a shift instead of its generated code', async () => {
+  vi.mocked(SmartSiteManagementClient.prototype.listContractors).mockResolvedValue({
+    items: [
+      {
+        id: 'contractor-1',
+        siteId: 'site-1',
+        name: 'CPR Land',
+        code: 'CTR-SYNTHETIC',
+        isActive: true,
+        createdAt: '2030-01-01T00:00:00Z',
+      },
+    ],
+    total: 1,
+  });
+  vi.mocked(SmartSiteManagementClient.prototype.listShiftContractorAssignments).mockResolvedValue({
+    items: [
+      {
+        id: 'assignment-1',
+        siteId: 'site-1',
+        shiftId: 'shift-1',
+        contractorId: 'contractor-1',
+        createdAt: '2030-01-01T00:00:00Z',
+      },
+    ],
+    total: 1,
+  });
+  mount();
+  expect(await screen.findByText('CPR Land')).toBeTruthy();
+  expect(screen.queryByText('CTR-SYNTHETIC')).toBeNull();
+});
+
 it('shows loading rather than denied access while scoped sites are loading', async () => {
   let resolve!: (value: typeof site) => void;
   vi.mocked(SmartSiteManagementClient.prototype.getSite).mockReturnValue(
@@ -154,6 +185,14 @@ it('refreshes site discovery along with shift and version data', async () => {
   await waitFor(() => expect(SmartSiteManagementClient.prototype.getSite).toHaveBeenCalledTimes(2));
   expect(SmartSiteManagementClient.prototype.listShifts).toHaveBeenCalledTimes(2);
   expect(SmartSiteManagementClient.prototype.listScheduleVersions).toHaveBeenCalledTimes(2);
+});
+
+it('retains the refresh action without rendering a duplicate page heading inside the view', async () => {
+  mount();
+  await screen.findByText('Day shift');
+  expect(screen.getByRole('button', { name: 'Refresh' })).toBeTruthy();
+  expect(screen.queryByRole('heading', { level: 1, name: 'Schedule Setup' })).toBeNull();
+  expect(screen.queryByText('Workforce Management')).toBeNull();
 });
 
 it('still denies a role without schedule configuration scope', async () => {
