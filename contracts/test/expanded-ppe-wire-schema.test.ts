@@ -22,6 +22,29 @@ const schema = JSON.parse(
 ) as unknown;
 const validate = ajv.compile(schema);
 
+test('v1.1 preserves every v1 schema rule except its identity, version and PPE enum', () => {
+  const expected = JSON.parse(
+    readFileSync(
+      new URL('../../schemas/v1/technical-observation-event.json', import.meta.url),
+      'utf8',
+    ),
+  ) as {
+    $id: string;
+    properties: { schemaVersion: { const: string } };
+    $defs: { ppeObservation: { properties: { ppeItem: { enum: string[] } } } };
+  };
+  expected.$id = 'https://smartsite.local/contracts/v1.1/technical-observation-event.json';
+  expected.properties.schemaVersion.const = '1.1.0';
+  expected.$defs.ppeObservation.properties.ppeItem.enum = [
+    'HARD_HAT',
+    'SAFETY_VEST',
+    'GLOVES',
+    'BOOTS',
+    'GOGGLES',
+  ];
+  assert.deepEqual(schema, expected);
+});
+
 function event(item: string, status = 'MISSING') {
   return {
     eventId: '11111111-1111-4111-8111-111111111111',
