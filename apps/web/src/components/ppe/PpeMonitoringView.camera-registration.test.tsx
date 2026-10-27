@@ -378,12 +378,15 @@ it('uses one discard decision when Cancel is followed by Escape', async () => {
   mount();
   const { user, dialog } = await open();
   await user.type(within(dialog).getByRole('textbox', { name: 'Camera code' }), 'DRAFT');
-  await user.click(within(dialog).getByRole('button', { name: 'Cancel' }));
-  await user.keyboard('{Escape}');
+  const cancel = within(dialog).getByRole('button', { name: 'Cancel' });
+  await user.click(cancel);
   expect(within(dialog).getAllByText('Discard unsaved camera changes?')).toHaveLength(1);
-  await user.click(within(dialog).getByRole('button', { name: 'Keep editing' }));
+  await user.keyboard('{Escape}');
+  expect(within(dialog).queryByText('Discard unsaved camera changes?')).toBeNull();
+  expect(screen.getByRole('dialog', { name: 'Register camera' })).toBe(dialog);
   expect(
     (within(dialog).getByRole('textbox', { name: 'Camera code' }) as HTMLInputElement).value,
   ).toBe('DRAFT');
+  expect(document.activeElement).toBe(cancel);
   expect(SmartSiteManagementClient.prototype.createCamera).not.toHaveBeenCalled();
 });
