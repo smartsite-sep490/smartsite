@@ -44,6 +44,7 @@ export { validateGeometries } from './validation/geometry-validator.js';
 export type { ValidationIssue } from './validation/geometry-validator.js';
 
 export { validateObservationEvent } from './validation/schema-validator.js';
+export { validateEightFamilyObservationEvent } from './validation/schema-validator.js';
 
 export { validateCameraRegionConfiguration } from './validation/schema-validator.js';
 
