@@ -1,9 +1,8 @@
 import { localizedLabel } from '../../i18n/labels';
-import { localizedError } from '../../i18n/messages';
+import { userErrorMessage } from '../../i18n/messages';
 import { translate as tr } from '../../i18n';
-import { useCallback, useMemo, useState } from 'react';
+import { useCallback, useState } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { SmartSiteManagementClient } from '@smartsite/api-client';
 import {
   IconAlertTriangle,
   IconBuilding2,
@@ -15,14 +14,18 @@ import {
 } from '../icons';
 import { GateObservationView } from './GateObservationView';
 import { SecurityGateDeskView } from './gate/SecurityGateDeskView';
-import { WorkerEnrollmentView } from './enrollment/WorkerEnrollmentView';
 import { VisitorAccessView } from './visitor/VisitorAccessView';
 import { WorkerGatePermissionsView } from './permissions/WorkerGatePermissionsView';
 import { SiteAccessSetupView } from './permissions/SiteAccessSetupView';
 import { ZoneDecisionHistory } from './permissions/ZoneDecisionHistory';
 import { WorkerMobileQrView } from './gate/WorkerMobileQrView';
 import { AttendanceView } from './attendance/AttendanceView';
-import { useAuth, useCurrentUser, useLogout } from '../../features/auth/auth-session';
+import {
+  useManagementClient,
+  useAuth,
+  useCurrentUser,
+  useLogout,
+} from '../../features/auth/auth-session';
 import { isSecurityWorkspaceOnly } from '../../features/auth/workspace-access';
 import { useTranslation } from 'react-i18next';
 
@@ -30,7 +33,6 @@ type AccessSubTab =
   | 'attendance'
   | 'zone-permissions'
   | 'gate-desk'
-  | 'worker-enrollment'
   | 'gate-permissions'
   | 'visitor-passes'
   | 'visitor-gate'
@@ -49,7 +51,7 @@ interface TabDefinition {
 const ACCESS_TABS: readonly TabDefinition[] = [
   {
     id: 'attendance',
-    code: 'MF03',
+    code: 'Timesheet',
     label: 'Attendance',
     subLabel: 'Hours & approvals',
     description: 'Daily work hours, overtime, leave and attendance corrections',
@@ -80,14 +82,6 @@ const ACCESS_TABS: readonly TabDefinition[] = [
     description:
       'Physical gate security desk for real-time facial verification and check-in/out of workers',
     icon: IconCamera,
-  },
-  {
-    id: 'worker-enrollment',
-    code: 'Biometrics',
-    label: 'Worker Biometrics',
-    subLabel: '3-Angle Face Enrollment',
-    description: 'Guided capture workflow for multi-angle face enrollment and template encryption',
-    icon: IconUsers,
   },
   {
     id: 'gate-permissions',
@@ -129,12 +123,12 @@ export interface AccessControlViewProps {
 }
 
 function errorMessage(error: unknown): string {
-  return localizedError(error instanceof Error ? error.message : undefined);
+  return userErrorMessage(error);
 }
 
 export function AccessControlView({ apiUrl }: AccessControlViewProps) {
   const { t } = useTranslation();
-  const client = useMemo(() => new SmartSiteManagementClient(apiUrl), [apiUrl]);
+  const client = useManagementClient(apiUrl);
   const queryClient = useQueryClient();
   const { accessToken } = useAuth();
   const currentUserQuery = useCurrentUser(apiUrl);
@@ -187,18 +181,11 @@ export function AccessControlView({ apiUrl }: AccessControlViewProps) {
     if (tab.id === 'worker-qr') {
       return siteRoles.includes('WORKER');
     }
-    if (tab.id === 'worker-enrollment') {
-      return siteRoles.includes('CONTRACTOR_REPRESENTATIVE');
-    }
     if (tab.id === 'gate-permissions') {
       return isGlobalAdmin || siteRoles.includes('SITE_MANAGER');
     }
     if (tab.id === 'zone-permissions') {
-      return (
-        isGlobalAdmin ||
-        siteRoles.includes('SITE_MANAGER') ||
-        siteRoles.includes('CONTRACTOR_REPRESENTATIVE')
-      );
+      return isGlobalAdmin;
     }
     if (tab.id === 'gate-desk') {
       return siteRoles.includes('SECURITY_OFFICER');
@@ -224,9 +211,11 @@ export function AccessControlView({ apiUrl }: AccessControlViewProps) {
       ? 'worker-qr'
       : siteRoles.includes('SECURITY_OFFICER') && !isGlobalAdmin
         ? 'gate-desk'
-        : siteRoles.includes('SITE_MANAGER')
-          ? 'visitor-passes'
-          : visibleTabs[0]?.id;
+        : visibleTabs[0]?.id;
+  const attendanceWorkspace =
+    !isGlobalAdmin &&
+    !securityOnly &&
+    siteRoles.some((role) => ['SITE_MANAGER', 'CONTRACTOR_REPRESENTATIVE'].includes(role));
 
   const logout = () => {
     setRequestedSiteId('');
@@ -292,24 +281,27 @@ export function AccessControlView({ apiUrl }: AccessControlViewProps) {
   return (
     <div className="mx-auto max-w-[1360px] space-y-5 pb-12 text-[#182232]">
       {/* Top Banner / Identity Header */}
-      <header className="rounded-xl border border-[#EAEAEA] bg-white p-5 shadow-xs">
+      {!attendanceWorkspace && <header className="rounded-xl border border-[#EAEAEA] bg-white p-5 shadow-xs">
         <div className="flex flex-wrap items-center justify-between gap-4">
           <div className="space-y-1">
-            <div className="flex items-center gap-2.5">
-              <span className="inline-flex items-center gap-1.5 rounded-full bg-orange-50 px-2.5 py-0.5 text-[11px] font-bold uppercase tracking-wider text-[#F66B17] border border-orange-200/60">
-                <span className="h-1.5 w-1.5 rounded-full bg-[#F66B17]" />
-                {t('access.systemBadge')}
-              </span>
-              <span className="hidden sm:inline-block rounded-full bg-[#F7F6F3] border border-[#EAEAEA] px-2.5 py-0.5 text-[10px] font-semibold uppercase tracking-wider text-[#6B6B6B]">
-                {t('access.portalBadge')}
-              </span>
-            </div>
+            {!attendanceWorkspace && (
+              <div className="flex items-center gap-2.5">
+                <span className="inline-flex items-center gap-1.5 rounded-full bg-orange-50 px-2.5 py-0.5 text-[11px] font-bold uppercase tracking-wider text-[#F66B17] border border-orange-200/60">
+                  <span className="h-1.5 w-1.5 rounded-full bg-[#F66B17]" />
+                  {t('access.systemBadge')}
+                </span>
+                <span className="hidden sm:inline-block rounded-full bg-[#F7F6F3] border border-[#EAEAEA] px-2.5 py-0.5 text-[10px] font-semibold uppercase tracking-wider text-[#6B6B6B]">
+                  {t('access.portalBadge')}
+                </span>
+              </div>
+            )}
             <h1 className="text-2xl font-bold tracking-tight text-[#111111]">
-              {securityOnly ? t('security.title') : t('access.title')}
+              {securityOnly
+                ? t('security.title')
+                : attendanceWorkspace
+                  ? t('access.tabs.attendance.label')
+                  : t('access.title')}
             </h1>
-            <p className="text-xs text-[#6B6B6B] max-w-2xl leading-relaxed">
-              {securityOnly ? t('security.description') : t('access.description')}
-            </p>
           </div>
 
           {/* User Profile Chip & Session Actions */}
@@ -342,10 +334,10 @@ export function AccessControlView({ apiUrl }: AccessControlViewProps) {
             </button>
           </div>
         </div>
-      </header>
+      </header>}
 
       {/* Modern Sub-Navigation Tabs */}
-      <nav
+      {!(attendanceWorkspace && visibleTabs.length === 1) && <nav
         aria-label={tr('common.access_control_tabs')}
         className={
           securityOnly
@@ -364,6 +356,13 @@ export function AccessControlView({ apiUrl }: AccessControlViewProps) {
         {visibleTabs.map((tab) => {
           const isActive = activeTab === tab.id;
           const TabIcon = tab.icon;
+          if (attendanceWorkspace && tab.id === 'attendance') {
+            return (
+              <button key={tab.id} type="button" data-testid={`access-tab-${tab.id}`} aria-current={isActive ? 'page' : undefined} onClick={() => setAccessSubTab(tab.id)} className="self-center justify-self-start rounded-lg px-3 py-2 text-sm font-semibold text-[#071A2B] hover:bg-white focus-visible:outline-2 focus-visible:outline-[#F66B17]">
+                {tab.label}
+              </button>
+            );
+          }
           return (
             <button
               type="button"
@@ -371,10 +370,10 @@ export function AccessControlView({ apiUrl }: AccessControlViewProps) {
               data-testid={`access-tab-${tab.id}`}
               aria-current={isActive ? 'page' : undefined}
               onClick={() => setAccessSubTab(tab.id)}
-              className={`group relative flex flex-col justify-between rounded-xl border p-4 text-left transition-all duration-150 ${
+              className={`group relative flex flex-col justify-between rounded-xl p-4 text-left transition-all duration-150 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#F66B17] ${
                 isActive
-                  ? 'border-[#F66B17] bg-white ring-1 ring-[#F66B17]/20 shadow-xs'
-                  : 'border-[#EAEAEA] bg-white hover:bg-[#FBFBFA] hover:border-[#D0D0CE]'
+                    ? 'border border-[#F66B17] bg-white ring-1 ring-[#F66B17]/20 shadow-xs'
+                    : 'border border-[#EAEAEA] bg-white hover:bg-[#FBFBFA] hover:border-[#D0D0CE]'
               }`}
             >
               {/* Top Row: Icon + Module Code Badge */}
@@ -424,7 +423,7 @@ export function AccessControlView({ apiUrl }: AccessControlViewProps) {
             </button>
           );
         })}
-      </nav>
+      </nav>}
 
       {/* Unified Global Site Selector Strip */}
       <section className="flex flex-wrap items-center justify-between gap-4 rounded-xl border border-[#EAEAEA] bg-white p-3.5 shadow-xs">
@@ -539,17 +538,6 @@ export function AccessControlView({ apiUrl }: AccessControlViewProps) {
               selectedSiteId={siteId}
               sites={sites.data?.items ?? []}
               onSelectSite={setRequestedSiteId}
-            />
-          )}
-
-          {activeTab === 'worker-enrollment' && (
-            <WorkerEnrollmentView
-              canManageAccounts={false}
-              key={`${sessionScope}:${siteId}`}
-              apiUrl={apiUrl}
-              token={token}
-              sessionScope={sessionScope}
-              siteId={siteId}
             />
           )}
 

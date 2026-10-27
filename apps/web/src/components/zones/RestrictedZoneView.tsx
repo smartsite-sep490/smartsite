@@ -1,5 +1,6 @@
 import { useManagementClient } from '../../features/auth/auth-session';
-import { localizedError, localizeMessage } from '../../i18n/messages';
+import { authErrorMessage } from '../../features/auth/auth-errors';
+import { localizedError, localizeMessage, userErrorMessage } from '../../i18n/messages';
 import { translate as tr } from '../../i18n';
 import { localizedLabel, localizedDetectionLabel } from '../../i18n/labels';
 import { useTranslation } from 'react-i18next';
@@ -7,7 +8,7 @@ import { useRealtimePreview } from '../cameras/useRealtimePreview';
 import { RealtimePreviewCanvas } from '../cameras/RealtimePreviewCanvas';
 import React, { useCallback, useEffect, useMemo, useRef, useState, type FormEvent } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { type LoginResponse } from '@smartsite/api-client';
+import { ApiError, type LoginResponse } from '@smartsite/api-client';
 import {
   IconX,
   IconAlertTriangle,
@@ -312,7 +313,7 @@ export function RestrictedZoneView({
       setLoginError(null);
     },
     onError: (err) => {
-      setLoginError(err instanceof Error ? err.message : tr('common.sign_in_failed'));
+      setLoginError(err instanceof ApiError ? authErrorMessage(err) : userErrorMessage(err));
     },
   });
 
@@ -513,10 +514,7 @@ export function RestrictedZoneView({
         if (isConflictError(error)) {
           setConflictMessage(formatConflictMessage(vars.cameraLabel));
         } else {
-          showStatusMessage(
-            error instanceof Error ? error.message : tr('common.save_failed'),
-            5000,
-          );
+          showStatusMessage(userErrorMessage(error), 5000);
         }
       }
     },

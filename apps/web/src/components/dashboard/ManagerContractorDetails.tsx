@@ -1,4 +1,4 @@
-import { localizedError } from '../../i18n/messages';
+import { userErrorMessage } from '../../i18n/messages';
 import { uiLocale } from '../../i18n';
 import { translate as tr } from '../../i18n';
 import { useTranslation } from 'react-i18next';
@@ -38,6 +38,13 @@ export function ManagerContractorDetails({
   });
   const time = (value: string) =>
     new Date(value).toLocaleString(uiLocale(), { timeZone: timezone });
+  const permissionDate = (value: string) =>
+    new Date(value).toLocaleDateString(uiLocale(), {
+      timeZone: timezone,
+      day: '2-digit',
+      month: '2-digit',
+      year: 'numeric',
+    });
   const data = detail.data;
   return (
     <Dialog
@@ -56,13 +63,21 @@ export function ManagerContractorDetails({
           fieldRequired
         />
         {!date ? (
-          <p role="alert" className="text-sm text-slate-500">{tr('manager_contractor_details.select_a_work_date')}</p>
+          <p role="alert" className="text-sm text-slate-500">
+            {tr('manager_contractor_details.select_a_work_date')}
+          </p>
         ) : detail.isPending ? (
-          <p role="status" className="text-sm text-slate-500">{tr('common.loading_contractor_details')}</p>
+          <p role="status" className="text-sm text-slate-500">
+            {tr('common.loading_contractor_details')}
+          </p>
         ) : detail.isError ? (
           <div role="alert" className="text-sm text-red-600">
-            {tr('common.contractor_details_unavailable')} {localizedError(detail.error.message)}{' '}
-            <button type="button" onClick={() => void detail.refetch()} className="underline font-semibold">
+            {tr('common.contractor_details_unavailable')} {userErrorMessage(detail.error)}{' '}
+            <button
+              type="button"
+              onClick={() => void detail.refetch()}
+              className="underline font-semibold"
+            >
               {tr('common.retry')}
             </button>
           </div>
@@ -71,16 +86,20 @@ export function ManagerContractorDetails({
             <>
               {/* KPI Cards */}
               <dl className="grid grid-cols-3 gap-3">
-                {([
-                  [tr('common.active_teams_82c339'), data.teamCount, 'text-[#008C47]'],
-                  [tr('common.active_workers_3adad5'), data.workerCount, 'text-[#041D2E]'],
-                  [tr('common.scheduled_workers'), data.scheduledWorkerCount, 'text-[#F66B17]'],
-                ] as [string, number, string][]).map(([label, count, color]) => (
+                {(
+                  [
+                    [tr('common.active_teams_82c339'), data.teamCount, 'text-[#008C47]'],
+                    [tr('common.active_workers_3adad5'), data.workerCount, 'text-[#041D2E]'],
+                    [tr('common.scheduled_workers'), data.scheduledWorkerCount, 'text-[#F66B17]'],
+                  ] as [string, number, string][]
+                ).map(([label, count, color]) => (
                   <div
                     key={label}
                     className="rounded-xl border border-slate-200/90 bg-white p-3 shadow-2xs space-y-1"
                   >
-                    <dt className="text-[10px] font-bold text-slate-500 uppercase tracking-wider leading-tight">{label}</dt>
+                    <dt className="text-[10px] font-bold text-slate-500 uppercase tracking-wider leading-tight">
+                      {label}
+                    </dt>
                     <dd className={`text-2xl font-black tracking-tight ${color}`}>{count}</dd>
                   </div>
                 ))}
@@ -94,7 +113,10 @@ export function ManagerContractorDetails({
                 {data.teams.length ? (
                   <ul className="space-y-2">
                     {data.teams.map((team) => (
-                      <li key={team.id} className="rounded-xl border border-slate-200/90 bg-white shadow-2xs overflow-hidden">
+                      <li
+                        key={team.id}
+                        className="rounded-xl border border-slate-200/90 bg-white shadow-2xs overflow-hidden"
+                      >
                         <div className="flex items-center justify-between gap-3 px-4 py-3 border-b border-slate-100">
                           <span className="font-bold text-[#041D2E] text-sm">{team.name}</span>
                           <span className="text-xs font-bold text-[#008C47] bg-emerald-50 border border-emerald-200 px-2.5 py-0.5 rounded-full">
@@ -116,17 +138,23 @@ export function ManagerContractorDetails({
                           ) : team.zoneAssignments.length ? (
                             <ul className="space-y-1.5">
                               {team.zoneAssignments.map((zone) => (
-                                <li key={zone.id} className="flex items-center justify-between gap-2 text-xs">
+                                <li
+                                  key={zone.id}
+                                  className="flex items-center justify-between gap-2 text-xs"
+                                >
                                   <span className="font-semibold text-[#041D2E]">{zone.name}</span>
                                   <span className="text-slate-400 shrink-0">
-                                    {time(zone.validFrom)} – {time(zone.validUntil)}
+                                    {permissionDate(zone.validFrom)} –{' '}
+                                    {permissionDate(zone.validUntil)}
                                   </span>
                                 </li>
                               ))}
                             </ul>
                           ) : (
                             <p className="text-xs text-slate-500">
-                              {tr('manager_contractor_details.no_team_zone_assignments_on_this_date')}
+                              {tr(
+                                'manager_contractor_details.no_team_zone_assignments_on_this_date',
+                              )}
                             </p>
                           )}
                         </div>
@@ -155,7 +183,7 @@ export function ManagerContractorDetails({
                       >
                         <p className="font-bold text-[#041D2E] text-sm">{zone.name}</p>
                         <p className="text-xs text-slate-400 shrink-0">
-                          {time(zone.validFrom)} – {time(zone.validUntil)}
+                          {permissionDate(zone.validFrom)} – {permissionDate(zone.validUntil)}
                         </p>
                       </li>
                     ))}
@@ -178,7 +206,10 @@ export function ManagerContractorDetails({
                 {data.scheduledTeams.length ? (
                   <ul className="space-y-2">
                     {data.scheduledTeams.map((team) => (
-                      <li key={team.id} className="rounded-xl border border-slate-200/90 bg-white shadow-2xs overflow-hidden">
+                      <li
+                        key={team.id}
+                        className="rounded-xl border border-slate-200/90 bg-white shadow-2xs overflow-hidden"
+                      >
                         <div className="flex items-center justify-between gap-3 px-4 py-3 border-b border-slate-100">
                           <span className="font-bold text-[#041D2E] text-sm">{team.name}</span>
                           <span className="text-xs font-bold text-[#F66B17] bg-orange-50 border border-orange-200 px-2.5 py-0.5 rounded-full">
@@ -187,7 +218,10 @@ export function ManagerContractorDetails({
                         </div>
                         <ul className="px-4 py-3 space-y-1">
                           {team.shifts.map((shift) => (
-                            <li key={shift.id} className="flex items-center justify-between text-xs gap-2">
+                            <li
+                              key={shift.id}
+                              className="flex items-center justify-between text-xs gap-2"
+                            >
                               <span className="font-semibold text-[#041D2E]">{shift.name}</span>
                               <span className="text-slate-400 shrink-0">
                                 {time(shift.startsAt)} – {time(shift.endsAt)}
@@ -199,7 +233,9 @@ export function ManagerContractorDetails({
                     ))}
                   </ul>
                 ) : (
-                  <p className="text-sm text-slate-500">{tr('manager_contractor_details.no_teams_scheduled_on_this_date')}</p>
+                  <p className="text-sm text-slate-500">
+                    {tr('manager_contractor_details.no_teams_scheduled_on_this_date')}
+                  </p>
                 )}
                 {data.scheduledWorkersWithoutTeam > 0 && (
                   <p className="text-xs font-semibold text-amber-700 bg-amber-50 border border-amber-200 rounded-xl px-3 py-2">

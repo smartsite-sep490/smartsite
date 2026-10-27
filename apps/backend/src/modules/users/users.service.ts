@@ -460,6 +460,26 @@ export class UsersService {
     });
   }
 
+  async revokeSiteManager(userId: string, siteId: string) {
+    const id = uuid(userId);
+    const scopedSiteId = uuid(siteId);
+    return this.dataSource.transaction(async (manager) => {
+      await manager.query('SELECT pg_advisory_xact_lock(48484, 1)');
+      const user = await manager.getRepository(UserEntity).findOne({
+        where: { id },
+        lock: { mode: 'pessimistic_write' },
+      });
+      if (!user) throw new NotFoundException();
+      const result = await manager.getRepository(UserRoleAssignmentEntity).delete({
+        userId: id,
+        siteId: scopedSiteId,
+        role: UserRole.SITE_MANAGER,
+      });
+      if (result.affected) await this.revokeSessions(manager, id);
+      return this.response(manager, user);
+    });
+  }
+
   async replaceRoleAssignments(userId: string, input: ReplaceRoleAssignmentsDto) {
     const value = command(ReplaceRoleAssignmentsDto, input);
     await this.validateAssignments(value.roleAssignments);

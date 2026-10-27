@@ -1,5 +1,5 @@
 import { useManagementClient } from '../../../features/auth/auth-session';
-import { localizedError } from '../../../i18n/messages';
+import { userErrorMessage } from '../../../i18n/messages';
 import { translate as tr } from '../../../i18n';
 import { useTranslation } from 'react-i18next';
 import { useState } from 'react';
@@ -112,7 +112,9 @@ export function SiteZoneSetup({
                 onChange={(e) => setPolicy(e.target.value as ZoneResponse['restrictionPolicy'])}
               >
                 <option value="NONE">{tr('common.no_restriction')}</option>
-                <option value="AUTHORIZATION_REQUIRED">{tr('common.authorization_required')}</option>
+                <option value="AUTHORIZATION_REQUIRED">
+                  {tr('common.authorization_required')}
+                </option>
                 <option value="PROHIBITED_FOR_ALL">{tr('common.prohibited_for_all')}</option>
               </select>
             </label>
@@ -136,7 +138,9 @@ export function SiteZoneSetup({
                   checked={hardHat}
                   onChange={(e) => setHardHat(e.target.checked)}
                 />
-                <IconHardHat className={`w-4 h-4 ${hardHat ? 'text-[#F66B17]' : 'text-slate-400'}`} />
+                <IconHardHat
+                  className={`w-4 h-4 ${hardHat ? 'text-[#F66B17]' : 'text-slate-400'}`}
+                />
                 <span>{tr('common.hard_hat')}</span>
               </label>
 
@@ -172,13 +176,19 @@ export function SiteZoneSetup({
         </form>
 
         {create.isError && (
-          <div role="alert" className="rounded-xl border border-rose-200 bg-rose-50/80 px-4 py-3 text-xs text-rose-700 flex items-center gap-2">
+          <div
+            role="alert"
+            className="rounded-xl border border-rose-200 bg-rose-50/80 px-4 py-3 text-xs text-rose-700 flex items-center gap-2"
+          >
             <IconAlertTriangle className="w-4 h-4 shrink-0 text-rose-600" />
-            <span>{localizedError(create.error.message)}</span>
+            <span>{userErrorMessage(create.error)}</span>
           </div>
         )}
         {create.isSuccess && (
-          <div role="status" className="rounded-xl border border-emerald-200 bg-emerald-50/80 px-4 py-3 text-xs text-emerald-700 flex items-center gap-2">
+          <div
+            role="status"
+            className="rounded-xl border border-emerald-200 bg-emerald-50/80 px-4 py-3 text-xs text-emerald-700 flex items-center gap-2"
+          >
             <IconCheck className="w-4 h-4 shrink-0 text-emerald-600" />
             <span>{tr('common.zone_created')}</span>
           </div>
@@ -204,7 +214,10 @@ export function SiteZoneSetup({
             <p role="status">{tr('common.loading_zones')}</p>
           </div>
         ) : zones.isError ? (
-          <div role="alert" className="p-5 flex items-center justify-between text-xs text-rose-700 bg-rose-50/60">
+          <div
+            role="alert"
+            className="p-5 flex items-center justify-between text-xs text-rose-700 bg-rose-50/60"
+          >
             <span>{tr('common.zones_unavailable')}</span>
             <button
               type="button"
@@ -217,7 +230,9 @@ export function SiteZoneSetup({
           </div>
         ) : zones.data.items.length === 0 ? (
           <div className="p-8 text-center">
-            <p className="text-xs text-slate-400">{tr('site_zone_setup.no_zones_configured_for_this_site')}</p>
+            <p className="text-xs text-slate-400">
+              {tr('site_zone_setup.no_zones_configured_for_this_site')}
+            </p>
           </div>
         ) : (
           <ul className="divide-y divide-slate-100">
@@ -238,15 +253,15 @@ export function SiteZoneSetup({
                           zone.type === 'HAZARDOUS'
                             ? 'bg-rose-50 text-rose-700 border-rose-200'
                             : zone.type === 'RESTRICTED'
-                            ? 'bg-amber-50 text-amber-800 border-amber-200'
-                            : 'bg-slate-100 text-slate-700 border-slate-200'
+                              ? 'bg-amber-50 text-amber-800 border-amber-200'
+                              : 'bg-slate-100 text-slate-700 border-slate-200'
                         }`}
                       >
                         {zone.type === 'HAZARDOUS'
                           ? tr('common.hazardous')
                           : zone.type === 'RESTRICTED'
-                          ? tr('common.restricted')
-                          : tr('common.standard')}
+                            ? tr('common.restricted')
+                            : tr('common.standard')}
                       </span>
 
                       <span
@@ -254,15 +269,15 @@ export function SiteZoneSetup({
                           zone.restrictionPolicy === 'PROHIBITED_FOR_ALL'
                             ? 'bg-rose-50 text-rose-700 border-rose-200'
                             : zone.restrictionPolicy === 'AUTHORIZATION_REQUIRED'
-                            ? 'bg-sky-50 text-sky-800 border-sky-200'
-                            : 'bg-emerald-50 text-emerald-800 border-emerald-200'
+                              ? 'bg-sky-50 text-sky-800 border-sky-200'
+                              : 'bg-emerald-50 text-emerald-800 border-emerald-200'
                         }`}
                       >
                         {zone.restrictionPolicy === 'PROHIBITED_FOR_ALL'
                           ? tr('common.prohibited_for_all')
                           : zone.restrictionPolicy === 'AUTHORIZATION_REQUIRED'
-                          ? tr('common.authorization_required')
-                          : tr('common.no_restriction')}
+                            ? tr('common.authorization_required')
+                            : tr('common.no_restriction')}
                       </span>
                     </div>
                   </div>

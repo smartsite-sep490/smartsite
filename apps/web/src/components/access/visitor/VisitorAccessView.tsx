@@ -1,7 +1,7 @@
+import { useManagementClient } from '../../../features/auth/auth-session';
 import { translate as tr } from '../../../i18n';
 import { useMemo, useRef, useState, type FormEvent } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { SmartSiteManagementClient } from '@smartsite/api-client';
 import type {
   VisitResponse,
   VisitorGateCommand,
@@ -65,6 +65,45 @@ function formatSchedule(from: string, until: string, locale: string) {
 
 export type VisitorAccessMode = 'all' | 'approvals' | 'gate' | 'observer';
 
+type StatusFilter = 'ALL' | 'PENDING' | 'APPROVED' | 'REJECTED' | 'CANCELLED' | 'EXPIRED';
+
+function getPresenceInfo(
+  v: VisitResponse,
+  t: (key: string, options?: Record<string, unknown>) => string,
+) {
+  const inside = Math.max(0, v.enteredCount - v.exitedCount);
+  if (v.presence === 'NEEDS_REVIEW') {
+    return {
+      statusText: t('visitor.presenceNeedsReview'),
+      badgeClass: 'bg-amber-100 text-amber-900 border-amber-300 font-bold',
+      isInside: inside > 0,
+      inside,
+    };
+  }
+  if (v.enteredCount === 0) {
+    return {
+      statusText: t('visitor.presenceNotEntered'),
+      badgeClass: 'bg-slate-100 text-slate-600 border-slate-200',
+      isInside: false,
+      inside: 0,
+    };
+  }
+  if (v.enteredCount > v.exitedCount) {
+    return {
+      statusText: t('visitor.presenceOnSiteWithCount', { inside, groupSize: v.groupSize }),
+      badgeClass: 'bg-sky-50 text-sky-800 border-sky-300 font-bold',
+      isInside: true,
+      inside,
+    };
+  }
+  return {
+    statusText: t('visitor.presenceCheckedOut'),
+    badgeClass: 'bg-slate-100 text-slate-700 border-slate-200',
+    isInside: false,
+    inside: 0,
+  };
+}
+
 export interface VisitorAccessViewProps {
   apiUrl: string;
   token: string;
@@ -87,7 +126,7 @@ export function VisitorAccessView({
   mode: propMode,
 }: VisitorAccessViewProps) {
   const { t } = useTranslation();
-  const client = useMemo(() => new SmartSiteManagementClient(apiUrl), [apiUrl]);
+  const client = useManagementClient(apiUrl);
   const cache = useQueryClient();
   const key = ['access-control', apiUrl, sessionScope, 'visits', siteId];
   const historyKey = ['access-control', apiUrl, sessionScope, 'visitor-events', siteId];
@@ -120,7 +159,8 @@ export function VisitorAccessView({
   // State
   const [qrToken, setQrToken] = useState('');
   const [gateId, setGateId] = useState<string>(SITE_GATES[0].id);
-  const [statusFilter, setStatusFilter] = useState('ALL');
+  const [statusFilter, setStatusFilter] = useState<StatusFilter>('ALL');
+  const [onSiteOnly, setOnSiteOnly] = useState(false);
   const [search, setSearch] = useState('');
   const [viewSection, setViewSection] = useState<'all' | 'visits' | 'gate' | 'history'>('all');
   const [viewStyle, setViewStyle] = useState<'table' | 'cards'>('table');
@@ -292,24 +332,39 @@ export function VisitorAccessView({
   const pendingVisits = useMemo(() => items.filter((v) => v.status === 'PENDING'), [items]);
   const approvedVisits = useMemo(() => items.filter((v) => v.status === 'APPROVED'), [items]);
   const rejectedVisits = useMemo(() => items.filter((v) => v.status === 'REJECTED'), [items]);
+  const cancelledVisits = useMemo(() => items.filter((v) => v.status === 'CANCELLED'), [items]);
+  const expiredVisits = useMemo(() => items.filter((v) => v.status === 'EXPIRED'), [items]);
   const insideVisits = useMemo(() => items.filter((v) => v.enteredCount > v.exitedCount), [items]);
   const onSiteCount = useMemo(
     () => items.reduce((sum, v) => sum + Math.max(0, v.enteredCount - v.exitedCount), 0),
     [items],
   );
 
+  const summary = useMemo(() => {
+    if (visits.data?.summary) {
+      return visits.data.summary;
+    }
+    return {
+      totalVisits: visits.data?.total ?? items.length,
+      pendingVisits: pendingVisits.length,
+      approvedValidVisits: approvedVisits.length,
+      onSitePeople: onSiteCount,
+    };
+  }, [visits.data, items, pendingVisits, approvedVisits, onSiteCount]);
+
   const filtered = useMemo(() => {
-    return items.filter(
-      (v) =>
-        (statusFilter === 'ALL' ||
-          (statusFilter === 'INSIDE'
-            ? v.enteredCount > v.exitedCount
-            : v.status === statusFilter)) &&
-        `${v.visitorName} ${v.company} ${v.contact} ${v.hostName} ${v.purpose}`
+    return items.filter((v) => {
+      const matchesStatus = statusFilter === 'ALL' || v.status === statusFilter;
+      const matchesOnSite = !onSiteOnly || v.enteredCount > v.exitedCount;
+      const query = search.trim().toLowerCase();
+      const matchesSearch =
+        !query ||
+        `${v.visitorName} ${v.company ?? ''} ${v.contact} ${v.hostName} ${v.purpose}`
           .toLowerCase()
-          .includes(search.trim().toLowerCase()),
-    );
-  }, [items, statusFilter, search]);
+          .includes(query);
+      return matchesStatus && matchesOnSite && matchesSearch;
+    });
+  }, [items, statusFilter, onSiteOnly, search]);
 
   const locale = uiLocale();
 
@@ -354,13 +409,6 @@ export function VisitorAccessView({
                   ? `${t('visitor.gateDeskTitle')}${siteName ? ` — ${siteName}` : ''}`
                   : t('visitor.accessTitle', { site: siteName ?? siteId })}
             </h1>
-            <p className="text-xs text-[#6B6B6B]">
-              {mode === 'approvals'
-                ? t('visitor.managerApprovalDesc')
-                : mode === 'gate'
-                  ? t('visitor.securityGateDesc')
-                  : t('visitor.accessIntro')}
-            </p>
           </div>
           <div className="flex flex-wrap items-center gap-2.5">
             {canApproveEffective && (
@@ -388,37 +436,56 @@ export function VisitorAccessView({
         <div className="mt-4 grid grid-cols-2 gap-3 sm:grid-cols-4">
           {[
             {
-              id: 'ALL',
+              id: 'TOTAL',
               label: t('visitor.total'),
-              count: items.length,
-              active: statusFilter === 'ALL',
+              count: summary.totalVisits,
+              unit: t('visitor.unitVisits'),
+              active: statusFilter === 'ALL' && !onSiteOnly,
               accent: 'text-slate-900',
               icon: IconUsers,
+              onClick: () => {
+                setStatusFilter('ALL');
+                setOnSiteOnly(false);
+              },
             },
             {
               id: 'PENDING',
               label: t('visitor.pending'),
-              count: pendingVisits.length,
-              active: statusFilter === 'PENDING',
-              accent: pendingVisits.length > 0 ? 'text-amber-600' : 'text-slate-700',
-              highlight: pendingVisits.length > 0,
+              count: summary.pendingVisits,
+              unit: t('visitor.unitVisits'),
+              active: statusFilter === 'PENDING' && !onSiteOnly,
+              accent: summary.pendingVisits > 0 ? 'text-amber-600' : 'text-slate-700',
+              highlight: summary.pendingVisits > 0,
               icon: IconClock,
+              onClick: () => {
+                setStatusFilter('PENDING');
+                setOnSiteOnly(false);
+              },
+            },
+            {
+              id: 'APPROVED',
+              label: t('visitor.approvedValid'),
+              count: summary.approvedValidVisits,
+              unit: t('visitor.unitVisits'),
+              active: statusFilter === 'APPROVED' && !onSiteOnly,
+              accent: 'text-emerald-600',
+              icon: IconCheck,
+              onClick: () => {
+                setStatusFilter('APPROVED');
+                setOnSiteOnly(false);
+              },
             },
             {
               id: 'INSIDE',
               label: t('visitor.inside'),
-              count: onSiteCount,
-              active: statusFilter === 'INSIDE',
+              count: summary.onSitePeople,
+              unit: t('visitor.unitPeople'),
+              active: onSiteOnly,
               accent: 'text-sky-600',
               icon: IconBuilding,
-            },
-            {
-              id: 'APPROVED',
-              label: t('visitor.approved'),
-              count: approvedVisits.length,
-              active: statusFilter === 'APPROVED',
-              accent: 'text-emerald-600',
-              icon: IconCheck,
+              onClick: () => {
+                setOnSiteOnly(!onSiteOnly);
+              },
             },
           ].map((m) => {
             const Icon = m.icon;
@@ -427,7 +494,7 @@ export function VisitorAccessView({
                 key={m.id}
                 type="button"
                 onClick={() => {
-                  setStatusFilter(m.id);
+                  m.onClick();
                   if (viewSection === 'gate' || viewSection === 'history') setViewSection('visits');
                 }}
                 className={`rounded-xl border p-3.5 text-left transition-all cursor-pointer ${
@@ -444,7 +511,10 @@ export function VisitorAccessView({
                   </span>
                   <Icon className="w-4 h-4 text-slate-400" />
                 </div>
-                <p className={`mt-1.5 text-2xl font-black tracking-tight ${m.accent}`}>{m.count}</p>
+                <div className="mt-1.5 flex items-baseline gap-1.5">
+                  <p className={`text-2xl font-black tracking-tight ${m.accent}`}>{m.count}</p>
+                  <span className="text-xs font-semibold text-slate-400">{m.unit}</span>
+                </div>
               </button>
             );
           })}
@@ -666,40 +736,69 @@ export function VisitorAccessView({
                 {t('visitor.listTitle', { count: filtered.length })}
               </h2>
               <p className="text-xs text-slate-500">{t('visitor.listSubtitle')}</p>
+              {visits.data?.total !== undefined && items.length < visits.data.total && (
+                <p className="mt-1 text-[11px] font-medium text-amber-700">
+                  {t('visitor.cappedHint', { loaded: items.length, total: visits.data.total })}
+                </p>
+              )}
             </div>
 
-            {/* Filter Pills */}
-            <div className="flex flex-wrap items-center gap-1.5 bg-slate-100/90 p-1 rounded-xl">
-              {[
-                { id: 'ALL', label: t('visitor.all'), count: items.length },
-                { id: 'PENDING', label: t('visitor.PENDING'), count: pendingVisits.length },
-                { id: 'APPROVED', label: t('visitor.APPROVED'), count: approvedVisits.length },
-                { id: 'INSIDE', label: t('visitor.onSite'), count: insideVisits.length },
-                { id: 'REJECTED', label: t('visitor.REJECTED'), count: rejectedVisits.length },
-              ].map((tab) => (
-                <button
-                  key={tab.id}
-                  type="button"
-                  aria-pressed={statusFilter === tab.id}
-                  className={`inline-flex items-center gap-1.5 rounded-lg px-2.5 py-1 text-xs font-bold transition-all cursor-pointer ${
-                    statusFilter === tab.id
-                      ? 'bg-[#071A2B] text-white shadow-2xs'
-                      : 'text-slate-600 hover:text-slate-900 hover:bg-white/60'
-                  }`}
-                  onClick={() => setStatusFilter(tab.id)}
-                >
-                  <span>{tab.label}</span>
-                  <span
-                    className={`rounded-full px-1.5 py-0.2 text-[10px] font-mono ${
+            {/* Filter Pills & Quick On-Site Filter */}
+            <div className="flex flex-wrap items-center gap-2">
+              <div className="flex flex-wrap items-center gap-1.5 bg-slate-100/90 p-1 rounded-xl">
+                {[
+                  { id: 'ALL', label: t('visitor.all'), count: items.length },
+                  { id: 'PENDING', label: t('visitor.PENDING'), count: pendingVisits.length },
+                  { id: 'APPROVED', label: t('visitor.APPROVED'), count: approvedVisits.length },
+                  { id: 'REJECTED', label: t('visitor.REJECTED'), count: rejectedVisits.length },
+                  { id: 'CANCELLED', label: t('visitor.CANCELLED'), count: cancelledVisits.length },
+                  { id: 'EXPIRED', label: t('visitor.EXPIRED'), count: expiredVisits.length },
+                ].map((tab) => (
+                  <button
+                    key={tab.id}
+                    type="button"
+                    aria-pressed={statusFilter === tab.id}
+                    className={`inline-flex items-center gap-1.5 rounded-lg px-2.5 py-1 text-xs font-bold transition-all cursor-pointer ${
                       statusFilter === tab.id
-                        ? 'bg-white/20 text-white'
-                        : 'bg-slate-200/80 text-slate-600'
+                        ? 'bg-[#071A2B] text-white shadow-2xs'
+                        : 'text-slate-600 hover:text-slate-900 hover:bg-white/60'
                     }`}
+                    onClick={() => setStatusFilter(tab.id as StatusFilter)}
                   >
-                    {tab.count}
-                  </span>
-                </button>
-              ))}
+                    <span>{tab.label}</span>
+                    <span
+                      className={`rounded-full px-1.5 py-0.2 text-[10px] font-mono ${
+                        statusFilter === tab.id
+                          ? 'bg-white/20 text-white'
+                          : 'bg-slate-200/80 text-slate-600'
+                      }`}
+                    >
+                      {tab.count}
+                    </span>
+                  </button>
+                ))}
+              </div>
+
+              <button
+                type="button"
+                aria-pressed={onSiteOnly}
+                className={`inline-flex items-center gap-1.5 rounded-xl px-3 py-1.5 text-xs font-bold transition-all cursor-pointer border ${
+                  onSiteOnly
+                    ? 'bg-sky-600 border-sky-600 text-white shadow-xs ring-2 ring-sky-200'
+                    : 'bg-white border-slate-200 text-slate-700 hover:bg-slate-50 hover:border-slate-300'
+                }`}
+                onClick={() => setOnSiteOnly(!onSiteOnly)}
+              >
+                <IconBuilding className="w-3.5 h-3.5" />
+                <span>{t('visitor.filterOnSite')}</span>
+                <span
+                  className={`rounded-full px-1.5 py-0.2 text-[10px] font-mono ${
+                    onSiteOnly ? 'bg-white/20 text-white' : 'bg-slate-100 text-slate-600'
+                  }`}
+                >
+                  {insideVisits.length}
+                </span>
+              </button>
             </div>
           </div>
 
@@ -852,13 +951,14 @@ export function VisitorAccessView({
                     <th className="py-3 px-3.5">{t('visitor.colHostGate')}</th>
                     <th className="py-3 px-3.5">{t('visitor.colVisitSchedule')}</th>
                     <th className="py-3 px-3.5">{t('visitor.colStatusEmail')}</th>
-                    <th className="py-3 px-3.5">{t('visitor.colInOut')}</th>
+                    <th className="py-3 px-3.5">{t('visitor.colPresence')}</th>
                     <th className="py-3 px-3.5 text-right">{t('visitor.colActions')}</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100">
                   {filtered.map((v) => {
                     const isInside = v.enteredCount > v.exitedCount;
+                    const presenceInfo = getPresenceInfo(v, t);
                     return (
                       <tr key={v.id} className="hover:bg-slate-50/70 transition-colors">
                         <td className="py-3 px-3.5">
@@ -894,14 +994,16 @@ export function VisitorAccessView({
                         <td className="py-3 px-3.5">
                           <div className="flex flex-col gap-1 items-start">
                             <span
-                              className={`rounded-full px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider ${
+                              className={`rounded-full px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider border ${
                                 v.status === 'APPROVED'
-                                  ? 'bg-emerald-50 text-emerald-800 border border-emerald-200'
+                                  ? 'bg-emerald-50 text-emerald-800 border-emerald-200'
                                   : v.status === 'PENDING'
-                                    ? 'bg-amber-50 text-amber-800 border border-amber-200'
+                                    ? 'bg-amber-50 text-amber-800 border-amber-200'
                                     : v.status === 'REJECTED'
-                                      ? 'bg-rose-50 text-rose-800 border border-rose-200'
-                                      : 'bg-slate-100 text-slate-700 border border-slate-200'
+                                      ? 'bg-rose-50 text-rose-800 border-rose-200'
+                                      : v.status === 'CANCELLED'
+                                        ? 'bg-slate-100 text-slate-700 border-slate-300'
+                                        : 'bg-purple-50 text-purple-800 border-purple-200'
                               }`}
                             >
                               {t('visitor.' + v.status)}
@@ -915,18 +1017,19 @@ export function VisitorAccessView({
                         </td>
 
                         <td className="py-3 px-3.5">
-                          <span
-                            className={`inline-block rounded-md px-2 py-0.5 text-[11px] font-bold ${
-                              isInside
-                                ? 'bg-sky-50 text-sky-800 border border-sky-200'
-                                : 'bg-slate-100 text-slate-600'
-                            }`}
-                          >
-                            {t('visitor.inOutCount', {
-                              entered: v.enteredCount,
-                              exited: v.exitedCount,
-                            })}
-                          </span>
+                          <div className="flex flex-col gap-1 items-start">
+                            <span
+                              className={`inline-block rounded-md px-2 py-0.5 text-[11px] border ${presenceInfo.badgeClass}`}
+                            >
+                              {presenceInfo.statusText}
+                            </span>
+                            <span className="text-[10px] text-slate-500 font-mono">
+                              {t('visitor.inOutCount', {
+                                entered: v.enteredCount,
+                                exited: v.exitedCount,
+                              })}
+                            </span>
+                          </div>
                         </td>
 
                         <td className="py-3 px-3.5 text-right">
@@ -1045,14 +1148,16 @@ export function VisitorAccessView({
                           </p>
                         </div>
                         <span
-                          className={`rounded-full px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider shrink-0 ${
+                          className={`rounded-full px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider shrink-0 border ${
                             v.status === 'APPROVED'
-                              ? 'bg-emerald-50 text-emerald-800 border border-emerald-200'
+                              ? 'bg-emerald-50 text-emerald-800 border-emerald-200'
                               : v.status === 'PENDING'
-                                ? 'bg-amber-50 text-amber-800 border border-amber-200'
+                                ? 'bg-amber-50 text-amber-800 border-amber-200'
                                 : v.status === 'REJECTED'
-                                  ? 'bg-rose-50 text-rose-800 border border-rose-200'
-                                  : 'bg-slate-100 text-slate-700 border border-slate-200'
+                                  ? 'bg-rose-50 text-rose-800 border-rose-200'
+                                  : v.status === 'CANCELLED'
+                                    ? 'bg-slate-100 text-slate-700 border-slate-300'
+                                    : 'bg-purple-50 text-purple-800 border-purple-200'
                           }`}
                         >
                           {t('visitor.' + v.status)}
@@ -1089,9 +1194,16 @@ export function VisitorAccessView({
                         )}
                       </div>
 
-                      <div className="flex items-center justify-between text-xs font-semibold px-1 text-slate-600">
-                        <span>{t('visitor.guests', { count: v.groupSize })}</span>
-                        <span className={isInside ? 'text-sky-700 font-bold' : 'text-slate-500'}>
+                      <div className="flex items-center justify-between text-xs px-1 border-t border-slate-100 pt-2.5">
+                        {(() => {
+                          const p = getPresenceInfo(v, t);
+                          return (
+                            <span className={`rounded-md px-2 py-0.5 text-[11px] border ${p.badgeClass}`}>
+                              {p.statusText}
+                            </span>
+                          );
+                        })()}
+                        <span className="text-[11px] text-slate-500 font-mono">
                           {t('visitor.inOutCount', {
                             entered: v.enteredCount,
                             exited: v.exitedCount,
@@ -1708,28 +1820,47 @@ export function VisitorAccessView({
                   </p>
                   <p className="text-xs text-slate-500">{detailVisit.contact}</p>
                 </div>
-                <div>
-                  <span className="text-slate-400 font-medium">{t('visitor.statusLabel')}</span>
-                  <div className="mt-1 flex items-center gap-2">
-                    <span
-                      className={`rounded-full px-2.5 py-0.5 text-xs font-bold uppercase tracking-wider ${
-                        detailVisit.status === 'APPROVED'
-                          ? 'bg-emerald-100 text-emerald-800 border border-emerald-200'
-                          : detailVisit.status === 'PENDING'
-                            ? 'bg-amber-100 text-amber-800 border border-amber-200'
-                            : detailVisit.status === 'REJECTED'
-                              ? 'bg-rose-100 text-rose-800 border border-rose-200'
-                              : 'bg-slate-200 text-slate-700'
-                      }`}
-                    >
-                      {t('visitor.' + detailVisit.status)}
-                    </span>
+                <div className="space-y-2">
+                  <div>
+                    <span className="text-slate-400 font-medium">{t('visitor.statusLabel')}</span>
+                    <div className="mt-1 flex items-center gap-2">
+                      <span
+                        className={`rounded-full px-2.5 py-0.5 text-xs font-bold uppercase tracking-wider border ${
+                          detailVisit.status === 'APPROVED'
+                            ? 'bg-emerald-100 text-emerald-800 border-emerald-200'
+                            : detailVisit.status === 'PENDING'
+                              ? 'bg-amber-100 text-amber-800 border-amber-200'
+                              : detailVisit.status === 'REJECTED'
+                                ? 'bg-rose-100 text-rose-800 border-rose-200'
+                                : detailVisit.status === 'CANCELLED'
+                                  ? 'bg-slate-200 text-slate-700 border-slate-300'
+                                  : 'bg-purple-100 text-purple-800 border-purple-200'
+                        }`}
+                      >
+                        {t('visitor.' + detailVisit.status)}
+                      </span>
+                    </div>
+                    {detailVisit.email && (
+                      <p className="text-xs text-slate-500 mt-1 font-mono">
+                        ✉ {t('visitor.emailStatus.' + (detailVisit.emailStatus ?? 'NOT_REQUESTED'))}
+                      </p>
+                    )}
                   </div>
-                  {detailVisit.email && (
-                    <p className="text-xs text-slate-500 mt-1 font-mono">
-                      ✉ {t('visitor.emailStatus.' + (detailVisit.emailStatus ?? 'NOT_REQUESTED'))}
-                    </p>
-                  )}
+                  <div>
+                    <span className="text-slate-400 font-medium">{t('visitor.presenceLabel')}</span>
+                    <div className="mt-1">
+                      {(() => {
+                        const p = getPresenceInfo(detailVisit, t);
+                        return (
+                          <span
+                            className={`inline-block rounded-full px-2.5 py-0.5 text-xs font-bold border ${p.badgeClass}`}
+                          >
+                            {p.statusText}
+                          </span>
+                        );
+                      })()}
+                    </div>
+                  </div>
                 </div>
               </div>
 
@@ -1858,6 +1989,22 @@ export function VisitorAccessView({
                   }}
                 >
                   {t('visitor.cancel')}
+                </button>
+              )}
+
+              {canManualCheckoutEffective && detailVisit.enteredCount > detailVisit.exitedCount && (
+                <button
+                  type="button"
+                  className="rounded-xl bg-amber-600 hover:bg-amber-700 text-white px-3.5 py-2 text-xs font-bold cursor-pointer"
+                  disabled={manualCheckout.isPending}
+                  onClick={() => {
+                    setManualCheckoutVisit(detailVisit);
+                    setManualCheckoutNote('');
+                    setRepresentativeConfirmed(false);
+                    setDetailVisit(null);
+                  }}
+                >
+                  {t('visitor.manualCheckout')}
                 </button>
               )}
 

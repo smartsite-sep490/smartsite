@@ -1,3 +1,4 @@
+import { SchedulingNotificationService } from '../../src/modules/workforce/notifications/scheduling-notification.service.js';
 import { createTestConfig } from '../support/config.js';
 import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
@@ -103,7 +104,7 @@ test('conflicting identity candidates preserve raw evidence without selecting a 
       source,
       new ObservationContextResolverService(),
       new AlertCandidateEvaluator(),
-      new DurableGroupingService(createTestConfig()),
+      new DurableGroupingService(createTestConfig(), new SchedulingNotificationService(dataSource)),
       createTestConfig(),
     );
     const identities = [
@@ -230,6 +231,7 @@ test('AiIngestionService: 5 concurrent identical retries in real PostgreSQL resu
     const candidateEvaluator = new AlertCandidateEvaluator(zoneAuth);
     const groupingService = new DurableGroupingService(
       createTestConfig({ ALERT_COOLDOWN_SECONDS: String(60) }),
+      new SchedulingNotificationService(dataSource),
     );
     const service = new AiIngestionService(
       source,
@@ -326,7 +328,10 @@ test('AiIngestionService: retry with same eventId but changed payload returns pu
     const contextResolver = new ObservationContextResolverService();
     const zoneAuth = new ZoneAuthorizationService();
     const candidateEvaluator = new AlertCandidateEvaluator(zoneAuth);
-    const groupingService = new DurableGroupingService(createTestConfig());
+    const groupingService = new DurableGroupingService(
+      createTestConfig(),
+      new SchedulingNotificationService(dataSource),
+    );
     const service = new AiIngestionService(
       source,
       contextResolver,
@@ -417,7 +422,10 @@ test('AiIngestionService: other named unique violation is not classified as dupl
     const contextResolver = new ObservationContextResolverService();
     const zoneAuth = new ZoneAuthorizationService();
     const candidateEvaluator = new AlertCandidateEvaluator(zoneAuth);
-    const groupingService = new DurableGroupingService(createTestConfig());
+    const groupingService = new DurableGroupingService(
+      createTestConfig(),
+      new SchedulingNotificationService(dataSource),
+    );
 
     // Force an unrelated unique violation inside the transaction
     const failingService = new AiIngestionService(
@@ -502,6 +510,7 @@ test('AiIngestionService: actionable event creates AlertDetectionMapping and per
     const candidateEvaluator = new AlertCandidateEvaluator(zoneAuth);
     const groupingService = new DurableGroupingService(
       createTestConfig({ ALERT_COOLDOWN_SECONDS: String(60) }),
+      new SchedulingNotificationService(dataSource),
     );
     const service = new AiIngestionService(
       source,
@@ -579,7 +588,10 @@ test('AiIngestionService: unknown camera persists raw event with null resolvedCa
     const contextResolver = new ObservationContextResolverService();
     const zoneAuth = new ZoneAuthorizationService();
     const candidateEvaluator = new AlertCandidateEvaluator(zoneAuth);
-    const groupingService = new DurableGroupingService(createTestConfig());
+    const groupingService = new DurableGroupingService(
+      createTestConfig(),
+      new SchedulingNotificationService(dataSource),
+    );
     const service = new AiIngestionService(
       source,
       contextResolver,
@@ -659,7 +671,7 @@ test('AiIngestionService: inactive camera preserves raw PPE event without creati
       source,
       new ObservationContextResolverService(),
       new AlertCandidateEvaluator(new ZoneAuthorizationService()),
-      new DurableGroupingService(createTestConfig()),
+      new DurableGroupingService(createTestConfig(), new SchedulingNotificationService(dataSource)),
       createTestConfig(),
     );
     const eventId = randomUUID();
@@ -756,6 +768,7 @@ test('AiIngestionService: mixed observation regions and geometry versions in rea
     const candidateEvaluator = new AlertCandidateEvaluator(zoneAuth);
     const groupingService = new DurableGroupingService(
       createTestConfig({ ALERT_COOLDOWN_SECONDS: String(60) }),
+      new SchedulingNotificationService(dataSource),
     );
     const service = new AiIngestionService(
       source,

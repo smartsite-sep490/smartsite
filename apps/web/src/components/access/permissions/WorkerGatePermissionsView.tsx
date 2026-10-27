@@ -1,6 +1,6 @@
 import type { SmartSiteManagementClient } from '@smartsite/api-client';
 import { useManagementClient } from '../../../features/auth/auth-session';
-import { localizedError } from '../../../i18n/messages';
+import { userErrorMessage } from '../../../i18n/messages';
 import { localizedGateName } from '../../../i18n/labels';
 import { translate as tr, uiLocale } from '../../../i18n';
 import { useTranslation } from 'react-i18next';
@@ -167,7 +167,7 @@ export function GatePermissionEditor({
           className="flex items-center gap-2 rounded-xl border border-red-200 bg-red-50 p-3 text-xs font-semibold text-red-700"
         >
           <IconAlertTriangle className="h-4 w-4 shrink-0" />
-          <span>{localizedError(save.error.message)}</span>
+          <span>{userErrorMessage(save.error)}</span>
         </div>
       )}
 
@@ -313,7 +313,7 @@ export function WorkerGatePermissionsView({
                 role="alert"
                 className="flex items-center justify-between rounded-xl border border-red-200 bg-red-50 p-3 text-xs text-red-700"
               >
-                <span>{localizedError(workers.error.message)}</span>
+                <span>{userErrorMessage(workers.error)}</span>
                 <button
                   type="button"
                   onClick={() => void workers.refetch()}
@@ -450,7 +450,7 @@ export function WorkerGatePermissionsView({
                   role="alert"
                   className="flex items-center justify-between rounded-xl border border-red-200 bg-red-50 p-4 text-xs text-red-700"
                 >
-                  <span>{localizedError(permissions.error.message)}</span>
+                  <span>{userErrorMessage(permissions.error)}</span>
                   <button
                     type="button"
                     onClick={() => {

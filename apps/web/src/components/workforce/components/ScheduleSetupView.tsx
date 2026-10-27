@@ -1,4 +1,4 @@
-import { localizedError, localizeMessage } from '../../../i18n/messages';
+import { localizedError, localizeMessage, userErrorMessage } from '../../../i18n/messages';
 import { uiLocale } from '../../../i18n';
 import { translate as tr } from '../../../i18n';
 import { useTranslation } from 'react-i18next';
@@ -77,7 +77,8 @@ export function ScheduleSetupView({ apiUrl }: ScheduleSetupViewProps) {
   useTranslation();
 
   const { accessToken } = useAuth();
-  const { data: currentUser } = useCurrentUser(apiUrl);
+  const currentUserQuery = useCurrentUser(apiUrl);
+  const { data: currentUser } = currentUserQuery;
   const queryClient = useQueryClient();
   const client = useManagementClient(apiUrl);
 
@@ -113,7 +114,7 @@ export function ScheduleSetupView({ apiUrl }: ScheduleSetupViewProps) {
   const [selectedSiteId, setSelectedSiteId] = useState<string | null>(() =>
     new URLSearchParams(window.location.search).get('siteId'),
   );
-  const [activeTab, setActiveTab] = useState<'shifts' | 'version' | 'assignment'>(() =>
+  const [requestedTab, setActiveTab] = useState<'shifts' | 'version' | 'assignment'>(() =>
     new URLSearchParams(window.location.search).get('tab') === 'assignment'
       ? 'assignment'
       : 'shifts',
@@ -147,11 +148,7 @@ export function ScheduleSetupView({ apiUrl }: ScheduleSetupViewProps) {
         const res = await client.listSites(accessToken!);
         return res.items;
       }
-      const sitePromises = scopedSiteIds.map((sId) =>
-        client.getSite(accessToken!, sId).catch(() => null),
-      );
-      const sites = await Promise.all(sitePromises);
-      return sites.filter((s): s is NonNullable<typeof s> => s !== null);
+      return Promise.all(scopedSiteIds.map((sId) => client.getSite(accessToken!, sId)));
     },
     enabled: Boolean(accessToken && canDiscoverSites),
   });
@@ -173,12 +170,33 @@ export function ScheduleSetupView({ apiUrl }: ScheduleSetupViewProps) {
   // MF07: only a Site Manager for the selected Site may create/delete shifts,
   // manage versions, and assign shifts to contractors. Admin may still view setup.
   const canManageShiftsAndVersions = isManager;
-  const canAssignWorker = isManager;
-  const canViewAssignments = isAdmin || isManager || isContractorRep;
+  const canAssignWorker = isContractorRep;
+  const canViewAssignments = isAdmin || isContractorRep;
+  const activeTab = requestedTab === 'assignment' && !canViewAssignments ? 'shifts' : requestedTab;
   const readScopes = useQuery({
-    queryKey: ['schedule-read-scopes', apiUrl, currentUser?.id],
-    queryFn: () => client.contractorDashboardScopes(accessToken!),
-    enabled: !!accessToken && isContractorRep && !canAssignWorker,
+    queryKey: ['schedule-read-scopes', apiUrl, currentUser?.id, activeSiteId, isManager],
+    queryFn: async () =>
+      isManager
+        ? {
+            items: (await client.accessSetup(accessToken!, activeSiteId!)).participations
+              .filter(
+                (p) =>
+                  Date.parse(p.validFrom) <= Date.now() &&
+                  (!p.validUntil || Date.parse(p.validUntil) > Date.now()),
+              )
+              .map((p) => ({
+                siteId: activeSiteId!,
+                contractorId: p.contractorId,
+                contractorName: p.name,
+              })),
+          }
+        : client.contractorDashboardScopes(accessToken!),
+    enabled:
+      !!accessToken &&
+      !!activeSiteId &&
+      canViewAssignments &&
+      (isManager || isContractorRep) &&
+      !canAssignWorker,
   });
   const readOptions = useMemo(
     () => readScopes.data?.items.filter((o) => o.siteId === activeSiteId) ?? [],
@@ -267,7 +285,9 @@ export function ScheduleSetupView({ apiUrl }: ScheduleSetupViewProps) {
         offset: 0,
         limit: 100,
       }),
-    enabled: Boolean(accessToken && activeSiteId && assignmentScope.contractorId),
+    enabled: Boolean(
+      accessToken && activeSiteId && canViewAssignments && assignmentScope.contractorId,
+    ),
   });
   const contractorTeams = useMemo(
     () => contractorTeamsQuery.data?.items ?? [],
@@ -281,7 +301,9 @@ export function ScheduleSetupView({ apiUrl }: ScheduleSetupViewProps) {
         offset: 0,
         limit: 200,
       }),
-    enabled: Boolean(accessToken && activeSiteId && assignmentScope.contractorId),
+    enabled: Boolean(
+      accessToken && activeSiteId && canViewAssignments && assignmentScope.contractorId,
+    ),
   });
   const contractorTeamWorkers = useMemo(
     () => contractorTeamWorkersQuery.data?.items ?? [],
@@ -651,12 +673,45 @@ export function ScheduleSetupView({ apiUrl }: ScheduleSetupViewProps) {
         get label() {
           return tr('common.worker_assignment');
         },
-        count: schedulesTotal,
+        count: schedulesQuery.data?.total,
         icon: <IconUsers className="w-3.5 h-3.5 text-emerald-600" />,
       });
     }
     return items;
-  }, [shifts.length, versions.length, schedulesTotal, canViewAssignments]);
+  }, [shifts.length, versions.length, schedulesQuery.data?.total, canViewAssignments]);
+
+  const setupQueries = [
+    currentUserQuery,
+    sitesQuery,
+    shiftsQuery,
+    versionsQuery,
+    readScopes,
+    schedulesQuery,
+  ];
+  const failedInitialQuery = setupQueries.find(
+    (query) =>
+      query.isError &&
+      (query.data === undefined ||
+        (query.error instanceof ApiError && [401, 403].includes(query.error.status ?? 0))),
+  );
+  const failedRefreshQuery = setupQueries.find((query) => query.isError);
+
+  if (failedInitialQuery) {
+    return (
+      <div role="alert" className="space-y-3 rounded-xl border border-rose-200 bg-rose-50 p-4">
+        <p>{userErrorMessage(failedInitialQuery.error)}</p>
+        <Button onClick={() => void failedInitialQuery.refetch()}>{tr('common.retry')}</Button>
+      </div>
+    );
+  }
+
+  if (
+    currentUserQuery.isPending ||
+    (canDiscoverSites && sitesQuery.isPending) ||
+    (canAccess && activeSiteId && (shiftsQuery.isPending || versionsQuery.isPending))
+  ) {
+    return <p role="status">{tr('common.loading')}</p>;
+  }
 
   // ── Access Check ─────────────────────────────────────────────────────────
   if (!canAccess) {
@@ -677,59 +732,48 @@ export function ScheduleSetupView({ apiUrl }: ScheduleSetupViewProps) {
 
   return (
     <div className="space-y-5 animate-in fade-in duration-300">
-      {/* 1. Header & Quick Actions */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-4 border-b border-slate-200/80">
-        <div className="flex items-center gap-3">
-          <div className="w-10 h-10 rounded-xl bg-[#071A2B] text-white flex items-center justify-center shadow-xs shrink-0">
-            <IconCalendar className="w-5 h-5 text-[#F66B17]" />
+      {/* 1. Quick Actions */}
+      <div className="flex flex-wrap items-center justify-end gap-2.5 pb-4 border-b border-slate-200/80">
+        {availableSites.length > 1 && (
+          <div className="flex items-center gap-1.5 min-w-[200px]">
+            <span className="text-xs font-semibold text-slate-500 hidden sm:inline shrink-0">
+              {tr('common.site')}
+            </span>
+            <SmartSelect
+              size="sm"
+              value={activeSiteId || ''}
+              onChange={(val) => setSelectedSiteId(val)}
+              className="w-full"
+              options={availableSites.map((site) => ({
+                value: site.id,
+                label: `${site.name} (${site.code})`,
+              }))}
+            />
           </div>
-          <div>
-            <div className="flex items-center gap-2">
-              <span className="text-xs font-semibold text-slate-500">
-                {tr('common.workforce_management')}
-              </span>
-            </div>
-            <h1 className="text-xl font-bold tracking-tight text-[#071A2B]">
-              {tr('common.schedule_setup')}
-            </h1>
-          </div>
-        </div>
+        )}
 
-        {/* Site Switcher & Refresh */}
-        <div className="flex flex-wrap items-center gap-2.5 max-w-full">
-          {availableSites.length > 1 && (
-            <div className="flex items-center gap-1.5 min-w-[200px]">
-              <span className="text-xs font-semibold text-slate-500 hidden sm:inline shrink-0">
-                {tr('common.site')}
-              </span>
-              <SmartSelect
-                size="sm"
-                value={activeSiteId || ''}
-                onChange={(val) => setSelectedSiteId(val)}
-                className="w-full"
-                options={availableSites.map((site) => ({
-                  value: site.id,
-                  label: `${site.name} (${site.code})`,
-                }))}
-              />
-            </div>
-          )}
-
-          <Button
-            variant="outline"
-            size="md"
-            onClick={() => {
-              shiftsQuery.refetch();
-              versionsQuery.refetch();
-              if (canAssignWorker) schedulesQuery.refetch();
-            }}
-            isLoading={shiftsQuery.isFetching || versionsQuery.isFetching}
-            leftIcon={<IconRefreshCw className="w-3.5 h-3.5 text-slate-500" />}
-          >
-            {tr('common.refresh')}
-          </Button>
-        </div>
+        <Button
+          variant="outline"
+          size="md"
+          onClick={() => {
+            sitesQuery.refetch();
+            shiftsQuery.refetch();
+            versionsQuery.refetch();
+            if (canViewAssignments && assignmentScope.contractorId) schedulesQuery.refetch();
+          }}
+          isLoading={sitesQuery.isFetching || shiftsQuery.isFetching || versionsQuery.isFetching}
+          leftIcon={<IconRefreshCw className="w-3.5 h-3.5 text-slate-500" />}
+        >
+          {tr('common.refresh')}
+        </Button>
       </div>
+
+      {failedRefreshQuery && (
+        <div role="alert" className="space-y-3 rounded-xl border border-rose-200 bg-rose-50 p-4">
+          <p>{userErrorMessage(failedRefreshQuery.error)}</p>
+          <Button onClick={() => void failedRefreshQuery.refetch()}>{tr('common.retry')}</Button>
+        </div>
+      )}
 
       {/* ── HIGH-END FLOATING TOAST NOTIFICATIONS ───────────────────────── */}
       <div className="fixed top-5 right-5 z-50 flex flex-col gap-3 pointer-events-none max-w-sm sm:max-w-md w-[calc(100vw-2.5rem)]">
@@ -1035,7 +1079,7 @@ export function ScheduleSetupView({ apiUrl }: ScheduleSetupViewProps) {
                         ) : (
                           assignedContractorList.map((c) => (
                             <Badge key={c.id} variant="neutral">
-                              {c.code}
+                              {c.name}
                             </Badge>
                           ))
                         )}
@@ -1120,7 +1164,7 @@ export function ScheduleSetupView({ apiUrl }: ScheduleSetupViewProps) {
           {/* Assignment Form Card (4 cols) - Double-Bezel Architecture */}
           <div className="lg:col-span-4 rounded-3xl p-1.5 bg-gradient-to-b from-slate-100 to-slate-200/70 border border-slate-200/80 shadow-xs">
             <div className="bg-white rounded-[22px] p-5 border border-slate-100 shadow-[0_1px_3px_rgba(0,0,0,0.04)] space-y-4">
-              {!canAssignWorker && isContractorRep && (
+              {!canAssignWorker && isManager && (
                 <label>
                   {tr('common.contractor')}
                   <select
@@ -1140,7 +1184,6 @@ export function ScheduleSetupView({ apiUrl }: ScheduleSetupViewProps) {
               )}
               {canAssignWorker && (
                 <ScheduleAssignmentForm
-                  managerScope={isManager}
                   key={activeSiteId}
                   apiUrl={apiUrl}
                   token={accessToken!}
@@ -1163,7 +1206,7 @@ export function ScheduleSetupView({ apiUrl }: ScheduleSetupViewProps) {
                       {tr('common.assigned_schedules')}
                     </h3>
                     <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold bg-slate-100 text-slate-700 border border-slate-200/80">
-                      {schedulesTotal}
+                      {schedulesQuery.data?.total ?? '—'}
                     </span>
                   </div>
                   {schedulesQuery.isFetching && (

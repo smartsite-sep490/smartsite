@@ -5,7 +5,7 @@ import { WorkerDocumentReviewView } from '../safety/WorkerDocumentReviewView';
 import { AlertWorkContext } from '../safety/AlertWorkContext';
 import type { RelatedAlertFilter } from '../safety/safety-context';
 import { localizedLabel } from '../../i18n/labels';
-import { localizedError } from '../../i18n/messages';
+import { userErrorMessage } from '../../i18n/messages';
 import { uiLocale } from '../../i18n';
 import { translate as tr } from '../../i18n';
 import { useTranslation } from 'react-i18next';
@@ -79,10 +79,10 @@ function errorMessage(error: unknown): string {
         'safety_alerts_view.this_alert_changed_while_you_were_reviewing_it_the_latest_record_has_been_loaded_r',
       );
     if (error.code === 'network') return tr('safety_alerts_view.could_not_connect_to_the_backend');
-    return localizedError(error.message);
+    return userErrorMessage(error);
   }
   return error instanceof Error
-    ? localizedError(error.message)
+    ? userErrorMessage(error)
     : tr('access_control_view.the_request_could_not_be_completed');
 }
 
@@ -214,7 +214,7 @@ export function SafetyAlertsView({
     }
   }
   const [incidentSourceAlert, setIncidentSourceAlert] = useState('');
-  const [mobileAlertDetail, setMobileAlertDetail] = useState(false);
+  const [mobileAlertDetail, setMobileAlertDetail] = useState(!!initialAlertId);
   const [localSession, setSession] = useState<LoginResponse | null>(null);
   const session = authenticatedSession ?? localSession;
   const externalSession = authenticatedSession !== undefined;
@@ -257,7 +257,7 @@ export function SafetyAlertsView({
     setCreatedIncidentId('');
     setRequestedSiteId(initialSiteId ?? '');
     setRequestedAlertId('');
-    setMobileAlertDetail(false);
+    setMobileAlertDetail(!!initialAlertId);
     setIncidentSourceAlert('');
   }
 
@@ -265,6 +265,12 @@ export function SafetyAlertsView({
   if (prevInitialAlertId !== initialAlertId) {
     setPrevInitialAlertId(initialAlertId);
     setRequestedAlertId(initialAlertId ?? '');
+    if (initialAlertId) {
+      setWorkspaceTab('Alerts');
+      setReviewReason('');
+      setRelatedAlertFilter(undefined);
+      setMobileAlertDetail(true);
+    }
   }
 
   const removeSessionQueries = useCallback(
@@ -397,9 +403,16 @@ export function SafetyAlertsView({
     [isGlobalAdmin, siteIdsForCurrentTab, sites.data?.items],
   );
 
-  const selectedSiteId = visibleSites.some((site) => site.id === requestedSiteId)
-    ? requestedSiteId
-    : (visibleSites[0]?.id ?? '');
+  const alertSiteUnavailable =
+    !!requestedAlertId &&
+    !!requestedSiteId &&
+    sites.isSuccess &&
+    !visibleSites.some((site) => site.id === requestedSiteId);
+  const selectedSiteId = alertSiteUnavailable
+    ? ''
+    : visibleSites.some((site) => site.id === requestedSiteId)
+      ? requestedSiteId
+      : (visibleSites[0]?.id ?? '');
 
   const canReviewSafety =
     session?.user.roleAssignments.some(
@@ -459,9 +472,35 @@ export function SafetyAlertsView({
       workspaceTab === 'Alerts',
   });
 
+  const detailAccessDenied =
+    detail.error instanceof ApiError && [401, 403, 404].includes(detail.error.status ?? 0);
+  useEffect(() => {
+    if (!detailAccessDenied) return;
+    for (const prefix of [
+      'safety-alert-evidence',
+      'observation-identity-context',
+      'observation-identity-workers',
+      'observation-identity-decisions',
+    ]) {
+      const queryKey = [prefix, apiUrl, sessionScope, selectedSiteId, selectedAlertId];
+      void queryClient.cancelQueries({ queryKey });
+      queryClient.removeQueries({ queryKey });
+    }
+    const contextKey = [
+      'safety-workflow',
+      apiUrl,
+      sessionScope,
+      selectedSiteId,
+      'alert-context',
+      selectedAlertId,
+    ];
+    void queryClient.cancelQueries({ queryKey: contextKey });
+    queryClient.removeQueries({ queryKey: contextKey });
+  }, [detailAccessDenied, apiUrl, sessionScope, selectedSiteId, selectedAlertId, queryClient]);
+
   const review = useMutation({
     mutationFn: async (targetStatus: SafetyAlertReviewTargetStatus) => {
-      if (!detail.data)
+      if (!detail.data || detailAccessDenied)
         throw new Error(tr('safety_alerts_view.load_an_alert_before_submitting_a_review'));
       return client.reviewSafetyAlert(token, selectedSiteId, detail.data.id, {
         commandId: crypto.randomUUID(),
@@ -575,6 +614,7 @@ export function SafetyAlertsView({
 
   return (
     <div className="mx-auto max-w-[1202px] w-full min-w-0 space-y-3 pb-10 text-[#2F3437]">
+      {alertSiteUnavailable && <p role="alert">{tr('ppeNotifications.targetUnavailable')}</p>}
       <header className="flex flex-wrap items-start justify-between gap-3 min-w-0">
         <div className="min-w-0">
           <h1 className="mt-1 text-2xl font-bold tracking-tight text-[#111111]">
@@ -603,6 +643,11 @@ export function SafetyAlertsView({
               disabled={sites.isPending || visibleSites.length === 0}
               className="mt-1.5 w-full min-w-0 truncate rounded-md border border-[#EAEAEA] bg-white px-3 py-2 text-sm font-semibold text-[#2F3437]"
             >
+              {alertSiteUnavailable && (
+                <option value="" disabled>
+                  {tr('accounts.selectSite')}
+                </option>
+              )}
               {visibleSites.map((site) => (
                 <option key={site.id} value={site.id}>
                   {site.code} · {site.name}
@@ -1002,7 +1047,7 @@ export function SafetyAlertsView({
                 {errorMessage(detail.error)}
               </p>
             )}
-            {detail.data && (
+            {detail.data && !detailAccessDenied && (
               <div className="mt-4 space-y-5 min-w-0">
                 <TechnicalDetails>
                   {tr('safety_alerts_view.alert_value_revision_value', {
@@ -1095,86 +1140,87 @@ export function SafetyAlertsView({
                     )}
                   </div>
                 </div>
-                {(detail.data.status === 'PENDING_REVIEW' ||
-                  detail.data.status === 'NEEDS_MORE_EVIDENCE') && (
-                  <section className="rounded-lg border border-[#EAEAEA] bg-[#F7F6F3] p-3 sm:p-4 min-w-0">
-                    <h3 className="text-sm font-bold text-[#111111]">
-                      {tr('common.record_review_decision')}
-                    </h3>
-                    <p className="mt-1 text-xs leading-5 text-[#6B6B6B]">
-                      {tr(
-                        'safety_alerts_view.explain_the_evidence_behind_the_decision_the_reason_is_required_and_cannot_be_edit',
-                      )}
-                    </p>
-                    <label
-                      htmlFor="review-reason-textarea"
-                      className="mt-3 block text-xs font-semibold text-[#2F3437]"
-                    >
-                      {tr('common.decision_reason')}{' '}
-                      <span className="font-normal text-[#6B6B6B]">
-                        {tr('common.minimum_5_characters')}
-                      </span>
-                    </label>
-                    <textarea
-                      id="review-reason-textarea"
-                      name="reviewReason"
-                      aria-label={tr('safety_alerts_view.decision_reason_minimum_5_characters')}
-                      value={reviewReason}
-                      onChange={(event) => setReviewReason(event.target.value)}
-                      minLength={5}
-                      maxLength={1000}
-                      rows={3}
-                      placeholder={tr(
-                        'safety_alerts_view.example_worker_is_clearly_visible_without_a_hard_hat_across_the_linked_observation',
-                      )}
-                      className="mt-1.5 w-full min-w-0 rounded-md border border-[#EAEAEA] bg-white px-3 py-2 text-sm outline-none focus:border-[#F66B17] focus:ring-2 focus:ring-[#F66B17]/10 placeholder:text-[#6B6B6B]"
-                    />
-                    {review.error && (
-                      <p
-                        role="alert"
-                        className="mt-2 rounded-md bg-[#FDEBEC] p-2 text-xs text-[#9F2F2D]"
-                      >
-                        {errorMessage(review.error)}
+                {canReviewSafety &&
+                  (detail.data.status === 'PENDING_REVIEW' ||
+                    detail.data.status === 'NEEDS_MORE_EVIDENCE') && (
+                    <section className="rounded-lg border border-[#EAEAEA] bg-[#F7F6F3] p-3 sm:p-4 min-w-0">
+                      <h3 className="text-sm font-bold text-[#111111]">
+                        {tr('common.record_review_decision')}
+                      </h3>
+                      <p className="mt-1 text-xs leading-5 text-[#6B6B6B]">
+                        {tr(
+                          'safety_alerts_view.explain_the_evidence_behind_the_decision_the_reason_is_required_and_cannot_be_edit',
+                        )}
                       </p>
-                    )}
-                    {review.isSuccess && (
-                      <p
-                        role="status"
-                        className="mt-2 rounded-md bg-[#EDF3EC] p-2 text-xs text-[#346538]"
+                      <label
+                        htmlFor="review-reason-textarea"
+                        className="mt-3 block text-xs font-semibold text-[#2F3437]"
                       >
-                        {tr('common.review_decision_recorded')}
-                      </p>
-                    )}
-                    <div className="mt-3 flex flex-wrap gap-2">
-                      <button
-                        type="button"
-                        disabled={reviewReason.trim().length < 5 || review.isPending}
-                        onClick={() => review.mutate('CONFIRMED')}
-                        className="rounded-md bg-[#9F2F2D] px-3 py-2 text-xs font-bold text-white hover:bg-[#7F2524] disabled:cursor-not-allowed disabled:opacity-50"
-                      >
-                        {tr('common.confirm_violation')}
-                      </button>
-                      <button
-                        type="button"
-                        disabled={reviewReason.trim().length < 5 || review.isPending}
-                        onClick={() => review.mutate('DISMISSED')}
-                        className="rounded-md bg-[#111111] px-3 py-2 text-xs font-bold text-white hover:bg-[#333333] disabled:cursor-not-allowed disabled:opacity-50"
-                      >
-                        {tr('common.dismiss_alert')}
-                      </button>
-                      {detail.data.status === 'PENDING_REVIEW' && (
+                        {tr('common.decision_reason')}{' '}
+                        <span className="font-normal text-[#6B6B6B]">
+                          {tr('common.minimum_5_characters')}
+                        </span>
+                      </label>
+                      <textarea
+                        id="review-reason-textarea"
+                        name="reviewReason"
+                        aria-label={tr('safety_alerts_view.decision_reason_minimum_5_characters')}
+                        value={reviewReason}
+                        onChange={(event) => setReviewReason(event.target.value)}
+                        minLength={5}
+                        maxLength={1000}
+                        rows={3}
+                        placeholder={tr(
+                          'safety_alerts_view.example_worker_is_clearly_visible_without_a_hard_hat_across_the_linked_observation',
+                        )}
+                        className="mt-1.5 w-full min-w-0 rounded-md border border-[#EAEAEA] bg-white px-3 py-2 text-sm outline-none focus:border-[#F66B17] focus:ring-2 focus:ring-[#F66B17]/10 placeholder:text-[#6B6B6B]"
+                      />
+                      {review.error && (
+                        <p
+                          role="alert"
+                          className="mt-2 rounded-md bg-[#FDEBEC] p-2 text-xs text-[#9F2F2D]"
+                        >
+                          {errorMessage(review.error)}
+                        </p>
+                      )}
+                      {review.isSuccess && (
+                        <p
+                          role="status"
+                          className="mt-2 rounded-md bg-[#EDF3EC] p-2 text-xs text-[#346538]"
+                        >
+                          {tr('common.review_decision_recorded')}
+                        </p>
+                      )}
+                      <div className="mt-3 flex flex-wrap gap-2">
                         <button
                           type="button"
                           disabled={reviewReason.trim().length < 5 || review.isPending}
-                          onClick={() => review.mutate('NEEDS_MORE_EVIDENCE')}
-                          className="rounded-md border border-[#1F6C9F]/30 bg-white px-3 py-2 text-xs font-bold text-[#1F6C9F] hover:bg-[#E1F3FE] disabled:cursor-not-allowed disabled:opacity-50"
+                          onClick={() => review.mutate('CONFIRMED')}
+                          className="rounded-md bg-[#9F2F2D] px-3 py-2 text-xs font-bold text-white hover:bg-[#7F2524] disabled:cursor-not-allowed disabled:opacity-50"
                         >
-                          {tr('common.request_more_evidence')}
+                          {tr('common.confirm_violation')}
                         </button>
-                      )}
-                    </div>
-                  </section>
-                )}
+                        <button
+                          type="button"
+                          disabled={reviewReason.trim().length < 5 || review.isPending}
+                          onClick={() => review.mutate('DISMISSED')}
+                          className="rounded-md bg-[#111111] px-3 py-2 text-xs font-bold text-white hover:bg-[#333333] disabled:cursor-not-allowed disabled:opacity-50"
+                        >
+                          {tr('common.dismiss_alert')}
+                        </button>
+                        {detail.data.status === 'PENDING_REVIEW' && (
+                          <button
+                            type="button"
+                            disabled={reviewReason.trim().length < 5 || review.isPending}
+                            onClick={() => review.mutate('NEEDS_MORE_EVIDENCE')}
+                            className="rounded-md border border-[#1F6C9F]/30 bg-white px-3 py-2 text-xs font-bold text-[#1F6C9F] hover:bg-[#E1F3FE] disabled:cursor-not-allowed disabled:opacity-50"
+                          >
+                            {tr('common.request_more_evidence')}
+                          </button>
+                        )}
+                      </div>
+                    </section>
+                  )}
                 {detail.data.status === 'CONFIRMED' &&
                   !detail.data.incidentId &&
                   session.user.roleAssignments.some(

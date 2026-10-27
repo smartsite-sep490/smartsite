@@ -1,7 +1,7 @@
 import type { SmartSiteManagementClient } from '@smartsite/api-client';
 import { useManagementClient } from '../../../features/auth/auth-session';
 import { localizedLabel } from '../../../i18n/labels';
-import { localizedError } from '../../../i18n/messages';
+import { userErrorMessage } from '../../../i18n/messages';
 import { translate as tr } from '../../../i18n';
 import { useTranslation } from 'react-i18next';
 import React, { useState, useMemo } from 'react';
@@ -829,7 +829,7 @@ export function WorkforceScheduleTab({
               </p>
               <p className="text-[11px] text-rose-700 mt-0.5">
                 {myTeamQuery.error instanceof Error
-                  ? localizedError(myTeamQuery.error.message)
+                  ? userErrorMessage(myTeamQuery.error)
                   : tr('workforce_schedule_tab.please_try_again_to_check_shift_swap_eligibility')}
               </p>
             </div>

@@ -53,7 +53,7 @@ it('loads only granted Zones, formats dates and retains request ID through faile
   expect(screen.getByLabelText('Start date').textContent).toContain('12/10/2026');
   expect(screen.getByLabelText('End date').textContent).toContain('13/10/2026');
   await user.click(screen.getByRole('button', { name: 'Assign Team Zone' }));
-  await screen.findByText('Connection unavailable');
+  await screen.findByText('Something went wrong. Please try again.');
   await user.click(screen.getByRole('button', { name: 'Assign Team Zone' }));
   await waitFor(() => expect(grant).toHaveBeenCalledTimes(2));
   expect(grant.mock.calls[0]![4].requestId).toBe(grant.mock.calls[1]![4].requestId);

@@ -8,6 +8,7 @@ export default tseslint.config(
   {
     ignores: [
       '**/.worktrees/**',
+      '**/.wrangler/**',
       '**/node_modules/**',
       '**/dist/**',
       '**/.test-build/**',

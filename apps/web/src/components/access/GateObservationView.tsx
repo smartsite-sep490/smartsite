@@ -1,10 +1,10 @@
-import { localizedError } from '../../i18n/messages';
+import { useManagementClient } from '../../features/auth/auth-session';
+import { userErrorMessage } from '../../i18n/messages';
 import { localizedLabel, localizedGateName } from '../../i18n/labels';
 import { translate as tr } from '../../i18n';
-import { useMemo, useState } from 'react';
+import { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { useTranslation } from 'react-i18next';
-import { SmartSiteManagementClient } from '@smartsite/api-client';
 import { SITE_GATES } from '@smartsite/contracts/gate-permissions';
 import { uiLocale } from '../../i18n';
 import { IconAlertTriangle } from '../icons';
@@ -22,7 +22,7 @@ export function GateObservationView({
 }) {
   const { t } = useTranslation();
   const locale = uiLocale();
-  const client = useMemo(() => new SmartSiteManagementClient(apiUrl), [apiUrl]);
+  const client = useManagementClient(apiUrl);
   const [gateId, setGateId] = useState<string>(SITE_GATES[0].id);
 
   const logs = useQuery({
@@ -44,7 +44,6 @@ export function GateObservationView({
           <h2 className="text-xl font-extrabold tracking-tight text-[#111111]">
             {t('gateObservation.title')}
           </h2>
-          <p className="text-xs text-[#6B6B6B]">{t('gateObservation.subtitle')}</p>
         </div>
 
         <div className="flex min-w-0 max-w-full flex-wrap items-center gap-2">
@@ -79,7 +78,7 @@ export function GateObservationView({
           className="flex items-center gap-2 rounded-xl bg-rose-50 border border-rose-200 p-3 text-xs font-semibold text-rose-800"
         >
           <IconAlertTriangle className="h-4 w-4 shrink-0 text-rose-600" />
-          <span>{localizedError(logs.error.message)}</span>
+          <span>{userErrorMessage(logs.error)}</span>
         </div>
       )}
 

@@ -1,3 +1,4 @@
+import { SchedulingNotificationService } from '../../src/modules/workforce/notifications/scheduling-notification.service.js';
 import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
 import { test } from 'node:test';
@@ -263,7 +264,10 @@ test('MF06 resolves event-time allow, deny, expired and unknown identity and rec
       source,
       new ObservationContextResolverService(),
       new AlertCandidateEvaluator(),
-      new DurableGroupingService(createTestConfig({ ALERT_COOLDOWN_SECONDS: '60' })),
+      new DurableGroupingService(
+        createTestConfig({ ALERT_COOLDOWN_SECONDS: '60' }),
+        new SchedulingNotificationService(dataSource),
+      ),
       createTestConfig(),
       () => capturedAt,
       service,

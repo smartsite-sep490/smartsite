@@ -51,6 +51,9 @@ it('routes a representative group registration to the selected site and shows QR
   vi.spyOn(SmartSiteManagementClient.prototype, 'listVisitorZones').mockResolvedValue({
     items: [{ id: 'zone-beta', name: 'Beta office' }],
   });
+  vi.spyOn(SmartSiteManagementClient.prototype, 'listVisitorManagers').mockResolvedValue({
+    items: [{ id: 'manager-beta', displayName: 'Synthetic host' }],
+  });
   const lookup = vi
     .spyOn(SmartSiteManagementClient.prototype, 'getVisitorPass')
     .mockResolvedValue({ visit, pass: null });
@@ -64,7 +67,8 @@ it('routes a representative group registration to the selected site and shows QR
   await user.type(screen.getByLabelText('Representative Full Name'), visit.visitorName);
   await user.type(screen.getByLabelText('Contact Phone / Email'), visit.contact);
   await user.type(screen.getByLabelText('Email for QR delivery'), 'synthetic@example.test');
-  await user.type(screen.getByLabelText('Host Contact at Site'), visit.hostName);
+  await screen.findByRole('option', { name: 'Synthetic host' });
+  await user.selectOptions(screen.getByLabelText('Host Contact at Site'), 'manager-beta');
   await user.type(screen.getByLabelText('Visit Purpose'), visit.purpose);
   await user.type(screen.getByLabelText('Target Visit Area'), visit.targetArea);
   await user.click(await screen.findByLabelText('Beta office'));
@@ -89,6 +93,7 @@ it('routes a representative group registration to the selected site and shows QR
         { fullName: 'Synthetic visitor 2', identityNumber: '000000000002' },
       ],
       visitorName: visit.visitorName,
+      siteManagerId: 'manager-beta',
       zoneIds: ['zone-beta'],
     }),
   );

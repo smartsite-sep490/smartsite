@@ -1,4 +1,4 @@
-import { localizedError } from '../../i18n/messages';
+import { localizedError, userErrorMessage } from '../../i18n/messages';
 import { translate as tr } from '../../i18n';
 import { useTranslation } from 'react-i18next';
 import React, { useState, useMemo, useRef } from 'react';
@@ -34,10 +34,7 @@ export interface DashboardNavigateContext {
 }
 
 function getErrorMessage(error: unknown, fallback: string): string {
-  if (error instanceof Error && error.message) {
-    return error.message;
-  }
-  return fallback;
+  return error ? userErrorMessage(error) : fallback;
 }
 
 function getErrorStatus(error: unknown): number | undefined {
@@ -574,10 +571,7 @@ export function ContractorDashboardView({
             ? tr(
                 'contractor_dashboard_view.your_account_does_not_have_active_contractor_representative_permissions',
               )
-            : scopesQuery.error?.message ||
-              tr(
-                'contractor_dashboard_view.a_network_error_occurred_while_discovering_your_assigned_sites',
-              )}
+            : userErrorMessage(scopesQuery.error)}
         </p>
         <Button
           variant="default"
@@ -985,8 +979,7 @@ export function ContractorDashboardView({
                   className="p-6 text-center rounded-2xl border border-rose-200 bg-white space-y-3"
                 >
                   <p className="text-xs font-bold text-rose-600">
-                    {teamsQuery.error?.message ||
-                      tr('contractor_dashboard_view.could_not_load_contractor_teams')}
+                    {userErrorMessage(teamsQuery.error)}
                   </p>
                   <Button variant="outline" size="sm" onClick={() => void teamsQuery.refetch()}>
                     {tr('common.retry')}
@@ -1221,8 +1214,7 @@ export function ContractorDashboardView({
                   className="p-6 text-center rounded-2xl border border-rose-200 bg-white space-y-3"
                 >
                   <p className="text-xs font-bold text-rose-600">
-                    {workersQuery.error?.message ||
-                      tr('contractor_dashboard_view.could_not_load_contractor_workers')}
+                    {userErrorMessage(workersQuery.error)}
                   </p>
                   <Button variant="outline" size="sm" onClick={() => void workersQuery.refetch()}>
                     {tr('common.retry')}

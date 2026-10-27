@@ -61,6 +61,26 @@ function setup() {
   return { cache, user: userEvent.setup() };
 }
 
+it('confirms and revokes the selected Site Manager, then allows a new assignment', async () => {
+  const users = vi
+    .spyOn(SmartSiteManagementClient.prototype, 'listUsers')
+    .mockResolvedValue({ items: [manager('old-manager')], total: 1 });
+  const revoke = vi
+    .spyOn(SmartSiteManagementClient.prototype, 'revokeSiteManager')
+    .mockImplementation(async () => {
+      users.mockResolvedValue({ items: [], total: 0 });
+    });
+  const { user, cache } = setup();
+  await screen.findByText('old-manager (Ready to approve)');
+  await user.click(screen.getByRole('button', { name: 'Manage Site Managers' }));
+  await user.click(screen.getByRole('button', { name: 'Revoke Site Manager' }));
+  expect(revoke).not.toHaveBeenCalled();
+  await user.click(screen.getByRole('button', { name: 'Confirm revoke' }));
+  await waitFor(() => expect(revoke).toHaveBeenCalledWith('admin-token', 'old-manager', 'site-a'));
+  await screen.findByText('Not assigned yet');
+  cache.clear();
+});
+
 it('renders a manager returned after the first account page', async () => {
   const records: AccountResponse[] = [
     ...Array.from({ length: 100 }, (_, index) => ({
@@ -77,6 +97,7 @@ it('renders a manager returned after the first account page', async () => {
     }));
   const { cache } = setup();
   await screen.findByText('later-manager (Ready to approve)');
+  expect(screen.queryByRole('button', { name: 'Add Contractor' })).toBeNull();
   expect(users).toHaveBeenCalledWith('admin-token', { offset: 100, limit: 100 });
   cache.clear();
 });

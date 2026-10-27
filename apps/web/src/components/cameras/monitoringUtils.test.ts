@@ -22,13 +22,15 @@ describe('monitoringUtils', () => {
     it('returns error when token is missing and not in URL', () => {
       const result = buildAiWebSocketUrl('ws://127.0.0.1:8000/ws/realtime', '');
       expect(result.url).toBeNull();
-      expect(result.error).toMatch(/token/i);
+      expect(result.error).toContain('unavailable');
+      expect(result.error).not.toMatch(/token|VITE_|WebSocket/);
     });
 
     it('returns error when token is only whitespace and not in URL', () => {
       const result = buildAiWebSocketUrl('ws://127.0.0.1:8000/ws/realtime', '   ');
       expect(result.url).toBeNull();
-      expect(result.error).toMatch(/token/i);
+      expect(result.error).toContain('unavailable');
+      expect(result.error).not.toMatch(/token|VITE_|WebSocket/);
     });
 
     it('attaches token query param to bare WebSocket URL', () => {

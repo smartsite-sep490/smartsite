@@ -1,3 +1,4 @@
+import { SchedulingNotificationService } from '../../src/modules/workforce/notifications/scheduling-notification.service.js';
 import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
 import { after, test } from 'node:test';
@@ -364,7 +365,7 @@ test('ingestion rejects stale geometry across polygon edits and Region/Camera li
     dataSource,
     resolver,
     evaluator,
-    new DurableGroupingService(createTestConfig()),
+    new DurableGroupingService(createTestConfig(), new SchedulingNotificationService(dataSource)),
     createTestConfig(),
   );
   const event = (geometryVersion: number) => ({

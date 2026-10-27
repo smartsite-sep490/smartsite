@@ -6,7 +6,8 @@ import { SmartSiteManagementClient } from '@smartsite/api-client';
 import { WorkerAbsenceSummary } from '../workforce/components/WorkerAbsenceSummary';
 import { DashboardView } from './DashboardView';
 
-vi.mock('../../features/auth/auth-session', () => ({
+vi.mock('../../features/auth/auth-session', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('../../features/auth/auth-session')>()),
   useAuth: () => ({ accessToken: 'worker-token' }),
   useCurrentUser: () => ({
     data: { id: 'worker-user', roleAssignments: [{ role: 'WORKER', siteId: 'site-a' }] },

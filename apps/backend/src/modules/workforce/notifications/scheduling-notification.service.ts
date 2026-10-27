@@ -12,6 +12,7 @@ import type {
 import { invalid, missing, page, uuid } from '../../../common/configuration/commands.js';
 import { PublicHttpException } from '../../../common/http/public-http-exception.js';
 import { UserNotificationEntity } from '../../../database/entities/user-notification.entity.js';
+import { SafetyAlertEntity } from '../../../database/entities/safety-alert.entity.js';
 import { WorkerEntity } from '../../../database/entities/worker.entity.js';
 import { ShiftEntity } from '../../../database/entities/shift.entity.js';
 import { SiteEntity } from '../../../database/entities/site.entity.js';
@@ -63,7 +64,11 @@ const documentScope = `EXISTS(SELECT 1 FROM app_user u WHERE u.id=n.recipient_us
     (n.recipient_role='CONTRACTOR_REPRESENTATIVE' AND EXISTS(SELECT 1 FROM contractor_representative_grant g WHERE g.contractor_id=w.contractor_id AND g.user_id=n.recipient_user_id)
      AND EXISTS(SELECT 1 FROM contractor c WHERE c.id=w.contractor_id AND c.is_active)
      AND EXISTS(SELECT 1 FROM contractor_site_participation p WHERE p.site_id=w.site_id AND p.contractor_id=w.contractor_id AND p.is_active AND p.valid_from<=CURRENT_TIMESTAMP AND (p.valid_until IS NULL OR p.valid_until>CURRENT_TIMESTAMP)))))`;
-const scope = `((n.request_type IN ('CHANGE','SWAP','ATTENDANCE','SCHEDULE') AND (${schedulingScope}) AND NOT (n.request_type='ATTENDANCE' AND n.event='TIME_REQUESTED' AND n.recipient_role<>'CONTRACTOR_REPRESENTATIVE')) OR (n.request_type='SAFETY' AND (${safetyScope})) OR (n.request_type='CHECKLIST' AND (${checklistScope})) OR (n.request_type='DOCUMENT' AND (${documentScope})))`;
+const ppeAlertScope = `n.recipient_role='SAFETY_OFFICER'
+ AND EXISTS(SELECT 1 FROM app_user u WHERE u.id=n.recipient_user_id AND u.is_active AND NOT u.must_change_password)
+ AND EXISTS(SELECT 1 FROM user_role_assignment r WHERE r.user_id=n.recipient_user_id AND r.site_id=n.site_id AND r.role='SAFETY_OFFICER')
+ AND EXISTS(SELECT 1 FROM safety_alert a WHERE a.id=n.request_id AND a.site_id=n.site_id AND a.alert_type='PPE_VIOLATION')`;
+const scope = `((n.request_type IN ('CHANGE','SWAP','ATTENDANCE','SCHEDULE') AND (${schedulingScope}) AND NOT (n.request_type='ATTENDANCE' AND n.event='TIME_REQUESTED' AND n.recipient_role<>'CONTRACTOR_REPRESENTATIVE')) OR (n.request_type='SAFETY' AND (${safetyScope})) OR (n.request_type='CHECKLIST' AND (${checklistScope})) OR (n.request_type='DOCUMENT' AND (${documentScope})) OR (n.request_type='SAFETY_ALERT' AND (${ppeAlertScope})))`;
 type SchedulingRequest = ShiftChangeRequestEntity | ShiftSwapRequestEntity;
 type Recipient = Pick<
   UserNotificationEntity,
@@ -74,6 +79,65 @@ type Recipient = Pick<
 export class SchedulingNotificationService {
   private readonly logger = new Logger(SchedulingNotificationService.name);
   constructor(private readonly dataSource: DataSource) {}
+
+  async recordPpeAlert(
+    manager: EntityManager,
+    alert: SafetyAlertEntity,
+    cameraId: string,
+  ): Promise<number> {
+    if (
+      alert.alertType !== 'PPE_VIOLATION' ||
+      !['PPE_HARD_HAT_MISSING', 'PPE_SAFETY_VEST_MISSING'].includes(alert.candidateSubtype)
+    )
+      invalid('Invalid PPE notification alert');
+    const recipients: { id: string }[] = await manager.query(
+      `SELECT DISTINCT u.id FROM app_user u JOIN user_role_assignment r ON r.user_id=u.id
+       WHERE u.is_active AND NOT u.must_change_password AND r.site_id=$1 AND r.role='SAFETY_OFFICER' ORDER BY u.id`,
+      [alert.siteId],
+    );
+    if (!recipients.length) {
+      // This records a gap observed in the transaction, never a delivery acknowledgement.
+      this.logger.warn({
+        action: 'safety.ppe.notification.gap',
+        siteId: alert.siteId,
+        alertId: alert.id,
+        recipients: 0,
+      });
+      return 0;
+    }
+    const [context]: { site_name: string; camera_name: string; zone_name: string | null }[] =
+      await manager.query(
+        `SELECT s.name AS site_name,c.name AS camera_name,z.name AS zone_name FROM site s
+       JOIN camera c ON c.site_id=s.id AND c.id=$2
+       LEFT JOIN zone z ON z.site_id=s.id AND z.id=$3
+       WHERE s.id=$1 AND ($3::uuid IS NULL OR z.id IS NOT NULL)`,
+        [alert.siteId, cameraId, alert.zoneId],
+      );
+    if (!context) invalid('Invalid PPE notification context');
+    const content = {
+      siteName: context.site_name,
+      title: 'PPE alert requires review',
+      message: 'Review the PPE observation.',
+      safetyAlert: {
+        cameraId,
+        cameraName: context.camera_name,
+        zoneId: alert.zoneId,
+        zoneName: context.zone_name,
+        candidateSubtype: alert.candidateSubtype,
+      },
+    };
+    let inserted = 0;
+    for (const recipient of recipients) {
+      const rows: { id: string }[] = await manager.query(
+        `INSERT INTO user_notification(id,recipient_user_id,site_id,contractor_id,worker_id,recipient_role,request_type,request_id,event,content)
+         VALUES($1,$2,$3,NULL,NULL,'SAFETY_OFFICER','SAFETY_ALERT',$4,'PPE_ALERT_CREATED',$5::jsonb)
+         ON CONFLICT ON CONSTRAINT uq_notification_event_recipient DO NOTHING RETURNING id`,
+        [randomUUID(), recipient.id, alert.siteId, alert.id, JSON.stringify(content)],
+      );
+      inserted += rows.length;
+    }
+    return inserted;
+  }
   async recordScheduleChange(
     manager: EntityManager,
     input: {
@@ -463,6 +527,19 @@ export class SchedulingNotificationService {
   }
 
   private response(n: UserNotificationEntity): UserNotificationResponse {
+    if (n.requestType === 'SAFETY_ALERT')
+      return {
+        id: n.id,
+        event: n.event,
+        siteId: n.siteId,
+        siteName: n.content.siteName,
+        title: n.content.title,
+        message: n.content.message,
+        safetyAlert: n.content.safetyAlert!,
+        createdAt: n.createdAt.toISOString(),
+        readAt: n.readAt?.toISOString() ?? null,
+        target: { siteId: n.siteId, alertId: n.requestId, tab: 'alerts' },
+      };
     if (n.requestType === 'DOCUMENT')
       return {
         id: n.id,

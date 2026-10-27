@@ -1,5 +1,5 @@
 import { useManagementClient } from '../../../features/auth/auth-session';
-import { localizedError, localizeMessage } from '../../../i18n/messages';
+import { localizedError, localizeMessage, userErrorMessage } from '../../../i18n/messages';
 import { localizedLabel } from '../../../i18n/labels';
 import { translate as tr } from '../../../i18n';
 import { useTranslation } from 'react-i18next';
@@ -734,7 +734,7 @@ export function WorkerEnrollmentView({
               role="alert"
               className="rounded-xl border border-red-200 bg-red-50 p-3 text-xs font-medium text-red-700"
             >
-              {localizedError(linkAccount.error.message)}
+              {userErrorMessage(linkAccount.error)}
             </div>
           )}
         </section>
@@ -953,7 +953,7 @@ export function WorkerEnrollmentView({
                 ))}
             </select>
           </label>
-          {workerChoices.error && <p role="alert">{localizedError(workerChoices.error.message)}</p>}
+          {workerChoices.error && <p role="alert">{userErrorMessage(workerChoices.error)}</p>}
           <p className="mb-3 text-xs text-slate-600">
             {tr(
               'worker_enrollment_view.hand_the_screen_to_the_worker_only_the_worker_may_confirm_consent_the_assisting_op',
@@ -969,9 +969,6 @@ export function WorkerEnrollmentView({
                   value1: CONSENT_VERSION,
                 })}
               </h3>
-              <p className="text-xs text-slate-500">
-                {tr('worker_enrollment_view.mf01_worker_biometric_consent_compliance')}
-              </p>
             </div>
           </div>
 

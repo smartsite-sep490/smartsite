@@ -29,7 +29,8 @@ const manager: AccountResponse = {
 let actor: AccountResponse | undefined = admin;
 let token: string | null = 'synthetic-token';
 const logout = vi.fn();
-vi.mock('../auth/auth-session', () => ({
+vi.mock('../auth/auth-session', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('../auth/auth-session')>()),
   useAuth: () => ({ accessToken: token }),
   useCurrentUser: () => ({ data: actor, isPending: false, isError: false }),
   useLogout: () => ({ mutate: logout }),
@@ -167,6 +168,38 @@ it('rejects duplicate roles and preserves assignments when editing another site'
     ]),
   );
 });
+
+it.each(['SAFETY_OFFICER', 'SECURITY_OFFICER'] as const)(
+  'adds a site for %s while preserving the existing assignment',
+  async (role) => {
+    const officer: AccountResponse = { ...manager, roleAssignments: [{ role, siteId: 'alpha' }] };
+    vi.mocked(SmartSiteManagementClient.prototype.listUsers).mockResolvedValue({
+      items: [officer],
+      total: 1,
+    });
+    const replace = vi
+      .spyOn(SmartSiteManagementClient.prototype, 'replaceUserRoleAssignments')
+      .mockResolvedValue(officer);
+    mount();
+    const user = userEvent.setup();
+    await screen.findByText('Synthetic Manager');
+    await user.click(
+      within(screen.getByRole('group', { name: 'Actions for manager.test' })).getByRole('button', {
+        name: 'Edit roles',
+      }),
+    );
+    await user.click(screen.getByRole('button', { name: 'Add site for role 1' }));
+    expect((screen.getByLabelText('Role 2') as HTMLSelectElement).value).toBe(role);
+    await user.selectOptions(screen.getByLabelText('Site 2'), 'beta');
+    await user.click(screen.getByRole('button', { name: 'Confirm' }));
+    await waitFor(() =>
+      expect(replace).toHaveBeenCalledWith('synthetic-token', 'manager', [
+        { role, siteId: 'alpha' },
+        { role, siteId: 'beta' },
+      ]),
+    );
+  },
+);
 
 it('requires confirmation before disabling an account and prevents disabling yourself', async () => {
   const setActive = vi

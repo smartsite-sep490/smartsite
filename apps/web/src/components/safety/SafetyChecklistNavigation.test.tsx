@@ -98,6 +98,7 @@ it('closes the old checklist report when Back changes the checklist in the same 
   navigate('site-a', 'target-b');
   await screen.findByRole('heading', { name: 'target-b' });
   fireEvent.click(screen.getByRole('button', { name: 'Report checklist' }));
+  fireEvent.click(screen.getByRole('button', { name: 'Add note' }));
   fireEvent.change(screen.getByLabelText('Notes: target-b criterion'), {
     target: { value: 'Unsaved synthetic report' },
   });
@@ -105,6 +106,7 @@ it('closes the old checklist report when Back changes the checklist in the same 
   await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
   expect(await screen.findByRole('heading', { name: 'target-a' })).not.toBeNull();
   fireEvent.click(screen.getByRole('button', { name: 'Report checklist' }));
+  fireEvent.click(screen.getByRole('button', { name: 'Add note' }));
   expect((screen.getByLabelText('Notes: target-a criterion') as HTMLTextAreaElement).value).toBe(
     '',
   );
@@ -137,5 +139,6 @@ it('keeps the new checklist open when the previous report finishes after Back', 
   });
   expect(screen.getByRole('heading', { name: 'target-a' })).not.toBeNull();
   expect(screen.getByRole('dialog')).not.toBeNull();
+  fireEvent.click(screen.getByRole('button', { name: 'Add note' }));
   expect(screen.getByLabelText('Notes: target-a criterion')).not.toBeNull();
 });

@@ -1,7 +1,5 @@
-import { useMemo } from 'react';
 import { useQuery } from '@tanstack/react-query';
-import { SmartSiteManagementClient } from '@smartsite/api-client';
-import { useAuth, useCurrentUser } from '../../features/auth/auth-session';
+import { useManagementClient, useAuth, useCurrentUser } from '../../features/auth/auth-session';
 import { useTranslation } from 'react-i18next';
 import { translate as tr } from '../../i18n';
 import { WorkerAbsenceSummary } from '../workforce/components/WorkerAbsenceSummary';
@@ -19,7 +17,7 @@ function WorkerSiteSummary({
   siteId: string;
   userId: string;
 }) {
-  const client = useMemo(() => new SmartSiteManagementClient(apiUrl), [apiUrl]);
+  const client = useManagementClient(apiUrl);
   const profile = useQuery({
     queryKey: ['worker-dashboard-profile', apiUrl, userId, siteId],
     queryFn: async () => {

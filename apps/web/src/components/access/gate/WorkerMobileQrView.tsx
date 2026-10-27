@@ -1,5 +1,5 @@
 import { useManagementClient } from '../../../features/auth/auth-session';
-import { localizedError } from '../../../i18n/messages';
+import { userErrorMessage } from '../../../i18n/messages';
 import { translate as tr } from '../../../i18n';
 import { useTranslation } from 'react-i18next';
 import { useState, type FormEvent } from 'react';
@@ -54,11 +54,6 @@ export function WorkerMobileQrView({
               <h2 className="text-xl font-bold tracking-tight text-white">
                 {tr('worker_mobile_qr_view.fallback_qr_value', { value1: workerName })}
               </h2>
-              <p className="mt-0.5 text-xs text-slate-300">
-                {tr(
-                  'worker_mobile_qr_view.emergency_gate_access_fallback_when_webcam_fails_or_face_verification_is_inconclus',
-                )}
-              </p>
             </div>
           </div>
         </div>
@@ -143,7 +138,7 @@ export function WorkerMobileQrView({
               className="mt-4 flex items-center gap-2 rounded-xl border border-rose-200 bg-rose-50 p-4 text-xs font-semibold text-rose-700"
             >
               <IconAlertTriangle className="h-4 w-4 shrink-0 text-rose-500" />
-              <span>{localizedError(pass.error.message)}</span>
+              <span>{userErrorMessage(pass.error)}</span>
             </div>
           )}
 

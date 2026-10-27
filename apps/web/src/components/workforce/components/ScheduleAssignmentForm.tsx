@@ -1,8 +1,9 @@
 import { useManagementClient } from '../../../features/auth/auth-session';
-import { localizedError, localizeMessage } from '../../../i18n/messages';
+import { localizeMessage, userErrorMessage } from '../../../i18n/messages';
 import { translate as tr } from '../../../i18n';
 import { useTranslation } from 'react-i18next';
 import React, { useEffect, useRef, useState } from 'react';
+import { CalendarBlank, PencilSimple } from '@phosphor-icons/react';
 import { SmartDatePicker } from '../../ui';
 import { formatShiftRange, formatWorkDate } from '../utils/workforce-format';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
@@ -249,7 +250,7 @@ export function ScheduleAssignmentForm({
           role="alert"
           className="text-xs text-red-600 font-semibold bg-red-50 p-2.5 rounded-xl border border-red-200"
         >
-          {localizedError(loadError.message)}{' '}
+          {userErrorMessage(loadError)}{' '}
           <button
             className="underline font-bold hover:text-red-800"
             onClick={() => {
@@ -676,7 +677,7 @@ export function ScheduleAssignmentForm({
           role="alert"
           className="text-xs text-red-700 bg-red-50 p-3 rounded-xl border border-red-200"
         >
-          {localizedError(preview.error.message)}
+          {userErrorMessage(preview.error)}
         </p>
       )}
       {save.error && (
@@ -684,7 +685,7 @@ export function ScheduleAssignmentForm({
           role="alert"
           className="text-xs text-red-700 bg-red-50 p-3 rounded-xl border border-red-200"
         >
-          {localizedError(save.error.message)}
+          {userErrorMessage(save.error)}
         </p>
       )}
       {message && (
@@ -764,7 +765,7 @@ export function ScheduleAssignmentForm({
         {batches.isPending && <p role="status">{tr('common.loading_batches')}</p>}
         {batches.error && (
           <p role="alert">
-            {localizedError(batches.error.message)}{' '}
+            {userErrorMessage(batches.error)}{' '}
             <button onClick={() => void batches.refetch()}>{tr('common.retry_batches')}</button>
           </p>
         )}
@@ -867,27 +868,44 @@ function BatchEditor({
     },
   });
   return (
-    <article className="space-y-2 rounded-lg border border-slate-200 p-3">
-      <p className="text-xs font-bold">
-        {tr('schedule_assignment_form.original_assignment_value_value_worker_s_value_day_s', {
-          value1: batch.targetName,
-          value2: batch.members.length,
-          value3: batch.dates.length,
-        })}
-      </p>
-      <p className="text-xs text-slate-500">
-        {batch.dates[0]} – {batch.dates.at(-1)}
-      </p>
-      <button
-        className="text-xs font-bold text-blue-700"
-        aria-expanded={open}
-        onClick={() => setOpen(!open)}
-      >
-        {tr('schedule_assignment_form.edit_or_cancel_schedules')}
-      </button>
+    <article className="min-w-0 overflow-hidden rounded-xl border border-slate-200 bg-white">
+      <div className="flex items-start justify-between gap-3 p-4">
+        <div className="min-w-0 space-y-2.5">
+          <div className="space-y-1">
+            <h5 className="break-words text-sm font-semibold leading-5 text-[#071A2B]">
+              {batch.targetName}
+            </h5>
+            <p className="text-xs leading-5 text-slate-600">
+              {tr('schedule_assignment_form.value_worker_s_across_value_day_s', {
+                value1: batch.members.length,
+                value2: batch.dates.length,
+              })}
+            </p>
+          </div>
+          <p className="flex flex-wrap items-center gap-x-1.5 gap-y-1 text-xs font-medium leading-5 text-slate-700 tabular-nums">
+            <CalendarBlank size={15} className="shrink-0 text-slate-500" aria-hidden="true" />
+            <time dateTime={batch.dates[0]}>{formatWorkDate(batch.dates[0])}</time>
+            {batch.dates.at(-1) !== batch.dates[0] && (
+              <>
+                <span className="text-slate-400">–</span>
+                <time dateTime={batch.dates.at(-1)}>{formatWorkDate(batch.dates.at(-1))}</time>
+              </>
+            )}
+          </p>
+        </div>
+        <button
+          type="button"
+          className="inline-flex min-h-9 shrink-0 items-center justify-center gap-1.5 whitespace-nowrap rounded-lg border border-slate-200 bg-slate-50 px-3 text-xs font-semibold text-slate-700 hover:border-slate-300 hover:bg-slate-100 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-600"
+          aria-expanded={open}
+          onClick={() => setOpen(!open)}
+        >
+          <PencilSimple size={14} aria-hidden="true" />
+          {tr('common.edit')}
+        </button>
+      </div>
       {open && (
         <form
-          className="space-y-2"
+          className="space-y-3 border-t border-slate-200 bg-slate-50/60 p-4"
           onSubmit={(e) => {
             e.preventDefault();
             mutation.mutate();
@@ -987,7 +1005,7 @@ function BatchEditor({
       )}
       {mutation.error && (
         <p role="alert" className="text-xs text-red-700">
-          {localizedError(mutation.error.message)}
+          {userErrorMessage(mutation.error)}
         </p>
       )}
       {mutation.isSuccess && (

@@ -1,3 +1,4 @@
+import { SchedulingNotificationService } from '../src/modules/workforce/notifications/scheduling-notification.service.js';
 import { createTestConfig } from './support/config.js';
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
@@ -317,7 +318,10 @@ test('ingestion does not pass a conflicting candidate Worker into Zone decision 
       createMockDataSource(store),
       new ObservationContextResolverService(),
       new AlertCandidateEvaluator(),
-      new DurableGroupingService(createTestConfig()),
+      new DurableGroupingService(
+        createTestConfig(),
+        new SchedulingNotificationService(createMockDataSource(store)),
+      ),
       createTestConfig(),
       () => FIXED_NOW,
       new CheckedZoneAuthorization(),
@@ -349,7 +353,10 @@ test('AiIngestionService: invalid schema throws a public validation error with s
   const contextResolver = new ObservationContextResolverService();
   const zoneAuth = new ZoneAuthorizationService();
   const candidateEvaluator = new AlertCandidateEvaluator(zoneAuth);
-  const groupingService = new DurableGroupingService(createTestConfig());
+  const groupingService = new DurableGroupingService(
+    createTestConfig(),
+    new SchedulingNotificationService(createMockDataSource(store)),
+  );
   const service = new AiIngestionService(
     ds,
     contextResolver,
@@ -397,7 +404,10 @@ test('AiIngestionService: invalid geometry returns a public INVALID_GEOMETRY iss
   const contextResolver = new ObservationContextResolverService();
   const zoneAuth = new ZoneAuthorizationService();
   const candidateEvaluator = new AlertCandidateEvaluator(zoneAuth);
-  const groupingService = new DurableGroupingService(createTestConfig());
+  const groupingService = new DurableGroupingService(
+    createTestConfig(),
+    new SchedulingNotificationService(createMockDataSource(store)),
+  );
   const service = new AiIngestionService(
     ds,
     contextResolver,
@@ -450,7 +460,10 @@ test('AiIngestionService: clock older than 300s results in SKIPPED_CLOCK_SKEW an
   const contextResolver = new ObservationContextResolverService();
   const zoneAuth = new ZoneAuthorizationService();
   const candidateEvaluator = new AlertCandidateEvaluator(zoneAuth);
-  const groupingService = new DurableGroupingService(createTestConfig());
+  const groupingService = new DurableGroupingService(
+    createTestConfig(),
+    new SchedulingNotificationService(createMockDataSource(store)),
+  );
   const service = new AiIngestionService(
     ds,
     contextResolver,
@@ -494,7 +507,10 @@ test('AiIngestionService: clock more than 30s in the future results in SKIPPED_C
   const contextResolver = new ObservationContextResolverService();
   const zoneAuth = new ZoneAuthorizationService();
   const candidateEvaluator = new AlertCandidateEvaluator(zoneAuth);
-  const groupingService = new DurableGroupingService(createTestConfig());
+  const groupingService = new DurableGroupingService(
+    createTestConfig(),
+    new SchedulingNotificationService(createMockDataSource(store)),
+  );
   const service = new AiIngestionService(
     ds,
     contextResolver,
@@ -532,7 +548,10 @@ test('AiIngestionService: unknown camera results in SKIPPED_UNKNOWN_CAMERA and p
   const contextResolver = new ObservationContextResolverService();
   const zoneAuth = new ZoneAuthorizationService();
   const candidateEvaluator = new AlertCandidateEvaluator(zoneAuth);
-  const groupingService = new DurableGroupingService(createTestConfig());
+  const groupingService = new DurableGroupingService(
+    createTestConfig(),
+    new SchedulingNotificationService(createMockDataSource(store)),
+  );
   const service = new AiIngestionService(
     ds,
     contextResolver,
@@ -577,7 +596,10 @@ test('AiIngestionService: known camera with no violation candidate results in SK
   const contextResolver = new ObservationContextResolverService();
   const zoneAuth = new ZoneAuthorizationService();
   const candidateEvaluator = new AlertCandidateEvaluator(zoneAuth);
-  const groupingService = new DurableGroupingService(createTestConfig());
+  const groupingService = new DurableGroupingService(
+    createTestConfig(),
+    new SchedulingNotificationService(createMockDataSource(store)),
+  );
   const service = new AiIngestionService(
     ds,
     contextResolver,
@@ -653,7 +675,10 @@ test('AiIngestionService: valid violation candidate is PROCESSED, groups alert, 
   const contextResolver = new ObservationContextResolverService();
   const zoneAuth = new ZoneAuthorizationService();
   const candidateEvaluator = new AlertCandidateEvaluator(zoneAuth);
-  const groupingService = new DurableGroupingService(createTestConfig());
+  const groupingService = new DurableGroupingService(
+    createTestConfig(),
+    new SchedulingNotificationService(createMockDataSource(store)),
+  );
   const service = new AiIngestionService(
     ds,
     contextResolver,
@@ -727,7 +752,10 @@ test('AiIngestionService: clock skew event still records resolvedCameraId when c
   const contextResolver = new ObservationContextResolverService();
   const zoneAuth = new ZoneAuthorizationService();
   const candidateEvaluator = new AlertCandidateEvaluator(zoneAuth);
-  const groupingService = new DurableGroupingService(createTestConfig());
+  const groupingService = new DurableGroupingService(
+    createTestConfig(),
+    new SchedulingNotificationService(createMockDataSource(store)),
+  );
   const service = new AiIngestionService(
     ds,
     contextResolver,
@@ -767,7 +795,10 @@ test('AiIngestionController: delegates ingest to service and returns result', as
   const contextResolver = new ObservationContextResolverService();
   const zoneAuth = new ZoneAuthorizationService();
   const candidateEvaluator = new AlertCandidateEvaluator(zoneAuth);
-  const groupingService = new DurableGroupingService(createTestConfig());
+  const groupingService = new DurableGroupingService(
+    createTestConfig(),
+    new SchedulingNotificationService(createMockDataSource(store)),
+  );
   const service = new AiIngestionService(
     ds,
     contextResolver,
@@ -836,7 +867,10 @@ test('AiIngestionService: valid timezone offset forms preserve event time and ra
       createMockDataSource(store),
       new ObservationContextResolverService(),
       new AlertCandidateEvaluator(new ZoneAuthorizationService()),
-      new DurableGroupingService(createTestConfig()),
+      new DurableGroupingService(
+        createTestConfig(),
+        new SchedulingNotificationService(createMockDataSource(store)),
+      ),
       createTestConfig(),
       () => now,
     );
@@ -868,7 +902,10 @@ test('AiIngestionService: rejects non-RFC3339 timestamp before persistence', asy
     createMockDataSource(store),
     new ObservationContextResolverService(),
     new AlertCandidateEvaluator(new ZoneAuthorizationService()),
-    new DurableGroupingService(createTestConfig()),
+    new DurableGroupingService(
+      createTestConfig(),
+      new SchedulingNotificationService(createMockDataSource(store)),
+    ),
     createTestConfig(),
     () => now,
   );
@@ -906,7 +943,10 @@ test('AiIngestionService: accepts RFC 3339 leap-second capturedAt (:60) near bou
   const contextResolver = new ObservationContextResolverService();
   const zoneAuth = new ZoneAuthorizationService();
   const candidateEvaluator = new AlertCandidateEvaluator(zoneAuth);
-  const groupingService = new DurableGroupingService(createTestConfig());
+  const groupingService = new DurableGroupingService(
+    createTestConfig(),
+    new SchedulingNotificationService(createMockDataSource(store)),
+  );
 
   // Fake clock: exactly 61 seconds after the leap second event (near-boundary, well within 300s past window)
   const leapSecondClock = new Date('2027-01-01T00:01:00.000Z');
@@ -957,7 +997,10 @@ test('AiIngestionService: leap-second capturedAt outside past boundary results i
   const contextResolver = new ObservationContextResolverService();
   const zoneAuth = new ZoneAuthorizationService();
   const candidateEvaluator = new AlertCandidateEvaluator(zoneAuth);
-  const groupingService = new DurableGroupingService(createTestConfig());
+  const groupingService = new DurableGroupingService(
+    createTestConfig(),
+    new SchedulingNotificationService(createMockDataSource(store)),
+  );
 
   // Fake clock: 302 seconds after normalized leap second (exceeds 300s past window)
   const clockAfterBoundary = new Date('2027-01-01T00:05:01.000Z');
@@ -997,7 +1040,10 @@ test('AiIngestionService: identical retry with same payloadHash returns 202 DUPL
   const contextResolver = new ObservationContextResolverService();
   const zoneAuth = new ZoneAuthorizationService();
   const candidateEvaluator = new AlertCandidateEvaluator(zoneAuth);
-  const groupingService = new DurableGroupingService(createTestConfig());
+  const groupingService = new DurableGroupingService(
+    createTestConfig(),
+    new SchedulingNotificationService(createMockDataSource(store)),
+  );
   const service = new AiIngestionService(
     ds,
     contextResolver,
@@ -1040,7 +1086,10 @@ test('AiIngestionService: retry with same eventId but different payloadHash retu
   const contextResolver = new ObservationContextResolverService();
   const zoneAuth = new ZoneAuthorizationService();
   const candidateEvaluator = new AlertCandidateEvaluator(zoneAuth);
-  const groupingService = new DurableGroupingService(createTestConfig());
+  const groupingService = new DurableGroupingService(
+    createTestConfig(),
+    new SchedulingNotificationService(createMockDataSource(store)),
+  );
   const service = new AiIngestionService(
     ds,
     contextResolver,
@@ -1132,7 +1181,10 @@ test('AiIngestionService: sanitizes non-idempotency database errors before they 
   const contextResolver = new ObservationContextResolverService();
   const zoneAuth = new ZoneAuthorizationService();
   const candidateEvaluator = new AlertCandidateEvaluator(zoneAuth);
-  const groupingService = new DurableGroupingService(createTestConfig());
+  const groupingService = new DurableGroupingService(
+    createTestConfig(),
+    new SchedulingNotificationService(createMockDataSource(store)),
+  );
   const service = new AiIngestionService(
     ds,
     contextResolver,
@@ -1186,7 +1238,10 @@ test('AiIngestionService: general non-unique DB error is rethrown untouched', as
   const contextResolver = new ObservationContextResolverService();
   const zoneAuth = new ZoneAuthorizationService();
   const candidateEvaluator = new AlertCandidateEvaluator(zoneAuth);
-  const groupingService = new DurableGroupingService(createTestConfig());
+  const groupingService = new DurableGroupingService(
+    createTestConfig(),
+    new SchedulingNotificationService(createMockDataSource(store)),
+  );
   const service = new AiIngestionService(
     ds,
     contextResolver,
@@ -1264,7 +1319,10 @@ test('AiIngestionService: raw insert occurs before any alert side effects on dup
   const candidateEvaluator = new AlertCandidateEvaluator(zoneAuth);
 
   let groupingCalled = 0;
-  const groupingService = new DurableGroupingService(createTestConfig());
+  const groupingService = new DurableGroupingService(
+    createTestConfig(),
+    new SchedulingNotificationService(createMockDataSource(store)),
+  );
   const originalGroupCandidate = groupingService.groupCandidate.bind(groupingService);
   groupingService.groupCandidate = async (...args) => {
     groupingCalled++;
@@ -1378,7 +1436,10 @@ test('AiIngestionService: handles observations across mixed regions and geometry
   const contextResolver = new ObservationContextResolverService();
   const zoneAuth = new ZoneAuthorizationService();
   const candidateEvaluator = new AlertCandidateEvaluator(zoneAuth);
-  const groupingService = new DurableGroupingService(createTestConfig());
+  const groupingService = new DurableGroupingService(
+    createTestConfig(),
+    new SchedulingNotificationService(createMockDataSource(store)),
+  );
   const service = new AiIngestionService(
     ds,
     contextResolver,

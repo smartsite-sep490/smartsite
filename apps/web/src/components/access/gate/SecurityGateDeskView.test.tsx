@@ -97,9 +97,18 @@ it('accepts the Worker short manual code without asking Worker to enter an offic
   );
 });
 
-it.each(['recorded', 'response-lost', 'repeated-scan', 'schedule-removed', 'no-schedule'] as const)(
+const automaticFaceOutcomes = [
+  'recorded',
+  'response-lost',
+  'repeated-scan',
+  'schedule-removed',
+  'no-schedule',
+  'documents-invalid',
+] as const;
+it.each(automaticFaceOutcomes)(
   'handles automatic Face outcome %s without adding another passage',
   async (outcome) => {
+    const denied = outcome === 'no-schedule' || outcome === 'documents-invalid';
     cameraMock.active = true;
     vi.spyOn(SmartSiteManagementClient.prototype, 'listGateAccessLogs').mockResolvedValue({
       items: [],
@@ -113,7 +122,7 @@ it.each(['recorded', 'response-lost', 'repeated-scan', 'schedule-removed', 'no-s
     vi.spyOn(SmartSiteManagementClient.prototype, 'verifyFaceGate').mockResolvedValue({
       attempt: {
         id: 'attempt-face',
-        status: outcome === 'no-schedule' ? 'DENIED' : 'READY',
+        status: denied ? 'DENIED' : 'READY',
         scheduleStatus: outcome === 'no-schedule' ? 'NO_SCHEDULE' : 'SCHEDULED',
         expiresAt: '2030-01-01T00:05:00Z',
       },
@@ -128,8 +137,13 @@ it.each(['recorded', 'response-lost', 'repeated-scan', 'schedule-removed', 'no-s
       },
       decision: {
         technicalOutcome: 'MATCHED',
-        authorization: outcome === 'no-schedule' ? 'DENIED' : 'ALLOWED',
-        reasonCode: outcome === 'no-schedule' ? 'NO_SCHEDULE' : 'VALID_ASSIGNMENT',
+        authorization: denied ? 'DENIED' : 'ALLOWED',
+        reasonCode:
+          outcome === 'documents-invalid'
+            ? 'WORKER_DOCUMENTS_INVALID'
+            : outcome === 'no-schedule'
+              ? 'NO_SCHEDULE'
+              : 'VALID_ASSIGNMENT',
         qrFallbackAllowed: false,
       },
     });
@@ -190,6 +204,19 @@ it.each(['recorded', 'response-lost', 'repeated-scan', 'schedule-removed', 'no-s
         />
       </QueryClientProvider>,
     );
+    if (outcome === 'documents-invalid') {
+      const message = await screen.findByText(
+        /Worker documents are incomplete, unapproved or expired/,
+        {},
+        { timeout: 3000 },
+      );
+      expect(message.tagName).toBe('P');
+      expect(screen.getByText('Access Denied')).toBeTruthy();
+      expect(screen.queryByText(/Access denied by backend policy/)).toBeNull();
+      expect(screen.queryByRole('button', { name: 'Confirm actual passage' })).toBeNull();
+      expect(confirm).not.toHaveBeenCalled();
+      return;
+    }
     if (outcome === 'no-schedule') {
       expect(
         await screen.findByText(

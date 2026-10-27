@@ -6,6 +6,7 @@ import { type EntityManager } from 'typeorm';
 import { AlertStatus, AlertType } from '../../../database/entities/enums.js';
 import { SafetyAlertEntity } from '../../../database/entities/safety-alert.entity.js';
 import type { AlertCandidate } from './alert-candidate-evaluator.js';
+import { SchedulingNotificationService } from '../../workforce/notifications/scheduling-notification.service.js';
 
 const OPEN_ALERT_STATUSES = [
   AlertStatus.PENDING_REVIEW,
@@ -20,7 +21,10 @@ const MAX_SAFE_DATE_MS = 253_402_300_799_999; // 9999-12-31T23:59:59.999Z
 
 @Injectable()
 export class DurableGroupingService {
-  constructor(private readonly configService: ConfigService<BackendEnvironment, true>) {}
+  constructor(
+    private readonly configService: ConfigService<BackendEnvironment, true>,
+    private readonly notifications: SchedulingNotificationService,
+  ) {}
 
   private getCooldownMs(): number {
     return this.configService.getOrThrow('ALERT_COOLDOWN_SECONDS', { infer: true }) * 1000;
@@ -116,6 +120,10 @@ export class DurableGroupingService {
       detectionCount: 1,
     });
 
-    return await alertRepo.save(newAlert);
+    const saved = await alertRepo.save(newAlert);
+    if (saved.alertType === AlertType.PPE_VIOLATION) {
+      await this.notifications.recordPpeAlert(manager, saved, candidate.cameraId);
+    }
+    return saved;
   }
 }

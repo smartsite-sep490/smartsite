@@ -5,6 +5,7 @@ import { MemoryRouter } from 'react-router-dom';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import {
   SmartSiteManagementClient,
+  ApiError,
   type AccountResponse,
   type WorkerComplianceResponse,
 } from '@smartsite/api-client';
@@ -104,6 +105,17 @@ function mount(initialUrl = '/worker-documents') {
     </QueryClientProvider>,
   );
 }
+
+it('shows a safe request error and retries document prerequisites', async () => {
+  vi.mocked(SmartSiteManagementClient.prototype.listSites).mockRejectedValueOnce(
+    new ApiError('invalid-response', 'PRIVATE_INVALID_JSON', 502),
+  );
+  mount();
+  expect((await screen.findByRole('alert')).textContent).toContain(tr('errors.unavailable'));
+  expect(document.body.textContent).not.toContain('PRIVATE_INVALID_JSON');
+  fireEvent.click(screen.getByRole('button', { name: tr('common.retry') }));
+  await screen.findByText(/Nguyễn Văn An/);
+});
 
 it('searches and filters the whole queue through the API and resets pagination', async () => {
   const list = vi.mocked(SmartSiteManagementClient.prototype.listWorkerCompliance);

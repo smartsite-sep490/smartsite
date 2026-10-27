@@ -1,5 +1,5 @@
 import { useManagementClient } from '../../../features/auth/auth-session';
-import { localizedError, localizeMessage } from '../../../i18n/messages';
+import { localizedError, localizeMessage, userErrorMessage } from '../../../i18n/messages';
 import { localizedLabel, localizedGateName } from '../../../i18n/labels';
 import { uiLocale } from '../../../i18n';
 import { translate as tr } from '../../../i18n';
@@ -740,7 +740,7 @@ export function SecurityGateDeskView({
                     )}
                     {fallbackMutation.error && (
                       <p role="alert" className="text-red-400">
-                        {localizedError(fallbackMutation.error.message)}
+                        {userErrorMessage(fallbackMutation.error)}
                       </p>
                     )}
                   </div>
@@ -859,11 +859,11 @@ export function SecurityGateDeskView({
             {/* Description & Safe Reason Message */}
             <div className="mt-4 space-y-2">
               <p className="text-sm font-semibold text-slate-900">
-                {lastDecision?.reasonCode === 'NO_SCHEDULE'
-                  ? getSafeReasonMessage('NO_SCHEDULE')
+                {lastDecision?.reasonCode && uiState.type === 'DENIED'
+                  ? getSafeReasonMessage(lastDecision.reasonCode)
                   : uiState.safeDescription}
               </p>
-              {lastDecision?.reasonCode && lastDecision.reasonCode !== 'NO_SCHEDULE' && (
+              {lastDecision?.reasonCode && uiState.type !== 'DENIED' && (
                 <p className="text-xs font-medium text-slate-600">
                   {getSafeReasonMessage(lastDecision.reasonCode)}
                 </p>
@@ -1041,7 +1041,7 @@ export function SecurityGateDeskView({
                   className="flex items-center gap-2 rounded-xl border border-rose-200 bg-rose-50 p-3 text-xs font-semibold text-rose-700"
                 >
                   <IconAlertTriangle className="h-4 w-4 shrink-0 text-rose-500" />
-                  <span>{localizedError(qrVerification.error.message)}</span>
+                  <span>{userErrorMessage(qrVerification.error)}</span>
                 </div>
               )}
               {qrResultMessage && (
@@ -1170,7 +1170,7 @@ export function SecurityGateDeskView({
                 </button>
               </div>
             )}
-            {passage.error && <p role="alert">{localizedError(passage.error.message)}</p>}
+            {passage.error && <p role="alert">{userErrorMessage(passage.error)}</p>}
             {direction === 'IN' &&
               currentAttempt.scheduleStatus !== 'SCHEDULED' &&
               !isSecurityOfficer && (

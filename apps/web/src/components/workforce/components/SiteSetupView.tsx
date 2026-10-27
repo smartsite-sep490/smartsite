@@ -1,4 +1,4 @@
-import { localizedError, localizeMessage } from '../../../i18n/messages';
+import { localizedError, localizeMessage, userErrorMessage } from '../../../i18n/messages';
 import { uiLocale } from '../../../i18n';
 import { translate as tr } from '../../../i18n';
 import { useTranslation } from 'react-i18next';
@@ -102,6 +102,7 @@ export function SiteSetupView({ apiUrl }: SiteSetupViewProps) {
   const [existingRepId, setExistingRepId] = useState('');
   const [assignRepError, setAssignRepError] = useState<string | null>(null);
   const [managerError, setManagerError] = useState<string | null>(null);
+  const [revokeManagerId, setRevokeManagerId] = useState<string | null>(null);
   const [managerSuccessMsg, setManagerSuccessMsg] = useState<string | null>(null);
   const [managerUsername, setManagerUsername] = useState('');
   const [managerDisplayName, setManagerDisplayName] = useState('');
@@ -256,7 +257,7 @@ export function SiteSetupView({ apiUrl }: SiteSetupViewProps) {
     },
     onError: (err: unknown) => {
       if (err instanceof ApiError) {
-        setSiteError(err.message);
+        setSiteError(userErrorMessage(err));
       } else {
         setSiteError(tr('site_setup_view.failed_to_create_site_please_check_input_parameters'));
       }
@@ -281,7 +282,7 @@ export function SiteSetupView({ apiUrl }: SiteSetupViewProps) {
     },
     onError: (err: unknown) => {
       if (err instanceof ApiError) {
-        setContractorError(err.message);
+        setContractorError(userErrorMessage(err));
       } else {
         setContractorError(tr('site_setup_view.failed_to_create_contractor_please_check_inputs'));
       }
@@ -318,7 +319,7 @@ export function SiteSetupView({ apiUrl }: SiteSetupViewProps) {
     },
     onError: (err: unknown) => {
       if (err instanceof ApiError) {
-        setRepError(err.message);
+        setRepError(userErrorMessage(err));
       } else {
         setRepError(
           tr(
@@ -354,7 +355,7 @@ export function SiteSetupView({ apiUrl }: SiteSetupViewProps) {
     },
     onError: (err: unknown) => {
       if (err instanceof ApiError) {
-        setAssignRepError(err.message);
+        setAssignRepError(userErrorMessage(err));
       } else {
         setAssignRepError(
           tr(
@@ -391,9 +392,9 @@ export function SiteSetupView({ apiUrl }: SiteSetupViewProps) {
     },
     onError: (err: unknown) => {
       if (err instanceof ApiError) {
-        setManagerError(err.message);
+        setManagerError(userErrorMessage(err));
       } else if (err instanceof Error) {
-        setManagerError(err.message);
+        setManagerError(userErrorMessage(err));
       } else {
         setManagerError(
           tr(
@@ -402,6 +403,19 @@ export function SiteSetupView({ apiUrl }: SiteSetupViewProps) {
         );
       }
     },
+  });
+
+  const revokeSiteManagerMutation = useMutation({
+    mutationFn: ({ userId, siteId }: { userId: string; siteId: string }) =>
+      client.revokeSiteManager(accessToken!, userId, siteId),
+    onSuccess: async () => {
+      setRevokeManagerId(null);
+      setShowAssignManagerModal(false);
+      setManagerSuccessMsg(tr('site_setup_view.manager_revoked'));
+      await queryClient.invalidateQueries({ queryKey: [...setupKey, 'users'] });
+      setTimeout(() => setManagerSuccessMsg(null), 5000);
+    },
+    onError: (error) => setManagerError(userErrorMessage(error)),
   });
 
   const createSiteManagerMutation = useMutation({
@@ -432,7 +446,7 @@ export function SiteSetupView({ apiUrl }: SiteSetupViewProps) {
     },
     onError: (err: unknown) => {
       if (err instanceof ApiError) {
-        setCreateManagerError(err.message);
+        setCreateManagerError(userErrorMessage(err));
       } else {
         setCreateManagerError(
           tr(
@@ -561,6 +575,7 @@ export function SiteSetupView({ apiUrl }: SiteSetupViewProps) {
   const openAssignSiteManagerModal = () => {
     setSelectedManagerId('');
     setManagerError(null);
+    setRevokeManagerId(null);
     setShowAssignManagerModal(true);
   };
 
@@ -629,7 +644,7 @@ export function SiteSetupView({ apiUrl }: SiteSetupViewProps) {
       )}
       {/* 1. Header & Quick Actions */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-4 border-b border-slate-200/80">
-        <div className="flex min-w-0 items-center gap-3">
+        {isAdmin && <div className="flex min-w-0 items-center gap-3">
           <div className="w-10 h-10 rounded-xl bg-[#071A2B] text-white flex items-center justify-center shadow-xs shrink-0">
             <IconBuilding className="w-5 h-5 text-[#F66B17]" />
           </div>
@@ -647,7 +662,7 @@ export function SiteSetupView({ apiUrl }: SiteSetupViewProps) {
               {isAdmin ? tr('common.site_setup') : tr('site_setup_view.contractor_zone_setup')}
             </h1>
           </div>
-        </div>
+        </div>}
 
         <div className="flex items-center gap-2.5">
           <button
@@ -1023,7 +1038,7 @@ export function SiteSetupView({ apiUrl }: SiteSetupViewProps) {
                       </button>
                     )}
 
-                    {isAdmin && (
+                    {isManager && (
                       <button
                         type="button"
                         onClick={() => {
@@ -1489,6 +1504,52 @@ export function SiteSetupView({ apiUrl }: SiteSetupViewProps) {
                       )
                       .join(', ')}
                   </span>
+                  {siteManagers.map((manager) => (
+                    <div key={manager.id} className="mt-3">
+                      {revokeManagerId === manager.id ? (
+                        <div className="space-y-2">
+                          <p>
+                            {tr('site_setup_view.revoke_manager_confirm', {
+                              name: manager.displayName || manager.username,
+                              site: selectedSite?.name,
+                            })}
+                          </p>
+                          <div className="flex gap-2">
+                            <button
+                              type="button"
+                              className="rounded-lg bg-rose-700 px-3 py-2 font-bold text-white disabled:opacity-50"
+                              disabled={revokeSiteManagerMutation.isPending}
+                              onClick={() =>
+                                activeSiteId &&
+                                revokeSiteManagerMutation.mutate({
+                                  userId: manager.id,
+                                  siteId: activeSiteId,
+                                })
+                              }
+                            >
+                              {tr('site_setup_view.confirm_revoke')}
+                            </button>
+                            <button
+                              type="button"
+                              className="rounded-lg border border-amber-300 px-3 py-2 font-bold"
+                              disabled={revokeSiteManagerMutation.isPending}
+                              onClick={() => setRevokeManagerId(null)}
+                            >
+                              {tr('common.cancel')}
+                            </button>
+                          </div>
+                        </div>
+                      ) : (
+                        <button
+                          type="button"
+                          className="rounded-lg border border-rose-300 bg-white px-3 py-2 font-bold text-rose-700 hover:bg-rose-50"
+                          onClick={() => setRevokeManagerId(manager.id)}
+                        >
+                          {tr('site_setup_view.revoke_manager')}
+                        </button>
+                      )}
+                    </div>
+                  ))}
                 </div>
               ) : null}
               {assignableSiteManagers.length > 0 ? (

@@ -373,7 +373,7 @@ it('displays error and allows retry when myContractorTeam query fails', async ()
   mount();
 
   expect(await screen.findByText(/Failed to load/i)).not.toBeNull();
-  expect(screen.getByText('Network error loading team')).not.toBeNull();
+  expect(screen.getByText('Something went wrong. Please try again.')).not.toBeNull();
 
   // Retry loading team status
   myTeamSpy.mockResolvedValueOnce({

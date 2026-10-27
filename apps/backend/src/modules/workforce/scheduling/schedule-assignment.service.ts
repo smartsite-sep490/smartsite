@@ -85,8 +85,7 @@ export class ScheduleAssignmentService {
     const user = await m.getRepository(UserEntity).findOneBy({ id: actor.id, isActive: true });
     const roles = await m.getRepository(UserRoleAssignmentEntity).findBy({ userId: actor.id });
     const manager = roles.some((r) => r.role === UserRole.SITE_MANAGER && r.siteId === siteId);
-    const representativeRead =
-      readOnly &&
+    const representative =
       roles.some((r) => r.role === UserRole.CONTRACTOR_REPRESENTATIVE && r.siteId === siteId) &&
       (await m
         .getRepository(ContractorRepresentativeAssignmentEntity)
@@ -95,7 +94,7 @@ export class ScheduleAssignmentService {
       !user ||
       actor.mustChangePassword ||
       user.mustChangePassword ||
-      (!manager && !representativeRead) ||
+      (!representative && !(readOnly && manager)) ||
       !(await hasActiveContractorParticipation(m, contractorId, siteId))
     )
       throw new PublicHttpException(403, {

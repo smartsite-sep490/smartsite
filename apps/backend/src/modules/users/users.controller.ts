@@ -1,6 +1,7 @@
 import {
   Body,
   Controller,
+  Delete,
   Get,
   HttpCode,
   Logger,
@@ -91,6 +92,22 @@ export class UsersController {
       resourceId: user.id,
     });
     return user;
+  }
+
+  @Delete(':userId/site-manager/:siteId')
+  @HttpCode(204)
+  async revokeSiteManager(
+    @Req() request: AuthenticatedRequest,
+    @Param('userId') userId: string,
+    @Param('siteId') siteId: string,
+  ) {
+    await this.users.revokeSiteManager(userId, siteId);
+    this.logger.log({
+      actorId: request.user!.id,
+      action: 'user.site-manager.revoke',
+      resourceId: userId,
+      siteId,
+    });
   }
 
   @Patch(':userId/status')

@@ -1,14 +1,15 @@
 import { localizedLabel } from '../../../i18n/labels';
-import { localizedError } from '../../../i18n/messages';
+import { userErrorMessage } from '../../../i18n/messages';
 import { translate as tr } from '../../../i18n';
-import { useMemo, useState, type FormEvent } from 'react';
+import { useState, type FormEvent } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useTranslation } from 'react-i18next';
-import { SmartSiteManagementClient } from '@smartsite/api-client';
-import { useAuth, useCurrentUser } from '../../../features/auth/auth-session';
+import { useManagementClient, useAuth, useCurrentUser } from '../../../features/auth/auth-session';
 import type { ZoneResponse } from '@smartsite/contracts';
 import { uiLocale } from '../../../i18n';
 import { IconCamera, IconShield, IconPlus, IconUsers, IconAlertTriangle } from '../../icons';
+import { SmartDatePicker } from '../../ui';
+import { participationDates } from './participation-dates';
 
 const fieldInput =
   'w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-800 shadow-2xs hover:border-slate-300 focus:outline-none focus:ring-2 focus:ring-[#F66B17]/20 focus:border-[#F66B17] transition-all';
@@ -26,7 +27,7 @@ export function SiteOperationsSetupView({
   const locale = uiLocale();
   const { accessToken } = useAuth();
   const { data: user } = useCurrentUser(apiUrl);
-  const client = useMemo(() => new SmartSiteManagementClient(apiUrl), [apiUrl]);
+  const client = useManagementClient(apiUrl);
   const cache = useQueryClient();
 
   const [requestedSite, setSite] = useState('');
@@ -39,6 +40,7 @@ export function SiteOperationsSetupView({
   const [contractorId, setContractorId] = useState('');
   const [validFrom, setValidFrom] = useState('');
   const [validUntil, setValidUntil] = useState('');
+  const invalidParticipationRange = Boolean(validFrom && validUntil && validUntil < validFrom);
 
   const key = ['site-operations', apiUrl, user?.id];
 
@@ -118,8 +120,7 @@ export function SiteOperationsSetupView({
     mutationFn: () =>
       client.createContractorParticipation(accessToken!, contractorId, {
         siteId,
-        validFrom: new Date(validFrom).toISOString(),
-        validUntil: validUntil ? new Date(validUntil).toISOString() : null,
+        ...participationDates(validFrom, validUntil),
       }),
     onSuccess: invalidate,
   });
@@ -145,7 +146,7 @@ export function SiteOperationsSetupView({
         className="flex items-center gap-2 rounded-xl bg-rose-50 border border-rose-200 p-4 text-xs font-semibold text-rose-800"
       >
         <IconAlertTriangle className="h-4 w-4 shrink-0 text-rose-600" />
-        <span>{localizedError(sites.error.message)}</span>
+        <span>{userErrorMessage(sites.error)}</span>
       </div>
     );
   }
@@ -162,8 +163,8 @@ export function SiteOperationsSetupView({
     <div className="space-y-6 text-[#2F3437]">
       {/* Header section */}
       <section className="rounded-2xl border border-slate-200/90 bg-white p-5 shadow-xs">
-        <div className="flex flex-wrap items-center justify-between gap-4 border-b border-slate-100 pb-4">
-          <div className="space-y-1">
+        <div className={`flex flex-wrap items-center justify-between gap-4 ${participationOnly ? '' : 'border-b border-slate-100 pb-4'}`}>
+          {!participationOnly && <div className="space-y-1">
             <div className="flex min-w-0 max-w-full flex-wrap items-center gap-2">
               <span className="inline-flex items-center gap-1.5 rounded-full bg-orange-50 px-2.5 py-0.5 text-[11px] font-bold uppercase tracking-wider text-[#F66B17] border border-orange-200/60">
                 <span className="h-1.5 w-1.5 rounded-full bg-[#F66B17]" />
@@ -176,7 +177,7 @@ export function SiteOperationsSetupView({
             <h1 className="text-xl font-extrabold tracking-tight text-[#111111]">
               {canManage ? t('siteOps.titleManage') : t('siteOps.titleObserve')}
             </h1>
-          </div>
+          </div>}
 
           <div className="flex min-w-0 max-w-full flex-wrap items-center gap-2">
             <label className="flex min-w-0 max-w-full flex-wrap items-center gap-2 text-xs font-bold text-slate-700">
@@ -223,7 +224,17 @@ export function SiteOperationsSetupView({
             className="flex items-center gap-2 rounded-xl bg-rose-50 border border-rose-200 p-3 text-xs font-semibold text-rose-800"
           >
             <IconAlertTriangle className="h-4 w-4 shrink-0 text-rose-600" />
-            <span>{(access.error || contractors.error)?.message}</span>
+            <span>{userErrorMessage(access.error || contractors.error)}</span>
+            <button
+              type="button"
+              className="underline focus-visible:outline-2"
+              onClick={() => {
+                void access.refetch();
+                void contractors.refetch();
+              }}
+            >
+              {t('common.retry')}
+            </button>
           </div>
         )}
 
@@ -253,7 +264,13 @@ export function SiteOperationsSetupView({
         {canManage && (
           <form
             className="flex flex-wrap items-end gap-3 pt-3 border-t border-slate-100"
-            onSubmit={(e) => submit(e, participate)}
+            onSubmit={(e) => {
+              if (!validFrom || invalidParticipationRange) {
+                e.preventDefault();
+                return;
+              }
+              submit(e, participate);
+            }}
           >
             <div className="space-y-1 text-xs">
               <label className="font-bold text-slate-700">{t('siteOps.contractorLabel')}</label>
@@ -273,30 +290,42 @@ export function SiteOperationsSetupView({
                   ))}
               </select>
             </div>
-            <div className="space-y-1 text-xs">
-              <label className="font-bold text-slate-700">{t('siteOps.from')}</label>
-              <input
-                className={fieldInput}
-                type="datetime-local"
-                required
+            <div className="w-full sm:w-64">
+              <SmartDatePicker
+                label={t('siteOps.from')}
+                fieldRequired
                 value={validFrom}
-                onChange={(e) => setValidFrom(e.target.value)}
+                onChange={setValidFrom}
+                disablePast={false}
               />
             </div>
-            <div className="space-y-1 text-xs">
-              <label className="font-bold text-slate-700">{t('siteOps.until')}</label>
-              <input
-                className={fieldInput}
-                type="datetime-local"
-                min={validFrom}
+            <div className="w-full sm:w-64">
+              <SmartDatePicker
+                label={t('siteOps.until')}
                 value={validUntil}
-                onChange={(e) => setValidUntil(e.target.value)}
+                onChange={setValidUntil}
+                disablePast={false}
+                clearable
+                min={validFrom || undefined}
+                error={
+                  invalidParticipationRange
+                    ? t('contractor_zone_setup.end_date_must_be_on_or_after_start_date')
+                    : undefined
+                }
               />
             </div>
-            <button className={primaryButton} disabled={participate.isPending}>
+            <button
+              className={primaryButton}
+              disabled={participate.isPending || !validFrom || invalidParticipationRange}
+            >
               <IconPlus className="w-3.5 h-3.5" />
               <span>{t('siteOps.addParticipation')}</span>
             </button>
+            <p className="w-full text-xs text-slate-500">
+              {t('siteOps.participationDateHint', {
+                timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
+              })}
+            </p>
           </form>
         )}
         {participate.error && (
@@ -305,7 +334,7 @@ export function SiteOperationsSetupView({
             className="flex items-center gap-2 rounded-xl bg-rose-50 border border-rose-200 p-3 text-xs font-semibold text-rose-800"
           >
             <IconAlertTriangle className="h-4 w-4 shrink-0 text-rose-600" />
-            <span>{localizedError(participate.error.message)}</span>
+            <span>{userErrorMessage(participate.error)}</span>
           </div>
         )}
       </section>
@@ -338,7 +367,7 @@ export function SiteOperationsSetupView({
                 className="flex items-center gap-2 rounded-xl bg-rose-50 border border-rose-200 p-3 text-xs font-semibold text-rose-800"
               >
                 <IconAlertTriangle className="h-4 w-4 shrink-0 text-rose-600" />
-                <span>{localizedError(zones.error.message)}</span>
+                <span>{userErrorMessage(zones.error)}</span>
               </div>
             )}
 
@@ -422,7 +451,7 @@ export function SiteOperationsSetupView({
                 className="flex items-center gap-2 rounded-xl bg-rose-50 border border-rose-200 p-3 text-xs font-semibold text-rose-800"
               >
                 <IconAlertTriangle className="h-4 w-4 shrink-0 text-rose-600" />
-                <span>{localizedError(createZone.error.message)}</span>
+                <span>{userErrorMessage(createZone.error)}</span>
               </div>
             )}
           </section>
@@ -453,7 +482,7 @@ export function SiteOperationsSetupView({
                 className="flex items-center gap-2 rounded-xl bg-rose-50 border border-rose-200 p-3 text-xs font-semibold text-rose-800"
               >
                 <IconAlertTriangle className="h-4 w-4 shrink-0 text-rose-600" />
-                <span>{localizedError(cameras.error.message)}</span>
+                <span>{userErrorMessage(cameras.error)}</span>
               </div>
             )}
 
@@ -524,7 +553,7 @@ export function SiteOperationsSetupView({
                 className="flex items-center gap-2 rounded-xl bg-rose-50 border border-rose-200 p-3 text-xs font-semibold text-rose-800"
               >
                 <IconAlertTriangle className="h-4 w-4 shrink-0 text-rose-600" />
-                <span>{localizedError(createCamera.error.message)}</span>
+                <span>{userErrorMessage(createCamera.error)}</span>
               </div>
             )}
           </section>

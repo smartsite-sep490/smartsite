@@ -8,7 +8,7 @@ import type {
 import { WorkerDocumentStatusTags } from '../workforce/components/WorkerDocumentStatusTags';
 import { WorkerDocumentsPanel } from '../workforce/components/WorkerDocumentsPanel';
 import { translate as tr } from '../../i18n';
-import { localizedError } from '../../i18n/messages';
+import { userErrorMessage } from '../../i18n/messages';
 import {
   IconSearch,
   IconClock,
@@ -180,7 +180,7 @@ export function WorkerDocumentReviewView(p: {
             >
               <div className="flex items-center gap-2.5">
                 <IconAlertTriangle className="w-5 h-5 text-red-600 shrink-0" />
-                <span className="font-semibold">{localizedError(workers.error.message)}</span>
+                <span className="font-semibold">{userErrorMessage(workers.error)}</span>
               </div>
               <button
                 type="button"

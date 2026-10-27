@@ -56,6 +56,42 @@ test('new Site Manager can use the supplied password for visitor workflows and v
       roleAssignments: [{ role: UserRole.SITE_MANAGER, siteId }],
     });
     userIds.push(account.id);
+    assert.deepEqual((await access.publicManagers(siteId)).items, [
+      { id: account.id, displayName: 'Synthetic Site Manager' },
+    ]);
+    await assert.rejects(
+      access.register(siteId, {
+        ...registration,
+        requestId: randomUUID(),
+        siteManagerId: randomUUID(),
+      }),
+    );
+    const selected = await access.register(siteId, {
+      ...registration,
+      requestId: randomUUID(),
+      siteManagerId: account.id,
+      hostName: 'Synthetic Site Manager',
+    });
+    assert.equal(selected.siteManagerId, account.id);
+    await assert.rejects(
+      access.register(siteId, {
+        ...registration,
+        requestId: randomUUID(),
+        siteManagerId: account.id,
+        hostName: 'Another person',
+      }),
+    );
+    await dataSource.query('UPDATE app_user SET is_active = FALSE WHERE id = $1', [account.id]);
+    assert.deepEqual((await access.publicManagers(siteId)).items, []);
+    await assert.rejects(
+      access.register(siteId, {
+        ...registration,
+        requestId: randomUUID(),
+        siteManagerId: account.id,
+        hostName: 'Synthetic Site Manager',
+      }),
+    );
+    await dataSource.query('UPDATE app_user SET is_active = TRUE WHERE id = $1', [account.id]);
     const temporary = await auth.login(account.username, 'InitialDemo2026!', AuthClientType.MOBILE);
     assert.equal(temporary.user.mustChangePassword, false);
     const initialVisit = await access.register(siteId, registration);

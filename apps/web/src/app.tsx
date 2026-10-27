@@ -33,7 +33,6 @@ import { useTranslation } from 'react-i18next';
 import { AccountsView } from './features/accounts/AccountsView';
 import { AssignedWorkView } from './components/contractor/AssignedWorkView';
 import { ContractorDashboardView } from './components/contractor/ContractorDashboardView';
-import { WorkerDashboardView } from './components/dashboard/WorkerDashboardView';
 import { WorkerOnboardingView } from './components/workforce/components/WorkerOnboardingView';
 import { WorkerDocumentsView } from './components/workforce/components/WorkerDocumentsView';
 import { workspaceTabs, defaultWorkspace } from './features/auth/workspace-access';
@@ -144,10 +143,6 @@ function ProtectedRoutes({ defaultAuthTab, alertsContext, onNavigate }: Protecte
           path="/contractor-teams"
           element={<ContractorDashboardView apiUrl={apiUrl} onNavigate={onNavigate} />}
         />
-        <Route
-          path="/worker-summary"
-          element={<WorkerDashboardView apiUrl={apiUrl} onNavigate={onNavigate} />}
-        />
         <Route path="/worker-onboarding" element={<WorkerOnboardingView apiUrl={apiUrl} />} />
         <Route path="/worker-documents" element={<WorkerDocumentsView apiUrl={apiUrl} />} />
         <Route path="/schedule-setup" element={<ScheduleSetupView apiUrl={apiUrl} />} />
@@ -176,7 +171,11 @@ function ProtectedRoutes({ defaultAuthTab, alertsContext, onNavigate }: Protecte
           element={
             profile.data ? (
               <SafetyAlertsView
-                key={profile.data.id + JSON.stringify(alertsContext ?? {})}
+                key={
+                  profile.data.id +
+                  JSON.stringify(alertsContext ?? {}) +
+                  (incidentLink.has('alertId') ? location.search : '')
+                }
                 authenticatedSession={{ accessToken, user: profile.data }}
                 onSignOut={() => logout.mutate()}
                 apiUrl={apiUrl}
@@ -188,9 +187,9 @@ function ProtectedRoutes({ defaultAuthTab, alertsContext, onNavigate }: Protecte
                     ? (incidentLink.get('workerId') ?? undefined)
                     : undefined
                 }
-                initialAlertId={alertsContext?.alertId}
-                initialStatus={alertsContext?.status}
-                initialType={alertsContext?.alertType}
+                initialAlertId={incidentLink.get('alertId') ?? alertsContext?.alertId}
+                initialStatus={incidentLink.has('alertId') ? undefined : alertsContext?.status}
+                initialType={incidentLink.has('alertId') ? undefined : alertsContext?.alertType}
               />
             ) : profile.isError ? (
               <div role="alert">
@@ -226,7 +225,8 @@ export function App() {
   const { t } = useTranslation();
   const navigate = useNavigate();
   const { accessToken, isSessionExpired, dismissSessionExpired } = useAuth();
-  const { isLoading: isRestoringSession } = useRestoreSession(apiUrl);
+  const sessionRestore = useRestoreSession(apiUrl);
+  const { isLoading: isRestoringSession } = sessionRestore;
   const currentUserQuery = useCurrentUser(apiUrl);
   const currentUser = currentUserQuery.data;
 
@@ -254,6 +254,20 @@ export function App() {
         className="min-h-screen bg-[#041D2E] flex items-center justify-center"
       >
         <div className="w-8 h-8 rounded-full border-2 border-[#F66B17] border-t-transparent animate-spin" />
+      </div>
+    );
+  }
+
+  if (!accessToken && sessionRestore.isError) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-slate-50 p-6">
+        <div role="alert" className="space-y-4 rounded-xl border border-slate-200 bg-white p-6 text-center">
+          <h1 className="text-lg font-bold text-slate-900">{t('auth.restoreError')}</h1>
+          <p className="text-sm text-slate-600">{t('auth.restoreErrorDesc')}</p>
+          <button type="button" onClick={() => void sessionRestore.refetch()} className="rounded-lg bg-[#071A2B] px-4 py-2 text-sm font-semibold text-white focus-visible:outline-2 focus-visible:outline-blue-600">
+            {t('accounts.retry')}
+          </button>
+        </div>
       </div>
     );
   }

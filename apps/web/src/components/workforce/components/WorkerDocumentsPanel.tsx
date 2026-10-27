@@ -9,7 +9,7 @@ import type {
 } from '@smartsite/api-client';
 import { healthCertificateExpiry } from '@smartsite/api-client';
 import { translate as tr } from '../../../i18n';
-import { localizedError } from '../../../i18n/messages';
+import { userErrorMessage } from '../../../i18n/messages';
 import { DocumentMediaPicker } from './DocumentMediaPicker';
 import { DocumentIdentityNotice } from './DocumentIdentityNotice';
 import { documentKinds } from './worker-document-files';
@@ -25,10 +25,6 @@ import {
   IconLoader,
   IconChevronDown,
 } from '../../icons';
-
-const isTestEnv =
-  import.meta.env.MODE === 'test' ||
-  (typeof process !== 'undefined' && process.env?.NODE_ENV === 'test');
 
 const fieldClass =
   'block w-full rounded-xl border border-slate-200 bg-slate-50/70 px-3.5 py-2.5 text-sm font-medium text-slate-800 placeholder:text-slate-400 focus:border-[#F66B17] focus:bg-white focus:ring-2 focus:ring-[#F66B17]/15 focus:outline-none transition-all shadow-2xs';
@@ -60,12 +56,11 @@ export function DocumentFileInputs({
   useTranslation();
   return (
     <div className="space-y-4 sm:col-span-2">
-      <div className="rounded-xl border border-slate-200/90 bg-slate-50/70 p-4 shadow-2xs">
-        <p className="text-xs font-bold text-slate-800 flex items-center gap-2">
-          <IconShield className="w-4 h-4 text-[#F66B17]" />
-          <span>{tr('documents.hint')}</span>
+      <div className="rounded-xl border border-slate-200/90 bg-slate-50/70 p-3.5 shadow-2xs">
+        <p className="text-xs font-medium text-slate-600 flex items-center gap-2">
+          <IconShield className="w-4 h-4 text-[#F66B17] shrink-0" />
+          <span>{tr('documents.fileHint')}</span>
         </p>
-        <p className="text-xs text-slate-500 mt-1 leading-relaxed">{tr('documents.fileHint')}</p>
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
@@ -135,18 +130,30 @@ export function WorkerDocumentsPanel(p: Props) {
   const [preview, setPreview] = useState<{ url: string; type: string } | null>(null);
   const [expiries, setExpiries] = useState<Partial<Record<WorkerDocumentKind, string>>>({});
 
-  // Collapsible accordion state: In test environment, keep all open for test selectors. In browser, start collapsed or user-controlled.
   const allSections = ['IDENTITY', ...documentKinds];
-  const [expandedSections, setExpandedSections] = useState<string[]>(isTestEnv ? allSections : []);
+  const [sectionChoices, setSectionChoices] = useState<Record<string, boolean>>({});
+  const pendingSections = new Set(
+    profile.data?.documents.filter((d) => d.status === 'PENDING').map((d) => d.kind),
+  );
+  const expandedSections = allSections.filter(
+    (id) =>
+      sectionChoices[id] ??
+      (id === 'IDENTITY'
+        ? !!profile.data?.identityImages.length &&
+          profile.data.submissionStatus === 'PENDING_REVIEW'
+        : pendingSections.has(id as WorkerDocumentKind)),
+  );
 
   const toggleSection = (id: string) => {
-    setExpandedSections((prev) =>
-      prev.includes(id) ? prev.filter((item) => item !== id) : [...prev, id],
-    );
+    setSectionChoices((prev) => ({ ...prev, [id]: !expandedSections.includes(id) }));
   };
 
   const toggleAll = () => {
-    setExpandedSections((prev) => (prev.length === allSections.length ? [] : allSections));
+    setSectionChoices(
+      Object.fromEntries(
+        allSections.map((id) => [id, expandedSections.length !== allSections.length]),
+      ),
+    );
   };
 
   useEffect(
@@ -181,7 +188,7 @@ export function WorkerDocumentsPanel(p: Props) {
       >
         <div className="flex items-center gap-2.5">
           <IconAlertTriangle className="w-5 h-5 text-red-600 shrink-0" />
-          <span className="font-semibold">{localizedError(profile.error.message)}</span>
+          <span className="font-semibold">{userErrorMessage(profile.error)}</span>
         </div>
         <button
           type="button"
@@ -212,10 +219,15 @@ export function WorkerDocumentsPanel(p: Props) {
               {data.displayName.charAt(0).toUpperCase()}
             </div>
             <div className="min-w-0">
-              <h3 className="text-base sm:text-lg font-black text-[#041D2E] tracking-tight truncate">
-                {tr('documents.title')} — {data.displayName} ({data.externalId})
-              </h3>
-              <p className="font-mono text-xs font-semibold text-slate-500">
+              <div className="flex items-center gap-2">
+                <h3 className="text-base sm:text-lg font-black text-[#041D2E] tracking-tight truncate">
+                  {data.displayName}
+                </h3>
+                <span className="font-mono text-xs font-bold px-2 py-0.5 rounded-md bg-slate-200/80 text-slate-700 shrink-0">
+                  {data.externalId}
+                </span>
+              </div>
+              <p className="font-mono text-xs font-semibold text-slate-500 mt-0.5">
                 {tr('documents.nationalId')}: {data.nationalId ?? '—'} ·{' '}
                 {tr('documents.phoneNumber')}: {data.phoneNumber ?? '—'}
               </p>
@@ -273,8 +285,6 @@ export function WorkerDocumentsPanel(p: Props) {
             <span>{tr('documents.expiring')}</span>
           </div>
         )}
-
-        <p className="text-[11px] text-slate-500">{tr('documents.hint')}</p>
       </div>
 
       {action.isError && (
@@ -282,7 +292,7 @@ export function WorkerDocumentsPanel(p: Props) {
           role="alert"
           className="rounded-xl border border-red-200 bg-red-50 p-3.5 text-xs font-semibold text-red-700 shadow-2xs"
         >
-          {localizedError(action.error.message)}
+          {userErrorMessage(action.error)}
         </div>
       )}
 
