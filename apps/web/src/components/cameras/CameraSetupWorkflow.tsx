@@ -10,12 +10,6 @@ export type CameraSetupOpenHandler = (
   trigger?: HTMLButtonElement | null,
 ) => void;
 
-const WORKFLOW_STEPS = [
-  ['01', 'cameraSetup.step1'],
-  ['02', 'cameraSetup.step2'],
-  ['03', 'cameraSetup.step3'],
-] as const;
-
 export function CameraSetupWorkflow({
   canWriteZones,
   canReadZones,
@@ -69,23 +63,7 @@ export function CameraSetupWorkflow({
             ▾
           </span>
         </summary>
-        <div className="mt-2 space-y-2.5 rounded-xl border border-slate-200/90 bg-slate-50/70 p-3 text-left text-xs text-slate-600">
-          <ol
-            aria-label={t('cameraSetup.workflowTitle')}
-            className="grid gap-2 leading-5 sm:grid-cols-3"
-          >
-            {WORKFLOW_STEPS.map(([stepNumber, stepKey]) => (
-              <li
-                key={stepNumber}
-                className="min-w-0 flex items-start gap-2 break-words rounded-lg border border-slate-200/80 bg-white px-2.5 py-2"
-              >
-                <span className="mt-0.5 inline-flex shrink-0 items-center rounded bg-slate-100 px-1.5 py-0.5 font-mono text-[10px] font-semibold tabular-nums text-slate-600">
-                  {stepNumber}
-                </span>
-                <span className="min-w-0">{t(stepKey)}</span>
-              </li>
-            ))}
-          </ol>
+        <div className="mt-2 rounded-xl border border-slate-200/90 bg-slate-50/70 p-3 text-left text-xs text-slate-600">
           <CameraSetupStageCards />
         </div>
       </details>

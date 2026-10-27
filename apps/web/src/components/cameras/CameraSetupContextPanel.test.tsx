@@ -51,15 +51,23 @@ it('keeps the four-step setup explanation inside a single un-nested setup guide 
   fireEvent.click(summary!);
   expect(helpDisclosure.open).toBe(true);
 
+  const listsInDisclosure = within(helpDisclosure).getAllByRole('list');
+  expect(listsInDisclosure).toHaveLength(1);
+
   const stageSection = within(helpDisclosure).getByTestId('camera-setup-stages-disclosure');
   const stageList = within(stageSection).getByRole('list', {
     name: 'Four-stage setup reference',
   });
   expect(stageList.tagName).toBe('OL');
+  expect(within(stageList).getAllByRole('listitem')).toHaveLength(4);
   expect(within(stageList).getByText('Stage 1 · Per-Zone PPE Policy')).toBeTruthy();
   expect(within(stageList).getByText('Stage 2 · Camera & Source ID')).toBeTruthy();
   expect(within(stageList).getByText('Stage 3 · Reference Image')).toBeTruthy();
   expect(within(stageList).getByText('Stage 4 · Observation Regions')).toBeTruthy();
+  expect(
+    within(stageList).getByText(/Registration does not verify a live connection/i),
+  ).toBeTruthy();
+  expect(within(stageList).getByText(/Saving stores the configuration version only/i)).toBeTruthy();
 
   expect(stageList.textContent).not.toMatch(/0\.\.1|externalId|worker/i);
   expect(stageList.textContent).not.toMatch(/worker applied|camera moved|online/i);
@@ -71,6 +79,10 @@ it('keeps the four-step setup explanation inside a single un-nested setup guide 
   expect(screen.getByText('Tham chiếu 4 bước thiết lập')).toBeTruthy();
   expect(within(stageList).getByText('Bước 1 · Chính sách PPE theo khu vực')).toBeTruthy();
   expect(within(stageList).getByText('Bước 4 · Vùng quan sát')).toBeTruthy();
+  expect(
+    within(stageList).getByText(/Việc đăng ký không xác nhận kết nối trực tiếp/i),
+  ).toBeTruthy();
+  expect(within(stageList).getByText(/Thao tác lưu chỉ ghi nhận phiên bản cấu hình/i)).toBeTruthy();
   expect(stageList.textContent).not.toMatch(/0\.\.1|externalId|worker/i);
 });
 

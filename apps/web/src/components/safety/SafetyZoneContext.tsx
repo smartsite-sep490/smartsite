@@ -82,7 +82,7 @@ export function SafetyZoneContext(
     retry: false,
   });
   return (
-    <article className={cardClass}>
+    <article className={'min-w-0 ' + cardClass}>
       <div className="flex flex-wrap items-center justify-between gap-2 border-b border-[var(--border)] pb-2.5">
         <h3 className="font-bold text-[var(--text-heading)]">
           {tr('safety_workspace.zones_and_cameras')}
@@ -97,12 +97,12 @@ export function SafetyZoneContext(
         </p>
       ) : (
         <>
-          <div className="space-y-2.5 rounded-lg border border-[var(--border)] bg-[var(--surface-canvas)] p-3">
+          <div className="min-w-0 space-y-2.5 rounded-lg border border-[var(--border)] bg-[var(--surface-canvas)] p-3">
             <div className="flex flex-wrap items-end justify-between gap-2">
-              <label className="block flex-1 text-sm font-medium text-[var(--text-heading)]">
+              <label className="block min-w-0 flex-1 text-sm font-medium text-[var(--text-heading)]">
                 {tr('common.zone')}
                 <select
-                  className={'mt-1.5 ' + fieldClass}
+                  className={'mt-1.5 min-w-0 max-w-full ' + fieldClass}
                   value={selected.id}
                   onChange={(e) => {
                     setZone(e.target.value);
@@ -136,7 +136,7 @@ export function SafetyZoneContext(
             </div>
           </div>
 
-          <div className="space-y-2 rounded-lg bg-[var(--surface-bone)] p-3">
+          <div className="min-w-0 space-y-2 rounded-lg bg-[var(--surface-bone)] p-3">
             <div className="space-y-0.5">
               <strong className="block text-sm text-[var(--text-heading)]">
                 {tr('safety_workspace.teams_related_to_this_zone')}
@@ -158,7 +158,7 @@ export function SafetyZoneContext(
                 {teams.data.items.map((t) => (
                   <p
                     key={t.id}
-                    className="rounded border border-[var(--border)] bg-[var(--surface-white)] px-2.5 py-1 text-sm text-[var(--text-body)]"
+                    className="min-w-0 max-w-full break-words [overflow-wrap:anywhere] rounded border border-[var(--border)] bg-[var(--surface-white)] px-2.5 py-1 text-sm text-[var(--text-body)]"
                   >
                     {t.contractorName} · {t.name}
                   </p>
@@ -168,7 +168,7 @@ export function SafetyZoneContext(
             {teams.data && <Pager total={teams.data.total} offset={offset} onChange={setOffset} />}
           </div>
 
-          <div className="space-y-2.5">
+          <div className="min-w-0 space-y-2.5">
             {!cameras.length && (
               <p className="rounded-lg border border-[var(--border)] bg-[var(--surface-canvas)] p-3 text-sm text-[var(--text-secondary)]">
                 {tr('safety_workspace.no_current_camera_linked_to_this_zone')}
@@ -182,7 +182,7 @@ export function SafetyZoneContext(
                     key={c.id}
                     aria-pressed={isSelected}
                     className={
-                      'space-y-1.5 rounded-lg border p-3 text-left transition-colors ' +
+                      'min-w-0 space-y-1.5 rounded-lg border p-3 text-left transition-colors ' +
                       (isSelected
                         ? 'border-[var(--accent)] bg-[var(--surface-bone)] ring-1 ring-[var(--accent)]'
                         : 'border-[var(--border)] bg-[var(--surface-white)] hover:bg-[var(--surface-canvas)]')
@@ -192,8 +192,10 @@ export function SafetyZoneContext(
                       setZoom(false);
                     }}
                   >
-                    <strong className="block text-sm text-[var(--text-heading)]">{c.name}</strong>
-                    <span className="flex items-center gap-1.5 text-xs text-[var(--text-secondary)]">
+                    <strong className="block break-words [overflow-wrap:anywhere] text-sm text-[var(--text-heading)]">
+                      {c.name}
+                    </strong>
+                    <span className="flex flex-wrap items-center gap-1.5 text-xs text-[var(--text-secondary)]">
                       {tr('safety_workspace.configuration')}
                       <StatusBadge value={c.status} />
                     </span>
@@ -209,10 +211,10 @@ export function SafetyZoneContext(
           </div>
 
           {current && (
-            <div className="space-y-2.5 rounded-lg border border-[var(--border)] bg-[var(--surface-canvas)] p-3">
+            <div className="min-w-0 space-y-2.5 rounded-lg border border-[var(--border)] bg-[var(--surface-canvas)] p-3">
               <div className="flex flex-wrap items-center justify-between gap-2 border-b border-[var(--border)] pb-2">
-                <div>
-                  <h4 className="font-semibold text-[var(--text-heading)]">
+                <div className="min-w-0 flex-1">
+                  <h4 className="break-words [overflow-wrap:anywhere] font-semibold text-[var(--text-heading)]">
                     {tr('safety_workspace.value1_alert_evidence', { value1: current.name })}
                   </h4>
                   <p className="text-xs text-[var(--text-secondary)]">
@@ -279,16 +281,16 @@ export function SafetyZoneContext(
       <TechnicalDetails>
         <dl className="grid gap-1 font-mono">
           <div className="flex flex-wrap gap-2">
-            <dt className="font-semibold">{tr('common.site')}</dt>
-            <dd>{p.siteId || tr('labels.UNAVAILABLE')}</dd>
+            <dt className="shrink-0 font-semibold">{tr('common.site')}</dt>
+            <dd className="min-w-0 break-all">{p.siteId || tr('labels.UNAVAILABLE')}</dd>
           </div>
           <div className="flex flex-wrap gap-2">
-            <dt className="font-semibold">{tr('common.code')}:</dt>
-            <dd>{selected?.code ?? tr('labels.UNAVAILABLE')}</dd>
+            <dt className="shrink-0 font-semibold">{tr('common.code')}:</dt>
+            <dd className="min-w-0 break-all">{selected?.code ?? tr('labels.UNAVAILABLE')}</dd>
           </div>
           <div className="flex flex-wrap gap-2">
-            <dt className="font-semibold">{tr('common.camera')}:</dt>
-            <dd>{current?.externalId ?? tr('labels.UNAVAILABLE')}</dd>
+            <dt className="shrink-0 font-semibold">{tr('common.camera')}:</dt>
+            <dd className="min-w-0 break-all">{current?.externalId ?? tr('labels.UNAVAILABLE')}</dd>
           </div>
         </dl>
       </TechnicalDetails>
