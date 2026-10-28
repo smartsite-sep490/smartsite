@@ -491,6 +491,9 @@
     "handedOver": "Đã chuyển giao:",
     "startAction": "Bắt đầu khắc phục",
     "actionResult": "Kết quả khắc phục",
+    "refresh": "Làm mới công việc khắc phục",
+    "awaitingReview": "Đang chờ cán bộ an toàn xác minh.",
+    "otherWorkOpen": "Công việc này đã đóng. Vụ việc còn công việc khác cần hoàn thành.",
     "submitToSafety": "Nộp kết quả cho cán bộ an toàn"
   },
   "qr": {

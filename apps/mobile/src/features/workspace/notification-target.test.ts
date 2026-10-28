@@ -48,3 +48,19 @@ it('does not open another site or an assigned safety workspace for Worker', () =
     ),
   ).toBeNull();
 });
+
+it('opens a Safety handover Incident only for the current Site contractor workspace', () => {
+  const handover = notification({
+    siteId: 'a',
+    incidentId: 'incident-a',
+    actionId: 'action-a',
+    tab: 'incidents',
+  });
+  expect(notificationTarget(handover, 'a', 'contractor')).toEqual({
+    route: 'assigned',
+    id: 'incident-a',
+    kind: 'incident',
+  });
+  expect(notificationTarget(handover, 'a', 'worker')).toBeNull();
+  expect(notificationTarget(handover, 'b', 'contractor')).toBeNull();
+});

@@ -8,11 +8,7 @@ import { SafetyAlertEntity } from '../../../database/entities/safety-alert.entit
 import type { AlertCandidate } from './alert-candidate-evaluator.js';
 import { SchedulingNotificationService } from '../../workforce/notifications/scheduling-notification.service.js';
 
-const OPEN_ALERT_STATUSES = [
-  AlertStatus.PENDING_REVIEW,
-  AlertStatus.NEEDS_MORE_EVIDENCE,
-  AlertStatus.CONFIRMED,
-];
+const OPEN_ALERT_STATUSES = [AlertStatus.PENDING_REVIEW, AlertStatus.CONFIRMED];
 
 // Safe bounds compatible with both ECMAScript Date and PostgreSQL timestamptz (4-digit ISO years)
 // Prevents JS Date overflow (Invalid Date) when ALERT_COOLDOWN_SECONDS is configured near MAX_SAFE_INTEGER.

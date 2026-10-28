@@ -41,7 +41,6 @@ export interface SafetyAlertsViewProps {
 
 const statusOptions: readonly SafetyAlertStatus[] = [
   'PENDING_REVIEW',
-  'NEEDS_MORE_EVIDENCE',
   'CONFIRMED',
   'DISMISSED',
   'CLOSED',
@@ -88,7 +87,6 @@ function errorMessage(error: unknown): string {
 
 function statusTone(status: SafetyAlertStatus): string {
   if (status === 'PENDING_REVIEW') return 'bg-[#FBF3DB] text-[#956400] border-[#EAEAEA]';
-  if (status === 'NEEDS_MORE_EVIDENCE') return 'bg-[#E1F3FE] text-[#1F6C9F] border-[#EAEAEA]';
   if (status === 'CONFIRMED') return 'bg-[#FDEBEC] text-[#9F2F2D] border-[#EAEAEA]';
   return 'bg-[#F7F6F3] text-[#6B6B6B] border-[#EAEAEA]';
 }
@@ -516,6 +514,7 @@ export function SafetyAlertsView({
       await Promise.all([
         queryClient.invalidateQueries({ queryKey: ['safety-alerts', apiUrl, sessionScope] }),
         queryClient.invalidateQueries({ queryKey: ['safety-alert', apiUrl, sessionScope] }),
+        queryClient.invalidateQueries({ queryKey: ['safety-workflow', apiUrl, sessionScope] }),
       ]);
     },
     onError: async (error) => {
@@ -1140,87 +1139,75 @@ export function SafetyAlertsView({
                     )}
                   </div>
                 </div>
-                {canReviewSafety &&
-                  (detail.data.status === 'PENDING_REVIEW' ||
-                    detail.data.status === 'NEEDS_MORE_EVIDENCE') && (
-                    <section className="rounded-lg border border-[#EAEAEA] bg-[#F7F6F3] p-3 sm:p-4 min-w-0">
-                      <h3 className="text-sm font-bold text-[#111111]">
-                        {tr('common.record_review_decision')}
-                      </h3>
-                      <p className="mt-1 text-xs leading-5 text-[#6B6B6B]">
-                        {tr(
-                          'safety_alerts_view.explain_the_evidence_behind_the_decision_the_reason_is_required_and_cannot_be_edit',
-                        )}
-                      </p>
-                      <label
-                        htmlFor="review-reason-textarea"
-                        className="mt-3 block text-xs font-semibold text-[#2F3437]"
+                {canReviewSafety && detail.data.status === 'PENDING_REVIEW' && (
+                  <section className="rounded-lg border border-[#EAEAEA] bg-[#F7F6F3] p-3 sm:p-4 min-w-0">
+                    <h3 className="text-sm font-bold text-[#111111]">
+                      {tr('common.record_review_decision')}
+                    </h3>
+                    <p className="mt-1 text-xs leading-5 text-[#6B6B6B]">
+                      {tr(
+                        'safety_alerts_view.explain_the_evidence_behind_the_decision_the_reason_is_required_and_cannot_be_edit',
+                      )}
+                    </p>
+                    <label
+                      htmlFor="review-reason-textarea"
+                      className="mt-3 block text-xs font-semibold text-[#2F3437]"
+                    >
+                      {tr('common.decision_reason')}{' '}
+                      <span className="font-normal text-[#6B6B6B]">
+                        {tr('common.minimum_5_characters')}
+                      </span>
+                    </label>
+                    <textarea
+                      id="review-reason-textarea"
+                      name="reviewReason"
+                      aria-label={tr('safety_alerts_view.decision_reason_minimum_5_characters')}
+                      value={reviewReason}
+                      onChange={(event) => setReviewReason(event.target.value)}
+                      minLength={5}
+                      maxLength={1000}
+                      rows={3}
+                      placeholder={tr(
+                        'safety_alerts_view.example_worker_is_clearly_visible_without_a_hard_hat_across_the_linked_observation',
+                      )}
+                      className="mt-1.5 w-full min-w-0 rounded-md border border-[#EAEAEA] bg-white px-3 py-2 text-sm outline-none focus:border-[#F66B17] focus:ring-2 focus:ring-[#F66B17]/10 placeholder:text-[#6B6B6B]"
+                    />
+                    {review.error && (
+                      <p
+                        role="alert"
+                        className="mt-2 rounded-md bg-[#FDEBEC] p-2 text-xs text-[#9F2F2D]"
                       >
-                        {tr('common.decision_reason')}{' '}
-                        <span className="font-normal text-[#6B6B6B]">
-                          {tr('common.minimum_5_characters')}
-                        </span>
-                      </label>
-                      <textarea
-                        id="review-reason-textarea"
-                        name="reviewReason"
-                        aria-label={tr('safety_alerts_view.decision_reason_minimum_5_characters')}
-                        value={reviewReason}
-                        onChange={(event) => setReviewReason(event.target.value)}
-                        minLength={5}
-                        maxLength={1000}
-                        rows={3}
-                        placeholder={tr(
-                          'safety_alerts_view.example_worker_is_clearly_visible_without_a_hard_hat_across_the_linked_observation',
-                        )}
-                        className="mt-1.5 w-full min-w-0 rounded-md border border-[#EAEAEA] bg-white px-3 py-2 text-sm outline-none focus:border-[#F66B17] focus:ring-2 focus:ring-[#F66B17]/10 placeholder:text-[#6B6B6B]"
-                      />
-                      {review.error && (
-                        <p
-                          role="alert"
-                          className="mt-2 rounded-md bg-[#FDEBEC] p-2 text-xs text-[#9F2F2D]"
-                        >
-                          {errorMessage(review.error)}
-                        </p>
-                      )}
-                      {review.isSuccess && (
-                        <p
-                          role="status"
-                          className="mt-2 rounded-md bg-[#EDF3EC] p-2 text-xs text-[#346538]"
-                        >
-                          {tr('common.review_decision_recorded')}
-                        </p>
-                      )}
-                      <div className="mt-3 flex flex-wrap gap-2">
-                        <button
-                          type="button"
-                          disabled={reviewReason.trim().length < 5 || review.isPending}
-                          onClick={() => review.mutate('CONFIRMED')}
-                          className="rounded-md bg-[#9F2F2D] px-3 py-2 text-xs font-bold text-white hover:bg-[#7F2524] disabled:cursor-not-allowed disabled:opacity-50"
-                        >
-                          {tr('common.confirm_violation')}
-                        </button>
-                        <button
-                          type="button"
-                          disabled={reviewReason.trim().length < 5 || review.isPending}
-                          onClick={() => review.mutate('DISMISSED')}
-                          className="rounded-md bg-[#111111] px-3 py-2 text-xs font-bold text-white hover:bg-[#333333] disabled:cursor-not-allowed disabled:opacity-50"
-                        >
-                          {tr('common.dismiss_alert')}
-                        </button>
-                        {detail.data.status === 'PENDING_REVIEW' && (
-                          <button
-                            type="button"
-                            disabled={reviewReason.trim().length < 5 || review.isPending}
-                            onClick={() => review.mutate('NEEDS_MORE_EVIDENCE')}
-                            className="rounded-md border border-[#1F6C9F]/30 bg-white px-3 py-2 text-xs font-bold text-[#1F6C9F] hover:bg-[#E1F3FE] disabled:cursor-not-allowed disabled:opacity-50"
-                          >
-                            {tr('common.request_more_evidence')}
-                          </button>
-                        )}
-                      </div>
-                    </section>
-                  )}
+                        {errorMessage(review.error)}
+                      </p>
+                    )}
+                    {review.isSuccess && (
+                      <p
+                        role="status"
+                        className="mt-2 rounded-md bg-[#EDF3EC] p-2 text-xs text-[#346538]"
+                      >
+                        {tr('common.review_decision_recorded')}
+                      </p>
+                    )}
+                    <div className="mt-3 flex flex-wrap gap-2">
+                      <button
+                        type="button"
+                        disabled={reviewReason.trim().length < 5 || review.isPending}
+                        onClick={() => review.mutate('CONFIRMED')}
+                        className="rounded-md bg-[#9F2F2D] px-3 py-2 text-xs font-bold text-white hover:bg-[#7F2524] disabled:cursor-not-allowed disabled:opacity-50"
+                      >
+                        {tr('common.confirm_violation')}
+                      </button>
+                      <button
+                        type="button"
+                        disabled={reviewReason.trim().length < 5 || review.isPending}
+                        onClick={() => review.mutate('DISMISSED')}
+                        className="rounded-md bg-[#111111] px-3 py-2 text-xs font-bold text-white hover:bg-[#333333] disabled:cursor-not-allowed disabled:opacity-50"
+                      >
+                        {tr('common.dismiss_alert')}
+                      </button>
+                    </div>
+                  </section>
+                )}
                 {detail.data.status === 'CONFIRMED' &&
                   !detail.data.incidentId &&
                   session.user.roleAssignments.some(

@@ -491,6 +491,9 @@
     "handedOver": "Handed over:",
     "startAction": "Start corrective action",
     "actionResult": "Corrective action result",
+    "refresh": "Refresh corrective work",
+    "awaitingReview": "Awaiting Safety review.",
+    "otherWorkOpen": "This action is closed. The Incident still has other work to complete.",
     "submitToSafety": "Submit result to the Safety Officer"
   },
   "qr": {

@@ -9,14 +9,9 @@ export function incidentStatus(
   const outstanding = actions.filter((status) => status !== 'CLOSED');
   if (previous === 'REOPENED' && outstanding.every((status) => status === 'ASSIGNED'))
     return 'REOPENED';
-  if (actions.every((status) => status === 'VERIFIED' || status === 'CLOSED')) return 'VERIFIED';
-  if (outstanding.every((status) => status === 'ASSIGNED')) return 'ASSIGNED';
+  if (actions.every((status) => status === 'ASSIGNED')) return 'ASSIGNED';
   return 'IN_PROGRESS';
 }
 export function canCloseIncident(actions: CorrectiveActionStatus[], pending: boolean): boolean {
-  return (
-    !!actions.length &&
-    !pending &&
-    actions.every((status) => status === 'VERIFIED' || status === 'CLOSED')
-  );
+  return !!actions.length && !pending && actions.every((status) => status === 'CLOSED');
 }

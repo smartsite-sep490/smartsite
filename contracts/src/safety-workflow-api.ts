@@ -18,6 +18,7 @@ export interface ActionInput {
   dueAt?: string | null;
 }
 export interface CreateIncidentCommand {
+  initialAction?: ActionInput;
   sourceChecklistResultId?: string | null;
   contractorId?: string | null;
   workerIds?: string[];

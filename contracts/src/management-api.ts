@@ -122,7 +122,7 @@ export interface SafetyAlertResponse {
   updatedAt: string;
 }
 
-export type SafetyAlertReviewTargetStatus = 'CONFIRMED' | 'DISMISSED' | 'NEEDS_MORE_EVIDENCE';
+export type SafetyAlertReviewTargetStatus = 'CONFIRMED' | 'DISMISSED';
 
 export interface SafetyAlertReviewResponse {
   id: string;
@@ -130,7 +130,7 @@ export interface SafetyAlertReviewResponse {
   siteId: string;
   actorUserId: string;
   fromStatus: SafetyAlertStatus;
-  toStatus: SafetyAlertReviewTargetStatus;
+  toStatus: SafetyAlertStatus;
   reason: string;
   alertRevision: number;
   createdAt: string;

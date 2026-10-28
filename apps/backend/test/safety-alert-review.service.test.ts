@@ -15,10 +15,10 @@ import {
 test('safety alert review transition policy keeps terminal states closed', () => {
   assert.equal(
     canReviewTransition(AlertStatus.PENDING_REVIEW, AlertStatus.NEEDS_MORE_EVIDENCE),
-    true,
+    false,
   );
   assert.equal(canReviewTransition(AlertStatus.PENDING_REVIEW, AlertStatus.CONFIRMED), true);
-  assert.equal(canReviewTransition(AlertStatus.NEEDS_MORE_EVIDENCE, AlertStatus.DISMISSED), true);
+  assert.equal(canReviewTransition(AlertStatus.NEEDS_MORE_EVIDENCE, AlertStatus.DISMISSED), false);
   assert.equal(
     canReviewTransition(AlertStatus.NEEDS_MORE_EVIDENCE, AlertStatus.PENDING_REVIEW),
     false,
