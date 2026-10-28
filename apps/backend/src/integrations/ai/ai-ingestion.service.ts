@@ -1,3 +1,5 @@
+import { Mf06IngestionEnqueueService } from '../../modules/safety/assessments/mf06-ingestion-enqueue.service.js';
+import { Mf06EnqueueService } from '../../modules/safety/assessments/mf06-enqueue.service.js';
 import { validatePartitionedObservationEvent } from '@smartsite/contracts';
 import { admitPartitionedFrame } from './partitioned-frame-admission.js';
 import { resolveAlertObservationSubjects } from '../../modules/safety/alerts/alert-observation-subjects.js';
@@ -62,6 +64,7 @@ export class AiIngestionService {
     private readonly configService: ConfigService<BackendEnvironment, true>,
     @Optional() clock?: () => Date,
     @Optional() zoneEntryAuthorization?: ZoneEntryAuthorizationService,
+    @Optional() private readonly mf06Enqueue?: Mf06IngestionEnqueueService,
   ) {
     this.clock = clock ?? (() => new Date());
     this.zoneEntryAuthorization = zoneEntryAuthorization ?? new ZoneEntryAuthorizationService();
@@ -127,10 +130,21 @@ export class AiIngestionService {
       isClockSkew = capturedMs < minAllowedMs || capturedMs > maxAllowedMs;
     }
 
+    const enqueueEnabled = this.configService.get('MF06_ENQUEUE_ENABLED', { infer: true }) === true;
+    if (enqueueEnabled && !this.mf06Enqueue) {
+      throw new PublicHttpException(HttpStatus.SERVICE_UNAVAILABLE, {
+        code: 'AI_INGESTION_UNAVAILABLE',
+        message: 'AI ingestion is temporarily unavailable',
+      });
+    }
     // 4. Same-transaction context resolution, raw preservation, and alert grouping
     try {
       return await this.dataSource.transaction(async (manager: EntityManager) => {
-        const camera = await this.contextResolver.resolveCamera(manager, event.cameraExternalId);
+        const camera = await this.contextResolver.resolveCamera(
+          manager,
+          event.cameraExternalId,
+          enqueueEnabled,
+        );
 
         const frameScope = camera
           ? await admitPartitionedFrame(manager, event, camera.id)
@@ -172,6 +186,7 @@ export class AiIngestionService {
                   event.cameraExternalId,
                   obs['regionId'],
                   obs['geometryVersion'],
+                  enqueueEnabled,
                 );
                 if (ctx) {
                   contextMap.set(key, ctx);
@@ -252,9 +267,14 @@ export class AiIngestionService {
           processingStatus: status,
           processingNote: note,
         });
-        await rawEventRepo.insert(
-          rawEvent as unknown as QueryDeepPartialEntity<AiObservationEventEntity>,
-        );
+        if (enqueueEnabled) {
+          await new Mf06EnqueueService(this.dataSource).insertFresh(manager, rawEvent);
+          await this.mf06Enqueue!.enqueueFresh(manager, rawEvent);
+        } else {
+          await rawEventRepo.insert(
+            rawEvent as unknown as QueryDeepPartialEntity<AiObservationEventEntity>,
+          );
+        }
 
         for (const decision of zoneDecisions) {
           await this.zoneEntryAuthorization.record(manager, decision.input, decision.result);

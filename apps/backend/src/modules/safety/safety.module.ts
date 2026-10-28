@@ -8,6 +8,7 @@ import { UsersModule } from '../users/users.module.js';
 import { SafetyWorkflowService } from './safety-workflow.service.js';
 import { SafetyWorkflowController } from './safety-workflow.controller.js';
 import { SafetyUploadService } from './safety-upload.service.js';
+import { Mf06IngestionEnqueueService } from './assessments/mf06-ingestion-enqueue.service.js';
 import { Module } from '@nestjs/common';
 import { DatabaseModule } from '../../database/database.module.js';
 import { AuthModule } from '../auth/auth.module.js';
@@ -50,6 +51,7 @@ import { ZoneAccessManagementService } from '../zones/zone-access-management.ser
     SafetyWorkflowController,
   ],
   providers: [
+    Mf06IngestionEnqueueService,
     SafetyChecklistService,
     SafetyOverviewService,
     SafetyWorkflowService,
@@ -87,6 +89,6 @@ import { ZoneAccessManagementService } from '../zones/zone-access-management.ser
       ) => new ObservationIdentityContextService(resolutions, evidence, zones, workers),
     },
   ],
-  exports: [AlertCandidateEvaluator, DurableGroupingService],
+  exports: [AlertCandidateEvaluator, DurableGroupingService, Mf06IngestionEnqueueService],
 })
 export class SafetyModule {}
