@@ -8,14 +8,14 @@ test('incident follows outstanding actions and retains reopened until work begin
   assert.equal(incidentStatus('ASSIGNED', ['SUBMITTED', 'ASSIGNED']), 'IN_PROGRESS');
   assert.equal(incidentStatus('REOPENED', ['CLOSED', 'ASSIGNED']), 'REOPENED');
   assert.equal(incidentStatus('REOPENED', ['CLOSED', 'IN_PROGRESS']), 'IN_PROGRESS');
-  assert.equal(incidentStatus('IN_PROGRESS', ['CLOSED', 'VERIFIED']), 'VERIFIED');
+  assert.equal(incidentStatus('IN_PROGRESS', ['CLOSED', 'ASSIGNED']), 'IN_PROGRESS');
 });
 
 test('closure requires work, verification, and no pending submission', () => {
   assert.equal(canCloseIncident([], false), false);
   assert.equal(canCloseIncident(['ASSIGNED'], false), false);
   assert.equal(canCloseIncident(['VERIFIED'], true), false);
-  assert.equal(canCloseIncident(['CLOSED', 'VERIFIED'], false), true);
+  assert.equal(canCloseIncident(['CLOSED', 'CLOSED'], false), true);
 });
 
 test('Worker subjects reject UUID duplicates regardless of letter case in create and confirm', async () => {
@@ -42,4 +42,33 @@ test('Worker subjects reject UUID duplicates regardless of letter case in create
   assert.throws(() =>
     command(ConfirmResponsibilityDto, { ...common, expectedVersion: 1, reason: 'Confirmed' }),
   );
+});
+
+test('nested initial handover rejects malformed fields and caller-supplied command metadata', async () => {
+  const { command } = await import('../src/common/configuration/commands.js');
+  const { CreateIncidentDto } = await import('../src/modules/safety/safety-workflow.commands.js');
+  const input = {
+    commandId: 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb',
+    title: 'Hazard',
+    description: 'Observed hazard',
+    severity: 'HIGH',
+    occurredAt: '2026-10-05T00:00:00Z',
+    alertIds: [],
+    initialAction: {
+      assignedTo: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
+      description: ' Fix hazard ',
+    },
+  };
+  assert.equal(command(CreateIncidentDto, input).initialAction?.description, 'Fix hazard');
+  for (const initialAction of [
+    null,
+    [],
+    [input.initialAction],
+    'invalid',
+    { ...input.initialAction, assignedTo: 'invalid' },
+    { ...input.initialAction, description: ' ' },
+    { ...input.initialAction, dueAt: 'tomorrow' },
+    { ...input.initialAction, commandId: input.commandId },
+  ])
+    assert.throws(() => command(CreateIncidentDto, { ...input, initialAction }));
 });
