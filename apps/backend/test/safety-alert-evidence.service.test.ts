@@ -469,3 +469,14 @@ test('evidence content rejects a configured root reached through a symlink or ju
     isPublicError('NOT_FOUND'),
   );
 });
+
+test('ordinary evidence reads reject conflicting historical Site mappings before serving JPEG', async (t) => {
+  const root = await mkdtemp(join(tmpdir(), 'smartsite-evidence-site-'));
+  t.after(() => rm(root, { recursive: true, force: true }));
+  const value = identityFrameFixture(root, { conflictingSiteMapping: true });
+  await writeFile(join(root, value.fileName), jpeg);
+  await assert.rejects(
+    value.service.read(value.siteId, value.alertId, value.eventId, '0'),
+    isPublicError('NOT_FOUND'),
+  );
+});
