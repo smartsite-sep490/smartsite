@@ -3,6 +3,7 @@ import { randomUUID } from 'node:crypto';
 import test from 'node:test';
 import * as entities from '../../src/database/entities/index.js';
 import { CanonicalMf06Requests1794096000000 } from '../../src/database/migrations/1794096000000-CanonicalMf06Requests.js';
+import { CanonicalMf06Results1794182400000 } from '../../src/database/migrations/1794182400000-CanonicalMf06Results.js';
 import { createIsolatedTestDatabase } from '../support/isolated-test-database.js';
 import { checkPopulated } from '../support/mf06-storage-cases.js';
 
@@ -65,6 +66,14 @@ test('MF06 migration rejects shadow schemas and collisions without losing existi
     } finally {
       await runner.rollbackTransaction();
     }
+    await runner.startTransaction();
+    try {
+      await new CanonicalMf06Results1794182400000().down(runner);
+      await runner.commitTransaction();
+    } catch (error) {
+      await runner.rollbackTransaction();
+      throw error;
+    }
     await migration.down(runner);
     const site = randomUUID();
     await owned.dataSource
@@ -91,6 +100,7 @@ test('MF06 migration rejects shadow schemas and collisions without losing existi
     await runner.startTransaction();
     try {
       await migration.up(runner);
+      await new CanonicalMf06Results1794182400000().up(runner);
       await runner.commitTransaction();
     } catch (error) {
       await runner.rollbackTransaction();
