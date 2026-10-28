@@ -1,4 +1,8 @@
 {
+  "incident_view.review_decision": "Quyết định xác minh",
+  "incident_view.verify_and_close_action": "Xác minh đạt và đóng công việc",
+  "incident_view.return_for_rework": "Yêu cầu xử lý lại",
+  "incident_view.other_actions_remain_open": "Một công việc hiện hành đã đóng. Vụ việc và cảnh báo vẫn mở cho đến khi mọi công việc hiện hành đã đóng.",
   "notifications.PPE_ALERT_CREATED": "Cảnh báo PPE cần xem xét",
   "ppeNotifications.body": "{{camera}} · {{zone}}: {{subtype}}. Vui lòng xem xét bằng chứng.",
   "ppeNotifications.noZone": "Chưa xác định Zone",
