@@ -1,3 +1,7 @@
+import { ZoneEntryAssessmentRequestEntity } from './zone-entry-assessment-request.entity.js';
+export * from './zone-entry-assessment-request.entity.js';
+import { ZoneEntryAssessmentJobEntity } from './zone-entry-assessment-job.entity.js';
+export * from './zone-entry-assessment-job.entity.js';
 import {
   SafetyChecklistAssignmentEntity,
   SafetyChecklistItemEntity,
@@ -128,6 +132,8 @@ export * from './user-notification.entity.js';
 
 export * from './safety-workflow.entity.js';
 export const ENTITIES = [
+  ZoneEntryAssessmentRequestEntity,
+  ZoneEntryAssessmentJobEntity,
   WorkerComplianceProfileEntity,
   WorkerIdentityImageEntity,
   WorkerDocumentEntity,

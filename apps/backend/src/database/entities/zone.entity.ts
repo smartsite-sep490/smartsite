@@ -2,6 +2,7 @@ import { Column, CreateDateColumn, Entity, ForeignKey, PrimaryColumn, Unique } f
 import { ZoneRestrictionPolicy, ZoneType } from './enums.js';
 import { SiteEntity } from './site.entity.js';
 
+@Unique('uq_mf06_request_zone_scope', ['id', 'siteId'])
 @Entity({ name: 'zone' })
 @Unique('uq_zone_site_code', ['siteId', 'code'])
 export class ZoneEntity {

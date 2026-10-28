@@ -1,3 +1,4 @@
+import { CanonicalMf06Requests1794096000000 } from './migrations/1794096000000-CanonicalMf06Requests.js';
 import { ObservationFrameParts1794009600000 } from './migrations/1794009600000-ObservationFrameParts.js';
 import { AlertDetectionSubject1793404800000 } from './migrations/1793404800000-AlertDetectionSubject.js';
 import { ExpandedPpeNotificationKinds1793145600000 } from './migrations/1793145600000-ExpandedPpeNotificationKinds.js';
@@ -81,6 +82,7 @@ export function buildTypeOrmOptions(config: DatabaseConnectionConfig): DataSourc
     connectTimeoutMS: timeoutMs,
     entities: [...ENTITIES],
     migrations: [
+      CanonicalMf06Requests1794096000000,
       ObservationFrameParts1794009600000,
       PpeAlertNotifications1792886400000,
       ExpandedPpeNotificationKinds1793145600000,
