@@ -1,10 +1,10 @@
 import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
 import test from 'node:test';
-import * as entities from '../src/database/entities/index.js';
-import { CanonicalMf06Requests1794096000000 } from '../src/database/migrations/1794096000000-CanonicalMf06Requests.js';
-import { createIsolatedTestDatabase } from './support/isolated-test-database.js';
-import { checkPopulated } from './support/mf06-storage-cases.js';
+import * as entities from '../../src/database/entities/index.js';
+import { CanonicalMf06Requests1794096000000 } from '../../src/database/migrations/1794096000000-CanonicalMf06Requests.js';
+import { createIsolatedTestDatabase } from '../support/isolated-test-database.js';
+import { checkPopulated } from '../support/mf06-storage-cases.js';
 
 test('MF06 storage matches registered metadata and preserves populated immutable bindings', async () => {
   const owned = createIsolatedTestDatabase();
