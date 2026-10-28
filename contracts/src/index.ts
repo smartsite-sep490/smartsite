@@ -175,3 +175,15 @@ export { healthCertificateExpiry } from './worker-document-dates.js';
 
 export { resolveEventLocalEpisodeSubject } from './safety-episode-subject.js';
 export type { EventLocalEpisodeSubject } from './safety-episode-subject.js';
+export {
+  parseMf06AssessmentResponse,
+  parseMf06AssessmentPage,
+  parseMf06RequestStatusResponse,
+  parseMf06RequestStatusPage,
+} from './mf06-assessment-api.js';
+export type {
+  Mf06AssessmentResponse,
+  Mf06AssessmentPage,
+  Mf06RequestStatusResponse,
+  Mf06RequestStatusPage,
+} from './mf06-assessment-api.js';
