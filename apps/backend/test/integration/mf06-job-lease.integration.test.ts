@@ -1,3 +1,7 @@
+import {
+  Mf06AssessmentStore,
+  type Mf06AssessmentAppendInput,
+} from '../../src/modules/safety/assessments/mf06-assessment-store.service.js';
 import 'reflect-metadata';
 import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
@@ -1239,4 +1243,55 @@ it('retry backoff starts at the database write instead of being consumed by a st
     [fixture.requestId],
   );
   assert.deepEqual(row, { future: true, delay: 1 });
+});
+
+it('claimed job output can finalize UNAVAILABLE with committed store and replay idempotently', async () => {
+  const service = new Mf06JobLeaseService(db, {
+    leaseSeconds: 60,
+    maxAttempts: 3,
+    retryDelaySeconds: 1,
+  });
+  const store = new Mf06AssessmentStore(db);
+  const fixture = await createTestFixture();
+  await insertPendingJob(fixture.requestId);
+
+  const claim = await service.claim();
+  assert.ok(claim);
+
+  const commandId = randomUUID();
+  const appendInput: Mf06AssessmentAppendInput = {
+    claim: {
+      requestId: claim.requestId,
+      leaseToken: claim.leaseToken,
+      headRevision: claim.headRevision,
+    },
+    commandId,
+    siteId: fixture.siteId,
+    bindingHash: fixture.bindingHash,
+    evaluatorVersion: '1.0.0',
+    outcome: 'UNAVAILABLE',
+    reasonCode: 'SERVICE_DISABLED',
+    provenance: 'UNAVAILABLE',
+    workerId: null,
+    profileRevision: null,
+    frameSha256: null,
+    cropSha256: null,
+    authorityArtifact: null,
+  };
+
+  const storeResult = await store.finalize(appendInput);
+  assert.equal(storeResult.state, 'RECORDED');
+  if (storeResult.state !== 'RECORDED') throw new Error('Expected recorded assessment');
+  assert.equal(storeResult.assessment.commandId, commandId);
+  assert.equal(storeResult.assessment.requestId, claim.requestId);
+  assert.equal(storeResult.assessment.outcome, 'UNAVAILABLE');
+
+  const directReplay = await store.replay(claim.requestId, commandId, fixture.siteId);
+  assert.ok(directReplay);
+  assert.equal(directReplay.commandId, commandId);
+
+  const replayFinalize = await store.finalize(appendInput);
+  assert.equal(replayFinalize.state, 'REPLAY');
+  if (replayFinalize.state !== 'REPLAY') throw new Error('Expected replay assessment');
+  assert.equal(replayFinalize.assessment.commandId, commandId);
 });
