@@ -1052,3 +1052,274 @@ test('registered metadata reads actual candidate tables while default artifact q
     .getOneOrFail();
   assert.deepEqual(explicit.body, result.assessment.authorityArtifact);
 });
+
+import { Mf06CandidateMetadataService } from '../../src/modules/safety/assessments/mf06-candidate-metadata.service.js';
+
+import { Mf06RequestContextReader } from '../../src/modules/safety/assessments/mf06-request-context.js';
+
+import { bindMf06FaceInvocation } from '../../src/modules/safety/assessments/mf06-face-binding.js';
+
+import { SafetyFaceProfileMetadataReader } from '../../src/modules/workforce/safety-face-profile.reader.js';
+
+import { createHash } from 'node:crypto';
+
+import type { SafetySubjectCrop } from '../../src/modules/safety/identity/safety-subject-cropper.js';
+
+test('same caller manager records default-disabled B1 result without invoking any profile/identity service', async () => {
+  const f = await fixture();
+  const req = f.request();
+  const token = randomUUID();
+  await insert('zone_entry_assessment_request', req);
+  await insert('zone_entry_assessment_job', job(req.request_id, { lease_token: token }));
+  let profileCalls = 0;
+  const candidates = new Mf06CandidateMetadataService({
+    async findCurrentForSafety() {
+      profileCalls++;
+      throw new Error('No profile read while disabled');
+    },
+  });
+  const result = await db.transaction('SERIALIZABLE', async (manager) => {
+    const disabled = await candidates.revalidate(
+      manager,
+      f.siteId,
+      String(req.request_id),
+      { state: 'UNAVAILABLE', reason: 'INVALID_BINDING' },
+      {} as Parameters<Mf06CandidateMetadataService['revalidate']>[4],
+      null,
+    );
+    assert.deepEqual(disabled, { state: 'UNAVAILABLE', reason: 'SERVICE_DISABLED' });
+    return store.finalizeInTransaction(manager, defaultInput(req, token));
+  });
+  assert.equal(result.state, 'RECORDED');
+  if (result.state !== 'RECORDED') return;
+  assert.equal(result.assessment.outcome, 'UNAVAILABLE');
+  assert.equal(result.assessment.reasonCode, 'SERVICE_DISABLED');
+  assert.equal(result.assessment.workerId, null);
+  assert.equal(profileCalls, 0);
+});
+
+// Actual profile/consent tables in the file-owned test schema. This fixture is
+// explicitly synthetic and never invokes a Face service or establishes identity.
+async function candidateFixture(v14CropFrameSha256?: string) {
+  assert(
+    db.migrations.some(
+      (migration) => migration.name === 'CanonicalSafetyFaceProvenance1794268800000',
+    ),
+  );
+  const f = await fixture();
+  if (v14CropFrameSha256 !== undefined) {
+    const sequenceNumber = '18446744073709551615';
+    Object.assign(f.raw, {
+      schemaVersion: '1.4.0',
+      framePartition: { frameId: randomUUID(), sequenceNumber, partIndex: 1, partCount: 2 },
+      evidence: [
+        {
+          kind: 'FRAME',
+          uri: `local://evidence/${f.raw.streamSessionId}/${sequenceNumber}/${f.eventId}.jpg`,
+          sha256: 'f'.repeat(64),
+        },
+      ],
+    });
+    await db
+      .getRepository(AiObservationEventEntity)
+      .update({ eventId: f.eventId }, { rawPayload: f.raw });
+  }
+  const req: Row = { ...f.request(), payload_hash: computeCanonicalPayloadHash(f.raw) };
+  // Source event is still unreferenced here. Establish canonical fixture bytes
+  // before inserting the immutable request; never repair a historical request.
+  await db.query('UPDATE ai_observation_event SET payload_hash=$2 WHERE event_id=$1', [
+    f.eventId,
+    req.payload_hash,
+  ]);
+  const token = randomUUID();
+  await insert('zone_entry_assessment_request', req);
+  await insert('zone_entry_assessment_job', job(req.request_id, { lease_token: token }));
+  const actorId = randomUUID(),
+    workerId = randomUUID(),
+    profileId = randomUUID();
+  const profileReferenceHash = randomUUID().replaceAll('-', '').repeat(2);
+  await db.query(
+    "INSERT INTO app_user(id,username,display_name,password_hash) VALUES($1,$1::uuid::text,'Synthetic context actor','not-runtime-password')",
+    [actorId],
+  );
+  await db.query(
+    "INSERT INTO worker(id,site_id,external_id,display_name) VALUES($1,$2,$1::uuid::text,'Synthetic context worker')",
+    [workerId, f.siteId],
+  );
+  await db.query(
+    `INSERT INTO face_profile(id,worker_id,user_id,encrypted_template,profile_reference_hash,model_version,status,consent_version,consented_at,created_by_user_id,consent_method)
+    VALUES($1,$2,NULL,$3,$4,'synthetic-context-v1','ACTIVE','fixture-enrollment-v1',statement_timestamp(),$5,'SUPERVISED_WORKER_CONFIRMATION')`,
+    [profileId, workerId, 'x'.repeat(128), profileReferenceHash, actorId],
+  );
+  const profileRevision: string = (
+    await db.query('SELECT safety_revision FROM face_profile WHERE id=$1', [profileId])
+  )[0].safety_revision;
+  const consentId = randomUUID();
+  await db.query(
+    `INSERT INTO safety_face_consent(id,profile_id,profile_revision,purpose,consent_version,consent_method,consented_at,source_record_id,source_record_hash,recorded_by_user_id)
+    VALUES($1,$2,$3,'SAFETY_MF06','synthetic-consent-v1','SUPERVISED_WORKER_CONFIRMATION',statement_timestamp(),$4,$5,$6)`,
+    [consentId, profileId, profileRevision, randomUUID(), 'd'.repeat(64), actorId],
+  );
+  const context = await new Mf06RequestContextReader(db).load(f.siteId, String(req.request_id));
+  assert.equal(context.status, 'MATCHED');
+  if (context.status !== 'MATCHED' || !context.subject)
+    throw new Error('Synthetic context unavailable');
+  const bytes = Buffer.from('SYNTHETIC_CROP_BYTES_NOT_A_REAL_IMAGE_OR_FACE_RESULT');
+  const crop: SafetySubjectCrop = {
+    bytes,
+    frameSha256: v14CropFrameSha256 ?? 'f'.repeat(64),
+    cropSha256: createHash('sha256').update(bytes).digest('hex'),
+    subject: context.subject,
+    rectangle: { left: 64, top: 48, width: 192, height: 384 },
+    cropAlgorithmVersion: 'PERSON_FLOOR_CEIL_JPEG95_444_V1',
+  };
+  const prepared = bindMf06FaceInvocation(context, crop, randomUUID(), 'synthetic-context-v1');
+  assert.equal(prepared.state, 'BOUND_UNATTESTED');
+  if (prepared.state !== 'BOUND_UNATTESTED') throw new Error('Synthetic binding unavailable');
+  const response = {
+    ...prepared.invocation,
+    state: 'CANDIDATE',
+    provenance: 'SYNTHETIC_TEST',
+    profileReferenceHash,
+    profileRevision,
+  };
+  const candidates = new Mf06CandidateMetadataService(
+    new SafetyFaceProfileMetadataReader(),
+    'SYNTHETIC_TEST',
+  );
+  return {
+    f,
+    req,
+    token,
+    actorId,
+    workerId,
+    profileId,
+    profileRevision,
+    consentId,
+    crop,
+    prepared,
+    response,
+    candidates,
+  };
+}
+
+for (const matchesFrame of [true, false]) {
+  test(`v1.4 stored uint64 frame binding ${matchesFrame ? 'accepts matching' : 'rejects mismatched'} crop SHA without establishing identity`, async () => {
+    const c = await candidateFixture((matchesFrame ? 'f' : 'e').repeat(64));
+    const result = await db.transaction('SERIALIZABLE', async (manager) => {
+      const metadata = await c.candidates.revalidate(
+        manager,
+        c.f.siteId,
+        String(c.req.request_id),
+        c.prepared,
+        c.crop,
+        c.response,
+      );
+      if (matchesFrame) {
+        assert.equal(metadata.state, 'ELIGIBLE_PROFILE_METADATA');
+        if (metadata.state !== 'ELIGIBLE_PROFILE_METADATA') throw new Error('Missing metadata');
+        assert.equal(metadata.identityEstablished, false);
+        assert.equal(metadata.authorityEstablished, false);
+      } else {
+        assert.deepEqual(metadata, { state: 'UNAVAILABLE', reason: 'INVALID_BINDING' });
+      }
+      return store.finalizeInTransaction(
+        manager,
+        defaultInput(c.req, c.token, 2, {
+          reasonCode: 'IDENTITY_UNAVAILABLE',
+          provenance: 'SYNTHETIC_TEST',
+        }),
+      );
+    });
+    assert.equal(result.state, 'RECORDED');
+    if (result.state !== 'RECORDED') return;
+    assert.equal(result.assessment.outcome, 'UNAVAILABLE');
+    assert.equal(result.assessment.workerId, null);
+  });
+}
+
+test('real profile revalidation and append share one SERIALIZABLE transaction without treating eligible metadata as identity', async () => {
+  const c = await candidateFixture();
+  const result = await db.transaction('SERIALIZABLE', async (manager) => {
+    const metadata = await c.candidates.revalidate(
+      manager,
+      c.f.siteId,
+      String(c.req.request_id),
+      c.prepared,
+      c.crop,
+      c.response,
+    );
+    assert.equal(metadata.state, 'ELIGIBLE_PROFILE_METADATA');
+    if (metadata.state !== 'ELIGIBLE_PROFILE_METADATA')
+      throw new Error('Synthetic profile unavailable');
+    assert.equal(metadata.workerId, c.workerId);
+    assert.equal(metadata.identityEstablished, false);
+    assert.equal(metadata.authorityEstablished, false);
+    return store.finalizeInTransaction(
+      manager,
+      defaultInput(c.req, c.token, 2, {
+        reasonCode: 'IDENTITY_UNAVAILABLE',
+        provenance: 'SYNTHETIC_TEST',
+      }),
+    );
+  });
+  assert.equal(result.state, 'RECORDED');
+  if (result.state !== 'RECORDED') return;
+  assert.equal(result.assessment.outcome, 'UNAVAILABLE');
+  assert.equal(result.assessment.reasonCode, 'IDENTITY_UNAVAILABLE');
+  assert.equal(result.assessment.workerId, null);
+});
+
+test('consent revoked after preparation is unavailable inside final append transaction; no positive Worker outcome', async () => {
+  const c = await candidateFixture();
+  await db.query(
+    `INSERT INTO safety_face_consent_revocation(consent_id,revoked_at,source_record_id,source_record_hash,recorded_by_user_id)
+    VALUES($1,statement_timestamp(),$2,$3,$4)`,
+    [c.consentId, randomUUID(), 'd'.repeat(64), c.actorId],
+  );
+  const result = await db.transaction('SERIALIZABLE', async (manager) => {
+    const metadata = await c.candidates.revalidate(
+      manager,
+      c.f.siteId,
+      String(c.req.request_id),
+      c.prepared,
+      c.crop,
+      c.response,
+    );
+    assert.deepEqual(metadata, { state: 'UNAVAILABLE', reason: 'PROFILE_UNAVAILABLE' });
+    return store.finalizeInTransaction(
+      manager,
+      defaultInput(c.req, c.token, 2, { reasonCode: 'PROFILE_REVOKED' }),
+    );
+  });
+  assert.equal(result.state, 'RECORDED');
+  if (result.state !== 'RECORDED') return;
+  assert.equal(result.assessment.outcome, 'UNAVAILABLE');
+  assert.equal(result.assessment.workerId, null);
+});
+
+test('optional profile-table error is recovered by B1 savepoint and allows unavailable append in the same real transaction', async () => {
+  const c = await candidateFixture();
+  const result = await db.transaction('SERIALIZABLE', async (manager) => {
+    await manager.query(
+      'ALTER TABLE safety_face_consent RENAME TO fixture_hidden_safety_face_consent',
+    );
+    const metadata = await c.candidates.revalidate(
+      manager,
+      c.f.siteId,
+      String(c.req.request_id),
+      c.prepared,
+      c.crop,
+      c.response,
+    );
+    assert.deepEqual(metadata, { state: 'UNAVAILABLE', reason: 'PROFILE_UNAVAILABLE' });
+    await manager.query(
+      'ALTER TABLE fixture_hidden_safety_face_consent RENAME TO safety_face_consent',
+    );
+    return store.finalizeInTransaction(
+      manager,
+      defaultInput(c.req, c.token, 2, { reasonCode: 'IDENTITY_UNAVAILABLE' }),
+    );
+  });
+  assert.equal(result.state, 'RECORDED');
+});
