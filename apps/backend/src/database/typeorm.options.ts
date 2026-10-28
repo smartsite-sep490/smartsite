@@ -1,3 +1,5 @@
+import { CanonicalSafetyFaceProvenance1794268800000 } from './migrations/1794268800000-CanonicalSafetyFaceProvenance.js';
+import { CanonicalMf06Results1794182400000 } from './migrations/1794182400000-CanonicalMf06Results.js';
 import { CanonicalMf06Requests1794096000000 } from './migrations/1794096000000-CanonicalMf06Requests.js';
 import { ObservationFrameParts1794009600000 } from './migrations/1794009600000-ObservationFrameParts.js';
 import { AlertDetectionSubject1793404800000 } from './migrations/1793404800000-AlertDetectionSubject.js';
@@ -82,6 +84,8 @@ export function buildTypeOrmOptions(config: DatabaseConnectionConfig): DataSourc
     connectTimeoutMS: timeoutMs,
     entities: [...ENTITIES],
     migrations: [
+      CanonicalSafetyFaceProvenance1794268800000,
+      CanonicalMf06Results1794182400000,
       CanonicalMf06Requests1794096000000,
       ObservationFrameParts1794009600000,
       PpeAlertNotifications1792886400000,
