@@ -1,6 +1,6 @@
 import { createHash } from 'node:crypto';
 import { z } from 'zod';
-import { fetchBoundedJson } from '../../../common/http/fetch-bounded-json.js';
+import { BoundedJsonReadError, fetchBoundedJson } from '../../../common/http/fetch-bounded-json.js';
 import { snapshotMf06Json } from './mf06-json-snapshot.js';
 import { Mf06RetryableWorkError } from './mf06-assessment-worker.service.js';
 import {
@@ -161,6 +161,8 @@ export class HttpSafetyIdentityResolver implements SafetyIdentityResolverPort {
         return unavailable('INVALID_RESPONSE');
       return response;
     } catch (error) {
+      if (!signal.aborted && error instanceof BoundedJsonReadError)
+        throw new Mf06RetryableWorkError('RESOLVER_UNAVAILABLE');
       if (!signal.aborted && timedOut) throw new Mf06RetryableWorkError('RESOLVER_UNAVAILABLE');
       if (!signal.aborted && error instanceof Mf06RetryableWorkError) throw error;
       return unavailable(signal.aborted ? 'ABORTED' : 'INVALID_RESPONSE');

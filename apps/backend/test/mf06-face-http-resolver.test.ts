@@ -405,6 +405,36 @@ test('temporary HTTP failures and connection failures request bounded worker ret
   );
 });
 
+test('interrupted response body requests retry without accepting partial JSON', async () => {
+  let pulls = 0;
+  const interrupted = new ReadableStream<Uint8Array>({
+    pull(controller) {
+      if (pulls++ === 0) controller.enqueue(new TextEncoder().encode('{"state":'));
+      else controller.error(new TypeError('synthetic connection reset'));
+    },
+  });
+  const resolver = new HttpSafetyIdentityResolver(
+    BASE_URL,
+    SERVICE_TOKEN,
+    async () =>
+      new Response(interrupted, {
+        headers: { 'content-type': 'application/json' },
+      }),
+  );
+  await assert.rejects(
+    resolver.resolve(
+      {
+        invocation: makeInvocation(),
+        cropBytes: VALID_JPEG_BYTES,
+        candidates: [makeCandidate(1)],
+      },
+      new AbortController().signal,
+    ),
+    (error: unknown) =>
+      error instanceof Mf06RetryableWorkError && error.code === 'RESOLVER_UNAVAILABLE',
+  );
+});
+
 test('internal Face transport deadline requests retry while caller cancellation still wins', async (t) => {
   t.mock.timers.enable({ apis: ['setTimeout'] });
   const input = {

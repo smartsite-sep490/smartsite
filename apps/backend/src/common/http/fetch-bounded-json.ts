@@ -1,3 +1,5 @@
+export class BoundedJsonReadError extends Error {}
+
 /** Abortable bounded JSON transport shared by configuration images and Safety Face. */
 export async function fetchBoundedJson(
   fetcher: typeof fetch,
@@ -46,7 +48,12 @@ export async function fetchBoundedJson(
     const chunks: Uint8Array[] = [];
     let bytes = 0;
     while (true) {
-      const next = await Promise.race([reader.read(), aborted]);
+      const next = await Promise.race([
+        reader.read().catch(() => {
+          throw new BoundedJsonReadError('JSON response interrupted');
+        }),
+        aborted,
+      ]);
       if (next.done) break;
       bytes += next.value.byteLength;
       if (bytes > maxBytes) throw new Error('JSON response refused');
