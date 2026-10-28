@@ -1,3 +1,4 @@
+import { AlertDetectionSubject1793404800000 } from './migrations/1793404800000-AlertDetectionSubject.js';
 import { ExpandedPpeNotificationKinds1793145600000 } from './migrations/1793145600000-ExpandedPpeNotificationKinds.js';
 import { PpeAlertNotifications1792886400000 } from './migrations/1792886400000-PpeAlertNotifications.js';
 import { WorkerQrShortCodes1792454400000 } from './migrations/1792454400000-WorkerQrShortCodes.js';
@@ -81,6 +82,7 @@ export function buildTypeOrmOptions(config: DatabaseConnectionConfig): DataSourc
     migrations: [
       PpeAlertNotifications1792886400000,
       ExpandedPpeNotificationKinds1793145600000,
+      AlertDetectionSubject1793404800000,
       WorkerHealthIssueDate1792800000000,
       WorkerDocumentSubmittedExpiry1792713600000,
       WorkerDocumentIdentityChecks1792627200000,
