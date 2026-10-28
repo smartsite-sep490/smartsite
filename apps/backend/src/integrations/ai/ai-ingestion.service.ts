@@ -1,3 +1,4 @@
+import { resolveAlertObservationSubjects } from '../../modules/safety/alerts/alert-observation-subjects.js';
 import { HttpStatus, Injectable, Logger, Optional } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import type { BackendEnvironment } from '../../config/environment.js';
@@ -259,12 +260,20 @@ export class AiIngestionService {
             alertIds.push(alert.id);
           }
 
-          const uniqueAlertIds = Array.from(new Set(alertIds));
+          const subjects = resolveAlertObservationSubjects(
+            event.eventId,
+            event.observations as unknown as Observation[],
+            candidates.map((candidate, index) => ({
+              alertId: alertIds[index]!,
+              trackId: candidate.trackId,
+            })),
+          );
           const mappingRepo = manager.getRepository(AlertDetectionMappingEntity);
-          for (const alertId of uniqueAlertIds) {
+          for (const [alertId, personObservationIndex] of subjects) {
             await mappingRepo.insert({
               alertId,
               eventId: event.eventId,
+              personObservationIndex,
             });
           }
         }

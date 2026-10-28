@@ -172,3 +172,6 @@ export * from './safety-overview-api.js';
 export * from './safety-checklist-api.js';
 export type * from './worker-documents-api.js';
 export { healthCertificateExpiry } from './worker-document-dates.js';
+
+export { resolveEventLocalEpisodeSubject } from './safety-episode-subject.js';
+export type { EventLocalEpisodeSubject } from './safety-episode-subject.js';
