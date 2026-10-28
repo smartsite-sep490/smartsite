@@ -14,7 +14,8 @@ migration refuses them. Startup migration execution and synchronize remain disab
 
 Consent binds an active supervised profile's exact revision, Safety purpose, source
 record/hash, actor and finite time. Revocation is another immutable receipt. Updates,
-deletes and truncation are refused. Populated rollback requires forward recovery.
+deletes and populated truncation are refused. Empty purpose tables permit existing
+parent cleanup; no historical receipt may be removed. Populated rollback requires forward recovery.
 Migration and guards pin the target schema; temporary shadows, inherited parent
 tables and missing Main consent/deletion prerequisites are refused.
 

@@ -173,6 +173,19 @@ test('migration provides a database-owned revision without creating consent reco
   await migrate('up');
 });
 
+test('empty consent tables permit existing Main parent CASCADE cleanup without removing provenance', async () => {
+  assert.equal((await db.query('SELECT count(*)::int AS n FROM safety_face_consent'))[0].n, 0);
+  const runner = db.createQueryRunner();
+  await runner.connect();
+  await runner.startTransaction();
+  try {
+    await runner.query('TRUNCATE auth_session, user_role_assignment, app_user CASCADE');
+  } finally {
+    await runner.rollbackTransaction();
+    await runner.release();
+  }
+});
+
 test('populated Main profile upgrade preserves enrollment bytes without creating Safety consent', async () => {
   const p = await profile('LEGACY_UNVERIFIED');
   const snapshot = () =>

@@ -79,6 +79,8 @@ export class CanonicalSafetyFaceProvenance1794268800000 implements MigrationInte
       END $$;
       CREATE FUNCTION ${target}.mf06_face_consent_immutable() RETURNS trigger LANGUAGE plpgsql SET search_path TO ${trustedPath} AS $$
       BEGIN
+        IF TG_OP='TRUNCATE' AND NOT EXISTS(SELECT 1 FROM safety_face_consent)
+          AND NOT EXISTS(SELECT 1 FROM safety_face_consent_revocation) THEN RETURN NULL; END IF;
         RAISE EXCEPTION 'Safety Face consent provenance is immutable' USING ERRCODE = '23514';
       END $$;
       CREATE TRIGGER trg_safety_face_consent_insert BEFORE INSERT ON ${target}.safety_face_consent

@@ -30,6 +30,8 @@ test('ERD migrations preserve legacy visitor counts, revoke old QR and refuse a 
         !(m.name ?? m.constructor.name).startsWith('TeamZonePermissions') &&
         !(m.name ?? m.constructor.name).startsWith('ContractorZoneRegrant') &&
         !(m.name ?? m.constructor.name).startsWith('SingleTeamZone') &&
+        // Safety purpose metadata requires ErdFaceConsent; it is not part of this pre-ERD baseline.
+        !(m.name ?? m.constructor.name).startsWith('CanonicalSafetyFaceProvenance') &&
         m.name !== 'ShiftBreak1791763200001' &&
         m.name !== 'AttendanceAbsence1792022400000' &&
         // Exit policies require attendance_day from the excluded MF03 migrations.
