@@ -18,10 +18,9 @@ schema and malformed options/claims fail closed.
 
 No scheduler, module provider, worker configuration, model call or runtime
 activation is added. The service does not mark jobs SUCCEEDED: that requires the
-separate immutable assessment-store transaction. The original combined
-lease/finalize/replay test remains reserved for that later store extraction;
-lease-only tests cannot establish result, authority, identity or full-flow
-acceptance.
+separate immutable assessment-store transaction. The combined lease/finalize/replay
+test is now restored with the private store extraction; lease-only tests still
+cannot establish result, authority, identity or full-flow acceptance.
 
 The focused tests use explicit option checks and freshly owned schemas on the
 dedicated PostgreSQL test connection. They cover concurrent ownership, stale
