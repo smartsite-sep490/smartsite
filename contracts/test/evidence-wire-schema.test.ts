@@ -59,8 +59,8 @@ test('v1.2 canonical golden vector preserves its expected event hash', () => {
   assert.notEqual(computeCanonicalPayloadHash(changed), vector.expectedCanonicalHash);
 });
 
-test('v1.2 asset does not change existing v1.0 runtime admission or hash rules', () => {
-  assert.equal(validateObservationEvent(vector.event).isValid, false);
+test('v1.2 admission retains strict schema and hash rules', () => {
+  assert.equal(validateObservationEvent(vector.event).isValid, true);
   assert.equal(validate({ ...vector.event, schemaVersion: '1.0.0' }), false);
   assert.equal(validate({ ...vector.event, extra: true }), false);
   assert.equal(

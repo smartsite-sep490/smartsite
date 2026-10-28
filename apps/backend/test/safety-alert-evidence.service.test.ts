@@ -116,7 +116,7 @@ function identityFrameFixture(
     cameraSiteId?: string;
     storedCameraExternalId?: string;
     conflictingSiteMapping?: boolean;
-    schemaVersion?: '1.0.0' | '1.3.0';
+    schemaVersion?: '1.0.0' | '1.2.0' | '1.3.0';
     declaredSha?: string;
   },
 ) {
@@ -128,7 +128,8 @@ function identityFrameFixture(
   const uriSessionId = overrides?.uriSessionId ?? sessionId;
   const schemaVersion = overrides?.schemaVersion ?? '1.0.0';
   const declaredSha =
-    overrides?.declaredSha ?? (schemaVersion === '1.3.0' ? jpegSha256 : undefined);
+    overrides?.declaredSha ??
+    (schemaVersion === '1.2.0' || schemaVersion === '1.3.0' ? jpegSha256 : undefined);
   const rawPayload = {
     eventId,
     schemaVersion,
@@ -644,4 +645,25 @@ test('ordinary v1.3 evidence refuses an image URI from another source session', 
     value.service.read(value.siteId, value.alertId, value.eventId, '0'),
     isPublicError('NOT_FOUND'),
   );
+});
+
+test('v1.2 evidence adoption binds both ordinary and identity reads to actual SHA', async (t) => {
+  const root = await mkdtemp(join(tmpdir(), 'smartsite-v12-sha-'));
+  t.after(() => rm(root, { recursive: true, force: true }));
+  const value = identityFrameFixture(root, { schemaVersion: '1.2.0' });
+  await writeFile(join(root, value.fileName), jpeg);
+  const ordinary = () => value.service.read(value.siteId, value.alertId, value.eventId, '0');
+  const identity = () =>
+    value.service.readFrameForIdentityReview(
+      value.siteId,
+      value.alertId,
+      value.eventId,
+      '0',
+      value.payloadHash,
+    );
+  assert.deepEqual((await ordinary()).bytes, jpeg);
+  assert.equal((await identity()).sha256, jpegSha256);
+  await writeFile(join(root, value.fileName), Buffer.from([0xff, 0xd8, 0x03, 0x04, 0xff, 0xd9]));
+  await assert.rejects(ordinary(), isPublicError('CONFLICT'));
+  await assert.rejects(identity(), isPublicError('CONFLICT'));
 });

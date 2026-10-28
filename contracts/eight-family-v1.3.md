@@ -1,6 +1,6 @@
 # Eight-family observation contract v1.3
 
-`validateEightFamilyObservationEvent` is an explicit, version-specific library validator. It accepts schemaVersion `1.3.0` and validates schema plus cross-field bounding-box geometry. `validateObservationEvent` retains its current v1.0 admission; publishing this API does not enable Backend ingestion, alerts or model capability.
+`validateEightFamilyObservationEvent` is an explicit, version-specific library validator. It accepts schemaVersion `1.3.0` and validates schema plus cross-field bounding-box geometry. `validateObservationEvent` retains v1.0/v1.1/v1.2 admission and rejects v1.3; publishing this API does not enable Backend ingestion, alerts or model capability.
 
 PPE families: HARD_HAT, SAFETY_VEST, GLOVES, BOOTS, GOGGLES, MASK, FULL_BODY_HARNESS and LANYARD_HOOK. Harness and hook permit only PRESENT evidence: attachment, fit and safety are not established by object visibility. Other families require explicit PRESENT/MISSING; UNKNOWN must not be emitted as a violation. Missing detections are not proof of MISSING.
 

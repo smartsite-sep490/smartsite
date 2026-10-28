@@ -8,16 +8,11 @@ withhold unsupported PPE conclusions and must not infer MISSING from no detectio
 schema validation alone cannot enforce or prove that producer rule. Identity
 candidate UNKNOWN/UNAVAILABLE states are separate and remain supported.
 
-This change publishes the schema asset and its validation checks only. The
-existing validateObservationEvent runtime still admits v1.0 only. No Backend
-consumer, notification CHECK, model, worker or deployment is enabled here.
-Unsupported consumer versions must remain rejected until their coordinated
-admission/business changes are reviewed. The schema is a technical wire format,
-not proof that a model can determine whether a person wears an item.
+`validateObservationEvent` admits v1.0/v1.1/v1.2 with the coordinated five-family Backend policy, candidate, notification and evidence-reader changes. The original v1.0 vocabulary remains strict. Consumer compatibility is source behavior, not deployment or model qualification; unsupported PPE must remain UNKNOWN at the producer instead of becoming a fabricated violation.
 
 As with v1, JSON schema validation must be combined with the existing semantic
 geometry validator: numeric coordinate bounds alone do not establish x1<x2 or
-y1<y2. The focused tests exercise this separation and unchanged legacy admission.
+y1<y2. The focused tests exercise this separation and preserved legacy v1.0 vocabulary.
 
 The schema bytes are extracted unchanged from preserved Platform PR61 head
 0d432c806b5f0e21d6d2563d6e5ec4df3025cd50. Future AI vendoring must reference the

@@ -180,7 +180,8 @@ export class SafetyAlertEvidenceService {
     const contentBound =
       raw &&
       typeof raw === 'object' &&
-      ((raw as { schemaVersion?: unknown }).schemaVersion === '1.3.0' ||
+      ((raw as { schemaVersion?: unknown }).schemaVersion === '1.2.0' ||
+        (raw as { schemaVersion?: unknown }).schemaVersion === '1.3.0' ||
         (raw as { schemaVersion?: unknown }).schemaVersion === '1.4.0');
     if (contentBound && !reviewRawEventIsConsistent(observationEvent)) return this.reviewConflict();
     const item = parseEvidenceItem(evidenceItems(raw)[index]);
@@ -249,7 +250,7 @@ export class SafetyAlertEvidenceService {
     const content = await this.readLocalJpeg(local);
     const sha256 = createHash('sha256').update(content.bytes).digest('hex');
     if (
-      (version === '1.3.0' || version === '1.4.0') &&
+      (version === '1.2.0' || version === '1.3.0' || version === '1.4.0') &&
       (evidenceItems(raw)[index] as { sha256?: unknown }).sha256 !== sha256
     )
       return this.reviewConflict();
