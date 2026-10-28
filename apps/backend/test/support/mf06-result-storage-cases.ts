@@ -18,25 +18,21 @@ export async function checkResults(
   await db
     .getRepository(e.SiteEntity)
     .insert({ id: site, code: site, name: 'Synthetic result Site' });
-  await db
-    .getRepository(e.CameraEntity)
-    .insert({
-      id: camera,
-      siteId: site,
-      externalId: camera,
-      code: camera,
-      name: 'Synthetic result Camera',
-    });
-  await db
-    .getRepository(e.ZoneEntity)
-    .insert({
-      id: zone,
-      siteId: site,
-      code: zone,
-      name: 'Synthetic result Zone',
-      type: e.ZoneType.STANDARD,
-      restrictionPolicy: e.ZoneRestrictionPolicy.NONE,
-    });
+  await db.getRepository(e.CameraEntity).insert({
+    id: camera,
+    siteId: site,
+    externalId: camera,
+    code: camera,
+    name: 'Synthetic result Camera',
+  });
+  await db.getRepository(e.ZoneEntity).insert({
+    id: zone,
+    siteId: site,
+    code: zone,
+    name: 'Synthetic result Zone',
+    type: e.ZoneType.STANDARD,
+    restrictionPolicy: e.ZoneRestrictionPolicy.NONE,
+  });
   const reject = (fn: () => Promise<unknown>) =>
     assert.rejects(
       fn,
@@ -45,6 +41,19 @@ export async function checkResults(
   for (const [version, registry] of [
     ['V1', v1],
     ['V2', v2],
+    [
+      'V2',
+      v2.map(
+        ([kind, table, fields]) =>
+          [
+            kind,
+            table,
+            kind === 'TEAM_MEMBERSHIP'
+              ? ['id', 'team_id', 'worker_id', 'site_id', 'contractor_id', 'joined_at', 'left_at']
+              : fields,
+          ] as const,
+      ),
+    ],
   ] as const) {
     const event = randomUUID(),
       session = randomUUID(),
@@ -73,19 +82,17 @@ export async function checkResults(
     };
     const hash = computeCanonicalPayloadHash(raw),
       binding = 'b'.repeat(64);
-    await db
-      .getRepository(e.AiObservationEventEntity)
-      .insert({
-        eventId: event,
-        payloadHash: hash,
-        cameraExternalId: camera,
-        resolvedCameraId: camera,
-        streamSessionId: session,
-        capturedAt: at,
-        rawPayload: raw,
-        processingStatus: e.EventProcessingStatus.PROCESSED,
-        processingNote: null,
-      });
+    await db.getRepository(e.AiObservationEventEntity).insert({
+      eventId: event,
+      payloadHash: hash,
+      cameraExternalId: camera,
+      resolvedCameraId: camera,
+      streamSessionId: session,
+      capturedAt: at,
+      rawPayload: raw,
+      processingStatus: e.EventProcessingStatus.PROCESSED,
+      processingNote: null,
+    });
     await db.query(
       `INSERT INTO zone_entry_assessment_request(request_id,event_id,payload_hash,person_observation_index,zone_observation_index,subject_binding_status,track_id,site_id,camera_id,camera_external_id,stream_session_id,region_id,geometry_version,zone_id,captured_at,requested_purpose,request_revision,binding_hash)
    VALUES($1,$2,$3,0,1,'BOUND',7,$4,$5::uuid,$5::uuid::text,$6,$7,3,$8,$9,'INITIAL_OBSERVATION_ASSESSMENT',1,$10)`,
@@ -122,6 +129,29 @@ export async function checkResults(
     };
     const sha = computeCanonicalPayloadHash(payload),
       archive = { format, sha256: sha, payload };
+    const source =
+      payload.sources.find((item) => item.sourceKind === 'TEAM_MEMBERSHIP') ?? payload.sources[0]!;
+    for (const fields of [
+      [...source.fields].reverse(),
+      [...source.fields, 'unexpected'],
+      source.fields.slice(1),
+      null,
+    ]) {
+      const malformed = structuredClone(archive);
+      const target = malformed.payload.sources.find(
+        (item) => item.sourceKind === source.sourceKind,
+      )!;
+      Object.assign(target, { fields });
+      const malformedSha = computeCanonicalPayloadHash(malformed.payload);
+      malformed.sha256 = malformedSha;
+      await assert.rejects(
+        db.query(
+          'INSERT INTO zone_entry_authority_artifact(artifact_id,request_id,sha256,body) VALUES($1,$2,$3,$4::jsonb)',
+          [randomUUID(), request, malformedSha, JSON.stringify(malformed)],
+        ),
+        /MF06 archive source mask invalid/,
+      );
+    }
     const resultSql = `INSERT INTO zone_entry_assessment(assessment_id,request_id,command_id,command_hash,site_id,event_id,binding_hash,outcome,reason_code,evaluator_version,provenance,authority_artifact_id,claim_head_revision,claim_lease_token)
     VALUES($1,$2,$3,$4,$5,$6,$7,'UNAVAILABLE','AUTHORITY_UNAVAILABLE','synthetic-storage-test','SYNTHETIC_TEST',$8,$9,$10)`;
     const resultArgs = [
@@ -242,7 +272,7 @@ export async function checkResults(
   } finally {
     await runner.rollbackTransaction();
   }
-  assert.equal((await db.query('SELECT count(*)::int AS n FROM zone_entry_assessment'))[0].n, 2);
+  assert.equal((await db.query('SELECT count(*)::int AS n FROM zone_entry_assessment'))[0].n, 3);
   console.log(
     'PASS synthetic V1/V2 result/archive, stale token/revision/lease and scope refusal, orphan rollback, temporary-shadow isolation, atomic SUCCEEDED/immutability/populated downgrade refusal',
   );

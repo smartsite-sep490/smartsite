@@ -56,7 +56,11 @@ BEGIN
       (SELECT count(*) FROM jsonb_object_keys(source))<>4 OR
       EXISTS(SELECT 1 FROM jsonb_object_keys(source) k WHERE k NOT IN ('sourceKind','tableName','fields','rows')) OR
       source->>'sourceKind'=ANY(seen) OR source->>'tableName' IS DISTINCT FROM mask->>'tableName' OR
-      source->'fields' IS DISTINCT FROM mask->'fields' OR jsonb_typeof(source->'rows') IS DISTINCT FROM 'array' THEN
+      (source->'fields' IS DISTINCT FROM mask->'fields' AND NOT (
+        NEW.body->>'format'='MF06_MAIN_AUTHORITY_ARCHIVE_V2' AND
+        source->>'sourceKind'='TEAM_MEMBERSHIP' AND
+        source->'fields' IS NOT DISTINCT FROM '["id","team_id","worker_id","site_id","contractor_id","joined_at","left_at"]'::jsonb
+      )) OR jsonb_typeof(source->'rows') IS DISTINCT FROM 'array' THEN
      RAISE EXCEPTION 'MF06 archive source mask invalid' USING ERRCODE='23514'; END IF;
    seen:=array_append(seen,source->>'sourceKind'); rows_count:=rows_count+jsonb_array_length(source->'rows');
    IF rows_count>2048 THEN RAISE EXCEPTION 'MF06 archive row budget exceeded' USING ERRCODE='23514'; END IF;
