@@ -28,15 +28,32 @@ const kinds = [
   'PPE_GOGGLES_MISSING',
 ];
 
-test('five-kind notification canonical migrations, upgrade history, scope, deduplication and rollback', async (t) => {
+test('five-kind notification migration profile, upgrade history, scope, deduplication and rollback', async (t) => {
   const owned = createIsolatedTestDatabase();
   const db = owned.dataSource;
+  const migrations = db.options.migrations;
+  assert(Array.isArray(migrations));
+  // This upgrade/down test owns the historical PPE boundary, not later migrations.
+  const profile = migrations.filter((migration) => {
+    assert(typeof migration === 'function');
+    const timestamp = Number(migration.name.slice(-13));
+    assert(Number.isSafeInteger(timestamp) && timestamp > 0);
+    return timestamp <= 1793145600000;
+  });
+  assert(
+    profile.some(
+      (migration) =>
+        typeof migration === 'function' &&
+        migration.name === 'ExpandedPpeNotificationKinds1793145600000',
+    ),
+  );
+  db.setOptions({ migrations: profile });
   const schema = (db.options as { schema: string }).schema;
   t.diagnostic(`ownedPpeNotificationSchema=${schema}`);
   try {
     await owned.initialize();
     const [migrationCount] = await db.query('SELECT count(*)::int AS count FROM migrations');
-    t.diagnostic(`canonicalPpeMigrationCount=${migrationCount.count}`);
+    t.diagnostic(`ppeProfileMigrationCount=${migrationCount.count}`);
     const [latest] = await db.query('SELECT name FROM migrations ORDER BY timestamp DESC LIMIT 1');
     assert.equal(latest.name, 'ExpandedPpeNotificationKinds1793145600000');
     await db.undoLastMigration();
