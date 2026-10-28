@@ -1,3 +1,4 @@
+import { ObservationFrameParts1794009600000 } from './migrations/1794009600000-ObservationFrameParts.js';
 import { AlertDetectionSubject1793404800000 } from './migrations/1793404800000-AlertDetectionSubject.js';
 import { ExpandedPpeNotificationKinds1793145600000 } from './migrations/1793145600000-ExpandedPpeNotificationKinds.js';
 import { PpeAlertNotifications1792886400000 } from './migrations/1792886400000-PpeAlertNotifications.js';
@@ -80,6 +81,7 @@ export function buildTypeOrmOptions(config: DatabaseConnectionConfig): DataSourc
     connectTimeoutMS: timeoutMs,
     entities: [...ENTITIES],
     migrations: [
+      ObservationFrameParts1794009600000,
       PpeAlertNotifications1792886400000,
       ExpandedPpeNotificationKinds1793145600000,
       AlertDetectionSubject1793404800000,

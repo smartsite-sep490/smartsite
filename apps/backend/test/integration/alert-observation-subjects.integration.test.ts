@@ -29,8 +29,16 @@ import { createIsolatedTestDatabase } from '../support/isolated-test-database.js
 test('subject provenance survives upgrade, retry and rollback boundaries in isolated PostgreSQL', async (t) => {
   const owned = createIsolatedTestDatabase();
   const db = owned.dataSource;
-  const production = db.options.migrations;
-  assert(Array.isArray(production));
+  const registered = db.options.migrations;
+  assert(Array.isArray(registered));
+  // Rehearse this historical boundary even when later migrations are registered.
+  const production = registered.filter((migration) => {
+    assert(typeof migration === 'function');
+    const timestamp = Number(migration.name.slice(-13));
+    assert(Number.isSafeInteger(timestamp) && timestamp > 0);
+    return timestamp <= 1793404800000;
+  });
+  db.setOptions({ migrations: production });
   assert.equal(production.length, 65);
   assert(
     production.some(
