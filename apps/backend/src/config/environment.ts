@@ -212,6 +212,10 @@ export const backendEnvironmentSchema = z
         }
       }, 'must be an absolute HTTP(S) URL without credentials')
       .optional(),
+    AI_PARTITIONED_FRAME_ENABLED: z
+      .enum(['false', 'true'])
+      .default('false')
+      .transform((value) => value === 'true'),
     ALERT_COOLDOWN_SECONDS: integer(60, 1, MAX_SAFE_SECONDS),
     MAX_PAST_EVENT_AGE_SECONDS: integer(300, 1, MAX_SAFE_SECONDS),
     MAX_FUTURE_CLOCK_SKEW_SECONDS: integer(30, 1, MAX_SAFE_SECONDS),
