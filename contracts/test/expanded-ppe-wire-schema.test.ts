@@ -77,8 +77,8 @@ for (const item of ['HARD_HAT', 'SAFETY_VEST', 'GLOVES', 'BOOTS', 'GOGGLES']) {
   });
 }
 
-test('new schema asset does not activate v1.1 admission in existing runtime validators', () => {
-  assert.equal(validateObservationEvent(event('GLOVES')).isValid, false);
+test('versioned runtime admits v1.1 while retaining v1.0 vocabulary', () => {
+  assert.equal(validateObservationEvent(event('GLOVES')).isValid, true);
   assert.equal(
     validateObservationEvent({ ...event('HARD_HAT'), schemaVersion: '1.0.0' }).isValid,
     true,

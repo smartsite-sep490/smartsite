@@ -1,6 +1,6 @@
 # Partitioned observation frames v1.4
 
-Explicit library API: `validatePartitionedObservationEvent`, with exported `ObservationFramePartition`. Existing v1.0 and explicit v1.3 admission remain unchanged. This package publication does not enable Backend ingestion or an AI producer.
+Explicit library API: `validatePartitionedObservationEvent`, with exported `ObservationFramePartition`. Existing v1.0/v1.1/v1.2 and explicit v1.3 APIs do not admit v1.4. This package publication does not enable Backend ingestion or an AI producer.
 
 A part adds required `framePartition`: lowercase UUID `frameId`, canonical decimal uint64 string `sequenceNumber`, integer `partIndex` 0..1023 and `partCount` 1..1024. Index must be smaller than count. Sequence is checked using BigInt, never converted through JavaScript Number. Each transport part retains the existing256observation bound and its own eventId/JCS hash.
 

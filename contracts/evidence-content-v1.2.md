@@ -11,10 +11,7 @@ digest, enforce authorization and storage-key scope, and reject a mismatch.
 Successful format validation does not establish identity, wearing, a violation
 or permission. Semantic geometry validation is still required.
 
-This PR publishes assets/tests only. Existing runtime validateObservationEvent
-continues admitting v1.0 only; no Backend reader, storage, notification, worker
-or model is activated. Consumer admission and hash verification are dependent
-integration work. PPE UNKNOWN remains withholding a supported conclusion;
+The coordinated five-family change admits v1.2 via validateObservationEvent and binds Backend image reads to actual evidence SHA. No storage, worker or model is activated by source integration. Runtime rollout remains a separate integration gate. PPE UNKNOWN remains withholding a supported conclusion;
 identity candidate UNKNOWN/UNAVAILABLE states are distinct.
 
 Schema and golden-vector bytes are extracted unchanged from frozen Platform

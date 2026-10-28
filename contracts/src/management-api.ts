@@ -458,7 +458,12 @@ export interface PpeAlertNotificationMetadata {
   cameraName: string;
   zoneId: string | null;
   zoneName: string | null;
-  candidateSubtype: 'PPE_HARD_HAT_MISSING' | 'PPE_SAFETY_VEST_MISSING';
+  candidateSubtype:
+    | 'PPE_HARD_HAT_MISSING'
+    | 'PPE_SAFETY_VEST_MISSING'
+    | 'PPE_GLOVES_MISSING'
+    | 'PPE_BOOTS_MISSING'
+    | 'PPE_GOGGLES_MISSING';
 }
 
 export interface UserNotificationResponse {
