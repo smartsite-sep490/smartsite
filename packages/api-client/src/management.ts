@@ -1,4 +1,4 @@
-import { parseSafetyEpisodeReadCommand } from '@smartsite/contracts';
+import { parseSafetyEpisodeReadCommand } from '@smartsite/contracts/safety-episodes';
 import type {
   SafetyEpisode,
   SafetyEpisodePage,

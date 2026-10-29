@@ -2,6 +2,11 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { SmartSiteManagementClient, ApiError } from '../src/index';
 import type { SafetyEpisode } from '../src/index';
 
+// Browser clients must not evaluate the Node-only schema loaders from the root barrel.
+vi.mock('@smartsite/contracts', () => {
+  throw new Error('Browser client imported the Node-only contracts root at runtime');
+});
+
 afterEach(() => vi.unstubAllGlobals());
 const client = () => new SmartSiteManagementClient('https://api.example.test');
 function reply(payload: unknown, status = 200) {
