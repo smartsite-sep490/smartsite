@@ -48,6 +48,7 @@ export class CameraViewRevisionEntity {
 }
 
 @Entity({ name: 'camera_configuration_reference' })
+@Unique('uq_camera_configuration_reference_camera_view', ['id', 'cameraId', 'viewRevision'])
 @ForeignKey(
   () => CameraViewRevisionEntity,
   ['cameraId', 'viewRevision', 'siteId'],

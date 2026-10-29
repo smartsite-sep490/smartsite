@@ -2,6 +2,7 @@ import {
   Body,
   Controller,
   Get,
+  Header,
   Logger,
   Param,
   Patch,
@@ -9,9 +10,11 @@ import {
   Query,
   Req,
   UseGuards,
+  UnauthorizedException,
 } from '@nestjs/common';
 import {
   ApiBearerAuth,
+  ApiBody,
   ApiBadRequestResponse,
   ApiCreatedResponse,
   ApiConflictResponse,
@@ -38,6 +41,12 @@ import type { AuthenticatedRequest } from '../auth/auth.service.js';
 import { UserAuthGuard } from '../auth/user-auth.guard.js';
 import { SiteConfigurationGuard } from '../auth/site-configuration.guard.js';
 import {
+  CreateReferenceRegionCommandDto,
+  UpdateReferenceRegionCommandDto,
+  ReferenceRegionMutationResponseDto,
+} from '../../common/http/reference-region-command.dto.js';
+import type { RegionGeometryConfirmation } from '@smartsite/contracts/camera-region-geometry-confirmation';
+import {
   CameraConfigurationService,
   CreateCameraCommand,
   CreateRegionCommand,
@@ -60,7 +69,15 @@ function cameraResponse(camera: CameraEntity) {
   };
 }
 
-function regionResponse(region: CameraObservationRegionEntity) {
+function guardedToken(request: AuthenticatedRequest): string {
+  const header = request.headers.authorization;
+  if (typeof header !== 'string') throw new UnauthorizedException();
+  return header.slice(7);
+}
+
+function regionResponse(
+  region: CameraObservationRegionEntity & { geometryConfirmation?: RegionGeometryConfirmation },
+) {
   return {
     id: region.id,
     cameraId: region.cameraId,
@@ -70,6 +87,7 @@ function regionResponse(region: CameraObservationRegionEntity) {
     version: region.version,
     isActive: region.isActive,
     createdAt: region.createdAt,
+    ...(region.geometryConfirmation ? { geometryConfirmation: region.geometryConfirmation } : {}),
   };
 }
 
@@ -172,6 +190,60 @@ export class CamerasController {
     this.logger.log({
       actorId: request.user!.id,
       action: 'region.create',
+      siteId,
+      resourceId: region.id,
+      revision: region.configurationVersion,
+    });
+    return { region: regionResponse(region), configurationVersion: region.configurationVersion };
+  }
+
+  @Post(':cameraId/reference-regions')
+  @Header('Cache-Control', 'no-store')
+  @ApiBody({ type: CreateReferenceRegionCommandDto })
+  @ApiCreatedResponse({ type: ReferenceRegionMutationResponseDto })
+  async createReferenceRegion(
+    @Req() request: AuthenticatedRequest,
+    @Param('siteId') siteId: string,
+    @Param('cameraId') cameraId: string,
+    @Body() input: unknown,
+  ) {
+    const region = await this.cameras.createReferenceRegion(
+      siteId,
+      cameraId,
+      input,
+      guardedToken(request),
+    );
+    this.logger.log({
+      actorId: request.user!.id,
+      action: 'region.reference-create',
+      siteId,
+      resourceId: region.id,
+      revision: region.configurationVersion,
+    });
+    return { region: regionResponse(region), configurationVersion: region.configurationVersion };
+  }
+
+  @Patch(':cameraId/regions/:regionId/reference-polygon')
+  @Header('Cache-Control', 'no-store')
+  @ApiBody({ type: UpdateReferenceRegionCommandDto })
+  @ApiOkResponse({ type: ReferenceRegionMutationResponseDto })
+  async updateReferencePolygon(
+    @Req() request: AuthenticatedRequest,
+    @Param('siteId') siteId: string,
+    @Param('cameraId') cameraId: string,
+    @Param('regionId') regionId: string,
+    @Body() input: unknown,
+  ) {
+    const region = await this.cameras.updateReferencePolygon(
+      siteId,
+      cameraId,
+      regionId,
+      input,
+      guardedToken(request),
+    );
+    this.logger.log({
+      actorId: request.user!.id,
+      action: 'region.reference-polygon',
       siteId,
       resourceId: region.id,
       revision: region.configurationVersion,

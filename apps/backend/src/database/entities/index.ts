@@ -140,7 +140,10 @@ import {
   CameraConfigurationReferenceEntity,
 } from './camera-configuration-reference.entity.js';
 export * from './camera-configuration-reference.entity.js';
+import { CameraRegionGeometryRevisionEntity } from './camera-region-geometry-revision.entity.js';
+export * from './camera-region-geometry-revision.entity.js';
 export const ENTITIES = [
+  CameraRegionGeometryRevisionEntity,
   CameraViewRevisionEntity,
   CameraConfigurationReferenceEntity,
   ZoneEntryAssessmentEntity,

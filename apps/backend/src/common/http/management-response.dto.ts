@@ -1,4 +1,5 @@
 import { ApiProperty } from '@nestjs/swagger';
+import { RegionGeometryConfirmationResponseDto } from './region-geometry-confirmation-response.dto.js';
 import {
   AlertStatus,
   AlertType,
@@ -65,6 +66,8 @@ export class ZoneResponseDto {
 }
 
 export class RegionResponseDto {
+  @ApiProperty({ type: RegionGeometryConfirmationResponseDto, required: false })
+  geometryConfirmation?: RegionGeometryConfirmationResponseDto;
   @ApiProperty({ format: 'uuid' }) id!: string;
   @ApiProperty({ format: 'uuid' }) cameraId!: string;
   @ApiProperty({ format: 'uuid' }) zoneId!: string;

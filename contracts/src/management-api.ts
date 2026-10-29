@@ -85,6 +85,7 @@ export interface ZoneResponse {
 }
 
 export interface RegionResponse {
+  geometryConfirmation?: import('./camera-region-geometry-confirmation.js').RegionGeometryConfirmation;
   id: string;
   cameraId: string;
   zoneId: string;
