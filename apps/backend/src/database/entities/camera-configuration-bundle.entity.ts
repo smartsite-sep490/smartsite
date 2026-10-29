@@ -4,6 +4,13 @@ import { CameraRegionGeometryRevisionEntity } from './camera-region-geometry-rev
 import { ZonePolicyRevisionEntity } from './zone-policy-revision.entity.js';
 
 @Entity({ name: 'camera_configuration_bundle' })
+@Unique('uq_camera_bundle_receipt_scope', [
+  'cameraId',
+  'configurationVersion',
+  'siteId',
+  'viewRevision',
+  'bundleSha256',
+])
 @Unique('uq_camera_bundle_hash', ['cameraId', 'bundleSha256'])
 @ForeignKey(
   () => CameraViewRevisionEntity,

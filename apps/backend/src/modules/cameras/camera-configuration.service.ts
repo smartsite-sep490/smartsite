@@ -40,6 +40,7 @@ import { ZoneConfigurationService } from '../zones/zone-configuration.service.js
 import { AuthService } from '../auth/auth.service.js';
 import { recordCameraConfigurationBundle } from './camera-configuration-bundles.js';
 import { readIssuedCameraConfigurationBundle } from './camera-configuration-bundle-reader.js';
+import { recordCameraConfigurationAcknowledgement } from './camera-configuration-acknowledgement.js';
 import { requireSiteManager } from '../auth/site-manager.guard.js';
 import {
   attachRegionConfirmations,
@@ -292,6 +293,9 @@ export class CameraConfigurationService {
 
   async readConfigurationBundleForCamera(cameraId: string) {
     return readIssuedCameraConfigurationBundle(this.dataSource, uuid(cameraId).toLowerCase());
+  }
+  async acknowledgeConfigurationForCamera(cameraId: string, secret: string, input: unknown) {
+    return recordCameraConfigurationAcknowledgement(this.dataSource, cameraId, secret, input);
   }
 
   async setStatus(
