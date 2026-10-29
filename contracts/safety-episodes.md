@@ -1,6 +1,6 @@
 # Safety episodes and personal inbox — transport preparation
 
-Status: DTOs, read-command parser and shared-client transport exist. Backend endpoints, persistence, recipient routing, Frontend screens and rollout are not implemented by this contract slice. Calling these methods against the existing Backend can return404. No existing notification route has changed.
+Status: DTOs, read-command parser, shared-client transport, additive exact-event storage and Backend list/detail/inbox/read source exist on this feature stack. Recipient routing, Frontend screens and rollout remain incomplete. An older deployed Backend can return404 for these routes. No existing notification route has changed.
 
 ## Canonical surface
 
@@ -23,6 +23,7 @@ Sort episode list by firstObservedAt DESC,id DESC and inbox by firstDeliveredAt 
 
 - `subject` currently accepts only `EventLocalEpisodeSubject`. It is not Worker identity, cross-frame continuity or a notification admission rule. See `safety-episode-subject.md`.
 - `identityDecision` reuses the existing exact-observation manual decision response, including CLEAR. Null means no verified decision; do not use a Face candidate or track ID to fill it. Backend must bind it to the episode's event and person index; a decision for another person is invalid.
+- Site list/detail preserve global Admin read and current scoped Safety Officer access. Exact-observation manual identity is returned only to a current scoped Safety Officer, preserving the separate identity-review capability. Null can therefore also mean the reader lacks that capability; it never grants identity from another source.
 - Findings keep existing alert IDs, types, subtypes, revisions and statuses. Hat may be CONFIRMED while vest remains NEEDS_MORE_EVIDENCE. There is no aggregate confirm-all command or new incident state machine.
 - `findingCount` must equal the detail findings length; summary/detail contentRevision must refer to the same committed projection. `SEALED` stops collection, not business review or corrective work.
 - Workflow links reuse existing Incident/CorrectiveAction statuses and scoped readers. These DTOs do not grant new Manager or contractor evidence rights.
@@ -45,4 +46,4 @@ Persistence requires reviewed additive ERD names/indexes and migration slots, pr
 
 Tracked delivery requires a versioned, qualified continuity/admission protocol. The current schemas carry no trusted track generation. Do not turn these prepared routes on in UI before the Backend and deployment capability exist.
 
-Focused tests cover exact paths/filters, independent findings, authentication, read-body validation, preservation of a newer unread response,401/403/404/409 and cancellation. They do not verify database races, persistence, real role scope, rendering, live inference or delivery.
+Shared-client focused tests cover paths/filters, independent findings, read-body validation,401/403/404/409 and cancellation. Backend integration tests use actual AppModule/JWT/owned PostgreSQL/HTTP for current role/session scope, revision acknowledgement, exact subject findings, existing workflow links, CLEAR projection, digest-bound media availability and revocation during file IO. Synthetic persisted fixtures and minimal JPEG markers do not establish real detection, human identification, visual quality, rendering or delivery. Separate storage tests cover database revision races; full concurrent delivery and product acceptance remain open.
