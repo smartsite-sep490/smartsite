@@ -1,7 +1,7 @@
 import 'reflect-metadata';
 import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
-import { after, test } from 'node:test';
+import { after, before, test } from 'node:test';
 import { ConfigService } from '@nestjs/config';
 import { Test } from '@nestjs/testing';
 import { getDataSourceToken } from '@nestjs/typeorm';
@@ -9,7 +9,7 @@ import type { NestExpressApplication } from '@nestjs/platform-express';
 import { parseCameraRegionConfigurationPayload } from '@smartsite/contracts';
 import { PARAMS_PROVIDER_TOKEN } from 'nestjs-pino';
 import { DataSource } from 'typeorm';
-import dataSource from '../support/test-data-source.js';
+import { createIsolatedTestDatabase } from '../support/isolated-test-database.js';
 import { AppModule } from '../../src/app.module.js';
 import { configureApplication } from '../../src/configure-app.js';
 import { validateEnvironment, type BackendEnvironment } from '../../src/config/environment.js';
@@ -18,12 +18,13 @@ import { UsersService } from '../../src/modules/users/users.service.js';
 import { UserRole } from '../../src/database/entities/user.entity.js';
 import { SiteConfigurationService } from '../../src/modules/sites/site-configuration.service.js';
 
-after(async () => {
-  if (dataSource.isInitialized) await dataSource.destroy();
-});
+const owned = createIsolatedTestDatabase();
+const dataSource = owned.dataSource;
+before(() => owned.initialize());
+after(() => owned.dispose());
 
 test('Admin Site setup and scoped Manager Zone setup feed an allowlisted AI snapshot and versioned observation', async () => {
-  await dataSource.initialize();
+  if (!dataSource.isInitialized) await dataSource.initialize();
   const suffix = randomUUID().slice(0, 8);
   const temporaryPassword = 'TempAdmin123!';
   const newPassword = 'PermanentAdmin123!';
@@ -135,7 +136,15 @@ test('Admin Site setup and scoped Manager Zone setup feed an allowlisted AI snap
     const managerId = ((await managerResponse.json()) as { id: string }).id;
     const revokePath = `${url}/api/v1/users/${managerId}/site-manager/${site.id}`;
     assert.equal((await fetch(revokePath, { method: 'DELETE' })).status, 401);
-    assert.equal((await fetch(revokePath, { method: 'DELETE', headers: { Authorization: `Bearer ${managerToken}` } })).status, 403);
+    assert.equal(
+      (
+        await fetch(revokePath, {
+          method: 'DELETE',
+          headers: { Authorization: `Bearer ${managerToken}` },
+        })
+      ).status,
+      403,
+    );
     const contractorPath = `/sites/${site.id}/contractors`;
     const contractorInput = { code: `CTR-${suffix}`, name: 'HTTP contractor' };
     assert.equal((await post(contractorPath, contractorInput, adminToken)).status, 403);
