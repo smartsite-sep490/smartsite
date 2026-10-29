@@ -1,3 +1,4 @@
+import { SafetyEpisodes1794355200000 } from './migrations/1794355200000-SafetyEpisodes.js';
 import { CanonicalSafetyFaceProvenance1794268800000 } from './migrations/1794268800000-CanonicalSafetyFaceProvenance.js';
 import { CanonicalMf06Results1794182400000 } from './migrations/1794182400000-CanonicalMf06Results.js';
 import { CanonicalMf06Requests1794096000000 } from './migrations/1794096000000-CanonicalMf06Requests.js';
@@ -84,6 +85,7 @@ export function buildTypeOrmOptions(config: DatabaseConnectionConfig): DataSourc
     connectTimeoutMS: timeoutMs,
     entities: [...ENTITIES],
     migrations: [
+      SafetyEpisodes1794355200000,
       CanonicalSafetyFaceProvenance1794268800000,
       CanonicalMf06Results1794182400000,
       CanonicalMf06Requests1794096000000,
