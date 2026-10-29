@@ -1,6 +1,10 @@
 import 'reflect-metadata';
 import assert from 'node:assert/strict';
-import { randomUUID } from 'node:crypto';
+import { createHash, randomUUID } from 'node:crypto';
+import { mkdir, writeFile } from 'node:fs/promises';
+import { join } from 'node:path';
+import { tmpdir } from 'node:os';
+import { computeCanonicalPayloadHash } from '@smartsite/contracts';
 import { after, before, test } from 'node:test';
 import { ConfigService } from '@nestjs/config';
 import { Test } from '@nestjs/testing';
@@ -15,6 +19,7 @@ import { AuthService, type AuthenticatedRequest } from '../../src/modules/auth/a
 import { hashPassword } from '../../src/modules/auth/password.js';
 import { AuthClientType } from '../../src/database/entities/auth-session.entity.js';
 import { SafetyEpisodeInboxService } from '../../src/modules/safety/alerts/safety-episode-inbox.service.js';
+import { SafetyAlertEvidenceService } from '../../src/modules/safety/alerts/safety-alert-evidence.service.js';
 import { createIsolatedTestDatabase } from '../support/isolated-test-database.js';
 import { createTestConfig } from '../support/config.js';
 
@@ -23,10 +28,13 @@ const owned = createIsolatedTestDatabase(),
 const password = 'Synthetic_test_password_123';
 let app: NestExpressApplication, auth: AuthService, inbox: SafetyEpisodeInboxService, url: string;
 let hashedPassword: string;
+let evidenceRoot: string;
 before(async () => {
   await owned.initialize();
   hashedPassword = await hashPassword(password);
-  const config = createTestConfig({ LOG_FORMAT: 'json' });
+  evidenceRoot = join(tmpdir(), `episode-http-${randomUUID()}`);
+  await mkdir(evidenceRoot);
+  const config = createTestConfig({ LOG_FORMAT: 'json', EVIDENCE_LOCAL_ROOT: evidenceRoot });
   const module = await Test.createTestingModule({ imports: [AppModule] })
     .overrideProvider(ConfigService)
     .useValue(config)
@@ -46,6 +54,190 @@ before(async () => {
   auth = module.get(AuthService);
   inbox = module.get(SafetyEpisodeInboxService);
   url = `${await app.getUrl()}/api/v1/me/safety-episode-inbox`;
+});
+
+test('episode detail returns only exact-subject findings and hash-bound evidence', async () => {
+  const f = await fixture();
+  const [camera] = await db.query('SELECT camera_id FROM safety_episode WHERE id=$1', [
+    f.episodes[0],
+  ]);
+  const event = randomUUID(),
+    session = randomUUID(),
+    episode = randomUUID();
+  // Synthetic JPEG marker fixture verifies digest/file handling, not image quality or a real detection.
+  const bytes = Buffer.from([255, 216, 255, 217]);
+  const sha256 = createHash('sha256').update(bytes).digest('hex');
+  const payload = {
+    schemaVersion: '1.2.0',
+    eventId: event,
+    cameraExternalId: camera.camera_id,
+    streamSessionId: session,
+    capturedAt: '2026-10-29T00:00:00Z',
+    frameDimensions: { width: 640, height: 480 },
+    observations: [
+      {
+        type: 'PERSON',
+        trackId: 7,
+        boundingBox: { x1: 0.1, y1: 0.1, x2: 0.4, y2: 0.9, coordinateSpace: 'NORMALIZED_0_1' },
+      },
+      {
+        type: 'PERSON',
+        trackId: 8,
+        boundingBox: { x1: 0.6, y1: 0.1, x2: 0.9, y2: 0.9, coordinateSpace: 'NORMALIZED_0_1' },
+      },
+    ],
+    evidence: [
+      { kind: 'FRAME', uri: `local://evidence/${session}/1/${event}.jpg`, sha256 },
+      { kind: 'CROP', trackId: 8, uri: `local://evidence/${session}/1/${event}.jpg`, sha256 },
+    ],
+  };
+  const hash = computeCanonicalPayloadHash(payload);
+  await writeFile(join(evidenceRoot, `${session}_1_${event}.jpg`), bytes);
+  await db.query(
+    `INSERT INTO ai_observation_event(event_id,payload_hash,camera_external_id,resolved_camera_id,stream_session_id,captured_at,raw_payload,processing_status)
+    VALUES($1,$2,$3::text,$3::uuid,$4,$5,$6::jsonb,'PROCESSED')`,
+    [event, hash, camera.camera_id, session, payload.capturedAt, JSON.stringify(payload)],
+  );
+  await db.query(
+    `INSERT INTO safety_episode(id,site_id,camera_id,event_id,person_observation_index,payload_hash,first_observed_at,last_observed_at)
+    VALUES($1,$2,$3,$4,0,$5,$6,$6)`,
+    [episode, f.sites[0], camera.camera_id, event, hash, payload.capturedAt],
+  );
+  const alerts = [randomUUID(), randomUUID()];
+  for (const [index, alert] of alerts.entries()) {
+    await db.query(
+      `INSERT INTO safety_alert(id,site_id,episode_id,alert_type,candidate_subtype,grouping_key,status,first_detected_at,last_detected_at)
+      VALUES($1::uuid,$2,$3,'PPE_VIOLATION',$4,$1::text,$5,now(),now())`,
+      [
+        alert,
+        f.sites[0],
+        episode,
+        index === 0 ? 'PPE_HARD_HAT_MISSING' : 'PPE_SAFETY_VEST_MISSING',
+        index === 0 ? 'PENDING_REVIEW' : 'DISMISSED',
+      ],
+    );
+    await db.query(
+      'INSERT INTO alert_detection_mapping(alert_id,event_id,person_observation_index) VALUES($1,$2,0)',
+      [alert, event],
+    );
+  }
+  const headers = { Authorization: `Bearer ${f.session.accessToken}` };
+  const endpoint = `${url.split('/me/')[0]}/sites/${f.sites[0]}/safety-episodes/${episode}`;
+  const response = await fetch(endpoint, { headers });
+  assert.equal(response.status, 200);
+  assert.equal(response.headers.get('cache-control'), 'no-store');
+  const detail = await response.json();
+  assert.equal(detail.id, episode);
+  assert.equal(detail.findingCount, 2);
+  assert.deepEqual(
+    detail.findings.map((item: { alertId: string }) => item.alertId).sort(),
+    alerts.sort(),
+  );
+  assert.deepEqual(detail.findings.map((item: { status: string }) => item.status).sort(), [
+    'DISMISSED',
+    'PENDING_REVIEW',
+  ]);
+  assert.equal(detail.identityDecision, null);
+  assert.deepEqual(detail.workflowLinks, []);
+  for (const finding of detail.findings)
+    assert.deepEqual(finding.evidenceRefs, [
+      { eventId: event, personObservationIndex: 0, evidenceIndex: 0, sha256, available: true },
+    ]);
+  assert.ok(!JSON.stringify(detail).includes('local://'));
+  const incident = randomUUID(),
+    action = randomUUID(),
+    resolution = randomUUID(),
+    decision = randomUUID();
+  await db.query(
+    `INSERT INTO incident(id,site_id,title,description,severity,status,occurred_at,reported_by) VALUES($1,$2,'Synthetic incident','Synthetic detail test','LOW','OPEN',now(),$3)`,
+    [incident, f.sites[0], f.user],
+  );
+  await db.query(
+    `INSERT INTO corrective_action(id,incident_id,assigned_to,assigned_by,description,status) VALUES($1,$2,$3,$3,'Synthetic correction','ASSIGNED')`,
+    [action, incident, f.user],
+  );
+  await db.query('UPDATE safety_alert SET incident_id=$1 WHERE episode_id=$2', [incident, episode]);
+  const subjectRef = {
+    eventId: event,
+    personObservationIndex: 0,
+    payloadHash: hash,
+    cameraId: camera.camera_id,
+    cameraExternalId: camera.camera_id,
+    streamSessionId: session,
+    capturedAt: payload.capturedAt,
+    trackId: 7,
+    personBoundingBox: payload.observations[0]!.boundingBox,
+  };
+  // Stored CLEAR fixture tests faithful projection only; it does not claim an actual manual decision journey.
+  await db.transaction(async (manager) => {
+    await manager.query(
+      `INSERT INTO observation_identity_resolution(id,event_id,person_observation_index,site_id,payload_hash,subject_ref) VALUES($1,$2,0,$3,$4,$5::jsonb)`,
+      [resolution, event, f.sites[0], hash, JSON.stringify(subjectRef)],
+    );
+    await manager.query(
+      `INSERT INTO observation_identity_decision(id,resolution_id,site_id,actor_user_id,revision,expected_revision,command_hash,action,reason) VALUES($1,$2,$3,$4,1,0,$5,'CLEAR','Synthetic review cleared')`,
+      [decision, resolution, f.sites[0], f.user, 'b'.repeat(64)],
+    );
+    await manager.query(
+      'UPDATE observation_identity_resolution SET revision=1,current_decision_id=$1 WHERE id=$2',
+      [decision, resolution],
+    );
+  });
+  const linked = await (await fetch(endpoint, { headers })).json();
+  assert.equal(linked.identityDecision.id, decision);
+  assert.equal(linked.identityDecision.action, 'CLEAR');
+  assert.equal(linked.identityDecision.workerId, null);
+  assert.deepEqual(linked.workflowLinks, [
+    { incidentId: incident, status: 'OPEN', actions: [{ actionId: action, status: 'ASSIGNED' }] },
+  ]);
+  await db.query(
+    "INSERT INTO user_role_assignment(id,user_id,site_id,role) VALUES($1,$2,NULL,'ADMIN')",
+    [randomUUID(), f.user],
+  );
+  await db.query('DELETE FROM user_role_assignment WHERE user_id=$1 AND site_id=$2', [
+    f.user,
+    f.sites[0],
+  ]);
+  assert.equal((await (await fetch(endpoint, { headers })).json()).identityDecision, null);
+  await db.query(
+    "INSERT INTO user_role_assignment(id,user_id,site_id,role) VALUES($1,$2,$3,'SAFETY_OFFICER')",
+    [randomUUID(), f.user, f.sites[0]],
+  );
+  await db.query("DELETE FROM user_role_assignment WHERE user_id=$1 AND role='ADMIN'", [f.user]);
+  await writeFile(
+    join(evidenceRoot, `${session}_1_${event}.jpg`),
+    Buffer.from([255, 216, 0, 255, 217]),
+  );
+  const stale = await (await fetch(endpoint, { headers })).json();
+  assert.equal(stale.findings[0].evidenceRefs[0].available, false);
+  assert.equal((await fetch(endpoint + '?includeSecrets=true', { headers })).status, 400);
+  assert.equal((await fetch(endpoint.replace(episode, randomUUID()), { headers })).status, 404);
+  assert.equal((await fetch(endpoint.replace(f.sites[0]!, f.sites[1]!), { headers })).status, 404);
+  await db.query(
+    'UPDATE alert_detection_mapping SET person_observation_index=1 WHERE alert_id=$1',
+    [alerts[0]],
+  );
+  assert.equal((await fetch(endpoint, { headers })).status, 409);
+  await db.query(
+    'UPDATE alert_detection_mapping SET person_observation_index=0 WHERE alert_id=$1',
+    [alerts[0]],
+  );
+  const media = app.get(SafetyAlertEvidenceService);
+  const originalRead = media.read;
+  // A role revocation commits during file IO, after the first snapshot transaction is closed.
+  media.read = async function (...args) {
+    media.read = originalRead;
+    await db.query('DELETE FROM user_role_assignment WHERE user_id=$1 AND site_id=$2', [
+      f.user,
+      f.sites[0],
+    ]);
+    return originalRead.apply(this, args);
+  };
+  try {
+    assert.equal((await fetch(endpoint, { headers })).status, 403);
+  } finally {
+    media.read = originalRead;
+  }
 });
 after(async () => {
   if (app) await app.close();
@@ -256,6 +448,29 @@ test('Site episode list scopes camera/Zone filters, pagination and live grants o
   for (const query of ['?cameraId=', '?zoneId=bad', '?recipientId=other', '?limit=101'])
     assert.equal((await fetch(endpoint + query, { headers })).status, 400);
   assert.equal((await fetch(endpoint)).status, 401);
+  const newerEvent = randomUUID(),
+    newerEpisode = randomUUID();
+  await db.query(
+    `INSERT INTO ai_observation_event(event_id,payload_hash,camera_external_id,resolved_camera_id,stream_session_id,captured_at,raw_payload,processing_status)
+    SELECT $1,payload_hash,camera_external_id,resolved_camera_id,stream_session_id,captured_at+interval '1 hour',raw_payload,processing_status
+    FROM ai_observation_event WHERE event_id=(SELECT event_id FROM safety_episode WHERE id=$2)`,
+    [newerEvent, f.episodes[0]],
+  );
+  await db.query(
+    `INSERT INTO safety_episode(id,site_id,camera_id,event_id,person_observation_index,payload_hash,first_observed_at,last_observed_at)
+    SELECT $1,site_id,camera_id,$2,0,payload_hash,first_observed_at+interval '1 hour',first_observed_at+interval '1 hour' FROM safety_episode WHERE id=$3`,
+    [newerEpisode, newerEvent, f.episodes[0]],
+  );
+  await db.query(
+    `INSERT INTO safety_alert(id,site_id,episode_id,alert_type,candidate_subtype,grouping_key,first_detected_at,last_detected_at)
+    VALUES($1::uuid,$2,$3,'PPE_VIOLATION','PPE_HARD_HAT_MISSING',$1::text,now(),now())`,
+    [randomUUID(), f.sites[0], newerEpisode],
+  );
+  await db.query(
+    "UPDATE safety_episode SET last_observed_at=first_observed_at+interval '1 day' WHERE id=$1",
+    [f.episodes[0]],
+  );
+  assert.equal((await (await fetch(endpoint, { headers })).json()).items[0].id, newerEpisode);
   await db.query(
     "DELETE FROM user_role_assignment WHERE user_id=$1 AND site_id=$2 AND role='SAFETY_OFFICER'",
     [f.user, f.sites[0]],
