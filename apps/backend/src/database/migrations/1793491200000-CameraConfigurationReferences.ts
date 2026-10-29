@@ -48,7 +48,14 @@ export class CameraConfigurationReferences1793491200000 implements MigrationInte
       'CREATE INDEX idx_camera_reference_issuer ON camera_configuration_reference(issued_by_user_id)',
     );
     await runner.query(`CREATE FUNCTION protect_camera_reference_provenance() RETURNS trigger LANGUAGE plpgsql AS $$
-      BEGIN RAISE EXCEPTION 'Camera reference provenance is immutable' USING ERRCODE='23514'; END $$`);
+      DECLARE populated boolean;
+      BEGIN
+        IF TG_OP='TRUNCATE' THEN
+          EXECUTE format('SELECT EXISTS(SELECT 1 FROM %I.%I)',TG_TABLE_SCHEMA,TG_TABLE_NAME) INTO populated;
+          IF NOT populated THEN RETURN NULL; END IF;
+        END IF;
+        RAISE EXCEPTION 'Camera reference provenance is immutable' USING ERRCODE='23514';
+      END $$`);
     await runner.query(`CREATE TRIGGER camera_reference_immutable BEFORE UPDATE OR DELETE OR TRUNCATE ON camera_configuration_reference
       FOR EACH STATEMENT EXECUTE FUNCTION protect_camera_reference_provenance()`);
     await runner.query(`CREATE TRIGGER camera_view_retained BEFORE DELETE OR TRUNCATE ON camera_view_revision

@@ -34,6 +34,20 @@ test('reference issuance retains unconfirmed history and refuses stale context i
   });
   try {
     await owned.initialize();
+    await t.test(
+      'empty retained tables permit Main parent cleanup without relaxing mutation guards',
+      async () => {
+        await db.query('TRUNCATE auth_session, user_role_assignment, app_user CASCADE');
+        await db.query('TRUNCATE camera_view_revision CASCADE');
+        await db.query('TRUNCATE camera_configuration_reference');
+        await assert.rejects(db.query('DELETE FROM camera_configuration_reference'), /provenance/);
+        await assert.rejects(
+          db.query('UPDATE camera_configuration_reference SET width=64'),
+          /provenance/,
+        );
+        await assert.rejects(db.query('DELETE FROM camera_view_revision'), /provenance/);
+      },
+    );
     const [last] = await db.query('SELECT name FROM migrations ORDER BY id DESC LIMIT 1');
     assert.equal(last.name, 'CameraConfigurationReferences1793491200000');
     await db.undoLastMigration(); // Empty rollback, then upgrade with existing baseline rows.
@@ -192,6 +206,8 @@ test('reference issuance retains unconfirmed history and refuses stale context i
         'UPDATE camera_view_revision SET width=64',
         'DELETE FROM camera_view_revision',
         'TRUNCATE camera_view_revision CASCADE',
+        'TRUNCATE app_user CASCADE',
+        'TRUNCATE camera CASCADE',
       ])
         await assert.rejects(db.query(sql), /provenance/);
       const insertCopy = `INSERT INTO camera_configuration_reference SELECT $1,camera_id,view_revision,site_id,session_id,source_kind,width,height,image_sha256,configuration_version,captured_at,$2,expires_at,issued_by_user_id FROM camera_configuration_reference LIMIT 1`;

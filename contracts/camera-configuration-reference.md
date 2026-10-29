@@ -52,3 +52,6 @@ Reference metadata is linked to the same Site/view through a composite foreign k
 This source registration requires a separate deployment/migration decision before
 changing any existing website/cloud database. Empty downgrade is supported;
 populated history must be preserved rather than discarded.
+The retention triggers permit truncating an empty retained table, including parent
+cleanup cascades. They reject truncation once that table contains history, and
+UPDATE/DELETE protection is unchanged.
