@@ -168,15 +168,9 @@ export class SafetyFaceCandidateReader {
         });
       });
     } catch (error) {
-      const failure = error as { code?: unknown; driverError?: { code?: unknown } };
-      const code = failure?.driverError?.code ?? failure?.code;
-      if (
-        !signal.aborted &&
-        typeof code === 'string' &&
-        ['40001', '40P01', '55P03', '57014', '55000'].includes(code)
-      )
-        throw error;
+      if (!signal.aborted && isTransientDatabaseFailure(error)) throw error;
       return unavailable(signal.aborted ? 'ABORTED' : 'READ_UNAVAILABLE');
     }
   }
 }
+import { isTransientDatabaseFailure } from '../../common/database-errors.js';

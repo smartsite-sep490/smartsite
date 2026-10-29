@@ -1,4 +1,9 @@
 import type { DataSource, EntityManager } from 'typeorm';
+import {
+  databaseErrorCode,
+  isDatabaseConnectionFailure,
+  isTransientDatabaseFailure,
+} from '../../../common/database-errors.js';
 import type { Mf06JobClaim, Mf06JobLeaseService } from './mf06-job-lease.service.js';
 import type { Mf06AssessmentStoreResult } from './mf06-assessment-store.service.js';
 
@@ -119,6 +124,8 @@ export class Mf06AssessmentWorker {
       if (remaining() <= 0) return 'STALE';
       if (timeout.signal.aborted) return this.leases.retry(claim, 'RESOLVER_TIMEOUT');
       if (error instanceof Mf06RetryableWorkError) return this.leases.retry(claim, error.code);
+      if (isTransientDatabaseFailure(error))
+        return this.leases.retry(claim, 'DATABASE_UNAVAILABLE');
       return this.leases.fail(claim, 'PROCESSING_FAILED');
     } finally {
       clearTimeout(timer);
@@ -142,9 +149,13 @@ export class Mf06AssessmentWorker {
         if (signal.aborted) return this.leases.cancel(claim);
         // A stale prepared authority snapshot needs a new lease/preparation, not a SQL retry.
         if (error instanceof Mf06RetryableWorkError) return this.leases.retry(claim, error.code);
-        const failure = error as { code?: unknown; driverError?: { code?: unknown } };
-        const code = failure?.driverError?.code ?? failure?.code;
-        if (code === '55P03' || code === '57014' || code === '55000')
+        const code = databaseErrorCode(error);
+        if (
+          isDatabaseConnectionFailure(error) ||
+          code === '55P03' ||
+          code === '57014' ||
+          code === '55000'
+        )
           return this.leases.retry(claim, 'DATABASE_UNAVAILABLE');
         if (code === '40001' || code === '40P01') {
           if (attempt + 1 < this.settings.maxDatabaseAttempts) continue;

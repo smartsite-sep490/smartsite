@@ -2,6 +2,7 @@ import { SchedulingNotificationService } from '../../src/modules/workforce/notif
 import 'reflect-metadata';
 import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
+import { setTimeout as delay } from 'node:timers/promises';
 import { after, before, beforeEach, test } from 'node:test';
 import { createIsolatedTestDatabase } from '../support/isolated-test-database.js';
 import { createTestConfig } from '../support/config.js';
@@ -167,6 +168,78 @@ test('real ingestion→claim→SERIALIZABLE unavailable append preserves one ass
   await worker.drain();
   assert.equal(await worker.runOnce(), 'IDLE');
 });
+
+test(
+  'interruption of this test worker connection returns its real claim to PENDING without an assessment',
+  { timeout: 10000 },
+  async (t) => {
+    const f = await fixture();
+    const applicationName = `owned-mf06-fault-${randomUUID()}`;
+    let ready!: (value: { pid: number; scope: string }) => void;
+    const started = new Promise<{ pid: number; scope: string }>((resolve) => {
+      ready = resolve;
+    });
+    const work = workFor(f);
+    work.finalize = async (manager) => {
+      await manager.query("SELECT set_config('application_name',$1,true)", [applicationName]);
+      const [identity] = await manager.query(
+        'SELECT pg_backend_pid()::int AS pid,current_schema() AS scope',
+      );
+      ready(identity);
+      await manager.query('SELECT pg_sleep(5)');
+      throw new Error('Expected this owned connection to be interrupted');
+    };
+    const worker = new Mf06AssessmentWorker(db, leases(), work, {
+      ...options,
+      drainTimeoutMs: 6000,
+    });
+    t.after(() => worker.drain());
+    const run = worker.runOnce();
+    const target = await Promise.race([
+      started,
+      run.then(() => {
+        throw new Error('Worker exited before its owned connection was identified');
+      }),
+    ]);
+    assert.match(target.scope, /^isolated_test_[0-9a-f]{32}$/);
+    assert.equal(target.scope, db.driver.schema);
+    let backendStart: string | undefined;
+    for (let attempt = 0; attempt < 40; attempt++) {
+      const [active] = await db.query(
+        `SELECT backend_start::text AS started FROM pg_stat_activity
+       WHERE pid=$1 AND application_name=$2 AND usename='smartsite_test'
+         AND datname='smartsite_test' AND state='active' AND query LIKE '%pg_sleep(5)%'`,
+        [target.pid, applicationName],
+      );
+      if (active) {
+        backendStart = active.started;
+        break;
+      }
+      await delay(10);
+    }
+    assert.ok(backendStart, 'Only the identified active test query may be interrupted');
+    const [stopped] = await db.query(
+      `SELECT pg_terminate_backend(pid) AS stopped FROM pg_stat_activity
+     WHERE pid=$1 AND application_name=$2 AND backend_start=$3::timestamptz
+       AND usename='smartsite_test' AND datname='smartsite_test'`,
+      [target.pid, applicationName, backendStart],
+    );
+    assert.equal(stopped?.stopped, true);
+    assert.equal(await run, 'RETRY');
+    const [row] = await db.query(
+      `SELECT status,last_error_code,attempt_count,
+       (SELECT count(*)::int FROM zone_entry_assessment WHERE request_id=$1) AS assessments
+     FROM zone_entry_assessment_job WHERE request_id=$1`,
+      [f.requestId],
+    );
+    assert.deepEqual(row, {
+      status: 'PENDING',
+      last_error_code: 'DATABASE_UNAVAILABLE',
+      attempt_count: 1,
+      assessments: 0,
+    });
+  },
+);
 
 test('ignored-signal preparation times out and late completion cannot append', async () => {
   const f = await fixture();

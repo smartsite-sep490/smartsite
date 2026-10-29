@@ -131,6 +131,49 @@ function createMocks(
 // -----------------------------------------------------------------------------
 
 describe('Mf06AssessmentWorker unit tests', () => {
+  it('retries DB connection acquisition and preparation failures without failing the claimed job', async () => {
+    for (const phase of ['prepare', 'transaction'] as const) {
+      for (const code of ['ECONNREFUSED', 'ECONNRESET', '08006']) {
+        const failure = Object.assign(new Error('Synthetic database connection failure'), { code });
+        const mocks = createMocks({
+          ...(phase === 'prepare'
+            ? {
+                prepareImpl: async () => {
+                  throw failure;
+                },
+              }
+            : {}),
+          ...(phase === 'transaction'
+            ? {
+                transactionImpl: async () => {
+                  throw failure;
+                },
+              }
+            : {}),
+        });
+        const worker = new Mf06AssessmentWorker(mocks.db, mocks.leases, mocks.work, defaultOptions);
+        assert.equal(await worker.runOnce(), 'RETRY');
+        assert.equal(mocks.calls.retry[0]?.errorCode, 'DATABASE_UNAVAILABLE');
+        assert.equal(mocks.calls.fail.length, 0);
+        assert.equal(mocks.calls.finalize.length, 0);
+        assert.equal(mocks.calls.prepare.length, 1);
+      }
+    }
+  });
+
+  it('caller cancellation wins over a simultaneous connection failure', async () => {
+    const controller = new AbortController();
+    const mocks = createMocks({
+      transactionImpl: async () => {
+        controller.abort();
+        throw Object.assign(new Error('Synthetic connection reset'), { code: 'ECONNRESET' });
+      },
+    });
+    const worker = new Mf06AssessmentWorker(mocks.db, mocks.leases, mocks.work, defaultOptions);
+    assert.equal(await worker.runOnce(controller.signal), 'CANCELLED');
+    assert.equal(mocks.calls.retry.length, 0);
+    assert.equal(mocks.calls.fail.length, 0);
+  });
   describe('constructor bounds and options validation', () => {
     it('accepts valid options within strict ranges', () => {
       const { db, leases, work } = createMocks();
