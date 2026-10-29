@@ -149,7 +149,14 @@ import {
 } from './camera-configuration-bundle.entity.js';
 export * from './zone-policy-revision.entity.js';
 export * from './camera-configuration-bundle.entity.js';
+import {
+  CameraWorkerGenerationEntity,
+  CameraConfigurationApplicationReceiptEntity,
+} from './camera-worker-generation.entity.js';
+export * from './camera-worker-generation.entity.js';
 export const ENTITIES = [
+  CameraWorkerGenerationEntity,
+  CameraConfigurationApplicationReceiptEntity,
   ZonePolicyRevisionEntity,
   CameraConfigurationBundleEntity,
   CameraConfigurationBundleRegionEntity,

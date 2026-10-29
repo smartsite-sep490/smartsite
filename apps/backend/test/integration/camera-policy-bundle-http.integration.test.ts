@@ -22,6 +22,13 @@ import { buildSourcePayload } from '../support/camera-configuration-image-fixtur
 
 const owned = createIsolatedTestDatabase(),
   db = owned.dataSource;
+const bundleMigrations = db.options.migrations;
+assert(Array.isArray(bundleMigrations));
+db.setOptions({
+  migrations: bundleMigrations.filter(
+    (m) => typeof m === 'function' && Number(m.name.match(/\d{13}$/)?.[0]) <= 1794528000000,
+  ),
+});
 let app: NestExpressApplication, auth: AuthService, base: string;
 const site = randomUUID(),
   otherSite = randomUUID(),
