@@ -188,3 +188,5 @@ export type {
   Mf06RequestStatusPage,
 } from './mf06-assessment-api.js';
 export * from './camera-configuration-image.js';
+export * from './camera-region-reference-command.js';
+export * from './camera-region-geometry-confirmation.js';

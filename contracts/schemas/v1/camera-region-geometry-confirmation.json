@@ -1,0 +1,45 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://smartsite.example/schemas/v1/camera-region-geometry-confirmation.json",
+  "title": "Region manual geometry confirmation",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["status", "referenceId", "viewRevision", "confirmedByUserId", "confirmedAt"],
+  "properties": {
+    "status": { "enum": ["UNCONFIRMED", "MANUALLY_CONFIRMED", "NEEDS_REVALIDATION"] },
+    "referenceId": {
+      "type": ["string", "null"],
+      "pattern": "^[0-9a-f]{8}(-[0-9a-f]{4}){3}-[0-9a-f]{12}$"
+    },
+    "viewRevision": { "type": ["integer", "null"], "minimum": 1, "maximum": 9007199254740991 },
+    "confirmedByUserId": {
+      "type": ["string", "null"],
+      "pattern": "^[0-9a-f]{8}(-[0-9a-f]{4}){3}-[0-9a-f]{12}$"
+    },
+    "confirmedAt": {
+      "type": ["string", "null"],
+      "format": "date-time",
+      "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}\\.\\d{3}Z$"
+    }
+  },
+  "oneOf": [
+    {
+      "properties": {
+        "status": { "const": "UNCONFIRMED" },
+        "referenceId": { "type": "null" },
+        "viewRevision": { "type": "null" },
+        "confirmedByUserId": { "type": "null" },
+        "confirmedAt": { "type": "null" }
+      }
+    },
+    {
+      "properties": {
+        "status": { "enum": ["MANUALLY_CONFIRMED", "NEEDS_REVALIDATION"] },
+        "referenceId": { "type": "string" },
+        "viewRevision": { "type": "integer" },
+        "confirmedByUserId": { "type": "string" },
+        "confirmedAt": { "type": "string" }
+      }
+    }
+  ]
+}

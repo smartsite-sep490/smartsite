@@ -1,3 +1,11 @@
+import {
+  parseCreateReferenceRegionCommand,
+  parseUpdateReferenceRegionPolygonCommand,
+  type CreateReferenceRegionCommand,
+  type UpdateReferenceRegionPolygonCommand,
+} from '@smartsite/contracts/camera-region-reference';
+import type { ReferenceRegionMutationResponse } from '@smartsite/contracts/camera-region-geometry-confirmation';
+import { parseReferenceRegionMutation } from './reference-region-mutation';
 import type {
   GrantTeamZoneCommand,
   TeamZoneSetupResponse,
@@ -2509,6 +2517,49 @@ export class SmartSiteManagementClient {
       token,
       input,
     );
+  }
+
+  async createReferenceRegion(
+    token: string,
+    siteId: string,
+    cameraId: string,
+    input: CreateReferenceRegionCommand,
+    requestOptions?: RequestOptions,
+  ): Promise<ReferenceRegionMutationResponse> {
+    const body = parseCreateReferenceRegionCommand(input);
+    const payload = await this.request<unknown>(
+      'POST',
+      `/sites/${pathId(siteId)}/cameras/${pathId(cameraId)}/reference-regions`,
+      token,
+      body,
+      undefined,
+      requestOptions,
+      { cache: 'no-store', redirect: 'error' },
+      65536,
+    );
+    return parseReferenceRegionMutation(payload, body, { cameraId, zoneId: body.zoneId });
+  }
+
+  async updateReferencePolygon(
+    token: string,
+    siteId: string,
+    cameraId: string,
+    regionId: string,
+    input: UpdateReferenceRegionPolygonCommand,
+    requestOptions?: RequestOptions,
+  ): Promise<ReferenceRegionMutationResponse> {
+    const body = parseUpdateReferenceRegionPolygonCommand(input);
+    const payload = await this.request<unknown>(
+      'PATCH',
+      `/sites/${pathId(siteId)}/cameras/${pathId(cameraId)}/regions/${pathId(regionId)}/reference-polygon`,
+      token,
+      body,
+      undefined,
+      requestOptions,
+      { cache: 'no-store', redirect: 'error' },
+      65536,
+    );
+    return parseReferenceRegionMutation(payload, body, { cameraId, regionId });
   }
 
   // Workforce / MF07 Endpoints

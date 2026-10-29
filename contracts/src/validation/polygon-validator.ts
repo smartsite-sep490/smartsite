@@ -63,7 +63,7 @@ function hasZeroArea(exact: readonly ExactCoordinate[]): boolean {
   return twiceArea === 0n;
 }
 
-function polygonError(coordinates: readonly NormalizedCoordinate[]): string | undefined {
+export function polygonError(coordinates: readonly NormalizedCoordinate[]): string | undefined {
   const vertices = new Set<string>();
   for (const [x, y] of coordinates) {
     const key = `${x},${y}`;
