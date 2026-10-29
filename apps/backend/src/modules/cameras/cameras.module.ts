@@ -12,15 +12,19 @@ import {
 } from './camera-configuration-image.service.js';
 import { CameraConfigurationReferenceController } from './camera-configuration-reference.controller.js';
 import { CameraConfigurationReferenceService } from './camera-configuration-reference.service.js';
+import { CameraApplicationStatusController } from './camera-application-status.controller.js';
+import { CameraApplicationStatusService } from './camera-application-status.service.js';
 
 @Module({
   imports: [DatabaseModule, SitesModule, ZonesModule, AuthModule],
   controllers: [
+    CameraApplicationStatusController,
     CamerasController,
     CameraConfigurationImageController,
     CameraConfigurationReferenceController,
   ],
   providers: [
+    CameraApplicationStatusService,
     { provide: CAMERA_CONFIGURATION_IMAGE_FETCH, useFactory: () => globalThis.fetch },
     CameraConfigurationService,
     CameraConfigurationImageService,

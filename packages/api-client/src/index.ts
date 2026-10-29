@@ -167,3 +167,5 @@ export type {
   CameraConfigurationReferenceResponse,
 } from '@smartsite/contracts/camera-configuration-image';
 export { registerSessionCredential, unregisterSessionCredential } from './session-expiry';
+export { MAX_CAMERA_APPLICATION_STATUS_RESPONSE_BYTES } from './camera-configuration-response';
+export type { CameraApplicationStatus } from '@smartsite/contracts/camera-application-status';
