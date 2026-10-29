@@ -6,6 +6,11 @@ import {
 } from '@smartsite/contracts/camera-region-reference';
 import type { ReferenceRegionMutationResponse } from '@smartsite/contracts/camera-region-geometry-confirmation';
 import { parseReferenceRegionMutation } from './reference-region-mutation';
+import type { CameraApplicationStatus } from '@smartsite/contracts/camera-application-status';
+import {
+  MAX_CAMERA_APPLICATION_STATUS_RESPONSE_BYTES,
+  parseScopedCameraApplicationStatus,
+} from './camera-configuration-response';
 import type {
   GrantTeamZoneCommand,
   TeamZoneSetupResponse,
@@ -2387,6 +2392,24 @@ export class SmartSiteManagementClient {
       MAX_CONFIGURATION_REFERENCE_RESPONSE_BYTES,
     );
     return parseScopedCameraConfigurationReference(value, siteId, cameraId);
+  }
+  async getCameraApplicationStatus(
+    token: string,
+    siteId: string,
+    cameraId: string,
+    options?: RequestOptions,
+  ): Promise<CameraApplicationStatus> {
+    const value = await this.request<unknown>(
+      'GET',
+      `/sites/${pathId(siteId)}/cameras/${pathId(cameraId)}/application-status`,
+      token,
+      undefined,
+      undefined,
+      { ...options, timeoutMs: options?.timeoutMs ?? 3000 },
+      { cache: 'no-store', redirect: 'error' },
+      MAX_CAMERA_APPLICATION_STATUS_RESPONSE_BYTES,
+    );
+    return parseScopedCameraApplicationStatus(value, siteId, cameraId);
   }
   renameCamera(token: string, siteId: string, cameraId: string, name: string) {
     return this.request<CameraResponse>(

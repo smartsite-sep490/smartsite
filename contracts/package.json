@@ -11,6 +11,7 @@
     ".": "./dist/index.js",
     "./management": "./dist/management-api.js",
     "./camera-configuration-image": "./dist/camera-configuration-image.js",
+    "./camera-application-status": "./dist/camera-application-status.js",
     "./camera-region-reference": "./dist/camera-region-reference-command.js",
     "./camera-region-geometry-confirmation": "./dist/camera-region-geometry-confirmation.js",
     "./gate-permissions": "./dist/gate-permissions-api.js",

@@ -111,6 +111,11 @@ test('registered ACK route persists an authenticated receipt without claiming ap
   const credential = await provisionCameraWorkerGeneration(db, camera, [camera], 60000);
   sourceSession = credential.streamSessionId;
   const manager = await actor('SITE_MANAGER', site);
+  const readStatus = () => fetch(`${base}/application-status`, { headers: manager.headers });
+  const initial = await readStatus();
+  assert.equal(initial.status, 200);
+  assert.equal(initial.headers.get('cache-control'), 'no-store');
+  assert.equal((await initial.json()).reportedRevision, null);
   assert.equal(
     (await fetch(`${base}/configuration-reference`, { headers: manager.headers })).status,
     200,
@@ -153,6 +158,37 @@ test('registered ACK route persists an authenticated receipt without claiming ap
   assert.equal(first.status, 200);
   assert.equal(first.headers.get('cache-control'), 'no-store');
   const receipt = await first.json();
+  const loaded = await readStatus();
+  assert.equal(loaded.status, 200);
+  const loadedStatus = await loaded.json();
+  assert.equal(loadedStatus.applicationState, 'LOADED');
+  assert.equal(loadedStatus.desiredRevision, bundle.configurationVersion);
+  assert.equal(loadedStatus.reportedRevision, bundle.configurationVersion);
+  assert.equal(loadedStatus.viewValidity, 'UNCONFIRMED');
+  for (const [role, scope] of [
+    ['ADMIN', null],
+    ['SAFETY_OFFICER', site],
+  ] as const) {
+    const reader = await actor(role, scope);
+    assert.equal(
+      (await fetch(`${base}/application-status`, { headers: reader.headers })).status,
+      200,
+    );
+  }
+  for (const [role, scope] of [
+    ['WORKER', site],
+    ['SITE_MANAGER', otherSite],
+  ] as const) {
+    const denied = await actor(role, scope);
+    assert.equal(
+      (await fetch(`${base}/application-status`, { headers: denied.headers })).status,
+      403,
+    );
+  }
+  assert.equal(
+    (await fetch(`${base}/application-status?maxAge=999999`, { headers: manager.headers })).status,
+    400,
+  );
   assert.equal(receipt.replayed, false);
   assert.equal(receipt.outcome, 'LOADED');
   assert.equal(receipt.applicationState, undefined);
@@ -164,6 +200,7 @@ test('registered ACK route persists an authenticated receipt without claiming ap
   );
   assert.deepEqual(rows, [{ command_id: command.commandId, bundle_sha256: bundle.bundleSha256 }]);
   await revokeCameraWorkerGeneration(db, camera, [camera], credential.workerGenerationId);
+  assert.equal((await (await readStatus()).json()).applicationState, 'STALE');
   assert.equal((await send(headers)).status, 409);
   assert.equal(
     (await db.query('SELECT count(*)::int AS n FROM camera_configuration_application_receipt'))[0]
