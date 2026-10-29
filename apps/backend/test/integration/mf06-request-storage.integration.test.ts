@@ -36,6 +36,23 @@ test('MF06 migration rejects shadow schemas and collisions without losing existi
     await owned.initialize();
     runner = owned.dataSource.createQueryRunner();
     await runner.connect();
+    // Rehearse the old migration only after undoing its empty later dependents.
+    // Reapply them below so the final full-release metadata check stays intact.
+    const later = owned.dataSource.migrations
+      .filter((m) => Number((m.name ?? m.constructor.name).match(/\d{13}$/)?.[0]) > 1794268800000)
+      .sort(
+        (a, b) =>
+          Number((b.name ?? b.constructor.name).match(/\d{13}$/)?.[0]) -
+          Number((a.name ?? a.constructor.name).match(/\d{13}$/)?.[0]),
+      );
+    await runner.startTransaction();
+    try {
+      for (const dependent of later) await dependent.down(runner);
+      await runner.commitTransaction();
+    } catch (error) {
+      await runner.rollbackTransaction();
+      throw error;
+    }
     const [{ name }] = await runner.query('SELECT current_schema() AS name');
     assert.match(name, /^isolated_test_[0-9a-f]{32}$/);
     for (const table of [
@@ -110,6 +127,14 @@ test('MF06 migration rejects shadow schemas and collisions without losing existi
       await owned.dataSource.getRepository(entities.SiteEntity).countBy({ id: site }),
       1,
     );
+    await runner.startTransaction();
+    try {
+      for (const dependent of [...later].reverse()) await dependent.up(runner);
+      await runner.commitTransaction();
+    } catch (error) {
+      await runner.rollbackTransaction();
+      throw error;
+    }
     const drift = await owned.dataSource.driver.createSchemaBuilder().log();
     assert.deepEqual(drift.upQueries, []);
   } finally {
