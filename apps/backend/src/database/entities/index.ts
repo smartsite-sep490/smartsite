@@ -135,7 +135,14 @@ export * from './worker-gate-permission.entity.js';
 export * from './user-notification.entity.js';
 
 export * from './safety-workflow.entity.js';
+import {
+  CameraViewRevisionEntity,
+  CameraConfigurationReferenceEntity,
+} from './camera-configuration-reference.entity.js';
+export * from './camera-configuration-reference.entity.js';
 export const ENTITIES = [
+  CameraViewRevisionEntity,
+  CameraConfigurationReferenceEntity,
   ZoneEntryAssessmentEntity,
   ZoneEntryAuthorityArtifactEntity,
   ZoneEntryAssessmentRequestEntity,

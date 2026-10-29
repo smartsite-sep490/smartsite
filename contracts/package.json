@@ -10,6 +10,7 @@
   "exports": {
     ".": "./dist/index.js",
     "./management": "./dist/management-api.js",
+    "./camera-configuration-image": "./dist/camera-configuration-image.js",
     "./gate-permissions": "./dist/gate-permissions-api.js",
     "./worker-document-dates": "./dist/worker-document-dates.js"
   },
