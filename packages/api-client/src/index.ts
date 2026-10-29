@@ -161,3 +161,17 @@ export type {
   ReviewWorkerDocumentCommand,
 } from '@smartsite/contracts';
 export type { DocumentImageQuality, WorkerIdentityImageResponse } from '@smartsite/contracts';
+
+export type {
+  SafetyEpisode,
+  SafetyEpisodeSummary,
+  SafetyEpisodeFinding,
+  SafetyEpisodeEvidenceRef,
+  SafetyEpisodePage,
+  SafetyEpisodeListOptions,
+  SafetyEpisodeInboxItem,
+  SafetyEpisodeInboxPage,
+  SafetyEpisodeInboxOptions,
+  SafetyEpisodeReadCommand,
+  SafetyEpisodeReadResponse,
+} from '@smartsite/contracts';
