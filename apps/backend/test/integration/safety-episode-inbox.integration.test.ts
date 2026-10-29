@@ -20,6 +20,12 @@ import { hashPassword } from '../../src/modules/auth/password.js';
 import { AuthClientType } from '../../src/database/entities/auth-session.entity.js';
 import { SafetyEpisodeInboxService } from '../../src/modules/safety/alerts/safety-episode-inbox.service.js';
 import { SafetyAlertEvidenceService } from '../../src/modules/safety/alerts/safety-alert-evidence.service.js';
+import {
+  SafetyAlertReviewService,
+  type ReviewSafetyAlertCommand,
+} from '../../src/modules/safety/alerts/safety-alert-review.service.js';
+import { AlertStatus } from '../../src/database/entities/enums.js';
+import { SafetyEpisodes1794355200000 } from '../../src/database/migrations/1794355200000-SafetyEpisodes.js';
 import { createIsolatedTestDatabase } from '../support/isolated-test-database.js';
 import { createTestConfig } from '../support/config.js';
 
@@ -400,6 +406,120 @@ test('password-required accounts retain the standard error code', async () => {
     const failure = error as { getStatus(): number; getResponse(): { code: string } };
     return failure.getStatus() === 403 && failure.getResponse().code === 'PASSWORD_CHANGE_REQUIRED';
   });
+});
+
+test('episode revisions reflect a committed finding review once and preserve newer unread content', async () => {
+  const f = await fixture();
+  const reviews = app.get(SafetyAlertReviewService);
+  const [alert] = await db.query('SELECT id FROM safety_alert WHERE episode_id=$1', [
+    f.episodes[0],
+  ]);
+  const command: ReviewSafetyAlertCommand = {
+    commandId: randomUUID(),
+    expectedRevision: 0,
+    targetStatus: AlertStatus.CONFIRMED,
+    reason: 'Synthetic independent finding review',
+  };
+  await inbox.read(f.request(), f.recipients[0]!, { seenRevision: 1 });
+  await reviews.review(f.sites[0]!, alert.id, f.user, command);
+  const item = (await inbox.list(f.request(), { siteId: f.sites[0] })).items[0]!;
+  assert.equal(item.episode.contentRevision, 2);
+  assert.equal(item.seenRevision, 1);
+  assert.equal(item.unread, true);
+  assert.equal((await reviews.review(f.sites[0]!, alert.id, f.user, command)).replayed, true);
+  assert.equal(
+    (await inbox.list(f.request(), { siteId: f.sites[0] })).items[0]!.episode.contentRevision,
+    2,
+  );
+  const second = randomUUID();
+  await db.query(
+    `INSERT INTO safety_alert(id,site_id,episode_id,alert_type,candidate_subtype,grouping_key,first_detected_at,last_detected_at)
+    VALUES($1::uuid,$2,$3,'PPE_VIOLATION','PPE_SAFETY_VEST_MISSING',$1::text,now(),now())`,
+    [second, f.sites[0], f.episodes[0]],
+  );
+  await db.query("UPDATE safety_episode SET collection_state='SEALED' WHERE id=$1", [
+    f.episodes[0],
+  ]);
+  await Promise.all([
+    reviews.review(f.sites[0]!, second, f.user, {
+      ...command,
+      commandId: randomUUID(),
+      targetStatus: AlertStatus.DISMISSED,
+    }),
+    inbox.read(f.request(), f.recipients[0]!, { seenRevision: 2 }),
+  ]);
+  const latest = (await inbox.list(f.request(), { siteId: f.sites[0] })).items[0]!;
+  assert.equal(latest.episode.contentRevision, 3);
+  assert.equal(latest.episode.collectionState, 'SEALED');
+  assert.equal(latest.seenRevision, 2);
+  assert.equal(latest.unread, true);
+  const third = randomUUID(),
+    exhausted = randomUUID();
+  await db.query(
+    `INSERT INTO safety_alert(id,site_id,episode_id,alert_type,candidate_subtype,grouping_key,first_detected_at,last_detected_at)
+    VALUES($1::uuid,$2,$3,'PPE_VIOLATION','PPE_GLOVES_MISSING',$1::text,now(),now())`,
+    [third, f.sites[0], f.episodes[0]],
+  );
+  await db.query('UPDATE safety_episode SET content_revision=2147483647 WHERE id=$1', [
+    f.episodes[0],
+  ]);
+  await assert.rejects(
+    reviews.review(f.sites[0]!, third, f.user, { ...command, commandId: exhausted }),
+    status(409),
+  );
+  const [unchanged] = await db.query('SELECT status,revision FROM safety_alert WHERE id=$1', [
+    third,
+  ]);
+  assert.equal(unchanged.status, 'PENDING_REVIEW');
+  assert.equal(unchanged.revision, 0);
+  assert.equal(
+    (await db.query('SELECT id FROM safety_alert_review WHERE id=$1', [exhausted])).length,
+    0,
+  );
+});
+
+test('episode revisions preserve legacy alert review on a schema without episode tables', async () => {
+  const legacy = createIsolatedTestDatabase();
+  try {
+    await legacy.initialize();
+    const runner = legacy.dataSource.createQueryRunner();
+    await runner.connect();
+    try {
+      await runner.startTransaction();
+      await new SafetyEpisodes1794355200000().down(runner);
+      await runner.commitTransaction();
+    } finally {
+      if (runner.isTransactionActive) await runner.rollbackTransaction();
+      await runner.release();
+    }
+    const site = randomUUID(),
+      user = randomUUID(),
+      alert = randomUUID();
+    await legacy.dataSource.query(
+      'INSERT INTO site(id,code,name) VALUES($1::uuid,$1::text,$1::text)',
+      [site],
+    );
+    await legacy.dataSource.query(
+      `INSERT INTO app_user(id,username,display_name,password_hash) VALUES($1::uuid,$1::text,$1::text,'SYNTHETIC_NOT_USABLE')`,
+      [user],
+    );
+    await legacy.dataSource.query(
+      `INSERT INTO safety_alert(id,site_id,alert_type,candidate_subtype,grouping_key,first_detected_at,last_detected_at)
+      VALUES($1::uuid,$2,'PPE_VIOLATION','PPE_HARD_HAT_MISSING',$1::text,now(),now())`,
+      [alert, site],
+    );
+    const result = await new SafetyAlertReviewService(legacy.dataSource).review(site, alert, user, {
+      commandId: randomUUID(),
+      expectedRevision: 0,
+      targetStatus: AlertStatus.CONFIRMED,
+      reason: 'Synthetic legacy compatibility review',
+    });
+    assert.equal(result.alert.status, AlertStatus.CONFIRMED);
+    assert.equal(result.alert.revision, 1);
+    assert.equal(result.replayed, false);
+  } finally {
+    await legacy.dispose();
+  }
 });
 
 test('Site episode list scopes camera/Zone filters, pagination and live grants over HTTP', async () => {
