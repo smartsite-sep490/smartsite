@@ -5,6 +5,7 @@ import { mkdir, mkdtemp, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { after, before, test } from 'node:test';
+import { setTimeout as delay } from 'node:timers/promises';
 import sharp from 'sharp';
 import { createIsolatedTestDatabase } from '../support/isolated-test-database.js';
 import { storeVersionFixture } from '../support/mf06-store-version.fixture.js';
@@ -79,10 +80,13 @@ for (const expireAfterPreparation of [false, true]) {
     assert.equal(decoded.width, 192);
     assert.equal(decoded.height, 336);
     if (expireAfterPreparation) {
-      await db.query(
-        'SELECT pg_sleep(GREATEST(0,EXTRACT(EPOCH FROM lease_expires_at-clock_timestamp()))+0.02) FROM zone_entry_assessment_job WHERE request_id=$1',
+      const [{ waitMs }] = await db.query(
+        'SELECT GREATEST(0,EXTRACT(EPOCH FROM lease_expires_at-clock_timestamp())*1000)::float8 AS "waitMs" FROM zone_entry_assessment_job WHERE request_id=$1',
         [requestId],
       );
+      assert(Number.isFinite(waitMs) && waitMs >= 0 && waitMs <= 2000);
+      // Wait outside a query so the lease clock test cannot hit the driver's read timeout.
+      await delay(Math.ceil(waitMs) + 20);
       assert.deepEqual(await reader.readForClaim(claim), {
         status: 'UNAVAILABLE',
         reason: 'CLAIM_NOT_ACTIVE',
