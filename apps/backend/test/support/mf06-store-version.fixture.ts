@@ -21,7 +21,9 @@ export async function storeVersionFixture(
   db: DataSource,
   version: 'V1' | 'V2',
   eventVersion: '1.0.0' | '1.2.0' | '1.3.0' = '1.0.0',
+  frameSha256 = 'a'.repeat(64),
 ) {
+  assert.match(frameSha256, /^[0-9a-f]{64}$/);
   const siteId = randomUUID(),
     cameraId = randomUUID(),
     zoneId = randomUUID();
@@ -69,7 +71,7 @@ export async function storeVersionFixture(
             {
               kind: 'FRAME',
               uri: `local://evidence/${session}/7/${eventId}.jpg`,
-              sha256: 'a'.repeat(64),
+              sha256: frameSha256,
             },
           ]
         : [],
