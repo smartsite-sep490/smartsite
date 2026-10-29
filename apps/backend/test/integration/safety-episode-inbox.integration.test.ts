@@ -209,3 +209,79 @@ test('password-required accounts retain the standard error code', async () => {
     return failure.getStatus() === 403 && failure.getResponse().code === 'PASSWORD_CHANGE_REQUIRED';
   });
 });
+
+test('Site episode list scopes camera/Zone filters, pagination and live grants over HTTP', async () => {
+  const f = await fixture();
+  const headers = { Authorization: `Bearer ${f.session.accessToken}` };
+  const endpoint = `${url.split('/me/')[0]}/sites/${f.sites[0]}/safety-episodes`;
+  const response = await fetch(endpoint, { headers });
+  assert.equal(response.status, 200);
+  assert.equal(response.headers.get('cache-control'), 'no-store');
+  const page = await response.json();
+  assert.equal(page.total, 1);
+  assert.equal(page.items[0].id, f.episodes[0]);
+  assert.equal(page.items[0].subject.kind, 'EVENT_LOCAL');
+  assert.equal(page.items[0].findingCount, 1);
+  assert.equal((await (await fetch(endpoint + '?offset=1&limit=1', { headers })).json()).total, 1);
+  assert.equal(
+    (await (await fetch(endpoint + '?offset=1&limit=1', { headers })).json()).items.length,
+    0,
+  );
+  const [camera] = await db.query('SELECT camera_id FROM safety_episode WHERE id=$1', [
+    f.episodes[0],
+  ]);
+  const [otherCamera] = await db.query('SELECT camera_id FROM safety_episode WHERE id=$1', [
+    f.episodes[1],
+  ]);
+  assert.equal(
+    (await (await fetch(endpoint + `?cameraId=${camera.camera_id}`, { headers })).json()).total,
+    1,
+  );
+  assert.equal(
+    (await (await fetch(endpoint + `?cameraId=${otherCamera.camera_id}`, { headers })).json())
+      .total,
+    0,
+  );
+  const zone = randomUUID();
+  await db.query(
+    `INSERT INTO zone(id,site_id,code,name,type,restriction_policy) VALUES($1,$2,'EPISODE','Synthetic','STANDARD','NONE')`,
+    [zone, f.sites[0]],
+  );
+  await db.query('UPDATE safety_alert SET zone_id=$1 WHERE episode_id=$2', [zone, f.episodes[0]]);
+  assert.equal((await (await fetch(endpoint + `?zoneId=${zone}`, { headers })).json()).total, 1);
+  assert.equal(
+    (await (await fetch(endpoint + `?zoneId=${randomUUID()}`, { headers })).json()).total,
+    0,
+  );
+  for (const query of ['?cameraId=', '?zoneId=bad', '?recipientId=other', '?limit=101'])
+    assert.equal((await fetch(endpoint + query, { headers })).status, 400);
+  assert.equal((await fetch(endpoint)).status, 401);
+  await db.query(
+    "DELETE FROM user_role_assignment WHERE user_id=$1 AND site_id=$2 AND role='SAFETY_OFFICER'",
+    [f.user, f.sites[0]],
+  );
+  assert.equal((await fetch(endpoint, { headers })).status, 403);
+  await db.query(
+    "INSERT INTO user_role_assignment(id,user_id,site_id,role) VALUES($1,$2,$3,'SITE_MANAGER')",
+    [randomUUID(), f.user, f.sites[0]],
+  );
+  assert.equal((await fetch(endpoint, { headers })).status, 403);
+  await db.query('DELETE FROM user_role_assignment WHERE user_id=$1', [f.user]);
+  await db.query(
+    "INSERT INTO user_role_assignment(id,user_id,site_id,role) VALUES($1,$2,NULL,'ADMIN')",
+    [randomUUID(), f.user],
+  );
+  assert.equal((await fetch(endpoint, { headers })).status, 200);
+  const otherSiteEndpoint = endpoint.replace(f.sites[0]!, f.sites[2]!);
+  assert.equal(
+    (await (await fetch(otherSiteEndpoint, { headers })).json()).items[0].id,
+    f.episodes[2],
+  );
+  await db.query('UPDATE app_user SET must_change_password=true WHERE id=$1', [f.user]);
+  const blocked = await fetch(endpoint, { headers });
+  assert.equal(blocked.status, 403);
+  assert.equal((await blocked.json()).code, 'PASSWORD_CHANGE_REQUIRED');
+  await db.query('UPDATE app_user SET must_change_password=false WHERE id=$1', [f.user]);
+  await auth.logout(f.session.refreshToken, AuthClientType.WEB);
+  assert.equal((await fetch(endpoint, { headers })).status, 401);
+});
