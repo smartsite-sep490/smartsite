@@ -108,6 +108,14 @@ export class Mf06FacePreparation {
       return { state: 'PREPARED_UNATTESTED', context, media, response };
     } catch (error) {
       if (!signal.aborted && error instanceof Mf06RetryableWorkError) throw error;
+      const failure = error as { code?: unknown; driverError?: { code?: unknown } };
+      const code = failure?.driverError?.code ?? failure?.code;
+      if (
+        !signal.aborted &&
+        typeof code === 'string' &&
+        ['40001', '40P01', '55P03', '57014', '55000'].includes(code)
+      )
+        throw new Mf06RetryableWorkError('DATABASE_UNAVAILABLE');
       return unavailable(signal.aborted ? 'ABORTED' : 'PREPARATION_FAILED');
     }
   }

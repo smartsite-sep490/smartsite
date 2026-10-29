@@ -570,6 +570,55 @@ test('4. resolver Mf06RetryableWorkError is rethrown when signal stays active, w
   });
 });
 
+test('transient second-context and candidate reads retry instead of returning a final identity failure', async (t) => {
+  const unexpected = async (): Promise<never> => {
+    throw new Error('Unexpected downstream call');
+  };
+  for (const code of ['40001', '40P01', '55P03', '57014', '55000']) {
+    const preparation = new Mf06FacePreparation(
+      {
+        readForClaim: async () => {
+          throw Object.assign(new Error('Synthetic SQL failure'), { driverError: { code } });
+        },
+      },
+      { readForSafety: unexpected },
+      { resolve: unexpected },
+      '',
+      MODEL_VERSION,
+    );
+    await assert.rejects(
+      preparation.prepare(CLAIM, new AbortController().signal),
+      (value) => value instanceof Mf06RetryableWorkError && value.code === 'DATABASE_UNAVAILABLE',
+    );
+  }
+  const root = await makeDTempDir(t);
+  const frame = await makeSyntheticJpeg();
+  await writeFile(join(root, flatFileName()), frame.bytes);
+  const controller = new AbortController();
+  let abort = false;
+  const preparation = new Mf06FacePreparation(
+    { readForClaim: async () => makeMatchedV13Context(frame.sha256) },
+    {
+      readForSafety: async () => {
+        if (abort) controller.abort();
+        throw Object.assign(new Error('Synthetic candidate timeout'), { code: '57014' });
+      },
+    },
+    { resolve: unexpected },
+    root,
+    MODEL_VERSION,
+  );
+  await assert.rejects(
+    preparation.prepare(CLAIM, controller.signal),
+    (value) => value instanceof Mf06RetryableWorkError && value.code === 'DATABASE_UNAVAILABLE',
+  );
+  abort = true;
+  assert.deepEqual(await preparation.prepare(CLAIM, controller.signal), {
+    state: 'UNAVAILABLE',
+    reason: 'ABORTED',
+  });
+});
+
 test('5. identical Face inputs retain invocation and binding across lease retries, while model, candidate or media changes create a new invocation', async (t) => {
   const root = await makeDTempDir(t);
   let frame = await makeSyntheticJpeg(40, 20, '#308040');
