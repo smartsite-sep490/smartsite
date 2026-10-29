@@ -875,22 +875,27 @@ export class SmartSiteManagementClient {
     token: string | undefined,
     init: RequestInit,
     signal?: AbortSignal,
+    bounded = false,
   ): Promise<Response> {
     const session = token ? this.session : undefined;
     let current = session && token ? session.getAccessToken(token) : token;
     const send = (accessToken: string | undefined) =>
-      this.readBody(
-        () =>
-          fetch(`${this.baseUrl.replace(/\/+$/, '')}/api/v1${path}`, {
-            ...init,
-            headers: {
-              ...init.headers,
-              ...(accessToken ? { Authorization: `Bearer ${accessToken}` } : {}),
-            },
-            ...(signal ? { signal } : {}),
-          }),
-        signal,
-      );
+      this.readBody(() => {
+        const pending = fetch(`${this.baseUrl.replace(/\/+$/, '')}/api/v1${path}`, {
+          ...init,
+          headers: {
+            ...init.headers,
+            ...(accessToken ? { Authorization: `Bearer ${accessToken}` } : {}),
+          },
+          ...(signal ? { signal } : {}),
+        });
+        if (bounded)
+          void pending.then(
+            (response) => discardAbortedResponse(response, signal),
+            () => undefined,
+          );
+        return pending;
+      }, signal);
     const checkPasswordSession = async (response: Response): Promise<boolean> => {
       if (path !== '/auth/change-password' || response.status !== 401) return false;
       const check = await this.readBody(
@@ -916,6 +921,7 @@ export class SmartSiteManagementClient {
     if (session && token) session.getAccessToken(token);
     if (response.status !== 401 || !session || !current || (await checkPasswordSession(response)))
       return response;
+    if (bounded) discardResponseBody(response);
     try {
       current = await this.readBody(() => session.refreshAccessToken(current!), signal);
     } catch (error) {
@@ -930,12 +936,35 @@ export class SmartSiteManagementClient {
     return response;
   }
 
-  private async responseError(response: Response, signal?: AbortSignal): Promise<never> {
+  private async responseError(
+    response: Response,
+    signal?: AbortSignal,
+    maxResponseBytes?: number,
+  ): Promise<never> {
+    const retry = retryAfter(response);
+    const safeRetry =
+      maxResponseBytes !== undefined && retry !== undefined ? Math.min(retry, 60) : retry;
     let payload: unknown;
     try {
-      payload = await this.readBody(() => response.json(), signal);
+      payload =
+        maxResponseBytes === undefined
+          ? await this.readBody(() => response.json(), signal)
+          : await readBoundedResponseJson(
+              response,
+              maxResponseBytes,
+              (read, currentSignal) => this.readBody(read, currentSignal),
+              signal,
+            );
     } catch (error) {
       if (signal?.aborted) throw error;
+      if (maxResponseBytes !== undefined)
+        throw new ApiError(
+          'http',
+          `Backend returned HTTP ${response.status}.`,
+          response.status,
+          undefined,
+          safeRetry,
+        );
       throw new ApiError(
         'invalid-response',
         'Backend returned invalid JSON.',
@@ -950,7 +979,7 @@ export class SmartSiteManagementClient {
       error?.message ?? `Backend returned HTTP ${response.status}.`,
       response.status,
       error,
-      retryAfter(response),
+      safeRetry,
     );
   }
 
@@ -961,7 +990,10 @@ export class SmartSiteManagementClient {
     body?: unknown,
     credentials?: RequestCredentials,
     options?: RequestOptions,
+    transport?: { cache: 'no-store'; redirect: 'error' },
+    maxResponseBytes?: number,
   ): Promise<T> {
+    const sessionScopes = maxResponseBytes !== undefined ? captureSessionScopes(token) : [];
     const requestOptions = this.requestOptions(
       token,
       options ?? (this.session && path.startsWith('/auth/') ? { timeoutMs: 15_000 } : undefined),
@@ -978,8 +1010,10 @@ export class SmartSiteManagementClient {
           },
           ...(body === undefined ? {} : { body: JSON.stringify(body) }),
           ...(credentials ? { credentials } : {}),
+          ...(transport ?? {}),
         },
         signal,
+        maxResponseBytes !== undefined,
       );
       if (!response.ok) {
         if (
@@ -989,13 +1023,24 @@ export class SmartSiteManagementClient {
           response.status === 401 &&
           typeof window !== 'undefined'
         ) {
-          window.dispatchEvent(new CustomEvent('smartsite:session-expired'));
+          if (maxResponseBytes === undefined)
+            window.dispatchEvent(new CustomEvent('smartsite:session-expired'));
+          else if (sessionScopes.length) dispatchSessionExpired(sessionScopes);
         }
-        return this.responseError(response, signal);
+        return this.responseError(response, signal, maxResponseBytes);
       }
       if (response.status === 204) return undefined as T;
       try {
-        return (await this.readBody(() => response.json(), signal)) as T;
+        return (
+          maxResponseBytes === undefined
+            ? await this.readBody(() => response.json(), signal)
+            : await readBoundedResponseJson(
+                response,
+                maxResponseBytes,
+                (read, currentSignal) => this.readBody(read, currentSignal),
+                signal,
+              )
+        ) as T;
       } catch (error) {
         if (signal?.aborted) throw error;
         throw new ApiError('invalid-response', 'Backend returned invalid JSON.', response.status);
@@ -2297,6 +2342,44 @@ export class SmartSiteManagementClient {
       token,
     );
   }
+
+  async getCameraConfigurationImage(
+    token: string,
+    siteId: string,
+    cameraId: string,
+    options?: RequestOptions,
+  ): Promise<CameraConfigurationImageResponse> {
+    const value = await this.request<unknown>(
+      'GET',
+      `/sites/${pathId(siteId)}/cameras/${pathId(cameraId)}/configuration-image`,
+      token,
+      undefined,
+      undefined,
+      { ...options, timeoutMs: options?.timeoutMs ?? 3000 },
+      { cache: 'no-store', redirect: 'error' },
+      MAX_CONFIGURATION_IMAGE_RESPONSE_BYTES,
+    );
+    return parseScopedCameraConfigurationImage(value, siteId, cameraId);
+  }
+
+  async getCameraConfigurationReference(
+    token: string,
+    siteId: string,
+    cameraId: string,
+    options?: RequestOptions,
+  ): Promise<CameraConfigurationReferenceResponse> {
+    const value = await this.request<unknown>(
+      'GET',
+      `/sites/${pathId(siteId)}/cameras/${pathId(cameraId)}/configuration-reference`,
+      token,
+      undefined,
+      undefined,
+      { ...options, timeoutMs: options?.timeoutMs ?? 3000 },
+      { cache: 'no-store', redirect: 'error' },
+      MAX_CONFIGURATION_REFERENCE_RESPONSE_BYTES,
+    );
+    return parseScopedCameraConfigurationReference(value, siteId, cameraId);
+  }
   renameCamera(token: string, siteId: string, cameraId: string, name: string) {
     return this.request<CameraResponse>(
       'PATCH',
@@ -2938,3 +3021,17 @@ import type {
   WorkerComplianceResponse,
   ReviewWorkerDocumentCommand,
 } from '@smartsite/contracts';
+import type {
+  CameraConfigurationImageResponse,
+  CameraConfigurationReferenceResponse,
+} from '@smartsite/contracts/camera-configuration-image';
+import {
+  MAX_CONFIGURATION_IMAGE_RESPONSE_BYTES,
+  MAX_CONFIGURATION_REFERENCE_RESPONSE_BYTES,
+  readBoundedResponseJson,
+  discardAbortedResponse,
+  discardResponseBody,
+  parseScopedCameraConfigurationImage,
+  parseScopedCameraConfigurationReference,
+} from './camera-configuration-response';
+import { captureSessionScopes, dispatchSessionExpired } from './session-expiry';
