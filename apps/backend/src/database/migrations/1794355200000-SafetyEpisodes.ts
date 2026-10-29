@@ -49,6 +49,15 @@ export class SafetyEpisodes1794355200000 implements MigrationInterface {
     await runner.query(
       `CREATE INDEX idx_safety_alert_episode ON safety_alert(episode_id) WHERE episode_id IS NOT NULL`,
     );
+    await runner.query(`CREATE FUNCTION guard_safety_alert_episode_link() RETURNS trigger LANGUAGE plpgsql AS $$
+    BEGIN
+      IF OLD.episode_id IS NOT NULL AND NEW.episode_id IS DISTINCT FROM OLD.episode_id THEN
+        RAISE EXCEPTION 'Alert episode linkage must be preserved' USING ERRCODE='23514';
+      END IF;
+      RETURN NEW;
+    END $$`);
+    await runner.query(`CREATE TRIGGER trg_safety_alert_episode_link BEFORE UPDATE OF episode_id ON safety_alert
+      FOR EACH ROW EXECUTE FUNCTION guard_safety_alert_episode_link()`);
     await runner.query(`CREATE FUNCTION guard_safety_episode_context() RETURNS trigger LANGUAGE plpgsql AS $$
     DECLARE source_event record; person jsonb; matching_people integer;
     BEGIN
@@ -112,6 +121,8 @@ export class SafetyEpisodes1794355200000 implements MigrationInterface {
       OR EXISTS(SELECT 1 FROM safety_episode_recipient)
       OR EXISTS(SELECT 1 FROM safety_alert WHERE episode_id IS NOT NULL) AS present`);
     if (used.present) throw new Error('Episode history must be preserved before rollback');
+    await runner.query('DROP TRIGGER trg_safety_alert_episode_link ON safety_alert');
+    await runner.query('DROP FUNCTION guard_safety_alert_episode_link()');
     await runner.query(
       'ALTER TABLE safety_alert DROP CONSTRAINT fk_safety_alert_episode_scope, DROP COLUMN episode_id',
     );

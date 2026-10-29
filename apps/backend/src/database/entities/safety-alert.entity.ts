@@ -13,13 +13,31 @@ import { numericTransformer } from './numeric.transformer.js';
 import { SiteEntity } from './site.entity.js';
 import { ZoneEntity } from './zone.entity.js';
 import { IncidentEntity } from './safety-workflow.entity.js';
+import { SafetyEpisodeEntity } from './safety-episode.entity.js';
 
 @Entity({ name: 'safety_alert' })
+@ForeignKey(() => SafetyEpisodeEntity, ['episodeId', 'siteId'], ['id', 'siteId'], {
+  name: 'fk_safety_alert_episode_scope',
+  onDelete: 'RESTRICT',
+})
+@Index('idx_safety_alert_episode', { synchronize: false })
 @Check('chk_safety_alert_revision', 'revision >= 0')
 @Index('idx_alert_grouping', ['groupingKey', 'status'])
 @Index('idx_alert_site_last_detected', { synchronize: false })
 @Index('idx_alert_incident', { synchronize: false })
 export class SafetyAlertEntity {
+  // Projection-owned linkage: legacy alert reads/writes must not select or overwrite it.
+  // Episode queries explicitly select/link this column in their scoped transaction.
+  @Column({
+    name: 'episode_id',
+    type: 'uuid',
+    nullable: true,
+    select: false,
+    insert: false,
+    update: false,
+  })
+  episodeId!: string | null;
+
   @PrimaryColumn({ name: 'id', type: 'uuid', primaryKeyConstraintName: 'pk_safety_alert_id' })
   id!: string;
 
