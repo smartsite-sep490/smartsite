@@ -288,6 +288,34 @@ test('3. refuses 33-row limit overflow, duplicate hash or revision, and null or 
   }
 });
 
+test('transient PostgreSQL errors survive the candidate boundary, while cancellation wins', async () => {
+  for (const code of ['40001', '40P01', '55P03', '57014', '55000']) {
+    const error = Object.assign(new Error('Synthetic transient SQL error'), {
+      driverError: { code },
+    });
+    const reader = new SafetyFaceCandidateReader(makeFakeDb({ transactionError: error }).db);
+    await assert.rejects(
+      reader.readForSafety(SITE_ID, MODEL_VERSION, new AbortController().signal),
+      (value) => value === error,
+    );
+  }
+  const controller = new AbortController();
+  const db = makeFakeDb({
+    onQuery() {
+      controller.abort();
+      throw Object.assign(new Error('Synthetic timeout during abort'), { code: '57014' });
+    },
+  });
+  assert.deepEqual(
+    await new SafetyFaceCandidateReader(db.db).readForSafety(
+      SITE_ID,
+      MODEL_VERSION,
+      controller.signal,
+    ),
+    { status: 'UNAVAILABLE', reason: 'ABORTED' },
+  );
+});
+
 test('4. maps query or transaction errors to READ_UNAVAILABLE without leaking templates and honors mid-read abort', async () => {
   const signal = new AbortController().signal;
   const failingTxDb = makeFakeDb({
