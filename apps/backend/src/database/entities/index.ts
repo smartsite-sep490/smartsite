@@ -142,7 +142,17 @@ import {
 export * from './camera-configuration-reference.entity.js';
 import { CameraRegionGeometryRevisionEntity } from './camera-region-geometry-revision.entity.js';
 export * from './camera-region-geometry-revision.entity.js';
+import { ZonePolicyRevisionEntity } from './zone-policy-revision.entity.js';
+import {
+  CameraConfigurationBundleEntity,
+  CameraConfigurationBundleRegionEntity,
+} from './camera-configuration-bundle.entity.js';
+export * from './zone-policy-revision.entity.js';
+export * from './camera-configuration-bundle.entity.js';
 export const ENTITIES = [
+  ZonePolicyRevisionEntity,
+  CameraConfigurationBundleEntity,
+  CameraConfigurationBundleRegionEntity,
   CameraRegionGeometryRevisionEntity,
   CameraViewRevisionEntity,
   CameraConfigurationReferenceEntity,

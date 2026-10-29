@@ -38,6 +38,8 @@ import { CameraStatus } from '../../database/entities/enums.js';
 import { SiteConfigurationService } from '../sites/site-configuration.service.js';
 import { ZoneConfigurationService } from '../zones/zone-configuration.service.js';
 import { AuthService } from '../auth/auth.service.js';
+import { recordCameraConfigurationBundle } from './camera-configuration-bundles.js';
+import { readIssuedCameraConfigurationBundle } from './camera-configuration-bundle-reader.js';
 import { requireSiteManager } from '../auth/site-manager.guard.js';
 import {
   attachRegionConfirmations,
@@ -288,6 +290,10 @@ export class CameraConfigurationService {
     });
   }
 
+  async readConfigurationBundleForCamera(cameraId: string) {
+    return readIssuedCameraConfigurationBundle(this.dataSource, uuid(cameraId).toLowerCase());
+  }
+
   async setStatus(
     siteId: string,
     cameraId: string,
@@ -313,7 +319,12 @@ export class CameraConfigurationService {
       camera.status = value.status;
       await this.bump(manager, camera);
       for (const region of activeRegions) await recordRegionRevision(manager, camera, region, true);
-      await this.snapshot(manager, camera, true);
+      await recordCameraConfigurationBundle(
+        manager,
+        camera,
+        await this.snapshot(manager, camera, true),
+        this.zones,
+      );
       return camera;
     });
   }
@@ -435,7 +446,12 @@ export class CameraConfigurationService {
       await this.zones.markLinked(manager, zone);
       await this.bump(manager, camera);
       await recordRegionRevision(manager, camera, region, false, provenance);
-      await this.snapshot(manager, camera, true);
+      await recordCameraConfigurationBundle(
+        manager,
+        camera,
+        await this.snapshot(manager, camera, true),
+        this.zones,
+      );
       return regionMutationResult(region, camera.configurationVersion, provenance);
     });
   }
@@ -539,7 +555,12 @@ export class CameraConfigurationService {
       await repo.save(region);
       await this.bump(manager, camera);
       await recordRegionRevision(manager, camera, region, preserveReference, provenance);
-      await this.snapshot(manager, camera, true);
+      await recordCameraConfigurationBundle(
+        manager,
+        camera,
+        await this.snapshot(manager, camera, true),
+        this.zones,
+      );
       return regionMutationResult(region, camera.configurationVersion, provenance);
     });
   }

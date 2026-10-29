@@ -25,6 +25,8 @@ import {
 import { ZoneRestrictionPolicy, ZoneType } from '../../database/entities/enums.js';
 import { ZoneEntity } from '../../database/entities/zone.entity.js';
 import { SiteConfigurationService } from '../sites/site-configuration.service.js';
+import { appendZonePolicyRevision } from './zone-policy-revisions.js';
+import { ZonePolicyRevisionEntity } from '../../database/entities/zone-policy-revision.entity.js';
 
 const trim = ({ value }: { value: unknown }) => (typeof value === 'string' ? value.trim() : value);
 
@@ -83,13 +85,17 @@ export class ZoneConfigurationService {
     const value = command(CreateZoneCommand, input);
     await this.sites.get(siteId);
     try {
-      return await this.dataSource.getRepository(ZoneEntity).save({
-        id: randomUUID(),
-        siteId,
-        ...value,
-        code: value.code ?? `ZONE-${randomUUID().toUpperCase()}`,
-        requiredPpe: [...value.requiredPpe].sort(),
-        configurationLocked: false,
+      return await this.dataSource.transaction(async (manager) => {
+        const zone = await manager.getRepository(ZoneEntity).save({
+          id: randomUUID(),
+          siteId,
+          ...value,
+          code: value.code ?? `ZONE-${randomUUID().toUpperCase()}`,
+          requiredPpe: [...value.requiredPpe].sort(),
+          configurationLocked: false,
+        });
+        await appendZonePolicyRevision(manager, zone, true);
+        return zone;
       });
     } catch (error) {
       knownUnique(error, ['uq_zone_site_code']);
@@ -166,6 +172,7 @@ export class ZoneConfigurationService {
       zone.type = value.type;
       zone.restrictionPolicy = value.restrictionPolicy;
       zone.requiredPpe = requiredPpe;
+      await appendZonePolicyRevision(manager, zone);
       return zone;
     });
   }
@@ -187,5 +194,23 @@ export class ZoneConfigurationService {
     if (zone.configurationLocked) return;
     await manager.getRepository(ZoneEntity).update({ id: zone.id }, { configurationLocked: true });
     zone.configurationLocked = true;
+  }
+
+  async configurationPolicy(manager: EntityManager, siteId: string, zoneId: string) {
+    const zone = await manager.getRepository(ZoneEntity).findOneBy({ id: zoneId, siteId });
+    // Linked policy is immutable through Main; no cross-camera Zone lock cycle.
+    if (!zone?.configurationLocked) conflict('Zone policy history is unavailable');
+    const policy = await manager
+      .getRepository(ZonePolicyRevisionEntity)
+      .findOne({ where: { zoneId: zone.id, siteId }, order: { policyRevision: 'DESC' } });
+    if (
+      !policy ||
+      policy.zoneType !== zone.type ||
+      policy.restrictionPolicy !== zone.restrictionPolicy ||
+      JSON.stringify([...policy.requiredPpe].sort()) !==
+        JSON.stringify([...zone.requiredPpe].sort())
+    )
+      conflict('Zone policy history is unavailable');
+    return policy;
   }
 }
