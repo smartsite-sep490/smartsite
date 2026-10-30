@@ -8,10 +8,25 @@ import {
   revokeCameraWorkerGeneration as revoke,
 } from '../../src/modules/cameras/camera-worker-generations.js';
 import { CameraWorkerGenerationEntity } from '../../src/database/entities/camera-worker-generation.entity.js';
+import { CameraWorkerGenerations1794614400000 } from '../../src/database/migrations/1794614400000-CameraWorkerGenerations.js';
 
 test('generation lifecycle retains server ownership, transactional replacement and exact schema', async (t) => {
   const owned = createIsolatedTestDatabase(),
     db = owned.dataSource;
+  // Exercise this migration explicitly even when newer migrations are registered.
+  const migrateGeneration = async (direction: 'up' | 'down') => {
+    const runner = db.createQueryRunner();
+    try {
+      await runner.startTransaction();
+      await new CameraWorkerGenerations1794614400000()[direction](runner);
+      await runner.commitTransaction();
+    } catch (error) {
+      if (runner.isTransactionActive) await runner.rollbackTransaction();
+      throw error;
+    } finally {
+      await runner.release();
+    }
+  };
   try {
     await owned.initialize();
     await t.test(
@@ -23,8 +38,8 @@ test('generation lifecycle retains server ownership, transactional replacement a
         );
         await db.query('TRUNCATE app_user CASCADE');
         await db.query('TRUNCATE camera CASCADE');
-        await db.undoLastMigration();
-        await db.runMigrations();
+        await migrateGeneration('down');
+        await migrateGeneration('up');
       },
     );
     const site = randomUUID(),
@@ -113,7 +128,7 @@ test('generation lifecycle retains server ownership, transactional replacement a
           db.query('TRUNCATE camera_worker_generation CASCADE'),
           /cannot be removed/,
         );
-        await assert.rejects(db.undoLastMigration(), /populated worker generation history/);
+        await assert.rejects(migrateGeneration('down'), /populated worker generation history/);
       },
     );
   } finally {

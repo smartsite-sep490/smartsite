@@ -1,9 +1,13 @@
-import { Column, CreateDateColumn, Entity, ForeignKey, Index, PrimaryColumn } from 'typeorm';
+import { Check, Column, CreateDateColumn, Entity, ForeignKey, Index, PrimaryColumn } from 'typeorm';
 import { CameraEntity } from './camera.entity.js';
 import { EventProcessingStatus } from './enums.js';
 import type { WorkerEventDeliveryContext } from '@smartsite/contracts';
 
 @Entity({ name: 'ai_observation_event' })
+@Check(
+  'chk_ai_event_admission_object',
+  "admission_context IS NULL OR jsonb_typeof(admission_context)='object'",
+)
 @Index('uq_ai_event_frame_part', { synchronize: false })
 @Index('idx_ai_event_source_frame', { synchronize: false })
 @Index('idx_event_camera_session_captured', ['cameraExternalId', 'streamSessionId', 'capturedAt'])
