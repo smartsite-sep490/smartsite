@@ -1,5 +1,5 @@
 import { computeCanonicalPayloadHash } from '@smartsite/contracts';
-import type { DataSource } from 'typeorm';
+import type { DataSource, EntityManager } from 'typeorm';
 import { parseNormalizedCapturedAt } from '../../../common/parse-normalized-captured-at.js';
 import { AiObservationEventEntity } from '../../../database/entities/ai-observation-event.entity.js';
 import { ZoneEntryAssessmentRequestEntity } from '../../../database/entities/zone-entry-assessment-request.entity.js';
@@ -11,6 +11,7 @@ import { loadMf06RequestAdmission } from './mf06-event-admission.js';
 
 export type Mf06ClaimContextUnavailableReason =
   | 'INVALID_CLAIM'
+  | 'TRANSACTION_REQUIRED'
   | 'ABORTED'
   | 'SCHEMA_UNAVAILABLE'
   | 'CLAIM_NOT_ACTIVE'
@@ -168,6 +169,29 @@ export class Mf06ClaimContextReader {
   constructor(private readonly db: DataSource) {}
 
   async readForClaim(claim: Mf06JobClaim, signal?: AbortSignal): Promise<Mf06ClaimContextLookup> {
+    return this.read(claim, signal);
+  }
+
+  /** Caller acquires the authority fence first; preserve its transaction and search path. */
+  async revalidateForClaim(
+    manager: EntityManager,
+    claim: Mf06JobClaim,
+    signal?: AbortSignal,
+  ): Promise<Mf06ClaimContextLookup> {
+    if (
+      manager?.connection !== this.db ||
+      manager.queryRunner?.isTransactionActive !== true ||
+      manager.queryRunner.isReleased !== false
+    )
+      return unavailable('TRANSACTION_REQUIRED');
+    return this.read(claim, signal, manager);
+  }
+
+  private async read(
+    claim: Mf06JobClaim,
+    signal?: AbortSignal,
+    finalizationManager?: EntityManager,
+  ): Promise<Mf06ClaimContextLookup> {
     if (signal !== undefined && !(signal instanceof AbortSignal)) {
       return unavailable('INVALID_CLAIM');
     }
@@ -191,37 +215,48 @@ export class Mf06ClaimContextReader {
 
     const { claim: normalizedClaim, leaseExpiresTimeMs, deadlineTimeMs } = validated;
 
-    return this.db.transaction('REPEATABLE READ', async (manager) => {
+    const read = async (manager: EntityManager): Promise<Mf06ClaimContextLookup> => {
       if (signal?.aborted) return unavailable('ABORTED');
 
-      await manager.query('SET TRANSACTION READ ONLY');
-      if (signal?.aborted) return unavailable('ABORTED');
+      if (finalizationManager) {
+        const [scope] = await manager.query(
+          `SELECT current_schema()=$1::text AND pg_catalog.pg_my_temp_schema()=0
+            AND current_setting('search_path')=quote_ident($1::text)
+            AND current_setting('transaction_isolation')='serializable'
+            AND current_setting('transaction_read_only')='off' AS transaction_valid`,
+          [selectedSchema],
+        );
+        if (signal?.aborted) return unavailable('ABORTED');
+        if (scope?.transaction_valid !== true) return unavailable('TRANSACTION_REQUIRED');
+      } else {
+        await manager.query('SET TRANSACTION READ ONLY');
+        if (signal?.aborted) return unavailable('ABORTED');
 
-      await manager.query("SET LOCAL statement_timeout='5s'");
-      if (signal?.aborted) return unavailable('ABORTED');
+        await manager.query("SET LOCAL statement_timeout='5s'");
+        if (signal?.aborted) return unavailable('ABORTED');
 
-      const schemaCheck = (await manager.query(
-        `SELECT current_schema() = $1::text AS schema_matches,
+        const schemaCheck = (await manager.query(
+          `SELECT current_schema() = $1::text AS schema_matches,
                 bool_and(to_regclass(format('%I.%I', $1::text, names.name)) IS NOT NULL) AS tables_present
          FROM unnest($2::text[]) AS names(name)`,
-        [selectedSchema, REQUIRED_TABLES],
-      )) as { schema_matches?: boolean; tables_present?: boolean }[];
-      if (signal?.aborted) return unavailable('ABORTED');
-      if (!schemaCheck[0]?.schema_matches || !schemaCheck[0]?.tables_present) {
-        return unavailable('SCHEMA_UNAVAILABLE');
+          [selectedSchema, REQUIRED_TABLES],
+        )) as { schema_matches?: boolean; tables_present?: boolean }[];
+        if (signal?.aborted) return unavailable('ABORTED');
+        if (!schemaCheck[0]?.schema_matches || !schemaCheck[0]?.tables_present) {
+          return unavailable('SCHEMA_UNAVAILABLE');
+        }
+
+        await manager.query(
+          `LOCK TABLE ${REQUIRED_TABLES.map((table) => `${quoteIdentifier(selectedSchema)}.${quoteIdentifier(table)}`).join(', ')} IN ACCESS SHARE MODE`,
+        );
+        if (signal?.aborted) return unavailable('ABORTED');
+
+        await manager.query(
+          `SELECT set_config('search_path', quote_ident($1) || ', pg_temp', true)`,
+          [selectedSchema],
+        );
+        if (signal?.aborted) return unavailable('ABORTED');
       }
-
-      await manager.query(
-        `LOCK TABLE ${REQUIRED_TABLES.map((table) => `${quoteIdentifier(selectedSchema)}.${quoteIdentifier(table)}`).join(', ')} IN ACCESS SHARE MODE`,
-      );
-      if (signal?.aborted) return unavailable('ABORTED');
-
-      await manager.query(
-        `SELECT set_config('search_path', quote_ident($1) || ', pg_temp', true)`,
-        [selectedSchema],
-      );
-      if (signal?.aborted) return unavailable('ABORTED');
-
       const verifyActiveJobHead = async (): Promise<boolean> => {
         const jobRows = (await manager.query(
           `SELECT request_id,
@@ -337,6 +372,9 @@ export class Mf06ClaimContextReader {
         subject: inspected.subject,
         frameReference,
       });
-    });
+    };
+    return finalizationManager
+      ? read(finalizationManager)
+      : this.db.transaction('REPEATABLE READ', read);
   }
 }
