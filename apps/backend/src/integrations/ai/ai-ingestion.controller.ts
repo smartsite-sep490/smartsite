@@ -1,4 +1,6 @@
-import { Body, Controller, HttpCode, HttpStatus, Post, UseGuards } from '@nestjs/common';
+import { Body, Controller, HttpCode, HttpStatus, Post, UseGuards, Req } from '@nestjs/common';
+import type { Request } from 'express';
+import { PublicHttpException } from '../../common/http/public-http-exception.js';
 import {
   ApiAcceptedResponse,
   ApiBadRequestResponse,
@@ -61,5 +63,23 @@ export class AiIngestionController {
   })
   async ingest(@Body() payload: unknown): Promise<AiIngestionResult> {
     return await this.service.ingestEvent(payload);
+  }
+
+  @Post('worker-events')
+  @HttpCode(HttpStatus.ACCEPTED)
+  async ingestWorker(
+    @Req() request: Request,
+    @Body() payload: unknown,
+  ): Promise<AiIngestionResult> {
+    const secret = request.headers['x-worker-generation-secret'];
+    let count = 0;
+    for (let i = 0; i < request.rawHeaders.length; i += 2)
+      if (request.rawHeaders[i]?.toLowerCase() === 'x-worker-generation-secret') count++;
+    if (count !== 1 || typeof secret !== 'string' || !/^[A-Za-z0-9_-]{43}$/.test(secret))
+      throw new PublicHttpException(401, {
+        code: 'UNAUTHORIZED',
+        message: 'Worker credential is invalid',
+      });
+    return this.service.ingestWorkerEvent(payload, secret);
   }
 }

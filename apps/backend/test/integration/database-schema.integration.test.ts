@@ -108,6 +108,7 @@ ai_observation_event|raw_payload|jsonb|NO||||
 ai_observation_event|processing_status|event_processing_status|NO||||
 ai_observation_event|processing_note|text|YES||||
 ai_observation_event|created_at|timestamptz|NO||||now()
+ai_observation_event|admission_context|jsonb|YES||||
 alert_detection_mapping|alert_id|uuid|NO||||
 alert_detection_mapping|event_id|uuid|NO||||
 alert_detection_mapping|created_at|timestamptz|NO||||now()

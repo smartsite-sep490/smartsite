@@ -1,4 +1,10 @@
 import { Mf06IngestionEnqueueService } from '../../modules/safety/assessments/mf06-ingestion-enqueue.service.js';
+import {
+  parseWorkerEventDeliveryEnvelope,
+  computeWorkerEventBindingHash,
+  type WorkerEventDeliveryContext,
+} from '@smartsite/contracts';
+import { CameraEventAdmissionService } from '../../modules/cameras/camera-event-admission.service.js';
 import { Mf06EnqueueService } from '../../modules/safety/assessments/mf06-enqueue.service.js';
 import { validatePartitionedObservationEvent } from '@smartsite/contracts';
 import { admitPartitionedFrame } from './partitioned-frame-admission.js';
@@ -65,6 +71,7 @@ export class AiIngestionService {
     @Optional() clock?: () => Date,
     @Optional() zoneEntryAuthorization?: ZoneEntryAuthorizationService,
     @Optional() private readonly mf06Enqueue?: Mf06IngestionEnqueueService,
+    @Optional() private readonly workerAdmission?: CameraEventAdmissionService,
   ) {
     this.clock = clock ?? (() => new Date());
     this.zoneEntryAuthorization = zoneEntryAuthorization ?? new ZoneEntryAuthorizationService();
@@ -81,7 +88,34 @@ export class AiIngestionService {
     };
   }
 
-  async ingestEvent(payload: unknown): Promise<AiIngestionResult> {
+  async ingestWorkerEvent(payload: unknown, secret: string): Promise<AiIngestionResult> {
+    if (
+      this.configService.get('AI_WORKER_BOUND_EVENT_ENABLED', { infer: true }) !== true ||
+      !this.workerAdmission
+    )
+      throw new PublicHttpException(503, {
+        code: 'AI_INGESTION_UNAVAILABLE',
+        message: 'Bound event intake is unavailable',
+      });
+    const envelope = parseWorkerEventDeliveryEnvelope(payload);
+    if (!envelope)
+      throw new PublicHttpException(400, {
+        code: 'VALIDATION_FAILED',
+        message: 'Invalid worker event envelope',
+      });
+    // MF06 enqueue still resolves current mutable context; never silently feed bound events there.
+    if (this.configService.get('MF06_ENQUEUE_ENABLED', { infer: true }) === true)
+      throw new PublicHttpException(503, {
+        code: 'AI_INGESTION_UNAVAILABLE',
+        message: 'Bound assessment intake is unavailable',
+      });
+    return this.ingestEvent(envelope.event, { context: envelope.context, secret });
+  }
+
+  async ingestEvent(
+    payload: unknown,
+    bound?: { context: WorkerEventDeliveryContext; secret: string },
+  ): Promise<AiIngestionResult> {
     // 1. Validate contract schema and semantic geometry (Spec §15.1, §16)
     const validationResult =
       payload &&
@@ -140,15 +174,82 @@ export class AiIngestionService {
     // 4. Same-transaction context resolution, raw preservation, and alert grouping
     try {
       return await this.dataSource.transaction(async (manager: EntityManager) => {
-        const camera = await this.contextResolver.resolveCamera(
-          manager,
-          event.cameraExternalId,
-          enqueueEnabled,
-        );
+        const admission = bound
+          ? await this.workerAdmission!.admit(
+              manager,
+              bound.context,
+              bound.secret,
+              event.cameraExternalId,
+              this.configService.getOrThrow('AI_CONFIGURATION_CAMERA_IDS', { infer: true }),
+              parsedCapturedAt ?? undefined,
+              this.getTimingConfig().maxFutureClockSkewSeconds * 1000,
+            )
+          : undefined;
+        const bindingHash = bound
+          ? computeWorkerEventBindingHash(payloadHash, bound.context)
+          : undefined;
+        if (bound) {
+          await manager.query('SELECT pg_advisory_xact_lock(hashtext($1))', [
+            `bound-event:${event.eventId}`,
+          ]);
+          const [existing] = await manager.query(
+            'SELECT payload_hash,admission_context FROM ai_observation_event WHERE event_id=$1',
+            [event.eventId],
+          );
+          if (existing) {
+            if (
+              existing.payload_hash !== payloadHash ||
+              existing.admission_context?.bindingHash !== bindingHash
+            )
+              throw new PublicHttpException(409, {
+                code: 'AI_EVENT_ID_CONFLICT',
+                message: 'Event ID already exists with a different binding',
+              });
+            return { eventId: event.eventId, status: 'DUPLICATE_ACCEPTED' as const, alertIds: [] };
+          }
+        }
+        const camera =
+          admission?.camera ??
+          (await this.contextResolver.resolveCamera(
+            manager,
+            event.cameraExternalId,
+            enqueueEnabled,
+          ));
 
         const frameScope = camera
           ? await admitPartitionedFrame(manager, event, camera.id)
           : undefined;
+        if (frameScope) {
+          // Persisted binding survives flag disable. Explicit old migration profiles
+          // may lack this additive column; inspect catalog rather than query a
+          // missing column or serialize every large raw payload through to_jsonb.
+          const [columns] = await manager.query(`SELECT EXISTS(SELECT 1 FROM pg_attribute
+            WHERE attrelid='ai_observation_event'::regclass AND attname='admission_context'
+            AND NOT attisdropped) AS present`);
+          const rows =
+            columns?.present === true
+              ? await manager.query(
+                  `SELECT admission_context FROM ai_observation_event
+            WHERE resolved_camera_id=$1 AND stream_session_id=$2
+            AND raw_payload#>>'{framePartition,frameId}'=$3 LIMIT 1025`,
+                  [camera!.id, event.streamSessionId, frameScope.frameId],
+                )
+              : [];
+          if (
+            rows.length > 1024 ||
+            rows.some((row: { admission_context?: { context?: unknown } }) =>
+              bound
+                ? !row.admission_context?.context ||
+                  computeCanonicalPayloadHash(row.admission_context.context) !==
+                    computeCanonicalPayloadHash(bound.context)
+                : row.admission_context != null,
+            )
+          )
+            throw new PublicHttpException(409, {
+              code: 'CONFLICT',
+              message: 'Frame parts have different execution contexts',
+            });
+        }
 
         let status: EventProcessingStatus;
         let note: string | null = null;
@@ -163,7 +264,11 @@ export class AiIngestionService {
         // 2. otherwise unknown camera -> SKIPPED_UNKNOWN_CAMERA
         // 3. otherwise no valid candidate/context -> SKIPPED_NO_CANDIDATE
         // 4. otherwise -> PROCESSED
-        if (isClockSkew) {
+        if (admission?.classification === 'REVIEW_ONLY') {
+          status = EventProcessingStatus.SKIPPED_NO_CANDIDATE;
+          note =
+            'Authenticated historical/replay claim retained for review; not fresh LIVE admission';
+        } else if (isClockSkew) {
           status = EventProcessingStatus.SKIPPED_CLOCK_SKEW;
           note = unparseableDateNote ?? 'Event capturedAt is outside the allowed clock skew window';
         } else if (!camera) {
@@ -181,13 +286,21 @@ export class AiIngestionService {
             ) {
               const key = `${obs['regionId']}:${obs['geometryVersion']}`;
               if (!contextMap.has(key)) {
-                const ctx = await this.contextResolver.resolve(
-                  manager,
-                  event.cameraExternalId,
-                  obs['regionId'],
-                  obs['geometryVersion'],
-                  enqueueEnabled,
-                );
+                const ctx = admission
+                  ? await this.contextResolver.resolveIssuedRegion(
+                      manager,
+                      camera.siteId,
+                      admission.bundle,
+                      obs['regionId'],
+                      obs['geometryVersion'],
+                    )
+                  : await this.contextResolver.resolve(
+                      manager,
+                      event.cameraExternalId,
+                      obs['regionId'],
+                      obs['geometryVersion'],
+                      enqueueEnabled,
+                    );
                 if (ctx) {
                   contextMap.set(key, ctx);
                 }
@@ -276,6 +389,20 @@ export class AiIngestionService {
           );
         }
 
+        if (bound)
+          await manager.query(
+            'UPDATE ai_observation_event SET admission_context=$2::jsonb WHERE event_id=$1',
+            [
+              event.eventId,
+              JSON.stringify({
+                schemaVersion: '1.0.0',
+                context: bound.context,
+                bindingHash,
+                classification: admission!.classification,
+                admittedAt: admission!.admittedAt,
+              }),
+            ],
+          );
         for (const decision of zoneDecisions) {
           await this.zoneEntryAuthorization.record(manager, decision.input, decision.result);
         }
@@ -334,7 +461,7 @@ export class AiIngestionService {
           .findOneBy({ eventId: event.eventId });
 
         if (existing) {
-          if (existing.payloadHash === payloadHash) {
+          if (existing.payloadHash === payloadHash && !bound) {
             // Spec §15: Same hash -> 202 response DUPLICATE_ACCEPTED with no alert side effect
             return {
               eventId: event.eventId,
