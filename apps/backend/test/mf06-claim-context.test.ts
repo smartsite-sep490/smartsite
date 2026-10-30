@@ -117,6 +117,7 @@ function makeFakeDataSource(options?: {
   schema?: unknown;
   schemaMatches?: boolean;
   tablesPresent?: boolean;
+  transactionValid?: boolean;
   jobRows?: unknown[] | ((pollIndex: number) => unknown[]);
   request?: ZoneEntryAssessmentRequestEntity | null;
   siteRows?: unknown[];
@@ -135,8 +136,14 @@ function makeFakeDataSource(options?: {
     async transaction(isolation: string, runInTransaction: (manager: unknown) => Promise<unknown>) {
       step(`tx:${isolation}`);
       const manager = {
+        connection: db,
+        queryRunner: { isTransactionActive: true, isReleased: false },
         async query(sql: string, params?: unknown[]) {
           const text = sql.replace(/\s+/g, ' ').trim();
+          if (text.includes('AS transaction_valid')) {
+            step('sql:transaction_scope');
+            return [{ transaction_valid: options?.transactionValid ?? true }];
+          }
           if (text === 'SET TRANSACTION READ ONLY') {
             step('sql:read_only');
             return [];
@@ -213,6 +220,72 @@ function makeFakeDataSource(options?: {
   } as unknown as DataSource;
   return { db, calls, fixture: f };
 }
+
+test('final claim revalidation reuses the supplied manager without changing transaction or search path', async () => {
+  const f = makeFakeDataSource();
+  const reader = new Mf06ClaimContextReader(f.db);
+  const result = await f.db.transaction('SERIALIZABLE', (manager) =>
+    reader.revalidateForClaim(manager, f.fixture.claim),
+  );
+  assert.equal(result.status, 'MATCHED');
+  assert.match(result.contextDigest!, /^[0-9a-f]{64}$/);
+  assert.deepEqual(
+    f.calls.filter((c) => c.startsWith('tx:')),
+    ['tx:SERIALIZABLE'],
+  );
+  assert.equal(f.calls.includes('sql:read_only'), false);
+  assert.equal(f.calls.includes('sql:timeout'), false);
+  assert.equal(
+    f.calls.some((c) => c.startsWith('sql:search_path:')),
+    false,
+  );
+  assert.equal(f.calls[1], 'sql:transaction_scope');
+});
+
+test('final claim revalidation rejects a foreign manager without querying it', async () => {
+  const f = makeFakeDataSource(),
+    other = makeFakeDataSource();
+  const reader = new Mf06ClaimContextReader(f.db);
+  const result = await other.db.transaction('SERIALIZABLE', (manager) =>
+    reader.revalidateForClaim(manager, f.fixture.claim),
+  );
+  assert.deepEqual(result, { status: 'UNAVAILABLE', reason: 'TRANSACTION_REQUIRED' });
+  assert.deepEqual(other.calls, ['tx:SERIALIZABLE']);
+});
+
+test('final claim revalidation rejects an unsuitable transaction snapshot before reading job rows', async () => {
+  const f = makeFakeDataSource({ transactionValid: false });
+  const reader = new Mf06ClaimContextReader(f.db);
+  assert.deepEqual(
+    await f.db.transaction('SERIALIZABLE', (m) => reader.revalidateForClaim(m, f.fixture.claim)),
+    { status: 'UNAVAILABLE', reason: 'TRANSACTION_REQUIRED' },
+  );
+  assert.equal(
+    f.calls.some((c) => c.startsWith('sql:job:')),
+    false,
+  );
+});
+
+test('final claim revalidation preserves token and cancellation checks', async () => {
+  const f = makeFakeDataSource();
+  const reader = new Mf06ClaimContextReader(f.db);
+  assert.deepEqual(
+    await f.db.transaction('SERIALIZABLE', (m) =>
+      reader.revalidateForClaim(m, { ...f.fixture.claim, leaseToken: OTHER_UUID }),
+    ),
+    { status: 'UNAVAILABLE', reason: 'CLAIM_NOT_ACTIVE' },
+  );
+  const controller = new AbortController();
+  controller.abort();
+  const count = f.calls.length;
+  assert.deepEqual(
+    await f.db.transaction('SERIALIZABLE', (m) =>
+      reader.revalidateForClaim(m, f.fixture.claim, controller.signal),
+    ),
+    { status: 'UNAVAILABLE', reason: 'ABORTED' },
+  );
+  assert.equal(f.calls.length, count + 1);
+});
 
 test('matches active CLAIMED job in REPEATABLE READ READ ONLY snapshot and derives Site from server request', async () => {
   const { db, calls } = makeFakeDataSource();

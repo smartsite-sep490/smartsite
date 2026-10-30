@@ -617,6 +617,137 @@ test('worker bound HTTP admission preserves raw event and original execution con
         assert.ok(lease);
         assert.equal(lease.requestId, requests[0].request_id);
         assert.equal((await new Mf06ClaimContextReader(db).readForClaim(lease)).status, 'MATCHED');
+        // Synthetic qualification proves composition, not operational authority coverage.
+        const { MAIN_AUTHORITY_SNAPSHOT_TABLES } =
+          await import('../../src/modules/zones/main-authority-read-snapshot.js');
+        const { MAIN_AUTHORITY_V2_SOURCES } =
+          await import('../../src/common/configuration/main-team-authority-sources.js');
+        const { sealMainAuthorityArchive, MAIN_AUTHORITY_ARCHIVE_FORMAT_V2 } =
+          await import('../../src/modules/zones/main-authority-archive-codec.js');
+        const { Mf06BoundPolicyAssessmentWorkPort } =
+          await import('../../src/modules/safety/assessments/mf06-bound-policy-assessment-work.js');
+        const { Mf06AssessmentWorker } =
+          await import('../../src/modules/safety/assessments/mf06-assessment-worker.service.js');
+        const { Mf06AssessmentStore } =
+          await import('../../src/modules/safety/assessments/mf06-assessment-store.service.js');
+        for (const table of MAIN_AUTHORITY_SNAPSHOT_TABLES)
+          await db.query(
+            `CREATE TABLE IF NOT EXISTS "${db.driver.schema}"."${table}" (id integer)`,
+          );
+        const at = captured.request.capturedAt;
+        const baselineAt = new Date(Date.parse(at) - 1000).toISOString();
+        const authorityContext = {
+          siteId,
+          zoneId: zone.id,
+          workerId: null,
+          capturedAt: at,
+          purpose: captured.request.requestedPurpose,
+        };
+        const sealed = sealMainAuthorityArchive(
+          {
+            version: MAIN_AUTHORITY_ARCHIVE_FORMAT_V2,
+            context: authorityContext,
+            archivedAt: new Date().toISOString(),
+            baseline: {
+              epochId: randomUUID(),
+              capturedAt: baselineAt,
+              declaredWriterManifestHash: 'a'.repeat(64),
+              sourceRegistryHash: 'b'.repeat(64),
+              snapshotHash: 'c'.repeat(64),
+            },
+            sources: MAIN_AUTHORITY_V2_SOURCES.map(([sourceKind, tableName, fields]) => ({
+              sourceKind,
+              tableName,
+              fields,
+              rows:
+                sourceKind === 'SITE'
+                  ? [{ id: siteId, access_policy_version: 1 }]
+                  : sourceKind === 'ZONE_POLICY'
+                    ? [
+                        {
+                          id: zone.id,
+                          site_id: siteId,
+                          restriction_policy: zone.restrictionPolicy,
+                          required_ppe: zone.requiredPpe,
+                          configuration_locked: true,
+                        },
+                      ]
+                    : [],
+            })),
+          },
+          authorityContext,
+        );
+        assert.equal(sealed.status, 'VALID');
+        if (sealed.status !== 'VALID') throw Error('Invalid synthetic policy archive');
+        const qualified = {
+          status: 'QUALIFIED' as const,
+          archive: sealed.archive,
+          epochId: sealed.archive.payload.baseline.epochId,
+          epochState: 'READY' as const,
+          activatedAt: baselineAt,
+          gappedAt: null,
+          closedAt: null,
+          witnessConfirmedAt: at,
+          manifestSha256: 'a'.repeat(64),
+          releaseCommit: 'd'.repeat(40),
+          sourceRegistryHash: 'b'.repeat(64),
+          provenance: 'SYNTHETIC_TEST' as const,
+          operationalAuthorityCoverageEstablished: false,
+          syntheticCutoverMechanicsVerified: true,
+          identityEstablished: false as const,
+        };
+        const store = new Mf06AssessmentStore(db);
+        const work = new Mf06BoundPolicyAssessmentWorkPort(
+          new Mf06ClaimContextReader(db),
+          {
+            prepareForEvent: async (context) => {
+              assert.deepEqual(context, authorityContext);
+              return qualified;
+            },
+            revalidate: async (manager, input, prepared) => {
+              assert.equal(prepared, qualified);
+              assert.equal(input.epochId, qualified.epochId);
+              const [mode] = await manager.query('SHOW transaction_isolation');
+              assert.equal(mode.transaction_isolation, 'serializable');
+              return qualified;
+            },
+          },
+          store,
+          'test',
+        );
+        const leases = new Mf06JobLeaseService(db, {
+          leaseSeconds: 30,
+          maxAttempts: 2,
+          retryDelaySeconds: 1,
+        });
+        assert.equal(await leases.retry(lease, 'DATABASE_UNAVAILABLE'), 'RETRY');
+        await new Promise((resolve) => setTimeout(resolve, 1100));
+        const worker = new Mf06AssessmentWorker(db, leases, work, {
+          enabled: true,
+          resolverTimeoutMs: 10000,
+          drainTimeoutMs: 10000,
+          maxDatabaseAttempts: 2,
+        });
+        try {
+          assert.equal(await worker.runOnce(), 'COMPLETED');
+          assert.equal(await worker.runOnce(), 'IDLE');
+          const recorded = await db.query(
+            `SELECT a.outcome,a.reason_code,a.worker_id,a.profile_revision,
+            a.provenance,a.authority_artifact_id,j.status FROM zone_entry_assessment a
+            JOIN zone_entry_assessment_job j USING(request_id) WHERE a.request_id=$1`,
+            [lease.requestId],
+          );
+          assert.equal(recorded.length, 1);
+          assert.equal(recorded[0].outcome, 'ALLOWED');
+          assert.equal(recorded[0].reason_code, 'POLICY_NONE');
+          assert.equal(recorded[0].status, 'SUCCEEDED');
+          assert.equal(recorded[0].worker_id, null);
+          assert.equal(recorded[0].profile_revision, null);
+          assert.equal(recorded[0].provenance, 'SYNTHETIC_TEST');
+          assert.ok(recorded[0].authority_artifact_id);
+        } finally {
+          await worker.drain();
+        }
         assert.equal(
           (
             await send(
