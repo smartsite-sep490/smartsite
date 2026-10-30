@@ -1,3 +1,5 @@
+import { computeMf06InitialBinding } from '../src/modules/safety/assessments/mf06-event-admission.js';
+import { selectZoneEntrySubject } from '../src/modules/safety/identity/observation-identity-subject.js';
 import 'reflect-metadata';
 import assert from 'node:assert/strict';
 import { createHash, randomUUID } from 'node:crypto';
@@ -118,6 +120,9 @@ function createSyntheticFixture(
     requestedAt: new Date('2026-10-12T00:00:01.000Z'),
   } as ZoneEntryAssessmentRequestEntity;
 
+  const selected = selectZoneEntrySubject(rawPayload, request.zoneObservationIndex);
+  assert(selected.zoneEligible);
+  request.bindingHash = computeMf06InitialBinding(eventId, selected);
   const storedInspection = inspectMf06StoredBinding(request, event);
   assert.equal(storedInspection.status, 'MATCHED');
   const stored = storedInspection as Extract<Mf06StoredBindingInspection, { status: 'MATCHED' }>;
@@ -217,6 +222,17 @@ function createFakeManager(options: FakeManagerOptions = {}): EntityManager {
     getRepository: (entity: unknown) => {
       if (repositoryError) throw repositoryError;
       return {
+        createQueryBuilder: () => ({
+          select() {
+            return this;
+          },
+          where() {
+            return this;
+          },
+          async getRawOne() {
+            return { admission_context: event?.admissionContext ?? null };
+          },
+        }),
         findOneBy: async (criteria: Record<string, unknown>) => {
           if (repositoryError) throw repositoryError;
           if (entity === ZoneEntryAssessmentRequestEntity) {

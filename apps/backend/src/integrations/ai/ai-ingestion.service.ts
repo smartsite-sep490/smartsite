@@ -103,12 +103,6 @@ export class AiIngestionService {
         code: 'VALIDATION_FAILED',
         message: 'Invalid worker event envelope',
       });
-    // MF06 enqueue still resolves current mutable context; never silently feed bound events there.
-    if (this.configService.get('MF06_ENQUEUE_ENABLED', { infer: true }) === true)
-      throw new PublicHttpException(503, {
-        code: 'AI_INGESTION_UNAVAILABLE',
-        message: 'Bound assessment intake is unavailable',
-      });
     return this.ingestEvent(envelope.event, { context: envelope.context, secret });
   }
 
@@ -380,8 +374,22 @@ export class AiIngestionService {
           processingStatus: status,
           processingNote: note,
         });
+        const admissionContext = bound
+          ? {
+              schemaVersion: '1.0.0' as const,
+              context: bound.context,
+              bindingHash: bindingHash!,
+              classification: admission!.classification,
+              admittedAt: admission!.admittedAt,
+            }
+          : undefined;
+        rawEvent.admissionContext = admissionContext;
         if (enqueueEnabled) {
-          await new Mf06EnqueueService(this.dataSource).insertFresh(manager, rawEvent);
+          await new Mf06EnqueueService(this.dataSource).insertFresh(
+            manager,
+            rawEvent,
+            admissionContext,
+          );
           await this.mf06Enqueue!.enqueueFresh(manager, rawEvent);
         } else {
           await rawEventRepo.insert(
@@ -389,19 +397,10 @@ export class AiIngestionService {
           );
         }
 
-        if (bound)
+        if (bound && !enqueueEnabled)
           await manager.query(
             'UPDATE ai_observation_event SET admission_context=$2::jsonb WHERE event_id=$1',
-            [
-              event.eventId,
-              JSON.stringify({
-                schemaVersion: '1.0.0',
-                context: bound.context,
-                bindingHash,
-                classification: admission!.classification,
-                admittedAt: admission!.admittedAt,
-              }),
-            ],
+            [event.eventId, JSON.stringify(admissionContext)],
           );
         for (const decision of zoneDecisions) {
           await this.zoneEntryAuthorization.record(manager, decision.input, decision.result);
