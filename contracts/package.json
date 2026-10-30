@@ -8,6 +8,7 @@
     "schemas"
   ],
   "exports": {
+    "./camera-ppe-policy": "./dist/camera-ppe-policy.js",
     ".": "./dist/index.js",
     "./management": "./dist/management-api.js",
     "./gate-permissions": "./dist/gate-permissions-api.js",
