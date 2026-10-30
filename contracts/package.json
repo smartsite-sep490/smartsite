@@ -10,7 +10,7 @@
   "exports": {
     ".": "./dist/index.js",
     "./management": "./dist/management-api.js",
-    "./gate-permissions": "./dist/gate-permissions-api.js",
+    "./gates": "./dist/gate-catalog.js",
     "./worker-document-dates": "./dist/worker-document-dates.js"
   },
   "types": "./dist/index.d.ts",

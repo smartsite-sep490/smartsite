@@ -11,7 +11,6 @@ import { SafetyAlertAccessGuard } from '../src/modules/safety/alerts/safety-aler
 import { QrAccessService } from '../src/modules/workforce/access/qr-access.service.js';
 import { FaceGateService } from '../src/modules/workforce/access/face-gate.service.js';
 import { AttendanceService } from '../src/modules/workforce/attendance/attendance.service.js';
-import { WorkerGatePermissionsService } from '../src/modules/workforce/access/worker-gate-permissions.service.js';
 import { SiteAccessSetupService } from '../src/modules/workforce/access/site-access-setup.service.js';
 
 const denied = (e: unknown) => e instanceof PublicHttpException && e.getStatus() === 403;
@@ -107,13 +106,6 @@ test('Admin cannot grant operational permissions; attendance corrections require
   const user = actor(UserRole.ADMIN);
   await assert.rejects(
     new AttendanceService(source).overview(actor(UserRole.SECURITY_OFFICER), site),
-    denied,
-  );
-  await assert.rejects(
-    new WorkerGatePermissionsService(source).set(user, site, randomUUID(), {
-      gateIds: [],
-      expectedPermissionIds: [],
-    }),
     denied,
   );
   await assert.rejects(

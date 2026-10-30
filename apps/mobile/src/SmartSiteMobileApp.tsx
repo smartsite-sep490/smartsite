@@ -254,6 +254,7 @@ function ScopePicker() {
         scope={selected}
         user={user}
         onScopeChange={() => setChoosing(true)}
+        canSwitchScope={options.length > 1}
       >
         <WorkspaceApp onScopeChange={() => setChoosing(true)} />
       </WorkspaceProvider>

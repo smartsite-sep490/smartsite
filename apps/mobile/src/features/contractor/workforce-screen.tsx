@@ -247,6 +247,7 @@ const wfStyles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: 12,
+    flexWrap: 'wrap',
   },
   avatarCircle: {
     width: 44,
@@ -254,6 +255,7 @@ const wfStyles = StyleSheet.create({
     borderRadius: 22,
     alignItems: 'center',
     justifyContent: 'center',
+    flexShrink: 0,
   },
   avatarText: {
     fontSize: 15,
@@ -262,6 +264,8 @@ const wfStyles = StyleSheet.create({
   workerInfoCol: {
     flex: 1,
     gap: 2,
+    minWidth: 100,
+    flexBasis: 120,
   },
   statusPill: {
     flexDirection: 'row',
@@ -270,14 +274,19 @@ const wfStyles = StyleSheet.create({
     paddingVertical: 5,
     borderRadius: 14,
     gap: 5,
+    maxWidth: '100%',
+    flexShrink: 0,
   },
   statusDot: {
     width: 6,
     height: 6,
     borderRadius: 3,
+    flexShrink: 0,
   },
   statusText: {
     fontSize: 11,
     fontWeight: '700',
+    flexShrink: 1,
+    lineHeight: 18,
   },
 });

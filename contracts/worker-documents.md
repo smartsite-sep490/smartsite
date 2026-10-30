@@ -36,6 +36,31 @@ date, the officer must enter it from the original; no expiry is invented from a 
 or an unrelated date. All three approved documents must be currently valid before the
 Worker is eligible to enter. Expiry dates are inclusive in Asia/Ho_Chi_Minh.
 
+Workers can submit new or replacement certificates for their own linked Worker at the requested Site,
+including when documents are expired or the Worker is manually suspended. The active account and
+persisted Worker Site role are checked again when saving. Workers can propose dates on their own
+pending certificates; they cannot replace identity images, retry OCR, approve documents or modify
+another Worker. Representative upload and Safety review remain separately scoped. Web and Mobile
+expose certificate submission in the Worker document panel.
+
+Workers and Representatives select a replacement file to prefill an empty date from OCR.
+Existing manually entered dates are preserved for comparison. Web and Mobile call
+`POST /sites/:siteId/workers/:workerId/documents/:kind/check` with authenticated multipart
+`file` and `submittedExpiresOn` (Safety/Insurance) or `submittedIssuedOn` (Health).
+This read-only preflight validates ownership, current account/role, file and image quality,
+then returns `{ quality, ocr, dateCheck }` without saving evidence or changing eligibility.
+Preflight accepts an absent date so OCR can suggest one. Final Worker upload requires a real
+declared date; unreadable OCR requires manual input and rechecking. Representative dates
+remain optional for compatibility. Selection and OCR never upload a pending certificate;
+both apps wait for an explicit Send to Safety action. Final upload repeats validation and OCR independently.
+`dateCheck` is also an additive field on document responses, computed from proposals and OCR:
+`MATCH`, `MISMATCH`, `UNAVAILABLE` or `NO_REFERENCE`, with compared field and both dates.
+Health compares the examination/issue date; Safety/Insurance compare expiry.
+Only valid dates from a READ OCR result can match. Edited dates require a new preflight
+before UI submission. A mismatch or unreadable OCR shows a warning and may still be sent
+for Safety review; matching never approves or extends validity. Pending review screens
+show the latest comparison. No database migration is required.
+
 Replacement uploads retain the currently approved document until a replacement is
 approved. A rejected/pending replacement never extends the previous expiry. Approval
 supersedes the old approved version, with review/version/audit history retained.
@@ -69,6 +94,8 @@ Endpoints under `/api/v1`:
 
 - `POST /sites/:siteId/contractors/:contractorId/document-image-quality`: Representative,
   multipart `file`; returns `ACCEPTED|RETAKE|UNAVAILABLE` and a safe reason.
+- `POST /sites/:siteId/workers/:workerId/document-image-quality`: own Worker or scoped Representative,
+  multipart `file`; quality check for a certificate upload.
 - `POST /sites/:siteId/workers/:workerId/identity-images/:FRONT|BACK`: Representative,
   quality-checked ID image; byte-identical retries reuse the existing image.
 - `GET /sites/:siteId/workers/:workerId/identity-images/:id/file`: protected ID original.
@@ -84,12 +111,15 @@ Endpoints under `/api/v1`:
   or a document kind with no pending replacement and either no current valid approval or a latest
   rejected submission. A partial submission can be both awaiting review and need more documents.
   A complete pending renewal does not require another upload. These tags never grant access.
-- `POST /sites/:siteId/workers/:workerId/documents/:kind`: Representative multipart `file`;
-  optional `submittedIssuedOn` for health or `submittedExpiresOn` for safety/insurance, in
+- `POST /sites/:siteId/workers/:workerId/documents/:kind/check`: own Worker or scoped Representative;
+  multipart file and proposed date; private preflight comparison without persistence.
+- `POST /sites/:siteId/workers/:workerId/documents/:kind`: own Worker or scoped Representative multipart `file`;
+  `submittedIssuedOn` for health or `submittedExpiresOn` for safety/insurance (required for Worker,
+  optional for Representative), in
   `YYYY-MM-DD` format. A date field for the wrong document kind is rejected. Runs bounded OCR and persists
   a pending version. Unknown fields and impossible calendar dates are rejected. Byte-identical
   retries preserve the original; an explicitly changed proposed date increments its version.
-- `PATCH /sites/:siteId/workers/:workerId/documents/:id/submitted-expiry`: scoped Representative,
+- `PATCH /sites/:siteId/workers/:workerId/documents/:id/submitted-expiry`: own Worker or scoped Representative,
   `{expectedVersion, submittedIssuedOn: 'YYYY-MM-DD'|null}` for health or
   `{expectedVersion, submittedExpiresOn: 'YYYY-MM-DD'|null}` for safety/insurance;
   pending documents only. No file

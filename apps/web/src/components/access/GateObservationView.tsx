@@ -5,7 +5,7 @@ import { translate as tr } from '../../i18n';
 import { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { useTranslation } from 'react-i18next';
-import { SITE_GATES } from '@smartsite/contracts/gate-permissions';
+import { SITE_GATES } from '@smartsite/contracts/gates';
 import { uiLocale } from '../../i18n';
 import { IconAlertTriangle } from '../icons';
 

@@ -60,7 +60,7 @@ export function ScreenHeader({
           <IconChevronLeft size={24} color={colors.textPrimary} />
         </Pressable>
         <View style={styles.detailCenter}>
-          <Text numberOfLines={1} ellipsizeMode="tail" style={styles.detailBrand}>
+          <Text numberOfLines={2} ellipsizeMode="tail" style={styles.detailBrand}>
             {title ?? (
               <>
                 Smart<Text style={styles.brandOrange}>Site</Text>
@@ -177,6 +177,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'space-between',
     minHeight: 46,
+    gap: 8,
   },
   brandGroup: {
     flexDirection: 'row',
@@ -199,6 +200,7 @@ const styles = StyleSheet.create({
     fontWeight: '800',
     color: '#0F1E36',
     letterSpacing: -0.4,
+    flexShrink: 1,
   },
   brandOrange: {
     color: '#F66B17',
@@ -218,6 +220,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: 10,
+    flexShrink: 0,
   },
   langPill: {
     flexDirection: 'row',
@@ -260,7 +263,7 @@ const styles = StyleSheet.create({
     backgroundColor: '#EF4444',
     borderRadius: 8,
     minWidth: 16,
-    height: 16,
+    minHeight: 16,
     alignItems: 'center',
     justifyContent: 'center',
     paddingHorizontal: 3,
@@ -312,6 +315,8 @@ const styles = StyleSheet.create({
     fontWeight: '800',
     color: '#0F1E36',
     letterSpacing: -0.3,
+    flexShrink: 1,
+    lineHeight: 24,
   },
   detailRight: {
     minWidth: 32,

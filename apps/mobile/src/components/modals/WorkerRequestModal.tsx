@@ -13,7 +13,6 @@ import {
   ScrollView,
 } from 'react-native';
 import { colors } from '../../theme/colors';
-import { errorMessage } from '../../features/shared/ui';
 import { useWorkspace } from '../../features/workspace/workspace-context';
 import { useQuery } from '@tanstack/react-query';
 import { allPages, localDate, required, useCommand } from '../../features/shared/data';
@@ -45,7 +44,7 @@ export function WorkerRequestModal({
   const [showScheduleDropdown, setShowScheduleDropdown] = useState(false);
   const [showSwapDropdown, setShowSwapDropdown] = useState(false);
   const [showShiftDropdown, setShowShiftDropdown] = useState(false);
-  const [localError, setLocalError] = useState<unknown>(null);
+  const [localError, setLocalError] = useState<string | null>(null);
   const command = useCommand();
 
   const schedules = useQuery({
@@ -91,23 +90,36 @@ export function WorkerRequestModal({
     try {
       setLocalError(null);
       const why = required(reason, t('schedule.reason'));
-      required(selectedScheduleId, t('schedule.shift'));
-      if (activeTab === 'swap') required(targetCoworkerId, t('schedule.coworkerSchedule'));
-      if (activeTab === 'change') required(targetShiftId, t('requests.alternativeShift'));
 
       await command.mutateAsync(async () => {
         if (activeTab === 'leave') {
+          if (!selectedScheduleId)
+            throw new Error(t('schedule.shift') + ': ' + t('requests.selectShiftPlaceholder'));
           await client.createAbsenceRequest(token, scope.siteId, {
             workerScheduleId: selectedScheduleId,
             reason: why,
           });
         } else if (activeTab === 'swap') {
+          if (!selectedScheduleId)
+            throw new Error(t('schedule.shift') + ': ' + t('requests.selectShiftPlaceholder'));
+          if (!targetCoworkerId)
+            throw new Error(
+              t('schedule.coworkerSchedule') + ': ' + t('requests.selectCoworkerPlaceholder'),
+            );
           await client.createShiftSwapRequest(token, scope.siteId, {
             requesterWorkerScheduleId: selectedScheduleId,
             coworkerWorkerScheduleId: targetCoworkerId,
             reason: why,
           });
         } else {
+          if (!selectedScheduleId)
+            throw new Error(t('schedule.shift') + ': ' + t('requests.selectShiftPlaceholder'));
+          if (!targetShiftId)
+            throw new Error(
+              t('requests.alternativeShift') +
+                ': ' +
+                t('requests.selectAlternativeShiftPlaceholder'),
+            );
           await client.createShiftChangeRequest(token, scope.siteId, {
             workerScheduleId: selectedScheduleId,
             toShiftId: targetShiftId,
@@ -119,7 +131,7 @@ export function WorkerRequestModal({
       onSuccess?.();
       onClose();
     } catch (err) {
-      setLocalError(err);
+      setLocalError(err instanceof Error ? err.message : t('common.unexpectedError'));
     }
   };
 
@@ -385,7 +397,12 @@ export function WorkerRequestModal({
             {/* Error Message */}
             {Boolean(localError || command.error) && (
               <View style={styles.errorBox}>
-                <Text style={styles.errorText}>{errorMessage(localError ?? command.error)}</Text>
+                <Text style={styles.errorText}>
+                  {localError ??
+                    (command.error instanceof Error
+                      ? command.error.message
+                      : t('common.unexpectedError'))}
+                </Text>
               </View>
             )}
 
@@ -456,12 +473,15 @@ const styles = StyleSheet.create({
     borderBottomWidth: 1,
     borderBottomColor: '#EFF2F6',
     marginBottom: 14,
+    gap: 10,
   },
   title: {
     fontSize: 18,
     fontWeight: '800',
     color: '#0F1E36',
     letterSpacing: -0.3,
+    flexShrink: 1,
+    lineHeight: 24,
   },
   closeBtn: {
     width: 32,
@@ -470,6 +490,7 @@ const styles = StyleSheet.create({
     backgroundColor: '#F1F5F9',
     alignItems: 'center',
     justifyContent: 'center',
+    flexShrink: 0,
   },
   closeText: {
     fontSize: 14,
@@ -482,12 +503,17 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     padding: 3,
     marginBottom: 16,
+    flexWrap: 'wrap',
+    gap: 4,
   },
   tabBtn: {
     flex: 1,
     paddingVertical: 9,
     alignItems: 'center',
     borderRadius: 9,
+    minWidth: 80,
+    flexBasis: 80,
+    paddingHorizontal: 6,
   },
   tabBtnActive: {
     backgroundColor: colors.primary,
@@ -501,6 +527,9 @@ const styles = StyleSheet.create({
     fontSize: 12.5,
     fontWeight: '600',
     color: colors.textSecondary,
+    textAlign: 'center',
+    lineHeight: 19,
+    flexShrink: 1,
   },
   tabBtnTextActive: {
     color: '#FFFFFF',
@@ -532,11 +561,19 @@ const styles = StyleSheet.create({
   selectTextPlaceholder: {
     fontSize: 14,
     color: colors.textMuted,
+    flex: 1,
+    minWidth: 0,
+    flexShrink: 1,
+    lineHeight: 21,
   },
   selectTextActive: {
     fontSize: 14,
     fontWeight: '600',
     color: colors.textPrimary,
+    flex: 1,
+    minWidth: 0,
+    flexShrink: 1,
+    lineHeight: 21,
   },
   dropdownList: {
     marginTop: 6,
@@ -611,6 +648,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     gap: 12,
     marginTop: 6,
+    flexWrap: 'wrap',
   },
   cancelBtn: {
     flex: 1,
@@ -619,11 +657,17 @@ const styles = StyleSheet.create({
     paddingVertical: 14,
     alignItems: 'center',
     justifyContent: 'center',
+    minWidth: 96,
+    paddingHorizontal: 12,
+    minHeight: 48,
   },
   cancelBtnText: {
     fontSize: 15,
     fontWeight: '700',
     color: colors.textSecondary,
+    textAlign: 'center',
+    lineHeight: 22,
+    flexShrink: 1,
   },
   submitBtn: {
     flex: 2,
@@ -637,10 +681,16 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.25,
     shadowRadius: 5,
     elevation: 3,
+    minWidth: 152,
+    paddingHorizontal: 12,
+    minHeight: 48,
   },
   submitBtnText: {
     fontSize: 15,
     fontWeight: '700',
     color: '#FFFFFF',
+    textAlign: 'center',
+    lineHeight: 22,
+    flexShrink: 1,
   },
 });
