@@ -122,7 +122,7 @@ export interface SafetyAlertResponse {
   updatedAt: string;
 }
 
-export type SafetyAlertReviewTargetStatus = 'CONFIRMED' | 'DISMISSED' | 'NEEDS_MORE_EVIDENCE';
+export type SafetyAlertReviewTargetStatus = 'CONFIRMED' | 'DISMISSED';
 
 export interface SafetyAlertReviewResponse {
   id: string;
@@ -130,7 +130,7 @@ export interface SafetyAlertReviewResponse {
   siteId: string;
   actorUserId: string;
   fromStatus: SafetyAlertStatus;
-  toStatus: SafetyAlertReviewTargetStatus;
+  toStatus: SafetyAlertStatus;
   reason: string;
   alertRevision: number;
   createdAt: string;
@@ -458,7 +458,12 @@ export interface PpeAlertNotificationMetadata {
   cameraName: string;
   zoneId: string | null;
   zoneName: string | null;
-  candidateSubtype: 'PPE_HARD_HAT_MISSING' | 'PPE_SAFETY_VEST_MISSING';
+  candidateSubtype:
+    | 'PPE_HARD_HAT_MISSING'
+    | 'PPE_SAFETY_VEST_MISSING'
+    | 'PPE_GLOVES_MISSING'
+    | 'PPE_BOOTS_MISSING'
+    | 'PPE_GOGGLES_MISSING';
 }
 
 export interface UserNotificationResponse {

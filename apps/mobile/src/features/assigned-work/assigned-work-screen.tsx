@@ -62,10 +62,12 @@ export function AssignedWorkScreen({
           (p) => client.listIncidents(token, scope.siteId, { assignedTo: user.id, ...p }),
           signal,
         )
-      ).filter((i) => !i.contractorId || i.contractorId === scope.contractorId);
+      ).filter((i) => i.siteId === scope.siteId && i.contractorId === scope.contractorId);
       return { items: rows.slice(offset, offset + 20), total: rows.length };
     },
     enabled: kind === 'incident' && !id,
+    refetchOnMount: 'always',
+    refetchOnWindowFocus: 'always',
   });
   if (id)
     return kind === 'checklist' ? (
@@ -94,6 +96,14 @@ export function AssignedWorkScreen({
           { value: 'incident', label: tr('assignedWork.correctiveAction') },
         ]}
       />
+      {kind === 'incident' && (
+        <Button
+          secondary
+          label={tr('assignedWork.refresh')}
+          disabled={incidents.isFetching}
+          onPress={() => void incidents.refetch()}
+        />
+      )}
       {kind === 'checklist' ? (
         <QueryState query={checklists}>
           {(data) => (
@@ -127,7 +137,7 @@ export function AssignedWorkScreen({
             <>
               {!data.items.length && <Hint>{tr('assignedWork.noActions')}</Hint>}
               {data.items
-                .filter((i) => !i.contractorId || i.contractorId === scope.contractorId)
+                .filter((i) => i.siteId === scope.siteId && i.contractorId === scope.contractorId)
                 .map((i) => (
                   <Card key={i.id}>
                     <Body>{i.title}</Body>
@@ -339,12 +349,20 @@ function IncidentDetail({ id, onBack }: { id: string; onBack: () => void }) {
   const query = useQuery({
     queryKey: [...queryKey, 'incident', id],
     queryFn: () => client.getIncident(token, scope.siteId, id),
+    refetchOnMount: 'always',
+    refetchOnWindowFocus: 'always',
   });
   return (
     <Page title={tr('assignedWork.correctiveAction')} onBack={onBack}>
+      <Button
+        secondary
+        label={tr('assignedWork.refresh')}
+        disabled={query.isFetching}
+        onPress={() => void query.refetch()}
+      />
       <QueryState query={query}>
         {(data) =>
-          data.contractorId && data.contractorId !== scope.contractorId ? (
+          data.siteId !== scope.siteId || data.contractorId !== scope.contractorId ? (
             <Hint>{tr('assignedWork.actionScopeHint')}</Hint>
           ) : (
             <>
@@ -371,7 +389,12 @@ function IncidentDetail({ id, onBack }: { id: string; onBack: () => void }) {
               {data.actions
                 .filter((a) => a.assignedTo === user.id)
                 .map((a) => (
-                  <ActionForm key={`${a.id}:${a.version}`} action={a} incidentId={id} />
+                  <ActionForm
+                    key={`${a.id}:${a.version}`}
+                    action={a}
+                    incidentId={id}
+                    closed={data.status === 'CLOSED'}
+                  />
                 ))}
               <Card>
                 <Body>{tr('assignedWork.reviewHistory')}</Body>
@@ -392,9 +415,11 @@ function IncidentDetail({ id, onBack }: { id: string; onBack: () => void }) {
 function ActionForm({
   action,
   incidentId,
+  closed,
 }: {
   action: CorrectiveActionResponse;
   incidentId: string;
+  closed: boolean;
 }) {
   useTranslation();
   const { scope, client, token } = useWorkspace();
@@ -409,13 +434,15 @@ function ActionForm({
         {localizedLabel(action.status)} {tr('assignedWork.deadlineSuffix')}{' '}
         {displayTime(action.dueAt)}
       </Hint>
+      {action.status === 'SUBMITTED' && <Hint>{tr('assignedWork.awaitingReview')}</Hint>}
+      {action.status === 'CLOSED' && !closed && <Hint>{tr('assignedWork.otherWorkOpen')}</Hint>}
       {action.supersededAt ? (
         <Hint>
           {tr('assignedWork.handedOver')} {action.supersededReason}
         </Hint>
       ) : (
         <>
-          {action.status === 'ASSIGNED' && (
+          {!closed && action.status === 'ASSIGNED' && (
             <Button
               label={tr('assignedWork.startAction')}
               disabled={command.isPending}
@@ -434,7 +461,7 @@ function ActionForm({
               }
             />
           )}
-          {action.status === 'IN_PROGRESS' && (
+          {!closed && action.status === 'IN_PROGRESS' && (
             <>
               <Field
                 label={tr('assignedWork.actionResult')}

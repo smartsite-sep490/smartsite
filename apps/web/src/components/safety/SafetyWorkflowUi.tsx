@@ -12,7 +12,7 @@ import {
   formValues,
   photo,
 } from './safety-workflow';
-import { useId, useLayoutEffect, useRef, useState, type ReactNode } from 'react';
+import { useEffect, useId, useLayoutEffect, useRef, useState, type ReactNode } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { ApiError, type SafetyAuditResponse } from '@smartsite/api-client';
 export function Field({
@@ -634,14 +634,19 @@ export function CommandForm({
 export function ConfirmedAlerts({
   p,
   initialAlertId,
+  onSelectionChange,
 }: {
   p: WorkflowProps;
   initialAlertId?: string;
+  onSelectionChange?: (ids: string[]) => void;
 }) {
   useTranslation();
 
   const [offset, setOffset] = useState(0),
     [selected, setSelected] = useState<string[]>(initialAlertId ? [initialAlertId] : []);
+  useEffect(() => {
+    onSelectionChange?.(selected);
+  }, [selected, onSelectionChange]);
   const query = useQuery({
     queryKey: ['safety-workflow', p.apiUrl, p.scope, p.siteId, 'confirmed-alerts', offset],
     queryFn: ({ signal }) =>

@@ -39,6 +39,7 @@ import {
   SafetyEvidenceEntity,
   SafetyWorkflowAuditEntity,
 } from '../../database/entities/safety-workflow.entity.js';
+import { SafetyAlertReviewEntity } from '../../database/entities/safety-alert-review.entity.js';
 import { SafetyAlertEntity } from '../../database/entities/safety-alert.entity.js';
 import { AlertStatus } from '../../database/entities/enums.js';
 import { UserRole } from '../../database/entities/user.entity.js';
@@ -74,7 +75,7 @@ const has = (user: AuthenticatedUser, siteId: string | null, role: UserRole) =>
   user.roleAssignments.some((r) => r.role === role && r.siteId === siteId);
 const admin = (user: AuthenticatedUser) => has(user, null, UserRole.ADMIN);
 const json = <T>(value: unknown): T => JSON.parse(JSON.stringify(value)) as T;
-const incidentStates = ['OPEN', 'ASSIGNED', 'IN_PROGRESS', 'VERIFIED', 'CLOSED', 'REOPENED'];
+const incidentStates = ['OPEN', 'ASSIGNED', 'IN_PROGRESS', 'CLOSED', 'REOPENED'];
 const taskStates = ['ASSIGNED', 'IN_PROGRESS', 'COMPLETED', 'VERIFIED', 'CANCELLED'];
 export type IncidentOperation =
   | 'link'
@@ -733,6 +734,77 @@ export class SafetyWorkflowService {
       await manager.getRepository(SafetyAlertEntity).update(alert.id, { incidentId });
     }
   }
+  private async linkedAlertStatus(
+    manager: EntityManager,
+    incident: IncidentEntity,
+    actorId: string,
+    target: AlertStatus.CLOSED | AlertStatus.CONFIRMED,
+  ) {
+    const linked = await manager.getRepository(SafetyAlertEntity).findBy({
+      incidentId: incident.id,
+      siteId: incident.siteId,
+    });
+    for (const key of [...new Set(linked.map((a) => incident.siteId + ':' + a.groupingKey))].sort())
+      await manager.query('SELECT pg_advisory_xact_lock(hashtext($1))', [key]);
+    const alerts = linked.length
+      ? await manager.getRepository(SafetyAlertEntity).find({
+          where: { id: In(linked.map((a) => a.id)), siteId: incident.siteId },
+          order: { id: 'ASC' },
+          lock: { mode: 'pessimistic_write' },
+        })
+      : [];
+    for (const alert of alerts) {
+      if (alert.status === target) continue;
+      const fromStatus = alert.status;
+      if (
+        fromStatus !== (target === AlertStatus.CLOSED ? AlertStatus.CONFIRMED : AlertStatus.CLOSED)
+      )
+        conflict('Linked Alert status is inconsistent with the Incident');
+      alert.status = target;
+      alert.revision++;
+      await manager.getRepository(SafetyAlertEntity).save(alert);
+      await manager.getRepository(SafetyAlertReviewEntity).save({
+        id: randomUUID(),
+        alertId: alert.id,
+        siteId: incident.siteId,
+        actorUserId: actorId,
+        fromStatus,
+        toStatus: target,
+        alertRevision: alert.revision,
+        reason: `Incident ${incident.id} ${target === AlertStatus.CLOSED ? 'closed after final verification' : 'reopened for corrective work'}`,
+      });
+    }
+  }
+
+  private async closeIncident(
+    manager: EntityManager,
+    incident: IncidentEntity,
+    actions: CorrectiveActionEntity[],
+    actorId: string,
+  ) {
+    const current = actions.filter((a) => !a.supersededAt);
+    const pending = current.length
+      ? await manager.getRepository(CorrectiveActionSubmissionEntity).existsBy({
+          correctiveActionId: In(current.map((a) => a.id)),
+          status: 'PENDING',
+        })
+      : false;
+    if (
+      !canCloseIncident(
+        current.map((a) => a.status),
+        pending,
+      )
+    )
+      conflict('All current actions must be closed before closing the Incident');
+    if (!incident.contractorId) conflict('Confirm Incident responsibility before closing');
+    // Grouping locks remain held through source validation and commit; a failure rolls back all status writes.
+    await this.linkedAlertStatus(manager, incident, actorId, AlertStatus.CLOSED);
+    await this.requireCurrentLinkedSubjects(manager, incident);
+    incident.status = 'CLOSED';
+    incident.closedAt = new Date();
+    incident.closedBy = actorId;
+  }
+
   async createIncident(siteId: string, actorId: string, input: unknown) {
     const value = command(CreateIncidentDto, input);
     if (value.zoneId) await this.zones.get(siteId, value.zoneId);
@@ -745,7 +817,14 @@ export class SafetyWorkflowService {
       value,
       UserRole.SAFETY_OFFICER,
       undefined,
-      async (manager, actor) => {
+      async (manager, actor, stage) => {
+        if (
+          value.alertIds.length &&
+          (!value.contractorId || !value.responsibilityReason || !value.initialAction)
+        )
+          invalid('Alert handover requires contractor responsibility and an initial action');
+        if (value.initialAction && !value.contractorId)
+          invalid('Confirm contractor before assigning corrective work');
         if (value.sourceChecklistResultId) {
           await manager.query('SELECT pg_advisory_xact_lock(hashtext($1))', [
             'checklist-result:' + value.sourceChecklistResultId,
@@ -784,7 +863,7 @@ export class SafetyWorkflowService {
           );
         } else if (value.responsibilityReason || value.workerIds?.length)
           invalid('Confirm contractor before adding Worker subjects');
-        const incident = await manager.getRepository(IncidentEntity).save({
+        const incident: IncidentEntity = await manager.getRepository(IncidentEntity).save({
           id: randomUUID(),
           siteId: uuid(siteId),
           zoneId: value.zoneId ?? null,
@@ -809,6 +888,31 @@ export class SafetyWorkflowService {
             .save(value.workerIds.map((workerId) => ({ incidentId: incident.id, workerId })));
         await this.link(manager, siteId, incident.id, value.alertIds);
         await this.validateLinkedSubjects(manager, incident);
+        if (value.initialAction) {
+          await this.requireRepresentative(manager, incident, value.initialAction.assignedTo);
+          const action = await manager.getRepository(CorrectiveActionEntity).save({
+            id: randomUUID(),
+            incidentId: incident.id,
+            assignedTo: value.initialAction.assignedTo,
+            assignedBy: actor.id,
+            description: value.initialAction.description,
+            dueAt: value.initialAction.dueAt ? new Date(value.initialAction.dueAt) : null,
+            status: 'ASSIGNED',
+            version: 1,
+          });
+          incident.status = 'ASSIGNED';
+          await manager.getRepository(IncidentEntity).save(incident);
+          await this.notifications.recordSafetyHandover(manager, {
+            commandId: value.commandId,
+            siteId,
+            contractorId: incident.contractorId!,
+            incidentId: incident.id,
+            actionId: action.id,
+            recipientId: action.assignedTo,
+            title: incident.title,
+          });
+          stage.changes = { actionId: action.id, assignedTo: action.assignedTo };
+        }
         return this.incidentDetail(manager, incident, actor);
       },
     );
@@ -901,6 +1005,8 @@ export class SafetyWorkflowService {
             previousContractorName: previous.contractorName,
           };
           const wasClosed = incident.status === 'CLOSED';
+          if (wasClosed)
+            await this.linkedAlertStatus(manager, incident, actor.id, AlertStatus.CONFIRMED);
           incident.contractorId = corrected.contractorId;
           incident.responsibilityReason = corrected.reason;
           incident.responsibilityConfirmedBy = actor.id;
@@ -986,6 +1092,8 @@ export class SafetyWorkflowService {
           await this.validateLinkedSubjects(manager, incident);
         }
         if (operation === 'assign' || operation === 'reopen') {
+          if (operation === 'reopen')
+            await this.linkedAlertStatus(manager, incident, actor.id, AlertStatus.CONFIRMED);
           await this.requireCurrentLinkedSubjects(manager, incident);
           const assignment = value as AssignActionDto;
           if (operation === 'reopen' && incident.status !== 'CLOSED')
@@ -1051,44 +1159,20 @@ export class SafetyWorkflowService {
             reviewedAt: new Date(),
             reviewNote: review.reason,
           });
-          touched!.status = review.decision === 'APPROVED' ? 'VERIFIED' : 'IN_PROGRESS';
+          touched!.status = review.decision === 'APPROVED' ? 'CLOSED' : 'IN_PROGRESS';
         }
         if (touched && ['start', 'submit', 'review', 'transfer'].includes(operation)) {
           touched.version++;
           await manager.getRepository(CorrectiveActionEntity).save(touched);
         }
         const currentActions = actions.filter((a) => !a.supersededAt);
-        if (operation === 'close') {
-          await this.requireCurrentLinkedSubjects(manager, incident);
-          if (!incident.contractorId) conflict('Confirm Incident responsibility before closing');
-          const pending = currentActions.length
-            ? await manager.getRepository(CorrectiveActionSubmissionEntity).existsBy({
-                correctiveActionId: In(currentActions.map((a) => a.id)),
-                status: 'PENDING',
-              })
-            : false;
-          if (
-            !canCloseIncident(
-              currentActions.map((a) => a.status),
-              pending,
-            )
-          )
-            conflict('All actions must be verified before closing');
-          // Share the grouping locks with ingestion. New observations must form a new alert after closure.
-          const linked = await manager
-            .getRepository(SafetyAlertEntity)
-            .findBy({ incidentId: incident.id, siteId });
-          for (const key of [...new Set(linked.map((a) => siteId + ':' + a.groupingKey))].sort())
-            await manager.query('SELECT pg_advisory_xact_lock(hashtext($1))', [key]);
-          for (const action of currentActions)
-            if (action.status === 'VERIFIED') {
-              action.status = 'CLOSED';
-              action.version++;
-              await manager.getRepository(CorrectiveActionEntity).save(action);
-            }
-          incident.status = 'CLOSED';
-          incident.closedAt = new Date();
-          incident.closedBy = actor.id;
+        if (
+          operation === 'close' ||
+          (operation === 'review' &&
+            touched?.status === 'CLOSED' &&
+            currentActions.every((a) => a.status === 'CLOSED'))
+        ) {
+          await this.closeIncident(manager, incident, currentActions, actor.id);
         } else
           incident.status = incidentStatus(
             incident.status,

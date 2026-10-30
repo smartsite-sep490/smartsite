@@ -36,6 +36,7 @@ import {
   UserRoleAssignmentEntity,
   SiteEntity,
   SafetyAlertEntity,
+  SafetyAlertReviewEntity,
   AlertStatus,
   AlertType,
   SafetyWorkflowAuditEntity,
@@ -66,6 +67,7 @@ after(async () => {
   await dataSource.query(
     'TRUNCATE safety_workflow_audit, safety_task, corrective_action_submission, corrective_action, safety_evidence, incident CASCADE',
   );
+  await dataSource.getRepository(SafetyAlertReviewEntity).delete({ siteId: In(fixtureSites) });
   await dataSource.getRepository(SafetyAlertEntity).delete({ siteId: In(fixtureSites) });
   await dataSource.getRepository(AuthSessionEntity).delete({ userId: In(fixtureUsers) });
   await dataSource.getRepository(UserRoleAssignmentEntity).delete({ userId: In(fixtureUsers) });
@@ -199,13 +201,18 @@ async function fixture() {
     description: 'Observed hazard',
     severity: 'HIGH' as const,
     occurredAt: new Date().toISOString(),
-    alertIds: [alert.id],
+    alertIds: [],
   };
   return { site, other, ids, service, alert, create, contractor, otherContractor };
 }
 test('MF08 incident end-to-end: scoping, immutable history, replay, rejection, closure and reopening', async () => {
   const f = await fixture(),
-    { site, ids, service, create } = f;
+    { site, ids, service } = f;
+  const create = {
+    ...f.create,
+    alertIds: [f.alert.id],
+    initialAction: { assignedTo: ids.security!, description: 'Install barrier' },
+  };
   const created = await service.createIncident(site, ids.safety!, create);
   const id = created.resource.id;
   assert.equal(created.resource.alerts[0]?.candidateWorkerId, 'unverified-tracker');
@@ -232,14 +239,7 @@ test('MF08 incident end-to-end: scoping, immutable history, replay, rejection, c
     }),
     failure('CONFLICT'),
   );
-  let detail = (
-    await service.incidentCommand(site, id, ids.safety!, 'assign', {
-      commandId: randomUUID(),
-      expectedVersion: 1,
-      assignedTo: ids.security!,
-      description: 'Install barrier',
-    })
-  ).resource;
+  let detail = created.resource;
   const action = detail.actions[0]!;
   await assert.rejects(
     service.incidentCommand(site, id, ids.safety!, 'assign', {
@@ -362,14 +362,20 @@ test('MF08 incident end-to-end: scoping, immutable history, replay, rejection, c
       action.id,
     )
   ).resource;
-  assert.equal(detail.status, 'VERIFIED');
-  const closed = (
-    await service.incidentCommand(site, id, ids.safety!, 'close', {
-      commandId: randomUUID(),
-      expectedVersion: detail.version,
-      reason: 'All hazards fixed',
-    })
-  ).resource;
+  const closed = detail;
+  assert.equal(closed.alerts[0]?.status, AlertStatus.CLOSED);
+  const closedAlert = await dataSource
+    .getRepository(SafetyAlertEntity)
+    .findOneByOrFail({ id: f.alert.id });
+  assert.equal(closedAlert.revision, f.alert.revision + 1);
+  const closureHistory = await dataSource
+    .getRepository(SafetyAlertReviewEntity)
+    .findBy({ alertId: f.alert.id });
+  assert.equal(closureHistory.length, 1);
+  assert.equal(closureHistory[0]!.fromStatus, AlertStatus.CONFIRMED);
+  assert.equal(closureHistory[0]!.toStatus, AlertStatus.CLOSED);
+  assert.equal(closureHistory[0]!.alertRevision, closedAlert.revision);
+  assert.equal(closureHistory[0]!.actorUserId, ids.safety!);
   assert.equal(closed.status, 'CLOSED');
   assert.equal(closed.actions[0]?.status, 'CLOSED');
   const groupingCameraId = randomUUID();
@@ -413,6 +419,16 @@ test('MF08 incident end-to-end: scoping, immutable history, replay, rejection, c
     })
   ).resource;
   assert.equal(reopened.status, 'REOPENED');
+  assert.equal(reopened.alerts[0]?.status, AlertStatus.CONFIRMED);
+  assert.equal(
+    (await dataSource.getRepository(SafetyAlertEntity).findOneByOrFail({ id: f.alert.id }))
+      .revision,
+    closedAlert.revision + 1,
+  );
+  assert.equal(
+    await dataSource.getRepository(SafetyAlertReviewEntity).countBy({ alertId: f.alert.id }),
+    2,
+  );
   assert.equal(reopened.actions.length, 2);
   await assert.rejects(
     service.incidentCommand(site, id, ids.safety!, 'close', {
@@ -436,6 +452,340 @@ test('MF08 incident end-to-end: scoping, immutable history, replay, rejection, c
   await dataSource.getRepository(UserEntity).update(ids.security!, { isActive: false });
   await assert.rejects(service.getIncident(site, id, ids.security!), failure('FORBIDDEN'));
 });
+test('handover requires a first action and final verification rolls back until closure guards pass', async () => {
+  const { site, ids, service, create, alert } = await fixture();
+  await assert.rejects(
+    service.createIncident(site, ids.safety!, { ...create, alertIds: [alert.id] }),
+    failure('VALIDATION_FAILED'),
+  );
+  assert.equal(
+    (await dataSource.getRepository(SafetyAlertEntity).findOneByOrFail({ id: alert.id }))
+      .incidentId,
+    null,
+  );
+  const input = {
+    ...create,
+    alertIds: [alert.id],
+    initialAction: { assignedTo: ids.security!, description: 'Fix hazard' },
+  };
+  let detail = (await service.createIncident(site, ids.safety!, input)).resource;
+  assert.equal(detail.status, 'ASSIGNED');
+  assert.equal(detail.actions.length, 1);
+  const first = detail.actions[0]!;
+  detail = (
+    await service.incidentCommand(site, detail.id, ids.safety!, 'assign', {
+      commandId: randomUUID(),
+      expectedVersion: detail.version,
+      assignedTo: ids.security!,
+      description: 'Second fix',
+    })
+  ).resource;
+  const second = detail.actions.find((a) => a.id !== first.id)!;
+  async function submit(actionId: string) {
+    detail = (
+      await service.incidentCommand(
+        site,
+        detail.id,
+        ids.security!,
+        'start',
+        {
+          commandId: randomUUID(),
+          expectedVersion: 1,
+        },
+        actionId,
+      )
+    ).resource;
+    detail = (
+      await service.incidentCommand(
+        site,
+        detail.id,
+        ids.security!,
+        'submit',
+        {
+          commandId: randomUUID(),
+          expectedVersion: 2,
+          resultDescription: 'Fixed and checked',
+        },
+        actionId,
+      )
+    ).resource;
+    return detail.actions
+      .find((a) => a.id === actionId)!
+      .submissions.find((v) => v.status === 'PENDING')!;
+  }
+  const submitted = await submit(first.id);
+  detail = (
+    await service.incidentCommand(
+      site,
+      detail.id,
+      ids.safety!,
+      'review',
+      {
+        commandId: randomUUID(),
+        expectedVersion: 3,
+        submissionId: submitted.id,
+        decision: 'APPROVED',
+        reason: 'Verified result',
+      },
+      first.id,
+    )
+  ).resource;
+  assert.equal(detail.status, 'IN_PROGRESS');
+  assert.equal(detail.alerts[0]!.status, AlertStatus.CONFIRMED);
+  assert.equal(detail.actions.find((a) => a.id === first.id)!.status, 'CLOSED');
+  const last = await submit(second.id);
+  await dataSource.getRepository(IncidentEntity).update(detail.id, {
+    contractorId: null,
+    responsibilityReason: null,
+    responsibilityConfirmedBy: null,
+    responsibilityConfirmedAt: null,
+  });
+  const review = {
+    commandId: randomUUID(),
+    expectedVersion: 3,
+    submissionId: last.id,
+    decision: 'APPROVED',
+    reason: 'x'.repeat(2000),
+  };
+  await assert.rejects(
+    service.incidentCommand(site, detail.id, ids.safety!, 'review', review, second.id),
+    failure('CONFLICT'),
+  );
+  assert.equal(
+    (
+      await dataSource
+        .getRepository(CorrectiveActionSubmissionEntity)
+        .findOneByOrFail({ id: last.id })
+    ).status,
+    'PENDING',
+  );
+  assert.equal(
+    (await dataSource.getRepository(CorrectiveActionEntity).findOneByOrFail({ id: second.id }))
+      .status,
+    'SUBMITTED',
+  );
+  await dataSource.getRepository(IncidentEntity).update(detail.id, {
+    contractorId: create.contractorId,
+    responsibilityReason: create.responsibilityReason,
+    responsibilityConfirmedBy: ids.safety!,
+    responsibilityConfirmedAt: new Date(),
+  });
+  detail = (
+    await service.incidentCommand(site, detail.id, ids.safety!, 'review', review, second.id)
+  ).resource;
+  assert.equal(detail.status, 'CLOSED');
+  assert.equal(detail.alerts[0]!.status, AlertStatus.CLOSED);
+  assert.equal(
+    (await service.incidentCommand(site, detail.id, ids.safety!, 'review', review, second.id))
+      .replayed,
+    true,
+  );
+  const beforeCorrection = await dataSource
+    .getRepository(SafetyAlertEntity)
+    .findOneByOrFail({ id: alert.id });
+  const correction = {
+    commandId: randomUUID(),
+    expectedVersion: detail.version,
+    contractorId: create.contractorId,
+    workerIds: [],
+    assignedTo: ids.security!,
+    description: 'Follow up corrected responsibility',
+    reason: 'Safety corrected the closed handover',
+  };
+  detail = (
+    await service.incidentCommand(
+      site,
+      detail.id,
+      ids.safety!,
+      'correct-responsibility',
+      correction,
+    )
+  ).resource;
+  assert.equal(detail.status, 'REOPENED');
+  const restored = await dataSource
+    .getRepository(SafetyAlertEntity)
+    .findOneByOrFail({ id: alert.id });
+  assert.equal(restored.status, AlertStatus.CONFIRMED);
+  assert.equal(restored.revision, beforeCorrection.revision + 1);
+  const histories = await dataSource
+    .getRepository(SafetyAlertReviewEntity)
+    .findBy({ alertId: alert.id });
+  assert.equal(histories.length, 2);
+  assert.ok(
+    histories.some(
+      (h) =>
+        h.fromStatus === AlertStatus.CLOSED &&
+        h.toStatus === AlertStatus.CONFIRMED &&
+        h.alertRevision === restored.revision,
+    ),
+  );
+  assert.equal(
+    (
+      await service.incidentCommand(
+        site,
+        detail.id,
+        ids.safety!,
+        'correct-responsibility',
+        correction,
+      )
+    ).replayed,
+    true,
+  );
+  assert.equal(
+    await dataSource.getRepository(SafetyAlertReviewEntity).countBy({ alertId: alert.id }),
+    2,
+  );
+});
+
+test(
+  'final approval and reopening serialize with concurrent AI grouping',
+  { timeout: 20000 },
+  async () => {
+    const { site, ids, service, create, alert } = await fixture();
+    let detail = (
+      await service.createIncident(site, ids.safety!, {
+        ...create,
+        alertIds: [alert.id],
+        initialAction: { assignedTo: ids.security!, description: 'Fix hazard' },
+      })
+    ).resource;
+    const action = detail.actions[0]!;
+    await service.incidentCommand(
+      site,
+      detail.id,
+      ids.security!,
+      'start',
+      {
+        commandId: randomUUID(),
+        expectedVersion: 1,
+      },
+      action.id,
+    );
+    detail = (
+      await service.incidentCommand(
+        site,
+        detail.id,
+        ids.security!,
+        'submit',
+        {
+          commandId: randomUUID(),
+          expectedVersion: 2,
+          resultDescription: 'Hazard fixed',
+        },
+        action.id,
+      )
+    ).resource;
+    const submission = detail.actions[0]!.submissions[0]!;
+    const grouping = new DurableGroupingService(
+      new ConfigService(validateEnvironment({ NODE_ENV: 'test' })),
+      new SchedulingNotificationService(dataSource),
+    );
+    const cameraId = randomUUID();
+    await dataSource.getRepository(CameraEntity).save({
+      id: cameraId,
+      siteId: site,
+      externalId: cameraId,
+      code: cameraId,
+      name: 'Synthetic concurrency camera',
+    });
+    const candidate = {
+      alertType: 'PPE_VIOLATION' as const,
+      candidateSubtype: 'PPE_HARD_HAT_MISSING' as const,
+      groupingKey: alert.groupingKey,
+      cameraId,
+      streamSessionId: randomUUID(),
+      trackId: 1,
+      details: {},
+    };
+    const key = site + ':' + alert.groupingKey;
+    async function waitForWaiters(expected: number) {
+      for (let attempt = 0; attempt < 100; attempt++) {
+        const [row] = (await dataSource.query(
+          "SELECT count(*)::int AS count FROM pg_locks WHERE locktype='advisory' AND objid=(hashtext($1)::bigint & 4294967295)::oid AND NOT granted",
+          [key],
+        )) as { count: number }[];
+        if (row!.count >= expected) return;
+        await new Promise((resolve) => setTimeout(resolve, 10));
+      }
+      assert.fail('Expected both business command and ingestion to wait for the grouping lock');
+    }
+    async function race(command: () => Promise<unknown>) {
+      const runner = dataSource.createQueryRunner();
+      await runner.connect();
+      await runner.startTransaction();
+      const pending: Promise<unknown>[] = [];
+      try {
+        await runner.query('SELECT pg_advisory_xact_lock(hashtext($1))', [key]);
+        pending.push(command());
+        await waitForWaiters(1);
+        pending.push(
+          dataSource.transaction((manager) =>
+            grouping.groupCandidate(manager, site, candidate, new Date()),
+          ),
+        );
+        await waitForWaiters(2);
+        await runner.commitTransaction();
+        // Both exclusive waiters queue on the same real PostgreSQL lock: the business command goes first.
+        return await Promise.all(pending);
+      } finally {
+        if (runner.isTransactionActive) await runner.rollbackTransaction();
+        await runner.release();
+        await Promise.allSettled(pending);
+      }
+    }
+    const [, observed] = await race(() =>
+      service.incidentCommand(
+        site,
+        detail.id,
+        ids.safety!,
+        'review',
+        {
+          commandId: randomUUID(),
+          expectedVersion: 3,
+          submissionId: submission.id,
+          decision: 'APPROVED',
+          reason: 'Safety verified closure',
+        },
+        action.id,
+      ),
+    );
+    const afterClosure = await service.getIncident(site, detail.id, ids.safety!);
+    assert.equal(afterClosure.status, 'CLOSED');
+    assert.equal(afterClosure.alerts[0]!.status, AlertStatus.CLOSED);
+    const newAlert = observed as SafetyAlertEntity;
+    assert.notEqual(newAlert.id, alert.id);
+    assert.equal(newAlert.status, AlertStatus.PENDING_REVIEW);
+    assert.equal(newAlert.incidentId, null);
+    const original = await dataSource
+      .getRepository(SafetyAlertEntity)
+      .findOneByOrFail({ id: alert.id });
+    assert.equal(original.detectionCount, alert.detectionCount);
+    // Remove the separate new episode so the next grouping call tests the reopened original episode.
+    await dataSource.getRepository(SafetyAlertEntity).delete({ id: newAlert.id });
+    const [, duringReopen] = await race(() =>
+      service.incidentCommand(site, detail.id, ids.safety!, 'reopen', {
+        commandId: randomUUID(),
+        expectedVersion: afterClosure.version,
+        assignedTo: ids.security!,
+        description: 'Follow up hazard',
+        reason: 'Safety reopened the case',
+      }),
+    );
+    assert.equal((duringReopen as SafetyAlertEntity).id, alert.id);
+    const restored = await dataSource
+      .getRepository(SafetyAlertEntity)
+      .findOneByOrFail({ id: alert.id });
+    assert.equal(restored.status, AlertStatus.CONFIRMED);
+    assert.equal(restored.revision, original.revision + 1);
+    assert.equal(restored.detectionCount, alert.detectionCount + 1);
+    assert.equal(
+      await dataSource.getRepository(SafetyAlertReviewEntity).countBy({ alertId: alert.id }),
+      2,
+    );
+    await dataSource.getRepository(CameraEntity).delete(cameraId);
+  },
+);
+
 test('MF08 SafetyTask remains separate, retains returned results and prevents self-verification', async () => {
   const { site, ids, service } = await fixture();
   const create = {
@@ -1212,17 +1562,20 @@ test('Incident source subjects use verified identity, reject mixed contractors a
       occurredAt: f.raw.capturedAt,
       alertIds: f.alertIds,
     };
-    const count = await dataSource.getRepository(IncidentEntity).count();
-    await assert.rejects(service.createIncident(f.siteId, actor, create), failure('CONFLICT'));
-    assert.equal(
-      await dataSource.getRepository(IncidentEntity).count(),
-      count,
-      'mixed-contractor link rolls back whole case',
+    const manual = (await service.createIncident(f.siteId, actor, { ...create, alertIds: [] }))
+      .resource;
+    await assert.rejects(
+      service.incidentCommand(f.siteId, manual.id, actor, 'link', {
+        commandId: randomUUID(),
+        expectedVersion: manual.version,
+        alertIds: f.alertIds,
+      }),
+      failure('CONFLICT'),
     );
     const incident = (
-      await service.createIncident(f.siteId, actor, {
-        ...create,
+      await service.incidentCommand(f.siteId, manual.id, actor, 'link', {
         commandId: randomUUID(),
+        expectedVersion: manual.version,
         alertIds: [f.alertIds[0]!],
       })
     ).resource;
@@ -1450,13 +1803,6 @@ test('handover correction preserves reports, revokes old scope and deduplicates 
       },
       current.id,
     )
-  ).resource;
-  detail = (
-    await service.incidentCommand(site, detail.id, ids.safety!, 'close', {
-      commandId: randomUUID(),
-      expectedVersion: detail.version,
-      reason: 'Current outcome recorded',
-    })
   ).resource;
   assert.equal(detail.status, 'CLOSED');
   assert.equal(

@@ -129,7 +129,7 @@ export class SafetyAlertReviewResponseDto {
   @ApiProperty({ format: 'uuid' }) actorUserId!: string;
   @ApiProperty({ enum: AlertStatus }) fromStatus!: AlertStatus;
   @ApiProperty({
-    enum: [AlertStatus.CONFIRMED, AlertStatus.DISMISSED, AlertStatus.NEEDS_MORE_EVIDENCE],
+    enum: AlertStatus,
   })
   toStatus!: AlertStatus;
   @ApiProperty() reason!: string;
