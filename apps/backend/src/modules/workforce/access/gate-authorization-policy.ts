@@ -60,8 +60,6 @@ export function authorizeGateEntry(subject: GateAuthorizationSubject): GateAutho
     return { authorization: 'DENIED', reasonCode: 'ASSIGNMENT_NOT_APPROVED' };
   if (subject.assignment.siteId !== subject.siteId)
     return { authorization: 'DENIED', reasonCode: 'SITE_MISMATCH' };
-  if (subject.assignment.gateId && subject.assignment.gateId !== subject.gateId)
-    return { authorization: 'DENIED', reasonCode: 'GATE_MISMATCH' };
   if (
     subject.assignment.validFrom.getTime() > subject.evaluatedAt.getTime() ||
     (subject.assignment.validUntil !== null &&

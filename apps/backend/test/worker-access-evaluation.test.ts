@@ -2,6 +2,7 @@ import './support/config.js';
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import type { EntityManager } from 'typeorm';
+import { SITE_GATES } from '@smartsite/contracts';
 import {
   WorkerEntity,
   WorkerScheduleEntity,
@@ -24,7 +25,12 @@ const worker = {
 } as WorkerEntity;
 function fixture(
   workDate: string | null,
-  options: { overnight?: boolean; overtime?: boolean; missingShift?: boolean } = {},
+  options: {
+    overnight?: boolean;
+    overtime?: boolean;
+    missingShift?: boolean;
+    legacyGateId?: string;
+  } = {},
 ) {
   const builder = {
     innerJoin: () => builder,
@@ -34,6 +40,7 @@ function fixture(
   return {
     getRepository: (entity: unknown) => {
       if (entity === WorkerComplianceProfileEntity) return { findOneBy: async () => null };
+      if (entity === WorkerGatePermissionEntity) return { findBy: async () => [] };
       if (entity === WorkerDocumentEntity)
         return {
           findBy: async () =>
@@ -49,6 +56,7 @@ function fixture(
           find: async () => [
             {
               id: 'assignment',
+              gateId: options.legacyGateId ?? null,
               siteId: 'site',
               siteContractorId: 'participation',
               status: 'APPROVED',
@@ -83,16 +91,6 @@ function fixture(
             validFrom: new Date('2025-01-01'),
             validUntil: null,
           }),
-        };
-      if (entity === WorkerGatePermissionEntity)
-        return {
-          findBy: async () => [
-            {
-              workerAssignmentId: 'assignment',
-              validFrom: new Date('2026-01-01'),
-              validUntil: null,
-            },
-          ],
         };
       return { createQueryBuilder: () => builder };
     },
@@ -163,4 +161,35 @@ test('missing shift data, cross-site and unavailable persistence never allow ent
     ),
     /Synthetic unavailable/,
   );
+});
+
+test('eligible workers can enter every site gate without gate grants or legacy gate restrictions', async () => {
+  for (const options of [{}, { legacyGateId: 'gate-north-01' }]) {
+    for (const gate of SITE_GATES) {
+      const result = await evaluateWorkerAccess(
+        fixture('2026-10-11', options),
+        worker,
+        'site',
+        gate.id,
+        'IN',
+        at,
+      );
+      assert.deepEqual(result.decision, {
+        authorization: 'ALLOWED',
+        reasonCode: 'VALID_ASSIGNMENT',
+      });
+    }
+  }
+});
+
+test('site-wide gate access still denies an inactive worker', async () => {
+  const result = await evaluateWorkerAccess(
+    fixture('2026-10-11'),
+    { ...worker, isActive: false },
+    'site',
+    'gate-west-02',
+    'IN',
+    at,
+  );
+  assert.deepEqual(result.decision, { authorization: 'DENIED', reasonCode: 'WORKER_INACTIVE' });
 });

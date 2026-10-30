@@ -31,6 +31,7 @@ type Workspace = {
   queryKey: readonly unknown[];
   workerId: string;
   workerDocumentStatus?: WorkerComplianceStatus;
+  canSwitchScope?: boolean;
 };
 const WorkspaceContext = createContext<Workspace | null>(null);
 export function WorkspaceProvider({
@@ -38,7 +39,13 @@ export function WorkspaceProvider({
   user,
   children,
   onScopeChange,
-}: PropsWithChildren<{ scope: MobileScope; user: AccountResponse; onScopeChange: () => void }>) {
+  canSwitchScope = false,
+}: PropsWithChildren<{
+  scope: MobileScope;
+  user: AccountResponse;
+  onScopeChange: () => void;
+  canSwitchScope?: boolean;
+}>) {
   useTranslation();
   const { session, epoch, token } = useAuth();
   const [controller] = useState(() => new AbortController());
@@ -85,6 +92,7 @@ export function WorkspaceProvider({
         queryKey,
         workerId: self.data?.workerId ?? '',
         workerDocumentStatus: compliance.data?.status,
+        canSwitchScope: canSwitchScope || (user.roleAssignments?.length ?? 0) > 1,
       }}
     >
       {children}

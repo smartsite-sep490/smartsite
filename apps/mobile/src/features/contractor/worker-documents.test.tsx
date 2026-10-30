@@ -6,6 +6,7 @@ import type { useWorkspace } from '../workspace/workspace-context';
 import { WorkerDocuments } from './worker-documents';
 import { translate as t, setLanguage } from '../../i18n';
 import { Field, Button } from '../shared/ui';
+import { Attachments } from '../shared/uploads';
 
 vi.mock('../workspace/workspace-context', () => ({ useWorkspace: () => workspace }));
 vi.mock('../shared/uploads', () => ({ Attachments: () => null, EvidenceButton: () => null }));
@@ -117,6 +118,79 @@ it('keeps Worker originals read-only and allows Representative expiry suggestion
   expect(text).not.toContain(t('documents.identityAdvisory'));
   expect(text).toContain(t('documents.identityMismatch'));
   expect(upload).not.toHaveBeenCalled();
+  const quality = vi.spyOn(client, 'checkWorkerDocumentDates').mockResolvedValue({
+    quality: { status: 'ACCEPTED', reason: 'IMAGE_ACCEPTED' },
+    ocr: profile.documents[0]!.ocr,
+    dateCheck: {
+      status: 'NO_REFERENCE',
+      field: 'EXPIRES_ON',
+      submittedDate: null,
+      detectedDate: '2030-10-27',
+    },
+  });
+  upload.mockResolvedValue({ ...profile.documents[0]!, id: 'pending-renewal' });
+  const identity = vi.spyOn(client, 'uploadWorkerIdentityImage');
+  await act(async () =>
+    root.update(
+      <QueryClientProvider client={cache}>
+        <WorkerDocuments workerId="worker" canSubmitDocuments />
+      </QueryClientProvider>,
+    ),
+  );
+  const pickers = root.root.findAllByType(Attachments);
+  expect(pickers).toHaveLength(3);
+  expect(pickers[0]!.props.disabled).toBe(false);
+  const declaredDate = root.root
+    .findAllByType(Field)
+    .find((node) => node.props.label.startsWith(`${t('documents.SAFETY_CARD')} -`))!;
+  const file = { uri: 'file:///synthetic-renewal.jpg', name: 'renewal.jpg', type: 'image/jpeg' };
+  await act(async () => {
+    await pickers[0]!.props.validateFile(file);
+  });
+  await act(async () => pickers[0]!.props.onChange([file]));
+  expect(declaredDate.props.value).toBe('2030-10-27');
+  expect(quality).toHaveBeenCalledWith(
+    'synthetic-token',
+    'site',
+    'worker',
+    'SAFETY_CARD',
+    file,
+    {},
+  );
+  const submit = root.root
+    .findAllByType(Button)
+    .find((node) => node.props.label === t('documents.submitForReview') && !node.props.disabled)!;
+  expect(JSON.stringify(root.toJSON())).toContain(t('documents.dateMatch'));
+  expect(upload).not.toHaveBeenCalled();
+  await act(async () => declaredDate.props.onChangeText('2031-10-27'));
+  expect(submit.props.disabled).toBe(true);
+  quality.mockResolvedValue({
+    quality: { status: 'ACCEPTED', reason: 'IMAGE_ACCEPTED' },
+    ocr: { status: 'UNREADABLE', issuedOn: null, expiresOn: null, warnings: [] },
+    dateCheck: {
+      status: 'UNAVAILABLE',
+      field: 'EXPIRES_ON',
+      submittedDate: '2031-10-27',
+      detectedDate: null,
+    },
+  });
+  const recheck = root.root
+    .findAllByType(Button)
+    .find((node) => node.props.label === t('documents.dateRecheck'))!;
+  await act(async () => {
+    await recheck.props.onPress();
+    await new Promise((r) => setTimeout(r, 20));
+  });
+  expect(submit.props.disabled).toBe(false);
+  expect(JSON.stringify(root.toJSON())).toContain(t('documents.dateUnavailable'));
+  await act(async () => submit.props.onPress());
+  expect(quality).toHaveBeenCalledWith('synthetic-token', 'site', 'worker', 'SAFETY_CARD', file, {
+    submittedExpiresOn: '2031-10-27',
+  });
+  expect(upload).toHaveBeenCalledWith('synthetic-token', 'site', 'worker', 'SAFETY_CARD', file, {
+    submittedExpiresOn: '2031-10-27',
+  });
+  expect(identity).not.toHaveBeenCalled();
   workspace = { ...workspace, scope: { ...workspace.scope, role: 'contractor' } };
   const save = vi
     .spyOn(client, 'updateWorkerDocumentExpiry')

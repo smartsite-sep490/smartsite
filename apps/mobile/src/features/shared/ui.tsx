@@ -234,22 +234,36 @@ export function Pager({
 }) {
   const { t } = useTranslation();
   return (
-    <View style={styles.row}>
-      <Button
-        secondary
-        label={t('common.previous')}
+    <View style={styles.pagerRow}>
+      <Text style={styles.pagerHint}>
+        {total ? `${offset + 1}–${Math.min(offset + size, total)} / ${total}` : t('common.noData')}
+      </Text>
+      <Pressable
+        accessibilityRole="button"
+        accessibilityLabel={t('common.previous')}
         disabled={offset === 0}
         onPress={() => onChange(Math.max(0, offset - size))}
-      />
-      <Hint>
-        {total ? `${offset + 1}–${Math.min(offset + size, total)} / ${total}` : t('common.noData')}
-      </Hint>
-      <Button
-        secondary
-        label={t('common.next')}
+        style={({ pressed }) => [
+          styles.pagerBtn,
+          offset === 0 && { opacity: 0.4 },
+          pressed && { opacity: 0.7 },
+        ]}
+      >
+        <Text style={styles.pagerBtnText}>{t('common.previous')}</Text>
+      </Pressable>
+      <Pressable
+        accessibilityRole="button"
+        accessibilityLabel={t('common.next')}
         disabled={offset + size >= total}
         onPress={() => onChange(offset + size)}
-      />
+        style={({ pressed }) => [
+          styles.pagerBtn,
+          offset + size >= total && { opacity: 0.4 },
+          pressed && { opacity: 0.7 },
+        ]}
+      >
+        <Text style={styles.pagerBtnText}>{t('common.next')}</Text>
+      </Pressable>
     </View>
   );
 }
@@ -264,11 +278,19 @@ export const styles = StyleSheet.create({
     padding: 18,
     gap: 12,
   },
-  heading: { fontSize: 24, fontWeight: '800', color: palette.navy, letterSpacing: -0.4 },
-  text: { fontSize: 15, lineHeight: 23, color: palette.navy },
-  hint: { fontSize: 13, lineHeight: 20, color: palette.muted },
-  label: { color: palette.navy, fontSize: 13.5, fontWeight: '700' },
-  field: { gap: 6 },
+  heading: {
+    fontSize: 24,
+    fontWeight: '800',
+    color: palette.navy,
+    letterSpacing: -0.4,
+    lineHeight: 32,
+    paddingTop: 4,
+    paddingBottom: 2,
+  },
+  text: { fontSize: 15.5, lineHeight: 23, color: palette.navy },
+  hint: { fontSize: 14, lineHeight: 21, color: palette.muted },
+  label: { color: palette.navy, fontSize: 14.5, fontWeight: '700', lineHeight: 21 },
+  field: { gap: 6, minWidth: 0, maxWidth: '100%' },
   input: {
     borderColor: '#E2E8F0',
     borderWidth: 1,
@@ -291,6 +313,7 @@ export const styles = StyleSheet.create({
     shadowOpacity: 0.25,
     shadowRadius: 5,
     elevation: 3,
+    maxWidth: '100%',
   },
   secondary: {
     backgroundColor: '#FFFFFF',
@@ -300,7 +323,14 @@ export const styles = StyleSheet.create({
     shadowOpacity: 0,
     elevation: 0,
   },
-  buttonText: { color: 'white', fontWeight: '700', fontSize: 15 },
+  buttonText: {
+    color: 'white',
+    fontWeight: '700',
+    fontSize: 15,
+    textAlign: 'center',
+    lineHeight: 22,
+    flexShrink: 1,
+  },
   error: { color: '#B91C1C', lineHeight: 22, padding: 8 },
   loading: { padding: 30, alignItems: 'center', gap: 10 },
   row: {
@@ -309,6 +339,41 @@ export const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'space-between',
     gap: 8,
+  },
+  pagerRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingVertical: 8,
+    flexWrap: 'wrap',
+    gap: 8,
+  },
+  pagerBtn: {
+    backgroundColor: '#FFFFFF',
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
+    borderRadius: 12,
+    paddingHorizontal: 16,
+    paddingVertical: 9,
+    minHeight: 38,
+    alignItems: 'center',
+    justifyContent: 'center',
+    maxWidth: '100%',
+  },
+  pagerBtnText: {
+    fontSize: 13.5,
+    fontWeight: '700',
+    color: '#0F1E36',
+    textAlign: 'center',
+    lineHeight: 20,
+  },
+  pagerHint: {
+    flexBasis: '100%',
+    fontSize: 13.5,
+    fontWeight: '600',
+    color: '#64748B',
+    flexShrink: 1,
+    textAlign: 'center',
   },
   options: {
     borderWidth: 1,

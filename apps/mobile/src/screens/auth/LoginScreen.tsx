@@ -264,7 +264,8 @@ const styles = StyleSheet.create({
   },
   loginBtn: {
     backgroundColor: colors.primary,
-    height: 54,
+    minHeight: 54,
+    padding: 14,
     borderRadius: 16,
     alignItems: 'center',
     justifyContent: 'center',
@@ -277,6 +278,9 @@ const styles = StyleSheet.create({
   },
   loginBtnText: {
     color: '#FFFFFF',
+    textAlign: 'center',
+    lineHeight: 24,
+    flexShrink: 1,
     fontSize: 16,
     fontWeight: '700',
   },

@@ -144,7 +144,7 @@ export function CreateWorkerModal({ visible, onClose, onSuccess }: CreateWorkerM
               <View style={styles.iconCircle}>
                 <IconUserPlus size={20} color={colors.primary} />
               </View>
-              <View>
+              <View style={{ flex: 1, minWidth: 0 }}>
                 <Text style={styles.title}>{t('workforce.createTitle')}</Text>
                 <Text style={styles.subtitle}>
                   {scope.contractorName} · {scope.siteName}
@@ -381,12 +381,14 @@ const styles = StyleSheet.create({
     borderBottomWidth: 1,
     borderBottomColor: '#EFF2F6',
     marginBottom: 16,
+    gap: 10,
   },
   headerLeft: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 12,
     flex: 1,
+    minWidth: 0,
   },
   iconCircle: {
     width: 40,
@@ -395,12 +397,15 @@ const styles = StyleSheet.create({
     backgroundColor: '#FFF4EE',
     alignItems: 'center',
     justifyContent: 'center',
+    flexShrink: 0,
   },
   title: {
     fontSize: 17,
     fontWeight: '800',
     color: '#0F1E36',
     letterSpacing: -0.3,
+    flexShrink: 1,
+    lineHeight: 24,
   },
   subtitle: {
     fontSize: 12,
@@ -414,6 +419,7 @@ const styles = StyleSheet.create({
     backgroundColor: '#F1F5F9',
     alignItems: 'center',
     justifyContent: 'center',
+    flexShrink: 0,
   },
   closeText: {
     fontSize: 14,
@@ -472,6 +478,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     gap: 12,
     marginTop: 6,
+    flexWrap: 'wrap',
   },
   cancelBtn: {
     flex: 1,
@@ -480,11 +487,17 @@ const styles = StyleSheet.create({
     paddingVertical: 14,
     alignItems: 'center',
     justifyContent: 'center',
+    minWidth: 96,
+    paddingHorizontal: 12,
+    minHeight: 48,
   },
   cancelBtnText: {
     fontSize: 15,
     fontWeight: '700',
     color: colors.textSecondary,
+    textAlign: 'center',
+    lineHeight: 22,
+    flexShrink: 1,
   },
   submitBtn: {
     flex: 2,
@@ -498,10 +511,16 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.25,
     shadowRadius: 5,
     elevation: 3,
+    minWidth: 152,
+    paddingHorizontal: 12,
+    minHeight: 48,
   },
   submitBtnText: {
     fontSize: 15,
     fontWeight: '700',
     color: '#FFFFFF',
+    textAlign: 'center',
+    lineHeight: 22,
+    flexShrink: 1,
   },
 });

@@ -463,7 +463,13 @@ export function IconPlus({ size = 20, color = colors.textPrimary }: IconProps) {
 export function IconChevronLeft({ size = 20, color = colors.textPrimary }: IconProps) {
   return (
     <View style={{ width: size, height: size, alignItems: 'center', justifyContent: 'center' }}>
-      <Text style={{ fontSize: size * 0.9, fontWeight: '700', color, lineHeight: size }}>‹</Text>
+      <Text
+        allowFontScaling={false}
+        accessible={false}
+        style={{ fontSize: size * 0.9, fontWeight: '700', color, lineHeight: size }}
+      >
+        ‹
+      </Text>
     </View>
   );
 }
@@ -471,7 +477,13 @@ export function IconChevronLeft({ size = 20, color = colors.textPrimary }: IconP
 export function IconChevronRight({ size = 20, color = colors.textTertiary }: IconProps) {
   return (
     <View style={{ width: size, height: size, alignItems: 'center', justifyContent: 'center' }}>
-      <Text style={{ fontSize: size * 0.9, fontWeight: '700', color, lineHeight: size }}>›</Text>
+      <Text
+        allowFontScaling={false}
+        accessible={false}
+        style={{ fontSize: size * 0.9, fontWeight: '700', color, lineHeight: size }}
+      >
+        ›
+      </Text>
     </View>
   );
 }
@@ -479,7 +491,13 @@ export function IconChevronRight({ size = 20, color = colors.textTertiary }: Ico
 export function IconChevronDown({ size = 18, color = colors.textMuted }: IconProps) {
   return (
     <View style={{ width: size, height: size, alignItems: 'center', justifyContent: 'center' }}>
-      <Text style={{ fontSize: size * 0.8, fontWeight: '700', color, lineHeight: size }}>⌄</Text>
+      <Text
+        allowFontScaling={false}
+        accessible={false}
+        style={{ fontSize: size * 0.8, fontWeight: '700', color, lineHeight: size }}
+      >
+        ⌄
+      </Text>
     </View>
   );
 }
@@ -487,7 +505,13 @@ export function IconChevronDown({ size = 18, color = colors.textMuted }: IconPro
 export function IconChevronUp({ size = 18, color = colors.textMuted }: IconProps) {
   return (
     <View style={{ width: size, height: size, alignItems: 'center', justifyContent: 'center' }}>
-      <Text style={{ fontSize: size * 0.8, fontWeight: '700', color, lineHeight: size }}>⌃</Text>
+      <Text
+        allowFontScaling={false}
+        accessible={false}
+        style={{ fontSize: size * 0.8, fontWeight: '700', color, lineHeight: size }}
+      >
+        ⌃
+      </Text>
     </View>
   );
 }
@@ -538,7 +562,13 @@ export function IconBriefcase({ size = 22, color = colors.primary }: IconProps) 
 export function IconSwap({ size = 20, color = colors.primary }: IconProps) {
   return (
     <View style={{ width: size, height: size, alignItems: 'center', justifyContent: 'center' }}>
-      <Text style={{ fontSize: size * 0.9, fontWeight: '700', color, lineHeight: size }}>⇄</Text>
+      <Text
+        allowFontScaling={false}
+        accessible={false}
+        style={{ fontSize: size * 0.9, fontWeight: '700', color, lineHeight: size }}
+      >
+        ⇄
+      </Text>
     </View>
   );
 }
@@ -558,7 +588,13 @@ export function IconAlert({ size = 20, color = colors.warning }: IconProps) {
         justifyContent: 'center',
       }}
     >
-      <Text style={{ color: '#FFFFFF', fontWeight: '800', fontSize: size * 0.65 }}>!</Text>
+      <Text
+        allowFontScaling={false}
+        accessible={false}
+        style={{ color: '#FFFFFF', fontWeight: '800', fontSize: size * 0.65 }}
+      >
+        !
+      </Text>
     </View>
   );
 }
@@ -569,7 +605,13 @@ export function IconAlert({ size = 20, color = colors.warning }: IconProps) {
 export function IconCheck({ size = 18, color = colors.success }: IconProps) {
   return (
     <View style={{ width: size, height: size, alignItems: 'center', justifyContent: 'center' }}>
-      <Text style={{ color, fontWeight: '800', fontSize: size * 0.85 }}>✓</Text>
+      <Text
+        allowFontScaling={false}
+        accessible={false}
+        style={{ color, fontWeight: '800', fontSize: size * 0.85 }}
+      >
+        ✓
+      </Text>
     </View>
   );
 }
@@ -708,7 +750,9 @@ export function IconDocument({ size = 20, color = colors.primary }: IconProps) {
 export function IconSearch({ size = 18, color = colors.textMuted }: IconProps) {
   return (
     <View style={{ width: size, height: size, alignItems: 'center', justifyContent: 'center' }}>
-      <Text style={{ fontSize: size * 0.9, color }}>🔍</Text>
+      <Text allowFontScaling={false} accessible={false} style={{ fontSize: size * 0.9, color }}>
+        🔍
+      </Text>
     </View>
   );
 }
@@ -719,7 +763,9 @@ export function IconSearch({ size = 18, color = colors.textMuted }: IconProps) {
 export function IconPencil({ size = 18, color = colors.textPrimary }: IconProps) {
   return (
     <View style={{ width: size, height: size, alignItems: 'center', justifyContent: 'center' }}>
-      <Text style={{ fontSize: size * 0.9, color }}>✏️</Text>
+      <Text allowFontScaling={false} accessible={false} style={{ fontSize: size * 0.9, color }}>
+        ✏️
+      </Text>
     </View>
   );
 }
@@ -756,7 +802,45 @@ export function IconPause({ size = 18, color = colors.danger }: IconProps) {
 export function IconFaceScan({ size = 28, color = colors.primary }: IconProps) {
   return (
     <View style={{ width: size, height: size, alignItems: 'center', justifyContent: 'center' }}>
-      <Text style={{ fontSize: size * 0.8, color }}>👤</Text>
+      <Text allowFontScaling={false} accessible={false} style={{ fontSize: size * 0.8, color }}>
+        👤
+      </Text>
+    </View>
+  );
+}
+
+/**
+ * Trash / Delete Icon
+ */
+export function IconTrash({ size = 18, color = colors.danger }: IconProps) {
+  return (
+    <View style={{ width: size, height: size, alignItems: 'center', justifyContent: 'center' }}>
+      {/* Lid */}
+      <View
+        style={{
+          width: size * 0.72,
+          height: 2,
+          backgroundColor: color,
+          borderRadius: 1,
+          marginBottom: 1.5,
+        }}
+      />
+      {/* Body */}
+      <View
+        style={{
+          width: size * 0.58,
+          height: size * 0.58,
+          borderWidth: 1.5,
+          borderColor: color,
+          borderTopWidth: 0,
+          borderBottomLeftRadius: 3,
+          borderBottomRightRadius: 3,
+          alignItems: 'center',
+          justifyContent: 'center',
+        }}
+      >
+        <View style={{ width: 1.5, height: size * 0.32, backgroundColor: color }} />
+      </View>
     </View>
   );
 }

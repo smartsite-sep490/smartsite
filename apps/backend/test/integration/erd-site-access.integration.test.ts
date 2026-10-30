@@ -25,7 +25,6 @@ import {
 } from '../../src/database/entities/index.js';
 import { ContractorOperationsService } from '../../src/modules/workforce/directory/contractor-operations.service.js';
 import { SiteAccessSetupService } from '../../src/modules/workforce/access/site-access-setup.service.js';
-import { WorkerGatePermissionsService } from '../../src/modules/workforce/access/worker-gate-permissions.service.js';
 import { QrAccessService } from '../../src/modules/workforce/access/qr-access.service.js';
 import { AttendanceService } from '../../src/modules/workforce/attendance/attendance.service.js';
 import { ZoneEntryAuthorizationService } from '../../src/modules/zones/zone-entry-authorization.service.js';
@@ -240,11 +239,6 @@ test('ERD: bounded permissions, gate confirmation, temporary passage and attenda
       ).status,
       'DENIED',
     );
-    const gatePermissions = new WorkerGatePermissionsService(dataSource);
-    await gatePermissions.set(manager, siteId, workerId, {
-      gateIds: [gateId],
-      expectedPermissionIds: [],
-    });
     const unknown = await dataSource.transaction((m) =>
       access.recordAttempt(m, {
         actor: security,
@@ -412,15 +406,12 @@ test('ERD: bounded permissions, gate confirmation, temporary passage and attenda
       identityConfirmed: true,
       reviewNote: 'Before revocation',
     });
-    const current = await gatePermissions.list(manager, siteId, workerId);
-    await gatePermissions.set(manager, siteId, workerId, {
-      gateIds: [],
-      expectedPermissionIds: current.items.map((p) => p.id),
-    });
+    await dataSource.getRepository(WorkerEntity).update(workerId, { isActive: false });
     await assert.rejects(
       access.confirmPassage(security, siteId, reserved.id, { idempotencyKey: randomUUID() }),
       /permission changed/,
     );
+    await dataSource.getRepository(WorkerEntity).update(workerId, { isActive: true });
     await dataSource.getRepository(WorkerSiteZoneAssignmentEntity).update(assignment.id, {
       validFrom: new Date(Date.now() - 120_000),
       validUntil: new Date(Date.now() - 60_000),

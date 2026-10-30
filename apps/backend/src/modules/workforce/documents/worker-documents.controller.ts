@@ -48,6 +48,21 @@ export class WorkerDocumentsController {
   ) {
     return this.service.checkQuality(r.user!, siteId, contractorId, file);
   }
+  @Post('workers/:workerId/document-image-quality')
+  @Header('Cache-Control', 'private, no-store')
+  @UseInterceptors(
+    FileInterceptor('file', {
+      limits: { fileSize: 5 * 1024 * 1024, files: 1, fields: 0, parts: 1 },
+    }),
+  )
+  workerQuality(
+    @Req() r: AuthenticatedRequest,
+    @Param('siteId') siteId: string,
+    @Param('workerId') workerId: string,
+    @UploadedFile() file: DocumentUpload,
+  ) {
+    return this.service.checkWorkerQuality(r.user!, siteId, workerId, file);
+  }
   @Post('workers/:workerId/identity-images/:side')
   @Header('Cache-Control', 'private, no-store')
   @UseInterceptors(
@@ -112,6 +127,23 @@ export class WorkerDocumentsController {
     @Param('workerId') workerId: string,
   ) {
     return this.service.get(r.user!, siteId, workerId);
+  }
+  @Post('workers/:workerId/documents/:kind/check')
+  @Header('Cache-Control', 'private, no-store')
+  @UseInterceptors(
+    FileInterceptor('file', {
+      limits: { fileSize: 5 * 1024 * 1024, files: 1, fields: 2, parts: 3 },
+    }),
+  )
+  checkSubmission(
+    @Req() r: AuthenticatedRequest,
+    @Param('siteId') siteId: string,
+    @Param('workerId') workerId: string,
+    @Param('kind') kind: string,
+    @UploadedFile() file: DocumentUpload,
+    @Body() body: UploadWorkerDocumentDto,
+  ) {
+    return this.service.checkSubmission(r.user!, siteId, workerId, kind, file, body);
   }
   @Post('workers/:workerId/documents/:kind')
   @Header('Cache-Control', 'private, no-store')

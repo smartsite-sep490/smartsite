@@ -11,8 +11,6 @@ import { SiteAccessSetupController } from './site-access-setup.controller.js';
 import { QrAccessController, VisitorRegistrationController } from './qr-access.controller.js';
 import { FaceGateController } from './face-gate.controller.js';
 import { FaceGateService } from './face-gate.service.js';
-import { WorkerGatePermissionsService } from './worker-gate-permissions.service.js';
-import { WorkerGatePermissionsController } from './worker-gate-permissions.controller.js';
 
 @Module({
   imports: [
@@ -27,14 +25,7 @@ import { WorkerGatePermissionsController } from './worker-gate-permissions.contr
     VisitorRegistrationController,
     SiteAccessSetupController,
     FaceGateController,
-    WorkerGatePermissionsController,
   ],
-  providers: [
-    VisitorEmailService,
-    QrAccessService,
-    SiteAccessSetupService,
-    FaceGateService,
-    WorkerGatePermissionsService,
-  ],
+  providers: [VisitorEmailService, QrAccessService, SiteAccessSetupService, FaceGateService],
 })
 export class WorkforceAccessModule {}

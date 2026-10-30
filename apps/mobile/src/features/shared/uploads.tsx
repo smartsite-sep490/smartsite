@@ -60,6 +60,7 @@ export function Attachments({
   maxFiles = 3,
   validateFile,
   allowPdf = true,
+  disabled = false,
 }: {
   files: NativeUploadFile[];
   onChange: (files: NativeUploadFile[]) => void;
@@ -67,6 +68,7 @@ export function Attachments({
   maxFiles?: number;
   validateFile?: (file: NativeUploadFile) => Promise<void>;
   allowPdf?: boolean;
+  disabled?: boolean;
 }) {
   const { t } = useTranslation();
   const [error, setError] = useState<unknown>(null),
@@ -97,6 +99,7 @@ export function Attachments({
     }
   };
   const add = async (source: 'camera' | 'gallery' | 'file') => {
+    if (disabled || pending) return;
     setPending(true);
     setError(null);
     try {
@@ -169,6 +172,7 @@ export function Attachments({
           <Button
             secondary
             label={tr('uploads.removeFile', { name: file.name })}
+            disabled={disabled || pending}
             onPress={() => onChange(files.filter((_, i) => i !== index))}
           />
         </Card>
@@ -177,21 +181,21 @@ export function Attachments({
       <Button
         secondary
         label={validateFile ? t('documents.camera') : tr('uploads.takePhoto')}
-        disabled={pending || files.length >= maxFiles}
+        disabled={disabled || pending || files.length >= maxFiles}
         onPress={() => void add('camera')}
       />
       {validateFile && (
         <Button
           secondary
           label={t('documents.gallery')}
-          disabled={pending || files.length >= maxFiles}
+          disabled={disabled || pending || files.length >= maxFiles}
           onPress={() => void add('gallery')}
         />
       )}
       <Button
         secondary
         label={tr('uploads.chooseAttachment')}
-        disabled={pending || files.length >= maxFiles}
+        disabled={disabled || pending || files.length >= maxFiles}
         onPress={() => void add('file')}
       />
     </View>
