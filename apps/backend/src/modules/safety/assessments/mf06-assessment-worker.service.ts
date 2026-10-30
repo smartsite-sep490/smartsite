@@ -1,8 +1,11 @@
 import type { DataSource, EntityManager } from 'typeorm';
 import type { Mf06JobClaim, Mf06JobLeaseService } from './mf06-job-lease.service.js';
 import type { Mf06AssessmentStoreResult } from './mf06-assessment-store.service.js';
+import { finalizeMainAuthoritySnapshot } from '../../zones/main-authority-read-snapshot.js';
 
 export interface Mf06AssessmentWorkPort {
+  /** Trusted composition declaration, captured once before work starts. */
+  readonly finalizationScope?: 'AUTHORITY_SNAPSHOT';
   /** Potential resolver I/O, outside the final database transaction. */
   prepare(claim: Mf06JobClaim, signal: AbortSignal): Promise<unknown>;
   /** Revalidate current authoritative data and append on this same manager; no remote I/O. */
@@ -28,6 +31,7 @@ export class Mf06RetryableWorkError extends Error {
 /** Private caller-driven orchestration. No scheduler, model adapter or runtime provider. */
 export class Mf06AssessmentWorker {
   private readonly settings: Readonly<Mf06WorkerOptions>;
+  private readonly authorityFinalization: boolean;
   private active: Promise<Mf06WorkerResult> | undefined;
   private controller: AbortController | undefined;
   private draining = false;
@@ -37,7 +41,9 @@ export class Mf06AssessmentWorker {
     private readonly work: Mf06AssessmentWorkPort,
     options: Mf06WorkerOptions,
   ) {
+    const scope = work.finalizationScope;
     if (
+      (scope !== undefined && scope !== 'AUTHORITY_SNAPSHOT') ||
       !options ||
       typeof options.enabled !== 'boolean' ||
       ![options.resolverTimeoutMs, options.drainTimeoutMs, options.maxDatabaseAttempts].every(
@@ -52,6 +58,7 @@ export class Mf06AssessmentWorker {
     )
       throw new Error('MF06_INVALID_WORKER_OPTIONS');
     this.settings = Object.freeze({ ...options });
+    this.authorityFinalization = scope === 'AUTHORITY_SNAPSHOT';
   }
   runOnce(signal?: AbortSignal): Promise<Mf06WorkerResult> {
     if (!this.settings.enabled || signal?.aborted || this.draining || this.active)
@@ -127,13 +134,16 @@ export class Mf06AssessmentWorker {
       if (signal.aborted) return this.leases.cancel(claim);
       if (remaining() <= 0) return 'STALE';
       try {
-        const result = await this.db.transaction('SERIALIZABLE', async (manager) => {
+        const finalize = async (manager: EntityManager) => {
           signal.throwIfAborted();
           if (remaining() <= 0) return { state: 'STALE' as const, reason: 'LEASE_EXPIRED' };
           const value = await this.work.finalize(manager, claim, prepared, signal);
           signal.throwIfAborted();
           return value;
-        });
+        };
+        const result = this.authorityFinalization
+          ? await finalizeMainAuthoritySnapshot(this.db, finalize)
+          : await this.db.transaction('SERIALIZABLE', finalize);
         // The transaction has committed. A later cancellation cannot undo it.
         if (result.state === 'RECORDED' || result.state === 'REPLAY') return 'COMPLETED';
         if (result.state === 'STALE') return 'STALE';

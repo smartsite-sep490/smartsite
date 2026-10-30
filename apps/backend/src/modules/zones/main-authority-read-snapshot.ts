@@ -14,6 +14,22 @@ export async function readMainAuthoritySnapshot<T>(
   source: DataSource,
   operation: (manager: EntityManager) => Promise<T>,
 ): Promise<T> {
+  return withMainAuthoritySnapshot(source, operation, true);
+}
+
+/** Fence before the first snapshot while retaining writes for assessment finalization. */
+export async function finalizeMainAuthoritySnapshot<T>(
+  source: DataSource,
+  operation: (manager: EntityManager) => Promise<T>,
+): Promise<T> {
+  return withMainAuthoritySnapshot(source, operation, false);
+}
+
+async function withMainAuthoritySnapshot<T>(
+  source: DataSource,
+  operation: (manager: EntityManager) => Promise<T>,
+  readOnly: boolean,
+): Promise<T> {
   const schema = source.driver.schema;
   if (
     typeof schema !== 'string' ||
@@ -31,7 +47,7 @@ export async function readMainAuthoritySnapshot<T>(
     await manager.query(
       `LOCK TABLE ${MAIN_AUTHORITY_SNAPSHOT_TABLES.map((table) => `${quote(schema)}.${quote(table)}`).join(',')} IN SHARE MODE`,
     );
-    await manager.query('SET TRANSACTION READ ONLY');
+    await manager.query(readOnly ? 'SET TRANSACTION READ ONLY' : 'SET TRANSACTION READ WRITE');
     // Frozen capture profiles use the schema-only path; reject pooled temp namespaces
     // instead of changing that profile or allowing implicit temporary-table shadowing.
     const [temporary] = await manager.query('SELECT pg_catalog.pg_my_temp_schema()<>0 AS present');
