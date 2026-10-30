@@ -1,6 +1,7 @@
 import { Column, CreateDateColumn, Entity, ForeignKey, Index, PrimaryColumn } from 'typeorm';
 import { CameraEntity } from './camera.entity.js';
 import { EventProcessingStatus } from './enums.js';
+import type { WorkerEventDeliveryContext } from '@smartsite/contracts';
 
 @Entity({ name: 'ai_observation_event' })
 @Index('uq_ai_event_frame_part', { synchronize: false })
@@ -35,6 +36,23 @@ export class AiObservationEventEntity {
 
   @Column({ name: 'raw_payload', type: 'jsonb' })
   rawPayload!: unknown;
+
+  /** Bound-intake writes this atomically via its scoped SQL path; legacy reads stay compatible. */
+  @Column({
+    name: 'admission_context',
+    type: 'jsonb',
+    nullable: true,
+    select: false,
+    insert: false,
+    update: false,
+  })
+  admissionContext?: {
+    schemaVersion: '1.0.0';
+    context: WorkerEventDeliveryContext;
+    bindingHash: string;
+    classification: 'LIVE' | 'REVIEW_ONLY';
+    admittedAt: string;
+  } | null;
 
   @Column({
     name: 'processing_status',

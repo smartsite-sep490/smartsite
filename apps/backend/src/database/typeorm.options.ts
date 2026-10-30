@@ -40,6 +40,7 @@ import { CameraRegionGeometryRevisions1793577600000 } from './migrations/1793577
 import { ZonePolicyRevisions1794441600000 } from './migrations/1794441600000-ZonePolicyRevisions.js';
 import { CameraConfigurationBundles1794528000000 } from './migrations/1794528000000-CameraConfigurationBundles.js';
 import { CameraWorkerGenerations1794614400000 } from './migrations/1794614400000-CameraWorkerGenerations.js';
+import { WorkerEventAdmission1794700800000 } from './migrations/1794700800000-WorkerEventAdmission.js';
 import { QrAccess1791417600000 } from './migrations/1791417600000-QrAccess.js';
 import { VisitorRoster1792022400000 } from './migrations/1792022400000-VisitorRoster.js';
 import { Mf05Mf06Foundation1789689600000 } from './migrations/1789689600000-Mf05Mf06Foundation.js';
@@ -94,6 +95,7 @@ export function buildTypeOrmOptions(config: DatabaseConnectionConfig): DataSourc
       ZonePolicyRevisions1794441600000,
       CameraConfigurationBundles1794528000000,
       CameraWorkerGenerations1794614400000,
+      WorkerEventAdmission1794700800000,
       CanonicalSafetyFaceProvenance1794268800000,
       CanonicalMf06Results1794182400000,
       CanonicalMf06Requests1794096000000,

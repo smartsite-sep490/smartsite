@@ -20,7 +20,7 @@ import {
   ZoneType,
   ZoneEntryDecisionEntity,
 } from '../../src/database/entities/index.js';
-import dataSource from '../support/test-data-source.js';
+import { createIsolatedTestDatabase } from '../support/isolated-test-database.js';
 import { ObservationContextResolverService } from '../../src/modules/zones/observation-context-resolver.service.js';
 import { ZoneAuthorizationService } from '../../src/modules/zones/zone-authorization.service.js';
 import { AlertCandidateEvaluator } from '../../src/modules/safety/alerts/alert-candidate-evaluator.js';
@@ -28,17 +28,17 @@ import { DurableGroupingService } from '../../src/modules/safety/alerts/durable-
 import { AiIngestionService } from '../../src/integrations/ai/ai-ingestion.service.js';
 import { isEventIdConflict } from '../../src/integrations/ai/typeorm-error.js';
 
+const owned = createIsolatedTestDatabase();
+const dataSource = owned.dataSource;
 async function withDataSource<T>(fn: (source: DataSource) => Promise<T>): Promise<T> {
   if (!dataSource.isInitialized) {
-    await dataSource.initialize();
+    await owned.initialize();
   }
   return await fn(dataSource);
 }
 
 after(async () => {
-  if (dataSource.isInitialized) {
-    await dataSource.destroy();
-  }
+  await owned.dispose();
 });
 
 function createSampleEvent(overrides: Record<string, unknown> = {}): Record<string, unknown> {
