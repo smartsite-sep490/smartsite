@@ -532,6 +532,7 @@ test('4. resolver Mf06RetryableWorkError is rethrown when signal stays active, w
   const context = makeMatchedV13Context(frame.sha256);
   const candidates = [makeCandidate(1)] as const;
   const retryableError = new Mf06RetryableWorkError('RESOLVER_UNAVAILABLE');
+  let resolverFailure: Error = retryableError;
   let shouldAbortInResolver = false;
   const controller = new AbortController();
 
@@ -551,7 +552,7 @@ test('4. resolver Mf06RetryableWorkError is rethrown when signal stays active, w
         assert.equal(input.invocation.frameSha256, frame.sha256);
         assert.equal(input.candidates.length, 1);
         if (shouldAbortInResolver) controller.abort();
-        throw retryableError;
+        throw resolverFailure;
       },
     },
     root,
@@ -562,6 +563,13 @@ test('4. resolver Mf06RetryableWorkError is rethrown when signal stays active, w
     preparation.prepare(CLAIM, new AbortController().signal),
     (error: unknown) => error === retryableError,
   );
+
+  resolverFailure = Object.assign(new Error('Unclassified resolver reset'), { code: 'ECONNRESET' });
+  assert.deepEqual(await preparation.prepare(CLAIM, new AbortController().signal), {
+    state: 'UNAVAILABLE',
+    reason: 'PREPARATION_FAILED',
+  });
+  resolverFailure = retryableError;
 
   shouldAbortInResolver = true;
   assert.deepEqual(await preparation.prepare(CLAIM, controller.signal), {
@@ -574,7 +582,7 @@ test('transient second-context and candidate reads retry instead of returning a 
   const unexpected = async (): Promise<never> => {
     throw new Error('Unexpected downstream call');
   };
-  for (const code of ['40001', '40P01', '55P03', '57014', '55000']) {
+  for (const code of ['40001', '40P01', '55P03', '57014', '55000', 'ECONNREFUSED', '08006']) {
     const preparation = new Mf06FacePreparation(
       {
         readForClaim: async () => {

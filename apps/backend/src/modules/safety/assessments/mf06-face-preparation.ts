@@ -1,4 +1,5 @@
 import { computeCanonicalPayloadHash } from '@smartsite/contracts';
+import { isTransientDatabaseFailure } from '../../../common/database-errors.js';
 import { Mf06RetryableWorkError } from './mf06-assessment-worker.service.js';
 import { bindMf06FaceInvocation } from './mf06-face-binding.js';
 import type { SafetyFaceCandidateReader } from '../../workforce/safety-face-candidate.reader.js';
@@ -42,11 +43,13 @@ export class Mf06FacePreparation {
       state: 'UNAVAILABLE',
       reason,
     });
+    let readingDatabase = false;
     try {
       if (signal.aborted) return unavailable('ABORTED');
-      const context = snapshotMf06Json(
-        await this.contexts.readForClaim(claim, signal),
-      ) as Mf06ClaimContextLookup;
+      readingDatabase = true;
+      const rawContext = await this.contexts.readForClaim(claim, signal);
+      readingDatabase = false;
+      const context = snapshotMf06Json(rawContext) as Mf06ClaimContextLookup;
       if (signal.aborted) return unavailable('ABORTED');
       if (context.status !== 'MATCHED') return unavailable('CONTEXT_UNAVAILABLE');
       let media = await prepareMf06FaceMedia(
@@ -58,9 +61,16 @@ export class Mf06FacePreparation {
       );
       if (signal.aborted) return unavailable('ABORTED');
       if (media.state !== 'BOUND_UNATTESTED') return unavailable('MEDIA_UNAVAILABLE');
-      const lookup = snapshotMf06Json(
-        await this.candidates.readForSafety(context.siteId, this.modelVersion, signal),
-      ) as Awaited<ReturnType<SafetyFaceCandidateReader['readForSafety']>>;
+      readingDatabase = true;
+      const rawLookup = await this.candidates.readForSafety(
+        context.siteId,
+        this.modelVersion,
+        signal,
+      );
+      readingDatabase = false;
+      const lookup = snapshotMf06Json(rawLookup) as Awaited<
+        ReturnType<SafetyFaceCandidateReader['readForSafety']>
+      >;
       if (signal.aborted) return unavailable('ABORTED');
       if (
         lookup.status !== 'AVAILABLE' ||
@@ -108,13 +118,7 @@ export class Mf06FacePreparation {
       return { state: 'PREPARED_UNATTESTED', context, media, response };
     } catch (error) {
       if (!signal.aborted && error instanceof Mf06RetryableWorkError) throw error;
-      const failure = error as { code?: unknown; driverError?: { code?: unknown } };
-      const code = failure?.driverError?.code ?? failure?.code;
-      if (
-        !signal.aborted &&
-        typeof code === 'string' &&
-        ['40001', '40P01', '55P03', '57014', '55000'].includes(code)
-      )
+      if (!signal.aborted && readingDatabase && isTransientDatabaseFailure(error))
         throw new Mf06RetryableWorkError('DATABASE_UNAVAILABLE');
       return unavailable(signal.aborted ? 'ABORTED' : 'PREPARATION_FAILED');
     }
