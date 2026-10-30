@@ -1,6 +1,6 @@
 import 'reflect-metadata';
 import assert from 'node:assert/strict';
-import { randomUUID } from 'node:crypto';
+import { createHash, randomUUID } from 'node:crypto';
 import { test } from 'node:test';
 import { ConfigService } from '@nestjs/config';
 import { Test } from '@nestjs/testing';
@@ -23,6 +23,11 @@ import { ZoneConfigurationService } from '../../src/modules/zones/zone-configura
 import { SiteConfigurationService } from '../../src/modules/sites/site-configuration.service.js';
 import { createIsolatedTestDatabase } from '../support/isolated-test-database.js';
 import { createTestConfig } from '../support/config.js';
+import { Mf06RequestContextReader } from '../../src/modules/safety/assessments/mf06-request-context.js';
+import { Mf06ClaimContextReader } from '../../src/modules/safety/assessments/mf06-claim-context.reader.js';
+import { Mf06JobLeaseService } from '../../src/modules/safety/assessments/mf06-job-lease.service.js';
+import { bindMf06FaceInvocation } from '../../src/modules/safety/assessments/mf06-face-binding.js';
+import { Mf06CandidateMetadataService } from '../../src/modules/safety/assessments/mf06-candidate-metadata.service.js';
 
 test('worker bound HTTP admission preserves raw event and original execution context', async (t) => {
   const owned = createIsolatedTestDatabase(),
@@ -489,7 +494,168 @@ test('worker bound HTTP admission preserves raw event and original execution con
           ).status,
           202,
         );
+        config.set('MF06_ENQUEUE_ENABLED', true);
+        config.set('MF06_ENQUEUE_MAX_OUTSTANDING', 10);
+        // Direct corruption inside this owned fixture: enqueue must use issued geometry, not the current Region.
+        await db.query(
+          'UPDATE camera_observation_region SET version=2,is_active=false WHERE id=$1',
+          [regionId],
+        );
+        const zoneEvent = {
+          ...ppeEvent,
+          eventId: randomUUID(),
+          observations: [
+            ...event.observations,
+            { type: 'ZONE_ENTRY', trackId: 1, regionId, geometryVersion: 1 },
+          ],
+        };
+        zoneEvent.evidence = [
+          {
+            kind: 'FRAME',
+            uri: `local://evidence/${issued.streamSessionId}/1/${zoneEvent.eventId}.jpg`,
+            sha256: 'a'.repeat(64),
+          },
+        ];
+        const zoneResponse = await send(
+          { schemaVersion: '1.0.0', context: ppeContext, event: zoneEvent },
+          issued.secret,
+        );
+        assert.equal(
+          zoneResponse.status,
+          202,
+          zoneResponse.status === 202 ? '' : await zoneResponse.clone().text(),
+        );
+        const requests = await db.query(
+          'SELECT request_id,zone_id,geometry_version FROM zone_entry_assessment_request WHERE event_id=$1',
+          [zoneEvent.eventId],
+        );
+        assert.equal(requests.length, 1);
+        assert.equal(requests[0].zone_id, zone.id);
+        assert.equal(Number(requests[0].geometry_version), 1);
+        const captured = await new Mf06RequestContextReader(db).load(
+          siteId,
+          requests[0].request_id,
+        );
+        assert.equal(captured.status, 'MATCHED');
+        if (captured.status === 'MATCHED')
+          assert.deepEqual(captured.request.executionAdmission?.context, ppeContext);
+        if (captured.status !== 'MATCHED' || !captured.subject)
+          throw new Error('Synthetic bound subject missing');
+        // Synthetic crop bytes exercise mechanical preparation/finalization binding only, not image decoding or Face inference.
+        const cropBytes = Buffer.from('Synthetic bound MF06 crop');
+        const crop = {
+          bytes: cropBytes,
+          cropSha256: createHash('sha256').update(cropBytes).digest('hex'),
+          frameSha256: 'a'.repeat(64),
+          subject: captured.subject,
+          rectangle: { left: 12, top: 8, width: 72, height: 64 },
+          cropAlgorithmVersion: 'PERSON_FLOOR_CEIL_JPEG95_444_V1' as const,
+        };
+        const prepared = bindMf06FaceInvocation(captured, crop, randomUUID(), 'synthetic-no-model');
+        assert.equal(prepared.state, 'BOUND_UNATTESTED');
+        if (prepared.state !== 'BOUND_UNATTESTED')
+          throw new Error('Synthetic invocation unavailable');
+        const faceResponse = {
+          ...prepared.invocation,
+          state: 'UNAVAILABLE',
+          provenance: 'SYNTHETIC_TEST',
+          reason: 'NO_MATCH',
+        };
+        const finalizer = new Mf06CandidateMetadataService(
+          { findCurrentForSafety: async () => ({ state: 'UNAVAILABLE' }) },
+          'SYNTHETIC_TEST',
+        );
+        const finalize = () =>
+          db.transaction('SERIALIZABLE', (manager) =>
+            finalizer.revalidate(
+              manager,
+              siteId,
+              requests[0].request_id,
+              prepared,
+              crop,
+              faceResponse,
+            ),
+          );
+        assert.deepEqual(await finalize(), {
+          state: 'UNAVAILABLE',
+          reason: 'IDENTITY_UNAVAILABLE',
+        });
+        const originalAdmission = captured.request.executionAdmission!;
+        const changedAdmission = {
+          ...originalAdmission,
+          admittedAt: new Date(Date.parse(originalAdmission.admittedAt) + 1).toISOString(),
+        };
+        await db.query(
+          'UPDATE ai_observation_event SET admission_context=$2::jsonb WHERE event_id=$1',
+          [zoneEvent.eventId, JSON.stringify(changedAdmission)],
+        );
+        try {
+          assert.deepEqual(await finalize(), { state: 'UNAVAILABLE', reason: 'INVALID_BINDING' });
+          assert.equal(
+            (await new Mf06RequestContextReader(db).load(siteId, requests[0].request_id)).status,
+            'UNAVAILABLE',
+          );
+          await db.query(
+            'UPDATE ai_observation_event SET admission_context=NULL WHERE event_id=$1',
+            [zoneEvent.eventId],
+          );
+          assert.equal(
+            (await new Mf06RequestContextReader(db).load(siteId, requests[0].request_id)).status,
+            'UNAVAILABLE',
+          );
+        } finally {
+          await db.query(
+            'UPDATE ai_observation_event SET admission_context=$2::jsonb WHERE event_id=$1',
+            [zoneEvent.eventId, JSON.stringify(originalAdmission)],
+          );
+        }
+        const lease = await new Mf06JobLeaseService(db, {
+          leaseSeconds: 30,
+          maxAttempts: 2,
+          retryDelaySeconds: 1,
+        }).claim();
+        assert.ok(lease);
+        assert.equal(lease.requestId, requests[0].request_id);
+        assert.equal((await new Mf06ClaimContextReader(db).readForClaim(lease)).status, 'MATCHED');
+        assert.equal(
+          (
+            await send(
+              { schemaVersion: '1.0.0', context: ppeContext, event: zoneEvent },
+              issued.secret,
+            )
+          ).status,
+          202,
+        );
+        assert.equal(
+          (
+            await db.query(
+              'SELECT count(*)::int AS n FROM zone_entry_assessment_request WHERE event_id=$1',
+              [zoneEvent.eventId],
+            )
+          )[0].n,
+          1,
+        );
         await provisionCameraWorkerGeneration(db, ppeCamera, [ppeCamera], 60000);
+        const delayedZone = { ...zoneEvent, eventId: randomUUID() };
+        assert.equal(
+          (
+            await send(
+              { schemaVersion: '1.0.0', context: ppeContext, event: delayedZone },
+              issued.secret,
+            )
+          ).status,
+          202,
+        );
+        assert.equal(
+          (
+            await db.query(
+              'SELECT count(*)::int AS n FROM zone_entry_assessment_request WHERE event_id=$1',
+              [delayedZone.eventId],
+            )
+          )[0].n,
+          0,
+        );
+        config.set('MF06_ENQUEUE_ENABLED', false);
         const delayed = {
           ...ppeEvent,
           eventId: randomUUID(),

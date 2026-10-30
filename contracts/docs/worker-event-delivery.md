@@ -5,8 +5,12 @@ The existing service token and exactly one `x-worker-generation-secret` header
 authenticate the original generation. Neither credential belongs in the body,
 SQLite context, raw observation or report. `AI_WORKER_BOUND_EVENT_ENABLED` and
 producer CLI/manifest switches default OFF; source does not activate deployment.
-Bound requests return503 while `MF06_ENQUEUE_ENABLED` is true: that enqueue path
-still resolves current context and needs separate historical-context integration.
+`MF06_ENQUEUE_ENABLED` remains a separate default-OFF switch. Bound LIVE initial
+requests use the issued immutable bundle; REVIEW_ONLY events create no automatic
+initial jobs. Request, claim and candidate readers explicitly load persisted
+admission and verify the original initial-request hash before preparation. The
+context digest also fences changes through finalization. Bound retrospective
+requests remain unavailable until their own explicit pinning contract exists.
 
 Body: `{schemaVersion:'1.0.0',context:WorkerEventDeliveryContext,event:<original event>}`.
 The strict context includes cameraId, workerGenerationId, streamSessionId,

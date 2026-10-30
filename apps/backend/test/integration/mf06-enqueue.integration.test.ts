@@ -4,7 +4,7 @@ import { randomUUID } from 'node:crypto';
 import { after, before, describe, it } from 'node:test';
 import type { EntityManager } from 'typeorm';
 import type { QueryDeepPartialEntity } from 'typeorm/query-builder/QueryPartialEntity.js';
-import { computeCanonicalPayloadHash } from '@smartsite/contracts';
+import { computeCanonicalPayloadHash, computeWorkerEventBindingHash } from '@smartsite/contracts';
 import {
   AiObservationEventEntity,
   CameraEntity,
@@ -31,6 +31,78 @@ const db = isolated.dataSource;
 
 before(async () => {
   await isolated.initialize();
+});
+
+function syntheticAdmission(event: AiObservationEventEntity) {
+  const context = {
+    schemaVersion: '1.0.0' as const,
+    cameraId: event.resolvedCameraId!,
+    workerGenerationId: randomUUID(),
+    streamSessionId: event.streamSessionId,
+    configurationVersion: 1,
+    bundleSha256: 'a'.repeat(64),
+    viewRevision: 1,
+    receiptCommandId: randomUUID(),
+    sourceKind: 'LIVE' as const,
+  };
+  return {
+    schemaVersion: '1.0.0' as const,
+    context,
+    bindingHash: computeWorkerEventBindingHash(event.payloadHash, context),
+    classification: 'LIVE' as const,
+    admittedAt: new Date().toISOString(),
+  };
+}
+
+async function syntheticUninsertedEvent(manager: EntityManager) {
+  const infra = await setupInfrastructure(manager);
+  const original = await insertSyntheticEvent(manager, {
+    infra,
+    observations: [createPersonObservation(7), createZoneEntryObservation(7, infra.region1Id)],
+  });
+  const eventId = randomUUID();
+  const rawPayload = { ...(original.rawPayload as Record<string, unknown>), eventId };
+  return { ...original, eventId, rawPayload, payloadHash: computeCanonicalPayloadHash(rawPayload) };
+}
+
+it('owned fresh insertion persists detached admission metadata and rollback removes both', async () => {
+  const service = new Mf06EnqueueService(db);
+  let id = '';
+  await assert.rejects(
+    db.transaction(async (manager) => {
+      const event = await syntheticUninsertedEvent(manager);
+      id = event.eventId;
+      const admission = syntheticAdmission(event);
+      const expected = structuredClone(admission);
+      await Reflect.apply(service.insertFresh, service, [manager, event, admission]);
+      admission.context.configurationVersion = 99;
+      const [stored] = await manager.query(
+        'SELECT admission_context FROM ai_observation_event WHERE event_id=$1',
+        [id],
+      );
+      assert.deepEqual(stored.admission_context, expected);
+      throw new Error('Synthetic caller rollback');
+    }),
+    /Synthetic caller rollback/,
+  );
+  assert.equal(await db.getRepository(AiObservationEventEntity).countBy({ eventId: id }), 0);
+});
+
+it('owned fresh insertion rejects inconsistent admission before creating the raw event', async () => {
+  const service = new Mf06EnqueueService(db);
+  await db.transaction(async (manager) => {
+    const event = await syntheticUninsertedEvent(manager);
+    const admission = syntheticAdmission(event);
+    admission.bindingHash = '0'.repeat(64);
+    await assert.rejects(
+      Reflect.apply(service.insertFresh, service, [manager, event, admission]),
+      /MF06_INVALID_ADMISSION/,
+    );
+    assert.equal(
+      await manager.getRepository(AiObservationEventEntity).countBy({ eventId: event.eventId }),
+      0,
+    );
+  });
 });
 
 it('committed raw event without requests cannot be backfilled from a reassigned current Camera', async () => {
