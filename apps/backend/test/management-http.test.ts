@@ -211,6 +211,13 @@ test('HTTP separates Admin, Worker and AI configuration credentials', async (t) 
   await app.listen(0, '127.0.0.1');
   t.after(() => app.close());
   const url = await app.getUrl();
+  for (const method of ['GET', 'PUT']) {
+    const response = await fetch(
+      `${url}/api/v1/sites/${siteId}/workers/${randomUUID()}/gate-permissions`,
+      { method, headers: { Authorization: `Bearer ${adminToken}` } },
+    );
+    assert.equal(response.status, 404, `removed gate-permission endpoint: ${method}`);
+  }
   const getSites = (token: string) =>
     fetch(`${url}/api/v1/sites`, {
       headers: { Authorization: `Bearer ${token}` },

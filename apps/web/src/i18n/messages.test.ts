@@ -20,8 +20,8 @@ describe.each(['en', 'vi'] as const)('safe UI errors in %s', (language) => {
       expect(userErrorMessage(new Error(text))).toBe(translate('errors.unexpected'));
       expect(localizeMessage(text)).toBe(text);
     }
-    expect(localizedError('An approved worker assignment with an expiry is required')).toBe(
-      localizeMessage('An approved worker assignment with an expiry is required'),
+    expect(localizedError('Choose a document up to 5 MiB')).toBe(
+      localizeMessage('Choose a document up to 5 MiB'),
     );
   });
 
@@ -48,11 +48,9 @@ describe.each(['en', 'vi'] as const)('safe UI errors in %s', (language) => {
 
   it('keeps approved validation and uses rate-limit delay', async () => {
     await i18n.changeLanguage(language);
-    expect(
-      userErrorMessage(
-        new ApiError('http', 'An approved worker assignment with an expiry is required', 400),
-      ),
-    ).toBe(localizeMessage('An approved worker assignment with an expiry is required'));
+    expect(userErrorMessage(new ApiError('http', 'Choose a document up to 5 MiB', 400))).toBe(
+      localizeMessage('Choose a document up to 5 MiB'),
+    );
     expect(userErrorMessage(new ApiError('http', 'PRIVATE_SENTINEL', 429, undefined, 17))).toBe(
       translate('errors.rateLimitDelay', { seconds: 17 }),
     );

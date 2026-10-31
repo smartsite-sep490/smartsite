@@ -39,15 +39,5 @@ minimumReleaseAgeExclude:
   - babel-preset-expo@57.0.16
   - expo@57.0.30
   - expo-router@57.0.28
-  # SDK 57 compatibility patches authorized on 2026-10-22.
-  - '@expo/cli@57.0.32'
-  - '@expo/config-plugins@57.0.11'
-  - '@expo/router-server@57.0.14'
-  - '@expo/ui@57.0.26'
-  - expo-modules-core@57.0.24
-  - expo-modules-jsi@57.1.3
-  - expo@57.0.31
-  - expo-router@57.0.29
-  - expo-sharing@57.0.24
 saveExact: true
 engineStrict: true

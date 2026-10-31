@@ -1,13 +1,11 @@
 import type { EntityManager } from 'typeorm';
 import type { GateAuthorizationDecision } from './gate-authorization-policy.js';
-import { IsNull } from 'typeorm';
 import {
   ContractorEntity,
   ContractorSiteParticipationEntity,
   WorkerSiteZoneAssignmentEntity,
   WorkerSiteZoneAssignmentStatus,
   WorkerEntity,
-  WorkerGatePermissionEntity,
   WorkerScheduleEntity,
   ShiftEntity,
   OvertimeRequestEntity,
@@ -15,12 +13,12 @@ import {
 import { scheduledShiftWindow, workDateAt } from '../attendance/attendance-calculation.js';
 import { workerDocumentsAllowEntry } from '../documents/worker-compliance.js';
 
-/** QR and Face establish identity; both use the same persisted Site authorization. */
+/** QR, Face and manual checks share Site authorization, valid at every gate in that Site. */
 export async function evaluateWorkerAccess(
   manager: EntityManager,
   worker: WorkerEntity,
   siteId: string,
-  gateId: string,
+  _gateId: string,
   direction: 'IN' | 'OUT',
   at = new Date(),
   lock = false,
@@ -134,21 +132,6 @@ export async function evaluateWorkerAccess(
       (participation.validUntil && participation.validUntil < assignment.validUntil!)
     )
       reason = 'CONTRACTOR_SITE_PARTICIPATION_INVALID';
-    else if (assignment.gateId && assignment.gateId !== gateId) reason = 'GATE_MISMATCH';
-    else {
-      const gates = await manager
-        .getRepository(WorkerGatePermissionEntity)
-        .findBy({ workerId: worker.id, siteId, gateId, revokedAt: IsNull() });
-      if (
-        !gates.some(
-          (g) =>
-            g.workerAssignmentId === assignment.id &&
-            g.validFrom <= at &&
-            (!g.validUntil || g.validUntil > at),
-        )
-      )
-        reason = 'GATE_MISMATCH';
-    }
   }
   if (!reason && scheduleStatus === 'NO_SCHEDULE')
     reason = scheduleDataUnavailable ? 'AUTHORIZATION_DATA_UNAVAILABLE' : 'NO_SCHEDULE';

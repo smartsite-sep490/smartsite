@@ -30,7 +30,8 @@ for (const catalog of [en, vi]) {
   }
 }
 
-function resolveMessage(message: string): string | undefined {
+/** Only system-owned messages; names, notes and authored descriptions stay unchanged. */
+export function localizeMessage(message: string): string {
   const key = exact.get(message);
   if (key) return translate(key);
   for (const template of templates) {
@@ -49,16 +50,7 @@ function resolveMessage(message: string): string | undefined {
       continue;
     return translate(template.key, values);
   }
-  return undefined;
-}
-
-/** Only system-owned messages; names, notes and authored descriptions stay unchanged. */
-export function localizeMessage(message: string): string {
-  return resolveMessage(message) ?? message;
-}
-
-export function localizedError(message: string, fallbackKey = 'common.unexpectedError'): string {
-  return resolveMessage(message) ?? translate(fallbackKey);
+  return message;
 }
 
 export function localizedLabel(value: string): string {
