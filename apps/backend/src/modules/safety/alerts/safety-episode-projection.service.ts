@@ -1,8 +1,12 @@
 import { randomUUID } from 'node:crypto';
-import type { DataSource, EntityManager } from 'typeorm';
+import { Injectable } from '@nestjs/common';
+import { DataSource, type EntityManager } from 'typeorm';
 import { resolveEventLocalEpisodeSubject } from '@smartsite/contracts';
 import { AiObservationEventEntity } from '../../../database/entities/ai-observation-event.entity.js';
 import { reviewEventIsConsistent } from '../identity/observation-identity-event.js';
+import type { AlertCandidate } from './alert-candidate-evaluator.js';
+import type { DurableGroupingService } from './durable-grouping.service.js';
+import { EventProcessingStatus } from '../../../database/entities/enums.js';
 
 interface ProjectionInput {
   siteId: string;
@@ -24,17 +28,158 @@ function unavailable(): never {
 }
 
 /**
- * Private ingestion projection, not an HTTP authorization boundary or a registered provider.
- * Caller owns the transaction and must roll it back in full on any failure. Acquire
- * existing grouping locks in their stable order before invoking this once per subject batch.
+ * Internal ingestion projection, not an HTTP authorization boundary.
+ * Caller owns the transaction and must roll it back in full on any failure. The
+ * producer reserves all episodes by original PERSON index before grouping findings.
+ * Legacy attach-only callers retain their existing grouping-before-projection order.
  * No legacy key, review decision, notification or recipient state is changed here.
  */
+@Injectable()
 export class SafetyEpisodeProjectionService {
   constructor(private readonly db: DataSource) {}
+
+  /** Complete this batch inside the ingestion owner's transaction; never chooses a delivery route. */
+  async produceObservationFindings(
+    manager: EntityManager,
+    input: { siteId: string; eventId: string; candidates: readonly AlertCandidate[] },
+    grouping: DurableGroupingService,
+  ): Promise<{ alertIds: string[]; episodes: SafetyEpisodeProjection[] }> {
+    if (
+      manager?.connection !== this.db ||
+      !manager.queryRunner?.isTransactionActive ||
+      manager.queryRunner.isReleased ||
+      !input ||
+      !UUID.test(input.siteId) ||
+      !UUID.test(input.eventId) ||
+      !Array.isArray(input.candidates) ||
+      input.candidates.length < 1 ||
+      input.candidates.length > 256
+    )
+      unavailable();
+    const siteId = input.siteId.toLowerCase(),
+      eventId = input.eventId.toLowerCase();
+    const event = await manager.getRepository(AiObservationEventEntity).findOne({
+      where: { eventId },
+      lock: { mode: 'pessimistic_read' },
+    });
+    if (
+      !event ||
+      event.processingStatus !== EventProcessingStatus.PROCESSED ||
+      !reviewEventIsConsistent(event)
+    )
+      return unavailable();
+    const schema = this.db.driver.schema;
+    if (
+      typeof schema !== 'string' ||
+      !schema ||
+      schema.includes('\0') ||
+      Buffer.byteLength(schema) > 63 ||
+      /^(pg_|information_schema$)/i.test(schema)
+    )
+      unavailable();
+    const scope = '"' + schema.replaceAll('"', '""') + '"';
+    const [legacy]: { present: boolean }[] = await manager.query(
+      `SELECT EXISTS(SELECT 1 FROM ${scope}.alert_detection_mapping m JOIN ${scope}.safety_alert a ON a.id=m.alert_id
+       WHERE m.event_id=$1 AND a.episode_id IS NULL) AS present`,
+      [eventId],
+    );
+    if (!legacy || legacy.present) unavailable();
+    const raw = event.rawPayload as { observations: { type: string; trackId: number }[] };
+    const batches = new Map<number, AlertCandidate[]>();
+    for (const candidate of input.candidates) {
+      if (!candidate || candidate.alertType !== 'PPE_VIOLATION') unavailable();
+      const index = raw.observations.findIndex(
+        (o) => o.type === 'PERSON' && o.trackId === candidate.trackId,
+      );
+      const subject = resolveEventLocalEpisodeSubject(eventId, raw.observations, index);
+      if (!subject || subject.personObservationIndex > 255) unavailable();
+      const batch = batches.get(index) ?? [];
+      batch.push(candidate);
+      batches.set(index, batch);
+    }
+    // Every batch for one immutable event acquires episode locks in original PERSON order.
+    const ordered = [...batches].sort(([a], [b]) => a - b);
+    const reserved = new Map<number, SafetyEpisodeProjection>();
+    for (const [personObservationIndex] of ordered)
+      reserved.set(
+        personObservationIndex,
+        await this.reserveObservation(manager, { siteId, eventId, personObservationIndex }),
+      );
+    const episodes: SafetyEpisodeProjection[] = [],
+      alertIds: string[] = [];
+    for (const [personObservationIndex, batch] of ordered) {
+      batch.sort((a, b) =>
+        `${a.candidateSubtype}:${a.zoneId ?? ''}`.localeCompare(
+          `${b.candidateSubtype}:${b.zoneId ?? ''}`,
+        ),
+      );
+      const ids = new Set<string>();
+      for (const candidate of batch) {
+        const alert = await grouping.groupEpisodeCandidate(
+          manager,
+          siteId,
+          candidate,
+          event.capturedAt,
+          reserved.get(personObservationIndex)!.episodeId,
+        );
+        ids.add(alert.id);
+      }
+      for (const alertId of ids)
+        await manager.query(
+          `INSERT INTO ${scope}.alert_detection_mapping(alert_id,event_id,person_observation_index) VALUES($1,$2,$3)
+         ON CONFLICT (alert_id,event_id) DO NOTHING`,
+          [alertId, eventId, personObservationIndex],
+        );
+      const attached = await this.attachObservation(manager, {
+        siteId,
+        eventId,
+        personObservationIndex,
+        alertIds: [...ids],
+      });
+      // Finding linkage is reserved during grouping; advance once for this material batch.
+      if (attached.findingCount > reserved.get(personObservationIndex)!.findingCount) {
+        const updated: { content_revision: number }[] = await manager.query(
+          `WITH updated AS (UPDATE ${scope}.safety_episode SET content_revision=content_revision+1
+           WHERE id=$1 AND site_id=$2 AND content_revision<2147483647 RETURNING content_revision)
+           SELECT content_revision FROM updated`,
+          [attached.episodeId, siteId],
+        );
+        if (updated.length !== 1) unavailable();
+        episodes.push({
+          ...attached,
+          contentRevision: updated[0]!.content_revision,
+          materialChange: true,
+        });
+      } else episodes.push(attached);
+      alertIds.push(...ids);
+    }
+    return { alertIds, episodes };
+  }
 
   async attachObservation(
     manager: EntityManager,
     input: ProjectionInput,
+  ): Promise<SafetyEpisodeProjection> {
+    return this.project(manager, input, false);
+  }
+
+  /**
+   * Resolve the immutable event-local identity before deriving a finding key.
+   * The ingestion owner must create/attach findings in this same transaction or
+   * roll it back. This does not admit continuity, recipients or delivery.
+   */
+  async reserveObservation(
+    manager: EntityManager,
+    input: Omit<ProjectionInput, 'alertIds'>,
+  ): Promise<SafetyEpisodeProjection> {
+    if (!input || Object.hasOwn(input, 'alertIds')) unavailable();
+    return this.project(manager, { ...input, alertIds: [] }, true);
+  }
+
+  private async project(
+    manager: EntityManager,
+    input: ProjectionInput,
+    reservation: boolean,
   ): Promise<SafetyEpisodeProjection> {
     if (
       manager?.connection !== this.db ||
@@ -50,7 +195,7 @@ export class SafetyEpisodeProjectionService {
       input.personObservationIndex < 0 ||
       input.personObservationIndex > 255 ||
       !Array.isArray(input.alertIds) ||
-      input.alertIds.length < 1 ||
+      input.alertIds.length < (reservation ? 0 : 1) ||
       input.alertIds.length > 256 ||
       !input.alertIds.every((id) => typeof id === 'string' && UUID.test(id))
     )
