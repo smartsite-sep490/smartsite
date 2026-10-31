@@ -155,22 +155,24 @@ export class DurableGroupingService {
       candidate.identityQualityScore !== canonical.identityQualityScore
     )
       return refuse();
-    const scoped = {
-      ...canonical,
-      groupingKey: `episode:${episodeId.toLowerCase()}:${canonical.candidateSubtype}:${canonical.zoneId ?? '-'}`,
-    };
     await manager.query('SELECT pg_advisory_xact_lock(hashtext($1))', [
-      `${siteId}:${scoped.groupingKey}`,
+      `${siteId}:episode:${episodeId.toLowerCase()}:${canonical.groupingKey}`,
     ]);
     // Replays never create another finding after a human review closes the first.
     const existing = await manager.getRepository(SafetyAlertEntity).find({
-      where: { siteId, groupingKey: scoped.groupingKey },
+      where: { siteId, groupingKey: canonical.groupingKey, episodeId: episodeId.toLowerCase() },
       lock: { mode: 'pessimistic_write' },
       take: 2,
     });
     if (existing.length > 1) refuse();
     if (existing[0]) return existing[0];
-    return this.createAlert(manager, siteId, scoped, capturedAt, false);
+    const created = await this.createAlert(manager, siteId, canonical, capturedAt, false);
+    // Bind before another grouping call; keep the historical key used by identity/workflow readers.
+    await manager.query(
+      `UPDATE ${scope}.safety_alert SET episode_id=$1 WHERE id=$2 AND site_id=$3`,
+      [episodeId.toLowerCase(), created.id, siteId],
+    );
+    return created;
   }
 
   async groupCandidate(
@@ -199,7 +201,7 @@ export class DurableGroupingService {
         `SELECT DISTINCT a.id FROM safety_alert a
          JOIN alert_detection_mapping m ON m.alert_id=a.id
          JOIN ai_observation_event e ON e.event_id=m.event_id
-         WHERE a.site_id=$1 AND a.grouping_key=$2 AND e.resolved_camera_id=$3
+         WHERE a.site_id=$1 AND a.grouping_key=$2 AND a.episode_id IS NULL AND e.resolved_camera_id=$3
            AND e.stream_session_id=$4 AND e.raw_payload->>'schemaVersion'='1.4.0'
            AND e.raw_payload#>>'{framePartition,frameId}'=$5 LIMIT 2`,
         [siteId, candidate.groupingKey, frame.cameraId, frame.streamSessionId, frame.frameId],
@@ -244,6 +246,7 @@ export class DurableGroupingService {
       .setLock('pessimistic_write')
       .where('alert.siteId = :siteId', { siteId })
       .andWhere('alert.groupingKey = :groupingKey', { groupingKey: candidate.groupingKey })
+      .andWhere('alert.episode_id IS NULL')
       .andWhere(
         "NOT EXISTS (SELECT 1 FROM incident i WHERE i.id=alert.incident_id AND i.status='CLOSED')",
       )

@@ -130,14 +130,27 @@ export class SafetyEpisodeProjectionService {
          ON CONFLICT (alert_id,event_id) DO NOTHING`,
           [alertId, eventId, personObservationIndex],
         );
-      episodes.push(
-        await this.attachObservation(manager, {
-          siteId,
-          eventId,
-          personObservationIndex,
-          alertIds: [...ids],
-        }),
-      );
+      const attached = await this.attachObservation(manager, {
+        siteId,
+        eventId,
+        personObservationIndex,
+        alertIds: [...ids],
+      });
+      // Finding linkage is reserved during grouping; advance once for this material batch.
+      if (attached.findingCount > reserved.get(personObservationIndex)!.findingCount) {
+        const updated: { content_revision: number }[] = await manager.query(
+          `WITH updated AS (UPDATE ${scope}.safety_episode SET content_revision=content_revision+1
+           WHERE id=$1 AND site_id=$2 AND content_revision<2147483647 RETURNING content_revision)
+           SELECT content_revision FROM updated`,
+          [attached.episodeId, siteId],
+        );
+        if (updated.length !== 1) unavailable();
+        episodes.push({
+          ...attached,
+          contentRevision: updated[0]!.content_revision,
+          materialChange: true,
+        });
+      } else episodes.push(attached);
       alertIds.push(...ids);
     }
     return { alertIds, episodes };

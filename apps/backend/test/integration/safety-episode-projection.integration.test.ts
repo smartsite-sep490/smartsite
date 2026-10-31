@@ -18,7 +18,10 @@ import { SafetyEventRoutes1794873600000 } from '../../src/database/migrations/17
 import { PublicHttpException } from '../../src/common/http/public-http-exception.js';
 import { AiIngestionService } from '../../src/integrations/ai/ai-ingestion.service.js';
 import { ObservationContextResolverService } from '../../src/modules/zones/observation-context-resolver.service.js';
-import { AlertCandidateEvaluator } from '../../src/modules/safety/alerts/alert-candidate-evaluator.js';
+import {
+  AlertCandidateEvaluator,
+  buildGroupingKey,
+} from '../../src/modules/safety/alerts/alert-candidate-evaluator.js';
 import { DurableGroupingService } from '../../src/modules/safety/alerts/durable-grouping.service.js';
 import { SchedulingNotificationService } from '../../src/modules/workforce/notifications/scheduling-notification.service.js';
 import { SafetyEpisodeProjectionService } from '../../src/modules/safety/alerts/safety-episode-projection.service.js';
@@ -216,6 +219,40 @@ test('configured ingestion persists one non-delivering episode route and retries
     createTestConfig(),
   );
   assert.equal((await legacy.ingestEvent(f.input)).status, 'DUPLICATE_ACCEPTED');
+  const findings: {
+    id: string;
+    grouping_key: string;
+    candidate_subtype: string;
+    person: number;
+  }[] = await db.query(
+    `SELECT a.id,a.grouping_key,a.candidate_subtype,m.person_observation_index AS person
+     FROM safety_alert a JOIN alert_detection_mapping m ON m.alert_id=a.id WHERE m.event_id=$1`,
+    [f.eventId],
+  );
+  for (const finding of findings) {
+    assert.equal(
+      finding.grouping_key,
+      buildGroupingKey(
+        finding.candidate_subtype,
+        f.input.cameraExternalId,
+        f.input.streamSessionId,
+        f.zoneId,
+        finding.person === 0 ? 7 : 8,
+      ),
+    );
+  }
+  const next = await f.ingestion.ingestEvent({ ...f.input, eventId: randomUUID() });
+  assert.equal(next.alertIds.length, 3);
+  assert.ok(next.alertIds.every((id) => !findings.some((row) => row.id === id)));
+  const legacyNext = await legacy.ingestEvent({ ...f.input, eventId: randomUUID() });
+  assert.equal(legacyNext.alertIds.length, 3);
+  assert.ok(
+    legacyNext.alertIds.every(
+      (id) => !findings.some((row) => row.id === id) && !next.alertIds.includes(id),
+    ),
+  );
+  const replayLegacy = await legacy.ingestEvent({ ...f.input, eventId: randomUUID() });
+  assert.deepEqual([...replayLegacy.alertIds].sort(), [...legacyNext.alertIds].sort());
   const [after] = await db.query(
     'SELECT safety_route_mode,safety_route_epoch FROM ai_observation_event WHERE event_id=$1',
     [f.eventId],
@@ -626,7 +663,7 @@ test('episode finding grouping never reuses a legacy cooldown alert or emits its
   assert.equal(candidate.groupingKey, 'caller-key-must-not-be-used');
 });
 
-test('legacy cooldown reuse cannot be attached to a second event-local episode', async () => {
+test('legacy cooldown excludes episode findings and original findings cannot be attached to another event', async () => {
   const f = await fixture();
   const initial = await db.transaction((manager) =>
     projection.attachObservation(manager, {
@@ -645,14 +682,15 @@ test('legacy cooldown reuse cannot be attached to a second event-local episode',
   const reused = mappings
     .filter((row) => row.person_observation_index === 0)
     .map((row) => row.alert_id);
-  assert.deepEqual([...reused].sort(), [...f.first].sort());
+  assert.equal(reused.length, 2);
+  assert.ok(reused.every((id) => !f.first.includes(id)));
   await assert.rejects(
     db.transaction((manager) =>
       projection.attachObservation(manager, {
         siteId: f.siteId,
         eventId: laterId,
         personObservationIndex: 0,
-        alertIds: reused,
+        alertIds: f.first,
       }),
     ),
     /SAFETY_EPISODE_PROJECTION_UNAVAILABLE/,

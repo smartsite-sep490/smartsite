@@ -37,6 +37,11 @@ exact mapping, then attaches findings in the owning transaction. Projection fail
 returns unavailable and rolls back the event; it never falls back to legacy delivery.
 Duplicate IDs preserve the committed event and route even after configuration changes.
 Legacy alert IDs, keys, review states and non-Safety notifications remain unchanged.
+Episode findings also retain the canonical grouping key used by identity/workflow
+readers. Their lookup additionally requires the same `episode_id`; legacy cooldown
+and partition lookups exclude episode findings. Advisory locks use a separate
+episode namespace so different events cannot acquire shared track keys in reverse
+PERSON order. New finding batches advance the episode revision once; replay does not.
 
 ## Remaining activation gates
 
