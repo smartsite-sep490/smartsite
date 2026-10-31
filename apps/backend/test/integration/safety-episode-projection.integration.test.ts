@@ -11,7 +11,9 @@ import {
   CameraObservationRegionEntity,
   ZoneType,
   ZoneRestrictionPolicy,
+  AiObservationEventEntity,
 } from '../../src/database/entities/index.js';
+import { computeCanonicalPayloadHash } from '@smartsite/contracts';
 import { AiIngestionService } from '../../src/integrations/ai/ai-ingestion.service.js';
 import { ObservationContextResolverService } from '../../src/modules/zones/observation-context-resolver.service.js';
 import { AlertCandidateEvaluator } from '../../src/modules/safety/alerts/alert-candidate-evaluator.js';
@@ -25,6 +27,24 @@ const owned = createIsolatedTestDatabase(),
 before(() => owned.initialize());
 after(() => owned.dispose());
 const projection = new SafetyEpisodeProjectionService(db);
+
+async function seedUngroupedEvent(
+  manager: import('typeorm').EntityManager,
+  f: Awaited<ReturnType<typeof fixture>>,
+) {
+  const source = await manager
+    .getRepository(AiObservationEventEntity)
+    .findOneByOrFail({ eventId: f.eventId });
+  const eventId = randomUUID();
+  const rawPayload = { ...f.input, eventId };
+  await manager.getRepository(AiObservationEventEntity).insert({
+    ...source,
+    eventId,
+    rawPayload,
+    payloadHash: computeCanonicalPayloadHash(rawPayload),
+  });
+  return eventId;
+}
 
 async function fixture() {
   const siteId = randomUUID(),
@@ -118,6 +138,156 @@ async function fixture() {
   );
   return { siteId, zoneId, eventId, first, second, alertState, ingestion, input };
 }
+
+test('one atomic producer groups two subjects, replays without revision growth and rolls back partial work', async () => {
+  const f = await fixture();
+  const notifications = new SchedulingNotificationService(db);
+  notifications.recordPpeAlert = async () => assert.fail('Episode producer used legacy notifier');
+  const grouping = new DurableGroupingService(createTestConfig(), notifications);
+  const produce = (
+    projection as unknown as {
+      produceObservationFindings: (
+        manager: import('typeorm').EntityManager,
+        input: { siteId: string; eventId: string; candidates: AlertCandidate[] },
+        grouping: DurableGroupingService,
+      ) => Promise<{
+        alertIds: string[];
+        episodes: {
+          episodeId: string;
+          contentRevision: number;
+          findingCount: number;
+          deliveryAdmitted: false;
+        }[];
+      }>;
+    }
+  ).produceObservationFindings;
+  assert.equal(typeof produce, 'function');
+  const base: AlertCandidate = {
+    alertType: 'PPE_VIOLATION',
+    candidateSubtype: 'PPE_HARD_HAT_MISSING',
+    cameraId: f.input.cameraExternalId,
+    streamSessionId: f.input.streamSessionId,
+    zoneId: f.zoneId,
+    trackId: 7,
+    groupingKey: 'ignored-legacy-key',
+    details: {},
+  };
+  const candidates = [
+    { ...base, trackId: 8 },
+    { ...base, candidateSubtype: 'PPE_SAFETY_VEST_MISSING' as const },
+    base,
+  ];
+  const result = await db.transaction(async (manager) => {
+    const eventId = await seedUngroupedEvent(manager, f);
+    const input = { siteId: f.siteId, eventId, candidates };
+    const first = await produce.call(projection, manager, input, grouping);
+    assert.equal(first.alertIds.length, 3);
+    assert.deepEqual(first.episodes.map((e) => e.findingCount).sort(), [1, 2]);
+    assert.ok(first.episodes.every((e) => e.deliveryAdmitted === false));
+    const replay = await produce.call(
+      projection,
+      manager,
+      { ...input, candidates: [...candidates].reverse() },
+      grouping,
+    );
+    assert.deepEqual([...replay.alertIds].sort(), [...first.alertIds].sort());
+    assert.deepEqual(
+      replay.episodes,
+      first.episodes.map((e) => ({ ...e, materialChange: false })),
+    );
+    return { eventId, first };
+  });
+  const [maps] = await db.query(
+    'SELECT count(*)::int AS count FROM alert_detection_mapping WHERE event_id=$1',
+    [result.eventId],
+  );
+  assert.equal(maps.count, 3);
+  const concurrent = await Promise.all(
+    Array.from({ length: 10 }, (_, index) =>
+      db.transaction((manager) =>
+        produce.call(
+          projection,
+          manager,
+          {
+            siteId: f.siteId,
+            eventId: result.eventId,
+            candidates: index % 2 ? [...candidates].reverse() : candidates,
+          },
+          grouping,
+        ),
+      ),
+    ),
+  );
+  assert.ok(
+    concurrent.every(
+      (item) => JSON.stringify(item.episodes) === JSON.stringify(concurrent[0]!.episodes),
+    ),
+  );
+  const [before] = await db.query(
+    'SELECT count(*)::int AS count FROM safety_episode WHERE site_id=$1',
+    [f.siteId],
+  );
+  const invalid = [...candidates, { ...base, trackId: 8, zoneId: randomUUID() }];
+  const [beforeAlerts] = await db.query(
+    'SELECT count(*)::int AS count FROM safety_alert WHERE site_id=$1',
+    [f.siteId],
+  );
+  let rolledBackEvent: string | undefined;
+  await assert.rejects(
+    db.transaction(async (manager) => {
+      const eventId = await seedUngroupedEvent(manager, f);
+      rolledBackEvent = eventId;
+      await produce.call(
+        projection,
+        manager,
+        { siteId: f.siteId, eventId, candidates: invalid },
+        grouping,
+      );
+    }),
+    /AI ingestion is temporarily unavailable/,
+  );
+  const [after] = await db.query(
+    'SELECT count(*)::int AS count FROM safety_episode WHERE site_id=$1',
+    [f.siteId],
+  );
+  assert.equal(after.count, before.count);
+  const [afterAlerts] = await db.query(
+    'SELECT count(*)::int AS count FROM safety_alert WHERE site_id=$1',
+    [f.siteId],
+  );
+  assert.equal(afterAlerts.count, beforeAlerts.count);
+  const [rolledBack] = await db.query(
+    'SELECT count(*)::int AS count FROM ai_observation_event WHERE event_id=$1',
+    [rolledBackEvent],
+  );
+  assert.equal(rolledBack.count, 0);
+  await assert.rejects(
+    db.transaction(async (manager) => {
+      const eventId = await seedUngroupedEvent(manager, f);
+      await manager.query(
+        "UPDATE ai_observation_event SET processing_status='SKIPPED_CLOCK_SKEW' WHERE event_id=$1",
+        [eventId],
+      );
+      await produce.call(projection, manager, { siteId: f.siteId, eventId, candidates }, grouping);
+    }),
+    /SAFETY_EPISODE_PROJECTION_UNAVAILABLE/,
+  );
+  await assert.rejects(
+    db.transaction((manager) =>
+      produce.call(
+        projection,
+        manager,
+        {
+          siteId: f.siteId,
+          eventId: f.eventId,
+          candidates,
+        },
+        grouping,
+      ),
+    ),
+    /SAFETY_EPISODE_PROJECTION_UNAVAILABLE/,
+  );
+});
 
 test('episode finding grouping never reuses a legacy cooldown alert or emits its legacy notification', async () => {
   const f = await fixture();
