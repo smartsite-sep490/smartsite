@@ -1,5 +1,6 @@
 import { randomUUID } from 'node:crypto';
-import type { DataSource, EntityManager } from 'typeorm';
+import { Injectable } from '@nestjs/common';
+import { DataSource, type EntityManager } from 'typeorm';
 import { resolveEventLocalEpisodeSubject } from '@smartsite/contracts';
 import { AiObservationEventEntity } from '../../../database/entities/ai-observation-event.entity.js';
 import { reviewEventIsConsistent } from '../identity/observation-identity-event.js';
@@ -27,12 +28,13 @@ function unavailable(): never {
 }
 
 /**
- * Private ingestion projection, not an HTTP authorization boundary or a registered provider.
+ * Internal ingestion projection, not an HTTP authorization boundary.
  * Caller owns the transaction and must roll it back in full on any failure. The
  * producer reserves all episodes by original PERSON index before grouping findings.
  * Legacy attach-only callers retain their existing grouping-before-projection order.
  * No legacy key, review decision, notification or recipient state is changed here.
  */
+@Injectable()
 export class SafetyEpisodeProjectionService {
   constructor(private readonly db: DataSource) {}
 

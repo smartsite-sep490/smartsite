@@ -229,6 +229,11 @@ export const backendEnvironmentSchema = z
       .enum(['false', 'true'])
       .default('false')
       .transform((value) => value === 'true'),
+    SAFETY_EPISODE_PROJECTION_ENABLED: z
+      .enum(['false', 'true'])
+      .default('false')
+      .transform((value) => value === 'true'),
+    SAFETY_EPISODE_ROUTE_EPOCH: z.uuid().optional(),
     ALERT_COOLDOWN_SECONDS: integer(60, 1, MAX_SAFE_SECONDS),
     MAX_PAST_EVENT_AGE_SECONDS: integer(300, 1, MAX_SAFE_SECONDS),
     MAX_FUTURE_CLOCK_SKEW_SECONDS: integer(30, 1, MAX_SAFE_SECONDS),
@@ -312,6 +317,13 @@ export const backendEnvironmentSchema = z
   })
   .superRefine((config, context) => {
     productionDatabase(config, context);
+    if (config.SAFETY_EPISODE_PROJECTION_ENABLED && !config.SAFETY_EPISODE_ROUTE_EPOCH) {
+      context.addIssue({
+        code: 'custom',
+        path: ['SAFETY_EPISODE_ROUTE_EPOCH'],
+        message: 'must be explicitly set when non-delivering episode projection is enabled',
+      });
+    }
     if (config.MF06_ENQUEUE_ENABLED && config.MF06_ENQUEUE_MAX_OUTSTANDING === undefined) {
       context.addIssue({
         code: 'custom',

@@ -14,6 +14,8 @@ import {
   AiObservationEventEntity,
 } from '../../src/database/entities/index.js';
 import { computeCanonicalPayloadHash } from '@smartsite/contracts';
+import { SafetyEventRoutes1794873600000 } from '../../src/database/migrations/1794873600000-SafetyEventRoutes.js';
+import { PublicHttpException } from '../../src/common/http/public-http-exception.js';
 import { AiIngestionService } from '../../src/integrations/ai/ai-ingestion.service.js';
 import { ObservationContextResolverService } from '../../src/modules/zones/observation-context-resolver.service.js';
 import { AlertCandidateEvaluator } from '../../src/modules/safety/alerts/alert-candidate-evaluator.js';
@@ -46,7 +48,7 @@ async function seedUngroupedEvent(
   return eventId;
 }
 
-async function fixture() {
+async function fixture(configOverrides: Record<string, unknown> = {}) {
   const siteId = randomUUID(),
     cameraId = randomUUID(),
     zoneId = randomUUID(),
@@ -83,13 +85,25 @@ async function fixture() {
       [1, 1],
     ],
   });
-  const config = createTestConfig();
+  const config = createTestConfig(configOverrides);
+  const notifier = new SchedulingNotificationService(db);
+  const recordPpeAlert = notifier.recordPpeAlert.bind(notifier);
+  let legacyNotificationCalls = 0;
+  notifier.recordPpeAlert = async (...args) => {
+    legacyNotificationCalls++;
+    return recordPpeAlert(...args);
+  };
+  const grouping = new DurableGroupingService(config, notifier);
   const ingestion = new AiIngestionService(
     db,
     new ObservationContextResolverService(),
     new AlertCandidateEvaluator(),
-    new DurableGroupingService(config, new SchedulingNotificationService(db)),
+    grouping,
     config,
+    undefined,
+    undefined,
+    undefined,
+    new SafetyEpisodeProjectionService(db),
   );
   const person = (trackId: number) => ({
     type: 'PERSON',
@@ -136,8 +150,215 @@ async function fixture() {
     "SELECT to_jsonb(a)-'episode_id' AS body FROM safety_alert a WHERE site_id=$1 ORDER BY id",
     [siteId],
   );
-  return { siteId, zoneId, eventId, first, second, alertState, ingestion, input };
+  return {
+    siteId,
+    zoneId,
+    eventId,
+    first,
+    second,
+    alertState,
+    ingestion,
+    input,
+    grouping,
+    legacyNotificationCalls: () => legacyNotificationCalls,
+  };
 }
+
+test('enabled episode ingestion fails closed when its module provider is unavailable', async () => {
+  const f = await fixture();
+  const ingestion = new AiIngestionService(
+    db,
+    new ObservationContextResolverService(),
+    new AlertCandidateEvaluator(),
+    f.grouping,
+    createTestConfig({
+      SAFETY_EPISODE_PROJECTION_ENABLED: 'true',
+      SAFETY_EPISODE_ROUTE_EPOCH: randomUUID(),
+    }),
+  );
+  const eventId = randomUUID();
+  await assert.rejects(
+    ingestion.ingestEvent({ ...f.input, eventId }),
+    (error) => error instanceof PublicHttpException && error.getStatus() === 503,
+  );
+  const [row] = await db.query(
+    'SELECT count(*)::int AS count FROM ai_observation_event WHERE event_id=$1',
+    [eventId],
+  );
+  assert.equal(row.count, 0);
+});
+
+test('configured ingestion persists one non-delivering episode route and retries cannot switch back to legacy', async () => {
+  const epoch = randomUUID();
+  const f = await fixture({
+    SAFETY_EPISODE_PROJECTION_ENABLED: 'true',
+    SAFETY_EPISODE_ROUTE_EPOCH: epoch,
+  });
+  const [count] = await db.query(
+    'SELECT count(*)::int AS count FROM safety_episode WHERE site_id=$1',
+    [f.siteId],
+  );
+  assert.equal(count.count, 2);
+  assert.equal(f.legacyNotificationCalls(), 0);
+  const [route] = await db.query(
+    'SELECT safety_route_mode,safety_route_epoch,raw_payload,payload_hash FROM ai_observation_event WHERE event_id=$1',
+    [f.eventId],
+  );
+  assert.equal(route.safety_route_mode, 'EPISODE_EVENT_LOCAL');
+  assert.equal(route.safety_route_epoch, epoch);
+  assert.equal(route.payload_hash, computeCanonicalPayloadHash(f.input));
+  assert.deepEqual(route.raw_payload, f.input);
+  const legacy = new AiIngestionService(
+    db,
+    new ObservationContextResolverService(),
+    new AlertCandidateEvaluator(),
+    new DurableGroupingService(createTestConfig(), new SchedulingNotificationService(db)),
+    createTestConfig(),
+  );
+  assert.equal((await legacy.ingestEvent(f.input)).status, 'DUPLICATE_ACCEPTED');
+  const [after] = await db.query(
+    'SELECT safety_route_mode,safety_route_epoch FROM ai_observation_event WHERE event_id=$1',
+    [f.eventId],
+  );
+  assert.deepEqual(after, { safety_route_mode: 'EPISODE_EVENT_LOCAL', safety_route_epoch: epoch });
+  const [recipients] = await db.query(
+    'SELECT count(*)::int AS count FROM safety_episode_recipient WHERE site_id=$1',
+    [f.siteId],
+  );
+  assert.equal(recipients.count, 0);
+  await assert.rejects(
+    db.transaction((manager) =>
+      manager.query(
+        "UPDATE ai_observation_event SET safety_route_mode='LEGACY' WHERE event_id=$1",
+        [f.eventId],
+      ),
+    ),
+    /route.*immutable/i,
+  );
+});
+
+test('a chosen episode route rolls back on failure without invoking the legacy writer; mixed zone events stay legacy', async () => {
+  const epoch = randomUUID();
+  const f = await fixture({
+    SAFETY_EPISODE_PROJECTION_ENABLED: 'true',
+    SAFETY_EPISODE_ROUTE_EPOCH: epoch,
+  });
+  const oldEpisodeGroup = f.grouping.groupEpisodeCandidate.bind(f.grouping);
+  const oldLegacyGroup = f.grouping.groupCandidate.bind(f.grouping);
+  let legacyCalls = 0;
+  f.grouping.groupCandidate = async (...args) => {
+    legacyCalls++;
+    return oldLegacyGroup(...args);
+  };
+  f.grouping.groupEpisodeCandidate = async () => {
+    throw new Error('Synthetic episode persistence failure');
+  };
+  const failedId = randomUUID();
+  await assert.rejects(
+    f.ingestion.ingestEvent({ ...f.input, eventId: failedId }),
+    (error) => error instanceof PublicHttpException && error.getStatus() === 503,
+  );
+  assert.equal(legacyCalls, 0);
+  const [absent] = await db.query(
+    'SELECT count(*)::int AS count FROM ai_observation_event WHERE event_id=$1',
+    [failedId],
+  );
+  assert.equal(absent.count, 0);
+  const [episodes] = await db.query(
+    'SELECT count(*)::int AS count FROM safety_episode WHERE site_id=$1',
+    [f.siteId],
+  );
+  assert.equal(episodes.count, 2);
+  f.grouping.groupEpisodeCandidate = oldEpisodeGroup;
+  const ppe = f.input.observations.find((o) => o.type === 'PPE')!;
+  const mixedId = randomUUID();
+  await f.ingestion.ingestEvent({
+    ...f.input,
+    eventId: mixedId,
+    observations: [
+      ...f.input.observations,
+      {
+        type: 'ZONE_ENTRY',
+        trackId: 7,
+        regionId: (ppe as { regionId: string }).regionId,
+        geometryVersion: 1,
+      },
+    ],
+  });
+  assert.ok(legacyCalls > 0);
+  assert.ok(f.legacyNotificationCalls() > 0);
+  const [route] = await db.query(
+    'SELECT safety_route_mode,safety_route_epoch FROM ai_observation_event WHERE event_id=$1',
+    [mixedId],
+  );
+  assert.deepEqual(route, { safety_route_mode: 'LEGACY', safety_route_epoch: epoch });
+});
+
+test('route migration preserves old raw bytes, rejects NULL pairing and refuses erasing explicit route history', async () => {
+  const migrationOwned = createIsolatedTestDatabase();
+  await migrationOwned.initialize();
+  const migrationDb = migrationOwned.dataSource;
+  const eventId = randomUUID();
+  const migration = new SafetyEventRoutes1794873600000();
+  try {
+    await migrationDb.transaction(async (manager) => {
+      await manager.query(
+        "INSERT INTO ai_observation_event(event_id,payload_hash,camera_external_id,stream_session_id,captured_at,raw_payload,processing_status) VALUES($1,$2,'synthetic-route',$3,now(),'{}','PROCESSED')",
+        [eventId, 'a'.repeat(64), randomUUID()],
+      );
+      const runner = manager.queryRunner!;
+      const [scope] = await manager.query('SELECT current_schema() AS schema');
+      assert.equal(scope.schema, migrationDb.driver.schema);
+      await manager.query('SET LOCAL search_path TO pg_catalog');
+      await assert.rejects(migration.up(runner), /Invalid safety route schema/);
+      await manager.query(`SET LOCAL search_path TO "${scope.schema.replaceAll('"', '""')}"`);
+      const before = await manager.query(
+        'SELECT event_id,payload_hash,raw_payload FROM ai_observation_event WHERE event_id=$1',
+        [eventId],
+      );
+      await migration.down(runner);
+      await migration.up(runner);
+      assert.deepEqual(
+        await manager.query(
+          'SELECT event_id,payload_hash,raw_payload FROM ai_observation_event WHERE event_id=$1',
+          [eventId],
+        ),
+        before,
+      );
+      const [legacy] = await manager.query(
+        'SELECT safety_route_mode,safety_route_epoch FROM ai_observation_event WHERE event_id=$1',
+        [eventId],
+      );
+      assert.deepEqual(legacy, { safety_route_mode: null, safety_route_epoch: null });
+      // This deliberate direct SQL insertion checks metadata pairing, not AI admission.
+      const source = await manager
+        .getRepository(AiObservationEventEntity)
+        .findOneByOrFail({ eventId });
+      await manager.query('SAVEPOINT bad_pair');
+      await assert.rejects(
+        manager.getRepository(AiObservationEventEntity).insert({
+          ...source,
+          rawPayload: {},
+          eventId: randomUUID(),
+          safetyRouteMode: null,
+          safetyRouteEpoch: randomUUID(),
+        }),
+        /chk_ai_event_safety_route_pair/,
+      );
+      await manager.query('ROLLBACK TO SAVEPOINT bad_pair');
+      await manager.getRepository(AiObservationEventEntity).insert({
+        ...source,
+        rawPayload: {},
+        eventId: randomUUID(),
+        safetyRouteMode: 'LEGACY',
+        safetyRouteEpoch: randomUUID(),
+      });
+      await assert.rejects(migration.down(runner), /route history must be preserved/);
+    });
+  } finally {
+    await migrationOwned.dispose();
+  }
+});
 
 test('one atomic producer groups two subjects, replays without revision growth and rolls back partial work', async () => {
   const f = await fixture();
