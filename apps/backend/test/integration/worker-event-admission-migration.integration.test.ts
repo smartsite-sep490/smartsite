@@ -4,13 +4,20 @@ import { randomUUID } from 'node:crypto';
 import { test } from 'node:test';
 import { computeCanonicalPayloadHash, computeWorkerEventBindingHash } from '@smartsite/contracts';
 import { createIsolatedTestDatabase } from '../support/isolated-test-database.js';
+import { ExactMf06AuthorityTime1794787200000 } from '../../src/database/migrations/1794787200000-ExactMf06AuthorityTime.js';
 
 test('admission column upgrade preserves legacy bytes and populated rollback refuses history loss', async () => {
   const owned = createIsolatedTestDatabase(),
     db = owned.dataSource;
+  // This predecessor upgrade test ends at admission, independently of later migrations.
+  const migrations = db.options.migrations;
+  assert(Array.isArray(migrations));
+  db.setOptions({
+    migrations: migrations.filter((migration) => migration !== ExactMf06AuthorityTime1794787200000),
+  });
   try {
     await owned.initialize();
-    // Fresh profile contains the additive column; remove only its empty latest migration.
+    // The selected predecessor profile ends at the empty admission migration.
     const [fresh] = await db.query(`SELECT is_nullable,data_type FROM information_schema.columns
       WHERE table_schema=current_schema() AND table_name='ai_observation_event' AND column_name='admission_context'`);
     assert.deepEqual(fresh, { is_nullable: 'YES', data_type: 'jsonb' });

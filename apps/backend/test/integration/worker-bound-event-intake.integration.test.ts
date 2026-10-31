@@ -28,6 +28,7 @@ import { Mf06ClaimContextReader } from '../../src/modules/safety/assessments/mf0
 import { Mf06JobLeaseService } from '../../src/modules/safety/assessments/mf06-job-lease.service.js';
 import { bindMf06FaceInvocation } from '../../src/modules/safety/assessments/mf06-face-binding.js';
 import { Mf06CandidateMetadataService } from '../../src/modules/safety/assessments/mf06-candidate-metadata.service.js';
+import type { Mf06AssessmentStoreResult } from '../../src/modules/safety/assessments/mf06-assessment-store.service.js';
 
 test('worker bound HTTP admission preserves raw event and original execution context', async (t) => {
   const owned = createIsolatedTestDatabase(),
@@ -504,6 +505,7 @@ test('worker bound HTTP admission preserves raw event and original execution con
         const zoneEvent = {
           ...ppeEvent,
           eventId: randomUUID(),
+          capturedAt: new Date().toISOString().replace('Z', '456Z'),
           observations: [
             ...event.observations,
             { type: 'ZONE_ENTRY', trackId: 1, regionId, geometryVersion: 1 },
@@ -616,7 +618,11 @@ test('worker bound HTTP admission preserves raw event and original execution con
         }).claim();
         assert.ok(lease);
         assert.equal(lease.requestId, requests[0].request_id);
-        assert.equal((await new Mf06ClaimContextReader(db).readForClaim(lease)).status, 'MATCHED');
+        const exactClaim = await new Mf06ClaimContextReader(db).readForClaim(lease);
+        assert.equal(exactClaim.status, 'MATCHED');
+        if (exactClaim.status !== 'MATCHED') throw Error('Exact authenticated claim missing');
+        assert.equal(exactClaim.authorityCapturedAt, zoneEvent.capturedAt);
+        assert.equal(exactClaim.request.capturedAt, new Date(zoneEvent.capturedAt).toISOString());
         // Synthetic qualification proves composition, not operational authority coverage.
         const { MAIN_AUTHORITY_SNAPSHOT_TABLES } =
           await import('../../src/modules/zones/main-authority-read-snapshot.js');
@@ -634,7 +640,7 @@ test('worker bound HTTP admission preserves raw event and original execution con
           await db.query(
             `CREATE TABLE IF NOT EXISTS "${db.driver.schema}"."${table}" (id integer)`,
           );
-        const at = captured.request.capturedAt;
+        const at = exactClaim.authorityCapturedAt!;
         const baselineAt = new Date(Date.parse(at) - 1000).toISOString();
         const authorityContext = {
           siteId,
@@ -720,6 +726,31 @@ test('worker bound HTTP admission preserves raw event and original execution con
           maxAttempts: 2,
           retryDelaySeconds: 1,
         });
+        const pending = await work.prepare(lease, new AbortController().signal);
+        for (const admission of [changedAdmission, null]) {
+          await db.query(
+            'UPDATE ai_observation_event SET admission_context=$2::jsonb WHERE event_id=$1',
+            [zoneEvent.eventId, admission === null ? null : JSON.stringify(admission)],
+          );
+          try {
+            const refused: Mf06AssessmentStoreResult = await db.transaction(
+              'SERIALIZABLE',
+              (manager): Promise<Mf06AssessmentStoreResult> =>
+                work.finalize(manager, lease, pending, new AbortController().signal),
+            );
+            assert.deepEqual(refused, { state: 'UNAVAILABLE', reason: 'INVALID_STORED_BINDING' });
+            const counts: { n: number }[] = await db.query(
+              'SELECT count(*)::int AS n FROM zone_entry_assessment WHERE request_id=$1',
+              [lease.requestId],
+            );
+            assert.equal(counts[0]!.n, 0);
+          } finally {
+            await db.query(
+              'UPDATE ai_observation_event SET admission_context=$2::jsonb WHERE event_id=$1',
+              [zoneEvent.eventId, JSON.stringify(originalAdmission)],
+            );
+          }
+        }
         assert.equal(await leases.retry(lease, 'DATABASE_UNAVAILABLE'), 'RETRY');
         await new Promise((resolve) => setTimeout(resolve, 1100));
         const worker = new Mf06AssessmentWorker(db, leases, work, {
@@ -745,6 +776,13 @@ test('worker bound HTTP admission preserves raw event and original execution con
           assert.equal(recorded[0].profile_revision, null);
           assert.equal(recorded[0].provenance, 'SYNTHETIC_TEST');
           assert.ok(recorded[0].authority_artifact_id);
+          const [storedRaw] = await db.query(
+            'SELECT raw_payload,payload_hash FROM ai_observation_event WHERE event_id=$1',
+            [zoneEvent.eventId],
+          );
+          assert.deepEqual(storedRaw.raw_payload, zoneEvent);
+          const { computeCanonicalPayloadHash } = await import('@smartsite/contracts');
+          assert.equal(storedRaw.payload_hash, computeCanonicalPayloadHash(zoneEvent));
         } finally {
           await worker.drain();
         }

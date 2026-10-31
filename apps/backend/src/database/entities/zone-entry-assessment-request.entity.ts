@@ -80,6 +80,10 @@ function safeIntegerTransformer(minimum: number): ValueTransformer {
 )
 @Check('chk_mf06_request_camera_external', 'char_length(camera_external_id) BETWEEN 1 AND 128')
 @Check('chk_mf06_request_times', 'isfinite(captured_at) AND isfinite(requested_at)')
+@Check(
+  'chk_mf06_authority_captured_finite',
+  'authority_captured_at IS NULL OR isfinite(authority_captured_at)',
+)
 export class ZoneEntryAssessmentRequestEntity {
   @PrimaryColumn({ name: 'request_id', type: 'uuid', primaryKeyConstraintName: 'pk_mf06_request' })
   requestId!: string;
@@ -125,6 +129,17 @@ export class ZoneEntryAssessmentRequestEntity {
 
   @Column({ name: 'captured_at', type: 'timestamptz' })
   capturedAt!: Date;
+
+  /** Storage-derived only. Authoritative consumers project UTC microseconds with SQL, never Date. */
+  @Column({
+    name: 'authority_captured_at',
+    type: 'timestamptz',
+    nullable: true,
+    select: false,
+    insert: false,
+    update: false,
+  })
+  authorityCapturedAt?: Date | null;
 
   @Column({ name: 'requested_purpose', type: 'varchar', length: 32 })
   requestedPurpose!: Mf06AssessmentPurpose;

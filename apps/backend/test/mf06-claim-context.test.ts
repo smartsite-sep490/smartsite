@@ -122,6 +122,7 @@ function makeFakeDataSource(options?: {
   request?: ZoneEntryAssessmentRequestEntity | null;
   siteRows?: unknown[];
   event?: AiObservationEventEntity | null;
+  authorityCapturedAt?: string | null;
   onStep?: (step: string) => void;
 }) {
   const f = makeFixture();
@@ -180,6 +181,10 @@ function makeFakeDataSource(options?: {
           if (text === 'SELECT id FROM site WHERE id = $1') {
             step(`sql:site:${String(params?.[0])}`);
             return options?.siteRows ?? [{ id: SITE_ID }];
+          }
+          if (text.includes('AS authority_captured_at')) {
+            step('sql:authority_time');
+            return [{ authority_captured_at: options?.authorityCapturedAt ?? null }];
           }
           throw new Error(`Unexpected SQL: ${text}`);
         },
@@ -331,8 +336,26 @@ test('matches active CLAIMED job in REPEATABLE READ READ ONLY snapshot and deriv
     `sql:site:${SITE_ID}`,
     `repo:event:${EVENT_ID}`,
     'repo:admission',
+    'sql:authority_time',
     `sql:job:${REQUEST_ID}:#1`,
   ]);
+});
+
+test('legacy capture is explicitly null and a stored exact time cannot grant live eligibility', async () => {
+  const legacy = makeFakeDataSource();
+  const result = await new Mf06ClaimContextReader(legacy.db).readForClaim(legacy.fixture.claim);
+  assert.equal(result.status, 'MATCHED');
+  if (result.status !== 'MATCHED') return;
+  assert.equal(Reflect.get(result, 'authorityCapturedAt'), null);
+
+  const injected = makeFakeDataSource({ authorityCapturedAt: CAPTURED_AT });
+  assert.deepEqual(
+    await new Mf06ClaimContextReader(injected.db).readForClaim(injected.fixture.claim),
+    {
+      status: 'UNAVAILABLE',
+      reason: 'INVALID_STORED_BINDING',
+    },
+  );
 });
 
 test('projects frozen frameReference when stored v1.2 event has a single matching local FRAME URI and digest', async () => {
