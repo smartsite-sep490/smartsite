@@ -14,6 +14,8 @@
     "test:ocr": "node scripts/test-document-ocr.mjs",
     "dev:db": "docker compose -f infra/compose.yaml up -d postgres --wait --wait-timeout 60",
     "dev:mobile": "pnpm --filter @smartsite/mobile exec node --dns-result-order=ipv4first ./node_modules/expo/bin/cli start --dev-client --localhost --port 8081 --max-workers 2",
+    "dev:mobile:go": "pnpm --filter @smartsite/mobile exec node --dns-result-order=ipv4first ./node_modules/expo/bin/cli start --go --lan --port 8081 --max-workers 2 -c",
+    "dev:mobile:tunnel": "pnpm --filter @smartsite/mobile exec node --dns-result-order=ipv4first ./node_modules/expo/bin/cli start --go --tunnel --max-workers 2",
     "dev:mobile:lan": "pnpm --filter @smartsite/mobile dev",
     "build": "turbo run build",
     "typecheck": "turbo run typecheck",
@@ -26,6 +28,11 @@
     "check": "pnpm lint && pnpm typecheck && pnpm test && pnpm build",
     "infra:up": "docker compose -f infra/compose.yaml up -d --build",
     "infra:down": "docker compose -f infra/compose.yaml down"
+  },
+  "pnpm": {
+    "ignoredBuiltDependencies": [
+      "@scarf/scarf"
+    ]
   },
   "devDependencies": {
     "@eslint/js": "10.0.1",

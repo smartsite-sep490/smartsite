@@ -1,6 +1,25 @@
 import { afterEach, expect, it, vi } from 'vitest';
 import { SmartSiteManagementClient } from '../src/index';
 afterEach(() => vi.unstubAllGlobals());
+it('preflights certificate dates through authenticated scoped multipart', async () => {
+  const fetch = vi.fn<(url: string, init: RequestInit) => Promise<Response>>(async () =>
+    Response.json({}),
+  );
+  vi.stubGlobal('fetch', fetch);
+  const client = new SmartSiteManagementClient('https://api.example.test');
+  const file = new File(['synthetic'], 'card.pdf', { type: 'application/pdf' });
+  await client.checkWorkerDocumentDates('token', 'site/a', 'worker/a', 'SAFETY_CARD', file, {
+    submittedExpiresOn: '2030-10-27',
+  });
+  const [url, init] = fetch.mock.calls[0]!;
+  expect(url).toContain('/sites/site%2Fa/workers/worker%2Fa/documents/SAFETY_CARD/check');
+  expect(init.method).toBe('POST');
+  expect(init.headers).toMatchObject({ Authorization: 'Bearer token' });
+  expect(init.headers).not.toHaveProperty('Content-Type');
+  const form = init.body as FormData;
+  expect(form.get('submittedExpiresOn')).toBe('2030-10-27');
+  expect(form.get('file')).toBeInstanceOf(File);
+});
 it('sends document search and pending filters to the Backend before pagination', async () => {
   const fetch = vi.fn<(url: string, init: RequestInit) => Promise<Response>>(async () =>
     Response.json({ items: [], total: 0 }),
@@ -42,6 +61,7 @@ it('uploads native document and identity images through authenticated multipart 
   await client.checkDocumentImageQuality('token', 'site/a', 'contractor/a', file);
   await client.uploadWorkerIdentityImage('token', 'site/a', 'worker/a', 'FRONT', file);
   await client.uploadWorkerDocument('token', 'site/a', 'worker/a', 'SAFETY_CARD', file);
+  await client.checkWorkerDocumentImageQuality('token', 'site/a', 'worker/a', file);
   for (const [, init] of fetch.mock.calls) {
     expect(init.headers).toMatchObject({ Authorization: 'Bearer token' });
     expect(init.headers).not.toHaveProperty('Content-Type');
@@ -51,6 +71,9 @@ it('uploads native document and identity images through authenticated multipart 
     '/sites/site%2Fa/contractors/contractor%2Fa/document-image-quality',
   );
   expect(fetch.mock.calls[1]![0]).toContain('/workers/worker%2Fa/identity-images/FRONT');
+  expect(fetch.mock.calls[3]![0]).toContain(
+    '/sites/site%2Fa/workers/worker%2Fa/document-image-quality',
+  );
 });
 it('keeps review dates and the expected document version in the Site and Worker scoped command', async () => {
   const fetch = vi.fn<(url: string, init: RequestInit) => Promise<Response>>(async () =>

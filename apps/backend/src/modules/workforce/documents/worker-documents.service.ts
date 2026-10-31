@@ -13,6 +13,7 @@ import type {
   DocumentOcrResult,
   UploadWorkerDocumentCommand,
   UpdateWorkerDocumentExpiryCommand,
+  WorkerDocumentCheckResponse,
 } from '@smartsite/contracts';
 import {
   command,
@@ -29,7 +30,8 @@ import {
   WorkerIdentityImageEntity,
 } from '../../../database/entities/worker-document.entity.js';
 import { WorkerEntity } from '../../../database/entities/worker.entity.js';
-import { UserRole } from '../../../database/entities/user.entity.js';
+import { UserEntity, UserRole } from '../../../database/entities/user.entity.js';
+import { UserRoleAssignmentEntity } from '../../../database/entities/user-role-assignment.entity.js';
 import { StorageService } from '../../../integrations/storage/storage.service.js';
 import {
   ContractorOperationsService,
@@ -49,6 +51,7 @@ import {
   UpdateWorkerDocumentExpiryDto,
 } from './worker-documents.commands.js';
 import { DocumentNotificationsService } from './document-notifications.service.js';
+import { compareDocumentDates } from './worker-document-date-check.js';
 
 export interface DocumentUpload {
   buffer: Buffer;
@@ -136,6 +139,7 @@ function response(doc: WorkerDocumentEntity): WorkerDocumentResponse {
     reviewedAt: doc.reviewedAt?.toISOString() ?? null,
     reviewNote: doc.reviewNote,
     version: doc.version,
+    dateCheck: compareDocumentDates(doc.kind, doc, doc.ocr),
   };
 }
 
@@ -171,7 +175,7 @@ export class WorkerDocumentsService {
     actor: WorkforceActor,
     siteId: string,
     workerId: string,
-    mode: 'read' | 'write' | 'review' = 'read',
+    mode: 'read' | 'write' | 'submit' | 'review' = 'read',
     lock = false,
   ) {
     if (actor.mustChangePassword) forbidden();
@@ -188,6 +192,24 @@ export class WorkerDocumentsService {
       return worker;
     }
     if (
+      mode === 'submit' &&
+      worker.userId === actor.id &&
+      actor.roleAssignments.some((r) => r.role === UserRole.WORKER && r.siteId === siteId)
+    ) {
+      const account = await manager.getRepository(UserEntity).findOneBy({
+        id: actor.id,
+        isActive: true,
+        mustChangePassword: false,
+      });
+      const assigned = await manager.getRepository(UserRoleAssignmentEntity).existsBy({
+        userId: actor.id,
+        role: UserRole.WORKER,
+        siteId,
+      });
+      if (!account || !assigned) forbidden();
+      return worker;
+    }
+    if (
       mode === 'read' &&
       (safety ||
         (worker.userId === actor.id &&
@@ -197,6 +219,32 @@ export class WorkerDocumentsService {
     if (!worker.contractorId) forbidden();
     await this.operations.requireWorkerCreationAccess(manager, actor, worker.contractorId, siteId);
     return worker;
+  }
+  private requireDeclaredDate(actor: WorkforceActor, worker: WorkerEntity, provided: boolean) {
+    if (
+      worker.userId === actor.id &&
+      actor.roleAssignments.some((r) => r.role === UserRole.WORKER && r.siteId === worker.siteId) &&
+      !provided
+    )
+      invalid('Enter the document date before submitting.');
+  }
+  async checkSubmission(
+    actor: WorkforceActor,
+    siteId: string,
+    workerId: string,
+    kindInput: string,
+    file: DocumentUpload | undefined,
+    input: UploadWorkerDocumentCommand = {},
+  ): Promise<WorkerDocumentCheckResponse> {
+    const value = command(UploadWorkerDocumentDto, input);
+    const kind = kindValue(kindInput);
+    const manual = submittedDates(kind, value);
+    await this.access(this.source.manager, actor, siteId, workerId, 'submit');
+    const format = validateWorkerDocument(file);
+    const quality = await this.ocr.quality(file!.buffer, format.mediaType);
+    const ocr =
+      quality.status === 'ACCEPTED' ? await this.ocr.read(file!.buffer, format.mediaType) : null;
+    return { quality, ocr, dateCheck: compareDocumentDates(kind, manual, ocr) };
   }
   async get(
     actor: WorkforceActor,
@@ -370,7 +418,8 @@ export class WorkerDocumentsService {
     const value = command(UploadWorkerDocumentDto, input);
     const kind = kindValue(kindInput);
     const manual = submittedDates(kind, value);
-    await this.access(this.source.manager, actor, siteId, workerId, 'write');
+    const submitter = await this.access(this.source.manager, actor, siteId, workerId, 'submit');
+    this.requireDeclaredDate(actor, submitter, !!manual.submittedExpiresOn);
     const format = validateWorkerDocument(file);
     await this.requireQuality(file!);
     const stored = await this.storage.save(file!.buffer, format.mediaType, format.extension);
@@ -378,7 +427,7 @@ export class WorkerDocumentsService {
     try {
       const ocr = await this.ocr.read(file!.buffer, format.mediaType);
       const result = await this.source.transaction(async (manager) => {
-        const worker = await this.access(manager, actor, siteId, workerId, 'write', true);
+        const worker = await this.access(manager, actor, siteId, workerId, 'submit', true);
         const docs = manager.getRepository(WorkerDocumentEntity);
         // Same original and unchanged metadata preserve the pending review/version.
         const pending = await docs
@@ -472,7 +521,7 @@ export class WorkerDocumentsService {
   ) {
     const value = command(UpdateWorkerDocumentExpiryDto, input);
     return this.source.transaction(async (manager) => {
-      await this.access(manager, actor, siteId, workerId, 'write', true);
+      await this.access(manager, actor, siteId, workerId, 'submit', true);
       const repo = manager.getRepository(WorkerDocumentEntity);
       const doc = await repo
         .createQueryBuilder('d')
@@ -646,6 +695,16 @@ export class WorkerDocumentsService {
       uuid(contractorId),
       uuid(siteId),
     );
+    validateWorkerDocument(file);
+    return this.ocr.quality(file!.buffer, file!.mimetype);
+  }
+  async checkWorkerQuality(
+    actor: WorkforceActor,
+    siteId: string,
+    workerId: string,
+    file: DocumentUpload | undefined,
+  ) {
+    await this.access(this.source.manager, actor, siteId, workerId, 'submit');
     validateWorkerDocument(file);
     return this.ocr.quality(file!.buffer, file!.mimetype);
   }

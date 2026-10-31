@@ -16,7 +16,6 @@ import {
   UserRole,
   UserRoleAssignmentEntity,
   WorkerEntity,
-  WorkerGatePermissionEntity,
   WorkerSiteZoneAssignmentEntity,
   WorkerSiteZoneAssignmentStatus,
   ZoneEntity,
@@ -938,30 +937,17 @@ test('MF01: contractor onboarding, assignment requests, consent and current entr
     );
     await dataSource
       .getRepository(WorkerSiteZoneAssignmentEntity)
-      .update(assignment.id, { status: WorkerSiteZoneAssignmentStatus.APPROVED });
-    await dataSource.getRepository(WorkerGatePermissionEntity).save({
-      id: randomUUID(),
-      workerId: worker.id,
-      siteId,
-      gateId: 'gate1',
-      workerAssignmentId: assignment.id,
-      validFrom: from,
-      validUntil: until,
-      createdByUserId: representativeId,
-    });
+      .update(assignment.id, { status: WorkerSiteZoneAssignmentStatus.APPROVED, gateId: 'gate1' });
     await approvedWorkerDocuments(dataSource, [worker.id], representativeId);
-    await t.test(
-      'approved assignment and gate grant still require a current Worker schedule',
-      async () => {
-        assert.equal((await evaluate()).decision.reasonCode, 'NO_SCHEDULE');
-      },
-    );
+    await t.test('approved assignment still requires a current Worker schedule', async () => {
+      assert.equal((await evaluate()).decision.reasonCode, 'NO_SCHEDULE');
+    });
     await assignTestShift(dataSource, siteId, worker.id);
     await t.test(
-      'current approved assignment and gate grant permit entry; other gates and Sites do not',
+      'current approved assignment permits every gate without gate grants; other Sites remain denied',
       async () => {
         assert.equal((await evaluate()).decision.authorization, 'ALLOWED');
-        assert.equal((await evaluate('gate2')).decision.reasonCode, 'GATE_MISMATCH');
+        assert.equal((await evaluate('gate2')).decision.authorization, 'ALLOWED');
         assert.equal((await evaluate('gate1', otherSiteId)).decision.reasonCode, 'SITE_MISMATCH');
       },
     );
@@ -1281,7 +1267,6 @@ test('MF01: contractor onboarding, assignment requests, consent and current entr
       'DELETE FROM face_enrollment_session WHERE worker_id IN (SELECT id FROM worker WHERE site_id = $1)',
       [siteId],
     );
-    await dataSource.getRepository(WorkerGatePermissionEntity).delete({ siteId });
     await dataSource.getRepository(WorkerSiteZoneAssignmentEntity).delete({ siteId });
     await dataSource.getRepository(WorkerEntity).delete({ siteId });
     await dataSource.getRepository(ContractorRepresentativeGrantEntity).delete({ contractorId });

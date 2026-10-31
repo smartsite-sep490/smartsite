@@ -47,19 +47,6 @@ it('has complete, nonempty catalogs with matching interpolation variables', () =
   }
 });
 
-it.each(['en', 'vi'] as const)('explains gate permission conflicts in %s', async (language) => {
-  await i18n.changeLanguage(language);
-  const catalog = language === 'vi' ? vi : en;
-  for (const key of [
-    'errors.gate_assignment_required',
-    'errors.gate_permissions_changed',
-    'errors.gate_assignment_participation',
-  ] as const) {
-    expect(localizedError(en[key])).toBe(catalog[key]);
-    expect(localizedError(en[key])).not.toBe(catalog['errors.unexpected']);
-  }
-});
-
 it.each(['en', 'vi'] as const)(
   'translates attendance report errors, states and absence notifications in %s',
   async (language) => {
