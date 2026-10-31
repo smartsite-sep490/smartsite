@@ -126,6 +126,17 @@ export class ZoneEntryAssessmentRequestEntity {
   @Column({ name: 'captured_at', type: 'timestamptz' })
   capturedAt!: Date;
 
+  /** Storage-derived only. Authoritative consumers project UTC microseconds with SQL, never Date. */
+  @Column({
+    name: 'authority_captured_at',
+    type: 'timestamptz',
+    nullable: true,
+    select: false,
+    insert: false,
+    update: false,
+  })
+  authorityCapturedAt?: Date | null;
+
   @Column({ name: 'requested_purpose', type: 'varchar', length: 32 })
   requestedPurpose!: Mf06AssessmentPurpose;
 

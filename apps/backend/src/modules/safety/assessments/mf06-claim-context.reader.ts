@@ -8,6 +8,7 @@ import type { Mf06JobClaim } from './mf06-job-lease.service.js';
 import { inspectMf06StoredBinding, type Mf06CapturedRequest } from './mf06-request-context.js';
 import { selectMf06FrameReference, type Mf06FrameReference } from './mf06-frame-reference.js';
 import { loadMf06RequestAdmission } from './mf06-event-admission.js';
+import { parseMainAuthorityInstant } from '../../zones/main-authority-archive-codec.js';
 
 export type Mf06ClaimContextUnavailableReason =
   | 'INVALID_CLAIM'
@@ -29,6 +30,7 @@ export type Mf06ClaimContextLookup =
       request: Mf06CapturedRequest;
       contextDigest: string;
       claimContextDigest: string;
+      authorityCapturedAt: string | null;
       subject: ObservationSubjectRef | null;
       frameReference: Mf06FrameReference | null;
     }>;
@@ -348,11 +350,42 @@ export class Mf06ClaimContextReader {
         return unavailable('INVALID_STORED_BINDING');
       }
 
+      // Read in the same authenticated snapshot, without hydrating microseconds through Date.
+      // The JSON projection also explicitly returns null on pre-migration schemas.
+      const timeRows = (await manager.query(
+        `SELECT to_char((to_jsonb(r)->>'authority_captured_at')::timestamptz AT TIME ZONE 'UTC',
+          'YYYY-MM-DD"T"HH24:MI:SS.US"Z"') AS authority_captured_at
+         FROM ${quoteIdentifier(selectedSchema)}.zone_entry_assessment_request r WHERE r.request_id=$1`,
+        [normalizedClaim.requestId],
+      )) as { authority_captured_at: unknown }[];
+      if (signal?.aborted) return unavailable('ABORTED');
+      if (!Array.isArray(timeRows) || timeRows.length !== 1)
+        return unavailable('INVALID_STORED_BINDING');
+      const authorityCapturedAt = timeRows[0]!.authority_captured_at;
+      if (authorityCapturedAt !== null) {
+        const exact =
+          typeof authorityCapturedAt === 'string'
+            ? parseMainAuthorityInstant(authorityCapturedAt)
+            : null;
+        if (
+          exact === null ||
+          inspected.request.requestedPurpose !== 'INITIAL_OBSERVATION_ASSESSMENT' ||
+          inspected.request.executionAdmission?.classification !== 'LIVE' ||
+          inspected.request.subjectBindingStatus !== 'BOUND' ||
+          !inspected.subject ||
+          exact !== parseMainAuthorityInstant(inspected.subject.capturedAt)
+        )
+          return unavailable('INVALID_STORED_BINDING');
+      }
+      if (typeof authorityCapturedAt !== 'string' && authorityCapturedAt !== null)
+        return unavailable('INVALID_STORED_BINDING');
+
       const claimContextDigest = computeCanonicalPayloadHash({
         schemaVersion: '1.0.0',
         kind: 'MF06_CLAIM_CONTEXT',
         claim: normalizedClaim,
         contextDigest: inspected.contextDigest,
+        authorityCapturedAt,
       });
 
       const frameReference = selectMf06FrameReference(event.rawPayload, inspected.request);
@@ -369,6 +402,7 @@ export class Mf06ClaimContextReader {
         request: inspected.request,
         contextDigest: inspected.contextDigest,
         claimContextDigest,
+        authorityCapturedAt,
         subject: inspected.subject,
         frameReference,
       });

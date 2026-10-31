@@ -10,7 +10,12 @@ import {
 } from '../src/modules/zones/main-authority-archive-codec.js';
 import type { Mf06AssessmentWorkPort } from '../src/modules/safety/assessments/mf06-assessment-worker.service.js';
 
-async function fixture(policy = 'PROHIBITED_FOR_ALL', environment = 'test', upperScope = false) {
+async function fixture(
+  policy = 'PROHIBITED_FOR_ALL',
+  environment = 'test',
+  upperScope = false,
+  authorityCapturedAt: string | null = null,
+) {
   const { Mf06BoundPolicyAssessmentWorkPort } = await import(
     new URL(
       '../src/modules/safety/assessments/mf06-bound-policy-assessment-work.js',
@@ -36,13 +41,14 @@ async function fixture(policy = 'PROHIBITED_FOR_ALL', environment = 'test', uppe
     request,
     contextDigest: 'c'.repeat(64),
     claimContextDigest: 'd'.repeat(64),
-    subject: { capturedAt: request.capturedAt },
+    authorityCapturedAt,
+    subject: { capturedAt: authorityCapturedAt ?? request.capturedAt },
   };
   const authorityContext = {
     siteId,
     zoneId,
     workerId: null,
-    capturedAt: request.capturedAt,
+    capturedAt: authorityCapturedAt ?? request.capturedAt,
     purpose: request.requestedPurpose,
   };
   const sealed = sealMainAuthorityArchive(
@@ -209,6 +215,33 @@ test('microsecond precision loss is refused before historical policy lookup', as
   const p = await f.work.prepare(f.claim, f.signal);
   assert.equal((await f.work.finalize(f.manager, f.claim, p, f.signal)).state, 'UNAVAILABLE');
   assert.equal(f.inputs.length, 0);
+});
+
+test('exact authority capture drives preparation and finalization without changing public capture', async () => {
+  const f = await fixture('PROHIBITED_FOR_ALL', 'test', false, '2026-10-30T00:00:01.000001Z');
+  const p = await f.work.prepare(f.claim, f.signal);
+  assert.equal((await f.work.finalize(f.manager, f.claim, p, f.signal)).state, 'RECORDED');
+  assert.equal(f.context.request.capturedAt, '2026-10-30T00:00:01.000Z');
+  assert.equal(f.inputs[0]!.reasonCode, 'POLICY_PROHIBITED');
+  assert.equal(f.authorityCalls(), 1);
+  assert.equal(f.qualified.archive.payload.context.capturedAt, '2026-10-30T00:00:01.000001Z');
+});
+
+test('exact capture must equal original instant, including equivalent offsets', async () => {
+  const f = await fixture('NONE', 'test', false, '2026-10-30T00:00:01.000001Z');
+  f.context.subject.capturedAt = '2026-10-30T07:00:01.000001+07:00';
+  const p = await f.work.prepare(f.claim, f.signal);
+  assert.equal((await f.work.finalize(f.manager, f.claim, p, f.signal)).state, 'RECORDED');
+  assert.equal(f.inputs[0]!.reasonCode, 'POLICY_NONE');
+
+  const drift = await fixture('NONE', 'test', false, '2026-10-30T00:00:01.000001Z');
+  drift.context.subject.capturedAt = '2026-10-30T00:00:01.000002Z';
+  const refused = await drift.work.prepare(drift.claim, drift.signal);
+  assert.equal(
+    (await drift.work.finalize(drift.manager, drift.claim, refused, drift.signal)).state,
+    'UNAVAILABLE',
+  );
+  assert.equal(drift.inputs.length, 0);
 });
 
 test('database unavailability requests retry rather than recording an unavailable policy', async () => {

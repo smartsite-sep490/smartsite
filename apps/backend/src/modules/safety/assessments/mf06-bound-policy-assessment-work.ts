@@ -183,14 +183,15 @@ export class Mf06BoundPolicyAssessmentWorkPort implements Mf06AssessmentWorkPort
       current.siteId !== current.request.siteId
     )
       return null;
-    const stored = parseMainAuthorityInstant(current.request.capturedAt);
+    const capturedAt = current.authorityCapturedAt ?? current.request.capturedAt;
+    const stored = parseMainAuthorityInstant(capturedAt);
     const original = parseMainAuthorityInstant(current.subject.capturedAt);
     if (stored === null || original === null || stored !== original) return null;
     return {
       siteId: current.siteId,
       zoneId: current.request.zoneId,
       workerId: null,
-      capturedAt: current.request.capturedAt,
+      capturedAt,
       purpose: current.request.requestedPurpose,
     };
   }

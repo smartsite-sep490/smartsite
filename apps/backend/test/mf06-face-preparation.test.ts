@@ -168,6 +168,7 @@ function makeMatchedV13Context(
     kind: 'MF06_CLAIM_CONTEXT',
     claim: CLAIM,
     contextDigest: inspected.contextDigest,
+    authorityCapturedAt: null,
   });
   return Object.freeze({
     status: 'MATCHED',
@@ -176,6 +177,7 @@ function makeMatchedV13Context(
     request: inspected.request,
     contextDigest: inspected.contextDigest,
     claimContextDigest,
+    authorityCapturedAt: null,
     subject: inspected.subject,
     frameReference: selectMf06FrameReference(rawPayload, inspected.request),
   });

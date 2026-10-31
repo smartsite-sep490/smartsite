@@ -162,9 +162,14 @@ function commandHash(input: Mf06AssessmentAppendInput): string {
 }
 const timestamp = (column: string) =>
   `to_char(${column} AT TIME ZONE 'UTC','YYYY-MM-DD"T"HH24:MI:SS.US"Z"')`;
+// Internal authority binding only; retain legacy captured_at in public records.
+const authorityTimestamp = timestamp(
+  `COALESCE((to_jsonb(r)->>'authority_captured_at')::timestamptz,r.captured_at)`,
+);
 // Fixed SQL identifiers only. One statement reads original request and immutable artifact together.
 const assessmentSelect = (schema: string) => `SELECT a.*, r.camera_id,r.zone_id,r.requested_purpose,
   ${timestamp('r.captured_at')} AS captured_at, ${timestamp('a.assessed_at')} AS assessed_at,
+  ${authorityTimestamp} AS authority_captured_at,
   art.body AS artifact_body,art.sha256 AS artifact_sha256,
   (art.body_hash=encode(sha256(convert_to(art.body::text,'UTF8')),'hex')) AS artifact_body_intact
   FROM ${schema}.zone_entry_assessment a JOIN ${schema}.zone_entry_assessment_request r ON r.request_id=a.request_id
@@ -183,7 +188,7 @@ function mapRecord(row: Row): Mf06RecordedAssessment | null {
       siteId: String(row.site_id),
       zoneId: String(row.zone_id),
       workerId: row.worker_id === null ? null : String(row.worker_id),
-      capturedAt: String(row.captured_at),
+      capturedAt: String(row.authority_captured_at),
       purpose: row.requested_purpose as MainAuthorityArchiveContext['purpose'],
       sha256: row.artifact_sha256,
     });
@@ -335,7 +340,7 @@ export class Mf06AssessmentStore {
       `${this.schema()},pg_catalog,pg_temp`,
     ]);
     const requests = (await manager.query(
-      `SELECT r.*,${timestamp('r.captured_at')} AS captured_at
+      `SELECT r.*,${timestamp('r.captured_at')} AS captured_at,${authorityTimestamp} AS authority_captured_at
       FROM ${this.schema()}.zone_entry_assessment_request r WHERE request_id=$1 AND site_id=$2 FOR SHARE`,
       [input.claim.requestId, input.siteId],
     )) as Row[];
@@ -378,7 +383,7 @@ export class Mf06AssessmentStore {
         siteId: String(request.site_id),
         zoneId: String(request.zone_id),
         workerId: input.workerId,
-        capturedAt: String(request.captured_at),
+        capturedAt: String(request.authority_captured_at),
         purpose: request.requested_purpose as MainAuthorityArchiveContext['purpose'],
         sha256: input.authorityArtifact.sha256,
       });
