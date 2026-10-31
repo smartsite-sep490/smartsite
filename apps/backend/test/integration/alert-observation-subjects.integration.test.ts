@@ -25,6 +25,7 @@ import { SchedulingNotificationService } from '../../src/modules/workforce/notif
 import { ObservationContextResolverService } from '../../src/modules/zones/observation-context-resolver.service.js';
 import { createTestConfig } from '../support/config.js';
 import { createIsolatedTestDatabase } from '../support/isolated-test-database.js';
+import { AlertDetectionSubject1793404800000 } from '../../src/database/migrations/1793404800000-AlertDetectionSubject.js';
 
 test('subject provenance survives upgrade, retry and rollback boundaries in isolated PostgreSQL', async (t) => {
   const owned = createIsolatedTestDatabase();
@@ -125,18 +126,23 @@ test('subject provenance survives upgrade, retry and rollback boundaries in isol
     });
     const legacy = event([person(90), missing(90)]);
     const legacyAlertId = randomUUID();
-    await db.getRepository(AiObservationEventEntity).insert({
-      eventId: legacy.eventId,
-      payloadHash: computeCanonicalPayloadHash(legacy),
-      cameraExternalId,
-      resolvedCameraId: cameraId,
-      streamSessionId: sessionId,
-      capturedAt: new Date(legacy.capturedAt),
-      receivedAt: new Date(),
-      rawPayload: legacy,
-      processingStatus: EventProcessingStatus.PROCESSED,
-      processingNote: null,
-    });
+    // Seed only predecessor columns: current entity metadata also contains later migrations.
+    await db.query(
+      `INSERT INTO ai_observation_event(event_id,payload_hash,camera_external_id,resolved_camera_id,
+       stream_session_id,captured_at,received_at,raw_payload,processing_status)
+       VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9)`,
+      [
+        legacy.eventId,
+        computeCanonicalPayloadHash(legacy),
+        cameraExternalId,
+        cameraId,
+        sessionId,
+        new Date(legacy.capturedAt),
+        new Date(),
+        legacy,
+        EventProcessingStatus.PROCESSED,
+      ],
+    );
     await db.getRepository(SafetyAlertEntity).insert({
       id: legacyAlertId,
       siteId,
@@ -170,6 +176,12 @@ test('subject provenance survives upgrade, retry and rollback boundaries in isol
       null,
     );
 
+    // Current ingestion requires the complete registered schema; the historical upgrade above
+    // still proves the predecessor boundary independently of later migrations.
+    db.setOptions({ migrations: registered });
+    await db.destroy();
+    await db.initialize();
+    await db.runMigrations();
     const config = createTestConfig();
     const ingestion = new AiIngestionService(
       db,
@@ -301,7 +313,18 @@ test('subject provenance survives upgrade, retry and rollback boundaries in isol
     );
 
     await t.test('populated rollback refuses to erase provenance', async () => {
-      await assert.rejects(db.undoLastMigration(), /subject provenance must be retained/);
+      const runner = db.createQueryRunner();
+      await runner.connect();
+      await runner.startTransaction();
+      try {
+        await assert.rejects(
+          new AlertDetectionSubject1793404800000().down(runner),
+          /subject provenance must be retained/,
+        );
+      } finally {
+        await runner.rollbackTransaction();
+        await runner.release();
+      }
       assert.equal(
         await db.getRepository(AlertDetectionMappingEntity).countBy({ eventId: first.eventId }),
         5,

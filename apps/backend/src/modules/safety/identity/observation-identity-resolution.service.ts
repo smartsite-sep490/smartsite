@@ -101,6 +101,7 @@ export class ObservationIdentityResolutionService {
       const recorded = await this.replay(manager, scope, command, hash, lockedEvent);
       if (recorded) return recorded;
       await this.lock(manager, `identity-subject:${scope.eventId}:${scope.personObservationIndex}`);
+      const episode = await this.lockEpisodeRevision(manager, scope, command.expectedEventHash);
       const event = await this.loadScopedEvent(manager, scope);
       if (event.payloadHash !== command.expectedEventHash)
         conflict('Observation identity event hash has changed');
@@ -179,6 +180,14 @@ export class ObservationIdentityResolutionService {
       head.revision = decision.revision;
       head.currentDecisionId = decision.id;
       await heads.save(head);
+      if (episode) {
+        const changed: { id: string }[] = await manager.query(
+          `WITH changed AS (UPDATE safety_episode SET content_revision=content_revision+1
+            WHERE id=$1 AND site_id=$2 AND content_revision=$3 RETURNING id) SELECT id FROM changed`,
+          [episode.id, scope.siteId, episode.content_revision],
+        );
+        if (changed.length !== 1) conflict('Safety episode revision changed');
+      }
       return { decision, latestHead: head, replayed: false };
     });
   }
@@ -257,6 +266,36 @@ export class ObservationIdentityResolutionService {
 
   private async lock(manager: EntityManager, key: string): Promise<void> {
     await manager.query('SELECT pg_advisory_xact_lock(hashtextextended($1, 0))', [key]);
+  }
+
+  private async lockEpisodeRevision(
+    manager: EntityManager,
+    scope: ObservationIdentityCommandScope,
+    payloadHash: string,
+  ): Promise<{ id: string; content_revision: number } | undefined> {
+    // Historical releases have no episode table; retain their identity review path.
+    const [table]: { available: boolean }[] = await manager.query(
+      `SELECT to_regclass(format('%I.safety_episode',current_schema())) IS NOT NULL AS available`,
+    );
+    if (!table?.available) return undefined;
+    // Serialize absent-row creation with the exact-event projection, not track/Worker identity.
+    await manager.query('SELECT pg_advisory_xact_lock(hashtext($1),hashtext($2))', [
+      `safety-episode:${scope.siteId}`,
+      `${scope.eventId}:${scope.personObservationIndex}`,
+    ]);
+    const [episode]: {
+      id: string;
+      site_id: string;
+      payload_hash: string;
+      content_revision: number;
+    }[] = await manager.query(
+      'SELECT id,site_id,payload_hash,content_revision FROM safety_episode WHERE event_id=$1 AND person_observation_index=$2 FOR UPDATE',
+      [scope.eventId, scope.personObservationIndex],
+    );
+    if (episode && (episode.site_id !== scope.siteId || episode.payload_hash !== payloadHash))
+      conflict('Safety episode identity scope is inconsistent');
+    if (episode?.content_revision === 2147483647) conflict('Safety episode revision exhausted');
+    return episode;
   }
 
   private async findReplay(

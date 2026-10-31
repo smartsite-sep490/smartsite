@@ -6,7 +6,11 @@ import {
 } from '@smartsite/contracts';
 import { CameraEventAdmissionService } from '../../modules/cameras/camera-event-admission.service.js';
 import { Mf06EnqueueService } from '../../modules/safety/assessments/mf06-enqueue.service.js';
-import { validatePartitionedObservationEvent } from '@smartsite/contracts';
+import {
+  validatePartitionedObservationEvent,
+  resolveEventLocalEpisodeSubject,
+} from '@smartsite/contracts';
+import { SafetyEpisodeProjectionService } from '../../modules/safety/alerts/safety-episode-projection.service.js';
 import { admitPartitionedFrame } from './partitioned-frame-admission.js';
 import { resolveAlertObservationSubjects } from '../../modules/safety/alerts/alert-observation-subjects.js';
 import { HttpStatus, Injectable, Logger, Optional } from '@nestjs/common';
@@ -72,6 +76,7 @@ export class AiIngestionService {
     @Optional() zoneEntryAuthorization?: ZoneEntryAuthorizationService,
     @Optional() private readonly mf06Enqueue?: Mf06IngestionEnqueueService,
     @Optional() private readonly workerAdmission?: CameraEventAdmissionService,
+    @Optional() private readonly episodeProjection?: SafetyEpisodeProjectionService,
   ) {
     this.clock = clock ?? (() => new Date());
     this.zoneEntryAuthorization = zoneEntryAuthorization ?? new ZoneEntryAuthorizationService();
@@ -361,6 +366,33 @@ export class AiIngestionService {
         }
 
         // Spec §15.3: Raw Event insert MUST occur before any Alert side effects
+        const projectionEnabled =
+          this.configService.get('SAFETY_EPISODE_PROJECTION_ENABLED', { infer: true }) === true;
+        const routeEpoch = this.configService.get('SAFETY_EPISODE_ROUTE_EPOCH', { infer: true });
+        if (projectionEnabled && !routeEpoch)
+          throw new PublicHttpException(503, {
+            code: 'AI_INGESTION_UNAVAILABLE',
+            message: 'AI ingestion is temporarily unavailable',
+          });
+        const episodeRoute =
+          projectionEnabled &&
+          status === EventProcessingStatus.PROCESSED &&
+          !!camera &&
+          !frameScope &&
+          !event.observations.some((o) => o.type === 'ZONE_ENTRY') &&
+          candidates.length > 0 &&
+          candidates.every((candidate) => {
+            if (candidate.alertType !== 'PPE_VIOLATION') return false;
+            const index = event.observations.findIndex(
+              (o) => o.type === 'PERSON' && o.trackId === candidate.trackId,
+            );
+            const subject = resolveEventLocalEpisodeSubject(
+              event.eventId,
+              event.observations as unknown as Observation[],
+              index,
+            );
+            return subject !== null && subject.personObservationIndex <= 255;
+          });
         const rawEventRepo = manager.getRepository(AiObservationEventEntity);
         const rawEvent = rawEventRepo.create({
           eventId: event.eventId,
@@ -373,6 +405,12 @@ export class AiIngestionService {
           rawPayload: event,
           processingStatus: status,
           processingNote: note,
+          safetyRouteMode: projectionEnabled
+            ? episodeRoute
+              ? 'EPISODE_EVENT_LOCAL'
+              : 'LEGACY'
+            : null,
+          safetyRouteEpoch: projectionEnabled ? routeEpoch : null,
         });
         const admissionContext = bound
           ? {
@@ -408,7 +446,23 @@ export class AiIngestionService {
 
         // Group candidates and create AlertDetectionMapping only when PROCESSED
         const alertIds: string[] = [];
-        if (status === EventProcessingStatus.PROCESSED && camera) {
+        if (episodeRoute && camera) {
+          try {
+            if (!this.episodeProjection) throw new Error('Episode projection provider unavailable');
+            const produced = await this.episodeProjection.produceObservationFindings(
+              manager,
+              { siteId: camera.siteId, eventId: event.eventId, candidates },
+              this.durableGroupingService,
+            );
+            alertIds.push(...produced.alertIds);
+          } catch {
+            // Roll back this route in full; never retry the event through the legacy writer.
+            throw new PublicHttpException(503, {
+              code: 'AI_INGESTION_UNAVAILABLE',
+              message: 'AI ingestion is temporarily unavailable',
+            });
+          }
+        } else if (status === EventProcessingStatus.PROCESSED && camera) {
           // Acquire shared grouping locks in a consistent order, preserving response order.
           const ordered = candidates.map((candidate, index) => ({ candidate, index }));
           ordered.sort((left, right) =>

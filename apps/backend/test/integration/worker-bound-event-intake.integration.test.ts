@@ -29,6 +29,7 @@ import { Mf06JobLeaseService } from '../../src/modules/safety/assessments/mf06-j
 import { bindMf06FaceInvocation } from '../../src/modules/safety/assessments/mf06-face-binding.js';
 import { Mf06CandidateMetadataService } from '../../src/modules/safety/assessments/mf06-candidate-metadata.service.js';
 import type { Mf06AssessmentStoreResult } from '../../src/modules/safety/assessments/mf06-assessment-store.service.js';
+import { computeCanonicalPayloadHash, computeWorkerEventBindingHash } from '@smartsite/contracts';
 
 test('worker bound HTTP admission preserves raw event and original execution context', async (t) => {
   const owned = createIsolatedTestDatabase(),
@@ -502,6 +503,72 @@ test('worker bound HTTP admission preserves raw event and original execution con
           'UPDATE camera_observation_region SET version=2,is_active=false WHERE id=$1',
           [regionId],
         );
+        const episodeEvent = { ...ppeEvent, eventId: randomUUID() };
+        const routeEpoch = randomUUID();
+        config.set('SAFETY_EPISODE_PROJECTION_ENABLED', true);
+        config.set('SAFETY_EPISODE_ROUTE_EPOCH', routeEpoch);
+        try {
+          const envelope = { schemaVersion: '1.0.0', context: ppeContext, event: episodeEvent };
+          const projected = await send(envelope, issued.secret);
+          assert.equal(
+            projected.status,
+            202,
+            projected.status === 202 ? '' : await projected.clone().text(),
+          );
+          const result = await projected.json();
+          assert.equal(result.status, 'PROCESSED');
+          assert.equal(result.alertIds.length, 1);
+          const [snapshot] = await db.query(
+            `SELECT e.raw_payload,e.payload_hash,e.admission_context,e.safety_route_mode,e.safety_route_epoch,
+             a.candidate_subtype,a.episode_id,p.content_revision
+             FROM ai_observation_event e JOIN alert_detection_mapping m ON m.event_id=e.event_id
+             JOIN safety_alert a ON a.id=m.alert_id JOIN safety_episode p ON p.id=a.episode_id
+             WHERE e.event_id=$1`,
+            [episodeEvent.eventId],
+          );
+          assert.equal(snapshot.candidate_subtype, 'PPE_HARD_HAT_MISSING');
+          assert.equal(snapshot.safety_route_mode, 'EPISODE_EVENT_LOCAL');
+          assert.equal(snapshot.safety_route_epoch, routeEpoch);
+          assert.deepEqual(snapshot.raw_payload, episodeEvent);
+          assert.deepEqual(snapshot.admission_context.context, ppeContext);
+          assert.equal(snapshot.payload_hash, computeCanonicalPayloadHash(episodeEvent));
+          assert.equal(
+            snapshot.admission_context.bindingHash,
+            computeWorkerEventBindingHash(
+              snapshot.payload_hash,
+              snapshot.admission_context.context,
+            ),
+          );
+          assert.equal(
+            (
+              await db.query(
+                'SELECT count(*)::int AS n FROM user_notification WHERE request_id=$1',
+                [result.alertIds[0]],
+              )
+            )[0].n,
+            0,
+          );
+          const replay = await send(envelope, issued.secret);
+          assert.equal(replay.status, 202);
+          assert.equal((await replay.json()).status, 'DUPLICATE_ACCEPTED');
+          const [after] = await db.query(
+            'SELECT content_revision FROM safety_episode WHERE id=$1',
+            [snapshot.episode_id],
+          );
+          assert.equal(after.content_revision, snapshot.content_revision);
+          assert.equal(
+            (
+              await db.query(
+                'SELECT count(*)::int AS n FROM alert_detection_mapping WHERE event_id=$1',
+                [episodeEvent.eventId],
+              )
+            )[0].n,
+            1,
+          );
+        } finally {
+          config.set('SAFETY_EPISODE_PROJECTION_ENABLED', false);
+          config.set('SAFETY_EPISODE_ROUTE_EPOCH', undefined);
+        }
         const zoneEvent = {
           ...ppeEvent,
           eventId: randomUUID(),
@@ -850,7 +917,7 @@ test('worker bound HTTP admission preserves raw event and original execution con
               ])
             )[0].n,
           ),
-          1,
+          2, // One legacy and one episode finding above; the delayed event adds none.
         );
         assert.equal(
           Number(
