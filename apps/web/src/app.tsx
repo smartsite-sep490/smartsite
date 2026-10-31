@@ -14,6 +14,7 @@ import { PpeMonitoringView } from './components/ppe/PpeMonitoringView';
 import { DashboardView } from './components/dashboard/DashboardView';
 import { LandingPage } from './components/landing/LandingPage';
 import { SafetyAlertsView } from './components/alerts/SafetyAlertsView';
+import { SafetyEpisodeWorkspace } from './components/safety-episodes/SafetyEpisodeWorkspace';
 import { AccessControlView } from './components/access/AccessControlView';
 import { VisitorRegistrationView } from './components/access/visitor/VisitorRegistrationView';
 import {
@@ -170,27 +171,33 @@ function ProtectedRoutes({ defaultAuthTab, alertsContext, onNavigate }: Protecte
           path="/incidents"
           element={
             profile.data ? (
-              <SafetyAlertsView
-                key={
-                  profile.data.id +
-                  JSON.stringify(alertsContext ?? {}) +
-                  (incidentLink.has('alertId') ? location.search : '')
-                }
-                authenticatedSession={{ accessToken, user: profile.data }}
-                onSignOut={() => logout.mutate()}
+              <SafetyEpisodeWorkspace
                 apiUrl={apiUrl}
-                initialSiteId={incidentLink.get('siteId') ?? alertsContext?.siteId}
-                initialIncidentId={incidentLink.get('incidentId') ?? undefined}
-                initialActionId={incidentLink.get('actionId') ?? undefined}
-                initialDocumentWorkerId={
-                  incidentLink.get('tab') === 'documents'
-                    ? (incidentLink.get('workerId') ?? undefined)
-                    : undefined
-                }
-                initialAlertId={incidentLink.get('alertId') ?? alertsContext?.alertId}
-                initialStatus={incidentLink.has('alertId') ? undefined : alertsContext?.status}
-                initialType={incidentLink.has('alertId') ? undefined : alertsContext?.alertType}
-              />
+                session={{ accessToken, user: profile.data }}
+                onSignOut={() => logout.mutate()}
+              >
+                <SafetyAlertsView
+                  key={
+                    profile.data.id +
+                    JSON.stringify(alertsContext ?? {}) +
+                    (incidentLink.has('alertId') ? location.search : '')
+                  }
+                  authenticatedSession={{ accessToken, user: profile.data }}
+                  onSignOut={() => logout.mutate()}
+                  apiUrl={apiUrl}
+                  initialSiteId={incidentLink.get('siteId') ?? alertsContext?.siteId}
+                  initialIncidentId={incidentLink.get('incidentId') ?? undefined}
+                  initialActionId={incidentLink.get('actionId') ?? undefined}
+                  initialDocumentWorkerId={
+                    incidentLink.get('tab') === 'documents'
+                      ? (incidentLink.get('workerId') ?? undefined)
+                      : undefined
+                  }
+                  initialAlertId={incidentLink.get('alertId') ?? alertsContext?.alertId}
+                  initialStatus={incidentLink.has('alertId') ? undefined : alertsContext?.status}
+                  initialType={incidentLink.has('alertId') ? undefined : alertsContext?.alertType}
+                />
+              </SafetyEpisodeWorkspace>
             ) : profile.isError ? (
               <div role="alert">
                 {t('auth.loadAccountError')}{' '}
@@ -261,10 +268,17 @@ export function App() {
   if (!accessToken && sessionRestore.isError) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-slate-50 p-6">
-        <div role="alert" className="space-y-4 rounded-xl border border-slate-200 bg-white p-6 text-center">
+        <div
+          role="alert"
+          className="space-y-4 rounded-xl border border-slate-200 bg-white p-6 text-center"
+        >
           <h1 className="text-lg font-bold text-slate-900">{t('auth.restoreError')}</h1>
           <p className="text-sm text-slate-600">{t('auth.restoreErrorDesc')}</p>
-          <button type="button" onClick={() => void sessionRestore.refetch()} className="rounded-lg bg-[#071A2B] px-4 py-2 text-sm font-semibold text-white focus-visible:outline-2 focus-visible:outline-blue-600">
+          <button
+            type="button"
+            onClick={() => void sessionRestore.refetch()}
+            className="rounded-lg bg-[#071A2B] px-4 py-2 text-sm font-semibold text-white focus-visible:outline-2 focus-visible:outline-blue-600"
+          >
             {t('accounts.retry')}
           </button>
         </div>
