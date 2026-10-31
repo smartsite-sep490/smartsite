@@ -18,6 +18,7 @@ import { AlertCandidateEvaluator } from '../../src/modules/safety/alerts/alert-c
 import { DurableGroupingService } from '../../src/modules/safety/alerts/durable-grouping.service.js';
 import { SchedulingNotificationService } from '../../src/modules/workforce/notifications/scheduling-notification.service.js';
 import { SafetyEpisodeProjectionService } from '../../src/modules/safety/alerts/safety-episode-projection.service.js';
+import type { AlertCandidate } from '../../src/modules/safety/alerts/alert-candidate-evaluator.js';
 
 const owned = createIsolatedTestDatabase(),
   db = owned.dataSource;
@@ -84,7 +85,7 @@ async function fixture() {
     geometryVersion: 1,
   });
   const eventId = randomUUID();
-  await ingestion.ingestEvent({
+  const input = {
     schemaVersion: '1.0.0',
     eventId,
     cameraExternalId: cameraId,
@@ -99,7 +100,8 @@ async function fixture() {
       person(8),
       missing(8, 'HARD_HAT'),
     ],
-  });
+  };
+  await ingestion.ingestEvent(input);
   const mappings: { id: string; person: number; subtype: string }[] = await db.query(
     `SELECT a.id,m.person_observation_index AS person,a.candidate_subtype AS subtype
     FROM alert_detection_mapping m JOIN safety_alert a ON a.id=m.alert_id WHERE m.event_id=$1 ORDER BY a.id`,
@@ -114,8 +116,215 @@ async function fixture() {
     "SELECT to_jsonb(a)-'episode_id' AS body FROM safety_alert a WHERE site_id=$1 ORDER BY id",
     [siteId],
   );
-  return { siteId, eventId, first, second, alertState };
+  return { siteId, zoneId, eventId, first, second, alertState, ingestion, input };
 }
+
+test('episode finding grouping never reuses a legacy cooldown alert or emits its legacy notification', async () => {
+  const f = await fixture();
+  const foreign = await fixture();
+  const notifications = new SchedulingNotificationService(db);
+  notifications.recordPpeAlert = async () => assert.fail('Episode path invoked legacy notifier');
+  const grouping = new DurableGroupingService(createTestConfig(), notifications);
+  const group = grouping.groupEpisodeCandidate;
+  assert.equal(typeof group, 'function');
+  const candidate: AlertCandidate = {
+    alertType: 'PPE_VIOLATION',
+    candidateSubtype: 'PPE_HARD_HAT_MISSING',
+    cameraId: f.input.cameraExternalId,
+    streamSessionId: f.input.streamSessionId,
+    zoneId: f.zoneId,
+    trackId: 7,
+    groupingKey: 'caller-key-must-not-be-used',
+    details: {},
+  };
+  const captured = new Date(f.input.capturedAt);
+  const first = await db.transaction(async (manager) => {
+    const episode = await projection.reserveObservation(manager, {
+      siteId: f.siteId,
+      eventId: f.eventId,
+      personObservationIndex: 0,
+    });
+    const schema = manager.connection.driver.schema!;
+    await manager.query('SET LOCAL search_path TO pg_catalog');
+    const hat = await group.call(
+      grouping,
+      manager,
+      f.siteId,
+      candidate,
+      captured,
+      episode.episodeId,
+    );
+    await manager.query(`SET LOCAL search_path TO "${schema.replaceAll('"', '""')}"`);
+    for (const invalid of [
+      { ...candidate, zoneId: foreign.zoneId },
+      { ...candidate, trackId: 8 },
+      { ...candidate, streamSessionId: randomUUID() },
+      { ...candidate, candidateWorkerId: randomUUID() },
+      { ...candidate, identitySimilarityScore: 0.9 },
+      { ...candidate, candidateSubtype: 'PPE_BOOTS_MISSING' as const },
+    ])
+      await assert.rejects(
+        group.call(grouping, manager, f.siteId, invalid, captured, episode.episodeId),
+        /AI ingestion is temporarily unavailable/,
+      );
+    const again = await group.call(
+      grouping,
+      manager,
+      f.siteId,
+      candidate,
+      captured,
+      episode.episodeId,
+    );
+    assert.equal(hat.id, again.id);
+    assert.ok(!f.first.includes(hat.id));
+    assert.notEqual(hat.groupingKey, candidate.groupingKey);
+    const vest = await group.call(
+      grouping,
+      manager,
+      f.siteId,
+      {
+        ...candidate,
+        candidateSubtype: 'PPE_SAFETY_VEST_MISSING',
+      },
+      captured,
+      episode.episodeId,
+    );
+    assert.notEqual(hat.id, vest.id);
+    for (const alert of [hat, vest])
+      await manager.query(
+        'INSERT INTO alert_detection_mapping(alert_id,event_id,person_observation_index) VALUES($1,$2,0)',
+        [alert.id, f.eventId],
+      );
+    const attached = await projection.attachObservation(manager, {
+      siteId: f.siteId,
+      eventId: f.eventId,
+      personObservationIndex: 0,
+      alertIds: [hat.id, vest.id],
+    });
+    assert.equal(attached.findingCount, 2);
+    return { episode, hat };
+  });
+  const laterId = randomUUID();
+  await f.ingestion.ingestEvent({ ...f.input, eventId: laterId });
+  await db.transaction(async (manager) => {
+    const episode = await projection.reserveObservation(manager, {
+      siteId: f.siteId,
+      eventId: laterId,
+      personObservationIndex: 0,
+    });
+    const hat = await group.call(
+      grouping,
+      manager,
+      f.siteId,
+      candidate,
+      captured,
+      episode.episodeId,
+    );
+    assert.notEqual(hat.id, first.hat.id);
+    await manager.query(
+      'INSERT INTO alert_detection_mapping(alert_id,event_id,person_observation_index) VALUES($1,$2,0)',
+      [hat.id, laterId],
+    );
+    await projection.attachObservation(manager, {
+      siteId: f.siteId,
+      eventId: laterId,
+      personObservationIndex: 0,
+      alertIds: [hat.id],
+    });
+  });
+  assert.equal(candidate.groupingKey, 'caller-key-must-not-be-used');
+});
+
+test('legacy cooldown reuse cannot be attached to a second event-local episode', async () => {
+  const f = await fixture();
+  const initial = await db.transaction((manager) =>
+    projection.attachObservation(manager, {
+      siteId: f.siteId,
+      eventId: f.eventId,
+      personObservationIndex: 0,
+      alertIds: f.first,
+    }),
+  );
+  const laterId = randomUUID();
+  await f.ingestion.ingestEvent({ ...f.input, eventId: laterId });
+  const mappings: { alert_id: string; person_observation_index: number }[] = await db.query(
+    'SELECT alert_id,person_observation_index FROM alert_detection_mapping WHERE event_id=$1',
+    [laterId],
+  );
+  const reused = mappings
+    .filter((row) => row.person_observation_index === 0)
+    .map((row) => row.alert_id);
+  assert.deepEqual([...reused].sort(), [...f.first].sort());
+  await assert.rejects(
+    db.transaction((manager) =>
+      projection.attachObservation(manager, {
+        siteId: f.siteId,
+        eventId: laterId,
+        personObservationIndex: 0,
+        alertIds: reused,
+      }),
+    ),
+    /SAFETY_EPISODE_PROJECTION_UNAVAILABLE/,
+  );
+  const episodes: { id: string; event_id: string; content_revision: number }[] = await db.query(
+    'SELECT id,event_id,content_revision FROM safety_episode WHERE site_id=$1',
+    [f.siteId],
+  );
+  assert.deepEqual(episodes, [{ id: initial.episodeId, event_id: f.eventId, content_revision: 1 }]);
+  const links: { episode_id: string }[] = await db.query(
+    'SELECT episode_id FROM safety_alert WHERE id=ANY($1::uuid[])',
+    [f.first],
+  );
+  assert.ok(links.every((row) => row.episode_id === initial.episodeId));
+});
+
+test('the owning transaction can resolve an exact subject before findings without delivering or linking legacy alerts', async () => {
+  const f = await fixture();
+  const reserve = projection.reserveObservation;
+  assert.equal(typeof reserve, 'function');
+  await db.transaction(async (manager) => {
+    const input = { siteId: f.siteId, eventId: f.eventId, personObservationIndex: 0 };
+    const first = await reserve.call(projection, manager, input);
+    const replay = await reserve.call(projection, manager, input);
+    assert.equal(replay.episodeId, first.episodeId);
+    assert.equal(first.contentRevision, 1);
+    assert.equal(first.findingCount, 0);
+    assert.equal(first.deliveryAdmitted, false);
+    const other = await reserve.call(projection, manager, { ...input, personObservationIndex: 3 });
+    assert.notEqual(other.episodeId, first.episodeId);
+    const [links] = await manager.query(
+      'SELECT count(*)::int AS count FROM safety_alert WHERE site_id=$1 AND episode_id IS NOT NULL',
+      [f.siteId],
+    );
+    assert.equal(links.count, 0);
+    const attached = await projection.attachObservation(manager, { ...input, alertIds: f.first });
+    assert.equal(attached.episodeId, first.episodeId);
+    assert.equal(attached.findingCount, 2);
+    assert.equal(attached.contentRevision, 2);
+    const replayAfter = await reserve.call(projection, manager, input);
+    assert.equal(replayAfter.contentRevision, 2);
+    const otherAttached = await projection.attachObservation(manager, {
+      ...input,
+      personObservationIndex: 3,
+      alertIds: f.second,
+    });
+    assert.equal(otherAttached.episodeId, other.episodeId);
+    assert.equal(otherAttached.findingCount, 1);
+  });
+  const [recipients] = await db.query(
+    'SELECT count(*)::int AS count FROM safety_episode_recipient WHERE site_id=$1',
+    [f.siteId],
+  );
+  assert.equal(recipients.count, 0);
+  await assert.rejects(
+    reserve.call(projection, db.manager, {
+      siteId: f.siteId,
+      eventId: f.eventId,
+      personObservationIndex: 0,
+    }),
+    /SAFETY_EPISODE_PROJECTION_UNAVAILABLE/,
+  );
+});
 
 test('one exact person retains two independent PPE findings, and another person gets another episode', async () => {
   const f = await fixture();
@@ -155,6 +364,38 @@ test('one exact person retains two independent PPE findings, and another person 
     ),
     f.alertState,
   );
+});
+
+test('pre-finding reservation rejects wrong context and rolls back without a placeholder episode', async () => {
+  const f = await fixture();
+  for (const input of [
+    { siteId: randomUUID(), eventId: f.eventId, personObservationIndex: 0 },
+    { siteId: f.siteId, eventId: randomUUID(), personObservationIndex: 0 },
+    { siteId: f.siteId, eventId: f.eventId, personObservationIndex: 1 },
+    { siteId: f.siteId, eventId: f.eventId, personObservationIndex: 0, alertIds: [] },
+  ]) {
+    await assert.rejects(
+      db.transaction((manager) => projection.reserveObservation(manager, input)),
+      /SAFETY_EPISODE_PROJECTION_UNAVAILABLE/,
+    );
+  }
+  const rollback = new Error('Synthetic pre-finding caller rollback');
+  await assert.rejects(
+    db.transaction(async (manager) => {
+      await projection.reserveObservation(manager, {
+        siteId: f.siteId,
+        eventId: f.eventId,
+        personObservationIndex: 0,
+      });
+      throw rollback;
+    }),
+    (error) => error === rollback,
+  );
+  const [row] = await db.query(
+    'SELECT count(*)::int AS count FROM safety_episode WHERE site_id=$1',
+    [f.siteId],
+  );
+  assert.equal(row.count, 0);
 });
 
 test('ten concurrent retries create one episode and do not increase its revision', async () => {

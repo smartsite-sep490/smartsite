@@ -36,6 +36,27 @@ export class SafetyEpisodeProjectionService {
     manager: EntityManager,
     input: ProjectionInput,
   ): Promise<SafetyEpisodeProjection> {
+    return this.project(manager, input, false);
+  }
+
+  /**
+   * Resolve the immutable event-local identity before deriving a finding key.
+   * The ingestion owner must create/attach findings in this same transaction or
+   * roll it back. This does not admit continuity, recipients or delivery.
+   */
+  async reserveObservation(
+    manager: EntityManager,
+    input: Omit<ProjectionInput, 'alertIds'>,
+  ): Promise<SafetyEpisodeProjection> {
+    if (!input || Object.hasOwn(input, 'alertIds')) unavailable();
+    return this.project(manager, { ...input, alertIds: [] }, true);
+  }
+
+  private async project(
+    manager: EntityManager,
+    input: ProjectionInput,
+    reservation: boolean,
+  ): Promise<SafetyEpisodeProjection> {
     if (
       manager?.connection !== this.db ||
       !manager.queryRunner?.isTransactionActive ||
@@ -50,7 +71,7 @@ export class SafetyEpisodeProjectionService {
       input.personObservationIndex < 0 ||
       input.personObservationIndex > 255 ||
       !Array.isArray(input.alertIds) ||
-      input.alertIds.length < 1 ||
+      input.alertIds.length < (reservation ? 0 : 1) ||
       input.alertIds.length > 256 ||
       !input.alertIds.every((id) => typeof id === 'string' && UUID.test(id))
     )
