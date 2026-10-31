@@ -3976,5 +3976,8 @@
   "episodes.evidenceUnavailable": "No authorized evidence is available for this observation.",
   "episodes.newItems": "New episodes or content changes are available.",
   "episodes.loadUpdates": "Load updated list",
-  "episodes.updateCheckFailed": "Updates could not be checked. Your current list is preserved."
+  "episodes.updateCheckFailed": "Updates could not be checked. Your current list is preserved.",
+  "episodes.workflow": "Related workflow",
+  "episodes.openIncident": "Open related incident",
+  "episodes.openAction": "Open corrective action"
 }

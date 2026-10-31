@@ -121,6 +121,28 @@ function setup() {
   return { query, view };
 }
 describe('recipient episode workspace', () => {
+  it('links persisted incidents and corrective actions without treating read status as completion', async () => {
+    const { view } = setup();
+    client.getSafetyEpisode.mockResolvedValue({
+      ...episode,
+      workflowLinks: [
+        {
+          incidentId: 'incident-A',
+          status: 'ASSIGNED',
+          actions: [{ actionId: 'action-A', status: 'IN_PROGRESS' }],
+        },
+      ],
+    });
+    render(view());
+    fireEvent.click(await screen.findByRole('button', { name: /Chủ thể 1/ }));
+    expect(
+      (await screen.findByRole('link', { name: 'Mở sự cố liên quan' })).getAttribute('href'),
+    ).toContain(`siteId=${site}&incidentId=incident-A`);
+    expect(
+      screen.getByRole('link', { name: 'Mở hành động khắc phục' }).getAttribute('href'),
+    ).toContain('incidentId=incident-A&actionId=action-A');
+    expect(client.readSafetyEpisodeInbox).not.toHaveBeenCalled();
+  });
   it('keeps the working list stable when window focus returns', async () => {
     const { view } = setup();
     render(view());

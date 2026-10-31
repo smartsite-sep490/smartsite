@@ -3976,5 +3976,8 @@
   "episodes.evidenceUnavailable": "Chưa có bằng chứng được phép xem cho quan sát này.",
   "episodes.newItems": "Có hồ sơ mới hoặc nội dung đã thay đổi.",
   "episodes.loadUpdates": "Tải danh sách mới",
-  "episodes.updateCheckFailed": "Chưa kiểm tra được bản mới. Danh sách đang xem vẫn được giữ."
+  "episodes.updateCheckFailed": "Chưa kiểm tra được bản mới. Danh sách đang xem vẫn được giữ.",
+  "episodes.workflow": "Xử lý liên quan",
+  "episodes.openIncident": "Mở sự cố liên quan",
+  "episodes.openAction": "Mở hành động khắc phục"
 }

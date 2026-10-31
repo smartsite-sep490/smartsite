@@ -8,6 +8,7 @@ import { uiLocale } from '../../i18n';
 import { localizedLabel } from '../../i18n/labels';
 import { Button, Card } from '../ui';
 import { EpisodeEvidence } from './EpisodeEvidence';
+import { EpisodeWorkflowLinks } from './EpisodeWorkflowLinks';
 const size = 20;
 const hardDenial = (error: unknown) =>
   error instanceof ApiError && error.status !== undefined && [401, 403, 404].includes(error.status);
@@ -405,6 +406,7 @@ export function SafetyEpisodeInbox({
                   scope={scope}
                   episode={visible}
                 />
+                <EpisodeWorkflowLinks episode={visible} />
                 <details className="text-sm text-slate-600">
                   <summary className="cursor-pointer">{t('episodes.technical')}</summary>
                   <dl className="mt-2 grid gap-2 break-all">
