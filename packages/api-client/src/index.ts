@@ -150,7 +150,10 @@ export async function getBackendHealth(
   }
 }
 export type * from '@smartsite/contracts';
-export { healthCertificateExpiry, isWorkerDocumentDate } from '@smartsite/contracts/worker-document-dates';
+export {
+  healthCertificateExpiry,
+  isWorkerDocumentDate,
+} from '@smartsite/contracts/worker-document-dates';
 export type {
   WorkerDocumentKind,
   WorkerDocumentStatus,
@@ -169,3 +172,17 @@ export type {
 export { registerSessionCredential, unregisterSessionCredential } from './session-expiry';
 export { MAX_CAMERA_APPLICATION_STATUS_RESPONSE_BYTES } from './camera-configuration-response';
 export type { CameraApplicationStatus } from '@smartsite/contracts/camera-application-status';
+
+export type {
+  SafetyEpisode,
+  SafetyEpisodeSummary,
+  SafetyEpisodeFinding,
+  SafetyEpisodeEvidenceRef,
+  SafetyEpisodePage,
+  SafetyEpisodeListOptions,
+  SafetyEpisodeInboxItem,
+  SafetyEpisodeInboxPage,
+  SafetyEpisodeInboxOptions,
+  SafetyEpisodeReadCommand,
+  SafetyEpisodeReadResponse,
+} from '@smartsite/contracts';

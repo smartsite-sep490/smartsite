@@ -4,7 +4,6 @@ import { randomUUID } from 'node:crypto';
 import { test } from 'node:test';
 import { computeCanonicalPayloadHash, computeWorkerEventBindingHash } from '@smartsite/contracts';
 import { createIsolatedTestDatabase } from '../support/isolated-test-database.js';
-import { ExactMf06AuthorityTime1794787200000 } from '../../src/database/migrations/1794787200000-ExactMf06AuthorityTime.js';
 
 test('admission column upgrade preserves legacy bytes and populated rollback refuses history loss', async () => {
   const owned = createIsolatedTestDatabase(),
@@ -13,7 +12,12 @@ test('admission column upgrade preserves legacy bytes and populated rollback ref
   const migrations = db.options.migrations;
   assert(Array.isArray(migrations));
   db.setOptions({
-    migrations: migrations.filter((migration) => migration !== ExactMf06AuthorityTime1794787200000),
+    migrations: migrations.filter((migration) => {
+      assert(typeof migration === 'function');
+      const timestamp = Number(migration.name.slice(-13));
+      assert(Number.isSafeInteger(timestamp) && timestamp > 0);
+      return timestamp <= 1794700800000;
+    }),
   });
   try {
     await owned.initialize();

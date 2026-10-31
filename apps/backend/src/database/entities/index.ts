@@ -1,3 +1,5 @@
+import { SafetyEpisodeEntity, SafetyEpisodeRecipientEntity } from './safety-episode.entity.js';
+export * from './safety-episode.entity.js';
 import { ZoneEntryAssessmentEntity } from './zone-entry-assessment.entity.js';
 export * from './zone-entry-assessment.entity.js';
 import { ZoneEntryAuthorityArtifactEntity } from './zone-entry-authority-artifact.entity.js';
@@ -163,6 +165,8 @@ export const ENTITIES = [
   CameraRegionGeometryRevisionEntity,
   CameraViewRevisionEntity,
   CameraConfigurationReferenceEntity,
+  SafetyEpisodeEntity,
+  SafetyEpisodeRecipientEntity,
   ZoneEntryAssessmentEntity,
   ZoneEntryAuthorityArtifactEntity,
   ZoneEntryAssessmentRequestEntity,
