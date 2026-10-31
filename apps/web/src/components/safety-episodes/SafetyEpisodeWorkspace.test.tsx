@@ -2,7 +2,7 @@
 import React from 'react';
 
 import { act, fireEvent, render, screen, waitFor, cleanup } from '@testing-library/react';
-import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { QueryClient, QueryClientProvider, focusManager } from '@tanstack/react-query';
 import { MemoryRouter } from 'react-router-dom';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { ApiError, type LoginResponse, type SafetyEpisode } from '@smartsite/api-client';
@@ -121,6 +121,63 @@ function setup() {
   return { query, view };
 }
 describe('recipient episode workspace', () => {
+  it('keeps the working list stable when window focus returns', async () => {
+    const { view } = setup();
+    render(view());
+    await screen.findByRole('button', { name: /Chủ thể 1/ });
+    const before = client.listSafetyEpisodeInbox.mock.calls.length;
+    try {
+      await act(async () => {
+        focusManager.setFocused(false);
+        focusManager.setFocused(true);
+      });
+      expect(client.listSafetyEpisodeInbox).toHaveBeenCalledTimes(before);
+    } finally {
+      focusManager.setFocused(undefined);
+    }
+  });
+  it('retains the working list when an explicit update check has a transient failure', async () => {
+    const { view } = setup();
+    render(view());
+    fireEvent.click(await screen.findByRole('button', { name: /Chủ thể 1/ }));
+    await screen.findByRole('link', { name: /Xem phát hiện.*mũ/i });
+    client.listSafetyEpisodeInbox.mockRejectedValue(new Error('temporary check error'));
+    fireEvent.click(screen.getByRole('button', { name: 'Làm mới' }));
+    await screen.findByText('Chưa kiểm tra được bản mới. Danh sách đang xem vẫn được giữ.');
+    expect(screen.getByRole('button', { name: /Chủ thể 1/ })).toBeTruthy();
+    expect(screen.getByRole('link', { name: /Xem phát hiện.*mũ/i })).toBeTruthy();
+  });
+  it('announces a newly checked first page without replacing the selected episode until accepted', async () => {
+    const { view } = setup();
+    render(view());
+    fireEvent.click(await screen.findByRole('button', { name: /Chủ thể 1/ }));
+    await screen.findByRole('link', { name: /Xem phát hiện.*mũ/i });
+    client.listSafetyEpisodeInbox.mockResolvedValue({
+      items: [
+        {
+          id: 'new-inbox',
+          episode: {
+            ...episode,
+            id: 'new-episode',
+            subject: { ...episode.subject, personObservationIndex: 5 },
+          },
+          seenRevision: 0,
+          unread: true,
+          firstDeliveredAt: episode.firstObservedAt,
+          updatedAt: episode.firstObservedAt,
+        },
+      ],
+      total: 2,
+      unreadCount: 2,
+    });
+    fireEvent.click(screen.getByRole('button', { name: 'Làm mới' }));
+    expect(await screen.findByText('Có hồ sơ mới hoặc nội dung đã thay đổi.')).toBeTruthy();
+    expect(screen.getByRole('button', { name: /Chủ thể 1/ })).toBeTruthy();
+    expect(screen.queryByRole('button', { name: /Chủ thể 6/ })).toBeNull();
+    expect(screen.getByRole('link', { name: /Xem phát hiện.*mũ/i })).toBeTruthy();
+    fireEvent.click(screen.getByRole('button', { name: 'Tải danh sách mới' }));
+    expect(await screen.findByRole('button', { name: /Chủ thể 6/ })).toBeTruthy();
+  });
   it('opens only authorized evidence indices from the exact episode event', async () => {
     const { view } = setup();
     client.getSafetyEpisode.mockResolvedValue({

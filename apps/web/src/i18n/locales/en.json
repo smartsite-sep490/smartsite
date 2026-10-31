@@ -3973,5 +3973,8 @@
   "episodes.readSaved": "Read status saved.",
   "episodes.evidence": "Saved evidence",
   "episodes.selectEvidence": "Choose a finding to load its saved evidence.",
-  "episodes.evidenceUnavailable": "No authorized evidence is available for this observation."
+  "episodes.evidenceUnavailable": "No authorized evidence is available for this observation.",
+  "episodes.newItems": "New episodes or content changes are available.",
+  "episodes.loadUpdates": "Load updated list",
+  "episodes.updateCheckFailed": "Updates could not be checked. Your current list is preserved."
 }

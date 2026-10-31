@@ -3973,5 +3973,8 @@
   "episodes.readSaved": "Đã lưu trạng thái đọc.",
   "episodes.evidence": "Ảnh bằng chứng đã lưu",
   "episodes.selectEvidence": "Chọn phát hiện để tải bằng chứng đã lưu.",
-  "episodes.evidenceUnavailable": "Chưa có bằng chứng được phép xem cho quan sát này."
+  "episodes.evidenceUnavailable": "Chưa có bằng chứng được phép xem cho quan sát này.",
+  "episodes.newItems": "Có hồ sơ mới hoặc nội dung đã thay đổi.",
+  "episodes.loadUpdates": "Tải danh sách mới",
+  "episodes.updateCheckFailed": "Chưa kiểm tra được bản mới. Danh sách đang xem vẫn được giữ."
 }
