@@ -80,6 +80,10 @@ function safeIntegerTransformer(minimum: number): ValueTransformer {
 )
 @Check('chk_mf06_request_camera_external', 'char_length(camera_external_id) BETWEEN 1 AND 128')
 @Check('chk_mf06_request_times', 'isfinite(captured_at) AND isfinite(requested_at)')
+@Check(
+  'chk_mf06_authority_captured_finite',
+  'authority_captured_at IS NULL OR isfinite(authority_captured_at)',
+)
 export class ZoneEntryAssessmentRequestEntity {
   @PrimaryColumn({ name: 'request_id', type: 'uuid', primaryKeyConstraintName: 'pk_mf06_request' })
   requestId!: string;
