@@ -1,0 +1,86 @@
+import { registerFeatureCatalog } from '../../i18n/feature-catalog-registry';
+
+const en = {
+  'trackedHistory.title': 'Original observation history',
+  'trackedHistory.subtitle':
+    'Saved original observation mappings for this scope. Frame descriptors are SHA-256 bound metadata and do not confirm image availability until an authorized read succeeds.',
+  'trackedHistory.cropDisclaimer':
+    'Mechanical PERSON crop shows the original detector bounding box only and is never a verified Worker identity.',
+  'trackedHistory.loading': 'Loading original observation history…',
+  'trackedHistory.error': 'Could not load original observation history. Please try again.',
+  'trackedHistory.forbidden':
+    'You do not have permission to view original observation history in this scope.',
+  'trackedHistory.empty': 'No matching saved original observations for this scope.',
+  'trackedHistory.retry': 'Retry',
+  'trackedHistory.count': 'Loaded rows: {{loaded}} · Latest server total: {{total}}',
+  'trackedHistory.loadMore': 'Load more observations',
+  'trackedHistory.loadingMore': 'Loading more observations…',
+  'trackedHistory.loadMoreError': 'Could not load the next page of observations.',
+  'trackedHistory.retryLoadMore': 'Retry loading more',
+  'trackedHistory.personSlot': 'Original PERSON #{{index}}',
+  'trackedHistory.eventShort': 'Event {{shortId}}',
+  'trackedHistory.findingShort': 'Finding {{shortId}}',
+  'trackedHistory.capturedAt': 'Captured',
+  'trackedHistory.descriptorsCount': '{{count}} SHA-256 frame descriptor(s)',
+  'trackedHistory.noDescriptors': 'No frame descriptors recorded for this observation.',
+  'trackedHistory.descriptorBadge': 'Evidence #{{index}} · SHA-256 bound',
+  'trackedHistory.descriptorHint': 'Image availability requires an authorized media read.',
+  'trackedHistory.openFullFrame': 'Full FRAME #{{index}}',
+  'trackedHistory.openPersonCrop': 'Mechanical PERSON crop #{{index}}',
+  'trackedHistory.selectedSourceNotice':
+    'Selected source request: Evidence #{{evidenceIndex}} ({{representation}}) · Original PERSON #{{personIndex}}',
+  'trackedHistory.showTechnical': 'Show technical details',
+  'trackedHistory.hideTechnical': 'Hide technical details',
+  'trackedHistory.ppeObservationCount': 'Original PPE observations ({{count}})',
+  'trackedHistory.ppeObservationIndexes': 'Original PPE observation indexes',
+  'trackedHistory.none': 'None',
+  'trackedHistory.alertId': 'Finding alert ID',
+  'trackedHistory.eventId': 'Original event ID',
+  'trackedHistory.personObservationIndex': 'Original PERSON index',
+  'trackedHistory.sourceSequence': 'Source sequence (uint64)',
+  'trackedHistory.payloadHash': 'Payload SHA-256',
+  'trackedHistory.frameSha256': 'Evidence #{{index}} SHA-256',
+};
+
+const vi: Record<keyof typeof en, string> = {
+  'trackedHistory.title': 'Lịch sử quan sát gốc',
+  'trackedHistory.subtitle':
+    'Lịch sử ánh xạ các quan sát gốc đã lưu cho phạm vi này. Mô tả khung hình chỉ gắn mã băm SHA-256 và chưa xác nhận ảnh khả dụng cho đến khi đọc có xác thực thành công.',
+  'trackedHistory.cropDisclaimer':
+    'Ảnh cắt PERSON cơ học chỉ hiển thị khung phát hiện gốc, tuyệt đối không phải danh tính Công nhân đã xác minh.',
+  'trackedHistory.loading': 'Đang tải lịch sử quan sát gốc…',
+  'trackedHistory.error': 'Không thể tải lịch sử quan sát gốc. Vui lòng thử lại.',
+  'trackedHistory.forbidden': 'Bạn không có quyền xem lịch sử quan sát gốc trong phạm vi này.',
+  'trackedHistory.empty': 'Chưa có quan sát gốc đã lưu nào khớp với phạm vi này.',
+  'trackedHistory.retry': 'Thử lại',
+  'trackedHistory.count': 'Số dòng đã tải: {{loaded}} · Tổng máy chủ mới nhất: {{total}}',
+  'trackedHistory.loadMore': 'Tải thêm quan sát',
+  'trackedHistory.loadingMore': 'Đang tải thêm quan sát…',
+  'trackedHistory.loadMoreError': 'Không thể tải trang quan sát tiếp theo.',
+  'trackedHistory.retryLoadMore': 'Thử tải lại trang tiếp',
+  'trackedHistory.personSlot': 'PERSON gốc #{{index}}',
+  'trackedHistory.eventShort': 'Sự kiện {{shortId}}',
+  'trackedHistory.findingShort': 'Phát hiện {{shortId}}',
+  'trackedHistory.capturedAt': 'Thời điểm ghi nhận',
+  'trackedHistory.descriptorsCount': '{{count}} mô tả khung hình gắn SHA-256',
+  'trackedHistory.noDescriptors': 'Không có mô tả khung hình nào được ghi nhận cho quan sát này.',
+  'trackedHistory.descriptorBadge': 'Bằng chứng #{{index}} · Gắn SHA-256',
+  'trackedHistory.descriptorHint': 'Cần lượt đọc có xác thực để kiểm tra ảnh khả dụng.',
+  'trackedHistory.openFullFrame': 'Toàn khung FRAME #{{index}}',
+  'trackedHistory.openPersonCrop': 'Ảnh cắt PERSON cơ học #{{index}}',
+  'trackedHistory.selectedSourceNotice':
+    'Nguồn vừa yêu cầu: Bằng chứng #{{evidenceIndex}} ({{representation}}) · PERSON gốc #{{personIndex}}',
+  'trackedHistory.showTechnical': 'Hiện chi tiết kỹ thuật',
+  'trackedHistory.hideTechnical': 'Ẩn chi tiết kỹ thuật',
+  'trackedHistory.ppeObservationCount': 'Quan sát PPE gốc ({{count}})',
+  'trackedHistory.ppeObservationIndexes': 'Chỉ số quan sát PPE gốc',
+  'trackedHistory.none': 'Không có',
+  'trackedHistory.alertId': 'Mã cảnh báo phát hiện',
+  'trackedHistory.eventId': 'Mã sự kiện gốc',
+  'trackedHistory.personObservationIndex': 'Chỉ số PERSON gốc',
+  'trackedHistory.sourceSequence': 'Thứ tự nguồn (uint64)',
+  'trackedHistory.payloadHash': 'Mã băm gói dữ liệu (SHA-256)',
+  'trackedHistory.frameSha256': 'SHA-256 bằng chứng #{{index}}',
+};
+
+registerFeatureCatalog({ en, vi });
