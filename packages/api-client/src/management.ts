@@ -2441,18 +2441,29 @@ export class SmartSiteManagementClient {
   ) {
     return this.request<CameraResponse>('POST', `/sites/${pathId(siteId)}/cameras`, token, input);
   }
-  listCameras(token: string, siteId: string, options?: PageOptions) {
+  listCameras(
+    token: string,
+    siteId: string,
+    options?: PageOptions,
+    requestOptions?: RequestOptions,
+  ) {
     return this.request<Page<CameraResponse>>(
       'GET',
       this.listPath(`/sites/${pathId(siteId)}/cameras`, options),
       token,
+      undefined,
+      undefined,
+      requestOptions,
     );
   }
-  getCamera(token: string, siteId: string, cameraId: string) {
+  getCamera(token: string, siteId: string, cameraId: string, requestOptions?: RequestOptions) {
     return this.request<CameraResponse>(
       'GET',
       `/sites/${pathId(siteId)}/cameras/${pathId(cameraId)}`,
       token,
+      undefined,
+      undefined,
+      requestOptions,
     );
   }
 
@@ -2546,11 +2557,14 @@ export class SmartSiteManagementClient {
   ) {
     return this.request<ZoneResponse>('POST', `/sites/${pathId(siteId)}/zones`, token, input);
   }
-  listZones(token: string, siteId: string, options?: PageOptions) {
+  listZones(token: string, siteId: string, options?: PageOptions, requestOptions?: RequestOptions) {
     return this.request<Page<ZoneResponse>>(
       'GET',
       this.listPath(`/sites/${pathId(siteId)}/zones`, options),
       token,
+      undefined,
+      undefined,
+      requestOptions,
     );
   }
   getZone(token: string, siteId: string, zoneId: string) {
@@ -2599,11 +2613,20 @@ export class SmartSiteManagementClient {
       input,
     );
   }
-  listRegions(token: string, siteId: string, cameraId: string, options?: PageOptions) {
+  listRegions(
+    token: string,
+    siteId: string,
+    cameraId: string,
+    options?: PageOptions,
+    requestOptions?: RequestOptions,
+  ) {
     return this.request<Page<RegionResponse>>(
       'GET',
       this.listPath(`/sites/${pathId(siteId)}/cameras/${pathId(cameraId)}/regions`, options),
       token,
+      undefined,
+      undefined,
+      requestOptions,
     );
   }
   getRegion(token: string, siteId: string, cameraId: string, regionId: string) {
