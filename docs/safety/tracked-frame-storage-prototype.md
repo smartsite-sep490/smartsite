@@ -10,6 +10,8 @@ Technical admission checks source ordering, exact predecessor/head, scope, captu
 
 The required projection port runs in the same transaction as provisional seal and technical head writes. Failure rolls everything back; it is not a production business projector. Healthy/empty PostgreSQL fixtures use an explicit synthetic port. A new generation/scope stays pending until a trusted transition fence classifies old work and retires old heads.
 
+`TrackedScopeTransition` is an unregistered Backend-control prototype for that fence. It reauthenticates a stored original coordinator against the currently issued LIVE generation/bundle/profile, checks the exact expected old scopes and explicit row bounds, and uses the same camera lock as staging/admission/expiry. It terminalizes old pending work and permanently retires old active heads atomically. Sealed coordinators and their original nonzero members stay unchanged. Original raw/context/receipt/deadline/head history stays intact. Retirement provenance names the server command and authenticated target; it does not fabricate a captured EXIT or an empty frame. A command ID is correlation only, not a durable command receipt; repeated application is state-idempotent. No worker-token endpoint or automatic call to this class is installed.
+
 ## Verification scope
 
 Meaningful tests are in `tracked-frame-parts.test.ts`, `tracked-head-plan.test.ts`, `tracked-storage-migration.test.ts`, and the four `integration/*tracked*` / subject-storage fixtures. They cover immutable retries, reverse parts, scoped bounds, deadline concurrency, predecessor recovery, original nonzero PERSON, atomic rollback, tombstones and capture rewind. Integration tests use the dedicated isolated test DataSource; never point them at website/demo or production databases.
@@ -19,7 +21,7 @@ The migration remains absent from the runtime registry. Reversal refuses tracked
 ## Open release gates
 
 - Actual TRACKED episode/finding/evidence/recipient projector and scoped business storage integration.
-- Trusted generation/view/profile transition control, durable supervisor/scheduler and actual restart checks.
+- Integration of the trusted transition prototype with a reviewed Backend control plane, durable supervisor/scheduler and actual restart checks.
 - Public raw ACK contract, reviewed canonical Main SHA and exact paired AI vendoring.
 - Qualified tracker/profile, measured clock/gap/capacity policies, query plans and operational performance.
 - Actual camera/browser, evidence/notification journeys and production acceptance.
