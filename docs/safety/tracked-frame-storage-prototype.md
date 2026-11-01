@@ -24,6 +24,16 @@ Explicit captured retirement and the trusted scope fence seal collection for exi
 
 ## Verification scope
 
+### Material-only inbox composition
+
+The unregistered `TrackedPpeInboxProjection` composes the existing tracked PPE business port and existing `safety_episode_recipient` table inside the admission owner's transaction. Only material batches project recipients. Eligibility stays active, non-forced-password Site Safety Officer; selected account/role rows are locked through commit. Admin, Site Manager, another Site and disabled/forced-password users are not fallback recipients. A caller-supplied bounded fanout policy rejects overflow atomically rather than truncating delivery; prototype limits are not qualified capacity.
+
+New recipients start at seen revision zero. Existing seen revision and first-delivered timestamp are preserved; a new content revision becomes unread naturally. Repeated frames do not update recipient timestamps, reset reads or backfill new role assignments. Backfill/escalation is a separate policy. Missing eligible recipients returns an explicit gap outcome; this is not all-clear or an external delivery acknowledgement. No legacy `user_notification` is written, and `deliveryAdmitted` remains false. Current-scope inbox reads still hide revoked recipients while retaining their historical rows.
+
+`tracked-ppe-inbox.integration.test.ts` exercises real isolated PostgreSQL admission/projection: two PPE findings share one episode, eligible versus ineligible users, no repeat backfill, material revision/read preservation, ten exact retries, cap rejection, recipient failure rollback and explicit missing recipients. It uses synthetic users/observations, not live notifications. Human review/representative-evidence material hooks, public inbox DTO integration, notification routing and runtime activation remain open.
+
+### Storage and admission tests
+
 Meaningful tests are in `tracked-frame-parts.test.ts`, `tracked-head-plan.test.ts`, `tracked-storage-migration.test.ts`, and the four `integration/*tracked*` / subject-storage fixtures. They cover immutable retries, reverse parts, scoped bounds, deadline concurrency, predecessor recovery, original nonzero PERSON, atomic rollback, tombstones and capture rewind. Integration tests use the dedicated isolated test DataSource; never point them at website/demo or production databases.
 
 The migration remains absent from the runtime registry. Reversal refuses tracked history. No existing raw history is backfilled as TRACKED.
