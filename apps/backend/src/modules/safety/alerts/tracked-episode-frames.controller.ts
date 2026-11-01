@@ -5,10 +5,12 @@ import {
   Param,
   Query,
   Req,
+  Res,
   StreamableFile,
   UseGuards,
 } from '@nestjs/common';
 import { ApiBearerAuth, ApiProduces, ApiTags } from '@nestjs/swagger';
+import type { Response } from 'express';
 import {
   parseTrackedEpisodeObservationQuery,
   parseTrackedEpisodeMediaQuery,
@@ -40,6 +42,10 @@ export class TrackedEpisodeFramesController {
   @Get('findings/:alertId/events/:eventId/frame')
   @Header('Cache-Control', 'private, no-store')
   @Header('X-Content-Type-Options', 'nosniff')
+  @Header(
+    'Access-Control-Expose-Headers',
+    'X-Request-ID, X-Smartsite-Frame-Sha256, X-Smartsite-Content-Sha256, X-Smartsite-Media-Representation',
+  )
   @ApiProduces('image/jpeg')
   async frame(
     @Req() request: AuthenticatedRequest,
@@ -48,6 +54,7 @@ export class TrackedEpisodeFramesController {
     @Param('alertId') alertId: string,
     @Param('eventId') eventId: string,
     @Query() query: Record<string, unknown>,
+    @Res({ passthrough: true }) response: Response,
   ) {
     const parsed = parseTrackedEpisodeMediaQuery(query);
     if (!parsed) invalid('Invalid original frame query');
@@ -63,6 +70,9 @@ export class TrackedEpisodeFramesController {
       },
       parsed.representation,
     );
+    response.setHeader('X-Smartsite-Frame-Sha256', result.frameSha256);
+    response.setHeader('X-Smartsite-Content-Sha256', result.sha256);
+    response.setHeader('X-Smartsite-Media-Representation', result.representation);
     return new StreamableFile(result.bytes, {
       type: 'image/jpeg',
       disposition: `inline; filename="${result.fileName}"`,

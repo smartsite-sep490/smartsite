@@ -226,10 +226,20 @@ test('tracked finding pages and JPEG reads retain exact original sources and rec
     assert.equal(httpFrame.headers.get('content-type'), 'image/jpeg');
     assert.equal(httpFrame.headers.get('cache-control'), 'private, no-store');
     assert.equal(httpFrame.headers.get('x-content-type-options'), 'nosniff');
+    assert.equal(httpFrame.headers.get('x-smartsite-frame-sha256'), later.sha256);
+    assert.equal(httpFrame.headers.get('x-smartsite-content-sha256'), later.sha256);
+    assert.equal(httpFrame.headers.get('x-smartsite-media-representation'), 'FRAME');
     assert.deepEqual(Buffer.from(await httpFrame.arrayBuffer()), later.bytes);
     const httpCrop = await fetch(`${mediaEndpoint}&representation=SUBJECT`, { headers });
     assert.equal(httpCrop.status, 200);
-    assert.notDeepEqual(Buffer.from(await httpCrop.arrayBuffer()), later.bytes);
+    const httpCropBytes = Buffer.from(await httpCrop.arrayBuffer());
+    assert.notDeepEqual(httpCropBytes, later.bytes);
+    assert.equal(httpCrop.headers.get('x-smartsite-frame-sha256'), later.sha256);
+    assert.equal(
+      httpCrop.headers.get('x-smartsite-content-sha256'),
+      createHash('sha256').update(httpCropBytes).digest('hex'),
+    );
+    assert.equal(httpCrop.headers.get('x-smartsite-media-representation'), 'SUBJECT');
     assert.equal(
       (await fetch(`${endpoint}/observations?limit=1&limit=2`, { headers })).status,
       400,

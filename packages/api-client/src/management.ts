@@ -17,7 +17,15 @@ import {
   parseTrackedEpisodeObservationPage,
   type TrackedEpisodeObservationOptions,
   type TrackedEpisodeObservationPage,
+  type TrackedEpisodeMediaSource,
+  type TrackedEpisodeMediaRepresentation,
 } from '@smartsite/contracts/tracked-episode-frames';
+import {
+  trackedEpisodeMediaPath,
+  readTrackedEpisodeMediaResponse,
+  type TrackedEpisodeMediaResult,
+} from './tracked-episode-media-response';
+export type { TrackedEpisodeMediaResult } from './tracked-episode-media-response';
 import type {
   SafetyEpisode,
   SafetyEpisodePage,
@@ -1813,6 +1821,51 @@ export class SmartSiteManagementClient {
     if (!page)
       throw new ApiError('invalid-response', 'Backend returned inconsistent tracked history.');
     return page;
+  }
+
+  /** Candidate route only. expectedFrameSha256 must come from the validated history descriptor. */
+  async readTrackedEpisodeMedia(
+    token: string,
+    siteId: string,
+    episodeId: string,
+    source: TrackedEpisodeMediaSource,
+    representation: TrackedEpisodeMediaRepresentation,
+    expectedFrameSha256: string,
+    options?: RequestOptions,
+  ): Promise<TrackedEpisodeMediaResult> {
+    const path = trackedEpisodeMediaPath(
+      siteId,
+      episodeId,
+      source,
+      representation,
+      expectedFrameSha256,
+    );
+    const sessionScopes = captureSessionScopes(token);
+    return this.runRequest(this.requestOptions(token, options), async (signal) => {
+      const response = await this.fetchAuthenticated(
+        path,
+        token,
+        {
+          headers: { Accept: 'image/jpeg' },
+          cache: 'no-store',
+          redirect: 'error',
+        },
+        signal,
+        true,
+      );
+      if (!response.ok) {
+        if (!this.session && response.status === 401 && sessionScopes.length)
+          dispatchSessionExpired(sessionScopes);
+        return this.responseError(response, signal, 4096);
+      }
+      return readTrackedEpisodeMediaResponse(
+        response,
+        expectedFrameSha256,
+        representation,
+        (read, currentSignal) => this.readBody(read, currentSignal),
+        signal,
+      );
+    });
   }
 
   listSafetyEpisodes(
