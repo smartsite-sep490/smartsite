@@ -123,3 +123,183 @@ export function parseTrackedEpisodeMediaQuery(input: unknown): TrackedEpisodeMed
     return null;
   }
 }
+
+function objectFields(input: unknown, keys: readonly string[]): Record<string, unknown> | null {
+  if (
+    !input ||
+    typeof input !== 'object' ||
+    Array.isArray(input) ||
+    ![Object.prototype, null].includes(Object.getPrototypeOf(input))
+  )
+    return null;
+  const own = Reflect.ownKeys(input);
+  if (own.length !== keys.length) return null;
+  const result: Record<string, unknown> = {};
+  for (const key of own) {
+    if (typeof key !== 'string' || !keys.includes(key)) return null;
+    const field = Object.getOwnPropertyDescriptor(input, key);
+    if (!field?.enumerable || !('value' in field)) return null;
+    result[key] = field.value;
+  }
+  return result;
+}
+function arrayValues(input: unknown, max: number): unknown[] | null {
+  if (
+    !Array.isArray(input) ||
+    input.length > max ||
+    Object.getPrototypeOf(input) !== Array.prototype ||
+    Reflect.ownKeys(input).length !== input.length + 1
+  )
+    return null;
+  const values = [];
+  for (let i = 0; i < input.length; i++) {
+    const d = Object.getOwnPropertyDescriptor(input, String(i));
+    if (!d?.enumerable || !('value' in d)) return null;
+    values.push(d.value);
+  }
+  return values;
+}
+const uint64 = (v: unknown): v is string =>
+  typeof v === 'string' && /^(0|[1-9][0-9]{0,19})$/.test(v) && BigInt(v) <= 18446744073709551615n;
+const safe = (v: unknown, max = Number.MAX_SAFE_INTEGER): v is number =>
+  typeof v === 'number' && Number.isSafeInteger(v) && v >= 0 && v <= max;
+const id = (v: unknown): v is string =>
+  typeof v === 'string' && UUID.test(v) && v === v.toLowerCase();
+const hash = (v: unknown): v is string => typeof v === 'string' && /^[a-f0-9]{64}$/.test(v);
+const time = (v: unknown): v is string =>
+  typeof v === 'string' &&
+  /^\d{4}-\d\d-\d\d[Tt](?:[01]\d|2[0-3]):[0-5]\d:(?:[0-5]\d|60)(?:\.\d+)?(?:[Zz]|[+-](?:[01]\d|2[0-3]):[0-5]\d)$/.test(
+    v,
+  ) &&
+  Number.isFinite(Date.parse(v.replace(/:60(?=\.|[Zz]|[+-])/, ':59')));
+
+/** Runtime response validation against the exact requested episode, page and optional finding.
+ * Shape/hash descriptors are not a claim that bytes are available or a Worker is identified.
+ */
+export function parseTrackedEpisodeObservationPage(
+  input: unknown,
+  episodeId: string,
+  options: TrackedEpisodeObservationOptions = {},
+): TrackedEpisodeObservationPage | null {
+  try {
+    if (!id(episodeId)) return null;
+    const p = objectFields(input, [
+      'episodeId',
+      'contentRevision',
+      'throughSequence',
+      'offset',
+      'limit',
+      'total',
+      'hasMore',
+      'items',
+    ]);
+    if (
+      !p ||
+      p.episodeId !== episodeId ||
+      !safe(p.contentRevision, 2147483647) ||
+      p.contentRevision < 1 ||
+      !uint64(p.throughSequence) ||
+      !safe(p.offset) ||
+      !safe(p.limit, 20) ||
+      p.limit < 1 ||
+      !safe(p.total) ||
+      typeof p.hasMore !== 'boolean' ||
+      p.offset !== (options.offset ?? 0) ||
+      p.limit !== (options.limit ?? 20) ||
+      (options.throughSequence !== undefined && p.throughSequence !== options.throughSequence)
+    )
+      return null;
+    const rawItems = arrayValues(p.items, p.limit);
+    if (!rawItems) return null;
+    const expected = Math.min(p.limit, Math.max(0, p.total - p.offset));
+    if (rawItems.length !== expected || p.hasMore !== p.offset + rawItems.length < p.total)
+      return null;
+    const items: TrackedEpisodeOriginalObservation[] = [],
+      seen = new Set<string>();
+    const eventHeaders = new Map<string, string>();
+    let previous: bigint | null = null;
+    for (const raw of rawItems) {
+      const item = objectFields(raw, [
+        'alertId',
+        'eventId',
+        'personObservationIndex',
+        'payloadHash',
+        'sourceSequence',
+        'capturedAt',
+        'observationIndexes',
+        'frames',
+      ]);
+      if (
+        !item ||
+        !id(item.alertId) ||
+        !id(item.eventId) ||
+        !safe(item.personObservationIndex, 255) ||
+        !hash(item.payloadHash) ||
+        !uint64(item.sourceSequence) ||
+        BigInt(item.sourceSequence) > BigInt(p.throughSequence) ||
+        !time(item.capturedAt) ||
+        (options.alertId !== undefined && item.alertId !== options.alertId.toLowerCase())
+      )
+        return null;
+      const current = BigInt(item.sourceSequence);
+      if (previous !== null && current > previous) return null;
+      previous = current;
+      const key = `${item.alertId}:${item.eventId}:${item.personObservationIndex}`;
+      if (seen.has(key)) return null;
+      seen.add(key);
+      const indexes = arrayValues(item.observationIndexes, 256),
+        rawFrames = arrayValues(item.frames, 256);
+      if (
+        !indexes?.length ||
+        !rawFrames ||
+        indexes.some((i) => !safe(i, 255) || i === item.personObservationIndex) ||
+        new Set(indexes).size !== indexes.length
+      )
+        return null;
+      const frames: { evidenceIndex: number; sha256: string }[] = [];
+      const frameIndexes = new Set<number>();
+      for (const rawFrame of rawFrames) {
+        const frame = objectFields(rawFrame, ['evidenceIndex', 'sha256']);
+        if (
+          !frame ||
+          !safe(frame.evidenceIndex, 255) ||
+          !hash(frame.sha256) ||
+          frameIndexes.has(frame.evidenceIndex)
+        )
+          return null;
+        frameIndexes.add(frame.evidenceIndex);
+        frames.push({ evidenceIndex: frame.evidenceIndex, sha256: frame.sha256 });
+      }
+      const header = JSON.stringify([
+        item.payloadHash,
+        item.sourceSequence,
+        item.capturedAt,
+        frames,
+      ]);
+      if (eventHeaders.has(item.eventId) && eventHeaders.get(item.eventId) !== header) return null;
+      eventHeaders.set(item.eventId, header);
+      items.push({
+        alertId: item.alertId,
+        eventId: item.eventId,
+        personObservationIndex: item.personObservationIndex,
+        payloadHash: item.payloadHash,
+        sourceSequence: item.sourceSequence,
+        capturedAt: item.capturedAt,
+        observationIndexes: indexes as number[],
+        frames,
+      });
+    }
+    return {
+      episodeId,
+      contentRevision: p.contentRevision,
+      throughSequence: p.throughSequence,
+      offset: p.offset,
+      limit: p.limit,
+      total: p.total,
+      hasMore: p.hasMore,
+      items,
+    };
+  } catch {
+    return null;
+  }
+}

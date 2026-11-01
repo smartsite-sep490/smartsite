@@ -12,6 +12,12 @@ import {
   parseScopedCameraApplicationStatus,
 } from './camera-configuration-response';
 import { parseSafetyEpisodeReadCommand } from '@smartsite/contracts/safety-episodes';
+import {
+  parseTrackedEpisodeObservationQuery,
+  parseTrackedEpisodeObservationPage,
+  type TrackedEpisodeObservationOptions,
+  type TrackedEpisodeObservationPage,
+} from '@smartsite/contracts/tracked-episode-frames';
 import type {
   SafetyEpisode,
   SafetyEpisodePage,
@@ -1761,6 +1767,54 @@ export class SmartSiteManagementClient {
     return this.request<SiteResponse>('GET', `/sites/${pathId(siteId)}`, token);
   }
   /** Prepared episode transport; callers must wait for Backend rollout before exposing this UI. */
+  async listTrackedEpisodeObservations(
+    token: string,
+    siteId: string,
+    episodeId: string,
+    options: TrackedEpisodeObservationOptions = {},
+    requestOptions?: RequestOptions,
+  ): Promise<TrackedEpisodeObservationPage> {
+    const allowed = ['offset', 'limit', 'throughSequence', 'alertId'];
+    if (
+      !options ||
+      Object.keys(options).some((k) => !allowed.includes(k)) ||
+      (options.offset !== undefined &&
+        (typeof options.offset !== 'number' ||
+          !Number.isSafeInteger(options.offset) ||
+          options.offset < 0)) ||
+      (options.limit !== undefined &&
+        (typeof options.limit !== 'number' ||
+          !Number.isSafeInteger(options.limit) ||
+          options.limit < 1 ||
+          options.limit > 20)) ||
+      (options.throughSequence !== undefined && typeof options.throughSequence !== 'string') ||
+      (options.alertId !== undefined && typeof options.alertId !== 'string')
+    )
+      throw new ApiError('invalid-response', 'Invalid tracked history request.');
+    const query = new URLSearchParams(),
+      raw: Record<string, string> = {};
+    for (const key of ['offset', 'limit', 'throughSequence', 'alertId'] as const)
+      if (options[key] !== undefined) raw[key] = String(options[key]);
+    const parsed = parseTrackedEpisodeObservationQuery(raw);
+    if (!parsed) throw new ApiError('invalid-response', 'Invalid tracked history request.');
+    for (const [key, value] of Object.entries(parsed)) query.set(key, String(value));
+    const path = `/sites/${pathId(siteId)}/safety-episodes/${pathId(episodeId)}/observations`;
+    const payload = await this.request<unknown>(
+      'GET',
+      `${path}${query.size ? '?' + query : ''}`,
+      token,
+      undefined,
+      undefined,
+      requestOptions,
+      { cache: 'no-store', redirect: 'error' },
+      524288,
+    );
+    const page = parseTrackedEpisodeObservationPage(payload, episodeId.toLowerCase(), parsed);
+    if (!page)
+      throw new ApiError('invalid-response', 'Backend returned inconsistent tracked history.');
+    return page;
+  }
+
   listSafetyEpisodes(
     token: string,
     siteId: string,

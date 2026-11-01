@@ -16,3 +16,7 @@ An observation item carries original event ID, original PERSON index, payload ha
 The page is a mapping history, so one event may appear for several findings. The total describes eligible mappings through the upper fence. Clients keep finding/event/PERSON identity together and do not deduplicate only by event ID. Server-side roles and Site scope remain authoritative; no requested query flag can enable a legacy fallback or change rights.
 
 Unknown, duplicate-array, numeric, accessor, symbol and non-plain query fields are rejected. The shared parser does not coerce malformed HTTP values. This module has no Node/schema-loader runtime dependencies.
+
+`parseTrackedEpisodeObservationPage` validates the exact requested episode, offset/limit, optional finding and sequence fence. It rejects unsafe or numeric sequences, contradictory counts/hasMore, duplicate mappings/indexes, unknown metadata and conflicting immutable headers for one event. Returned structures are detached from input. Frame descriptors remain evidence references, not an availability or identity assertion.
+
+`SmartSiteManagementClient.listTrackedEpisodeObservations` uses the shared parser with a bounded 512 KiB JSON response, no-store and redirect-error transport, existing credential handling and request cancellation. This prepared client method does not activate the candidate controller or wire the feature into the current website.
