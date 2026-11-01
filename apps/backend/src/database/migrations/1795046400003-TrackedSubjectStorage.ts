@@ -217,18 +217,84 @@ export class TrackedSubjectStorage1795046400003 implements MigrationInterface {
     END $$`);
     await runner.query(`CREATE TRIGGER trg_ai_subject_segment BEFORE INSERT OR UPDATE OR DELETE ON ai_subject_segment
       FOR EACH ROW EXECUTE FUNCTION guard_ai_subject_segment()`);
+
+    await runner.query(`ALTER TABLE safety_episode
+      ADD COLUMN subject_kind varchar(16) NOT NULL DEFAULT 'EVENT_LOCAL',
+      ADD COLUMN tracking_segment_id uuid, ADD COLUMN tracking_scope_sha256 char(64),
+      ADD CONSTRAINT chk_safety_episode_subject_kind CHECK (
+        (subject_kind='EVENT_LOCAL' AND tracking_segment_id IS NULL AND tracking_scope_sha256 IS NULL)
+        OR (subject_kind='TRACKED' AND tracking_segment_id IS NOT NULL AND tracking_scope_sha256 IS NOT NULL
+          AND tracking_scope_sha256 ~ '^[a-f0-9]{64}$')),
+      ADD CONSTRAINT fk_safety_episode_tracked_scope FOREIGN KEY
+        (tracking_segment_id,tracking_scope_sha256,site_id,camera_id)
+        REFERENCES ai_subject_segment(segment_id,scope_sha256,site_id,camera_id) ON DELETE RESTRICT`);
+    await runner.query(`CREATE UNIQUE INDEX uq_safety_episode_tracking_segment ON safety_episode(tracking_segment_id)
+      WHERE subject_kind='TRACKED'`);
+    await runner.query(`CREATE FUNCTION guard_safety_episode_tracking() RETURNS trigger LANGUAGE plpgsql AS $$
+    DECLARE source_event record; claims bigint;
+    BEGIN
+      IF TG_OP='DELETE' THEN
+        IF OLD.subject_kind='TRACKED' THEN
+          RAISE EXCEPTION 'Tracked episode history must be retained' USING ERRCODE='23514';
+        END IF;
+        RETURN OLD;
+      END IF;
+      IF TG_OP='UPDATE' THEN
+        IF ROW(NEW.subject_kind,NEW.tracking_segment_id,NEW.tracking_scope_sha256)
+          IS DISTINCT FROM ROW(OLD.subject_kind,OLD.tracking_segment_id,OLD.tracking_scope_sha256) THEN
+          RAISE EXCEPTION 'Episode subject discriminator is immutable' USING ERRCODE='23514';
+        END IF;
+        RETURN NEW;
+      END IF;
+      SELECT * INTO source_event FROM ai_observation_event WHERE event_id=NEW.event_id FOR SHARE;
+      IF NEW.subject_kind='EVENT_LOCAL' THEN
+        IF source_event.tracking_scope_sha256 IS NOT NULL THEN
+          RAISE EXCEPTION 'Tracked subjects cannot use event-local projection' USING ERRCODE='23514';
+        END IF;
+        RETURN NEW;
+      END IF;
+      IF source_event.tracking_scope_sha256 IS DISTINCT FROM NEW.tracking_scope_sha256
+        OR source_event.tracking_site_id IS DISTINCT FROM NEW.site_id
+        OR source_event.resolved_camera_id IS DISTINCT FROM NEW.camera_id
+        OR NOT EXISTS(SELECT 1 FROM ai_observation_event c
+          WHERE c.resolved_camera_id=source_event.resolved_camera_id AND c.tracking_site_id=NEW.site_id
+          AND c.tracking_generation_id=source_event.tracking_generation_id
+          AND c.stream_session_id=source_event.stream_session_id AND c.tracking_scope_sha256=NEW.tracking_scope_sha256
+          AND c.tracking_frame_id=source_event.tracking_frame_id AND c.tracking_source_sequence=source_event.tracking_source_sequence
+          AND c.tracking_part_count=source_event.tracking_part_count AND c.captured_at=source_event.captured_at
+          AND c.tracking_part_index=0 AND c.tracking_frame_state='SEALED') THEN
+        RAISE EXCEPTION 'Tracked episode needs an original sealed subject' USING ERRCODE='23514';
+      END IF;
+      SELECT count(*) INTO claims FROM jsonb_array_elements(source_event.raw_payload#>'{continuity,subjects}') x
+        WHERE x->>'personObservationIndex'=NEW.person_observation_index::text;
+      IF claims<>1 THEN
+        RAISE EXCEPTION 'Tracked episode original PERSON mismatch' USING ERRCODE='23514';
+      END IF;
+      IF NOT EXISTS(SELECT 1 FROM jsonb_array_elements(source_event.raw_payload#>'{continuity,subjects}') x
+        WHERE x->>'personObservationIndex'=NEW.person_observation_index::text AND x->>'segmentId'=NEW.tracking_segment_id::text) THEN
+        RAISE EXCEPTION 'Tracked episode segment mismatch' USING ERRCODE='23514';
+      END IF;
+      RETURN NEW;
+    END $$`);
+    await runner.query(`CREATE TRIGGER trg_safety_episode_tracking BEFORE INSERT OR UPDATE OR DELETE ON safety_episode
+      FOR EACH ROW EXECUTE FUNCTION guard_safety_episode_tracking()`);
   }
 
   async down(runner: QueryRunner): Promise<void> {
     if (!runner.isTransactionActive) throw new Error('Tracked storage requires a transaction');
     await runner.query("SET LOCAL lock_timeout='5s'");
     await runner.query(
-      'LOCK TABLE ai_subject_segment,ai_observation_event IN ACCESS EXCLUSIVE MODE',
+      'LOCK TABLE safety_episode,ai_subject_segment,ai_observation_event IN ACCESS EXCLUSIVE MODE',
     );
     const [{ has_history }] = await runner.query(`SELECT
       EXISTS(SELECT 1 FROM ai_subject_segment) OR
+      EXISTS(SELECT 1 FROM safety_episode WHERE subject_kind='TRACKED') OR
       EXISTS(SELECT 1 FROM ai_observation_event WHERE tracking_scope_sha256 IS NOT NULL) AS has_history`);
     if (has_history) throw new Error('Tracked technical history must be retained');
+    await runner.query('DROP TRIGGER trg_safety_episode_tracking ON safety_episode');
+    await runner.query('DROP FUNCTION guard_safety_episode_tracking()');
+    await runner.query(`ALTER TABLE safety_episode DROP CONSTRAINT fk_safety_episode_tracked_scope,
+      DROP COLUMN subject_kind,DROP COLUMN tracking_segment_id,DROP COLUMN tracking_scope_sha256`);
     await runner.query('DROP TABLE ai_subject_segment');
     await runner.query('DROP FUNCTION guard_ai_subject_segment()');
     await runner.query('DROP TRIGGER trg_ai_tracking_raw ON ai_observation_event');
