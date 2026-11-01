@@ -16,7 +16,8 @@
     "./camera-application-status": "./dist/camera-application-status.js",
     "./camera-region-reference": "./dist/camera-region-reference-command.js",
     "./camera-region-geometry-confirmation": "./dist/camera-region-geometry-confirmation.js",
-    "./safety-episodes": "./dist/safety-episode-api.js"
+    "./safety-episodes": "./dist/safety-episode-api.js",
+    "./tracked-episode-frames": "./dist/tracked-episode-frames.js"
   },
   "types": "./dist/index.d.ts",
   "scripts": {

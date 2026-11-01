@@ -1,5 +1,11 @@
 import { createHash } from 'node:crypto';
 import type { DataSource, EntityManager } from 'typeorm';
+import type {
+  TrackedEpisodeObservationOptions,
+  TrackedEpisodeObservationPage,
+  TrackedEpisodeMediaSource,
+  TrackedEpisodeMediaRepresentation,
+} from '@smartsite/contracts/tracked-episode-frames';
 import {
   computeCanonicalPayloadHash,
   computeWorkerEventBindingHash,
@@ -66,12 +72,7 @@ interface Payload {
   evidence: Array<{ kind: string; uri: string; sha256: string }>;
   continuity: { subjects: Array<{ personObservationIndex: number; segmentId: string }> };
 }
-interface Source {
-  alertId: string;
-  eventId: string;
-  personObservationIndex: number;
-  evidenceIndex: number;
-}
+type Source = TrackedEpisodeMediaSource;
 const sequence = (value: string) =>
   typeof value === 'string' &&
   /^(0|[1-9][0-9]{0,19})$/.test(value) &&
@@ -273,8 +274,8 @@ export class TrackedEpisodeFrameQuery {
     request: AuthenticatedRequest,
     rawSite: string,
     rawEpisode: string,
-    options: { offset?: number; limit?: number; throughSequence?: string; alertId?: string } = {},
-  ) {
+    options: TrackedEpisodeObservationOptions = {},
+  ): Promise<TrackedEpisodeObservationPage> {
     const site = uuid(rawSite).toLowerCase(),
       id = uuid(rawEpisode).toLowerCase(),
       offset = options.offset ?? 0,
@@ -385,7 +386,7 @@ export class TrackedEpisodeFrameQuery {
     rawSite: string,
     rawEpisode: string,
     input: Source,
-    representation: 'FRAME' | 'SUBJECT' = 'FRAME',
+    representation: TrackedEpisodeMediaRepresentation = 'FRAME',
     signal?: AbortSignal,
   ) {
     const site = uuid(rawSite).toLowerCase(),
