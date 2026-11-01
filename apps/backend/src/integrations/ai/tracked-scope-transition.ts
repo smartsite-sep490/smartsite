@@ -9,6 +9,8 @@ interface TransitionCommand {
   expectedOldScopes: readonly string[];
 }
 interface RawTarget {
+  routeMode: string | null;
+  routeEpoch: string | null;
   cameraId: string;
   siteId: string;
   scopeSha256: string;
@@ -70,7 +72,8 @@ export class TrackedScopeTransition {
       const [target] = await manager.query<RawTarget[]>(
         `SELECT resolved_camera_id AS "cameraId",tracking_site_id AS "siteId",tracking_scope_sha256 AS "scopeSha256",
         payload_hash AS "payloadHash",raw_payload AS "rawPayload",admission_context AS context,
-        tracking_pending_until AS "pendingUntil",tracking_frame_state AS state
+        tracking_pending_until AS "pendingUntil",tracking_frame_state AS state,
+        safety_route_mode AS "routeMode",safety_route_epoch AS "routeEpoch"
         FROM ai_observation_event WHERE event_id=$1 AND tracking_part_index=0 FOR UPDATE`,
         [input.targetEventId],
       );
@@ -89,6 +92,8 @@ export class TrackedScopeTransition {
       );
       if (
         bound.classification !== 'LIVE' ||
+        target.routeMode !== 'EPISODE_TRACKED' ||
+        target.routeEpoch !== bound.routeEpoch ||
         bound.eventId !== input.targetEventId ||
         bound.cameraId !== target.cameraId ||
         bound.siteId !== target.siteId ||

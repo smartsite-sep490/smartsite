@@ -12,6 +12,7 @@ import { CameraEventAdmissionService } from '../../modules/cameras/camera-event-
 
 /** Server-owned injection only. Synthetic test policy does not qualify a real producer/profile. */
 export interface TrackedPartProfilePolicy {
+  readonly routeEpoch: string;
   readonly profileSha256: string;
   readonly allowedCameraIds: readonly string[];
   readonly clockToleranceMs: number;
@@ -55,6 +56,7 @@ export class TrackedPartAuthenticator {
   ) {
     if (policy) {
       if (
+        !/^[a-f0-9]{8}(-[a-f0-9]{4}){3}-[a-f0-9]{12}$/.test(policy.routeEpoch) ||
         !/^[a-f0-9]{64}$/.test(policy.profileSha256) ||
         !policy.allowedCameraIds.length ||
         !Number.isSafeInteger(policy.clockToleranceMs) ||
@@ -126,6 +128,7 @@ export class TrackedPartAuthenticator {
       sourceKind: context.sourceKind,
     });
     return Object.freeze({
+      routeEpoch: this.policy.routeEpoch,
       eventId: event.eventId.toLowerCase(),
       payloadHash,
       payload: freezeJson(payload),

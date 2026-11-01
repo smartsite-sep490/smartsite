@@ -39,6 +39,8 @@ interface Payload {
   };
 }
 interface Raw {
+  routeMode: string | null;
+  routeEpoch: string | null;
   eventId: string;
   payloadHash: string;
   rawPayload: unknown;
@@ -122,7 +124,8 @@ export class TrackedPpeEpisodeProjection {
     ]);
     const select = `SELECT event_id AS "eventId",payload_hash AS "payloadHash",raw_payload AS "rawPayload",admission_context AS context,
       tracking_part_index AS "partIndex",tracking_part_count AS "partCount",tracking_frame_id AS "frameId",tracking_source_sequence::text AS sequence,
-      tracking_frame_state AS state,tracking_scope_sha256 AS "scopeSha256",tracking_generation_id AS "generationId",stream_session_id AS "sessionId"
+      tracking_frame_state AS state,tracking_scope_sha256 AS "scopeSha256",tracking_generation_id AS "generationId",stream_session_id AS "sessionId",
+      safety_route_mode AS "routeMode",safety_route_epoch AS "routeEpoch"
       FROM ai_observation_event`;
     const [coordinator] = await manager.query<Raw[]>(
       `${select} WHERE event_id=$1 AND resolved_camera_id=$2 AND tracking_site_id=$3 AND tracking_part_index=0 FOR SHARE`,
@@ -131,7 +134,9 @@ export class TrackedPpeEpisodeProjection {
     if (
       !coordinator ||
       coordinator.state !== 'SEALED' ||
-      coordinator.scopeSha256 !== scope.scopeSha256
+      coordinator.scopeSha256 !== scope.scopeSha256 ||
+      coordinator.routeMode !== 'EPISODE_TRACKED' ||
+      !coordinator.routeEpoch
     )
       unavailable();
     const rows = await manager.query<Raw[]>(
@@ -144,6 +149,8 @@ export class TrackedPpeEpisodeProjection {
     for (const row of rows) {
       if (
         row.scopeSha256 !== scope.scopeSha256 ||
+        row.routeMode !== 'EPISODE_TRACKED' ||
+        row.routeEpoch !== coordinator.routeEpoch ||
         row.sequence !== coordinator.sequence ||
         row.partCount !== rows.length ||
         (row.partIndex === 0 ? row.state !== 'SEALED' : row.state !== 'PART_STAGED') ||

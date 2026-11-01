@@ -25,6 +25,7 @@ test('prototype raw multipart staging remains separate from admitted frame/episo
           profileSha256: 'a'.repeat(64),
           allowedCameraIds: [cameraId],
           clockToleranceMs: 1000,
+          routeEpoch: '00000000-0000-4000-8000-000000000001',
         }),
         {
           pendingTtlMs: 30000,

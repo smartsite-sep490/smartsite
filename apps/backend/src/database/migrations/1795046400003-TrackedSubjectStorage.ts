@@ -20,6 +20,30 @@ export class TrackedSubjectStorage1795046400003 implements MigrationInterface {
     if (!runner.isTransactionActive) throw new Error('Tracked storage requires a transaction');
     await runner.query("SET LOCAL lock_timeout='5s'");
     await runner.query('LOCK TABLE ai_observation_event IN ACCESS EXCLUSIVE MODE');
+    await runner.query(`ALTER TABLE camera_worker_generation
+      ADD COLUMN observation_route_mode varchar(24),ADD COLUMN tracking_route_epoch uuid,
+      ADD CONSTRAINT chk_generation_observation_route CHECK (((observation_route_mode IS NULL AND tracking_route_epoch IS NULL)
+        OR (observation_route_mode='LEGACY' AND tracking_route_epoch IS NULL)
+        OR (observation_route_mode='EPISODE_TRACKED' AND tracking_route_epoch IS NOT NULL)) IS TRUE),
+      ADD CONSTRAINT uq_generation_observation_route UNIQUE(id,camera_id,site_id,stream_session_id,observation_route_mode,tracking_route_epoch)`);
+    await runner.query(`CREATE FUNCTION guard_generation_observation_route() RETURNS trigger LANGUAGE plpgsql AS $$
+      BEGIN
+        IF TG_OP='DELETE' THEN
+          IF OLD.observation_route_mode IS NOT NULL THEN
+            RAISE EXCEPTION 'Generation observation route history is immutable' USING ERRCODE='23514';
+          END IF;
+          RETURN OLD;
+        END IF;
+        IF OLD.observation_route_mode IS NOT NULL AND
+          ROW(NEW.observation_route_mode,NEW.tracking_route_epoch) IS DISTINCT FROM ROW(OLD.observation_route_mode,OLD.tracking_route_epoch) THEN
+          RAISE EXCEPTION 'Generation observation route history is immutable' USING ERRCODE='23514';
+        END IF;
+        RETURN NEW;
+      END $$`);
+    await runner.query(`CREATE TRIGGER trg_generation_observation_route BEFORE UPDATE OR DELETE ON camera_worker_generation
+      FOR EACH ROW EXECUTE FUNCTION guard_generation_observation_route()`);
+    await runner.query(`ALTER TABLE ai_observation_event DROP CONSTRAINT chk_ai_event_safety_route_mode,
+      ADD CONSTRAINT chk_ai_event_safety_route_mode CHECK (safety_route_mode IS NULL OR safety_route_mode IN ('LEGACY','EPISODE_EVENT_LOCAL','EPISODE_TRACKED'))`);
     await runner.query(`ALTER TABLE ai_observation_event
       ADD COLUMN tracking_scope_sha256 char(64), ADD COLUMN tracking_generation_id uuid,
       ADD COLUMN tracking_site_id uuid, ADD COLUMN tracking_frame_id uuid,
@@ -58,6 +82,12 @@ export class TrackedSubjectStorage1795046400003 implements MigrationInterface {
     await runner.query(`CREATE UNIQUE INDEX uq_ai_tracking_frame_part ON ai_observation_event
       (resolved_camera_id,tracking_generation_id,stream_session_id,tracking_frame_id,tracking_part_index)
       WHERE tracking_scope_sha256 IS NOT NULL`);
+    await runner.query(`ALTER TABLE ai_observation_event ADD CONSTRAINT chk_ai_tracking_route CHECK ((
+      (tracking_scope_sha256 IS NULL AND safety_route_mode IS DISTINCT FROM 'EPISODE_TRACKED') OR
+      (tracking_scope_sha256 IS NOT NULL AND safety_route_mode='EPISODE_TRACKED' AND safety_route_epoch IS NOT NULL)) IS TRUE)`);
+    await runner.query(`ALTER TABLE ai_observation_event ADD CONSTRAINT fk_ai_tracking_route_owner
+      FOREIGN KEY(tracking_generation_id,resolved_camera_id,tracking_site_id,stream_session_id,safety_route_mode,safety_route_epoch)
+      REFERENCES camera_worker_generation(id,camera_id,site_id,stream_session_id,observation_route_mode,tracking_route_epoch) ON DELETE RESTRICT`);
     await runner.query(`CREATE UNIQUE INDEX uq_ai_tracking_coordinator_sequence ON ai_observation_event
       (resolved_camera_id,tracking_generation_id,stream_session_id,tracking_source_sequence)
       WHERE tracking_part_index=0`);
@@ -122,7 +152,38 @@ export class TrackedSubjectStorage1795046400003 implements MigrationInterface {
     );
 
     await runner.query(`CREATE FUNCTION guard_ai_tracking_raw() RETURNS trigger LANGUAGE plpgsql AS $$
+    DECLARE owner_id uuid; owner_mode varchar(24); owner_epoch uuid; wanted_mode varchar(24); wanted_epoch uuid;
     BEGIN
+      IF TG_OP='INSERT' OR (TG_OP='UPDATE' AND OLD.tracking_scope_sha256 IS NULL AND
+        ROW(NEW.resolved_camera_id,NEW.stream_session_id) IS DISTINCT FROM ROW(OLD.resolved_camera_id,OLD.stream_session_id)) THEN
+        IF NEW.resolved_camera_id IS NOT NULL THEN
+          PERFORM 1 FROM camera WHERE id=NEW.resolved_camera_id FOR UPDATE;
+          IF NEW.tracking_scope_sha256 IS NOT NULL THEN
+            owner_id:=NEW.tracking_generation_id; wanted_mode:='EPISODE_TRACKED'; wanted_epoch:=NEW.safety_route_epoch;
+            IF EXISTS(SELECT 1 FROM ai_observation_event e WHERE e.resolved_camera_id=NEW.resolved_camera_id
+              AND e.stream_session_id=NEW.stream_session_id AND e.tracking_scope_sha256 IS NULL) THEN
+              RAISE EXCEPTION 'Tracked source has legacy history' USING ERRCODE='23514';
+            END IF;
+          ELSE
+            SELECT g.id INTO owner_id FROM camera_worker_generation g WHERE g.camera_id=NEW.resolved_camera_id
+              AND (g.stream_session_id=NEW.stream_session_id OR g.is_current)
+              ORDER BY (g.stream_session_id=NEW.stream_session_id) DESC,g.issued_at DESC,g.id LIMIT 1;
+            wanted_mode:='LEGACY'; wanted_epoch:=NULL;
+          END IF;
+          IF owner_id IS NOT NULL THEN
+            -- A write to the unique existing generation row makes stale RR snapshots serialize/fail,
+            -- unlike a camera-only lock followed by a snapshot scan of raw rows.
+            UPDATE camera_worker_generation SET observation_route_mode=wanted_mode,tracking_route_epoch=wanted_epoch
+              WHERE id=owner_id AND camera_id=NEW.resolved_camera_id AND observation_route_mode IS NULL;
+            SELECT observation_route_mode,tracking_route_epoch INTO owner_mode,owner_epoch FROM camera_worker_generation
+              WHERE id=owner_id AND camera_id=NEW.resolved_camera_id FOR UPDATE;
+            IF NOT FOUND OR owner_mode IS DISTINCT FROM wanted_mode OR owner_epoch IS DISTINCT FROM wanted_epoch THEN
+              RAISE EXCEPTION 'Tracked source route epoch is immutable' USING ERRCODE='23514';
+            END IF;
+          END IF;
+        END IF;
+        RETURN NEW;
+      END IF;
       IF TG_OP='DELETE' THEN
         IF OLD.tracking_scope_sha256 IS NOT NULL THEN
           RAISE EXCEPTION 'Tracked raw history must be retained' USING ERRCODE='23514';
@@ -154,7 +215,7 @@ export class TrackedSubjectStorage1795046400003 implements MigrationInterface {
       END IF;
       RETURN NEW;
     END $$`);
-    await runner.query(`CREATE TRIGGER trg_ai_tracking_raw BEFORE UPDATE OR DELETE ON ai_observation_event
+    await runner.query(`CREATE TRIGGER trg_ai_tracking_raw BEFORE INSERT OR UPDATE OR DELETE ON ai_observation_event
       FOR EACH ROW EXECUTE FUNCTION guard_ai_tracking_raw()`);
     await runner.query(`CREATE FUNCTION guard_ai_subject_segment() RETURNS trigger LANGUAGE plpgsql AS $$
     DECLARE first_row record; head_row record; claim jsonb; claim_count bigint; sources_sealed boolean;
@@ -284,13 +345,18 @@ export class TrackedSubjectStorage1795046400003 implements MigrationInterface {
     if (!runner.isTransactionActive) throw new Error('Tracked storage requires a transaction');
     await runner.query("SET LOCAL lock_timeout='5s'");
     await runner.query(
-      'LOCK TABLE safety_episode,ai_subject_segment,ai_observation_event IN ACCESS EXCLUSIVE MODE',
+      'LOCK TABLE safety_episode,ai_subject_segment,ai_observation_event,camera_worker_generation IN ACCESS EXCLUSIVE MODE',
     );
     const [{ has_history }] = await runner.query(`SELECT
       EXISTS(SELECT 1 FROM ai_subject_segment) OR
       EXISTS(SELECT 1 FROM safety_episode WHERE subject_kind='TRACKED') OR
+      EXISTS(SELECT 1 FROM camera_worker_generation WHERE observation_route_mode='EPISODE_TRACKED') OR
       EXISTS(SELECT 1 FROM ai_observation_event WHERE tracking_scope_sha256 IS NOT NULL) AS has_history`);
     if (has_history) throw new Error('Tracked technical history must be retained');
+    await runner.query(`ALTER TABLE ai_observation_event DROP CONSTRAINT chk_ai_tracking_route,
+      DROP CONSTRAINT fk_ai_tracking_route_owner,
+      DROP CONSTRAINT chk_ai_event_safety_route_mode,
+      ADD CONSTRAINT chk_ai_event_safety_route_mode CHECK (safety_route_mode IS NULL OR safety_route_mode IN ('LEGACY','EPISODE_EVENT_LOCAL'))`);
     await runner.query('DROP TRIGGER trg_safety_episode_tracking ON safety_episode');
     await runner.query('DROP FUNCTION guard_safety_episode_tracking()');
     await runner.query(`ALTER TABLE safety_episode DROP CONSTRAINT fk_safety_episode_tracked_scope,
@@ -302,5 +368,9 @@ export class TrackedSubjectStorage1795046400003 implements MigrationInterface {
     await runner.query(`ALTER TABLE ai_observation_event DROP CONSTRAINT fk_ai_event_tracking_generation,
       DROP CONSTRAINT uq_ai_event_tracking_scope,
       ${rawColumns.map((name) => `DROP COLUMN ${name}`).join(',')}`);
+    await runner.query('DROP TRIGGER trg_generation_observation_route ON camera_worker_generation');
+    await runner.query('DROP FUNCTION guard_generation_observation_route()');
+    await runner.query(`ALTER TABLE camera_worker_generation DROP CONSTRAINT uq_generation_observation_route,
+      DROP COLUMN observation_route_mode,DROP COLUMN tracking_route_epoch`);
   }
 }

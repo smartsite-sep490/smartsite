@@ -90,10 +90,10 @@ test('unregistered tracked storage preserves legacy data and scoped technical hi
         },
       });
     await db.query(
-      `INSERT INTO ai_observation_event(event_id,payload_hash,camera_external_id,resolved_camera_id,stream_session_id,captured_at,raw_payload,processing_status,
+      `INSERT INTO ai_observation_event(event_id,payload_hash,camera_external_id,resolved_camera_id,stream_session_id,captured_at,raw_payload,processing_status,safety_route_mode,safety_route_epoch,
       tracking_scope_sha256,tracking_generation_id,tracking_site_id,tracking_frame_id,tracking_source_sequence,tracking_part_index,tracking_part_count,
       tracking_frame_state,tracking_pending_until,tracking_transport_ack,tracking_frame_result)
-      VALUES($1,$2,$3::uuid::text,$3,$4,$5,$6,'PROCESSED',$7,$8,$9,$10,$11,$12,$13,$14,clock_timestamp()+interval '1 minute','{}',$15)`,
+      VALUES($1,$2,$3::uuid::text,$3,$4,$5,$6,'PROCESSED','EPISODE_TRACKED','00000000-0000-4000-8000-000000000001',$7,$8,$9,$10,$11,$12,$13,$14,clock_timestamp()+interval '1 minute','{}',$15)`,
       [
         id,
         'e'.repeat(64),

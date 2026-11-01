@@ -6,6 +6,8 @@ The prototype adds one technical `ai_subject_segment` table and nullable typed f
 
 Raw staging authenticates each original receipt and retry. Server-injected limits bound pending frames, parts, payload bytes and original deadlines. Explicit bounded recovery expires orphan/predecessor work without inventing part zero or requiring an AI retry. It never changes sealed outcomes.
 
+The server profile explicitly supplies a route epoch. Every tracked raw row is inserted as `EPISODE_TRACKED` with that immutable epoch; retry, admission and trusted transition recheck it. The existing generation table holds two SQL-owned technical columns (`observation_route_mode`, `tracking_route_epoch`) and an immutable composite owner key/FK. This adds no table or business permission. First raw storage claims the generation transactionally; legacy and tracked families cannot share one generation, and changing a tracked epoch requires a newly issued generation. Existing legacy history is never reclassified. Writing the existing generation row protects stale REPEATABLE READ snapshots as well as READ COMMITTED, instead of relying on a camera lock plus a stale raw-row scan. Resolving/changing an untracked row's camera/session also checks ownership. Historical unresolved rows stay unresolved when rebinding is denied. Runtime rollback preserves this ownership/history; it must not replay tracked rows through legacy delivery.
+
 Technical admission checks source ordering, exact predecessor/head, scope, capture gap/rewind, forks and permanent retirement. Empty capture alone retires nobody. Explicit qualified orphan retirement creates a tombstone without a fabricated PERSON. Original raw nanoseconds govern chronology; SQL copies the original persisted capture timestamp for head references.
 
 The required projection port runs in the same transaction as provisional seal and technical head writes. Failure rolls everything back; it is not a production business projector. Healthy/empty PostgreSQL fixtures use an explicit synthetic port. A new generation/scope stays pending until a trusted transition fence classifies old work and retires old heads.
@@ -26,7 +28,7 @@ The migration remains absent from the runtime registry. Reversal refuses tracked
 
 ## Open release gates
 
-- Production wiring of the PPE business port and immutable route ownership, per-finding evidence/detail readers, recipient projection and mixed MF06 capture-time authority.
+- Production wiring of the route-owned PPE business port, per-finding evidence/detail readers, recipient projection and mixed MF06 capture-time authority.
 - Integration of the trusted transition prototype with a reviewed Backend control plane, durable supervisor/scheduler and actual restart checks.
 - Public raw ACK contract, reviewed canonical Main SHA and exact paired AI vendoring.
 - Qualified tracker/profile, measured clock/gap/capacity policies, query plans and operational performance.

@@ -26,6 +26,7 @@ test('unregistered frame admission atomically seals technical heads and the supp
         profileSha256: 'a'.repeat(64),
         allowedCameraIds: [cameraId],
         clockToleranceMs: 1000,
+        routeEpoch: '00000000-0000-4000-8000-000000000001',
       });
       return {
         store: new TrackedFramePrototypeStore(auth, {

@@ -14,7 +14,7 @@ import type { WorkerEventDeliveryContext } from '@smartsite/contracts';
 )
 @Check(
   'chk_ai_event_safety_route_mode',
-  "safety_route_mode IS NULL OR safety_route_mode IN ('LEGACY','EPISODE_EVENT_LOCAL')",
+  "safety_route_mode IS NULL OR safety_route_mode IN ('LEGACY','EPISODE_EVENT_LOCAL','EPISODE_TRACKED')",
 )
 @Index('uq_ai_event_frame_part', { synchronize: false })
 @Index('idx_ai_event_source_frame', { synchronize: false })
@@ -28,7 +28,7 @@ export class AiObservationEventEntity {
     select: false,
     update: false,
   })
-  safetyRouteMode?: 'LEGACY' | 'EPISODE_EVENT_LOCAL' | null;
+  safetyRouteMode?: 'LEGACY' | 'EPISODE_EVENT_LOCAL' | 'EPISODE_TRACKED' | null;
 
   @Column({
     name: 'safety_route_epoch',

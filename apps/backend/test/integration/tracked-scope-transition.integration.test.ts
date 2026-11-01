@@ -23,6 +23,7 @@ test('trusted scope transition retains history and serializes with head admissio
       profileSha256: 'a'.repeat(64),
       allowedCameraIds: [f.cameraId],
       clockToleranceMs: 1000,
+      routeEpoch: '00000000-0000-4000-8000-000000000001',
     });
     const store = new TrackedFramePrototypeStore(auth, {
       pendingTtlMs: 30000,

@@ -28,6 +28,7 @@ test('three affected people among ten yield three episodes, original findings an
       profileSha256: 'a'.repeat(64),
       allowedCameraIds: [f.cameraId],
       clockToleranceMs: 1000,
+      routeEpoch: '00000000-0000-4000-8000-000000000001',
     });
     const store = new TrackedFramePrototypeStore(auth, {
       pendingTtlMs: 30000,
@@ -121,6 +122,78 @@ test('three affected people among ten yield three episodes, original findings an
     await db.query('DROP TRIGGER test_fail_tracked_mapping ON alert_detection_mapping');
     await db.query('DROP FUNCTION test_fail_tracked_mapping()');
     assert.equal((await process(first)).kind, 'SEALED');
+    assert.deepEqual(
+      (
+        await db.query(
+          'SELECT safety_route_mode AS mode,safety_route_epoch AS epoch FROM ai_observation_event WHERE event_id=$1',
+          [first.eventId],
+        )
+      )[0],
+      { mode: 'EPISODE_TRACKED', epoch: '00000000-0000-4000-8000-000000000001' },
+    );
+    const otherAuth = new TrackedPartAuthenticator(new CameraEventAdmissionService(), {
+      profileSha256: 'a'.repeat(64),
+      allowedCameraIds: [f.cameraId],
+      clockToleranceMs: 1000,
+      routeEpoch: '00000000-0000-4000-8000-000000000002',
+    });
+    const otherStore = new TrackedFramePrototypeStore(otherAuth, {
+      pendingTtlMs: 30000,
+      maxPendingFrames: 16,
+      maxPendingParts: 32,
+      maxPendingPayloadBytes: 100000,
+    });
+    await assert.rejects(otherStore.store(db, first, f.context, f.generation.secret));
+    await assert.rejects(
+      otherStore.store(db, event('7', first.eventId), f.context, f.generation.secret),
+    );
+    const otherAdmission = new TrackedFrameAdmission(
+      otherAuth,
+      {
+        firstFramePolicy: 'FIRST_COMMITTED_CAPTURE',
+        maxCaptureGapMs: 10000,
+        maxSourceSequenceGap: '1',
+        maxSegmentRows: 32,
+      },
+      {
+        async project() {
+          throw new Error('Wrong route must not reach projection');
+        },
+      },
+    );
+    await assert.rejects(
+      otherAdmission.process(
+        db,
+        {
+          cameraId: f.cameraId,
+          generationId: f.generation.workerGenerationId,
+          streamSessionId: f.generation.streamSessionId,
+          frameId: first.framePartition.frameId,
+        },
+        f.generation.secret,
+      ),
+    );
+    await assert.rejects(
+      db.query("UPDATE ai_observation_event SET safety_route_mode='LEGACY' WHERE event_id=$1", [
+        first.eventId,
+      ]),
+      { code: '23514' },
+    );
+    const rejectedRaw = event('7', first.eventId);
+    await assert.rejects(
+      db.query(
+        `INSERT INTO ai_observation_event SELECT (jsonb_populate_record(NULL::ai_observation_event,
+      to_jsonb(e)||jsonb_build_object('event_id',$2::uuid,'raw_payload',$3::jsonb,'tracking_frame_id',$4::uuid,'tracking_source_sequence',7,
+      'safety_route_epoch','00000000-0000-4000-8000-000000000002'))).* FROM ai_observation_event e WHERE event_id=$1`,
+        [
+          first.eventId,
+          rejectedRaw.eventId,
+          JSON.stringify(rejectedRaw),
+          rejectedRaw.framePartition.frameId,
+        ],
+      ),
+      /Tracked source route epoch is immutable/,
+    );
     assert.equal((await db.query('SELECT count(*)::int AS n FROM ai_subject_segment'))[0].n, 10);
     const summaries = () =>
       db.query(`SELECT e.tracking_segment_id AS segment,e.content_revision AS revision,count(a.id)::int AS findings
@@ -269,12 +342,15 @@ test('three affected people among ten yield three episodes, original findings an
       receiptCommandId,
     };
     const target = { ...f.event(), streamSessionId: generation.streamSessionId };
-    await store.store(db, target, nextContext, generation.secret);
+    await otherStore.store(db, target, nextContext, generation.secret);
     const [{ scope_sha256: oldScope }] = await db.query(
       'SELECT scope_sha256 FROM ai_subject_segment WHERE segment_id=$1',
       [segments[1]],
     );
-    await new TrackedScopeTransition(auth, { maxPendingRows: 32, maxActiveSegments: 32 }).apply(
+    await new TrackedScopeTransition(otherAuth, {
+      maxPendingRows: 32,
+      maxActiveSegments: 32,
+    }).apply(
       db,
       { commandId: randomUUID(), targetEventId: target.eventId, expectedOldScopes: [oldScope] },
       generation.secret,

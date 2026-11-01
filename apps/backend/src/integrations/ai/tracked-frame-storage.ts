@@ -25,6 +25,8 @@ interface Receipt {
   bindingHash: string;
 }
 interface StoredRow {
+  routeMode: string | null;
+  routeEpoch: string | null;
   eventId: string;
   payloadHash: string;
   rawPayload: unknown;
@@ -41,7 +43,8 @@ interface StoredRow {
 const columns = `event_id AS "eventId",payload_hash AS "payloadHash",raw_payload AS "rawPayload",
  admission_context AS "admissionContext",tracking_scope_sha256 AS "scopeSha256",tracking_frame_id AS "frameId",
  tracking_source_sequence::text AS "sourceSequence",tracking_part_index AS "partIndex",tracking_part_count AS "partCount",
- tracking_frame_state AS "frameState",tracking_pending_until AS "pendingUntil",tracking_transport_ack AS "transportAck"`;
+ tracking_frame_state AS "frameState",tracking_pending_until AS "pendingUntil",tracking_transport_ack AS "transportAck",
+ safety_route_mode AS "routeMode",safety_route_epoch AS "routeEpoch"`;
 function reject(status: 409 | 503): never {
   throw new PublicHttpException(status, {
     code: status === 409 ? 'CONFLICT' : 'AI_INGESTION_UNAVAILABLE',
@@ -125,6 +128,8 @@ export class TrackedFramePrototypeStore {
     );
     if (existing) {
       if (
+        existing.routeMode !== 'EPISODE_TRACKED' ||
+        existing.routeEpoch !== bound.routeEpoch ||
         existing.payloadHash !== bound.payloadHash ||
         computeCanonicalPayloadHash(existing.rawPayload) !== bound.payloadHash ||
         existing.admissionContext?.bindingHash !== bound.bindingHash ||
@@ -143,6 +148,12 @@ export class TrackedFramePrototypeStore {
         reject(409);
       return { receipt: existing.transportAck, duplicate: true };
     }
+    const sourceRoute = await manager.query(
+      `SELECT 1 FROM ai_observation_event WHERE resolved_camera_id=$1 AND tracking_generation_id=$2 AND stream_session_id=$3
+      AND (safety_route_mode IS DISTINCT FROM 'EPISODE_TRACKED' OR safety_route_epoch IS DISTINCT FROM $4::uuid) LIMIT 1`,
+      [...sourceKey, bound.routeEpoch],
+    );
+    if (sourceRoute.length) reject(409);
     const rows = await manager.query<StoredRow[]>(
       `SELECT ${columns} FROM ai_observation_event
       WHERE resolved_camera_id=$1 AND tracking_generation_id=$2 AND stream_session_id=$3
@@ -155,6 +166,8 @@ export class TrackedFramePrototypeStore {
       if (row.frameState === 'SEALED') reject(409);
       if (
         !row.admissionContext ||
+        row.routeMode !== 'EPISODE_TRACKED' ||
+        row.routeEpoch !== bound.routeEpoch ||
         row.scopeSha256 !== bound.scopeSha256 ||
         row.frameId !== part.frameId ||
         row.sourceSequence !== part.sequenceNumber
@@ -223,8 +236,8 @@ export class TrackedFramePrototypeStore {
     await manager.query(
       `INSERT INTO ai_observation_event(event_id,payload_hash,camera_external_id,resolved_camera_id,stream_session_id,captured_at,raw_payload,
       processing_status,processing_note,admission_context,tracking_scope_sha256,tracking_generation_id,tracking_site_id,tracking_frame_id,
-      tracking_source_sequence,tracking_part_index,tracking_part_count,tracking_frame_state,tracking_pending_until,tracking_transport_ack,tracking_frame_result)
-      VALUES($1,$2,$3,$4,$5,$6,$7,'PROCESSED','TRACKED_RAW_STORED_NO_PROJECTION',$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19)`,
+      tracking_source_sequence,tracking_part_index,tracking_part_count,tracking_frame_state,tracking_pending_until,tracking_transport_ack,tracking_frame_result,safety_route_mode,safety_route_epoch)
+      VALUES($1,$2,$3,$4,$5,$6,$7,'PROCESSED','TRACKED_RAW_STORED_NO_PROJECTION',$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,'EPISODE_TRACKED',$20)`,
       [
         bound.eventId,
         bound.payloadHash,
@@ -257,6 +270,7 @@ export class TrackedFramePrototypeStore {
         deadline,
         JSON.stringify(receipt),
         part.partIndex ? null : result,
+        bound.routeEpoch,
       ],
     );
     if (reason) {

@@ -29,6 +29,8 @@ export interface TrackedProjectionPort {
   ): Promise<void>;
 }
 interface RawRow {
+  routeMode: string | null;
+  routeEpoch: string | null;
   eventId: string;
   payloadHash: string;
   rawPayload: unknown;
@@ -104,7 +106,8 @@ export class TrackedFrameAdmission {
     const rows = await manager.query<RawRow[]>(
       `SELECT event_id AS "eventId",payload_hash AS "payloadHash",raw_payload AS "rawPayload",
       admission_context AS "admissionContext",tracking_scope_sha256 AS "scopeSha256",tracking_frame_state AS "frameState",
-      tracking_part_index AS "partIndex",tracking_pending_until AS "pendingUntil",tracking_frame_result AS "frameResult"
+      tracking_part_index AS "partIndex",tracking_pending_until AS "pendingUntil",tracking_frame_result AS "frameResult",
+      safety_route_mode AS "routeMode",safety_route_epoch AS "routeEpoch"
       FROM ai_observation_event WHERE resolved_camera_id=$1 AND tracking_generation_id=$2 AND stream_session_id=$3 AND tracking_frame_id=$4
       ORDER BY tracking_part_index LIMIT 1025 FOR UPDATE`,
       [...sourceKey, key.frameId],
@@ -121,6 +124,8 @@ export class TrackedFrameAdmission {
       );
       if (
         bound.payloadHash !== row.payloadHash ||
+        row.routeMode !== 'EPISODE_TRACKED' ||
+        row.routeEpoch !== bound.routeEpoch ||
         bound.bindingHash !== row.admissionContext.bindingHash ||
         bound.scopeSha256 !== row.scopeSha256 ||
         bound.cameraId !== key.cameraId ||

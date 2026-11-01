@@ -26,7 +26,7 @@ test('tracked episodes reuse immutable original anchors and preserve preexisting
         legacyEvent,
         'f'.repeat(64),
         f.cameraId,
-        f.generation.streamSessionId,
+        randomUUID(),
         { schemaVersion: '1.0.0', observations: [{ type: 'PERSON', trackId: 7 }] },
       ],
     );
@@ -62,6 +62,7 @@ test('tracked episodes reuse immutable original anchors and preserve preexisting
       profileSha256: 'a'.repeat(64),
       allowedCameraIds: [f.cameraId],
       clockToleranceMs: 1000,
+      routeEpoch: '00000000-0000-4000-8000-000000000001',
     });
     const store = new TrackedFramePrototypeStore(auth, {
       pendingTtlMs: 30000,
