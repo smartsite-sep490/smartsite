@@ -381,9 +381,6 @@ test('account linking, encrypted DB enrollment, scoped matching and revocation',
     await dataSource.query('DELETE FROM qr_fallback_session WHERE site_id = ANY($1)', [
       [siteId, otherSiteId],
     ]);
-    await dataSource.query('DELETE FROM worker_gate_permission WHERE site_id = ANY($1)', [
-      [siteId, otherSiteId],
-    ]);
     await dataSource.query('DELETE FROM gate_access_log WHERE site_id = ANY($1)', [
       [siteId, otherSiteId],
     ]);

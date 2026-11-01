@@ -8,7 +8,6 @@ import {
   WorkerScheduleEntity,
   ShiftEntity,
   WorkerSiteZoneAssignmentEntity,
-  WorkerGatePermissionEntity,
   ContractorEntity,
   ContractorSiteParticipationEntity,
   WorkerComplianceProfileEntity,
@@ -40,7 +39,6 @@ function fixture(
   return {
     getRepository: (entity: unknown) => {
       if (entity === WorkerComplianceProfileEntity) return { findOneBy: async () => null };
-      if (entity === WorkerGatePermissionEntity) return { findBy: async () => [] };
       if (entity === WorkerDocumentEntity)
         return {
           findBy: async () =>

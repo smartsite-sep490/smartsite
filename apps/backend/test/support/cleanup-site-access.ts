@@ -19,7 +19,6 @@ export async function cleanupSiteAccess(source: DataSource, siteIds: string[]) {
     [siteIds],
   );
   await source.query('DELETE FROM user_notification WHERE site_id = ANY($1)', [siteIds]);
-  await source.query('DELETE FROM timesheet WHERE site_id = ANY($1)', [siteIds]);
   await source.query('DELETE FROM overtime_request WHERE site_id = ANY($1)', [siteIds]);
   await source.query(
     'UPDATE attendance_session SET applied_correction_id = NULL WHERE site_id = ANY($1)',
