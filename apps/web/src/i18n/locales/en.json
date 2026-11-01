@@ -1205,7 +1205,7 @@
   "security_gate_desk_view.manual_clearance_is_not_implemented": "Manual clearance is not implemented",
   "common.retry_scan": "Retry Scan",
   "security_gate_desk_view.security_officer_operating_guidelines_sop": "Security Officer Operating Guidelines (SOP)",
-  "security_gate_desk_view.webcam_match_provides_preliminary_identity_verification_backend_authorizes_access": "Webcam match provides preliminary identity verification; backend authorizes access based on zone permissions.",
+  "security_gate_desk_view.webcam_match_provides_preliminary_identity_verification_backend_authorizes_access": "Webcam match provides preliminary identity verification; the backend checks the worker's Site entry eligibility.",
   "security_gate_desk_view.when_clearance_is_denied_red_do_not_admit_worker_or_initiate_qr_fallback_without_s": "When clearance is DENIED (red), do not admit worker or initiate QR fallback without supervisor authorization.",
   "security_gate_desk_view.for_inconclusive_face_matches_give_the_worker_a_fallback_session_id_and_request_th": "If face verification is inconclusive, open QR fallback and scan the QR or enter the 8-character code from the Worker's mobile app.",
   "security_gate_desk_view.worker_dynamic_qr_fallback": "Worker Dynamic QR Fallback",

@@ -1205,7 +1205,7 @@
   "security_gate_desk_view.manual_clearance_is_not_implemented": "Chưa hỗ trợ cấp quyền thủ công",
   "common.retry_scan": "Quét lại",
   "security_gate_desk_view.security_officer_operating_guidelines_sop": "Hướng dẫn vận hành cho nhân viên bảo vệ (SOP)",
-  "security_gate_desk_view.webcam_match_provides_preliminary_identity_verification_backend_authorizes_access": "Kết quả webcam cung cấp xác minh danh tính ban đầu; backend quyết định quyền vào dựa trên quyền khu vực.",
+  "security_gate_desk_view.webcam_match_provides_preliminary_identity_verification_backend_authorizes_access": "Kết quả webcam cung cấp xác minh danh tính ban đầu; backend kiểm tra điều kiện vào công trường của công nhân.",
   "security_gate_desk_view.when_clearance_is_denied_red_do_not_admit_worker_or_initiate_qr_fallback_without_s": "Khi bị TỪ CHỐI (màu đỏ), không cho công nhân vào hoặc mở QR dự phòng nếu chưa được người giám sát cho phép.",
   "security_gate_desk_view.for_inconclusive_face_matches_give_the_worker_a_fallback_session_id_and_request_th": "Nếu chưa xác minh được khuôn mặt, mở xác minh QR dự phòng rồi quét QR hoặc nhập mã 8 ký tự từ mobile của công nhân.",
   "security_gate_desk_view.worker_dynamic_qr_fallback": "QR động dự phòng cho công nhân",

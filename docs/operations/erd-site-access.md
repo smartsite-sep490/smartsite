@@ -1,5 +1,10 @@
 # Site Access và ERD ngày 02/10/2026
 
+Cập nhật cấu trúc ngày 01/11/2026: các bảng đã bỏ/gộp được xử lý qua
+[migration database](../../apps/backend/src/database/migrations).
+Các mô tả luồng và kết quả kiểm chứng có ngày bên dưới
+ghi lại các đợt triển khai trước; hướng dẫn chấm công hiện tại ở [MF03](mf03-attendance.md).
+
 Phạm vi thay đổi này là sáu mục Site Access và các bảng liên quan đến visitor, quyền vào Site/Zone, khuôn mặt, lượt qua cổng và attendance. Đây là bước triển khai nghiệp vụ theo ERD, không phải chuyển toàn bộ hệ thống sang đúng 43 bảng vật lý.
 
 ## Các luồng đã triển khai
@@ -16,17 +21,18 @@ Phạm vi thay đổi này là sáu mục Site Access và các bảng liên quan
 
 ## Tên bảng tương thích
 
-| ERD logical                                         | Bảng vật lý đang dùng                                     |
-| --------------------------------------------------- | --------------------------------------------------------- |
-| account                                             | app_user                                                  |
-| site_contractor                                     | contractor_site_participation                             |
-| worker_assignment                                   | worker_site_zone_assignment (giữ zone_ids/gate_id legacy) |
-| visit                                               | visitor_visit; visitor riêng và visit_zone được bổ sung   |
-| access_credential                                   | qr_credential; consumed_at tương ứng used_at              |
-| access_attempt / gate_event                         | access_attempt / gate_event                               |
-| contractor_zone_permission / worker_zone_permission | cùng tên ERD                                              |
-| attendance_event / session / correction             | cùng tên ERD                                              |
-| audit_log                                           | audit_log                                                 |
+| ERD logical                                         | Bảng vật lý đang dùng                                                                    |
+| --------------------------------------------------- | ---------------------------------------------------------------------------------------- |
+| account                                             | app_user                                                                                 |
+| site_contractor                                     | contractor_site_participation                                                            |
+| worker_assignment                                   | worker_site_zone_assignment (giữ zone_ids; không còn gate_id)                            |
+| visit                                               | visitor_visit; visitor riêng và visit_zone được bổ sung                                  |
+| access_credential                                   | qr_credential; consumed_at tương ứng used_at                                             |
+| access_attempt / gate_event                         | access_attempt / gate_event                                                              |
+| visitor passage                                     | gate_event (chứa count, attendees, request_hash, recorded_by và thời điểm lịch sử khách) |
+| contractor_zone_permission / worker_zone_permission | cùng tên ERD                                                                             |
+| attendance_event / session / correction             | cùng tên ERD                                                                             |
+| audit_log                                           | audit_log                                                                                |
 
 `face_profile` vẫn dùng ciphertext được mã hóa trong PostgreSQL và hash reference của AI, thay vì `template_ref` tới kho private độc lập. API không trả ciphertext/hash. Đây là lựa chọn tương thích với AI đang chạy; không tuyên bố đã chuyển sang external template storage. `captured_by` tương ứng `created_by_user_id`.
 

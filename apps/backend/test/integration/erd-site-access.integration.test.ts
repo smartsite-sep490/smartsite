@@ -14,7 +14,6 @@ import {
   ZoneType,
   ZoneRestrictionPolicy,
   WorkerSiteZoneAssignmentEntity,
-  WorkerGatePermissionEntity,
   AccessAttemptEntity,
   GateEventEntity,
   AttendanceEventEntity,
@@ -454,7 +453,6 @@ test('ERD: bounded permissions, gate confirmation, temporary passage and attenda
     await dataSource.query('DELETE FROM worker_schedule WHERE site_id=$1', [siteId]);
     await dataSource.query('DELETE FROM shift WHERE site_id=$1', [siteId]);
     await dataSource.query('DELETE FROM schedule_version WHERE site_id=$1', [siteId]);
-    await dataSource.getRepository(WorkerGatePermissionEntity).delete({ siteId });
     await dataSource.getRepository(WorkerSiteZoneAssignmentEntity).delete({ siteId });
     await dataSource.getRepository(WorkerEntity).delete({ siteId });
     await dataSource.getRepository(ContractorSiteParticipationEntity).delete({ siteId });

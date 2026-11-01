@@ -238,6 +238,7 @@ export function VisitorAccessView({
     },
     onSuccess: () => {
       manualRetry.current = null;
+      setRecorded(null);
       setRepresentativeConfirmed(false);
       setManualCheckoutVisit(null);
       setManualCheckoutNote('');

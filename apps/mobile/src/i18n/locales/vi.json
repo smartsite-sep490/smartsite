@@ -440,7 +440,7 @@
     "validThrough": "Hiệu lực đến: {{date}}",
     "noZones": "Chưa có khu vực nào được cấp quyền.",
     "revoked": "Đã thu hồi",
-    "authorizationHint": "ℹ️ Quyền vào cổng/khu vực được máy chủ kiểm tra theo lịch và phạm vi hiện hành.",
+    "authorizationHint": "ℹ️ Quyền vào công trường và khu vực được máy chủ kiểm tra theo lịch và phạm vi hiện hành.",
     "requestAssignment": "Gửi đề nghị phân công",
     "assignmentHint": "Đề nghị cần được xét theo quy trình. Đại diện không tự duyệt quyền vào.",
     "requestedZones": "Khu vực đề nghị",
@@ -1017,7 +1017,7 @@
     "WORKER_DOCUMENTS_INVALID": "Hồ sơ giấy tờ chưa đủ điều kiện hoặc đã hết hạn"
   },
   "systemMessages": {
-    "errors_gate_assignment_required": "Cần có phân công công trường đã được duyệt và còn thời hạn trước khi cấp quyền cổng. Tạo và duyệt phân công tại mục Phân quyền khu vực.",
+    "errors_gate_assignment_required": "Cần có phân công công trường đã được duyệt và còn thời hạn trước khi cấp quyền khu vực.",
     "notification-utils_you_are_not_scheduled_for_a_shift_on_value_at_this_site_and_entry_is_not_permitted": "Bạn chưa được phân công ca làm ngày {{value1}} tại công trường này nên không được vào. Hãy liên hệ đại diện nhà thầu.",
     "errors_document_signature": "Chọn tệp JPEG, PNG hoặc PDF đúng định dạng.",
     "errors_document_size": "Chọn giấy tờ có dung lượng tối đa 5 MiB.",
