@@ -16,6 +16,8 @@ The same unregistered candidate migration adds an immutable `EVENT_LOCAL`/`TRACK
 
 `TrackedPpeEpisodeProjection` is an unregistered prototype of the admission transaction's business port. It reconstructs the original issued region/PPE policy, groups qualified PPE findings by technical segment and subtype/Zone, and retains original per-part event/PERSON mappings. Numeric tracker labels may change without rewriting the first finding's legacy grouping-key bytes. Healthy people acquire technical heads without empty safety episodes. Repeated findings advance observation counts/history without unread/content revision increments; a new subtype or changed region set advances the episode revision once per subject batch. Original timestamps are copied from raw storage. This port does not emit notifications and is not an independently authenticated API: its caller must perform original-part authentication and transactional sealing/head admission first.
 
+Explicit captured retirement and the trusted scope fence seal collection for existing TRACKED episodes of the retired segments in the same transaction. Empty capture alone does not seal collection. This preserves the last actual PERSON observation, finding/review status, content/seen revisions and recipients: technical collection ending is not a safety resolution or a fabricated Zone EXIT. The scope fence uses the same business helper and scoped segment/Site/camera join; no empty episode is created for a healthy retired segment.
+
 ## Verification scope
 
 Meaningful tests are in `tracked-frame-parts.test.ts`, `tracked-head-plan.test.ts`, `tracked-storage-migration.test.ts`, and the four `integration/*tracked*` / subject-storage fixtures. They cover immutable retries, reverse parts, scoped bounds, deadline concurrency, predecessor recovery, original nonzero PERSON, atomic rollback, tombstones and capture rewind. Integration tests use the dedicated isolated test DataSource; never point them at website/demo or production databases.
@@ -24,7 +26,7 @@ The migration remains absent from the runtime registry. Reversal refuses tracked
 
 ## Open release gates
 
-- Production wiring of the PPE business port, retirement/collection and immutable route ownership, per-finding evidence/detail readers, recipient projection and mixed MF06 capture-time authority.
+- Production wiring of the PPE business port and immutable route ownership, per-finding evidence/detail readers, recipient projection and mixed MF06 capture-time authority.
 - Integration of the trusted transition prototype with a reviewed Backend control plane, durable supervisor/scheduler and actual restart checks.
 - Public raw ACK contract, reviewed canonical Main SHA and exact paired AI vendoring.
 - Qualified tracker/profile, measured clock/gap/capacity policies, query plans and operational performance.

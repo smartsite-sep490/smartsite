@@ -9,6 +9,9 @@ import { TrackedPartAuthenticator } from '../../src/integrations/ai/tracked-part
 import { TrackedFramePrototypeStore } from '../../src/integrations/ai/tracked-frame-storage.js';
 import { TrackedFrameAdmission } from '../../src/integrations/ai/tracked-frame-admission.js';
 import { CameraEventAdmissionService } from '../../src/modules/cameras/camera-event-admission.service.js';
+import { provisionCameraWorkerGeneration } from '../../src/modules/cameras/camera-worker-generations.js';
+import { recordCameraConfigurationAcknowledgement } from '../../src/modules/cameras/camera-configuration-acknowledgement.js';
+import { TrackedScopeTransition } from '../../src/integrations/ai/tracked-scope-transition.js';
 
 test('three affected people among ten yield three episodes, original findings and one material revision per subject batch', async () => {
   const owned = createIsolatedTestDatabase(),
@@ -85,7 +88,7 @@ test('three affected people among ten yield three episodes, original findings an
         },
       };
     };
-    const process = async (e: ReturnType<typeof event>) => {
+    const process = async (e: { framePartition: { frameId: string } }) => {
       await store.store(db, e, f.context, f.generation.secret);
       return admission.process(
         db,
@@ -212,6 +215,74 @@ test('three affected people among ten yield three episodes, original findings an
           r.revision === (r.segment === segments[0] ? 4 : r.segment === segments[1] ? 3 : 2),
       ),
     );
+    const alertsBeforeClose = await db.query('SELECT * FROM safety_alert ORDER BY id');
+    const episodeSnapshot = () =>
+      db.query(`SELECT tracking_segment_id AS segment,content_revision AS revision,last_observed_at,collection_state AS state
+      FROM safety_episode ORDER BY tracking_segment_id`);
+    const beforeClose = await episodeSnapshot();
+    const observationSnapshot = (
+      rows: Array<{ segment: string; revision: number; last_observed_at: Date }>,
+    ) =>
+      rows.map((r) => ({
+        segment: r.segment,
+        revision: r.revision,
+        last_observed_at: r.last_observed_at,
+      }));
+    const empty = f.event(0, 1, '5');
+    assert.equal((await process(empty)).kind, 'SEALED');
+    assert.deepEqual(await episodeSnapshot(), beforeClose); // Empty alone never resolves safety work.
+    const retirementBase = f.event(0, 1, '6');
+    const retirement = {
+      ...retirementBase,
+      continuity: {
+        ...retirementBase.continuity,
+        retiredSegments: [{ segmentId: segments[0]!, reason: 'LOST_TRACK' }],
+      },
+    };
+    assert.equal((await process(retirement)).kind, 'SEALED');
+    const afterRetire = await episodeSnapshot();
+    assert.equal(
+      afterRetire.find((r: { segment: string }) => r.segment === segments[0]).state,
+      'SEALED',
+    );
+    assert.ok(
+      afterRetire
+        .filter((r: { segment: string }) => r.segment !== segments[0])
+        .every((r: { state: string }) => r.state === 'COLLECTING'),
+    );
+    assert.deepEqual(observationSnapshot(afterRetire), observationSnapshot(beforeClose));
+    const generation = await provisionCameraWorkerGeneration(db, f.cameraId, [f.cameraId], 120000),
+      receiptCommandId = randomUUID();
+    await recordCameraConfigurationAcknowledgement(db, f.cameraId, generation.secret, {
+      commandId: receiptCommandId,
+      workerGenerationId: generation.workerGenerationId,
+      streamSessionId: generation.streamSessionId,
+      configurationVersion: 1,
+      bundleSha256: f.context.bundleSha256,
+      viewRevision: 1,
+      outcome: 'LOADED',
+    });
+    const nextContext = {
+      ...f.context,
+      workerGenerationId: generation.workerGenerationId,
+      streamSessionId: generation.streamSessionId,
+      receiptCommandId,
+    };
+    const target = { ...f.event(), streamSessionId: generation.streamSessionId };
+    await store.store(db, target, nextContext, generation.secret);
+    const [{ scope_sha256: oldScope }] = await db.query(
+      'SELECT scope_sha256 FROM ai_subject_segment WHERE segment_id=$1',
+      [segments[1]],
+    );
+    await new TrackedScopeTransition(auth, { maxPendingRows: 32, maxActiveSegments: 32 }).apply(
+      db,
+      { commandId: randomUUID(), targetEventId: target.eventId, expectedOldScopes: [oldScope] },
+      generation.secret,
+    );
+    const afterFence = await episodeSnapshot();
+    assert.ok(afterFence.every((r: { state: string }) => r.state === 'SEALED'));
+    assert.deepEqual(observationSnapshot(afterFence), observationSnapshot(beforeClose));
+    assert.deepEqual(await db.query('SELECT * FROM safety_alert ORDER BY id'), alertsBeforeClose);
     assert.equal(
       (await db.query('SELECT count(*)::int AS n FROM safety_episode_recipient'))[0].n,
       0,

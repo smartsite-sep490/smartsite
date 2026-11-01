@@ -87,7 +87,12 @@ export async function seedTrackedFrameFixture(
     await recordCameraConfigurationBundle(
       manager,
       await manager.getRepository(CameraEntity).findOneByOrFail({ id: cameraId }),
-      { schemaVersion: '1.0.0', configurationVersion: 1, cameraExternalId: cameraId, regions },
+      {
+        schemaVersion: '1.0.0',
+        configurationVersion: 1,
+        cameraExternalId: cameraId,
+        regions: [...regions].sort((a, b) => a.regionId.localeCompare(b.regionId)),
+      },
       new ZoneConfigurationService(db, new SiteConfigurationService(db)),
     );
   });

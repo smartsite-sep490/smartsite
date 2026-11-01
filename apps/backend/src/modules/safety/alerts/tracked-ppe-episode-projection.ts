@@ -33,7 +33,10 @@ interface Payload {
   capturedAt: string;
   framePartition: { partIndex: number; partCount: number; frameId: string };
   observations: Observation[];
-  continuity: { subjects: Array<{ personObservationIndex: number; segmentId: string }> };
+  continuity: {
+    subjects: Array<{ personObservationIndex: number; segmentId: string }>;
+    retiredSegments: Array<{ segmentId: string }>;
+  };
 }
 interface Raw {
   eventId: string;
@@ -64,6 +67,37 @@ function unavailable(): never {
   throw new Error('TRACKED_PPE_PROJECTION_UNAVAILABLE');
 }
 const uuid = /^[a-f0-9]{8}(-[a-f0-9]{4}){3}-[a-f0-9]{12}$/;
+
+/** End technical collection only. Preserve findings/reviews, last real observation and unread revision. */
+export async function sealRetiredTrackedEpisodes(
+  manager: EntityManager,
+  siteId: string,
+  cameraId: string,
+  segmentIds: readonly string[],
+) {
+  if (
+    !manager.queryRunner?.isTransactionActive ||
+    manager.queryRunner.isReleased ||
+    !uuid.test(siteId) ||
+    !uuid.test(cameraId) ||
+    segmentIds.length > 4096 ||
+    segmentIds.some((id) => !uuid.test(id))
+  )
+    unavailable();
+  if (!segmentIds.length) return;
+  const rows = await manager.query<Array<{ id: string }>>(
+    `SELECT e.id FROM safety_episode e JOIN ai_subject_segment s
+    ON s.segment_id=e.tracking_segment_id AND s.scope_sha256=e.tracking_scope_sha256 AND s.site_id=e.site_id AND s.camera_id=e.camera_id
+    WHERE e.subject_kind='TRACKED' AND e.collection_state='COLLECTING' AND e.site_id=$1 AND e.camera_id=$2
+    AND s.state='RETIRED' AND s.segment_id=ANY($3::uuid[]) ORDER BY e.id FOR UPDATE OF e`,
+    [siteId, cameraId, [...new Set(segmentIds)]],
+  );
+  if (rows.length)
+    await manager.query(
+      "UPDATE safety_episode SET collection_state='SEALED' WHERE site_id=$1 AND camera_id=$2 AND id=ANY($3::uuid[])",
+      [siteId, cameraId, rows.map((r) => r.id)],
+    );
+}
 
 /** Unregistered business projection for the tracked admission owner's transaction only.
  * The admission owner authenticates every original immediately before invoking this port.
@@ -324,6 +358,12 @@ export class TrackedPpeEpisodeProjection {
         deliveryAdmitted: false,
       });
     }
+    await sealRetiredTrackedEpisodes(
+      manager,
+      scope.siteId,
+      scope.cameraId,
+      (coordinator.rawPayload as Payload).continuity.retiredSegments.map((s) => s.segmentId),
+    );
     return projected;
   }
   private regions(

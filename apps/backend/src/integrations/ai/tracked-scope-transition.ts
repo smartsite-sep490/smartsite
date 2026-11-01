@@ -1,5 +1,6 @@
 import type { DataSource } from 'typeorm';
 import { TrackedPartAuthenticator } from './tracked-part-authentication.js';
+import { sealRetiredTrackedEpisodes } from '../../modules/safety/alerts/tracked-ppe-episode-projection.js';
 
 interface TransitionCommand {
   /** Server correlation only; this is not a public worker command or a durable command receipt. */
@@ -163,6 +164,12 @@ export class TrackedScopeTransition {
           retirement_reason='SERVER_SCOPE_TRANSITION',retirement_provenance=$3 WHERE segment_id=$1 AND state='ACTIVE'`,
           [head.segmentId, now, provenance],
         );
+      await sealRetiredTrackedEpisodes(
+        manager,
+        target.siteId,
+        target.cameraId,
+        heads.map((head) => head.segmentId),
+      );
       return { retiredSegments: heads.length, terminalizedParts: pending.length };
     });
   }
