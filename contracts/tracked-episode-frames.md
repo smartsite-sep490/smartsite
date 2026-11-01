@@ -2,6 +2,8 @@
 
 This additive contract does not register an endpoint or enable tracked ingestion. Existing EVENT_LOCAL episode DTOs and MF08 readers are unchanged. Canonical source must be reviewed and merged before immutable Main provenance can be used for paired AI adoption.
 
+An unregistered candidate `TrackedEpisodeFramesController` implements the bindings below and has been exercised in an isolated Nest HTTP test with real auth/session, PostgreSQL and synthetic JPEG evidence. It is absent from runtime module composition. That test does not establish production bootstrap, deployment or current website route availability.
+
 The pure browser-safe export is `@smartsite/contracts/tracked-episode-frames`. It supplies original-observation page/media types and exact HTTP query parsers. Query parsing establishes shape only; Backend still authorizes the current account/session, Site, episode, finding and original event/PERSON mapping before and after media I/O.
 
 ## Planned HTTP binding

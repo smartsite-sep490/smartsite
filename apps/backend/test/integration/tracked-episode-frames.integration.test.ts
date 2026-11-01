@@ -6,6 +6,9 @@ import { join } from 'node:path';
 import { test } from 'node:test';
 import sharp from 'sharp';
 import { JwtService } from '@nestjs/jwt';
+import { Test } from '@nestjs/testing';
+import type { NestExpressApplication } from '@nestjs/platform-express';
+import { HttpExceptionFilter } from '../../src/common/http/http-exception.filter.js';
 import { createIsolatedTestDatabase } from '../support/isolated-test-database.js';
 import { seedTrackedFrameFixture } from '../support/tracked-frame-fixture.js';
 import { createTestConfig } from '../support/config.js';
@@ -27,6 +30,7 @@ test('tracked finding pages and JPEG reads retain exact original sources and rec
     'D:/Ky9-FPT/SmartSiteData/runs/c04-tracked-storage-prototype-20261101-v1',
     `frame-fixture-${randomUUID()}`,
   );
+  let httpApp: NestExpressApplication | undefined;
   try {
     await owned.initialize();
     await db.transaction((m) => new TrackedSubjectStorage1795046400003().up(m.queryRunner!));
@@ -196,6 +200,46 @@ test('tracked finding pages and JPEG reads retain exact original sources and rec
     const content = await reader.read(request(), f.siteId, episodeId, source);
     assert.deepEqual(content.bytes, later.bytes);
     assert.equal(content.frameSha256, later.sha256);
+    const { TrackedEpisodeFramesController } =
+      await import('../../src/modules/safety/alerts/tracked-episode-frames.controller.js');
+    const module = await Test.createTestingModule({
+      controllers: [TrackedEpisodeFramesController],
+      providers: [
+        { provide: TrackedEpisodeFrameQuery, useValue: reader },
+        { provide: UserAuthGuard, useValue: guard },
+        { provide: AuthService, useValue: new AuthService(db, tokens) },
+      ],
+    }).compile();
+    httpApp = module.createNestApplication<NestExpressApplication>({ logger: false });
+    httpApp.setGlobalPrefix('api/v1');
+    httpApp.useGlobalFilters(new HttpExceptionFilter());
+    await httpApp.listen(0, '127.0.0.1');
+    const endpoint = `${await httpApp.getUrl()}/api/v1/sites/${f.siteId}/safety-episodes/${episodeId}`;
+    const headers = { Authorization: `Bearer ${accessToken}` };
+    const httpPage = await fetch(`${endpoint}/observations?limit=1`, { headers });
+    assert.equal(httpPage.status, 200);
+    assert.equal(httpPage.headers.get('cache-control'), 'no-store');
+    assert.equal((await httpPage.json()).throughSequence, '9007199254740995');
+    const mediaEndpoint = `${endpoint}/findings/${source.alertId}/events/${source.eventId}/frame?personObservationIndex=0&evidenceIndex=0`;
+    const httpFrame = await fetch(mediaEndpoint, { headers });
+    assert.equal(httpFrame.status, 200);
+    assert.equal(httpFrame.headers.get('content-type'), 'image/jpeg');
+    assert.equal(httpFrame.headers.get('cache-control'), 'private, no-store');
+    assert.equal(httpFrame.headers.get('x-content-type-options'), 'nosniff');
+    assert.deepEqual(Buffer.from(await httpFrame.arrayBuffer()), later.bytes);
+    const httpCrop = await fetch(`${mediaEndpoint}&representation=SUBJECT`, { headers });
+    assert.equal(httpCrop.status, 200);
+    assert.notDeepEqual(Buffer.from(await httpCrop.arrayBuffer()), later.bytes);
+    assert.equal(
+      (await fetch(`${endpoint}/observations?limit=1&limit=2`, { headers })).status,
+      400,
+    );
+    assert.equal((await fetch(`${mediaEndpoint}&representation=FACE`, { headers })).status, 400);
+    assert.equal((await fetch(`${endpoint}/observations`)).status, 401);
+    assert.equal(
+      (await fetch(endpoint.replace(f.siteId, randomUUID()) + '/observations', { headers })).status,
+      403,
+    );
     const crop = await reader.read(request(), f.siteId, episodeId, source, 'SUBJECT');
     assert.equal(crop.frameSha256, later.sha256);
     assert.notEqual(crop.sha256, later.sha256);
@@ -269,6 +313,7 @@ test('tracked finding pages and JPEG reads retain exact original sources and rec
     );
     await assert.rejects(revokedSessionReader.read(request(), f.siteId, episodeId, source));
   } finally {
+    await httpApp?.close();
     await owned.dispose();
   }
 });
