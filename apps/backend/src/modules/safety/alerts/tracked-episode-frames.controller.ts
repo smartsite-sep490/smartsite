@@ -27,6 +27,17 @@ import { TrackedEpisodeFrameQuery } from './tracked-episode-frame-query.js';
 @Controller('sites/:siteId/safety-episodes/:id')
 export class TrackedEpisodeFramesController {
   constructor(private readonly frames: TrackedEpisodeFrameQuery) {}
+  @Get('tracked')
+  @Header('Cache-Control', 'no-store')
+  tracked(
+    @Req() request: AuthenticatedRequest,
+    @Param('siteId') siteId: string,
+    @Param('id') id: string,
+    @Query() query: Record<string, unknown>,
+  ) {
+    if (Object.keys(query).length) invalid('Unexpected tracked detail query');
+    return this.frames.detail(request, siteId, id);
+  }
   @Get('observations')
   @Header('Cache-Control', 'no-store')
   observations(

@@ -1,11 +1,13 @@
 import { createHash } from 'node:crypto';
 import type { DataSource, EntityManager } from 'typeorm';
 import type {
+  TrackedEpisodeDetail,
   TrackedEpisodeObservationOptions,
   TrackedEpisodeObservationPage,
   TrackedEpisodeMediaSource,
   TrackedEpisodeMediaRepresentation,
 } from '@smartsite/contracts/tracked-episode-frames';
+import { parseTrackedEpisodeDetail } from '@smartsite/contracts/tracked-episode-frames';
 import {
   computeCanonicalPayloadHash,
   computeWorkerEventBindingHash,
@@ -38,6 +40,9 @@ interface Scope {
   segmentId: string;
   scopeSha256: string;
   contentRevision: number;
+  firstObservedAt: string;
+  lastObservedAt: string;
+  collectionState: 'COLLECTING' | 'SEALED';
 }
 interface Mapping {
   alertId: string;
@@ -124,12 +129,56 @@ export class TrackedEpisodeFrameQuery {
   private async episode(manager: EntityManager, siteId: string, id: string): Promise<Scope> {
     const [e] = await manager.query<Scope[]>(
       `SELECT id,site_id AS "siteId",camera_id AS "cameraId",tracking_segment_id AS "segmentId",
-      tracking_scope_sha256 AS "scopeSha256",content_revision AS "contentRevision" FROM safety_episode
+      tracking_scope_sha256 AS "scopeSha256",content_revision AS "contentRevision",
+      to_char(first_observed_at AT TIME ZONE 'UTC','YYYY-MM-DD"T"HH24:MI:SS.US"Z"') AS "firstObservedAt",
+      to_char(last_observed_at AT TIME ZONE 'UTC','YYYY-MM-DD"T"HH24:MI:SS.US"Z"') AS "lastObservedAt",
+      collection_state AS "collectionState" FROM safety_episode
       WHERE id=$1 AND site_id=$2 AND subject_kind='TRACKED' FOR SHARE`,
       [id, siteId],
     );
     if (!e) missing();
     return e;
+  }
+  async detail(
+    request: AuthenticatedRequest,
+    rawSite: string,
+    rawEpisode: string,
+  ): Promise<TrackedEpisodeDetail> {
+    const site = uuid(rawSite).toLowerCase(),
+      id = uuid(rawEpisode).toLowerCase();
+    return this.db.transaction('REPEATABLE READ', async (manager) => {
+      await this.authorize(manager, request, site);
+      const e = await this.episode(manager, site, id);
+      const [segment] = await manager.query(
+        'SELECT 1 FROM ai_subject_segment WHERE segment_id=$1 AND scope_sha256=$2 AND site_id=$3 AND camera_id=$4 FOR SHARE',
+        [e.segmentId, e.scopeSha256, site, e.cameraId],
+      );
+      if (!segment) conflict('Tracked subject provenance is inconsistent');
+      const findings = await manager.query(
+        `SELECT a.id AS "alertId",a.alert_type AS "alertType",a.candidate_subtype AS "candidateSubtype",
+        a.status,a.revision AS "alertRevision",a.zone_id AS "zoneId",
+        (SELECT count(*)::int FROM alert_detection_mapping m WHERE m.alert_id=a.id) AS "observationCount"
+        FROM safety_alert a WHERE a.episode_id=$1 AND a.site_id=$2 ORDER BY a.id LIMIT 257`,
+        [id, site],
+      );
+      const result = parseTrackedEpisodeDetail(
+        {
+          episodeId: id,
+          siteId: site,
+          cameraId: e.cameraId,
+          subject: { kind: 'TRACKED', segmentId: e.segmentId, scopeSha256: e.scopeSha256 },
+          firstObservedAt: e.firstObservedAt,
+          lastObservedAt: e.lastObservedAt,
+          contentRevision: e.contentRevision,
+          collectionState: e.collectionState,
+          findings,
+        },
+        site,
+        id,
+      );
+      if (!result) conflict('Tracked episode metadata is inconsistent');
+      return result;
+    });
   }
   private async qualify(manager: EntityManager, e: Scope, row: Mapping) {
     if (

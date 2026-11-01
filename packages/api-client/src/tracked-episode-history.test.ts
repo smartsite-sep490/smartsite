@@ -25,6 +25,60 @@ const page = () => ({
   ],
 });
 afterEach(() => vi.unstubAllGlobals());
+const detail = () => ({
+  episodeId: episode,
+  siteId: site,
+  cameraId: alert,
+  subject: { kind: 'TRACKED', segmentId: site, scopeSha256: 'a'.repeat(64) },
+  firstObservedAt: '2026-11-01T10:00:00Z',
+  lastObservedAt: '2026-11-01T10:01:00Z',
+  contentRevision: 1,
+  collectionState: 'COLLECTING',
+  findings: [
+    {
+      alertId: alert,
+      alertType: 'PPE_VIOLATION',
+      candidateSubtype: 'MISSING_HARD_HAT',
+      status: 'PENDING_REVIEW',
+      alertRevision: 1,
+      zoneId: null,
+      observationCount: 3,
+    },
+  ],
+});
+it('reads distinct tracked detail without inventing anchor identity or evidence', async () => {
+  const fetcher = vi.fn<typeof fetch>(async () => Response.json(detail()));
+  vi.stubGlobal('fetch', fetcher);
+  const result = await new SmartSiteManagementClient('https://example.test').getTrackedEpisode(
+    'token',
+    site,
+    episode,
+  );
+  expect(result.subject.kind).toBe('TRACKED');
+  expect(result.findings[0]?.observationCount).toBe(3);
+  expect(String(fetcher.mock.calls[0]?.[0])).toContain(
+    `/sites/${site}/safety-episodes/${episode}/tracked`,
+  );
+  expect(fetcher.mock.calls[0]?.[1]).toMatchObject({ cache: 'no-store', redirect: 'error' });
+});
+it('rejects mismatched tracked detail and oversized metadata', async () => {
+  for (const response of [
+    Response.json({ ...detail(), siteId: alert }),
+    new Response('x'.repeat(131073), { headers: { 'content-type': 'application/json' } }),
+  ]) {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () => response),
+    );
+    await expect(
+      new SmartSiteManagementClient('https://example.test').getTrackedEpisode(
+        'token',
+        site,
+        episode,
+      ),
+    ).rejects.toMatchObject({ code: 'invalid-response' });
+  }
+});
 it('uses bounded scoped no-store history transport and preserves uint64', async () => {
   const fetcher = vi.fn<typeof fetch>(async () => Response.json(page()));
   vi.stubGlobal('fetch', fetcher);

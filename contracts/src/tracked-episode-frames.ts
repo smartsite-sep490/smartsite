@@ -1,3 +1,27 @@
+import type { SafetyAlertStatus, SafetyAlertType } from './management-api.js';
+
+/** TRACKED metadata only: identity and original media belong to each original observation. */
+export interface TrackedEpisodeDetail {
+  episodeId: string;
+  siteId: string;
+  cameraId: string;
+  subject: { kind: 'TRACKED'; segmentId: string; scopeSha256: string };
+  firstObservedAt: string;
+  lastObservedAt: string;
+  contentRevision: number;
+  collectionState: 'COLLECTING' | 'SEALED';
+  findings: {
+    alertId: string;
+    alertType: SafetyAlertType;
+    candidateSubtype: string;
+    status: SafetyAlertStatus;
+    alertRevision: number;
+    zoneId: string | null;
+    /** Original contributor mappings, not unique people, frames or notifications. */
+    observationCount: number;
+  }[];
+}
+
 /** Additive transport contract. The internal tracked reader is not registered by this module. */
 export interface TrackedEpisodeObservationOptions {
   offset?: number;
@@ -172,6 +196,97 @@ const time = (v: unknown): v is string =>
     v,
   ) &&
   Number.isFinite(Date.parse(v.replace(/:60(?=\.|[Zz]|[+-])/, ':59')));
+
+export function parseTrackedEpisodeDetail(
+  input: unknown,
+  siteId: string,
+  episodeId: string,
+): TrackedEpisodeDetail | null {
+  try {
+    const p = objectFields(input, [
+      'episodeId',
+      'siteId',
+      'cameraId',
+      'subject',
+      'firstObservedAt',
+      'lastObservedAt',
+      'contentRevision',
+      'collectionState',
+      'findings',
+    ]);
+    if (
+      !id(siteId) ||
+      !id(episodeId) ||
+      !p ||
+      p.siteId !== siteId ||
+      p.episodeId !== episodeId ||
+      !id(p.cameraId) ||
+      !time(p.firstObservedAt) ||
+      !time(p.lastObservedAt) ||
+      Date.parse(p.firstObservedAt) > Date.parse(p.lastObservedAt) ||
+      !safe(p.contentRevision, 2147483647) ||
+      p.contentRevision < 1 ||
+      !['COLLECTING', 'SEALED'].includes(p.collectionState as string)
+    )
+      return null;
+    const s = objectFields(p.subject, ['kind', 'segmentId', 'scopeSha256']);
+    if (!s || s.kind !== 'TRACKED' || !id(s.segmentId) || !hash(s.scopeSha256)) return null;
+    const rows = arrayValues(p.findings, 256);
+    if (!rows?.length) return null;
+    const findings: TrackedEpisodeDetail['findings'] = [],
+      seen = new Set<string>();
+    for (const row of rows) {
+      const f = objectFields(row, [
+        'alertId',
+        'alertType',
+        'candidateSubtype',
+        'status',
+        'alertRevision',
+        'zoneId',
+        'observationCount',
+      ]);
+      if (
+        !f ||
+        !id(f.alertId) ||
+        seen.has(f.alertId) ||
+        !['PPE_VIOLATION', 'RESTRICTED_ZONE_INTRUSION'].includes(f.alertType as string) ||
+        typeof f.candidateSubtype !== 'string' ||
+        !/^[A-Z][A-Z0-9_]{0,63}$/.test(f.candidateSubtype) ||
+        !['PENDING_REVIEW', 'NEEDS_MORE_EVIDENCE', 'CONFIRMED', 'DISMISSED', 'CLOSED'].includes(
+          f.status as string,
+        ) ||
+        !safe(f.alertRevision, 2147483647) ||
+        (f.zoneId !== null && !id(f.zoneId)) ||
+        !safe(f.observationCount, 2147483647) ||
+        f.observationCount < 1
+      )
+        return null;
+      seen.add(f.alertId);
+      findings.push({
+        alertId: f.alertId,
+        alertType: f.alertType as SafetyAlertType,
+        candidateSubtype: f.candidateSubtype,
+        status: f.status as SafetyAlertStatus,
+        alertRevision: f.alertRevision,
+        zoneId: f.zoneId as string | null,
+        observationCount: f.observationCount,
+      });
+    }
+    return {
+      episodeId,
+      siteId,
+      cameraId: p.cameraId,
+      subject: { kind: 'TRACKED', segmentId: s.segmentId, scopeSha256: s.scopeSha256 },
+      firstObservedAt: p.firstObservedAt,
+      lastObservedAt: p.lastObservedAt,
+      contentRevision: p.contentRevision,
+      collectionState: p.collectionState as 'COLLECTING' | 'SEALED',
+      findings,
+    };
+  } catch {
+    return null;
+  }
+}
 
 /** Runtime response validation against the exact requested episode, page and optional finding.
  * Shape/hash descriptors are not a claim that bytes are available or a Worker is identified.

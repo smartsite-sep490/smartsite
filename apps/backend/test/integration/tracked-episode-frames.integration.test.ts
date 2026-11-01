@@ -216,6 +216,38 @@ test('tracked finding pages and JPEG reads retain exact original sources and rec
     await httpApp.listen(0, '127.0.0.1');
     const endpoint = `${await httpApp.getUrl()}/api/v1/sites/${f.siteId}/safety-episodes/${episodeId}`;
     const headers = { Authorization: `Bearer ${accessToken}` };
+    const initialAlertRevisions = await db.query(
+      'SELECT revision FROM safety_alert WHERE episode_id=$1',
+      [episodeId],
+    );
+    assert.deepEqual(
+      [...new Set(initialAlertRevisions.map((row: { revision: number }) => row.revision))],
+      [0],
+    );
+    const trackedDetail = await fetch(`${endpoint}/tracked`, { headers });
+    assert.equal(trackedDetail.status, 200, await trackedDetail.clone().text());
+    const trackedBody = await trackedDetail.json();
+    assert.equal(trackedBody.episodeId, episodeId);
+    assert.equal(trackedBody.siteId, f.siteId);
+    assert.equal(trackedBody.subject.kind, 'TRACKED');
+    assert.equal(trackedBody.subject.segmentId, segmentId);
+    assert.equal(trackedBody.findings.length, 2);
+    assert.equal(
+      trackedBody.findings.reduce(
+        (n: number, finding: { observationCount: number }) => n + finding.observationCount,
+        0,
+      ),
+      3,
+    );
+    assert.equal('identityDecision' in trackedBody, false);
+    assert.equal('eventId' in trackedBody.subject, false);
+    assert.ok(trackedBody.findings.every((finding: object) => !('evidenceRefs' in finding)));
+    assert.equal((await fetch(`${endpoint}/tracked?identity=true`, { headers })).status, 400);
+    assert.equal((await fetch(`${endpoint}/tracked`)).status, 401);
+    assert.equal(
+      (await fetch(`${endpoint.replace(f.siteId, randomUUID())}/tracked`, { headers })).status,
+      403,
+    );
     const httpPage = await fetch(`${endpoint}/observations?limit=1`, { headers });
     assert.equal(httpPage.status, 200);
     assert.equal(httpPage.headers.get('cache-control'), 'no-store');

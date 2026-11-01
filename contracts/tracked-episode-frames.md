@@ -8,6 +8,7 @@ The pure browser-safe export is `@smartsite/contracts/tracked-episode-frames`. I
 
 ## Planned HTTP binding
 
+- `GET /sites/:siteId/safety-episodes/:id/tracked`: no query flags. Returns `TrackedEpisodeDetail`, a distinct TRACKED metadata shape with scoped technical subject, stored summary timestamps/revision/collection state and 1–256 findings. `observationCount` counts original contributor mapping rows, not unique people, video frames or notifications. A finding's initial `alertRevision` is legitimately zero; episode content revisions start at one. The response deliberately has no episode-anchor identity decision or shared evidence list. Original images/history remain on the per-finding observation/media routes below. Existing EVENT_LOCAL DTOs, detail/list/inbox and MF08 readers are unchanged; a unified list/inbox rollout is still a separate integration gate.
 - `GET /sites/:siteId/safety-episodes/:id/observations`: optional `offset`, `limit` (1–20), `throughSequence`, `alertId`. Default page size is 20. Offset and limit are canonical decimal HTTP strings converted to safe integers. `throughSequence` remains canonical uint64 decimal text, including values above JavaScript's safe integer limit. Keep the returned first-page fence on subsequent pages to avoid new frames shifting the historical page.
 - `GET /sites/:siteId/safety-episodes/:id/findings/:alertId/events/:eventId/frame`: required `personObservationIndex` and `evidenceIndex` (0–255), optional `representation=FRAME|SUBJECT` (default FRAME). SUBJECT is a mechanical crop of the original PERSON box, not Face identity. Responses are bounded JPEG bytes with no-store; HTTP implementation must set media headers and recheck authorization after reading. This path is a binding specification, not an active route claim.
 
@@ -20,6 +21,8 @@ Unknown, duplicate-array, numeric, accessor, symbol and non-plain query fields a
 `parseTrackedEpisodeObservationPage` validates the exact requested episode, offset/limit, optional finding and sequence fence. It rejects unsafe or numeric sequences, contradictory counts/hasMore, duplicate mappings/indexes, unknown metadata and conflicting immutable headers for one event. Returned structures are detached from input. Frame descriptors remain evidence references, not an availability or identity assertion.
 
 `SmartSiteManagementClient.listTrackedEpisodeObservations` uses the shared parser with a bounded 512 KiB JSON response, no-store and redirect-error transport, existing credential handling and request cancellation. This prepared client method does not activate the candidate controller or wire the feature into the current website.
+
+`parseTrackedEpisodeDetail` binds the requested Site and episode, validates bounded distinct findings and stored technical subject metadata, rejects unsolicited identity/evidence fields and detaches the result. `SmartSiteManagementClient.getTrackedEpisode` uses it with a bounded 128 KiB no-store/redirect-error JSON read and existing session/cancellation handling. Metadata is not a claim that any referenced media is currently available, that a worker is identified, or that a technical segment grants access authority.
 
 ## Original frame and crop integrity
 

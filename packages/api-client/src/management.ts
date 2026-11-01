@@ -15,6 +15,8 @@ import { parseSafetyEpisodeReadCommand } from '@smartsite/contracts/safety-episo
 import {
   parseTrackedEpisodeObservationQuery,
   parseTrackedEpisodeObservationPage,
+  parseTrackedEpisodeDetail,
+  type TrackedEpisodeDetail,
   type TrackedEpisodeObservationOptions,
   type TrackedEpisodeObservationPage,
   type TrackedEpisodeMediaSource,
@@ -1774,6 +1776,33 @@ export class SmartSiteManagementClient {
   getSite(token: string, siteId: string) {
     return this.request<SiteResponse>('GET', `/sites/${pathId(siteId)}`, token);
   }
+  /** Prepared episode transport; callers must wait for Backend rollout before exposing this UI. */
+  async getTrackedEpisode(
+    token: string,
+    siteId: string,
+    episodeId: string,
+    options?: RequestOptions,
+  ): Promise<TrackedEpisodeDetail> {
+    const payload = await this.request<unknown>(
+      'GET',
+      `/sites/${pathId(siteId)}/safety-episodes/${pathId(episodeId)}/tracked`,
+      token,
+      undefined,
+      undefined,
+      options,
+      { cache: 'no-store', redirect: 'error' },
+      131072,
+    );
+    const detail = parseTrackedEpisodeDetail(
+      payload,
+      siteId.toLowerCase(),
+      episodeId.toLowerCase(),
+    );
+    if (!detail)
+      throw new ApiError('invalid-response', 'Backend returned inconsistent tracked episode.');
+    return detail;
+  }
+
   /** Prepared episode transport; callers must wait for Backend rollout before exposing this UI. */
   async listTrackedEpisodeObservations(
     token: string,

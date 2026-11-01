@@ -1,11 +1,71 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
+import * as tracked from '../src/tracked-episode-frames.js';
 import {
   parseTrackedEpisodeObservationQuery,
   parseTrackedEpisodeMediaQuery,
   parseTrackedEpisodeObservationPage,
 } from '../src/tracked-episode-frames.js';
 const alertId = '11111111-1111-4111-8111-111111111111';
+const detail = () => ({
+  episodeId: '22222222-2222-4222-8222-222222222222',
+  siteId: alertId,
+  cameraId: '33333333-3333-4333-8333-333333333333',
+  subject: {
+    kind: 'TRACKED',
+    segmentId: '44444444-4444-4444-8444-444444444444',
+    scopeSha256: 'a'.repeat(64),
+  },
+  firstObservedAt: '2026-11-01T10:00:00.000001Z',
+  lastObservedAt: '2026-11-01T10:01:00.000002Z',
+  contentRevision: 2,
+  collectionState: 'COLLECTING',
+  findings: [
+    {
+      alertId,
+      alertType: 'PPE_VIOLATION',
+      candidateSubtype: 'MISSING_HARD_HAT',
+      status: 'PENDING_REVIEW',
+      alertRevision: 0,
+      zoneId: null,
+      observationCount: 3,
+    },
+  ],
+});
+test('tracked detail binds Site/episode and detaches metadata without anchor identity/evidence', () => {
+  const parse = Reflect.get(tracked, 'parseTrackedEpisodeDetail');
+  assert.equal(typeof parse, 'function');
+  const input = detail();
+  const result = parse(input, input.siteId, input.episodeId);
+  assert.deepEqual(result, input);
+  input.findings[0]!.observationCount = 99;
+  assert.equal(result.findings[0].observationCount, 3);
+  assert.equal(parse(detail(), input.cameraId, input.episodeId), null);
+});
+test('tracked detail rejects legacy subjects, duplicate findings, unsafe counts and unsolicited identity', () => {
+  const parse = Reflect.get(tracked, 'parseTrackedEpisodeDetail');
+  assert.equal(typeof parse, 'function');
+  const base = detail();
+  for (const input of [
+    { ...base, subject: { kind: 'EVENT_LOCAL', eventId: alertId, personObservationIndex: 0 } },
+    { ...base, subject: { ...base.subject, workerId: alertId } },
+    { ...base, findings: [base.findings[0], base.findings[0]] },
+    { ...base, findings: [] },
+    { ...base, findings: Array(257).fill(base.findings[0]) },
+    { ...base, findings: [{ ...base.findings[0], observationCount: 0 }] },
+    { ...base, findings: [{ ...base.findings[0], status: 'SAFE' }] },
+    { ...base, findings: [{ ...base.findings[0], alertRevision: -1 }] },
+    { ...base, identityDecision: { workerId: alertId } },
+    { ...base, contentRevision: Number.MAX_SAFE_INTEGER },
+    { ...base, lastObservedAt: '2026-10-01T00:00:00Z' },
+    Object.defineProperty({ ...base }, 'cameraId', {
+      get() {
+        throw new Error('Do not invoke');
+      },
+    }),
+  ])
+    assert.equal(parse(input, base.siteId, base.episodeId), null);
+});
 test('observation HTTP query retains uint64 text and bounded page controls', () => {
   assert.deepEqual(parseTrackedEpisodeObservationQuery({}), {});
   assert.deepEqual(
