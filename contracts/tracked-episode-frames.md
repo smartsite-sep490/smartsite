@@ -24,6 +24,16 @@ Unknown, duplicate-array, numeric, accessor, symbol and non-plain query fields a
 
 `parseTrackedEpisodeDetail` binds the requested Site and episode, validates bounded distinct findings and stored technical subject metadata, rejects unsolicited identity/evidence fields and detaches the result. `SmartSiteManagementClient.getTrackedEpisode` uses it with a bounded 128 KiB no-store/redirect-error JSON read and existing session/cancellation handling. Metadata is not a claim that any referenced media is currently available, that a worker is identified, or that a technical segment grants access authority.
 
+## Exact-observation manual identity read
+
+The unregistered candidate `GET /sites/:siteId/safety-episodes/:id/findings/:alertId/events/:eventId/identity` takes required `personObservationIndex` and `evidenceIndex` query values from the original media source. It rejects representation flags. It rechecks the current account/session and assigned Site Safety Officer capability; Admin-only media access does not grant identity access. Responses are no-store.
+
+`TrackedObservationIdentity` carries the exact source, original `subjectRef`, revision and nullable latest decision. No stored head returns revision zero and null; CLEAR remains an explicit cleared decision. RESOLVE is a recorded manual association for this original event/PERSON, not face recognition, a Worker profile, team membership or Zone authority. A decision on one frame never propagates to another frame in the same technical segment.
+
+Backend binds the entire stored subject reference to the original canonical observation, including payload hash, exact timestamp text, bounding box and track ID. RESOLVE evidence must match the original FRAME index and SHA. Inconsistent persisted references/decisions fail closed. Existing identity mutation services and protected MF08 readers are unchanged.
+
+`SmartSiteManagementClient.getTrackedObservationIdentity(token, siteId, episodeId, source, expectedPayloadHash, options?)` snapshots and validates the exact source, then validates the response against that source and expected original payload hash. It uses bounded 16 KiB JSON, no-store, redirect-error and existing session/cancellation handling. Shared parsers return detached structures and reject unexpected properties/accessors. Candidate HTTP/real PostgreSQL tests use synthetic manual-decision fixtures; they do not establish actual human identity or current website activation.
+
 ## Original frame and crop integrity
 
 The candidate JPEG route returns `X-Smartsite-Frame-Sha256` (the original FRAME digest), `X-Smartsite-Content-Sha256` (the returned bytes' digest), and `X-Smartsite-Media-Representation` (`FRAME` or `SUBJECT`). These headers are exposed for an already CORS-allowed browser origin; this does not grant any additional origin access. The controller supplies them from the authorized reader result, never from request metadata.

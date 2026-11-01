@@ -50,6 +50,26 @@ export class TrackedEpisodeFramesController {
     if (!parsed) invalid('Invalid observation history query');
     return this.frames.pageObservations(request, siteId, id, parsed);
   }
+  @Get('findings/:alertId/events/:eventId/identity')
+  @Header('Cache-Control', 'no-store')
+  identity(
+    @Req() request: AuthenticatedRequest,
+    @Param('siteId') siteId: string,
+    @Param('id') id: string,
+    @Param('alertId') alertId: string,
+    @Param('eventId') eventId: string,
+    @Query() query: Record<string, unknown>,
+  ) {
+    const parsed = parseTrackedEpisodeMediaQuery(query);
+    if (!parsed || Object.hasOwn(query, 'representation'))
+      invalid('Invalid original identity query');
+    return this.frames.identity(request, siteId, id, {
+      alertId,
+      eventId,
+      personObservationIndex: parsed.personObservationIndex,
+      evidenceIndex: parsed.evidenceIndex,
+    });
+  }
   @Get('findings/:alertId/events/:eventId/frame')
   @Header('Cache-Control', 'private, no-store')
   @Header('X-Content-Type-Options', 'nosniff')

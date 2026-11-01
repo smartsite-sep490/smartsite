@@ -418,6 +418,77 @@ export function parseObservationIdentityDecisionPage(
   }
   return value as Page<ObservationIdentityDecisionResponse>;
 }
+
+// New exact-observation readers need detached descriptor-safe projections. Existing parsers stay compatible.
+function ownIdentityFields(
+  value: unknown,
+  keys: readonly string[],
+): Record<string, unknown> | undefined {
+  if (
+    !value ||
+    typeof value !== 'object' ||
+    Array.isArray(value) ||
+    ![Object.prototype, null].includes(Object.getPrototypeOf(value)) ||
+    Reflect.ownKeys(value).length !== keys.length
+  )
+    return;
+  const projected: Record<string, unknown> = {};
+  for (const key of keys) {
+    const d = Object.getOwnPropertyDescriptor(value, key);
+    if (!d?.enumerable || !('value' in d)) return;
+    projected[key] = d.value;
+  }
+  return projected;
+}
+export function parseObservationIdentitySubjectRef(
+  value: unknown,
+): ObservationIdentitySubjectRef | undefined {
+  try {
+    const ref = ownIdentityFields(value, [
+      'eventId',
+      'personObservationIndex',
+      'payloadHash',
+      'cameraId',
+      'cameraExternalId',
+      'streamSessionId',
+      'capturedAt',
+      'trackId',
+      'personBoundingBox',
+    ]);
+    if (!ref) return;
+    const box = ownIdentityFields(ref.personBoundingBox, [
+      'x1',
+      'y1',
+      'x2',
+      'y2',
+      'coordinateSpace',
+    ]);
+    if (!box) return;
+    ref.personBoundingBox = box;
+    return subjectRef(ref) ? ref : undefined;
+  } catch {
+    return;
+  }
+}
+export function parseObservationIdentityDecisionResponse(
+  value: unknown,
+): ObservationIdentityDecisionResponse | undefined {
+  try {
+    const d = ownIdentityFields(value, [
+      ...manualKeys,
+      'subjectRef',
+      'evidenceIndex',
+      'evidenceSha256',
+    ]);
+    if (!d) return;
+    const ref = parseObservationIdentitySubjectRef(d.subjectRef);
+    if (!ref) return;
+    d.subjectRef = ref;
+    return decision(d) ? d : undefined;
+  } catch {
+    return;
+  }
+}
 export function parseObservationIdentityWorkerPage(
   value: unknown,
   expectedSiteId?: string,

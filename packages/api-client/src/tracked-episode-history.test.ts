@@ -25,6 +25,80 @@ const page = () => ({
   ],
 });
 afterEach(() => vi.unstubAllGlobals());
+const identitySource = {
+  alertId: alert,
+  eventId: site,
+  personObservationIndex: 0,
+  evidenceIndex: 0,
+};
+const identity = () => ({
+  episodeId: episode,
+  siteId: site,
+  source: { ...identitySource },
+  subjectRef: {
+    eventId: site,
+    personObservationIndex: 0,
+    payloadHash: 'a'.repeat(64),
+    cameraId: alert,
+    cameraExternalId: 'synthetic-camera',
+    streamSessionId: episode,
+    capturedAt: '2026-11-01T10:00:00Z',
+    trackId: 1,
+    personBoundingBox: { x1: 0.1, y1: 0.1, x2: 0.7, y2: 0.9, coordinateSpace: 'NORMALIZED_0_1' },
+  },
+  revision: 0,
+  latestDecision: null,
+});
+it('reads identity only for exact original source and payload hash with bounded private transport', async () => {
+  const fetcher = vi.fn<typeof fetch>(async () => Response.json(identity()));
+  vi.stubGlobal('fetch', fetcher);
+  const result = await new SmartSiteManagementClient(
+    'https://example.test',
+  ).getTrackedObservationIdentity('token', site, episode, identitySource, 'a'.repeat(64));
+  expect(result.latestDecision).toBeNull();
+  expect(result.subjectRef.payloadHash).toBe('a'.repeat(64));
+  expect(String(fetcher.mock.calls[0]?.[0])).toContain(
+    `/findings/${alert}/events/${site}/identity?personObservationIndex=0&evidenceIndex=0`,
+  );
+  expect(fetcher.mock.calls[0]?.[1]).toMatchObject({ cache: 'no-store', redirect: 'error' });
+});
+it('rejects identity hash/revision mismatch and preserves narrower role denial', async () => {
+  for (const response of [
+    Response.json({ ...identity(), revision: 1 }),
+    Response.json({
+      ...identity(),
+      subjectRef: { ...identity().subjectRef, payloadHash: 'b'.repeat(64) },
+    }),
+    new Response('x'.repeat(16385), { headers: { 'content-type': 'application/json' } }),
+  ]) {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () => response),
+    );
+    await expect(
+      new SmartSiteManagementClient('https://example.test').getTrackedObservationIdentity(
+        'token',
+        site,
+        episode,
+        identitySource,
+        'a'.repeat(64),
+      ),
+    ).rejects.toMatchObject({ code: 'invalid-response' });
+  }
+  vi.stubGlobal(
+    'fetch',
+    vi.fn(async () => Response.json({ message: 'Forbidden' }, { status: 403 })),
+  );
+  await expect(
+    new SmartSiteManagementClient('https://example.test').getTrackedObservationIdentity(
+      'token',
+      site,
+      episode,
+      identitySource,
+      'a'.repeat(64),
+    ),
+  ).rejects.toMatchObject({ code: 'http', status: 403 });
+});
 const detail = () => ({
   episodeId: episode,
   siteId: site,

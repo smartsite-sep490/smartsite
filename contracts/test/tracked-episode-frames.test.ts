@@ -7,6 +7,108 @@ import {
   parseTrackedEpisodeObservationPage,
 } from '../src/tracked-episode-frames.js';
 const alertId = '11111111-1111-4111-8111-111111111111';
+const identitySource = {
+  alertId,
+  eventId: '33333333-3333-4333-8333-333333333333',
+  personObservationIndex: 0,
+  evidenceIndex: 0,
+};
+const identity = () => ({
+  episodeId: '22222222-2222-4222-8222-222222222222',
+  siteId: alertId,
+  source: { ...identitySource },
+  subjectRef: {
+    eventId: identitySource.eventId,
+    personObservationIndex: 0,
+    payloadHash: 'a'.repeat(64),
+    cameraId: '44444444-4444-4444-8444-444444444444',
+    cameraExternalId: 'synthetic-camera',
+    streamSessionId: '55555555-5555-4555-8555-555555555555',
+    capturedAt: '2026-11-01T10:00:00.000000001Z',
+    trackId: 1,
+    personBoundingBox: { x1: 0.1, y1: 0.1, x2: 0.6, y2: 0.9, coordinateSpace: 'NORMALIZED_0_1' },
+  },
+  revision: 0,
+  latestDecision: null as unknown,
+});
+test('tracked identity preserves exact original scope and explicit CLEAR without borrowing another frame', () => {
+  const parse = Reflect.get(tracked, 'parseTrackedObservationIdentity');
+  assert.equal(typeof parse, 'function');
+  const input = identity();
+  assert.deepEqual(parse(input, alertId, input.episodeId, identitySource, 'a'.repeat(64)), input);
+  input.revision = 1;
+  input.latestDecision = {
+    id: '66666666-6666-4666-8666-666666666666',
+    revision: 1,
+    action: 'CLEAR',
+    workerId: null,
+    actorUserId: '77777777-7777-4777-8777-777777777777',
+    reason: 'Synthetic clear fixture',
+    scope: 'EXACT_OBSERVATION',
+    verificationMethod: 'MANUAL',
+    recordedAt: '2026-11-01T11:00:00Z',
+    subjectRef: structuredClone(input.subjectRef),
+    evidenceIndex: null,
+    evidenceSha256: null,
+  };
+  const result = parse(input, alertId, input.episodeId, identitySource, 'a'.repeat(64));
+  assert.ok(result && result.latestDecision);
+  assert.equal(result.latestDecision.action, 'CLEAR');
+  input.subjectRef.personBoundingBox.x1 = 0.2;
+  assert.equal(result.subjectRef.personBoundingBox.x1, 0.1);
+});
+test('tracked identity rejects mismatched hash/person/revision, foreign decision refs and nested getters', () => {
+  const parse = Reflect.get(tracked, 'parseTrackedObservationIdentity');
+  assert.equal(typeof parse, 'function');
+  const base = identity();
+  const foreignDecision = {
+    id: '66666666-6666-4666-8666-666666666666',
+    revision: 1,
+    action: 'CLEAR',
+    workerId: null,
+    actorUserId: '77777777-7777-4777-8777-777777777777',
+    reason: 'Synthetic clear fixture',
+    scope: 'EXACT_OBSERVATION',
+    verificationMethod: 'MANUAL',
+    recordedAt: '2026-11-01T11:00:00Z',
+    subjectRef: { ...base.subjectRef, capturedAt: '2026-11-01T10:00:00.000000002Z' },
+    evidenceIndex: null,
+    evidenceSha256: null,
+  };
+  for (const input of [
+    { ...base, revision: 1 },
+    { ...base, source: { ...identitySource, personObservationIndex: 1 } },
+    { ...base, subjectRef: { ...base.subjectRef, payloadHash: 'b'.repeat(64) } },
+    { ...base, workerId: alertId },
+    { ...base, subjectRef: { ...base.subjectRef, personObservationIndex: 1 } },
+    { ...base, revision: 1, latestDecision: foreignDecision },
+    {
+      ...base,
+      revision: 1,
+      latestDecision: {
+        ...foreignDecision,
+        subjectRef: {
+          ...base.subjectRef,
+          personBoundingBox: { ...base.subjectRef.personBoundingBox, x1: 0.2 },
+        },
+      },
+    },
+  ])
+    assert.equal(parse(input, alertId, base.episodeId, identitySource, 'a'.repeat(64)), null);
+  let calls = 0;
+  const getter = Object.defineProperty({ ...base.subjectRef }, 'capturedAt', {
+    enumerable: true,
+    get() {
+      calls++;
+      return base.subjectRef.capturedAt;
+    },
+  });
+  assert.equal(
+    parse({ ...base, subjectRef: getter }, alertId, base.episodeId, identitySource, 'a'.repeat(64)),
+    null,
+  );
+  assert.equal(calls, 0);
+});
 const detail = () => ({
   episodeId: '22222222-2222-4222-8222-222222222222',
   siteId: alertId,

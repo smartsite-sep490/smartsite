@@ -2,6 +2,7 @@ import { createHash } from 'node:crypto';
 import type { DataSource, EntityManager } from 'typeorm';
 import type {
   TrackedEpisodeDetail,
+  TrackedObservationIdentity,
   TrackedEpisodeObservationOptions,
   TrackedEpisodeObservationPage,
   TrackedEpisodeMediaSource,
@@ -31,6 +32,10 @@ import {
 } from '../assessments/mf06-frame-media.reader.js';
 import type { Mf06FrameReference } from '../assessments/mf06-frame-reference.js';
 import { projectObservationSubjectRef } from '../identity/observation-identity-subject-ref.js';
+import { selectObservationSubject } from '../identity/observation-identity-subject.js';
+import { identityDecisionPageResponse } from '../identity/observation-identity-response.dto.js';
+import { ObservationIdentityResolutionEntity } from '../../../database/entities/observation-identity-resolution.entity.js';
+import { ObservationIdentityDecisionEntity } from '../../../database/entities/observation-identity-decision.entity.js';
 import { parseNormalizedCapturedAt } from '../../../common/parse-normalized-captured-at.js';
 
 interface Scope {
@@ -124,7 +129,11 @@ export class TrackedEpisodeFrameQuery {
       )
     )
       denied();
-    return { userId: request.user.id, sessionId: request.sessionId };
+    return {
+      userId: request.user.id,
+      sessionId: request.sessionId,
+      canReadIdentity: roles.some((r) => r.role === 'SAFETY_OFFICER' && r.site_id === siteId),
+    };
   }
   private async episode(manager: EntityManager, siteId: string, id: string): Promise<Scope> {
     const [e] = await manager.query<Scope[]>(
@@ -394,9 +403,11 @@ export class TrackedEpisodeFrameQuery {
     site: string,
     id: string,
     source: Source,
+    identityOnly = false,
   ) {
-    const actor = await this.authorize(manager, request, site),
-      e = await this.episode(manager, site, id);
+    const actor = await this.authorize(manager, request, site);
+    if (identityOnly && !actor.canReadIdentity) denied();
+    const e = await this.episode(manager, site, id);
     const [row] = await manager.query<Mapping[]>(
       `SELECT ${mappingColumns} FROM safety_alert a JOIN alert_detection_mapping m ON m.alert_id=a.id
       JOIN ai_observation_event r ON r.event_id=m.event_id WHERE a.id=$1 AND a.episode_id=$2 AND a.site_id=$3 AND m.event_id=$4`,
@@ -428,7 +439,84 @@ export class TrackedEpisodeFrameQuery {
       trackId: selected.person.trackId,
       personBoundingBox: 'boundingBox' in selected.person ? selected.person.boundingBox : undefined,
     });
-    return { actor, reference, subject };
+    if (
+      identityOnly &&
+      (!subject || !selectObservationSubject(selected.raw, source.personObservationIndex).eligible)
+    )
+      conflict('Original identity subject is unavailable');
+    return { actor, reference, subject, raw: selected.raw };
+  }
+  async identity(
+    request: AuthenticatedRequest,
+    rawSite: string,
+    rawEpisode: string,
+    input: Source,
+  ): Promise<TrackedObservationIdentity> {
+    const site = uuid(rawSite).toLowerCase(),
+      id = uuid(rawEpisode).toLowerCase();
+    if (
+      !input ||
+      Object.keys(input).sort().join(',') !==
+        'alertId,eventId,evidenceIndex,personObservationIndex' ||
+      !Number.isSafeInteger(input.personObservationIndex) ||
+      input.personObservationIndex < 0 ||
+      input.personObservationIndex > 255 ||
+      !Number.isSafeInteger(input.evidenceIndex) ||
+      input.evidenceIndex < 0 ||
+      input.evidenceIndex > 255
+    )
+      invalid();
+    const source = {
+      ...input,
+      alertId: uuid(input.alertId).toLowerCase(),
+      eventId: uuid(input.eventId).toLowerCase(),
+    };
+    return this.db.transaction('REPEATABLE READ', async (manager) => {
+      const snapshot = await this.load(manager, request, site, id, source, true);
+      const subjectRef = snapshot.subject!;
+      const head = await manager
+        .getRepository(ObservationIdentityResolutionEntity)
+        .findOneBy({
+          eventId: source.eventId,
+          personObservationIndex: source.personObservationIndex,
+          siteId: site,
+        });
+      let latestDecision: TrackedObservationIdentity['latestDecision'] = null;
+      if (head) {
+        if (
+          head.payloadHash !== snapshot.reference.payloadHash ||
+          computeCanonicalPayloadHash(head.subjectRef) !== computeCanonicalPayloadHash(subjectRef)
+        )
+          conflict('Original identity scope is inconsistent');
+        if (head.currentDecisionId) {
+          const d = await manager
+            .getRepository(ObservationIdentityDecisionEntity)
+            .findOneBy({
+              id: head.currentDecisionId,
+              resolutionId: head.id,
+              revision: head.revision,
+              siteId: site,
+            });
+          if (!d) conflict('Original identity decision is inconsistent');
+          if (d.action === 'RESOLVE') {
+            const evidence =
+              d.evidenceIndex === null ? undefined : snapshot.raw.evidence[d.evidenceIndex];
+            if (!evidence || evidence.kind !== 'FRAME' || evidence.sha256 !== d.evidenceSha256)
+              conflict('Original identity evidence is inconsistent');
+          }
+          latestDecision = identityDecisionPageResponse({ items: [d], total: 1 }, subjectRef)
+            .items[0]!;
+        } else if (head.revision !== 0) conflict('Original identity revision is inconsistent');
+      }
+      return {
+        episodeId: id,
+        siteId: site,
+        source,
+        subjectRef,
+        revision: head?.revision ?? 0,
+        latestDecision,
+      };
+    });
   }
   async read(
     request: AuthenticatedRequest,

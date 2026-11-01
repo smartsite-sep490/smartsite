@@ -1,4 +1,19 @@
 import type { SafetyAlertStatus, SafetyAlertType } from './management-api.js';
+import {
+  parseObservationIdentitySubjectRef,
+  parseObservationIdentityDecisionResponse,
+  type ObservationIdentitySubjectRef,
+  type ObservationIdentityDecisionResponse,
+} from './observation-identity-management.js';
+
+export interface TrackedObservationIdentity {
+  episodeId: string;
+  siteId: string;
+  source: TrackedEpisodeMediaSource;
+  subjectRef: ObservationIdentitySubjectRef;
+  revision: number;
+  latestDecision: ObservationIdentityDecisionResponse | null;
+}
 
 /** TRACKED metadata only: identity and original media belong to each original observation. */
 export interface TrackedEpisodeDetail {
@@ -196,6 +211,102 @@ const time = (v: unknown): v is string =>
     v,
   ) &&
   Number.isFinite(Date.parse(v.replace(/:60(?=\.|[Zz]|[+-])/, ':59')));
+
+export function parseTrackedEpisodeMediaSource(input: unknown): TrackedEpisodeMediaSource | null {
+  try {
+    const s = objectFields(input, [
+      'alertId',
+      'eventId',
+      'personObservationIndex',
+      'evidenceIndex',
+    ]);
+    if (
+      !s ||
+      !id(s.alertId) ||
+      !id(s.eventId) ||
+      !safe(s.personObservationIndex, 255) ||
+      !safe(s.evidenceIndex, 255)
+    )
+      return null;
+    return {
+      alertId: s.alertId,
+      eventId: s.eventId,
+      personObservationIndex: s.personObservationIndex,
+      evidenceIndex: s.evidenceIndex,
+    };
+  } catch {
+    return null;
+  }
+}
+function identityRefKey(ref: ObservationIdentitySubjectRef): string {
+  const b = ref.personBoundingBox;
+  return JSON.stringify([
+    ref.eventId,
+    ref.personObservationIndex,
+    ref.payloadHash,
+    ref.cameraId,
+    ref.cameraExternalId,
+    ref.streamSessionId,
+    ref.capturedAt,
+    ref.trackId,
+    b.x1,
+    b.y1,
+    b.x2,
+    b.y2,
+    b.coordinateSpace,
+  ]);
+}
+export function parseTrackedObservationIdentity(
+  input: unknown,
+  siteId: string,
+  episodeId: string,
+  source: TrackedEpisodeMediaSource,
+  expectedPayloadHash: string,
+): TrackedObservationIdentity | null {
+  try {
+    const expected = parseTrackedEpisodeMediaSource(source);
+    const p = objectFields(input, [
+      'episodeId',
+      'siteId',
+      'source',
+      'subjectRef',
+      'revision',
+      'latestDecision',
+    ]);
+    if (
+      !p ||
+      !id(siteId) ||
+      !id(episodeId) ||
+      !expected ||
+      !hash(expectedPayloadHash) ||
+      p.siteId !== siteId ||
+      p.episodeId !== episodeId ||
+      !safe(p.revision, 2147483647)
+    )
+      return null;
+    const s = parseTrackedEpisodeMediaSource(p.source),
+      ref = parseObservationIdentitySubjectRef(p.subjectRef);
+    if (
+      !s ||
+      !ref ||
+      JSON.stringify(s) !== JSON.stringify(expected) ||
+      ref.eventId !== s.eventId ||
+      ref.personObservationIndex !== s.personObservationIndex ||
+      ref.payloadHash !== expectedPayloadHash
+    )
+      return null;
+    let latestDecision: ObservationIdentityDecisionResponse | null = null;
+    if (p.latestDecision !== null) {
+      const d = parseObservationIdentityDecisionResponse(p.latestDecision);
+      if (!d || d.revision !== p.revision || identityRefKey(d.subjectRef) !== identityRefKey(ref))
+        return null;
+      latestDecision = d;
+    } else if (p.revision !== 0) return null;
+    return { episodeId, siteId, source: s, subjectRef: ref, revision: p.revision, latestDecision };
+  } catch {
+    return null;
+  }
+}
 
 export function parseTrackedEpisodeDetail(
   input: unknown,

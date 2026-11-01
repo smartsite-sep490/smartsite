@@ -16,7 +16,10 @@ import {
   parseTrackedEpisodeObservationQuery,
   parseTrackedEpisodeObservationPage,
   parseTrackedEpisodeDetail,
+  parseTrackedEpisodeMediaSource,
+  parseTrackedObservationIdentity,
   type TrackedEpisodeDetail,
+  type TrackedObservationIdentity,
   type TrackedEpisodeObservationOptions,
   type TrackedEpisodeObservationPage,
   type TrackedEpisodeMediaSource,
@@ -1776,6 +1779,48 @@ export class SmartSiteManagementClient {
   getSite(token: string, siteId: string) {
     return this.request<SiteResponse>('GET', `/sites/${pathId(siteId)}`, token);
   }
+  /** Prepared episode transport; callers must wait for Backend rollout before exposing this UI. */
+  async getTrackedObservationIdentity(
+    token: string,
+    siteId: string,
+    episodeId: string,
+    input: TrackedEpisodeMediaSource,
+    expectedPayloadHash: string,
+    options?: RequestOptions,
+  ): Promise<TrackedObservationIdentity> {
+    const source = parseTrackedEpisodeMediaSource(input);
+    if (
+      !source ||
+      typeof expectedPayloadHash !== 'string' ||
+      !/^[a-f0-9]{64}$/.test(expectedPayloadHash)
+    )
+      throw new ApiError('invalid-response', 'Invalid original identity source.');
+    const query = new URLSearchParams({
+      personObservationIndex: String(source.personObservationIndex),
+      evidenceIndex: String(source.evidenceIndex),
+    });
+    const payload = await this.request<unknown>(
+      'GET',
+      `/sites/${pathId(siteId)}/safety-episodes/${pathId(episodeId)}/findings/${source.alertId}/events/${source.eventId}/identity?${query}`,
+      token,
+      undefined,
+      undefined,
+      options,
+      { cache: 'no-store', redirect: 'error' },
+      16384,
+    );
+    const result = parseTrackedObservationIdentity(
+      payload,
+      siteId.toLowerCase(),
+      episodeId.toLowerCase(),
+      source,
+      expectedPayloadHash,
+    );
+    if (!result)
+      throw new ApiError('invalid-response', 'Backend returned inconsistent original identity.');
+    return result;
+  }
+
   /** Prepared episode transport; callers must wait for Backend rollout before exposing this UI. */
   async getTrackedEpisode(
     token: string,
