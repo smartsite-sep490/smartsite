@@ -14,6 +14,8 @@ The required projection port runs in the same transaction as provisional seal an
 
 The same unregistered candidate migration adds an immutable `EVENT_LOCAL`/`TRACKED` discriminator and segment/scope reference to the existing `safety_episode` table. Existing episodes default to EVENT_LOCAL with null tracking fields. TRACKED anchors require an original sealed PERSON claim and a composite segment/scope/Site/camera FK. One segment can have only one episode; the original event/PERSON unique key remains. Tracked raw cannot enter the EVENT_LOCAL path, subject kinds cannot be rewritten, and tracked episode history cannot be deleted. This is storage support only; no healthy episode is created by technical admission and no business projector is installed. The entity columns require this migration: do not deploy this candidate entity against a database where it has not been explicitly applied. The migration remains outside the runtime registry.
 
+`TrackedPpeEpisodeProjection` is an unregistered prototype of the admission transaction's business port. It reconstructs the original issued region/PPE policy, groups qualified PPE findings by technical segment and subtype/Zone, and retains original per-part event/PERSON mappings. Numeric tracker labels may change without rewriting the first finding's legacy grouping-key bytes. Healthy people acquire technical heads without empty safety episodes. Repeated findings advance observation counts/history without unread/content revision increments; a new subtype or changed region set advances the episode revision once per subject batch. Original timestamps are copied from raw storage. This port does not emit notifications and is not an independently authenticated API: its caller must perform original-part authentication and transactional sealing/head admission first.
+
 ## Verification scope
 
 Meaningful tests are in `tracked-frame-parts.test.ts`, `tracked-head-plan.test.ts`, `tracked-storage-migration.test.ts`, and the four `integration/*tracked*` / subject-storage fixtures. They cover immutable retries, reverse parts, scoped bounds, deadline concurrency, predecessor recovery, original nonzero PERSON, atomic rollback, tombstones and capture rewind. Integration tests use the dedicated isolated test DataSource; never point them at website/demo or production databases.
@@ -22,7 +24,7 @@ The migration remains absent from the runtime registry. Reversal refuses tracked
 
 ## Open release gates
 
-- Actual TRACKED episode/finding/evidence/recipient projector and scoped business storage integration.
+- Production wiring of the PPE business port, retirement/collection and immutable route ownership, per-finding evidence/detail readers, recipient projection and mixed MF06 capture-time authority.
 - Integration of the trusted transition prototype with a reviewed Backend control plane, durable supervisor/scheduler and actual restart checks.
 - Public raw ACK contract, reviewed canonical Main SHA and exact paired AI vendoring.
 - Qualified tracker/profile, measured clock/gap/capacity policies, query plans and operational performance.
