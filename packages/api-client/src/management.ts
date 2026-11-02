@@ -147,8 +147,6 @@ import type {
   GateFacePresenceResponse,
   GateAccessLogResponse,
   EnrollmentCaptureTarget,
-  WorkerGatePermissionsResponse,
-  SetWorkerGatePermissionsCommand,
 } from '@smartsite/contracts';
 export type { SchedulingRequestStatus };
 
@@ -1900,6 +1898,22 @@ export class SmartSiteManagementClient {
       { timeoutMs: 60_000 },
     );
   }
+  checkWorkerDocumentImageQuality(
+    token: string,
+    siteId: string,
+    workerId: string,
+    file: UploadFile,
+  ) {
+    const form = new FormData();
+    appendFile(form, 'file', file);
+    return this.requestFormData<import('@smartsite/contracts').DocumentImageQuality>(
+      'POST',
+      `/sites/${pathId(siteId)}/workers/${pathId(workerId)}/document-image-quality`,
+      token,
+      form,
+      { timeoutMs: 60_000 },
+    );
+  }
   uploadWorkerIdentityImage(
     token: string,
     siteId: string,
@@ -1948,6 +1962,28 @@ export class SmartSiteManagementClient {
       token,
       {},
       undefined,
+      { timeoutMs: 60_000 },
+    );
+  }
+  checkWorkerDocumentDates(
+    token: string,
+    siteId: string,
+    workerId: string,
+    kind: WorkerDocumentKind,
+    file: UploadFile,
+    input: import('@smartsite/contracts').UploadWorkerDocumentCommand,
+  ) {
+    const form = new FormData();
+    appendFile(form, 'file', file);
+    if (input.submittedExpiresOn !== undefined)
+      form.append('submittedExpiresOn', input.submittedExpiresOn);
+    if (input.submittedIssuedOn !== undefined)
+      form.append('submittedIssuedOn', input.submittedIssuedOn);
+    return this.requestFormData<import('@smartsite/contracts').WorkerDocumentCheckResponse>(
+      'POST',
+      `/sites/${pathId(siteId)}/workers/${pathId(workerId)}/documents/${pathId(kind)}/check`,
+      token,
+      form,
       { timeoutMs: 60_000 },
     );
   }
@@ -2156,26 +2192,6 @@ export class SmartSiteManagementClient {
       `/sites/${pathId(siteId)}/gates/${pathId(gateId)}/face-presence`,
       token,
       form,
-    );
-  }
-  getWorkerGatePermissions(token: string, siteId: string, workerId: string) {
-    return this.request<WorkerGatePermissionsResponse>(
-      'GET',
-      `/sites/${pathId(siteId)}/workers/${pathId(workerId)}/gate-permissions`,
-      token,
-    );
-  }
-  setWorkerGatePermissions(
-    token: string,
-    siteId: string,
-    workerId: string,
-    input: SetWorkerGatePermissionsCommand,
-  ) {
-    return this.request<WorkerGatePermissionsResponse>(
-      'PUT',
-      `/sites/${pathId(siteId)}/workers/${pathId(workerId)}/gate-permissions`,
-      token,
-      input,
     );
   }
   uploadFaceEnrollmentSample(token: string, sessionId: string, sample: Blob | NativeUploadFile) {
