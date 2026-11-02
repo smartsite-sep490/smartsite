@@ -178,3 +178,9 @@ export type {
   SafetyEpisodeReadCommand,
   SafetyEpisodeReadResponse,
 } from '@smartsite/contracts';
+export type {
+  CameraConfigurationImageResponse,
+  CameraConfigurationImageReference,
+  CameraConfigurationReferenceResponse,
+} from '@smartsite/contracts/camera-configuration-image';
+export { registerSessionCredential, unregisterSessionCredential } from './session-expiry';
