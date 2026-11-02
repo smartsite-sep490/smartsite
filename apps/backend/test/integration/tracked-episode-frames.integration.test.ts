@@ -34,7 +34,7 @@ test('tracked finding pages and JPEG reads retain exact original sources and rec
   let httpApp: NestExpressApplication | undefined;
   try {
     await owned.initialize();
-    await db.transaction((m) => new TrackedSubjectStorage1795046400003().up(m.queryRunner!));
+
     await mkdir(root);
     const f = await seedTrackedFrameFixture(db, ['HARD_HAT', 'SAFETY_VEST']);
     const actor = randomUUID(),
@@ -59,6 +59,12 @@ test('tracked finding pages and JPEG reads retain exact original sources and rec
     const request = (): AuthenticatedRequest => ({
       headers: { authorization: `Bearer ${accessToken}` },
     });
+    const { SafetyEpisodeInboxService } =
+      await import('../../src/modules/safety/alerts/safety-episode-inbox.service.js');
+    const inbox = new SafetyEpisodeInboxService(db, guard);
+    // Existing EVENT_LOCAL-only schema has no candidate columns: list still executes safely.
+    assert.equal((await inbox.list(request(), { siteId: f.siteId })).total, 0);
+    await db.transaction((m) => new TrackedSubjectStorage1795046400003().up(m.queryRunner!));
     const authenticator = new TrackedPartAuthenticator(new CameraEventAdmissionService(), {
       profileSha256: 'a'.repeat(64),
       allowedCameraIds: [f.cameraId],
@@ -173,6 +179,23 @@ test('tracked finding pages and JPEG reads retain exact original sources and rec
       'SELECT id FROM safety_episode WHERE tracking_segment_id=$1',
       [segmentId],
     );
+
+    await db.query(
+      'INSERT INTO safety_episode_recipient(id,episode_id,site_id,recipient_user_id) VALUES($1,$2,$3,$4)',
+      [randomUUID(), episodeId, f.siteId, actor],
+    );
+
+    const inboxPage = await inbox.list(request(), { siteId: f.siteId });
+    assert.equal(inboxPage.items.length, 1);
+    assert.deepEqual(inboxPage.items[0]!.episode.subject, {
+      kind: 'TRACKED',
+      segmentId,
+      scopeSha256: (
+        await db.query('SELECT tracking_scope_sha256 AS scope FROM safety_episode WHERE id=$1', [
+          episodeId,
+        ])
+      )[0].scope,
+    });
     const { TrackedEpisodeFrameQuery } =
       await import('../../src/modules/safety/alerts/tracked-episode-frame-query.js');
     const reader = new TrackedEpisodeFrameQuery(db, guard, root);

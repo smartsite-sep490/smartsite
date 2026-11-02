@@ -63,12 +63,16 @@ export interface SafetyEpisodeInboxOptions {
 
 export interface SafetyEpisodeInboxItem {
   id: string;
-  episode: SafetyEpisodeSummary;
+  episode: SafetyEpisodeInboxSummary;
   seenRevision: number;
   unread: boolean;
   firstDeliveredAt: string;
   updatedAt: string;
 }
+/** Inbox discrimination only. Legacy detail and per-observation identity remain separate. */
+export type SafetyEpisodeInboxSummary = Omit<SafetyEpisodeSummary, 'subject'> & {
+  subject: EventLocalEpisodeSubject | { kind: 'TRACKED'; segmentId: string; scopeSha256: string };
+};
 export interface SafetyEpisodeInboxPage extends Page<SafetyEpisodeInboxItem> {
   unreadCount: number;
 }

@@ -3,6 +3,7 @@ import { IsIn, IsOptional, IsUUID } from 'class-validator';
 import { DataSource, type EntityManager } from 'typeorm';
 import { parseSafetyEpisodeReadCommand } from '@smartsite/contracts/safety-episodes';
 import type { SafetyEpisodeInboxPage, SafetyEpisodeReadResponse } from '@smartsite/contracts';
+import type { SafetyEpisodeInboxSummary } from '@smartsite/contracts/safety-episodes';
 import {
   command,
   conflict,
@@ -34,6 +35,26 @@ interface InboxRow {
   last_observed_at: Date;
   first_delivered_at: Date;
   updated_at: Date;
+  subject_metadata: { kind: unknown; segmentId: unknown; scopeSha256: unknown };
+}
+
+function inboxSubject(row: InboxRow): SafetyEpisodeInboxSummary['subject'] {
+  const subject = row.subject_metadata;
+  if (subject.kind === 'EVENT_LOCAL' && subject.segmentId === null && subject.scopeSha256 === null)
+    return {
+      kind: 'EVENT_LOCAL',
+      eventId: row.event_id,
+      personObservationIndex: row.person_observation_index,
+    };
+  if (
+    subject.kind === 'TRACKED' &&
+    typeof subject.segmentId === 'string' &&
+    /^[a-f0-9]{8}(-[a-f0-9]{4}){3}-[a-f0-9]{12}$/.test(subject.segmentId) &&
+    typeof subject.scopeSha256 === 'string' &&
+    /^[a-f0-9]{64}$/.test(subject.scopeSha256)
+  )
+    return { kind: 'TRACKED', segmentId: subject.segmentId, scopeSha256: subject.scopeSha256 };
+  conflict('Episode inbox subject is inconsistent');
 }
 
 @Injectable()
@@ -117,7 +138,9 @@ export class SafetyEpisodeInboxService {
       const rows: InboxRow[] = await manager.query(
         `SELECT r.id,r.episode_id,r.seen_revision,r.first_delivered_at,r.updated_at,
         e.site_id,e.camera_id,e.event_id,e.person_observation_index,e.first_observed_at,e.last_observed_at,
-        e.content_revision,e.collection_state,(SELECT count(*)::int FROM ${schema}.safety_alert a WHERE a.episode_id=e.id AND a.site_id=e.site_id) AS finding_count
+        e.content_revision,e.collection_state,(SELECT count(*)::int FROM ${schema}.safety_alert a WHERE a.episode_id=e.id AND a.site_id=e.site_id) AS finding_count,
+        jsonb_build_object('kind',CASE WHEN to_jsonb(e) ? 'subject_kind' THEN to_jsonb(e)->>'subject_kind' ELSE 'EVENT_LOCAL' END,
+          'segmentId',to_jsonb(e)->>'tracking_segment_id','scopeSha256',to_jsonb(e)->>'tracking_scope_sha256') AS subject_metadata
         FROM ${schema}.safety_episode_recipient r JOIN ${schema}.safety_episode e ON e.id=r.episode_id AND e.site_id=r.site_id
         WHERE ${eligible} AND (NOT $4::boolean OR r.seen_revision<e.content_revision)
         ORDER BY r.first_delivered_at DESC,r.id DESC OFFSET $5 LIMIT $6`,
@@ -130,11 +153,7 @@ export class SafetyEpisodeInboxService {
             id: row.episode_id,
             siteId: row.site_id,
             cameraId: row.camera_id,
-            subject: {
-              kind: 'EVENT_LOCAL' as const,
-              eventId: row.event_id,
-              personObservationIndex: row.person_observation_index,
-            },
+            subject: inboxSubject(row),
             configurationBundleId: null,
             firstObservedAt: row.first_observed_at.toISOString(),
             lastObservedAt: row.last_observed_at.toISOString(),
