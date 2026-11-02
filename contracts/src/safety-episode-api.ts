@@ -2,6 +2,11 @@ import type { Page, SafetyAlertStatus, SafetyAlertType } from './management-api.
 import type { ObservationIdentityDecisionResponse } from './observation-identity-management.js';
 import type { EventLocalEpisodeSubject } from './safety-episode-subject.js';
 import type { CorrectiveActionStatus, IncidentStatus } from './safety-workflow-api.js';
+export {
+  parseSafetyEpisodeInboxOptions,
+  parseSafetyEpisodeInboxPage,
+  parseSafetyEpisodeReadResponse,
+} from './safety-episode-inbox-response.js';
 
 /** Transport preparation only; no episode endpoints or delivery cutover are active yet. */
 export interface SafetyEpisodeSummary {

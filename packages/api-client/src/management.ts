@@ -11,7 +11,12 @@ import {
   MAX_CAMERA_APPLICATION_STATUS_RESPONSE_BYTES,
   parseScopedCameraApplicationStatus,
 } from './camera-configuration-response';
-import { parseSafetyEpisodeReadCommand } from '@smartsite/contracts/safety-episodes';
+import {
+  parseSafetyEpisodeReadCommand,
+  parseSafetyEpisodeInboxOptions,
+  parseSafetyEpisodeInboxPage,
+  parseSafetyEpisodeReadResponse,
+} from '@smartsite/contracts/safety-episodes';
 import {
   parseTrackedEpisodeObservationQuery,
   parseTrackedEpisodeObservationPage,
@@ -1978,22 +1983,30 @@ export class SmartSiteManagementClient {
     );
   }
 
-  listSafetyEpisodeInbox(
+  async listSafetyEpisodeInbox(
     token: string,
     options: SafetyEpisodeInboxOptions = {},
     requestOptions?: RequestOptions,
   ): Promise<SafetyEpisodeInboxPage> {
+    const expected = parseSafetyEpisodeInboxOptions(options);
+    if (!expected) throw new TypeError('Invalid episode inbox options');
     const query = new URLSearchParams();
     for (const key of ['offset', 'limit', 'siteId', 'readStatus'] as const)
-      if (options[key] !== undefined) query.set(key, String(options[key]));
-    return this.request(
+      if (expected[key] !== undefined) query.set(key, String(expected[key]));
+    const payload = await this.request<unknown>(
       'GET',
       `/me/safety-episode-inbox${query.size ? `?${query}` : ''}`,
       token,
       undefined,
       undefined,
       requestOptions,
+      { cache: 'no-store', redirect: 'error' },
+      524288,
     );
+    const page = parseSafetyEpisodeInboxPage(payload, expected);
+    if (!page)
+      throw new ApiError('invalid-response', 'Backend returned inconsistent episode inbox.');
+    return page;
   }
 
   async readSafetyEpisodeInbox(
@@ -2005,14 +2018,26 @@ export class SmartSiteManagementClient {
     const body = parseSafetyEpisodeReadCommand(input);
     if (!body)
       throw new TypeError('Expected a positive safe integer seenRevision and no other fields');
-    return this.request(
+    const recipientId = id.toLowerCase();
+    if (!/^[a-f0-9]{8}(-[a-f0-9]{4}){3}-[a-f0-9]{12}$/.test(recipientId))
+      throw new TypeError('Invalid episode inbox recipient');
+    const payload = await this.request<unknown>(
       'PATCH',
       `/me/safety-episode-inbox/${pathId(id)}/read`,
       token,
       body,
       undefined,
       requestOptions,
+      { cache: 'no-store', redirect: 'error' },
+      16384,
     );
+    const result = parseSafetyEpisodeReadResponse(payload, recipientId, body.seenRevision);
+    if (!result)
+      throw new ApiError(
+        'invalid-response',
+        'Backend returned inconsistent episode read revision.',
+      );
+    return result;
   }
 
   listSafetyAlerts(
