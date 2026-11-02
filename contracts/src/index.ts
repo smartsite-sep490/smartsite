@@ -181,3 +181,4 @@ export type {
   Mf06RequestStatusResponse,
   Mf06RequestStatusPage,
 } from './mf06-assessment-api.js';
+export * from './camera-configuration-image.js';
