@@ -32,7 +32,7 @@ const isSha256 = (v: unknown): v is string => typeof v === 'string' && SHA256_RE
 const isPosSafeInt = (v: unknown): v is number =>
   typeof v === 'number' && Number.isSafeInteger(v) && v >= 1;
 
-/** Keep legacy numeric references while preserving v1.4 uint64 sequences exactly. */
+/** Keep legacy numeric references while preserving partitioned uint64 sequences exactly. */
 export function mf06FrameSequenceText(
   reference: Pick<Mf06FrameReference, 'sequenceNumber' | 'framePartition'>,
 ): string | null {
@@ -70,7 +70,7 @@ export function selectMf06FrameReference(
     const exp = asRecord(snapshotMf06Json(expected));
     const saved = snapshotMf06Json(raw);
     const rec = asRecord(saved);
-    if (!exp || !rec || !['1.2.0', '1.3.0', '1.4.0'].includes(rec.schemaVersion as string))
+    if (!exp || !rec || !['1.2.0', '1.3.0', '1.4.0', '1.5.0'].includes(rec.schemaVersion as string))
       return null;
 
     const { eventId: expEventId, streamSessionId: expSessionId, payloadHash } = exp;
@@ -100,7 +100,7 @@ export function selectMf06FrameReference(
     if (!isPosSafeInt(width) || !isPosSafeInt(height) || !Array.isArray(rec.evidence)) return null;
 
     const partition =
-      rec.schemaVersion === '1.4.0'
+      rec.schemaVersion === '1.4.0' || rec.schemaVersion === '1.5.0'
         ? (rec.framePartition as unknown as ObservationFramePartition)
         : undefined;
     let selected: { sequenceNumber: number | string; uri: string; sha256: string } | null = null;

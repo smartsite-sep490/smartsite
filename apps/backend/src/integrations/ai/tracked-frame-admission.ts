@@ -21,12 +21,24 @@ export interface TrackedFrameKey {
 }
 type Bound = Awaited<ReturnType<TrackedPartAuthenticator['authenticate']>>;
 type Ready = Extract<TrackedHeadPlan, { kind: 'READY' }>;
+export interface TrackedProjectionFrame {
+  scope: Bound;
+  parts: readonly Bound[];
+  plan: Ready;
+  coordinatorEventId: string;
+}
+const activeProjections = new WeakMap<TrackedProjectionFrame, EntityManager>();
+
+/** Only the actual admission callback owns this transaction-bound projection capability. */
+export function isTrackedProjectionTransaction(
+  manager: EntityManager,
+  frame: TrackedProjectionFrame,
+) {
+  return activeProjections.get(frame) === manager;
+}
 export interface TrackedProjectionPort {
   /** Must use this transaction manager. Required even for a healthy/empty frame; never defaults to legacy delivery. */
-  project(
-    manager: EntityManager,
-    frame: { scope: Bound; parts: readonly Bound[]; plan: Ready; coordinatorEventId: string },
-  ): Promise<void>;
+  project(manager: EntityManager, frame: TrackedProjectionFrame): Promise<void>;
 }
 interface RawRow {
   routeMode: string | null;
@@ -337,12 +349,18 @@ export class TrackedFrameAdmission {
           [retired.segmentId, coordinator.eventId, retired.reason, provenance],
         );
     }
-    await this.projector.project(manager, {
+    const projection = Object.freeze({
       scope,
-      parts,
+      parts: Object.freeze(parts),
       plan,
       coordinatorEventId: coordinator.eventId,
     });
+    activeProjections.set(projection, manager);
+    try {
+      await this.projector.project(manager, projection);
+    } finally {
+      activeProjections.delete(projection);
+    }
     return { kind: 'SEALED' as const, result };
   }
 

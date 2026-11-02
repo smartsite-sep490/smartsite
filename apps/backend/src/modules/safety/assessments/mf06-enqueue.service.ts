@@ -7,6 +7,10 @@ import { EventProcessingStatus } from '../../../database/entities/enums.js';
 import { readConsistentMf06RawEvent } from './mf06-observation-event.js';
 import { selectZoneEntrySubject } from '../identity/observation-identity-subject.js';
 import {
+  isTrackedProjectionTransaction,
+  type TrackedProjectionFrame,
+} from '../../../integrations/ai/tracked-frame-admission.js';
+import {
   snapshotMf06Admission,
   loadMf06EventAdmission,
   computeMf06InitialBinding,
@@ -125,6 +129,45 @@ export class Mf06EnqueueService {
     if (receipt.transaction !== transaction || receipt.command !== command) return [];
     insertReceipts.get(manager)!.delete(eventId);
 
+    return this.enqueueQualified(manager, storedEvent);
+  }
+
+  /** Separate admission capability; never manufactures or consumes a fresh INSERT receipt. */
+  async enqueueSealedFrame(
+    manager: EntityManager,
+    frame: TrackedProjectionFrame,
+  ): Promise<readonly string[]> {
+    this.requireTransaction(manager);
+    if (!isTrackedProjectionTransaction(manager, frame))
+      throw new Error('MF06_SEALED_PROJECTION_REQUIRED');
+    const ids: string[] = [];
+    for (const part of frame.parts) {
+      const event = await manager
+        .getRepository(AiObservationEventEntity)
+        .findOneBy({ eventId: part.eventId });
+      if (
+        !event ||
+        event.payloadHash !== part.payloadHash ||
+        event.resolvedCameraId !== frame.scope.cameraId
+      )
+        throw new Error('MF06_INVALID_SEALED_ORIGINAL');
+      const raw = readConsistentMf06RawEvent(event);
+      if (!raw || raw.schemaVersion !== '1.5.0') throw new Error('MF06_INVALID_SEALED_ORIGINAL');
+      if (!(raw.observations as Array<{ type: string }>).some((item) => item.type === 'ZONE_ENTRY'))
+        continue;
+      const issued = await loadMf06EventAdmission(manager, event, frame.scope.siteId);
+      if (!issued || issued.admission?.classification !== 'LIVE')
+        throw new Error('MF06_INVALID_SEALED_ORIGINAL');
+      ids.push(...(await this.enqueueQualified(manager, event, issued)));
+    }
+    return Object.freeze(ids);
+  }
+
+  private async enqueueQualified(
+    manager: EntityManager,
+    storedEvent: AiObservationEventEntity,
+    qualified?: Awaited<ReturnType<typeof loadMf06EventAdmission>>,
+  ): Promise<readonly string[]> {
     // Must be eligible processing status (PROCESSED or SKIPPED_NO_CANDIDATE)
     if (
       storedEvent.processingStatus !== EventProcessingStatus.PROCESSED &&
@@ -153,7 +196,8 @@ export class Mf06EnqueueService {
       return [];
     }
     const camera = cameraRows[0];
-    const issued = await loadMf06EventAdmission(manager, storedEvent, camera.site_id);
+    const issued =
+      qualified ?? (await loadMf06EventAdmission(manager, storedEvent, camera.site_id));
     if (!issued || issued.admission?.classification === 'REVIEW_ONLY') return [];
 
     // 7. Process observations independently

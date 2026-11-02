@@ -6,6 +6,10 @@ import type { AiObservationEventEntity } from '../../../database/entities/ai-obs
 import { EventProcessingStatus } from '../../../database/entities/enums.js';
 import { PublicHttpException } from '../../../common/http/public-http-exception.js';
 import { Mf06EnqueueService } from './mf06-enqueue.service.js';
+import {
+  isTrackedProjectionTransaction,
+  type TrackedProjectionFrame,
+} from '../../../integrations/ai/tracked-frame-admission.js';
 
 @Injectable()
 export class Mf06IngestionEnqueueService {
@@ -19,17 +23,8 @@ export class Mf06IngestionEnqueueService {
     event: AiObservationEventEntity,
   ): Promise<readonly string[]> {
     if (this.config.get('MF06_ENQUEUE_ENABLED', { infer: true }) !== true) return [];
-    const cap = this.config.get('MF06_ENQUEUE_MAX_OUTSTANDING', { infer: true });
-    if (!Number.isSafeInteger(cap) || cap === undefined || cap < 1 || cap > 10000) {
-      throw this.unavailable();
-    }
-    if (
-      manager.connection !== this.db ||
-      !manager.queryRunner?.isTransactionActive ||
-      manager.queryRunner.isReleased
-    ) {
-      throw this.unavailable();
-    }
+    const cap = this.requireCapacity(manager);
+
     if (
       !event.resolvedCameraId ||
       ![EventProcessingStatus.PROCESSED, EventProcessingStatus.SKIPPED_NO_CANDIDATE].includes(
@@ -46,14 +41,58 @@ export class Mf06IngestionEnqueueService {
       )
     )
       return [];
+    return this.withCapacity(manager, cap, () =>
+      new Mf06EnqueueService(this.db).enqueueFresh(manager, event),
+    );
+  }
 
+  async enqueueSealedFrame(
+    manager: EntityManager,
+    frame: TrackedProjectionFrame,
+  ): Promise<readonly string[]> {
+    if (this.config.get('MF06_ENQUEUE_ENABLED', { infer: true }) !== true) return [];
+    const cap = this.requireCapacity(manager);
+    if (!isTrackedProjectionTransaction(manager, frame)) throw this.unavailable();
+    if (
+      !frame.parts.some((part) =>
+        (part.payload as { observations: Array<{ type: string }> }).observations.some(
+          (item) => item.type === 'ZONE_ENTRY',
+        ),
+      )
+    )
+      return [];
+    return this.withCapacity(manager, cap, () =>
+      new Mf06EnqueueService(this.db).enqueueSealedFrame(manager, frame),
+    );
+  }
+
+  private requireCapacity(manager: EntityManager): number {
+    const cap = this.config.get('MF06_ENQUEUE_MAX_OUTSTANDING', { infer: true });
+    if (!Number.isSafeInteger(cap) || cap === undefined || cap < 1 || cap > 10000) {
+      throw this.unavailable();
+    }
+    if (
+      manager.connection !== this.db ||
+      !manager.queryRunner?.isTransactionActive ||
+      manager.queryRunner.isReleased
+    ) {
+      throw this.unavailable();
+    }
+    return cap;
+  }
+
+  private async withCapacity(
+    manager: EntityManager,
+    cap: number,
+    enqueue: () => Promise<readonly string[]>,
+  ) {
     // Schema-wide capacity requires a schema-wide writer lock until COMMIT. A losing
     // intake returns503 for retry; releasing early or locking per Site would race the cap.
     const [lock] = await manager.query(
       "SELECT pg_try_advisory_xact_lock(hashtext(current_database()), hashtext(current_schema() || ':mf06-enqueue-v1')) AS acquired",
     );
     if (lock?.acquired !== true) throw this.unavailable();
-    const ids = await new Mf06EnqueueService(this.db).enqueueFresh(manager, event);
+    const ids = await enqueue();
     if (ids.length === 0) return ids;
     // Expired nonterminal work still occupies capacity until an explicit worker
     // transition. Limit the count read; do not purge history or partially accept an event.

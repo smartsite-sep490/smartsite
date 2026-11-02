@@ -1,6 +1,10 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { computeCanonicalPayloadHash, validateObservationEvent } from '@smartsite/contracts';
+import {
+  computeCanonicalPayloadHash,
+  validateObservationEvent,
+  validateTrackedObservationEvent,
+} from '@smartsite/contracts';
 import {
   mf06FrameSequenceText,
   selectMf06FrameReference,
@@ -53,6 +57,51 @@ function makeFixture(overrides: Record<string, unknown> = {}) {
   };
   return { raw, expected };
 }
+
+test('v1.5 preserves original nonzero partition media and uint64 sequence without widening evidence URI rules', () => {
+  for (const sequenceNumber of ['9007199254740993', '18446744073709551615']) {
+    const { raw, expected } = makeFixture({
+      schemaVersion: '1.5.0',
+      framePartition: { frameId: OTHER_EVENT_ID, sequenceNumber, partIndex: 1, partCount: 2 },
+      continuity: {
+        schemaVersion: '1.0.0',
+        profileSha256: 'd'.repeat(64),
+        coverage: { status: 'COMPLETE' },
+        subjects: [
+          {
+            personObservationIndex: 0,
+            segmentId: REGION_ID,
+            link: { kind: 'START', reason: 'INITIAL' },
+          },
+        ],
+        retiredSegments: [],
+      },
+      evidence: [
+        { kind: 'FRAME', uri: makeFrameUri(SESSION_ID, sequenceNumber), sha256: FRAME_SHA },
+      ],
+    });
+    assert.equal(validateTrackedObservationEvent(raw).isValid, true);
+    const selected = selectMf06FrameReference(raw, expected);
+    assert.ok(selected, 'tracked media must retain the exact original partition');
+    assert.equal(selected.sequenceNumber, sequenceNumber);
+    assert.equal(selected.framePartition?.partIndex, 1);
+    assert.equal(mf06FrameSequenceText(selected), sequenceNumber);
+    for (const uri of [
+      makeFrameUri(SESSION_ID, Number(sequenceNumber)),
+      makeFrameUri(OTHER_SESSION_ID, sequenceNumber),
+      makeFrameUri(SESSION_ID, sequenceNumber, OTHER_EVENT_ID),
+    ]) {
+      const bad = { ...raw, evidence: [{ kind: 'FRAME', uri, sha256: FRAME_SHA }] };
+      assert.equal(
+        selectMf06FrameReference(bad, {
+          ...expected,
+          payloadHash: computeCanonicalPayloadHash(bad),
+        }),
+        null,
+      );
+    }
+  }
+});
 
 test('v1.4 preserves exact uint64 frame sequences and immutable partition metadata', () => {
   for (const sequenceNumber of ['0', '9007199254740993', '18446744073709551615']) {
