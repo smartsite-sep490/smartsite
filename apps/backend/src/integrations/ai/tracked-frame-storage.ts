@@ -1,6 +1,7 @@
 import { computeCanonicalPayloadHash, type ObservationFramePartition } from '@smartsite/contracts';
 import type { DataSource, EntityManager } from 'typeorm';
 import { PublicHttpException } from '../../common/http/public-http-exception.js';
+import { parseNormalizedCapturedAt } from '../../common/parse-normalized-captured-at.js';
 import { inspectTrackedFrameParts } from './tracked-frame-parts.js';
 import { TrackedPartAuthenticator } from './tracked-part-authentication.js';
 
@@ -233,6 +234,8 @@ export class TrackedFramePrototypeStore {
       bindingHash: bound.bindingHash,
     };
     const result = reason ? { reason, terminalizedAt: now.toISOString() } : null;
+    const capturedAt = parseNormalizedCapturedAt(event.capturedAt);
+    if (!capturedAt) reject(503);
     await manager.query(
       `INSERT INTO ai_observation_event(event_id,payload_hash,camera_external_id,resolved_camera_id,stream_session_id,captured_at,raw_payload,
       processing_status,processing_note,admission_context,tracking_scope_sha256,tracking_generation_id,tracking_site_id,tracking_frame_id,
@@ -244,7 +247,8 @@ export class TrackedFramePrototypeStore {
         event.cameraExternalId,
         bound.cameraId,
         bound.context.streamSessionId,
-        event.capturedAt,
+        // Preserve legacy millisecond column semantics; raw payload retains the exact authority instant.
+        capturedAt,
         JSON.stringify(bound.payload),
         JSON.stringify({
           schemaVersion: '1.0.0',

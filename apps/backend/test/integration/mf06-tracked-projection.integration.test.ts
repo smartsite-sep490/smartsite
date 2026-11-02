@@ -18,6 +18,7 @@ import { TrackedSafetyProjection } from '../../src/modules/safety/alerts/tracked
 import { Mf06IngestionEnqueueService } from '../../src/modules/safety/assessments/mf06-ingestion-enqueue.service.js';
 import { Mf06JobLeaseService } from '../../src/modules/safety/assessments/mf06-job-lease.service.js';
 import { Mf06ClaimContextReader } from '../../src/modules/safety/assessments/mf06-claim-context.reader.js';
+import { Mf06AssessmentStore } from '../../src/modules/safety/assessments/mf06-assessment-store.service.js';
 import { Mf06EnqueueService } from '../../src/modules/safety/assessments/mf06-enqueue.service.js';
 import { AiObservationEventEntity } from '../../src/database/entities/ai-observation-event.entity.js';
 
@@ -76,6 +77,7 @@ test('mixed sealed frame atomically projects PPE and original MF06 work, preserv
       },
     );
     const first = f.event(0, 2, '0');
+    first.capturedAt = first.capturedAt.slice(0, -1) + '456Z';
     const segmentId = randomUUID();
     const second = {
       ...f.event(1, 2, '0', first.framePartition.frameId),
@@ -119,6 +121,12 @@ test('mixed sealed frame atomically projects PPE and original MF06 work, preserv
     second.evidence[0]!.uri = second.evidence[0]!.uri.replace('SECOND', second.eventId);
     await store.store(db, second, f.context, f.generation.secret);
     await store.store(db, first, f.context, f.generation.secret);
+    const [storedTime] = await db.query(
+      "SELECT captured_at=date_trunc('milliseconds',captured_at) AS legacy_milliseconds,raw_payload->>'capturedAt' AS original FROM ai_observation_event WHERE event_id=$1",
+      [second.eventId],
+    );
+    assert.equal(storedTime.legacy_milliseconds, true);
+    assert.equal(storedTime.original, first.capturedAt);
     await db.transaction(async (m) => {
       const original = await m
         .getRepository(AiObservationEventEntity)
@@ -212,6 +220,12 @@ test('mixed sealed frame atomically projects PPE and original MF06 work, preserv
       assert.equal(loaded.frameReference?.eventId, second.eventId);
       assert.equal(loaded.frameReference?.framePartition?.partIndex, 1);
       assert.equal(loaded.frameReference?.sequenceNumber, '0');
+      assert.equal(
+        loaded.authorityCapturedAt,
+        first.capturedAt,
+        'event-time authority must retain the original microseconds',
+      );
+      assert.equal(loaded.subject?.capturedAt, first.capturedAt);
     }
     const next = {
       ...f.event(0, 1, '1'),
@@ -255,6 +269,53 @@ test('mixed sealed frame atomically projects PPE and original MF06 work, preserv
       )[0].head_event_id,
       second.eventId,
       'capacity failure rolls back head advance',
+    );
+    assert.equal(loaded.status, 'MATCHED');
+    if (loaded.status !== 'MATCHED') throw new Error('Expected original claim context');
+    const assessmentStore = new Mf06AssessmentStore(db);
+    const command = {
+      claim: {
+        requestId: claim.requestId,
+        leaseToken: claim.leaseToken,
+        headRevision: claim.headRevision,
+      },
+      commandId: randomUUID(),
+      siteId: f.siteId,
+      bindingHash: loaded.request.storedBindingHash,
+      evaluatorVersion: 'SYNTHETIC_TRACKED_UNAVAILABLE_FIXTURE_V1',
+      outcome: 'UNAVAILABLE' as const,
+      reasonCode: 'AUTHORITY_UNAVAILABLE' as const,
+      provenance: 'UNAVAILABLE' as const,
+      workerId: null,
+      profileRevision: null,
+      frameSha256: null,
+      cropSha256: null,
+      authorityArtifact: null,
+    };
+    const finalized = await db.transaction('SERIALIZABLE', (m) =>
+      assessmentStore.finalizeInTransaction(m, command),
+    );
+    assert.equal(finalized.state, 'RECORDED');
+    const [result] = await db.query(
+      'SELECT a.outcome,a.reason_code,a.worker_id,j.status FROM zone_entry_assessment a JOIN zone_entry_assessment_job j USING(request_id) WHERE a.request_id=$1',
+      [claim.requestId],
+    );
+    assert.deepEqual(result, {
+      outcome: 'UNAVAILABLE',
+      reason_code: 'AUTHORITY_UNAVAILABLE',
+      worker_id: null,
+      status: 'SUCCEEDED',
+    });
+    assert.equal(
+      Number(
+        (
+          await db.query(
+            'SELECT count(*) AS total FROM zone_entry_assessment WHERE request_id=$1',
+            [claim.requestId],
+          )
+        )[0].total,
+      ),
+      1,
     );
   } finally {
     await owned.dispose();
