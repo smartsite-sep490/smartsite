@@ -3,6 +3,7 @@ import {
   validateEightFamilyObservationEvent,
   validateObservationEvent,
   validatePartitionedObservationEvent,
+  validateTrackedObservationEvent,
 } from '@smartsite/contracts';
 import type { AiObservationEventEntity } from '../../../database/entities/ai-observation-event.entity.js';
 import { parseNormalizedCapturedAt } from '../../../common/parse-normalized-captured-at.js';
@@ -10,6 +11,9 @@ import { snapshotMf06Json } from './mf06-json-snapshot.js';
 
 /** Internal callers pass descriptor-safe JSON snapshots, never resolver or browser objects. */
 export function validateMf06ObservationEvent(raw: unknown) {
+  if (raw && typeof raw === 'object' && 'schemaVersion' in raw && raw.schemaVersion === '1.5.0') {
+    return validateTrackedObservationEvent(raw);
+  }
   if (raw && typeof raw === 'object' && 'schemaVersion' in raw && raw.schemaVersion === '1.4.0') {
     return validatePartitionedObservationEvent(raw);
   }
