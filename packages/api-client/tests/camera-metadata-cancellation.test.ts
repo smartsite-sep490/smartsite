@@ -6,6 +6,14 @@ const cameraId = '22222222-2222-4222-8222-222222222222';
 const page = { items: [], total: 0 };
 const cases = [
   {
+    name: 'zones',
+    path: `/sites/${siteId}/zones`,
+    load: (client: SmartSiteManagementClient, options?: RequestOptions) =>
+      client.listZones('metadata-token', siteId, { offset: 20, limit: 20 }, options),
+    legacy: (client: SmartSiteManagementClient) =>
+      client.listZones('metadata-token', siteId, { offset: 20, limit: 20 }),
+  },
+  {
     name: 'cameras',
     path: `/sites/${siteId}/cameras`,
     load: (client: SmartSiteManagementClient, options?: RequestOptions) =>
