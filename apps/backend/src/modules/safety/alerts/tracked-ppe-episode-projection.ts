@@ -365,12 +365,13 @@ export class TrackedPpeEpisodeProjection {
         deliveryAdmitted: false,
       });
     }
-    await sealRetiredTrackedEpisodes(
-      manager,
-      scope.siteId,
-      scope.cameraId,
-      (coordinator.rawPayload as Payload).continuity.retiredSegments.map((s) => s.segmentId),
-    );
+    await sealRetiredTrackedEpisodes(manager, scope.siteId, scope.cameraId, [
+      ...new Set(
+        rows.flatMap((row) =>
+          (row.rawPayload as Payload).continuity.retiredSegments.map((s) => s.segmentId),
+        ),
+      ),
+    ]);
     return projected;
   }
   private regions(

@@ -57,9 +57,6 @@ function invariant(part: Part): string {
     partCount: part.framePartition.partCount,
     profileSha256: part.continuity.profileSha256,
     coverage: part.continuity.coverage,
-    retiredSegments: part.continuity.retiredSegments
-      .map((item) => ({ ...item }))
-      .sort((a, b) => a.segmentId.localeCompare(b.segmentId)),
   });
 }
 
@@ -94,6 +91,7 @@ export function inspectTrackedFrameParts(rows: readonly StoredTrackedPart[]): In
     subjectContext = new Map<string, string>();
   const subjects = new Map<string, AssembledSubject>(),
     predecessors = new Map<string, string>();
+  const retirements = new Map<string, TrackedFrameContinuity['retiredSegments'][number]>();
   let frameSha: string | undefined;
   for (const part of parts) {
     const index = part.framePartition.partIndex,
@@ -101,6 +99,12 @@ export function inspectTrackedFrameParts(rows: readonly StoredTrackedPart[]): In
     if (invariant(part) !== expected || indices.has(index) || events.has(eventId)) conflict();
     indices.add(index);
     events.add(eventId);
+    for (const item of part.continuity.retiredSegments) {
+      const segmentId = item.segmentId.toLowerCase();
+      if (retirements.has(segmentId) && retirements.get(segmentId)!.reason !== item.reason)
+        conflict();
+      if (!retirements.has(segmentId)) retirements.set(segmentId, { ...item, segmentId });
+    }
     for (const item of part.evidence.filter((item) => item.kind === 'FRAME')) {
       if (frameSha && frameSha !== item.sha256) conflict();
       frameSha = item.sha256;
@@ -158,7 +162,7 @@ export function inspectTrackedFrameParts(rows: readonly StoredTrackedPart[]): In
         });
     }
   }
-  for (const item of first.continuity.retiredSegments)
+  for (const item of retirements.values())
     if (subjects.has(item.segmentId.toLowerCase())) conflict();
   if (indices.size < first.framePartition.partCount)
     return {
@@ -171,6 +175,6 @@ export function inspectTrackedFrameParts(rows: readonly StoredTrackedPart[]): In
     kind: 'COMPLETE',
     sequenceNumber: first.framePartition.sequenceNumber,
     subjects: [...subjects.values()],
-    retiredSegments: first.continuity.retiredSegments.map((item) => ({ ...item })),
+    retiredSegments: [...retirements.values()],
   };
 }

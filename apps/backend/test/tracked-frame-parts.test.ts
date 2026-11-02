@@ -27,7 +27,7 @@ function event(partIndex = 0, partCount = 1) {
       subjects: [
         { personObservationIndex: 0, segmentId: id(4), link: { kind: 'START', reason: 'INITIAL' } },
       ],
-      retiredSegments: [],
+      retiredSegments: [] as Array<{ segmentId: string; reason: string }>,
     },
   };
 }
@@ -72,6 +72,40 @@ test('conflicting frame, scope or stored payload hash cannot be assembled', () =
   assert.throws(() => inspectTrackedFrameParts([row(a), row(b)]));
   assert.throws(() => inspectTrackedFrameParts([{ ...row(a), payloadHash: 'd'.repeat(64) }]));
   assert.throws(() => inspectTrackedFrameParts([row(a), row(a)]));
+});
+
+test('distributed retirement claims fold into one consistent union in original part order', () => {
+  const a = event(0, 2),
+    b = event(1, 2);
+  a.continuity.retiredSegments = [{ segmentId: id(21), reason: 'LOST_TRACK' }];
+  b.continuity.retiredSegments = [
+    { segmentId: id(22), reason: 'LOST_TRACK' },
+    { segmentId: id(21), reason: 'LOST_TRACK' },
+  ];
+  const result = inspectTrackedFrameParts([row(b), row(a)]);
+  assert.equal(result.kind, 'COMPLETE');
+  if (result.kind !== 'COMPLETE') throw new Error('Expected complete frame');
+  assert.deepEqual(result.retiredSegments, [
+    { segmentId: id(21), reason: 'LOST_TRACK' },
+    { segmentId: id(22), reason: 'LOST_TRACK' },
+  ]);
+});
+
+test('retirement present only in a later part cannot retire a subject active in another part', () => {
+  const a = event(0, 2),
+    b = event(1, 2);
+  b.observations = [];
+  b.continuity.subjects = [];
+  b.continuity.retiredSegments = [{ segmentId: id(4), reason: 'LOST_TRACK' }];
+  assert.throws(() => inspectTrackedFrameParts([row(a), row(b)]));
+});
+
+test('repeated retirement with a conflicting reason is rejected across parts', () => {
+  const a = event(0, 2),
+    b = event(1, 2);
+  a.continuity.retiredSegments = [{ segmentId: id(21), reason: 'LOST_TRACK' }];
+  b.continuity.retiredSegments = [{ segmentId: id(21), reason: 'RECONNECT' }];
+  assert.throws(() => inspectTrackedFrameParts([row(a), row(b)]));
 });
 test('one track cannot fork segments or carry conflicting subject context across parts', () => {
   const a = event(0, 2),

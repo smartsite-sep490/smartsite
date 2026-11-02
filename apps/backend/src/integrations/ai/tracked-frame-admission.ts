@@ -54,6 +54,7 @@ interface RawRow {
   admissionContext: { context: unknown; bindingHash: string; classification: string } | null;
 }
 interface Payload {
+  eventId: string;
   capturedAt: string;
   observations: Array<{ type: string }>;
   continuity: {
@@ -311,12 +312,20 @@ export class TrackedFrameAdmission {
         );
     }
     for (const retired of plan.retirements) {
+      // Parts are authenticated and ordered by original part index before assembly.
+      const original = parts.find((part) =>
+        (part.payload as Payload).continuity.retiredSegments.some(
+          (item) => item.segmentId.toLowerCase() === retired.segmentId,
+        ),
+      );
+      if (!original) unavailable();
+      const originalPayload = original.payload as Payload;
       const provenance = {
         kind: 'CAPTURED_RETIREMENT',
-        eventId: coordinator.eventId,
-        payloadHash: scope.payloadHash,
-        retirementIndex: payload.continuity.retiredSegments.findIndex(
-          (item) => item.segmentId === retired.segmentId,
+        eventId: originalPayload.eventId,
+        payloadHash: original.payloadHash,
+        retirementIndex: originalPayload.continuity.retiredSegments.findIndex(
+          (item) => item.segmentId.toLowerCase() === retired.segmentId,
         ),
         reason: retired.reason,
       };
@@ -337,7 +346,7 @@ export class TrackedFrameAdmission {
             scope.context.bundleSha256,
             payload.continuity.profileSha256,
             scope.context.sourceKind,
-            coordinator.eventId,
+            originalPayload.eventId,
             retired.reason,
             provenance,
           ],
@@ -346,7 +355,7 @@ export class TrackedFrameAdmission {
         await manager.query(
           `UPDATE ai_subject_segment SET state='RETIRED',retired_at=(SELECT captured_at FROM ai_observation_event WHERE event_id=$2),
         retirement_reason=$3,retirement_event_id=$2,retirement_provenance=$4 WHERE segment_id=$1`,
-          [retired.segmentId, coordinator.eventId, retired.reason, provenance],
+          [retired.segmentId, originalPayload.eventId, retired.reason, provenance],
         );
     }
     const projection = Object.freeze({

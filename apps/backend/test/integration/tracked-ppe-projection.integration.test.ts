@@ -1,6 +1,7 @@
 import 'reflect-metadata';
 import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
+import { computeCanonicalPayloadHash } from '@smartsite/contracts';
 import { test } from 'node:test';
 import { createIsolatedTestDatabase } from '../support/isolated-test-database.js';
 import { seedTrackedFrameFixture } from '../support/tracked-frame-fixture.js';
@@ -304,15 +305,55 @@ test('three affected people among ten yield three episodes, original findings an
     const empty = f.event(0, 1, '5');
     assert.equal((await process(empty)).kind, 'SEALED');
     assert.deepEqual(await episodeSnapshot(), beforeClose); // Empty alone never resolves safety work.
-    const retirementBase = f.event(0, 1, '6');
+    const retirementBase = f.event(0, 2, '6');
     const retirement = {
       ...retirementBase,
       continuity: {
         ...retirementBase.continuity,
-        retiredSegments: [{ segmentId: segments[0]!, reason: 'LOST_TRACK' }],
+        retiredSegments: [],
       },
     };
+    const neverObservedSegment = randomUUID();
+    const retirementPart = {
+      ...retirement,
+      eventId: randomUUID(),
+      framePartition: { ...retirement.framePartition, partIndex: 1 },
+      continuity: {
+        ...retirement.continuity,
+        retiredSegments: [
+          { segmentId: segments[0]!, reason: 'LOST_TRACK' },
+          { segmentId: neverObservedSegment, reason: 'LOST_TRACK' },
+        ],
+      },
+    };
+    assert.equal((await process(retirementPart)).kind, 'PENDING_PARTS');
     assert.equal((await process(retirement)).kind, 'SEALED');
+    const retired = (
+      await db.query(
+        'SELECT retirement_event_id,retirement_provenance FROM ai_subject_segment WHERE segment_id=$1',
+        [segments[0]],
+      )
+    )[0];
+    assert.equal(retired.retirement_event_id, retirementPart.eventId);
+    assert.deepEqual(retired.retirement_provenance, {
+      kind: 'CAPTURED_RETIREMENT',
+      eventId: retirementPart.eventId,
+      payloadHash: computeCanonicalPayloadHash(retirementPart),
+      retirementIndex: 0,
+      reason: 'LOST_TRACK',
+    });
+    const tombstone = (
+      await db.query(
+        'SELECT state,retirement_event_id,retirement_provenance FROM ai_subject_segment WHERE segment_id=$1',
+        [neverObservedSegment],
+      )
+    )[0];
+    assert.equal(tombstone.state, 'RETIRED');
+    assert.equal(tombstone.retirement_event_id, retirementPart.eventId);
+    assert.deepEqual(tombstone.retirement_provenance, {
+      ...retired.retirement_provenance,
+      retirementIndex: 1,
+    });
     const afterRetire = await episodeSnapshot();
     assert.equal(
       afterRetire.find((r: { segment: string }) => r.segment === segments[0]).state,
@@ -324,6 +365,9 @@ test('three affected people among ten yield three episodes, original findings an
         .every((r: { state: string }) => r.state === 'COLLECTING'),
     );
     assert.deepEqual(observationSnapshot(afterRetire), observationSnapshot(beforeClose));
+    assert.equal((await process(retirementPart)).kind, 'SEALED');
+    assert.deepEqual(await episodeSnapshot(), afterRetire);
+    assert.deepEqual(await db.query('SELECT * FROM safety_alert ORDER BY id'), alertsBeforeClose);
     const generation = await provisionCameraWorkerGeneration(db, f.cameraId, [f.cameraId], 120000),
       receiptCommandId = randomUUID();
     await recordCameraConfigurationAcknowledgement(db, f.cameraId, generation.secret, {
