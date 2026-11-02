@@ -161,3 +161,9 @@ export type {
   ReviewWorkerDocumentCommand,
 } from '@smartsite/contracts';
 export type { DocumentImageQuality, WorkerIdentityImageResponse } from '@smartsite/contracts';
+export type {
+  CameraConfigurationImageResponse,
+  CameraConfigurationImageReference,
+  CameraConfigurationReferenceResponse,
+} from '@smartsite/contracts/camera-configuration-image';
+export { registerSessionCredential, unregisterSessionCredential } from './session-expiry';
