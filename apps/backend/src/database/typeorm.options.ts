@@ -1,3 +1,4 @@
+import { SafetyEpisodes1794355200000 } from './migrations/1794355200000-SafetyEpisodes.js';
 import { RetireGatePermissions1794960000000 } from './migrations/1794960000000-RetireGatePermissions.js';
 import { RetireLegacyAttendance1794960000001 } from './migrations/1794960000001-RetireLegacyAttendance.js';
 import { RetireTimesheetReplica1794960000002 } from './migrations/1794960000002-RetireTimesheetReplica.js';
@@ -89,6 +90,7 @@ export function buildTypeOrmOptions(config: DatabaseConnectionConfig): DataSourc
     connectTimeoutMS: timeoutMs,
     entities: [...ENTITIES],
     migrations: [
+      SafetyEpisodes1794355200000,
       RetireGatePermissions1794960000000,
       RetireLegacyAttendance1794960000001,
       RetireTimesheetReplica1794960000002,
