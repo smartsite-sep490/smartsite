@@ -226,9 +226,12 @@ test('tracked finding pages and JPEG reads retain exact original sources and rec
     assert.equal(content.frameSha256, later.sha256);
     const { TrackedEpisodeFramesController } =
       await import('../../src/modules/safety/alerts/tracked-episode-frames.controller.js');
+    const { SafetyEpisodeInboxController } =
+      await import('../../src/modules/safety/alerts/safety-episode-inbox.controller.js');
     const module = await Test.createTestingModule({
-      controllers: [TrackedEpisodeFramesController],
+      controllers: [TrackedEpisodeFramesController, SafetyEpisodeInboxController],
       providers: [
+        { provide: SafetyEpisodeInboxService, useValue: inbox },
         { provide: TrackedEpisodeFrameQuery, useValue: reader },
         { provide: UserAuthGuard, useValue: guard },
         { provide: AuthService, useValue: new AuthService(db, tokens) },
@@ -240,6 +243,28 @@ test('tracked finding pages and JPEG reads retain exact original sources and rec
     await httpApp.listen(0, '127.0.0.1');
     const endpoint = `${await httpApp.getUrl()}/api/v1/sites/${f.siteId}/safety-episodes/${episodeId}`;
     const headers = { Authorization: `Bearer ${accessToken}` };
+    const inboxEndpoint = `${await httpApp.getUrl()}/api/v1/me/safety-episode-inbox`;
+    const inboxHttp = await fetch(`${inboxEndpoint}?siteId=${f.siteId}`, { headers });
+    assert.equal(inboxHttp.status, 200);
+    const inboxBody = await inboxHttp.json();
+    assert.equal(inboxBody.items[0].episode.subject.kind, 'TRACKED');
+    const displayedRevision: number = inboxBody.items[0].episode.contentRevision;
+    // Synthetic material revision race; real projection/read preservation has its own journey.
+    await db.query('UPDATE safety_episode SET content_revision=content_revision+1 WHERE id=$1', [
+      episodeId,
+    ]);
+    const readHttp = await fetch(`${inboxEndpoint}/${inboxBody.items[0].id}/read`, {
+      method: 'PATCH',
+      headers: { ...headers, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ seenRevision: displayedRevision }),
+    });
+    assert.equal(readHttp.status, 200);
+    assert.deepEqual(await readHttp.json(), {
+      id: inboxBody.items[0].id,
+      contentRevision: displayedRevision + 1,
+      seenRevision: displayedRevision,
+      unread: true,
+    });
     const initialAlertRevisions = await db.query(
       'SELECT revision FROM safety_alert WHERE episode_id=$1',
       [episodeId],
