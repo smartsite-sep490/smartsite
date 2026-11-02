@@ -1,5 +1,5 @@
 import i18n, { translate } from './index';
-import { SITE_GATES } from '@smartsite/contracts/gate-permissions';
+import { SITE_GATES } from '@smartsite/contracts/gates';
 /** Translate presentation metadata only. API values and authored names/reasons stay unchanged. */
 export function localizedLabel(value: string | null | undefined): string {
   if (!value) return '—';

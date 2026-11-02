@@ -41,6 +41,42 @@ afterEach(() => {
   cameraMock.failed = false;
 });
 
+it('shows the saved denial reason in gate history', async () => {
+  vi.spyOn(SmartSiteManagementClient.prototype, 'listGateAccessLogs').mockResolvedValue({
+    items: [
+      {
+        id: 'denied-log',
+        createdAt: '2026-10-27T09:57:53Z',
+        gateId: 'gate-north-01',
+        direction: 'IN',
+        method: 'QR',
+        workerId: 'worker-1',
+        userId: null,
+        workerName: 'Synthetic worker',
+        workerExternalId: 'W1',
+        contractorName: null,
+        username: null,
+        decision: { authorization: 'DENIED', reasonCode: 'ASSIGNMENT_MISSING' },
+      },
+    ],
+  });
+  queries = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+  render(
+    <QueryClientProvider client={queries}>
+      <SecurityGateDeskView
+        apiUrl="https://synthetic.test"
+        token="synthetic-token"
+        sessionScope="test"
+        selectedSiteId="site-1"
+        sites={[{ id: 'site-1', name: 'Synthetic site' }]}
+        onSelectSite={() => {}}
+        isSecurityOfficer
+      />
+    </QueryClientProvider>,
+  );
+  expect(await screen.findByText('Worker does not have an approved site assignment.')).toBeTruthy();
+});
+
 it('accepts the Worker short manual code without asking Worker to enter an officer session', async () => {
   cameraMock.failed = true;
   const workers = vi

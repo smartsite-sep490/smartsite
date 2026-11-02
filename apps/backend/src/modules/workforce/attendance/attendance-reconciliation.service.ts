@@ -613,16 +613,6 @@ export class AttendanceReconciliationService implements OnModuleInit, OnModuleDe
     ]);
     if (before !== after) day.version += 1;
     await manager.getRepository(AttendanceDayEntity).save(day);
-    if (day.confirmedMinutes !== null)
-      await manager.query(
-        `INSERT INTO timesheet(id,site_id,worker_id,period_start,period_end,total_minutes,status,attendance_day_id) VALUES($1,$2,$3,$4,$4,$5,'APPROVED',$6) ON CONFLICT(attendance_day_id) DO UPDATE SET total_minutes=EXCLUDED.total_minutes,status='APPROVED'`,
-        [randomUUID(), day.siteId, day.workerId, day.workDate, day.confirmedMinutes, day.id],
-      );
-    else
-      await manager.query(
-        "UPDATE timesheet SET total_minutes=0,status='DRAFT' WHERE attendance_day_id=$1",
-        [day.id],
-      );
     if (day.status === 'ABSENT')
       await this.notify(
         manager,
