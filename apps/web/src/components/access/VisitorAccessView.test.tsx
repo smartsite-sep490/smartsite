@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { cleanup, render, screen, waitFor } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { it, expect, vi, afterEach } from 'vitest';
@@ -123,10 +123,12 @@ it.each(['REJECTED', 'CANCELLED'] as const)(
   },
 );
 
-it('loads a QR before confirmation, selects actual arrivals, submits a replacement, and expands grouped history', async () => {
+it('loads a QR, records a replacement and clears stale arrival feedback after manual checkout', async () => {
   await i18n.changeLanguage('en');
   const user = userEvent.setup();
-  vi.spyOn(SmartSiteManagementClient.prototype, 'listVisits').mockResolvedValue({ items: [visit] });
+  const visits = vi
+    .spyOn(SmartSiteManagementClient.prototype, 'listVisits')
+    .mockResolvedValue({ items: [visit] });
   const events = vi
     .spyOn(SmartSiteManagementClient.prototype, 'listVisitorEvents')
     .mockResolvedValue({ items: [] });
@@ -156,7 +158,15 @@ it('loads a QR before confirmation, selects actual arrivals, submits a replaceme
     .spyOn(SmartSiteManagementClient.prototype, 'verifyVisitorQr')
     .mockImplementation(async () => {
       events.mockResolvedValue({ items: [result] });
+      visits.mockResolvedValue({ items: [{ ...result.visit, status: 'EXPIRED' }] });
       return result;
+    });
+  const manual = vi
+    .spyOn(SmartSiteManagementClient.prototype, 'manualVisitCheckout')
+    .mockImplementation(async () => {
+      const outside = { ...result.visit, exitedCount: 1 };
+      visits.mockResolvedValue({ items: [outside] });
+      return outside;
     });
   const cache = new QueryClient({
     defaultOptions: { queries: { retry: false }, mutations: { retry: false } },
@@ -201,6 +211,26 @@ it('loads a QR before confirmation, selects actual arrivals, submits a replaceme
   );
   await user.click(await screen.findByText('Entry · Synthetic representative · 1 visitors'));
   expect(screen.getByText('Replaced: Synthetic 1 · 000000000001')).toBeTruthy();
+  expect(screen.getByText(/Remaining on site: 1 visitors/)).toBeTruthy();
+  await user.click(screen.getAllByRole('button', { name: 'Manual group checkout' })[0]!);
+  await user.click(
+    screen.getByRole('checkbox', {
+      name: 'The representative confirmed the entire group has left.',
+    }),
+  );
+  fireEvent.change(screen.getByLabelText('Checkout note (required):'), {
+    target: { value: 'Representative verified departure' },
+  });
+  await user.click(screen.getByRole('button', { name: 'Confirm checkout' }));
+  await waitFor(() =>
+    expect(manual).toHaveBeenCalledWith(
+      'test',
+      'site-a',
+      visit.id,
+      expect.objectContaining({ representativeConfirmed: true }),
+    ),
+  );
+  await waitFor(() => expect(screen.queryByText(/Remaining on site: 1 visitors/)).toBeNull());
   await i18n.changeLanguage('vi');
   await screen.findByText('Lịch sử khách qua cổng');
   expect(screen.getByText('Thay cho: Synthetic 1 · 000000000001')).toBeTruthy();
@@ -482,9 +512,7 @@ it('displays summary cards with visit counts vs headcounts and bounded list indi
   expect(peopleUnits.length).toBe(1); // Currently On-Site
 
   // Check bounded list indicator
-  expect(
-    screen.getByText('Showing latest 2 of 120 registrations'),
-  ).toBeTruthy();
+  expect(screen.getByText('Showing latest 2 of 120 registrations')).toBeTruthy();
 
   cache.clear();
 });

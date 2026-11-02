@@ -8,7 +8,7 @@ import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { ApiError } from '@smartsite/api-client';
 import type { FaceGateDecisionResponse, FaceGateVerificationResponse } from '@smartsite/contracts';
-import { SITE_GATES } from '@smartsite/contracts/gate-permissions';
+import { SITE_GATES } from '@smartsite/contracts/gates';
 import type {
   QrFallbackResponse,
   WorkerQrVerificationCommand,
@@ -1305,6 +1305,11 @@ export function SecurityGateDeskView({
                         </>
                       )}
                     </span>
+                    {evt.outcome !== 'ALLOWED' && (
+                      <p className="mt-1 max-w-xs text-[11px] text-slate-600">
+                        {getSafeReasonMessage(evt.reasonCode)}
+                      </p>
+                    )}
                   </td>
                   <td className="px-3.5 py-2.5 font-medium text-slate-600">{evt.gateName}</td>
                 </tr>

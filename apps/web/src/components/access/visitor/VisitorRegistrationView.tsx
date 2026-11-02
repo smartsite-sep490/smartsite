@@ -3,7 +3,7 @@ import { useMemo, useRef, useState, type FormEvent } from 'react';
 import { useMutation, useQuery } from '@tanstack/react-query';
 import { SmartSiteManagementClient } from '@smartsite/api-client';
 import type { CreateVisitCommand, VisitorMemberInput } from '@smartsite/contracts';
-import { SITE_GATES } from '@smartsite/contracts/gate-permissions';
+import { SITE_GATES } from '@smartsite/contracts/gates';
 import { useTranslation } from 'react-i18next';
 import { uiLocale, uiLanguage } from '../../../i18n';
 import { LanguageSwitcher } from '../../../i18n/LanguageSwitcher';
