@@ -289,7 +289,7 @@ test('3. refuses 33-row limit overflow, duplicate hash or revision, and null or 
 });
 
 test('transient PostgreSQL errors survive the candidate boundary, while cancellation wins', async () => {
-  for (const code of ['40001', '40P01', '55P03', '57014', '55000']) {
+  for (const code of ['40001', '40P01', '55P03', '57014', '55000', 'ECONNRESET', '08006']) {
     const error = Object.assign(new Error('Synthetic transient SQL error'), {
       driverError: { code },
     });
