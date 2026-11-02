@@ -11,7 +11,8 @@
     ".": "./dist/index.js",
     "./management": "./dist/management-api.js",
     "./gates": "./dist/gate-catalog.js",
-    "./worker-document-dates": "./dist/worker-document-dates.js"
+    "./worker-document-dates": "./dist/worker-document-dates.js",
+    "./camera-configuration-image": "./dist/camera-configuration-image.js"
   },
   "types": "./dist/index.d.ts",
   "scripts": {
