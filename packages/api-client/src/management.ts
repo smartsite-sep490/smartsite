@@ -2359,11 +2359,14 @@ export class SmartSiteManagementClient {
       requestOptions,
     );
   }
-  getCamera(token: string, siteId: string, cameraId: string) {
+  getCamera(token: string, siteId: string, cameraId: string, options?: RequestOptions) {
     return this.request<CameraResponse>(
       'GET',
       `/sites/${pathId(siteId)}/cameras/${pathId(cameraId)}`,
       token,
+      undefined,
+      undefined,
+      options,
     );
   }
 
