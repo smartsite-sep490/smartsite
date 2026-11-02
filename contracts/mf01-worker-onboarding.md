@@ -103,4 +103,4 @@ API; the current management UI displays the code as read-only.
 
 Existing profile-only creation and Admin account APIs remain
 available. Provisioning does not create or approve a Site/Zone assignment, certificate, face
-profile or gate permission. These retain their current workflows and current-state checks.
+profile or Zone permission. These retain their current workflows and current-state checks.

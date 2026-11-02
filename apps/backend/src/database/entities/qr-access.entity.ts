@@ -1,5 +1,4 @@
 import type {
-  VisitorAttendanceResponse,
   VisitorMemberResponse,
   VisitorGateEventResponse,
   WorkerQrVerificationResponse,
@@ -193,36 +192,6 @@ export class QrCredentialEntity {
   requestHash!: string | null;
   @Column({ type: 'jsonb', nullable: true })
   result!: VisitorGateEventResponse | WorkerQrVerificationResponse | null;
-  @CreateDateColumn({ name: 'created_at', type: 'timestamptz' })
-  createdAt!: Date;
-}
-@Entity({ name: 'visitor_gate_event' })
-@Check('chk_visitor_event_direction', "direction IN ('IN','OUT')")
-@Check('chk_visitor_event_count', 'count > 0')
-@Check(
-  'chk_event_attendees',
-  "jsonb_typeof(attendees) = 'array' AND (jsonb_array_length(attendees) = 0 OR jsonb_array_length(attendees) = count)",
-)
-@Index('idx_visitor_gate_event_visit', ['visitId', 'createdAt'])
-export class VisitorGateEventEntity {
-  @PrimaryColumn({ type: 'uuid' })
-  id!: string;
-  @Column({ name: 'visit_id', type: 'uuid' })
-  @ForeignKey(() => VisitorVisitEntity, { name: 'fk_visitor_event_visit', onDelete: 'RESTRICT' })
-  visitId!: string;
-  @Column({ name: 'operator_user_id', type: 'uuid' })
-  @ForeignKey(() => UserEntity, { name: 'fk_visitor_event_operator', onDelete: 'RESTRICT' })
-  operatorUserId!: string;
-  @Column({ name: 'gate_id', type: 'varchar', length: 64 })
-  gateId!: string;
-  @Column({ type: 'varchar', length: 3 })
-  direction!: 'IN' | 'OUT';
-  @Column({ type: 'integer' })
-  count!: number;
-  @Column({ type: 'jsonb', default: [] })
-  attendees!: VisitorAttendanceResponse[];
-  @Column({ name: 'request_hash', type: 'varchar', length: 64, nullable: true }) requestHash!:
-    string | null;
   @CreateDateColumn({ name: 'created_at', type: 'timestamptz' })
   createdAt!: Date;
 }

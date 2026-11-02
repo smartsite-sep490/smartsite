@@ -39,6 +39,17 @@ export interface WorkerDocumentIdentityCheck {
   status: 'MATCH' | 'MISMATCH' | 'NOT_DETECTED' | 'UNAVAILABLE' | 'NO_REFERENCE';
   detectedNationalIds: string[];
 }
+export interface WorkerDocumentDateCheck {
+  status: 'MATCH' | 'MISMATCH' | 'UNAVAILABLE' | 'NO_REFERENCE';
+  field: 'ISSUED_ON' | 'EXPIRES_ON';
+  submittedDate: string | null;
+  detectedDate: string | null;
+}
+export interface WorkerDocumentCheckResponse {
+  quality: DocumentImageQuality;
+  ocr: DocumentOcrResult | null;
+  dateCheck: WorkerDocumentDateCheck;
+}
 export interface WorkerDocumentResponse {
   id: string;
   workerId: string;
@@ -51,7 +62,7 @@ export interface WorkerDocumentResponse {
   issuedOn: string | null;
   expiresOn: string | null;
   uploadedAt: string;
-  /** Representative suggestion only; does not grant or extend approved validity. */
+  /** Worker/Representative proposal only; does not grant or extend approved validity. */
   submittedExpiresOn?: string | null;
   /** Health certificate issue/examination date supplied for Safety confirmation. */
   submittedIssuedOn?: string | null;
@@ -60,6 +71,8 @@ export interface WorkerDocumentResponse {
   version: number;
   /** Advisory only: never blocks submission or Safety approval. */
   identityCheck?: WorkerDocumentIdentityCheck;
+  /** Technical comparison only; Safety still confirms the original and approved dates. */
+  dateCheck?: WorkerDocumentDateCheck;
 }
 export type WorkerComplianceStatus = 'NOT_REQUIRED' | 'PENDING' | 'ACTIVE' | 'EXPIRED';
 export type WorkerDocumentSubmissionStatus = 'NOT_SUBMITTED' | 'PENDING_REVIEW' | 'REVIEWED';
