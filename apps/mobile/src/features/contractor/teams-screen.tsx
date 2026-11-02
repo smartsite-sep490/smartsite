@@ -551,6 +551,7 @@ const teamStyles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: 12,
+    flexWrap: 'wrap',
   },
   teamIconBox: {
     width: 44,
@@ -559,10 +560,13 @@ const teamStyles = StyleSheet.create({
     backgroundColor: '#FFF4EE',
     alignItems: 'center',
     justifyContent: 'center',
+    flexShrink: 0,
   },
   teamInfoCol: {
     flex: 1,
     gap: 2,
+    minWidth: 100,
+    flexBasis: 120,
   },
   teamNameText: {
     fontSize: 16,
@@ -580,15 +584,20 @@ const teamStyles = StyleSheet.create({
     paddingVertical: 4,
     borderRadius: 10,
     gap: 4,
+    maxWidth: '100%',
+    flexShrink: 0,
   },
   statusDot: {
     width: 6,
     height: 6,
     borderRadius: 3,
+    flexShrink: 0,
   },
   statusText: {
     fontSize: 11,
     fontWeight: '700',
+    flexShrink: 1,
+    lineHeight: 18,
   },
   memberCountRow: {
     flexDirection: 'row',
