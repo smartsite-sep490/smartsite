@@ -33,6 +33,45 @@ const cases = [
 
 afterEach(() => vi.unstubAllGlobals());
 
+it('cancels a deep-linked camera lookup before transport and rejects a late success', async () => {
+  const client = new SmartSiteManagementClient('https://api.example.test');
+  const aborted = new AbortController();
+  aborted.abort();
+  const fetchMock = vi.fn().mockResolvedValue(Response.json({ id: cameraId }));
+  vi.stubGlobal('fetch', fetchMock);
+  await expect(
+    client.getCamera('metadata-token', siteId, cameraId, {
+      signal: aborted.signal,
+    }),
+  ).rejects.toMatchObject({ code: 'cancelled' });
+  expect(fetchMock).not.toHaveBeenCalled();
+
+  let complete!: (value: Response) => void;
+  let started!: () => void;
+  const ready = new Promise<void>((resolve) => {
+    started = resolve;
+  });
+  fetchMock.mockImplementation(() => {
+    started();
+    return new Promise<Response>((resolve) => {
+      complete = resolve;
+    });
+  });
+  const controller = new AbortController();
+  const result = client
+    .getCamera('metadata-token', siteId, cameraId, {
+      signal: controller.signal,
+    })
+    .then(
+      () => 'success',
+      (error: unknown) => error,
+    );
+  await ready;
+  controller.abort();
+  complete(Response.json({ id: cameraId }));
+  expect(await result).toMatchObject({ code: 'cancelled' });
+});
+
 describe.each(cases)('$name metadata transport cancellation', ({ path, load, legacy }) => {
   it('preserves the legacy pagination URL, method and credential header without request options', async () => {
     const fetchMock = vi.fn().mockResolvedValue(Response.json(page));
