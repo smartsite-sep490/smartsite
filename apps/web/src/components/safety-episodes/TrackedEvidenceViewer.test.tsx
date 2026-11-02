@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import React from 'react';
-import { act, cleanup, fireEvent, render, screen, within } from '@testing-library/react';
+import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { changeUiLanguage } from '../../i18n/runtime';
 import {
@@ -466,5 +466,98 @@ describe('TrackedEvidenceViewer', () => {
     } finally {
       launcher.remove();
     }
+  });
+
+  it('renders optional identityContent slot only after exact activeObjectUrl img onLoad and suppresses it across Blob/scope/status changes or onError', async () => {
+    // 1. Default omitted identityContent renders no slot before or after img load
+    const { rerender } = render(<TrackedEvidenceViewer {...buildProps()} />);
+    await act(async () => {});
+    await waitFor(() => {
+      expect(screen.getByTestId('tracked-viewer-image')).toBeTruthy();
+    });
+    expect(screen.queryByTestId('tracked-viewer-identity-slot')).toBeNull();
+    fireEvent.load(screen.getByTestId('tracked-viewer-image'));
+    expect(screen.queryByTestId('tracked-viewer-identity-slot')).toBeNull();
+
+    // 2. Provided identityContent stays absent on newly allocated URL before fireEvent.load(img), then appears after load
+    await act(async () => {
+      rerender(
+        <TrackedEvidenceViewer
+          {...buildProps({
+            identityContent: <div data-testid="custom-identity-child">Identity child</div>,
+          })}
+        />,
+      );
+    });
+    await waitFor(() => {
+      expect(screen.getByTestId('tracked-viewer-image')).toBeTruthy();
+    });
+    expect(screen.queryByTestId('tracked-viewer-identity-slot')).toBeNull();
+    expect(screen.queryByTestId('custom-identity-child')).toBeNull();
+
+    fireEvent.load(screen.getByTestId('tracked-viewer-image'));
+    expect(screen.getByTestId('tracked-viewer-identity-slot')).toBeTruthy();
+    expect(screen.getByTestId('custom-identity-child').textContent).toBe('Identity child');
+
+    // 3. Rerendering with a new Blob or new scopeKey suppresses the slot until the new img fires onLoad
+    await act(async () => {
+      rerender(
+        <TrackedEvidenceViewer
+          {...buildProps({
+            scopeKey: 'site-1:episode-2',
+            media: buildMedia({ scopeKey: 'site-1:episode-2', blob: createJpegBlob(640) }),
+            identityContent: <div data-testid="custom-identity-child">Identity child</div>,
+          })}
+        />,
+      );
+    });
+    await waitFor(() => {
+      expect(screen.getByTestId('tracked-viewer-image')).toBeTruthy();
+    });
+    expect(screen.queryByTestId('tracked-viewer-identity-slot')).toBeNull();
+    expect(screen.queryByTestId('custom-identity-child')).toBeNull();
+
+    fireEvent.load(screen.getByTestId('tracked-viewer-image'));
+    expect(screen.getByTestId('tracked-viewer-identity-slot')).toBeTruthy();
+
+    // 4. Hidden on LOADING, ERROR, and FORBIDDEN
+    for (const nonReadyStatus of ['LOADING', 'ERROR', 'FORBIDDEN'] as const) {
+      await act(async () => {
+        rerender(
+          <TrackedEvidenceViewer
+            {...buildProps({
+              status: nonReadyStatus,
+              identityContent: <div data-testid="custom-identity-child">Identity child</div>,
+            })}
+          />,
+        );
+      });
+      expect(screen.queryByTestId('tracked-viewer-identity-slot')).toBeNull();
+      expect(screen.queryByTestId('custom-identity-child')).toBeNull();
+    }
+
+    // 5. Restore READY, fire onLoad so slot appears, then trigger onError -> removes both image and identityContent slot
+    await act(async () => {
+      rerender(
+        <TrackedEvidenceViewer
+          {...buildProps({
+            status: 'READY',
+            identityContent: <div data-testid="custom-identity-child">Identity child</div>,
+          })}
+        />,
+      );
+    });
+    await waitFor(() => {
+      expect(screen.getByTestId('tracked-viewer-image')).toBeTruthy();
+    });
+    expect(screen.queryByTestId('tracked-viewer-identity-slot')).toBeNull();
+
+    fireEvent.load(screen.getByTestId('tracked-viewer-image'));
+    expect(screen.getByTestId('custom-identity-child')).toBeTruthy();
+
+    fireEvent.error(screen.getByTestId('tracked-viewer-image'));
+    expect(screen.queryByTestId('tracked-viewer-image')).toBeNull();
+    expect(screen.queryByTestId('tracked-viewer-identity-slot')).toBeNull();
+    expect(screen.queryByTestId('custom-identity-child')).toBeNull();
   });
 });

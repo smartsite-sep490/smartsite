@@ -10,6 +10,7 @@ import type {
   TrackedEpisodeObservationOptions,
   TrackedEpisodeObservationPage,
   TrackedEpisodeOriginalObservation,
+  TrackedObservationIdentity,
 } from '@smartsite/contracts/tracked-episode-frames';
 import { changeUiLanguage } from '../../i18n/runtime';
 import {
@@ -203,6 +204,12 @@ function createTestQueryClient() {
   });
 }
 
+function createUnexpectedIdentityFetchStub(): TrackedEpisodeEvidenceClient['getTrackedObservationIdentity'] {
+  return vi.fn(async () => {
+    throw new Error('Unexpected auto-fetch of getTrackedObservationIdentity');
+  });
+}
+
 describe('TrackedEpisodeEvidenceWorkspace', () => {
   let urlSequence = 0;
   let createObjectURLSpy: ReturnType<typeof vi.spyOn>;
@@ -278,6 +285,7 @@ describe('TrackedEpisodeEvidenceWorkspace', () => {
       getTrackedEpisode,
       listTrackedEpisodeObservations,
       readTrackedEpisodeMedia,
+      getTrackedObservationIdentity: createUnexpectedIdentityFetchStub(),
     };
 
     render(
@@ -459,6 +467,7 @@ describe('TrackedEpisodeEvidenceWorkspace', () => {
         async (_token, _siteId, _episodeId, _source, representation, expectedFrameSha256) =>
           buildMediaResult(representation, expectedFrameSha256),
       ),
+      getTrackedObservationIdentity: createUnexpectedIdentityFetchStub(),
     };
 
     render(
@@ -601,6 +610,7 @@ describe('TrackedEpisodeEvidenceWorkspace', () => {
           return Promise.resolve(buildMediaResult(representation, expectedFrameSha256, 512));
         },
       ),
+      getTrackedObservationIdentity: createUnexpectedIdentityFetchStub(),
     };
 
     const buildProps = (
@@ -738,6 +748,7 @@ describe('TrackedEpisodeEvidenceWorkspace', () => {
           });
         },
       ),
+      getTrackedObservationIdentity: createUnexpectedIdentityFetchStub(),
     };
 
     render(
@@ -831,6 +842,7 @@ describe('TrackedEpisodeEvidenceWorkspace', () => {
           return buildMediaResult(representation, expectedFrameSha256);
         },
       ),
+      getTrackedObservationIdentity: createUnexpectedIdentityFetchStub(),
     };
 
     const { rerender } = render(
@@ -926,5 +938,210 @@ describe('TrackedEpisodeEvidenceWorkspace', () => {
       changeUiLanguage('vi');
     });
     expect(screen.getByTestId('tracked-workspace-state-badge').textContent).toBe('Đã niêm phong');
+  });
+
+  it('passes the selected later finding observation payloadHash (not the anchor hash) on explicit identity read inside the viewer, clears previous Worker ID when switching observations on the same technical segment, and aborts pending identity reads when closing the viewer', async () => {
+    const queryClient = createTestQueryClient();
+    const WORKER_ID_EVENT_2 = '77777777-7777-4777-8777-777777777777';
+    const ACTOR_USER_ID = '88888888-8888-4888-8888-888888888888';
+    const DECISION_ID = '99999999-9999-4999-8999-999999999992';
+    const STREAM_SESSION_ID = '66666666-6666-4666-8666-666666666666';
+
+    let pendingEvent1Signal: AbortSignal | undefined;
+    let resolvePendingEvent1Identity: ((identity: TrackedObservationIdentity) => void) | null =
+      null;
+
+    const getTrackedObservationIdentity = vi.fn<
+      TrackedEpisodeEvidenceClient['getTrackedObservationIdentity']
+    >((_token, _siteId, _episodeId, source, expectedPayloadHash, options) => {
+      const subjectRef: TrackedObservationIdentity['subjectRef'] = {
+        eventId: source.eventId,
+        personObservationIndex: source.personObservationIndex,
+        payloadHash: expectedPayloadHash,
+        cameraId: CAMERA_ID,
+        cameraExternalId: 'cam-gate-01',
+        streamSessionId: STREAM_SESSION_ID,
+        capturedAt: '2026-11-01T10:14:00.000Z',
+        trackId: 99,
+        personBoundingBox: {
+          x1: 0.1,
+          y1: 0.2,
+          x2: 0.4,
+          y2: 0.9,
+          coordinateSpace: 'NORMALIZED_0_1',
+        },
+      };
+
+      if (source.eventId === EVENT_1_ID) {
+        pendingEvent1Signal = options?.signal;
+        return new Promise<TrackedObservationIdentity>((resolve) => {
+          resolvePendingEvent1Identity = resolve;
+        });
+      }
+
+      return Promise.resolve({
+        episodeId: EPISODE_ID,
+        siteId: SITE_ID,
+        source,
+        subjectRef,
+        revision: 2,
+        latestDecision: {
+          id: DECISION_ID,
+          revision: 2,
+          action: 'RESOLVE',
+          workerId: WORKER_ID_EVENT_2,
+          actorUserId: ACTOR_USER_ID,
+          reason: 'Manual verification for later vest finding',
+          scope: 'EXACT_OBSERVATION',
+          verificationMethod: 'MANUAL',
+          recordedAt: '2026-11-01T10:20:00.000Z',
+          subjectRef,
+          evidenceIndex: source.evidenceIndex,
+          evidenceSha256: SHA_EVENT2_FRAME3,
+        },
+      });
+    });
+
+    const client: TrackedEpisodeEvidenceClient = {
+      getTrackedEpisode: vi.fn(async () => buildDetail()),
+      listTrackedEpisodeObservations: vi.fn(async () =>
+        buildObservationPage({
+          offset: 0,
+          limit: 20,
+          total: 2,
+          hasMore: false,
+          items: [OBS_1_HELMET_EVENT_1, OBS_3_VEST_EVENT_2],
+        }),
+      ),
+      readTrackedEpisodeMedia: vi.fn(
+        async (_token, _siteId, _episodeId, _source, representation, expectedFrameSha256) =>
+          buildMediaResult(representation, expectedFrameSha256, 512),
+      ),
+      getTrackedObservationIdentity,
+    };
+
+    render(
+      <QueryClientProvider client={queryClient}>
+        <TrackedEpisodeEvidenceWorkspace
+          client={client}
+          token="jwt-token-identity-workspace"
+          sessionScope="actor-1:safety"
+          apiUrl="http://127.0.0.1:4000"
+          siteId={SITE_ID}
+          episodeId={EPISODE_ID}
+        />
+      </QueryClientProvider>,
+    );
+
+    await waitFor(() => {
+      expect(screen.getAllByTestId('tracked-history-item')).toHaveLength(2);
+    });
+
+    // 1. Open viewer on the second row (later finding OBS_3_VEST_EVENT_2, PAYLOAD_HASH_EVENT_2)
+    const rows = screen.getAllByTestId('tracked-history-item');
+    const secondRow = rows[1]!;
+    fireEvent.click(within(secondRow).getByRole('button', { name: 'Mechanical PERSON crop #3' }));
+
+    await waitFor(() => {
+      expect(screen.getByTestId('tracked-viewer-image')).toBeTruthy();
+    });
+    // Identity panel remains suppressed until the viewer image fires onLoad for its activeObjectUrl
+    expect(screen.queryByTestId('tracked-observation-identity-panel')).toBeNull();
+    fireEvent.load(screen.getByTestId('tracked-viewer-image'));
+
+    expect(screen.getByTestId('tracked-observation-identity-panel')).toBeTruthy();
+    // Opening the viewer and loading the image must NOT auto-fetch getTrackedObservationIdentity
+    expect(getTrackedObservationIdentity).not.toHaveBeenCalled();
+    expect(screen.getByTestId('tracked-identity-idle')).toBeTruthy();
+
+    // 2. Click explicit Read manual identity record button inside viewer modal:
+    // proves OBS_3_VEST_EVENT_2's PAYLOAD_HASH_EVENT_2 is passed, NOT anchor PAYLOAD_HASH_EVENT_1
+    fireEvent.click(screen.getByTestId('tracked-identity-read-button'));
+
+    await waitFor(() => {
+      expect(screen.getByTestId('tracked-identity-worker').textContent).toContain(
+        WORKER_ID_EVENT_2,
+      );
+    });
+
+    expect(getTrackedObservationIdentity).toHaveBeenCalledTimes(1);
+    expect(getTrackedObservationIdentity).toHaveBeenLastCalledWith(
+      'jwt-token-identity-workspace',
+      SITE_ID,
+      EPISODE_ID,
+      {
+        alertId: FINDING_VEST_ID,
+        eventId: EVENT_2_ID,
+        personObservationIndex: 2,
+        evidenceIndex: 3,
+      },
+      PAYLOAD_HASH_EVENT_2,
+      expect.objectContaining({ signal: expect.any(AbortSignal) }),
+    );
+    expect(getTrackedObservationIdentity.mock.calls[0]?.[4]).not.toBe(PAYLOAD_HASH_EVENT_1);
+
+    // 3. Close viewer and open the first row (OBS_1_HELMET_EVENT_1 on the same technical segment):
+    // previous recorded Worker ID must disappear immediately and no auto-fetch occurs
+    fireEvent.click(screen.getByRole('button', { name: 'Close viewer' }));
+    expect(screen.queryByRole('dialog')).toBeNull();
+
+    const firstRow = screen.getAllByTestId('tracked-history-item')[0]!;
+    fireEvent.click(within(firstRow).getByRole('button', { name: 'Full FRAME #0' }));
+
+    await waitFor(() => {
+      expect(screen.getByTestId('tracked-viewer-image')).toBeTruthy();
+    });
+    expect(screen.queryByTestId('tracked-observation-identity-panel')).toBeNull();
+    fireEvent.load(screen.getByTestId('tracked-viewer-image'));
+
+    expect(screen.getByTestId('tracked-identity-idle')).toBeTruthy();
+    expect(screen.queryByTestId('tracked-identity-worker')).toBeNull();
+    expect(getTrackedObservationIdentity).toHaveBeenCalledTimes(1);
+
+    // 4. Start pending identity read on OBS_1_HELMET_EVENT_1, then close the viewer:
+    // verifies PAYLOAD_HASH_EVENT_1 was passed, in-flight request is aborted, and late response cannot leak
+    fireEvent.click(screen.getByTestId('tracked-identity-read-button'));
+    expect(screen.getByTestId('tracked-identity-loading')).toBeTruthy();
+    expect(getTrackedObservationIdentity).toHaveBeenCalledTimes(2);
+    expect(getTrackedObservationIdentity.mock.calls[1]?.[4]).toBe(PAYLOAD_HASH_EVENT_1);
+    expect(pendingEvent1Signal?.aborted).toBe(false);
+
+    fireEvent.click(screen.getByRole('button', { name: 'Close viewer' }));
+    expect(screen.queryByRole('dialog')).toBeNull();
+    expect(pendingEvent1Signal?.aborted).toBe(true);
+
+    await act(async () => {
+      resolvePendingEvent1Identity?.({
+        episodeId: EPISODE_ID,
+        siteId: SITE_ID,
+        source: {
+          alertId: FINDING_HELMET_ID,
+          eventId: EVENT_1_ID,
+          personObservationIndex: 0,
+          evidenceIndex: 0,
+        },
+        subjectRef: {
+          eventId: EVENT_1_ID,
+          personObservationIndex: 0,
+          payloadHash: PAYLOAD_HASH_EVENT_1,
+          cameraId: CAMERA_ID,
+          cameraExternalId: 'cam-gate-01',
+          streamSessionId: STREAM_SESSION_ID,
+          capturedAt: '2026-11-01T10:15:30.000Z',
+          trackId: 99,
+          personBoundingBox: {
+            x1: 0.1,
+            y1: 0.2,
+            x2: 0.4,
+            y2: 0.9,
+            coordinateSpace: 'NORMALIZED_0_1',
+          },
+        },
+        revision: 0,
+        latestDecision: null,
+      });
+      await Promise.resolve();
+    });
+    expect(screen.queryByRole('dialog')).toBeNull();
   });
 });

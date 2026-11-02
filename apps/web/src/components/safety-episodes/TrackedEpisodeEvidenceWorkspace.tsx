@@ -19,11 +19,15 @@ import {
   TrackedObservationHistory,
   type TrackedObservationHistoryStatus,
 } from './TrackedObservationHistory';
+import { TrackedObservationIdentityPanel } from './TrackedObservationIdentityPanel';
 import './tracked-episode-workspace-catalog';
 
 export type TrackedEpisodeEvidenceClient = Pick<
   SmartSiteManagementClient,
-  'getTrackedEpisode' | 'listTrackedEpisodeObservations' | 'readTrackedEpisodeMedia'
+  | 'getTrackedEpisode'
+  | 'listTrackedEpisodeObservations'
+  | 'readTrackedEpisodeMedia'
+  | 'getTrackedObservationIdentity'
 >;
 
 export interface TrackedEpisodeEvidenceWorkspaceProps {
@@ -73,11 +77,16 @@ const buildMediaSelectionKey = (
 ) =>
   `${source.alertId}:${source.eventId}:${source.personObservationIndex}:${source.evidenceIndex}:${representation}`;
 
-function resolveAuthorizedFrameSha256(
+interface AuthorizedMediaDescriptor {
+  expectedFrameSha256: string;
+  expectedPayloadHash: string;
+}
+
+function resolveAuthorizedMediaDescriptor(
   detail: TrackedEpisodeDetail | null,
   items: readonly TrackedEpisodeOriginalObservation[],
   source: TrackedEpisodeMediaSource,
-): string | null {
+): AuthorizedMediaDescriptor | null {
   if (!detail || !detail.findings.some((finding) => finding.alertId === source.alertId)) {
     return null;
   }
@@ -88,7 +97,13 @@ function resolveAuthorizedFrameSha256(
       item.personObservationIndex === source.personObservationIndex,
   );
   const frame = observation?.frames.find((entry) => entry.evidenceIndex === source.evidenceIndex);
-  return frame?.sha256 ?? null;
+  if (!observation || !frame) {
+    return null;
+  }
+  return {
+    expectedFrameSha256: frame.sha256,
+    expectedPayloadHash: observation.payloadHash,
+  };
 }
 
 export function TrackedEpisodeEvidenceWorkspace(props: TrackedEpisodeEvidenceWorkspaceProps) {
@@ -326,10 +341,16 @@ function TrackedEpisodeEvidenceWorkspaceInner({
       ? selectedMedia
       : null;
 
-  const expectedFrameSha256 =
+  const authorizedMediaDescriptor =
     activeMediaSelection !== null
-      ? resolveAuthorizedFrameSha256(usableDetail, deduplicatedItems, activeMediaSelection.source)
+      ? resolveAuthorizedMediaDescriptor(
+          usableDetail,
+          deduplicatedItems,
+          activeMediaSelection.source,
+        )
       : null;
+  const expectedFrameSha256 = authorizedMediaDescriptor?.expectedFrameSha256 ?? null;
+  const expectedPayloadHash = authorizedMediaDescriptor?.expectedPayloadHash ?? null;
 
   const mediaQuery = useQuery({
     queryKey: [
@@ -465,6 +486,24 @@ function TrackedEpisodeEvidenceWorkspaceInner({
       void historyQuery.refetch();
     }
   };
+
+  const viewerIdentityContent =
+    verifiedViewerMedia !== null &&
+    activeMediaSelection !== null &&
+    expectedFrameSha256 !== null &&
+    expectedPayloadHash !== null ? (
+      <TrackedObservationIdentityPanel
+        key={`${historyScopeKey}::${activeMediaSelection.selectionKey}::${expectedPayloadHash}`}
+        client={client}
+        token={token}
+        scopeKey={historyScopeKey}
+        apiUrl={apiUrl}
+        siteId={siteId}
+        episodeId={episodeId}
+        source={activeMediaSelection.source}
+        expectedPayloadHash={expectedPayloadHash}
+      />
+    ) : undefined;
 
   const episodeTechPanelId = `${instanceId}-episode-tech`;
 
@@ -673,6 +712,7 @@ function TrackedEpisodeEvidenceWorkspaceInner({
         representation={activeMediaSelection?.representation ?? 'FRAME'}
         status={viewerStatus}
         media={verifiedViewerMedia}
+        identityContent={viewerIdentityContent}
         onClose={handleCloseViewer}
         onRetry={handleRetryViewer}
       />

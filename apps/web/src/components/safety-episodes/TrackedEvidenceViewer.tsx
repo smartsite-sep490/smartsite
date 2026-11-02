@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { type ReactNode, useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import type { TrackedEpisodeMediaRepresentation } from '@smartsite/contracts/tracked-episode-frames';
 import { SAFETY_NAMESPACE } from '../../i18n/runtime';
@@ -22,6 +22,7 @@ export interface TrackedEvidenceViewerProps {
   representation: TrackedEpisodeMediaRepresentation;
   status: TrackedEvidenceViewerStatus;
   media: TrackedEvidenceViewerMedia | null;
+  identityContent?: ReactNode;
   onClose(): void;
   onRetry(): void;
 }
@@ -32,6 +33,13 @@ interface AllocatedBlobUrlState {
   blob: Blob;
   url: string | null;
   allocationFailed: boolean;
+}
+
+interface LoadedImageState {
+  scopeKey: string;
+  selectionKey: string;
+  blob: Blob;
+  url: string;
 }
 
 const MAX_JPEG_BYTES = 1_048_576;
@@ -89,11 +97,13 @@ function TrackedEvidenceViewerContent({
   representation,
   status,
   media,
+  identityContent,
   onClose,
   onRetry,
 }: TrackedEvidenceViewerProps) {
   const { t } = useTranslation(SAFETY_NAMESPACE);
   const [blobUrlState, setBlobUrlState] = useState<AllocatedBlobUrlState | null>(null);
+  const [loadedImageState, setLoadedImageState] = useState<LoadedImageState | null>(null);
   const [failedBlobUrl, setFailedBlobUrl] = useState<string | null>(null);
   const [isTechnicalOpen, setIsTechnicalOpen] = useState(false);
 
@@ -161,6 +171,15 @@ function TrackedEvidenceViewerContent({
   const activeObjectUrl = matchingUrlState?.url ?? null;
   const isUrlCreationFailed = matchingUrlState?.allocationFailed === true;
   const isDecodeFailed = activeObjectUrl !== null && failedBlobUrl === activeObjectUrl;
+  const isImageLoaded =
+    acceptedBlob !== null &&
+    activeObjectUrl !== null &&
+    !isDecodeFailed &&
+    loadedImageState !== null &&
+    loadedImageState.scopeKey === scopeKey &&
+    loadedImageState.selectionKey === selectionKey &&
+    loadedImageState.blob === acceptedBlob &&
+    loadedImageState.url === activeObjectUrl;
   const isReadyUnavailable =
     status === 'READY' && (acceptedBlob === null || isUrlCreationFailed || isDecodeFailed);
   const isPreparingReadyUrl =
@@ -272,18 +291,36 @@ function TrackedEvidenceViewerContent({
       )}
 
       {status === 'READY' && activeObjectUrl !== null && !isDecodeFailed && (
-        <div
-          data-testid="tracked-viewer-stage"
-          className="flex min-h-[240px] max-h-[60vh] w-full items-center justify-center overflow-auto rounded-xl border border-slate-200 bg-slate-950/95 p-3"
-        >
-          <img
-            src={activeObjectUrl}
-            alt={imageAlt}
-            data-testid="tracked-viewer-image"
-            onError={() => setFailedBlobUrl(activeObjectUrl)}
-            className="max-h-[56vh] w-auto max-w-full object-contain"
-          />
-        </div>
+        <>
+          <div
+            data-testid="tracked-viewer-stage"
+            className="flex min-h-[240px] max-h-[60vh] w-full items-center justify-center overflow-auto rounded-xl border border-slate-200 bg-slate-950/95 p-3"
+          >
+            <img
+              src={activeObjectUrl}
+              alt={imageAlt}
+              data-testid="tracked-viewer-image"
+              onLoad={() => {
+                if (acceptedBlob !== null && activeObjectUrl !== null) {
+                  setLoadedImageState({
+                    scopeKey,
+                    selectionKey,
+                    blob: acceptedBlob,
+                    url: activeObjectUrl,
+                  });
+                }
+              }}
+              onError={() => {
+                setLoadedImageState(null);
+                setFailedBlobUrl(activeObjectUrl);
+              }}
+              className="max-h-[56vh] w-auto max-w-full object-contain"
+            />
+          </div>
+          {isImageLoaded && identityContent !== undefined && identityContent !== null && (
+            <div data-testid="tracked-viewer-identity-slot">{identityContent}</div>
+          )}
+        </>
       )}
 
       {isTechnicalOpen && (
