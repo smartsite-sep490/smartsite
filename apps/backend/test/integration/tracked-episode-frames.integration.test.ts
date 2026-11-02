@@ -249,10 +249,26 @@ test('tracked finding pages and JPEG reads retain exact original sources and rec
     const inboxBody = await inboxHttp.json();
     assert.equal(inboxBody.items[0].episode.subject.kind, 'TRACKED');
     const displayedRevision: number = inboxBody.items[0].episode.contentRevision;
-    // Synthetic material revision race; real projection/read preservation has its own journey.
-    await db.query('UPDATE safety_episode SET content_revision=content_revision+1 WHERE id=$1', [
-      episodeId,
-    ]);
+    // Exercise the existing human review transaction on a synthetic TRACKED finding.
+    const { SafetyAlertReviewService } =
+      await import('../../src/modules/safety/alerts/safety-alert-review.service.js');
+    const { AlertStatus } = await import('../../src/database/entities/enums.js');
+    const reviews = new SafetyAlertReviewService(db);
+    const reviewCommand: import('../../src/modules/safety/alerts/safety-alert-review.service.js').ReviewSafetyAlertCommand =
+      {
+        commandId: randomUUID(),
+        expectedRevision: 0,
+        targetStatus: AlertStatus.DISMISSED,
+        reason: 'Synthetic fixture review, not a real observation judgement',
+      };
+    assert.equal(
+      (await reviews.review(f.siteId, source.alertId, actor, reviewCommand)).replayed,
+      false,
+    );
+    assert.equal(
+      (await reviews.review(f.siteId, source.alertId, actor, reviewCommand)).replayed,
+      true,
+    );
     const readHttp = await fetch(`${inboxEndpoint}/${inboxBody.items[0].id}/read`, {
       method: 'PATCH',
       headers: { ...headers, 'Content-Type': 'application/json' },
@@ -270,8 +286,8 @@ test('tracked finding pages and JPEG reads retain exact original sources and rec
       [episodeId],
     );
     assert.deepEqual(
-      [...new Set(initialAlertRevisions.map((row: { revision: number }) => row.revision))],
-      [0],
+      [...new Set(initialAlertRevisions.map((row: { revision: number }) => row.revision))].sort(),
+      [0, 1],
     );
     const trackedDetail = await fetch(`${endpoint}/tracked`, { headers });
     assert.equal(trackedDetail.status, 200, await trackedDetail.clone().text());
