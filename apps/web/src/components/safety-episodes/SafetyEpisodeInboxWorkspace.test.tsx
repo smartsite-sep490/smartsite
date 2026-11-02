@@ -36,6 +36,30 @@ describe('SafetyEpisodeInboxWorkspace', () => {
     vi.restoreAllMocks();
   });
 
+  it('does not describe EVENT_LOCAL people as tracked across frames in either language', async () => {
+    const client: SafetyEpisodeInboxClient = {
+      listSafetyEpisodeInbox: vi
+        .fn()
+        .mockResolvedValue({ items: [ITEM_A_1, ITEM_B_1], total: 2, unreadCount: 1 }),
+      readSafetyEpisodeInbox: vi.fn(),
+    };
+    renderWorkspace({ client });
+    const local = await screen.findByTestId(`safety-inbox-row-subject-${ITEM_B_1.id}`);
+    expect(local.textContent).toContain('1 person in this event');
+    expect(local.textContent).not.toContain('tracked person');
+    expect(screen.getByTestId(`safety-inbox-row-subject-${ITEM_A_1.id}`).textContent).toContain(
+      '1 tracked person',
+    );
+    await act(async () => {
+      await changeUiLanguage('vi');
+    });
+    expect(local.textContent).toContain('1 người trong sự kiện');
+    expect(local.textContent).not.toContain('người theo dõi');
+    expect(screen.getByTestId(`safety-inbox-row-subject-${ITEM_A_1.id}`).textContent).toContain(
+      '1 người theo dõi',
+    );
+  });
+
   it('distinguishes unavailable empty-sites scope, pending load, settled filtered empty, 502 retryable error, and 403 forbidden states', async () => {
     const listDeferred = createDeferred<SafetyEpisodeInboxPage>();
     const listMock = vi

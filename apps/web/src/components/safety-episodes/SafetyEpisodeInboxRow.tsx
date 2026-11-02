@@ -129,7 +129,7 @@ export function SafetyEpisodeInboxRow({
             data-testid={`safety-inbox-row-subject-${item.id}`}
             className="text-xs font-medium text-slate-800"
           >
-            {t('safetyInbox.subjectSummary', {
+            {t(isTracked ? 'safetyInbox.subjectSummary' : 'safetyInbox.eventLocalSubjectSummary', {
               count: item.episode.findingCount,
             })}
           </p>
