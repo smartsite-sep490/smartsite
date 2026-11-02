@@ -176,7 +176,7 @@ export class MainQualifiedAuthorityReader {
       sourceRegistryHash: release.sourceRegistryHash,
       provenance: release.provenance,
       operationalAuthorityCoverageEstablished: release.provenance === 'OPERATIONAL_REVIEWED',
-      syntheticCutoverMechanicsVerified: true,
+      syntheticCutoverMechanicsVerified: release.provenance === 'SYNTHETIC_TEST',
       identityEstablished: false,
     });
     this.attestations.set(prepared, row.revision_state_hash);
