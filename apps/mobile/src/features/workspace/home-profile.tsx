@@ -3,7 +3,14 @@ import { View, Text, StyleSheet, Pressable, ScrollView, Modal, Platform } from '
 import { useQuery } from '@tanstack/react-query';
 import { useAuth } from '../auth/auth-context';
 import { useWorkspace } from './workspace-context';
-import { allPages, displayTime, localDate, minutes, required, useCommand } from '../shared/data';
+import {
+  allPages,
+  displayShiftTime,
+  localDate,
+  minutes,
+  required,
+  useCommand,
+} from '../shared/data';
 import { Button, ErrorNotice, Field, Hint, Page, QueryState, palette } from '../shared/ui';
 import { WorkerAvatar } from '../../components/common/WorkerAvatar';
 import { WorkerQrModal } from '../../components/worker/WorkerQrModal';
@@ -348,10 +355,10 @@ export function HomeScreen({ navigate }: { navigate: (target: NavigationTarget) 
               <IconDocument size={18} color={pendingRequests.data?.total ? '#EA580C' : '#64748B'} />
             </View>
             <View style={{ flex: 1, minWidth: 0 }}>
-              <Text numberOfLines={1} ellipsizeMode="tail" style={homeStyles.compactActionTitle}>
+              <Text numberOfLines={2} ellipsizeMode="tail" style={homeStyles.compactActionTitle}>
                 {t('contractorHome.pendingRequests')}
               </Text>
-              <Text numberOfLines={1} ellipsizeMode="tail" style={homeStyles.compactActionSub}>
+              <Text numberOfLines={2} ellipsizeMode="tail" style={homeStyles.compactActionSub}>
                 {pendingRequests.data?.total
                   ? t('contractorHome.pendingRequestsSub', { count: pendingRequests.data.total })
                   : t('contractorHome.allRequestsProcessed')}
@@ -383,10 +390,10 @@ export function HomeScreen({ navigate }: { navigate: (target: NavigationTarget) 
               <IconClock size={18} color="#2563EB" />
             </View>
             <View style={{ flex: 1, minWidth: 0 }}>
-              <Text numberOfLines={1} ellipsizeMode="tail" style={homeStyles.compactActionTitle}>
+              <Text numberOfLines={2} ellipsizeMode="tail" style={homeStyles.compactActionTitle}>
                 {t('contractorHome.attendanceReconciliation')}
               </Text>
-              <Text numberOfLines={1} ellipsizeMode="tail" style={homeStyles.compactActionSub}>
+              <Text numberOfLines={2} ellipsizeMode="tail" style={homeStyles.compactActionSub}>
                 {t('contractorHome.attendanceSub')}
               </Text>
             </View>
@@ -406,10 +413,10 @@ export function HomeScreen({ navigate }: { navigate: (target: NavigationTarget) 
               <IconShield size={18} color="#10B981" />
             </View>
             <View style={{ flex: 1, minWidth: 0 }}>
-              <Text numberOfLines={1} ellipsizeMode="tail" style={homeStyles.compactActionTitle}>
+              <Text numberOfLines={2} ellipsizeMode="tail" style={homeStyles.compactActionTitle}>
                 {t('contractorHome.assignedChecklists')}
               </Text>
-              <Text numberOfLines={1} ellipsizeMode="tail" style={homeStyles.compactActionSub}>
+              <Text numberOfLines={2} ellipsizeMode="tail" style={homeStyles.compactActionSub}>
                 {safetyChecklists.data?.total
                   ? t('contractorHome.safetyChecklistsSub', { count: safetyChecklists.data?.total })
                   : t('contractorHome.safetyTasksDefault')}
@@ -430,10 +437,10 @@ export function HomeScreen({ navigate }: { navigate: (target: NavigationTarget) 
             <View style={homeStyles.bentoIconPrimary}>
               <IconUserPlus size={18} color="#FFFFFF" />
             </View>
-            <Text numberOfLines={1} ellipsizeMode="tail" style={homeStyles.bentoTitlePrimary}>
+            <Text numberOfLines={2} ellipsizeMode="tail" style={homeStyles.bentoTitlePrimary}>
               {t('contractorHome.addWorker')}
             </Text>
-            <Text numberOfLines={1} ellipsizeMode="tail" style={homeStyles.bentoSubPrimary}>
+            <Text numberOfLines={2} ellipsizeMode="tail" style={homeStyles.bentoSubPrimary}>
               {t('contractorHome.addWorkerSub')}
             </Text>
           </Pressable>
@@ -447,10 +454,10 @@ export function HomeScreen({ navigate }: { navigate: (target: NavigationTarget) 
             <View style={homeStyles.bentoIconSecondary}>
               <IconCalendar size={18} color="#2563EB" />
             </View>
-            <Text numberOfLines={1} ellipsizeMode="tail" style={homeStyles.bentoTitleSecondary}>
+            <Text numberOfLines={2} ellipsizeMode="tail" style={homeStyles.bentoTitleSecondary}>
               {t('contractorHome.assignSchedule')}
             </Text>
-            <Text numberOfLines={1} ellipsizeMode="tail" style={homeStyles.bentoSubSecondary}>
+            <Text numberOfLines={2} ellipsizeMode="tail" style={homeStyles.bentoSubSecondary}>
               {t('contractorHome.assignScheduleSub')}
             </Text>
           </Pressable>
@@ -513,10 +520,10 @@ export function HomeScreen({ navigate }: { navigate: (target: NavigationTarget) 
           <Text numberOfLines={1} ellipsizeMode="tail" style={homeStyles.greetingSub}>
             {t('workerHome.greeting')}
           </Text>
-          <Text numberOfLines={1} ellipsizeMode="tail" style={homeStyles.userName}>
+          <Text numberOfLines={2} ellipsizeMode="tail" style={homeStyles.userName}>
             {user.displayName}
           </Text>
-          <Text numberOfLines={1} ellipsizeMode="tail" style={homeStyles.companyInfo}>
+          <Text numberOfLines={2} ellipsizeMode="tail" style={homeStyles.companyInfo}>
             {scope.siteName} · {today}
           </Text>
         </View>
@@ -541,15 +548,15 @@ export function HomeScreen({ navigate }: { navigate: (target: NavigationTarget) 
             {t('workerHome.todayShift')}
           </Text>
           {matchingShift?.name && (
-            <Text numberOfLines={1} ellipsizeMode="tail" style={homeStyles.shiftNameBadge}>
+            <Text numberOfLines={2} ellipsizeMode="tail" style={homeStyles.shiftNameBadge}>
               {matchingShift.name}
             </Text>
           )}
         </View>
 
-        <Text numberOfLines={1} style={homeStyles.shiftHours}>
+        <Text numberOfLines={2} style={homeStyles.shiftHours}>
           {matchingShift
-            ? `${displayTime(matchingShift.startsAt)} – ${displayTime(matchingShift.endsAt)}`
+            ? `${displayShiftTime(matchingShift.startsAt)} – ${displayShiftTime(matchingShift.endsAt)}`
             : t('workerHome.shiftHours')}
         </Text>
         <Text numberOfLines={1} style={homeStyles.shiftBreak}>
@@ -577,7 +584,7 @@ export function HomeScreen({ navigate }: { navigate: (target: NavigationTarget) 
           <View style={homeStyles.zonesRow}>
             {team.data?.zones?.map((z) => (
               <View key={z.id} style={homeStyles.zoneChip}>
-                <Text numberOfLines={1} style={homeStyles.zoneChipText}>
+                <Text numberOfLines={2} style={homeStyles.zoneChipText}>
                   📍 {z.name}
                 </Text>
               </View>
@@ -636,7 +643,7 @@ export function HomeScreen({ navigate }: { navigate: (target: NavigationTarget) 
           onPress={() => setShowQrModal(true)}
         >
           <IconQrCode size={20} color="#FFFFFF" />
-          <Text numberOfLines={1} ellipsizeMode="tail" style={homeStyles.primaryActionBtnText}>
+          <Text numberOfLines={2} ellipsizeMode="tail" style={homeStyles.primaryActionBtnText}>
             {t('workerHome.emergencyQr')}
           </Text>
         </Pressable>
@@ -648,7 +655,7 @@ export function HomeScreen({ navigate }: { navigate: (target: NavigationTarget) 
           onPress={() => setShowRequestModal(true)}
         >
           <IconPlus size={20} color={palette.navy} />
-          <Text numberOfLines={1} ellipsizeMode="tail" style={homeStyles.secondaryActionBtnText}>
+          <Text numberOfLines={2} ellipsizeMode="tail" style={homeStyles.secondaryActionBtnText}>
             {t('workerHome.sendRequest')}
           </Text>
         </Pressable>
@@ -781,7 +788,7 @@ export function ProfileScreen({
   initialDocuments?: boolean;
 }) {
   const { t } = useTranslation();
-  const { scope, user, client, token, queryKey } = useWorkspace();
+  const { scope, user, client, token, queryKey, canSwitchScope } = useWorkspace();
   const { session } = useAuth();
   const [showPasswordModal, setShowPasswordModal] = useState(false);
   const [documents, setDocuments] = useState(initialDocuments);
@@ -799,114 +806,254 @@ export function ProfileScreen({
   if (documents && scope.role === 'worker' && worker.data)
     return (
       <Page title={t('documents.title')} onBack={() => setDocuments(false)}>
-        <WorkerDocuments workerId={worker.data.id} />
+        <WorkerDocuments workerId={worker.data.id} canSubmitDocuments />
       </Page>
     );
+
   return (
     <Page title={t('profile.title')}>
-      {scope.role === 'worker' && worker.data && (
-        <>
-          <Hint>{t(`documents.${worker.data.documentStatus ?? 'PENDING'}`)}</Hint>
-          {worker.data.documentStatus !== 'ACTIVE' && <Hint>{t('documents.readOnly')}</Hint>}
-          <Button secondary label={t('documents.title')} onPress={() => setDocuments(true)} />
-        </>
-      )}
-      {/* Hero Profile Card */}
+      {/* Hero Profile Identity Card */}
       <View style={homeStyles.profileHeroCard}>
         <View style={homeStyles.profileAvatarRow}>
-          <WorkerAvatar size={60} role={scope.role} />
+          <View style={homeStyles.avatarWrapper}>
+            <WorkerAvatar size={64} role={scope.role} />
+            <View
+              style={[
+                homeStyles.avatarRoleBadge,
+                { backgroundColor: scope.role === 'worker' ? '#10B981' : '#2563EB' },
+              ]}
+            >
+              <View style={homeStyles.avatarRoleDot} />
+            </View>
+          </View>
+
           <View style={homeStyles.profileHeroInfo}>
-            <Text numberOfLines={1} ellipsizeMode="tail" style={homeStyles.profileHeroName}>
+            <Text numberOfLines={2} ellipsizeMode="tail" style={homeStyles.profileHeroName}>
               {user.displayName}
             </Text>
             <Text numberOfLines={1} ellipsizeMode="tail" style={homeStyles.profileHeroUsername}>
               @{user.username}
             </Text>
-            <View style={homeStyles.profileRoleBadge}>
+
+            <View style={homeStyles.heroPillsRow}>
               <View
                 style={[
-                  homeStyles.miniDot,
-                  { backgroundColor: scope.role === 'worker' ? '#10B981' : '#2563EB' },
-                ]}
-              />
-              <Text
-                numberOfLines={1}
-                style={[
-                  homeStyles.profileRoleText,
-                  { color: scope.role === 'worker' ? '#065F46' : '#1D4ED8' },
+                  homeStyles.profileRoleBadge,
+                  { backgroundColor: scope.role === 'worker' ? '#EDFAF2' : '#EFF6FF' },
                 ]}
               >
-                {scope.role === 'worker' ? t('scope.workerRole') : t('scope.contractorRole')}
-              </Text>
+                <View
+                  style={[
+                    homeStyles.miniDot,
+                    { backgroundColor: scope.role === 'worker' ? '#10B981' : '#2563EB' },
+                  ]}
+                />
+                <Text
+                  numberOfLines={1}
+                  style={[
+                    homeStyles.profileRoleText,
+                    { color: scope.role === 'worker' ? '#065F46' : '#1D4ED8' },
+                  ]}
+                >
+                  {scope.role === 'worker' ? t('scope.workerRole') : t('scope.contractorRole')}
+                </Text>
+              </View>
+
+              {scope.role === 'worker' && (
+                <QueryState query={worker}>
+                  {(data) =>
+                    data ? (
+                      <View style={homeStyles.workerCodeBadge}>
+                        <Text numberOfLines={1} style={homeStyles.workerCodeText}>
+                          {data.externalId}
+                        </Text>
+                      </View>
+                    ) : (
+                      <Text numberOfLines={1} style={homeStyles.noProfileText}>
+                        {t('profile.noWorkerProfile')}
+                      </Text>
+                    )
+                  }
+                </QueryState>
+              )}
             </View>
+
+            {/* Clean Site scope row inside Hero Card, identical to Home screen */}
+            {canSwitchScope ? (
+              <Pressable
+                accessibilityRole="button"
+                accessibilityLabel={t('scope.switchScope')}
+                style={({ pressed }) => [homeStyles.heroSiteRow, pressed && { opacity: 0.75 }]}
+                onPress={onScopeChange}
+              >
+                <Text numberOfLines={1} ellipsizeMode="tail" style={homeStyles.heroSiteText}>
+                  🏢 {scope.siteName}
+                </Text>
+                <View style={homeStyles.heroSwitchPill}>
+                  <Text style={homeStyles.heroSwitchPillText}>{t('scope.chooseAgain')}</Text>
+                  <IconChevronRight size={13} color="#1D4ED8" />
+                </View>
+              </Pressable>
+            ) : (
+              <View style={homeStyles.heroSiteRow}>
+                <Text numberOfLines={1} ellipsizeMode="tail" style={homeStyles.heroSiteText}>
+                  🏢 {scope.siteName}
+                </Text>
+                <View style={homeStyles.heroSiteBadge}>
+                  <View style={homeStyles.heroSiteDot} />
+                  <Text style={homeStyles.heroSiteBadgeText}>{t('workerHome.zoneEffective')}</Text>
+                </View>
+              </View>
+            )}
           </View>
         </View>
+      </View>
 
-        <View style={homeStyles.profileSiteRow}>
-          <Text numberOfLines={1} style={homeStyles.profileSiteText}>
-            📍 {scope.siteName}
-          </Text>
-          {scope.role === 'worker' && (
-            <QueryState query={worker}>
-              {(data) =>
-                data ? (
-                  <View style={homeStyles.workerCodeBadge}>
-                    <Text numberOfLines={1} style={homeStyles.workerCodeText}>
-                      {data.externalId}
+      {/* Worker Documents Hero Card (Worker only) */}
+      {scope.role === 'worker' && (
+        <QueryState query={worker}>
+          {(data) => {
+            const docStatus = data?.documentStatus ?? 'PENDING';
+            const isApproved = docStatus === 'ACTIVE';
+            const isPending = docStatus === 'PENDING';
+            const isExpired = docStatus === 'EXPIRED';
+
+            const statusBadgeBg = isApproved
+              ? '#EDFAF2'
+              : isPending
+                ? '#FFF7ED'
+                : isExpired
+                  ? '#FEF2F2'
+                  : '#F8FAFC';
+            const statusBadgeBorder = isApproved
+              ? '#A7F3D0'
+              : isPending
+                ? '#FED7AA'
+                : isExpired
+                  ? '#FECACA'
+                  : '#E2E8F0';
+            const statusBadgeColor = isApproved
+              ? '#065F46'
+              : isPending
+                ? '#C2410C'
+                : isExpired
+                  ? '#991B1B'
+                  : '#475569';
+            const statusDotColor = isApproved
+              ? '#10B981'
+              : isPending
+                ? '#F97316'
+                : isExpired
+                  ? '#EF4444'
+                  : '#94A3B8';
+            const cardAccentColor = isApproved
+              ? '#10B981'
+              : isPending
+                ? '#F97316'
+                : isExpired
+                  ? '#EF4444'
+                  : '#CBD5E1';
+
+            return (
+              <Pressable
+                accessibilityRole="button"
+                accessibilityLabel={t('documents.title')}
+                style={({ pressed }) => [
+                  homeStyles.documentHeroCard,
+                  { borderLeftColor: cardAccentColor },
+                  pressed && { opacity: 0.85, transform: [{ scale: 0.99 }] },
+                ]}
+                onPress={() => setDocuments(true)}
+              >
+                {/* Header Row: Icon + Title & Subtitle */}
+                <View style={homeStyles.docHeroHeaderRow}>
+                  <View style={homeStyles.docHeroIconBadge}>
+                    <IconDocument size={22} color="#F66B17" />
+                  </View>
+                  <View style={homeStyles.docHeroTitleCol}>
+                    <Text numberOfLines={2} ellipsizeMode="tail" style={homeStyles.docHeroTitle}>
+                      {t('documents.certificatesHeading')}
+                    </Text>
+                    <Text numberOfLines={2} ellipsizeMode="tail" style={homeStyles.docHeroSub}>
+                      {t('documents.title')}
                     </Text>
                   </View>
-                ) : (
-                  <Text numberOfLines={1} style={homeStyles.noProfileText}>
-                    {t('profile.noWorkerProfile')}
-                  </Text>
-                )
-              }
-            </QueryState>
-          )}
+                </View>
+
+                {/* Bottom Status & CTA Strip */}
+                <View style={homeStyles.docHeroBottomRow}>
+                  <View
+                    style={[
+                      homeStyles.docHeroStatusBadge,
+                      { backgroundColor: statusBadgeBg, borderColor: statusBadgeBorder },
+                    ]}
+                  >
+                    <View style={[homeStyles.miniDot, { backgroundColor: statusDotColor }]} />
+                    <Text
+                      numberOfLines={1}
+                      style={[homeStyles.docHeroStatusText, { color: statusBadgeColor }]}
+                    >
+                      {t(`documents.${docStatus}`)}
+                    </Text>
+                  </View>
+
+                  <View style={homeStyles.docHeroCtaGroup}>
+                    <Text style={homeStyles.docHeroFooterAction}>{t('common.details')}</Text>
+                    <View style={homeStyles.docHeroChevronCircle}>
+                      <IconChevronRight size={14} color="#F66B17" />
+                    </View>
+                  </View>
+                </View>
+              </Pressable>
+            );
+          }}
+        </QueryState>
+      )}
+
+      {/* Account Security Action Card */}
+      <Pressable
+        accessibilityRole="button"
+        accessibilityLabel={t('profile.changePassword')}
+        style={({ pressed }) => [
+          homeStyles.compactActionCard,
+          pressed && { opacity: 0.8, transform: [{ scale: 0.99 }] },
+        ]}
+        onPress={() => setShowPasswordModal(true)}
+      >
+        <View style={homeStyles.actionRowLeft}>
+          <View style={[homeStyles.rowIconBox, { backgroundColor: '#F1F5F9' }]}>
+            <IconLock size={18} color="#0F1E36" />
+          </View>
+          <View style={homeStyles.rowTextCol}>
+            <Text numberOfLines={1} ellipsizeMode="tail" style={homeStyles.rowTitle}>
+              {t('profile.changePassword')}
+            </Text>
+            <Text numberOfLines={1} ellipsizeMode="tail" style={homeStyles.rowSubtitle}>
+              {t('profile.changePasswordSubtitle')}
+            </Text>
+          </View>
         </View>
 
-        <Button secondary label={t('scope.switchScope')} onPress={onScopeChange} />
-      </View>
+        <IconChevronRight size={16} color="#94A3B8" />
+      </Pressable>
 
-      {/* Security Section with Change Password Action */}
-      <View style={homeStyles.profileSectionCard}>
-        <Text numberOfLines={1} style={homeStyles.profileSectionTitle}>
-          {t('profile.securityTitle')}
-        </Text>
-        <Pressable
-          accessibilityRole="button"
-          accessibilityLabel={t('profile.changePassword')}
-          style={({ pressed }) => [homeStyles.profileMenuRow, pressed && { opacity: 0.7 }]}
-          onPress={() => setShowPasswordModal(true)}
-        >
-          <View style={homeStyles.profileMenuLeft}>
-            <View style={homeStyles.profileMenuIconBox}>
-              <IconLock size={18} color={palette.navy} />
-            </View>
-            <View style={{ flexShrink: 1, minWidth: 0 }}>
-              <Text numberOfLines={1} ellipsizeMode="tail" style={homeStyles.profileMenuTitle}>
-                {t('profile.changePassword')}
-              </Text>
-              <Text numberOfLines={1} ellipsizeMode="tail" style={homeStyles.profileMenuSubtitle}>
-                {t('profile.changePasswordSubtitle')}
-              </Text>
-            </View>
-          </View>
-          <IconChevronRight size={18} color="#94A3B8" />
-        </Pressable>
-      </View>
-
-      {/* Logout Button */}
-      <View style={{ marginTop: 6, marginBottom: 20 }}>
+      {/* Logout & App Footer */}
+      <View style={{ marginTop: 4, marginBottom: 24, gap: 12 }}>
         <Pressable
           accessibilityRole="button"
           accessibilityLabel={t('common.logout')}
           disabled={command.isPending}
-          style={({ pressed }) => [homeStyles.logoutButton, pressed && { opacity: 0.8 }]}
+          style={({ pressed }) => [
+            homeStyles.modernLogoutBtn,
+            pressed && { opacity: 0.8 },
+            command.isPending && { opacity: 0.6 },
+          ]}
           onPress={() => command.mutate(() => session.logout())}
         >
-          <Text style={homeStyles.logoutButtonText}>{t('common.logout')}</Text>
+          <Text style={homeStyles.modernLogoutBtnText}>{t('common.logout')}</Text>
         </Pressable>
+
+        <Text style={homeStyles.appVersionFooter}>SmartSite v0.1.0 · 2026</Text>
       </View>
 
       <ChangePasswordModal
@@ -934,20 +1081,20 @@ const homeStyles = StyleSheet.create({
     paddingRight: 12,
   },
   greetingSub: {
-    fontSize: 13,
+    fontSize: 14.5,
     color: '#64748B',
     fontWeight: '500',
     marginBottom: 2,
   },
   userName: {
-    fontSize: 22,
+    fontSize: 24,
     fontWeight: '800',
     color: '#0F1E36',
     letterSpacing: -0.4,
     marginBottom: 2,
   },
   companyInfo: {
-    fontSize: 12.5,
+    fontSize: 14,
     color: '#64748B',
   },
   statsCard: {
@@ -1070,46 +1217,60 @@ const homeStyles = StyleSheet.create({
   actionButtonsRow: {
     flexDirection: 'row',
     gap: 10,
-    marginTop: 4,
+    marginTop: 2,
+    flexWrap: 'wrap',
+    alignItems: 'stretch',
   },
   primaryActionBtn: {
     flex: 1,
     backgroundColor: '#F66B17',
-    borderRadius: 14,
-    paddingVertical: 14,
-    minHeight: 48,
+    borderRadius: 12,
+    paddingVertical: 11,
+    minHeight: 44,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
     gap: 8,
-    elevation: 3,
+    elevation: 2,
     shadowColor: '#F66B17',
-    shadowOffset: { width: 0, height: 3 },
-    shadowOpacity: 0.25,
-    shadowRadius: 5,
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.2,
+    shadowRadius: 4,
+    minWidth: 136,
+    flexBasis: 136,
+    paddingHorizontal: 12,
   },
   primaryActionBtnText: {
     color: '#FFFFFF',
     fontSize: 14.5,
     fontWeight: '700',
+    flexShrink: 1,
+    textAlign: 'center',
+    lineHeight: 22,
   },
   secondaryActionBtn: {
     flex: 1,
     backgroundColor: '#FFFFFF',
-    borderRadius: 14,
-    paddingVertical: 14,
-    minHeight: 48,
+    borderRadius: 12,
+    paddingVertical: 11,
+    minHeight: 44,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
     gap: 8,
-    borderWidth: 1.5,
-    borderColor: '#CBD5E1',
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
+    minWidth: 136,
+    flexBasis: 136,
+    paddingHorizontal: 12,
   },
   secondaryActionBtnText: {
     color: '#0F1E36',
     fontSize: 14.5,
     fontWeight: '700',
+    flexShrink: 1,
+    textAlign: 'center',
+    lineHeight: 22,
   },
   noticeCard: {
     backgroundColor: '#FEF9ED',
@@ -1131,7 +1292,7 @@ const homeStyles = StyleSheet.create({
     flex: 1,
   },
   noticeText: {
-    fontSize: 13,
+    fontSize: 14.5,
     fontWeight: '600',
     color: '#92400E',
     flex: 1,
@@ -1149,30 +1310,33 @@ const homeStyles = StyleSheet.create({
     justifyContent: 'space-between',
     alignItems: 'center',
     marginBottom: 6,
+    flexWrap: 'wrap',
+    gap: 8,
   },
   shiftCardTitle: {
-    fontSize: 13,
-    fontWeight: '600',
-    color: '#64748B',
+    fontSize: 14.5,
+    fontWeight: '700',
+    color: '#475569',
   },
   shiftNameBadge: {
-    fontSize: 11.5,
+    fontSize: 13,
     fontWeight: '700',
     color: '#F66B17',
     backgroundColor: '#FFF4EE',
-    paddingHorizontal: 8,
-    paddingVertical: 3,
-    borderRadius: 6,
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 8,
+    maxWidth: '100%',
   },
   shiftHours: {
-    fontSize: 26,
+    fontSize: 28,
     fontWeight: '800',
     color: '#0F1E36',
     letterSpacing: -0.4,
     marginBottom: 4,
   },
   shiftBreak: {
-    fontSize: 12.5,
+    fontSize: 14,
     color: '#64748B',
     marginBottom: 12,
   },
@@ -1180,18 +1344,18 @@ const homeStyles = StyleSheet.create({
     alignSelf: 'flex-start',
     flexDirection: 'row',
     alignItems: 'center',
-    paddingHorizontal: 10,
-    paddingVertical: 5,
-    borderRadius: 14,
-    gap: 6,
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 16,
+    gap: 7,
   },
   statusDot: {
-    width: 7,
-    height: 7,
-    borderRadius: 3.5,
+    width: 8,
+    height: 8,
+    borderRadius: 4,
   },
   statusText: {
-    fontSize: 12,
+    fontSize: 13.5,
     fontWeight: '700',
   },
   zonesRow: {
@@ -1206,15 +1370,15 @@ const homeStyles = StyleSheet.create({
   zoneChip: {
     backgroundColor: '#F8FAFC',
     borderRadius: 8,
-    paddingHorizontal: 8,
-    paddingVertical: 4,
+    paddingHorizontal: 10,
+    paddingVertical: 5,
     borderWidth: 1,
     borderColor: '#E2E8F0',
   },
   zoneChipText: {
-    fontSize: 11,
+    fontSize: 13,
     color: '#334155',
-    fontWeight: '600',
+    fontWeight: '700',
   },
   statsGridRow: {
     flexDirection: 'row',
@@ -1225,28 +1389,29 @@ const homeStyles = StyleSheet.create({
     flex: 1,
     backgroundColor: '#FFFFFF',
     borderRadius: 16,
-    padding: 14,
+    padding: 16,
     borderWidth: 1,
     borderColor: '#E2E8F0',
-    minHeight: 96,
+    minHeight: 104,
     justifyContent: 'space-between',
   },
   statLabel: {
-    fontSize: 12,
-    color: '#64748B',
-    fontWeight: '500',
+    fontSize: 14,
+    color: '#475569',
+    fontWeight: '600',
     marginBottom: 4,
   },
   statValue: {
-    fontSize: 20,
+    fontSize: 26,
     fontWeight: '800',
     color: '#0F1E36',
     letterSpacing: -0.3,
     marginBottom: 6,
   },
   statHint: {
-    fontSize: 11,
-    color: '#94A3B8',
+    fontSize: 13,
+    color: '#64748B',
+    fontWeight: '500',
   },
   temporaryBadge: {
     alignSelf: 'flex-start',
@@ -1256,7 +1421,7 @@ const homeStyles = StyleSheet.create({
     borderRadius: 6,
   },
   temporaryBadgeText: {
-    fontSize: 10.5,
+    fontSize: 12,
     fontWeight: '700',
     color: '#B45309',
   },
@@ -1268,16 +1433,15 @@ const homeStyles = StyleSheet.create({
   },
   profileHeroCard: {
     backgroundColor: '#FFFFFF',
-    borderRadius: 24,
-    padding: 20,
-    marginBottom: 16,
-    borderWidth: StyleSheet.hairlineWidth,
-    borderColor: '#EFF2F6',
-    gap: 16,
-    shadowColor: '#000000',
-    shadowOffset: { width: 0, height: 4 },
+    borderRadius: 22,
+    padding: 18,
+    marginBottom: 14,
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
+    shadowColor: '#0F1E36',
+    shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.05,
-    shadowRadius: 10,
+    shadowRadius: 8,
     elevation: 2,
   },
   profileAvatarRow: {
@@ -1285,163 +1449,372 @@ const homeStyles = StyleSheet.create({
     alignItems: 'center',
     gap: 16,
   },
+  avatarWrapper: {
+    position: 'relative',
+  },
+  avatarRoleBadge: {
+    position: 'absolute',
+    bottom: -2,
+    right: -2,
+    width: 22,
+    height: 22,
+    borderRadius: 11,
+    borderWidth: 2,
+    borderColor: '#FFFFFF',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  avatarRoleDot: {
+    width: 7,
+    height: 7,
+    borderRadius: 3.5,
+    backgroundColor: '#FFFFFF',
+  },
   profileHeroInfo: {
     flex: 1,
     gap: 4,
+    minWidth: 0,
   },
   profileHeroName: {
-    fontSize: 20,
+    fontSize: 24,
     fontWeight: '800',
     color: '#0F1E36',
-    letterSpacing: -0.3,
+    letterSpacing: -0.4,
   },
   profileHeroUsername: {
-    fontSize: 13,
-    color: '#64748B',
-    fontWeight: '500',
+    fontSize: 15,
+    color: '#334155',
+    fontWeight: '600',
+  },
+  heroPillsRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    marginTop: 6,
+    flexWrap: 'wrap',
   },
   profileRoleBadge: {
-    alignSelf: 'flex-start',
     flexDirection: 'row',
     alignItems: 'center',
-    paddingHorizontal: 10,
-    paddingVertical: 4,
-    borderRadius: 12,
-    backgroundColor: '#F8FAFC',
-    borderWidth: 1,
-    borderColor: '#E2E8F0',
+    paddingHorizontal: 12,
+    paddingVertical: 5,
+    borderRadius: 10,
     gap: 6,
-    marginTop: 2,
+  },
+  miniDot: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
   },
   profileRoleText: {
-    fontSize: 12,
-    fontWeight: '700',
-  },
-  profileSiteRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingVertical: 10,
-    borderTopWidth: StyleSheet.hairlineWidth,
-    borderBottomWidth: StyleSheet.hairlineWidth,
-    borderColor: '#F1F5F9',
-  },
-  profileSiteText: {
     fontSize: 14,
-    fontWeight: '600',
-    color: '#334155',
+    fontWeight: '800',
   },
   workerCodeBadge: {
     backgroundColor: '#FFF4EE',
-    paddingHorizontal: 10,
-    paddingVertical: 4,
+    paddingHorizontal: 12,
+    paddingVertical: 5,
     borderRadius: 10,
+    borderWidth: 1,
+    borderColor: '#FED7AA',
   },
   workerCodeText: {
-    fontSize: 12,
+    fontSize: 14,
     fontWeight: '800',
-    color: '#F66B17',
+    color: '#C2410C',
   },
   noProfileText: {
-    fontSize: 12,
-    color: '#94A3B8',
+    fontSize: 13.5,
+    color: '#64748B',
+    fontWeight: '600',
   },
-  profileSectionCard: {
+  profileGroupCard: {
     backgroundColor: '#FFFFFF',
     borderRadius: 20,
-    padding: 18,
-    marginBottom: 16,
-    borderWidth: StyleSheet.hairlineWidth,
-    borderColor: '#EFF2F6',
-    gap: 14,
-    shadowColor: '#000000',
+    padding: 16,
+    marginBottom: 14,
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
+    shadowColor: '#0F1E36',
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.04,
     shadowRadius: 6,
     elevation: 1,
+    gap: 12,
   },
-  profileSectionTitle: {
-    fontSize: 15,
+  profileGroupHeader: {
+    fontSize: 14.5,
     fontWeight: '800',
     color: '#0F1E36',
+    letterSpacing: 0.3,
+    paddingHorizontal: 4,
   },
-  langToggleRow: {
-    flexDirection: 'row',
-    gap: 10,
-  },
-  langToggleBtn: {
-    flex: 1,
-    paddingVertical: 12,
-    alignItems: 'center',
-    borderRadius: 14,
-    backgroundColor: '#F8FAFC',
-    borderWidth: 1,
-    borderColor: '#E2E8F0',
-  },
-  langToggleBtnActive: {
-    backgroundColor: '#FFF4EE',
-    borderColor: '#F66B17',
-  },
-  langToggleText: {
-    fontSize: 13,
-    fontWeight: '600',
-    color: '#64748B',
-  },
-  langToggleTextActive: {
-    color: '#F66B17',
-    fontWeight: '800',
-  },
-  logoutButton: {
-    backgroundColor: '#FEE2E2',
-    borderRadius: 16,
-    paddingVertical: 14,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  logoutButtonText: {
-    fontSize: 15,
-    fontWeight: '800',
-    color: '#DC2626',
-  },
-  miniDot: {
-    width: 6,
-    height: 6,
-    borderRadius: 3,
-  },
-  profileMenuRow: {
+  profileActionRow: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
     paddingVertical: 12,
     paddingHorizontal: 14,
-    minHeight: 52,
+    minHeight: 64,
     backgroundColor: '#F8FAFC',
-    borderRadius: 14,
+    borderRadius: 16,
     borderWidth: 1,
-    borderColor: '#EFF2F6',
+    borderColor: '#E2E8F0',
+    gap: 12,
   },
-  profileMenuLeft: {
+  actionRowLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 14,
+    flex: 1,
+    minWidth: 0,
+  },
+  rowIconBox: {
+    width: 44,
+    height: 44,
+    borderRadius: 14,
+    alignItems: 'center',
+    justifyContent: 'center',
+    flexShrink: 0,
+  },
+  rowTextCol: {
+    flex: 1,
+    minWidth: 0,
+    gap: 4,
+  },
+  rowTitle: {
+    fontSize: 16.5,
+    fontWeight: '800',
+    color: '#0F1E36',
+  },
+  rowSubtitle: {
+    fontSize: 14,
+    color: '#334155',
+    fontWeight: '500',
+    lineHeight: 20,
+  },
+  rowRightAction: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    flexShrink: 0,
+  },
+  switchScopePill: {
+    backgroundColor: '#EFF6FF',
+    paddingHorizontal: 12,
+    paddingVertical: 7,
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: '#93C5FD',
+  },
+  switchScopePillText: {
+    fontSize: 14,
+    fontWeight: '800',
+    color: '#1D4ED8',
+  },
+  activeSiteBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    backgroundColor: '#EDFAF2',
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: '#A7F3D0',
+  },
+  activeSiteDot: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+    backgroundColor: '#10B981',
+  },
+  activeSiteText: {
+    fontSize: 13.5,
+    fontWeight: '800',
+    color: '#065F46',
+  },
+  documentHeroCard: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: 20,
+    padding: 16,
+    marginBottom: 14,
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
+    borderLeftWidth: 4,
+    shadowColor: '#0F1E36',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.05,
+    shadowRadius: 8,
+    elevation: 2,
+    gap: 12,
+  },
+  docHeroHeaderRow: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 12,
   },
-  profileMenuIconBox: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
+  docHeroIconBadge: {
+    width: 44,
+    height: 44,
+    borderRadius: 14,
+    backgroundColor: '#FFF4EE',
+    alignItems: 'center',
+    justifyContent: 'center',
+    flexShrink: 0,
+  },
+  docHeroTitleCol: {
+    flex: 1,
+    minWidth: 0,
+    gap: 3,
+  },
+  docHeroTitle: {
+    fontSize: 16.5,
+    fontWeight: '800',
+    color: '#0F1E36',
+  },
+  docHeroSub: {
+    fontSize: 13.5,
+    color: '#64748B',
+    fontWeight: '500',
+  },
+  docHeroBottomRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingTop: 10,
+    borderTopWidth: 1,
+    borderTopColor: '#F1F5F9',
+    gap: 10,
+    flexWrap: 'wrap',
+  },
+  docHeroStatusBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    borderRadius: 10,
+    borderWidth: 1,
+    flexShrink: 1,
+  },
+  docHeroStatusText: {
+    fontSize: 13,
+    fontWeight: '800',
+  },
+  docHeroCtaGroup: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    flexShrink: 0,
+  },
+  docHeroFooterAction: {
+    fontSize: 13.5,
+    fontWeight: '800',
+    color: '#F66B17',
+  },
+  docHeroChevronCircle: {
+    width: 22,
+    height: 22,
+    borderRadius: 11,
     backgroundColor: '#FFF4EE',
     alignItems: 'center',
     justifyContent: 'center',
   },
-  profileMenuTitle: {
-    fontSize: 14,
-    fontWeight: '700',
-    color: '#0F1E36',
+  compactActionCard: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: 16,
+    padding: 14,
+    marginBottom: 14,
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    shadowColor: '#0F1E36',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.04,
+    shadowRadius: 5,
+    elevation: 1,
+    minHeight: 56,
   },
-  profileMenuSubtitle: {
+  heroSiteRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    flexWrap: 'wrap',
+    gap: 8,
+    marginTop: 6,
+    paddingTop: 8,
+    borderTopWidth: 1,
+    borderTopColor: '#F1F5F9',
+  },
+  heroSiteText: {
+    fontSize: 13.5,
+    fontWeight: '700',
+    color: '#334155',
+    flexShrink: 1,
+    minWidth: 120,
+    flexBasis: 140,
+  },
+  heroSiteBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
+    backgroundColor: '#EDFAF2',
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: '#A7F3D0',
+  },
+  heroSiteDot: {
+    width: 6,
+    height: 6,
+    borderRadius: 3,
+    backgroundColor: '#10B981',
+  },
+  heroSiteBadgeText: {
     fontSize: 12,
-    color: '#64748B',
-    marginTop: 2,
+    fontWeight: '800',
+    color: '#065F46',
+  },
+  heroSwitchPill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    backgroundColor: '#EFF6FF',
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: '#93C5FD',
+  },
+  heroSwitchPillText: {
+    fontSize: 12,
+    fontWeight: '800',
+    color: '#1D4ED8',
+  },
+  modernLogoutBtn: {
+    backgroundColor: '#FEF2F2',
+    borderWidth: 1,
+    borderColor: '#FECACA',
+    borderRadius: 14,
+    paddingVertical: 12,
+    alignItems: 'center',
+    justifyContent: 'center',
+    minHeight: 46,
+  },
+  modernLogoutBtnText: {
+    fontSize: 15.5,
+    fontWeight: '800',
+    color: '#DC2626',
+    letterSpacing: 0.3,
+  },
+  appVersionFooter: {
+    fontSize: 13.5,
+    color: '#475569',
+    fontWeight: '600',
+    textAlign: 'center',
   },
   modalOverlay: {
     flex: 1,
@@ -1547,11 +1920,14 @@ const homeStyles = StyleSheet.create({
     justifyContent: 'space-between',
     alignItems: 'center',
     marginBottom: 10,
+    gap: 8,
   },
   workforceTitleGroup: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 8,
+    flex: 1,
+    minWidth: 0,
   },
   workforceIconCircle: {
     width: 30,
@@ -1574,6 +1950,7 @@ const homeStyles = StyleSheet.create({
   viewListBtn: {
     paddingVertical: 2,
     paddingHorizontal: 4,
+    flexShrink: 0,
   },
   viewListText: {
     fontSize: 13,
@@ -1585,11 +1962,15 @@ const homeStyles = StyleSheet.create({
     justifyContent: 'space-between',
     alignItems: 'flex-end',
     marginBottom: 8,
+    flexWrap: 'wrap',
+    gap: 8,
   },
   workforceHeroLeft: {
     flexDirection: 'row',
     alignItems: 'baseline',
     gap: 8,
+    flexShrink: 1,
+    minWidth: 0,
   },
   workforceTotalNum: {
     fontSize: 30,
@@ -1601,6 +1982,7 @@ const homeStyles = StyleSheet.create({
     fontSize: 13,
     fontWeight: '600',
     color: '#64748B',
+    flexShrink: 1,
   },
   presenceRateChip: {
     flexDirection: 'row',
@@ -1669,6 +2051,7 @@ const homeStyles = StyleSheet.create({
     justifyContent: 'space-between',
     borderWidth: 1,
     borderColor: '#BBF7D0',
+    minWidth: 0,
   },
   metricCardOrange: {
     flex: 1,
@@ -1680,6 +2063,7 @@ const homeStyles = StyleSheet.create({
     justifyContent: 'space-between',
     borderWidth: 1,
     borderColor: '#FED7AA',
+    minWidth: 0,
   },
   metricCardSlate: {
     flex: 1,
@@ -1691,6 +2075,7 @@ const homeStyles = StyleSheet.create({
     justifyContent: 'space-between',
     borderWidth: 1,
     borderColor: '#E2E8F0',
+    minWidth: 0,
   },
   metricCardTop: {
     flexDirection: 'row',
@@ -1707,6 +2092,8 @@ const homeStyles = StyleSheet.create({
     fontSize: 11,
     fontWeight: '700',
     color: '#15803D',
+    flexShrink: 1,
+    lineHeight: 16,
   },
   metricValueGreen: {
     fontSize: 17,
@@ -1717,6 +2104,8 @@ const homeStyles = StyleSheet.create({
     fontSize: 11,
     fontWeight: '700',
     color: '#C2410C',
+    flexShrink: 1,
+    lineHeight: 16,
   },
   metricValueOrange: {
     fontSize: 17,
@@ -1727,6 +2116,8 @@ const homeStyles = StyleSheet.create({
     fontSize: 11,
     fontWeight: '700',
     color: '#64748B',
+    flexShrink: 1,
+    lineHeight: 16,
   },
   metricValueSlate: {
     fontSize: 17,
@@ -1752,11 +2143,16 @@ const homeStyles = StyleSheet.create({
     justifyContent: 'space-between',
     alignItems: 'center',
     marginBottom: 8,
+    gap: 8,
+    flexWrap: 'wrap',
   },
   needsActionTitleGroup: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 6,
+    flexShrink: 1,
+    minWidth: 0,
+    flexWrap: 'wrap',
   },
   needsActionTitle: {
     fontSize: 13,
@@ -1764,6 +2160,7 @@ const homeStyles = StyleSheet.create({
     color: '#334155',
     textTransform: 'uppercase',
     letterSpacing: 0.5,
+    flexShrink: 1,
   },
   pendingTotalChip: {
     backgroundColor: '#EA580C',
@@ -1804,6 +2201,7 @@ const homeStyles = StyleSheet.create({
     borderRadius: 10,
     alignItems: 'center',
     justifyContent: 'center',
+    flexShrink: 0,
   },
   compactActionTitle: {
     fontSize: 14.5,
@@ -1844,6 +2242,7 @@ const homeStyles = StyleSheet.create({
     flexDirection: 'row',
     gap: 10,
     marginBottom: 8,
+    flexWrap: 'wrap',
   },
   bentoCardPrimary: {
     flex: 1,
@@ -1857,6 +2256,8 @@ const homeStyles = StyleSheet.create({
     shadowOffset: { width: 0, height: 3 },
     shadowOpacity: 0.25,
     shadowRadius: 6,
+    minWidth: 136,
+    flexBasis: 136,
   },
   bentoIconPrimary: {
     width: 32,
@@ -1892,6 +2293,8 @@ const homeStyles = StyleSheet.create({
     shadowOffset: { width: 0, height: 1 },
     shadowOpacity: 0.04,
     shadowRadius: 4,
+    minWidth: 136,
+    flexBasis: 136,
   },
   bentoIconSecondary: {
     width: 32,

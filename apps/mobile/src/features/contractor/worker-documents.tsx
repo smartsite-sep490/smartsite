@@ -1,14 +1,15 @@
 import { translate as tr } from '../../i18n';
 import { useState } from 'react';
 import { StyleSheet, Text, View } from 'react-native';
-import { useQuery } from '@tanstack/react-query';
+import { useMutation, useQuery } from '@tanstack/react-query';
 import type {
   NativeUploadFile,
   WorkerDocumentKind,
   WorkerDocumentIdentityCheck,
   WorkerDocumentResponse,
+  WorkerDocumentDateCheck,
 } from '@smartsite/api-client';
-import { healthCertificateExpiry } from '@smartsite/api-client';
+import { healthCertificateExpiry, isWorkerDocumentDate } from '@smartsite/api-client';
 import { useWorkspace } from '../workspace/workspace-context';
 import { useCommand, validDates } from '../shared/data';
 import { Body, Button, Card, ErrorNotice, Hint, QueryState, Field } from '../shared/ui';
@@ -57,19 +58,20 @@ function IdentityNotice({
 export function WorkerDocuments({
   workerId,
   canUpload = false,
+  canSubmitDocuments = false,
 }: {
   workerId: string;
   canUpload?: boolean;
+  canSubmitDocuments?: boolean;
 }) {
   const { t } = useTranslation();
   const { client, token, scope, queryKey } = useWorkspace();
+  const canUploadCertificates = canUpload || canSubmitDocuments;
   const profile = useQuery({
     queryKey: [...queryKey, 'worker-documents', workerId],
     queryFn: () => client.workerCompliance(token, scope.siteId, workerId),
   });
   const command = useCommand();
-  const [drafts, setDrafts] = useState<Partial<Record<WorkerDocumentKind, NativeUploadFile[]>>>({});
-  const [expiries, setExpiries] = useState<Partial<Record<WorkerDocumentKind, string>>>({});
   const [identityDrafts, setIdentityDrafts] = useState<
     Partial<Record<'FRONT' | 'BACK', NativeUploadFile[]>>
   >({});
@@ -79,7 +81,7 @@ export function WorkerDocuments({
       {/* Header Info */}
       <View style={docStyles.headerBlock}>
         <Text style={docStyles.screenTitle}>{t('documents.title')}</Text>
-        <Hint>{t('documents.hint')}</Hint>
+        <Hint>{t(canSubmitDocuments ? 'documents.renewalHint' : 'documents.hint')}</Hint>
       </View>
 
       <QueryState query={profile}>
@@ -321,7 +323,7 @@ export function WorkerDocuments({
                       return (
                         <View key={doc.id} style={docStyles.docRow}>
                           <View style={docStyles.docStatusRow}>
-                            <Text style={docStyles.docFilename} numberOfLines={1}>
+                            <Text style={docStyles.docFilename} numberOfLines={2}>
                               {doc.originalName}
                             </Text>
                             <View
@@ -387,7 +389,7 @@ export function WorkerDocuments({
 
                           {doc.status === 'PENDING' && (
                             <View style={docStyles.pendingSection}>
-                              {canUpload && (
+                              {canUploadCertificates && (
                                 <SubmittedExpiryEditor
                                   key={`${doc.id}:${doc.version}`}
                                   doc={doc}
@@ -451,71 +453,13 @@ export function WorkerDocuments({
                       );
                     })}
 
-                    {canUpload && data.contractorId && (
-                      <View style={docStyles.uploadSection}>
-                        <Text style={docStyles.uploadHeading}>{t('documents.upload')}</Text>
-                        <Field
-                          label={`${t(`documents.${kind}`)} - ${t(kind === 'HEALTH_CERTIFICATE' ? 'documents.submittedIssuedOn' : 'documents.submittedExpiresOn')} (YYYY-MM-DD)`}
-                          placeholder="YYYY-MM-DD"
-                          maxLength={10}
-                          editable={!command.isPending}
-                          value={expiries[kind] ?? ''}
-                          onChangeText={(value) =>
-                            setExpiries((previous) => ({ ...previous, [kind]: value }))
-                          }
-                        />
-                        <Hint>
-                          {t(
-                            kind === 'HEALTH_CERTIFICATE'
-                              ? 'documents.healthExpiryRule'
-                              : 'documents.submittedExpiryHint',
-                          )}{' '}
-                          {kind === 'HEALTH_CERTIFICATE'
-                            ? (healthCertificateExpiry(expiries[kind]) ?? '')
-                            : ''}
-                        </Hint>
-                        <Attachments
-                          files={drafts[kind] ?? []}
-                          maxFiles={1}
-                          validateFile={async (file) => {
-                            const result = await client.checkDocumentImageQuality(
-                              token,
-                              scope.siteId,
-                              data.contractorId!,
-                              file,
-                            );
-                            if (result.status !== 'ACCEPTED')
-                              throw new Error(t(`documents.${result.reason}`));
-                          }}
-                          onChange={(files) =>
-                            setDrafts((previous) => ({ ...previous, [kind]: files }))
-                          }
-                        />
-                        <Button
-                          label={t('documents.upload')}
-                          disabled={command.isPending || !drafts[kind]?.[0]}
-                          onPress={() =>
-                            command.mutate(async () => {
-                              const expiry = expiries[kind];
-                              if (expiry) validDates(expiry, expiry);
-                              await client.uploadWorkerDocument(
-                                token,
-                                scope.siteId,
-                                workerId,
-                                kind,
-                                drafts[kind]![0]!,
-                                expiry
-                                  ? kind === 'HEALTH_CERTIFICATE'
-                                    ? { submittedIssuedOn: expiry }
-                                    : { submittedExpiresOn: expiry }
-                                  : {},
-                              );
-                              setDrafts((previous) => ({ ...previous, [kind]: [] }));
-                              setExpiries((previous) => ({ ...previous, [kind]: '' }));
-                            })
-                          }
-                        />
-                      </View>
+                    {canUploadCertificates && (canSubmitDocuments || data.contractorId) && (
+                      <WorkerCertificateSubmission
+                        workerId={workerId}
+                        kind={kind}
+                        requireDate={canSubmitDocuments}
+                        disabled={command.isPending}
+                      />
                     )}
                   </Card>
                 );
@@ -525,6 +469,164 @@ export function WorkerDocuments({
         }}
       </QueryState>
       <ErrorNotice error={command.error} />
+    </View>
+  );
+}
+
+function DocumentDateNotice({ check }: { check: WorkerDocumentDateCheck }) {
+  const { t } = useTranslation();
+  const label = {
+    MATCH: 'documents.dateMatch',
+    MISMATCH: 'documents.dateMismatch',
+    UNAVAILABLE: 'documents.dateUnavailable',
+    NO_REFERENCE: 'documents.dateNoReference',
+  }[check.status];
+  const date = (value: string | null) =>
+    value?.split('-').reverse().join('/') ?? t('documents.notDetermined');
+  return (
+    <View
+      style={{
+        padding: 12,
+        gap: 4,
+        borderRadius: 8,
+        backgroundColor: check.status === 'MATCH' ? '#ECFDF5' : '#FFFBEB',
+      }}
+    >
+      <Body>{t(label)}</Body>
+      <Hint>
+        {t('documents.dateDeclared')}: {date(check.submittedDate)} · {t('documents.dateDetected')}:{' '}
+        {date(check.detectedDate)}
+      </Hint>
+    </View>
+  );
+}
+
+function WorkerCertificateSubmission({
+  workerId,
+  kind,
+  disabled,
+  requireDate = true,
+}: {
+  workerId: string;
+  kind: WorkerDocumentKind;
+  disabled: boolean;
+  requireDate?: boolean;
+}) {
+  const { t } = useTranslation();
+  const { client, token, scope } = useWorkspace();
+  const [date, setDate] = useState('');
+  const [dateEdited, setDateEdited] = useState(false);
+  const [files, setFiles] = useState<NativeUploadFile[]>([]);
+  const command = useCommand();
+  const health = kind === 'HEALTH_CERTIFICATE';
+  const dates = (value: string) =>
+    !value ? {} : health ? { submittedIssuedOn: value } : { submittedExpiresOn: value };
+  const check = useMutation({
+    mutationFn: async ({ file, date }: { file: NativeUploadFile; date: string }) => {
+      if (date) validDates(date, date);
+      const result = await client.checkWorkerDocumentDates(
+        token,
+        scope.siteId,
+        workerId,
+        kind,
+        file,
+        dates(date),
+      );
+      if (result.quality.status !== 'ACCEPTED')
+        throw new Error(t(`documents.${result.quality.reason}`));
+      return result;
+    },
+    onSuccess: (result, variables) => {
+      if (!variables.date) setDate(result.dateCheck.detectedDate ?? '');
+    },
+  });
+  const file = files[0];
+  const checked =
+    check.isSuccess &&
+    (check.variables.date || check.data.dateCheck.detectedDate || '') === date &&
+    check.variables.file.uri === file?.uri;
+  const valid = !date || isWorkerDocumentDate(date);
+  const canSubmit = checked && valid && (!requireDate || isWorkerDocumentDate(date));
+  const busy = disabled || command.isPending || check.isPending;
+  return (
+    <View style={docStyles.uploadSection}>
+      <Text style={docStyles.uploadHeading}>{t('documents.upload')}</Text>
+      <Hint>{t('documents.ocrDateHint')}</Hint>
+      <Field
+        label={`${t(`documents.${kind}`)} - ${t(health ? 'documents.declaredIssuedOn' : 'documents.declaredExpiresOn')} (YYYY-MM-DD)`}
+        placeholder="YYYY-MM-DD"
+        value={date}
+        maxLength={10}
+        editable={!busy}
+        onChangeText={(value) => {
+          setDate(value);
+          setDateEdited(!!value);
+        }}
+      />
+      {health && (
+        <Hint>
+          {t('documents.healthExpiryRule')}{' '}
+          {healthCertificateExpiry(date) ?? t('documents.notDetermined')}
+        </Hint>
+      )}
+      <Attachments
+        files={files}
+        onChange={setFiles}
+        maxFiles={1}
+        disabled={busy || !valid}
+        validateFile={async (file) => {
+          await check.mutateAsync({ file, date: dateEdited ? date : '' });
+        }}
+      />
+      {check.isPending && <Hint>{t('documents.checkingDates')}</Hint>}
+      {checked && check.data && (
+        <DocumentDateNotice
+          check={{
+            ...check.data.dateCheck,
+            submittedDate: date || null,
+            status: date
+              ? check.data.dateCheck.detectedDate
+                ? date === check.data.dateCheck.detectedDate
+                  ? 'MATCH'
+                  : 'MISMATCH'
+                : 'UNAVAILABLE'
+              : 'NO_REFERENCE',
+          }}
+        />
+      )}
+      {file && !checked && !check.isPending && <Hint>{t('documents.dateChanged')}</Hint>}
+      <ErrorNotice error={check.error ?? command.error} />
+      {file && (
+        <Button
+          secondary
+          label={t('documents.dateRecheck')}
+          disabled={busy || !valid}
+          onPress={() => {
+            void check.mutateAsync({ file, date }).catch(() => {});
+          }}
+        />
+      )}
+      <Button
+        label={t('documents.submitForReview')}
+        disabled={busy || !file || !canSubmit}
+        onPress={() => {
+          if (!file || !canSubmit || busy) return;
+          command.mutate(async () => {
+            await client.uploadWorkerDocument(
+              token,
+              scope.siteId,
+              workerId,
+              kind,
+              file,
+              dates(date),
+            );
+            setFiles([]);
+            setDate('');
+            setDateEdited(false);
+            check.reset();
+          });
+        }}
+      />
     </View>
   );
 }
@@ -587,6 +689,7 @@ const docStyles = StyleSheet.create({
     paddingBottom: 12,
     borderBottomWidth: 1,
     borderBottomColor: '#F1F5F9',
+    flexWrap: 'wrap',
   },
   avatarCircle: {
     width: 46,
@@ -597,6 +700,7 @@ const docStyles = StyleSheet.create({
     borderColor: '#FFD9C6',
     alignItems: 'center',
     justifyContent: 'center',
+    flexShrink: 0,
   },
   avatarText: {
     fontSize: 16,
@@ -606,6 +710,8 @@ const docStyles = StyleSheet.create({
   workerHeroText: {
     flex: 1,
     gap: 2,
+    minWidth: 100,
+    flexBasis: 120,
   },
   workerName: {
     fontSize: 15,
@@ -626,15 +732,20 @@ const docStyles = StyleSheet.create({
     borderRadius: 12,
     borderWidth: 1,
     gap: 5,
+    maxWidth: '100%',
+    flexShrink: 0,
   },
   statusDot: {
     width: 6,
     height: 6,
     borderRadius: 3,
+    flexShrink: 0,
   },
   statusText: {
-    fontSize: 11,
+    fontSize: 13,
     fontWeight: '800',
+    flexShrink: 1,
+    lineHeight: 18,
   },
   metaGrid: {
     flexDirection: 'row',
@@ -643,57 +754,60 @@ const docStyles = StyleSheet.create({
     paddingTop: 10,
   },
   metaItem: {
-    width: '48%',
+    flexBasis: 'auto',
+    flexGrow: 1,
+    minWidth: 144,
+    maxWidth: '100%',
     backgroundColor: '#F8FAFC',
-    padding: 8,
-    borderRadius: 8,
+    padding: 10,
+    borderRadius: 10,
     borderWidth: 1,
     borderColor: '#E2E8F0',
-    gap: 2,
+    gap: 3,
   },
   metaItemFull: {
     width: '100%',
     backgroundColor: '#F8FAFC',
-    padding: 8,
-    borderRadius: 8,
+    padding: 10,
+    borderRadius: 10,
     borderWidth: 1,
     borderColor: '#E2E8F0',
-    gap: 2,
+    gap: 3,
   },
   metaLabel: {
-    fontSize: 10,
+    fontSize: 12.5,
     fontWeight: '700',
     textTransform: 'uppercase',
-    color: '#64748B',
+    color: '#475569',
   },
   metaValue: {
-    fontSize: 12,
-    fontWeight: '600',
-    color: '#1E293B',
+    fontSize: 15,
+    fontWeight: '700',
+    color: '#0F172A',
   },
   expiringBanner: {
     marginTop: 8,
-    padding: 8,
+    padding: 10,
     backgroundColor: '#FFFBEB',
-    borderRadius: 8,
+    borderRadius: 10,
     borderWidth: 1,
     borderColor: '#FDE68A',
   },
   expiringText: {
-    fontSize: 12,
+    fontSize: 14,
     fontWeight: '700',
     color: '#92400E',
   },
   sectionHeader: {
-    marginTop: 8,
-    marginBottom: 2,
+    marginTop: 10,
+    marginBottom: 4,
   },
   sectionTitle: {
-    fontSize: 13,
+    fontSize: 14.5,
     fontWeight: '900',
     textTransform: 'uppercase',
     letterSpacing: 0.5,
-    color: '#475569',
+    color: '#0F1E36',
   },
   cardHeaderRow: {
     flexDirection: 'row',
@@ -705,35 +819,35 @@ const docStyles = StyleSheet.create({
     marginBottom: 6,
   },
   cardTitle: {
-    fontSize: 14,
+    fontSize: 16,
     fontWeight: '800',
     color: '#0F172A',
   },
   acceptedBadge: {
-    paddingHorizontal: 8,
-    paddingVertical: 2,
-    borderRadius: 6,
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 8,
     backgroundColor: '#ECFDF5',
     borderWidth: 1,
     borderColor: '#A7F3D0',
   },
   acceptedText: {
-    fontSize: 11,
-    fontWeight: '700',
+    fontSize: 13,
+    fontWeight: '800',
     color: '#065F46',
   },
   emptyBadge: {
-    paddingHorizontal: 8,
-    paddingVertical: 2,
-    borderRadius: 6,
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 8,
     backgroundColor: '#F1F5F9',
     borderWidth: 1,
     borderColor: '#E2E8F0',
   },
   emptyText: {
-    fontSize: 11,
+    fontSize: 13,
     fontWeight: '700',
-    color: '#64748B',
+    color: '#475569',
   },
   docRow: {
     gap: 8,
@@ -746,21 +860,24 @@ const docStyles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'space-between',
     gap: 8,
+    flexWrap: 'wrap',
   },
   docFilename: {
     flex: 1,
-    fontSize: 13,
+    fontSize: 15,
     fontWeight: '700',
     color: '#1E293B',
+    minWidth: 120,
+    flexBasis: 160,
   },
   docStatusPill: {
-    paddingHorizontal: 8,
-    paddingVertical: 2,
+    paddingHorizontal: 10,
+    paddingVertical: 4,
     borderRadius: 8,
     borderWidth: 1,
   },
   docStatusText: {
-    fontSize: 11,
+    fontSize: 13,
     fontWeight: '800',
   },
   dateBox: {
@@ -768,11 +885,11 @@ const docStyles = StyleSheet.create({
     borderRadius: 8,
     borderWidth: 1,
     borderColor: '#E2E8F0',
-    padding: 8,
+    padding: 10,
     gap: 4,
   },
   dateText: {
-    fontSize: 12,
+    fontSize: 14,
     fontWeight: '600',
     color: '#334155',
   },
@@ -781,25 +898,25 @@ const docStyles = StyleSheet.create({
     borderRadius: 8,
     borderWidth: 1,
     borderColor: '#FFEDD5',
-    padding: 8,
+    padding: 10,
   },
   noteText: {
-    fontSize: 12,
+    fontSize: 14,
     fontStyle: 'italic',
     color: '#9A3412',
   },
   submittedPill: {
     alignSelf: 'flex-start',
     backgroundColor: '#FFF7ED',
-    paddingHorizontal: 8,
-    paddingVertical: 4,
+    paddingHorizontal: 10,
+    paddingVertical: 5,
     borderRadius: 8,
     borderWidth: 1,
     borderColor: '#FFEDD5',
   },
   submittedPillText: {
-    fontSize: 11,
-    fontWeight: '700',
+    fontSize: 13,
+    fontWeight: '800',
     color: '#C2410C',
   },
   pendingSection: {
@@ -808,28 +925,28 @@ const docStyles = StyleSheet.create({
   },
   expiryEditorBox: {
     gap: 8,
-    padding: 10,
+    padding: 12,
     backgroundColor: '#FFFDF9',
-    borderRadius: 8,
+    borderRadius: 10,
     borderWidth: 1,
     borderColor: '#FED7AA',
   },
   ocrBox: {
     backgroundColor: '#F8FAFC',
-    borderRadius: 8,
+    borderRadius: 10,
     borderWidth: 1,
     borderColor: '#E2E8F0',
-    padding: 8,
-    gap: 3,
+    padding: 10,
+    gap: 4,
   },
   ocrText: {
-    fontSize: 11,
+    fontSize: 13.5,
     fontWeight: '700',
-    color: '#334155',
+    color: '#1E293B',
   },
   ocrHintText: {
-    fontSize: 10,
-    color: '#64748B',
+    fontSize: 12.5,
+    color: '#475569',
   },
   uploadSection: {
     gap: 8,
@@ -839,46 +956,46 @@ const docStyles = StyleSheet.create({
     borderTopColor: '#F1F5F9',
   },
   uploadHeading: {
-    fontSize: 12,
+    fontSize: 13.5,
     fontWeight: '800',
     textTransform: 'uppercase',
-    color: '#475569',
+    color: '#0F1E36',
   },
   matchBadge: {
     alignSelf: 'flex-start',
-    paddingHorizontal: 8,
-    paddingVertical: 3,
+    paddingHorizontal: 10,
+    paddingVertical: 4,
     backgroundColor: '#ECFDF5',
-    borderRadius: 6,
+    borderRadius: 8,
     borderWidth: 1,
     borderColor: '#A7F3D0',
   },
   matchText: {
-    fontSize: 11,
-    fontWeight: '700',
+    fontSize: 13,
+    fontWeight: '800',
     color: '#065F46',
   },
   mismatchBox: {
-    gap: 4,
-    padding: 10,
+    gap: 6,
+    padding: 12,
     backgroundColor: '#FFFBEB',
     borderColor: '#F59E0B',
     borderWidth: 1,
-    borderRadius: 8,
+    borderRadius: 10,
   },
   mismatchTitle: {
-    fontSize: 12,
+    fontSize: 14,
     fontWeight: '800',
     color: '#92400E',
   },
   mismatchText: {
-    fontSize: 11,
+    fontSize: 13.5,
     fontWeight: '700',
     color: '#B45309',
   },
   mismatchAdvisory: {
-    fontSize: 10,
+    fontSize: 12.5,
     color: '#78350F',
-    lineHeight: 14,
+    lineHeight: 18,
   },
 });

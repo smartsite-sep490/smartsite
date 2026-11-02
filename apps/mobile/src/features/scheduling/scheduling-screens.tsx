@@ -1,5 +1,5 @@
 import { localizedLabel } from '../../i18n/messages';
-import { translate as tr } from '../../i18n';
+import { translate as tr, uiLocale } from '../../i18n';
 import { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import type {
@@ -11,7 +11,15 @@ import type {
 import { useWorkspace } from '../workspace/workspace-context';
 import { useScopedWorkers } from '../workspace/use-scoped-workers';
 import { requestInScope } from './request-scope';
-import { allPages, displayTime, localDate, required, useCommand, validDates } from '../shared/data';
+import {
+  allPages,
+  displayTime,
+  displayShiftTime,
+  localDate,
+  required,
+  useCommand,
+  validDates,
+} from '../shared/data';
 import {
   Body,
   Button,
@@ -26,19 +34,20 @@ import {
 } from '../shared/ui';
 import { View, Text, StyleSheet, Pressable } from 'react-native';
 import { useTranslation } from '../../i18n';
-import { IconBriefcase } from '../../components/common/Icons';
+import { IconClock, IconChevronRight } from '../../components/common/Icons';
 import { colors } from '../../theme/colors';
+import { DateRangeFilter } from '../shared/date-range-filter';
 
 export function ScheduleScreen({ initialDate }: { initialDate?: string }) {
   const { t } = useTranslation();
   const { scope, client, token, queryKey, workerId } = useWorkspace();
-  const [today] = useState(() => localDate());
-  const [from, setFrom] = useState(() => initialDate ?? localDate()),
-    [to, setTo] = useState(() => initialDate ?? localDate(new Date(Date.now() + 30 * 86400000)));
-  const [range, setRange] = useState({ fromDate: from, toDate: to }),
-    [offset, setOffset] = useState(0);
-  const [selected, setSelected] = useState<WorkerScheduleResponse | null>(null),
-    [error, setError] = useState<unknown>(null);
+  const [range, setRange] = useState(() => {
+    if (initialDate) return { fromDate: initialDate, toDate: initialDate };
+    const now = localDate();
+    return { fromDate: `${now.slice(0, 8)}01`, toDate: now };
+  });
+  const [offset, setOffset] = useState(0);
+  const [selected, setSelected] = useState<WorkerScheduleResponse | null>(null);
   const schedules = useQuery({
     queryKey: [...queryKey, 'schedules', range, offset],
     queryFn: () =>
@@ -65,83 +74,21 @@ export function ScheduleScreen({ initialDate }: { initialDate?: string }) {
         onBack={() => setSelected(null)}
       />
     );
-  const baseDate = new Date(from);
-  const dayIndex = isNaN(baseDate.getTime()) ? 0 : (baseDate.getDay() + 6) % 7;
-  const monday = new Date(isNaN(baseDate.getTime()) ? today : baseDate);
-  monday.setDate(monday.getDate() - dayIndex);
-
-  const dayLabels = ['T2', 'T3', 'T4', 'T5', 'T6', 'T7', 'CN'];
-  const weekDays = Array.from({ length: 7 }, (_, i) => {
-    const d = new Date(monday);
-    d.setDate(monday.getDate() + i);
-    const dateStr = d.toISOString().slice(0, 10);
-    return {
-      label: dayLabels[i],
-      dateNumber: d.getDate(),
-      dateStr,
-      isSelected: dateStr === from,
-    };
-  });
 
   return (
     <Page
       title={scope.role === 'worker' ? t('schedule.title') : t('contractorHome.assignSchedule')}
     >
-      {/* Week Calendar Strip (Matching Lovable) */}
-      <View style={schedStyles.weekCard}>
-        <View style={schedStyles.weekDaysRow}>
-          {weekDays.map((d) => (
-            <Pressable
-              key={d.dateStr}
-              accessibilityRole="button"
-              accessibilityLabel={`${d.label} ${d.dateNumber}`}
-              style={[schedStyles.dayCol, d.isSelected && schedStyles.dayColSelected]}
-              onPress={() => {
-                setFrom(d.dateStr);
-                setTo(d.dateStr);
-                setRange({ fromDate: d.dateStr, toDate: d.dateStr });
-                setOffset(0);
-              }}
-            >
-              <Text style={[schedStyles.dayName, d.isSelected && schedStyles.dayNameSelected]}>
-                {d.label}
-              </Text>
-              <Text style={[schedStyles.dayDate, d.isSelected && schedStyles.dayDateSelected]}>
-                {d.dateNumber}
-              </Text>
-              {d.isSelected ? (
-                <View style={schedStyles.selectedDot} />
-              ) : (
-                <View style={{ height: 5 }} />
-              )}
-            </Pressable>
-          ))}
-        </View>
-      </View>
+      {/* Draggable / Swipeable Date Range Filter (matching Attendance screen) */}
+      <DateRangeFilter
+        range={range}
+        onChange={(newRange) => {
+          setRange(newRange);
+          setOffset(0);
+        }}
+        onValidate={(newRange) => validDates(newRange.fromDate, newRange.toDate)}
+      />
 
-      <Card>
-        <Field
-          label={`${t('schedule.fromDate')} (YYYY-MM-DD)`}
-          value={from}
-          onChangeText={setFrom}
-        />
-        <Field label={`${t('schedule.toDate')} (YYYY-MM-DD)`} value={to} onChangeText={setTo} />
-        <ErrorNotice error={error} />
-        <Button
-          secondary
-          label={t('schedule.search')}
-          onPress={() => {
-            try {
-              validDates(from, to);
-              setRange({ fromDate: from, toDate: to });
-              setOffset(0);
-              setError(null);
-            } catch (e) {
-              setError(e);
-            }
-          }}
-        />
-      </Card>
       <QueryState query={shifts}>
         {() => (
           <QueryState query={workers}>
@@ -155,51 +102,97 @@ export function ScheduleScreen({ initialDate }: { initialDate?: string }) {
                       .map((s) => {
                         const shift = shifts.data?.find((v) => v.id === s.shiftId);
                         const worker = workers.data?.find((v) => v.id === s.workerId);
+                        const isWorker = scope.role === 'worker';
                         return (
-                          <Card key={s.id}>
-                            <View style={schedStyles.shiftItemRow}>
-                              <View style={[schedStyles.iconBox, { backgroundColor: '#FFF4EE' }]}>
-                                <IconBriefcase size={22} color={colors.primary} />
+                          <View key={s.id} style={schedStyles.scheduleCard}>
+                            <View style={schedStyles.scheduleCardHeader}>
+                              {/* Date badge matching attendance screen */}
+                              <View style={schedStyles.dateBadge}>
+                                <Text style={schedStyles.dateBadgeDay}>{s.workDate.slice(8)}</Text>
+                                <Text style={schedStyles.dateBadgeMonth}>
+                                  {new Intl.DateTimeFormat(uiLocale(), {
+                                    month: 'short',
+                                    timeZone: 'UTC',
+                                  }).format(new Date(`${s.workDate}T00:00:00Z`))}
+                                </Text>
                               </View>
+
+                              {/* Details col */}
                               <View style={schedStyles.shiftDetailsCol}>
-                                <Text style={schedStyles.shiftTypeTitle}>
-                                  {shift?.name ?? t('schedule.shift')}
-                                </Text>
-                                <Text style={schedStyles.shiftTimeText}>
-                                  {shift
-                                    ? `${displayTime(shift.startsAt)} – ${displayTime(shift.endsAt)}`
-                                    : s.workDate}
-                                </Text>
-                                <Text style={schedStyles.shiftLocationText}>
-                                  📍 {scope.siteName} · {worker?.displayName ?? s.workerId}
-                                </Text>
-                              </View>
-                              <View
-                                style={[
-                                  schedStyles.statusPill,
-                                  { backgroundColor: s.isActive ? '#EDFAF2' : '#F1F5F9' },
-                                ]}
-                              >
+                                <View style={schedStyles.shiftTopRow}>
+                                  <Text
+                                    numberOfLines={2}
+                                    ellipsizeMode="tail"
+                                    style={schedStyles.shiftTypeTitle}
+                                  >
+                                    {shift?.name ?? t('schedule.shift')}
+                                  </Text>
+                                  {/* Status pill */}
+                                  <View
+                                    style={[
+                                      schedStyles.statusPill,
+                                      { backgroundColor: s.isActive ? '#EDFAF2' : '#F1F5F9' },
+                                    ]}
+                                  >
+                                    <View
+                                      style={[
+                                        schedStyles.statusDot,
+                                        { backgroundColor: s.isActive ? '#10B981' : '#94A3B8' },
+                                      ]}
+                                    />
+                                    <Text
+                                      style={[
+                                        schedStyles.statusText,
+                                        { color: s.isActive ? '#065F46' : '#64748B' },
+                                      ]}
+                                    >
+                                      {s.isActive
+                                        ? t('workforce.statusActive')
+                                        : t('workforce.statusInactive')}
+                                    </Text>
+                                  </View>
+                                </View>
+
+                                <View style={schedStyles.shiftTimeRow}>
+                                  <IconClock size={15} color="#2563EB" />
+                                  <Text numberOfLines={1} style={schedStyles.shiftTimeText}>
+                                    {shift
+                                      ? `${displayShiftTime(shift.startsAt)} – ${displayShiftTime(shift.endsAt)}`
+                                      : s.workDate}
+                                  </Text>
+                                </View>
+
                                 <Text
-                                  style={[
-                                    schedStyles.statusText,
-                                    { color: s.isActive ? '#065F46' : '#64748B' },
-                                  ]}
+                                  numberOfLines={1}
+                                  ellipsizeMode="tail"
+                                  style={schedStyles.shiftLocationText}
                                 >
-                                  {s.isActive
-                                    ? t('workforce.statusActive')
-                                    : t('workforce.statusInactive')}
+                                  📍 {scope.siteName}
+                                  {!isWorker && worker?.displayName
+                                    ? ` · ${worker.displayName}`
+                                    : ''}
                                 </Text>
                               </View>
                             </View>
-                            {scope.role === 'worker' && s.isActive && (
-                              <Button
-                                secondary
-                                label={t('schedule.requestAction')}
+
+                            {/* Request Action Button matching test accessibilityLabel */}
+                            {isWorker && s.isActive && (
+                              <Pressable
+                                accessibilityRole="button"
+                                accessibilityLabel={t('schedule.requestAction')}
+                                style={({ pressed }) => [
+                                  schedStyles.requestActionBtn,
+                                  pressed && { opacity: 0.8 },
+                                ]}
                                 onPress={() => setSelected(s)}
-                              />
+                              >
+                                <Text style={schedStyles.requestActionText}>
+                                  {t('schedule.requestAction')}
+                                </Text>
+                                <IconChevronRight size={16} color="#F66B17" />
+                              </Pressable>
                             )}
-                          </Card>
+                          </View>
                         );
                       })}
                     <Pager offset={offset} total={data.total} onChange={setOffset} />
@@ -267,7 +260,7 @@ function ScheduleRequest({
                 value={target}
                 options={data.items.map((s) => ({
                   value: s.id,
-                  label: `${s.name} · ${displayTime(s.startsAt)}–${displayTime(s.endsAt)}`,
+                  label: `${s.name} · ${displayShiftTime(s.startsAt)} – ${displayShiftTime(s.endsAt)}`,
                 }))}
                 onChange={setTarget}
               />
@@ -722,6 +715,46 @@ const schedStyles = StyleSheet.create({
     alignItems: 'center',
     gap: 12,
   },
+  scheduleCard: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: 20,
+    padding: 16,
+    marginBottom: 12,
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
+    gap: 12,
+    shadowColor: '#0F1E36',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.04,
+    shadowRadius: 6,
+    elevation: 2,
+  },
+  scheduleCardHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+  },
+  dateBadge: {
+    backgroundColor: '#FFF4EE',
+    borderRadius: 14,
+    paddingVertical: 10,
+    paddingHorizontal: 12,
+    alignItems: 'center',
+    justifyContent: 'center',
+    minWidth: 54,
+    flexShrink: 0,
+  },
+  dateBadgeDay: {
+    fontSize: 20,
+    fontWeight: '800',
+    color: '#F66B17',
+  },
+  dateBadgeMonth: {
+    fontSize: 12.5,
+    fontWeight: '800',
+    color: '#C2410C',
+    textTransform: 'uppercase',
+  },
   iconBox: {
     width: 44,
     height: 44,
@@ -731,44 +764,80 @@ const schedStyles = StyleSheet.create({
   },
   shiftDetailsCol: {
     flex: 1,
+    gap: 4,
+    minWidth: 0,
+  },
+  shiftTopRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: 8,
+    flexWrap: 'wrap',
   },
   shiftTypeTitle: {
-    fontSize: 13,
-    color: colors.textMuted,
-    fontWeight: '500',
-    marginBottom: 2,
-  },
-  shiftTimeText: {
-    fontSize: 16,
+    fontSize: 16.5,
     fontWeight: '800',
     color: '#0F1E36',
-    letterSpacing: -0.3,
-    marginBottom: 2,
+    flex: 1,
+    minWidth: 120,
+    flexBasis: 140,
+    lineHeight: 24,
+  },
+  shiftTimeRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
+  },
+  shiftTimeText: {
+    fontSize: 15,
+    fontWeight: '700',
+    color: '#1D4ED8',
   },
   shiftLocationText: {
-    fontSize: 12,
-    color: colors.textMuted,
+    fontSize: 13.5,
+    color: '#64748B',
+    fontWeight: '500',
   },
   statusPill: {
     flexDirection: 'row',
     alignItems: 'center',
     paddingHorizontal: 8,
-    paddingVertical: 4,
-    borderRadius: 10,
+    paddingVertical: 3,
+    borderRadius: 8,
     gap: 4,
-  },
-  statusText: {
-    fontSize: 11,
-    fontWeight: '700',
-  },
-  statusPillText: {
-    fontSize: 11,
-    fontWeight: '700',
+    flexShrink: 0,
+    maxWidth: '100%',
   },
   statusDot: {
     width: 6,
     height: 6,
     borderRadius: 3,
+    flexShrink: 0,
+  },
+  statusText: {
+    fontSize: 12,
+    fontWeight: '700',
+    flexShrink: 1,
+    lineHeight: 18,
+  },
+  requestActionBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    backgroundColor: '#FFF7ED',
+    borderRadius: 10,
+    paddingVertical: 8,
+    paddingHorizontal: 12,
+    minHeight: 38,
+  },
+  requestActionText: {
+    fontSize: 13.5,
+    fontWeight: '700',
+    color: '#C2410C',
+  },
+  statusPillText: {
+    fontSize: 13,
+    fontWeight: '700',
   },
   detailCard: {
     backgroundColor: '#FFFFFF',
@@ -788,18 +857,21 @@ const schedStyles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
+    flexWrap: 'wrap',
+    gap: 8,
   },
   typePill: {
     paddingHorizontal: 10,
     paddingVertical: 4,
     borderRadius: 10,
+    maxWidth: '100%',
   },
   typePillText: {
-    fontSize: 12,
+    fontSize: 13,
     fontWeight: '700',
   },
   detailReasonText: {
-    fontSize: 15,
+    fontSize: 16.5,
     fontWeight: '800',
     color: '#0F1E36',
   },
@@ -810,16 +882,16 @@ const schedStyles = StyleSheet.create({
     borderTopColor: '#F1F5F9',
   },
   detailInfoLine: {
-    fontSize: 13,
+    fontSize: 14.5,
     fontWeight: '600',
     color: '#334155',
   },
   detailInfoSub: {
-    fontSize: 12,
+    fontSize: 13.5,
     color: '#94A3B8',
   },
   detailReviewReason: {
-    fontSize: 12,
+    fontSize: 13.5,
     color: '#475569',
     fontStyle: 'italic',
   },
@@ -843,9 +915,9 @@ const schedStyles = StyleSheet.create({
     alignItems: 'center',
   },
   requestReasonText: {
-    fontSize: 14,
+    fontSize: 15.5,
     fontWeight: '700',
     color: '#0F1E36',
-    lineHeight: 20,
+    lineHeight: 22,
   },
 });

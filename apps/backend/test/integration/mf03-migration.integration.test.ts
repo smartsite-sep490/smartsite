@@ -26,6 +26,7 @@ test('MF03 migration preserves legacy multiple shifts, blocks new conflicts and 
     const mf03 = mf03Migrations[0]!;
     for (const migration of migrations.filter(
       (m) =>
+        Number((m.name ?? m.constructor.name).slice(-13)) < 1794960000000 &&
         !mf03Migrations.includes(m) &&
         ![
           'ShiftBreak1791763200001',
