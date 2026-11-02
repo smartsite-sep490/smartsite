@@ -1,6 +1,6 @@
 import type { MigrationInterface, QueryRunner } from 'typeorm';
 
-/** Candidate only: registration and runtime cutover require separate reviewed delivery. */
+/** Guarded episode storage; applying this registered migration requires an explicit runtime cutover. */
 export class SafetyEpisodes1794355200000 implements MigrationInterface {
   async up(runner: QueryRunner): Promise<void> {
     if (!runner.isTransactionActive) throw new Error('Episode migration requires a transaction');

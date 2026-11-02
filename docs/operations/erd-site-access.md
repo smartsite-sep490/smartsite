@@ -1,5 +1,10 @@
 # Site Access và ERD ngày 02/10/2026
 
+Cập nhật cấu trúc ngày 01/11/2026: các bảng đã bỏ/gộp được xử lý qua
+[migration database](../../apps/backend/src/database/migrations).
+Các mô tả luồng và kết quả kiểm chứng có ngày bên dưới
+ghi lại các đợt triển khai trước; hướng dẫn chấm công hiện tại ở [MF03](mf03-attendance.md).
+
 Phạm vi thay đổi này là sáu mục Site Access và các bảng liên quan đến visitor, quyền vào Site/Zone, khuôn mặt, lượt qua cổng và attendance. Đây là bước triển khai nghiệp vụ theo ERD, không phải chuyển toàn bộ hệ thống sang đúng 43 bảng vật lý.
 
 ## Các luồng đã triển khai
@@ -8,7 +13,7 @@ Phạm vi thay đổi này là sáu mục Site Access và các bảng liên quan
 - Mỗi QR opaque gắn Site và IN hoặc OUT, có hạn ngắn, lưu hash, xoay mã thì thu hồi mã trước. Đại diện check-in/check-out cả đoàn; không nhập số người cho từng lượt hoặc tách đoàn. Cho phép nhiều lượt ra/vào trong thời hạn; giờ ra vẫn được ghi sau khi visit hết hạn hoặc bị hủy.
 - Contractor Representative đề nghị Worker assignment có ngày hết hạn. Site Manager duyệt trực tiếp, kiểm tra participation và version; có thể thu hồi assignment kèm lý do. Safety review cũ vẫn tương thích nhưng không còn là bước bắt buộc.
 - Site Manager cấp Contractor Zone permission trong thời hạn participation. Representative cấp Worker Zone permission nằm trong cả assignment và Contractor permission, cùng Site/Contractor. Thu hồi quyền nền sẽ làm quyền phụ thuộc không còn cho phép vào Zone. Legacy ALLOW không còn là nguồn cấp quyền; DENY cũ vẫn ưu tiên để giữ chức năng ngăn truy cập của main.
-- FACE/QR/MANUAL tạo `access_attempt` với identity, authorization và schedule riêng. UNKNOWN được lưu nhưng không tạo passage. Worker phải có assignment APPROVED còn hiệu lực và quyền đúng cổng để IN. Security xác minh ngoại lệ không có ca với lý do, không vượt quyền Site đã hết hạn. OUT dùng EXIT_RECORD_ONLY.
+- FACE/QR/MANUAL tạo `access_attempt` với identity, authorization và schedule riêng. UNKNOWN được lưu nhưng không tạo passage. Worker phải có assignment APPROVED còn hiệu lực để IN qua mọi cổng thuộc cùng Site; không cần cấp quyền từng cổng. Security xác minh ngoại lệ không có ca với lý do, không vượt quyền Site đã hết hạn. OUT dùng EXIT_RECORD_ONLY.
 - Sau xác minh, operator xác nhận lượt qua cổng. Backend đánh giá lại quyền, khóa dữ liệu liên quan, consume QR và tạo đúng một `gate_event` trong transaction. Retry cùng key trả event cũ. Quét Worker QR hoặc nhận diện khuôn mặt chưa tự tạo passage.
 - Chấm công là thao tác riêng sau passage đã xác nhận. Ra/vào tạm thời không tự đóng/mở attendance session. Worker đề nghị correction; Representative cùng nhà thầu duyệt, không tự duyệt và không ghi đè version mới hơn. Chỉ giờ hiệu lực thay đổi; sự kiện gốc giữ nguyên. Báo cáo số phút được tính từ giờ hiệu lực, chưa có duyệt/chốt công hoặc payroll.
 - Worker tự xác nhận consent trước bất kỳ chất lượng ảnh, sample hoặc enrollment nào. Người hỗ trợ chỉ mở session và bàn giao màn hình cho Worker. Capability chỉ dùng cho session đó, hết hạn sau 30 phút; không lưu trên browser storage. Backend không thể chứng minh người thực tế bấm màn hình là ai: đây là phương thức supervised có trách nhiệm vận hành.
@@ -16,17 +21,18 @@ Phạm vi thay đổi này là sáu mục Site Access và các bảng liên quan
 
 ## Tên bảng tương thích
 
-| ERD logical                                         | Bảng vật lý đang dùng                                     |
-| --------------------------------------------------- | --------------------------------------------------------- |
-| account                                             | app_user                                                  |
-| site_contractor                                     | contractor_site_participation                             |
-| worker_assignment                                   | worker_site_zone_assignment (giữ zone_ids/gate_id legacy) |
-| visit                                               | visitor_visit; visitor riêng và visit_zone được bổ sung   |
-| access_credential                                   | qr_credential; consumed_at tương ứng used_at              |
-| access_attempt / gate_event                         | access_attempt / gate_event                               |
-| contractor_zone_permission / worker_zone_permission | cùng tên ERD                                              |
-| attendance_event / session / correction             | cùng tên ERD                                              |
-| audit_log                                           | audit_log                                                 |
+| ERD logical                                         | Bảng vật lý đang dùng                                                                    |
+| --------------------------------------------------- | ---------------------------------------------------------------------------------------- |
+| account                                             | app_user                                                                                 |
+| site_contractor                                     | contractor_site_participation                                                            |
+| worker_assignment                                   | worker_site_zone_assignment (giữ zone_ids; không còn gate_id)                            |
+| visit                                               | visitor_visit; visitor riêng và visit_zone được bổ sung                                  |
+| access_credential                                   | qr_credential; consumed_at tương ứng used_at                                             |
+| access_attempt / gate_event                         | access_attempt / gate_event                                                              |
+| visitor passage                                     | gate_event (chứa count, attendees, request_hash, recorded_by và thời điểm lịch sử khách) |
+| contractor_zone_permission / worker_zone_permission | cùng tên ERD                                                                             |
+| attendance_event / session / correction             | cùng tên ERD                                                                             |
+| audit_log                                           | audit_log                                                                                |
 
 `face_profile` vẫn dùng ciphertext được mã hóa trong PostgreSQL và hash reference của AI, thay vì `template_ref` tới kho private độc lập. API không trả ciphertext/hash. Đây là lựa chọn tương thích với AI đang chạy; không tuyên bố đã chuyển sang external template storage. `captured_by` tương ứng `created_by_user_id`.
 

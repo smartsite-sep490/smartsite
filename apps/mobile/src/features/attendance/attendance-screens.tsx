@@ -41,7 +41,8 @@ import type { AttendanceSessionResponse, AttendanceDaysResponse } from '@smartsi
 import { useScopedWorkers } from '../workspace/use-scoped-workers';
 import { AttendanceReport } from './attendance-report';
 import { useTranslation } from '../../i18n';
-import { IconChevronDown, IconChevronUp } from '../../components/common/Icons';
+import { IconChevronDown, IconChevronUp, IconChevronRight } from '../../components/common/Icons';
+import { DateRangeFilter } from '../shared/date-range-filter';
 
 export function AttendanceScreen({
   initialDayId,
@@ -54,13 +55,10 @@ export function AttendanceScreen({
   const { scope, client, token, queryKey, workerId } = useWorkspace();
   const today = localDate(),
     timezone = Intl.DateTimeFormat().resolvedOptions().timeZone;
-  const [from, setFrom] = useState(`${today.slice(0, 8)}01`),
-    [to, setTo] = useState(today),
-    [range, setRange] = useState({ fromDate: from, toDate: to }),
+  const [range, setRange] = useState({ fromDate: `${today.slice(0, 8)}01`, toDate: today }),
     [offset, setOffset] = useState(0);
   const [dayId, setDayId] = useState(initialDayId ?? ''),
-    [requestOpen, setRequestOpen] = useState(false),
-    [error, setError] = useState<unknown>(null);
+    [requestOpen, setRequestOpen] = useState(false);
   const workers = useScopedWorkers();
   const workerIds = new Set(workers.data?.map((w) => w.id));
 
@@ -128,35 +126,21 @@ export function AttendanceScreen({
       title={scope.role === 'worker' ? t('attendance.myTitle') : t('attendance.teamTitle')}
       onBack={onBack}
     >
-      {/* Date Filter Card */}
-      <Card>
-        <Field
-          label={`${t('attendance.filterFrom')} (YYYY-MM-DD)`}
-          value={from}
-          onChangeText={setFrom}
-        />
-        <Field label={`${t('attendance.filterTo')} (YYYY-MM-DD)`} value={to} onChangeText={setTo} />
-        <ErrorNotice error={error} />
-        <Button
-          secondary
-          label={t('attendance.filter')}
-          onPress={() => {
-            try {
-              validDates(from, to);
-              setRange({ fromDate: from, toDate: to });
-              setOffset(0);
-              setError(null);
-            } catch (e) {
-              setError(e);
-            }
-          }}
-        />
-      </Card>
+      {/* Draggable / Swipeable Date Range Filter */}
+      <DateRangeFilter
+        range={range}
+        onChange={(newRange) => {
+          setRange(newRange);
+          setOffset(0);
+        }}
+        onValidate={(newRange) => validDates(newRange.fromDate, newRange.toDate)}
+      />
 
-      {/* 3-Column Summary Stats Card (Matching Lovable) */}
+      {/* 3-Column Summary Stats Card */}
       <QueryState query={summary}>
         {(s) => (
           <View style={attStyles.summaryCard}>
+            <Text style={attStyles.summaryCardTitle}>{t('attendance.overview')}</Text>
             <View style={attStyles.summaryGrid}>
               <View style={attStyles.summaryCol}>
                 <Text style={attStyles.summaryValueGreen}>{minutes(s.totalMinutes)}</Text>
@@ -210,7 +194,13 @@ export function AttendanceScreen({
             )}
             {!data.items.length && <Hint>{t('attendance.noDaysInRange')}</Hint>}
             {data.items.map((day) => (
-              <View key={day.id} style={attStyles.dayCard}>
+              <Pressable
+                key={day.id}
+                accessibilityRole="button"
+                accessibilityLabel={`${day.workDate} ${scope.role === 'contractor' ? day.workerName : (day.shiftName ?? t('attendance.shiftNotAssigned'))}`}
+                style={({ pressed }) => [attStyles.dayCard, pressed && { opacity: 0.92 }]}
+                onPress={() => setDayId(day.id)}
+              >
                 <View style={attStyles.dayCardHeader}>
                   <View style={attStyles.dateBadge}>
                     <Text style={attStyles.dateBadgeDay}>{day.workDate.slice(8)}</Text>
@@ -270,12 +260,11 @@ export function AttendanceScreen({
                   </View>
                 )}
 
-                <Button
-                  secondary
-                  label={t('attendance.dayDetail')}
-                  onPress={() => setDayId(day.id)}
-                />
-              </View>
+                <View style={attStyles.dayCardFooter}>
+                  <Text style={attStyles.dayDetailLink}>{t('attendance.dayDetail')}</Text>
+                  <IconChevronRight size={18} color="#F66B17" />
+                </View>
+              </Pressable>
             ))}
 
             <Pager offset={offset} total={data.total} onChange={setOffset} />
@@ -364,7 +353,7 @@ function AttendanceDetail({ dayId, onBack }: { dayId: string; onBack: () => void
             {/* Header Stats Card */}
             <View style={attStyles.detailHeaderCard}>
               <View style={attStyles.detailTitleRow}>
-                <View>
+                <View style={{ flex: 1, minWidth: 140 }}>
                   <Text style={attStyles.detailWorkerName}>{data.day.workerName}</Text>
                   <Text style={attStyles.detailSubInfo}>
                     {data.day.workDate} · {data.day.shiftName}
@@ -720,13 +709,20 @@ const attStyles = StyleSheet.create({
     borderRadius: 20,
     padding: 16,
     marginBottom: 14,
-    borderWidth: StyleSheet.hairlineWidth,
-    borderColor: '#EFF2F6',
-    shadowColor: '#000000',
-    shadowOffset: { width: 0, height: 3 },
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
+    shadowColor: '#0F1E36',
+    shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.05,
     shadowRadius: 8,
     elevation: 2,
+    gap: 12,
+  },
+  summaryCardTitle: {
+    fontSize: 16,
+    fontWeight: '800',
+    color: '#0F1E36',
+    marginBottom: 2,
   },
   summaryGrid: {
     flexDirection: 'row',
@@ -736,39 +732,44 @@ const attStyles = StyleSheet.create({
   summaryCol: {
     flex: 1,
     alignItems: 'center',
+    minWidth: 0,
+    paddingHorizontal: 4,
   },
   colDivider: {
     width: 1,
-    height: 36,
+    height: 38,
     backgroundColor: '#E2E8F0',
   },
   summaryValueGreen: {
-    fontSize: 20,
+    fontSize: 24,
     fontWeight: '800',
     color: '#10B981',
   },
   summaryValueOrange: {
-    fontSize: 20,
+    fontSize: 24,
     fontWeight: '800',
     color: '#F66B17',
   },
   summaryValueBlue: {
-    fontSize: 20,
+    fontSize: 22,
     fontWeight: '800',
     color: '#2563EB',
   },
   summaryLabel: {
-    fontSize: 12,
-    fontWeight: '600',
-    color: '#64748B',
+    fontSize: 13.5,
+    fontWeight: '700',
+    color: '#475569',
     marginTop: 4,
+    textAlign: 'center',
+    lineHeight: 19,
   },
   summaryPillsRow: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
+    flexWrap: 'wrap',
     gap: 8,
-    marginTop: 14,
+    marginTop: 6,
     paddingTop: 12,
     borderTopWidth: StyleSheet.hairlineWidth,
     borderTopColor: '#F1F5F9',
@@ -776,18 +777,18 @@ const attStyles = StyleSheet.create({
   miniPill: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingHorizontal: 10,
-    paddingVertical: 4,
-    borderRadius: 12,
-    gap: 5,
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 14,
+    gap: 6,
   },
   miniDot: {
-    width: 6,
-    height: 6,
-    borderRadius: 3,
+    width: 8,
+    height: 8,
+    borderRadius: 4,
   },
   miniPillText: {
-    fontSize: 11,
+    fontSize: 13,
     fontWeight: '700',
   },
   dayCard: {
@@ -795,70 +796,77 @@ const attStyles = StyleSheet.create({
     borderRadius: 20,
     padding: 16,
     marginBottom: 12,
-    borderWidth: StyleSheet.hairlineWidth,
-    borderColor: '#EFF2F6',
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
     gap: 12,
-    shadowColor: '#000000',
+    shadowColor: '#0F1E36',
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.04,
     shadowRadius: 6,
-    elevation: 1,
+    elevation: 2,
   },
   dayCardHeader: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 12,
+    flexWrap: 'wrap',
   },
   dateBadge: {
     backgroundColor: '#FFF4EE',
     borderRadius: 14,
-    paddingVertical: 8,
-    paddingHorizontal: 10,
+    paddingVertical: 10,
+    paddingHorizontal: 12,
     alignItems: 'center',
     justifyContent: 'center',
-    minWidth: 46,
+    minWidth: 54,
+    flexShrink: 0,
   },
   dateBadgeDay: {
-    fontSize: 16,
+    fontSize: 20,
     fontWeight: '800',
     color: '#F66B17',
   },
   dateBadgeMonth: {
-    fontSize: 10,
-    fontWeight: '700',
+    fontSize: 12.5,
+    fontWeight: '800',
     color: '#C2410C',
     textTransform: 'uppercase',
   },
   dayInfoCol: {
     flex: 1,
-    gap: 4,
+    gap: 5,
+    minWidth: 100,
+    flexBasis: 120,
   },
   dayWorkerName: {
-    fontSize: 15,
-    fontWeight: '700',
+    fontSize: 16.5,
+    fontWeight: '800',
     color: '#0F1E36',
+    lineHeight: 24,
   },
   presenceBadge: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 5,
+    gap: 6,
   },
   presenceText: {
-    fontSize: 12,
-    fontWeight: '600',
+    fontSize: 13.5,
+    fontWeight: '700',
   },
   dayHoursCol: {
     alignItems: 'flex-end',
+    gap: 2,
+    maxWidth: '100%',
   },
   hoursText: {
-    fontSize: 15,
+    fontSize: 18,
     fontWeight: '800',
     color: '#0F1E36',
   },
   hoursSub: {
-    fontSize: 11,
-    color: '#94A3B8',
-    fontWeight: '500',
+    fontSize: 13,
+    color: '#64748B',
+    fontWeight: '600',
   },
   anomaliesRow: {
     flexDirection: 'row',
@@ -867,48 +875,70 @@ const attStyles = StyleSheet.create({
   },
   anomalyPill: {
     backgroundColor: '#FEF3C7',
-    paddingHorizontal: 8,
-    paddingVertical: 3,
-    borderRadius: 8,
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    borderRadius: 10,
   },
   anomalyText: {
-    fontSize: 11,
+    fontSize: 13,
     color: '#92400E',
-    fontWeight: '600',
+    fontWeight: '700',
+  },
+  dayCardFooter: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'flex-end',
+    gap: 4,
+    paddingTop: 8,
+    borderTopWidth: StyleSheet.hairlineWidth,
+    borderTopColor: '#F1F5F9',
+  },
+  dayDetailLink: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: '#F66B17',
   },
   detailHeaderCard: {
     backgroundColor: '#FFFFFF',
     borderRadius: 20,
     padding: 16,
     marginBottom: 16,
-    borderWidth: StyleSheet.hairlineWidth,
-    borderColor: '#EFF2F6',
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
     gap: 14,
+    shadowColor: '#0F1E36',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.04,
+    shadowRadius: 6,
+    elevation: 2,
   },
   detailTitleRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'flex-start',
+    flexWrap: 'wrap',
+    gap: 10,
   },
   detailWorkerName: {
-    fontSize: 18,
+    fontSize: 20,
     fontWeight: '800',
     color: '#0F1E36',
   },
   detailSubInfo: {
-    fontSize: 13,
+    fontSize: 14,
     color: '#64748B',
     marginTop: 2,
+    fontWeight: '500',
   },
   detailStatusBadge: {
     backgroundColor: '#EDFAF2',
-    paddingHorizontal: 10,
-    paddingVertical: 4,
+    paddingHorizontal: 12,
+    paddingVertical: 6,
     borderRadius: 12,
   },
   detailStatusText: {
-    fontSize: 11,
-    fontWeight: '700',
+    fontSize: 13,
+    fontWeight: '800',
     color: '#065F46',
   },
   detailStatsGrid: {
@@ -923,23 +953,23 @@ const attStyles = StyleSheet.create({
     alignItems: 'center',
   },
   detailStatNumGreen: {
-    fontSize: 17,
+    fontSize: 20,
     fontWeight: '800',
     color: '#10B981',
   },
   detailStatNumOrange: {
-    fontSize: 17,
+    fontSize: 20,
     fontWeight: '800',
     color: '#F66B17',
   },
   detailStatNumGray: {
-    fontSize: 17,
+    fontSize: 20,
     fontWeight: '800',
     color: '#64748B',
   },
   detailStatLabel: {
-    fontSize: 11,
-    color: '#94A3B8',
+    fontSize: 13,
+    color: '#64748B',
     fontWeight: '600',
     marginTop: 2,
   },
@@ -947,7 +977,7 @@ const attStyles = StyleSheet.create({
     marginBottom: 16,
   },
   sectionTitle: {
-    fontSize: 15,
+    fontSize: 16,
     fontWeight: '800',
     color: '#0F1E36',
     marginBottom: 12,
@@ -985,46 +1015,55 @@ const attStyles = StyleSheet.create({
     borderRadius: 16,
     padding: 14,
     marginBottom: 12,
-    borderWidth: StyleSheet.hairlineWidth,
-    borderColor: '#EFF2F6',
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
     gap: 8,
+    shadowColor: '#0F1E36',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.03,
+    shadowRadius: 4,
+    elevation: 1,
   },
   sessionCardHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
+    flexWrap: 'wrap',
+    gap: 8,
   },
   sessionCardTitle: {
-    fontSize: 14,
-    fontWeight: '700',
+    fontSize: 15.5,
+    fontWeight: '800',
     color: '#0F1E36',
+    flexShrink: 1,
+    lineHeight: 22,
   },
   workedBadge: {
     backgroundColor: '#EDFAF2',
-    paddingHorizontal: 8,
-    paddingVertical: 2,
+    paddingHorizontal: 10,
+    paddingVertical: 3,
     borderRadius: 8,
   },
   workedBadgeText: {
-    fontSize: 11,
-    fontWeight: '700',
+    fontSize: 13,
+    fontWeight: '800',
     color: '#065F46',
   },
   sessionTimes: {
-    fontSize: 13,
-    fontWeight: '700',
+    fontSize: 15,
+    fontWeight: '800',
     color: '#0F1E36',
   },
   sessionRawTimes: {
-    fontSize: 11,
-    color: '#94A3B8',
+    fontSize: 13,
+    color: '#64748B',
   },
   rulesCard: {
     backgroundColor: '#F8FAFC',
     borderRadius: 16,
     padding: 14,
     marginBottom: 14,
-    borderWidth: StyleSheet.hairlineWidth,
+    borderWidth: 1,
     borderColor: '#E2E8F0',
   },
   rulesHeader: {
@@ -1033,14 +1072,14 @@ const attStyles = StyleSheet.create({
     alignItems: 'center',
   },
   rulesTitle: {
-    fontSize: 13,
-    fontWeight: '700',
-    color: '#475569',
+    fontSize: 14.5,
+    fontWeight: '800',
+    color: '#334155',
   },
   rulesContent: {
-    fontSize: 12,
+    fontSize: 13.5,
     color: '#64748B',
-    lineHeight: 18,
+    lineHeight: 20,
     marginTop: 8,
   },
   modalOverlay: {
@@ -1079,13 +1118,13 @@ const attStyles = StyleSheet.create({
     marginBottom: 4,
   },
   modalSubtitle: {
-    fontSize: 13,
+    fontSize: 14,
     color: '#64748B',
     marginBottom: 14,
   },
   historyRowText: {
-    fontSize: 12,
-    color: '#475569',
+    fontSize: 13.5,
+    color: '#334155',
     marginBottom: 6,
   },
 });

@@ -67,7 +67,7 @@ it('offers camera and gallery, and rejects a blurry capture before selecting it'
   const changed = vi.fn();
   const validate = vi
     .fn()
-    .mockRejectedValueOnce(new Error(t('documents.IMAGE_BLURRY')))
+    .mockRejectedValueOnce(new Error('Synthetic blurry document'))
     .mockResolvedValue(undefined);
   await act(async () => {
     root = create(
@@ -79,7 +79,7 @@ it('offers camera and gallery, and rejects a blurry capture before selecting it'
     button(t('documents.camera')).props.onPress();
   });
   expect(changed).not.toHaveBeenCalled();
-  expect(JSON.stringify(root.toJSON())).toContain(t('documents.IMAGE_BLURRY'));
+  expect(JSON.stringify(root.toJSON())).toContain('Synthetic blurry document');
   expect(native.deleted).toContain('cache://document.jpg');
   await act(async () => {
     button(t('documents.camera')).props.onPress();
