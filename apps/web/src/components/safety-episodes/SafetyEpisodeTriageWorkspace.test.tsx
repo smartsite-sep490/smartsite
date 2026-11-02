@@ -307,11 +307,15 @@ describe('SafetyEpisodeTriageWorkspace', () => {
     expect(client.listSafetyEpisodeInbox).toHaveBeenCalledTimes(1);
     expect(screen.queryByTestId('tracked-episode-workspace')).toBeNull();
 
+    openTrackedBtn.focus();
     fireEvent.click(openTrackedBtn);
 
     expect(await screen.findByTestId('tracked-episode-workspace')).toBeTruthy();
     expect(screen.getByTestId('safety-triage-site-label').textContent).toBe('North Tower');
     expect(screen.getByTestId('safety-triage-detail-heading').textContent).toBe('Hồ sơ theo dõi');
+    await waitFor(() => {
+      expect(document.activeElement).toBe(screen.getByTestId('safety-triage-detail-heading'));
+    });
 
     const inboxPane = screen.getByTestId('safety-episode-triage-inbox-pane');
     expect(inboxPane.hidden).toBe(true);
@@ -359,10 +363,65 @@ describe('SafetyEpisodeTriageWorkspace', () => {
 
     fireEvent.click(screen.getByTestId('safety-triage-back-button'));
 
+    await waitFor(() => expect(document.activeElement).toBe(openTrackedBtn));
+
     expect(screen.queryByTestId('tracked-episode-workspace')).toBeNull();
     expect(screen.queryByTestId('safety-episode-triage-detail-pane')).toBeNull();
     expect(inboxPane.hidden).toBe(false);
     expect(client.listSafetyEpisodeInbox).toHaveBeenCalledTimes(1);
+  });
+
+  it('returns focus to the inbox pane if the original opener becomes unavailable', async () => {
+    const queryClient = makeQueryClient();
+    render(
+      <QueryClientProvider client={queryClient}>
+        <SafetyEpisodeTriageWorkspace
+          client={makeMockClient()}
+          token="synthetic-triage-token"
+          scopeKey="synthetic-focus-scope"
+          apiUrl="http://localhost:4000"
+          sites={SITES_AB}
+          onOpenEventLocal={vi.fn()}
+        />
+      </QueryClientProvider>,
+    );
+    const opener = await screen.findByTestId<HTMLButtonElement>(
+      `safety-inbox-open-${RECIPIENT_A_ID}`,
+    );
+    opener.focus();
+    fireEvent.click(opener);
+    await waitFor(() =>
+      expect(document.activeElement).toBe(screen.getByTestId('safety-triage-detail-heading')),
+    );
+    opener.disabled = true;
+    fireEvent.click(screen.getByTestId('safety-triage-back-button'));
+    await waitFor(() =>
+      expect(document.activeElement).toBe(screen.getByTestId('safety-episode-triage-inbox-pane')),
+    );
+    queryClient.clear();
+  });
+
+  it('returns to the opened row when pointer activation leaves another inbox control focused', async () => {
+    const queryClient = makeQueryClient();
+    render(
+      <QueryClientProvider client={queryClient}>
+        <SafetyEpisodeTriageWorkspace
+          client={makeMockClient()}
+          token="synthetic-pointer-token"
+          scopeKey="synthetic-pointer-scope"
+          apiUrl="http://localhost:4000"
+          sites={SITES_AB}
+          onOpenEventLocal={vi.fn()}
+        />
+      </QueryClientProvider>,
+    );
+    const opener = await screen.findByTestId(`safety-inbox-open-${RECIPIENT_A_ID}`);
+    screen.getByTestId('safety-inbox-site-filter-all').focus();
+    fireEvent.click(opener);
+    await screen.findByTestId('safety-triage-detail-heading');
+    fireEvent.click(screen.getByTestId('safety-triage-back-button'));
+    await waitFor(() => expect(document.activeElement).toBe(opener));
+    queryClient.clear();
   });
 
   it('delegates an EVENT_LOCAL row to onOpenEventLocal with the exact item and makes zero TRACKED detail fetches', async () => {

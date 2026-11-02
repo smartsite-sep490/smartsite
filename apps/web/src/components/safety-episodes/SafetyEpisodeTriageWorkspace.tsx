@@ -1,4 +1,4 @@
-import { useCallback, useId, useState } from 'react';
+import { useCallback, useEffect, useId, useRef, useState } from 'react';
 import type { SmartSiteManagementClient } from '@smartsite/api-client';
 import type { SafetyEpisodeInboxItem } from '@smartsite/contracts/safety-episodes';
 import { useTranslation } from 'react-i18next';
@@ -55,6 +55,42 @@ interface TriageScopeSnapshot {
   apiUrl: string;
   sortedSiteIdsKey: string;
   generation: number;
+}
+
+interface StoredInboxOpener {
+  recipientId: string;
+  element: HTMLElement | null;
+}
+
+type PendingFocusTransition = 'DETAIL_HEADING' | 'INBOX_OPENER';
+
+function findInboxOpenerButton(
+  container: HTMLElement | null,
+  recipientId: string,
+): HTMLElement | null {
+  if (!container || !recipientId) {
+    return null;
+  }
+  const targetTestId = `safety-inbox-open-${recipientId}`;
+  for (const button of container.querySelectorAll<HTMLElement>('button[data-testid]')) {
+    if (button.getAttribute('data-testid') === targetTestId) {
+      return button;
+    }
+  }
+  return null;
+}
+
+function isFocusableInVisibleInbox(
+  element: HTMLElement | null,
+  inboxPane: HTMLElement,
+): element is HTMLElement {
+  if (!element || !element.isConnected || !inboxPane.contains(element)) {
+    return false;
+  }
+  if (element.closest('[hidden]') || element.getAttribute('aria-disabled') === 'true') {
+    return false;
+  }
+  return !(element instanceof HTMLButtonElement && element.disabled);
 }
 
 function normalizeSites(sites: readonly SafetyEpisodeTriageSiteOption[]): NormalizedSiteOption[] {
@@ -155,6 +191,11 @@ function SafetyEpisodeTriageWorkspaceInner({
   const [showSelectionTechnical, setShowSelectionTechnical] = useState(false);
   const [isInboxHardDenied, setIsInboxHardDenied] = useState(false);
 
+  const inboxPaneRef = useRef<HTMLDivElement | null>(null);
+  const detailHeadingRef = useRef<HTMLHeadingElement | null>(null);
+  const storedOpenerRef = useRef<StoredInboxOpener | null>(null);
+  const pendingFocusTransitionRef = useRef<PendingFocusTransition | null>(null);
+
   const hasValidScope = Boolean(
     token.trim() && scopeKey.trim() && apiUrl.trim() && allowedSites.length > 0,
   );
@@ -176,10 +217,64 @@ function SafetyEpisodeTriageWorkspaceInner({
     activeTracked !== null ? (allowedSiteMap.get(activeTracked.siteKey) ?? null) : null;
 
   const handleInboxHardDenied = useCallback(() => {
+    storedOpenerRef.current = null;
+    pendingFocusTransitionRef.current = null;
     setIsInboxHardDenied(true);
     setSelectedTracked(null);
     setShowSelectionTechnical(false);
   }, []);
+
+  useEffect(() => {
+    const transition = pendingFocusTransitionRef.current;
+    if (!transition) {
+      return;
+    }
+
+    if (transition === 'DETAIL_HEADING') {
+      if (!activeTracked) {
+        return;
+      }
+      pendingFocusTransitionRef.current = null;
+      const heading = detailHeadingRef.current;
+      if (heading && heading.isConnected && !heading.closest('[hidden]')) {
+        heading.focus();
+      }
+      return;
+    }
+
+    if (transition === 'INBOX_OPENER' && activeTracked === null) {
+      pendingFocusTransitionRef.current = null;
+      const opener = storedOpenerRef.current;
+      storedOpenerRef.current = null;
+
+      if (!hasValidScope || isInboxHardDenied) {
+        return;
+      }
+
+      const inboxPane = inboxPaneRef.current;
+      if (
+        !inboxPane ||
+        !inboxPane.isConnected ||
+        inboxPane.hidden ||
+        inboxPane.closest('[hidden]')
+      ) {
+        return;
+      }
+
+      const openerCandidate = opener
+        ? isFocusableInVisibleInbox(opener.element, inboxPane)
+          ? opener.element
+          : findInboxOpenerButton(inboxPane, opener.recipientId)
+        : null;
+
+      if (isFocusableInVisibleInbox(openerCandidate, inboxPane)) {
+        openerCandidate.focus();
+        return;
+      }
+
+      inboxPane.focus();
+    }
+  }, [activeTracked, hasValidScope, isInboxHardDenied]);
 
   const handleOpenEpisode = (item: SafetyEpisodeInboxItem) => {
     if (!hasValidScope || isInboxHardDenied) {
@@ -219,6 +314,15 @@ function SafetyEpisodeTriageWorkspaceInner({
         return;
       }
 
+      const inboxPane = inboxPaneRef.current;
+      const openerElement = findInboxOpenerButton(inboxPane, recipientId);
+
+      storedOpenerRef.current = {
+        recipientId,
+        element: openerElement,
+      };
+      pendingFocusTransitionRef.current = 'DETAIL_HEADING';
+
       setShowSelectionTechnical(false);
       setSelectedTracked({
         recipientId,
@@ -232,6 +336,12 @@ function SafetyEpisodeTriageWorkspaceInner({
   };
 
   const handleBackToInbox = () => {
+    if (!hasValidScope || isInboxHardDenied) {
+      storedOpenerRef.current = null;
+      pendingFocusTransitionRef.current = null;
+      return;
+    }
+    pendingFocusTransitionRef.current = 'INBOX_OPENER';
     setSelectedTracked(null);
     setShowSelectionTechnical(false);
   };
@@ -239,9 +349,12 @@ function SafetyEpisodeTriageWorkspaceInner({
   return (
     <section className="space-y-4" data-testid="safety-episode-triage-workspace">
       <div
+        ref={inboxPaneRef}
+        tabIndex={-1}
         hidden={activeTracked !== null}
         aria-hidden={activeTracked !== null ? 'true' : undefined}
         data-testid="safety-episode-triage-inbox-pane"
+        className="rounded-lg outline-none focus-visible:ring-2 focus-visible:ring-slate-600 focus-visible:ring-offset-2"
       >
         <SafetyEpisodeInboxWorkspace
           client={client}
@@ -275,7 +388,9 @@ function SafetyEpisodeTriageWorkspaceInner({
                 </Badge>
 
                 <h2
-                  className="text-sm font-bold text-slate-900"
+                  ref={detailHeadingRef}
+                  tabIndex={-1}
+                  className="rounded-xs text-sm font-bold text-slate-900 outline-none focus-visible:ring-2 focus-visible:ring-[#071A2B]/20 focus-visible:ring-offset-1"
                   data-testid="safety-triage-detail-heading"
                 >
                   {t('safetyTriage.trackedHeading')}
