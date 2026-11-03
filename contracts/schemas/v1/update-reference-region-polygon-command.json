@@ -1,0 +1,27 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://smartsite.local/contracts/v1/update-reference-region-polygon-command.json",
+  "title": "UpdateReferenceRegionPolygonCommand",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "expectedConfigurationVersion",
+    "referenceId",
+    "viewRevision",
+    "confirmReferenceView",
+    "polygon"
+  ],
+  "properties": {
+    "expectedConfigurationVersion": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 9007199254740991
+    },
+    "referenceId": { "type": "string", "pattern": "^[0-9a-f]{8}(-[0-9a-f]{4}){3}-[0-9a-f]{12}$" },
+    "viewRevision": { "type": "integer", "minimum": 1, "maximum": 9007199254740991 },
+    "confirmReferenceView": { "const": true },
+    "polygon": {
+      "$ref": "https://smartsite.local/contracts/v1/camera-region-configuration.json#/$defs/polygon"
+    }
+  }
+}
