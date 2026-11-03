@@ -1,4 +1,15 @@
-import { Body, Controller, Get, Logger, Param, Post, Query, Req, UseGuards } from '@nestjs/common';
+import {
+  Body,
+  Controller,
+  Get,
+  Logger,
+  Param,
+  Patch,
+  Post,
+  Query,
+  Req,
+  UseGuards,
+} from '@nestjs/common';
 import {
   ApiBadRequestResponse,
   ApiBearerAuth,
@@ -18,7 +29,11 @@ import type { AuthenticatedRequest } from '../../auth/auth.service.js';
 import { SiteManagerGuard } from '../../auth/site-manager.guard.js';
 import { UserAuthGuard } from '../../auth/user-auth.guard.js';
 import { pagination } from '../../../common/http/pagination.js';
-import { AssignContractorRepresentativeDto, CreateContractorDto } from './dto/workforce.dto.js';
+import {
+  AssignContractorRepresentativeDto,
+  CreateContractorDto,
+  RenameSiteProfileDto,
+} from './dto/workforce.dto.js';
 import { WorkforceConfigurationService } from './workforce-configuration.service.js';
 
 function contractorResponse(contractor: ContractorEntity, siteId: string) {
@@ -56,6 +71,24 @@ export class ContractorsController {
   private readonly logger = new Logger(ContractorsController.name);
 
   constructor(private readonly workforce: WorkforceConfigurationService) {}
+
+  @Patch('contractors/:contractorId/name')
+  @UseGuards(SiteManagerGuard)
+  async rename(
+    @Req() request: AuthenticatedRequest,
+    @Param('siteId') siteId: string,
+    @Param('contractorId') contractorId: string,
+    @Body() input: RenameSiteProfileDto,
+  ) {
+    const result = await this.workforce.renameContractor(siteId, contractorId, input);
+    this.logger.log({
+      actorId: request.user!.id,
+      action: 'contractor.rename',
+      siteId,
+      resourceId: contractorId,
+    });
+    return result;
+  }
 
   @Post('contractors')
   @UseGuards(SiteManagerGuard)

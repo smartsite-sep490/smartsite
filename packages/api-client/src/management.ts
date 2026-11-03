@@ -11,6 +11,21 @@ import {
   MAX_CAMERA_APPLICATION_STATUS_RESPONSE_BYTES,
   parseScopedCameraApplicationStatus,
 } from './camera-configuration-response';
+import { parseSafetyEpisodeReadCommand } from '@smartsite/contracts/safety-episodes';
+import type {
+  SafetyEpisode,
+  SafetyEpisodePage,
+  SafetyEpisodeListOptions,
+  SafetyEpisodeInboxPage,
+  SafetyEpisodeInboxOptions,
+  SafetyEpisodeReadCommand,
+  SafetyEpisodeReadResponse,
+} from '@smartsite/contracts';
+import type {
+  CreateContractorRepresentativeCommand,
+  RenameSiteProfileCommand,
+  SiteProfileNameResponse,
+} from '@smartsite/contracts/management';
 import type {
   GrantTeamZoneCommand,
   TeamZoneSetupResponse,
@@ -160,8 +175,6 @@ import type {
   GateFacePresenceResponse,
   GateAccessLogResponse,
   EnrollmentCaptureTarget,
-  WorkerGatePermissionsResponse,
-  SetWorkerGatePermissionsCommand,
 } from '@smartsite/contracts';
 export type { SchedulingRequestStatus };
 
@@ -1712,6 +1725,39 @@ export class SmartSiteManagementClient {
       input,
     );
   }
+  createContractorRepresentative(
+    token: string,
+    siteId: string,
+    input: CreateContractorRepresentativeCommand,
+  ) {
+    return this.request<AccountResponse>(
+      'POST',
+      `/sites/${pathId(siteId)}/contractor-representative-accounts`,
+      token,
+      input,
+    );
+  }
+  renameContractor(token: string, siteId: string, id: string, input: RenameSiteProfileCommand) {
+    return this.request<SiteProfileNameResponse>(
+      'PATCH',
+      `/sites/${pathId(siteId)}/contractors/${pathId(id)}/name`,
+      token,
+      input,
+    );
+  }
+  renameSiteRepresentative(
+    token: string,
+    siteId: string,
+    id: string,
+    input: RenameSiteProfileCommand,
+  ) {
+    return this.request<SiteProfileNameResponse>(
+      'PATCH',
+      `/sites/${pathId(siteId)}/representative-accounts/${pathId(id)}/name`,
+      token,
+      input,
+    );
+  }
   listSiteRepresentatives(token: string, siteId: string, options?: PageOptions) {
     return this.request<Page<AccountResponse>>(
       'GET',
@@ -1752,6 +1798,80 @@ export class SmartSiteManagementClient {
   getSite(token: string, siteId: string) {
     return this.request<SiteResponse>('GET', `/sites/${pathId(siteId)}`, token);
   }
+  /** Prepared episode transport; callers must wait for Backend rollout before exposing this UI. */
+  listSafetyEpisodes(
+    token: string,
+    siteId: string,
+    options: SafetyEpisodeListOptions = {},
+    requestOptions?: RequestOptions,
+  ): Promise<SafetyEpisodePage> {
+    const query = new URLSearchParams();
+    for (const key of ['offset', 'limit', 'cameraId', 'zoneId'] as const)
+      if (options[key] !== undefined) query.set(key, String(options[key]));
+    const path = `/sites/${pathId(siteId)}/safety-episodes`;
+    return this.request(
+      'GET',
+      `${path}${query.size ? `?${query}` : ''}`,
+      token,
+      undefined,
+      undefined,
+      requestOptions,
+    );
+  }
+
+  getSafetyEpisode(
+    token: string,
+    siteId: string,
+    id: string,
+    requestOptions?: RequestOptions,
+  ): Promise<SafetyEpisode> {
+    return this.request(
+      'GET',
+      `/sites/${pathId(siteId)}/safety-episodes/${pathId(id)}`,
+      token,
+      undefined,
+      undefined,
+      requestOptions,
+    );
+  }
+
+  listSafetyEpisodeInbox(
+    token: string,
+    options: SafetyEpisodeInboxOptions = {},
+    requestOptions?: RequestOptions,
+  ): Promise<SafetyEpisodeInboxPage> {
+    const query = new URLSearchParams();
+    for (const key of ['offset', 'limit', 'siteId', 'readStatus'] as const)
+      if (options[key] !== undefined) query.set(key, String(options[key]));
+    return this.request(
+      'GET',
+      `/me/safety-episode-inbox${query.size ? `?${query}` : ''}`,
+      token,
+      undefined,
+      undefined,
+      requestOptions,
+    );
+  }
+
+  async readSafetyEpisodeInbox(
+    token: string,
+    id: string,
+    input: SafetyEpisodeReadCommand,
+    requestOptions?: RequestOptions,
+  ): Promise<SafetyEpisodeReadResponse> {
+    const body = parseSafetyEpisodeReadCommand(input);
+    if (!body)
+      throw new TypeError('Expected a positive safe integer seenRevision and no other fields');
+    return this.request(
+      'PATCH',
+      `/me/safety-episode-inbox/${pathId(id)}/read`,
+      token,
+      body,
+      undefined,
+      requestOptions,
+    );
+  }
+
   listSafetyAlerts(
     token: string,
     siteId: string,
@@ -1958,6 +2078,22 @@ export class SmartSiteManagementClient {
       { timeoutMs: 60_000 },
     );
   }
+  checkWorkerDocumentImageQuality(
+    token: string,
+    siteId: string,
+    workerId: string,
+    file: UploadFile,
+  ) {
+    const form = new FormData();
+    appendFile(form, 'file', file);
+    return this.requestFormData<import('@smartsite/contracts').DocumentImageQuality>(
+      'POST',
+      `/sites/${pathId(siteId)}/workers/${pathId(workerId)}/document-image-quality`,
+      token,
+      form,
+      { timeoutMs: 60_000 },
+    );
+  }
   uploadWorkerIdentityImage(
     token: string,
     siteId: string,
@@ -2006,6 +2142,28 @@ export class SmartSiteManagementClient {
       token,
       {},
       undefined,
+      { timeoutMs: 60_000 },
+    );
+  }
+  checkWorkerDocumentDates(
+    token: string,
+    siteId: string,
+    workerId: string,
+    kind: WorkerDocumentKind,
+    file: UploadFile,
+    input: import('@smartsite/contracts').UploadWorkerDocumentCommand,
+  ) {
+    const form = new FormData();
+    appendFile(form, 'file', file);
+    if (input.submittedExpiresOn !== undefined)
+      form.append('submittedExpiresOn', input.submittedExpiresOn);
+    if (input.submittedIssuedOn !== undefined)
+      form.append('submittedIssuedOn', input.submittedIssuedOn);
+    return this.requestFormData<import('@smartsite/contracts').WorkerDocumentCheckResponse>(
+      'POST',
+      `/sites/${pathId(siteId)}/workers/${pathId(workerId)}/documents/${pathId(kind)}/check`,
+      token,
+      form,
       { timeoutMs: 60_000 },
     );
   }
@@ -2216,26 +2374,6 @@ export class SmartSiteManagementClient {
       form,
     );
   }
-  getWorkerGatePermissions(token: string, siteId: string, workerId: string) {
-    return this.request<WorkerGatePermissionsResponse>(
-      'GET',
-      `/sites/${pathId(siteId)}/workers/${pathId(workerId)}/gate-permissions`,
-      token,
-    );
-  }
-  setWorkerGatePermissions(
-    token: string,
-    siteId: string,
-    workerId: string,
-    input: SetWorkerGatePermissionsCommand,
-  ) {
-    return this.request<WorkerGatePermissionsResponse>(
-      'PUT',
-      `/sites/${pathId(siteId)}/workers/${pathId(workerId)}/gate-permissions`,
-      token,
-      input,
-    );
-  }
   uploadFaceEnrollmentSample(token: string, sessionId: string, sample: Blob | NativeUploadFile) {
     const form = new FormData();
     appendFile(form, 'sample', sample, 'face-sample.jpg');
@@ -2341,18 +2479,29 @@ export class SmartSiteManagementClient {
   ) {
     return this.request<CameraResponse>('POST', `/sites/${pathId(siteId)}/cameras`, token, input);
   }
-  listCameras(token: string, siteId: string, options?: PageOptions) {
+  listCameras(
+    token: string,
+    siteId: string,
+    options?: PageOptions,
+    requestOptions?: RequestOptions,
+  ) {
     return this.request<Page<CameraResponse>>(
       'GET',
       this.listPath(`/sites/${pathId(siteId)}/cameras`, options),
       token,
+      undefined,
+      undefined,
+      requestOptions,
     );
   }
-  getCamera(token: string, siteId: string, cameraId: string) {
+  getCamera(token: string, siteId: string, cameraId: string, options?: RequestOptions) {
     return this.request<CameraResponse>(
       'GET',
       `/sites/${pathId(siteId)}/cameras/${pathId(cameraId)}`,
       token,
+      undefined,
+      undefined,
+      options,
     );
   }
 
@@ -2446,11 +2595,14 @@ export class SmartSiteManagementClient {
   ) {
     return this.request<ZoneResponse>('POST', `/sites/${pathId(siteId)}/zones`, token, input);
   }
-  listZones(token: string, siteId: string, options?: PageOptions) {
+  listZones(token: string, siteId: string, options?: PageOptions, requestOptions?: RequestOptions) {
     return this.request<Page<ZoneResponse>>(
       'GET',
       this.listPath(`/sites/${pathId(siteId)}/zones`, options),
       token,
+      undefined,
+      undefined,
+      requestOptions,
     );
   }
   getZone(token: string, siteId: string, zoneId: string) {
@@ -2466,6 +2618,13 @@ export class SmartSiteManagementClient {
       `/sites/${pathId(siteId)}/zones/${pathId(zoneId)}`,
       token,
       { name },
+    );
+  }
+  deleteZone(token: string, siteId: string, zoneId: string) {
+    return this.request<{ id: string }>(
+      'DELETE',
+      `/sites/${pathId(siteId)}/zones/${pathId(zoneId)}`,
+      token,
     );
   }
   updateZonePolicy(
@@ -2499,11 +2658,20 @@ export class SmartSiteManagementClient {
       input,
     );
   }
-  listRegions(token: string, siteId: string, cameraId: string, options?: PageOptions) {
+  listRegions(
+    token: string,
+    siteId: string,
+    cameraId: string,
+    options?: PageOptions,
+    requestOptions?: RequestOptions,
+  ) {
     return this.request<Page<RegionResponse>>(
       'GET',
       this.listPath(`/sites/${pathId(siteId)}/cameras/${pathId(cameraId)}/regions`, options),
       token,
+      undefined,
+      undefined,
+      requestOptions,
     );
   }
   getRegion(token: string, siteId: string, cameraId: string, regionId: string) {

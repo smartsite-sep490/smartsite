@@ -93,6 +93,22 @@ export class SafetyAlertReviewService {
         return { alert: replayAlert, review: existing, replayed: true };
       }
 
+      // Episode before finding: shares the acknowledgement/projection lock order.
+      // JSON projection also supports historical schemas without episode_id.
+      const [binding]: { episode_id: string | null }[] = await manager.query(
+        `SELECT to_jsonb(a)->>'episode_id' AS episode_id FROM safety_alert a WHERE a.id=$1 AND a.site_id=$2`,
+        [scopedAlertId, scopedSiteId],
+      );
+      if (!binding) missing();
+      let episode: { id: string; content_revision: number } | undefined;
+      if (binding.episode_id) {
+        [episode] = await manager.query(
+          'SELECT id,content_revision FROM safety_episode WHERE id=$1 AND site_id=$2 FOR UPDATE',
+          [binding.episode_id, scopedSiteId],
+        );
+        if (!episode) conflict('Safety episode scope is inconsistent');
+        if (episode.content_revision === 2147483647) conflict('Safety episode revision exhausted');
+      }
       const alertRepository = manager.getRepository(SafetyAlertEntity);
       const alert = await alertRepository
         .createQueryBuilder('alert')
@@ -101,6 +117,13 @@ export class SafetyAlertReviewService {
         .andWhere('alert.siteId = :siteId', { siteId: scopedSiteId })
         .getOne();
       if (!alert) missing();
+      const [currentBinding]: { episode_id: string | null }[] = await manager.query(
+        `SELECT to_jsonb(a)->>'episode_id' AS episode_id FROM safety_alert a WHERE a.id=$1 AND a.site_id=$2`,
+        [scopedAlertId, scopedSiteId],
+      );
+      // A concurrent projection may have attached a formerly legacy finding while we waited.
+      if (!currentBinding || currentBinding.episode_id !== binding.episode_id)
+        conflict('Safety episode binding changed; retry the review');
       if (alert.revision !== value.expectedRevision) {
         conflict('Safety alert revision is stale');
       }
@@ -122,6 +145,14 @@ export class SafetyAlertReviewService {
         reason: value.reason,
         alertRevision: updatedAlert.revision,
       });
+      if (episode) {
+        const updated: { id: string }[] = await manager.query(
+          `WITH changed AS (UPDATE safety_episode SET content_revision=content_revision+1
+            WHERE id=$1 AND site_id=$2 AND content_revision=$3 RETURNING id) SELECT id FROM changed`,
+          [episode.id, scopedSiteId, episode.content_revision],
+        );
+        if (updated.length !== 1) conflict('Safety episode revision changed');
+      }
       return { alert: updatedAlert, review, replayed: false };
     });
   }

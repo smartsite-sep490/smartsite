@@ -6,6 +6,7 @@ import {
   ZoneAccessGrantEntity,
 } from '../src/database/entities/zone-access-grant.entity.js';
 import { WorkerEntity } from '../src/database/entities/worker.entity.js';
+import { ZoneEntity } from '../src/database/entities/zone.entity.js';
 import { ZoneRestrictionPolicy } from '../src/database/entities/enums.js';
 import { ZoneAuthorizationService } from '../src/modules/zones/zone-authorization.service.js';
 import {
@@ -54,7 +55,11 @@ function matches(row: object, criteria: Record<string, unknown>): boolean {
   );
 }
 
-function createManager(workers: WorkerEntity[], grants: ZoneAccessGrantEntity[]) {
+function createManager(
+  workers: WorkerEntity[],
+  grants: ZoneAccessGrantEntity[],
+  zoneAvailable = true,
+) {
   const workerQueries: Record<string, unknown>[] = [];
   const grantQueries: Record<string, unknown>[] = [];
   const manager = {
@@ -73,6 +78,8 @@ function createManager(workers: WorkerEntity[], grants: ZoneAccessGrantEntity[])
         .map((g) => ({ validFrom: g.validFrom, validUntil: g.validUntil }));
     },
     getRepository(target: unknown) {
+      if (target === ZoneEntity)
+        return { findOneBy: async () => (zoneAvailable ? { id: zoneId, siteId } : null) };
       if (target === WorkerEntity) {
         return {
           findOneBy: async (criteria: Record<string, unknown>) => {
@@ -109,6 +116,15 @@ function decisionInput(overrides: Partial<ZoneEntryDecisionInput> = {}): ZoneEnt
 function service(): ZoneEntryAuthorizationService {
   return new ZoneEntryAuthorizationService(new ZoneAuthorizationService());
 }
+
+test('ZoneEntryAuthorizationService: unavailable or deleted Zone cannot grant entry even with unrestricted policy', async () => {
+  const { manager } = createManager([worker()], [allowGrant()], false);
+  const result = await service().decide(
+    manager,
+    decisionInput({ verifiedWorkerId: workerId, restrictionPolicy: ZoneRestrictionPolicy.NONE }),
+  );
+  assert.equal(result.status, 'UNAVAILABLE');
+});
 
 test('ZoneEntryAuthorizationService: an inactive verified worker cannot use an allow grant', async () => {
   const { manager, workerQueries, grantQueries } = createManager(

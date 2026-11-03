@@ -12,6 +12,10 @@ import { translate as tr } from '../../../i18n';
 import { userErrorMessage } from '../../../i18n/messages';
 import { DocumentMediaPicker } from './DocumentMediaPicker';
 import { DocumentIdentityNotice } from './DocumentIdentityNotice';
+import {
+  WorkerCertificateSubmission,
+  WorkerDocumentDateNotice,
+} from './WorkerCertificateSubmission';
 import { documentKinds } from './worker-document-files';
 import {
   IconEye,
@@ -114,11 +118,13 @@ interface Props {
   workerId: string;
   scope: string;
   canUpload?: boolean;
+  canSubmitDocuments?: boolean;
   canReview?: boolean;
 }
 
 export function WorkerDocumentsPanel(p: Props) {
   useTranslation();
+  const canUploadCertificates = p.canUpload || p.canSubmitDocuments;
   const cache = useQueryClient();
   const key = ['worker-documents', p.scope, p.siteId, p.workerId];
 
@@ -128,7 +134,6 @@ export function WorkerDocumentsPanel(p: Props) {
   });
 
   const [preview, setPreview] = useState<{ url: string; type: string } | null>(null);
-  const [expiries, setExpiries] = useState<Partial<Record<WorkerDocumentKind, string>>>({});
 
   const allSections = ['IDENTITY', ...documentKinds];
   const [sectionChoices, setSectionChoices] = useState<Record<string, boolean>>({});
@@ -250,8 +255,11 @@ export function WorkerDocumentsPanel(p: Props) {
           </div>
         </div>
 
+        {p.canSubmitDocuments && (
+          <p className="text-xs text-slate-600">{tr('documents.renewalHint')}</p>
+        )}
         {/* Read-only warning for workers */}
-        {!p.canUpload && !p.canReview && data.status !== 'ACTIVE' && (
+        {!canUploadCertificates && !p.canReview && data.status !== 'ACTIVE' && (
           <p
             role="status"
             className="text-xs font-semibold text-amber-800 bg-amber-50/80 border border-amber-200 rounded-xl p-2.5 leading-relaxed"
@@ -549,6 +557,9 @@ export function WorkerDocumentsPanel(p: Props) {
                   )}
 
                 <DocumentIdentityNotice check={doc.identityCheck} reference={data.nationalId} />
+                {doc.status === 'PENDING' && doc.dateCheck && (
+                  <WorkerDocumentDateNotice check={doc.dateCheck} />
+                )}
 
                 <div className="flex flex-wrap items-center gap-2 pt-1">
                   <button
@@ -575,7 +586,7 @@ export function WorkerDocumentsPanel(p: Props) {
                 {/* Pending controls: Expiry editor, OCR hint, Safety review */}
                 {doc.status === 'PENDING' && (
                   <div className="space-y-3 pt-3 border-t border-slate-200/70">
-                    {p.canUpload && (
+                    {canUploadCertificates && (
                       <SubmittedExpiryEditor
                         key={`${doc.id}:${doc.version}`}
                         doc={doc}
@@ -773,73 +784,28 @@ export function WorkerDocumentsPanel(p: Props) {
                   <div className="space-y-3">{current.map(render)}</div>
 
                   {/* Upload replacement */}
-                  {p.canUpload && data.contractorId && (
-                    <div className="space-y-3 rounded-2xl border border-slate-200/80 bg-slate-50/60 p-4 sm:p-5 mt-4">
-                      <p className="text-xs font-extrabold uppercase tracking-wider text-slate-700">
-                        {tr('documents.upload')} — {tr(`documents.${kind}`)}
-                      </p>
-                      <label className="block text-xs font-bold text-slate-700 space-y-1">
-                        <span>
-                          {tr(`documents.${kind}`)} -{' '}
-                          {tr(
-                            kind === 'HEALTH_CERTIFICATE'
-                              ? 'documents.submittedIssuedOn'
-                              : 'documents.submittedExpiresOn',
-                          )}
-                        </span>
-                        <input
-                          className={fieldClass}
-                          type="date"
-                          disabled={action.isPending}
-                          value={expiries[kind] ?? ''}
-                          onChange={(event) =>
-                            setExpiries((previous) => ({ ...previous, [kind]: event.target.value }))
-                          }
-                        />
-                      </label>
-                      <p className="text-xs text-slate-500">
-                        {tr(
-                          kind === 'HEALTH_CERTIFICATE'
-                            ? 'documents.healthExpiryRule'
-                            : 'documents.submittedExpiryHint',
-                        )}{' '}
-                        {kind === 'HEALTH_CERTIFICATE'
-                          ? (healthCertificateExpiry(expiries[kind]) ?? '')
-                          : ''}
-                      </p>
-                      <DocumentMediaPicker
-                        label={`${tr('documents.upload')} — ${tr(`documents.${kind}`)}`}
-                        disabled={action.isPending}
-                        validate={async (file) => {
-                          const result = await p.client.checkDocumentImageQuality(
+                  {canUploadCertificates && (p.canSubmitDocuments || data.contractorId) && (
+                    <WorkerCertificateSubmission
+                      client={p.client}
+                      token={p.token}
+                      siteId={p.siteId}
+                      workerId={p.workerId}
+                      kind={kind}
+                      requireDate={!!p.canSubmitDocuments}
+                      disabled={action.isPending}
+                      onSubmit={(file, dates) =>
+                        action.mutateAsync(() =>
+                          p.client.uploadWorkerDocument(
                             p.token,
                             p.siteId,
-                            data.contractorId!,
+                            p.workerId,
+                            kind,
                             file,
-                          );
-                          if (result.status !== 'ACCEPTED')
-                            throw new Error(tr(`documents.${result.reason}`));
-                        }}
-                        onSelect={(file) =>
-                          action
-                            .mutateAsync(() =>
-                              p.client.uploadWorkerDocument(
-                                p.token,
-                                p.siteId,
-                                p.workerId,
-                                kind,
-                                file,
-                                expiries[kind]
-                                  ? kind === 'HEALTH_CERTIFICATE'
-                                    ? { submittedIssuedOn: expiries[kind] }
-                                    : { submittedExpiresOn: expiries[kind] }
-                                  : {},
-                              ),
-                            )
-                            .then(() => {})
-                        }
-                      />
-                    </div>
+                            dates,
+                          ),
+                        )
+                      }
+                    />
                   )}
 
                   {/* Audit / Revisions History */}
