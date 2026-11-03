@@ -49,3 +49,17 @@ export class AssignContractorRepresentativeDto {
   @IsUUID()
   userId!: string;
 }
+
+export class RenameSiteProfileDto {
+  @Transform(trim)
+  @IsString()
+  @IsNotEmpty()
+  @MaxLength(255)
+  @Matches(safeText)
+  name!: string;
+  @IsString()
+  @IsNotEmpty()
+  @MaxLength(255)
+  @Matches(safeText)
+  expectedName!: string;
+}

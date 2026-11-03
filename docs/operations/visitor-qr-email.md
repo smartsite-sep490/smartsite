@@ -66,6 +66,20 @@ passage has one history row with the actual count; expanding it shows immutable 
 previous identities for replacements. Partial arrivals count as inside, without triggering legacy
 reconciliation. Old count-only registrations keep their existing whole-group confirmation.
 
+## Registration Status and Physical Presence
+
+Visitor tracking strictly separates registration lifecycle status from physical presence:
+- **Canonical statuses:** `PENDING`, `APPROVED`, `REJECTED`, `CANCELLED`, `EXPIRED`. No synthetic statuses such as `COMPLETED` or `INSIDE` replace registration authority.
+- **Physical presence:** Tracked independently across table, cards, and detail modal as:
+  - *Not yet entered:* No gate entry has been recorded (`enteredCount === 0`).
+  - *Currently on-site:* One or more attendees are physically inside (`enteredCount > exitedCount`), displaying both headcount inside and group size (`inside/groupSize`).
+  - *Everyone checked out:* Entry occurred previously and all attendees have departed (`enteredCount > 0 && enteredCount === exitedCount`).
+  - *Needs review:* Legacy partial-arrival records without an individual roster that require manual reconciliation.
+- **Combined filtering:** The UI provides primary filtering across all canonical statuses (`All`, `Pending`, `Approved`, `Rejected`, `Cancelled`, `Expired`) plus a separate quick toggle for `On-Site only`. This ensures cancelled or expired visits with individuals still inside remain immediately discoverable.
+- **Automatic expiration:** Overdue `PENDING` and `APPROVED` visits automatically transition to `EXPIRED` once `validUntil` passes, evaluated consistently across backend reads, management listings, and gate decision endpoints, without requiring the visitor to open the public tracking pass.
+- **Departures after expiration/cancellation:** Once expired or cancelled, new entries (`direction === 'IN'`) are rejected fail-closed, while departures (`direction === 'OUT'`) for attendees already on-site remain permitted until everyone has departed. Checked out does not end an otherwise valid approved visit.
+- **Summary metrics and bounded lists:** Management listings return site-wide aggregates (`totalVisits`, `pendingVisits`, `approvedValidVisits`, `onSitePeople`) computed across the whole site in SQL, clearly distinguishing visit counts from headcounts. When the query results are capped (e.g. 100 items), the UI displays a clear bounded-list hint rather than silently claiming whole-site totals.
+
 ## Verification
 
 Use only the dedicated local `smartsite_test` PostgreSQL service for integration tests. Email tests

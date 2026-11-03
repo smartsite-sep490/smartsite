@@ -1,6 +1,7 @@
 import {
   Body,
   Controller,
+  Delete,
   Get,
   Logger,
   Param,
@@ -66,6 +67,23 @@ function zoneResponse(zone: ZoneEntity) {
 export class ZonesController {
   private readonly logger = new Logger(ZonesController.name);
   constructor(private readonly zones: ZoneConfigurationService) {}
+
+  @Delete(':zoneId')
+  @UseGuards(SiteManagerGuard)
+  async remove(
+    @Req() request: AuthenticatedRequest,
+    @Param('siteId') siteId: string,
+    @Param('zoneId') zoneId: string,
+  ) {
+    const result = await this.zones.remove(siteId, zoneId);
+    this.logger.log({
+      actorId: request.user!.id,
+      action: 'zone.delete',
+      siteId,
+      resourceId: zoneId,
+    });
+    return result;
+  }
 
   @Post()
   @UseGuards(SiteManagerGuard)
