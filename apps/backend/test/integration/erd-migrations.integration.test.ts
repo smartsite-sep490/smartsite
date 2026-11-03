@@ -25,11 +25,14 @@ test('ERD migrations preserve legacy visitor counts, revoke old QR and refuse a 
     );
     const baseline = migrations.filter(
       (m) =>
+        Number((m.name ?? m.constructor.name).slice(-13)) < 1794960000000 &&
         !(m.name ?? m.constructor.name).startsWith('Erd') &&
         // Team Zone permissions depend on ERD Contractor permissions; they are not a legacy baseline.
         !(m.name ?? m.constructor.name).startsWith('TeamZonePermissions') &&
         !(m.name ?? m.constructor.name).startsWith('ContractorZoneRegrant') &&
         !(m.name ?? m.constructor.name).startsWith('SingleTeamZone') &&
+        // Zone deletion references ERD Contractor/Visitor permissions, absent in this baseline.
+        !(m.name ?? m.constructor.name).startsWith('ZoneSoftDeletion') &&
         // Safety purpose metadata requires ErdFaceConsent; it is not part of this pre-ERD baseline.
         !(m.name ?? m.constructor.name).startsWith('CanonicalSafetyFaceProvenance') &&
         m.name !== 'ShiftBreak1791763200001' &&

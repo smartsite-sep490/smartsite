@@ -1,4 +1,5 @@
 import { DataSource, type EntityManager } from 'typeorm';
+import { databaseErrorCode, isDatabaseConnectionFailure } from '../../common/database-errors.js';
 import type { ConfigService } from '@nestjs/config';
 import type { BackendEnvironment } from '../../config/environment.js';
 import { hasMainAuthorityCapture } from '../../common/configuration/main-authority-capture-preflight.js';
@@ -296,28 +297,8 @@ export class MainQualifiedAuthorityReader {
   ): MainQualifiedAuthorityResult {
     if (error instanceof MainAuthoritySnapshotUnavailable)
       return unavailable('SNAPSHOT_FENCE_REQUIRED');
-    // Pool acquisition failures are plain driver errors, not QueryFailedError instances.
-    const candidate = error as {
-      code?: unknown;
-      driverError?: { code?: unknown };
-      cause?: { code?: unknown };
-    } | null;
-    const rawCode = candidate?.driverError?.code ?? candidate?.cause?.code ?? candidate?.code;
-    const code = typeof rawCode === 'string' ? rawCode : undefined;
-    if (
-      code &&
-      (code.startsWith('08') ||
-        [
-          '57P01',
-          '57P02',
-          '57P03',
-          'ECONNREFUSED',
-          'ECONNRESET',
-          'ETIMEDOUT',
-          'EHOSTUNREACH',
-        ].includes(code))
-    )
-      return unavailable('DATABASE_UNAVAILABLE');
+    const code = databaseErrorCode(error);
+    if (isDatabaseConnectionFailure(error)) return unavailable('DATABASE_UNAVAILABLE');
     if (rethrowRetryable && (code === '40001' || code === '40P01')) throw error;
     if (
       code &&

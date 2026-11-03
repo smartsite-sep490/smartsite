@@ -1,4 +1,5 @@
 export const CONTRACTS_VERSION = '1.0.0';
+export * from './camera-ppe-policy.js';
 export { PPE_ITEMS } from './ppe-items.js';
 export type { PpeItem } from './ppe-items.js';
 export type * from './attendance-reports-api.js';
@@ -53,14 +54,8 @@ export type { ObservationFramePartition } from './validation/schema-validator.js
 export { validateCameraRegionConfiguration } from './validation/schema-validator.js';
 
 export type { ValidationResult } from './validation/schema-validator.js';
-export { SITE_GATES } from './gate-permissions-api.js';
+export { SITE_GATES } from './gate-catalog.js';
 export { isPastWorkDate, isShiftEnded } from './scheduling-date.js';
-
-export type {
-  WorkerGatePermissionResponse,
-  WorkerGatePermissionsResponse,
-  SetWorkerGatePermissionsCommand,
-} from './gate-permissions-api.js';
 
 export {
   MAX_CAMERA_REGION_PAYLOAD_BYTES,
@@ -171,10 +166,11 @@ export * from './manager-overview-api.js';
 export * from './safety-overview-api.js';
 export * from './safety-checklist-api.js';
 export type * from './worker-documents-api.js';
-export { healthCertificateExpiry } from './worker-document-dates.js';
+export { healthCertificateExpiry, isWorkerDocumentDate } from './worker-document-dates.js';
 
 export { resolveEventLocalEpisodeSubject } from './safety-episode-subject.js';
 export type { EventLocalEpisodeSubject } from './safety-episode-subject.js';
+export * from './safety-episode-api.js';
 export {
   parseMf06AssessmentResponse,
   parseMf06AssessmentPage,

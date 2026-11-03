@@ -20,7 +20,6 @@
     },
     "plugins": [
       "expo-router",
-      "expo-dev-client",
       "expo-secure-store",
       "./plugins/with-windows-native-build.mjs",
       [

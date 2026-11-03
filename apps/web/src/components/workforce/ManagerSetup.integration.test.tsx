@@ -25,7 +25,7 @@ afterEach(() => {
   vi.restoreAllMocks();
 });
 
-it('manager creates contractors for their Site and configures Zones without administrative Site creation', async () => {
+async function setupManager() {
   vi.spyOn(SmartSiteManagementClient.prototype, 'listSites').mockResolvedValue({
     items: ['a', 'b'].map((id) => ({
       id: `site-${id}`,
@@ -36,8 +36,17 @@ it('manager creates contractors for their Site and configures Zones without admi
     total: 2,
   });
   vi.spyOn(SmartSiteManagementClient.prototype, 'listContractors').mockResolvedValue({
-    items: [],
-    total: 0,
+    items: [
+      {
+        id: 'contractor-a',
+        siteId: 'site-a',
+        code: 'A',
+        name: 'Contractor A',
+        isActive: true,
+        createdAt: '2026-01-01T00:00:00Z',
+      },
+    ],
+    total: 1,
   });
   vi.spyOn(SmartSiteManagementClient.prototype, 'contractorParticipationOptions').mockResolvedValue(
     { items: [{ id: 'contractor-a', code: 'A', name: 'Contractor A', isActive: true }] },
@@ -45,7 +54,25 @@ it('manager creates contractors for their Site and configures Zones without admi
   const globalUsers = vi.spyOn(SmartSiteManagementClient.prototype, 'listUsers');
   const representatives = vi
     .spyOn(SmartSiteManagementClient.prototype, 'listSiteRepresentatives')
-    .mockResolvedValue({ items: [], total: 0 });
+    .mockResolvedValue({
+      items: [
+        {
+          id: 'rep-a',
+          username: 'rep.a',
+          displayName: 'Representative A',
+          isActive: true,
+          mustChangePassword: false,
+          roleAssignments: [{ role: 'CONTRACTOR_REPRESENTATIVE', siteId: 'site-a' }],
+        },
+      ],
+      total: 1,
+    });
+  const renameContractor = vi
+    .spyOn(SmartSiteManagementClient.prototype, 'renameContractor')
+    .mockResolvedValue({ id: 'contractor-a', name: 'Corrected contractor' });
+  const renameRepresentative = vi
+    .spyOn(SmartSiteManagementClient.prototype, 'renameSiteRepresentative')
+    .mockResolvedValue({ id: 'rep-a', name: 'Corrected representative' });
   vi.spyOn(
     SmartSiteManagementClient.prototype,
     'listContractorRepresentativeAssignments',
@@ -74,6 +101,16 @@ it('manager creates contractors for their Site and configures Zones without admi
       configurationLocked: false,
       createdAt: new Date().toISOString(),
     }));
+  const combined = vi
+    .spyOn(SmartSiteManagementClient.prototype, 'createContractorRepresentative')
+    .mockResolvedValue({
+      id: 'new-rep',
+      username: 'rep.new',
+      displayName: 'New representative',
+      isActive: true,
+      mustChangePassword: false,
+      roleAssignments: [{ role: 'CONTRACTOR_REPRESENTATIVE', siteId: 'site-a' }],
+    });
   vi.spyOn(SmartSiteManagementClient.prototype, 'accessSetup').mockResolvedValue({
     canReviewAssignments: true,
     canGrantContractorZones: true,
@@ -107,7 +144,7 @@ it('manager creates contractors for their Site and configures Zones without admi
     </QueryClientProvider>,
   );
   await screen.findByRole('button', { name: 'New Zone' });
-  expect(screen.queryByRole('heading', { name: 'Contractor & Zone Setup' })).toBeNull();
+  expect(screen.queryByRole('heading', { name: 'Contractor & Zone Setup' })).not.toBeNull();
   expect(screen.queryByRole('heading', { name: 'Site Operations Configuration' })).toBeNull();
   expect(screen.queryByText('Site b')).toBeNull();
   expect(screen.queryByRole('button', { name: 'New Site' })).toBeNull();
@@ -119,14 +156,23 @@ it('manager creates contractors for their Site and configures Zones without admi
     offset: 0,
     limit: 100,
   });
-  await user.click(screen.getByRole('button', { name: 'Add Contractor' }));
-  await user.type(screen.getByLabelText(/Contractor name/i), 'New contractor');
-  await user.click(screen.getByRole('button', { name: 'Register Contractor' }));
-  await waitFor(() =>
-    expect(createContractor).toHaveBeenCalledWith('manager-token', 'site-a', {
-      name: 'New contractor',
-    }),
-  );
+  return {
+    user,
+    cache,
+    renameContractor,
+    renameRepresentative,
+    createContractor,
+    combined,
+    createZone,
+    grantZone,
+    attendance,
+  };
+}
+
+it('manager creates contractors and configures scoped Zones', async () => {
+  const { user, cache, createContractor, createZone, grantZone, attendance } = await setupManager();
+  expect(screen.queryByRole('button', { name: 'Add Contractor' })).toBeNull();
+  expect(createContractor).not.toHaveBeenCalled();
   await user.click(screen.getByRole('button', { name: 'New Zone' }));
   expect(screen.queryByLabelText('Zone code')).toBeNull();
   await user.type(screen.getByLabelText('Zone name'), 'Work area');
@@ -164,5 +210,56 @@ it('manager creates contractors for their Site and configures Zones without admi
     ),
   );
   expect(attendance).not.toHaveBeenCalled();
+  cache.clear();
+});
+
+it('manager can correct contractor and representative names', async () => {
+  const { user, cache, renameContractor, renameRepresentative } = await setupManager();
+  await user.click(await screen.findByRole('button', { name: 'Edit Contractor' }));
+  await user.clear(screen.getByLabelText('Contractor name'));
+  await user.type(screen.getByLabelText('Contractor name'), 'Corrected contractor');
+  await user.click(screen.getByRole('button', { name: 'Save name' }));
+  await waitFor(() =>
+    expect(renameContractor).toHaveBeenCalledWith('manager-token', 'site-a', 'contractor-a', {
+      name: 'Corrected contractor',
+      expectedName: 'Contractor A',
+    }),
+  );
+  await user.click(screen.getByRole('button', { name: /^Representatives/ }));
+  await user.click(await screen.findByRole('button', { name: 'Edit Representative' }));
+  await user.clear(screen.getByLabelText(/Display name/i));
+  await user.type(screen.getByLabelText(/Display name/i), 'Corrected representative');
+  await user.click(screen.getByRole('button', { name: 'Save name' }));
+  await waitFor(() =>
+    expect(renameRepresentative).toHaveBeenCalledWith('manager-token', 'site-a', 'rep-a', {
+      name: 'Corrected representative',
+      expectedName: 'Representative A',
+    }),
+  );
+  await user.click(screen.getByRole('button', { name: /^Contractors/ }));
+  cache.clear();
+});
+
+it('manager creates a contractor and representative in one form', async () => {
+  const { user, cache, combined } = await setupManager();
+  await user.click(screen.getByRole('button', { name: 'Create Representative' }));
+  await user.type(screen.getByLabelText('Contractor name'), 'Combined contractor');
+  await user.type(screen.getByLabelText(/Username/), 'rep.new');
+  await user.type(screen.getByLabelText(/Display name/i), 'New representative');
+  await user.type(screen.getByLabelText(/Temporary password/i), 'TempDemo2026!');
+  await user.click(screen.getByRole('button', { name: /Create.*Assign Account/i }));
+  await waitFor(() =>
+    expect(combined).toHaveBeenCalledWith(
+      'manager-token',
+      'site-a',
+      expect.objectContaining({
+        contractorName: 'Combined contractor',
+        username: 'rep.new',
+        displayName: 'New representative',
+        validFrom: expect.any(String),
+        validUntil: null,
+      }),
+    ),
+  );
   cache.clear();
 });

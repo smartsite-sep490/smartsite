@@ -318,6 +318,7 @@ const accessStyles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: 12,
+    flexWrap: 'wrap',
   },
   zoneIconBox: {
     width: 42,
@@ -326,10 +327,13 @@ const accessStyles = StyleSheet.create({
     backgroundColor: '#FFF4EE',
     alignItems: 'center',
     justifyContent: 'center',
+    flexShrink: 0,
   },
   zoneInfoCol: {
     flex: 1,
     gap: 4,
+    minWidth: 100,
+    flexBasis: 120,
   },
   zoneNameText: {
     fontSize: 15,
@@ -348,15 +352,20 @@ const accessStyles = StyleSheet.create({
     paddingVertical: 5,
     borderRadius: 12,
     gap: 5,
+    maxWidth: '100%',
+    flexShrink: 0,
   },
   statusDot: {
     width: 6,
     height: 6,
     borderRadius: 3,
+    flexShrink: 0,
   },
   statusText: {
     fontSize: 11,
     fontWeight: '700',
+    flexShrink: 1,
+    lineHeight: 18,
   },
   noticeBox: {
     backgroundColor: '#F8FAFC',

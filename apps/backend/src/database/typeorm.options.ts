@@ -1,3 +1,9 @@
+import { ZoneSoftDeletion1794355200000 } from './migrations/1794355200000-ZoneSoftDeletion.js';
+import { SafetyEpisodes1794355200000 } from './migrations/1794355200000-SafetyEpisodes.js';
+import { RetireGatePermissions1794960000000 } from './migrations/1794960000000-RetireGatePermissions.js';
+import { RetireLegacyAttendance1794960000001 } from './migrations/1794960000001-RetireLegacyAttendance.js';
+import { RetireTimesheetReplica1794960000002 } from './migrations/1794960000002-RetireTimesheetReplica.js';
+import { MergeVisitorGateEvents1794960000003 } from './migrations/1794960000003-MergeVisitorGateEvents.js';
 import { CanonicalSafetyFaceProvenance1794268800000 } from './migrations/1794268800000-CanonicalSafetyFaceProvenance.js';
 import { CanonicalMf06Results1794182400000 } from './migrations/1794182400000-CanonicalMf06Results.js';
 import { CanonicalMf06Requests1794096000000 } from './migrations/1794096000000-CanonicalMf06Requests.js';
@@ -88,14 +94,20 @@ export function buildTypeOrmOptions(config: DatabaseConnectionConfig): DataSourc
     connectTimeoutMS: timeoutMs,
     entities: [...ENTITIES],
     migrations: [
-      CameraConfigurationReferences1793491200000,
-      CameraRegionGeometryRevisions1793577600000,
       ZonePolicyRevisions1794441600000,
       CameraConfigurationBundles1794528000000,
+      ZoneSoftDeletion1794355200000,
+      SafetyEpisodes1794355200000,
+      RetireGatePermissions1794960000000,
+      RetireLegacyAttendance1794960000001,
+      RetireTimesheetReplica1794960000002,
+      MergeVisitorGateEvents1794960000003,
       CanonicalSafetyFaceProvenance1794268800000,
       CanonicalMf06Results1794182400000,
       CanonicalMf06Requests1794096000000,
       ObservationFrameParts1794009600000,
+      CameraConfigurationReferences1793491200000,
+      CameraRegionGeometryRevisions1793577600000,
       PpeAlertNotifications1792886400000,
       ExpandedPpeNotificationKinds1793145600000,
       AlertDetectionSubject1793404800000,

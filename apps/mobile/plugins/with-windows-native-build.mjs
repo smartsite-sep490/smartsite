@@ -1,4 +1,4 @@
-import configPlugins from 'expo/config-plugins.js';
+import configPlugins from 'expo/config-plugins';
 const { withProjectBuildGradle } = configPlugins;
 
 // pnpm's virtual-store paths exceed CMake/Ninja's Windows object-path limit.
