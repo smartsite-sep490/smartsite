@@ -346,20 +346,6 @@ export function AccessControlView({ apiUrl }: AccessControlViewProps) {
           {visibleTabs.map((tab) => {
             const isActive = activeTab === tab.id;
             const TabIcon = tab.icon;
-            if (attendanceWorkspace && tab.id === 'attendance') {
-              return (
-                <button
-                  key={tab.id}
-                  type="button"
-                  data-testid={`access-tab-${tab.id}`}
-                  aria-current={isActive ? 'page' : undefined}
-                  onClick={() => setAccessSubTab(tab.id)}
-                  className="self-center justify-self-start rounded-lg px-3 py-2 text-sm font-semibold text-[#071A2B] hover:bg-white focus-visible:outline-2 focus-visible:outline-[#F66B17]"
-                >
-                  {tab.label}
-                </button>
-              );
-            }
             return (
               <button
                 type="button"

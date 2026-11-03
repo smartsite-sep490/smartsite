@@ -314,6 +314,23 @@ export interface ZoneEntryDecisionResponse {
   createdAt: string;
 }
 
+export interface RenameSiteProfileCommand {
+  name: string;
+  expectedName: string;
+}
+export interface SiteProfileNameResponse {
+  id: string;
+  name: string;
+}
+export interface CreateContractorRepresentativeCommand {
+  contractorName: string;
+  username: string;
+  displayName: string;
+  temporaryPassword: string;
+  validFrom: string;
+  validUntil: string | null;
+}
+
 export interface ContractorResponse {
   id: string;
   siteId: string;

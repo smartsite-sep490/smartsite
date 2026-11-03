@@ -114,3 +114,29 @@ it('only accepts calendar dates, includes the entire selected end day and permit
     }),
   );
 });
+
+it('revokes a contractor zone permission and displays a toast notification', async () => {
+  vi.spyOn(SmartSiteManagementClient.prototype, 'accessSetup').mockResolvedValue({
+    ...options,
+    contractorPermissions: [
+      {
+        id: 'perm-1',
+        siteContractorId: 'participation',
+        zoneId: 'zone',
+        validFrom: '2026-01-01T00:00:00Z',
+        validUntil: '2026-12-31T23:59:59Z',
+        revokedAt: null,
+      },
+    ],
+  });
+  const revokeFn = vi
+    .spyOn(SmartSiteManagementClient.prototype, 'revokeZonePermission')
+    .mockResolvedValue({} as never);
+  const user = mount();
+
+  const revokeBtn = await screen.findByRole('button', { name: 'Revoke Contractor Zone' });
+  await user.click(revokeBtn);
+
+  expect(revokeFn).toHaveBeenCalledWith('manager-token', 'site', 'perm-1', 'contractor');
+  expect(await screen.findByText('Zone assignment revoked successfully.')).toBeTruthy();
+});

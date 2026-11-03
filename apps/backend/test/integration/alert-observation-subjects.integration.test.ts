@@ -48,6 +48,9 @@ test('subject provenance survives upgrade, retry and rollback boundaries in isol
   );
   try {
     await owned.initialize();
+    // Current Zone repositories require this orthogonal lifecycle column while
+    // this rehearsal deliberately pins the provenance migration history.
+    await db.query('ALTER TABLE zone ADD COLUMN deleted_at timestamptz');
     const [column] = await db.query(`SELECT data_type,is_nullable FROM information_schema.columns
       WHERE table_schema=current_schema() AND table_name='alert_detection_mapping'
       AND column_name='person_observation_index'`);
