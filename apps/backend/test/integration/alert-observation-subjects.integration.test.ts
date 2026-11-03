@@ -9,12 +9,10 @@ import {
   AlertStatus,
   AlertType,
   CameraEntity,
-  CameraObservationRegionEntity,
   CameraStatus,
   EventProcessingStatus,
   SafetyAlertEntity,
   SiteEntity,
-  ZoneEntity,
   ZoneRestrictionPolicy,
   ZoneType,
 } from '../../src/database/entities/index.js';
@@ -77,14 +75,33 @@ test('subject provenance survives upgrade, retry and rollback boundaries in isol
     await db.query(
       `INSERT INTO zone(id,site_id,code,name,type,restriction_policy,required_ppe)
        VALUES($1,$2,$3,$4,$5,$6,$7)`,
-      [zoneId, siteId, 'SUBJECT-ZONE', 'Synthetic Zone', ZoneType.STANDARD,
-        ZoneRestrictionPolicy.NONE, ['HARD_HAT', 'SAFETY_VEST', 'GLOVES']],
+      [
+        zoneId,
+        siteId,
+        'SUBJECT-ZONE',
+        'Synthetic Zone',
+        ZoneType.STANDARD,
+        ZoneRestrictionPolicy.NONE,
+        ['HARD_HAT', 'SAFETY_VEST', 'GLOVES'],
+      ],
     );
     await db.query(
       `INSERT INTO camera_observation_region(id,camera_id,zone_id,coordinate_space,version,is_active,polygon)
        VALUES($1,$2,$3,$4,$5,$6,$7::jsonb)`,
-      [regionId, cameraId, zoneId, 'NORMALIZED_0_1', 1, true,
-        JSON.stringify([[0, 0], [1, 0], [1, 1], [0, 1]])],
+      [
+        regionId,
+        cameraId,
+        zoneId,
+        'NORMALIZED_0_1',
+        1,
+        true,
+        JSON.stringify([
+          [0, 0],
+          [1, 0],
+          [1, 1],
+          [0, 1],
+        ]),
+      ],
     );
     const box = { x1: 0.1, y1: 0.1, x2: 0.4, y2: 0.9, coordinateSpace: 'NORMALIZED_0_1' };
     const person = (trackId: number) => ({
