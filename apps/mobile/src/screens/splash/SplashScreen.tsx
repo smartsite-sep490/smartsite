@@ -1,5 +1,6 @@
 import { translate as tr, useTranslation } from '../../i18n';
 import React, { useEffect, useState } from 'react';
+import { StatusBar } from 'expo-status-bar';
 import {
   View,
   Text,
@@ -7,7 +8,6 @@ import {
   Animated,
   Image,
   Dimensions,
-  StatusBar,
   Pressable,
 } from 'react-native';
 
@@ -132,7 +132,7 @@ export function SplashScreen({ onFinish }: SplashScreenProps) {
   return (
     <Pressable style={styles.touchArea} onPress={exitSplash}>
       <Animated.View style={[styles.container, { opacity: screenFade }]}>
-        <StatusBar barStyle="light-content" backgroundColor="#041D2E" />
+        <StatusBar style="light" />
 
         {/* Ambient Glowing Aura */}
         <Animated.View

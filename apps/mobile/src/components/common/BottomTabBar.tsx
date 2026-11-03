@@ -36,7 +36,7 @@ export function BottomTabBar({
         >
           <IconHome size={24} color={activeTab === 'home' ? colors.primary : colors.textTertiary} />
           <Text
-            numberOfLines={1}
+            numberOfLines={2}
             ellipsizeMode="tail"
             style={[styles.tabLabel, activeTab === 'home' && styles.tabLabelActive]}
           >
@@ -58,7 +58,7 @@ export function BottomTabBar({
             color={activeTab === 'schedule' ? colors.primary : colors.textTertiary}
           />
           <Text
-            numberOfLines={1}
+            numberOfLines={2}
             ellipsizeMode="tail"
             style={[styles.tabLabel, activeTab === 'schedule' && styles.tabLabelActive]}
           >
@@ -80,7 +80,7 @@ export function BottomTabBar({
             color={activeTab === 'attendance' ? colors.primary : colors.textTertiary}
           />
           <Text
-            numberOfLines={1}
+            numberOfLines={2}
             ellipsizeMode="tail"
             style={[styles.tabLabel, activeTab === 'attendance' && styles.tabLabelActive]}
           >
@@ -102,7 +102,7 @@ export function BottomTabBar({
             color={activeTab === 'profile' ? colors.primary : colors.textTertiary}
           />
           <Text
-            numberOfLines={1}
+            numberOfLines={2}
             ellipsizeMode="tail"
             style={[styles.tabLabel, activeTab === 'profile' && styles.tabLabelActive]}
           >
@@ -127,7 +127,7 @@ export function BottomTabBar({
       >
         <IconHome size={24} color={activeTab === 'home' ? colors.primary : colors.textTertiary} />
         <Text
-          numberOfLines={1}
+          numberOfLines={2}
           ellipsizeMode="tail"
           style={[styles.tabLabel, activeTab === 'home' && styles.tabLabelActive]}
         >
@@ -149,7 +149,7 @@ export function BottomTabBar({
           color={activeTab === 'workforce' ? colors.primary : colors.textTertiary}
         />
         <Text
-          numberOfLines={1}
+          numberOfLines={2}
           ellipsizeMode="tail"
           style={[styles.tabLabel, activeTab === 'workforce' && styles.tabLabelActive]}
         >
@@ -171,7 +171,7 @@ export function BottomTabBar({
           color={activeTab === 'schedule' ? colors.primary : colors.textTertiary}
         />
         <Text
-          numberOfLines={1}
+          numberOfLines={2}
           ellipsizeMode="tail"
           style={[styles.tabLabel, activeTab === 'schedule' && styles.tabLabelActive]}
         >
@@ -202,7 +202,7 @@ export function BottomTabBar({
           )}
         </View>
         <Text
-          numberOfLines={1}
+          numberOfLines={2}
           ellipsizeMode="tail"
           style={[styles.tabLabel, activeTab === 'requests' && styles.tabLabelActive]}
         >
@@ -217,7 +217,7 @@ export function BottomTabBar({
 const styles = StyleSheet.create({
   container: {
     flexDirection: 'row',
-    height: 64,
+
     backgroundColor: '#FFFFFF',
     borderTopWidth: 1,
     borderTopColor: '#EFF2F6',
@@ -227,6 +227,7 @@ const styles = StyleSheet.create({
     shadowOffset: { width: 0, height: -2 },
     shadowOpacity: 0.05,
     shadowRadius: 6,
+    minHeight: 64,
   },
   tabItem: {
     flex: 1,
@@ -236,6 +237,7 @@ const styles = StyleSheet.create({
     paddingTop: 4,
     minWidth: 0,
     paddingHorizontal: 2,
+    paddingVertical: 6,
   },
   tabLabel: {
     fontSize: 11,
@@ -243,6 +245,8 @@ const styles = StyleSheet.create({
     marginTop: 4,
     fontWeight: '500',
     textAlign: 'center',
+    maxWidth: '100%',
+    lineHeight: 16,
   },
   tabLabelActive: {
     color: colors.primary,
@@ -252,7 +256,7 @@ const styles = StyleSheet.create({
     position: 'absolute',
     top: 0,
     width: 24,
-    height: 3,
+
     backgroundColor: colors.primary,
     borderBottomLeftRadius: 2,
     borderBottomRightRadius: 2,
@@ -267,7 +271,7 @@ const styles = StyleSheet.create({
     backgroundColor: colors.primary,
     borderRadius: 9,
     minWidth: 18,
-    height: 18,
+    minHeight: 18,
     alignItems: 'center',
     justifyContent: 'center',
     paddingHorizontal: 4,
