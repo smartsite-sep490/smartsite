@@ -12,7 +12,7 @@ import {
   type SafetyAlertEvidenceSummary,
 } from './safety-alert-evidence.service.js';
 
-export const attentionAlertSql = `a.status IN ('PENDING_REVIEW','NEEDS_MORE_EVIDENCE','CONFIRMED') AND NOT EXISTS(SELECT 1 FROM incident i WHERE i.id=a.incident_id AND i.site_id=a.site_id AND i.status='CLOSED')`;
+export const attentionAlertSql = `a.status IN ('PENDING_REVIEW','CONFIRMED') AND NOT EXISTS(SELECT 1 FROM incident i WHERE i.id=a.incident_id AND i.site_id=a.site_id AND i.status='CLOSED')`;
 const DETAIL_DETECTION_LIMIT = 100;
 const DETAIL_REVIEW_LIMIT = 100;
 

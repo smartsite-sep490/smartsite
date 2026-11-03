@@ -31,7 +31,7 @@ test('internal commands reject extra fields and unsupported PPE before database 
       name: 'Zone',
       type: ZoneType.RESTRICTED,
       restrictionPolicy: ZoneRestrictionPolicy.NONE,
-      requiredPpe: ['GLOVES'],
+      requiredPpe: ['MASK'],
     }),
     invalid,
   );

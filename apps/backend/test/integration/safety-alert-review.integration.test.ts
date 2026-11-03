@@ -58,12 +58,12 @@ test('safety alert review is scoped, audited, idempotent and revision-safe', asy
     const input = {
       commandId,
       expectedRevision: 0,
-      targetStatus: AlertStatus.NEEDS_MORE_EVIDENCE,
+      targetStatus: AlertStatus.DISMISSED,
       reason: 'The worker helmet area is partially occluded.',
     } as const;
     const created = await service.review(siteId, alertId, actorUserId, input);
     assert.equal(created.replayed, false);
-    assert.equal(created.alert.status, AlertStatus.NEEDS_MORE_EVIDENCE);
+    assert.equal(created.alert.status, AlertStatus.DISMISSED);
     assert.equal(created.alert.revision, 1);
     assert.equal(created.review.actorUserId, actorUserId);
     assert.equal(created.review.alertRevision, 1);

@@ -3,6 +3,8 @@ import { CameraEntity } from './camera.entity.js';
 import { EventProcessingStatus } from './enums.js';
 
 @Entity({ name: 'ai_observation_event' })
+@Index('uq_ai_event_frame_part', { synchronize: false })
+@Index('idx_ai_event_source_frame', { synchronize: false })
 @Index('idx_event_camera_session_captured', ['cameraExternalId', 'streamSessionId', 'capturedAt'])
 export class AiObservationEventEntity {
   @PrimaryColumn({

@@ -1,4 +1,9 @@
 import type {
+  CreateContractorRepresentativeCommand,
+  RenameSiteProfileCommand,
+  SiteProfileNameResponse,
+} from '@smartsite/contracts/management';
+import type {
   GrantTeamZoneCommand,
   TeamZoneSetupResponse,
   ManagerOverviewResponse,
@@ -147,8 +152,6 @@ import type {
   GateFacePresenceResponse,
   GateAccessLogResponse,
   EnrollmentCaptureTarget,
-  WorkerGatePermissionsResponse,
-  SetWorkerGatePermissionsCommand,
 } from '@smartsite/contracts';
 export type { SchedulingRequestStatus };
 
@@ -1654,6 +1657,39 @@ export class SmartSiteManagementClient {
       input,
     );
   }
+  createContractorRepresentative(
+    token: string,
+    siteId: string,
+    input: CreateContractorRepresentativeCommand,
+  ) {
+    return this.request<AccountResponse>(
+      'POST',
+      `/sites/${pathId(siteId)}/contractor-representative-accounts`,
+      token,
+      input,
+    );
+  }
+  renameContractor(token: string, siteId: string, id: string, input: RenameSiteProfileCommand) {
+    return this.request<SiteProfileNameResponse>(
+      'PATCH',
+      `/sites/${pathId(siteId)}/contractors/${pathId(id)}/name`,
+      token,
+      input,
+    );
+  }
+  renameSiteRepresentative(
+    token: string,
+    siteId: string,
+    id: string,
+    input: RenameSiteProfileCommand,
+  ) {
+    return this.request<SiteProfileNameResponse>(
+      'PATCH',
+      `/sites/${pathId(siteId)}/representative-accounts/${pathId(id)}/name`,
+      token,
+      input,
+    );
+  }
   listSiteRepresentatives(token: string, siteId: string, options?: PageOptions) {
     return this.request<Page<AccountResponse>>(
       'GET',
@@ -1900,6 +1936,22 @@ export class SmartSiteManagementClient {
       { timeoutMs: 60_000 },
     );
   }
+  checkWorkerDocumentImageQuality(
+    token: string,
+    siteId: string,
+    workerId: string,
+    file: UploadFile,
+  ) {
+    const form = new FormData();
+    appendFile(form, 'file', file);
+    return this.requestFormData<import('@smartsite/contracts').DocumentImageQuality>(
+      'POST',
+      `/sites/${pathId(siteId)}/workers/${pathId(workerId)}/document-image-quality`,
+      token,
+      form,
+      { timeoutMs: 60_000 },
+    );
+  }
   uploadWorkerIdentityImage(
     token: string,
     siteId: string,
@@ -1948,6 +2000,28 @@ export class SmartSiteManagementClient {
       token,
       {},
       undefined,
+      { timeoutMs: 60_000 },
+    );
+  }
+  checkWorkerDocumentDates(
+    token: string,
+    siteId: string,
+    workerId: string,
+    kind: WorkerDocumentKind,
+    file: UploadFile,
+    input: import('@smartsite/contracts').UploadWorkerDocumentCommand,
+  ) {
+    const form = new FormData();
+    appendFile(form, 'file', file);
+    if (input.submittedExpiresOn !== undefined)
+      form.append('submittedExpiresOn', input.submittedExpiresOn);
+    if (input.submittedIssuedOn !== undefined)
+      form.append('submittedIssuedOn', input.submittedIssuedOn);
+    return this.requestFormData<import('@smartsite/contracts').WorkerDocumentCheckResponse>(
+      'POST',
+      `/sites/${pathId(siteId)}/workers/${pathId(workerId)}/documents/${pathId(kind)}/check`,
+      token,
+      form,
       { timeoutMs: 60_000 },
     );
   }
@@ -2158,26 +2232,6 @@ export class SmartSiteManagementClient {
       form,
     );
   }
-  getWorkerGatePermissions(token: string, siteId: string, workerId: string) {
-    return this.request<WorkerGatePermissionsResponse>(
-      'GET',
-      `/sites/${pathId(siteId)}/workers/${pathId(workerId)}/gate-permissions`,
-      token,
-    );
-  }
-  setWorkerGatePermissions(
-    token: string,
-    siteId: string,
-    workerId: string,
-    input: SetWorkerGatePermissionsCommand,
-  ) {
-    return this.request<WorkerGatePermissionsResponse>(
-      'PUT',
-      `/sites/${pathId(siteId)}/workers/${pathId(workerId)}/gate-permissions`,
-      token,
-      input,
-    );
-  }
   uploadFaceEnrollmentSample(token: string, sessionId: string, sample: Blob | NativeUploadFile) {
     const form = new FormData();
     appendFile(form, 'sample', sample, 'face-sample.jpg');
@@ -2352,6 +2406,13 @@ export class SmartSiteManagementClient {
       `/sites/${pathId(siteId)}/zones/${pathId(zoneId)}`,
       token,
       { name },
+    );
+  }
+  deleteZone(token: string, siteId: string, zoneId: string) {
+    return this.request<{ id: string }>(
+      'DELETE',
+      `/sites/${pathId(siteId)}/zones/${pathId(zoneId)}`,
+      token,
     );
   }
   updateZonePolicy(

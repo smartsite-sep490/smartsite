@@ -1,8 +1,14 @@
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import { createElement } from 'react';
 import { act, create, type ReactTestRenderer } from 'react-test-renderer';
-import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { SmartSiteManagementClient, type ChecklistDetailResponse } from '@smartsite/api-client';
+import { QueryClient, QueryClientProvider, focusManager } from '@tanstack/react-query';
+import {
+  SmartSiteManagementClient,
+  ApiError,
+  type ChecklistDetailResponse,
+  type IncidentDetailResponse,
+} from '@smartsite/api-client';
+import { Attachments } from '../shared/uploads';
 import { AssignedWorkScreen } from './assigned-work-screen';
 import type { useWorkspace } from '../workspace/workspace-context';
 vi.mock('expo-file-system', () => ({
@@ -86,15 +92,15 @@ afterEach(async () => {
   cache.clear();
   vi.restoreAllMocks();
 });
-async function mount() {
+async function mount(initialKind = 'checklist', initialId = 'checklist-a') {
   await act(async () => {
     root = create(
       createElement(
         QueryClientProvider,
         { client: cache },
         createElement(AssignedWorkScreen, {
-          initialId: 'checklist-a',
-          initialKind: 'checklist',
+          initialId,
+          initialKind,
           onBack: () => {},
         }),
       ),
@@ -175,4 +181,258 @@ it('requires evidence for a passing criterion that requests it, without reportin
     root.root.findAll((n) => String(n.type) === 'Text' && n.props.accessibilityRole === 'alert')
       .length,
   ).toBeGreaterThan(0);
+});
+
+function incidentFixture(): IncidentDetailResponse {
+  return {
+    id: 'incident-a',
+    siteId: 'site-a',
+    contractorId: 'contractor-a',
+    responsibilityReason: 'Verified responsibility',
+    responsibilityConfirmedBy: 'safety',
+    responsibilityConfirmedAt: '2026-10-28T01:00:00Z',
+    title: 'Synthetic corrective work',
+    description: 'Restore guardrail',
+    severity: 'HIGH',
+    status: 'ASSIGNED',
+    zoneId: null,
+    occurredAt: '2026-10-28T01:00:00Z',
+    reportedBy: 'safety',
+    closedBy: null,
+    closedAt: null,
+    version: 1,
+    createdAt: '',
+    updatedAt: '',
+    workerIds: [],
+    alerts: [],
+    audit: [],
+    actions: [
+      {
+        id: 'action-a',
+        incidentId: 'incident-a',
+        assignedTo: 'rep',
+        assignedBy: 'safety',
+        description: 'Install guardrail',
+        dueAt: null,
+        status: 'ASSIGNED',
+        version: 1,
+        createdAt: '',
+        updatedAt: '',
+        submissions: [],
+      },
+    ],
+  };
+}
+const field = () => root.root.findByProps({ accessibilityLabel: 'Kết quả khắc phục' });
+async function enterResult(value: string) {
+  await act(async () => field().props.onChangeText(value));
+}
+const renderedText = () => JSON.stringify(root.toJSON());
+it('starts corrective work, submits a versioned result and refreshes the final closure from Web', async () => {
+  let incident = incidentFixture();
+  vi.spyOn(workspace.client, 'getIncident').mockImplementation(async () => incident);
+  const command = vi
+    .spyOn(workspace.client, 'incidentCommand')
+    .mockImplementation(async (_token, _site, _id, op) => {
+      incident = {
+        ...incident,
+        status: 'IN_PROGRESS',
+        actions: [
+          {
+            ...incident.actions[0]!,
+            status: op === 'start' ? 'IN_PROGRESS' : 'SUBMITTED',
+            version: op === 'start' ? 2 : 3,
+          },
+        ],
+      };
+      return { resource: incident, replayed: false };
+    });
+  await mount('incident', 'incident-a');
+  await click('Bắt đầu khắc phục');
+  expect(command).toHaveBeenLastCalledWith(
+    'token',
+    'site-a',
+    'incident-a',
+    'start',
+    expect.objectContaining({ expectedVersion: 1, commandId: expect.any(String) }),
+    'action-a',
+  );
+  await enterResult('Guardrail restored');
+  await click('Nộp kết quả cho cán bộ an toàn');
+  expect(command).toHaveBeenLastCalledWith(
+    'token',
+    'site-a',
+    'incident-a',
+    'submit',
+    expect.objectContaining({ expectedVersion: 2, resultDescription: 'Guardrail restored' }),
+    'action-a',
+    undefined,
+  );
+  expect(buttons('Nộp kết quả cho cán bộ an toàn')).toHaveLength(0);
+  incident = {
+    ...incident,
+    status: 'CLOSED',
+    actions: [{ ...incident.actions[0]!, status: 'CLOSED', version: 4 }],
+  };
+  await click('Làm mới công việc khắc phục');
+  expect(renderedText()).toContain('Đã đóng');
+  expect(buttons('Bắt đầu khắc phục')).toHaveLength(0);
+  expect(buttons('Nộp kết quả cho cán bộ an toàn')).toHaveLength(0);
+});
+it('shows rejected submission history and permits a new result with the current version', async () => {
+  const incident = incidentFixture();
+  incident.status = 'IN_PROGRESS';
+  incident.actions[0] = {
+    ...incident.actions[0]!,
+    status: 'IN_PROGRESS',
+    version: 5,
+    submissions: [
+      {
+        id: 'submission-a',
+        correctiveActionId: 'action-a',
+        submittedBy: 'rep',
+        resultDescription: 'First repair',
+        submittedAt: '',
+        status: 'REJECTED',
+        evidence: null,
+        reviewedBy: 'safety',
+        reviewedAt: '',
+        reviewNote: 'Guardrail still loose',
+      },
+    ],
+  };
+  vi.spyOn(workspace.client, 'getIncident').mockResolvedValue(incident);
+  const submit = vi
+    .spyOn(workspace.client, 'incidentCommand')
+    .mockResolvedValue({ resource: incident, replayed: false });
+  await mount('incident', 'incident-a');
+  expect(renderedText()).toContain('Guardrail still loose');
+  await enterResult('Repaired again');
+  await click('Nộp kết quả cho cán bộ an toàn');
+  expect(submit).toHaveBeenCalledWith(
+    'token',
+    'site-a',
+    'incident-a',
+    'submit',
+    expect.objectContaining({ expectedVersion: 5, resultDescription: 'Repaired again' }),
+    'action-a',
+    undefined,
+  );
+  expect(incident.actions[0]!.submissions[0]!.status).toBe('REJECTED');
+});
+it('preserves a draft and command ID after a transient submission failure', async () => {
+  const incident = incidentFixture();
+  incident.status = 'IN_PROGRESS';
+  incident.actions[0]!.status = 'IN_PROGRESS';
+  vi.spyOn(workspace.client, 'getIncident').mockResolvedValue(incident);
+  const submit = vi
+    .spyOn(workspace.client, 'incidentCommand')
+    .mockRejectedValueOnce(new ApiError('network', 'Unavailable'))
+    .mockResolvedValue({ resource: incident, replayed: true });
+  await mount('incident', 'incident-a');
+  await enterResult('Keep this repair report');
+  await click('Nộp kết quả cho cán bộ an toàn');
+  expect(field().props.value).toBe('Keep this repair report');
+  await click('Nộp kết quả cho cán bộ an toàn');
+  expect(submit.mock.calls[0]![4]).toEqual(submit.mock.calls[1]![4]);
+});
+it.each(['CLOSED', 'superseded', 'other-assignee', 'other-contractor', 'other-site'])(
+  'hides corrective work controls for %s',
+  async (condition) => {
+    const incident = incidentFixture();
+    if (condition === 'CLOSED') incident.status = 'CLOSED';
+    if (condition === 'superseded') incident.actions[0]!.supersededAt = '2026-10-28T01:00:00Z';
+    if (condition === 'other-assignee') incident.actions[0]!.assignedTo = 'someone-else';
+    if (condition === 'other-contractor') incident.contractorId = 'contractor-b';
+    if (condition === 'other-site') incident.siteId = 'site-b';
+    vi.spyOn(workspace.client, 'getIncident').mockResolvedValue(incident);
+    await mount('incident', 'incident-a');
+    expect(buttons('Bắt đầu khắc phục')).toHaveLength(0);
+    expect(buttons('Nộp kết quả cho cán bộ an toàn')).toHaveLength(0);
+  },
+);
+it('refreshes assigned incidents explicitly and reloads a fresh cache on foreground', async () => {
+  focusManager.setFocused(false);
+  let incident = incidentFixture();
+  const list = vi
+    .spyOn(workspace.client, 'listIncidents')
+    .mockImplementation(async () => ({ items: [incident], total: 1 }));
+  cache.setDefaultOptions({ queries: { retry: false, staleTime: Infinity } });
+  await mount('incident', '');
+  expect(list).toHaveBeenCalledWith(
+    'token',
+    'site-a',
+    expect.objectContaining({ assignedTo: 'rep' }),
+  );
+  incident = { ...incident, title: 'Updated by Safety' };
+  await click('Làm mới công việc khắc phục');
+  expect(renderedText()).toContain('Updated by Safety');
+  const count = list.mock.calls.length;
+  await act(async () => {
+    focusManager.setFocused(true);
+    await new Promise((r) => setTimeout(r, 30));
+  });
+  expect(list.mock.calls.length).toBeGreaterThan(count);
+  focusManager.setFocused(undefined);
+});
+
+it('submits the selected JPEG evidence through the shared native upload client', async () => {
+  const incident = incidentFixture();
+  incident.status = 'IN_PROGRESS';
+  incident.actions[0]!.status = 'IN_PROGRESS';
+  vi.spyOn(workspace.client, 'getIncident').mockResolvedValue(incident);
+  const submit = vi
+    .spyOn(workspace.client, 'incidentCommand')
+    .mockResolvedValue({ resource: incident, replayed: false });
+  await mount('incident', 'incident-a');
+  const file = { uri: 'file:///synthetic.jpg', name: 'synthetic.jpg', type: 'image/jpeg' };
+  await act(async () => root.root.findByType(Attachments).props.onChange([file]));
+  await enterResult('Repair with evidence');
+  await click('Nộp kết quả cho cán bộ an toàn');
+  expect(submit).toHaveBeenCalledWith(
+    'token',
+    'site-a',
+    'incident-a',
+    'submit',
+    expect.objectContaining({ resultDescription: 'Repair with evidence' }),
+    'action-a',
+    file,
+  );
+});
+it('refreshes a stale Action version before retrying and does not send an obsolete version twice', async () => {
+  let incident = incidentFixture();
+  incident.status = 'IN_PROGRESS';
+  incident.actions[0]!.status = 'IN_PROGRESS';
+  vi.spyOn(workspace.client, 'getIncident').mockImplementation(async () => incident);
+  const submit = vi
+    .spyOn(workspace.client, 'incidentCommand')
+    .mockImplementationOnce(async () => {
+      incident = { ...incident, actions: [{ ...incident.actions[0]!, version: 2 }] };
+      throw new ApiError('http', 'Action version is stale', 409);
+    })
+    .mockImplementation(async () => ({ resource: incident, replayed: false }));
+  await mount('incident', 'incident-a');
+  await enterResult('Old report');
+  await click('Nộp kết quả cho cán bộ an toàn');
+  await enterResult('Updated report');
+  await click('Nộp kết quả cho cán bộ an toàn');
+  expect(submit.mock.calls[0]![4]).toMatchObject({ expectedVersion: 1 });
+  expect(submit.mock.calls[1]![4]).toMatchObject({ expectedVersion: 2 });
+});
+
+it('keeps closed work read-only while other Incident actions are still open', async () => {
+  const incident = incidentFixture();
+  incident.status = 'IN_PROGRESS';
+  const own = { ...incident.actions[0]!, status: 'CLOSED' as const };
+  incident.actions = [
+    own,
+    { ...own, id: 'action-b', assignedTo: 'someone-else', status: 'ASSIGNED' },
+  ];
+  vi.spyOn(workspace.client, 'getIncident').mockResolvedValue(incident);
+  await mount('incident', 'incident-a');
+  expect(renderedText()).toContain(
+    'Công việc này đã đóng. Vụ việc còn công việc khác cần hoàn thành.',
+  );
+  expect(buttons('Bắt đầu khắc phục')).toHaveLength(0);
+  expect(buttons('Nộp kết quả cho cán bộ an toàn')).toHaveLength(0);
 });

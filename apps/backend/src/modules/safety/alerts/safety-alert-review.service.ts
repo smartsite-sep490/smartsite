@@ -8,20 +8,12 @@ import { AlertStatus } from '../../../database/entities/enums.js';
 import { SafetyAlertReviewEntity } from '../../../database/entities/safety-alert-review.entity.js';
 import { SafetyAlertEntity } from '../../../database/entities/safety-alert.entity.js';
 
-export const REVIEW_TARGET_STATUSES = [
-  AlertStatus.CONFIRMED,
-  AlertStatus.DISMISSED,
-  AlertStatus.NEEDS_MORE_EVIDENCE,
-] as const;
+export const REVIEW_TARGET_STATUSES = [AlertStatus.CONFIRMED, AlertStatus.DISMISSED] as const;
 
 export type ReviewTargetStatus = (typeof REVIEW_TARGET_STATUSES)[number];
 
 const ALLOWED_TRANSITIONS: ReadonlyMap<AlertStatus, ReadonlySet<ReviewTargetStatus>> = new Map([
-  [
-    AlertStatus.PENDING_REVIEW,
-    new Set([AlertStatus.CONFIRMED, AlertStatus.DISMISSED, AlertStatus.NEEDS_MORE_EVIDENCE]),
-  ],
-  [AlertStatus.NEEDS_MORE_EVIDENCE, new Set([AlertStatus.CONFIRMED, AlertStatus.DISMISSED])],
+  [AlertStatus.PENDING_REVIEW, new Set([AlertStatus.CONFIRMED, AlertStatus.DISMISSED])],
 ]);
 
 export class ReviewSafetyAlertCommand {

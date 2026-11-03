@@ -1482,3 +1482,112 @@ test('AiIngestionService: handles observations across mixed regions and geometry
   assert.equal(store.mappings.length, 2);
   assert.equal(store.rawEvents.length, 1);
 });
+
+test('ingestion orders grouping locks consistently while preserving payload and result order', async () => {
+  const cameraId = '33333333-3333-4333-8333-333333333333';
+  const siteId = '44444444-4444-4444-8444-444444444444';
+  const regionId = '55555555-5555-4555-8555-555555555555';
+  const zoneId = '66666666-6666-4666-8666-666666666666';
+  const orders: string[][] = [];
+  for (const reverse of [false, true]) {
+    const store: MockStore = {
+      cameras: [
+        {
+          id: cameraId,
+          siteId,
+          externalId: 'CAM-01',
+          code: 'CAM-01',
+          name: 'Camera',
+          status: CameraStatus.ACTIVE,
+          configurationVersion: 1,
+          createdAt: FIXED_NOW,
+        },
+      ],
+      regions: [
+        {
+          id: regionId,
+          cameraId,
+          zoneId,
+          coordinateSpace: 'NORMALIZED_0_1',
+          version: 1,
+          isActive: true,
+          polygon: { type: 'Polygon', coordinates: [] },
+          createdAt: FIXED_NOW,
+        },
+      ],
+      zones: [
+        {
+          id: zoneId,
+          siteId,
+          code: 'ZONE-A',
+          name: 'PPE area',
+          type: ZoneType.STANDARD,
+          restrictionPolicy: ZoneRestrictionPolicy.NONE,
+          requiredPpe: ['HARD_HAT', 'SAFETY_VEST'],
+          configurationLocked: false,
+          createdAt: FIXED_NOW,
+        },
+      ],
+      rawEvents: [],
+      alerts: [],
+      mappings: [],
+    };
+    const ds = createMockDataSource(store);
+    const grouping = new DurableGroupingService(
+      createTestConfig(),
+      new SchedulingNotificationService(ds),
+    );
+    const originalGroup = grouping.groupCandidate.bind(grouping);
+    const visited: string[] = [];
+    grouping.groupCandidate = async (...args) => {
+      visited.push(args[2].groupingKey);
+      return await originalGroup(...args);
+    };
+    const service = new AiIngestionService(
+      ds,
+      new ObservationContextResolverService(),
+      new AlertCandidateEvaluator(new ZoneAuthorizationService()),
+      grouping,
+      createTestConfig(),
+      () => FIXED_NOW,
+    );
+    const items = reverse ? ['SAFETY_VEST', 'HARD_HAT'] : ['HARD_HAT', 'SAFETY_VEST'];
+    const person = (createSampleEvent().observations as Record<string, unknown>[])[0]!;
+    const event = createSampleEvent({
+      observations: [
+        person,
+        ...items.map((ppeItem) => ({
+          type: 'PPE',
+          trackId: 101,
+          ppeItem,
+          status: 'MISSING',
+          regionId,
+          geometryVersion: 1,
+          confidence: 0.98,
+        })),
+      ],
+    });
+    const immutablePayload = structuredClone(event);
+    const result = await service.ingestEvent(event);
+    assert.equal(result.status, EventProcessingStatus.PROCESSED);
+    assert.deepEqual(visited, [...visited].sort());
+    orders.push(visited);
+    assert.deepEqual(event, immutablePayload);
+    assert.deepEqual(store.rawEvents[0]!.rawPayload, immutablePayload);
+    assert.equal(store.rawEvents[0]!.payloadHash, computeCanonicalPayloadHash(immutablePayload));
+    assert.deepEqual(
+      result.alertIds,
+      items.map(
+        (item) =>
+          store.alerts.find(
+            (alert) =>
+              alert.candidateSubtype ===
+              (item === 'HARD_HAT' ? 'PPE_HARD_HAT_MISSING' : 'PPE_SAFETY_VEST_MISSING'),
+          )!.id,
+      ),
+    );
+    assert.equal(store.mappings.length, 2);
+    assert.ok(store.mappings.every((mapping) => mapping.personObservationIndex === 0));
+  }
+  assert.deepEqual(orders[0], orders[1]);
+});

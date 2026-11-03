@@ -19,11 +19,16 @@ export class ObservationContextResolverService {
   async resolveCamera(
     manager: EntityManager,
     cameraExternalId: string,
+    lockForAssessment = false,
   ): Promise<CameraEntity | undefined> {
-    const camera = await manager.getRepository(CameraEntity).findOneBy({
+    const where = {
       externalId: cameraExternalId,
       status: CameraStatus.ACTIVE,
-    });
+    };
+    const repository = manager.getRepository(CameraEntity);
+    const camera = lockForAssessment
+      ? await repository.findOne({ where, lock: { mode: 'pessimistic_read' } })
+      : await repository.findOneBy(where);
     return camera ?? undefined;
   }
 
@@ -32,15 +37,17 @@ export class ObservationContextResolverService {
     cameraExternalId: string,
     regionId: string,
     geometryVersion: number,
+    lockForAssessment = false,
   ): Promise<ResolvedObservationContext | undefined> {
-    const camera = await this.resolveCamera(manager, cameraExternalId);
+    const camera = await this.resolveCamera(manager, cameraExternalId, lockForAssessment);
     if (!camera) {
       return undefined;
     }
 
-    const region = await manager.getRepository(CameraObservationRegionEntity).findOneBy({
-      id: regionId,
-    });
+    const regions = manager.getRepository(CameraObservationRegionEntity);
+    const region = lockForAssessment
+      ? await regions.findOne({ where: { id: regionId }, lock: { mode: 'pessimistic_read' } })
+      : await regions.findOneBy({ id: regionId });
 
     if (!region) {
       return undefined;
@@ -58,10 +65,14 @@ export class ObservationContextResolverService {
       return undefined;
     }
 
-    const zone = await manager.getRepository(ZoneEntity).findOneBy({
+    const zoneWhere = {
       id: region.zoneId,
       siteId: camera.siteId,
-    });
+    };
+    const zones = manager.getRepository(ZoneEntity);
+    const zone = lockForAssessment
+      ? await zones.findOne({ where: zoneWhere, lock: { mode: 'pessimistic_read' } })
+      : await zones.findOneBy(zoneWhere);
 
     if (!zone) {
       return undefined;

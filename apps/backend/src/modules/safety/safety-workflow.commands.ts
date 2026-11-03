@@ -1,5 +1,5 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
-import { Transform } from 'class-transformer';
+import { Transform, Type } from 'class-transformer';
 import {
   ArrayMaxSize,
   ArrayMinSize,
@@ -8,6 +8,7 @@ import {
   IsIn,
   IsInt,
   IsISO8601,
+  IsObject,
   IsString,
   IsUUID,
   Length,
@@ -15,6 +16,7 @@ import {
   Max,
   Min,
   ValidateIf,
+  ValidateNested,
 } from 'class-validator';
 import type { IncidentSeverity, SafetyTaskKind } from '@smartsite/contracts';
 const trim = ({ value }: { value: unknown }) => (typeof value === 'string' ? value.trim() : value);
@@ -44,7 +46,29 @@ export class ReasonCommandDto extends VersionCommandDto {
   @Length(1, 2000)
   reason!: string;
 }
+export class InitialActionDto {
+  @ApiProperty({ format: 'uuid' })
+  @Transform(lower)
+  @IsUUID()
+  assignedTo!: string;
+  @ApiProperty({})
+  @Transform(trim)
+  @IsString()
+  @Length(1, 10000)
+  description!: string;
+  @ValidateIf(optional)
+  @IsISO8601({ strict: true, strictSeparator: true })
+  @Matches(/T.*(?:Z|[+-]\d{2}:\d{2})$/)
+  @ApiPropertyOptional({})
+  dueAt?: string | null;
+}
 export class CreateIncidentDto extends WorkflowCommand {
+  @ApiPropertyOptional({ type: InitialActionDto })
+  @ValidateIf((_, value: unknown) => value !== undefined)
+  @IsObject()
+  @ValidateNested()
+  @Type(() => InitialActionDto)
+  initialAction?: InitialActionDto;
   @ApiPropertyOptional({ format: 'uuid', nullable: true })
   @ValidateIf(optional)
   @Transform(lower)

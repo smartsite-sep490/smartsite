@@ -14,13 +14,22 @@ describe('management client', () => {
     const fetchMock = createFetchMock(() => new Response(null, { status: 204 }));
     vi.stubGlobal('fetch', fetchMock);
     try {
-      await new SmartSiteManagementClient('https://api.example.test').changePassword('temporary-token', 'TempDemo2026!', 'NewDemo2026!');
-      expect(fetchMock.mock.calls[0]?.[0]).toBe('https://api.example.test/api/v1/auth/change-password');
+      await new SmartSiteManagementClient('https://api.example.test').changePassword(
+        'temporary-token',
+        'TempDemo2026!',
+        'NewDemo2026!',
+      );
+      expect(fetchMock.mock.calls[0]?.[0]).toBe(
+        'https://api.example.test/api/v1/auth/change-password',
+      );
       expect(fetchMock.mock.calls[0]?.[1]).toMatchObject({
-        method: 'POST', credentials: 'include',
+        method: 'POST',
+        credentials: 'include',
         body: JSON.stringify({ currentPassword: 'TempDemo2026!', newPassword: 'NewDemo2026!' }),
       });
-    } finally { vi.unstubAllGlobals(); }
+    } finally {
+      vi.unstubAllGlobals();
+    }
   });
   it('creates a contractor representative link with encoded scope IDs', async () => {
     const fetchMock = createFetchMock(
@@ -39,33 +48,6 @@ describe('management client', () => {
       expect(fetchMock.mock.calls[0]?.[1]).toMatchObject({
         method: 'POST',
         body: JSON.stringify({ userId: 'user/1' }),
-      });
-    } finally {
-      vi.unstubAllGlobals();
-    }
-  });
-
-  it('reads and atomically replaces worker gate permissions with an expected snapshot', async () => {
-    const fetchMock = vi.fn(async (_url: string, _init: RequestInit) => {
-      void _url;
-      void _init;
-      return new Response(JSON.stringify({ workerId: 'worker/a', items: [] }), { status: 200 });
-    });
-    vi.stubGlobal('fetch', fetchMock);
-    try {
-      const client = new SmartSiteManagementClient('https://api.example.test');
-      await client.getWorkerGatePermissions('synthetic-token', 'site/a', 'worker/a');
-      await client.setWorkerGatePermissions('synthetic-token', 'site/a', 'worker/a', {
-        gateIds: ['gate-north-01'],
-        expectedPermissionIds: [],
-      });
-      expect(fetchMock.mock.calls[0]?.[0]).toBe(
-        'https://api.example.test/api/v1/sites/site%2Fa/workers/worker%2Fa/gate-permissions',
-      );
-      expect(fetchMock.mock.calls[1]?.[1].method).toBe('PUT');
-      expect(JSON.parse(String(fetchMock.mock.calls[1]?.[1].body))).toEqual({
-        gateIds: ['gate-north-01'],
-        expectedPermissionIds: [],
       });
     } finally {
       vi.unstubAllGlobals();

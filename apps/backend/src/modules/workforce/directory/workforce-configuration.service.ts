@@ -24,6 +24,7 @@ import {
   AssignContractorRepresentativeDto,
   CreateContractorDto,
   CreateWorkerDto,
+  RenameSiteProfileDto,
 } from './dto/workforce.dto.js';
 import { hasActiveContractorParticipation } from '../shared/contractor-participation.js';
 import { workerDocumentStatuses } from '../documents/worker-compliance.js';
@@ -366,6 +367,74 @@ export class WorkforceConfigurationService {
     } catch (error) {
       knownUnique(error, ['uq_contractor_code']);
     }
+  }
+
+  async createContractorWithParticipation(
+    manager: EntityManager,
+    siteId: string,
+    name: string,
+    from: Date,
+    until: Date | null,
+  ) {
+    const value = command(CreateContractorDto, { name });
+    if (!(await manager.getRepository(SiteEntity).existsBy({ id: uuid(siteId) }))) missing();
+    const now = Date.now();
+    if (
+      !Number.isFinite(+from) ||
+      (until && !Number.isFinite(+until)) ||
+      +from > now ||
+      (until && (+until <= now || +until <= +from))
+    )
+      conflict('Representative registration requires a currently active participation interval');
+    const contractor = await manager
+      .getRepository(ContractorEntity)
+      .save({
+        id: randomUUID(),
+        code: `CTR-${randomUUID().toUpperCase()}`,
+        name: value.name,
+        isActive: true,
+      });
+    await manager
+      .getRepository(ContractorSiteParticipationEntity)
+      .save({
+        id: randomUUID(),
+        contractorId: contractor.id,
+        siteId,
+        validFrom: from,
+        validUntil: until,
+        isActive: true,
+      });
+    return contractor;
+  }
+
+  async renameContractor(siteId: string, contractorId: string, input: RenameSiteProfileDto) {
+    const value = command(RenameSiteProfileDto, input);
+    return this.dataSource.transaction(async (manager) => {
+      const contractor = await manager
+        .getRepository(ContractorEntity)
+        .findOne({ where: { id: uuid(contractorId) }, lock: { mode: 'pessimistic_write' } });
+      const participations = await manager
+        .getRepository(ContractorSiteParticipationEntity)
+        .findBy({ contractorId: uuid(contractorId) });
+      if (!contractor || !participations.some((p) => p.siteId === uuid(siteId))) missing();
+      if (participations.some((p) => p.siteId !== siteId))
+        conflict('Shared profiles must be edited by an administrator');
+      if (contractor.name !== value.expectedName)
+        conflict('Profile changed. Refresh before editing');
+      await manager.getRepository(ContractorEntity).update(contractor.id, { name: value.name });
+      return { id: contractor.id, name: value.name };
+    });
+  }
+
+  async requireExclusiveRepresentativeSite(manager: EntityManager, siteId: string, userId: string) {
+    uuid(siteId);
+    uuid(userId);
+    const assignments = await manager
+      .getRepository(ContractorRepresentativeAssignmentEntity)
+      .findBy({ userId });
+    if (!assignments.some((a) => a.siteId === siteId)) missing();
+    if (assignments.some((a) => a.siteId !== siteId))
+      conflict('Shared profiles must be edited by an administrator');
   }
 
   async assignRepresentative(

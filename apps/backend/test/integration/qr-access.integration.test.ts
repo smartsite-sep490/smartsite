@@ -21,7 +21,6 @@ import {
   ContractorSiteParticipationEntity,
   FaceProfileEntity,
   FaceProfileStatus,
-  WorkerGatePermissionEntity,
   WorkerSiteZoneAssignmentEntity,
   WorkerSiteZoneAssignmentStatus,
   GateEventEntity,
@@ -541,17 +540,6 @@ test('real PostgreSQL visitor approval, group counts, expiring QR, replay and wo
       requestedByUserId: managerId,
       siteManagerDecidedByUserId: managerId,
     });
-    const permissionId = randomUUID();
-    await dataSource.getRepository(WorkerGatePermissionEntity).save({
-      id: permissionId,
-      workerAssignmentId: assignmentId,
-      workerId,
-      siteId,
-      gateId,
-      validFrom: new Date(Date.now() - 60_000),
-      validUntil: null,
-      createdByUserId: managerId,
-    });
     const noShiftFallback = await service.cameraFallback(security, siteId, gateId, {
       direction: 'IN',
       reason: 'CAMERA_UNAVAILABLE',
@@ -590,6 +578,21 @@ test('real PostgreSQL visitor approval, group counts, expiring QR, replay and wo
       1,
     );
     const assigned = await assignTestShift(dataSource, siteId, workerId);
+    // Each gate accepts its own QR fallback without any per-gate Worker grant.
+    for (const entryGate of ['gate-north-01', 'gate-west-02', 'gate-logistics-03']) {
+      const session = await service.cameraFallback(security, siteId, entryGate, {
+        direction: 'IN',
+        reason: 'CAMERA_UNAVAILABLE',
+      });
+      const pass = await service.workerPass(workerActor, siteId, { fallbackSessionId: session.id });
+      const result = await service.workerGate(security, siteId, entryGate, {
+        token: pass.token,
+        direction: 'IN',
+        requestId: randomUUID(),
+      });
+      assert.equal(result.authorization, 'ALLOWED');
+    }
+
     const staleAttempt = await service.manualWorker(security, siteId, gateId, {
       requestId: randomUUID(),
       workerId,
@@ -705,6 +708,9 @@ test('real PostgreSQL visitor approval, group counts, expiring QR, replay and wo
     await assert.rejects(
       service.workerGate(security, siteId, gateId, { ...scan, direction: 'OUT' }),
     );
+    const logsBeforeScan = await dataSource
+      .getRepository(GateAccessLogEntity)
+      .countBy({ workerId });
     const workerResults = await Promise.all([
       service.workerGate(security, siteId, gateId, scan),
       service.workerGate(security, siteId, gateId, scan),
@@ -712,7 +718,10 @@ test('real PostgreSQL visitor approval, group counts, expiring QR, replay and wo
     assert.equal(workerResults[0].authorization, 'ALLOWED');
     assert.equal(workerResults[0].log.method, 'QR');
     assert.equal(workerResults[0].log.id, workerResults[1].log.id);
-    assert.equal(await dataSource.getRepository(GateAccessLogEntity).countBy({ workerId }), 2);
+    assert.equal(
+      await dataSource.getRepository(GateAccessLogEntity).countBy({ workerId }),
+      logsBeforeScan + 1,
+    );
     const attempt = workerResults[0].attempt!;
     assert.equal(attempt.status, 'READY');
     assert.equal(await dataSource.getRepository(GateEventEntity).countBy({ workerId }), 0);
@@ -846,9 +855,7 @@ test('real PostgreSQL visitor approval, group counts, expiring QR, replay and wo
     const deniedPass = await service.workerPass(workerActor, siteId, {
       fallbackSessionId: deniedFallback.id,
     });
-    await dataSource
-      .getRepository(WorkerGatePermissionEntity)
-      .update(permissionId, { revokedAt: new Date(), revokedByUserId: managerId });
+    await dataSource.getRepository(WorkerEntity).update(workerId, { isActive: false });
     assert.equal(
       (
         await service.workerGate(security, siteId, gateId, {
@@ -859,6 +866,7 @@ test('real PostgreSQL visitor approval, group counts, expiring QR, replay and wo
       ).authorization,
       'DENIED',
     );
+    await dataSource.getRepository(WorkerEntity).update(workerId, { isActive: true });
     const staleSession = await service.cameraFallback(security, siteId, gateId, {
       direction: 'IN',
       reason: 'CAMERA_UNAVAILABLE',

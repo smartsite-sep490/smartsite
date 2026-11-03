@@ -113,18 +113,43 @@ export class AuthService {
     };
   }
 
-  async authenticate(token: string) {
-    const claims = await this.tokens.verifyAccessToken(token);
-    const session = await this.dataSource.getRepository(AuthSessionEntity).findOneBy({
-      id: claims.sessionId,
-      userId: claims.userId,
-    });
-    if (!session || session.revokedAt !== null || session.expiresAt.getTime() <= Date.now())
+  /** A mutation manager holds account/session locks until the owning transaction ends. */
+  async authenticate(token: string, mutationManager?: EntityManager) {
+    if (mutationManager && !mutationManager.queryRunner?.isTransactionActive)
       throw new UnauthorizedException();
-    const user = await this.dataSource.getRepository(UserEntity).findOneBy({ id: session.userId });
+    const claims = await this.tokens.verifyAccessToken(token);
+    const manager = mutationManager ?? this.dataSource.manager;
+    // Same account-first order as password/status/role writers; logout locks only the session.
+    const user = mutationManager
+      ? await manager
+          .getRepository(UserEntity)
+          .createQueryBuilder('user')
+          .setLock('pessimistic_read')
+          .where('user.id = :id', { id: claims.userId })
+          .getOne()
+      : await manager.getRepository(UserEntity).findOneBy({ id: claims.userId });
     if (!user?.isActive) throw new UnauthorizedException();
+    const session = mutationManager
+      ? await manager
+          .getRepository(AuthSessionEntity)
+          .createQueryBuilder('session')
+          .setLock('pessimistic_read')
+          .where('session.id = :id', { id: claims.sessionId })
+          .andWhere('session.userId = :userId', { userId: claims.userId })
+          .getOne()
+      : await manager.getRepository(AuthSessionEntity).findOneBy({
+          id: claims.sessionId,
+          userId: claims.userId,
+        });
+    if (
+      !session ||
+      session.revokedAt !== null ||
+      session.expiresAt.getTime() <= Date.now() ||
+      claims.expiresAt.getTime() <= Date.now()
+    )
+      throw new UnauthorizedException();
     return {
-      user: await this.userResponse(this.dataSource.manager, user),
+      user: await this.userResponse(manager, user),
       sessionId: session.id,
       clientType: session.clientType,
     };

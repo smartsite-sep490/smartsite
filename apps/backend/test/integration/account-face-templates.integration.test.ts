@@ -4,7 +4,6 @@ import { after, test } from 'node:test';
 import { FaceEnrollmentService } from '../../src/modules/workforce/identity/face-enrollment.service.js';
 import { FaceEnrollmentController } from '../../src/modules/workforce/identity/face-enrollment.controller.js';
 import { FaceGateService } from '../../src/modules/workforce/access/face-gate.service.js';
-import { WorkerGatePermissionsService } from '../../src/modules/workforce/access/worker-gate-permissions.service.js';
 import { ContractorOperationsService } from '../../src/modules/workforce/directory/contractor-operations.service.js';
 import { WorkforceConfigurationService } from '../../src/modules/workforce/directory/workforce-configuration.service.js';
 import {
@@ -16,7 +15,6 @@ import {
   WorkerEntity,
   ContractorEntity,
   ContractorSiteParticipationEntity,
-  WorkerGatePermissionEntity,
   WorkerSiteZoneAssignmentEntity,
   WorkerSiteZoneAssignmentStatus,
   GateAccessLogEntity,
@@ -265,16 +263,6 @@ test('account linking, encrypted DB enrollment, scoped matching and revocation',
       validUntil: new Date(Date.now() + 3600_000),
       requestedByUserId: actorId,
     });
-    await dataSource.getRepository(WorkerGatePermissionEntity).save({
-      workerAssignmentId: assignmentId,
-      id: randomUUID(),
-      workerId,
-      siteId,
-      gateId: 'gate1',
-      validFrom: new Date(Date.now() - 60_000),
-      validUntil: null,
-      createdByUserId: actorId,
-    });
     await approvedWorkerDocuments(dataSource, [workerId], actorId);
     const deniedNoShift = await gate.verify(actor, siteId, 'gate1', frame, 'IN');
     assert.equal(deniedNoShift.decision.authorization, 'DENIED');
@@ -339,7 +327,7 @@ test('account linking, encrypted DB enrollment, scoped matching and revocation',
     await assert.rejects(gate.verify({ ...actor, id: randomUUID() }, siteId, 'gate1', frame)); // cannot acknowledge ALLOWED when audit persistence fails
     assert.equal(
       (await gate.verify(actor, siteId, 'gate2', frame)).decision.authorization,
-      'DENIED',
+      'ALLOWED',
     );
     await assert.rejects(
       gate.listLogs(
@@ -356,81 +344,12 @@ test('account linking, encrypted DB enrollment, scoped matching and revocation',
       ),
     );
     await assert.rejects(gate.verify(actor, siteId, 'gate1', frame, 'INVALID' as 'IN'));
-    const permissions = new WorkerGatePermissionsService(dataSource);
-    const current = await permissions.list(actor, siteId, workerId);
-    const changed = await permissions.set(actor, siteId, workerId, {
-      gateIds: ['gate-north-01', 'gate-west-02'],
-      expectedPermissionIds: current.items.map((item) => item.id),
-    });
-    assert.equal(
-      (await gate.verify(actor, siteId, 'gate-north-01', frame)).decision.authorization,
-      'ALLOWED',
-    );
-    assert.equal(
-      (await gate.verify(actor, siteId, 'gate-west-02', frame)).decision.authorization,
-      'ALLOWED',
-    );
-    assert.equal(
-      (await gate.verify(actor, siteId, 'gate1', frame)).decision.authorization,
-      'DENIED',
-    );
-    assert.equal(
-      (await gate.verify(actor, siteId, 'gate-logistics-03', frame)).decision.authorization,
-      'DENIED',
-    );
-    await assert.rejects(
-      permissions.set(actor, siteId, workerId, {
-        gateIds: [],
-        expectedPermissionIds: current.items.map((item) => item.id),
-      }),
-    );
-    await assert.rejects(
-      permissions.set(actor, siteId, workerId, {
-        gateIds: ['unknown-gate'],
-        expectedPermissionIds: changed.items.map((item) => item.id),
-      }),
-    );
-    await assert.rejects(permissions.list(actor, otherSiteId, workerId));
-    await assert.rejects(
-      permissions.list(
-        { ...actor, roleAssignments: [{ role: UserRole.WORKER, siteId }] },
-        siteId,
-        workerId,
-      ),
-    );
-    assert.ok(
-      (
-        await permissions.list(
-          { ...actor, roleAssignments: [{ role: UserRole.SITE_MANAGER, siteId }] },
-          siteId,
-          workerId,
-        )
-      ).items.length,
-    );
-    const concurrent = await Promise.allSettled([
-      permissions.set(actor, siteId, workerId, {
-        gateIds: ['gate-north-01'],
-        expectedPermissionIds: changed.items.map((item) => item.id),
-      }),
-      permissions.set(actor, siteId, workerId, {
-        gateIds: ['gate-west-02'],
-        expectedPermissionIds: changed.items.map((item) => item.id),
-      }),
-    ]);
-    assert.equal(concurrent.filter((result) => result.status === 'fulfilled').length, 1);
-    const last = await permissions.list(actor, siteId, workerId);
-    await permissions.set(actor, siteId, workerId, {
-      gateIds: [],
-      expectedPermissionIds: last.items.map((item) => item.id),
-    });
-    assert.equal(
-      (await gate.verify(actor, siteId, 'gate-north-01', frame)).decision.authorization,
-      'DENIED',
-    );
-    assert.equal(
-      (await gate.verify(actor, siteId, 'gate-west-02', frame)).decision.authorization,
-      'DENIED',
-    );
+    for (const gateId of ['gate-north-01', 'gate-west-02', 'gate-logistics-03']) {
+      assert.equal(
+        (await gate.verify(actor, siteId, gateId, frame)).decision.authorization,
+        'ALLOWED',
+      );
+    }
     await gate.verify(
       { ...actor, roleAssignments: [{ role: UserRole.SECURITY_OFFICER, siteId: otherSiteId }] },
       otherSiteId,

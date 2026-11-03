@@ -1,3 +1,8 @@
+import { Mf06IngestionEnqueueService } from '../../modules/safety/assessments/mf06-ingestion-enqueue.service.js';
+import { Mf06EnqueueService } from '../../modules/safety/assessments/mf06-enqueue.service.js';
+import { validatePartitionedObservationEvent } from '@smartsite/contracts';
+import { admitPartitionedFrame } from './partitioned-frame-admission.js';
+import { resolveAlertObservationSubjects } from '../../modules/safety/alerts/alert-observation-subjects.js';
 import { HttpStatus, Injectable, Logger, Optional } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import type { BackendEnvironment } from '../../config/environment.js';
@@ -59,6 +64,7 @@ export class AiIngestionService {
     private readonly configService: ConfigService<BackendEnvironment, true>,
     @Optional() clock?: () => Date,
     @Optional() zoneEntryAuthorization?: ZoneEntryAuthorizationService,
+    @Optional() private readonly mf06Enqueue?: Mf06IngestionEnqueueService,
   ) {
     this.clock = clock ?? (() => new Date());
     this.zoneEntryAuthorization = zoneEntryAuthorization ?? new ZoneEntryAuthorizationService();
@@ -77,7 +83,14 @@ export class AiIngestionService {
 
   async ingestEvent(payload: unknown): Promise<AiIngestionResult> {
     // 1. Validate contract schema and semantic geometry (Spec §15.1, §16)
-    const validationResult = validateObservationEvent(payload);
+    const validationResult =
+      payload &&
+      typeof payload === 'object' &&
+      'schemaVersion' in payload &&
+      payload.schemaVersion === '1.4.0' &&
+      this.configService.get('AI_PARTITIONED_FRAME_ENABLED', { infer: true }) === true
+        ? validatePartitionedObservationEvent(payload)
+        : validateObservationEvent(payload);
     if (!validationResult.isValid) {
       throw new PublicHttpException(HttpStatus.BAD_REQUEST, {
         code: 'VALIDATION_FAILED',
@@ -117,10 +130,25 @@ export class AiIngestionService {
       isClockSkew = capturedMs < minAllowedMs || capturedMs > maxAllowedMs;
     }
 
+    const enqueueEnabled = this.configService.get('MF06_ENQUEUE_ENABLED', { infer: true }) === true;
+    if (enqueueEnabled && !this.mf06Enqueue) {
+      throw new PublicHttpException(HttpStatus.SERVICE_UNAVAILABLE, {
+        code: 'AI_INGESTION_UNAVAILABLE',
+        message: 'AI ingestion is temporarily unavailable',
+      });
+    }
     // 4. Same-transaction context resolution, raw preservation, and alert grouping
     try {
       return await this.dataSource.transaction(async (manager: EntityManager) => {
-        const camera = await this.contextResolver.resolveCamera(manager, event.cameraExternalId);
+        const camera = await this.contextResolver.resolveCamera(
+          manager,
+          event.cameraExternalId,
+          enqueueEnabled,
+        );
+
+        const frameScope = camera
+          ? await admitPartitionedFrame(manager, event, camera.id)
+          : undefined;
 
         let status: EventProcessingStatus;
         let note: string | null = null;
@@ -158,6 +186,7 @@ export class AiIngestionService {
                   event.cameraExternalId,
                   obs['regionId'],
                   obs['geometryVersion'],
+                  enqueueEnabled,
                 );
                 if (ctx) {
                   contextMap.set(key, ctx);
@@ -238,9 +267,14 @@ export class AiIngestionService {
           processingStatus: status,
           processingNote: note,
         });
-        await rawEventRepo.insert(
-          rawEvent as unknown as QueryDeepPartialEntity<AiObservationEventEntity>,
-        );
+        if (enqueueEnabled) {
+          await new Mf06EnqueueService(this.dataSource).insertFresh(manager, rawEvent);
+          await this.mf06Enqueue!.enqueueFresh(manager, rawEvent);
+        } else {
+          await rawEventRepo.insert(
+            rawEvent as unknown as QueryDeepPartialEntity<AiObservationEventEntity>,
+          );
+        }
 
         for (const decision of zoneDecisions) {
           await this.zoneEntryAuthorization.record(manager, decision.input, decision.result);
@@ -249,22 +283,40 @@ export class AiIngestionService {
         // Group candidates and create AlertDetectionMapping only when PROCESSED
         const alertIds: string[] = [];
         if (status === EventProcessingStatus.PROCESSED && camera) {
-          for (const candidate of candidates) {
+          // Acquire shared grouping locks in a consistent order, preserving response order.
+          const ordered = candidates.map((candidate, index) => ({ candidate, index }));
+          ordered.sort((left, right) =>
+            left.candidate.groupingKey < right.candidate.groupingKey
+              ? -1
+              : left.candidate.groupingKey > right.candidate.groupingKey
+                ? 1
+                : 0,
+          );
+          for (const { candidate, index } of ordered) {
             const alert = await this.durableGroupingService.groupCandidate(
               manager,
               camera.siteId,
               candidate,
               capturedAt,
+              frameScope,
             );
-            alertIds.push(alert.id);
+            alertIds[index] = alert.id;
           }
 
-          const uniqueAlertIds = Array.from(new Set(alertIds));
+          const subjects = resolveAlertObservationSubjects(
+            event.eventId,
+            event.observations as unknown as Observation[],
+            candidates.map((candidate, index) => ({
+              alertId: alertIds[index]!,
+              trackId: candidate.trackId,
+            })),
+          );
           const mappingRepo = manager.getRepository(AlertDetectionMappingEntity);
-          for (const alertId of uniqueAlertIds) {
+          for (const [alertId, personObservationIndex] of subjects) {
             await mappingRepo.insert({
               alertId,
               eventId: event.eventId,
+              personObservationIndex,
             });
           }
         }

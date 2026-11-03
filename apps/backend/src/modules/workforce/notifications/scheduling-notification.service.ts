@@ -87,7 +87,13 @@ export class SchedulingNotificationService {
   ): Promise<number> {
     if (
       alert.alertType !== 'PPE_VIOLATION' ||
-      !['PPE_HARD_HAT_MISSING', 'PPE_SAFETY_VEST_MISSING'].includes(alert.candidateSubtype)
+      ![
+        'PPE_HARD_HAT_MISSING',
+        'PPE_SAFETY_VEST_MISSING',
+        'PPE_GLOVES_MISSING',
+        'PPE_BOOTS_MISSING',
+        'PPE_GOGGLES_MISSING',
+      ].includes(alert.candidateSubtype)
     )
       invalid('Invalid PPE notification alert');
     const recipients: { id: string }[] = await manager.query(

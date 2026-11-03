@@ -8,7 +8,7 @@ import type {
   VisitorQrPreviewResponse,
   VisitorGateEventResponse,
 } from '@smartsite/contracts';
-import { SITE_GATES } from '@smartsite/contracts/gate-permissions';
+import { SITE_GATES } from '@smartsite/contracts/gates';
 import { useTranslation } from 'react-i18next';
 import { uiLocale } from '../../../i18n';
 import { QrScannerView } from '../gate/QrScannerView';
@@ -1198,7 +1198,9 @@ export function VisitorAccessView({
                         {(() => {
                           const p = getPresenceInfo(v, t);
                           return (
-                            <span className={`rounded-md px-2 py-0.5 text-[11px] border ${p.badgeClass}`}>
+                            <span
+                              className={`rounded-md px-2 py-0.5 text-[11px] border ${p.badgeClass}`}
+                            >
                               {p.statusText}
                             </span>
                           );

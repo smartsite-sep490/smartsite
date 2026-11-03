@@ -1,10 +1,21 @@
-import { Column, CreateDateColumn, Entity, ForeignKey, PrimaryColumn, Unique } from 'typeorm';
+import {
+  Column,
+  CreateDateColumn,
+  DeleteDateColumn,
+  Entity,
+  ForeignKey,
+  PrimaryColumn,
+  Unique,
+} from 'typeorm';
 import { ZoneRestrictionPolicy, ZoneType } from './enums.js';
 import { SiteEntity } from './site.entity.js';
 
+@Unique('uq_mf06_request_zone_scope', ['id', 'siteId'])
 @Entity({ name: 'zone' })
 @Unique('uq_zone_site_code', ['siteId', 'code'])
 export class ZoneEntity {
+  @DeleteDateColumn({ name: 'deleted_at', type: 'timestamptz', nullable: true })
+  deletedAt?: Date | null;
   @PrimaryColumn({ name: 'id', type: 'uuid', primaryKeyConstraintName: 'pk_zone_id' })
   id!: string;
 

@@ -111,6 +111,7 @@ ai_observation_event|created_at|timestamptz|NO||||now()
 alert_detection_mapping|alert_id|uuid|NO||||
 alert_detection_mapping|event_id|uuid|NO||||
 alert_detection_mapping|created_at|timestamptz|NO||||now()
+alert_detection_mapping|person_observation_index|int2|YES||16|0|
 camera|id|uuid|NO||||
 camera|site_id|uuid|NO||||
 camera|external_id|varchar|NO|128|||
@@ -158,6 +159,7 @@ zone|restriction_policy|zone_restriction_policy|NO||||
 zone|required_ppe|_text|NO||||'{}'::text[]
 zone|created_at|timestamptz|NO||||now()
 zone|configuration_locked|bool|NO||||false
+zone|deleted_at|timestamptz|YES||||
 `
       .trim()
       .split('\n');

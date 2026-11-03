@@ -212,6 +212,23 @@ export const backendEnvironmentSchema = z
         }
       }, 'must be an absolute HTTP(S) URL without credentials')
       .optional(),
+    MF06_ENQUEUE_ENABLED: z
+      .enum(['false', 'true'])
+      .default('false')
+      .transform((value) => value === 'true'),
+    MF06_ENQUEUE_MAX_OUTSTANDING: z
+      .string()
+      .regex(/^\d+$/, 'must be an integer between 1 and 10000')
+      .transform(Number)
+      .refine(
+        (value) => Number.isSafeInteger(value) && value >= 1 && value <= 10000,
+        'must be an integer between 1 and 10000',
+      )
+      .optional(),
+    AI_PARTITIONED_FRAME_ENABLED: z
+      .enum(['false', 'true'])
+      .default('false')
+      .transform((value) => value === 'true'),
     ALERT_COOLDOWN_SECONDS: integer(60, 1, MAX_SAFE_SECONDS),
     MAX_PAST_EVENT_AGE_SECONDS: integer(300, 1, MAX_SAFE_SECONDS),
     MAX_FUTURE_CLOCK_SKEW_SECONDS: integer(30, 1, MAX_SAFE_SECONDS),
@@ -295,6 +312,13 @@ export const backendEnvironmentSchema = z
   })
   .superRefine((config, context) => {
     productionDatabase(config, context);
+    if (config.MF06_ENQUEUE_ENABLED && config.MF06_ENQUEUE_MAX_OUTSTANDING === undefined) {
+      context.addIssue({
+        code: 'custom',
+        path: ['MF06_ENQUEUE_MAX_OUTSTANDING'],
+        message: 'must be explicitly set when MF06 enqueue is enabled',
+      });
+    }
     if (Boolean(config.RESEND_API_KEY) !== Boolean(config.RESEND_FROM_EMAIL)) {
       context.addIssue({
         code: 'custom',
