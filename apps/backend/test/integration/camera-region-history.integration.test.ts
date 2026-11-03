@@ -7,14 +7,12 @@ import {
   CameraObservationRegionEntity,
   CameraStatus,
   SiteEntity,
-  ZoneEntity,
-  ZoneRestrictionPolicy,
-  ZoneType,
 } from '../../src/database/entities/index.js';
 import { CameraConfigurationService } from '../../src/modules/cameras/camera-configuration.service.js';
 import { SiteConfigurationService } from '../../src/modules/sites/site-configuration.service.js';
 import { ZoneConfigurationService } from '../../src/modules/zones/zone-configuration.service.js';
 import { createIsolatedTestDatabase } from '../support/isolated-test-database.js';
+import { CameraRegionGeometryRevisions1793577600000 } from '../../src/database/migrations/1793577600000-CameraRegionGeometryRevisions.js';
 
 test('Region history preserves active state, cutover truth and atomic legacy mutations', async (t) => {
   const owned = createIsolatedTestDatabase();
@@ -77,15 +75,12 @@ test('Region history preserves active state, cutover truth and atomic legacy mut
       name: 'Synthetic Camera',
       configurationVersion: 11,
     });
-    await db.getRepository(ZoneEntity).insert({
-      id: zoneId,
-      siteId,
-      code: zoneId,
-      name: 'Synthetic Zone',
-      type: ZoneType.RESTRICTED,
-      restrictionPolicy: ZoneRestrictionPolicy.PROHIBITED_FOR_ALL,
-      requiredPpe: ['HARD_HAT'],
-    });
+    // Seed the historical schema without asking current ORM metadata for future columns.
+    await db.query(
+      `INSERT INTO zone(id,site_id,code,name,type,restriction_policy,required_ppe)
+       VALUES($1,$2,$1::uuid::text,'Synthetic Zone','RESTRICTED','PROHIBITED_FOR_ALL',ARRAY['HARD_HAT'])`,
+      [zoneId, siteId],
+    );
     await db.getRepository(CameraObservationRegionEntity).insert({
       id: oldId,
       cameraId,
@@ -110,6 +105,12 @@ test('Region history preserves active state, cutover truth and atomic legacy mut
       assert.ok(baseline.recorded_at.getTime() >= beforeUpgrade);
       assert.equal((await history()).length, 1);
     });
+    // Current services require the full current schema, including later Zone soft deletion.
+    // Reinitialize to rebuild TypeORM's migration instances from the restored options.
+    await db.destroy();
+    db.setOptions({ migrations });
+    await db.initialize();
+    await db.runMigrations();
     const sites = new SiteConfigurationService(db);
     const zones = new ZoneConfigurationService(db, sites);
     const cameras = new CameraConfigurationService(db, zones, sites);
@@ -227,7 +228,19 @@ test('Region history preserves active state, cutover truth and atomic legacy mut
         ]) {
           await assert.rejects(db.query(sql), (e: { code?: string }) => e.code === '23514');
         }
-        await assert.rejects(db.undoLastMigration(), /Region revision history must be retained/);
+        const runner = db.createQueryRunner();
+        await runner.connect();
+        try {
+          await runner.startTransaction();
+          // Target the history migration itself; later Main migrations now follow it.
+          await assert.rejects(
+            new CameraRegionGeometryRevisions1793577600000().down(runner),
+            /Region revision history must be retained/,
+          );
+        } finally {
+          if (runner.isTransactionActive) await runner.rollbackTransaction();
+          await runner.release();
+        }
         assert.equal((await history()).length, 6);
       },
     );
