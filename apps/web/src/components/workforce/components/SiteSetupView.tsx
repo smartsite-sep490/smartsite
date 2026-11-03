@@ -26,7 +26,8 @@ import {
   IconChevronRight,
   IconUsers,
 } from '../../icons';
-import { SmartSelect } from '../../ui';
+import { SmartSelect, Toast, ToastContainer, useToast } from '../../ui';
+import { participationDates } from './participation-dates';
 import {
   addSiteManagerAssignment,
   getAssignableRepresentatives,
@@ -69,10 +70,10 @@ export function SiteSetupView({ apiUrl }: SiteSetupViewProps) {
   >('contractors');
   const [siteSearchQuery, setSiteSearchQuery] = useState('');
   const [contractorSearchQuery, setContractorSearchQuery] = useState('');
+  const { toast, showToast, hideToast } = useToast();
 
   // Modal open states
   const [showCreateSiteModal, setShowCreateSiteModal] = useState(false);
-  const [showCreateContractorModal, setShowCreateContractorModal] = useState(false);
   const [showCreateRepModal, setShowCreateRepModal] = useState(false);
   const [showAssignRepModal, setShowAssignRepModal] = useState(false);
   const [showAssignManagerModal, setShowAssignManagerModal] = useState(false);
@@ -86,17 +87,21 @@ export function SiteSetupView({ apiUrl }: SiteSetupViewProps) {
   const [siteCode, setSiteCode] = useState('');
   const [siteError, setSiteError] = useState<string | null>(null);
 
-  // Contractor Form State
-  const [contractorName, setContractorName] = useState('');
-  const [contractorError, setContractorError] = useState<string | null>(null);
-  const [contractorSuccessMsg, setContractorSuccessMsg] = useState<string | null>(null);
-
   // Representative Form State
   const [repUsername, setRepUsername] = useState('');
   const [repDisplayName, setRepDisplayName] = useState('');
   const [repPassword, setRepPassword] = useState('');
   const [showRepPassword, setShowRepPassword] = useState(false);
   const [repContractorId, setRepContractorId] = useState('');
+  const [repNewContractorName, setRepNewContractorName] = useState('');
+  const [repStartDate, setRepStartDate] = useState(new Date().toLocaleDateString('en-CA'));
+  const [repEndDate, setRepEndDate] = useState('');
+  const [editProfile, setEditProfile] = useState<{
+    kind: 'contractor' | 'representative';
+    id: string;
+    name: string;
+    expectedName: string;
+  } | null>(null);
   const [repError, setRepError] = useState<string | null>(null);
   const [repSuccessMsg, setRepSuccessMsg] = useState<string | null>(null);
   const [existingRepId, setExistingRepId] = useState('');
@@ -264,31 +269,6 @@ export function SiteSetupView({ apiUrl }: SiteSetupViewProps) {
     },
   });
 
-  const createContractorMutation = useMutation({
-    mutationFn: (input: { name: string }) =>
-      client.createContractor(accessToken!, activeSiteId!, input),
-    onSuccess: (newContractor) => {
-      setContractorError(null);
-      setContractorSuccessMsg(
-        tr('messages.a3a47618783d', { value1: newContractor.name, value2: newContractor.code }),
-      );
-      setContractorName('');
-      setShowCreateContractorModal(false);
-      queryClient.invalidateQueries({ queryKey: [...setupKey, 'contractors', activeSiteId] });
-      queryClient.invalidateQueries({
-        queryKey: ['access-control', apiUrl, currentUser?.id, activeSiteId, 'access-setup'],
-      });
-      setTimeout(() => setContractorSuccessMsg(null), 5000);
-    },
-    onError: (err: unknown) => {
-      if (err instanceof ApiError) {
-        setContractorError(userErrorMessage(err));
-      } else {
-        setContractorError(tr('site_setup_view.failed_to_create_contractor_please_check_inputs'));
-      }
-    },
-  });
-
   const createRepresentativeMutation = useMutation({
     mutationFn: async (input: {
       username: string;
@@ -296,6 +276,14 @@ export function SiteSetupView({ apiUrl }: SiteSetupViewProps) {
       temporaryPassword: string;
       contractorId: string;
     }) => {
+      if (input.contractorId === '__new__')
+        return client.createContractorRepresentative(accessToken!, activeSiteId!, {
+          username: input.username,
+          displayName: input.displayName,
+          temporaryPassword: input.temporaryPassword,
+          contractorName: repNewContractorName.trim(),
+          ...participationDates(repStartDate, repEndDate),
+        });
       return client.createSiteRepresentative(accessToken!, activeSiteId!, input.contractorId, {
         username: input.username,
         displayName: input.displayName,
@@ -310,6 +298,9 @@ export function SiteSetupView({ apiUrl }: SiteSetupViewProps) {
       setRepPassword('');
       setRepContractorId('');
       setShowCreateRepModal(false);
+      void queryClient.invalidateQueries({
+        predicate: (query) => query.queryKey.includes(activeSiteId!),
+      });
       queryClient.invalidateQueries({ queryKey: [...setupKey, 'users'] });
       queryClient.invalidateQueries({
         queryKey: [...setupKey, 'contractor-representative-assignments', activeSiteId],
@@ -327,6 +318,26 @@ export function SiteSetupView({ apiUrl }: SiteSetupViewProps) {
           ),
         );
       }
+    },
+  });
+
+  const renameProfile = useMutation({
+    mutationFn: (profile: NonNullable<typeof editProfile>) =>
+      profile.kind === 'contractor'
+        ? client.renameContractor(accessToken!, activeSiteId!, profile.id, {
+            name: profile.name.trim(),
+            expectedName: profile.expectedName,
+          })
+        : client.renameSiteRepresentative(accessToken!, activeSiteId!, profile.id, {
+            name: profile.name.trim(),
+            expectedName: profile.expectedName,
+          }),
+    onSuccess: () => {
+      setEditProfile(null);
+      showToast(tr('contractor_profile.updated_successfully'));
+      void queryClient.invalidateQueries({
+        predicate: (query) => query.queryKey.includes(activeSiteId!),
+      });
     },
   });
 
@@ -412,6 +423,7 @@ export function SiteSetupView({ apiUrl }: SiteSetupViewProps) {
       setRevokeManagerId(null);
       setShowAssignManagerModal(false);
       setManagerSuccessMsg(tr('site_setup_view.manager_revoked'));
+      showToast(tr('site_setup_view.manager_revoked'));
       await queryClient.invalidateQueries({ queryKey: [...setupKey, 'users'] });
       setTimeout(() => setManagerSuccessMsg(null), 5000);
     },
@@ -494,29 +506,19 @@ export function SiteSetupView({ apiUrl }: SiteSetupViewProps) {
     createSiteMutation.mutate({ code, name: siteName.trim() });
   };
 
-  const handleCreateContractorSubmit = (e: React.FormEvent) => {
-    e.preventDefault();
-    setContractorError(null);
-    if (!activeSiteId) {
-      setContractorError(tr('site_setup_view.please_select_an_active_site_first'));
-      return;
-    }
-    if (!contractorName.trim()) {
-      setContractorError(tr('site_setup_view.contractor_name_is_required'));
-      return;
-    }
-
-    createContractorMutation.mutate({
-      name: contractorName.trim(),
-    });
-  };
-
   const handleCreateRepSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     setRepError(null);
     const contractorId = repContractorId || preselectedContractorId || contractors[0]?.id;
     if (!activeSiteId || !contractorId) {
       setRepError(tr('site_setup_view.an_active_contractor_must_be_selected'));
+      return;
+    }
+    if (
+      contractorId === '__new__' &&
+      (!repNewContractorName.trim() || !repStartDate || (repEndDate && repEndDate < repStartDate))
+    ) {
+      setRepError(tr('contractor_profile.check_fields'));
       return;
     }
     if (!repUsername.trim()) {
@@ -542,7 +544,10 @@ export function SiteSetupView({ apiUrl }: SiteSetupViewProps) {
 
   const openRepModalForContractor = (contractorId: string) => {
     setPreselectedContractorId(contractorId);
-    setRepContractorId(contractorId);
+    setRepContractorId(contractorId || '__new__');
+    setRepNewContractorName('');
+    setRepStartDate(new Date().toLocaleDateString('en-CA'));
+    setRepEndDate('');
     setRepError(null);
     setShowCreateRepModal(true);
   };
@@ -644,25 +649,22 @@ export function SiteSetupView({ apiUrl }: SiteSetupViewProps) {
       )}
       {/* 1. Header & Quick Actions */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-4 border-b border-slate-200/80">
-        {isAdmin && <div className="flex min-w-0 items-center gap-3">
-          <div className="w-10 h-10 rounded-xl bg-[#071A2B] text-white flex items-center justify-center shadow-xs shrink-0">
-            <IconBuilding className="w-5 h-5 text-[#F66B17]" />
-          </div>
+        <div className="flex min-w-0 items-center gap-3">
           <div className="min-w-0">
             <div className="flex flex-wrap items-center gap-2">
               <span className="text-[10px] font-bold uppercase tracking-[0.16em] text-slate-500">
-                {tr('common.administration')}
+                {isAdmin ? tr('common.administration') : tr('integrated_ui.site_operations')}
               </span>
               <span className="text-slate-300">•</span>
               <span className="text-[10px] font-bold uppercase tracking-[0.16em] text-slate-500">
-                {tr('common.workspace_setup')}
+                {isAdmin ? tr('common.workspace_setup') : tr('siteOps.titleManage')}
               </span>
             </div>
-            <h1 className="text-xl font-bold tracking-tight text-[#071A2B]">
+            <h1 className="text-xl font-bold tracking-tight text-[#041D2E]">
               {isAdmin ? tr('common.site_setup') : tr('site_setup_view.contractor_zone_setup')}
             </h1>
           </div>
-        </div>}
+        </div>
 
         <div className="flex items-center gap-2.5">
           <button
@@ -692,7 +694,7 @@ export function SiteSetupView({ apiUrl }: SiteSetupViewProps) {
                 setSiteCode('');
                 setShowCreateSiteModal(true);
               }}
-              className="flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-[#071A2B] text-white text-xs font-bold hover:bg-[#0E2841] transition-all cursor-pointer shadow-xs active:scale-[0.98]"
+              className="flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-[#041D2E] text-white text-xs font-bold hover:bg-[#072A42] transition-all cursor-pointer shadow-xs active:scale-[0.98]"
             >
               <IconPlus className="w-3.5 h-3.5 text-[#F66B17]" />
               <span>{tr('common.new_site')}</span>
@@ -701,8 +703,14 @@ export function SiteSetupView({ apiUrl }: SiteSetupViewProps) {
         </div>
       </div>
 
-      {/* Success Notification Banners */}
-      {isManager && <SiteOperationsSetupView apiUrl={apiUrl} participationOnly />}
+      {/* Success Notification Banners & Participation Directory */}
+      {isManager && (
+        <SiteOperationsSetupView
+          apiUrl={apiUrl}
+          participationOnly
+          siteId={activeSiteId ?? undefined}
+        />
+      )}
       {isAdmin && <ContractorParticipationDirectory apiUrl={apiUrl} />}
       {(sitesQuery.isError ||
         usersQuery.isError ||
@@ -717,22 +725,6 @@ export function SiteSetupView({ apiUrl }: SiteSetupViewProps) {
           )}
         </div>
       )}
-      {contractorSuccessMsg && (
-        <div className="p-3.5 rounded-xl bg-emerald-50 border border-emerald-200 text-emerald-800 text-xs flex items-center justify-between animate-in fade-in duration-200">
-          <div className="flex items-center gap-2.5 font-medium">
-            <IconCheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
-            <span>{localizeMessage(contractorSuccessMsg)}</span>
-          </div>
-          <button
-            type="button"
-            onClick={() => setContractorSuccessMsg(null)}
-            className="text-emerald-600 hover:text-emerald-900 cursor-pointer"
-          >
-            <IconX className="w-4 h-4" />
-          </button>
-        </div>
-      )}
-
       {repSuccessMsg && (
         <div className="p-3.5 rounded-xl bg-emerald-50 border border-emerald-200 text-emerald-800 text-xs flex items-center justify-between animate-in fade-in duration-200">
           <div className="flex items-center gap-2.5 font-medium">
@@ -767,55 +759,70 @@ export function SiteSetupView({ apiUrl }: SiteSetupViewProps) {
 
       {/* 2. Top Summary Metrics */}
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-3.5">
-        <div className="bg-white border border-slate-200/80 rounded-xl p-3.5 shadow-2xs flex items-center justify-between">
+        {/* Total Sites */}
+        <div className="bg-white border border-slate-200/80 rounded-2xl p-4 shadow-2xs hover:shadow-xs transition-shadow flex items-center justify-between">
           <div className="space-y-0.5">
-            <span className="text-xs font-medium text-slate-500">{tr('common.total_sites')}</span>
-            <p className="text-xl font-bold tracking-tight text-[#071A2B]">{sites.length}</p>
+            <span className="text-[11px] font-bold uppercase tracking-wider text-slate-500">
+              {tr('common.total_sites')}
+            </span>
+            <p className="text-2xl font-black tracking-tight text-[#041D2E]">{sites.length}</p>
           </div>
-          <div className="w-8 h-8 rounded-lg bg-slate-50 border border-slate-100 flex items-center justify-center text-slate-600">
-            <IconBuilding className="w-4 h-4" />
+          <div className="w-9 h-9 rounded-xl bg-orange-50 border border-orange-200/60 flex items-center justify-center text-[#F66B17] shrink-0">
+            <IconBuilding className="w-4.5 h-4.5" />
           </div>
         </div>
 
-        <div className="bg-white border border-slate-200/80 rounded-xl p-3.5 shadow-2xs flex items-center justify-between">
+        {/* Contractors / Managers */}
+        <div className="bg-white border border-slate-200/80 rounded-2xl p-4 shadow-2xs hover:shadow-xs transition-shadow flex items-center justify-between">
           <div className="space-y-0.5">
-            <span className="text-xs font-medium text-slate-500">
+            <span className="text-[11px] font-bold uppercase tracking-wider text-slate-500">
               {isAdmin ? tr('common.site_managers') : tr('common.contractors_on_site')}
             </span>
-            <p className="text-xl font-bold tracking-tight text-[#071A2B]">
-              {isAdmin
-                ? usersQuery.isPending
-                  ? '...'
-                  : siteManagers.length
-                : contractorsQuery.isPending
-                  ? '...'
-                  : contractors.length}
+            <p className="text-2xl font-black tracking-tight text-[#041D2E]">
+              {isAdmin ? (
+                usersQuery.isPending ? (
+                  <span className="text-slate-300 text-lg">—</span>
+                ) : (
+                  siteManagers.length
+                )
+              ) : contractorsQuery.isPending ? (
+                <span className="text-slate-300 text-lg">—</span>
+              ) : (
+                contractors.length
+              )}
             </p>
           </div>
-          <div className="w-8 h-8 rounded-lg bg-slate-50 border border-slate-100 flex items-center justify-center text-slate-600">
-            <IconBuilding2 className="w-4 h-4" />
+          <div className="w-9 h-9 rounded-xl bg-orange-50 border border-orange-200/60 flex items-center justify-center text-[#F66B17] shrink-0">
+            <IconBuilding2 className="w-4.5 h-4.5" />
           </div>
         </div>
 
-        <div className="bg-white border border-slate-200/80 rounded-xl p-3.5 shadow-2xs flex items-center justify-between">
+        {/* Representatives / Manager Status */}
+        <div className="bg-white border border-slate-200/80 rounded-2xl p-4 shadow-2xs hover:shadow-xs transition-shadow flex items-center justify-between">
           <div className="space-y-0.5">
-            <span className="text-xs font-medium text-slate-500">
+            <span className="text-[11px] font-bold uppercase tracking-wider text-slate-500">
               {isAdmin ? tr('common.manager_status') : tr('common.representatives')}
             </span>
-            <p className="text-xl font-bold tracking-tight text-[#071A2B]">
-              {usersQuery.isPending
-                ? '...'
-                : isAdmin
-                  ? usersQuery.isError
-                    ? tr('common.unavailable')
-                    : readySiteManagers.length
-                      ? tr('common.ready')
-                      : tr('common.not_ready')
-                  : siteRepresentatives.length}
+            <p className="text-2xl font-black tracking-tight text-[#041D2E]">
+              {usersQuery.isPending ? (
+                <span className="text-slate-300 text-lg">—</span>
+              ) : isAdmin ? (
+                usersQuery.isError ? (
+                  <span className="text-rose-500 text-sm font-bold">
+                    {tr('common.unavailable')}
+                  </span>
+                ) : readySiteManagers.length ? (
+                  <span className="text-emerald-600 text-sm font-bold">{tr('common.ready')}</span>
+                ) : (
+                  <span className="text-amber-600 text-sm font-bold">{tr('common.not_ready')}</span>
+                )
+              ) : (
+                siteRepresentatives.length
+              )}
             </p>
           </div>
-          <div className="w-8 h-8 rounded-lg bg-slate-50 border border-slate-100 flex items-center justify-center text-slate-600">
-            <IconUsers className="w-4 h-4" />
+          <div className="w-9 h-9 rounded-xl bg-blue-50 border border-blue-200/60 flex items-center justify-center text-blue-600 shrink-0">
+            <IconUsers className="w-4.5 h-4.5" />
           </div>
         </div>
       </div>
@@ -823,20 +830,21 @@ export function SiteSetupView({ apiUrl }: SiteSetupViewProps) {
       {/* 3. Main Master-Detail Hub */}
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-5 items-start">
         {/* Left Column: Sites Navigator (4 cols) */}
-        <div className="lg:col-span-4 bg-white rounded-2xl border border-slate-200/90 shadow-xs overflow-hidden flex flex-col">
-          <div className="p-3.5 border-b border-slate-100 bg-slate-50/50 flex items-center justify-between">
+        <div className="lg:col-span-4 rounded-2xl border border-slate-200/90 bg-white shadow-xs overflow-hidden flex flex-col">
+          {/* Nav header */}
+          <div className="p-3.5 border-b border-slate-100 bg-slate-50/70 flex items-center justify-between">
             <div className="flex items-center gap-2">
-              <h2 className="text-xs font-bold tracking-wider text-slate-800">
+              <h2 className="text-xs font-bold tracking-wider text-slate-800 uppercase">
                 {tr('common.sites')}
               </h2>
-              <span className="text-[11px] font-bold px-1.5 py-0.5 rounded-full bg-slate-200 text-slate-700">
+              <span className="text-[10px] font-bold px-1.5 py-0.5 rounded-full bg-slate-200 text-slate-700">
                 {sites.length}
               </span>
             </div>
           </div>
 
-          {/* Search input for sites */}
-          <div className="p-2.5 border-b border-slate-100">
+          {/* Search input */}
+          <div className="p-2.5 border-b border-slate-100 bg-white">
             <div className="relative">
               <IconSearch className="w-3.5 h-3.5 text-slate-400 absolute left-2.5 top-1/2 -translate-y-1/2" />
               <input
@@ -850,7 +858,7 @@ export function SiteSetupView({ apiUrl }: SiteSetupViewProps) {
                 <button
                   type="button"
                   onClick={() => setSiteSearchQuery('')}
-                  className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 p-0.5"
+                  className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 p-0.5 cursor-pointer"
                 >
                   <IconX className="w-3 h-3" />
                 </button>
@@ -858,21 +866,24 @@ export function SiteSetupView({ apiUrl }: SiteSetupViewProps) {
             </div>
           </div>
 
-          {/* Sites List */}
-          <div className="p-2 space-y-1 max-h-[520px] overflow-y-auto">
+          {/* Sites list on white background */}
+          <div className="bg-white flex-1 p-2 space-y-1 max-h-[520px] overflow-y-auto custom-scrollbar">
             {sitesQuery.isLoading ? (
-              <div className="py-12 text-center text-xs text-slate-400 flex flex-col items-center justify-center gap-2">
-                <IconLoader className="w-5 h-5 animate-spin text-slate-500" />
-                <span>{tr('common.loading_sites_ccca8c')}</span>
+              <div className="py-10 space-y-2 px-2">
+                {[1, 2, 3].map((i) => (
+                  <div key={i} className="skeleton h-10 rounded-xl" />
+                ))}
               </div>
             ) : filteredSites.length === 0 ? (
-              <div className="py-10 px-4 text-center text-xs text-slate-500 space-y-2">
-                <p>{tr('site_setup_view.no_sites_match_your_filter')}</p>
+              <div className="py-10 px-4 text-center space-y-2">
+                <p className="text-xs text-slate-500">
+                  {tr('site_setup_view.no_sites_match_your_filter')}
+                </p>
                 {siteSearchQuery && (
                   <button
                     type="button"
                     onClick={() => setSiteSearchQuery('')}
-                    className="text-xs font-bold text-[#F66B17] hover:underline"
+                    className="text-xs font-bold text-[#F66B17] hover:underline cursor-pointer"
                   >
                     {tr('common.clear_search')}
                   </button>
@@ -881,47 +892,51 @@ export function SiteSetupView({ apiUrl }: SiteSetupViewProps) {
             ) : (
               filteredSites.map((site) => {
                 const isSelected = site.id === activeSiteId;
+                const initials = site.name.substring(0, 2).toUpperCase();
                 return (
                   <button
                     key={site.id}
                     type="button"
                     onClick={() => {
                       setSelectedSiteId(site.id);
-                      setContractorError(null);
-                      setContractorSuccessMsg(null);
                     }}
-                    className={`w-full text-left p-3 rounded-xl border transition-all duration-150 flex items-center justify-between cursor-pointer group ${
+                    className={`w-full text-left px-3 py-2.5 rounded-xl transition-all duration-150 flex items-center gap-3 cursor-pointer group ${
                       isSelected
-                        ? 'bg-[#071A2B] border-[#071A2B] text-white shadow-xs'
-                        : 'bg-white border-transparent hover:border-slate-200 hover:bg-slate-50 text-slate-700'
+                        ? 'bg-[#041D2E] text-white shadow-xs'
+                        : 'hover:bg-slate-50 text-slate-700'
                     }`}
                   >
-                    <div className="min-w-0 pr-2">
-                      <div className="flex items-center gap-2">
-                        <span
-                          className={`text-[9px] font-mono font-bold px-1.5 py-0.5 rounded tracking-wider uppercase ${
-                            isSelected
-                              ? 'bg-white/15 text-white border border-white/20'
-                              : 'bg-slate-100 text-slate-600 border border-slate-200'
-                          }`}
-                        >
-                          {site.code}
-                        </span>
-                        <h3
-                          className={`text-xs font-bold truncate ${isSelected ? 'text-white' : 'text-slate-900'}`}
-                        >
-                          {site.name}
-                        </h3>
-                      </div>
+                    {/* Avatar initial badge */}
+                    <div
+                      className={`w-8 h-8 rounded-lg flex items-center justify-center text-[10px] font-black shrink-0 ${
+                        isSelected ? 'bg-[#F66B17] text-white' : 'bg-slate-100 text-slate-600'
+                      }`}
+                    >
+                      {initials}
                     </div>
 
-                    <div className="flex items-center gap-1.5 shrink-0">
-                      {isSelected ? (
-                        <div className="w-2 h-2 rounded-full bg-[#F66B17]" />
-                      ) : (
-                        <IconChevronRight className="w-3.5 h-3.5 text-slate-300 group-hover:text-slate-500 transition-colors" />
-                      )}
+                    <div className="min-w-0 flex-1">
+                      <h3
+                        className={`text-xs font-bold truncate ${
+                          isSelected ? 'text-white' : 'text-slate-900'
+                        }`}
+                      >
+                        {site.name}
+                      </h3>
+                      <span
+                        className={`text-[9px] font-mono tracking-wider ${
+                          isSelected ? 'text-white/50' : 'text-slate-400'
+                        }`}
+                      >
+                        {site.code}
+                      </span>
                     </div>
+
+                    {isSelected ? (
+                      <div className="w-1.5 h-1.5 rounded-full bg-[#F66B17] shrink-0" />
+                    ) : (
+                      <IconChevronRight className="w-3.5 h-3.5 text-slate-300 group-hover:text-slate-500 transition-colors shrink-0" />
+                    )}
                   </button>
                 );
               })
@@ -946,23 +961,24 @@ export function SiteSetupView({ apiUrl }: SiteSetupViewProps) {
           ) : (
             <>
               {/* Site Header Banner */}
-              <div className="bg-white rounded-2xl border border-slate-200/90 p-4 shadow-xs space-y-4">
+              <div className="rounded-2xl border border-slate-200/90 bg-white p-4 sm:p-5 shadow-xs space-y-4">
                 <div className="grid grid-cols-1 xl:grid-cols-[minmax(0,1fr)_auto] gap-4 items-center pb-4 border-b border-slate-100">
                   <div className="min-w-0">
                     <div className="flex items-center gap-3">
-                      <div className="w-9 h-9 rounded-xl bg-[#071A2B] text-white flex items-center justify-center shrink-0">
-                        <IconBuilding2 className="w-4 h-4 text-[#F66B17]" />
+                      <div className="w-10 h-10 rounded-xl bg-[#041D2E] text-white flex items-center justify-center shrink-0 shadow-xs">
+                        <IconBuilding2 className="w-5 h-5 text-[#F66B17]" />
                       </div>
                       <div className="min-w-0">
                         <div className="flex items-center gap-2 mb-1">
                           <span className="text-[9px] font-mono font-bold px-2 py-0.5 rounded-md bg-slate-100 text-slate-600 border border-slate-200 tracking-wider">
                             {selectedSite.code}
                           </span>
-                          <span className="text-[9px] font-bold uppercase tracking-[0.14em] text-emerald-600">
+                          <span className="inline-flex items-center gap-1 text-[9px] font-bold uppercase tracking-widest text-emerald-600">
+                            <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
                             {tr('common.active_site_c51689')}
                           </span>
                         </div>
-                        <h2 className="text-base font-bold text-slate-900 truncate">
+                        <h2 className="text-lg font-extrabold text-[#041D2E] truncate tracking-tight">
                           {selectedSite.name}
                         </h2>
                       </div>
@@ -1041,29 +1057,9 @@ export function SiteSetupView({ apiUrl }: SiteSetupViewProps) {
                     {isManager && (
                       <button
                         type="button"
-                        onClick={() => {
-                          setContractorError(null);
-                          setContractorName('');
-                          setShowCreateContractorModal(true);
-                        }}
-                        className="inline-flex items-center gap-1.5 min-h-10 px-3.5 rounded-xl bg-[#071A2B] text-white text-xs font-bold hover:bg-[#0E2841] transition-all cursor-pointer shadow-xs active:scale-[0.98]"
-                      >
-                        <IconPlus className="w-3.5 h-3.5 text-[#F66B17]" />
-                        <span>{tr('common.add_contractor')}</span>
-                      </button>
-                    )}
-
-                    {isManager && (
-                      <button
-                        type="button"
                         onClick={() => openRepModalForContractor('')}
-                        disabled={contractors.length === 0}
                         className="inline-flex items-center gap-1.5 min-h-10 px-3.5 rounded-xl border border-slate-200 bg-white text-xs font-bold text-slate-800 hover:bg-slate-50 transition-colors cursor-pointer shadow-xs disabled:opacity-40 disabled:cursor-not-allowed"
-                        title={
-                          contractors.length === 0
-                            ? tr('site_setup_view.create_a_contractor_first')
-                            : tr('site_setup_view.create_contractor_representative_login')
-                        }
+                        title={tr('site_setup_view.create_contractor_representative_login')}
                       >
                         <IconUser className="w-3.5 h-3.5 text-slate-600" />
                         <span>{tr('common.create_representative')}</span>
@@ -1092,17 +1088,17 @@ export function SiteSetupView({ apiUrl }: SiteSetupViewProps) {
                   </div>
                 </div>
 
-                {/* Sub-Tabs: Contractors vs Representatives */}
                 {isManager && (
-                  <div className="flex items-center justify-between pt-0.5">
-                    <div className="flex flex-wrap items-center gap-1.5 p-1 rounded-xl bg-slate-100/80 border border-slate-200/60">
+                  <div className="flex items-center justify-between gap-2 flex-wrap pt-0.5">
+                    {/* Pill-island tab track */}
+                    <div className="flex flex-wrap items-center gap-1 rounded-full bg-slate-100 p-1 border border-slate-200/50">
                       <button
                         type="button"
                         onClick={() => setActiveTab('contractors')}
-                        className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+                        className={`flex items-center gap-1.5 rounded-full px-3.5 py-1.5 text-xs font-bold transition-all duration-200 cursor-pointer ${
                           activeTab === 'contractors'
                             ? 'bg-white text-slate-900 shadow-xs'
-                            : 'text-slate-600 hover:text-slate-900'
+                            : 'text-slate-500 hover:text-slate-800'
                         }`}
                       >
                         <IconBuilding2 className="w-3.5 h-3.5 text-[#F66B17]" />
@@ -1114,10 +1110,10 @@ export function SiteSetupView({ apiUrl }: SiteSetupViewProps) {
                       <button
                         type="button"
                         onClick={() => setActiveTab('representatives')}
-                        className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+                        className={`flex items-center gap-1.5 rounded-full px-3.5 py-1.5 text-xs font-bold transition-all duration-200 cursor-pointer ${
                           activeTab === 'representatives'
                             ? 'bg-white text-slate-900 shadow-xs'
-                            : 'text-slate-600 hover:text-slate-900'
+                            : 'text-slate-500 hover:text-slate-800'
                         }`}
                       >
                         <IconUsers className="w-3.5 h-3.5 text-blue-600" />
@@ -1127,32 +1123,39 @@ export function SiteSetupView({ apiUrl }: SiteSetupViewProps) {
                           })}
                         </span>
                       </button>
+
                       {(['zones', 'zone-assignments'] as const).map((tab) => (
                         <button
                           key={tab}
                           type="button"
                           aria-pressed={activeTab === tab}
                           onClick={() => setActiveTab(tab)}
-                          className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${activeTab === tab ? 'bg-white text-slate-900 shadow-xs' : 'text-slate-600 hover:text-slate-900'}`}
+                          className={`flex items-center gap-1.5 rounded-full px-3.5 py-1.5 text-xs font-bold transition-all duration-200 cursor-pointer ${
+                            activeTab === tab
+                              ? 'bg-white text-slate-900 shadow-xs'
+                              : 'text-slate-500 hover:text-slate-800'
+                          }`}
                         >
                           <IconShield className="w-3.5 h-3.5 text-[#F66B17]" />
-                          {tab === 'zones'
-                            ? tr('common.zones')
-                            : tr('common.contractor_zone_assignments')}
+                          <span>
+                            {tab === 'zones'
+                              ? tr('common.zones')
+                              : tr('common.contractor_zone_assignments')}
+                          </span>
                         </button>
                       ))}
                     </div>
 
-                    {/* Filter / Search within tab */}
+                    {/* Inline contractor search */}
                     {activeTab === 'contractors' && contractors.length > 3 && (
-                      <div className="w-48 relative hidden sm:block">
+                      <div className="w-44 relative hidden sm:block">
                         <IconSearch className="w-3.5 h-3.5 text-slate-400 absolute left-2.5 top-1/2 -translate-y-1/2" />
                         <input
                           type="text"
                           value={contractorSearchQuery}
                           onChange={(e) => setContractorSearchQuery(e.target.value)}
                           placeholder={tr('common.filter_contractors')}
-                          className="w-full bg-slate-50 border border-slate-200 rounded-lg pl-8 pr-2.5 py-1 text-xs text-slate-800 placeholder:text-slate-400 outline-none focus:border-[#F66B17] focus:bg-white transition-colors"
+                          className="w-full bg-slate-50 border border-slate-200 rounded-lg pl-8 pr-2.5 py-1 text-xs text-slate-800 placeholder:text-slate-400 outline-none focus:border-[#F66B17] focus:bg-white transition-all duration-200"
                         />
                       </div>
                     )}
@@ -1215,113 +1218,119 @@ export function SiteSetupView({ apiUrl }: SiteSetupViewProps) {
                       </div>
                     </div>
                   ) : (
-                    <div className="overflow-x-auto">
-                      <table className="w-full text-left text-xs">
-                        <thead>
-                          <tr className="border-b border-slate-100 bg-slate-50/60 text-slate-400 font-bold uppercase tracking-wider text-[10px]">
-                            <th className="py-3 px-4">{tr('common.contractor_info')}</th>
-                            <th className="py-3 px-4">{tr('common.code')}</th>
-                            <th className="py-3 px-4">{tr('common.representatives')}</th>
-                            <th className="py-3 px-4">{tr('common.created')}</th>
-                            <th className="py-3 px-4 text-right">{tr('common.actions')}</th>
-                          </tr>
-                        </thead>
-                        <tbody className="divide-y divide-slate-100">
-                          {filteredContractors.map((contractor) => {
-                            const linkedRepresentativeIds = getContractorRepresentativeUserIds(
-                              representativeAssignments,
-                              contractor.id,
-                            );
-                            const linkedRepresentatives = siteRepresentatives.filter(
-                              (representative) =>
-                                linkedRepresentativeIds.includes(representative.id),
-                            );
-                            return (
-                              <tr
-                                key={contractor.id}
-                                className="hover:bg-slate-50/70 transition-colors"
-                              >
-                                <td className="py-3.5 px-4">
-                                  <div className="font-bold text-slate-900">{contractor.name}</div>
-                                </td>
-                                <td className="py-3.5 px-4">
-                                  <span className="text-[10px] font-mono font-bold px-2 py-0.5 rounded-md bg-slate-100 border border-slate-200 text-slate-800 uppercase">
-                                    {contractor.code}
-                                  </span>
-                                </td>
-                                <td className="py-3.5 px-4">
-                                  {representativeAssignmentsQuery.isLoading ? (
-                                    <span className="text-[11px] text-slate-400">
-                                      {tr('common.loading_47d2a5')}
+                    <div className="p-4 space-y-2.5">
+                      {/* Card-row list — replaces the flat table */}
+                      {filteredContractors.map((contractor) => {
+                        const linkedRepresentativeIds = getContractorRepresentativeUserIds(
+                          representativeAssignments,
+                          contractor.id,
+                        );
+                        const linkedRepresentatives = siteRepresentatives.filter((representative) =>
+                          linkedRepresentativeIds.includes(representative.id),
+                        );
+                        const hasReps = linkedRepresentativeIds.length > 0;
+                        return (
+                          <div
+                            key={contractor.id}
+                            className="rounded-xl border border-slate-200/80 bg-white p-3.5 shadow-2xs hover:shadow-xs hover:border-slate-300 transition-all"
+                          >
+                            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                              {/* Left: contractor info */}
+                              <div className="flex items-center gap-3 min-w-0">
+                                {/* Avatar initial */}
+                                <div className="w-9 h-9 rounded-xl bg-[#041D2E] text-white flex items-center justify-center text-[11px] font-black shrink-0">
+                                  {contractor.name.substring(0, 2).toUpperCase()}
+                                </div>
+                                <div className="min-w-0">
+                                  <p className="text-sm font-bold text-slate-900 truncate">
+                                    {contractor.name}
+                                  </p>
+                                  <div className="flex items-center gap-2 mt-0.5 flex-wrap">
+                                    {/* Code chip */}
+                                    <span className="inline-flex items-center font-mono text-[9px] font-bold bg-slate-100 border border-slate-200 text-slate-700 px-2 py-0.5 rounded-md tracking-wider">
+                                      {contractor.code}
                                     </span>
-                                  ) : linkedRepresentativeIds.length > 0 ? (
-                                    <div className="space-y-0.5">
-                                      {linkedRepresentatives.length > 0 ? (
-                                        linkedRepresentatives.map((representative) => (
-                                          <div key={representative.id}>
-                                            <div className="font-bold text-slate-900">
-                                              {representative.displayName}
-                                            </div>
-                                            <div className="font-mono text-[10px] text-slate-400">
-                                              @{representative.username}
-                                            </div>
+                                    {/* Created date */}
+                                    <span className="text-[10px] text-slate-400">
+                                      {new Date(contractor.createdAt).toLocaleDateString(
+                                        uiLocale(),
+                                      )}
+                                    </span>
+                                  </div>
+                                </div>
+                              </div>
+
+                              {/* Right: rep info + actions */}
+                              <div className="flex items-center gap-3 flex-wrap shrink-0">
+                                {/* Representatives */}
+                                {representativeAssignmentsQuery.isLoading ? (
+                                  <div className="skeleton h-5 w-20 rounded" />
+                                ) : hasReps ? (
+                                  <div className="text-right">
+                                    {linkedRepresentatives.length > 0
+                                      ? linkedRepresentatives.map((rep) => (
+                                          <div key={rep.id} className="text-right">
+                                            <p className="text-xs font-semibold text-slate-800">
+                                              {rep.displayName}
+                                            </p>
+                                            <p className="text-[10px] font-mono text-slate-400">
+                                              @{rep.username}
+                                            </p>
                                           </div>
                                         ))
-                                      ) : (
-                                        <span className="text-[11px] font-semibold text-emerald-700">
-                                          {tr('common.assigned')}
-                                        </span>
-                                      )}
-                                    </div>
-                                  ) : (
-                                    <button
-                                      type="button"
-                                      onClick={() => openAssignExistingRepModal(contractor.id)}
-                                      className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg border border-slate-200 bg-slate-50 text-[11px] font-semibold text-slate-700 hover:bg-slate-100 hover:border-slate-300 transition-colors cursor-pointer"
-                                    >
-                                      <IconPlus className="w-3 h-3 text-[#F66B17]" />
-                                      <span>{tr('common.assign_existing_rep')}</span>
-                                    </button>
-                                  )}
-                                </td>
-                                <td className="py-3.5 px-4 text-slate-500 text-[11px]">
-                                  {new Date(contractor.createdAt).toLocaleDateString(uiLocale())}
-                                </td>
-                                <td className="py-3.5 px-4 text-right">
-                                  {isManager && (
-                                    <button
-                                      type="button"
-                                      className="mb-2 block ml-auto text-xs font-bold text-[#071A2B] underline"
-                                      onClick={() =>
-                                        setDetailContractor({
-                                          siteId: activeSiteId!,
-                                          contractorId: contractor.id,
-                                        })
-                                      }
-                                    >
-                                      {tr('common.view_details_90789c')}
-                                    </button>
-                                  )}
-                                  {representativeAssignmentsQuery.isLoading ? null : linkedRepresentativeIds.length >
-                                    0 ? (
-                                    <span className="text-[11px] font-semibold text-emerald-700">
+                                      : null}
+                                    <span className="inline-flex items-center gap-1 text-[10px] font-bold text-emerald-700 bg-emerald-50 border border-emerald-200 px-2 py-0.5 rounded-full">
+                                      <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
                                       {tr('common.assigned')}
                                     </span>
-                                  ) : (
-                                    <button
-                                      type="button"
-                                      onClick={() => openAssignExistingRepModal(contractor.id)}
-                                      className="text-xs font-bold text-[#F66B17] hover:text-[#d4550b] cursor-pointer"
-                                    >
-                                      {tr('site_setup_view.assign_existing_rep')}
-                                    </button>
-                                  )}
-                                </td>
-                              </tr>
-                            );
-                          })}
-                        </tbody>
-                      </table>
+                                  </div>
+                                ) : (
+                                  <button
+                                    type="button"
+                                    onClick={() => openAssignExistingRepModal(contractor.id)}
+                                    className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg border border-[#F66B17]/30 text-[#F66B17] text-[11px] font-semibold hover:bg-orange-50 hover:border-[#F66B17]/60 transition-all duration-200 cursor-pointer"
+                                  >
+                                    <IconPlus className="w-3 h-3" />
+                                    <span>{tr('common.assign_existing_rep')}</span>
+                                  </button>
+                                )}
+
+                                <button
+                                  type="button"
+                                  className="rounded-lg border px-3 py-2 text-xs font-semibold"
+                                  onClick={() => {
+                                    renameProfile.reset();
+                                    setEditProfile({
+                                      kind: 'contractor',
+                                      id: contractor.id,
+                                      name: contractor.name,
+                                      expectedName: contractor.name,
+                                    });
+                                  }}
+                                >
+                                  {tr('contractor_profile.edit_contractor')}
+                                </button>
+                                {/* View Details */}
+                                {isManager && (
+                                  <button
+                                    type="button"
+                                    className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-[#041D2E] text-white text-[11px] font-bold hover:bg-[#072A42] transition-all duration-200 cursor-pointer active:scale-[0.97]"
+                                    onClick={() =>
+                                      setDetailContractor({
+                                        siteId: activeSiteId!,
+                                        contractorId: contractor.id,
+                                      })
+                                    }
+                                  >
+                                    <span>{tr('common.view_details_90789c')}</span>
+                                    <IconChevronRight className="w-3 h-3 text-[#F66B17]" />
+                                  </button>
+                                )}
+                              </div>
+                            </div>
+                          </div>
+                        );
+                      })}
                     </div>
                   )}
                 </div>
@@ -1353,100 +1362,106 @@ export function SiteSetupView({ apiUrl }: SiteSetupViewProps) {
                       <button
                         type="button"
                         onClick={() => openRepModalForContractor('')}
-                        disabled={contractors.length === 0}
-                        className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl bg-[#071A2B] text-white text-xs font-bold hover:bg-[#0E2841] transition-all cursor-pointer shadow-xs disabled:opacity-50"
+                        className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl bg-[#041D2E] text-white text-xs font-bold hover:bg-[#072A42] transition-all cursor-pointer shadow-xs disabled:opacity-50"
                       >
                         <IconPlus className="w-3.5 h-3.5 text-[#F66B17]" />
                         <span>{tr('common.create_representative')}</span>
                       </button>
                     </div>
                   ) : (
-                    <div className="overflow-x-auto">
-                      <table className="w-full text-left text-xs">
-                        <thead>
-                          <tr className="border-b border-slate-100 bg-slate-50/60 text-slate-400 font-bold uppercase tracking-wider text-[10px]">
-                            <th className="py-3 px-4">{tr('common.representative')}</th>
-                            <th className="py-3 px-4">{tr('common.username')}</th>
-                            <th className="py-3 px-4">{tr('common.contractor')}</th>
-                            <th className="py-3 px-4">{tr('common.role_scope')}</th>
-                            <th className="py-3 px-4">{tr('common.status')}</th>
-                          </tr>
-                        </thead>
-                        <tbody className="divide-y divide-slate-100">
-                          {siteRepresentatives.map((rep) => {
-                            const linkedContractors = representativeAssignments
-                              .filter((assignment) => assignment.userId === rep.id)
-                              .map((assignment) =>
-                                contractors.find(
-                                  (contractor) => contractor.id === assignment.contractorId,
-                                ),
-                              )
-                              .filter((contractor): contractor is (typeof contractors)[number] =>
-                                Boolean(contractor),
-                              );
-                            return (
-                              <tr key={rep.id} className="hover:bg-slate-50/70 transition-colors">
-                                <td className="py-3.5 px-4">
-                                  <div className="flex items-center gap-2.5">
-                                    <div className="w-7 h-7 rounded-full bg-blue-100 text-blue-700 flex items-center justify-center font-bold text-xs uppercase">
-                                      {rep.displayName.charAt(0) || 'R'}
-                                    </div>
-                                    <div>
-                                      <div className="font-bold text-slate-900">
-                                        {rep.displayName}
-                                      </div>
-                                    </div>
-                                  </div>
-                                </td>
-                                <td className="py-3.5 px-4 font-mono font-medium text-slate-700">
-                                  @{rep.username}
-                                </td>
-                                <td className="py-3.5 px-4">
-                                  {linkedContractors.length > 0 ? (
-                                    <div className="space-y-0.5">
-                                      {linkedContractors.map((contractor) => (
-                                        <div key={contractor.id}>
-                                          <div className="font-bold text-slate-900">
-                                            {contractor.name}
-                                          </div>
-                                          <div className="font-mono text-[10px] text-slate-400">
-                                            {contractor.code}
-                                          </div>
-                                        </div>
-                                      ))}
-                                    </div>
-                                  ) : (
-                                    <span className="text-amber-700 font-semibold">
-                                      {tr('common.not_linked')}
+                    <div className="p-4 space-y-2.5">
+                      {/* Card-row list — replaces flat table */}
+                      {siteRepresentatives.map((rep) => {
+                        const linkedContractors = representativeAssignments
+                          .filter((assignment) => assignment.userId === rep.id)
+                          .map((assignment) =>
+                            contractors.find(
+                              (contractor) => contractor.id === assignment.contractorId,
+                            ),
+                          )
+                          .filter((contractor): contractor is (typeof contractors)[number] =>
+                            Boolean(contractor),
+                          );
+                        return (
+                          <div
+                            key={rep.id}
+                            className="rounded-xl border border-slate-200/80 bg-white p-3.5 shadow-2xs hover:shadow-xs hover:border-slate-300 transition-all"
+                          >
+                            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                              {/* Left: Rep info */}
+                              <div className="flex items-center gap-3 min-w-0">
+                                <div className="w-9 h-9 rounded-xl bg-blue-50 text-blue-700 ring-1 ring-blue-200/50 flex items-center justify-center text-xs font-black shrink-0 uppercase">
+                                  {rep.displayName.charAt(0) || 'R'}
+                                </div>
+                                <div className="min-w-0">
+                                  <div className="flex items-center gap-2 flex-wrap">
+                                    <p className="text-sm font-bold text-slate-900 truncate">
+                                      {rep.displayName}
+                                    </p>
+                                    <span className="font-mono text-xs text-slate-400">
+                                      @{rep.username}
                                     </span>
-                                  )}
-                                </td>
-                                <td className="py-3.5 px-4">
-                                  <span className="text-[10px] font-bold px-2 py-0.5 rounded-md bg-blue-50 border border-blue-200 text-blue-700">
-                                    {tr('common.contractor_representative')}
-                                  </span>
-                                </td>
-                                <td className="py-3.5 px-4">
+                                  </div>
+                                  {/* Linked contractors */}
+                                  <div className="flex items-center gap-2 mt-1 flex-wrap">
+                                    {linkedContractors.length > 0 ? (
+                                      linkedContractors.map((c) => (
+                                        <span
+                                          key={c.id}
+                                          className="inline-flex items-center gap-1 font-mono text-[9px] font-bold bg-slate-100 border border-slate-200 text-slate-700 px-2 py-0.5 rounded-md"
+                                        >
+                                          <span>{c.name}</span>
+                                          <span className="text-slate-400">({c.code})</span>
+                                        </span>
+                                      ))
+                                    ) : (
+                                      <span className="text-[11px] font-semibold text-amber-600 bg-amber-50 px-2 py-0.5 rounded-md border border-amber-200/60">
+                                        {tr('common.not_linked')}
+                                      </span>
+                                    )}
+                                  </div>
+                                </div>
+                              </div>
+
+                              {/* Right: Role & Status */}
+                              <div className="flex items-center gap-2.5 shrink-0 self-end sm:self-center">
+                                <button
+                                  type="button"
+                                  className="rounded-lg border px-3 py-2 text-xs font-semibold"
+                                  onClick={() => {
+                                    renameProfile.reset();
+                                    setEditProfile({
+                                      kind: 'representative',
+                                      id: rep.id,
+                                      name: rep.displayName,
+                                      expectedName: rep.displayName,
+                                    });
+                                  }}
+                                >
+                                  {tr('contractor_profile.edit_representative')}
+                                </button>
+                                <span className="text-[10px] font-bold px-2.5 py-1 rounded-full bg-blue-50 border border-blue-200 text-blue-700">
+                                  {tr('common.contractor_representative')}
+                                </span>
+                                <span
+                                  className={`inline-flex items-center gap-1 text-[10px] font-bold px-2.5 py-1 rounded-full ${
+                                    rep.isActive
+                                      ? 'bg-emerald-50 text-emerald-700 border border-emerald-200'
+                                      : 'bg-slate-100 text-slate-600 border border-slate-200'
+                                  }`}
+                                >
                                   <span
-                                    className={`inline-flex items-center gap-1 text-[10px] font-bold px-2 py-0.5 rounded-full ${
-                                      rep.isActive
-                                        ? 'bg-emerald-50 text-emerald-700 border border-emerald-200'
-                                        : 'bg-slate-100 text-slate-600'
-                                    }`}
-                                  >
-                                    <span
-                                      className={`w-1.5 h-1.5 rounded-full ${rep.isActive ? 'bg-emerald-500' : 'bg-slate-400'}`}
-                                    />
-                                    {rep.isActive
-                                      ? tr('common.active')
-                                      : tr('common.inactive_ac7c94')}
-                                  </span>
-                                </td>
-                              </tr>
-                            );
-                          })}
-                        </tbody>
-                      </table>
+                                    className={`w-1.5 h-1.5 rounded-full ${rep.isActive ? 'bg-emerald-500' : 'bg-slate-400'}`}
+                                  />
+                                  {rep.isActive
+                                    ? tr('common.active')
+                                    : tr('common.inactive_ac7c94')}
+                                </span>
+                              </div>
+                            </div>
+                          </div>
+                        );
+                      })}
                     </div>
                   )}
                 </div>
@@ -1863,94 +1878,6 @@ export function SiteSetupView({ apiUrl }: SiteSetupViewProps) {
         </div>
       )}
 
-      {/* ── MODAL 4: Create Contractor Modal ─────────────────────────────────── */}
-      {showCreateContractorModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-[#071A2B]/40 backdrop-blur-xs p-4 animate-in fade-in duration-200">
-          <div className="bg-white rounded-2xl border border-slate-200 shadow-2xl max-w-md w-full p-6 space-y-4 animate-in zoom-in-95 duration-200">
-            <div className="flex items-center justify-between pb-3 border-b border-slate-100">
-              <div className="flex items-center gap-2.5">
-                <div className="w-8 h-8 rounded-xl bg-[#071A2B] text-white flex items-center justify-center">
-                  <IconBuilding2 className="w-4 h-4 text-[#F66B17]" />
-                </div>
-                <div>
-                  <h3 className="text-sm font-bold text-slate-900">
-                    {tr('common.register_contractor')}
-                  </h3>
-                  <p className="text-[11px] text-slate-500">
-                    {tr('common.adding_to_value', { value1: selectedSite?.name })}
-                  </p>
-                </div>
-              </div>
-              <button
-                type="button"
-                onClick={() => setShowCreateContractorModal(false)}
-                className="w-7 h-7 rounded-lg text-slate-400 hover:text-slate-600 hover:bg-slate-100 flex items-center justify-center transition-colors cursor-pointer"
-              >
-                <IconX className="w-4 h-4" />
-              </button>
-            </div>
-
-            <form onSubmit={handleCreateContractorSubmit} className="space-y-4">
-              {contractorError && (
-                <div className="p-3 rounded-xl bg-rose-50 border border-rose-200 flex items-center gap-2 text-rose-700 text-xs">
-                  <IconAlertCircle className="w-4 h-4 shrink-0" />
-                  <span>{localizedError(contractorError ?? undefined)}</span>
-                </div>
-              )}
-
-              <p className="text-xs text-slate-500">
-                {tr('site_setup_view.contractor_code_is_generated_automatically_when_saved')}
-              </p>
-
-              <div className="space-y-1">
-                <label
-                  htmlFor="contractor-name-input"
-                  className="block text-xs font-bold text-slate-700"
-                >
-                  {tr('common.contractor_name')} <span className="text-rose-500">*</span>
-                </label>
-                <input
-                  id="contractor-name-input"
-                  type="text"
-                  required
-                  placeholder={tr('site_setup_view.e_g_painting_contractor_ltd')}
-                  value={contractorName}
-                  onChange={(e) => setContractorName(e.target.value)}
-                  className="w-full rounded-xl border border-slate-200 bg-white px-3.5 py-2 text-xs text-slate-900 placeholder:text-slate-400 outline-none focus:border-[#F66B17] focus:ring-2 focus:ring-[#F66B17]/10"
-                />
-              </div>
-
-              <div className="flex items-center justify-end gap-2 pt-3 border-t border-slate-100">
-                <button
-                  type="button"
-                  onClick={() => setShowCreateContractorModal(false)}
-                  className="px-4 py-2 rounded-xl border border-slate-200 bg-white text-xs font-semibold text-slate-700 hover:bg-slate-50 transition-colors cursor-pointer"
-                >
-                  {tr('common.cancel')}
-                </button>
-
-                <button
-                  type="submit"
-                  disabled={createContractorMutation.isPending}
-                  className="flex items-center gap-2 px-4 py-2 rounded-xl bg-[#071A2B] text-white text-xs font-bold hover:bg-[#0E2841] transition-all cursor-pointer shadow-xs disabled:opacity-50"
-                >
-                  {createContractorMutation.isPending ? (
-                    <IconLoader className="w-3.5 h-3.5 animate-spin" />
-                  ) : (
-                    <IconPlus className="w-3.5 h-3.5 text-[#F66B17]" />
-                  )}
-                  <span>
-                    {createContractorMutation.isPending
-                      ? tr('common.registering')
-                      : tr('common.register_contractor')}
-                  </span>
-                </button>
-              </div>
-            </form>
-          </div>
-        </div>
-      )}
-
       {/* ── MODAL 5: Assign Existing Representative Modal ───────────────────── */}
       {showAssignRepModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-[#071A2B]/40 backdrop-blur-xs p-4 animate-in fade-in duration-200">
@@ -2066,6 +1993,69 @@ export function SiteSetupView({ apiUrl }: SiteSetupViewProps) {
       )}
 
       {/* ── MODAL 6: Create Representative Modal ────────────────────────────── */}
+      {editProfile && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/40 p-4"
+          onKeyDown={(event) => {
+            if (event.key === 'Escape' && !renameProfile.isPending) setEditProfile(null);
+          }}
+        >
+          <form
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="edit-profile-title"
+            className="w-full max-w-lg rounded-2xl bg-white p-6 space-y-4"
+            onSubmit={(event) => {
+              event.preventDefault();
+              renameProfile.mutate(editProfile);
+            }}
+          >
+            <h3 id="edit-profile-title" className="font-bold">
+              {tr(
+                editProfile.kind === 'contractor'
+                  ? 'contractor_profile.edit_contractor'
+                  : 'contractor_profile.edit_representative',
+              )}
+            </h3>
+            <label className="grid gap-2 text-sm">
+              {tr(
+                editProfile.kind === 'contractor'
+                  ? 'contractor_profile.contractor_name'
+                  : 'common.display_name_18d67c',
+              )}
+              <input
+                autoFocus
+                required
+                maxLength={255}
+                className="rounded-lg border p-2"
+                value={editProfile.name}
+                onChange={(event) => setEditProfile({ ...editProfile, name: event.target.value })}
+              />
+            </label>
+            {renameProfile.error && (
+              <p role="alert" className="text-sm text-red-700">
+                {userErrorMessage(renameProfile.error)}
+              </p>
+            )}
+            <div className="flex justify-end gap-2">
+              <button
+                type="button"
+                disabled={renameProfile.isPending}
+                className="rounded-lg border px-4 py-2"
+                onClick={() => setEditProfile(null)}
+              >
+                {tr('common.cancel')}
+              </button>
+              <button
+                disabled={renameProfile.isPending || !editProfile.name.trim()}
+                className="rounded-lg bg-[#041D2E] px-4 py-2 text-white"
+              >
+                {tr('contractor_profile.save')}
+              </button>
+            </div>
+          </form>
+        </div>
+      )}
       {showCreateRepModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-[#071A2B]/40 backdrop-blur-xs p-4 animate-in fade-in duration-200">
           <div className="bg-white rounded-2xl border border-slate-200 shadow-2xl max-w-lg w-full p-6 space-y-4 animate-in zoom-in-95 duration-200">
@@ -2094,7 +2084,10 @@ export function SiteSetupView({ apiUrl }: SiteSetupViewProps) {
               </button>
             </div>
 
-            <form onSubmit={handleCreateRepSubmit} className="space-y-4">
+            <form
+              onSubmit={handleCreateRepSubmit}
+              className="space-y-4 max-h-[75vh] overflow-y-auto"
+            >
               {repError && (
                 <div className="p-3 rounded-xl bg-rose-50 border border-rose-200 flex items-center gap-2 text-rose-700 text-xs">
                   <IconAlertCircle className="w-4 h-4 shrink-0" />
@@ -2110,13 +2103,63 @@ export function SiteSetupView({ apiUrl }: SiteSetupViewProps) {
                   fieldRequired
                   value={repContractorId || preselectedContractorId || contractors[0]?.id || ''}
                   onChange={setRepContractorId}
-                  options={contractors.map((c) => ({
-                    value: c.id,
-                    label: c.name,
-                    badge: c.code,
-                  }))}
+                  options={[
+                    { value: '__new__', label: tr('contractor_profile.new_contractor') },
+                    ...contractors.map((c) => ({
+                      value: c.id,
+                      label: c.name,
+                      badge: c.code,
+                    })),
+                  ]}
                 />
               </div>
+
+              {repContractorId === '__new__' && (
+                <fieldset
+                  disabled={createRepresentativeMutation.isPending}
+                  className="rounded-xl border bg-slate-50 p-3 space-y-3"
+                >
+                  <legend className="text-xs font-bold">
+                    {tr('contractor_profile.new_contractor')}
+                  </legend>
+                  <label className="grid gap-1 text-xs font-semibold">
+                    {tr('contractor_profile.contractor_name')}
+                    <input
+                      required
+                      maxLength={255}
+                      className="rounded-lg border bg-white p-2"
+                      value={repNewContractorName}
+                      onChange={(event) => setRepNewContractorName(event.target.value)}
+                    />
+                  </label>
+                  <div className="grid grid-cols-2 gap-3">
+                    <label className="grid gap-1 text-xs font-semibold">
+                      {tr('contractor_profile.start_date')}
+                      <input
+                        required
+                        type="date"
+                        max={new Date().toLocaleDateString('en-CA')}
+                        className="rounded-lg border bg-white p-2"
+                        value={repStartDate}
+                        onChange={(event) => setRepStartDate(event.target.value)}
+                      />
+                    </label>
+                    <label className="grid gap-1 text-xs font-semibold">
+                      {tr('contractor_profile.end_date')}
+                      <input
+                        type="date"
+                        min={repStartDate}
+                        className="rounded-lg border bg-white p-2"
+                        value={repEndDate}
+                        onChange={(event) => setRepEndDate(event.target.value)}
+                      />
+                    </label>
+                  </div>
+                  <p className="text-xs text-slate-600">
+                    {tr('contractor_profile.active_interval')}
+                  </p>
+                </fieldset>
+              )}
 
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
                 <div className="space-y-1">
@@ -2218,6 +2261,12 @@ export function SiteSetupView({ apiUrl }: SiteSetupViewProps) {
             </form>
           </div>
         </div>
+      )}
+
+      {toast && (
+        <ToastContainer>
+          <Toast message={toast.message} type={toast.type} onClose={hideToast} />
+        </ToastContainer>
       )}
     </div>
   );

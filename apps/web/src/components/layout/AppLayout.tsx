@@ -341,22 +341,41 @@ export function AppLayout({ currentTab: propCurrentTab, onSelectTab, children }:
           {/* Left: Brand/Context info */}
           {activeTab === 'schedule-setup' ||
           (activeTab === 'site-setup' && roles.includes('SITE_MANAGER') && !roles.includes('ADMIN')) ||
-          (activeTab === 'workforce' && workforceTabs.showReview && workforceTab === 'review') ? (
+          (activeTab === 'workforce' && workforceTabs.showReview && workforceTab === 'review') ||
+          (activeTab === 'access' && attendanceWorkspace) ? (
             <div className="flex items-center gap-3 min-w-0">
               <div
                 aria-hidden="true"
                 className="w-10 h-10 rounded-xl bg-[#071A2B] text-white flex items-center justify-center shadow-xs shrink-0"
               >
-                {activeTab === 'site-setup' ? <IconBuilding className="w-5 h-5 text-[#F66B17]" /> : activeTab === 'workforce' ? <IconShield className="w-5 h-5 text-[#F66B17]" /> : <IconCalendar className="w-5 h-5 text-[#F66B17]" />}
+                {activeTab === 'site-setup' ? (
+                  <IconBuilding className="w-5 h-5 text-[#F66B17]" />
+                ) : activeTab === 'workforce' ? (
+                  <IconShield className="w-5 h-5 text-[#F66B17]" />
+                ) : (
+                  <IconCalendar className="w-5 h-5 text-[#F66B17]" />
+                )}
               </div>
               <div className="min-w-0">
                 <div className="flex items-center gap-2">
                   <span className="text-xs font-semibold text-slate-500 truncate">
-                    {activeTab === 'site-setup' ? t('integrated_ui.site_operations') : activeTab === 'workforce' ? `${t('common.workforce_operations')} · ${t('common.shift_approvals')}` : t('common.workforce_management')}
+                    {activeTab === 'site-setup'
+                      ? t('integrated_ui.site_operations')
+                      : activeTab === 'workforce'
+                        ? `${t('common.workforce_operations')} · ${t('common.shift_approvals')}`
+                        : activeTab === 'schedule-setup'
+                          ? t('common.workforce_management')
+                          : t('common.workforce_operations')}
                   </span>
                 </div>
                 <h1 className="text-xl font-bold tracking-tight text-[#071A2B] truncate">
-                  {activeTab === 'site-setup' ? t('siteOps.titleManage') : activeTab === 'workforce' ? t('common.contractor_review') : t('common.schedule_setup')}
+                  {activeTab === 'site-setup'
+                    ? t('siteOps.titleManage')
+                    : activeTab === 'workforce'
+                      ? t('common.contractor_review')
+                      : activeTab === 'schedule-setup'
+                        ? t('common.schedule_setup')
+                        : t('access.tabs.attendance.label')}
                 </h1>
               </div>
             </div>

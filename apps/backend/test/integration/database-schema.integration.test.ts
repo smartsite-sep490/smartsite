@@ -160,6 +160,7 @@ zone|restriction_policy|zone_restriction_policy|NO||||
 zone|required_ppe|_text|NO||||'{}'::text[]
 zone|created_at|timestamptz|NO||||now()
 zone|configuration_locked|bool|NO||||false
+zone|deleted_at|timestamptz|YES||||
 `
       .trim()
       .split('\n');

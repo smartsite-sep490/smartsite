@@ -1,3 +1,4 @@
+import { ZoneSoftDeletion1794355200000 } from './migrations/1794355200000-ZoneSoftDeletion.js';
 import { SafetyEpisodes1794355200000 } from './migrations/1794355200000-SafetyEpisodes.js';
 import { RetireGatePermissions1794960000000 } from './migrations/1794960000000-RetireGatePermissions.js';
 import { RetireLegacyAttendance1794960000001 } from './migrations/1794960000001-RetireLegacyAttendance.js';
@@ -90,6 +91,7 @@ export function buildTypeOrmOptions(config: DatabaseConnectionConfig): DataSourc
     connectTimeoutMS: timeoutMs,
     entities: [...ENTITIES],
     migrations: [
+      ZoneSoftDeletion1794355200000,
       SafetyEpisodes1794355200000,
       RetireGatePermissions1794960000000,
       RetireLegacyAttendance1794960000001,

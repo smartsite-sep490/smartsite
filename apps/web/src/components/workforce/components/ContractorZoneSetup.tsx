@@ -5,7 +5,7 @@ import { translate as tr } from '../../../i18n';
 import { useTranslation } from 'react-i18next';
 import { useRef, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { SmartDatePicker } from '../../ui';
+import { SmartDatePicker, Toast, ToastContainer, useToast } from '../../ui';
 import {
   IconAlertTriangle,
   IconCalendar,
@@ -44,6 +44,7 @@ export function ContractorZoneSetup({
   const [validUntil, setValidUntil] = useState(localDate);
   const timezone = Intl.DateTimeFormat().resolvedOptions().timeZone;
   const request = useRef<{ fingerprint: string; id: string } | null>(null);
+  const { toast, showToast, hideToast } = useToast();
   const grant = useMutation({
     mutationFn: () => {
       if (!validFrom || !validUntil || validUntil < validFrom)
@@ -68,12 +69,16 @@ export function ContractorZoneSetup({
     },
     onSuccess: () => {
       request.current = null;
+      showToast(tr('contractor_zone_setup.assigned_successfully'));
       void cache.invalidateQueries({ queryKey: key });
     },
   });
   const revoke = useMutation({
     mutationFn: (id: string) => client.revokeZonePermission(token, siteId, id, 'contractor'),
-    onSuccess: () => cache.invalidateQueries({ queryKey: key }),
+    onSuccess: () => {
+      showToast(tr('contractor_zone_setup.revoked_successfully'));
+      void cache.invalidateQueries({ queryKey: key });
+    },
   });
 
   if (setup.isPending)
@@ -333,6 +338,12 @@ export function ContractorZoneSetup({
           </div>
         )}
       </section>
+
+      {toast && (
+        <ToastContainer>
+          <Toast message={toast.message} type={toast.type} onClose={hideToast} />
+        </ToastContainer>
+      )}
     </div>
   );
 }

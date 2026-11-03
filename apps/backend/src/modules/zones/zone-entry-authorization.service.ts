@@ -10,6 +10,7 @@ import { ZoneEntryDecisionEntity } from '../../database/entities/zone-entry-deci
 import { ZoneRestrictionPolicy } from '../../database/entities/enums.js';
 import type { ZoneAuthorizationResult } from './zone-authorization.interface.js';
 import { ZoneAuthorizationService } from './zone-authorization.service.js';
+import { ZoneEntity } from '../../database/entities/zone.entity.js';
 
 export interface ZoneEntryDecisionInput {
   eventId: string;
@@ -31,6 +32,10 @@ export class ZoneEntryAuthorizationService {
     manager: EntityManager,
     input: ZoneEntryDecisionInput,
   ): Promise<ZoneAuthorizationResult> {
+    const zone = await manager
+      .getRepository(ZoneEntity)
+      .findOneBy({ id: input.zoneId, siteId: input.siteId });
+    if (!zone) return { status: 'UNAVAILABLE', reasonCode: 'AUTHORIZATION_DATA_UNAVAILABLE' };
     const restrictionPolicy =
       input.restrictionPolicy ?? ZoneRestrictionPolicy.AUTHORIZATION_REQUIRED;
     if (restrictionPolicy !== ZoneRestrictionPolicy.AUTHORIZATION_REQUIRED) {

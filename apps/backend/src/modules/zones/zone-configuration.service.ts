@@ -99,8 +99,11 @@ export class ZoneConfigurationService {
   async referenceName(siteId: string, zoneId: string | null): Promise<string | null> {
     if (!zoneId) return null;
     return (
-      (await this.dataSource.getRepository(ZoneEntity).findOneBy({ siteId, id: zoneId }))?.name ??
-      null
+      (
+        await this.dataSource
+          .getRepository(ZoneEntity)
+          .findOne({ where: { siteId, id: zoneId }, withDeleted: true })
+      )?.name ?? null
     );
   }
   async get(siteId: string, zoneId: string): Promise<ZoneEntity> {
@@ -135,6 +138,26 @@ export class ZoneConfigurationService {
       .update({ id: zone.id, siteId }, { name: value.name });
     zone.name = value.name;
     return zone;
+  }
+
+  async remove(siteId: string, zoneId: string): Promise<{ id: string }> {
+    return this.dataSource.transaction(async (manager) => {
+      const zone = await this.lockForRegion(manager, siteId, zoneId);
+      const [usage] = await manager.query<Array<{ assigned: boolean; linked: boolean }>>(
+        `SELECT EXISTS(SELECT 1 FROM contractor_zone_permission WHERE zone_id=$1 AND revoked_at IS NULL)
+          OR EXISTS(SELECT 1 FROM worker_site_zone_assignment WHERE $1=ANY(zone_ids) AND site_id=$2 AND status IN ('PENDING','SAFETY_REVIEWED','APPROVED'))
+          OR EXISTS(SELECT 1 FROM zone_access_grant WHERE zone_id=$1 AND revoked_at IS NULL)
+          OR EXISTS(SELECT 1 FROM visit_zone WHERE zone_id=$1 AND valid_until>now()) AS assigned,
+          EXISTS(SELECT 1 FROM camera_observation_region WHERE zone_id=$1 AND is_active) AS linked`,
+        [zone.id, siteId],
+      );
+      if (!usage) conflict('Zone usage is unavailable');
+      if (usage.assigned) conflict('Zone is assigned. Revoke its assignments before deleting it.');
+      if (usage.linked)
+        conflict('Zone has active camera regions. Deactivate them before deleting it.');
+      await manager.getRepository(ZoneEntity).softDelete({ id: zone.id, siteId });
+      return { id: zone.id };
+    });
   }
 
   async updatePolicy(

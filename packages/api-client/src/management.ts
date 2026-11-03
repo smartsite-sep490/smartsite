@@ -9,6 +9,11 @@ import type {
   SafetyEpisodeReadResponse,
 } from '@smartsite/contracts';
 import type {
+  CreateContractorRepresentativeCommand,
+  RenameSiteProfileCommand,
+  SiteProfileNameResponse,
+} from '@smartsite/contracts/management';
+import type {
   GrantTeamZoneCommand,
   TeamZoneSetupResponse,
   ManagerOverviewResponse,
@@ -1707,6 +1712,39 @@ export class SmartSiteManagementClient {
       input,
     );
   }
+  createContractorRepresentative(
+    token: string,
+    siteId: string,
+    input: CreateContractorRepresentativeCommand,
+  ) {
+    return this.request<AccountResponse>(
+      'POST',
+      `/sites/${pathId(siteId)}/contractor-representative-accounts`,
+      token,
+      input,
+    );
+  }
+  renameContractor(token: string, siteId: string, id: string, input: RenameSiteProfileCommand) {
+    return this.request<SiteProfileNameResponse>(
+      'PATCH',
+      `/sites/${pathId(siteId)}/contractors/${pathId(id)}/name`,
+      token,
+      input,
+    );
+  }
+  renameSiteRepresentative(
+    token: string,
+    siteId: string,
+    id: string,
+    input: RenameSiteProfileCommand,
+  ) {
+    return this.request<SiteProfileNameResponse>(
+      'PATCH',
+      `/sites/${pathId(siteId)}/representative-accounts/${pathId(id)}/name`,
+      token,
+      input,
+    );
+  }
   listSiteRepresentatives(token: string, siteId: string, options?: PageOptions) {
     return this.request<Page<AccountResponse>>(
       'GET',
@@ -2549,6 +2587,13 @@ export class SmartSiteManagementClient {
       `/sites/${pathId(siteId)}/zones/${pathId(zoneId)}`,
       token,
       { name },
+    );
+  }
+  deleteZone(token: string, siteId: string, zoneId: string) {
+    return this.request<{ id: string }>(
+      'DELETE',
+      `/sites/${pathId(siteId)}/zones/${pathId(zoneId)}`,
+      token,
     );
   }
   updateZonePolicy(

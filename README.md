@@ -240,6 +240,8 @@ they are disabled or ready to approve. An active assigned manager makes the site
 sites, accounts, contractors and representative assignments, and reports unavailable data.
 New accounts and password resets use the supplied password immediately, without a mandatory password-change screen. The optional password-change API still verifies the current password and revokes existing sessions; resets also revoke old sessions. Migration `OptionalPasswordChange1791676800002` clears legacy requirements without changing passwords, account activation or roles. Rolling it back restores the old column default but does not add requirements to existing accounts. The manager setup UI does not expose Site Access or Visitor Passes. The existing visitor approval APIs still require the assigned Site Manager; this UI change does not alter their Backend authorization.
 
+To release a Site's manager assignment, an Admin selects the Site, opens **Manage Site Managers** and confirms **Revoke Site Manager**. Only that Site role is removed; other roles are preserved, and the affected user's sessions are revoked when the assignment is removed. A user can temporarily have no roles. Repeating the same revocation is safe and does not remove a subsequently assigned manager. A Site without an active manager cannot accept new visitor registrations until another manager is assigned.
+
 Site Manager forms generate Contractor and Zone codes on the Backend. The Dashboard shows real Site-scoped Contractor/Zone totals and opens Contractor details with active teams, Workers, dated Zone grants and scheduled teams. See [management API semantics and compatibility](docs/site-manager-overview.md); team grouping uses the current roster and schedule data, with a visible date/timezone selector.
 
 Contractor details now show dated Zone assignments under each team, separately from Contractor Zone grants. Global Admin **Site Setup → Contractor Site directory** lists a Contractor's participation intervals across Sites with status and pagination. These reads retain role/data scope checks; manager-only accounts cannot query the global directory. Deploy Backend before Web; no schema migration is added. See [MF03/MF07 API flows](docs/mf03-mf07-api-flow.md) for fields and remaining historical limitations.
@@ -311,6 +313,11 @@ AI restarts retain enrollment because the templates come from PostgreSQL, but al
 use the same encryption key and compatible model. Losing/changing the key requires reenrollment.
 
 ### Mobile Development
+
+Site Managers can edit and soft-delete Zones from **Contractors & Zones → Zones → Configured Zones**.
+Name and policy/PPE edits have separate save actions; the existing permanent policy lock after a camera Region is linked remains enforced.
+Deleting a Zone requires confirmation and is blocked by unrevoked Contractor/Worker access assignments, pending/approved Worker assignments, future visitor access or active camera Regions.
+Apply `ZoneSoftDeletion1794355200000` before deploying the updated Backend. Deleted Zones are excluded from active selections; historical references are retained. The migration also prevents new Zone references racing with deletion. There is no restore action in this release.
 
 See [apps/mobile/README.md](apps/mobile/README.md) for Expo development instructions.
 
