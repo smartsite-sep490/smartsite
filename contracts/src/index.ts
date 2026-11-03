@@ -169,6 +169,7 @@ export { healthCertificateExpiry, isWorkerDocumentDate } from './worker-document
 
 export { resolveEventLocalEpisodeSubject } from './safety-episode-subject.js';
 export type { EventLocalEpisodeSubject } from './safety-episode-subject.js';
+export * from './safety-episode-api.js';
 export {
   parseMf06AssessmentResponse,
   parseMf06AssessmentPage,
@@ -181,3 +182,4 @@ export type {
   Mf06RequestStatusResponse,
   Mf06RequestStatusPage,
 } from './mf06-assessment-api.js';
+export * from './camera-configuration-image.js';

@@ -937,7 +937,7 @@ test('MF01: contractor onboarding, assignment requests, consent and current entr
     );
     await dataSource
       .getRepository(WorkerSiteZoneAssignmentEntity)
-      .update(assignment.id, { status: WorkerSiteZoneAssignmentStatus.APPROVED, gateId: 'gate1' });
+      .update(assignment.id, { status: WorkerSiteZoneAssignmentStatus.APPROVED });
     await approvedWorkerDocuments(dataSource, [worker.id], representativeId);
     await t.test('approved assignment still requires a current Worker schedule', async () => {
       assert.equal((await evaluate()).decision.reasonCode, 'NO_SCHEDULE');

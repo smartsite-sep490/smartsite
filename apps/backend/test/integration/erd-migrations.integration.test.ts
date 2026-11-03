@@ -25,6 +25,7 @@ test('ERD migrations preserve legacy visitor counts, revoke old QR and refuse a 
     );
     const baseline = migrations.filter(
       (m) =>
+        Number((m.name ?? m.constructor.name).slice(-13)) < 1794960000000 &&
         !(m.name ?? m.constructor.name).startsWith('Erd') &&
         // Team Zone permissions depend on ERD Contractor permissions; they are not a legacy baseline.
         !(m.name ?? m.constructor.name).startsWith('TeamZonePermissions') &&

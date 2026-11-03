@@ -162,10 +162,6 @@ test('new Site Manager can use the supplied password for visitor workflows and v
         'DELETE FROM qr_credential WHERE visit_id IN (SELECT id FROM visitor_visit WHERE site_id=$1)',
         [siteId],
       );
-      await dataSource.query(
-        'DELETE FROM visitor_gate_event WHERE visit_id IN (SELECT id FROM visitor_visit WHERE site_id=$1)',
-        [siteId],
-      );
       await dataSource.query('DELETE FROM visitor_visit WHERE site_id=$1', [siteId]);
       await dataSource.query('DELETE FROM app_user WHERE id=ANY($1)', [userIds]);
       await dataSource.query('DELETE FROM site WHERE id=$1', [siteId]);

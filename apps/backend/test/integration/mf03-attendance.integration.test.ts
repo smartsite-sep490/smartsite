@@ -197,7 +197,7 @@ test('MF03: interval totals, missing checkout, notifications, approvals, scope a
     );
     await dataSource.getRepository(AbsenceRequestEntity).delete(approvedLeave.id);
     await dataSource.getRepository(UserNotificationEntity).delete({ siteId, event: 'ABSENT' });
-    await dataSource.query('DELETE FROM timesheet WHERE attendance_day_id=$1', [absentDay.id]);
+
     await dataSource.getRepository(AttendanceDayEntity).delete(absentDay.id);
     await dataSource.getRepository(WorkerScheduleEntity).update(schedule.id, { isActive: false });
     await reconciliation.runDue(at('18:00'));
@@ -1080,11 +1080,14 @@ test('MF03: interval totals, missing checkout, notifications, approvals, scope a
         assert.equal(result.provisionalMinutes, expected);
         assert.equal(result.breakStartsAt?.toISOString(), `${workDate}T05:00:00.000Z`);
         assert.equal(result.breakEndsAt?.toISOString(), `${workDate}T06:00:00.000Z`);
-        const timesheet = await dataSource.query(
-          'SELECT total_minutes FROM timesheet WHERE attendance_day_id=$1',
-          [result.id],
+        const report = await days.timesheets(workerActor, siteId, {
+          fromDate: workDate,
+          toDate: workDate,
+        });
+        assert.equal(
+          report.items.find((item) => item.workerId === workerId)?.totalMinutes,
+          expected,
         );
-        assert.equal(timesheet[0].total_minutes, expected);
       }
       await assert.rejects(
         dataSource.getRepository(ShiftEntity).update(lunchShift.id, { breakEndsAt: null }),
@@ -1320,10 +1323,6 @@ test('MF03: interval totals, missing checkout, notifications, approvals, scope a
   } finally {
     await cleanupSiteAccess(dataSource, [siteId]);
     await dataSource.query('DELETE FROM absence_request WHERE site_id=$1', [siteId]);
-    await dataSource.query(
-      'DELETE FROM attendance_schedule_conflict WHERE schedule_id IN (SELECT id FROM worker_schedule WHERE site_id=$1)',
-      [siteId],
-    );
     await dataSource.query('DELETE FROM worker_schedule WHERE site_id=$1', [siteId]);
     await dataSource.query('DELETE FROM shift WHERE site_id=$1', [siteId]);
     await dataSource.query('DELETE FROM schedule_version WHERE site_id=$1', [siteId]);

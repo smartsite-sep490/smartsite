@@ -1,4 +1,9 @@
 import { ZoneSoftDeletion1794355200000 } from './migrations/1794355200000-ZoneSoftDeletion.js';
+import { SafetyEpisodes1794355200000 } from './migrations/1794355200000-SafetyEpisodes.js';
+import { RetireGatePermissions1794960000000 } from './migrations/1794960000000-RetireGatePermissions.js';
+import { RetireLegacyAttendance1794960000001 } from './migrations/1794960000001-RetireLegacyAttendance.js';
+import { RetireTimesheetReplica1794960000002 } from './migrations/1794960000002-RetireTimesheetReplica.js';
+import { MergeVisitorGateEvents1794960000003 } from './migrations/1794960000003-MergeVisitorGateEvents.js';
 import { CanonicalSafetyFaceProvenance1794268800000 } from './migrations/1794268800000-CanonicalSafetyFaceProvenance.js';
 import { CanonicalMf06Results1794182400000 } from './migrations/1794182400000-CanonicalMf06Results.js';
 import { CanonicalMf06Requests1794096000000 } from './migrations/1794096000000-CanonicalMf06Requests.js';
@@ -36,6 +41,7 @@ import { IncidentContractorResponsibility1791504000000 } from './migrations/1791
 import { SiteManagerReviewNotifications1792108800000 } from './migrations/1792108800000-SiteManagerReviewNotifications.js';
 import type { DataSourceOptions } from 'typeorm';
 import { ENTITIES } from './entities/index.js';
+import { CameraConfigurationReferences1793491200000 } from './migrations/1793491200000-CameraConfigurationReferences.js';
 import { QrAccess1791417600000 } from './migrations/1791417600000-QrAccess.js';
 import { VisitorRoster1792022400000 } from './migrations/1792022400000-VisitorRoster.js';
 import { Mf05Mf06Foundation1789689600000 } from './migrations/1789689600000-Mf05Mf06Foundation.js';
@@ -86,10 +92,16 @@ export function buildTypeOrmOptions(config: DatabaseConnectionConfig): DataSourc
     entities: [...ENTITIES],
     migrations: [
       ZoneSoftDeletion1794355200000,
+      SafetyEpisodes1794355200000,
+      RetireGatePermissions1794960000000,
+      RetireLegacyAttendance1794960000001,
+      RetireTimesheetReplica1794960000002,
+      MergeVisitorGateEvents1794960000003,
       CanonicalSafetyFaceProvenance1794268800000,
       CanonicalMf06Results1794182400000,
       CanonicalMf06Requests1794096000000,
       ObservationFrameParts1794009600000,
+      CameraConfigurationReferences1793491200000,
       PpeAlertNotifications1792886400000,
       ExpandedPpeNotificationKinds1793145600000,
       AlertDetectionSubject1793404800000,

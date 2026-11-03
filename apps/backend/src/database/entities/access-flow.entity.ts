@@ -4,6 +4,7 @@ import { WorkerEntity } from './worker.entity.js';
 import { UserEntity } from './user.entity.js';
 import { WorkerSiteZoneAssignmentEntity } from './worker-site-zone-assignment.entity.js';
 import { QrCredentialEntity, VisitorVisitEntity } from './qr-access.entity.js';
+import type { VisitorAttendanceResponse } from '@smartsite/contracts';
 
 @Entity({ name: 'access_attempt' })
 @Check('ck_attempt_subject', 'NOT (worker_id IS NOT NULL AND visit_id IS NOT NULL)')
@@ -84,7 +85,24 @@ export class AccessAttemptEntity {
 @Index('uq_gate_event_idempotency', ['idempotencyKey'], { unique: true })
 @Check('ck_gate_event_subject', '(worker_id IS NOT NULL) <> (visit_id IS NOT NULL)')
 @Check('ck_gate_event_direction', "direction IN ('IN','OUT')")
+@Index('idx_gate_event_visitor_history', ['siteId', 'visitorEventCreatedAt', 'id'], {
+  where: 'visit_id IS NOT NULL',
+})
+@Check(
+  'ck_gate_event_visitor_data',
+  `(worker_id IS NOT NULL AND count IS NULL AND attendees IS NULL AND request_hash IS NULL AND visitor_event_created_at IS NULL)
+  OR (visit_id IS NOT NULL AND count IS NOT NULL AND count>0 AND attendees IS NOT NULL
+    AND jsonb_typeof(attendees)='array' AND (jsonb_array_length(attendees)=0 OR jsonb_array_length(attendees)=count)
+    AND recorded_by IS NOT NULL AND visitor_event_created_at IS NOT NULL AND isfinite(visitor_event_created_at)
+    AND (request_hash IS NULL OR request_hash ~ '^[0-9a-f]{64}$'))`,
+)
 export class GateEventEntity {
+  @Column({ type: 'integer', nullable: true }) count!: number | null;
+  @Column({ type: 'jsonb', nullable: true }) attendees!: VisitorAttendanceResponse[] | null;
+  @Column({ name: 'request_hash', type: 'varchar', length: 64, nullable: true }) requestHash!:
+    string | null;
+  @Column({ name: 'visitor_event_created_at', type: 'timestamptz', nullable: true })
+  visitorEventCreatedAt!: Date | null;
   @PrimaryColumn({ type: 'uuid', primaryKeyConstraintName: 'pk_gate_event_id' }) id!: string;
   @Column({ name: 'access_attempt_id', type: 'uuid' })
   @ForeignKey(() => AccessAttemptEntity, { name: 'fk_gate_event_attempt', onDelete: 'RESTRICT' })
