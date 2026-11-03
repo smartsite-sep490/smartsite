@@ -11,6 +11,8 @@
     "./camera-ppe-policy": "./dist/camera-ppe-policy.js",
     ".": "./dist/index.js",
     "./management": "./dist/management-api.js",
+    "./camera-region-reference": "./dist/camera-region-reference-command.js",
+    "./camera-region-geometry-confirmation": "./dist/camera-region-geometry-confirmation.js",
     "./gates": "./dist/gate-catalog.js",
     "./worker-document-dates": "./dist/worker-document-dates.js",
     "./camera-configuration-image": "./dist/camera-configuration-image.js",
