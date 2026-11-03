@@ -20,6 +20,7 @@ export default tseslint.config(
       '**/generated/**',
       '**/*.d.ts',
       '**/.agents/**',
+      '**/fb-auto-comment-work/**',
     ],
   },
   js.configs.recommended,

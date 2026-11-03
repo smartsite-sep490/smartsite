@@ -6,7 +6,7 @@ export function notificationTarget(
   role: 'worker' | 'contractor',
 ): NavigationTarget | null {
   const target = notification.target;
-  if (target.siteId !== siteId) return null;
+  if (!target || target.siteId !== siteId) return null;
   if (target.tab === 'documents' && 'workerId' in target)
     return role === 'worker'
       ? { route: 'profile', kind: 'documents' }

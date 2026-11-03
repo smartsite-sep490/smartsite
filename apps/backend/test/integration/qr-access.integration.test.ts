@@ -1,4 +1,3 @@
-import { VisitorRoster1792022400000 } from '../../src/database/migrations/1792022400000-VisitorRoster.js';
 import { VisitorEmailService } from '../../src/modules/workforce/access/visitor-email.service.js';
 import type {
   VerifyVisitorQrCommand,
@@ -21,12 +20,10 @@ import {
   ContractorSiteParticipationEntity,
   FaceProfileEntity,
   FaceProfileStatus,
-  WorkerGatePermissionEntity,
   WorkerSiteZoneAssignmentEntity,
   WorkerSiteZoneAssignmentStatus,
   GateEventEntity,
   VisitorVisitEntity,
-  VisitorGateEventEntity,
   QrFallbackSessionEntity,
   QrCredentialEntity,
   GateAccessLogEntity,
@@ -116,18 +113,6 @@ test('real PostgreSQL visitor approval, group counts, expiring QR, replay and wo
     const visit = await service.register(siteId, registration);
     assert.equal(visit.status, 'PENDING');
     assert.equal(visit.members?.length, 20);
-    const downgrade = dataSource.createQueryRunner();
-    await downgrade.connect();
-    await downgrade.startTransaction();
-    try {
-      await assert.rejects(
-        new VisitorRoster1792022400000().down(downgrade),
-        /Visitor identity history/,
-      );
-    } finally {
-      await downgrade.rollbackTransaction();
-      await downgrade.release();
-    }
     assert.equal('bookingCodeHash' in visit, false);
     assert.equal('bookingCodeCiphertext' in visit, false);
     assert.equal((await service.register(siteId, registration)).id, visit.id);
@@ -219,10 +204,7 @@ test('real PostgreSQL visitor approval, group counts, expiring QR, replay and wo
     assert.equal(results[0].attendees?.[0]?.replacedFrom?.fullName, 'Synthetic guest 0');
     assert.equal(results[0].visit.members?.filter((m) => m.inside).length, 18);
     assert.equal(results[0].visit.members?.[0]?.registeredFullName, 'Synthetic guest 0');
-    assert.equal(
-      await dataSource.getRepository(VisitorGateEventEntity).countBy({ visitId: visit.id }),
-      1,
-    );
+    assert.equal(await dataSource.getRepository(GateEventEntity).countBy({ visitId: visit.id }), 1);
     await assert.rejects(
       service.visitorGate(security, siteId, gateId, { ...entry, requestId: randomUUID() }),
       /Reload/,
@@ -287,11 +269,8 @@ test('real PostgreSQL visitor approval, group counts, expiring QR, replay and wo
       /schedule/,
     );
     assert.equal(
-      (
-        await dataSource
-          .getRepository(VisitorGateEventEntity)
-          .findOneByOrFail({ id: results[0].id })
-      ).attendees[0]?.fullName,
+      (await dataSource.getRepository(GateEventEntity).findOneByOrFail({ id: results[0].id }))
+        .attendees?.[0]?.fullName,
       'Synthetic replacement',
     );
     // Single visitors retain a one-person passage using the same permanent code.
@@ -541,17 +520,6 @@ test('real PostgreSQL visitor approval, group counts, expiring QR, replay and wo
       requestedByUserId: managerId,
       siteManagerDecidedByUserId: managerId,
     });
-    const permissionId = randomUUID();
-    await dataSource.getRepository(WorkerGatePermissionEntity).save({
-      id: permissionId,
-      workerAssignmentId: assignmentId,
-      workerId,
-      siteId,
-      gateId,
-      validFrom: new Date(Date.now() - 60_000),
-      validUntil: null,
-      createdByUserId: managerId,
-    });
     const noShiftFallback = await service.cameraFallback(security, siteId, gateId, {
       direction: 'IN',
       reason: 'CAMERA_UNAVAILABLE',
@@ -590,6 +558,21 @@ test('real PostgreSQL visitor approval, group counts, expiring QR, replay and wo
       1,
     );
     const assigned = await assignTestShift(dataSource, siteId, workerId);
+    // Each gate accepts its own QR fallback without any per-gate Worker grant.
+    for (const entryGate of ['gate-north-01', 'gate-west-02', 'gate-logistics-03']) {
+      const session = await service.cameraFallback(security, siteId, entryGate, {
+        direction: 'IN',
+        reason: 'CAMERA_UNAVAILABLE',
+      });
+      const pass = await service.workerPass(workerActor, siteId, { fallbackSessionId: session.id });
+      const result = await service.workerGate(security, siteId, entryGate, {
+        token: pass.token,
+        direction: 'IN',
+        requestId: randomUUID(),
+      });
+      assert.equal(result.authorization, 'ALLOWED');
+    }
+
     const staleAttempt = await service.manualWorker(security, siteId, gateId, {
       requestId: randomUUID(),
       workerId,
@@ -705,6 +688,9 @@ test('real PostgreSQL visitor approval, group counts, expiring QR, replay and wo
     await assert.rejects(
       service.workerGate(security, siteId, gateId, { ...scan, direction: 'OUT' }),
     );
+    const logsBeforeScan = await dataSource
+      .getRepository(GateAccessLogEntity)
+      .countBy({ workerId });
     const workerResults = await Promise.all([
       service.workerGate(security, siteId, gateId, scan),
       service.workerGate(security, siteId, gateId, scan),
@@ -712,7 +698,10 @@ test('real PostgreSQL visitor approval, group counts, expiring QR, replay and wo
     assert.equal(workerResults[0].authorization, 'ALLOWED');
     assert.equal(workerResults[0].log.method, 'QR');
     assert.equal(workerResults[0].log.id, workerResults[1].log.id);
-    assert.equal(await dataSource.getRepository(GateAccessLogEntity).countBy({ workerId }), 2);
+    assert.equal(
+      await dataSource.getRepository(GateAccessLogEntity).countBy({ workerId }),
+      logsBeforeScan + 1,
+    );
     const attempt = workerResults[0].attempt!;
     assert.equal(attempt.status, 'READY');
     assert.equal(await dataSource.getRepository(GateEventEntity).countBy({ workerId }), 0);
@@ -846,9 +835,7 @@ test('real PostgreSQL visitor approval, group counts, expiring QR, replay and wo
     const deniedPass = await service.workerPass(workerActor, siteId, {
       fallbackSessionId: deniedFallback.id,
     });
-    await dataSource
-      .getRepository(WorkerGatePermissionEntity)
-      .update(permissionId, { revokedAt: new Date(), revokedByUserId: managerId });
+    await dataSource.getRepository(WorkerEntity).update(workerId, { isActive: false });
     assert.equal(
       (
         await service.workerGate(security, siteId, gateId, {
@@ -859,6 +846,7 @@ test('real PostgreSQL visitor approval, group counts, expiring QR, replay and wo
       ).authorization,
       'DENIED',
     );
+    await dataSource.getRepository(WorkerEntity).update(workerId, { isActive: true });
     const staleSession = await service.cameraFallback(security, siteId, gateId, {
       direction: 'IN',
       reason: 'CAMERA_UNAVAILABLE',
@@ -899,10 +887,6 @@ test('real PostgreSQL visitor approval, group counts, expiring QR, replay and wo
     await dataSource.query('DELETE FROM shift WHERE site_id=$1', [siteId]);
     await dataSource.query('DELETE FROM schedule_version WHERE site_id=$1', [siteId]);
     await dataSource.query('DELETE FROM qr_credential WHERE site_id = ANY($1)', [sites]);
-    await dataSource.query(
-      'DELETE FROM visitor_gate_event WHERE visit_id IN (SELECT id FROM visitor_visit WHERE site_id = ANY($1))',
-      [sites],
-    );
     const representatives = await dataSource.query<{ representative_visitor_id: string }[]>(
       'SELECT representative_visitor_id FROM visitor_visit WHERE site_id = ANY($1)',
       [sites],
@@ -913,7 +897,6 @@ test('real PostgreSQL visitor approval, group counts, expiring QR, replay and wo
     ]);
     await dataSource.query('DELETE FROM qr_fallback_session WHERE site_id = ANY($1)', [sites]);
     await dataSource.query('DELETE FROM gate_access_log WHERE site_id = ANY($1)', [sites]);
-    await dataSource.query('DELETE FROM worker_gate_permission WHERE site_id = ANY($1)', [sites]);
     await dataSource.query('DELETE FROM face_profile WHERE worker_id = $1', [workerId]);
     await dataSource.query('DELETE FROM worker_site_zone_assignment WHERE worker_id = $1', [
       workerId,

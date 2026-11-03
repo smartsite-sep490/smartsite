@@ -1,3 +1,4 @@
+@import url('https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700;800;900&display=swap');
 @import 'tailwindcss';
 
 /*
@@ -14,6 +15,11 @@
  *   --text-secondary #64748B  5.1:1   ✓ small text (timestamps, counts, meta, hints)
  *   --text-muted     #94A3B8  2.9:1   ✗ small — disabled / placeholder ONLY
  */
+
+html,
+body {
+  font-family: 'Geist', ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, sans-serif;
+}
 
 :root {
   /* ── Surfaces ────────────────────────────────────────── */
@@ -49,6 +55,31 @@
   --semantic-blue-text: #0369a1;
   --semantic-green-bg: #dcfce7;
   --semantic-green-text: #15803d;
+
+  /* ── Premium motion ──────────────────────────────────── */
+  --ease-premium: cubic-bezier(0.32, 0.72, 0, 1);
+  --ease-spring: cubic-bezier(0.34, 1.56, 0.64, 1);
+
+  /* ── Shadows (tinted to navy — no harsh pure-black drops) */
+  --shadow-card: 0 1px 4px rgba(4, 29, 46, 0.06), 0 1px 2px rgba(4, 29, 46, 0.04);
+  --shadow-card-hover: 0 4px 12px rgba(4, 29, 46, 0.1), 0 1px 3px rgba(4, 29, 46, 0.06);
+  --shadow-orange: 0 2px 8px rgba(246, 107, 23, 0.28);
+}
+
+/* ── Double-bezel card utilities ─────────────────────────── */
+/* Outer shell: softly tinted wrapper with hairline ring */
+.card-shell {
+  background: rgba(248, 250, 252, 0.7);
+  border-radius: 1rem; /* 16px ≈ rounded-2xl */
+  box-shadow: 0 0 0 1px rgba(4, 29, 46, 0.06);
+  padding: 5px;
+}
+/* Inner core: bright white with concentric radius */
+.card-core {
+  background: #ffffff;
+  border-radius: calc(1rem - 4px);
+  box-shadow: var(--shadow-card);
+  padding: 1.25rem; /* 20px */
 }
 
 /* Scrollbar — modern & minimal */
@@ -85,6 +116,23 @@ input::-webkit-credentials-auto-fill-button {
   visibility: hidden;
   display: none !important;
   pointer-events: none;
+}
+
+/* ── Skeleton loader pulse ───────────────────────────────── */
+@keyframes skeleton-pulse {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.45;
+  }
+}
+.skeleton {
+  background: linear-gradient(90deg, #e2e8f0 0%, #f1f5f9 50%, #e2e8f0 100%);
+  background-size: 200% 100%;
+  animation: skeleton-pulse 1.6s ease-in-out infinite;
+  border-radius: 6px;
 }
 
 /* Reduced motion — respect user preference */

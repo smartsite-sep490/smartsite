@@ -191,6 +191,7 @@ describe('Site Access ERD integration', () => {
     mount();
     await screen.findByRole('heading', { name: 'Worker assignments and Zone permissions' });
     expect(login).not.toHaveBeenCalled();
+    expect(screen.queryByRole('button', { name: /Gate Permissions/i })).toBeNull();
     expect(SmartSiteManagementClient.prototype.accessSetup).toHaveBeenCalledWith(
       'mock-admin-token',
       'site-alpha',
@@ -286,6 +287,7 @@ describe('Site Access ERD integration', () => {
     await user.click(screen.getByRole('button', { name: /Visitor Passes|Khách viếng thăm/i }));
     await screen.findByText('No visitor pass requests at this site.');
     expect(screen.queryByRole('button', { name: /Zone Permissions/i })).toBeNull();
+    expect(screen.queryByRole('button', { name: /Gate Permissions/i })).toBeNull();
     expect(screen.queryByRole('button', { name: /Worker Biometrics/i })).toBeNull();
   });
   it('Worker sees personal QR and attendance without gate operations or self-enrollment', async () => {

@@ -150,7 +150,10 @@ export async function getBackendHealth(
   }
 }
 export type * from '@smartsite/contracts';
-export { healthCertificateExpiry } from '@smartsite/contracts/worker-document-dates';
+export {
+  healthCertificateExpiry,
+  isWorkerDocumentDate,
+} from '@smartsite/contracts/worker-document-dates';
 export type {
   WorkerDocumentKind,
   WorkerDocumentStatus,
@@ -161,6 +164,20 @@ export type {
   ReviewWorkerDocumentCommand,
 } from '@smartsite/contracts';
 export type { DocumentImageQuality, WorkerIdentityImageResponse } from '@smartsite/contracts';
+
+export type {
+  SafetyEpisode,
+  SafetyEpisodeSummary,
+  SafetyEpisodeFinding,
+  SafetyEpisodeEvidenceRef,
+  SafetyEpisodePage,
+  SafetyEpisodeListOptions,
+  SafetyEpisodeInboxItem,
+  SafetyEpisodeInboxPage,
+  SafetyEpisodeInboxOptions,
+  SafetyEpisodeReadCommand,
+  SafetyEpisodeReadResponse,
+} from '@smartsite/contracts';
 export type {
   CameraConfigurationImageResponse,
   CameraConfigurationImageReference,

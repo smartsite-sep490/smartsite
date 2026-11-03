@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
-import { cleanup, render, screen, waitFor } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import {
@@ -146,7 +146,7 @@ it('shows mismatched ID warnings on originals to the read-only Worker too', asyn
   expect(screen.getAllByText(tr('documents.identityMismatch')).length).toBe(2);
   expect(screen.queryByRole('button', { name: tr('documents.approve') })).toBeNull();
 });
-function mount(canReview: boolean, canUpload = false) {
+function mount(canReview: boolean, canUpload = false, canSubmitDocuments = false) {
   render(
     <QueryClientProvider client={cache}>
       <WorkerDocumentsPanel
@@ -157,10 +157,168 @@ function mount(canReview: boolean, canUpload = false) {
         scope="synthetic-reviewer"
         canReview={canReview}
         canUpload={canUpload}
+        canSubmitDocuments={canSubmitDocuments}
       />
     </QueryClientProvider>,
   );
 }
+it.each([false, true])(
+  'autofills OCR dates and only submits after a click (Representative: %s)',
+  async (representative) => {
+    const quality = vi.spyOn(client, 'checkWorkerDocumentDates').mockResolvedValue({
+      quality: { status: 'ACCEPTED', reason: 'IMAGE_ACCEPTED' },
+      ocr: doc.ocr,
+      dateCheck: {
+        status: 'NO_REFERENCE',
+        field: 'EXPIRES_ON',
+        submittedDate: null,
+        detectedDate: '2030-10-27',
+      },
+    });
+    const upload = vi
+      .spyOn(client, 'uploadWorkerDocument')
+      .mockResolvedValue({ ...doc, id: 'replacement' });
+    const identity = vi.spyOn(client, 'uploadWorkerIdentityImage');
+    mount(false, representative, !representative);
+    const label = `${tr('documents.upload')} — ${tr('documents.SAFETY_CARD')}`;
+    const input = await screen.findByLabelText(label);
+    expect((input as HTMLInputElement).disabled).toBe(false);
+    const date = screen.getByLabelText(
+      `${tr('documents.SAFETY_CARD')} - ${tr('documents.declaredExpiresOn')}`,
+    );
+    let file = new File(['synthetic replacement'], 'renewal.jpg', { type: 'image/jpeg' });
+    fireEvent.change(input, { target: { files: [file] } });
+    await screen.findByText(tr('documents.dateMatch'));
+    expect((date as HTMLInputElement).value).toBe('2030-10-27');
+    expect(upload).not.toHaveBeenCalled();
+    expect(quality).toHaveBeenCalledWith('token', 'site', 'worker', 'SAFETY_CARD', file, {});
+    quality.mockResolvedValue({
+      quality: { status: 'ACCEPTED', reason: 'IMAGE_ACCEPTED' },
+      ocr: doc.ocr,
+      dateCheck: {
+        status: 'NO_REFERENCE',
+        field: 'EXPIRES_ON',
+        submittedDate: null,
+        detectedDate: '2032-10-27',
+      },
+    });
+    file = new File(['different synthetic certificate'], 'replacement.pdf', {
+      type: 'application/pdf',
+    });
+    fireEvent.change(input, { target: { files: [file] } });
+    await waitFor(() => expect((date as HTMLInputElement).value).toBe('2032-10-27'));
+    expect(upload).not.toHaveBeenCalled();
+    fireEvent.change(date, { target: { value: '2031-10-27' } });
+    expect(
+      (screen.getByRole('button', { name: tr('documents.submitForReview') }) as HTMLButtonElement)
+        .disabled,
+    ).toBe(true);
+    quality.mockResolvedValue({
+      quality: { status: 'ACCEPTED', reason: 'IMAGE_ACCEPTED' },
+      ocr: doc.ocr,
+      dateCheck: {
+        status: 'MISMATCH',
+        field: 'EXPIRES_ON',
+        submittedDate: '2031-10-27',
+        detectedDate: '2032-10-27',
+      },
+    });
+    fireEvent.click(screen.getByRole('button', { name: tr('documents.dateRecheck') }));
+    await screen.findByText(tr('documents.dateMismatch'));
+    fireEvent.click(screen.getByRole('button', { name: tr('documents.submitForReview') }));
+    await waitFor(() =>
+      expect(upload).toHaveBeenCalledWith('token', 'site', 'worker', 'SAFETY_CARD', file, {
+        submittedExpiresOn: '2031-10-27',
+      }),
+    );
+    expect(identity).not.toHaveBeenCalled();
+    expect(screen.queryByRole('button', { name: tr('documents.approve') })).toBeNull();
+  },
+);
+
+it('autofills Health examination date and derives a one-year expiry without submitting', async () => {
+  vi.spyOn(client, 'checkWorkerDocumentDates').mockResolvedValue({
+    quality: { status: 'ACCEPTED', reason: 'IMAGE_ACCEPTED' },
+    ocr: { status: 'READ', issuedOn: '2026-10-27', expiresOn: '2030-10-27', warnings: [] },
+    dateCheck: {
+      status: 'NO_REFERENCE',
+      field: 'ISSUED_ON',
+      submittedDate: null,
+      detectedDate: '2026-10-27',
+    },
+  });
+  const upload = vi.spyOn(client, 'uploadWorkerDocument').mockResolvedValue(doc);
+  mount(false, false, true);
+  fireEvent.click(
+    await screen.findByRole('button', { name: new RegExp(tr('documents.HEALTH_CERTIFICATE')) }),
+  );
+  const input = await screen.findByLabelText(
+    `${tr('documents.upload')} — ${tr('documents.HEALTH_CERTIFICATE')}`,
+  );
+  fireEvent.change(input, {
+    target: { files: [new File(['synthetic'], 'health.pdf', { type: 'application/pdf' })] },
+  });
+  await screen.findByText(tr('documents.dateMatch'));
+  expect(
+    (
+      screen.getByLabelText(
+        `${tr('documents.HEALTH_CERTIFICATE')} - ${tr('documents.declaredIssuedOn')}`,
+      ) as HTMLInputElement
+    ).value,
+  ).toBe('2026-10-27');
+  expect(screen.getByText(/2027-10-27/)).toBeTruthy();
+  expect(upload).not.toHaveBeenCalled();
+});
+it('requires a manually entered date when OCR cannot read it and still waits for explicit submission', async () => {
+  const preview = vi.spyOn(client, 'checkWorkerDocumentDates').mockResolvedValue({
+    quality: { status: 'ACCEPTED', reason: 'IMAGE_ACCEPTED' },
+    ocr: { status: 'UNREADABLE', issuedOn: null, expiresOn: null, warnings: [] },
+    dateCheck: {
+      status: 'NO_REFERENCE',
+      field: 'EXPIRES_ON',
+      submittedDate: null,
+      detectedDate: null,
+    },
+  });
+  const upload = vi.spyOn(client, 'uploadWorkerDocument').mockResolvedValue(doc);
+  mount(false, false, true);
+  const input = await screen.findByLabelText(
+    `${tr('documents.upload')} — ${tr('documents.SAFETY_CARD')}`,
+  );
+  const file = new File(['synthetic'], 'unreadable.pdf', { type: 'application/pdf' });
+  fireEvent.change(input, { target: { files: [file] } });
+  await screen.findByText(tr('documents.dateNoReference'));
+  const submit = screen.getByRole('button', {
+    name: tr('documents.submitForReview'),
+  }) as HTMLButtonElement;
+  expect(submit.disabled).toBe(true);
+  const date = screen.getByLabelText(
+    `${tr('documents.SAFETY_CARD')} - ${tr('documents.declaredExpiresOn')}`,
+  ) as HTMLInputElement;
+  expect(date.value).toBe('');
+  fireEvent.change(date, { target: { value: '2030-10-27' } });
+  preview.mockResolvedValue({
+    quality: { status: 'ACCEPTED', reason: 'IMAGE_ACCEPTED' },
+    ocr: { status: 'UNREADABLE', issuedOn: null, expiresOn: null, warnings: [] },
+    dateCheck: {
+      status: 'UNAVAILABLE',
+      field: 'EXPIRES_ON',
+      submittedDate: '2030-10-27',
+      detectedDate: null,
+    },
+  });
+  fireEvent.click(screen.getByRole('button', { name: tr('documents.dateRecheck') }));
+  await screen.findByText(tr('documents.dateUnavailable'));
+  expect(date.value).toBe('2030-10-27');
+  expect(upload).not.toHaveBeenCalled();
+  fireEvent.click(submit);
+  await waitFor(() =>
+    expect(upload).toHaveBeenCalledWith('token', 'site', 'worker', 'SAFETY_CARD', file, {
+      submittedExpiresOn: '2030-10-27',
+    }),
+  );
+});
+
 it('prefills OCR suggestions but requires explicit original/date confirmation before Safety approval', async () => {
   mount(true);
   const user = userEvent.setup();
