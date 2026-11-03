@@ -34,7 +34,6 @@ import {
   ContractorEntity,
   GateAccessLogEntity,
   VisitorVisitEntity,
-  VisitorGateEventEntity,
   QrCredentialEntity,
   QrFallbackSessionEntity,
   VisitorEntity,
@@ -128,6 +127,23 @@ export function visitResponse(v: VisitorVisitEntity, zoneIds: string[] = []): Vi
         : v.members?.length || v.enteredCount - v.exitedCount === v.groupSize
           ? 'INSIDE'
           : 'NEEDS_REVIEW',
+  };
+}
+function visitorEventResponse(
+  event: GateEventEntity,
+  visit: VisitResponse,
+): VisitorGateEventResponse {
+  if (!event.visitId || event.count === null || !event.attendees || !event.visitorEventCreatedAt)
+    throw new Error('Incomplete visitor passage');
+  return {
+    id: event.id,
+    visitId: event.visitId,
+    gateId: event.gateName,
+    direction: event.direction,
+    count: event.count,
+    attendees: event.attendees,
+    createdAt: event.visitorEventCreatedAt.toISOString(),
+    visit,
   };
 }
 @Injectable()
@@ -592,12 +608,18 @@ export class QrAccessService {
         reviewedAt: now,
         reviewNote: value.reviewNote,
       });
-      const compatibilityEvent = await manager.getRepository(VisitorGateEventEntity).save({
+      const event = await manager.getRepository(GateEventEntity).save({
         id: randomUUID(),
+        accessAttemptId: attempt.id,
+        siteId,
+        workerId: null,
         visitId,
-        operatorUserId: actor.id,
-        gateId: visit.gateId,
+        recordedBy: actor.id,
+        gateName: visit.gateId,
         direction: 'OUT',
+        occurredAt: now,
+        visitorEventCreatedAt: now,
+        idempotencyKey: value.requestId,
         count: remaining,
         attendees: (visit.members ?? [])
           .filter((m) => m.inside)
@@ -606,18 +628,6 @@ export class QrAccessService {
             fullName: m.fullName,
             identityNumber: m.identityNumber,
           })),
-      });
-      await manager.getRepository(GateEventEntity).save({
-        id: compatibilityEvent.id,
-        accessAttemptId: attempt.id,
-        siteId,
-        workerId: null,
-        visitId,
-        direction: 'OUT',
-        occurredAt: now,
-        gateName: visit.gateId,
-        idempotencyKey: value.requestId,
-        recordedBy: actor.id,
       });
       visit.exitedCount = visit.enteredCount;
       visit.members = (visit.members ?? []).map((m) => ({ ...m, inside: false }));
@@ -629,7 +639,7 @@ export class QrAccessService {
         siteId,
         legacyPartial ? 'LEGACY_VISITOR_PRESENCE_RECONCILED' : 'VISITOR_MANUAL_CHECKOUT',
         'gate_event',
-        compatibilityEvent.id,
+        event.id,
         value.reviewNote,
         {
           visitId,
@@ -1235,7 +1245,7 @@ export class QrAccessService {
   async listVisitorEvents(actor: WorkforceActor, siteId: string) {
     requireSiteRole(actor, siteId, [UserRole.SITE_MANAGER, UserRole.SECURITY_OFFICER]);
     const events = await this.source
-      .getRepository(VisitorGateEventEntity)
+      .getRepository(GateEventEntity)
       .createQueryBuilder('event')
       .innerJoin(
         VisitorVisitEntity,
@@ -1243,7 +1253,8 @@ export class QrAccessService {
         'visit.id = event.visit_id AND visit.site_id = :siteId',
         { siteId },
       )
-      .orderBy('event.created_at', 'DESC')
+      .where('event.site_id = :siteId', { siteId })
+      .orderBy('event.visitor_event_created_at', 'DESC')
       .addOrderBy('event.id', 'DESC')
       .take(100)
       .getMany();
@@ -1253,16 +1264,9 @@ export class QrAccessService {
           .findBy({ siteId, id: In(events.map((e) => e.visitId)) })
       : [];
     return {
-      items: events.map((e) => ({
-        id: e.id,
-        visitId: e.visitId,
-        gateId: e.gateId,
-        direction: e.direction,
-        count: e.count,
-        createdAt: e.createdAt.toISOString(),
-        attendees: e.attendees,
-        visit: visitResponse(visits.find((v) => v.id === e.visitId)!),
-      })),
+      items: events.map((e) =>
+        visitorEventResponse(e, visitResponse(visits.find((v) => v.id === e.visitId)!)),
+      ),
     };
   }
   async visitorGate(
@@ -1320,27 +1324,14 @@ export class QrAccessService {
         .getRepository(GateEventEntity)
         .findOneBy({ idempotencyKey: value.requestId });
       if (bound) {
-        const event = await manager
-          .getRepository(VisitorGateEventEntity)
-          .findOneBy({ id: bound.id });
         if (
-          !event ||
           bound.visitId !== visit.id ||
           bound.siteId !== siteId ||
           bound.recordedBy !== actor.id ||
-          event.requestHash !== fingerprint
+          bound.requestHash !== fingerprint
         )
           conflict('Confirmation request was used for a different passage');
-        return {
-          id: event.id,
-          visitId: visit.id,
-          gateId: event.gateId,
-          direction: event.direction,
-          count: event.count,
-          createdAt: event.createdAt.toISOString(),
-          attendees: event.attendees,
-          visit: visitResponse(visit),
-        };
+        return visitorEventResponse(bound, visitResponse(visit));
       }
       if (credential?.result) return credential.result as VisitorGateEventResponse;
       if (credential && (credential.siteId !== siteId || credential.direction !== value.direction))
@@ -1389,16 +1380,7 @@ export class QrAccessService {
       }
       visit.version += 1;
       await manager.getRepository(VisitorVisitEntity).save(visit);
-      const event = await manager.getRepository(VisitorGateEventEntity).save({
-        id: randomUUID(),
-        visitId: visit.id,
-        operatorUserId: actor.id,
-        gateId,
-        direction: value.direction,
-        count,
-        attendees,
-        requestHash: fingerprint,
-      });
+      const now = new Date();
       const attempt = await this.recordAttempt(manager, {
         actor,
         siteId,
@@ -1411,21 +1393,25 @@ export class QrAccessService {
         visitId: visit.id,
         credentialId: credential?.id,
       });
-      await manager.getRepository(GateEventEntity).save({
-        id: event.id,
+      const event = await manager.getRepository(GateEventEntity).save({
+        id: randomUUID(),
         accessAttemptId: attempt.id,
         siteId,
         workerId: null,
         visitId: visit.id,
         direction: value.direction,
-        occurredAt: event.createdAt,
+        occurredAt: now,
+        visitorEventCreatedAt: now,
         gateName: gateId,
         idempotencyKey: value.requestId,
         recordedBy: actor.id,
+        count,
+        attendees,
+        requestHash: fingerprint,
       });
       await manager
         .getRepository(AccessAttemptEntity)
-        .update(attempt.id, { status: 'USED', usedAt: event.createdAt });
+        .update(attempt.id, { status: 'USED', usedAt: now });
       await auditAccess(
         manager,
         actor.id,
@@ -1441,15 +1427,9 @@ export class QrAccessService {
           replacedMemberIds: attendees.filter((a) => a.replacedFrom).map((a) => a.memberId),
         },
       );
-      const result = {
-        id: event.id,
-        visitId: visit.id,
-        gateId,
-        direction: event.direction,
-        count: event.count,
-        attendees,
-        createdAt: event.createdAt.toISOString(),
-        visit: visitResponse(
+      const result = visitorEventResponse(
+        event,
+        visitResponse(
           visit,
           (
             await manager
@@ -1457,7 +1437,7 @@ export class QrAccessService {
               .findBy({ visitId: visit.id, revokedAt: IsNull() })
           ).map((z) => z.zoneId),
         ),
-      };
+      );
       if (credential) {
         credential.consumedAt = new Date();
         credential.requestHash = fingerprint;

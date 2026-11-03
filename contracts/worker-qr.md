@@ -30,7 +30,7 @@ Content-Type: application/json
 {"token":"ABCD2345","direction":"IN","requestId":"00000000-0000-4000-8000-000000000001","fallbackSessionId":"00000000-0000-4000-8000-000000000002"}
 ```
 
-Manual input accepts lowercase and outer whitespace, normalizing to uppercase. It does not accept a Worker ID as a code. Verification still requires the opening Security operator, exact Site, Gate and direction, an unexpired/unconsumed fallback, and an authorized Worker. Schedule, Contractor, assignment and gate permission checks remain authoritative. Creating a code does not record attendance. Actual passage confirmation retains existing replay/idempotency checks.
+Manual input accepts lowercase and outer whitespace, normalizing to uppercase. It does not accept a Worker ID as a code. Verification still requires the opening Security operator, exact Site, Gate and direction, an unexpired/unconsumed fallback, and an authorized Worker. Schedule, Contractor, Site assignment and current document checks remain authoritative. Eligible Workers may enter through every gate in their own Site without a gate grant; the QR fallback remains bound to its opening Gate session. Creating a code does not record attendance. Actual passage confirmation retains existing replay/idempotency checks.
 
 The issue and verification endpoints each allow 20 requests per minute under the existing authenticated throttler. Refresh invalidates previously issued, unused Worker codes; the code on screen is the one Security must use.
 
