@@ -145,6 +145,7 @@ safety_alert|created_at|timestamptz|NO||||now()
 safety_alert|revision|int4|NO||32|0|0
 safety_alert|updated_at|timestamptz|NO||||now()
 safety_alert|incident_id|uuid|YES||||
+safety_alert|episode_id|uuid|YES||||
 site|id|uuid|NO||||
 site|code|varchar|NO|64|||
 site|name|varchar|NO|255|||
@@ -159,6 +160,7 @@ zone|restriction_policy|zone_restriction_policy|NO||||
 zone|required_ppe|_text|NO||||'{}'::text[]
 zone|created_at|timestamptz|NO||||now()
 zone|configuration_locked|bool|NO||||false
+zone|deleted_at|timestamptz|YES||||
 `
       .trim()
       .split('\n');

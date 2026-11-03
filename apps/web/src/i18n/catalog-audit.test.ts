@@ -3,7 +3,7 @@ import { readdirSync, readFileSync } from 'node:fs';
 import path from 'node:path';
 import ts from 'typescript';
 import en from './locales/en.json';
-import { SITE_GATES } from '@smartsite/contracts/gate-permissions';
+import { SITE_GATES } from '@smartsite/contracts/gates';
 
 it('includes the shared gate catalog in the UI translations', () => {
   for (const gate of SITE_GATES) expect(`gates.${gate.id}` in en, gate.id).toBe(true);

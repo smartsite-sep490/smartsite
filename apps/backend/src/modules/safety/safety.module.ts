@@ -10,6 +10,10 @@ import { SafetyWorkflowController } from './safety-workflow.controller.js';
 import { SafetyUploadService } from './safety-upload.service.js';
 import { Mf06IngestionEnqueueService } from './assessments/mf06-ingestion-enqueue.service.js';
 import { Module } from '@nestjs/common';
+import { SafetyEpisodeInboxController } from './alerts/safety-episode-inbox.controller.js';
+import { SafetyEpisodeInboxService } from './alerts/safety-episode-inbox.service.js';
+import { SafetyEpisodeQueryService } from './alerts/safety-episode-query.service.js';
+import { SafetyEpisodesController } from './alerts/safety-episodes.controller.js';
 import { DatabaseModule } from '../../database/database.module.js';
 import { AuthModule } from '../auth/auth.module.js';
 import { ZonesModule } from '../zones/zones.module.js';
@@ -44,6 +48,8 @@ import { ZoneAccessManagementService } from '../zones/zone-access-management.ser
     UsersModule,
   ],
   controllers: [
+    SafetyEpisodesController,
+    SafetyEpisodeInboxController,
     SafetyChecklistController,
     SafetyOverviewController,
     SafetyAlertsController,
@@ -51,6 +57,8 @@ import { ZoneAccessManagementService } from '../zones/zone-access-management.ser
     SafetyWorkflowController,
   ],
   providers: [
+    SafetyEpisodeQueryService,
+    SafetyEpisodeInboxService,
     Mf06IngestionEnqueueService,
     SafetyChecklistService,
     SafetyOverviewService,

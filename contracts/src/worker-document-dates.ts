@@ -1,3 +1,10 @@
+export function isWorkerDocumentDate(value: string | null | undefined): value is string {
+  if (!value || !/^[0-9]{4}-[0-9]{2}-[0-9]{2}$/.test(value) || value.startsWith('0000-'))
+    return false;
+  const date = new Date(`${value}T00:00:00Z`);
+  return Number.isFinite(date.getTime()) && date.toISOString().slice(0, 10) === value;
+}
+
 /** One calendar year from examination/issue, inclusive; Feb 29 clamps to Feb 28. */
 export function healthCertificateExpiry(issuedOn: string | null | undefined): string | null {
   if (!issuedOn || !/^[0-9]{4}-[0-9]{2}-[0-9]{2}$/.test(issuedOn) || issuedOn.startsWith('0000-'))
