@@ -15,7 +15,6 @@ export enum WorkerSiteZoneAssignmentStatus {
 }
 
 @Entity({ name: 'worker_site_zone_assignment' })
-@Check('chk_assignment_gate_id', "gate_id IS NULL OR gate_id ~ '^[A-Za-z0-9][A-Za-z0-9_-]{0,63}$'")
 @Index('idx_worker_site_zone_assignment_gate_lookup', ['workerId', 'siteId', 'status', 'validFrom'])
 @Check(
   'chk_worker_site_zone_assignment_status',
@@ -55,10 +54,6 @@ export class WorkerSiteZoneAssignmentEntity {
     onDelete: 'RESTRICT',
   })
   siteId!: string;
-
-  /** Null preserves existing site-wide assignments; explicit values restrict a gate. */
-  @Column({ name: 'gate_id', type: 'varchar', length: 64, nullable: true })
-  gateId!: string | null;
 
   @Column({ name: 'zone_ids', type: 'uuid', array: true })
   zoneIds!: string[];

@@ -222,5 +222,8 @@ it('Worker role opens their own document panel directly', async () => {
   await screen.findByRole('heading', { name: tr('documents.title') });
   expect(screen.queryByRole('heading', { name: tr('documents.reviewQueue') })).toBeNull();
   expect(await screen.findByText(/card\.jpg/)).toBeTruthy();
+  expect(
+    screen.getByLabelText(`${tr('documents.upload')} — ${tr('documents.SAFETY_CARD')}`),
+  ).toBeTruthy();
   expect(screen.queryByRole('button', { name: tr('documents.approve') })).toBeNull();
 });
