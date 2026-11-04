@@ -13,13 +13,11 @@ const camera = {
 };
 afterEach(() => vi.unstubAllGlobals());
 it('uses the scoped read-only path and preserves raw page counts', async () => {
-  const fetcher = vi
-    .fn()
-    .mockResolvedValue(
-      new Response(JSON.stringify({ items: [camera], total: 21 }), {
-        headers: { 'content-type': 'application/json' },
-      }),
-    );
+  const fetcher = vi.fn().mockResolvedValue(
+    new Response(JSON.stringify({ items: [camera], total: 21 }), {
+      headers: { 'content-type': 'application/json' },
+    }),
+  );
   vi.stubGlobal('fetch', fetcher);
   const page = await new SmartSiteManagementClient('https://backend.example').listPreviewCameras(
     'secret',
@@ -27,10 +25,12 @@ it('uses the scoped read-only path and preserves raw page counts', async () => {
     { offset: 20, limit: 20 },
   );
   expect(page.total).toBe(21);
-  expect(fetcher.mock.calls[0][0]).toBe(
+  expect(fetcher).toHaveBeenCalledTimes(1);
+  const [url, init] = fetcher.mock.calls[0]!;
+  expect(url).toBe(
     `https://backend.example/api/v1/sites/${siteId}/preview-cameras?offset=20&limit=20`,
   );
-  expect(fetcher.mock.calls[0][1]).toMatchObject({
+  expect(init).toMatchObject({
     cache: 'no-store',
     redirect: 'error',
     headers: { Authorization: 'Bearer secret' },
@@ -44,13 +44,11 @@ it('refuses cross-site, duplicate, invalid-revision and over-limit pages', async
   ]) {
     vi.stubGlobal(
       'fetch',
-      vi
-        .fn()
-        .mockResolvedValue(
-          new Response(JSON.stringify({ items, total: 30 }), {
-            headers: { 'content-type': 'application/json' },
-          }),
-        ),
+      vi.fn().mockResolvedValue(
+        new Response(JSON.stringify({ items, total: 30 }), {
+          headers: { 'content-type': 'application/json' },
+        }),
+      ),
     );
     await expect(
       new SmartSiteManagementClient('https://backend.example').listPreviewCameras('t', siteId, {

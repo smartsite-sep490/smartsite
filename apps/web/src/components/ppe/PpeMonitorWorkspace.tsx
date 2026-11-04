@@ -4,7 +4,8 @@ import { useTranslation } from 'react-i18next';
 import type { LoginResponse } from '@smartsite/api-client';
 import type { SmartSiteManagementClient } from '@smartsite/api-client';
 import { useManagementClient } from '../../features/auth/auth-session';
-import { FourSourceWall, FourSourceWallTile } from './FourSourceWall';
+import { FourSourceWall } from './FourSourceWall';
+import { FocusedCameraMedia } from './FocusedCameraMedia';
 import { useMonitorPages } from './useMonitorPages';
 import { registerFeatureCatalog } from '../../i18n/feature-catalog-registry';
 import { SAFETY_NAMESPACE } from '../../i18n/runtime';
@@ -300,12 +301,15 @@ function CameraScope({
       <div ref={container} className="bg-slate-50 min-w-0">
         {selected &&
           (focus ? (
-            <FourSourceWallTile
+            <FocusedCameraMedia
               key={selected.id}
-              {...common}
+              apiUrl={apiUrl}
+              client={client}
+              token={session.accessToken}
+              sessionScope={scope}
+              siteId={site.id}
               camera={selected}
-              isSelected
-              onSelect={setCamera}
+              aiPaused={!!aiPaused}
             />
           ) : (
             <FourSourceWall

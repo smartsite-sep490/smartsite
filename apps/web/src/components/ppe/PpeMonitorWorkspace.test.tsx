@@ -11,6 +11,11 @@ import { PpeMonitorWorkspace } from './PpeMonitorWorkspace';
 const state = vi.hoisted(() => ({ sites: vi.fn(), cameras: vi.fn() }));
 const client = { listSites: state.sites, listPreviewCameras: state.cameras };
 vi.mock('../../features/auth/auth-session', () => ({ useManagementClient: () => client }));
+vi.mock('./FocusedCameraMedia', () => ({
+  FocusedCameraMedia: (p: { camera: { id: string } }) => (
+    <div data-testid="focus">{p.camera.id}</div>
+  ),
+}));
 vi.mock('./FourSourceWall', () => ({
   FourSourceWall: (p: {
     selectedCameraId: string;
