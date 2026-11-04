@@ -69,6 +69,8 @@ export interface MainAuthorityCutoverReleaseConfig {
 
 export const MAIN_AUTHORITY_CUTOVER_RELEASE_FILES = [
   'common/configuration/main-configuration-authority.ts',
+  'common/configuration/authority-storage-relations.ts',
+  'common/configuration/zone-entry-storage-profile-v1.ts',
   'common/configuration/main-authority-capture-preflight.ts',
   'common/configuration/site-entry-assignment-authority-profile-v1.ts',
   'common/configuration/main-authority-sources.ts',
@@ -88,6 +90,7 @@ export const MAIN_AUTHORITY_CUTOVER_RELEASE_FILES = [
   'modules/cameras/cameras.controller.ts',
   'modules/auth/auth.service.ts',
   'modules/zones/main-authority-cutover.service.ts',
+  'modules/zones/zone-authority-transaction.ts',
   'modules/zones/main-authority-cutover-release.ts',
   'modules/zones/main-authority-read-snapshot.ts',
   'modules/zones/main-authority-captured-state.reader.ts',

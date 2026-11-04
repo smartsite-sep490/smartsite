@@ -155,10 +155,11 @@ export async function executeMainConfigurationCommand<T>(
       );
 
     const installed = await manager.query(
-      "SELECT count(*) FILTER(WHERE c.relname=ANY($1::text[]))::int AS n, count(*) FILTER(WHERE c.relname=ANY($2::text[]))::int AS legacy FROM pg_class c JOIN pg_namespace n ON n.oid=c.relnamespace WHERE n.nspname=current_schema() AND c.relkind='r'",
+      "SELECT count(*) FILTER(WHERE c.relname=ANY($1::text[]))::int AS n, count(*) FILTER(WHERE c.relname=ANY($2::text[]))::int AS legacy, count(*) FILTER(WHERE c.relname='authorization_history_baseline')::int AS baseline FROM pg_class c JOIN pg_namespace n ON n.oid=c.relnamespace WHERE n.nspname=current_schema() AND c.relkind='r'",
       [relations, PRE_NAMING_AUTHORITY_RELATIONS],
     );
     if (installed[0]?.legacy > 0) unavailable();
+    if (installed[0]?.n === 0 && installed[0]?.baseline > 0) unavailable();
     if (installed[0]?.n === 0) return { value: await work(manager), journaled: false };
     if (installed[0]?.n !== relations.length) unavailable();
     let captures =

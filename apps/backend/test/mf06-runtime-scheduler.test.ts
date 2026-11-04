@@ -24,7 +24,7 @@ async function waitFor(predicate: () => boolean) {
     await sleep(20);
   }
 }
-async function syntheticRelease() {
+async function syntheticRelease(omitPath?: string) {
   const runs = tmpdir();
   await mkdir(runs, { recursive: true });
   const root = await mkdtemp(join(runs, 'mf06-synthetic-runtime-'));
@@ -32,6 +32,7 @@ async function syntheticRelease() {
   const runtimeRoot = resolve(dirname(fileURLToPath(import.meta.url)), '../src');
   const files = [];
   for (const path of MAIN_AUTHORITY_CUTOVER_RELEASE_FILES) {
+    if (path === omitPath) continue;
     const target = resolve(releaseRoot, path);
     await mkdir(dirname(target), { recursive: true });
     // Synthetic review input only, never represented as operational source/writer review.
@@ -90,6 +91,23 @@ async function syntheticRelease() {
     corrupt: () => writeFile(manifestPath, '{}'),
     restore: () => writeFile(manifestPath, bytes),
   };
+}
+for (const path of [
+  'apps/backend/src/modules/zones/zone-authority-transaction.ts',
+  'apps/backend/src/common/configuration/authority-storage-relations.ts',
+  'apps/backend/src/common/configuration/zone-entry-storage-profile-v1.ts',
+]) {
+  test(`runtime refuses release missing authority dependency ${path}`, async () => {
+    const release = await syntheticRelease(path);
+    const db = idleDatabase();
+    const runtime = new Mf06AssessmentWorkerRuntime(db.db, release.config);
+    try {
+      await assert.rejects(runtime.onModuleInit());
+      assert.equal(db.count(), 0);
+    } finally {
+      await runtime.onModuleDestroy();
+    }
+  });
 }
 function idleDatabase(beforeClaim: () => Promise<void> = async () => {}) {
   let count = 0,
