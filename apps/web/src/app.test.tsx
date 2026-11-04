@@ -53,24 +53,25 @@ vi.mock('./components/landing/LandingPage', () => ({
     <div>
       <h1>Landing Page</h1>
       <button onClick={() => onEnterApp('ppe')}>Enter PPE</button>
+      <button onClick={() => onEnterApp('zones')}>Enter Zones</button>
       <button onClick={() => onEnterApp('incidents')}>Enter Incidents Direct</button>
     </div>
   ),
 }));
 
-vi.mock('./components/ppe/PpeMonitoringView', () => ({
-  PpeMonitoringView: ({ onNavigate }: { onNavigate?: (tab: string, ctx?: unknown) => void }) => (
+vi.mock('./components/ppe/PpeMonitorWorkspace', () => ({
+  PpeMonitorWorkspace: () => <h2>PPE Monitoring</h2>,
+}));
+
+vi.mock('./components/zones/RestrictedZoneView', () => ({
+  RestrictedZoneView: ({ onNavigate }: { onNavigate?: (tab: string, ctx?: unknown) => void }) => (
     <div>
-      <h2>PPE Monitoring</h2>
+      <h2>Restricted Zones</h2>
       <button onClick={() => onNavigate?.('incidents', { alertType: 'PPE_VIOLATION' })}>
         Navigate with PPE context
       </button>
     </div>
   ),
-}));
-
-vi.mock('./components/zones/RestrictedZoneView', () => ({
-  RestrictedZoneView: () => <div>Restricted Zones</div>,
 }));
 
 vi.mock('./components/alerts/SafetyAlertsView', () => ({
@@ -276,9 +277,9 @@ describe('App Navigation and Context Lifecycle', () => {
       </MemoryRouter>,
     );
 
-    // 1. Enter app at PPE tab
-    await user.click(screen.getByRole('button', { name: 'Enter PPE' }));
-    expect(screen.getByRole('heading', { name: 'PPE Monitoring' })).not.toBeNull();
+    // 1. Enter a route that forwards legacy alert context
+    await user.click(screen.getByRole('button', { name: 'Enter Zones' }));
+    expect(screen.getByRole('heading', { name: 'Restricted Zones' })).not.toBeNull();
 
     // 2. Navigate to incidents with PPE context
     await user.click(screen.getByRole('button', { name: 'Navigate with PPE context' }));
@@ -306,8 +307,8 @@ describe('App Navigation and Context Lifecycle', () => {
       </MemoryRouter>,
     );
 
-    // 1. Enter app at PPE tab
-    await user.click(screen.getByRole('button', { name: 'Enter PPE' }));
+    // 1. Enter a route that forwards legacy alert context
+    await user.click(screen.getByRole('button', { name: 'Enter Zones' }));
 
     // 2. Navigate from PPE to incidents with PPE context
     await user.click(screen.getByRole('button', { name: 'Navigate with PPE context' }));
