@@ -1,4 +1,15 @@
 import {
+  parseMf06AssessmentPage,
+  parseMf06AssessmentResponse,
+  parseMf06RequestStatusPage,
+  parseMf06RequestStatusResponse,
+  type Mf06AssessmentPage,
+  type Mf06AssessmentResponse,
+  type Mf06RequestStatusPage,
+  type Mf06RequestStatusResponse,
+} from '@smartsite/contracts/mf06-assessments';
+import { readMf06FrameResponse } from './mf06-frame-response';
+import {
   processCameraMediaNdjsonStream,
   type CameraVideoStreamOptions,
 } from './camera-media-stream';
@@ -3652,6 +3663,212 @@ export class SmartSiteManagementClient {
         throw new ApiError('invalid-response', 'Backend returned an invalid identity response.');
       }
       return mutation;
+    });
+  }
+  listMf06Assessments(
+    token: string,
+    siteId: string,
+    pageOptions?: PageOptions,
+    requestOptions?: RequestOptions,
+  ): Promise<Mf06AssessmentPage> {
+    const offset = pageOptions?.offset ?? 0;
+    const limit = pageOptions?.limit ?? 20;
+    const path = this.listPath(`/sites/${pathId(siteId)}/mf06-assessments`, {
+      offset,
+      limit,
+    });
+    return this.request<unknown>(
+      'GET',
+      path,
+      token,
+      undefined,
+      undefined,
+      { ...requestOptions, timeoutMs: requestOptions?.timeoutMs ?? 5000 },
+      { cache: 'no-store', redirect: 'error' },
+      262144,
+    ).then((payload) => {
+      let page: Mf06AssessmentPage;
+      try {
+        page = parseMf06AssessmentPage(payload);
+      } catch {
+        throw new ApiError('invalid-response', 'Backend returned an invalid MF06 assessment page.');
+      }
+      if (
+        page.offset !== offset ||
+        page.limit !== limit ||
+        page.items.some((item) => !this.sameScopeId(item.siteId, siteId))
+      ) {
+        throw new ApiError('invalid-response', 'Backend returned an invalid MF06 assessment page.');
+      }
+      return page;
+    });
+  }
+
+  getMf06Assessment(
+    token: string,
+    siteId: string,
+    assessmentId: string,
+    requestOptions?: RequestOptions,
+  ): Promise<Mf06AssessmentResponse> {
+    const path = `/sites/${pathId(siteId)}/mf06-assessments/${pathId(assessmentId)}`;
+    return this.request<unknown>(
+      'GET',
+      path,
+      token,
+      undefined,
+      undefined,
+      { ...requestOptions, timeoutMs: requestOptions?.timeoutMs ?? 5000 },
+      { cache: 'no-store', redirect: 'error' },
+      262144,
+    ).then((payload) => {
+      let assessment: Mf06AssessmentResponse;
+      try {
+        assessment = parseMf06AssessmentResponse(payload);
+      } catch {
+        throw new ApiError(
+          'invalid-response',
+          'Backend returned an invalid MF06 assessment response.',
+        );
+      }
+      if (
+        !this.sameScopeId(assessment.siteId, siteId) ||
+        !this.sameScopeId(assessment.assessmentId, assessmentId)
+      ) {
+        throw new ApiError(
+          'invalid-response',
+          'Backend returned an invalid MF06 assessment response.',
+        );
+      }
+      return assessment;
+    });
+  }
+
+  getMf06AssessmentFrame(
+    token: string,
+    siteId: string,
+    assessmentId: string,
+    requestId: string,
+    eventId: string,
+    requestOptions?: RequestOptions,
+  ): Promise<Blob> {
+    const path = this.listPath(
+      `/sites/${pathId(siteId)}/mf06-assessments/${pathId(assessmentId)}/frame`,
+      { requestId, eventId },
+    );
+    const scopes = captureSessionScopes(token);
+    return this.runRequest(
+      this.requestOptions(token, {
+        ...requestOptions,
+        timeoutMs: requestOptions?.timeoutMs ?? 5000,
+      }),
+      async (signal) => {
+        const response = await this.fetchAuthenticated(
+          path,
+          token,
+          {
+            method: 'GET',
+            headers: { Accept: 'image/jpeg' },
+            cache: 'no-store',
+            redirect: 'error',
+          },
+          signal,
+          true,
+        );
+        if (!response.ok) {
+          if (!this.session && response.status === 401 && scopes.length)
+            dispatchSessionExpired(scopes);
+          return this.responseError(response, signal, 4096);
+        }
+        return readMf06FrameResponse(
+          response,
+          (read, currentSignal) => this.readBody(read, currentSignal),
+          signal,
+        );
+      },
+    );
+  }
+
+  listMf06RequestStatuses(
+    token: string,
+    siteId: string,
+    options?: PageOptions,
+    requestOptions?: RequestOptions,
+  ): Promise<Mf06RequestStatusPage> {
+    const offset = typeof options?.offset === 'number' ? options.offset : 0;
+    const limit = typeof options?.limit === 'number' ? options.limit : 20;
+    const path = this.listPath(`/sites/${pathId(siteId)}/mf06-assessment-requests`, {
+      offset,
+      limit,
+    });
+    return this.request<unknown>(
+      'GET',
+      path,
+      token,
+      undefined,
+      undefined,
+      { ...requestOptions, timeoutMs: requestOptions?.timeoutMs ?? 5000 },
+      { cache: 'no-store', redirect: 'error' },
+      262144,
+    ).then((payload) => {
+      let page: Mf06RequestStatusPage;
+      try {
+        page = parseMf06RequestStatusPage(payload);
+      } catch {
+        throw new ApiError(
+          'invalid-response',
+          'Backend returned an invalid MF06 request status page.',
+        );
+      }
+      if (
+        page.offset !== offset ||
+        page.limit !== limit ||
+        page.items.some((item) => !this.sameScopeId(item.siteId, siteId))
+      ) {
+        throw new ApiError(
+          'invalid-response',
+          'Backend returned an invalid MF06 request status page.',
+        );
+      }
+      return page;
+    });
+  }
+
+  getMf06RequestStatus(
+    token: string,
+    siteId: string,
+    requestId: string,
+    requestOptions?: RequestOptions,
+  ): Promise<Mf06RequestStatusResponse> {
+    const path = `/sites/${pathId(siteId)}/mf06-assessment-requests/${pathId(requestId)}`;
+    return this.request<unknown>(
+      'GET',
+      path,
+      token,
+      undefined,
+      undefined,
+      { ...requestOptions, timeoutMs: requestOptions?.timeoutMs ?? 5000 },
+      { cache: 'no-store', redirect: 'error' },
+      262144,
+    ).then((payload) => {
+      let status: Mf06RequestStatusResponse;
+      try {
+        status = parseMf06RequestStatusResponse(payload);
+      } catch {
+        throw new ApiError(
+          'invalid-response',
+          'Backend returned an invalid MF06 request status response.',
+        );
+      }
+      if (
+        !this.sameScopeId(status.siteId, siteId) ||
+        !this.sameScopeId(status.requestId, requestId)
+      ) {
+        throw new ApiError(
+          'invalid-response',
+          'Backend returned an invalid MF06 request status response.',
+        );
+      }
+      return status;
     });
   }
 }

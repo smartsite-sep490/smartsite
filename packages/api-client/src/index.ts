@@ -190,3 +190,10 @@ export type {
 export { registerSessionCredential, unregisterSessionCredential } from './session-expiry';
 export { MAX_CAMERA_APPLICATION_STATUS_RESPONSE_BYTES } from './camera-configuration-response';
 export type { CameraApplicationStatus } from '@smartsite/contracts/camera-application-status';
+
+export type {
+  Mf06AssessmentPage,
+  Mf06AssessmentResponse,
+  Mf06RequestStatusPage,
+  Mf06RequestStatusResponse,
+} from '@smartsite/contracts';
