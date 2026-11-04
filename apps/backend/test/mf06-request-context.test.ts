@@ -1,8 +1,10 @@
+import { computeMf06InitialBinding } from '../src/modules/safety/assessments/mf06-event-admission.js';
+import { selectZoneEntrySubject } from '../src/modules/safety/identity/observation-identity-subject.js';
 import 'reflect-metadata';
 import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
 import { test } from 'node:test';
-import { computeCanonicalPayloadHash } from '@smartsite/contracts';
+import { computeCanonicalPayloadHash, computeWorkerEventBindingHash } from '@smartsite/contracts';
 import type { DataSource, EntityManager } from 'typeorm';
 import { ZoneEntryAssessmentRequestEntity } from '../src/database/entities/zone-entry-assessment-request.entity.js';
 import { AiObservationEventEntity } from '../src/database/entities/ai-observation-event.entity.js';
@@ -65,12 +67,58 @@ function fixture() {
     bindingHash: 'b'.repeat(64),
     requestedAt: new Date('2026-10-01T00:01:00Z'),
   } as ZoneEntryAssessmentRequestEntity;
+  const selected = selectZoneEntrySubject(raw, request.zoneObservationIndex);
+  assert(selected.zoneEligible);
+  request.bindingHash = computeMf06InitialBinding(eventId, selected);
   const rehash = () => {
     event.payloadHash = computeCanonicalPayloadHash(event.rawPayload);
     request.payloadHash = event.payloadHash;
   };
   return { request, event, raw, otherRegionId, rehash };
 }
+
+function executionAdmission(event: AiObservationEventEntity) {
+  const context = {
+    schemaVersion: '1.0.0' as const,
+    cameraId: event.resolvedCameraId!,
+    workerGenerationId: randomUUID(),
+    streamSessionId: event.streamSessionId,
+    configurationVersion: 1,
+    bundleSha256: 'a'.repeat(64),
+    viewRevision: 1,
+    receiptCommandId: randomUUID(),
+    sourceKind: 'LIVE' as const,
+  };
+  return {
+    schemaVersion: '1.0.0' as const,
+    context,
+    bindingHash: computeWorkerEventBindingHash(event.payloadHash, context),
+    classification: 'LIVE' as const,
+    admittedAt: '2026-10-01T00:00:01.000Z',
+  };
+}
+
+test('MF06 context digest includes detached original admission and rejects a corrupted binding', () => {
+  const f = fixture();
+  const legacy = inspectMf06StoredBinding(f.request, f.event);
+  assert.equal(legacy.status, 'MATCHED');
+  f.event.admissionContext = executionAdmission(f.event);
+  const bound = inspectMf06StoredBinding(f.request, f.event);
+  assert.equal(bound.status, 'MATCHED');
+  if (bound.status !== 'MATCHED' || legacy.status !== 'MATCHED') return;
+  assert.notEqual(bound.contextDigest, legacy.contextDigest);
+  const captured = (
+    bound.request as unknown as {
+      executionAdmission: NonNullable<AiObservationEventEntity['admissionContext']>;
+    }
+  ).executionAdmission;
+  assert.deepEqual(captured, f.event.admissionContext);
+  assert.throws(() => {
+    (captured.context as { configurationVersion: number }).configurationVersion = 9;
+  }, TypeError);
+  f.event.admissionContext.bindingHash = '0'.repeat(64);
+  assert.equal(inspectMf06StoredBinding(f.request, f.event).status, 'UNAVAILABLE');
+});
 
 test('MF06 context binds the exact requested PERSON/Zone indices, not first available person', () => {
   const f = fixture();
@@ -194,6 +242,17 @@ test('MF06 reader filters exact Site/request and reads source in one repeatable 
   const calls: unknown[] = [];
   const manager = {
     getRepository: (entity: unknown) => ({
+      createQueryBuilder: () => ({
+        select() {
+          return this;
+        },
+        where() {
+          return this;
+        },
+        async getRawOne() {
+          return { admission_context: null };
+        },
+      }),
       findOneBy: async (where: Record<string, unknown>) => {
         calls.push({ entity, where });
         if (entity === ZoneEntryAssessmentRequestEntity)

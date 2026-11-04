@@ -1,4 +1,5 @@
 import { Module } from '@nestjs/common';
+import { CameraEventAdmissionService } from './camera-event-admission.service.js';
 import { DatabaseModule } from '../../database/database.module.js';
 import { SitesModule } from '../sites/sites.module.js';
 import { ZonesModule } from '../zones/zones.module.js';
@@ -24,12 +25,13 @@ import { CameraApplicationStatusService } from './camera-application-status.serv
     CameraConfigurationReferenceController,
   ],
   providers: [
+    CameraEventAdmissionService,
     CameraApplicationStatusService,
     { provide: CAMERA_CONFIGURATION_IMAGE_FETCH, useFactory: () => globalThis.fetch },
     CameraConfigurationService,
     CameraConfigurationImageService,
     CameraConfigurationReferenceService,
   ],
-  exports: [CameraConfigurationService],
+  exports: [CameraConfigurationService, CameraEventAdmissionService],
 })
 export class CamerasModule {}

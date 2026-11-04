@@ -1,3 +1,5 @@
+import { computeMf06InitialBinding } from '../src/modules/safety/assessments/mf06-event-admission.js';
+import { selectZoneEntrySubject } from '../src/modules/safety/identity/observation-identity-subject.js';
 import 'reflect-metadata';
 import assert from 'node:assert/strict';
 import test from 'node:test';
@@ -87,6 +89,9 @@ function makeFixture() {
     bindingHash: 'b'.repeat(64),
     requestedAt: new Date('2026-10-10T01:02:05.000Z'),
   };
+  const selected = selectZoneEntrySubject(rawPayload, request.zoneObservationIndex);
+  assert(selected.zoneEligible);
+  request.bindingHash = computeMf06InitialBinding(EVENT_ID, selected);
   const claim: Mf06JobClaim = Object.freeze({
     requestId: REQUEST_ID,
     leaseToken: LEASE_TOKEN,
@@ -182,6 +187,18 @@ function makeFakeDataSource(options?: {
           }
           if (entity === AiObservationEventEntity) {
             return {
+              createQueryBuilder: () => ({
+                select() {
+                  return this;
+                },
+                where() {
+                  return this;
+                },
+                async getRawOne() {
+                  step('repo:admission');
+                  return { admission_context: options?.event?.admissionContext ?? null };
+                },
+              }),
               async findOneBy(where: { eventId: string }) {
                 step(`repo:event:${where.eventId}`);
                 return options && 'event' in options ? options.event : f.event;
@@ -240,6 +257,7 @@ test('matches active CLAIMED job in REPEATABLE READ READ ONLY snapshot and deriv
     `repo:request:${REQUEST_ID}`,
     `sql:site:${SITE_ID}`,
     `repo:event:${EVENT_ID}`,
+    'repo:admission',
     `sql:job:${REQUEST_ID}:#1`,
   ]);
 });

@@ -1,0 +1,21 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://smartsite.local/contracts/v1/worker-event-delivery-envelope.json",
+  "title": "WorkerEventDeliveryEnvelope",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schemaVersion", "context", "event"],
+  "properties": {
+    "schemaVersion": { "const": "1.0.0" },
+    "context": { "$ref": "./worker-event-delivery-context.json" },
+    "event": {
+      "oneOf": [
+        { "$ref": "./technical-observation-event.json" },
+        { "$ref": "../v1.1/technical-observation-event.json" },
+        { "$ref": "../v1.2/technical-observation-event.json" },
+        { "$ref": "../v1.3/technical-observation-event.json" },
+        { "$ref": "../v1.4/technical-observation-event.json" }
+      ]
+    }
+  }
+}

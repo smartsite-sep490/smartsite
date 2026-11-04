@@ -209,6 +209,22 @@ test('issued bundle journey binds exact geometry and PPE policy, preserving immu
     },
   );
   if (!regionId!) return;
+  const historical = async (overrides: Record<string, unknown> = {}) => {
+    const modulePath = '../../src/modules/cameras/camera-configuration-bundle-reader.js';
+    const api = await import(modulePath);
+    assert.equal(typeof api.readHistoricalIssuedCameraBundleInTransaction, 'function');
+    return db.transaction('REPEATABLE READ', (transaction) =>
+      api.readHistoricalIssuedCameraBundleInTransaction(transaction, {
+        cameraId: camera,
+        siteId: site,
+        cameraExternalId: 'camera-a',
+        configurationVersion: oldBundle.configurationVersion,
+        viewRevision: oldBundle.viewRevision,
+        bundleSha256: oldBundle.bundleSha256,
+        ...overrides,
+      }),
+    );
+  };
   await t.test(
     'inactive camera rejects conditional read; reactivation issues a new counter-bound bundle',
     async () => {
@@ -219,6 +235,7 @@ test('issued bundle journey binds exact geometry and PPE policy, preserving immu
       );
       assert.equal((await read(etag)).status, 409);
       assert.equal((await headers()).length, 1);
+      assert.deepEqual(await historical(), oldBundle);
       assert.equal(
         (await send('status', { status: 'ACTIVE', expectedConfigurationVersion: 3 }, 'PATCH'))
           .status,
@@ -247,6 +264,54 @@ test('issued bundle journey binds exact geometry and PPE policy, preserving immu
       assert.equal(old.bundle_sha256, oldBundle.bundleSha256);
     },
   );
+  await t.test(
+    'historical lookup survives retired view and requires every exact scope dimension',
+    async () => {
+      const before = await headers();
+      assert.deepEqual(await historical(), oldBundle);
+      for (const overrides of [
+        { cameraId: randomUUID() },
+        { siteId: otherSite },
+        { cameraExternalId: 'other-camera' },
+        { configurationVersion: 4 },
+        { viewRevision: 2 },
+        { bundleSha256: '0'.repeat(64) },
+        { configurationVersion: 0 },
+        { configurationVersion: Number.MAX_SAFE_INTEGER + 1 },
+        { viewRevision: '1' },
+        { cameraId: 'malformed' },
+        { bundleSha256: 'SELECT secret' },
+        { siteId: null },
+      ])
+        assert.equal(await historical(overrides), undefined);
+      assert.deepEqual(await headers(), before);
+    },
+  );
+  await t.test('historical PPE comes from immutable policy, not current Zone values', async () => {
+    await db.query('UPDATE zone SET required_ppe=$2 WHERE id=$1', [zoneId, ['BOOTS']]);
+    try {
+      assert.deepEqual(await historical(), oldBundle);
+    } finally {
+      await db.query('UPDATE zone SET required_ppe=$2 WHERE id=$1', [
+        zoneId,
+        ['GLOVES', 'HARD_HAT'],
+      ]);
+    }
+    const modulePath = '../../src/modules/cameras/camera-configuration-bundle-reader.js';
+    const api = await import(modulePath);
+    await assert.rejects(
+      () =>
+        api.readHistoricalIssuedCameraBundleInTransaction(db.manager, {
+          cameraId: camera,
+          siteId: site,
+          cameraExternalId: 'camera-a',
+          configurationVersion: oldBundle.configurationVersion,
+          viewRevision: oldBundle.viewRevision,
+          bundleSha256: oldBundle.bundleSha256,
+        }),
+      /transaction/,
+    );
+  });
   await t.test(
     'an unconfirmed active region prevents issuance until all active geometry is confirmed',
     async () => {
@@ -362,6 +427,19 @@ test('issued bundle journey binds exact geometry and PPE policy, preserving immu
         ]);
         await assert.rejects(
           readIssuedCameraBundleInTransaction(runner.manager, camera),
+          (error) => (error as { getStatus?: () => number }).getStatus?.() === 503,
+        );
+        const modulePath = '../../src/modules/cameras/camera-configuration-bundle-reader.js';
+        const api = await import(modulePath);
+        await assert.rejects(
+          api.readHistoricalIssuedCameraBundleInTransaction(runner.manager, {
+            cameraId: camera,
+            siteId: site,
+            cameraExternalId: 'camera-a',
+            configurationVersion: oldBundle.configurationVersion,
+            viewRevision: oldBundle.viewRevision,
+            bundleSha256: oldBundle.bundleSha256,
+          }),
           (error) => (error as { getStatus?: () => number }).getStatus?.() === 503,
         );
       } finally {
