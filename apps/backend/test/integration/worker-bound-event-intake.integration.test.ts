@@ -745,7 +745,29 @@ test('worker bound HTTP admission preserves raw event and original execution con
                           configuration_locked: true,
                         },
                       ]
-                    : [],
+                    : sourceKind === 'CAMERA'
+                      ? [
+                          {
+                            id: ppeCamera,
+                            site_id: siteId,
+                            external_id: ppeCamera,
+                            status: 'ACTIVE',
+                            configuration_version: 1,
+                          },
+                        ]
+                      : sourceKind === 'REGION'
+                        ? [
+                            {
+                              id: regionId,
+                              camera_id: ppeCamera,
+                              zone_id: zone.id,
+                              polygon,
+                              coordinate_space: 'NORMALIZED_0_1',
+                              version: 1,
+                              is_active: true,
+                            },
+                          ]
+                        : [],
             })),
           },
           authorityContext,
@@ -871,6 +893,117 @@ test('worker bound HTTP admission preserves raw event and original execution con
           )[0].n,
           1,
         );
+        // A second authenticated event exercises the full WorkPort, not the policy-only adapter.
+        const fullEvent = {
+          ...zoneEvent,
+          eventId: randomUUID(),
+          evidence: [] as typeof zoneEvent.evidence,
+        };
+        fullEvent.evidence = [
+          {
+            kind: 'FRAME',
+            uri: `local://evidence/${issued.streamSessionId}/1/${fullEvent.eventId}.jpg`,
+            sha256: 'a'.repeat(64),
+          },
+        ];
+        assert.equal(
+          (
+            await send(
+              { schemaVersion: '1.0.0', context: ppeContext, event: fullEvent },
+              issued.secret,
+            )
+          ).status,
+          202,
+        );
+        const { Mf06ZoneEntryAssessmentWorkPort } =
+          await import('../../src/modules/safety/assessments/mf06-zone-entry-assessment-work.port.js');
+        const fullWork = new Mf06ZoneEntryAssessmentWorkPort(
+          db,
+          new Mf06ClaimContextReader(db),
+          {
+            prepareForEvent: async (context) => {
+              assert.deepEqual(context, authorityContext);
+              return qualified;
+            },
+            revalidate: async (manager, input, prepared) => {
+              assert.equal(prepared, qualified);
+              assert.equal(input.capturedAt, at);
+              const [mode] = await manager.query('SHOW transaction_isolation');
+              assert.equal(mode.transaction_isolation, 'serializable');
+              return qualified;
+            },
+          },
+          {
+            prepare: async () => {
+              throw Error('Policy-only event must not invoke Face');
+            },
+          },
+          {
+            revalidate: async () => {
+              throw Error('Policy-only event must not read identity');
+            },
+          },
+          store,
+        );
+        let workFailure: string | undefined;
+        const originalPrepare = fullWork.prepare.bind(fullWork);
+        fullWork.prepare = async (...args) => {
+          try {
+            return await originalPrepare(...args);
+          } catch (error) {
+            workFailure = String(error);
+            throw error;
+          }
+        };
+        const originalFinalize = fullWork.finalize.bind(fullWork);
+        fullWork.finalize = async (...args) => {
+          try {
+            const result = await originalFinalize(...args);
+            if (result.state !== 'RECORDED' && result.state !== 'REPLAY')
+              workFailure = JSON.stringify(result);
+            return result;
+          } catch (error) {
+            workFailure = String(error);
+            throw error;
+          }
+        };
+        const fullWorker = new Mf06AssessmentWorker(db, leases, fullWork, {
+          enabled: true,
+          resolverTimeoutMs: 10000,
+          drainTimeoutMs: 10000,
+          maxDatabaseAttempts: 2,
+        });
+        try {
+          assert.equal(await fullWorker.runOnce(), 'COMPLETED', workFailure);
+          assert.equal(await fullWorker.runOnce(), 'IDLE');
+          const rows = await db.query(
+            `SELECT a.outcome,a.reason_code,a.provenance,a.worker_id,
+            a.evaluator_version,j.status,art.body AS archive,
+            to_char(r.authority_captured_at AT TIME ZONE 'UTC','YYYY-MM-DD"T"HH24:MI:SS.US"Z"') AS exact_time
+            FROM zone_entry_assessment a JOIN zone_entry_assessment_job j USING(request_id)
+            JOIN zone_entry_assessment_request r USING(request_id)
+            JOIN zone_entry_authority_artifact art ON art.artifact_id=a.authority_artifact_id
+            WHERE a.event_id=$1`,
+            [fullEvent.eventId],
+          );
+          assert.equal(rows.length, 1);
+          assert.equal(rows[0].outcome, 'ALLOWED');
+          assert.equal(rows[0].reason_code, 'POLICY_NONE');
+          assert.equal(rows[0].provenance, 'SYNTHETIC_TEST');
+          assert.equal(rows[0].worker_id, null);
+          assert.equal(rows[0].evaluator_version, 'mf06-workport-qualified-v1');
+          assert.equal(rows[0].status, 'SUCCEEDED');
+          assert.equal(rows[0].exact_time, at);
+          assert.equal(rows[0].archive.payload.context.capturedAt, at);
+          const [raw] = await db.query(
+            'SELECT raw_payload,payload_hash FROM ai_observation_event WHERE event_id=$1',
+            [fullEvent.eventId],
+          );
+          assert.deepEqual(raw.raw_payload, fullEvent);
+          assert.equal(raw.payload_hash, computeCanonicalPayloadHash(fullEvent));
+        } finally {
+          await fullWorker.drain();
+        }
         await provisionCameraWorkerGeneration(db, ppeCamera, [ppeCamera], 60000);
         const delayedZone = { ...zoneEvent, eventId: randomUUID() };
         assert.equal(

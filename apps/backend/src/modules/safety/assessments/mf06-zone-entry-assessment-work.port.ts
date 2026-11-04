@@ -45,6 +45,7 @@ import {
   type MatchedClaimContext,
 } from './mf06-work-preparation.js';
 import { readConsistentMf06RawEvent } from './mf06-observation-event.js';
+import { loadMf06RequestAdmission } from './mf06-event-admission.js';
 import { inspectMf06StoredBinding, type Mf06CapturedRequest } from './mf06-request-context.js';
 
 export const MF06_WORKPORT_EVALUATOR_VERSION = 'mf06-workport-qualified-v1';
@@ -381,7 +382,7 @@ export class Mf06ZoneEntryAssessmentWorkPort implements Mf06AssessmentWorkPort {
       where: { eventId: request.eventId.toLowerCase() },
       lock: { mode: 'pessimistic_read' },
     });
-    if (!event) return null;
+    if (!event || !(await loadMf06RequestAdmission(manager, event, request))) return null;
     const stored = inspectMf06StoredBinding(request, event),
       raw = readConsistentMf06RawEvent(event),
       expected = record.context.request;
