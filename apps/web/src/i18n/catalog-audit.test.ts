@@ -5,6 +5,75 @@ import ts from 'typescript';
 import en from './locales/en.json';
 import { SITE_GATES } from '@smartsite/contracts/gates';
 
+// Inspect static paired safety catalogs without importing UI modules or starting their hooks.
+function safetyCatalogKeys(root: string): Set<string> {
+  const keys = new Set<string>();
+  function scan(dir: string) {
+    for (const entry of readdirSync(dir, { withFileTypes: true })) {
+      const filename = path.join(dir, entry.name);
+      if (entry.isDirectory()) {
+        scan(filename);
+        continue;
+      }
+      if (!/\.tsx?$/.test(filename) || filename.includes('.test.')) continue;
+      const source = ts.createSourceFile(
+        filename,
+        readFileSync(filename, 'utf8'),
+        ts.ScriptTarget.Latest,
+        true,
+      );
+      const variables = new Map<string, ts.Expression>();
+      function collect(node: ts.Node) {
+        if (ts.isVariableDeclaration(node) && ts.isIdentifier(node.name) && node.initializer)
+          variables.set(node.name.text, node.initializer);
+        ts.forEachChild(node, collect);
+      }
+      collect(source);
+      function object(node: ts.Expression | undefined): ts.ObjectLiteralExpression | undefined {
+        if (!node) return;
+        if (ts.isAsExpression(node) || ts.isSatisfiesExpression(node))
+          return object(node.expression);
+        if (ts.isIdentifier(node)) return object(variables.get(node.text));
+        return ts.isObjectLiteralExpression(node) ? node : undefined;
+      }
+      function visit(node: ts.Node) {
+        if (
+          ts.isCallExpression(node) &&
+          node.expression.getText(source) === 'registerFeatureCatalog'
+        ) {
+          const pair = object(node.arguments[0]);
+          expect(pair, filename).toBeDefined();
+          const languages = new Map<string, string[]>();
+          for (const prop of pair?.properties ?? []) {
+            if (!ts.isPropertyAssignment(prop)) continue;
+            const language = prop.name.getText(source).replace(/['"]/g, '');
+            const entries = object(prop.initializer);
+            expect(entries, filename).toBeDefined();
+            languages.set(
+              language,
+              (entries?.properties ?? []).map((item) => {
+                expect(
+                  ts.isPropertyAssignment(item) && ts.isStringLiteral(item.initializer),
+                  filename,
+                ).toBe(true);
+                return item.name!.getText(source).replace(/['"]/g, '');
+              }),
+            );
+          }
+          expect(languages.get('vi')?.slice().sort(), filename).toEqual(
+            languages.get('en')?.slice().sort(),
+          );
+          for (const key of languages.get('en') ?? []) keys.add(key);
+        }
+        ts.forEachChild(node, visit);
+      }
+      visit(source);
+    }
+  }
+  scan(root);
+  return keys;
+}
+
 it('includes the shared gate catalog in the UI translations', () => {
   for (const gate of SITE_GATES) expect(`gates.${gate.id}` in en, gate.id).toBe(true);
 });
@@ -35,6 +104,7 @@ it('includes every access tab in the catalog, including keys composed at runtime
 
 it('scans every production UI source for missing keys and untranslated visible literals', () => {
   const root = path.resolve('src');
+  const safetyKeys = safetyCatalogKeys(path.join(root, 'components'));
   const failures: string[] = [];
   // Language names are intentionally shown in their own language in the selector.
   const brands = new Set([
@@ -77,6 +147,8 @@ it('scans every production UI source for missing keys and untranslated visible l
         ts.ScriptTarget.Latest,
         true,
       );
+      const usesSafetyNamespace =
+        /useTranslation\(SAFETY_NAMESPACE\)|useFourSourceWallTranslate\(\)/.test(source.text);
       const report = (node: ts.Node, text: string) =>
         failures.push(
           `${path.relative(root, filename)}:${source.getLineAndCharacterOfPosition(node.getStart(source)).line + 1}: ${text}`,
@@ -129,13 +201,15 @@ it('scans every production UI source for missing keys and untranslated visible l
           checkVisibleExpression(node.expression);
         }
       }
-      function checkTranslationKey(node: ts.Expression): void {
+      function checkTranslationKey(node: ts.Expression, safety: boolean): void {
         if (ts.isStringLiteral(node)) {
-          if (!(node.text in en) && !(`${node.text}_other` in en))
-            report(node, `missing key ${node.text}`);
+          const available = safety
+            ? safetyKeys.has(node.text)
+            : node.text in en || `${node.text}_other` in en;
+          if (!available) report(node, `missing key ${node.text}`);
         } else if (ts.isConditionalExpression(node)) {
-          checkTranslationKey(node.whenTrue);
-          checkTranslationKey(node.whenFalse);
+          checkTranslationKey(node.whenTrue, safety);
+          checkTranslationKey(node.whenFalse, safety);
         }
       }
       function visit(node: ts.Node) {
@@ -144,7 +218,10 @@ it('scans every production UI source for missing keys and untranslated visible l
           ['tr', 't', 'translate'].includes(node.expression.getText(source)) &&
           node.arguments[0]
         ) {
-          checkTranslationKey(node.arguments[0]);
+          checkTranslationKey(
+            node.arguments[0],
+            usesSafetyNamespace && node.expression.getText(source) === 't',
+          );
         }
         if (ts.isJsxText(node)) {
           const text = node.text.trim();

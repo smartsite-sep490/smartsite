@@ -2,6 +2,7 @@ import {
   processCameraMediaNdjsonStream,
   type CameraVideoStreamOptions,
 } from './camera-media-stream';
+import { parsePreviewCameraPage } from './preview-camera-page';
 import type { CameraMediaFrame } from '@smartsite/contracts/camera-preview';
 import {
   parseCreateReferenceRegionCommand,
@@ -2503,6 +2504,39 @@ export class SmartSiteManagementClient {
       undefined,
       requestOptions,
     );
+  }
+  async listPreviewCameras(
+    token: string,
+    siteId: string,
+    paging: PageOptions = {},
+    options?: RequestOptions,
+  ): Promise<Page<CameraResponse>> {
+    const offset = paging.offset ?? 0,
+      limit = paging.limit ?? 20;
+    if (
+      !Number.isSafeInteger(offset) ||
+      offset < 0 ||
+      !Number.isSafeInteger(limit) ||
+      limit < 1 ||
+      limit > 100
+    ) {
+      throw new RangeError('Invalid preview camera pagination');
+    }
+    const value = await this.request<unknown>(
+      'GET',
+      this.listPath(`/sites/${pathId(siteId)}/preview-cameras`, { offset, limit }),
+      token,
+      undefined,
+      undefined,
+      { ...options, timeoutMs: options?.timeoutMs ?? 3000 },
+      { cache: 'no-store', redirect: 'error' },
+      256_000,
+    );
+    try {
+      return parsePreviewCameraPage(value, siteId, limit);
+    } catch {
+      throw new ApiError('invalid-response', 'Invalid scoped preview camera page.');
+    }
   }
   getCamera(token: string, siteId: string, cameraId: string, options?: RequestOptions) {
     return this.request<CameraResponse>(

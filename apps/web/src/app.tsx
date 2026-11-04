@@ -10,7 +10,7 @@ import {
 import { AppLayout, type ActiveTab } from './components/layout/AppLayout';
 import { LiveMonitoringView } from './components/live/LiveMonitoringView';
 import { RestrictedZoneView } from './components/zones/RestrictedZoneView';
-import { PpeMonitoringView } from './components/ppe/PpeMonitoringView';
+import { PpeMonitorWorkspace } from './components/ppe/PpeMonitorWorkspace';
 import { DashboardView } from './components/dashboard/DashboardView';
 import { LandingPage } from './components/landing/LandingPage';
 import { SafetyAlertsView } from './components/alerts/SafetyAlertsView';
@@ -154,7 +154,12 @@ function ProtectedRoutes({ defaultAuthTab, alertsContext, onNavigate }: Protecte
         />
         <Route
           path="/ppe"
-          element={<PpeMonitoringView onNavigate={(tab, context) => onNavigate(tab, context)} />}
+          element={
+            <PpeMonitorWorkspace
+              apiUrl={apiUrl}
+              session={{ accessToken, user: currentUser.data! }}
+            />
+          }
         />
         <Route
           path="/zones"
