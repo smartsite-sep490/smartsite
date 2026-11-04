@@ -240,12 +240,13 @@ export async function executeMainConfigurationCommand<T>(
   };
   // Login holds the account row lock before inserting its session, but does not
   // update that row. A snapshot frozen before waiting for the account lock can
-  // therefore miss the newly committed session. These four revocation commands
+  // therefore miss the newly committed session. These revocation commands
   // need fresh statement snapshots after the lock; actor/target locks, MAIN's
   // Admin invariant lock, capture journal and complete-transaction retry remain.
   const revokesAccountSessions =
     operation === 'USER_ACCOUNT_STATUS' ||
     operation === 'USER_ROLE_REPLACE' ||
+    operation === 'USER_SITE_MANAGER_REVOKE' ||
     operation === 'USER_PASSWORD_RESET' ||
     operation === 'USER_PASSWORD_CHANGE';
   // Account-first enrollment locks the target account before looking for its

@@ -1,3 +1,7 @@
+import {
+  executeMainConfigurationCommand,
+  type MainConfigurationCommandContext,
+} from '../../common/configuration/main-configuration-authority.js';
 import { randomUUID } from 'node:crypto';
 import {
   ConflictException,
@@ -429,64 +433,21 @@ export class UsersService {
     };
   }
 
-  async setStatus(actorId: string, userId: string, input: SetUserStatusDto) {
+  async setStatus(
+    actorId: string,
+    userId: string,
+    input: SetUserStatusDto,
+    context?: MainConfigurationCommandContext,
+  ) {
     const value = command(SetUserStatusDto, input);
     const id = uuid(userId);
-    return this.dataSource.transaction(async (manager) => {
-      await manager.query('SELECT pg_advisory_xact_lock(48484, 1)');
-      const user = await manager
-        .getRepository(UserEntity)
-        .createQueryBuilder('user')
-        .setLock('pessimistic_write')
-        .where('user.id = :id', { id })
-        .getOne();
-      if (!user) throw new NotFoundException();
-      if (user.isActive === value.isActive) return this.response(manager, user);
-      if (!value.isActive && actorId === id) throw new ForbiddenException();
-      const assignments = await manager
-        .getRepository(UserRoleAssignmentEntity)
-        .findBy({ userId: id });
-      if (value.isActive && assignments.length === 0) this.invalidAssignments();
-      if (
-        !value.isActive &&
-        assignments.some(({ role, siteId }) => role === UserRole.ADMIN && siteId === null) &&
-        (await this.activeAdminCount(manager)) <= 1
-      )
-        throw new ConflictException('At least one active Admin is required');
-      user.isActive = value.isActive;
-      await manager.getRepository(UserEntity).save(user);
-      if (!value.isActive) await this.revokeSessions(manager, id);
-      return publicUser(user, assignments);
-    });
-  }
-
-  async revokeSiteManager(userId: string, siteId: string) {
-    const id = uuid(userId);
-    const scopedSiteId = uuid(siteId);
-    return this.dataSource.transaction(async (manager) => {
-      await manager.query('SELECT pg_advisory_xact_lock(48484, 1)');
-      const user = await manager.getRepository(UserEntity).findOne({
-        where: { id },
-        lock: { mode: 'pessimistic_write' },
-      });
-      if (!user) throw new NotFoundException();
-      const result = await manager.getRepository(UserRoleAssignmentEntity).delete({
-        userId: id,
-        siteId: scopedSiteId,
-        role: UserRole.SITE_MANAGER,
-      });
-      if (result.affected) await this.revokeSessions(manager, id);
-      return this.response(manager, user);
-    });
-  }
-
-  async replaceRoleAssignments(userId: string, input: ReplaceRoleAssignmentsDto) {
-    const value = command(ReplaceRoleAssignmentsDto, input);
-    await this.validateAssignments(value.roleAssignments);
-    const id = uuid(userId);
-    try {
-      return await this.dataSource.transaction(async (manager) => {
-        await manager.query('SELECT pg_advisory_xact_lock(48484, 1)');
+    if (context && context.actorUserId !== actorId) throw new ForbiddenException();
+    return executeMainConfigurationCommand(
+      this.dataSource,
+      context,
+      'USER_ACCOUNT_STATUS',
+      { userId: id, isActive: value.isActive },
+      async (manager) => {
         const user = await manager
           .getRepository(UserEntity)
           .createQueryBuilder('user')
@@ -494,57 +455,139 @@ export class UsersService {
           .where('user.id = :id', { id })
           .getOne();
         if (!user) throw new NotFoundException();
-        const current = await manager
+        if (user.isActive === value.isActive) return this.response(manager, user);
+        if (!value.isActive && actorId === id) throw new ForbiddenException();
+        const assignments = await manager
           .getRepository(UserRoleAssignmentEntity)
           .findBy({ userId: id });
+        if (value.isActive && assignments.length === 0) this.invalidAssignments();
         if (
-          value.roleAssignments.some(
-            (r) =>
-              r.role === UserRole.CONTRACTOR_REPRESENTATIVE &&
-              !current.some((c) => c.role === r.role && c.siteId === r.siteId),
-          )
+          !value.isActive &&
+          assignments.some(({ role, siteId }) => role === UserRole.ADMIN && siteId === null) &&
+          (await this.activeAdminCount(manager)) <= 1
         )
-          throw new ForbiddenException('Representatives must be assigned by their Site Manager');
-        const removesAdmin =
-          current.some(({ role, siteId }) => role === UserRole.ADMIN && siteId === null) &&
-          !value.roleAssignments.some(
-            ({ role, siteId }) => role === UserRole.ADMIN && siteId === null,
-          );
-        if (user.isActive && removesAdmin && (await this.activeAdminCount(manager)) <= 1)
           throw new ConflictException('At least one active Admin is required');
-        await manager.getRepository(UserRoleAssignmentEntity).delete({ userId: id });
-        await manager.getRepository(UserRoleAssignmentEntity).insert(
-          value.roleAssignments.map(({ role, siteId }) => ({
-            id: randomUUID(),
-            userId: id,
-            role,
-            siteId,
-          })),
-        );
-        await this.revokeSessions(manager, id);
+        user.isActive = value.isActive;
+        await manager.getRepository(UserEntity).save(user);
+        if (!value.isActive) await this.revokeSessions(manager, id);
+        return publicUser(user, assignments);
+      },
+    );
+  }
+
+  async revokeSiteManager(
+    userId: string,
+    siteId: string,
+    context?: MainConfigurationCommandContext,
+  ) {
+    const id = uuid(userId);
+    const scopedSiteId = uuid(siteId);
+    return executeMainConfigurationCommand(
+      this.dataSource,
+      context,
+      'USER_SITE_MANAGER_REVOKE',
+      { userId: id, siteId: scopedSiteId },
+      async (manager) => {
+        const user = await manager.getRepository(UserEntity).findOne({
+          where: { id },
+          lock: { mode: 'pessimistic_write' },
+        });
+        if (!user) throw new NotFoundException();
+        const result = await manager.getRepository(UserRoleAssignmentEntity).delete({
+          userId: id,
+          siteId: scopedSiteId,
+          role: UserRole.SITE_MANAGER,
+        });
+        if (result.affected) await this.revokeSessions(manager, id);
         return this.response(manager, user);
-      });
+      },
+    );
+  }
+
+  async replaceRoleAssignments(
+    userId: string,
+    input: ReplaceRoleAssignmentsDto,
+    context?: MainConfigurationCommandContext,
+  ) {
+    const value = command(ReplaceRoleAssignmentsDto, input);
+    await this.validateAssignments(value.roleAssignments);
+    const id = uuid(userId);
+    try {
+      return await executeMainConfigurationCommand(
+        this.dataSource,
+        context,
+        'USER_ROLE_REPLACE',
+        { userId: id, roleAssignments: value.roleAssignments },
+        async (manager) => {
+          const user = await manager
+            .getRepository(UserEntity)
+            .createQueryBuilder('user')
+            .setLock('pessimistic_write')
+            .where('user.id = :id', { id })
+            .getOne();
+          if (!user) throw new NotFoundException();
+          const current = await manager
+            .getRepository(UserRoleAssignmentEntity)
+            .findBy({ userId: id });
+          if (
+            value.roleAssignments.some(
+              (r) =>
+                r.role === UserRole.CONTRACTOR_REPRESENTATIVE &&
+                !current.some((c) => c.role === r.role && c.siteId === r.siteId),
+            )
+          )
+            throw new ForbiddenException('Representatives must be assigned by their Site Manager');
+          const removesAdmin =
+            current.some(({ role, siteId }) => role === UserRole.ADMIN && siteId === null) &&
+            !value.roleAssignments.some(
+              ({ role, siteId }) => role === UserRole.ADMIN && siteId === null,
+            );
+          if (user.isActive && removesAdmin && (await this.activeAdminCount(manager)) <= 1)
+            throw new ConflictException('At least one active Admin is required');
+          await manager.getRepository(UserRoleAssignmentEntity).delete({ userId: id });
+          await manager.getRepository(UserRoleAssignmentEntity).insert(
+            value.roleAssignments.map(({ role, siteId }) => ({
+              id: randomUUID(),
+              userId: id,
+              role,
+              siteId,
+            })),
+          );
+          await this.revokeSessions(manager, id);
+          return this.response(manager, user);
+        },
+      );
     } catch (error) {
       knownUnique(error, ['uq_site_single_manager']);
     }
   }
 
-  async resetPassword(userId: string, input: ResetPasswordDto) {
+  async resetPassword(
+    userId: string,
+    input: ResetPasswordDto,
+    context?: MainConfigurationCommandContext,
+  ) {
     const value = command(ResetPasswordDto, input);
     const id = uuid(userId);
     const replacement = await hashPassword(value.temporaryPassword);
-    await this.dataSource.transaction(async (manager) => {
-      const user = await manager
-        .getRepository(UserEntity)
-        .createQueryBuilder('user')
-        .setLock('pessimistic_write')
-        .where('user.id = :id', { id })
-        .getOne();
-      if (!user) throw new NotFoundException();
-      await manager
-        .getRepository(UserEntity)
-        .update({ id }, { passwordHash: replacement, mustChangePassword: false });
-      await this.revokeSessions(manager, id);
-    });
+    await executeMainConfigurationCommand(
+      this.dataSource,
+      context,
+      'USER_PASSWORD_RESET',
+      { userId: id },
+      async (manager) => {
+        const user = await manager
+          .getRepository(UserEntity)
+          .createQueryBuilder('user')
+          .setLock('pessimistic_write')
+          .where('user.id = :id', { id })
+          .getOne();
+        if (!user) throw new NotFoundException();
+        await manager
+          .getRepository(UserEntity)
+          .update({ id }, { passwordHash: replacement, mustChangePassword: false });
+        await this.revokeSessions(manager, id);
+      },
+    );
   }
 }

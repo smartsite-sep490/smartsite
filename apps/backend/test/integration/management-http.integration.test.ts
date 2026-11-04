@@ -584,6 +584,53 @@ test('Admin Site setup and scoped Manager Zone setup feed an allowlisted AI snap
       ).status,
       200,
     );
+    assert.equal(
+      (await patch(`/users/${managerId}/status`, { isActive: false }, adminToken)).status,
+      200,
+    );
+    assert.equal((await patch(repNamePath, nameInput, managerToken)).status, 401);
+    assert.equal(
+      (await patch(`/users/${managerId}/status`, { isActive: true }, adminToken)).status,
+      200,
+    );
+    assert.equal(
+      (
+        await post(
+          `/users/${managerId}/reset-password`,
+          { temporaryPassword: 'Synthetic_Reset_123' },
+          adminToken,
+        )
+      ).status,
+      204,
+    );
+    const roleReplacement = await fetch(`${url}/api/v1/users/${managerId}/role-assignments`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${adminToken}` },
+      body: JSON.stringify({
+        roleAssignments: [
+          { role: 'SITE_MANAGER', siteId: site.id },
+          { role: 'SAFETY_OFFICER', siteId: site.id },
+        ],
+      }),
+    });
+    assert.equal(roleReplacement.status, 200);
+    assert.equal(
+      (
+        await fetch(revokePath, {
+          method: 'DELETE',
+          headers: { Authorization: `Bearer ${adminToken}` },
+        })
+      ).status,
+      204,
+    );
+    const account = await fetch(`${url}/api/v1/users/${managerId}`, {
+      headers: { Authorization: `Bearer ${adminToken}` },
+    });
+    assert.equal(account.status, 200);
+    assert.deepEqual(
+      (await account.json()).roleAssignments.map((r: { role: string }) => r.role),
+      ['SAFETY_OFFICER'],
+    );
   } finally {
     await app.close();
   }
