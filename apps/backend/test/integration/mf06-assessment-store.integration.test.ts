@@ -15,6 +15,7 @@ import {
 } from '../../src/database/entities/index.js';
 import { parseNormalizedCapturedAt } from '../../src/common/parse-normalized-captured-at.js';
 import { selectZoneEntrySubject } from '../../src/modules/safety/identity/observation-identity-subject.js';
+import { computeMf06InitialBinding } from '../../src/modules/safety/assessments/mf06-event-admission.js';
 import { MAIN_AUTHORITY_SOURCES } from '../../src/common/configuration/main-authority-sources.js';
 import {
   MAIN_AUTHORITY_ARCHIVE_FORMAT,
@@ -1125,6 +1126,9 @@ async function candidateFixture(v14CropFrameSha256?: string) {
       .update({ eventId: f.eventId }, { rawPayload: f.raw });
   }
   const req: Row = { ...f.request(), payload_hash: computeCanonicalPayloadHash(f.raw) };
+  const initialSubject = selectZoneEntrySubject(f.raw, Number(req.zone_observation_index));
+  assert(initialSubject.zoneEligible);
+  req.binding_hash = computeMf06InitialBinding(f.eventId, initialSubject);
   // Source event is still unreferenced here. Establish canonical fixture bytes
   // before inserting the immutable request; never repair a historical request.
   await db.query('UPDATE ai_observation_event SET payload_hash=$2 WHERE event_id=$1', [

@@ -3,7 +3,7 @@ import 'reflect-metadata';
 import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
 import { after, before, test } from 'node:test';
-import { computeCanonicalPayloadHash } from '@smartsite/contracts';
+import { computeCanonicalPayloadHash, computeWorkerEventBindingHash } from '@smartsite/contracts';
 import {
   AiObservationEventEntity,
   CameraEntity,
@@ -18,10 +18,48 @@ import {
 import { Mf06RequestContextReader } from '../../src/modules/safety/assessments/mf06-request-context.js';
 import { selectZoneEntrySubject } from '../../src/modules/safety/identity/observation-identity-subject.js';
 import { createIsolatedTestDatabase } from '../support/isolated-test-database.js';
+import { computeMf06InitialBinding } from '../../src/modules/safety/assessments/mf06-event-admission.js';
 
 const isolated = createIsolatedTestDatabase();
 const db = isolated.dataSource;
 const reader = new Mf06RequestContextReader(db);
+
+test('stored admission cannot be hidden as legacy or accepted without its exact issued bundle', async () => {
+  const f = await fixture();
+  const request = await db
+    .getRepository(ZoneEntryAssessmentRequestEntity)
+    .findOneByOrFail({ requestId: f.requestId });
+  const event = await db
+    .getRepository(AiObservationEventEntity)
+    .findOneByOrFail({ eventId: request.eventId });
+  assert.equal((await reader.load(f.siteId, f.requestId)).status, 'MATCHED');
+  const context = {
+    schemaVersion: '1.0.0' as const,
+    cameraId: f.cameraId,
+    workerGenerationId: randomUUID(),
+    streamSessionId: event.streamSessionId,
+    configurationVersion: 1,
+    bundleSha256: 'a'.repeat(64),
+    viewRevision: 1,
+    receiptCommandId: randomUUID(),
+    sourceKind: 'LIVE' as const,
+  };
+  const admission = {
+    schemaVersion: '1.0.0',
+    context,
+    bindingHash: computeWorkerEventBindingHash(event.payloadHash, context),
+    classification: 'LIVE',
+    admittedAt: new Date().toISOString(),
+  };
+  await db.query('UPDATE ai_observation_event SET admission_context=$2::jsonb WHERE event_id=$1', [
+    event.eventId,
+    JSON.stringify(admission),
+  ]);
+  assert.deepEqual(await reader.load(f.siteId, f.requestId), {
+    status: 'UNAVAILABLE',
+    reason: 'INVALID_STORED_BINDING',
+  });
+});
 before(() => isolated.initialize());
 after(() => isolated.dispose());
 
@@ -79,6 +117,7 @@ async function fixture(ambiguous = false, invalidCanonicalHash = false) {
   });
   const selected = selectZoneEntrySubject(raw, 3);
   assert.ok(selected.zoneEligible);
+  const bindingHash = computeMf06InitialBinding(eventId, selected);
   const requestId = randomUUID();
   await db.getRepository(ZoneEntryAssessmentRequestEntity).insert({
     requestId,
@@ -98,9 +137,9 @@ async function fixture(ambiguous = false, invalidCanonicalHash = false) {
     capturedAt: new Date(raw.capturedAt),
     requestedPurpose: 'INITIAL_OBSERVATION_ASSESSMENT',
     requestRevision: 1,
-    bindingHash: 'b'.repeat(64),
+    bindingHash,
   });
-  return { siteId, cameraId, zoneId, regionId, requestId, externalId };
+  return { siteId, cameraId, zoneId, regionId, requestId, externalId, bindingHash };
 }
 
 test('real MF06 context selects the requested second PERSON and denies another Site', async () => {
@@ -113,7 +152,7 @@ test('real MF06 context selects the requested second PERSON and denies another S
   assert.equal(result.subject?.personBoundingBox.x1, 0.5);
   assert.equal(result.request.zoneObservationIndex, 3);
   assert.equal(result.request.regionId, f.regionId);
-  assert.equal(result.request.storedBindingHash, 'b'.repeat(64));
+  assert.equal(result.request.storedBindingHash, f.bindingHash);
   assert.equal('workerId' in result, false);
   assert.equal('authoritySnapshot' in result, false);
   assert.equal('outcome' in result, false);

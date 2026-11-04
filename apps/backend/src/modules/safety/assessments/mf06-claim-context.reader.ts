@@ -7,6 +7,7 @@ import type { ObservationSubjectRef } from '../identity/observation-identity.typ
 import type { Mf06JobClaim } from './mf06-job-lease.service.js';
 import { inspectMf06StoredBinding, type Mf06CapturedRequest } from './mf06-request-context.js';
 import { selectMf06FrameReference, type Mf06FrameReference } from './mf06-frame-reference.js';
+import { loadMf06RequestAdmission } from './mf06-event-admission.js';
 
 export type Mf06ClaimContextUnavailableReason =
   | 'INVALID_CLAIM'
@@ -298,6 +299,8 @@ export class Mf06ClaimContextReader {
         .findOneBy({ eventId: request.eventId.toLowerCase() });
       if (signal?.aborted) return unavailable('ABORTED');
       if (!event) return unavailable('EVENT_NOT_FOUND');
+      if (!(await loadMf06RequestAdmission(manager, event, request)))
+        return unavailable('INVALID_STORED_BINDING');
 
       const inspected = inspectMf06StoredBinding(request, event);
       if (inspected.status !== 'MATCHED') {

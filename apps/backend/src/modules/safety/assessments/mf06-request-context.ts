@@ -6,6 +6,7 @@ import { EventProcessingStatus } from '../../../database/entities/enums.js';
 import type { ObservationSubjectRef } from '../identity/observation-identity.types.js';
 import { readConsistentMf06RawEvent } from './mf06-observation-event.js';
 import { selectZoneEntrySubject } from '../identity/observation-identity-subject.js';
+import { snapshotMf06Admission, loadMf06RequestAdmission } from './mf06-event-admission.js';
 
 /** Internal immutable projection. It is not a public DTO or an approved resolver wire contract. */
 export type Mf06CapturedRequest = Readonly<
@@ -13,6 +14,7 @@ export type Mf06CapturedRequest = Readonly<
     capturedAt: string;
     requestedAt: string;
     storedBindingHash: string;
+    executionAdmission?: Readonly<NonNullable<AiObservationEventEntity['admissionContext']>>;
   }
 >;
 
@@ -91,6 +93,17 @@ export function inspectMf06StoredBinding(
     return invalid;
   const raw = readConsistentMf06RawEvent(event);
   if (!raw) return invalid;
+  let executionAdmission;
+  try {
+    executionAdmission = snapshotMf06Admission(event, event.admissionContext);
+    if (
+      executionAdmission &&
+      executionAdmission.context.cameraId !== request.cameraId.toLowerCase()
+    )
+      return invalid;
+  } catch {
+    return invalid;
+  }
   const selected = selectZoneEntrySubject(raw, request.zoneObservationIndex);
   if (
     !selected.zoneEligible ||
@@ -121,6 +134,7 @@ export function inspectMf06StoredBinding(
     requestRevision: request.requestRevision,
     storedBindingHash: request.bindingHash,
     requestedAt: request.requestedAt.toISOString(),
+    ...(executionAdmission ? { executionAdmission } : {}),
   });
   const rawCapturedAt = raw.capturedAt as string;
   const subject: ObservationSubjectRef | null =
@@ -170,6 +184,8 @@ export class Mf06RequestContextReader {
         .getRepository(AiObservationEventEntity)
         .findOneBy({ eventId: request.eventId });
       if (!event) return { status: 'UNAVAILABLE', reason: 'EVENT_NOT_FOUND' };
+      if (!(await loadMf06RequestAdmission(manager, event, request)))
+        return { status: 'UNAVAILABLE', reason: 'INVALID_STORED_BINDING' };
       return inspectMf06StoredBinding(request, event);
     });
   }

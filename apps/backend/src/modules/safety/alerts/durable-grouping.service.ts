@@ -1,4 +1,5 @@
 import { randomUUID } from 'node:crypto';
+import { loadMf06EventAdmission } from '../assessments/mf06-event-admission.js';
 import { Injectable } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import type { BackendEnvironment } from '../../../config/environment.js';
@@ -112,6 +113,8 @@ export class DurableGroupingService {
       raw.observations[episode.person_observation_index]?.trackId !== candidate.trackId
     )
       refuse();
+    const issued = await loadMf06EventAdmission(manager, event, siteId);
+    if (!issued) return refuse();
     const contexts = new Map<string, ResolvedObservationContext>();
     const resolver = new ObservationContextResolverService();
     const observations = raw.observations.filter((o) => o.type !== 'ZONE_ENTRY');
@@ -122,13 +125,21 @@ export class DurableGroupingService {
         observation.status !== 'MISSING'
       )
         continue;
-      const context = await resolver.resolve(
-        manager,
-        event.cameraExternalId,
-        observation.regionId,
-        observation.geometryVersion,
-        true,
-      );
+      const context = issued.bundle
+        ? await resolver.resolveIssuedRegion(
+            manager,
+            siteId,
+            issued.bundle,
+            observation.regionId,
+            observation.geometryVersion,
+          )
+        : await resolver.resolve(
+            manager,
+            event.cameraExternalId,
+            observation.regionId,
+            observation.geometryVersion,
+            true,
+          );
       if (context && context.siteId === siteId && context.cameraId === episode.camera_id)
         contexts.set(`${observation.regionId}:${observation.geometryVersion}`, context);
     }

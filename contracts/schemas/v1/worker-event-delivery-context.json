@@ -1,0 +1,32 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://smartsite.local/contracts/v1/worker-event-delivery-context.json",
+  "title": "WorkerEventDeliveryContext",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schemaVersion",
+    "cameraId",
+    "workerGenerationId",
+    "streamSessionId",
+    "configurationVersion",
+    "bundleSha256",
+    "viewRevision",
+    "receiptCommandId",
+    "sourceKind"
+  ],
+  "properties": {
+    "schemaVersion": { "const": "1.0.0" },
+    "cameraId": { "$ref": "#/$defs/uuid" },
+    "workerGenerationId": { "$ref": "#/$defs/uuid" },
+    "streamSessionId": { "$ref": "#/$defs/uuid" },
+    "configurationVersion": { "type": "integer", "minimum": 1, "maximum": 9007199254740991 },
+    "bundleSha256": { "type": "string", "pattern": "^[a-f0-9]{64}$" },
+    "viewRevision": { "type": "integer", "minimum": 1, "maximum": 9007199254740991 },
+    "receiptCommandId": { "$ref": "#/$defs/uuid" },
+    "sourceKind": { "enum": ["LIVE", "REPLAY"] }
+  },
+  "$defs": {
+    "uuid": { "type": "string", "pattern": "^[0-9a-f]{8}(-[0-9a-f]{4}){3}-[0-9a-f]{12}$" }
+  }
+}

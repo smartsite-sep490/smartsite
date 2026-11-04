@@ -1,6 +1,7 @@
 import { Check, Column, CreateDateColumn, Entity, ForeignKey, Index, PrimaryColumn } from 'typeorm';
 import { CameraEntity } from './camera.entity.js';
 import { EventProcessingStatus } from './enums.js';
+import type { WorkerEventDeliveryContext } from '@smartsite/contracts';
 
 @Entity({ name: 'ai_observation_event' })
 @Check(
@@ -10,6 +11,10 @@ import { EventProcessingStatus } from './enums.js';
 @Check(
   'chk_ai_event_safety_route_mode',
   "safety_route_mode IS NULL OR safety_route_mode IN ('LEGACY','EPISODE_EVENT_LOCAL')",
+)
+@Check(
+  'chk_ai_event_admission_object',
+  "admission_context IS NULL OR jsonb_typeof(admission_context)='object'",
 )
 @Index('uq_ai_event_frame_part', { synchronize: false })
 @Index('idx_ai_event_source_frame', { synchronize: false })
@@ -62,6 +67,23 @@ export class AiObservationEventEntity {
 
   @Column({ name: 'raw_payload', type: 'jsonb' })
   rawPayload!: unknown;
+
+  /** Bound-intake writes this atomically via its scoped SQL path; legacy reads stay compatible. */
+  @Column({
+    name: 'admission_context',
+    type: 'jsonb',
+    nullable: true,
+    select: false,
+    insert: false,
+    update: false,
+  })
+  admissionContext?: {
+    schemaVersion: '1.0.0';
+    context: WorkerEventDeliveryContext;
+    bindingHash: string;
+    classification: 'LIVE' | 'REVIEW_ONLY';
+    admittedAt: string;
+  } | null;
 
   @Column({
     name: 'processing_status',
