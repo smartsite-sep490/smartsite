@@ -3,7 +3,7 @@ import {
   executeMainMetadataMutation,
   type MainConfigurationCommandContext,
 } from '../../common/configuration/main-configuration-authority.js';
-import { PublicHttpException } from '../../common/http/public-http-exception.js';
+import { siteManagerCommandAuthorization } from '../auth/site-manager.guard.js';
 import { randomUUID } from 'node:crypto';
 import { Injectable } from '@nestjs/common';
 import { PPE_ITEMS } from '@smartsite/contracts';
@@ -112,7 +112,7 @@ export class ZoneConfigurationService {
           await appendZonePolicyRevision(manager, zone, true);
           return zone;
         },
-        this.siteManagerAuthorization(siteId, context),
+        siteManagerCommandAuthorization(siteId, context?.actorUserId),
       );
     } catch (error) {
       knownUnique(error, ['uq_zone_site_code']);
@@ -183,7 +183,7 @@ export class ZoneConfigurationService {
         zone.name = value.name;
         return zone;
       },
-      this.siteManagerAuthorization(siteId, context),
+      siteManagerCommandAuthorization(siteId, context?.actorUserId),
     );
   }
 
@@ -213,7 +213,7 @@ export class ZoneConfigurationService {
         await manager.getRepository(ZoneEntity).softDelete({ id: zone.id, siteId });
         return { id: zone.id };
       },
-      this.siteManagerAuthorization(siteId, context),
+      siteManagerCommandAuthorization(siteId, context?.actorUserId),
     );
   }
 
@@ -255,24 +255,8 @@ export class ZoneConfigurationService {
         await appendZonePolicyRevision(manager, zone);
         return zone;
       },
-      this.siteManagerAuthorization(siteId, context),
+      siteManagerCommandAuthorization(siteId, context?.actorUserId),
     );
-  }
-
-  private siteManagerAuthorization(siteId: string, context?: MainConfigurationCommandContext) {
-    if (!context) return undefined;
-    const normalizedSite = uuid(siteId).toLowerCase();
-    return async (manager: EntityManager): Promise<void> => {
-      const assignments = await manager.query(
-        "SELECT id FROM user_role_assignment WHERE user_id=$1 AND site_id=$2 AND role='SITE_MANAGER' FOR SHARE",
-        [context.actorUserId, normalizedSite],
-      );
-      if (!assignments.length)
-        throw new PublicHttpException(403, {
-          code: 'FORBIDDEN',
-          message: 'Site Manager access to this site is required',
-        });
-    };
   }
 
   async lockForRegion(manager: EntityManager, siteId: string, zoneId: string): Promise<ZoneEntity> {

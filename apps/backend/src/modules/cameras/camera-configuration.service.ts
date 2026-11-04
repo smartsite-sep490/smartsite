@@ -1,3 +1,8 @@
+import {
+  executeMainConfigurationCommand,
+  executeMainMetadataMutation,
+  type MainConfigurationCommandContext,
+} from '../../common/configuration/main-configuration-authority.js';
 import { randomUUID } from 'node:crypto';
 import { readCameraObservationZones } from './camera-observation-zones.query.js';
 import { Inject, Injectable } from '@nestjs/common';
@@ -42,7 +47,7 @@ import { AuthService } from '../auth/auth.service.js';
 import { recordCameraConfigurationBundle } from './camera-configuration-bundles.js';
 import { readIssuedCameraConfigurationBundle } from './camera-configuration-bundle-reader.js';
 import { recordCameraConfigurationAcknowledgement } from './camera-configuration-acknowledgement.js';
-import { requireSiteManager } from '../auth/site-manager.guard.js';
+import { requireSiteManager, siteManagerCommandAuthorization } from '../auth/site-manager.guard.js';
 import {
   attachRegionConfirmations,
   type ConfirmedRegionEntity,
@@ -128,17 +133,29 @@ export class CameraConfigurationService {
     @Inject(AuthService) private readonly auth?: AuthService,
   ) {}
 
-  async create(siteId: string, input: CreateCameraCommand): Promise<CameraEntity> {
+  async create(
+    siteId: string,
+    input: CreateCameraCommand,
+    context?: MainConfigurationCommandContext,
+  ): Promise<CameraEntity> {
     const value = command(CreateCameraCommand, input);
     await this.sites.get(siteId);
     try {
-      return await this.dataSource.getRepository(CameraEntity).save({
-        id: randomUUID(),
-        siteId,
-        ...value,
-        status: CameraStatus.ACTIVE,
-        configurationVersion: 1,
-      });
+      return await executeMainConfigurationCommand(
+        this.dataSource,
+        context,
+        'CAMERA_CREATE',
+        { siteId, ...value },
+        (manager) =>
+          manager.getRepository(CameraEntity).save({
+            id: randomUUID(),
+            siteId,
+            ...value,
+            status: CameraStatus.ACTIVE,
+            configurationVersion: 1,
+          }),
+        siteManagerCommandAuthorization(siteId, context?.actorUserId),
+      );
     } catch (error) {
       knownUnique(error, ['uq_camera_external_id', 'uq_camera_site_code']);
     }
@@ -182,22 +199,30 @@ export class CameraConfigurationService {
     siteId: string,
     cameraId: string,
     input: RenameCameraCommand,
+    context?: MainConfigurationCommandContext,
   ): Promise<CameraEntity> {
     const value = command(RenameCameraCommand, input);
-    const camera = await this.get(siteId, cameraId);
-    if (camera.name === value.name) return camera;
-    await this.dataSource
-      .getRepository(CameraEntity)
-      .update({ id: camera.id, siteId }, { name: value.name });
-    camera.name = value.name;
-    return camera;
+    return executeMainMetadataMutation(
+      this.dataSource,
+      context,
+      async (manager) => {
+        const camera = await this.lockCamera(manager, siteId, cameraId);
+        if (camera.name === value.name) return camera;
+        await manager
+          .getRepository(CameraEntity)
+          .update({ id: camera.id, siteId }, { name: value.name });
+        camera.name = value.name;
+        return camera;
+      },
+      siteManagerCommandAuthorization(siteId, context?.actorUserId),
+    );
   }
 
   private async lockCamera(
     manager: EntityManager,
     siteId: string,
     cameraId: string,
-    expected: number,
+    expected?: number,
   ): Promise<CameraEntity> {
     const camera = await manager
       .getRepository(CameraEntity)
@@ -209,7 +234,8 @@ export class CameraConfigurationService {
       })
       .getOne();
     if (!camera) missing();
-    if (camera.configurationVersion !== expected) conflict('Configuration version changed');
+    if (expected !== undefined && camera.configurationVersion !== expected)
+      conflict('Configuration version changed');
     return camera;
   }
 
@@ -303,35 +329,44 @@ export class CameraConfigurationService {
     siteId: string,
     cameraId: string,
     input: SetCameraStatusCommand,
+    context?: MainConfigurationCommandContext,
   ): Promise<CameraEntity> {
     const value = command(SetCameraStatusCommand, input);
-    return await this.dataSource.transaction(async (manager) => {
-      const camera = await this.lockCamera(
-        manager,
-        siteId,
-        cameraId,
-        value.expectedConfigurationVersion,
-      );
-      if (camera.status === value.status) return camera;
-      const activeRegions = await manager.getRepository(CameraObservationRegionEntity).find({
-        where: { cameraId, isActive: true },
-        order: { id: 'ASC' },
-      });
-      for (const region of activeRegions) {
-        this.bumpRegion(region);
-        await manager.getRepository(CameraObservationRegionEntity).save(region);
-      }
-      camera.status = value.status;
-      await this.bump(manager, camera);
-      for (const region of activeRegions) await recordRegionRevision(manager, camera, region, true);
-      await recordCameraConfigurationBundle(
-        manager,
-        camera,
-        await this.snapshot(manager, camera, true),
-        this.zones,
-      );
-      return camera;
-    });
+    return await executeMainConfigurationCommand(
+      this.dataSource,
+      context,
+      'CAMERA_STATUS_UPDATE',
+      { siteId, cameraId, ...value },
+      async (manager) => {
+        const camera = await this.lockCamera(
+          manager,
+          siteId,
+          cameraId,
+          value.expectedConfigurationVersion,
+        );
+        if (camera.status === value.status) return camera;
+        const activeRegions = await manager.getRepository(CameraObservationRegionEntity).find({
+          where: { cameraId, isActive: true },
+          order: { id: 'ASC' },
+        });
+        for (const region of activeRegions) {
+          this.bumpRegion(region);
+          await manager.getRepository(CameraObservationRegionEntity).save(region);
+        }
+        camera.status = value.status;
+        await this.bump(manager, camera);
+        for (const region of activeRegions)
+          await recordRegionRevision(manager, camera, region, true);
+        await recordCameraConfigurationBundle(
+          manager,
+          camera,
+          await this.snapshot(manager, camera, true),
+          this.zones,
+        );
+        return camera;
+      },
+      siteManagerCommandAuthorization(siteId, context?.actorUserId),
+    );
   }
 
   async listRegions(
