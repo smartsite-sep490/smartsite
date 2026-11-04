@@ -1,3 +1,9 @@
+import {
+  executeMainConfigurationCommand,
+  executeMainMetadataMutation,
+  type MainConfigurationCommandContext,
+} from '../../common/configuration/main-configuration-authority.js';
+import { siteManagerCommandAuthorization } from '../auth/site-manager.guard.js';
 import { randomUUID } from 'node:crypto';
 import { Injectable } from '@nestjs/common';
 import { PPE_ITEMS } from '@smartsite/contracts';
@@ -81,22 +87,33 @@ export class ZoneConfigurationService {
     private readonly sites: SiteConfigurationService,
   ) {}
 
-  async create(siteId: string, input: CreateZoneCommand): Promise<ZoneEntity> {
+  async create(
+    siteId: string,
+    input: CreateZoneCommand,
+    context?: MainConfigurationCommandContext,
+  ): Promise<ZoneEntity> {
     const value = command(CreateZoneCommand, input);
     await this.sites.get(siteId);
     try {
-      return await this.dataSource.transaction(async (manager) => {
-        const zone = await manager.getRepository(ZoneEntity).save({
-          id: randomUUID(),
-          siteId,
-          ...value,
-          code: value.code ?? `ZONE-${randomUUID().toUpperCase()}`,
-          requiredPpe: [...value.requiredPpe].sort(),
-          configurationLocked: false,
-        });
-        await appendZonePolicyRevision(manager, zone, true);
-        return zone;
-      });
+      return await executeMainConfigurationCommand(
+        this.dataSource,
+        context,
+        'ZONE_CREATE',
+        { siteId, ...value },
+        async (manager) => {
+          const zone = await manager.getRepository(ZoneEntity).save({
+            id: randomUUID(),
+            siteId,
+            ...value,
+            code: value.code ?? `ZONE-${randomUUID().toUpperCase()}`,
+            requiredPpe: [...value.requiredPpe].sort(),
+            configurationLocked: false,
+          });
+          await appendZonePolicyRevision(manager, zone, true);
+          return zone;
+        },
+        siteManagerCommandAuthorization(siteId, context?.actorUserId),
+      );
     } catch (error) {
       knownUnique(error, ['uq_zone_site_code']);
     }
@@ -147,69 +164,99 @@ export class ZoneConfigurationService {
     return { items, total };
   }
 
-  async rename(siteId: string, zoneId: string, input: RenameZoneCommand): Promise<ZoneEntity> {
+  async rename(
+    siteId: string,
+    zoneId: string,
+    input: RenameZoneCommand,
+    context?: MainConfigurationCommandContext,
+  ): Promise<ZoneEntity> {
     const value = command(RenameZoneCommand, input);
-    const zone = await this.get(siteId, zoneId);
-    if (zone.name === value.name) return zone;
-    await this.dataSource
-      .getRepository(ZoneEntity)
-      .update({ id: zone.id, siteId }, { name: value.name });
-    zone.name = value.name;
-    return zone;
+    return executeMainMetadataMutation(
+      this.dataSource,
+      context,
+      async (manager) => {
+        const zone = await this.lockForRegion(manager, siteId, zoneId);
+        if (zone.name === value.name) return zone;
+        await manager
+          .getRepository(ZoneEntity)
+          .update({ id: zone.id, siteId }, { name: value.name });
+        zone.name = value.name;
+        return zone;
+      },
+      siteManagerCommandAuthorization(siteId, context?.actorUserId),
+    );
   }
 
-  async remove(siteId: string, zoneId: string): Promise<{ id: string }> {
-    return this.dataSource.transaction(async (manager) => {
-      const zone = await this.lockForRegion(manager, siteId, zoneId);
-      const [usage] = await manager.query<Array<{ assigned: boolean; linked: boolean }>>(
-        `SELECT EXISTS(SELECT 1 FROM contractor_zone_permission WHERE zone_id=$1 AND revoked_at IS NULL)
+  async remove(
+    siteId: string,
+    zoneId: string,
+    context?: MainConfigurationCommandContext,
+  ): Promise<{ id: string }> {
+    return executeMainMetadataMutation(
+      this.dataSource,
+      context,
+      async (manager) => {
+        const zone = await this.lockForRegion(manager, siteId, zoneId);
+        const [usage] = await manager.query<Array<{ assigned: boolean; linked: boolean }>>(
+          `SELECT EXISTS(SELECT 1 FROM contractor_zone_permission WHERE zone_id=$1 AND revoked_at IS NULL)
           OR EXISTS(SELECT 1 FROM worker_site_zone_assignment WHERE $1=ANY(zone_ids) AND site_id=$2 AND status IN ('PENDING','SAFETY_REVIEWED','APPROVED'))
           OR EXISTS(SELECT 1 FROM zone_access_grant WHERE zone_id=$1 AND revoked_at IS NULL)
           OR EXISTS(SELECT 1 FROM visit_zone WHERE zone_id=$1 AND valid_until>now()) AS assigned,
           EXISTS(SELECT 1 FROM camera_observation_region WHERE zone_id=$1 AND is_active) AS linked`,
-        [zone.id, siteId],
-      );
-      if (!usage) conflict('Zone usage is unavailable');
-      if (usage.assigned) conflict('Zone is assigned. Revoke its assignments before deleting it.');
-      if (usage.linked)
-        conflict('Zone has active camera regions. Deactivate them before deleting it.');
-      await manager.getRepository(ZoneEntity).softDelete({ id: zone.id, siteId });
-      return { id: zone.id };
-    });
+          [zone.id, siteId],
+        );
+        if (!usage) conflict('Zone usage is unavailable');
+        if (usage.assigned)
+          conflict('Zone is assigned. Revoke its assignments before deleting it.');
+        if (usage.linked)
+          conflict('Zone has active camera regions. Deactivate them before deleting it.');
+        await manager.getRepository(ZoneEntity).softDelete({ id: zone.id, siteId });
+        return { id: zone.id };
+      },
+      siteManagerCommandAuthorization(siteId, context?.actorUserId),
+    );
   }
 
   async updatePolicy(
     siteId: string,
     zoneId: string,
     input: UpdateZonePolicyCommand,
+    context?: MainConfigurationCommandContext,
   ): Promise<ZoneEntity> {
     const value = command(UpdateZonePolicyCommand, input);
     uuid(siteId);
     uuid(zoneId);
-    return await this.dataSource.transaction(async (manager) => {
-      const zone = await this.lockForRegion(manager, siteId, zoneId);
-      const requiredPpe = [...value.requiredPpe].sort();
-      if (
-        zone.type === value.type &&
-        zone.restrictionPolicy === value.restrictionPolicy &&
-        JSON.stringify([...zone.requiredPpe].sort()) === JSON.stringify(requiredPpe)
-      )
+    return await executeMainConfigurationCommand(
+      this.dataSource,
+      context,
+      'ZONE_POLICY_UPDATE',
+      { siteId, zoneId, ...value },
+      async (manager) => {
+        const zone = await this.lockForRegion(manager, siteId, zoneId);
+        const requiredPpe = [...value.requiredPpe].sort();
+        if (
+          zone.type === value.type &&
+          zone.restrictionPolicy === value.restrictionPolicy &&
+          JSON.stringify([...zone.requiredPpe].sort()) === JSON.stringify(requiredPpe)
+        )
+          return zone;
+        if (zone.configurationLocked) conflict('Zone policy is locked after a region is linked');
+        await manager.getRepository(ZoneEntity).update(
+          { id: zone.id },
+          {
+            type: value.type,
+            restrictionPolicy: value.restrictionPolicy,
+            requiredPpe,
+          },
+        );
+        zone.type = value.type;
+        zone.restrictionPolicy = value.restrictionPolicy;
+        zone.requiredPpe = requiredPpe;
+        await appendZonePolicyRevision(manager, zone);
         return zone;
-      if (zone.configurationLocked) conflict('Zone policy is locked after a region is linked');
-      await manager.getRepository(ZoneEntity).update(
-        { id: zone.id },
-        {
-          type: value.type,
-          restrictionPolicy: value.restrictionPolicy,
-          requiredPpe,
-        },
-      );
-      zone.type = value.type;
-      zone.restrictionPolicy = value.restrictionPolicy;
-      zone.requiredPpe = requiredPpe;
-      await appendZonePolicyRevision(manager, zone);
-      return zone;
-    });
+      },
+      siteManagerCommandAuthorization(siteId, context?.actorUserId),
+    );
   }
 
   async lockForRegion(manager: EntityManager, siteId: string, zoneId: string): Promise<ZoneEntity> {

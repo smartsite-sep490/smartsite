@@ -1,4 +1,8 @@
 import { randomUUID } from 'node:crypto';
+import {
+  executeMainConfigurationCommand,
+  type MainConfigurationCommandContext,
+} from '../../common/configuration/main-configuration-authority.js';
 import { Injectable } from '@nestjs/common';
 import { Transform } from 'class-transformer';
 import { IsNotEmpty, IsString, Matches, MaxLength } from 'class-validator';
@@ -37,10 +41,19 @@ export class RenameSiteCommand {
 export class SiteConfigurationService {
   constructor(private readonly dataSource: DataSource) {}
 
-  async create(input: CreateSiteCommand): Promise<SiteEntity> {
+  async create(
+    input: CreateSiteCommand,
+    context?: MainConfigurationCommandContext,
+  ): Promise<SiteEntity> {
     const value = command(CreateSiteCommand, input);
     try {
-      return await this.dataSource.getRepository(SiteEntity).save({ id: randomUUID(), ...value });
+      return await executeMainConfigurationCommand(
+        this.dataSource,
+        context,
+        'SITE_CREATE',
+        value,
+        (manager) => manager.getRepository(SiteEntity).save({ id: randomUUID(), ...value }),
+      );
     } catch (error) {
       knownUnique(error, ['uq_site_code']);
     }

@@ -120,6 +120,13 @@ test('reactivating a region refuses to exceed 64 active regions', async () => {
     },
   };
   const manager = {
+    async query(sql: string) {
+      assert(
+        sql.startsWith('SELECT count(*) FILTER'),
+        'Only the no-journal catalog lookup is expected',
+      );
+      return [{ n: 0, legacy: 0 }];
+    },
     getRepository: (entity: unknown) =>
       entity === CameraEntity
         ? cameraRepository
@@ -169,6 +176,13 @@ test('camera status survives a reload and both lifecycle transitions advance the
     },
   };
   const manager = {
+    async query(sql: string) {
+      assert(
+        sql.startsWith('SELECT count(*) FILTER'),
+        'Only the no-journal catalog lookup is expected',
+      );
+      return [{ n: 0, legacy: 0 }];
+    },
     getRepository: (entity: unknown) =>
       entity === CameraEntity
         ? cameraRepository

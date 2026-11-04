@@ -32,6 +32,7 @@ import type { AuthenticatedRequest } from '../auth/auth.service.js';
 import { SiteManagerGuard } from '../auth/site-manager.guard.js';
 import { SiteConfigurationGuard } from '../auth/site-configuration.guard.js';
 import { UserAuthGuard } from '../auth/user-auth.guard.js';
+import { configurationCommandContext } from '../auth/configuration-command-context.js';
 import {
   CreateZoneCommand,
   RenameZoneCommand,
@@ -66,7 +67,10 @@ function zoneResponse(zone: ZoneEntity) {
 @Controller('sites/:siteId/zones')
 export class ZonesController {
   private readonly logger = new Logger(ZonesController.name);
-  constructor(private readonly zones: ZoneConfigurationService) {}
+  constructor(
+    private readonly zones: ZoneConfigurationService,
+    private readonly auth: UserAuthGuard,
+  ) {}
 
   @Delete(':zoneId')
   @UseGuards(SiteManagerGuard)
@@ -75,7 +79,11 @@ export class ZonesController {
     @Param('siteId') siteId: string,
     @Param('zoneId') zoneId: string,
   ) {
-    const result = await this.zones.remove(siteId, zoneId);
+    const result = await this.zones.remove(
+      siteId,
+      zoneId,
+      configurationCommandContext(request, this.auth),
+    );
     this.logger.log({
       actorId: request.user!.id,
       action: 'zone.delete',
@@ -93,7 +101,11 @@ export class ZonesController {
     @Param('siteId') siteId: string,
     @Body() input: CreateZoneCommand,
   ) {
-    const zone = await this.zones.create(siteId, input);
+    const zone = await this.zones.create(
+      siteId,
+      input,
+      configurationCommandContext(request, this.auth),
+    );
     this.logger.log({
       actorId: request.user!.id,
       action: 'zone.create',
@@ -130,7 +142,12 @@ export class ZonesController {
     @Param('zoneId') zoneId: string,
     @Body() input: RenameZoneCommand,
   ) {
-    const zone = await this.zones.rename(siteId, zoneId, input);
+    const zone = await this.zones.rename(
+      siteId,
+      zoneId,
+      input,
+      configurationCommandContext(request, this.auth),
+    );
     this.logger.log({
       actorId: request.user!.id,
       action: 'zone.rename',
@@ -149,7 +166,12 @@ export class ZonesController {
     @Param('zoneId') zoneId: string,
     @Body() input: UpdateZonePolicyCommand,
   ) {
-    const zone = await this.zones.updatePolicy(siteId, zoneId, input);
+    const zone = await this.zones.updatePolicy(
+      siteId,
+      zoneId,
+      input,
+      configurationCommandContext(request, this.auth),
+    );
     this.logger.log({
       actorId: request.user!.id,
       action: 'zone.policy',
