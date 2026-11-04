@@ -1,4 +1,5 @@
 import { randomUUID } from 'node:crypto';
+import { readCameraObservationZones } from './camera-observation-zones.query.js';
 import { Inject, Injectable } from '@nestjs/common';
 import {
   parseCreateReferenceRegionCommand,
@@ -353,6 +354,10 @@ export class CameraConfigurationService {
       items: await attachRegionConfirmations(this.dataSource, siteId, cameraId, items),
       total,
     };
+  }
+
+  async observationZones(siteId: string, cameraId: string, offset: number, limit: number) {
+    return readCameraObservationZones(this.dataSource, this.zones, siteId, cameraId, offset, limit);
   }
 
   async getRegion(

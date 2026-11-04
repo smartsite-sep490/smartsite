@@ -5,6 +5,11 @@ import {
   type UpdateReferenceRegionPolygonCommand,
 } from '@smartsite/contracts/camera-region-reference';
 import type { ReferenceRegionMutationResponse } from '@smartsite/contracts/camera-region-geometry-confirmation';
+import { parseCameraObservationZones } from '@smartsite/contracts/camera-observation-zones';
+import {
+  parseCameraPreviewResponse,
+  type CameraPreviewResponse,
+} from '@smartsite/contracts/camera-preview';
 import { parseReferenceRegionMutation } from './reference-region-mutation';
 import type { CameraApplicationStatus } from '@smartsite/contracts/camera-application-status';
 import {
@@ -2541,6 +2546,81 @@ export class SmartSiteManagementClient {
       MAX_CONFIGURATION_REFERENCE_RESPONSE_BYTES,
     );
     return parseScopedCameraConfigurationReference(value, siteId, cameraId);
+  }
+  async getCameraObservationZones(
+    token: string,
+    siteId: string,
+    cameraId: string,
+    paging: PageOptions = {},
+    options?: RequestOptions,
+  ) {
+    const offset = paging.offset ?? 0;
+    const limit = paging.limit ?? 20;
+    if (
+      !Number.isSafeInteger(offset) ||
+      offset < 0 ||
+      !Number.isSafeInteger(limit) ||
+      limit < 1 ||
+      limit > 100
+    )
+      throw new ApiError('invalid-response', 'Invalid camera observation page request.');
+    const query = new URLSearchParams();
+    if (paging.offset !== undefined) query.set('offset', String(paging.offset));
+    if (paging.limit !== undefined) query.set('limit', String(paging.limit));
+    const result = await this.request<unknown>(
+      'GET',
+      `/sites/${pathId(siteId)}/cameras/${pathId(cameraId)}/observation-zones${query.size ? `?${query}` : ''}`,
+      token,
+      undefined,
+      undefined,
+      { ...options, timeoutMs: options?.timeoutMs ?? 5000 },
+      { cache: 'no-store', redirect: 'error' },
+      128_000,
+    );
+    try {
+      const context = parseCameraObservationZones(result);
+      if (
+        context.siteId.toLowerCase() !== siteId.toLowerCase() ||
+        context.cameraId.toLowerCase() !== cameraId.toLowerCase() ||
+        context.items.length !== Math.min(limit, Math.max(0, context.total - offset))
+      )
+        throw new Error('Scope or page mismatch');
+      return context;
+    } catch {
+      throw new ApiError('invalid-response', 'Invalid camera observation Zone metadata.');
+    }
+  }
+  async getCameraPreview(
+    token: string,
+    siteId: string,
+    cameraId: string,
+    options?: RequestOptions,
+  ): Promise<CameraPreviewResponse> {
+    const payload = await this.request<unknown>(
+      'GET',
+      `/sites/${pathId(siteId)}/cameras/${pathId(cameraId)}/preview`,
+      token,
+      undefined,
+      undefined,
+      { ...options, timeoutMs: options?.timeoutMs ?? 3000 },
+      { cache: 'no-store', redirect: 'error' },
+      2_000_000,
+    );
+    try {
+      const preview = parseCameraPreviewResponse(payload);
+      if (
+        preview.siteId.toLowerCase() !== siteId.toLowerCase() ||
+        preview.cameraId.toLowerCase() !== cameraId.toLowerCase()
+      ) {
+        throw new Error('Camera preview scope does not match the request.');
+      }
+      return preview;
+    } catch (error) {
+      throw new ApiError(
+        'invalid-response',
+        error instanceof Error ? error.message : 'Invalid camera preview response from backend.',
+      );
+    }
   }
   async getCameraApplicationStatus(
     token: string,
