@@ -1,4 +1,5 @@
 import { ZoneSoftDeletion1794355200000 } from './migrations/1794355200000-ZoneSoftDeletion.js';
+import { SafetyEventRoutes1794873600000 } from './migrations/1794873600000-SafetyEventRoutes.js';
 import { SafetyEpisodes1794355200000 } from './migrations/1794355200000-SafetyEpisodes.js';
 import { RetireGatePermissions1794960000000 } from './migrations/1794960000000-RetireGatePermissions.js';
 import { RetireLegacyAttendance1794960000001 } from './migrations/1794960000001-RetireLegacyAttendance.js';
@@ -42,6 +43,10 @@ import { SiteManagerReviewNotifications1792108800000 } from './migrations/179210
 import type { DataSourceOptions } from 'typeorm';
 import { ENTITIES } from './entities/index.js';
 import { CameraConfigurationReferences1793491200000 } from './migrations/1793491200000-CameraConfigurationReferences.js';
+import { CameraRegionGeometryRevisions1793577600000 } from './migrations/1793577600000-CameraRegionGeometryRevisions.js';
+import { ZonePolicyRevisions1794441600000 } from './migrations/1794441600000-ZonePolicyRevisions.js';
+import { CameraConfigurationBundles1794528000000 } from './migrations/1794528000000-CameraConfigurationBundles.js';
+import { CameraWorkerGenerations1794614400000 } from './migrations/1794614400000-CameraWorkerGenerations.js';
 import { QrAccess1791417600000 } from './migrations/1791417600000-QrAccess.js';
 import { VisitorRoster1792022400000 } from './migrations/1792022400000-VisitorRoster.js';
 import { Mf05Mf06Foundation1789689600000 } from './migrations/1789689600000-Mf05Mf06Foundation.js';
@@ -91,7 +96,11 @@ export function buildTypeOrmOptions(config: DatabaseConnectionConfig): DataSourc
     connectTimeoutMS: timeoutMs,
     entities: [...ENTITIES],
     migrations: [
+      ZonePolicyRevisions1794441600000,
+      CameraConfigurationBundles1794528000000,
+      CameraWorkerGenerations1794614400000,
       ZoneSoftDeletion1794355200000,
+      SafetyEventRoutes1794873600000,
       SafetyEpisodes1794355200000,
       RetireGatePermissions1794960000000,
       RetireLegacyAttendance1794960000001,
@@ -102,6 +111,7 @@ export function buildTypeOrmOptions(config: DatabaseConnectionConfig): DataSourc
       CanonicalMf06Requests1794096000000,
       ObservationFrameParts1794009600000,
       CameraConfigurationReferences1793491200000,
+      CameraRegionGeometryRevisions1793577600000,
       PpeAlertNotifications1792886400000,
       ExpandedPpeNotificationKinds1793145600000,
       AlertDetectionSubject1793404800000,

@@ -13,6 +13,7 @@ import { Module } from '@nestjs/common';
 import { SafetyEpisodeInboxController } from './alerts/safety-episode-inbox.controller.js';
 import { SafetyEpisodeInboxService } from './alerts/safety-episode-inbox.service.js';
 import { SafetyEpisodeQueryService } from './alerts/safety-episode-query.service.js';
+import { SafetyEpisodeProjectionService } from './alerts/safety-episode-projection.service.js';
 import { SafetyEpisodesController } from './alerts/safety-episodes.controller.js';
 import { DatabaseModule } from '../../database/database.module.js';
 import { AuthModule } from '../auth/auth.module.js';
@@ -57,6 +58,7 @@ import { ZoneAccessManagementService } from '../zones/zone-access-management.ser
     SafetyWorkflowController,
   ],
   providers: [
+    SafetyEpisodeProjectionService,
     SafetyEpisodeQueryService,
     SafetyEpisodeInboxService,
     Mf06IngestionEnqueueService,
@@ -97,6 +99,11 @@ import { ZoneAccessManagementService } from '../zones/zone-access-management.ser
       ) => new ObservationIdentityContextService(resolutions, evidence, zones, workers),
     },
   ],
-  exports: [AlertCandidateEvaluator, DurableGroupingService, Mf06IngestionEnqueueService],
+  exports: [
+    AlertCandidateEvaluator,
+    DurableGroupingService,
+    Mf06IngestionEnqueueService,
+    SafetyEpisodeProjectionService,
+  ],
 })
 export class SafetyModule {}

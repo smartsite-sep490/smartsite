@@ -1,4 +1,5 @@
 export const CONTRACTS_VERSION = '1.0.0';
+export * from './camera-ppe-policy.js';
 export { PPE_ITEMS } from './ppe-items.js';
 export type { PpeItem } from './ppe-items.js';
 export type * from './attendance-reports-api.js';
@@ -183,3 +184,8 @@ export type {
   Mf06RequestStatusPage,
 } from './mf06-assessment-api.js';
 export * from './camera-configuration-image.js';
+export * from './camera-region-reference-command.js';
+export * from './camera-region-geometry-confirmation.js';
+export * from './camera-configuration-bundle.js';
+export * from './camera-configuration-ack.js';
+export * from './camera-application-status.js';

@@ -30,6 +30,14 @@ test('MF06 storage matches registered metadata and preserves populated immutable
 
 test('MF06 migration rejects shadow schemas and collisions without losing existing Site data', async () => {
   const owned = createIsolatedTestDatabase();
+  const migrations = owned.dataSource.options.migrations;
+  assert(Array.isArray(migrations));
+  // Start before unrelated, potentially irreversible cleanup and upgrade it later.
+  owned.dataSource.setOptions({
+    migrations: migrations.filter(
+      (m) => typeof m === 'function' && Number(m.name.match(/\d{13}$/)?.[0]) <= 1794182400000,
+    ),
+  });
   let runner;
   const migration = new CanonicalMf06Requests1794096000000();
   try {
@@ -106,6 +114,16 @@ test('MF06 migration rejects shadow schemas and collisions without losing existi
       await runner.rollbackTransaction();
       throw error;
     }
+    assert.equal(
+      await owned.dataSource.getRepository(entities.SiteEntity).countBy({ id: site }),
+      1,
+    );
+    await runner.release();
+    runner = undefined;
+    await owned.dataSource.destroy();
+    owned.dataSource.setOptions({ migrations });
+    await owned.dataSource.initialize();
+    await owned.dataSource.runMigrations();
     assert.equal(
       await owned.dataSource.getRepository(entities.SiteEntity).countBy({ id: site }),
       1,

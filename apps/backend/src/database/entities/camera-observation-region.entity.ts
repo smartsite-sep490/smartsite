@@ -1,8 +1,18 @@
-import { Check, Column, CreateDateColumn, Entity, ForeignKey, Index, PrimaryColumn } from 'typeorm';
+import {
+  Check,
+  Column,
+  CreateDateColumn,
+  Entity,
+  ForeignKey,
+  Index,
+  PrimaryColumn,
+  Unique,
+} from 'typeorm';
 import { CameraEntity } from './camera.entity.js';
 import { ZoneEntity } from './zone.entity.js';
 
 @Entity({ name: 'camera_observation_region' })
+@Unique('uq_region_camera_zone', ['id', 'cameraId', 'zoneId'])
 @Check('chk_region_coordinate_space', "coordinate_space = 'NORMALIZED_0_1'")
 @Check('chk_region_version', 'version >= 1')
 @Index('idx_region_camera_active', ['cameraId', 'isActive'])
