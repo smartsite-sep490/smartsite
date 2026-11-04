@@ -294,3 +294,13 @@ Nếu không có Docker/database thì báo rõ phần integration/smoke chưa ch
 | Ajv hiện có trong contracts            | Giữ validation canonical AI contract; không thay bằng DTO/Zod.                |
 
 Đây là nền để nhóm tiếp tục phát triển, chưa phải chứng nhận production. Phân quyền theo Site/Contractor/Zone, nhận diện Worker từ camera, cấu hình proxy, quota chia sẻ nhiều replica, retention/backup và vận hành triển khai còn cần yêu cầu và kiểm chứng riêng. AI không được quyết định danh tính, quyền Zone, vi phạm hay đóng incident. Mọi thay đổi cần một thành viên khác review trước khi merge.
+
+## MF06 assessment worker lifecycle
+
+`MF06_WORKER_ENABLED=false` is the default. Read history and enqueue flags are independent; enabling either does not start the worker. The worker is registered by `SafetyModule` but performs no database, media or identity work while disabled.
+
+Enabling requires all four `MF06_CUTOVER_*` settings from the reviewed release. The runtime verifies source/runtime pins before initialization and before each non-overlapping tick. A failed recheck pauses dequeue; shutdown aborts the loop and drains the active worker within its bounded budget. The flag does not install migrations, activate a cutover, or establish authority coverage.
+
+Face preparation is optional. Its enabled URL must use HTTPS, matching the resolver transport. Without the complete identity configuration, policy NONE/PROHIBITED can use qualified historical policy while identity-required results remain unavailable. A candidate is never promoted to Worker identity by this runtime.
+
+Current source integration does not constitute permission to enable the worker. The reviewed authority release, required cutover runtime bytes and qualified database infrastructure must exist and pass their own gates first. See `.env.example` for field names; never copy credentials into a release manifest or Git.

@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import { isAbsolute } from 'node:path';
+import { mf06EnvironmentFields, refineMf06Environment } from './mf06-worker-environment.js';
 import {
   isValidPassword,
   PASSWORD_MAX_LENGTH,
@@ -248,23 +249,7 @@ export const backendEnvironmentSchema = z
         }
       }, 'must be an absolute HTTP(S) URL without credentials')
       .optional(),
-    MF06_ASSESSMENT_READ_ENABLED: z
-      .enum(['false', 'true'])
-      .default('false')
-      .transform((value) => value === 'true'),
-    MF06_ENQUEUE_ENABLED: z
-      .enum(['false', 'true'])
-      .default('false')
-      .transform((value) => value === 'true'),
-    MF06_ENQUEUE_MAX_OUTSTANDING: z
-      .string()
-      .regex(/^\d+$/, 'must be an integer between 1 and 10000')
-      .transform(Number)
-      .refine(
-        (value) => Number.isSafeInteger(value) && value >= 1 && value <= 10000,
-        'must be an integer between 1 and 10000',
-      )
-      .optional(),
+    ...mf06EnvironmentFields,
     AI_PARTITIONED_FRAME_ENABLED: z
       .enum(['false', 'true'])
       .default('false')
@@ -369,13 +354,7 @@ export const backendEnvironmentSchema = z
         message: 'must be explicitly set when non-delivering episode projection is enabled',
       });
     }
-    if (config.MF06_ENQUEUE_ENABLED && config.MF06_ENQUEUE_MAX_OUTSTANDING === undefined) {
-      context.addIssue({
-        code: 'custom',
-        path: ['MF06_ENQUEUE_MAX_OUTSTANDING'],
-        message: 'must be explicitly set when MF06 enqueue is enabled',
-      });
-    }
+    refineMf06Environment(config, context, LOCAL_SERVICE_TOKEN);
     if (Boolean(config.RESEND_API_KEY) !== Boolean(config.RESEND_FROM_EMAIL)) {
       context.addIssue({
         code: 'custom',
