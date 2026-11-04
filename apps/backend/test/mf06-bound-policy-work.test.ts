@@ -209,6 +209,39 @@ test('synthetic qualification cannot produce a production policy result', async 
   assert.equal(f.inputs[0]!.authorityArtifact, null);
 });
 
+for (const [policy, outcome, reason] of [
+  ['NONE', 'ALLOWED', 'POLICY_NONE'],
+  ['PROHIBITED_FOR_ALL', 'DENIED', 'POLICY_PROHIBITED'],
+])
+  test(`operational reader mechanics receipt permits scoped ${policy} policy only`, async () => {
+    const f = await fixture(policy, 'production');
+    f.qualified.provenance = 'OPERATIONAL_REVIEWED';
+    f.qualified.operationalAuthorityCoverageEstablished = true;
+    // The actual qualified reader emits this true for both provenance kinds.
+    f.qualified.syntheticCutoverMechanicsVerified = true;
+    const prepared = await f.work.prepare(f.claim, f.signal);
+    await f.work.finalize(f.manager, f.claim, prepared, f.signal);
+    assert.equal(f.authorityCalls(), 1);
+    assert.equal(f.inputs[0]!.outcome, outcome);
+    assert.equal(f.inputs[0]!.reasonCode, reason);
+    assert.equal(f.inputs[0]!.workerId, null);
+    assert.equal(f.inputs[0]!.profileRevision, null);
+    assert.deepEqual(f.inputs[0]!.authorityArtifact, f.qualified.archive);
+  });
+
+for (const missing of ['coverage', 'mechanics'])
+  test(`operational provenance without ${missing} cannot produce a policy result`, async () => {
+    const f = await fixture('PROHIBITED_FOR_ALL', 'production');
+    f.qualified.provenance = 'OPERATIONAL_REVIEWED';
+    f.qualified.operationalAuthorityCoverageEstablished = missing !== 'coverage';
+    f.qualified.syntheticCutoverMechanicsVerified = missing !== 'mechanics';
+    const prepared = await f.work.prepare(f.claim, f.signal);
+    await f.work.finalize(f.manager, f.claim, prepared, f.signal);
+    assert.equal(f.authorityCalls(), 0);
+    assert.equal(f.inputs[0]!.outcome, 'UNAVAILABLE');
+    assert.equal(f.inputs[0]!.authorityArtifact, null);
+  });
+
 test('microsecond precision loss is refused before historical policy lookup', async () => {
   const f = await fixture();
   f.context.subject.capturedAt = '2026-10-30T00:00:01.000001Z';

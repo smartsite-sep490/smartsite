@@ -200,7 +200,9 @@ export class Mf06BoundPolicyAssessmentWorkPort implements Mf06AssessmentWorkPort
     return (
       (value.provenance === 'OPERATIONAL_REVIEWED' &&
         value.operationalAuthorityCoverageEstablished === true &&
-        value.syntheticCutoverMechanicsVerified === false) ||
+        // Mechanics verification is emitted for both qualified provenance kinds;
+        // operational coverage and provenance still decide the production boundary.
+        value.syntheticCutoverMechanicsVerified === true) ||
       (this.environment === 'test' &&
         value.provenance === 'SYNTHETIC_TEST' &&
         value.syntheticCutoverMechanicsVerified === true &&
