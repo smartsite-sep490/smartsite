@@ -204,7 +204,12 @@ export class CamerasController {
     @Param('cameraId') cameraId: string,
     @Body() input: CreateRegionCommand,
   ) {
-    const region = await this.cameras.createRegion(siteId, cameraId, input);
+    const region = await this.cameras.createRegion(
+      siteId,
+      cameraId,
+      input,
+      configurationCommandContext(request, this.auth),
+    );
     this.logger.log({
       actorId: request.user!.id,
       action: 'region.create',
@@ -230,6 +235,7 @@ export class CamerasController {
       cameraId,
       input,
       guardedToken(request),
+      configurationCommandContext(request, this.auth),
     );
     this.logger.log({
       actorId: request.user!.id,
@@ -258,6 +264,7 @@ export class CamerasController {
       regionId,
       input,
       guardedToken(request),
+      configurationCommandContext(request, this.auth),
     );
     this.logger.log({
       actorId: request.user!.id,
@@ -301,7 +308,13 @@ export class CamerasController {
     @Param('regionId') regionId: string,
     @Body() input: UpdateRegionPolygonCommand,
   ) {
-    const region = await this.cameras.updatePolygon(siteId, cameraId, regionId, input);
+    const region = await this.cameras.updatePolygon(
+      siteId,
+      cameraId,
+      regionId,
+      input,
+      configurationCommandContext(request, this.auth),
+    );
     this.logger.log({
       actorId: request.user!.id,
       action: 'region.polygon',
@@ -321,7 +334,13 @@ export class CamerasController {
     @Param('regionId') regionId: string,
     @Body() input: SetRegionActiveCommand,
   ) {
-    const region = await this.cameras.setRegionActive(siteId, cameraId, regionId, input);
+    const region = await this.cameras.setRegionActive(
+      siteId,
+      cameraId,
+      regionId,
+      input,
+      configurationCommandContext(request, this.auth),
+    );
     this.logger.log({
       actorId: request.user!.id,
       action: 'region.status',
