@@ -70,6 +70,7 @@ export interface MainAuthorityCutoverReleaseConfig {
 export const MAIN_AUTHORITY_CUTOVER_RELEASE_FILES = [
   'common/configuration/main-configuration-authority.ts',
   'common/configuration/main-authority-capture-preflight.ts',
+  'common/configuration/site-entry-assignment-authority-profile-v1.ts',
   'common/configuration/main-authority-sources.ts',
   'common/configuration/authorization-history-cutover-bodies-v1.ts',
   'common/configuration/main-team-authority-sources.ts',
