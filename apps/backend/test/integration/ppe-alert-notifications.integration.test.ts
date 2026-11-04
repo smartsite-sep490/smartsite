@@ -308,7 +308,7 @@ test('PPE migration restores the old schema without erasing old notification his
     await q.query("DELETE FROM user_notification WHERE request_type='SAFETY_ALERT'");
     await migration.down(q);
     const [old] = await q.query(
-      "SELECT is_nullable FROM information_schema.columns WHERE table_schema='public' AND table_name='user_notification' AND column_name='contractor_id'",
+      "SELECT is_nullable FROM information_schema.columns WHERE table_schema=current_schema() AND table_name='user_notification' AND column_name='contractor_id'",
     );
     assert.equal(old.is_nullable, 'NO');
     const legacyId = randomUUID(),
