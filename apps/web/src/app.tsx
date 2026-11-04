@@ -1,5 +1,5 @@
 import { translate as tr } from './i18n';
-import React, { useState } from 'react';
+import React, { lazy, Suspense, useState } from 'react';
 import { Routes, Route, Navigate, useNavigate, useLocation } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import {
@@ -11,6 +11,12 @@ import { AppLayout, type ActiveTab } from './components/layout/AppLayout';
 import { LiveMonitoringView } from './components/live/LiveMonitoringView';
 import { RestrictedZoneView } from './components/zones/RestrictedZoneView';
 import { PpeMonitorWorkspace } from './components/ppe/PpeMonitorWorkspace';
+import { CameraSetupBoundary } from './components/cameras/CameraSetupBoundary';
+const CameraSetupRoute = lazy(() =>
+  import('./components/cameras/CameraSetupRoute').then((module) => ({
+    default: module.CameraSetupRoute,
+  })),
+);
 import { DashboardView } from './components/dashboard/DashboardView';
 import { LandingPage } from './components/landing/LandingPage';
 import { SafetyAlertsView } from './components/alerts/SafetyAlertsView';
@@ -159,6 +165,16 @@ function ProtectedRoutes({ defaultAuthTab, alertsContext, onNavigate }: Protecte
               apiUrl={apiUrl}
               session={{ accessToken, user: currentUser.data! }}
             />
+          }
+        />
+        <Route
+          path="/camera-setup"
+          element={
+            <CameraSetupBoundary>
+              <Suspense fallback={<p role="status">{t('auth.loadingAccount')}</p>}>
+                <CameraSetupRoute apiUrl={apiUrl} />
+              </Suspense>
+            </CameraSetupBoundary>
           }
         />
         <Route
