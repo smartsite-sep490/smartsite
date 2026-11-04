@@ -45,10 +45,11 @@ interface Props {
   siteId: string;
   camera: CameraResponse;
   aiPaused: boolean;
+  observationMode?: 'ppe' | 'zone';
 }
 
 /** Mounted with a camera/credential key: only the selected transport can request media. */
-export function FocusedCameraMedia({ camera, aiPaused, ...scope }: Props) {
+export function FocusedCameraMedia({ camera, aiPaused, observationMode = 'ppe', ...scope }: Props) {
   const { t } = useTranslation(SAFETY_NAMESPACE);
   const [mode, setMode] = useState<'ai' | 'live' | 'recorded'>('ai');
   const options = { ...scope, cameraId: camera.id, cameraExternalId: camera.externalId };
@@ -95,7 +96,7 @@ export function FocusedCameraMedia({ camera, aiPaused, ...scope }: Props) {
       {mode !== 'ai' && <p className="px-4 pb-3 text-sm text-slate-600">{t('focus.rawHint')}</p>}
       <div className="relative aspect-video bg-slate-950 text-white">
         {!aiPaused && mode === 'ai' && snapshot.preview && (
-          <ScopedRealtimePreviewCanvas preview={snapshot.preview} mode="ppe" />
+          <ScopedRealtimePreviewCanvas preview={snapshot.preview} mode={observationMode} />
         )}
         {!aiPaused && mode === 'live' && (
           <RawCameraMediaCanvas image={raw.image} frame={raw.frame} />

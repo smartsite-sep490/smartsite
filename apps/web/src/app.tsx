@@ -9,7 +9,6 @@ import {
 } from '@smartsite/api-client';
 import { AppLayout, type ActiveTab } from './components/layout/AppLayout';
 import { LiveMonitoringView } from './components/live/LiveMonitoringView';
-import { RestrictedZoneView } from './components/zones/RestrictedZoneView';
 import { PpeMonitorWorkspace } from './components/ppe/PpeMonitorWorkspace';
 import { CameraSetupBoundary } from './components/cameras/CameraSetupBoundary';
 const CameraSetupRoute = lazy(() =>
@@ -180,11 +179,11 @@ function ProtectedRoutes({ defaultAuthTab, alertsContext, onNavigate }: Protecte
         <Route
           path="/zones"
           element={
-            <RestrictedZoneView
-              authenticatedSession={{ accessToken, user: currentUser.data! }}
-              onSignOut={() => logout.mutate()}
+            <PpeMonitorWorkspace
+              key="zones"
+              observationMode="zone"
+              session={{ accessToken, user: currentUser.data! }}
               apiUrl={apiUrl}
-              onNavigate={(tab, context) => onNavigate(tab, context)}
             />
           }
         />
