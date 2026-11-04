@@ -1,4 +1,5 @@
 import { ZoneSoftDeletion1794355200000 } from './migrations/1794355200000-ZoneSoftDeletion.js';
+import { SafetyEventRoutes1794873600000 } from './migrations/1794873600000-SafetyEventRoutes.js';
 import { SafetyEpisodes1794355200000 } from './migrations/1794355200000-SafetyEpisodes.js';
 import { RetireGatePermissions1794960000000 } from './migrations/1794960000000-RetireGatePermissions.js';
 import { RetireLegacyAttendance1794960000001 } from './migrations/1794960000001-RetireLegacyAttendance.js';
@@ -99,6 +100,7 @@ export function buildTypeOrmOptions(config: DatabaseConnectionConfig): DataSourc
       CameraConfigurationBundles1794528000000,
       CameraWorkerGenerations1794614400000,
       ZoneSoftDeletion1794355200000,
+      SafetyEventRoutes1794873600000,
       SafetyEpisodes1794355200000,
       RetireGatePermissions1794960000000,
       RetireLegacyAttendance1794960000001,

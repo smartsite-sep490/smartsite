@@ -1,12 +1,39 @@
-import { Column, CreateDateColumn, Entity, ForeignKey, Index, PrimaryColumn } from 'typeorm';
+import { Check, Column, CreateDateColumn, Entity, ForeignKey, Index, PrimaryColumn } from 'typeorm';
 import { CameraEntity } from './camera.entity.js';
 import { EventProcessingStatus } from './enums.js';
 
 @Entity({ name: 'ai_observation_event' })
+@Check(
+  'chk_ai_event_safety_route_pair',
+  '(safety_route_mode IS NULL) = (safety_route_epoch IS NULL)',
+)
+@Check(
+  'chk_ai_event_safety_route_mode',
+  "safety_route_mode IS NULL OR safety_route_mode IN ('LEGACY','EPISODE_EVENT_LOCAL')",
+)
 @Index('uq_ai_event_frame_part', { synchronize: false })
 @Index('idx_ai_event_source_frame', { synchronize: false })
 @Index('idx_event_camera_session_captured', ['cameraExternalId', 'streamSessionId', 'capturedAt'])
 export class AiObservationEventEntity {
+  @Column({
+    name: 'safety_route_mode',
+    type: 'varchar',
+    length: 24,
+    nullable: true,
+    select: false,
+    update: false,
+  })
+  safetyRouteMode?: 'LEGACY' | 'EPISODE_EVENT_LOCAL' | null;
+
+  @Column({
+    name: 'safety_route_epoch',
+    type: 'uuid',
+    nullable: true,
+    select: false,
+    update: false,
+  })
+  safetyRouteEpoch?: string | null;
+
   @PrimaryColumn({
     name: 'event_id',
     type: 'uuid',
