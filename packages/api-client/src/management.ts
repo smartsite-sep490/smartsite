@@ -7,7 +7,7 @@ import {
   type Mf06AssessmentResponse,
   type Mf06RequestStatusPage,
   type Mf06RequestStatusResponse,
-} from '@smartsite/contracts';
+} from '@smartsite/contracts/mf06-assessments';
 import { readMf06FrameResponse } from './mf06-frame-response';
 import {
   processCameraMediaNdjsonStream,
