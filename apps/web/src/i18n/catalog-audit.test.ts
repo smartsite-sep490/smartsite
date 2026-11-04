@@ -125,7 +125,7 @@ it('includes every access tab in the catalog, including keys composed at runtime
 
 it('scans every production UI source for missing keys and untranslated visible literals', () => {
   const root = path.resolve('src');
-  const safetyKeys = safetyCatalogKeys(path.join(root, 'components'));
+  const safetyKeys = safetyCatalogKeys(root);
   const failures: string[] = [];
   // Language names are intentionally shown in their own language in the selector.
   const brands = new Set([

@@ -32,6 +32,7 @@ export interface ScopedWallSnapshot {
 }
 
 export interface FourSourceWallTileProps {
+  observationMode?: 'ppe' | 'zone';
   apiUrl: string;
   client: SmartSiteManagementClient;
   token: string;
@@ -259,7 +260,7 @@ export function FourSourceWallTile(props: FourSourceWallTileProps) {
         ) : preview ? (
           <RealtimePreviewCanvas
             preview={preview}
-            mode="ppe"
+            mode={props.observationMode ?? 'ppe'}
             showModelObjects={showModelObjects}
             filterClasses={filterClasses}
           />
@@ -415,6 +416,7 @@ export function FourSourceWallTile(props: FourSourceWallTileProps) {
 }
 
 export interface FourSourceWallProps {
+  observationMode?: 'ppe' | 'zone';
   apiUrl: string;
   client: SmartSiteManagementClient;
   token: string;
@@ -505,6 +507,7 @@ export function FourSourceWall(props: FourSourceWallProps) {
           enabled={enabled && !isAiWorkPaused}
           isAiWorkPaused={isAiWorkPaused}
           showModelObjects={showModelObjects}
+          observationMode={props.observationMode}
           filterClasses={
             getFilterClassesForCamera ? getFilterClassesForCamera(camera) : filterClasses
           }

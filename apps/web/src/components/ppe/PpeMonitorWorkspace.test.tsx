@@ -8,8 +8,12 @@ import type { LoginResponse } from '@smartsite/api-client';
 import { ApiError } from '@smartsite/api-client';
 import { PpeMonitorWorkspace } from './PpeMonitorWorkspace';
 
-const state = vi.hoisted(() => ({ sites: vi.fn(), cameras: vi.fn() }));
-const client = { listSites: state.sites, listPreviewCameras: state.cameras };
+const state = vi.hoisted(() => ({ sites: vi.fn(), cameras: vi.fn(), assessments: vi.fn() }));
+const client = {
+  listSites: state.sites,
+  listPreviewCameras: state.cameras,
+  listMf06Assessments: state.assessments,
+};
 vi.mock('../../features/auth/auth-session', () => ({ useManagementClient: () => client }));
 vi.mock('./FocusedCameraMedia', () => ({
   FocusedCameraMedia: (p: { camera: { id: string } }) => (
@@ -20,11 +24,13 @@ vi.mock('./FourSourceWall', () => ({
   FourSourceWall: (p: {
     selectedCameraId: string;
     isAiWorkPaused: boolean;
+    observationMode?: string;
     onEnlargeCamera: (id: string) => void;
   }) => (
     <button
       data-testid="wall"
       data-paused={String(p.isAiWorkPaused)}
+      data-mode={p.observationMode}
       onClick={() => p.onEnlargeCamera(p.selectedCameraId)}
     >
       {p.selectedCameraId}
@@ -69,6 +75,43 @@ beforeEach(() => {
     .mockReset()
     .mockResolvedValue({ items: [{ id: site, name: 'Site A', code: 'A' }], total: 1 });
   state.cameras.mockReset().mockResolvedValue({ items: [camera], total: 1 });
+  state.assessments.mockReset().mockResolvedValue({ items: [], total: 0, offset: 0, limit: 20 });
+});
+
+it('mounts real MF06 history using the current authorized Site/client and zone overlay mode', async () => {
+  render(
+    <PpeMonitorWorkspace
+      apiUrl="https://backend.example"
+      session={session()}
+      observationMode="zone"
+      aiPaused
+    />,
+    { wrapper },
+  );
+  expect(await screen.findByRole('heading', { name: 'Restricted area monitoring' })).toBeTruthy();
+  await waitFor(() => expect(state.assessments).toHaveBeenCalled());
+  expect(state.assessments).toHaveBeenCalledWith(
+    'first',
+    site,
+    { offset: 0, limit: 20 },
+    expect.objectContaining({ signal: expect.any(AbortSignal) }),
+  );
+  expect((await screen.findByTestId('wall')).getAttribute('data-mode')).toBe('zone');
+});
+
+it('does not request MF06 history for a Manager-only monitoring session', () => {
+  render(
+    <PpeMonitorWorkspace
+      apiUrl="https://backend.example"
+      session={session('manager', 'SITE_MANAGER')}
+      observationMode="zone"
+      aiPaused
+    />,
+    { wrapper },
+  );
+  expect(screen.getByRole('alert')).toBeTruthy();
+  expect(state.assessments).not.toHaveBeenCalled();
+  expect(state.cameras).not.toHaveBeenCalled();
 });
 afterEach(() => {
   cleanup();

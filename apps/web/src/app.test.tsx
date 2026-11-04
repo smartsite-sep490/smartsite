@@ -60,7 +60,9 @@ vi.mock('./components/landing/LandingPage', () => ({
 }));
 
 vi.mock('./components/ppe/PpeMonitorWorkspace', () => ({
-  PpeMonitorWorkspace: () => <h2>PPE Monitoring</h2>,
+  PpeMonitorWorkspace: ({ observationMode }: { observationMode?: string }) => (
+    <h2>{observationMode === 'zone' ? 'Restricted Zones' : 'PPE Monitoring'}</h2>
+  ),
 }));
 
 vi.mock('./components/cameras/CameraSetupRoute', () => ({
@@ -282,58 +284,31 @@ describe('App Navigation and Context Lifecycle', () => {
     expect(screen.getByRole('heading', { name: 'PPE Monitoring' })).toBeTruthy();
   });
 
-  it('sets initialType when navigated with context, and clears it when navigating via sidebar without context', async () => {
-    const user = userEvent.setup();
-
+  it('mounts the scoped zone workspace at the actual route', () => {
     render(
-      <MemoryRouter>
+      <MemoryRouter initialEntries={['/zones']}>
         <QueryClientProvider client={queryClient}>
           <App />
         </QueryClientProvider>
       </MemoryRouter>,
     );
-
-    // 1. Enter a route that forwards legacy alert context
-    await user.click(screen.getByRole('button', { name: 'Enter Zones' }));
-    expect(screen.getByRole('heading', { name: 'Restricted Zones' })).not.toBeNull();
-
-    // 2. Navigate to incidents with PPE context
-    await user.click(screen.getByRole('button', { name: 'Navigate with PPE context' }));
-    expect(screen.getByRole('heading', { name: 'Safety Alerts Queue' })).not.toBeNull();
-    expect(screen.getByTestId('initial-type').textContent).toBe('PPE_VIOLATION');
-
-    // 3. Switch back to PPE via sidebar
-    await user.click(screen.getByRole('button', { name: 'Sidebar PPE' }));
-    expect(screen.getByRole('heading', { name: 'PPE Monitoring' })).not.toBeNull();
-
-    // 4. Click sidebar incidents directly (no context) -> context MUST be cleared, defaulting to ALL
-    await user.click(screen.getByRole('button', { name: 'Sidebar Incidents' }));
-    expect(screen.getByRole('heading', { name: 'Safety Alerts Queue' })).not.toBeNull();
-    expect(screen.getByTestId('initial-type').textContent).toBe('ALL');
+    expect(screen.getByRole('heading', { name: 'Restricted Zones' })).toBeTruthy();
   });
 
-  it('clears PPE filter to ALL immediately when clicking Sidebar Incidents from filtered incidents view', async () => {
+  it('clears notification URL selection when returning through the unfiltered incidents sidebar', async () => {
     const user = userEvent.setup();
-
     render(
-      <MemoryRouter>
+      <MemoryRouter initialEntries={['/incidents?siteId=site-a&alertId=alert-a']}>
         <QueryClientProvider client={queryClient}>
           <App />
         </QueryClientProvider>
       </MemoryRouter>,
     );
-
-    // 1. Enter a route that forwards legacy alert context
-    await user.click(screen.getByRole('button', { name: 'Enter Zones' }));
-
-    // 2. Navigate from PPE to incidents with PPE context
-    await user.click(screen.getByRole('button', { name: 'Navigate with PPE context' }));
-    expect(screen.getByRole('heading', { name: 'Safety Alerts Queue' })).not.toBeNull();
-    expect(screen.getByTestId('initial-type').textContent).toBe('PPE_VIOLATION');
-
-    // 3. Click sidebar incidents immediately (while already on incidents, without going back to PPE)
+    expect(screen.getByTestId('initial-alert').textContent).toBe('alert-a');
+    await user.click(screen.getByRole('button', { name: 'Sidebar PPE' }));
+    expect(screen.getByRole('heading', { name: 'PPE Monitoring' })).toBeTruthy();
     await user.click(screen.getByRole('button', { name: 'Sidebar Incidents' }));
-    expect(screen.getByRole('heading', { name: 'Safety Alerts Queue' })).not.toBeNull();
+    expect(screen.getByTestId('initial-alert').textContent).toBe('');
     expect(screen.getByTestId('initial-type').textContent).toBe('ALL');
   });
 });

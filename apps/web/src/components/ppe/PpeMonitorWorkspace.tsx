@@ -9,10 +9,12 @@ import { FocusedCameraMedia } from './FocusedCameraMedia';
 import { useMonitorPages } from './useMonitorPages';
 import { registerFeatureCatalog } from '../../i18n/feature-catalog-registry';
 import { SAFETY_NAMESPACE } from '../../i18n/runtime';
+import { Mf06ZoneAssessmentPanel } from './Mf06ZoneAssessmentPanel';
 
 registerFeatureCatalog({
   en: {
     'monitor.title': 'PPE monitoring',
+    'monitor.zoneTitle': 'Restricted area monitoring',
     'monitor.site': 'Site',
     'monitor.camera': 'Camera',
     'monitor.choose': 'Select',
@@ -37,6 +39,7 @@ registerFeatureCatalog({
   },
   vi: {
     'monitor.title': 'Giám sát bảo hộ',
+    'monitor.zoneTitle': 'Giám sát khu vực hạn chế',
     'monitor.site': 'Công trường',
     'monitor.camera': 'Camera',
     'monitor.choose': 'Chọn',
@@ -65,6 +68,7 @@ interface Props {
   apiUrl: string;
   session: Session;
   aiPaused?: boolean;
+  observationMode?: 'ppe' | 'zone';
 }
 
 /** A credential/role change remounts the entire display before old pixels can render. */
@@ -72,6 +76,7 @@ export function PpeMonitorWorkspace({
   apiUrl,
   session,
   aiPaused = import.meta.env.VITE_AI_WORK_PAUSED === 'true',
+  observationMode = 'ppe',
 }: Props) {
   const { t } = useTranslation(SAFETY_NAMESPACE);
   const client = useManagementClient(apiUrl);
@@ -111,8 +116,8 @@ export function PpeMonitorWorkspace({
   if (!canRead) return <p role="alert">{t('monitor.denied')}</p>;
   return (
     <MonitorScope
-      key={identity.nonce}
-      {...{ apiUrl, session, client, aiPaused }}
+      key={`${identity.nonce}:${observationMode}`}
+      {...{ apiUrl, session, client, aiPaused, observationMode }}
       scope={identity.nonce}
     />
   );
@@ -124,6 +129,7 @@ function MonitorScope({
   client,
   aiPaused,
   scope,
+  observationMode,
 }: Props & { client: SmartSiteManagementClient; scope: string }) {
   const { t } = useTranslation(SAFETY_NAMESPACE);
   const [chosenSite, setSite] = useState('');
@@ -141,7 +147,9 @@ function MonitorScope({
   return (
     <section className="space-y-5 min-w-0">
       <header className="flex flex-wrap items-center justify-between gap-3">
-        <h1 className="text-xl font-semibold">{t('monitor.title')}</h1>
+        <h1 className="text-xl font-semibold">
+          {t(observationMode === 'zone' ? 'monitor.zoneTitle' : 'monitor.title')}
+        </h1>
         {site && (
           <Link
             className="rounded-lg border px-4 py-2 text-sm"
@@ -190,7 +198,7 @@ function MonitorScope({
       {site && (
         <CameraScope
           key={`${scope}:${site.id}`}
-          {...{ apiUrl, client, session, aiPaused, scope }}
+          {...{ apiUrl, client, session, aiPaused, scope, observationMode }}
           site={site}
         />
       )}
@@ -205,6 +213,7 @@ function CameraScope({
   aiPaused,
   scope,
   site,
+  observationMode,
 }: Props & {
   client: SmartSiteManagementClient;
   scope: string;
@@ -309,10 +318,12 @@ function CameraScope({
               sessionScope={scope}
               siteId={site.id}
               camera={selected}
+              observationMode={observationMode}
               aiPaused={!!aiPaused}
             />
           ) : (
             <FourSourceWall
+              observationMode={observationMode}
               {...common}
               cameras={wall}
               selectedCameraId={selected.id}
@@ -324,6 +335,16 @@ function CameraScope({
             />
           ))}
       </div>
+      {observationMode === 'zone' && (
+        <Mf06ZoneAssessmentPanel
+          token={session.accessToken}
+          siteId={site.id}
+          credentialId={scope}
+          apiUrl={apiUrl}
+          client={client}
+          cameraCatalog={active}
+        />
+      )}
     </div>
   );
 }
