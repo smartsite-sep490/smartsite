@@ -8,6 +8,7 @@ import { UsersModule } from '../users/users.module.js';
 import { SafetyWorkflowService } from './safety-workflow.service.js';
 import { SafetyWorkflowController } from './safety-workflow.controller.js';
 import { SafetyUploadService } from './safety-upload.service.js';
+import { Mf06AssessmentWorkerRuntime } from './assessments/mf06-assessment-worker-runtime.service.js';
 import { Mf06IngestionEnqueueService } from './assessments/mf06-ingestion-enqueue.service.js';
 import { Mf06AssessmentQueryService } from './assessments/mf06-assessment-query.service.js';
 import { Mf06AssessmentsController } from './assessments/mf06-assessments.controller.js';
@@ -68,6 +69,7 @@ import { ZoneAccessManagementService } from '../zones/zone-access-management.ser
     SafetyEpisodeQueryService,
     SafetyEpisodeInboxService,
     Mf06IngestionEnqueueService,
+    Mf06AssessmentWorkerRuntime,
     Mf06AssessmentQueryService,
     Mf06RequestStatusQueryService,
     SafetyChecklistService,
