@@ -631,6 +631,39 @@ test('Admin Site setup and scoped Manager Zone setup feed an allowlisted AI snap
       (await account.json()).roleAssignments.map((r: { role: string }) => r.role),
       ['SAFETY_OFFICER'],
     );
+    // Exercise an existing temporary-password account without granting another role.
+    await dataSource.query('UPDATE app_user SET must_change_password=true WHERE id=$1', [
+      managerId,
+    ]);
+    const safetyLogin = await post('/auth/login', {
+      username: `http-manager-${suffix}`,
+      password: 'Synthetic_Reset_123',
+      clientType: 'MOBILE',
+    });
+    assert.equal(safetyLogin.status, 200);
+    const safetySession = await safetyLogin.json();
+    assert.equal(safetySession.user.mustChangePassword, true);
+    const safetyToken = safetySession.accessToken;
+    assert.equal(
+      (
+        await post(
+          '/auth/change-password',
+          { currentPassword: 'Synthetic_Reset_123', newPassword: 'Synthetic_Safety_456' },
+          safetyToken,
+        )
+      ).status,
+      204,
+    );
+    assert.equal(
+      (
+        await post(
+          '/auth/change-password',
+          { currentPassword: 'Synthetic_Safety_456', newPassword: 'Synthetic_Safety_789' },
+          safetyToken,
+        )
+      ).status,
+      401,
+    );
   } finally {
     await app.close();
   }

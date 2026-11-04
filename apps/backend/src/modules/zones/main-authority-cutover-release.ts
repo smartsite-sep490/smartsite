@@ -76,6 +76,7 @@ export const MAIN_AUTHORITY_CUTOVER_RELEASE_FILES = [
   'common/configuration/main-team-authority-sources.ts',
   'modules/auth/configuration-command-context.ts',
   'modules/auth/user-auth.guard.ts',
+  'modules/auth/auth.controller.ts',
   'modules/auth/site-manager.guard.ts',
   'modules/users/users.service.ts',
   'modules/users/users.controller.ts',

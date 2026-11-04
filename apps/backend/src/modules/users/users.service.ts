@@ -246,21 +246,27 @@ export class UsersService {
       .getCount();
   }
 
-  async createAdministrative(input: CreateUserDto) {
+  async createAdministrative(input: CreateUserDto, context?: MainConfigurationCommandContext) {
     const value = command(CreateUserDto, input);
     if (value.roleAssignments.some((r) => r.role === UserRole.CONTRACTOR_REPRESENTATIVE))
       throw new ForbiddenException('Representatives must be created by their Site Manager');
-    return this.create(value);
+    return this.create(value, context);
   }
 
-  async create(input: CreateUserDto) {
+  async create(input: CreateUserDto, context?: MainConfigurationCommandContext) {
     const value = command(CreateUserDto, input);
     await this.validateAssignments(value.roleAssignments);
     const passwordHash = await hashPassword(value.temporaryPassword);
     try {
-      return await this.dataSource.transaction(async (manager) => {
-        return this.createInTransaction(manager, value, passwordHash);
-      });
+      return await executeMainConfigurationCommand(
+        this.dataSource,
+        context,
+        'USER_ACCOUNT_CREATE',
+        { roleAssignments: value.roleAssignments },
+        async (manager) => {
+          return this.createInTransaction(manager, value, passwordHash);
+        },
+      );
     } catch (error) {
       knownUnique(error, ['uq_app_user_username', 'uq_site_single_manager']);
     }
