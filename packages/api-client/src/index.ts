@@ -17,6 +17,10 @@ export type {
   AttendanceSummaryResponse,
 } from '@smartsite/contracts';
 export { SmartSiteManagementClient } from './management';
+export { readRecordedCameraVideo, MAX_RECORDED_VIDEO_BYTES } from './management';
+export type { RecordedCameraVideoOptions } from './management';
+export type { CameraMediaFrame } from '@smartsite/contracts/camera-preview';
+export type { CameraVideoStreamOptions } from './camera-media-stream';
 export type { ManagementSession } from './management';
 export type { NativeUploadFile, UploadFile } from './management';
 export type { SafetyAlertListOptions, ZoneEntryDecisionListOptions } from './management';

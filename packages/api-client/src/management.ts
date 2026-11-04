@@ -1,10 +1,20 @@
 import {
+  processCameraMediaNdjsonStream,
+  type CameraVideoStreamOptions,
+} from './camera-media-stream';
+import type { CameraMediaFrame } from '@smartsite/contracts/camera-preview';
+import {
   parseCreateReferenceRegionCommand,
   parseUpdateReferenceRegionPolygonCommand,
   type CreateReferenceRegionCommand,
   type UpdateReferenceRegionPolygonCommand,
 } from '@smartsite/contracts/camera-region-reference';
 import type { ReferenceRegionMutationResponse } from '@smartsite/contracts/camera-region-geometry-confirmation';
+import { parseCameraObservationZones } from '@smartsite/contracts/camera-observation-zones';
+import {
+  parseCameraPreviewResponse,
+  type CameraPreviewResponse,
+} from '@smartsite/contracts/camera-preview';
 import { parseReferenceRegionMutation } from './reference-region-mutation';
 import type { CameraApplicationStatus } from '@smartsite/contracts/camera-application-status';
 import {
@@ -2542,6 +2552,360 @@ export class SmartSiteManagementClient {
     );
     return parseScopedCameraConfigurationReference(value, siteId, cameraId);
   }
+  async getCameraObservationZones(
+    token: string,
+    siteId: string,
+    cameraId: string,
+    paging: PageOptions = {},
+    options?: RequestOptions,
+  ) {
+    const offset = paging.offset ?? 0;
+    const limit = paging.limit ?? 20;
+    if (
+      !Number.isSafeInteger(offset) ||
+      offset < 0 ||
+      !Number.isSafeInteger(limit) ||
+      limit < 1 ||
+      limit > 100
+    )
+      throw new ApiError('invalid-response', 'Invalid camera observation page request.');
+    const query = new URLSearchParams();
+    if (paging.offset !== undefined) query.set('offset', String(paging.offset));
+    if (paging.limit !== undefined) query.set('limit', String(paging.limit));
+    const result = await this.request<unknown>(
+      'GET',
+      `/sites/${pathId(siteId)}/cameras/${pathId(cameraId)}/observation-zones${query.size ? `?${query}` : ''}`,
+      token,
+      undefined,
+      undefined,
+      { ...options, timeoutMs: options?.timeoutMs ?? 5000 },
+      { cache: 'no-store', redirect: 'error' },
+      128_000,
+    );
+    try {
+      const context = parseCameraObservationZones(result);
+      if (
+        context.siteId.toLowerCase() !== siteId.toLowerCase() ||
+        context.cameraId.toLowerCase() !== cameraId.toLowerCase() ||
+        context.items.length !== Math.min(limit, Math.max(0, context.total - offset))
+      )
+        throw new Error('Scope or page mismatch');
+      return context;
+    } catch {
+      throw new ApiError('invalid-response', 'Invalid camera observation Zone metadata.');
+    }
+  }
+  async streamCameraVideo(
+    token: string,
+    siteId: string,
+    cameraId: string,
+    onFrame: (frame: CameraMediaFrame) => void,
+    options?: CameraVideoStreamOptions,
+  ): Promise<void> {
+    if (options?.timeoutMs !== undefined && !validTimeout(options.timeoutMs)) {
+      throw new RangeError(
+        'timeoutMs must be a finite positive integer no greater than 2147483647.',
+      );
+    }
+    return this.runRequest(this.requestOptions(token, { signal: options?.signal }), (signal) =>
+      this.streamCameraVideoRequest(token, siteId, cameraId, onFrame, { ...options, signal }),
+    );
+  }
+
+  private async streamCameraVideoRequest(
+    token: string,
+    siteId: string,
+    cameraId: string,
+    onFrame: (frame: CameraMediaFrame) => void,
+    options?: CameraVideoStreamOptions,
+  ): Promise<void> {
+    const sessionScopes = captureSessionScopes(token);
+    const path = `/sites/${pathId(siteId)}/cameras/${pathId(cameraId)}/video-stream`;
+    const callerSignal = this.requestOptions(token, options)?.signal;
+
+    // Initial connection timeout: only bounds the time to receive response headers,
+    // ensuring a timeout does not terminate a healthy long-running stream.
+    const timeoutMs = options?.timeoutMs ?? 5000;
+    const connectionController = new AbortController();
+    let isConnected = false;
+    let timeoutTimer: ReturnType<typeof setTimeout> | null = null;
+
+    if (timeoutMs !== undefined && timeoutMs > 0) {
+      timeoutTimer = setTimeout(() => {
+        if (!isConnected) {
+          connectionController.abort();
+        }
+      }, timeoutMs);
+    }
+
+    const abortHandler = () => {
+      connectionController.abort();
+    };
+    if (callerSignal) {
+      if (callerSignal.aborted) {
+        connectionController.abort();
+      } else {
+        callerSignal.addEventListener('abort', abortHandler, { once: true });
+      }
+    }
+
+    let response: Response;
+    try {
+      response = await this.fetchAuthenticated(
+        path,
+        token,
+        {
+          method: 'GET',
+          headers: {
+            Accept: 'application/x-ndjson',
+          },
+          cache: 'no-store',
+          redirect: 'error',
+        },
+        connectionController.signal,
+        true,
+      );
+      isConnected = true;
+    } catch (error) {
+      if (callerSignal?.aborted) {
+        throw new ApiError('cancelled', 'Camera video stream request cancelled.');
+      }
+      if (connectionController.signal.aborted && !callerSignal?.aborted) {
+        throw new ApiError(
+          'timeout',
+          `Initial connection to video stream timed out after ${timeoutMs}ms.`,
+        );
+      }
+      if (error instanceof ApiError) {
+        throw error;
+      }
+      throw new ApiError(
+        'network',
+        error instanceof Error ? error.message : 'Could not connect to backend video stream.',
+      );
+    } finally {
+      if (timeoutTimer) {
+        clearTimeout(timeoutTimer);
+      }
+      if (callerSignal) {
+        callerSignal.removeEventListener('abort', abortHandler);
+      }
+    }
+
+    if (callerSignal?.aborted)
+      throw new ApiError('cancelled', 'Camera video stream request cancelled.');
+    if (connectionController.signal.aborted)
+      throw new ApiError(
+        'timeout',
+        `Initial connection to video stream timed out after ${timeoutMs}ms.`,
+      );
+    if (!this.session && response.status === 401 && sessionScopes.length > 0)
+      dispatchSessionExpired(sessionScopes);
+    if (!response.ok) {
+      // Healthy streams have no body deadline. Error bodies are finite JSON,
+      // bounded separately, and remain cancellable after headers arrive.
+      return this.runRequest(
+        { signal: callerSignal, ...(timeoutMs > 0 ? { timeoutMs } : {}) },
+        (signal) => this.responseError(response, signal, 16_000),
+      );
+    }
+
+    // Verify response content-type is application/x-ndjson
+    const contentType =
+      response.headers.get('content-type')?.split(';', 1)[0]?.trim().toLowerCase() ?? '';
+    if (contentType !== 'application/x-ndjson') {
+      await response.body?.cancel().catch(() => undefined);
+      throw new ApiError(
+        'invalid-response',
+        `Expected application/x-ndjson stream response, received: '${contentType}'.`,
+      );
+    }
+
+    if (!response.body) {
+      throw new ApiError(
+        'invalid-response',
+        'Backend returned an empty response body for video stream.',
+      );
+    }
+
+    await processCameraMediaNdjsonStream(
+      response.body,
+      (frame) => {
+        if (!callerSignal?.aborted) onFrame(frame);
+      },
+      { ...options, signal: callerSignal },
+    );
+    if (callerSignal?.aborted)
+      throw new ApiError('cancelled', 'Camera video stream request cancelled.');
+  }
+
+  async readRecordedCameraVideo(
+    token: string,
+    siteId: string,
+    cameraId: string,
+    options?: RecordedCameraVideoOptions,
+  ): Promise<Blob> {
+    if (options?.timeoutMs !== undefined && !validTimeout(options.timeoutMs)) {
+      throw new RangeError(
+        'timeoutMs must be a finite positive integer no greater than 2147483647.',
+      );
+    }
+    return this.runRequest(this.requestOptions(token, { signal: options?.signal }), (signal) =>
+      this.readRecordedCameraVideoRequest(token, siteId, cameraId, { ...options, signal }),
+    );
+  }
+
+  private async readRecordedCameraVideoRequest(
+    token: string,
+    siteId: string,
+    cameraId: string,
+    options?: RecordedCameraVideoOptions,
+  ): Promise<Blob> {
+    const sessionScopes = captureSessionScopes(token);
+    const path = `/sites/${pathId(siteId)}/cameras/${pathId(cameraId)}/recorded-video`;
+    const callerSignal = this.requestOptions(token, options)?.signal;
+    const timeoutMs = options?.timeoutMs ?? 5000;
+    const controller = new AbortController();
+    const abortHandler = () => controller.abort();
+    const timer = timeoutMs > 0 ? setTimeout(abortHandler, timeoutMs) : null;
+    let response: Response | null = null;
+    if (callerSignal?.aborted) controller.abort();
+    else callerSignal?.addEventListener('abort', abortHandler, { once: true });
+    const readBounded = async (maximum: number): Promise<Uint8Array<ArrayBuffer>[]> => {
+      if (!response?.body)
+        throw new ApiError('invalid-response', 'Recorded video response body is missing.');
+      const reader = response.body.getReader();
+      const chunks: Uint8Array<ArrayBuffer>[] = [];
+      let size = 0;
+      let onAbort = () => {};
+      const aborted = new Promise<never>((_, reject) => {
+        onAbort = () => reject(new Error('Recorded read aborted'));
+        controller.signal.addEventListener('abort', onAbort, { once: true });
+      });
+      try {
+        if (controller.signal.aborted) throw new Error('Recorded read aborted');
+        while (true) {
+          const row = await Promise.race([reader.read(), aborted]);
+          if (row.done) break;
+          size += row.value.byteLength;
+          if (size > maximum)
+            throw new ApiError('invalid-response', 'Recorded video body exceeds maximum limit.');
+          chunks.push(new Uint8Array(row.value));
+        }
+        return chunks;
+      } finally {
+        controller.signal.removeEventListener('abort', onAbort);
+        await reader.cancel().catch(() => undefined);
+        reader.releaseLock();
+      }
+    };
+    try {
+      if (controller.signal.aborted) throw new Error('Recorded request aborted');
+      response = await this.fetchAuthenticated(
+        path,
+        token,
+        {
+          method: 'GET',
+          headers: { Accept: 'video/mp4' },
+          cache: 'no-store',
+          redirect: 'error',
+        },
+        controller.signal,
+        true,
+      );
+      if (controller.signal.aborted) throw new Error('Recorded request aborted');
+      if (!this.session && response.status === 401 && sessionScopes.length > 0)
+        dispatchSessionExpired(sessionScopes);
+      if (!response.ok) {
+        const retry = response.headers.get('Retry-After');
+        const retryAfterSeconds =
+          retry && /^\d+$/.test(retry) ? Math.min(Number(retry), 60) : undefined;
+        let payload: unknown;
+        try {
+          const chunks = await readBounded(16000);
+          payload = JSON.parse(await new Blob(chunks).text());
+        } catch {
+          payload = undefined;
+        }
+        const backendError = parseBackendErrorEnvelope(payload, response.status);
+        throw new ApiError(
+          'http',
+          backendError?.message ?? `Backend returned HTTP ${response.status} for recorded video.`,
+          response.status,
+          backendError,
+          retryAfterSeconds,
+        );
+      }
+      if (
+        response.headers.get('content-type')?.split(';', 1)[0]?.trim().toLowerCase() !== 'video/mp4'
+      )
+        throw new ApiError('invalid-response', 'Expected video/mp4 response.');
+      if (
+        options?.expectedCameraExternalId &&
+        response.headers.get('x-camera-external-id') !== options.expectedCameraExternalId
+      )
+        throw new ApiError(
+          'invalid-response',
+          'Recorded video camera external ID is missing or mismatched.',
+        );
+      const length = response.headers.get('content-length');
+      if (length !== null && (!/^\d+$/.test(length) || Number(length) > MAX_RECORDED_VIDEO_BYTES))
+        throw new ApiError(
+          'invalid-response',
+          'Recorded video content length exceeds maximum limit.',
+        );
+      const chunks = await readBounded(MAX_RECORDED_VIDEO_BYTES);
+      if (controller.signal.aborted) throw new Error('Recorded read aborted');
+      return new Blob(chunks, { type: 'video/mp4' });
+    } catch (error) {
+      if (callerSignal?.aborted)
+        throw new ApiError('cancelled', 'Recorded camera video request cancelled.');
+      if (controller.signal.aborted)
+        throw new ApiError('timeout', `Recorded video request timed out after ${timeoutMs}ms.`);
+      if (error instanceof ApiError) throw error;
+      throw new ApiError(
+        'network',
+        error instanceof Error ? error.message : 'Could not fetch recorded video.',
+      );
+    } finally {
+      if (timer) clearTimeout(timer);
+      callerSignal?.removeEventListener('abort', abortHandler);
+      await response?.body?.cancel().catch(() => undefined);
+    }
+  }
+
+  async getCameraPreview(
+    token: string,
+    siteId: string,
+    cameraId: string,
+    options?: RequestOptions,
+  ): Promise<CameraPreviewResponse> {
+    const payload = await this.request<unknown>(
+      'GET',
+      `/sites/${pathId(siteId)}/cameras/${pathId(cameraId)}/preview`,
+      token,
+      undefined,
+      undefined,
+      { ...options, timeoutMs: options?.timeoutMs ?? 3000 },
+      { cache: 'no-store', redirect: 'error' },
+      2_000_000,
+    );
+    try {
+      const preview = parseCameraPreviewResponse(payload);
+      if (
+        preview.siteId.toLowerCase() !== siteId.toLowerCase() ||
+        preview.cameraId.toLowerCase() !== cameraId.toLowerCase()
+      ) {
+        throw new Error('Camera preview scope does not match the request.');
+      }
+      return preview;
+    } catch (error) {
+      throw new ApiError(
+        'invalid-response',
+        error instanceof Error ? error.message : 'Invalid camera preview response from backend.',
+      );
+    }
+  }
   async getCameraApplicationStatus(
     token: string,
     siteId: string,
@@ -3277,3 +3641,21 @@ import {
   parseScopedCameraConfigurationReference,
 } from './camera-configuration-response';
 import { captureSessionScopes, dispatchSessionExpired } from './session-expiry';
+
+export const MAX_RECORDED_VIDEO_BYTES = 2_000_000;
+export interface RecordedCameraVideoOptions {
+  signal?: AbortSignal;
+  timeoutMs?: number;
+  expectedCameraExternalId?: string;
+}
+
+export async function readRecordedCameraVideo(
+  token: string,
+  siteId: string,
+  cameraId: string,
+  options: RecordedCameraVideoOptions | undefined,
+  client: SmartSiteManagementClient,
+): Promise<Blob> {
+  if (!client) throw new TypeError('A configured management client is required.');
+  return client.readRecordedCameraVideo(token, siteId, cameraId, options);
+}

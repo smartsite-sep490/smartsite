@@ -13,7 +13,7 @@ import {
   Matches,
   MaxLength,
 } from 'class-validator';
-import { DataSource, type EntityManager } from 'typeorm';
+import { DataSource, In, type EntityManager } from 'typeorm';
 import {
   command,
   conflict,
@@ -117,6 +117,18 @@ export class ZoneConfigurationService {
       .getRepository(ZoneEntity)
       .findOneBy({ siteId: uuid(siteId), id: uuid(zoneId) });
     return zone ?? missing();
+  }
+
+  async observationReferences(manager: EntityManager, siteId: string, zoneIds: string[]) {
+    uuid(siteId);
+    if (zoneIds.length > 64) conflict('Too many observation Zone references');
+    if (zoneIds.length === 0) return [];
+    zoneIds.forEach(uuid);
+    return manager.getRepository(ZoneEntity).find({
+      where: { siteId, id: In(zoneIds) },
+      select: { id: true, code: true, name: true },
+      order: { id: 'ASC' },
+    });
   }
 
   async list(

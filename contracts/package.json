@@ -17,6 +17,9 @@
     "./worker-document-dates": "./dist/worker-document-dates.js",
     "./camera-configuration-image": "./dist/camera-configuration-image.js",
     "./camera-application-status": "./dist/camera-application-status.js",
+    "./camera-preview": "./dist/camera-preview.js",
+    "./camera-observation-zones": "./dist/camera-observation-zones.js",
+    "./ppe-items": "./dist/ppe-items.js",
     "./safety-episodes": "./dist/safety-episode-api.js"
   },
   "types": "./dist/index.d.ts",

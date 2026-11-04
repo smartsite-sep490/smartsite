@@ -1,4 +1,6 @@
 import { Module } from '@nestjs/common';
+import { CameraPreviewController } from './camera-preview.controller.js';
+import { CameraPreviewService } from './camera-preview.service.js';
 import { CameraEventAdmissionService } from './camera-event-admission.service.js';
 import { DatabaseModule } from '../../database/database.module.js';
 import { SitesModule } from '../sites/sites.module.js';
@@ -19,12 +21,14 @@ import { CameraApplicationStatusService } from './camera-application-status.serv
 @Module({
   imports: [DatabaseModule, SitesModule, ZonesModule, AuthModule],
   controllers: [
+    CameraPreviewController,
     CameraApplicationStatusController,
     CamerasController,
     CameraConfigurationImageController,
     CameraConfigurationReferenceController,
   ],
   providers: [
+    CameraPreviewService,
     CameraEventAdmissionService,
     CameraApplicationStatusService,
     { provide: CAMERA_CONFIGURATION_IMAGE_FETCH, useFactory: () => globalThis.fetch },
