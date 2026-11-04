@@ -224,7 +224,8 @@ test('Region history preserves active state, cutover truth and atomic legacy mut
         for (const sql of [
           'UPDATE camera_region_geometry_revision SET is_active=NOT is_active',
           'DELETE FROM camera_region_geometry_revision',
-          'TRUNCATE camera_region_geometry_revision',
+          // Reach the history guard even when issued bundles reference its rows.
+          'TRUNCATE camera_region_geometry_revision CASCADE',
         ]) {
           await assert.rejects(db.query(sql), (e: { code?: string }) => e.code === '23514');
         }
