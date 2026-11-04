@@ -12,7 +12,10 @@ import type {
   MainAuthorityArchive,
   MainAuthorityArchiveContext,
 } from '../../zones/main-authority-archive-codec.js';
-import { verifySubMillisecondAuthorityBridgeInTx } from '../../zones/main-authority-capture-time.js';
+import {
+  parseAuthorityInstantNanoseconds,
+  verifySubMillisecondAuthorityBridgeInTx,
+} from '../../zones/main-authority-capture-time.js';
 import { MAIN_AUTHORITY_SNAPSHOT_TABLES } from '../../zones/main-authority-read-snapshot.js';
 import type {
   MainQualifiedAuthorityPrepared,
@@ -129,7 +132,7 @@ export class Mf06ZoneEntryAssessmentWorkPort implements Mf06AssessmentWorkPort {
 
   constructor(
     private readonly db: DataSource,
-    private readonly contexts: Pick<Mf06ClaimContextReader, 'readForClaim'>,
+    private readonly contexts: Pick<Mf06ClaimContextReader, 'readForClaim' | 'revalidateForClaim'>,
     private readonly authority: Pick<
       MainQualifiedAuthorityReader,
       'prepareForEvent' | 'revalidate'
@@ -165,7 +168,7 @@ export class Mf06ZoneEntryAssessmentWorkPort implements Mf06AssessmentWorkPort {
       siteId: context.siteId,
       zoneId: context.request.zoneId,
       workerId: null,
-      capturedAt: context.request.capturedAt,
+      capturedAt: context.authorityCapturedAt ?? context.request.capturedAt,
       purpose: context.request.requestedPurpose,
     });
     const preparedAuthority: MainQualifiedAuthorityResult = await this.authority.prepareForEvent(
@@ -289,6 +292,19 @@ export class Mf06ZoneEntryAssessmentWorkPort implements Mf06AssessmentWorkPort {
         ? { state: 'STALE', reason: 'CLAIM_NOT_ACTIVE' }
         : { state: 'UNAVAILABLE', reason: record.reason };
     }
+    const current = await this.contexts.revalidateForClaim(manager, claim, signal);
+    signal.throwIfAborted();
+    if (current.status !== 'MATCHED')
+      return {
+        state: current.reason === 'CLAIM_NOT_ACTIVE' ? 'STALE' : 'UNAVAILABLE',
+        reason: current.reason,
+      };
+    if (
+      current.contextDigest !== record.context.contextDigest ||
+      current.claimContextDigest !== record.context.claimContextDigest ||
+      current.authorityCapturedAt !== record.context.authorityCapturedAt
+    )
+      return { state: 'UNAVAILABLE', reason: 'INVALID_STORED_BINDING' };
     const verified = await this.verifyRequestAndEvent(manager, record);
     signal.throwIfAborted();
     if (!verified) return { state: 'UNAVAILABLE', reason: 'INVALID_STORED_BINDING' };
@@ -381,7 +397,7 @@ export class Mf06ZoneEntryAssessmentWorkPort implements Mf06AssessmentWorkPort {
       stored.request.cameraExternalId === expected.cameraExternalId &&
       stored.request.regionId === expected.regionId &&
       stored.request.geometryVersion === expected.geometryVersion &&
-      stored.request.capturedAt === record.authorityContext.capturedAt &&
+      stored.request.capturedAt === expected.capturedAt &&
       stored.request.requestedPurpose === record.authorityContext.purpose;
     if (!ok || typeof raw?.capturedAt !== 'string') return null;
     return Object.freeze({ request: stored.request, rawCapturedAt: raw.capturedAt });
@@ -416,11 +432,20 @@ export class Mf06ZoneEntryAssessmentWorkPort implements Mf06AssessmentWorkPort {
         throw new Mf06RetryableWorkError('DATABASE_UNAVAILABLE');
       return this.unavailableDecision('AUTHORITY_UNAVAILABLE', 'UNAVAILABLE', null);
     }
-    const bridgeOk = await verifySubMillisecondAuthorityBridgeInTx(
-      manager,
-      revalidated.archive,
-      verified.rawCapturedAt,
+    // Exact-time requests must retain that instant; only legacy requests use the interval bridge.
+    const exact = record.context.authorityCapturedAt;
+    const archiveInstant = parseAuthorityInstantNanoseconds(
+      revalidated.archive.payload.context.capturedAt,
     );
+    const rawInstant = parseAuthorityInstantNanoseconds(verified.rawCapturedAt);
+    const bridgeOk =
+      exact !== null
+        ? archiveInstant !== null && rawInstant !== null && archiveInstant === rawInstant
+        : await verifySubMillisecondAuthorityBridgeInTx(
+            manager,
+            revalidated.archive,
+            verified.rawCapturedAt,
+          );
     signal.throwIfAborted();
     if (!bridgeOk || !archiveMatchesRequestScope(revalidated.archive, verified.request)) {
       return this.unavailableDecision('AUTHORITY_UNAVAILABLE', 'UNAVAILABLE', null);
