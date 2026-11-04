@@ -37,6 +37,7 @@ export type ActiveTab =
   | 'schedule-setup'
   | 'access'
   | 'live-monitoring'
+  | 'camera-setup'
   | 'ppe'
   | 'zones'
   | 'incidents'
@@ -102,7 +103,8 @@ export function AppLayout({ currentTab: propCurrentTab, onSelectTab, children }:
     ].includes(activeTab);
   const allowedTabs = workspaceTabs(currentUser?.roleAssignments ?? []);
   const workerOnly = roles.length === 1 && roles[0] === 'WORKER';
-  const attendanceWorkspace = !roles.includes('ADMIN') &&
+  const attendanceWorkspace =
+    !roles.includes('ADMIN') &&
     roles.some((role) => ['SITE_MANAGER', 'CONTRACTOR_REPRESENTATIVE'].includes(role));
   const navGroups = [
     {
@@ -138,6 +140,7 @@ export function AppLayout({ currentTab: propCurrentTab, onSelectTab, children }:
       label: t('shell.safety'),
       items: [
         { id: 'live-monitoring', label: t('shell.live'), icon: IconCamera },
+        { id: 'camera-setup', label: t('shell.cameraSetup'), icon: IconCamera },
         { id: 'ppe', label: t('shell.ppe'), icon: IconHardHat },
         { id: 'zones', label: t('shell.zones'), icon: IconShield },
         { id: 'incidents', label: t('shell.incidents'), icon: IconAlertTriangle },
@@ -340,7 +343,9 @@ export function AppLayout({ currentTab: propCurrentTab, onSelectTab, children }:
         >
           {/* Left: Brand/Context info */}
           {activeTab === 'schedule-setup' ||
-          (activeTab === 'site-setup' && roles.includes('SITE_MANAGER') && !roles.includes('ADMIN')) ||
+          (activeTab === 'site-setup' &&
+            roles.includes('SITE_MANAGER') &&
+            !roles.includes('ADMIN')) ||
           (activeTab === 'workforce' && workforceTabs.showReview && workforceTab === 'review') ||
           (activeTab === 'access' && attendanceWorkspace) ? (
             <div className="flex items-center gap-3 min-w-0">

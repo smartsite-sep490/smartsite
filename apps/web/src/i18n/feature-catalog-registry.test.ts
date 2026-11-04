@@ -4,6 +4,18 @@ import { hasRegisteredFeatureKey, registerFeatureCatalog } from './feature-catal
 import { SAFETY_NAMESPACE } from './runtime';
 
 describe('scoped camera feature catalogs on Main i18next', () => {
+  it('preserves existing i18next placeholders while converting legacy placeholders', () => {
+    registerFeatureCatalog({
+      en: { 'camera.test.mixed': 'Manage {{name}} at {site}' },
+      vi: { 'camera.test.mixed': 'Quản lý {{name}} tại {site}' },
+    });
+    expect(
+      i18n.t('camera.test.mixed', { ns: SAFETY_NAMESPACE, lng: 'en', name: 'North', site: 'A' }),
+    ).toBe('Manage North at A');
+    expect(
+      i18n.t('camera.test.mixed', { ns: SAFETY_NAMESPACE, lng: 'vi', name: 'North', site: 'A' }),
+    ).toBe('Quản lý North tại A');
+  });
   it('preserves Main resources and interpolates camera copy in both languages', () => {
     const before = JSON.stringify(i18n.getResourceBundle('en', 'common'));
     registerFeatureCatalog({

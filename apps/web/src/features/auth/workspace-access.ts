@@ -15,6 +15,7 @@ export function workspaceTabs(assignments: readonly RoleAssignmentResponse[]): s
   if (has('SITE_MANAGER', 'CONTRACTOR_REPRESENTATIVE', 'WORKER')) tabs.push('workforce');
   if (admin) tabs.push('accounts');
   if (admin || has('SITE_MANAGER')) tabs.push('site-setup');
+  if (admin || has('SITE_MANAGER')) tabs.push('camera-setup');
   if (has('SITE_MANAGER', 'CONTRACTOR_REPRESENTATIVE')) tabs.push('schedule-setup');
   if (admin || has('SITE_MANAGER', 'CONTRACTOR_REPRESENTATIVE', 'SECURITY_OFFICER', 'WORKER'))
     tabs.push('access');

@@ -29,12 +29,23 @@ function safetyCatalogKeys(root: string): Set<string> {
         ts.forEachChild(node, collect);
       }
       collect(source);
-      function object(node: ts.Expression | undefined): ts.ObjectLiteralExpression | undefined {
+      function value(node: ts.Expression | undefined): ts.Expression | undefined {
         if (!node) return;
         if (ts.isAsExpression(node) || ts.isSatisfiesExpression(node))
-          return object(node.expression);
-        if (ts.isIdentifier(node)) return object(variables.get(node.text));
-        return ts.isObjectLiteralExpression(node) ? node : undefined;
+          return value(node.expression);
+        if (ts.isIdentifier(node)) return value(variables.get(node.text));
+        if (ts.isPropertyAccessExpression(node)) {
+          const container = object(node.expression);
+          const prop = container?.properties.find(
+            (p) => p.name?.getText(source) === node.name.text,
+          );
+          return prop && ts.isPropertyAssignment(prop) ? value(prop.initializer) : undefined;
+        }
+        return node;
+      }
+      function object(node: ts.Expression | undefined): ts.ObjectLiteralExpression | undefined {
+        const resolved = value(node);
+        return resolved && ts.isObjectLiteralExpression(resolved) ? resolved : undefined;
       }
       function visit(node: ts.Node) {
         if (
@@ -45,9 +56,13 @@ function safetyCatalogKeys(root: string): Set<string> {
           expect(pair, filename).toBeDefined();
           const languages = new Map<string, string[]>();
           for (const prop of pair?.properties ?? []) {
-            if (!ts.isPropertyAssignment(prop)) continue;
+            expect(
+              ts.isPropertyAssignment(prop) || ts.isShorthandPropertyAssignment(prop),
+              filename,
+            ).toBe(true);
+            if (!ts.isPropertyAssignment(prop) && !ts.isShorthandPropertyAssignment(prop)) continue;
             const language = prop.name.getText(source).replace(/['"]/g, '');
-            const entries = object(prop.initializer);
+            const entries = object(ts.isPropertyAssignment(prop) ? prop.initializer : prop.name);
             expect(entries, filename).toBeDefined();
             languages.set(
               language,
@@ -56,10 +71,16 @@ function safetyCatalogKeys(root: string): Set<string> {
                   ts.isPropertyAssignment(item) && ts.isStringLiteral(item.initializer),
                   filename,
                 ).toBe(true);
+                if (item.name && ts.isComputedPropertyName(item.name)) {
+                  const key = value(item.name.expression);
+                  expect(key && ts.isStringLiteral(key), filename).toBe(true);
+                  return key && ts.isStringLiteral(key) ? key.text : '';
+                }
                 return item.name!.getText(source).replace(/['"]/g, '');
               }),
             );
           }
+          expect([...languages.keys()].sort(), filename).toEqual(['en', 'vi']);
           expect(languages.get('vi')?.slice().sort(), filename).toEqual(
             languages.get('en')?.slice().sort(),
           );
@@ -113,6 +134,7 @@ it('scans every production UI source for missing keys and untranslated visible l
     'SmartSite',
     'S',
     'QR',
+    'Esc',
     'MF01',
     'MF05',
     'IoT',
@@ -147,8 +169,48 @@ it('scans every production UI source for missing keys and untranslated visible l
         ts.ScriptTarget.Latest,
         true,
       );
-      const usesSafetyNamespace =
-        /useTranslation\(SAFETY_NAMESPACE\)|useFourSourceWallTranslate\(\)/.test(source.text);
+      const safetyTranslators = new Set<string>();
+      const commonTranslators = new Set<string>();
+      function collectSafetyBindings(node: ts.Node) {
+        if (
+          ts.isImportSpecifier(node) &&
+          (node.propertyName?.text ?? node.name.text) === 'translate'
+        )
+          commonTranslators.add(node.name.text);
+        if (
+          ts.isVariableDeclaration(node) &&
+          node.initializer &&
+          ts.isCallExpression(node.initializer)
+        ) {
+          const call = node.initializer;
+          if (
+            call.expression.getText(source) === 'useTranslation' &&
+            !call.arguments[0] &&
+            ts.isObjectBindingPattern(node.name)
+          ) {
+            for (const element of node.name.elements)
+              if ((element.propertyName?.getText(source) ?? element.name.getText(source)) === 't')
+                commonTranslators.add(element.name.getText(source));
+          }
+          if (
+            call.expression.getText(source) === 'useTranslation' &&
+            call.arguments[0]?.getText(source) === 'SAFETY_NAMESPACE' &&
+            ts.isObjectBindingPattern(node.name)
+          ) {
+            for (const element of node.name.elements) {
+              if ((element.propertyName?.getText(source) ?? element.name.getText(source)) === 't')
+                safetyTranslators.add(element.name.getText(source));
+            }
+          }
+          if (
+            call.expression.getText(source) === 'useFourSourceWallTranslate' &&
+            ts.isIdentifier(node.name)
+          )
+            safetyTranslators.add(node.name.text);
+        }
+        ts.forEachChild(node, collectSafetyBindings);
+      }
+      collectSafetyBindings(source);
       const report = (node: ts.Node, text: string) =>
         failures.push(
           `${path.relative(root, filename)}:${source.getLineAndCharacterOfPosition(node.getStart(source)).line + 1}: ${text}`,
@@ -201,26 +263,30 @@ it('scans every production UI source for missing keys and untranslated visible l
           checkVisibleExpression(node.expression);
         }
       }
-      function checkTranslationKey(node: ts.Expression, safety: boolean): void {
+      function checkTranslationKey(node: ts.Expression, safety: boolean, common: boolean): void {
         if (ts.isStringLiteral(node)) {
           const available = safety
             ? safetyKeys.has(node.text)
-            : node.text in en || `${node.text}_other` in en;
+            : node.text in en ||
+              `${node.text}_other` in en ||
+              (!common && safetyKeys.has(node.text));
           if (!available) report(node, `missing key ${node.text}`);
         } else if (ts.isConditionalExpression(node)) {
-          checkTranslationKey(node.whenTrue, safety);
-          checkTranslationKey(node.whenFalse, safety);
+          checkTranslationKey(node.whenTrue, safety, common);
+          checkTranslationKey(node.whenFalse, safety, common);
         }
       }
       function visit(node: ts.Node) {
         if (
           ts.isCallExpression(node) &&
-          ['tr', 't', 'translate'].includes(node.expression.getText(source)) &&
+          (['tr', 't', 'translate'].includes(node.expression.getText(source)) ||
+            safetyTranslators.has(node.expression.getText(source))) &&
           node.arguments[0]
         ) {
           checkTranslationKey(
             node.arguments[0],
-            usesSafetyNamespace && node.expression.getText(source) === 't',
+            safetyTranslators.has(node.expression.getText(source)),
+            commonTranslators.has(node.expression.getText(source)),
           );
         }
         if (ts.isJsxText(node)) {

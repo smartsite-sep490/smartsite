@@ -63,6 +63,10 @@ vi.mock('./components/ppe/PpeMonitorWorkspace', () => ({
   PpeMonitorWorkspace: () => <h2>PPE Monitoring</h2>,
 }));
 
+vi.mock('./components/cameras/CameraSetupRoute', () => ({
+  CameraSetupRoute: () => <h2>Camera setup workspace</h2>,
+}));
+
 vi.mock('./components/zones/RestrictedZoneView', () => ({
   RestrictedZoneView: ({ onNavigate }: { onNavigate?: (tab: string, ctx?: unknown) => void }) => (
     <div>
@@ -119,6 +123,18 @@ vi.mock('./components/layout/AppLayout', () => ({
 
 describe('App Navigation and Context Lifecycle', () => {
   let queryClient: QueryClient;
+
+  it.each(['ADMIN', 'SITE_MANAGER'] as const)('mounts camera setup for %s', async (role) => {
+    accountState.roleAssignments = [{ role, siteId: role === 'ADMIN' ? null : 'site-alpha' }];
+    render(
+      <MemoryRouter initialEntries={['/camera-setup']}>
+        <QueryClientProvider client={queryClient}>
+          <App />
+        </QueryClientProvider>
+      </MemoryRouter>,
+    );
+    expect(await screen.findByRole('heading', { name: 'Camera setup workspace' })).toBeTruthy();
+  });
 
   beforeEach(() => {
     accountState.mustChangePassword = false;
