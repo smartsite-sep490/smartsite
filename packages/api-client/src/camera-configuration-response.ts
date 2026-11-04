@@ -5,6 +5,26 @@ import {
   type CameraConfigurationReferenceResponse,
 } from '@smartsite/contracts/camera-configuration-image';
 import { ApiError } from './errors';
+import {
+  parseCameraApplicationStatus,
+  type CameraApplicationStatus,
+} from '@smartsite/contracts/camera-application-status';
+export const MAX_CAMERA_APPLICATION_STATUS_RESPONSE_BYTES = 4096;
+
+export function parseScopedCameraApplicationStatus(
+  payload: unknown,
+  siteId: string,
+  cameraId: string,
+): CameraApplicationStatus {
+  const status = parseCameraApplicationStatus(payload);
+  if (
+    !status ||
+    status.siteId !== siteId.toLowerCase() ||
+    status.cameraId !== cameraId.toLowerCase()
+  )
+    throw new ApiError('invalid-response', 'Backend returned invalid camera application status.');
+  return status;
+}
 export const MAX_CONFIGURATION_IMAGE_RESPONSE_BYTES = 1_500_000;
 export const MAX_CONFIGURATION_REFERENCE_RESPONSE_BYTES =
   MAX_CONFIGURATION_IMAGE_RESPONSE_BYTES + 4_096;

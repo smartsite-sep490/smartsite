@@ -176,7 +176,11 @@ test('camera status survives a reload and both lifecycle transitions advance the
             async find() {
               return [];
             },
+            async findOneBy() {
+              return null;
+            },
           },
+    queryRunner: { isTransactionActive: true },
   } as unknown as EntityManager;
   const db = {
     getRepository: manager.getRepository.bind(manager),

@@ -1,0 +1,77 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://smartsite.local/contracts/v1/camera-configuration-bundle.json",
+  "title": "CameraConfigurationBundle",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schemaVersion",
+    "cameraId",
+    "cameraExternalId",
+    "configurationVersion",
+    "viewRevision",
+    "issuedAt",
+    "bundleSha256",
+    "regions"
+  ],
+  "properties": {
+    "schemaVersion": { "const": "1.0.0" },
+    "cameraId": { "$ref": "#/$defs/lowercaseUuid" },
+    "cameraExternalId": { "$ref": "camera-region-configuration.json#/properties/cameraExternalId" },
+    "configurationVersion": {
+      "$ref": "camera-region-configuration.json#/properties/configurationVersion"
+    },
+    "viewRevision": { "$ref": "camera-region-configuration.json#/properties/configurationVersion" },
+    "issuedAt": {
+      "type": "string",
+      "format": "date-time",
+      "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-5][0-9]\\.[0-9]{3}Z$"
+    },
+    "bundleSha256": { "type": "string", "pattern": "^[0-9a-f]{64}$" },
+    "regions": {
+      "type": "array",
+      "maxItems": 64,
+      "uniqueItems": true,
+      "items": { "$ref": "#/$defs/region" }
+    }
+  },
+  "$defs": {
+    "lowercaseUuid": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
+    },
+    "region": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "regionId",
+        "geometryVersion",
+        "coordinateSpace",
+        "polygon",
+        "zoneId",
+        "policyRevision",
+        "requiredPpe"
+      ],
+      "properties": {
+        "regionId": { "$ref": "#/$defs/lowercaseUuid" },
+        "geometryVersion": {
+          "$ref": "camera-region-configuration.json#/$defs/region/properties/geometryVersion"
+        },
+        "coordinateSpace": {
+          "$ref": "camera-region-configuration.json#/$defs/region/properties/coordinateSpace"
+        },
+        "polygon": { "$ref": "camera-region-configuration.json#/$defs/polygon" },
+        "zoneId": { "$ref": "#/$defs/lowercaseUuid" },
+        "policyRevision": {
+          "$ref": "camera-region-configuration.json#/properties/configurationVersion"
+        },
+        "requiredPpe": {
+          "type": "array",
+          "maxItems": 5,
+          "uniqueItems": true,
+          "items": { "enum": ["HARD_HAT", "SAFETY_VEST", "GLOVES", "BOOTS", "GOGGLES"] }
+        }
+      }
+    }
+  }
+}

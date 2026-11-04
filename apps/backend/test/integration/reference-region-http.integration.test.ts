@@ -116,14 +116,22 @@ const changed = {
     [0.5, 0.8],
   ],
 };
-const zoneId = randomUUID();
+let zoneId: string;
 
 test('reference-bound polygon HTTP saves and reopens exact provenance, preserving legacy history', async (t) => {
   const manager = await actor('SITE_MANAGER', site);
-  await db.query(
-    "INSERT INTO zone(id,site_id,code,name,type,restriction_policy) VALUES($1,$2,$1::uuid::text,'Synthetic Zone','RESTRICTED','PROHIBITED_FOR_ALL')",
-    [zoneId, site],
-  );
+  const zone = await fetch(`${base.slice(0, base.indexOf('/cameras/'))}/zones`, {
+    method: 'POST',
+    headers: { ...manager.headers, 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      name: 'Synthetic Zone',
+      type: 'RESTRICTED',
+      restrictionPolicy: 'PROHIBITED_FOR_ALL',
+      requiredPpe: [],
+    }),
+  });
+  assert.equal(zone.status, 201);
+  zoneId = (await zone.json()).id;
   const send = async (path: string, body: unknown, method = 'POST', headers = manager.headers) =>
     fetch(`${base}/${path}`, {
       method,

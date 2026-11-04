@@ -186,3 +186,6 @@ export type {
 export * from './camera-configuration-image.js';
 export * from './camera-region-reference-command.js';
 export * from './camera-region-geometry-confirmation.js';
+export * from './camera-configuration-bundle.js';
+export * from './camera-configuration-ack.js';
+export * from './camera-application-status.js';
