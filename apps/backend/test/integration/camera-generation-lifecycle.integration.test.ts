@@ -8,6 +8,7 @@ import {
   revokeCameraWorkerGeneration as revoke,
 } from '../../src/modules/cameras/camera-worker-generations.js';
 import { CameraWorkerGenerationEntity } from '../../src/database/entities/camera-worker-generation.entity.js';
+import { CameraWorkerGenerations1794614400000 } from '../../src/database/migrations/1794614400000-CameraWorkerGenerations.js';
 
 test('generation lifecycle retains server ownership, transactional replacement and exact schema', async (t) => {
   const owned = createIsolatedTestDatabase(),
@@ -23,8 +24,30 @@ test('generation lifecycle retains server ownership, transactional replacement a
         );
         await db.query('TRUNCATE app_user CASCADE');
         await db.query('TRUNCATE camera CASCADE');
-        await db.undoLastMigration();
-        await db.runMigrations();
+        // Newer unrelated migrations may follow this feature in the release graph.
+        // Rehearse the named generation migration, not whichever migration is last.
+        const runner = db.createQueryRunner();
+        await runner.connect();
+        await runner.startTransaction();
+        try {
+          const migration = new CameraWorkerGenerations1794614400000();
+          await migration.down(runner);
+          assert.equal(
+            (await runner.query("SELECT to_regclass('camera_worker_generation') AS name"))[0].name,
+            null,
+          );
+          await migration.up(runner);
+          await runner.commitTransaction();
+        } catch (error) {
+          await runner.rollbackTransaction();
+          throw error;
+        } finally {
+          await runner.release();
+        }
+        assert.deepEqual(
+          (await db.driver.createSchemaBuilder().log()).upQueries.map((q) => q.query),
+          [],
+        );
       },
     );
     const site = randomUUID(),
@@ -113,7 +136,18 @@ test('generation lifecycle retains server ownership, transactional replacement a
           db.query('TRUNCATE camera_worker_generation CASCADE'),
           /cannot be removed/,
         );
-        await assert.rejects(db.undoLastMigration(), /populated worker generation history/);
+        const runner = db.createQueryRunner();
+        await runner.connect();
+        await runner.startTransaction();
+        try {
+          await assert.rejects(
+            new CameraWorkerGenerations1794614400000().down(runner),
+            /populated worker generation history/,
+          );
+        } finally {
+          await runner.rollbackTransaction();
+          await runner.release();
+        }
       },
     );
   } finally {
