@@ -248,6 +248,10 @@ export const backendEnvironmentSchema = z
         }
       }, 'must be an absolute HTTP(S) URL without credentials')
       .optional(),
+    MF06_ASSESSMENT_READ_ENABLED: z
+      .enum(['false', 'true'])
+      .default('false')
+      .transform((value) => value === 'true'),
     MF06_ENQUEUE_ENABLED: z
       .enum(['false', 'true'])
       .default('false')
