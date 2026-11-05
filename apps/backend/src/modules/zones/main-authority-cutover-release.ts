@@ -82,6 +82,7 @@ export const MAIN_AUTHORITY_CUTOVER_RELEASE_FILES = [
   'modules/auth/site-manager.guard.ts',
   'modules/users/users.service.ts',
   'modules/users/users.controller.ts',
+  'modules/users/site-representatives.controller.ts',
   'modules/sites/site-configuration.service.ts',
   'modules/sites/sites.controller.ts',
   'modules/zones/zone-configuration.service.ts',

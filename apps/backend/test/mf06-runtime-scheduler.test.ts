@@ -96,6 +96,7 @@ for (const path of [
   'apps/backend/src/modules/zones/zone-authority-transaction.ts',
   'apps/backend/src/common/configuration/authority-storage-relations.ts',
   'apps/backend/src/common/configuration/zone-entry-storage-profile-v1.ts',
+  'apps/backend/src/modules/users/site-representatives.controller.ts',
 ]) {
   test(`runtime refuses release missing authority dependency ${path}`, async () => {
     const release = await syntheticRelease(path);
