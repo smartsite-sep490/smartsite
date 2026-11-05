@@ -33,3 +33,11 @@ Focused coverage lives in `representative-command-context.test.ts`,
 `integration/representative-command.integration.test.ts`, and the missing-source
 case in `mf06-runtime-scheduler.test.ts`. PostgreSQL checks use a file-owned schema
 on dedicated test port 5433; they do not exercise a deployed website or live AI.
+
+Assigning an already-existing representative through the Contractor endpoint uses
+`MAIN_REPRESENTATIVE_ASSIGN` with the same original-request and scoped Manager
+checks. Both representative-grant and assignment capture sources are required.
+Repeating an existing assignment still reauthorizes the actor; it returns the
+existing assignment rather than inserting a duplicate. The command descriptor
+contains only Site, Contractor and target account identifiers. Other Contractor
+creation/name operations are separate writers and are not qualified by this path.

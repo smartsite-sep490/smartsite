@@ -28,6 +28,7 @@ import type { ContractorRepresentativeAssignmentEntity } from '../../../database
 import type { AuthenticatedRequest } from '../../auth/auth.service.js';
 import { SiteManagerGuard } from '../../auth/site-manager.guard.js';
 import { UserAuthGuard } from '../../auth/user-auth.guard.js';
+import { configurationCommandContext } from '../../auth/configuration-command-context.js';
 import { pagination } from '../../../common/http/pagination.js';
 import {
   AssignContractorRepresentativeDto,
@@ -70,7 +71,10 @@ function representativeAssignmentResponse(assignment: ContractorRepresentativeAs
 export class ContractorsController {
   private readonly logger = new Logger(ContractorsController.name);
 
-  constructor(private readonly workforce: WorkforceConfigurationService) {}
+  constructor(
+    private readonly workforce: WorkforceConfigurationService,
+    private readonly auth: UserAuthGuard,
+  ) {}
 
   @Patch('contractors/:contractorId/name')
   @UseGuards(SiteManagerGuard)
@@ -123,7 +127,12 @@ export class ContractorsController {
     @Param('contractorId') contractorId: string,
     @Body() input: AssignContractorRepresentativeDto,
   ) {
-    const assignment = await this.workforce.assignRepresentative(siteId, contractorId, input);
+    const assignment = await this.workforce.assignRepresentative(
+      siteId,
+      contractorId,
+      input,
+      configurationCommandContext(request, this.auth),
+    );
     this.logger.log({
       actorId: request.user!.id,
       action: 'contractor.representative.assign',
