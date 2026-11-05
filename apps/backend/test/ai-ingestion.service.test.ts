@@ -230,6 +230,41 @@ function createSampleEvent(overrides: Record<string, unknown> = {}): Record<stri
   };
 }
 
+test('snapshot-bound v1.3 ingestion preserves evidence SHA and rejects missing or malformed SHA', async () => {
+  const store: MockStore = {
+    cameras: [],
+    regions: [],
+    zones: [],
+    rawEvents: [],
+    alerts: [],
+    mappings: [],
+  };
+  const ds = createMockDataSource(store);
+  const service = new AiIngestionService(
+    ds,
+    new ObservationContextResolverService(),
+    new AlertCandidateEvaluator(new ZoneAuthorizationService()),
+    new DurableGroupingService(createTestConfig(), new SchedulingNotificationService(ds)),
+    createTestConfig(),
+    () => FIXED_NOW,
+  );
+  const evidence = { kind: 'FRAME', uri: 'evidence/synthetic.jpg', sha256: 'a'.repeat(64) };
+  const payload = createSampleEvent({ schemaVersion: '1.3.0', evidence: [evidence] });
+  const result = await service.ingestEvent(payload);
+  assert.equal(result.status, EventProcessingStatus.SKIPPED_UNKNOWN_CAMERA);
+  assert.deepEqual(store.rawEvents[0]!.rawPayload, payload);
+  for (const invalid of [
+    { kind: evidence.kind, uri: evidence.uri },
+    { ...evidence, sha256: 'not-a-sha' },
+  ]) {
+    await assert.rejects(
+      () => service.ingestEvent(createSampleEvent({ schemaVersion: '1.3.0', evidence: [invalid] })),
+      (error: unknown) => error instanceof PublicHttpException && error.getStatus() === 400,
+    );
+  }
+  assert.equal(store.rawEvents.length, 1);
+});
+
 test('ingestion does not pass a conflicting candidate Worker into Zone decision or audit', async () => {
   const cameraId = '33333333-3333-4333-8333-333333333333';
   const siteId = '44444444-4444-4444-8444-444444444444';
