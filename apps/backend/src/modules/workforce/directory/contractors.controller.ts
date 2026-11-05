@@ -84,7 +84,12 @@ export class ContractorsController {
     @Param('contractorId') contractorId: string,
     @Body() input: RenameSiteProfileDto,
   ) {
-    const result = await this.workforce.renameContractor(siteId, contractorId, input);
+    const result = await this.workforce.renameContractor(
+      siteId,
+      contractorId,
+      input,
+      configurationCommandContext(request, this.auth),
+    );
     this.logger.log({
       actorId: request.user!.id,
       action: 'contractor.rename',
@@ -102,7 +107,11 @@ export class ContractorsController {
     @Param('siteId') siteId: string,
     @Body() input: CreateContractorDto,
   ) {
-    const contractor = await this.workforce.createContractor(siteId, input);
+    const contractor = await this.workforce.createContractor(
+      siteId,
+      input,
+      configurationCommandContext(request, this.auth),
+    );
     this.logger.log({
       actorId: request.user!.id,
       action: 'contractor.create',

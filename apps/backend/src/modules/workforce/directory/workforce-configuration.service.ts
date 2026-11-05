@@ -1,6 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import {
   executeMainConfigurationCommand,
+  executeMainMetadataMutation,
   type MainConfigurationCommandContext,
 } from '../../../common/configuration/main-configuration-authority.js';
 import { siteManagerCommandAuthorization } from '../../auth/site-manager.guard.js';
@@ -378,25 +379,36 @@ export class WorkforceConfigurationService {
     }
   }
 
-  async createContractor(siteId: string, input: CreateContractorDto): Promise<ContractorEntity> {
+  async createContractor(
+    siteId: string,
+    input: CreateContractorDto,
+    context?: MainConfigurationCommandContext,
+  ): Promise<ContractorEntity> {
     const scopedSiteId = uuid(siteId);
     const value = command(CreateContractorDto, input);
     const code = value.code ?? `CTR-${randomUUID().toUpperCase()}`;
     try {
-      return await this.dataSource.transaction(async (manager) => {
-        const site = await manager.getRepository(SiteEntity).findOneBy({ id: scopedSiteId });
-        if (!site) missing();
-        let contractor = await manager.getRepository(ContractorEntity).findOneBy({ code });
-        if (contractor && (contractor.name !== value.name || !contractor.isActive))
-          conflict('Contractor code belongs to another name or an inactive contractor');
-        contractor ??= await manager.getRepository(ContractorEntity).save({
-          id: randomUUID(),
-          code,
-          name: value.name,
-          isActive: true,
-        });
-        return contractor;
-      });
+      return await executeMainConfigurationCommand(
+        this.dataSource,
+        context,
+        'SITE_CONTRACTOR_CREATE',
+        { siteId: scopedSiteId, code },
+        async (manager) => {
+          const site = await manager.getRepository(SiteEntity).findOneBy({ id: scopedSiteId });
+          if (!site) missing();
+          let contractor = await manager.getRepository(ContractorEntity).findOneBy({ code });
+          if (contractor && (contractor.name !== value.name || !contractor.isActive))
+            conflict('Contractor code belongs to another name or an inactive contractor');
+          contractor ??= await manager.getRepository(ContractorEntity).save({
+            id: randomUUID(),
+            code,
+            name: value.name,
+            isActive: true,
+          });
+          return contractor;
+        },
+        siteManagerCommandAuthorization(scopedSiteId, context?.actorUserId),
+      );
     } catch (error) {
       knownUnique(error, ['uq_contractor_code']);
     }
@@ -436,23 +448,35 @@ export class WorkforceConfigurationService {
     return contractor;
   }
 
-  async renameContractor(siteId: string, contractorId: string, input: RenameSiteProfileDto) {
+  async renameContractor(
+    siteId: string,
+    contractorId: string,
+    input: RenameSiteProfileDto,
+    context?: MainConfigurationCommandContext,
+  ) {
+    const scopedSiteId = uuid(siteId),
+      scopedContractorId = uuid(contractorId);
     const value = command(RenameSiteProfileDto, input);
-    return this.dataSource.transaction(async (manager) => {
-      const contractor = await manager
-        .getRepository(ContractorEntity)
-        .findOne({ where: { id: uuid(contractorId) }, lock: { mode: 'pessimistic_write' } });
-      const participations = await manager
-        .getRepository(ContractorSiteParticipationEntity)
-        .findBy({ contractorId: uuid(contractorId) });
-      if (!contractor || !participations.some((p) => p.siteId === uuid(siteId))) missing();
-      if (participations.some((p) => p.siteId !== siteId))
-        conflict('Shared profiles must be edited by an administrator');
-      if (contractor.name !== value.expectedName)
-        conflict('Profile changed. Refresh before editing');
-      await manager.getRepository(ContractorEntity).update(contractor.id, { name: value.name });
-      return { id: contractor.id, name: value.name };
-    });
+    return executeMainMetadataMutation(
+      this.dataSource,
+      context,
+      async (manager) => {
+        const contractor = await manager
+          .getRepository(ContractorEntity)
+          .findOne({ where: { id: scopedContractorId }, lock: { mode: 'pessimistic_write' } });
+        const participations = await manager
+          .getRepository(ContractorSiteParticipationEntity)
+          .findBy({ contractorId: scopedContractorId });
+        if (!contractor || !participations.some((p) => p.siteId === scopedSiteId)) missing();
+        if (participations.some((p) => p.siteId !== scopedSiteId))
+          conflict('Shared profiles must be edited by an administrator');
+        if (contractor.name !== value.expectedName)
+          conflict('Profile changed. Refresh before editing');
+        await manager.getRepository(ContractorEntity).update(contractor.id, { name: value.name });
+        return { id: contractor.id, name: value.name };
+      },
+      siteManagerCommandAuthorization(scopedSiteId, context?.actorUserId),
+    );
   }
 
   async requireExclusiveRepresentativeSite(manager: EntityManager, siteId: string, userId: string) {
