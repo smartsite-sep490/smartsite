@@ -1,11 +1,11 @@
 // @vitest-environment jsdom
 import React from 'react';
-import { render, screen, cleanup } from '@testing-library/react';
+import { render, screen, cleanup, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { describe, expect, it, vi, beforeEach, afterEach } from 'vitest';
 import * as useRealtimePreviewModule from './useRealtimePreview';
-import { CameraMonitoringView } from './CameraMonitoringView';
+import { CameraMonitoringView, type CameraSubTab } from './CameraMonitoringView';
 
 describe('CameraMonitoringView DOM Regression & Liveness Claim Prevention', () => {
   let queryClient: QueryClient;
@@ -122,5 +122,92 @@ describe('CameraMonitoringView DOM Regression & Liveness Claim Prevention', () =
     // Parent header remains strictly neutral
     expect(screen.getByText('Vision Workspace')).not.toBeNull();
     expect(screen.queryByText(/live ai active/i)).toBeNull();
+  });
+
+  it('3. Uncontrolled mode switch exposes aria-pressed and keyboard activation', async () => {
+    const user = userEvent.setup();
+    vi.spyOn(useRealtimePreviewModule, 'useRealtimePreview').mockReturnValue({
+      url: null,
+      preview: null,
+      connected: false,
+      error: 'AI backend unavailable',
+    });
+
+    render(
+      <QueryClientProvider client={queryClient}>
+        <CameraMonitoringView />
+      </QueryClientProvider>,
+    );
+
+    const modeGroup = screen.getByRole('group', { name: /Camera Monitoring/i });
+    const ppeButton = within(modeGroup).getByRole('button', {
+      name: /PPE Monitoring/i,
+      pressed: true,
+    });
+    const zonesButton = within(modeGroup).getByRole('button', {
+      name: /Restricted Zones/i,
+      pressed: false,
+    });
+
+    expect(ppeButton.getAttribute('aria-pressed')).toBe('true');
+    expect(zonesButton.getAttribute('aria-pressed')).toBe('false');
+
+    await user.click(zonesButton);
+
+    expect(ppeButton.getAttribute('aria-pressed')).toBe('false');
+    expect(zonesButton.getAttribute('aria-pressed')).toBe('true');
+
+    ppeButton.focus();
+    expect(document.activeElement).toBe(ppeButton);
+    await user.keyboard('{Enter}');
+
+    expect(ppeButton.getAttribute('aria-pressed')).toBe('true');
+    expect(zonesButton.getAttribute('aria-pressed')).toBe('false');
+  });
+
+  it('4. Controlled mode switch delegates clicks and reflects activeSubTab', async () => {
+    const user = userEvent.setup();
+    const onSubTabChange = vi.fn<(tab: CameraSubTab) => void>();
+    vi.spyOn(useRealtimePreviewModule, 'useRealtimePreview').mockReturnValue({
+      url: null,
+      preview: null,
+      connected: false,
+      error: 'AI backend unavailable',
+    });
+
+    const { rerender } = render(
+      <QueryClientProvider client={queryClient}>
+        <CameraMonitoringView activeSubTab="ppe" onSubTabChange={onSubTabChange} />
+      </QueryClientProvider>,
+    );
+
+    const modeGroup = screen.getByRole('group', { name: /Camera Monitoring/i });
+    const ppeButton = within(modeGroup).getByRole('button', { name: /PPE Monitoring/i });
+    const zonesButton = within(modeGroup).getByRole('button', { name: /Restricted Zones/i });
+
+    expect(ppeButton.getAttribute('aria-pressed')).toBe('true');
+    expect(zonesButton.getAttribute('aria-pressed')).toBe('false');
+
+    await user.click(zonesButton);
+
+    expect(onSubTabChange).toHaveBeenCalledTimes(1);
+    expect(onSubTabChange).toHaveBeenCalledWith('zones');
+    // Controlled prop remains authoritative until parent updates activeSubTab
+    expect(ppeButton.getAttribute('aria-pressed')).toBe('true');
+    expect(zonesButton.getAttribute('aria-pressed')).toBe('false');
+
+    rerender(
+      <QueryClientProvider client={queryClient}>
+        <CameraMonitoringView activeSubTab="zones" onSubTabChange={onSubTabChange} />
+      </QueryClientProvider>,
+    );
+
+    expect(ppeButton.getAttribute('aria-pressed')).toBe('false');
+    expect(zonesButton.getAttribute('aria-pressed')).toBe('true');
+
+    await user.click(ppeButton);
+
+    expect(onSubTabChange).toHaveBeenCalledTimes(2);
+    expect(onSubTabChange).toHaveBeenLastCalledWith('ppe');
   });
 });
