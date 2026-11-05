@@ -16,6 +16,8 @@ export interface AccessSetupResponse {
     workerId: string;
     workerName: string;
     siteContractorId: string | null;
+    /** Older API versions omit this field. Clients must wait for a known Zone scope before granting. */
+    zoneIds?: string[];
     status: string;
     validFrom: string;
     validUntil: string | null;

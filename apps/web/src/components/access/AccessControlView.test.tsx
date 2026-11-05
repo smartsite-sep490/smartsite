@@ -240,6 +240,56 @@ describe('Site Access ERD integration', () => {
     expect(row.getByText('#104')).toBeTruthy();
     expect(row.queryByText('Allowed')).toBeNull();
   });
+  it('offers only approved Worker Zones and clears the permission when switching assignments', async () => {
+    const user = userEvent.setup();
+    const grant = vi
+      .spyOn(SmartSiteManagementClient.prototype, 'grantWorkerZone')
+      .mockResolvedValue({ id: 'worker-permission' } as never);
+    const assignment = { ...setupData.assignments[0]!, status: 'APPROVED' };
+    const permission = setupData.contractorPermissions[0]!;
+    const response = {
+      ...setupData,
+      assignments: [
+        { ...assignment, zoneIds: ['zone-1'] },
+        { ...assignment, id: 'legacy-assignment' },
+      ],
+      contractorPermissions: [
+        permission,
+        { ...permission, id: 'outside-zone', zoneId: 'zone-2' },
+        { ...permission, id: 'foreign-permission', siteContractorId: 'other-participation' },
+        { ...permission, id: 'revoked-permission', revokedAt: '2026-10-05T12:00:00Z' },
+      ],
+    };
+    vi.mocked(SmartSiteManagementClient.prototype.accessSetup).mockResolvedValue(response);
+    mount();
+    const assignmentSelect = await screen.findByLabelText(/approved worker assignment/i);
+    const permissionSelect = screen.getByLabelText(
+      /^contractor zone permission$/i,
+    ) as HTMLSelectElement;
+    const submit = screen.getByRole('button', { name: 'Grant Worker Zone' }) as HTMLButtonElement;
+    await user.selectOptions(assignmentSelect, 'assignment-1');
+    expect([...permissionSelect.options].map((option) => option.value)).toEqual(['', 'cp-1']);
+    await user.selectOptions(permissionSelect, 'cp-1');
+    await user.selectOptions(assignmentSelect, 'legacy-assignment');
+    expect([...permissionSelect.options].map((option) => option.value)).toEqual(['']);
+    expect(submit.disabled).toBe(true);
+    await user.click(submit);
+    expect(grant).not.toHaveBeenCalled();
+    await user.selectOptions(assignmentSelect, 'assignment-1');
+    expect(permissionSelect.value).toBe('');
+    await user.selectOptions(permissionSelect, 'cp-1');
+    await user.click(submit);
+    await waitFor(() =>
+      expect(grant).toHaveBeenCalledWith(
+        'mock-admin-token',
+        'site-alpha',
+        expect.objectContaining({
+          workerAssignmentId: 'assignment-1',
+          contractorZonePermissionId: 'cp-1',
+        }),
+      ),
+    );
+  });
   it('switches to Visitor passes while keeping the shared session', async () => {
     const user = userEvent.setup();
     mount();

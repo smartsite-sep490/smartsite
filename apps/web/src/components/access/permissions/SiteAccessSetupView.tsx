@@ -33,6 +33,22 @@ export function SiteAccessSetupView({
   const [workerId, setWorkerId] = useState('');
   const [assignmentId, setAssignmentId] = useState('');
   const [permissionId, setPermissionId] = useState('');
+  const selectedAssignment = setup.data?.assignments.find(
+    (assignment) =>
+      assignment.id === assignmentId && assignment.status === 'APPROVED' && assignment.validUntil,
+  );
+  const eligiblePermissions =
+    setup.data?.contractorPermissions.filter(
+      (permission) =>
+        !permission.revokedAt &&
+        permission.siteContractorId === selectedAssignment?.siteContractorId &&
+        selectedAssignment?.zoneIds?.includes(permission.zoneId),
+    ) ?? [];
+  const selectedPermissionId = eligiblePermissions.some(
+    (permission) => permission.id === permissionId,
+  )
+    ? permissionId
+    : '';
   const [validFrom, setValidFrom] = useState(() => localTime(0));
   const [validUntil, setValidUntil] = useState(() => localTime(8 * 3600_000));
   const [reviewNote, setReviewNote] = useState('');
@@ -51,7 +67,7 @@ export function SiteAccessSetupView({
         zoneId,
         workerId,
         assignmentId,
-        permissionId,
+        selectedPermissionId,
         interval,
       ]);
       if (request.current?.fingerprint !== fingerprint)
@@ -63,13 +79,15 @@ export function SiteAccessSetupView({
           zoneId,
           ...interval,
         });
-      if (action === 'worker')
+      if (action === 'worker') {
+        if (!selectedPermissionId) throw new Error(tr('common.unavailable_permission'));
         return client.grantWorkerZone(token, siteId, {
           requestId: request.current.id,
           workerAssignmentId: assignmentId,
-          contractorZonePermissionId: permissionId,
+          contractorZonePermissionId: selectedPermissionId,
           ...interval,
         });
+      }
       return client.createWorkerSiteZoneAssignment(token, workerId, {
         siteId,
         zoneIds: [zoneId],
@@ -221,7 +239,10 @@ export function SiteAccessSetupView({
               <select
                 className={inputClass}
                 value={assignmentId}
-                onChange={(e) => setAssignmentId(e.target.value)}
+                onChange={(e) => {
+                  setAssignmentId(e.target.value);
+                  setPermissionId('');
+                }}
               >
                 <option value="">{tr('common.select_assignment')}</option>
                 {data.assignments
@@ -237,29 +258,20 @@ export function SiteAccessSetupView({
               {tr('common.contractor_zone_permission')}{' '}
               <select
                 className={inputClass}
-                value={permissionId}
+                value={selectedPermissionId}
                 onChange={(e) => setPermissionId(e.target.value)}
               >
                 <option value="">{tr('common.select_contractor_permission')}</option>
-                {data.contractorPermissions
-                  .filter(
-                    (p) =>
-                      !p.revokedAt &&
-                      p.siteContractorId ===
-                        data.assignments.find((a) => a.id === assignmentId)?.siteContractorId,
-                  )
-                  .map((p) => (
-                    <option key={p.id} value={p.id}>
-                      {permissionLabel(p.id)}
-                    </option>
-                  ))}
+                {eligiblePermissions.map((p) => (
+                  <option key={p.id} value={p.id}>
+                    {permissionLabel(p.id)}
+                  </option>
+                ))}
               </select>
             </label>
             <button
               className="rounded bg-slate-900 px-4 py-2 text-sm text-white disabled:opacity-50"
-              disabled={
-                mutation.isPending || !assignmentId || !permissionId || !validFrom || !validUntil
-              }
+              disabled={mutation.isPending || !selectedPermissionId || !validFrom || !validUntil}
               onClick={() => mutation.mutate('worker')}
             >
               {tr('common.grant_worker_zone')}
