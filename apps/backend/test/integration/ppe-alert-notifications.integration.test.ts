@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { randomUUID } from 'node:crypto';
+import { createHash, randomUUID } from 'node:crypto';
 import { after, test } from 'node:test';
 import { Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
@@ -74,7 +74,7 @@ after(async () => {
   }
 });
 
-async function fixture() {
+async function fixture(ppeItem: 'HARD_HAT' | 'GLOVES' = 'HARD_HAT') {
   if (!dataSource.isInitialized) await dataSource.initialize();
   const siteId = randomUUID(),
     otherSiteId = randomUUID(),
@@ -103,7 +103,7 @@ async function fixture() {
     name: 'Zone Nguyễn An',
     type: ZoneType.STANDARD,
     restrictionPolicy: ZoneRestrictionPolicy.NONE,
-    requiredPpe: ['HARD_HAT', 'SAFETY_VEST'],
+    requiredPpe: ppeItem === 'GLOVES' ? ['GLOVES'] : ['HARD_HAT', 'SAFETY_VEST'],
   });
   await dataSource.getRepository(CameraObservationRegionEntity).save({
     id: regionId,
@@ -112,7 +112,15 @@ async function fixture() {
     version: 1,
     isActive: true,
     coordinateSpace: 'NORMALIZED_0_1',
-    polygon: { type: 'Polygon', coordinates: [] },
+    polygon:
+      ppeItem === 'GLOVES'
+        ? [
+            [0, 0],
+            [1, 0],
+            [1, 1],
+            [0, 1],
+          ]
+        : { type: 'Polygon', coordinates: [] },
   });
   async function account(
     role = UserRole.SAFETY_OFFICER,
@@ -179,7 +187,7 @@ async function fixture() {
         {
           type: 'PPE',
           trackId: 1,
-          ppeItem: 'HARD_HAT',
+          ppeItem,
           status: 'MISSING',
           regionId,
           geometryVersion: 1,
@@ -555,8 +563,8 @@ test('read/delete is personal and never reviews alerts; current scope gates ever
   assert.equal((await f.notifications.list(f.colleague)).total, 0);
 });
 
-test('HTTP ingestion to inbox, alert and evidence enforces current session/user/Site across all operations', async () => {
-  const f = await fixture();
+async function httpNotificationEvidenceJourney(schemaVersion: '1.0.0' | '1.3.0') {
+  const f = await fixture(schemaVersion === '1.3.0' ? 'GLOVES' : 'HARD_HAT');
   const root = await mkdtemp(join(tmpdir(), 'smartsite-ppe-http-'));
   const environment = validateEnvironment({
     NODE_ENV: 'test',
@@ -613,10 +621,14 @@ test('HTTP ingestion to inbox, alert and evidence enforces current session/user/
     const jpeg = Buffer.from([0xff, 0xd8, 0xff, 0xe0, 0, 2, 0xff, 0xd9]);
     const event = {
       ...initial,
+      schemaVersion,
       evidence: [
         {
           kind: 'FRAME',
           uri: `local://evidence/${initial.streamSessionId}/1/${initial.eventId}.jpg`,
+          ...(schemaVersion === '1.3.0'
+            ? { sha256: createHash('sha256').update(jpeg).digest('hex') }
+            : {}),
         },
       ],
     };
@@ -629,6 +641,11 @@ test('HTTP ingestion to inbox, alert and evidence enforces current session/user/
     );
     assert.equal(response.status, 202);
     const result = (await response.json()) as { alertIds: string[] };
+    assert.equal(result.alertIds.length, 1);
+    const raw = await dataSource
+      .getRepository(AiObservationEventEntity)
+      .findOneByOrFail({ eventId: event.eventId });
+    assert.deepEqual(raw.rawPayload, event);
     const inbox = await request('/me/notifications?readStatus=UNREAD', safety.accessToken);
     assert.equal(inbox.status, 200);
     const list = (await inbox.json()) as UserNotificationListResponse;
@@ -643,6 +660,32 @@ test('HTTP ingestion to inbox, alert and evidence enforces current session/user/
     const evidence = await request(evidencePath, safety.accessToken);
     assert.equal(evidence.status, 200);
     assert.deepEqual(Buffer.from(await evidence.arrayBuffer()), jpeg);
+    if (schemaVersion === '1.3.0') {
+      assert.equal(item.safetyAlert?.candidateSubtype, 'PPE_GLOVES_MISSING');
+      const duplicate = await request(
+        '/integrations/ai/events',
+        environment.SMARTSITE_AI_SERVICE_TOKEN,
+        'POST',
+        event,
+      );
+      assert.equal(duplicate.status, 202);
+      assert.equal((await duplicate.json()).status, 'DUPLICATE_ACCEPTED');
+      assert.equal((await f.notifications.list(f.safety)).total, 1);
+      assert.equal(
+        await dataSource.getRepository(SafetyAlertEntity).countBy({ siteId: f.siteId }),
+        1,
+      );
+      assert.equal((await f.notifications.list(f.foreign)).total, 0);
+      assert.equal((await f.notifications.list(f.manager)).total, 0);
+      const evidenceFile = join(root, `${event.streamSessionId}_1_${event.eventId}.jpg`);
+      try {
+        await writeFile(evidenceFile, Buffer.from([0xff, 0xd8, 0x01, 0x02, 0xff, 0xd9]));
+        assert.equal((await request(evidencePath, safety.accessToken)).status, 409);
+      } finally {
+        await writeFile(evidenceFile, jpeg);
+      }
+      assert.equal((await request(evidencePath, safety.accessToken)).status, 200);
+    }
     assert.equal((await request(alertPath, foreign.accessToken)).status, 403);
     assert.equal((await request(evidencePath, foreign.accessToken)).status, 403);
     assert.equal(
@@ -708,6 +751,13 @@ test('HTTP ingestion to inbox, alert and evidence enforces current session/user/
     assert.equal((await request('/me/notifications', foreign.accessToken)).status, 401);
   } finally {
     await app.close();
-    await rm(root, { recursive: true, force: true });
+    // Preserve synthetic artifacts when the local audit requests retention.
+    if (process.env.SMARTSITE_RETAIN_TEST_EVIDENCE !== '1')
+      await rm(root, { recursive: true, force: true });
   }
-});
+}
+
+test('HTTP ingestion to inbox, alert and evidence enforces current session/user/Site across all operations', () =>
+  httpNotificationEvidenceJourney('1.0.0'));
+test('HTTP v1.3 glove event binds persisted alert, scoped inbox, retry and evidence SHA', () =>
+  httpNotificationEvidenceJourney('1.3.0'));
