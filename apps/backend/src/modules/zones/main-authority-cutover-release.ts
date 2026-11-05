@@ -86,6 +86,8 @@ export const MAIN_AUTHORITY_CUTOVER_RELEASE_FILES = [
   'modules/workforce/directory/contractors.controller.ts',
   'modules/workforce/directory/workforce-configuration.service.ts',
   'modules/workforce/directory/workforce.controller.ts',
+  'modules/workforce/directory/contractor-operations.service.ts',
+  'modules/workforce/directory/contractor-operations.controller.ts',
   'modules/sites/site-configuration.service.ts',
   'modules/sites/sites.controller.ts',
   'modules/zones/zone-configuration.service.ts',

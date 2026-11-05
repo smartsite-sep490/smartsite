@@ -14,6 +14,7 @@ import {
 import { ErrorResponseDto } from '../../../common/http/error-response.dto.js';
 import type { AuthenticatedRequest } from '../../auth/auth.service.js';
 import { AdminGuard, UserAuthGuard } from '../../auth/user-auth.guard.js';
+import { configurationCommandContext } from '../../auth/configuration-command-context.js';
 import {
   ContractorOperationsService,
   CreateContractorParticipationCommand,
@@ -35,7 +36,10 @@ import {
 export class ContractorOperationsController {
   private readonly logger = new Logger(ContractorOperationsController.name);
 
-  constructor(private readonly contractors: ContractorOperationsService) {}
+  constructor(
+    private readonly contractors: ContractorOperationsService,
+    private readonly auth: UserAuthGuard,
+  ) {}
 
   @Post(':contractorId/participations')
   @ApiCreatedResponse()
@@ -48,6 +52,7 @@ export class ContractorOperationsController {
       request.user!,
       contractorId,
       input,
+      configurationCommandContext(request, this.auth),
     );
     this.logger.log({
       actorId: request.user!.id,
@@ -67,7 +72,12 @@ export class ContractorOperationsController {
     @Param('contractorId') contractorId: string,
     @Body() input: GrantContractorRepresentativeCommand,
   ) {
-    const grant = await this.contractors.grantRepresentative(request.user!, contractorId, input);
+    const grant = await this.contractors.grantRepresentative(
+      request.user!,
+      contractorId,
+      input,
+      configurationCommandContext(request, this.auth),
+    );
     this.logger.log({
       actorId: request.user!.id,
       action: 'contractor.representative.grant',
