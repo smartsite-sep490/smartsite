@@ -48,7 +48,12 @@ export class WorkerAssignmentController {
     @Param('requestId') requestId: string,
     @Body() input: RevokeWorkerAssignmentCommand,
   ) {
-    return this.contractors.revokeAssignment(request.user!, requestId, input);
+    return this.contractors.revokeAssignment(
+      request.user!,
+      requestId,
+      input,
+      configurationCommandContext(request, this.auth),
+    );
   }
 
   @Post('workers/:workerId/site-zone-assignment-requests')
@@ -99,7 +104,12 @@ export class WorkerAssignmentController {
     @Param('requestId') requestId: string,
     @Body() input: SiteManagerDecisionCommand,
   ) {
-    const assignment = await this.contractors.siteManagerDecision(request.user!, requestId, input);
+    const assignment = await this.contractors.siteManagerDecision(
+      request.user!,
+      requestId,
+      input,
+      configurationCommandContext(request, this.auth),
+    );
     this.logger.log({
       actorId: request.user!.id,
       action: 'worker.assignment.site-manager-decision',
