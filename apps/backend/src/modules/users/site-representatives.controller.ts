@@ -30,6 +30,13 @@ import type { AuthenticatedRequest } from '../auth/auth.service.js';
 import { hashPassword } from '../auth/password.js';
 import { SiteManagerGuard } from '../auth/site-manager.guard.js';
 import { UserAuthGuard } from '../auth/user-auth.guard.js';
+import { configurationCommandContext } from '../auth/configuration-command-context.js';
+import { siteManagerCommandAuthorization } from '../auth/site-manager.guard.js';
+import {
+  executeMainConfigurationCommand,
+  executeMainMetadataMutation,
+  type MainConfigurationCommandContext,
+} from '../../common/configuration/main-configuration-authority.js';
 import { WorkforceConfigurationService } from '../workforce/directory/workforce-configuration.service.js';
 import { CreateUserDto, UsersService } from './users.service.js';
 import { Injectable } from '@nestjs/common';
@@ -62,7 +69,11 @@ export class SiteRepresentativesService {
     private readonly workforce: WorkforceConfigurationService,
   ) {}
 
-  async createWithContractor(siteId: string, input: CreateContractorRepresentativeDto) {
+  async createWithContractor(
+    siteId: string,
+    input: CreateContractorRepresentativeDto,
+    context?: MainConfigurationCommandContext,
+  ) {
     const value = command(CreateContractorRepresentativeDto, input);
     const account = command(CreateUserDto, {
       username: value.username,
@@ -72,46 +83,70 @@ export class SiteRepresentativesService {
     });
     const hash = await hashPassword(value.temporaryPassword);
     try {
-      return await this.source.transaction(async (manager) => {
-        const contractor = await this.workforce.createContractorWithParticipation(
-          manager,
-          siteId,
-          value.contractorName,
-          new Date(value.validFrom),
-          value.validUntil === null ? null : new Date(value.validUntil),
-        );
-        const user = await this.users.createInTransaction(manager, account, hash);
-        await this.workforce.assignRepresentativeInTransaction(manager, siteId, contractor.id, {
-          userId: user.id,
-        });
-        return user;
-      });
+      return await executeMainConfigurationCommand(
+        this.source,
+        context,
+        'USER_SITE_REPRESENTATIVE_CREATE',
+        { siteId: uuid(siteId), createContractor: true },
+        async (manager) => {
+          const contractor = await this.workforce.createContractorWithParticipation(
+            manager,
+            siteId,
+            value.contractorName,
+            new Date(value.validFrom),
+            value.validUntil === null ? null : new Date(value.validUntil),
+          );
+          const user = await this.users.createInTransaction(manager, account, hash);
+          await this.workforce.assignRepresentativeInTransaction(manager, siteId, contractor.id, {
+            userId: user.id,
+          });
+          return user;
+        },
+        siteManagerCommandAuthorization(siteId, context?.actorUserId),
+      );
     } catch (error) {
       knownUnique(error, ['uq_app_user_username', 'uq_contractor_code']);
     }
   }
 
-  async rename(siteId: string, userId: string, input: RenameSiteProfileDto) {
+  async rename(
+    siteId: string,
+    userId: string,
+    input: RenameSiteProfileDto,
+    context?: MainConfigurationCommandContext,
+  ) {
     const value = command(RenameSiteProfileDto, input);
-    return this.source.transaction(async (manager) => {
-      const user = await manager
-        .getRepository(UserEntity)
-        .findOne({ where: { id: uuid(userId) }, lock: { mode: 'pessimistic_write' } });
-      if (!user) missing();
-      await this.workforce.requireExclusiveRepresentativeSite(manager, siteId, userId);
-      const roles = await manager.getRepository(UserRoleAssignmentEntity).findBy({ userId });
-      if (!roles.some((r) => r.siteId === siteId && r.role === UserRole.CONTRACTOR_REPRESENTATIVE))
-        missing();
-      if (roles.some((r) => r.siteId !== siteId))
-        conflict('Shared profiles must be edited by an administrator');
-      if (user.displayName !== value.expectedName)
-        conflict('Profile changed. Refresh before editing');
-      await manager.getRepository(UserEntity).update(user.id, { displayName: value.name });
-      return { id: user.id, name: value.name };
-    });
+    return executeMainMetadataMutation(
+      this.source,
+      context,
+      async (manager) => {
+        const user = await manager
+          .getRepository(UserEntity)
+          .findOne({ where: { id: uuid(userId) }, lock: { mode: 'pessimistic_write' } });
+        if (!user) missing();
+        await this.workforce.requireExclusiveRepresentativeSite(manager, siteId, userId);
+        const roles = await manager.getRepository(UserRoleAssignmentEntity).findBy({ userId });
+        if (
+          !roles.some((r) => r.siteId === siteId && r.role === UserRole.CONTRACTOR_REPRESENTATIVE)
+        )
+          missing();
+        if (roles.some((r) => r.siteId !== siteId))
+          conflict('Shared profiles must be edited by an administrator');
+        if (user.displayName !== value.expectedName)
+          conflict('Profile changed. Refresh before editing');
+        await manager.getRepository(UserEntity).update(user.id, { displayName: value.name });
+        return { id: user.id, name: value.name };
+      },
+      siteManagerCommandAuthorization(siteId, context?.actorUserId),
+    );
   }
 
-  async create(siteId: string, contractorId: string, input: CreateSiteRepresentativeDto) {
+  async create(
+    siteId: string,
+    contractorId: string,
+    input: CreateSiteRepresentativeDto,
+    context?: MainConfigurationCommandContext,
+  ) {
     const value = command(CreateSiteRepresentativeDto, input);
     const account = command(CreateUserDto, {
       ...value,
@@ -120,13 +155,20 @@ export class SiteRepresentativesService {
     uuid(contractorId);
     const hash = await hashPassword(value.temporaryPassword);
     try {
-      return await this.source.transaction(async (manager) => {
-        const user = await this.users.createInTransaction(manager, account, hash);
-        await this.workforce.assignRepresentativeInTransaction(manager, siteId, contractorId, {
-          userId: user.id,
-        });
-        return user;
-      });
+      return await executeMainConfigurationCommand(
+        this.source,
+        context,
+        'USER_SITE_REPRESENTATIVE_CREATE',
+        { siteId: uuid(siteId), contractorId },
+        async (manager) => {
+          const user = await this.users.createInTransaction(manager, account, hash);
+          await this.workforce.assignRepresentativeInTransaction(manager, siteId, contractorId, {
+            userId: user.id,
+          });
+          return user;
+        },
+        siteManagerCommandAuthorization(siteId, context?.actorUserId),
+      );
     } catch (error) {
       knownUnique(error, [
         'uq_app_user_username',
@@ -146,6 +188,7 @@ export class SiteRepresentativesController {
   constructor(
     private readonly representatives: SiteRepresentativesService,
     private readonly users: UsersService,
+    private readonly auth: UserAuthGuard,
   ) {}
 
   @Post('contractor-representative-accounts')
@@ -154,7 +197,11 @@ export class SiteRepresentativesController {
     @Param('siteId') siteId: string,
     @Body() input: CreateContractorRepresentativeDto,
   ) {
-    const result = await this.representatives.createWithContractor(siteId, input);
+    const result = await this.representatives.createWithContractor(
+      siteId,
+      input,
+      configurationCommandContext(request, this.auth),
+    );
     this.logger.log({
       actorId: request.user!.id,
       action: 'contractor.representative.create-combined',
@@ -171,7 +218,12 @@ export class SiteRepresentativesController {
     @Param('userId') userId: string,
     @Body() input: RenameSiteProfileDto,
   ) {
-    const result = await this.representatives.rename(siteId, userId, input);
+    const result = await this.representatives.rename(
+      siteId,
+      userId,
+      input,
+      configurationCommandContext(request, this.auth),
+    );
     this.logger.log({
       actorId: request.user!.id,
       action: 'contractor.representative.rename',
@@ -198,7 +250,12 @@ export class SiteRepresentativesController {
     @Param('contractorId') contractorId: string,
     @Body() input: CreateSiteRepresentativeDto,
   ) {
-    const user = await this.representatives.create(siteId, contractorId, input);
+    const user = await this.representatives.create(
+      siteId,
+      contractorId,
+      input,
+      configurationCommandContext(request, this.auth),
+    );
     this.logger.log({
       actorId: request.user!.id,
       action: 'contractor.representative.create',

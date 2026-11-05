@@ -175,6 +175,8 @@ export async function executeMainConfigurationCommand<T>(
                   'user_role_assignment',
                   'contractor_representative_grant',
                   'contractor_representative_assignment',
+                  'contractor',
+                  'contractor_site_participation',
                 ]
               : operation === 'USER_ACCOUNT_CREATE' ||
                   operation === 'USER_ROLE_REPLACE' ||
