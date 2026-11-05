@@ -15,6 +15,7 @@ import {
 import { ErrorResponseDto } from '../../../common/http/error-response.dto.js';
 import type { AuthenticatedRequest } from '../../auth/auth.service.js';
 import { UserAuthGuard } from '../../auth/user-auth.guard.js';
+import { configurationCommandContext } from '../../auth/configuration-command-context.js';
 import {
   ContractorOperationsService,
   CreateWorkerSiteZoneAssignmentCommand,
@@ -36,7 +37,10 @@ import {
 export class WorkerAssignmentController {
   private readonly logger = new Logger(WorkerAssignmentController.name);
 
-  constructor(private readonly contractors: ContractorOperationsService) {}
+  constructor(
+    private readonly contractors: ContractorOperationsService,
+    private readonly auth: UserAuthGuard,
+  ) {}
 
   @Post('site-zone-assignment-requests/:requestId/revoke')
   revoke(
@@ -54,7 +58,12 @@ export class WorkerAssignmentController {
     @Param('workerId') workerId: string,
     @Body() input: CreateWorkerSiteZoneAssignmentCommand,
   ) {
-    const assignment = await this.contractors.requestAssignment(request.user!, workerId, input);
+    const assignment = await this.contractors.requestAssignment(
+      request.user!,
+      workerId,
+      input,
+      configurationCommandContext(request, this.auth),
+    );
     this.logger.log({
       actorId: request.user!.id,
       action: 'worker.assignment.request',
@@ -68,7 +77,11 @@ export class WorkerAssignmentController {
   @Post('site-zone-assignment-requests/:requestId/safety-review')
   @ApiOkResponse()
   async safetyReview(@Req() request: AuthenticatedRequest, @Param('requestId') requestId: string) {
-    const assignment = await this.contractors.safetyReview(request.user!, requestId);
+    const assignment = await this.contractors.safetyReview(
+      request.user!,
+      requestId,
+      configurationCommandContext(request, this.auth),
+    );
     this.logger.log({
       actorId: request.user!.id,
       action: 'worker.assignment.safety-review',
