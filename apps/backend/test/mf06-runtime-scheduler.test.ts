@@ -104,6 +104,9 @@ for (const path of [
   'apps/backend/src/modules/workforce/directory/contractor-operations.controller.ts',
   'apps/backend/src/modules/workforce/directory/worker-assignment.controller.ts',
   'apps/backend/src/modules/workforce/shared/access-audit.ts',
+  'apps/backend/src/modules/workforce/teams/contractor-teams.controller.ts',
+  'apps/backend/src/modules/workforce/teams/contractor-teams.service.ts',
+  'apps/backend/src/modules/workforce/teams/dto/contractor-team.dto.ts',
   'apps/backend/src/modules/zones/zone-access-management.service.ts',
   'apps/backend/src/modules/zones/zone-access.controller.ts',
 ]) {
