@@ -89,6 +89,8 @@ export const MAIN_AUTHORITY_CUTOVER_RELEASE_FILES = [
   'modules/sites/sites.controller.ts',
   'modules/zones/zone-configuration.service.ts',
   'modules/zones/zones.controller.ts',
+  'modules/zones/zone-access-management.service.ts',
+  'modules/zones/zone-access.controller.ts',
   'modules/cameras/camera-configuration.service.ts',
   'modules/cameras/cameras.controller.ts',
   'modules/auth/auth.service.ts',

@@ -4,6 +4,11 @@ import { IsEnum, IsISO8601, IsOptional, IsUUID, Matches } from 'class-validator'
 import { DataSource } from 'typeorm';
 import { PublicHttpException } from '../../common/http/public-http-exception.js';
 import { command, conflict, missing, page, uuid } from '../../common/configuration/commands.js';
+import {
+  executeMainConfigurationCommand,
+  type MainConfigurationCommandContext,
+} from '../../common/configuration/main-configuration-authority.js';
+import { siteManagerCommandAuthorization } from '../auth/site-manager.guard.js';
 import { WorkerEntity } from '../../database/entities/worker.entity.js';
 import {
   ZoneAccessEffect,
@@ -89,6 +94,7 @@ export class ZoneAccessManagementService {
     siteId: string,
     zoneId: string,
     input: CreateZoneAccessGrantCommand,
+    context?: MainConfigurationCommandContext,
   ): Promise<ZoneAccessGrantEntity> {
     const scopedSiteId = uuid(siteId);
     const scopedZoneId = uuid(zoneId);
@@ -104,27 +110,44 @@ export class ZoneAccessManagementService {
         message: 'validUntil must be later than validFrom',
       });
     }
-    const [zone, worker] = await Promise.all([
-      this.dataSource
-        .getRepository(ZoneEntity)
-        .findOneBy({ id: scopedZoneId, siteId: scopedSiteId }),
-      this.dataSource
-        .getRepository(WorkerEntity)
-        .findOneBy({ id: uuid(value.workerId), siteId: scopedSiteId, isActive: true }),
-    ]);
-    if (!zone || !worker) missing();
-    if (value.effect === ZoneAccessEffect.ALLOW)
-      conflict('Use Contractor and Worker Zone permissions within approved assignment bounds');
-    return await this.dataSource.getRepository(ZoneAccessGrantEntity).save({
-      id: randomUUID(),
-      siteId: scopedSiteId,
-      zoneId: scopedZoneId,
-      workerId: worker.id,
-      effect: value.effect,
-      validFrom,
-      validUntil,
-      revokedAt: null,
-    });
+    const workerId = uuid(value.workerId);
+    return executeMainConfigurationCommand(
+      this.dataSource,
+      context,
+      'ZONE_DENY_CREATE',
+      {
+        siteId: scopedSiteId,
+        zoneId: scopedZoneId,
+        workerId,
+        effect: value.effect,
+        validFrom: validFrom.toISOString(),
+        validUntil: validUntil?.toISOString() ?? null,
+      },
+      async (manager) => {
+        const zone = await manager.getRepository(ZoneEntity).findOne({
+          where: { id: scopedZoneId, siteId: scopedSiteId },
+          lock: { mode: 'pessimistic_read' },
+        });
+        const worker = await manager.getRepository(WorkerEntity).findOne({
+          where: { id: workerId, siteId: scopedSiteId, isActive: true },
+          lock: { mode: 'pessimistic_read' },
+        });
+        if (!zone || !worker) missing();
+        if (value.effect === ZoneAccessEffect.ALLOW)
+          conflict('Use Contractor and Worker Zone permissions within approved assignment bounds');
+        return manager.getRepository(ZoneAccessGrantEntity).save({
+          id: randomUUID(),
+          siteId: scopedSiteId,
+          zoneId: scopedZoneId,
+          workerId: worker.id,
+          effect: value.effect,
+          validFrom,
+          validUntil,
+          revokedAt: null,
+        });
+      },
+      siteManagerCommandAuthorization(scopedSiteId, context?.actorUserId),
+    );
   }
 
   async listGrants(
@@ -148,19 +171,29 @@ export class ZoneAccessManagementService {
     zoneId: string,
     grantId: string,
     revokedAt = new Date(),
+    context?: MainConfigurationCommandContext,
   ): Promise<ZoneAccessGrantEntity> {
-    const repository = this.dataSource.getRepository(ZoneAccessGrantEntity);
-    const grant = await repository.findOneBy({
-      id: uuid(grantId),
-      siteId: uuid(siteId),
-      zoneId: uuid(zoneId),
-    });
-    if (!grant) missing();
-    if (grant.revokedAt === null) {
-      await repository.update({ id: grant.id }, { revokedAt });
-      grant.revokedAt = revokedAt;
-    }
-    return grant;
+    const scope = { id: uuid(grantId), siteId: uuid(siteId), zoneId: uuid(zoneId) };
+    return executeMainConfigurationCommand(
+      this.dataSource,
+      context,
+      'ZONE_DENY_REVOKE',
+      { ...scope, revokedAt: revokedAt.toISOString() },
+      async (manager) => {
+        const repository = manager.getRepository(ZoneAccessGrantEntity);
+        const grant = await repository.findOne({
+          where: scope,
+          lock: { mode: 'pessimistic_write' },
+        });
+        if (!grant) missing();
+        if (grant.revokedAt === null) {
+          await repository.update({ id: grant.id }, { revokedAt });
+          grant.revokedAt = revokedAt;
+        }
+        return grant;
+      },
+      siteManagerCommandAuthorization(scope.siteId, context?.actorUserId),
+    );
   }
 
   async listDecisions(
