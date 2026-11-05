@@ -328,12 +328,10 @@ export class WorkforceConfigurationService {
             .where('worker.id = :workerId AND worker.site_id = :siteId', { workerId, siteId })
             .getOne();
           if (!worker) missing();
-          const user = await manager
-            .getRepository(UserEntity)
-            .findOne({
-              where: { id: value.userId, isActive: true },
-              lock: { mode: 'pessimistic_read' },
-            });
+          const user = await manager.getRepository(UserEntity).findOne({
+            where: { id: value.userId, isActive: true },
+            lock: { mode: 'pessimistic_read' },
+          });
           const assignment = await manager.getRepository(UserRoleAssignmentEntity).findOne({
             where: [
               { userId: value.userId, siteId },
