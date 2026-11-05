@@ -137,11 +137,16 @@ export class WorkforceController {
       invalid(
         'Create a contractor Worker profile first; account linking is a separate administrative action',
       );
-    const worker = await this.contractors.createWorker(request.user!, input.contractorId, {
-      siteId,
-      externalId: input.externalId,
-      displayName: input.displayName,
-    });
+    const worker = await this.contractors.createWorker(
+      request.user!,
+      input.contractorId,
+      {
+        siteId,
+        externalId: input.externalId,
+        displayName: input.displayName,
+      },
+      configurationCommandContext(request, this.auth),
+    );
     this.logger.log({
       actorId: request.user!.id,
       action: 'worker.create',

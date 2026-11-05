@@ -95,7 +95,12 @@ export class ContractorOperationsController {
     @Param('contractorId') contractorId: string,
     @Body() input: CreateContractorWorkerCommand,
   ) {
-    const worker = await this.contractors.createWorker(request.user!, contractorId, input);
+    const worker = await this.contractors.createWorker(
+      request.user!,
+      contractorId,
+      input,
+      configurationCommandContext(request, this.auth),
+    );
     this.logger.log({
       actorId: request.user!.id,
       action: 'contractor.worker.create',

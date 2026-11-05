@@ -29,14 +29,18 @@ function representative(): WorkforceActor {
 function serviceFor({ hasGrant }: { hasGrant: boolean }) {
   const savedWorkers: Array<Record<string, unknown>> = [];
   const manager = {
+    query: async (sql: string) => {
+      assert.match(sql, /FROM pg_class/);
+      return [{ n: 0, legacy: 0, baseline: 0 }];
+    },
     getRepository(target: unknown) {
       if (target === ContractorRepresentativeGrantEntity)
-        return { findOneBy: async () => (hasGrant ? { id: 'grant' } : null) };
+        return { findOne: async () => (hasGrant ? { id: 'grant' } : null) };
       if (target === ContractorEntity)
-        return { findOneBy: async () => ({ id: IDs.contractor, isActive: true }) };
+        return { findOne: async () => ({ id: IDs.contractor, isActive: true }) };
       if (target === ContractorSiteParticipationEntity)
         return {
-          findBy: async () => [
+          find: async () => [
             {
               validFrom: new Date('2020-01-01T00:00:00.000Z'),
               validUntil: null,
