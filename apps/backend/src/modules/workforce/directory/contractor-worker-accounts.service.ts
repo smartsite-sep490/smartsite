@@ -14,7 +14,7 @@ import {
   ValidateNested,
   ValidateIf,
 } from 'class-validator';
-import { DataSource, In } from 'typeorm';
+import { DataSource, In, type EntityManager } from 'typeorm';
 import { WORKER_DEFAULT_TEMPORARY_PASSWORD } from '@smartsite/contracts/management';
 import type {
   CreateContractorWorkerAccountCommand as WorkerAccountCommand,
@@ -31,6 +31,12 @@ import {
   missing,
   uuid,
 } from '../../../common/configuration/commands.js';
+import {
+  executeMainConfigurationCommand,
+  executeMainMetadataMutation,
+  type MainConfigurationCommandContext,
+} from '../../../common/configuration/main-configuration-authority.js';
+import { PublicHttpException } from '../../../common/http/public-http-exception.js';
 import {
   PASSWORD_MAX_LENGTH,
   PASSWORD_MIN_LENGTH,
@@ -152,56 +158,88 @@ export class ContractorWorkerAccountsService {
     private readonly users: UsersService,
   ) {}
 
+  private authorizeRepresentative(
+    actor: WorkforceActor,
+    siteId: string,
+    context?: MainConfigurationCommandContext,
+  ) {
+    if (!context) return undefined;
+    if (context.actorUserId !== actor.id)
+      throw new PublicHttpException(403, { code: 'FORBIDDEN', message: 'Forbidden' });
+    return async (manager: EntityManager) => {
+      const roles = await manager.query(
+        "SELECT id FROM user_role_assignment WHERE user_id=$1 AND site_id=$2 AND role='CONTRACTOR_REPRESENTATIVE' FOR SHARE",
+        [actor.id, siteId],
+      );
+      if (!roles.length)
+        throw new PublicHttpException(403, { code: 'FORBIDDEN', message: 'Forbidden' });
+    };
+  }
+
   async update(
     actor: WorkforceActor,
     siteIdValue: string,
     contractorIdValue: string,
     workerIdValue: string,
     input: UpdateContractorWorkerCommand,
+    context?: MainConfigurationCommandContext,
   ): Promise<WorkerResponse> {
     const siteId = uuid(siteIdValue);
     const contractorId = uuid(contractorIdValue);
     const workerId = uuid(workerIdValue);
     const value = command(UpdateContractorWorkerCommand, input);
     try {
-      return await this.source.transaction(async (manager) => {
-        await this.operations.requireWorkerCreationAccess(
-          manager,
-          actor,
+      return await executeMainConfigurationCommand(
+        this.source,
+        context,
+        'WORKER_PROFILE_UPDATE',
+        {
+          siteId,
           contractorId,
-          siteId,
-          true,
-        );
-        const repo = manager.getRepository(WorkerEntity);
-        const worker = await repo.findOne({
-          where: { id: workerId, siteId, contractorId },
-          lock: { mode: 'pessimistic_write' },
-        });
-        if (!worker) missing();
-        // A retry of an already-applied state is a no-op, including its audit.
-        if (sameProfile(worker, value))
-          return { ...worker, createdAt: worker.createdAt.toISOString() };
-        if (!sameProfile(worker, value.expectedSnapshot))
-          conflict('Worker profile changed. Reload it before editing again.');
-        const before = profileSnapshot(worker);
-        Object.assign(worker, profileSnapshot(value));
-        await repo.save(worker);
-        await auditAccess(
-          manager,
-          actor.id,
-          siteId,
-          'WORKER_PROFILE_UPDATED',
-          'worker',
           workerId,
-          null,
-          {
+          isActive: value.isActive,
+          expectedIsActive: value.expectedSnapshot.isActive,
+        },
+        async (manager) => {
+          await this.operations.requireWorkerCreationAccess(
+            manager,
+            actor,
             contractorId,
-            before,
-            after: profileSnapshot(worker),
-          },
-        );
-        return { ...worker, createdAt: worker.createdAt.toISOString() };
-      });
+            siteId,
+            true,
+          );
+          const repo = manager.getRepository(WorkerEntity);
+          const worker = await repo.findOne({
+            where: { id: workerId, siteId, contractorId },
+            lock: { mode: 'pessimistic_write' },
+          });
+          if (!worker) missing();
+          // A retry of an already-applied state is a no-op, including its audit.
+          if (sameProfile(worker, value))
+            return { ...worker, createdAt: worker.createdAt.toISOString() };
+          if (!sameProfile(worker, value.expectedSnapshot))
+            conflict('Worker profile changed. Reload it before editing again.');
+          const before = profileSnapshot(worker);
+          Object.assign(worker, profileSnapshot(value));
+          await repo.save(worker);
+          await auditAccess(
+            manager,
+            actor.id,
+            siteId,
+            'WORKER_PROFILE_UPDATED',
+            'worker',
+            workerId,
+            null,
+            {
+              contractorId,
+              before,
+              after: profileSnapshot(worker),
+            },
+          );
+          return { ...worker, createdAt: worker.createdAt.toISOString() };
+        },
+        this.authorizeRepresentative(actor, siteId, context),
+      );
     } catch (error) {
       knownUnique(error, ['uq_worker_site_external_id']);
     }
@@ -244,67 +282,81 @@ export class ContractorWorkerAccountsService {
     actor: WorkforceActor,
     contractorIdValue: string,
     input: CreateContractorWorkerAccountCommand,
+    context?: MainConfigurationCommandContext,
   ): Promise<ContractorWorkerAccountResponse> {
     const contractorId = uuid(contractorIdValue);
     const value = command(CreateContractorWorkerAccountCommand, input);
     const siteId = uuid(value.siteId);
+    const authorize = this.authorizeRepresentative(actor, siteId, context);
     // Reject unauthorized callers before expensive password hashing.
-    await this.source.transaction((manager) =>
-      this.operations.requireWorkerCreationAccess(manager, actor, contractorId, siteId),
+    await executeMainMetadataMutation(
+      this.source,
+      context,
+      (manager) =>
+        this.operations.requireWorkerCreationAccess(manager, actor, contractorId, siteId),
+      authorize,
     );
     const prepared = await this.users.prepareWorkerAccount(value);
     try {
-      return await this.source.transaction(async (manager) => {
-        // Recheck current scope and participation after hashing.
-        await this.operations.requireWorkerCreationAccess(
-          manager,
-          actor,
-          contractorId,
-          siteId,
-          true,
-        );
-        const account = await this.users.createWorkerAccount(manager, prepared);
-        const workers = manager.getRepository(WorkerEntity);
-        let externalId = value.externalId;
-        if (externalId === undefined) {
-          // PostgreSQL sequences allocate distinct values across concurrent transactions.
-          // Gaps after a rollback are intentional; codes must never be recycled.
-          do {
-            const [allocated] = await manager.query<{ number: string }[]>(
-              "SELECT nextval('worker_code_seq')::text AS number",
-            );
-            externalId = `W${allocated!.number.padStart(6, '0')}`;
-          } while (await workers.existsBy({ siteId, externalId }));
-        }
-        const worker = await workers.save({
-          id: randomUUID(),
-          contractorId,
-          siteId,
-          userId: account.id,
-          externalId,
-          displayName: value.displayName,
-          isActive: true,
-        });
-        await manager.getRepository(WorkerComplianceProfileEntity).save({
-          workerId: worker.id,
-          nationalId: value.nationalId,
-          phoneNumber: value.phoneNumber,
-          gender: value.gender,
-          address: value.address,
-          identityRequired: true,
-        });
-        await auditAccess(
-          manager,
-          actor.id,
-          siteId,
-          'WORKER_ACCOUNT_CREATED',
-          'worker',
-          worker.id,
-          null,
-          { contractorId, userId: account.id },
-        );
-        return { account, worker: { ...worker, createdAt: worker.createdAt.toISOString() } };
-      });
+      // Journal descriptors contain the authority scope, never credentials or personal details.
+      return await executeMainConfigurationCommand(
+        this.source,
+        context,
+        'USER_CONTRACTOR_WORKER_ACCOUNT_CREATE',
+        { siteId, contractorId },
+        async (manager) => {
+          // Recheck current scope and participation after hashing.
+          await this.operations.requireWorkerCreationAccess(
+            manager,
+            actor,
+            contractorId,
+            siteId,
+            true,
+          );
+          const account = await this.users.createWorkerAccount(manager, prepared);
+          const workers = manager.getRepository(WorkerEntity);
+          let externalId = value.externalId;
+          if (externalId === undefined) {
+            // PostgreSQL sequences allocate distinct values across concurrent transactions.
+            // Gaps after a rollback are intentional; codes must never be recycled.
+            do {
+              const [allocated] = await manager.query<{ number: string }[]>(
+                "SELECT nextval('worker_code_seq')::text AS number",
+              );
+              externalId = `W${allocated!.number.padStart(6, '0')}`;
+            } while (await workers.existsBy({ siteId, externalId }));
+          }
+          const worker = await workers.save({
+            id: randomUUID(),
+            contractorId,
+            siteId,
+            userId: account.id,
+            externalId,
+            displayName: value.displayName,
+            isActive: true,
+          });
+          await manager.getRepository(WorkerComplianceProfileEntity).save({
+            workerId: worker.id,
+            nationalId: value.nationalId,
+            phoneNumber: value.phoneNumber,
+            gender: value.gender,
+            address: value.address,
+            identityRequired: true,
+          });
+          await auditAccess(
+            manager,
+            actor.id,
+            siteId,
+            'WORKER_ACCOUNT_CREATED',
+            'worker',
+            worker.id,
+            null,
+            { contractorId, userId: account.id },
+          );
+          return { account, worker: { ...worker, createdAt: worker.createdAt.toISOString() } };
+        },
+        authorize,
+      );
     } catch (error) {
       // Retrying the same username/code returns CONFLICT without partial accounts or a reset.
       knownUnique(error, [
