@@ -251,14 +251,44 @@ export class ContractorOperationsService {
     actor: WorkforceActor,
     workerIdValue: string,
   ): Promise<WorkerEntity> {
-    const worker = await manager.getRepository(WorkerEntity).findOneBy({ id: uuid(workerIdValue) });
+    const userId = uuid(actor.id);
+    const currentUser = await manager.getRepository(UserEntity).findOne({
+      where: { id: userId, isActive: true },
+      lock: { mode: 'pessimistic_read' },
+    });
+    if (!currentUser) this.forbidden();
+    this.assertPasswordChanged({
+      ...actor,
+      mustChangePassword: actor.mustChangePassword || currentUser.mustChangePassword,
+    });
+    const worker = await manager.getRepository(WorkerEntity).findOne({
+      where: { id: uuid(workerIdValue) },
+      lock: { mode: 'pessimistic_read' },
+    });
     if (!worker) missing();
     if (!worker.isActive) this.forbidden();
     if (!worker.contractorId) {
       this.forbidden();
     }
-    await this.requireContractorRepresentative(manager, actor, worker.contractorId, worker.siteId);
-    await this.requireActiveParticipation(manager, worker.contractorId, worker.siteId, new Date());
+    const currentRole = await manager.getRepository(UserRoleAssignmentEntity).findOne({
+      where: { userId, siteId: worker.siteId, role: UserRole.CONTRACTOR_REPRESENTATIVE },
+      lock: { mode: 'pessimistic_read' },
+    });
+    if (!currentRole) this.forbidden();
+    await this.requireContractorRepresentative(
+      manager,
+      actor,
+      worker.contractorId,
+      worker.siteId,
+      true,
+    );
+    await this.requireActiveParticipation(
+      manager,
+      worker.contractorId,
+      worker.siteId,
+      new Date(),
+      true,
+    );
     return worker;
   }
 

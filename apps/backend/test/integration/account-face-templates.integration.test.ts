@@ -3,6 +3,7 @@ import { createHash, randomUUID } from 'node:crypto';
 import { after, test } from 'node:test';
 import { FaceEnrollmentService } from '../../src/modules/workforce/identity/face-enrollment.service.js';
 import { FaceEnrollmentController } from '../../src/modules/workforce/identity/face-enrollment.controller.js';
+import type { UserAuthGuard } from '../../src/modules/auth/user-auth.guard.js';
 import { FaceGateService } from '../../src/modules/workforce/access/face-gate.service.js';
 import { ContractorOperationsService } from '../../src/modules/workforce/directory/contractor-operations.service.js';
 import { WorkforceConfigurationService } from '../../src/modules/workforce/directory/workforce-configuration.service.js';
@@ -36,6 +37,7 @@ test('account linking, encrypted DB enrollment, scoped matching and revocation',
   const siteId = randomUUID();
   const otherSiteId = randomUUID();
   const accountId = randomUUID();
+  const unassignedAccountId = randomUUID();
   const actorId = randomUUID();
   const workerId = randomUUID();
   const secondWorkerId = randomUUID();
@@ -88,7 +90,7 @@ test('account linking, encrypted DB enrollment, scoped matching and revocation',
   try {
     for (const id of [siteId, otherSiteId])
       await dataSource.getRepository(SiteEntity).save({ id, code: id, name: 'Synthetic site' });
-    for (const id of [accountId, actorId])
+    for (const id of [accountId, actorId, unassignedAccountId])
       await dataSource.getRepository(UserEntity).save({
         id,
         username: id,
@@ -100,6 +102,13 @@ test('account linking, encrypted DB enrollment, scoped matching and revocation',
     await dataSource
       .getRepository(UserRoleAssignmentEntity)
       .save({ id: randomUUID(), userId: accountId, role: UserRole.WORKER, siteId });
+    await dataSource.getRepository(UserRoleAssignmentEntity).save(
+      actor.roleAssignments.map((assignment) => ({
+        id: randomUUID(),
+        userId: actorId,
+        ...assignment,
+      })),
+    );
     await dataSource
       .getRepository(ContractorEntity)
       .save({ id: contractorId, code: contractorId, name: 'Synthetic contractor', isActive: true });
@@ -200,7 +209,7 @@ test('account linking, encrypted DB enrollment, scoped matching and revocation',
     await enrollment.revokeProfile(actor, secondWorkerId, true);
     await assert.rejects(workforce.linkAccount(otherSiteId, workerId, { userId: accountId }));
     await assert.rejects(
-      workforce.linkAccount(siteId, workerId, { userId: actorId }),
+      workforce.linkAccount(siteId, workerId, { userId: unassignedAccountId }),
       /account assigned/,
     );
     await workforce.linkAccount(siteId, workerId, { userId: accountId });
@@ -217,10 +226,10 @@ test('account linking, encrypted DB enrollment, scoped matching and revocation',
     for (let index = 0; index < 3; index++) await enrollment.submitSample(actor, session.id, frame);
     const profile = await enrollment.complete(actor, session.id);
     assert.equal(profile.userId, accountId);
-    const response = await new FaceEnrollmentController(enrollment).getProfile(
-      { user: actor } as never,
-      workerId,
-    );
+    // DTO secrecy check; bearer/session enforcement has a separate real-HTTP integration test.
+    const response = await new FaceEnrollmentController(enrollment, {
+      authenticateRequest: async () => {},
+    } as unknown as UserAuthGuard).getProfile({ user: actor } as never, workerId);
     assert.equal(response.userId, accountId);
     assert.equal('encryptedTemplate' in response, false);
     assert.equal(
@@ -399,7 +408,9 @@ test('account linking, encrypted DB enrollment, scoped matching and revocation',
     await dataSource.query('DELETE FROM worker WHERE id = ANY($1)', [[workerId, secondWorkerId]]);
     await dataSource.getRepository(ContractorRepresentativeGrantEntity).delete({ contractorId });
     await dataSource.query('DELETE FROM contractor WHERE id = $1', [contractorId]);
-    await dataSource.query('DELETE FROM app_user WHERE id = ANY($1)', [[accountId, actorId]]);
+    await dataSource.query('DELETE FROM app_user WHERE id = ANY($1)', [
+      [accountId, actorId, unassignedAccountId],
+    ]);
     await dataSource.query('DELETE FROM site WHERE id = ANY($1)', [[siteId, otherSiteId]]);
   }
 });
