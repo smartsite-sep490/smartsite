@@ -12,7 +12,11 @@ import { ConfigService } from '@nestjs/config';
 import type { BackendEnvironment } from '../../config/environment.js';
 import { DataSource, type EntityManager, QueryFailedError } from 'typeorm';
 import type { QueryDeepPartialEntity } from 'typeorm/query-builder/QueryPartialEntity.js';
-import { computeCanonicalPayloadHash, validateObservationEvent } from '@smartsite/contracts';
+import {
+  computeCanonicalPayloadHash,
+  validateObservationEvent,
+  validateEightFamilyObservationEvent,
+} from '@smartsite/contracts';
 import { EventProcessingStatus } from '../../database/entities/enums.js';
 import { AiObservationEventEntity } from '../../database/entities/ai-observation-event.entity.js';
 import { AlertDetectionMappingEntity } from '../../database/entities/alert-detection-mapping.entity.js';
@@ -95,7 +99,12 @@ export class AiIngestionService {
       payload.schemaVersion === '1.4.0' &&
       this.configService.get('AI_PARTITIONED_FRAME_ENABLED', { infer: true }) === true
         ? validatePartitionedObservationEvent(payload)
-        : validateObservationEvent(payload);
+        : payload &&
+            typeof payload === 'object' &&
+            'schemaVersion' in payload &&
+            payload.schemaVersion === '1.3.0'
+          ? validateEightFamilyObservationEvent(payload)
+          : validateObservationEvent(payload);
     if (!validationResult.isValid) {
       throw new PublicHttpException(HttpStatus.BAD_REQUEST, {
         code: 'VALIDATION_FAILED',
