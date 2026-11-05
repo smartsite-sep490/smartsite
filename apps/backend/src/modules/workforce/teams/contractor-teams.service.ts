@@ -34,6 +34,11 @@ import {
   uuid,
 } from '../../../common/configuration/commands.js';
 import { PublicHttpException } from '../../../common/http/public-http-exception.js';
+import {
+  executeMainConfigurationCommand,
+  executeMainMetadataMutation,
+  type MainConfigurationCommandContext,
+} from '../../../common/configuration/main-configuration-authority.js';
 import type { AuthenticatedUser } from '../../auth/auth.service.js';
 import { hasActiveContractorParticipation } from '../shared/contractor-participation.js';
 import { auditAccess } from '../shared/access-audit.js';
@@ -46,6 +51,8 @@ import {
   AssignContractorTeamDto,
   GrantTeamZoneDto,
 } from './dto/contractor-team.dto.js';
+
+type TeamCommand = Extract<Parameters<typeof executeMainConfigurationCommand>[2], `TEAM_${string}`>;
 
 @Injectable()
 export class ContractorTeamsService {
@@ -133,6 +140,7 @@ export class ContractorTeamsService {
     teamValue: string,
     input: GrantTeamZoneDto,
     replacePermissionValue?: string,
+    context?: MainConfigurationCommandContext,
   ) {
     const siteId = uuid(siteValue),
       contractorId = uuid(contractorValue),
@@ -148,9 +156,14 @@ export class ContractorTeamsService {
     } catch {
       invalid('Invalid IANA timezone');
     }
-    return this.source
-      .transaction(async (m) => {
-        await this.scope(m, actor, siteId, contractorId);
+    return this.writeTeam(
+      actor,
+      siteId,
+      contractorId,
+      context,
+      'TEAM_ZONE_GRANT',
+      { teamId, replaceId, ...value },
+      async (m) => {
         const team = await m.getRepository(ContractorTeamEntity).findOne({
           where: { id: teamId, siteId, contractorId, isActive: true },
           lock: { mode: 'pessimistic_write' },
@@ -249,8 +262,8 @@ export class ContractorTeamsService {
           },
         );
         return { id: permission.id };
-      })
-      .catch((error) => knownUnique(error, ['pk_team_zone_permission', 'uq_team_single_zone']));
+      },
+    ).catch((error) => knownUnique(error, ['pk_team_zone_permission', 'uq_team_single_zone']));
   }
   async revokeZone(
     actor: AuthenticatedUser,
@@ -258,39 +271,47 @@ export class ContractorTeamsService {
     contractorValue: string,
     teamValue: string,
     permissionValue: string,
+    context?: MainConfigurationCommandContext,
   ) {
     const siteId = uuid(siteValue),
       contractorId = uuid(contractorValue),
       teamId = uuid(teamValue),
       id = uuid(permissionValue);
-    return this.source.transaction(async (m) => {
-      await this.scope(m, actor, siteId, contractorId);
-      if (
-        !(await m
-          .getRepository(ContractorTeamEntity)
-          .existsBy({ id: teamId, siteId, contractorId }))
-      )
-        missing();
-      const permission = await m
-        .getRepository(TeamZonePermissionEntity)
-        .findOne({ where: { id, teamId }, lock: { mode: 'pessimistic_write' } });
-      if (!permission) missing();
-      if (!permission.revokedAt) {
-        permission.revokedAt = new Date();
-        await m.getRepository(TeamZonePermissionEntity).save(permission);
-        await auditAccess(
-          m,
-          actor.id,
-          siteId,
-          'TEAM_ZONE_REVOKED',
-          'team_zone_permission',
-          id,
-          null,
-          { teamId },
-        );
-      }
-      return { id };
-    });
+    return this.writeTeam(
+      actor,
+      siteId,
+      contractorId,
+      context,
+      'TEAM_ZONE_REVOKE',
+      { teamId, id },
+      async (m) => {
+        if (
+          !(await m
+            .getRepository(ContractorTeamEntity)
+            .existsBy({ id: teamId, siteId, contractorId }))
+        )
+          missing();
+        const permission = await m
+          .getRepository(TeamZonePermissionEntity)
+          .findOne({ where: { id, teamId }, lock: { mode: 'pessimistic_write' } });
+        if (!permission) missing();
+        if (!permission.revokedAt) {
+          permission.revokedAt = new Date();
+          await m.getRepository(TeamZonePermissionEntity).save(permission);
+          await auditAccess(
+            m,
+            actor.id,
+            siteId,
+            'TEAM_ZONE_REVOKED',
+            'team_zone_permission',
+            id,
+            null,
+            { teamId },
+          );
+        }
+        return { id };
+      },
+    );
   }
   constructor(private readonly source: DataSource) {}
   private forbidden(): never {
@@ -298,6 +319,49 @@ export class ContractorTeamsService {
       code: 'FORBIDDEN',
       message: 'Contractor team management is outside your scope',
     });
+  }
+  private writeTeam<T>(
+    actor: AuthenticatedUser,
+    siteId: string,
+    contractorId: string,
+    context: MainConfigurationCommandContext | undefined,
+    operation: TeamCommand | 'metadata',
+    request: object,
+    work: (manager: EntityManager) => Promise<T>,
+  ): Promise<T> {
+    if (actor.mustChangePassword || (context && context.actorUserId !== actor.id)) this.forbidden();
+    const authorize = context
+      ? async (manager: EntityManager) => {
+          const rows = await manager.query(
+            `SELECT r.id
+             FROM user_role_assignment r
+             JOIN contractor_representative_assignment a ON a.user_id=r.user_id AND a.site_id=r.site_id
+             JOIN contractor c ON c.id=a.contractor_id AND c.is_active
+             JOIN contractor_site_participation p ON p.contractor_id=c.id AND p.site_id=a.site_id
+             WHERE r.user_id=$1 AND r.site_id=$2 AND a.contractor_id=$3
+               AND r.role='CONTRACTOR_REPRESENTATIVE' AND p.is_active
+               AND p.valid_from <= clock_timestamp()
+               AND (p.valid_until IS NULL OR p.valid_until > clock_timestamp())
+             LIMIT 1 FOR SHARE OF r,a,c,p`,
+            [actor.id, siteId, contractorId],
+          );
+          if (!rows.length) this.forbidden();
+        }
+      : undefined;
+    const scopedWork = async (manager: EntityManager) => {
+      if (!context) await this.scope(manager, actor, siteId, contractorId);
+      return work(manager);
+    };
+    return operation === 'metadata'
+      ? executeMainMetadataMutation(this.source, context, scopedWork, authorize)
+      : executeMainConfigurationCommand(
+          this.source,
+          context,
+          operation,
+          { siteId, contractorId, ...request },
+          scopedWork,
+          authorize,
+        );
   }
   private async scope(
     m: EntityManager,
@@ -537,52 +601,60 @@ export class ContractorTeamsService {
     siteValue: string,
     contractorValue: string,
     input: CreateContractorTeamDto,
+    context?: MainConfigurationCommandContext,
   ) {
     const siteId = uuid(siteValue).toLowerCase(),
       contractorId = uuid(contractorValue).toLowerCase(),
       value = command(CreateContractorTeamDto, input);
     try {
-      return await this.source.transaction(async (m) => {
-        await this.scope(m, actor, siteId, contractorId);
-        await m.query('SELECT pg_advisory_xact_lock(hashtext($1))', [
-          `team-create:${value.requestId}`,
-        ]);
-        const repo = m.getRepository(ContractorTeamEntity),
-          old = await repo.findOneBy({ id: value.requestId });
-        if (old) {
-          if (
-            old.siteId !== siteId ||
-            old.contractorId !== contractorId ||
-            old.createdBy !== actor.id ||
-            old.name !== value.name ||
-            old.description !== (value.description ?? '')
-          )
-            conflict('Request ID was used for different team details');
-          return this.view(m, old);
-        }
-        const team = await repo.save({
-          id: value.requestId,
-          siteId,
-          contractorId,
-          name: value.name,
-          normalizedName: value.name.normalize('NFKC').toLowerCase(),
-          description: value.description ?? '',
-          createdBy: actor.id,
-          isActive: true,
-          version: 1,
-        });
-        await auditAccess(
-          m,
-          actor.id,
-          siteId,
-          'CONTRACTOR_TEAM_CREATED',
-          'contractor_team',
-          team.id,
-          null,
-          { contractorId, name: team.name },
-        );
-        return this.view(m, team);
-      });
+      return await this.writeTeam(
+        actor,
+        siteId,
+        contractorId,
+        context,
+        'TEAM_CREATE',
+        { requestId: value.requestId },
+        async (m) => {
+          await m.query('SELECT pg_advisory_xact_lock(hashtext($1))', [
+            `team-create:${value.requestId}`,
+          ]);
+          const repo = m.getRepository(ContractorTeamEntity),
+            old = await repo.findOneBy({ id: value.requestId });
+          if (old) {
+            if (
+              old.siteId !== siteId ||
+              old.contractorId !== contractorId ||
+              old.createdBy !== actor.id ||
+              old.name !== value.name ||
+              old.description !== (value.description ?? '')
+            )
+              conflict('Request ID was used for different team details');
+            return this.view(m, old);
+          }
+          const team = await repo.save({
+            id: value.requestId,
+            siteId,
+            contractorId,
+            name: value.name,
+            normalizedName: value.name.normalize('NFKC').toLowerCase(),
+            description: value.description ?? '',
+            createdBy: actor.id,
+            isActive: true,
+            version: 1,
+          });
+          await auditAccess(
+            m,
+            actor.id,
+            siteId,
+            'CONTRACTOR_TEAM_CREATED',
+            'contractor_team',
+            team.id,
+            null,
+            { contractorId, name: team.name },
+          );
+          return this.view(m, team);
+        },
+      );
     } catch (error) {
       knownUnique(error, ['uq_team_active_name']);
     }
@@ -593,44 +665,53 @@ export class ContractorTeamsService {
     contractorValue: string,
     idValue: string,
     input: UpdateContractorTeamDto,
+    context?: MainConfigurationCommandContext,
   ) {
     const siteId = uuid(siteValue).toLowerCase(),
       contractorId = uuid(contractorValue).toLowerCase(),
       id = uuid(idValue).toLowerCase(),
       value = command(UpdateContractorTeamDto, input);
     try {
-      return await this.source.transaction(async (m) => {
-        await this.scope(m, actor, siteId, contractorId);
-        const team = await m
-          .getRepository(ContractorTeamEntity)
-          .findOne({ where: { id, siteId, contractorId }, lock: { mode: 'pessimistic_write' } });
-        if (!team) missing();
-        if (!team.isActive) conflict('Archived team cannot be edited');
-        if (
-          team.version === value.expectedVersion + 1 &&
-          team.name === value.name &&
-          team.description === value.description
-        )
+      return await this.writeTeam(
+        actor,
+        siteId,
+        contractorId,
+        context,
+        'metadata',
+        {},
+        async (m) => {
+          const team = await m
+            .getRepository(ContractorTeamEntity)
+            .findOne({ where: { id, siteId, contractorId }, lock: { mode: 'pessimistic_write' } });
+          if (!team) missing();
+          if (!team.isActive) conflict('Archived team cannot be edited');
+          if (
+            team.version === value.expectedVersion + 1 &&
+            team.name === value.name &&
+            team.description === value.description
+          )
+            return this.view(m, team);
+          if (team.version !== value.expectedVersion)
+            conflict('Team changed; reload before editing');
+          const oldName = team.name;
+          team.name = value.name;
+          team.normalizedName = value.name.normalize('NFKC').toLowerCase();
+          team.description = value.description;
+          team.version++;
+          await m.getRepository(ContractorTeamEntity).save(team);
+          await auditAccess(
+            m,
+            actor.id,
+            siteId,
+            'CONTRACTOR_TEAM_UPDATED',
+            'contractor_team',
+            id,
+            null,
+            { oldName, name: team.name, version: team.version },
+          );
           return this.view(m, team);
-        if (team.version !== value.expectedVersion) conflict('Team changed; reload before editing');
-        const oldName = team.name;
-        team.name = value.name;
-        team.normalizedName = value.name.normalize('NFKC').toLowerCase();
-        team.description = value.description;
-        team.version++;
-        await m.getRepository(ContractorTeamEntity).save(team);
-        await auditAccess(
-          m,
-          actor.id,
-          siteId,
-          'CONTRACTOR_TEAM_UPDATED',
-          'contractor_team',
-          id,
-          null,
-          { oldName, name: team.name, version: team.version },
-        );
-        return this.view(m, team);
-      });
+        },
+      );
     } catch (error) {
       knownUnique(error, ['uq_team_active_name']);
     }
@@ -641,48 +722,56 @@ export class ContractorTeamsService {
     contractorValue: string,
     idValue: string,
     input: ArchiveContractorTeamDto,
+    context?: MainConfigurationCommandContext,
   ) {
     const siteId = uuid(siteValue).toLowerCase(),
       contractorId = uuid(contractorValue).toLowerCase(),
       id = uuid(idValue).toLowerCase(),
       value = command(ArchiveContractorTeamDto, input);
-    return this.source.transaction(async (m) => {
-      await this.scope(m, actor, siteId, contractorId);
-      const team = await m
-        .getRepository(ContractorTeamEntity)
-        .findOne({ where: { id, siteId, contractorId }, lock: { mode: 'pessimistic_write' } });
-      if (!team) missing();
-      if (!team.isActive && team.version === value.expectedVersion + 1) return this.view(m, team);
-      if (!team.isActive || team.version !== value.expectedVersion)
-        conflict('Team changed; reload before archiving');
-      const closed = (await m.query(
-        `UPDATE contractor_team_membership tm SET left_at=GREATEST(now(),joined_at),ended_by=$2,end_reason=$3
+    return this.writeTeam(
+      actor,
+      siteId,
+      contractorId,
+      context,
+      'TEAM_ARCHIVE',
+      { id, expectedVersion: value.expectedVersion },
+      async (m) => {
+        const team = await m
+          .getRepository(ContractorTeamEntity)
+          .findOne({ where: { id, siteId, contractorId }, lock: { mode: 'pessimistic_write' } });
+        if (!team) missing();
+        if (!team.isActive && team.version === value.expectedVersion + 1) return this.view(m, team);
+        if (!team.isActive || team.version !== value.expectedVersion)
+          conflict('Team changed; reload before archiving');
+        const closed = (await m.query(
+          `UPDATE contractor_team_membership tm SET left_at=GREATEST(now(),joined_at),ended_by=$2,end_reason=$3
         WHERE tm.team_id=$1 AND tm.left_at IS NULL AND NOT EXISTS (
           SELECT 1 FROM worker w WHERE w.id=tm.worker_id AND w.site_id=tm.site_id AND w.contractor_id=tm.contractor_id AND w.is_active
         ) RETURNING tm.id`,
-        [id, actor.id, value.reason],
-      )) as unknown[];
-      if (
-        await m
-          .getRepository(ContractorTeamMembershipEntity)
-          .existsBy({ teamId: id, leftAt: IsNull() })
-      )
-        conflict('Move or remove all members before archiving this team');
-      team.isActive = false;
-      team.version++;
-      await m.getRepository(ContractorTeamEntity).save(team);
-      await auditAccess(
-        m,
-        actor.id,
-        siteId,
-        'CONTRACTOR_TEAM_ARCHIVED',
-        'contractor_team',
-        id,
-        value.reason,
-        { version: team.version, closedInactiveMemberships: closed },
-      );
-      return this.view(m, team);
-    });
+          [id, actor.id, value.reason],
+        )) as unknown[];
+        if (
+          await m
+            .getRepository(ContractorTeamMembershipEntity)
+            .existsBy({ teamId: id, leftAt: IsNull() })
+        )
+          conflict('Move or remove all members before archiving this team');
+        team.isActive = false;
+        team.version++;
+        await m.getRepository(ContractorTeamEntity).save(team);
+        await auditAccess(
+          m,
+          actor.id,
+          siteId,
+          'CONTRACTOR_TEAM_ARCHIVED',
+          'contractor_team',
+          id,
+          value.reason,
+          { version: team.version, closedInactiveMemberships: closed },
+        );
+        return this.view(m, team);
+      },
+    );
   }
   async assign(
     actor: AuthenticatedUser,
@@ -690,6 +779,7 @@ export class ContractorTeamsService {
     contractorValue: string,
     workerValue: string,
     input: AssignContractorTeamDto,
+    context?: MainConfigurationCommandContext,
   ): Promise<ContractorTeamWorkerResponse> {
     const siteId = uuid(siteValue).toLowerCase(),
       contractorId = uuid(contractorValue).toLowerCase(),
@@ -697,119 +787,131 @@ export class ContractorTeamsService {
       value = command(AssignContractorTeamDto, input),
       reason = value.reason ?? '';
     try {
-      return await this.source.transaction(async (m) => {
-        await this.scope(m, actor, siteId, contractorId);
-        const worker = await m.getRepository(WorkerEntity).findOne({
-          where: { id: workerId, siteId, contractorId, isActive: true },
-          lock: { mode: 'pessimistic_write' },
-        });
-        if (!worker) missing();
-        const repo = m.getRepository(ContractorTeamMembershipEntity),
-          current = await repo.findOneBy({ workerId, siteId, leftAt: IsNull() });
-        const result = (
-          membership: ContractorTeamMembershipEntity | null,
-          team: ContractorTeamEntity | null,
-        ): ContractorTeamWorkerResponse => ({
+      return await this.writeTeam(
+        actor,
+        siteId,
+        contractorId,
+        context,
+        'TEAM_ASSIGN',
+        {
           workerId,
-          displayName: worker.displayName,
-          membershipId: membership?.id ?? null,
-          teamId: team?.id ?? null,
-          teamName: team?.name ?? null,
-        });
-        if (!current && value.teamId === null && value.expectedMembershipId === null)
-          return result(null, null);
-        const old = await repo.findOneBy({ id: value.requestId });
-        if (old) {
-          if (
-            old.workerId !== workerId ||
-            old.siteId !== siteId ||
-            old.contractorId !== contractorId ||
-            old.teamId !== value.teamId ||
-            old.assignedBy !== actor.id ||
-            old.reason !== reason ||
-            old.leftAt ||
-            current?.id !== old.id
-          )
-            conflict('Assignment request was reused or is no longer current');
-          return result(
-            old,
-            await m
-              .getRepository(ContractorTeamEntity)
-              .findOneBy({ id: old.teamId, siteId, contractorId }),
-          );
-        }
-        if (!current && value.teamId === null && value.expectedMembershipId) {
-          const ended = await repo.findOneBy({
-            id: value.expectedMembershipId,
-            workerId,
-            siteId,
-            contractorId,
+          requestId: value.requestId,
+          teamId: value.teamId,
+          expectedMembershipId: value.expectedMembershipId,
+        },
+        async (m) => {
+          const worker = await m.getRepository(WorkerEntity).findOne({
+            where: { id: workerId, siteId, contractorId, isActive: true },
+            lock: { mode: 'pessimistic_write' },
           });
-          if (ended?.leftAt && ended.endedBy === actor.id && ended.endReason === reason)
+          if (!worker) missing();
+          const repo = m.getRepository(ContractorTeamMembershipEntity),
+            current = await repo.findOneBy({ workerId, siteId, leftAt: IsNull() });
+          const result = (
+            membership: ContractorTeamMembershipEntity | null,
+            team: ContractorTeamEntity | null,
+          ): ContractorTeamWorkerResponse => ({
+            workerId,
+            displayName: worker.displayName,
+            membershipId: membership?.id ?? null,
+            teamId: team?.id ?? null,
+            teamName: team?.name ?? null,
+          });
+          if (!current && value.teamId === null && value.expectedMembershipId === null)
             return result(null, null);
-        }
-        if ((current?.id ?? null) !== value.expectedMembershipId)
-          conflict('Worker team changed; reload before assigning');
-        const teamIds = [
-          ...new Set([current?.teamId, value.teamId].filter((id): id is string => !!id)),
-        ].sort();
-        const teams = teamIds.length
-          ? await m.getRepository(ContractorTeamEntity).find({
-              where: { id: In(teamIds) },
-              order: { id: 'ASC' },
-              lock: { mode: 'pessimistic_write' },
-            })
-          : [];
-        const target = value.teamId
-          ? teams.find(
-              (t) =>
-                t.id === value.teamId &&
-                t.siteId === siteId &&
-                t.contractorId === contractorId &&
-                t.isActive,
+          const old = await repo.findOneBy({ id: value.requestId });
+          if (old) {
+            if (
+              old.workerId !== workerId ||
+              old.siteId !== siteId ||
+              old.contractorId !== contractorId ||
+              old.teamId !== value.teamId ||
+              old.assignedBy !== actor.id ||
+              old.reason !== reason ||
+              old.leftAt ||
+              current?.id !== old.id
             )
-          : null;
-        if (value.teamId && !target) missing();
-        if (current?.teamId === value.teamId) return result(current, target ?? null);
-        const now = new Date();
-        if (current) {
-          current.leftAt = now;
-          current.endedBy = actor.id;
-          current.endReason = reason;
-          await repo.save(current);
-        }
-        const membership = target
-          ? await repo.save({
-              id: value.requestId,
+              conflict('Assignment request was reused or is no longer current');
+            return result(
+              old,
+              await m
+                .getRepository(ContractorTeamEntity)
+                .findOneBy({ id: old.teamId, siteId, contractorId }),
+            );
+          }
+          if (!current && value.teamId === null && value.expectedMembershipId) {
+            const ended = await repo.findOneBy({
+              id: value.expectedMembershipId,
+              workerId,
               siteId,
               contractorId,
-              workerId,
-              teamId: target.id,
-              joinedAt: now,
-              leftAt: null,
-              assignedBy: actor.id,
-              reason,
-              endedBy: null,
-              endReason: null,
-            })
-          : null;
-        await auditAccess(
-          m,
-          actor.id,
-          siteId,
-          'CONTRACTOR_TEAM_MEMBERSHIP_CHANGED',
-          'worker',
-          workerId,
-          reason,
-          {
-            previousMembershipId: current?.id ?? null,
-            previousTeamId: current?.teamId ?? null,
-            membershipId: membership?.id ?? null,
-            teamId: target?.id ?? null,
-          },
-        );
-        return result(membership, target ?? null);
-      });
+            });
+            if (ended?.leftAt && ended.endedBy === actor.id && ended.endReason === reason)
+              return result(null, null);
+          }
+          if ((current?.id ?? null) !== value.expectedMembershipId)
+            conflict('Worker team changed; reload before assigning');
+          const teamIds = [
+            ...new Set([current?.teamId, value.teamId].filter((id): id is string => !!id)),
+          ].sort();
+          const teams = teamIds.length
+            ? await m.getRepository(ContractorTeamEntity).find({
+                where: { id: In(teamIds) },
+                order: { id: 'ASC' },
+                lock: { mode: 'pessimistic_write' },
+              })
+            : [];
+          const target = value.teamId
+            ? teams.find(
+                (t) =>
+                  t.id === value.teamId &&
+                  t.siteId === siteId &&
+                  t.contractorId === contractorId &&
+                  t.isActive,
+              )
+            : null;
+          if (value.teamId && !target) missing();
+          if (current?.teamId === value.teamId) return result(current, target ?? null);
+          const now = new Date();
+          if (current) {
+            current.leftAt = now;
+            current.endedBy = actor.id;
+            current.endReason = reason;
+            await repo.save(current);
+          }
+          const membership = target
+            ? await repo.save({
+                id: value.requestId,
+                siteId,
+                contractorId,
+                workerId,
+                teamId: target.id,
+                joinedAt: now,
+                leftAt: null,
+                assignedBy: actor.id,
+                reason,
+                endedBy: null,
+                endReason: null,
+              })
+            : null;
+          await auditAccess(
+            m,
+            actor.id,
+            siteId,
+            'CONTRACTOR_TEAM_MEMBERSHIP_CHANGED',
+            'worker',
+            workerId,
+            reason,
+            {
+              previousMembershipId: current?.id ?? null,
+              previousTeamId: current?.teamId ?? null,
+              membershipId: membership?.id ?? null,
+              teamId: target?.id ?? null,
+            },
+          );
+          return result(membership, target ?? null);
+        },
+      );
     } catch (error) {
       knownUnique(error, ['pk_team_membership_id', 'uq_team_worker_active']);
     }
