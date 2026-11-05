@@ -5,7 +5,8 @@ import { PublicHttpException } from '../src/common/http/public-http-exception.js
 import { ContractorEntity } from '../src/database/entities/contractor.entity.js';
 import { ContractorRepresentativeGrantEntity } from '../src/database/entities/contractor-representative-grant.entity.js';
 import { ContractorSiteParticipationEntity } from '../src/database/entities/contractor-site-participation.entity.js';
-import { UserRole } from '../src/database/entities/user.entity.js';
+import { UserEntity, UserRole } from '../src/database/entities/user.entity.js';
+import { UserRoleAssignmentEntity } from '../src/database/entities/user-role-assignment.entity.js';
 import { WorkerEntity } from '../src/database/entities/worker.entity.js';
 import {
   ContractorOperationsService,
@@ -72,14 +73,30 @@ function enrollmentServiceFor(
 ) {
   const manager = {
     getRepository(target: unknown) {
-      if (target === WorkerEntity) return { findOneBy: async () => worker };
+      if (target === UserEntity)
+        return {
+          findOne: async () => ({
+            id: actor.id,
+            isActive: true,
+            mustChangePassword: actor.mustChangePassword,
+          }),
+        };
+      if (target === UserRoleAssignmentEntity)
+        return {
+          findOne: async () =>
+            actor.roleAssignments.find(
+              (row) =>
+                row.role === UserRole.CONTRACTOR_REPRESENTATIVE && row.siteId === worker.siteId,
+            ) ?? null,
+        };
+      if (target === WorkerEntity) return { findOne: async () => worker };
       if (target === ContractorRepresentativeGrantEntity)
-        return { findOneBy: async () => (hasGrant ? { id: 'grant' } : null) };
+        return { findOne: async () => (hasGrant ? { id: 'grant' } : null) };
       if (target === ContractorEntity)
-        return { findOneBy: async () => ({ id: worker.contractorId, isActive: true }) };
+        return { findOne: async () => ({ id: worker.contractorId, isActive: true }) };
       if (target === ContractorSiteParticipationEntity)
         return {
-          findBy: async () =>
+          find: async () =>
             activeParticipation ? [{ validFrom: new Date('2020-01-01'), validUntil: null }] : [],
         };
       throw new Error('Unexpected repository');
