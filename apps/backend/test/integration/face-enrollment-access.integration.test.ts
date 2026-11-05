@@ -2,6 +2,13 @@ import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
 import { setTimeout } from 'node:timers/promises';
 import { test } from 'node:test';
+import { ConfigService } from '@nestjs/config';
+import { JwtService } from '@nestjs/jwt';
+import { Test } from '@nestjs/testing';
+import { AuthTokenService } from '../../src/modules/auth/auth-token.service.js';
+import { AuthService } from '../../src/modules/auth/auth.service.js';
+import { UserAuthGuard } from '../../src/modules/auth/user-auth.guard.js';
+import { FaceEnrollmentController } from '../../src/modules/workforce/identity/face-enrollment.controller.js';
 import { UserRole } from '../../src/database/entities/user.entity.js';
 import { ContractorOperationsService } from '../../src/modules/workforce/directory/contractor-operations.service.js';
 import { FaceEnrollmentService } from '../../src/modules/workforce/identity/face-enrollment.service.js';
@@ -219,6 +226,162 @@ test('enrollment access retains current account and Site grant state in its tran
       if (writeError) throw writeError;
       assert.equal(completed, true);
     });
+    await t.test(
+      'HTTP enrollment rechecks the original session after adapter awaits',
+      async (http) => {
+        const tokens = new AuthTokenService(
+          new JwtService(),
+          new ConfigService({ AUTH_JWT_SECRET: randomUUID().repeat(3) }),
+        );
+        const auth = new AuthService(db, tokens);
+        let authSession = '',
+          revokeDuringCall = true,
+          adapterFails = false,
+          adapterCalls = 0;
+        const finishAdapter = async () => {
+          adapterCalls++;
+          if (revokeDuringCall)
+            await db.query('UPDATE auth_session SET revoked_at=clock_timestamp() WHERE id=$1', [
+              authSession,
+            ]);
+          if (adapterFails) throw new Error('Synthetic adapter failure');
+        };
+        const enrollment = new FaceEnrollmentService(db, service, {
+          submitSample: async () => {
+            await finishAdapter();
+            return { acceptedSampleCount: 1 };
+          },
+          assessSampleQuality: async () => {
+            await finishAdapter();
+            return { status: 'ACCEPTED' };
+          },
+          completeEnrollment: async () => {
+            await finishAdapter();
+            return {
+              profileReference: `synthetic:${randomUUID()}`,
+              modelVersion: 'synthetic-http-session',
+              encryptedTemplate: 'a'.repeat(150),
+            };
+          },
+        });
+        const module = await Test.createTestingModule({
+          controllers: [FaceEnrollmentController],
+          providers: [
+            { provide: FaceEnrollmentService, useValue: enrollment },
+            { provide: AuthService, useValue: auth },
+            UserAuthGuard,
+          ],
+        }).compile();
+        const app = module.createNestApplication({ logger: false });
+        await app.listen(0, '127.0.0.1');
+        try {
+          for (const scenario of [
+            'complete-revoked',
+            'sample-revoked',
+            'quality-revoked',
+            'failure-revoked',
+            'quality-active',
+            'failure-active',
+            'complete-active',
+          ] as const) {
+            await http.test(scenario, async () => {
+              revokeDuringCall = scenario.endsWith('revoked');
+              adapterFails = scenario.startsWith('failure');
+              adapterCalls = 0;
+              const [{ count: profilesBefore }] = await db.query(
+                'SELECT count(*)::int AS count FROM face_profile WHERE worker_id=$1',
+                [worker],
+              );
+              authSession = randomUUID();
+              await db.query(
+                "INSERT INTO auth_session(id,user_id,client_type,refresh_token_hash,last_refreshed_at,expires_at) VALUES($1,$2,'WEB',$3,clock_timestamp(),clock_timestamp()+interval '1 hour')",
+                [authSession, user, 'a'.repeat(64)],
+              );
+              const { accessToken } = await tokens.issueAccessToken(user, authSession);
+              const session = await enrollment.start(actor, worker, {
+                consentVersion: 'synthetic-http-session',
+              });
+              await enrollment.confirmConsent(session.id, {
+                consentToken: session.consentToken,
+                workerConfirmed: true,
+              });
+              const completing = scenario.startsWith('complete') || adapterFails;
+              if (completing)
+                await db.query(
+                  'UPDATE face_enrollment_session SET accepted_sample_count=3 WHERE id=$1',
+                  [session.id],
+                );
+              const path = scenario.startsWith('quality')
+                ? `workers/${worker}/face-enrollment-quality`
+                : `face-enrollments/${session.id}/${completing ? 'complete' : 'samples'}`;
+              const form = new FormData();
+              form.append(
+                'sample',
+                new Blob(['synthetic JPEG'], { type: 'image/jpeg' }),
+                'sample.jpg',
+              );
+              form.append('target', 'front');
+              const response = await fetch(`${await app.getUrl()}/${path}`, {
+                method: 'POST',
+                headers: { Authorization: `Bearer ${accessToken}` },
+                body: completing ? undefined : form,
+              });
+              await response.arrayBuffer();
+              assert.equal(adapterCalls, 1);
+              const [stored] = await db.query(
+                'SELECT status,accepted_sample_count FROM face_enrollment_session WHERE id=$1',
+                [session.id],
+              );
+              const [{ count }] = await db.query(
+                'SELECT count(*)::int AS count FROM face_profile WHERE worker_id=$1',
+                [worker],
+              );
+              if (adapterFails) {
+                assert.equal(response.status, 500);
+                assert.equal(stored.status, revokeDuringCall ? 'PENDING' : 'FAILED');
+              } else {
+                assert.equal(response.status, revokeDuringCall ? 401 : completing ? 201 : 200);
+                assert.equal(
+                  stored.status,
+                  !revokeDuringCall && completing ? 'COMPLETED' : 'PENDING',
+                );
+              }
+              assert.equal(stored.accepted_sample_count, completing ? 3 : 0);
+              assert.equal(
+                count,
+                profilesBefore + (!revokeDuringCall && !adapterFails && completing ? 1 : 0),
+              );
+            });
+          }
+        } finally {
+          await app.close();
+        }
+        await http.test(
+          'an explicit context must bind the actor and contain reauthorization',
+          async () => {
+            const unauthorized = (error: unknown) =>
+              error instanceof Error &&
+              'getStatus' in error &&
+              typeof error.getStatus === 'function' &&
+              error.getStatus() === 401;
+            await assert.rejects(
+              () => enrollment.getProfile(actor, worker, { actorUserId: user }),
+              unauthorized,
+            );
+            await assert.rejects(
+              () =>
+                enrollment.getProfile(actor, worker, {
+                  actorUserId: randomUUID(),
+                  reauthorize: async () => {
+                    throw new Error('Wrong-actor context must not run');
+                  },
+                }),
+              unauthorized,
+            );
+          },
+        );
+      },
+    );
   } finally {
     await owned.dispose();
   }

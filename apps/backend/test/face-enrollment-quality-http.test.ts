@@ -1,7 +1,7 @@
 import 'reflect-metadata';
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { ValidationPipe } from '@nestjs/common';
+import { ValidationPipe, type ExecutionContext } from '@nestjs/common';
 import { Test } from '@nestjs/testing';
 import type { NestExpressApplication } from '@nestjs/platform-express';
 import { UserAuthGuard } from '../src/modules/auth/user-auth.guard.js';
@@ -10,9 +10,17 @@ import { FaceEnrollmentService } from '../src/modules/workforce/identity/face-en
 
 test('multipart quality requests preserve left/right and never default a missing target to front', async () => {
   const checked: string[] = [];
+  const auth = {
+    canActivate(context: ExecutionContext) {
+      context.switchToHttp().getRequest().user = { id: '00000000-0000-4000-8000-000000000002' };
+      return true;
+    },
+    authenticateRequest: async () => {},
+  };
   const module = await Test.createTestingModule({
     controllers: [FaceEnrollmentController],
     providers: [
+      { provide: UserAuthGuard, useValue: auth },
       {
         provide: FaceEnrollmentService,
         useValue: {
@@ -33,7 +41,7 @@ test('multipart quality requests preserve left/right and never default a missing
     ],
   })
     .overrideGuard(UserAuthGuard)
-    .useValue({ canActivate: () => true })
+    .useValue(auth)
     .compile();
   const app = module.createNestApplication<NestExpressApplication>({ logger: false });
   app.useGlobalPipes(

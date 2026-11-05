@@ -3,6 +3,7 @@ import { createHash, randomUUID } from 'node:crypto';
 import { after, test } from 'node:test';
 import { FaceEnrollmentService } from '../../src/modules/workforce/identity/face-enrollment.service.js';
 import { FaceEnrollmentController } from '../../src/modules/workforce/identity/face-enrollment.controller.js';
+import type { UserAuthGuard } from '../../src/modules/auth/user-auth.guard.js';
 import { FaceGateService } from '../../src/modules/workforce/access/face-gate.service.js';
 import { ContractorOperationsService } from '../../src/modules/workforce/directory/contractor-operations.service.js';
 import { WorkforceConfigurationService } from '../../src/modules/workforce/directory/workforce-configuration.service.js';
@@ -225,10 +226,10 @@ test('account linking, encrypted DB enrollment, scoped matching and revocation',
     for (let index = 0; index < 3; index++) await enrollment.submitSample(actor, session.id, frame);
     const profile = await enrollment.complete(actor, session.id);
     assert.equal(profile.userId, accountId);
-    const response = await new FaceEnrollmentController(enrollment).getProfile(
-      { user: actor } as never,
-      workerId,
-    );
+    // DTO secrecy check; bearer/session enforcement has a separate real-HTTP integration test.
+    const response = await new FaceEnrollmentController(enrollment, {
+      authenticateRequest: async () => {},
+    } as unknown as UserAuthGuard).getProfile({ user: actor } as never, workerId);
     assert.equal(response.userId, accountId);
     assert.equal('encryptedTemplate' in response, false);
     assert.equal(

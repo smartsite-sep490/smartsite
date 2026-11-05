@@ -42,6 +42,7 @@ import {
 } from '../../../common/http/management-response.dto.js';
 import type { AuthenticatedRequest } from '../../auth/auth.service.js';
 import { UserAuthGuard } from '../../auth/user-auth.guard.js';
+import { configurationCommandContext } from '../../auth/configuration-command-context.js';
 import {
   FaceEnrollmentService,
   StartFaceEnrollmentCommand,
@@ -114,11 +115,20 @@ function profileResponse(profile: {
 export class FaceEnrollmentController {
   private readonly logger = new Logger(FaceEnrollmentController.name);
 
-  constructor(private readonly enrollment: FaceEnrollmentService) {}
+  constructor(
+    private readonly enrollment: FaceEnrollmentService,
+    private readonly auth: UserAuthGuard,
+  ) {}
 
   @Post('face-enrollments/:sessionId/cancel')
   async cancel(@Req() request: AuthenticatedRequest, @Param('sessionId') sessionId: string) {
-    return sessionResponse(await this.enrollment.cancel(request.user!, sessionId));
+    return sessionResponse(
+      await this.enrollment.cancel(
+        request.user!,
+        sessionId,
+        configurationCommandContext(request, this.auth),
+      ),
+    );
   }
 
   @Post('workers/:workerId/face-enrollments')
@@ -128,7 +138,12 @@ export class FaceEnrollmentController {
     @Param('workerId') workerId: string,
     @Body() input: StartFaceEnrollmentCommand,
   ) {
-    const session = await this.enrollment.start(request.user!, workerId, input);
+    const session = await this.enrollment.start(
+      request.user!,
+      workerId,
+      input,
+      configurationCommandContext(request, this.auth),
+    );
     this.logger.log({
       actorId: request.user!.id,
       action: 'face-enrollment.start',
@@ -146,7 +161,14 @@ export class FaceEnrollmentController {
     @Param('sessionId') sessionId: string,
     @UploadedFile() sample: UploadedFaceSample | undefined,
   ) {
-    return sessionResponse(await this.enrollment.submitSample(request.user!, sessionId, sample));
+    return sessionResponse(
+      await this.enrollment.submitSample(
+        request.user!,
+        sessionId,
+        sample,
+        configurationCommandContext(request, this.auth),
+      ),
+    );
   }
 
   @Post('workers/:workerId/face-enrollment-quality')
@@ -159,13 +181,23 @@ export class FaceEnrollmentController {
     @UploadedFile() sample: UploadedFaceSample | undefined,
     @Body() input: FaceQualityCommand,
   ) {
-    return this.enrollment.assessSampleQuality(request.user!, workerId, sample, input.target);
+    return this.enrollment.assessSampleQuality(
+      request.user!,
+      workerId,
+      sample,
+      input.target,
+      configurationCommandContext(request, this.auth),
+    );
   }
 
   @Post('face-enrollments/:sessionId/complete')
   @ApiOkResponse({ type: FaceProfileResponseDto })
   async complete(@Req() request: AuthenticatedRequest, @Param('sessionId') sessionId: string) {
-    const profile = await this.enrollment.complete(request.user!, sessionId);
+    const profile = await this.enrollment.complete(
+      request.user!,
+      sessionId,
+      configurationCommandContext(request, this.auth),
+    );
     this.logger.log({
       actorId: request.user!.id,
       action: 'face-enrollment.complete',
@@ -178,13 +210,24 @@ export class FaceEnrollmentController {
   @Get('workers/:workerId/face-profile')
   @ApiOkResponse({ type: FaceProfileResponseDto })
   async getProfile(@Req() request: AuthenticatedRequest, @Param('workerId') workerId: string) {
-    return profileResponse(await this.enrollment.getProfile(request.user!, workerId));
+    return profileResponse(
+      await this.enrollment.getProfile(
+        request.user!,
+        workerId,
+        configurationCommandContext(request, this.auth),
+      ),
+    );
   }
 
   @Post('workers/:workerId/face-profile/revoke')
   @ApiOkResponse({ type: FaceProfileResponseDto })
   async revoke(@Req() request: AuthenticatedRequest, @Param('workerId') workerId: string) {
-    const profile = await this.enrollment.revokeProfile(request.user!, workerId);
+    const profile = await this.enrollment.revokeProfile(
+      request.user!,
+      workerId,
+      false,
+      configurationCommandContext(request, this.auth),
+    );
     this.logger.log({
       actorId: request.user!.id,
       action: 'face-profile.revoke',
@@ -197,7 +240,14 @@ export class FaceEnrollmentController {
     @Req() request: AuthenticatedRequest,
     @Param('workerId') workerId: string,
   ) {
-    return profileResponse(await this.enrollment.revokeProfile(request.user!, workerId, true));
+    return profileResponse(
+      await this.enrollment.revokeProfile(
+        request.user!,
+        workerId,
+        true,
+        configurationCommandContext(request, this.auth),
+      ),
+    );
   }
 }
 

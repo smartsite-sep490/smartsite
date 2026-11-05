@@ -1,9 +1,10 @@
 import { createHash, randomUUID, randomBytes } from 'node:crypto';
 import type { EnrollmentCaptureTarget } from '@smartsite/contracts';
-import { HttpStatus, Inject, Injectable } from '@nestjs/common';
+import { HttpStatus, Inject, Injectable, UnauthorizedException } from '@nestjs/common';
 import { IsNotEmpty, IsString, MaxLength, Matches, Equals } from 'class-validator';
 import { DataSource, In, IsNull, MoreThan, Not, type EntityManager } from 'typeorm';
 import { command, conflict, missing, uuid } from '../../../common/configuration/commands.js';
+import type { MainConfigurationCommandContext } from '../../../common/configuration/main-configuration-authority.js';
 import { PublicHttpException } from '../../../common/http/public-http-exception.js';
 import { UserEntity, UserRole } from '../../../database/entities/user.entity.js';
 import { UserRoleAssignmentEntity } from '../../../database/entities/user-role-assignment.entity.js';
@@ -82,9 +83,15 @@ export class FaceEnrollmentService {
       });
   }
 
-  async start(actor: WorkforceActor, workerIdValue: string, input: StartFaceEnrollmentCommand) {
+  async start(
+    actor: WorkforceActor,
+    workerIdValue: string,
+    input: StartFaceEnrollmentCommand,
+    context?: MainConfigurationCommandContext,
+  ) {
     const value = command(StartFaceEnrollmentCommand, input);
     return this.dataSource.transaction(async (manager) => {
+      await this.reauthorize(manager, actor, context);
       const worker = await this.workforce.requireWorkerEnrollmentAccess(
         manager,
         actor,
@@ -158,8 +165,13 @@ export class FaceEnrollmentService {
     });
   }
 
-  async cancel(actor: WorkforceActor, sessionIdValue: string) {
+  async cancel(
+    actor: WorkforceActor,
+    sessionIdValue: string,
+    context?: MainConfigurationCommandContext,
+  ) {
     return this.dataSource.transaction(async (manager) => {
+      await this.reauthorize(manager, actor, context);
       const session = await manager.getRepository(FaceEnrollmentSessionEntity).findOne({
         where: { id: uuid(sessionIdValue), actorUserId: actor.id },
         lock: { mode: 'pessimistic_write' },
@@ -179,8 +191,13 @@ export class FaceEnrollmentService {
     });
   }
 
-  async getProfile(actor: WorkforceActor, workerIdValue: string): Promise<FaceProfileEntity> {
+  async getProfile(
+    actor: WorkforceActor,
+    workerIdValue: string,
+    context?: MainConfigurationCommandContext,
+  ): Promise<FaceProfileEntity> {
     return this.dataSource.transaction(async (manager) => {
+      await this.reauthorize(manager, actor, context);
       const worker = await this.workforce.requireWorkerEnrollmentAccess(
         manager,
         actor,
@@ -198,8 +215,10 @@ export class FaceEnrollmentService {
     actor: WorkforceActor,
     workerIdValue: string,
     erase = false,
+    context?: MainConfigurationCommandContext,
   ): Promise<FaceProfileEntity> {
     return this.dataSource.transaction(async (manager) => {
+      await this.reauthorize(manager, actor, context);
       const worker = await this.workforce.requireWorkerEnrollmentAccess(
         manager,
         actor,
@@ -242,11 +261,12 @@ export class FaceEnrollmentService {
     actor: WorkforceActor,
     sessionIdValue: string,
     sample: UploadedFaceSample | undefined,
+    context?: MainConfigurationCommandContext,
   ): Promise<FaceEnrollmentSessionEntity> {
     this.validateJpeg(sample);
     const sessionId = uuid(sessionIdValue);
     const session = await this.dataSource.transaction(async (manager) =>
-      this.requireOpenSession(manager, actor, sessionId),
+      this.requireOpenSession(manager, actor, sessionId, false, context),
     );
     // Never put jpeg bytes in a transaction, database entity, application log, or browser storage.
     const result = await this.adapter.submitSample({
@@ -264,7 +284,7 @@ export class FaceEnrollmentService {
         message: 'Face verification returned an invalid enrollment result',
       });
     return this.dataSource.transaction(async (manager) => {
-      const current = await this.requireOpenSession(manager, actor, session.id, true);
+      const current = await this.requireOpenSession(manager, actor, session.id, true, context);
       if (current.acceptedSampleCount !== session.acceptedSampleCount)
         conflict('Face enrollment sample is no longer current');
       current.acceptedSampleCount = result.acceptedSampleCount;
@@ -278,9 +298,11 @@ export class FaceEnrollmentService {
     workerIdValue: string,
     sample: UploadedFaceSample | undefined,
     target: EnrollmentCaptureTarget,
+    context?: MainConfigurationCommandContext,
   ): Promise<FaceSampleQuality> {
     this.validateJpeg(sample);
-    await this.dataSource.transaction(async (manager) => {
+    const requireQualityAccess = async (manager: EntityManager) => {
+      await this.reauthorize(manager, actor, context);
       const worker = await this.workforce.requireWorkerEnrollmentAccess(
         manager,
         actor,
@@ -296,13 +318,15 @@ export class FaceEnrollmentService {
         }))
       )
         conflict('Worker consent is required before face quality assessment');
-    });
+    };
+    await this.dataSource.transaction(requireQualityAccess);
     if (!['front', 'left', 'right'].includes(target))
       throw new PublicHttpException(HttpStatus.BAD_REQUEST, {
         code: 'VALIDATION_FAILED',
         message: 'Invalid face capture target',
       });
     const result = await this.adapter.assessSampleQuality(sample.buffer, target);
+    await this.dataSource.transaction(requireQualityAccess);
     if (result.status === 'AI_UNAVAILABLE')
       throw new PublicHttpException(HttpStatus.SERVICE_UNAVAILABLE, {
         code: 'SERVICE_UNAVAILABLE',
@@ -311,10 +335,14 @@ export class FaceEnrollmentService {
     return result;
   }
 
-  async complete(actor: WorkforceActor, sessionIdValue: string): Promise<FaceProfileEntity> {
+  async complete(
+    actor: WorkforceActor,
+    sessionIdValue: string,
+    context?: MainConfigurationCommandContext,
+  ): Promise<FaceProfileEntity> {
     const sessionId = uuid(sessionIdValue);
     const session = await this.dataSource.transaction(async (manager) =>
-      this.requireOpenSession(manager, actor, sessionId),
+      this.requireOpenSession(manager, actor, sessionId, false, context),
     );
     if (session.acceptedSampleCount !== 3)
       conflict('Face enrollment requires three accepted samples');
@@ -325,11 +353,11 @@ export class FaceEnrollmentService {
     } catch (error) {
       // A quality/model failure must not leave the session active forever;
       // callers can capture a fresh three-sample session and retry.
-      await this.markSessionFailed(actor, session.id);
+      await this.markSessionFailed(actor, session.id, context);
       throw error;
     }
     return this.dataSource.transaction(async (manager) => {
-      const current = await this.requireOpenSession(manager, actor, session.id, true);
+      const current = await this.requireOpenSession(manager, actor, session.id, true, context);
       if (current.acceptedSampleCount !== 3)
         conflict('Face enrollment requires three accepted samples');
       await manager.query('SELECT pg_advisory_xact_lock(hashtext($1))', [
@@ -397,10 +425,14 @@ export class FaceEnrollmentService {
     });
   }
 
-  private async markSessionFailed(actor: WorkforceActor, sessionId: string): Promise<void> {
+  private async markSessionFailed(
+    actor: WorkforceActor,
+    sessionId: string,
+    context?: MainConfigurationCommandContext,
+  ): Promise<void> {
     try {
       await this.dataSource.transaction(async (manager) => {
-        const current = await this.requireOpenSession(manager, actor, sessionId, true);
+        const current = await this.requireOpenSession(manager, actor, sessionId, true, context);
         current.status = FaceEnrollmentSessionStatus.FAILED;
         current.completedAt = new Date();
         await manager.getRepository(FaceEnrollmentSessionEntity).save(current);
@@ -427,7 +459,9 @@ export class FaceEnrollmentService {
     actor: WorkforceActor,
     sessionId: string,
     lock = false,
+    context?: MainConfigurationCommandContext,
   ): Promise<FaceEnrollmentSessionEntity> {
+    await this.reauthorize(manager, actor, context);
     const session = lock
       ? await manager
           .getRepository(FaceEnrollmentSessionEntity)
@@ -473,5 +507,16 @@ export class FaceEnrollmentService {
       { userId: worker.userId, siteId: IsNull(), role: UserRole.ADMIN },
     ]);
     if (!user || !role) conflict('The linked account must be active and assigned to this site');
+  }
+
+  private async reauthorize(
+    manager: EntityManager,
+    actor: WorkforceActor,
+    context?: MainConfigurationCommandContext,
+  ) {
+    // HTTP callers supply the original bearer; trusted in-process callers retain their actor API.
+    if (!context) return;
+    if (context.actorUserId !== actor.id || !context.reauthorize) throw new UnauthorizedException();
+    await context.reauthorize(manager);
   }
 }
