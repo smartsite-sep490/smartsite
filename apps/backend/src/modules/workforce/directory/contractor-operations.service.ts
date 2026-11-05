@@ -377,25 +377,43 @@ export class ContractorOperationsService {
     actor: WorkforceActor,
     contractorIdValue: string,
     input: CreateContractorWorkerCommand,
+    context?: MainConfigurationCommandContext,
   ) {
     const contractorId = uuid(contractorIdValue);
     const value = command(CreateContractorWorkerCommand, input);
     const siteId = uuid(value.siteId);
-    return this.dataSource.transaction(async (manager) => {
-      await this.requireWorkerCreationAccess(manager, actor, contractorId, siteId);
-      try {
-        return await manager.getRepository(WorkerEntity).save({
-          id: randomUUID(),
-          contractorId,
-          siteId,
-          externalId: value.externalId,
-          displayName: value.displayName,
-          isActive: true,
-        });
-      } catch (error) {
-        knownUnique(error, ['uq_worker_site_external_id']);
-      }
-    });
+    if (context && uuid(context.actorUserId).toLowerCase() !== uuid(actor.id).toLowerCase())
+      this.forbidden();
+    return executeMainConfigurationCommand(
+      this.dataSource,
+      context,
+      'CONTRACTOR_WORKER_CREATE',
+      { contractorId, siteId, externalId: value.externalId },
+      async (manager) => {
+        await this.requireWorkerCreationAccess(manager, actor, contractorId, siteId, true);
+        try {
+          return await manager.getRepository(WorkerEntity).save({
+            id: randomUUID(),
+            contractorId,
+            siteId,
+            externalId: value.externalId,
+            displayName: value.displayName,
+            isActive: true,
+          });
+        } catch (error) {
+          knownUnique(error, ['uq_worker_site_external_id']);
+        }
+      },
+      context
+        ? async (manager) => {
+            const roles = await manager.query(
+              "SELECT id FROM user_role_assignment WHERE user_id=$1 AND site_id=$2 AND role='CONTRACTOR_REPRESENTATIVE' FOR SHARE",
+              [context.actorUserId, siteId],
+            );
+            if (!roles.length) this.forbidden();
+          }
+        : undefined,
+    );
   }
 
   async requireWorkerCreationAccess(
