@@ -8,9 +8,18 @@ import {
   type SafetyAlertType,
 } from '@smartsite/api-client';
 import { AppLayout, type ActiveTab } from './components/layout/AppLayout';
-import { LiveMonitoringView } from './components/live/LiveMonitoringView';
-import { PpeMonitorWorkspace } from './components/ppe/PpeMonitorWorkspace';
 import { CameraSetupBoundary } from './components/cameras/CameraSetupBoundary';
+import { SafetyMonitorBoundary } from './components/cameras/SafetyMonitorBoundary';
+const LiveMonitoringView = lazy(() =>
+  import('./components/live/LiveMonitoringView').then((module) => ({
+    default: module.LiveMonitoringView,
+  })),
+);
+const PpeMonitorWorkspace = lazy(() =>
+  import('./components/ppe/PpeMonitorWorkspace').then((module) => ({
+    default: module.PpeMonitorWorkspace,
+  })),
+);
 const CameraSetupRoute = lazy(() =>
   import('./components/cameras/CameraSetupRoute').then((module) => ({
     default: module.CameraSetupRoute,
@@ -155,15 +164,25 @@ function ProtectedRoutes({ defaultAuthTab, alertsContext, onNavigate }: Protecte
         <Route path="/access" element={<AccessControlView apiUrl={apiUrl} />} />
         <Route
           path="/live-monitoring"
-          element={<LiveMonitoringView onNavigate={(tab) => onNavigate(tab)} />}
+          element={
+            <SafetyMonitorBoundary>
+              <Suspense fallback={<p role="status">{t('auth.loadingAccount')}</p>}>
+                <LiveMonitoringView onNavigate={(tab) => onNavigate(tab)} />
+              </Suspense>
+            </SafetyMonitorBoundary>
+          }
         />
         <Route
           path="/ppe"
           element={
-            <PpeMonitorWorkspace
-              apiUrl={apiUrl}
-              session={{ accessToken, user: currentUser.data! }}
-            />
+            <SafetyMonitorBoundary>
+              <Suspense fallback={<p role="status">{t('auth.loadingAccount')}</p>}>
+                <PpeMonitorWorkspace
+                  apiUrl={apiUrl}
+                  session={{ accessToken, user: currentUser.data! }}
+                />
+              </Suspense>
+            </SafetyMonitorBoundary>
           }
         />
         <Route
@@ -179,12 +198,16 @@ function ProtectedRoutes({ defaultAuthTab, alertsContext, onNavigate }: Protecte
         <Route
           path="/zones"
           element={
-            <PpeMonitorWorkspace
-              key="zones"
-              observationMode="zone"
-              session={{ accessToken, user: currentUser.data! }}
-              apiUrl={apiUrl}
-            />
+            <SafetyMonitorBoundary>
+              <Suspense fallback={<p role="status">{t('auth.loadingAccount')}</p>}>
+                <PpeMonitorWorkspace
+                  key="zones"
+                  observationMode="zone"
+                  session={{ accessToken, user: currentUser.data! }}
+                  apiUrl={apiUrl}
+                />
+              </Suspense>
+            </SafetyMonitorBoundary>
           }
         />
         <Route

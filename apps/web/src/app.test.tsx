@@ -269,7 +269,7 @@ describe('App Navigation and Context Lifecycle', () => {
     expect(screen.queryByRole('heading', { name: 'Safety Alerts Queue' })).toBeNull();
   });
 
-  it('retains other explicitly assigned roles for a Security/Admin account', () => {
+  it('retains other explicitly assigned roles for a Security/Admin account', async () => {
     accountState.roleAssignments = [
       { role: 'SECURITY_OFFICER', siteId: 'site-alpha' },
       { role: 'ADMIN', siteId: null },
@@ -281,10 +281,10 @@ describe('App Navigation and Context Lifecycle', () => {
         </QueryClientProvider>
       </MemoryRouter>,
     );
-    expect(screen.getByRole('heading', { name: 'PPE Monitoring' })).toBeTruthy();
+    expect(await screen.findByRole('heading', { name: 'PPE Monitoring' })).toBeTruthy();
   });
 
-  it('mounts the scoped zone workspace at the actual route', () => {
+  it('mounts the scoped zone workspace at the actual route', async () => {
     render(
       <MemoryRouter initialEntries={['/zones']}>
         <QueryClientProvider client={queryClient}>
@@ -292,7 +292,7 @@ describe('App Navigation and Context Lifecycle', () => {
         </QueryClientProvider>
       </MemoryRouter>,
     );
-    expect(screen.getByRole('heading', { name: 'Restricted Zones' })).toBeTruthy();
+    expect(await screen.findByRole('heading', { name: 'Restricted Zones' })).toBeTruthy();
   });
 
   it('clears notification URL selection when returning through the unfiltered incidents sidebar', async () => {
@@ -306,7 +306,7 @@ describe('App Navigation and Context Lifecycle', () => {
     );
     expect(screen.getByTestId('initial-alert').textContent).toBe('alert-a');
     await user.click(screen.getByRole('button', { name: 'Sidebar PPE' }));
-    expect(screen.getByRole('heading', { name: 'PPE Monitoring' })).toBeTruthy();
+    expect(await screen.findByRole('heading', { name: 'PPE Monitoring' })).toBeTruthy();
     await user.click(screen.getByRole('button', { name: 'Sidebar Incidents' }));
     expect(screen.getByTestId('initial-alert').textContent).toBe('');
     expect(screen.getByTestId('initial-type').textContent).toBe('ALL');
