@@ -102,6 +102,8 @@ for (const path of [
   'apps/backend/src/modules/workforce/directory/workforce.controller.ts',
   'apps/backend/src/modules/workforce/directory/contractor-operations.service.ts',
   'apps/backend/src/modules/workforce/directory/contractor-operations.controller.ts',
+  'apps/backend/src/modules/workforce/directory/contractor-worker-accounts.controller.ts',
+  'apps/backend/src/modules/workforce/directory/contractor-worker-accounts.service.ts',
   'apps/backend/src/modules/workforce/directory/worker-assignment.controller.ts',
   'apps/backend/src/modules/workforce/shared/access-audit.ts',
   'apps/backend/src/modules/workforce/access/site-access-setup.controller.ts',
