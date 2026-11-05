@@ -156,6 +156,7 @@ export class SiteAccessSetupService {
         workerId: a.workerId,
         workerName: workers.find((w) => w.id === a.workerId)?.displayName ?? a.workerId,
         siteContractorId: a.siteContractorId,
+        zoneIds: a.zoneIds,
         status: a.status,
         validFrom: a.validFrom.toISOString(),
         validUntil: a.validUntil?.toISOString() ?? null,

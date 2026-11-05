@@ -147,6 +147,16 @@ test('Site Zone commands preserve scoped authority, retry and atomic audit', asy
         .length;
 
     await t.test(
+      'Access Setup exposes the approved Zone IDs for the scoped assignment',
+      async () => {
+        const options = await service.options(rep.actor, site);
+        assert.deepEqual(options.assignments.find((item) => item.id === assignment)?.zoneIds, [
+          zone,
+        ]);
+      },
+    );
+
+    await t.test(
       'concurrent exact Contractor grant creates one permission and one business audit',
       async () => {
         const [first, second] = await Promise.all([grantContractor(), grantContractor()]);
