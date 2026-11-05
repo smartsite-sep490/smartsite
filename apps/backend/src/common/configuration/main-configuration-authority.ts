@@ -255,12 +255,16 @@ export async function executeMainConfigurationCommand<T>(
   // Account-first enrollment locks the target account before looking for its
   // Worker. A waiter must see the first creator's committed Worker after that
   // lock, rather than reuse a pre-lock SERIALIZABLE snapshot and report409.
-  // Team writers serialize through advisory or row locks. Lookups after waiting
+  // Team and Zone permission writers serialize through advisory or row locks. Lookups after waiting
   // must see a committed retry result rather than a snapshot taken before the lock.
   const refreshAfterLock =
     revokesAccountSessions ||
     operation === 'WORKER_ACCOUNT_PREPARE' ||
-    operation.startsWith('TEAM_');
+    operation.startsWith('TEAM_') ||
+    operation === 'CONTRACTOR_ZONE_GRANT' ||
+    operation === 'CONTRACTOR_ZONE_REVOKE' ||
+    operation === 'WORKER_ZONE_GRANT' ||
+    operation === 'WORKER_ZONE_REVOKE';
   const result = await (
     context
       ? withZoneAuthorityTransaction(
