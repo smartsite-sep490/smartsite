@@ -1,4 +1,9 @@
 import { randomUUID } from 'node:crypto';
+import {
+  executeMainConfigurationCommand,
+  type MainConfigurationCommandContext,
+} from '../../../common/configuration/main-configuration-authority.js';
+import { siteManagerCommandAuthorization } from '../../auth/site-manager.guard.js';
 import { HttpStatus, Injectable } from '@nestjs/common';
 import { IsUUID } from 'class-validator';
 import { DataSource, In, IsNull, type EntityManager, type FindOptionsWhere } from 'typeorm';
@@ -386,24 +391,20 @@ export class WorkforceConfigurationService {
       (until && (+until <= now || +until <= +from))
     )
       conflict('Representative registration requires a currently active participation interval');
-    const contractor = await manager
-      .getRepository(ContractorEntity)
-      .save({
-        id: randomUUID(),
-        code: `CTR-${randomUUID().toUpperCase()}`,
-        name: value.name,
-        isActive: true,
-      });
-    await manager
-      .getRepository(ContractorSiteParticipationEntity)
-      .save({
-        id: randomUUID(),
-        contractorId: contractor.id,
-        siteId,
-        validFrom: from,
-        validUntil: until,
-        isActive: true,
-      });
+    const contractor = await manager.getRepository(ContractorEntity).save({
+      id: randomUUID(),
+      code: `CTR-${randomUUID().toUpperCase()}`,
+      name: value.name,
+      isActive: true,
+    });
+    await manager.getRepository(ContractorSiteParticipationEntity).save({
+      id: randomUUID(),
+      contractorId: contractor.id,
+      siteId,
+      validFrom: from,
+      validUntil: until,
+      isActive: true,
+    });
     return contractor;
   }
 
@@ -441,10 +442,20 @@ export class WorkforceConfigurationService {
     siteId: string,
     contractorId: string,
     input: AssignContractorRepresentativeDto,
+    context?: MainConfigurationCommandContext,
   ): Promise<ContractorRepresentativeAssignmentEntity> {
+    const scopedSiteId = uuid(siteId),
+      scopedContractorId = uuid(contractorId);
+    const value = command(AssignContractorRepresentativeDto, input);
     try {
-      return await this.dataSource.transaction((manager) =>
-        this.assignRepresentativeInTransaction(manager, siteId, contractorId, input),
+      return await executeMainConfigurationCommand(
+        this.dataSource,
+        context,
+        'MAIN_REPRESENTATIVE_ASSIGN',
+        { siteId: scopedSiteId, contractorId: scopedContractorId, userId: value.userId },
+        (manager) =>
+          this.assignRepresentativeInTransaction(manager, scopedSiteId, scopedContractorId, value),
+        siteManagerCommandAuthorization(scopedSiteId, context?.actorUserId),
       );
     } catch (error) {
       knownUnique(error, [

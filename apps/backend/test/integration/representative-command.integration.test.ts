@@ -146,10 +146,41 @@ test('representative commands keep transaction authentication, Site scope and at
       },
     );
     await t.test(
+      'existing representative assignment rechecks scope and bearer even on no-op',
+      async () => {
+        const workforce = new WorkforceConfigurationService(db);
+        const value = { userId: representativeId };
+        const assignment = await workforce.assignRepresentative(site, contractorId, value, context);
+        assert.equal(assignment.userId, representativeId);
+        await rejectUnchanged(
+          () => workforce.assignRepresentative(otherSite, contractorId, value, context),
+          403,
+        );
+        await db.query('UPDATE auth_session SET revoked_at=clock_timestamp() WHERE id=$1', [
+          session,
+        ]);
+        await rejectUnchanged(
+          () => workforce.assignRepresentative(site, contractorId, value, context),
+          401,
+        );
+        await db.query('UPDATE auth_session SET revoked_at=NULL WHERE id=$1', [session]);
+      },
+    );
+    await t.test(
       'partial canonical journal refuses all combined writes before mutation',
       async () => {
         await db.query('CREATE TABLE authorization_history_baseline (synthetic boolean)');
         await rejectUnchanged(() => service.createWithContractor(site, combined(), context), 503);
+        await rejectUnchanged(
+          () =>
+            new WorkforceConfigurationService(db).assignRepresentative(
+              site,
+              contractorId,
+              { userId: representativeId },
+              context,
+            ),
+          503,
+        );
       },
     );
   } finally {
