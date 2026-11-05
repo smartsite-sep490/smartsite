@@ -90,6 +90,8 @@ export const MAIN_AUTHORITY_CUTOVER_RELEASE_FILES = [
   'modules/workforce/directory/contractor-operations.controller.ts',
   'modules/workforce/directory/worker-assignment.controller.ts',
   'modules/workforce/shared/access-audit.ts',
+  'modules/workforce/access/site-access-setup.controller.ts',
+  'modules/workforce/access/site-access-setup.service.ts',
   'modules/workforce/teams/contractor-teams.controller.ts',
   'modules/workforce/teams/contractor-teams.service.ts',
   'modules/workforce/teams/dto/contractor-team.dto.ts',
