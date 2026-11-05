@@ -32,6 +32,7 @@ import { pagination } from '../../../common/http/pagination.js';
 import type { WorkerEntity } from '../../../database/entities/worker.entity.js';
 import type { AuthenticatedRequest } from '../../auth/auth.service.js';
 import { AdminGuard, UserAuthGuard } from '../../auth/user-auth.guard.js';
+import { configurationCommandContext } from '../../auth/configuration-command-context.js';
 import { CreateWorkerDto } from './dto/workforce.dto.js';
 import { ContractorOperationsService } from './contractor-operations.service.js';
 import { invalid } from '../../../common/configuration/commands.js';
@@ -75,6 +76,7 @@ export class WorkforceController {
   constructor(
     private readonly workforce: WorkforceConfigurationService,
     private readonly contractors: ContractorOperationsService,
+    private readonly auth: UserAuthGuard,
   ) {}
 
   @Post('for-account')
@@ -85,7 +87,11 @@ export class WorkforceController {
     @Param('siteId') siteId: string,
     @Body() input: LinkWorkerAccountCommand,
   ) {
-    const worker = await this.workforce.forAccount(siteId, input);
+    const worker = await this.workforce.forAccount(
+      siteId,
+      input,
+      configurationCommandContext(request, this.auth),
+    );
     this.logger.log({
       actorId: request.user!.id,
       action: 'worker.account.prepare',
@@ -104,7 +110,12 @@ export class WorkforceController {
     @Param('workerId') workerId: string,
     @Body() input: LinkWorkerAccountCommand,
   ) {
-    const worker = await this.workforce.linkAccount(siteId, workerId, input);
+    const worker = await this.workforce.linkAccount(
+      siteId,
+      workerId,
+      input,
+      configurationCommandContext(request, this.auth),
+    );
     this.logger.log({
       actorId: request.user!.id,
       action: 'worker.account.link',
