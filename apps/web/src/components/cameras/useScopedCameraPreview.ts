@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useQuery, useQueryClient, type QueryClient } from '@tanstack/react-query';
 import { ApiError, SmartSiteManagementClient } from '@smartsite/api-client';
+import { deferPreviewReads, waitForPreviewRead } from './previewReadBudget';
 import {
   parseScopedRealtimePreview as parseRealtimePreview,
   type ScopedRealtimePreview as RealtimePreview,
@@ -187,10 +188,25 @@ export function useScopedCameraPreview({
       if (!token || !siteId || !cameraId) {
         throw new ApiError('invalid-response', 'Camera preview scope is incomplete');
       }
-      const response = await managementClient.getCameraPreview(token, siteId, cameraId, {
-        signal,
-        timeoutMs: 3000,
-      });
+      if (typeof document !== 'undefined' && document.hidden)
+        throw new DOMException('Preview viewer is hidden', 'AbortError');
+      await waitForPreviewRead(queryClient, apiUrl, signal);
+      signal.throwIfAborted();
+      if (
+        (typeof document !== 'undefined' && document.hidden) ||
+        !queryClient.getQueryCache().find({ queryKey, exact: true })?.isActive()
+      )
+        throw new DOMException('Preview viewer is inactive', 'AbortError');
+      const response = await managementClient
+        .getCameraPreview(token, siteId, cameraId, {
+          signal,
+          timeoutMs: 3000,
+        })
+        .catch((error: unknown) => {
+          if (error instanceof ApiError && error.status === 429)
+            deferPreviewReads(queryClient, apiUrl, error.retryAfterSeconds);
+          throw error;
+        });
 
       // Strict envelope scope check
       if (response.siteId !== siteId || response.cameraId !== cameraId) {
@@ -256,6 +272,14 @@ export function useScopedCameraPreview({
   });
   if (query.isError && decodedState !== null) setDecodedState(null);
   const { isFetching, error: queryError, refetch, dataUpdatedAt, errorUpdateCount } = query;
+
+  useEffect(() => {
+    if (
+      !isDocumentVisible ||
+      (!isScopeReady && !queryClient.getQueryCache().find({ queryKey, exact: true })?.isActive())
+    )
+      void queryClient.cancelQueries({ queryKey, exact: true });
+  }, [isDocumentVisible, isScopeReady, queryClient, queryKey]);
 
   // Polling scheduler: re-armed by visibility state and completion transitions,
   // strictly preserving 429 Retry-After deadline, halting permanently on 401/403, and preventing bursts.

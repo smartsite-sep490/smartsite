@@ -1286,17 +1286,17 @@ describe('useScopedCameraPreview', () => {
         { wrapper: createWrapper() },
       );
 
-      // First query runs upon mount
+      // Hidden viewers must not start the first request.
       await act(async () => {
         await vi.advanceTimersByTimeAsync(50);
       });
-      expect(getPreviewSpy).toHaveBeenCalledTimes(1);
+      expect(getPreviewSpy).toHaveBeenCalledTimes(0);
 
       // Advance by 3000ms while hidden: scheduler must NOT poll in background
       await act(async () => {
         await vi.advanceTimersByTimeAsync(3000);
       });
-      expect(getPreviewSpy).toHaveBeenCalledTimes(1);
+      expect(getPreviewSpy).toHaveBeenCalledTimes(0);
 
       // Tab becomes visible again: dispatch event in its own act, then advance timers in next act
       Object.defineProperty(document, 'hidden', {
@@ -1312,7 +1312,7 @@ describe('useScopedCameraPreview', () => {
       });
 
       // Exactly 1 resume refetch triggered without burst
-      expect(getPreviewSpy).toHaveBeenCalledTimes(2);
+      expect(getPreviewSpy).toHaveBeenCalledTimes(1);
     } finally {
       Object.defineProperty(document, 'hidden', {
         value: false,
