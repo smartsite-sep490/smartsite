@@ -1,4 +1,9 @@
 import { randomUUID } from 'node:crypto';
+import {
+  executeMainConfigurationCommand,
+  type MainConfigurationCommandContext,
+} from '../../../common/configuration/main-configuration-authority.js';
+import { siteManagerCommandAuthorization } from '../../auth/site-manager.guard.js';
 import { HttpStatus, Injectable } from '@nestjs/common';
 import { Transform } from 'class-transformer';
 import {
@@ -276,63 +281,96 @@ export class ContractorOperationsService {
     actor: WorkforceActor,
     contractorIdValue: string,
     input: CreateContractorParticipationCommand,
+    context?: MainConfigurationCommandContext,
   ) {
     const contractorId = uuid(contractorIdValue);
     const value = command(CreateContractorParticipationCommand, input);
-    await this.requireSiteRole(actor, uuid(value.siteId), UserRole.SITE_MANAGER);
+    const siteId = uuid(value.siteId);
+    if (context && uuid(context.actorUserId).toLowerCase() !== uuid(actor.id).toLowerCase())
+      this.forbidden();
+    await this.requireSiteRole(actor, siteId, UserRole.SITE_MANAGER);
     const range = timeRange(value.validFrom, value.validUntil);
-    return this.dataSource.transaction(async (manager) => {
-      const contractor = await manager
-        .getRepository(ContractorEntity)
-        .findOneBy({ id: contractorId });
-      if (!contractor) missing();
-      const siteId = uuid(value.siteId);
-      const site = await manager.getRepository(SiteEntity).findOneBy({ id: siteId });
-      if (!site) missing();
-      return manager.getRepository(ContractorSiteParticipationEntity).save({
-        id: randomUUID(),
+    return executeMainConfigurationCommand(
+      this.dataSource,
+      context,
+      'MAIN_PARTICIPATION_CREATE',
+      {
         contractorId,
         siteId,
-        validFrom: range.from,
-        validUntil: range.until,
-        isActive: true,
-      });
-    });
+        validFrom: range.from.toISOString(),
+        validUntil: range.until?.toISOString() ?? null,
+      },
+      async (manager) => {
+        const contractor = await manager
+          .getRepository(ContractorEntity)
+          .findOne({ where: { id: contractorId }, lock: { mode: 'pessimistic_read' } });
+        if (!contractor) missing();
+        const site = await manager.getRepository(SiteEntity).findOneBy({ id: siteId });
+        if (!site) missing();
+        return manager.getRepository(ContractorSiteParticipationEntity).save({
+          id: randomUUID(),
+          contractorId,
+          siteId,
+          validFrom: range.from,
+          validUntil: range.until,
+          isActive: true,
+        });
+      },
+      siteManagerCommandAuthorization(siteId, context?.actorUserId),
+    );
   }
 
   async grantRepresentative(
     actor: WorkforceActor,
     contractorIdValue: string,
     input: GrantContractorRepresentativeCommand,
+    context?: MainConfigurationCommandContext,
   ) {
     this.assertAdmin(actor);
     const contractorId = uuid(contractorIdValue);
     const value = command(GrantContractorRepresentativeCommand, input);
-    return this.dataSource.transaction(async (manager) => {
-      const [contractor, user] = await Promise.all([
-        manager.getRepository(ContractorEntity).findOneBy({ id: contractorId }),
-        manager.getRepository(UserEntity).findOneBy({ id: uuid(value.userId) }),
-      ]);
-      if (!contractor || !user) missing();
-      const roles = await manager
-        .getRepository(UserRoleAssignmentEntity)
-        .findBy({ userId: user.id });
-      if (!roles.some(({ role, siteId }) => role === UserRole.CONTRACTOR_REPRESENTATIVE && siteId))
-        throw new PublicHttpException(HttpStatus.BAD_REQUEST, {
-          code: 'VALIDATION_FAILED',
-          message: 'User must have a Contractor Representative Site role',
+    const userId = uuid(value.userId);
+    if (context && uuid(context.actorUserId).toLowerCase() !== uuid(actor.id).toLowerCase())
+      this.forbidden();
+    return executeMainConfigurationCommand(
+      this.dataSource,
+      context,
+      'MAIN_REPRESENTATIVE_GRANT',
+      { contractorId, userId },
+      async (manager) => {
+        const contractor = await manager.getRepository(ContractorEntity).findOne({
+          where: { id: contractorId },
+          lock: { mode: 'pessimistic_read' },
         });
-      const existing = await manager.getRepository(ContractorRepresentativeGrantEntity).findOneBy({
-        userId: user.id,
-        contractorId,
-      });
-      if (existing) return existing;
-      return manager.getRepository(ContractorRepresentativeGrantEntity).save({
-        id: randomUUID(),
-        userId: user.id,
-        contractorId,
-      });
-    });
+        const user = await manager.getRepository(UserEntity).findOne({
+          where: { id: userId },
+          lock: { mode: 'pessimistic_read' },
+        });
+        if (!contractor || !user) missing();
+        const roles = await manager
+          .getRepository(UserRoleAssignmentEntity)
+          .find({ where: { userId: user.id }, lock: { mode: 'pessimistic_read' } });
+        if (
+          !roles.some(({ role, siteId }) => role === UserRole.CONTRACTOR_REPRESENTATIVE && siteId)
+        )
+          throw new PublicHttpException(HttpStatus.BAD_REQUEST, {
+            code: 'VALIDATION_FAILED',
+            message: 'User must have a Contractor Representative Site role',
+          });
+        const existing = await manager
+          .getRepository(ContractorRepresentativeGrantEntity)
+          .findOneBy({
+            userId: user.id,
+            contractorId,
+          });
+        if (existing) return existing;
+        return manager.getRepository(ContractorRepresentativeGrantEntity).save({
+          id: randomUUID(),
+          userId: user.id,
+          contractorId,
+        });
+      },
+    );
   }
 
   async createWorker(
