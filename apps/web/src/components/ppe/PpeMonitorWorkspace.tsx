@@ -1,11 +1,15 @@
 import { useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
-import type { LoginResponse } from '@smartsite/api-client';
-import type { SmartSiteManagementClient } from '@smartsite/api-client';
+import {
+  ApiError,
+  type LoginResponse,
+  type SmartSiteManagementClient,
+} from '@smartsite/api-client';
 import { useManagementClient } from '../../features/auth/auth-session';
 import { FourSourceWall } from './FourSourceWall';
 import { FocusedCameraMedia } from './FocusedCameraMedia';
+import { MonitorWorkspaceTour } from './MonitorWorkspaceTour';
 import { useMonitorPages } from './useMonitorPages';
 import { registerFeatureCatalog } from '../../i18n/feature-catalog-registry';
 import { SAFETY_NAMESPACE } from '../../i18n/runtime';
@@ -71,6 +75,10 @@ interface Props {
   observationMode?: 'ppe' | 'zone';
 }
 
+function isRevokedStatus(error: unknown): boolean {
+  return error instanceof ApiError && [401, 403, 404].includes(error.status ?? 0);
+}
+
 /** A credential/role change remounts the entire display before old pixels can render. */
 export function PpeMonitorWorkspace({
   apiUrl,
@@ -129,7 +137,7 @@ function MonitorScope({
   client,
   aiPaused,
   scope,
-  observationMode,
+  observationMode = 'ppe',
 }: Props & { client: SmartSiteManagementClient; scope: string }) {
   const { t } = useTranslation(SAFETY_NAMESPACE);
   const [chosenSite, setSite] = useState('');
@@ -144,6 +152,11 @@ function MonitorScope({
   );
   const visibleSites = sites.rows.filter((site) => globalAdmin || allowed.has(site.id));
   const site = visibleSites.find((row) => row.id === chosenSite) ?? visibleSites[0];
+  const siteMetadataReady =
+    Boolean(site) &&
+    !sites.isPending &&
+    !(sites.isError && !sites.isFetchNextPageError) &&
+    !isRevokedStatus(sites.error);
   return (
     <section className="space-y-5 min-w-0">
       <header className="flex flex-wrap items-center justify-between gap-3">
@@ -152,6 +165,7 @@ function MonitorScope({
         </h1>
         {site && (
           <Link
+            data-tour-anchor="monitor-safety-records"
             className="rounded-lg border px-4 py-2 text-sm"
             to={`/incidents?tab=episodes&siteId=${encodeURIComponent(site.id)}`}
           >
@@ -169,6 +183,7 @@ function MonitorScope({
         <label className="block text-sm">
           {t('monitor.site')}
           <select
+            data-tour-anchor="monitor-site-scope"
             className="block mt-2 w-full rounded-lg border p-2"
             value={site?.id ?? ''}
             onChange={(e) => setSite(e.target.value)}
@@ -200,6 +215,7 @@ function MonitorScope({
           key={`${scope}:${site.id}`}
           {...{ apiUrl, client, session, aiPaused, scope, observationMode }}
           site={site}
+          siteMetadataReady={siteMetadataReady}
         />
       )}
     </section>
@@ -213,11 +229,13 @@ function CameraScope({
   aiPaused,
   scope,
   site,
-  observationMode,
+  siteMetadataReady,
+  observationMode = 'ppe',
 }: Props & {
   client: SmartSiteManagementClient;
   scope: string;
   site: { id: string; name: string; code: string };
+  siteMetadataReady: boolean;
 }) {
   const { t } = useTranslation(SAFETY_NAMESPACE);
   const [chosen, setCamera] = useState(''),
@@ -232,6 +250,11 @@ function CameraScope({
   const wall = selected
     ? [selected, ...active.filter((row) => row.id !== selected.id)].slice(0, 4)
     : [];
+  const isMetadataReady =
+    siteMetadataReady &&
+    !cameras.isPending &&
+    !(cameras.isError && !cameras.isFetchNextPageError) &&
+    !isRevokedStatus(cameras.error);
   const common = {
     apiUrl,
     client,
@@ -251,6 +274,7 @@ function CameraScope({
         <label className="grow text-sm">
           {t('monitor.camera')}
           <select
+            data-tour-anchor="monitor-camera-select"
             className="block mt-2 w-full rounded-lg border p-2"
             value={selected?.id ?? ''}
             onChange={(e) => setCamera(e.target.value)}
@@ -266,10 +290,15 @@ function CameraScope({
         </label>
         {selected && (
           <>
-            <button className="rounded-lg border px-3 py-2" onClick={() => setFocus(!focus)}>
+            <button
+              data-tour-anchor="monitor-focus-toggle"
+              className="rounded-lg border px-3 py-2"
+              onClick={() => setFocus(!focus)}
+            >
               {t(focus ? 'monitor.grid' : 'monitor.focus')}
             </button>
             <button
+              data-tour-anchor="monitor-fullscreen"
               className="rounded-lg border px-3 py-2"
               onClick={() => {
                 setFullscreenError(false);
@@ -282,6 +311,15 @@ function CameraScope({
             </button>
           </>
         )}
+        <MonitorWorkspaceTour
+          userId={session.user.id}
+          scope={scope}
+          observationMode={observationMode}
+          siteId={site.id}
+          selectedCameraId={selected?.id ?? null}
+          isMetadataReady={isMetadataReady}
+          hasActiveCamera={Boolean(selected)}
+        />
         <p role="status" className="w-full text-xs text-slate-500">
           {cameras.isPending
             ? t('monitor.loading')
