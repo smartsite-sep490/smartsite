@@ -74,6 +74,8 @@ test(
       let sessionId = '',
         revokeDuringRead = false,
         readCalls = 0;
+      let dropRoleDuringRead: string | null = null;
+      let revokeBeforeHandler = false;
       ocr.quality = async () => ({ status: 'ACCEPTED', reason: 'IMAGE_ACCEPTED' });
       ocr.read = async () => {
         readCalls++;
@@ -81,12 +83,15 @@ test(
           await db.query('UPDATE auth_session SET revoked_at=clock_timestamp() WHERE id=$1', [
             sessionId,
           ]);
+        if (dropRoleDuringRead)
+          await db.query('DELETE FROM user_role_assignment WHERE id=$1', [dropRoleDuringRead]);
         return unavailableOcr();
       };
+      const storage = new StorageService(config);
       const service = new WorkerDocumentsService(
         db,
         new ContractorOperationsService(db),
-        new StorageService(config),
+        storage,
         ocr,
         new DocumentNotificationsService(db, config),
       );
@@ -104,6 +109,15 @@ test(
       app.useGlobalPipes(
         new ValidationPipe({ whitelist: true, forbidNonWhitelisted: true, transform: true }),
       );
+      app.useGlobalInterceptors({
+        async intercept(_context, next) {
+          if (revokeBeforeHandler)
+            await db.query('UPDATE auth_session SET revoked_at=clock_timestamp() WHERE id=$1', [
+              sessionId,
+            ]);
+          return next.handle();
+        },
+      });
       await app.listen(0, '127.0.0.1');
       const origin = await app.getUrl();
       for (const identity of [false, true]) {
@@ -164,6 +178,143 @@ test(
             },
           );
         }
+      }
+      const safetyId = randomUUID(),
+        safetyRoleId = randomUUID();
+      await db.query(
+        "INSERT INTO app_user(id,username,display_name,password_hash) VALUES($1,$1::uuid::text,'OCR test Safety','not-a-runtime-password')",
+        [safetyId],
+      );
+      const restoreSafetyRole = () =>
+        db.query(
+          "INSERT INTO user_role_assignment(id,user_id,role,site_id) VALUES($1,$2,'SAFETY_OFFICER',$3)",
+          [safetyRoleId, safetyId, siteId],
+        );
+      await restoreSafetyRole();
+      // A removed Safety role must yield403 rather than logging out an otherwise active account.
+      await db.query(
+        "INSERT INTO user_role_assignment(id,user_id,role,site_id) VALUES($1,$2,'WORKER',$3)",
+        [randomUUID(), safetyId, siteId],
+      );
+      async function seedDocument(identity: boolean, submittedExpiresOn: string | null = null) {
+        const workerId = randomUUID(),
+          recordId = randomUUID();
+        await db.query(
+          "INSERT INTO worker(id,site_id,contractor_id,external_id,display_name) VALUES($1,$2,$3,$1::uuid::text,'OCR test Worker')",
+          [workerId, siteId, contractorId],
+        );
+        const stored = await storage.save(
+          Buffer.from([255, 216, 255, 1, 255, 217]),
+          'image/jpeg',
+          'jpg',
+        );
+        const seedOcr = { ...unavailableOcr(), warnings: [] };
+        if (identity)
+          await db.query(
+            "INSERT INTO worker_identity_image(id,worker_id,side,original_name,file,ocr) VALUES($1,$2,'FRONT','synthetic.jpg',$3::jsonb,$4::jsonb)",
+            [recordId, workerId, JSON.stringify(stored), JSON.stringify(seedOcr)],
+          );
+        else
+          await db.query(
+            "INSERT INTO worker_document(id,worker_id,kind,status,original_name,file,ocr,uploaded_by,submitted_expires_on) VALUES($1,$2,'PERSONAL_INSURANCE','PENDING','synthetic.jpg',$3::jsonb,$4::jsonb,$5,$6)",
+            [
+              recordId,
+              workerId,
+              JSON.stringify(stored),
+              JSON.stringify(seedOcr),
+              actorId,
+              submittedExpiresOn,
+            ],
+          );
+        return { workerId, recordId };
+      }
+      async function tokenFor(userId: string) {
+        sessionId = randomUUID();
+        await db.query(
+          "INSERT INTO auth_session(id,user_id,client_type,refresh_token_hash,last_refreshed_at,expires_at) VALUES($1,$2,'WEB',$3,clock_timestamp(),clock_timestamp()+interval '1 hour')",
+          [sessionId, userId, 'a'.repeat(64)],
+        );
+        return (await tokens.issueAccessToken(userId, sessionId)).accessToken;
+      }
+      for (const identity of [false, true]) {
+        for (const fault of ['active', 'session', 'safety-role'] as const) {
+          await t.test(`retry ${identity ? 'identity' : 'document'} OCR / ${fault}`, async () => {
+            const { workerId, recordId } = await seedDocument(identity);
+            const accessToken = await tokenFor(fault === 'safety-role' ? safetyId : actorId);
+            revokeDuringRead = fault === 'session';
+            dropRoleDuringRead = fault === 'safety-role' ? safetyRoleId : null;
+            readCalls = 0;
+            const filesBefore = (await readdir(storageRoot)).length;
+            try {
+              const suffix = identity ? 'identity-images' : 'documents';
+              const response = await fetch(
+                `${origin}/sites/${siteId}/workers/${workerId}/${suffix}/${recordId}/ocr`,
+                {
+                  method: 'POST',
+                  headers: {
+                    Authorization: `Bearer ${accessToken}`,
+                    'Content-Type': 'application/json',
+                  },
+                  body: '{}',
+                },
+              );
+              await response.arrayBuffer();
+              const table = identity ? 'worker_identity_image' : 'worker_document';
+              const [stored] = await db.query(`SELECT ocr FROM ${table} WHERE id=$1`, [recordId]);
+              assert.equal(readCalls, 1);
+              assert.equal(
+                response.status,
+                fault === 'active' ? 201 : fault === 'session' ? 401 : 403,
+              );
+              assert.deepEqual(
+                stored.ocr,
+                fault === 'active' ? unavailableOcr() : { ...unavailableOcr(), warnings: [] },
+              );
+              assert.equal((await readdir(storageRoot)).length, filesBefore);
+            } finally {
+              if (fault === 'safety-role') await restoreSafetyRole();
+              dropRoleDuringRead = null;
+            }
+          });
+        }
+      }
+      for (const fault of ['active', 'revoked-write', 'revoked-noop'] as const) {
+        await t.test(`submitted expiry / ${fault}`, async () => {
+          const { workerId, recordId } = await seedDocument(
+            false,
+            fault === 'revoked-noop' ? '2027-01-01' : null,
+          );
+          const accessToken = await tokenFor(actorId);
+          revokeDuringRead = false;
+          readCalls = 0;
+          revokeBeforeHandler = fault !== 'active';
+          const response = await fetch(
+            `${origin}/sites/${siteId}/workers/${workerId}/documents/${recordId}/submitted-expiry`,
+            {
+              method: 'PATCH',
+              headers: {
+                Authorization: `Bearer ${accessToken}`,
+                'Content-Type': 'application/json',
+              },
+              body: JSON.stringify({ expectedVersion: 1, submittedExpiresOn: '2027-01-01' }),
+            },
+          );
+          await response.arrayBuffer();
+          revokeBeforeHandler = false;
+          const [stored] = await db.query(
+            'SELECT version,submitted_expires_on::text AS expiry FROM worker_document WHERE id=$1',
+            [recordId],
+          );
+          const [{ count: audits }] = await db.query(
+            'SELECT count(*)::int AS count FROM audit_log WHERE entity_id=$1',
+            [workerId],
+          );
+          assert.equal(readCalls, 0);
+          assert.equal(response.status, fault === 'active' ? 200 : 401);
+          assert.equal(stored.version, fault === 'active' ? 2 : 1);
+          assert.equal(stored.expiry, fault === 'revoked-write' ? null : '2027-01-01');
+          assert.equal(audits, fault === 'active' ? 1 : 0);
+        });
       }
     } finally {
       await app?.close();
