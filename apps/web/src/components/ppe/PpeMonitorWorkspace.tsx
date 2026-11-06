@@ -270,79 +270,104 @@ function CameraScope({
   };
   return (
     <div className="space-y-4">
-      <div className="rounded-xl border bg-white p-4 flex flex-wrap items-end gap-4">
-        <label className="grow text-sm">
-          {t('monitor.camera')}
-          <select
-            data-tour-anchor="monitor-camera-select"
-            className="block mt-2 w-full rounded-lg border p-2"
-            value={selected?.id ?? ''}
-            onChange={(e) => setCamera(e.target.value)}
-            disabled={!active.length}
-          >
-            {!selected && <option value="">{t('monitor.choose')}</option>}
-            {active.map((row) => (
-              <option key={row.id} value={row.id}>
-                {row.name}
-              </option>
-            ))}
-          </select>
-        </label>
-        {selected && (
-          <>
-            <button
-              data-tour-anchor="monitor-focus-toggle"
-              className="rounded-lg border px-3 py-2"
-              onClick={() => setFocus(!focus)}
-            >
-              {t(focus ? 'monitor.grid' : 'monitor.focus')}
-            </button>
-            <button
-              data-tour-anchor="monitor-fullscreen"
-              className="rounded-lg border px-3 py-2"
-              onClick={() => {
-                setFullscreenError(false);
-                const pending = container.current?.requestFullscreen?.();
-                if (!pending) setFullscreenError(true);
-                else void pending.catch(() => setFullscreenError(true));
-              }}
-            >
-              {t('monitor.fullscreen')}
-            </button>
-          </>
-        )}
-        <MonitorWorkspaceTour
-          userId={session.user.id}
-          scope={scope}
-          observationMode={observationMode}
-          siteId={site.id}
-          selectedCameraId={selected?.id ?? null}
-          isMetadataReady={isMetadataReady}
-          hasActiveCamera={Boolean(selected)}
-        />
-        <p role="status" className="w-full text-xs text-slate-500">
-          {cameras.isPending
-            ? t('monitor.loading')
-            : cameras.isError && !cameras.isFetchNextPageError
-              ? t('monitor.error')
-              : t('monitor.loaded', { loaded: cameras.rows.length, total: cameras.total ?? '—' })}
-        </p>
-        {cameras.isError && !cameras.isFetchNextPageError && (
-          <button onClick={() => void cameras.refetch()}>{t('monitor.retry')}</button>
-        )}
-        {!cameras.isPending && !cameras.isError && !active.length && (
-          <p>
-            {t('monitor.emptyCamera')} {cameras.hasNextPage && t('monitor.partial')}
-          </p>
-        )}
-        {cameras.hasNextPage && (
-          <button
-            disabled={cameras.isFetchingNextPage}
-            onClick={() => void cameras.fetchNextPage()}
-          >
-            {t(cameras.isFetchNextPageError ? 'monitor.retry' : 'monitor.more')}
-          </button>
-        )}
+      <div className="min-w-0 rounded-xl border border-slate-200 bg-white p-4 space-y-3">
+        <div className="min-w-0 flex flex-col gap-3 lg:flex-row lg:items-end lg:justify-between">
+          <div className="min-w-0 w-full flex-1 lg:max-w-md">
+            <label className="block min-w-0 w-full text-sm font-medium text-slate-800">
+              {t('monitor.camera')}
+              <select
+                data-tour-anchor="monitor-camera-select"
+                className="mt-1.5 block min-h-10 w-full min-w-0 rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-slate-900 disabled:bg-slate-50 disabled:text-slate-500"
+                value={selected?.id ?? ''}
+                onChange={(e) => setCamera(e.target.value)}
+                disabled={!active.length}
+              >
+                {!selected && <option value="">{t('monitor.choose')}</option>}
+                {active.map((row) => (
+                  <option key={row.id} value={row.id}>
+                    {row.name}
+                  </option>
+                ))}
+              </select>
+            </label>
+          </div>
+          <div className="min-w-0 flex flex-wrap items-center gap-2 lg:justify-end">
+            {selected && (
+              <>
+                <button
+                  type="button"
+                  data-tour-anchor="monitor-focus-toggle"
+                  className="inline-flex min-h-10 items-center justify-center rounded-lg border border-slate-300 bg-white px-3.5 py-2 text-sm font-medium text-slate-800 transition-colors hover:bg-slate-50 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-slate-900"
+                  onClick={() => setFocus(!focus)}
+                >
+                  {t(focus ? 'monitor.grid' : 'monitor.focus')}
+                </button>
+                <button
+                  type="button"
+                  data-tour-anchor="monitor-fullscreen"
+                  className="inline-flex min-h-10 items-center justify-center rounded-lg border border-slate-300 bg-white px-3.5 py-2 text-sm font-medium text-slate-800 transition-colors hover:bg-slate-50 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-slate-900"
+                  onClick={() => {
+                    setFullscreenError(false);
+                    const pending = container.current?.requestFullscreen?.();
+                    if (!pending) setFullscreenError(true);
+                    else void pending.catch(() => setFullscreenError(true));
+                  }}
+                >
+                  {t('monitor.fullscreen')}
+                </button>
+              </>
+            )}
+            <MonitorWorkspaceTour
+              userId={session.user.id}
+              scope={scope}
+              observationMode={observationMode}
+              siteId={site.id}
+              selectedCameraId={selected?.id ?? null}
+              isMetadataReady={isMetadataReady}
+              hasActiveCamera={Boolean(selected)}
+            />
+          </div>
+        </div>
+        <div className="min-w-0 flex flex-wrap items-center justify-between gap-x-4 gap-y-2 border-t border-slate-100 pt-2.5 text-xs text-slate-600">
+          <div className="min-w-0 flex flex-wrap items-center gap-x-3 gap-y-1">
+            <p role="status" className="min-w-0 text-xs text-slate-500 tabular-nums">
+              {cameras.isPending
+                ? t('monitor.loading')
+                : cameras.isError && !cameras.isFetchNextPageError
+                  ? t('monitor.error')
+                  : t('monitor.loaded', {
+                      loaded: cameras.rows.length,
+                      total: cameras.total ?? '—',
+                    })}
+            </p>
+            {!cameras.isPending && !cameras.isError && !active.length && (
+              <p className="min-w-0 text-xs text-slate-600">
+                {t('monitor.emptyCamera')} {cameras.hasNextPage && t('monitor.partial')}
+              </p>
+            )}
+          </div>
+          <div className="min-w-0 flex flex-wrap items-center gap-2">
+            {cameras.isError && !cameras.isFetchNextPageError && (
+              <button
+                type="button"
+                className="inline-flex min-h-8 items-center justify-center rounded-md border border-slate-300 bg-white px-2.5 py-1 text-xs font-medium text-slate-700 transition-colors hover:bg-slate-50 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-slate-900"
+                onClick={() => void cameras.refetch()}
+              >
+                {t('monitor.retry')}
+              </button>
+            )}
+            {cameras.hasNextPage && (
+              <button
+                type="button"
+                className="inline-flex min-h-8 items-center justify-center rounded-md border border-slate-300 bg-white px-2.5 py-1 text-xs font-medium text-slate-700 transition-colors hover:bg-slate-50 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-slate-900 disabled:cursor-not-allowed disabled:opacity-50"
+                disabled={cameras.isFetchingNextPage}
+                onClick={() => void cameras.fetchNextPage()}
+              >
+                {t(cameras.isFetchNextPageError ? 'monitor.retry' : 'monitor.more')}
+              </button>
+            )}
+          </div>
+        </div>
       </div>
       {fullscreenError && <p role="alert">{t('monitor.fullscreenError')}</p>}
       <div ref={container} className="bg-slate-50 min-w-0">
