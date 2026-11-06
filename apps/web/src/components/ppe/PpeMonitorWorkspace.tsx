@@ -179,12 +179,12 @@ function MonitorScope({
           {t('monitor.paused')}
         </p>
       )}
-      <div className="rounded-xl border bg-white p-4 space-y-2">
-        <label className="block text-sm">
+      <div className="min-w-0 rounded-xl border border-slate-200 bg-white p-4 space-y-3">
+        <label className="block min-w-0 w-full text-sm font-medium text-slate-800">
           {t('monitor.site')}
           <select
             data-tour-anchor="monitor-site-scope"
-            className="block mt-2 w-full rounded-lg border p-2"
+            className="mt-1.5 block min-h-10 w-full min-w-0 rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-slate-900 disabled:bg-slate-50 disabled:text-slate-500"
             value={site?.id ?? ''}
             onChange={(e) => setSite(e.target.value)}
             disabled={sites.isPending || !visibleSites.length}
@@ -197,18 +197,35 @@ function MonitorScope({
             ))}
           </select>
         </label>
-        {sites.isPending ? (
-          <p role="status">{t('monitor.loading')}</p>
-        ) : sites.isError && !sites.isFetchNextPageError ? (
-          <button onClick={() => void sites.refetch()}>{t('monitor.error')}</button>
-        ) : !visibleSites.length && !sites.hasNextPage ? (
-          <p role="status">{t('monitor.emptySite')}</p>
-        ) : null}
-        {sites.hasNextPage && (
-          <button disabled={sites.isFetchingNextPage} onClick={() => void sites.fetchNextPage()}>
-            {t(sites.isFetchNextPageError ? 'monitor.retry' : 'monitor.more')}
-          </button>
-        )}
+        <div className="min-w-0 flex flex-wrap items-center justify-between gap-x-4 gap-y-2 border-t border-slate-100 pt-2.5 text-xs text-slate-600 empty:hidden">
+          {sites.isPending ? (
+            <p role="status" className="min-w-0 text-xs text-slate-500">
+              {t('monitor.loading')}
+            </p>
+          ) : sites.isError && !sites.isFetchNextPageError ? (
+            <button
+              type="button"
+              className="inline-flex min-h-8 items-center justify-center rounded-md border border-slate-300 bg-white px-2.5 py-1 text-xs font-medium text-slate-700 transition-colors hover:bg-slate-50 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-slate-900"
+              onClick={() => void sites.refetch()}
+            >
+              {t('monitor.error')}
+            </button>
+          ) : !visibleSites.length && !sites.hasNextPage ? (
+            <p role="status" className="min-w-0 text-xs text-slate-600">
+              {t('monitor.emptySite')}
+            </p>
+          ) : null}
+          {sites.hasNextPage && (
+            <button
+              type="button"
+              className="inline-flex min-h-8 items-center justify-center rounded-md border border-slate-300 bg-white px-2.5 py-1 text-xs font-medium text-slate-700 transition-colors hover:bg-slate-50 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-slate-900 disabled:cursor-not-allowed disabled:opacity-50"
+              disabled={sites.isFetchingNextPage}
+              onClick={() => void sites.fetchNextPage()}
+            >
+              {t(sites.isFetchNextPageError ? 'monitor.retry' : 'monitor.more')}
+            </button>
+          )}
+        </div>
       </div>
       {site && (
         <CameraScope
