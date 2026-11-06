@@ -81,7 +81,14 @@ export class WorkerDocumentsController {
     @Param('side') side: string,
     @UploadedFile() file: DocumentUpload,
   ) {
-    return this.service.uploadIdentity(r.user!, siteId, workerId, side, file);
+    return this.service.uploadIdentity(
+      r.user!,
+      siteId,
+      workerId,
+      side,
+      file,
+      configurationCommandContext(r, this.auth),
+    );
   }
   @Get('workers/:workerId/identity-images/:id/file')
   @Header('Cache-Control', 'private, no-store')
@@ -164,7 +171,15 @@ export class WorkerDocumentsController {
     @UploadedFile() file: DocumentUpload,
     @Body() body: UploadWorkerDocumentDto,
   ) {
-    return this.service.upload(r.user!, siteId, workerId, kind, file, body);
+    return this.service.upload(
+      r.user!,
+      siteId,
+      workerId,
+      kind,
+      file,
+      body,
+      configurationCommandContext(r, this.auth),
+    );
   }
   @Patch('workers/:workerId/documents/:id/submitted-expiry')
   @Header('Cache-Control', 'private, no-store')
