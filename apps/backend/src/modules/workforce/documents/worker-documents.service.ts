@@ -1,5 +1,5 @@
 import { randomUUID } from 'node:crypto';
-import { Injectable } from '@nestjs/common';
+import { Injectable, UnauthorizedException } from '@nestjs/common';
 import { DataSource, type EntityManager } from 'typeorm';
 import { healthCertificateExpiry } from '@smartsite/contracts';
 import type {
@@ -232,6 +232,44 @@ export class WorkerDocumentsService {
     )
       invalid('Enter the document date before submitting.');
   }
+
+  private async reauthorizeMutation(
+    manager: EntityManager,
+    actor: WorkforceActor,
+    context?: MainConfigurationCommandContext,
+    reviewSiteId?: string,
+  ) {
+    // HTTP supplies the original bearer; contextless in-process callers keep their existing API.
+    if (!context) return;
+    if (context.actorUserId !== actor.id || !context.reauthorize) throw new UnauthorizedException();
+    await context.reauthorize(manager);
+    if (reviewSiteId) {
+      const roles = await manager.query(
+        "SELECT id FROM user_role_assignment WHERE user_id=$1 AND role='SAFETY_OFFICER' AND site_id=$2 FOR SHARE",
+        [actor.id, uuid(reviewSiteId)],
+      );
+      if (!roles.length) forbidden();
+    }
+  }
+
+  private async mutationAccess(
+    actor: WorkforceActor,
+    siteId: string,
+    workerId: string,
+    mode: 'write' | 'submit' | 'review',
+    context?: MainConfigurationCommandContext,
+  ) {
+    if (!context) return this.access(this.source.manager, actor, siteId, workerId, mode);
+    return this.source.transaction(async (manager) => {
+      await this.reauthorizeMutation(
+        manager,
+        actor,
+        context,
+        mode === 'review' ? siteId : undefined,
+      );
+      return this.access(manager, actor, siteId, workerId, mode, true);
+    });
+  }
   async checkSubmission(
     actor: WorkforceActor,
     siteId: string,
@@ -418,11 +456,12 @@ export class WorkerDocumentsService {
     kindInput: string,
     file: DocumentUpload | undefined,
     input: UploadWorkerDocumentCommand = {},
+    context?: MainConfigurationCommandContext,
   ): Promise<WorkerDocumentResponse> {
     const value = command(UploadWorkerDocumentDto, input);
     const kind = kindValue(kindInput);
     const manual = submittedDates(kind, value);
-    const submitter = await this.access(this.source.manager, actor, siteId, workerId, 'submit');
+    const submitter = await this.mutationAccess(actor, siteId, workerId, 'submit', context);
     this.requireDeclaredDate(actor, submitter, !!manual.submittedExpiresOn);
     const format = validateWorkerDocument(file);
     await this.requireQuality(file!);
@@ -431,6 +470,7 @@ export class WorkerDocumentsService {
     try {
       const ocr = await this.ocr.read(file!.buffer, format.mediaType);
       const result = await this.source.transaction(async (manager) => {
+        await this.reauthorizeMutation(manager, actor, context);
         const worker = await this.access(manager, actor, siteId, workerId, 'submit', true);
         const docs = manager.getRepository(WorkerDocumentEntity);
         // Same original and unchanged metadata preserve the pending review/version.
@@ -522,9 +562,11 @@ export class WorkerDocumentsService {
     workerId: string,
     documentId: string,
     input: UpdateWorkerDocumentExpiryCommand,
+    context?: MainConfigurationCommandContext,
   ) {
     const value = command(UpdateWorkerDocumentExpiryDto, input);
     return this.source.transaction(async (manager) => {
+      await this.reauthorizeMutation(manager, actor, context);
       await this.access(manager, actor, siteId, workerId, 'submit', true);
       const repo = manager.getRepository(WorkerDocumentEntity);
       const doc = await repo
@@ -573,14 +615,21 @@ export class WorkerDocumentsService {
     if (!doc) missing();
     return { doc, bytes: await this.storage.read(doc.file) };
   }
-  async retryOcr(actor: WorkforceActor, siteId: string, workerId: string, documentId: string) {
+  async retryOcr(
+    actor: WorkforceActor,
+    siteId: string,
+    workerId: string,
+    documentId: string,
+    context?: MainConfigurationCommandContext,
+  ) {
     const safety = actor.roleAssignments.some(
       (r) => r.role === UserRole.SAFETY_OFFICER && r.siteId === siteId,
     );
-    await this.access(this.source.manager, actor, siteId, workerId, safety ? 'review' : 'write');
+    await this.mutationAccess(actor, siteId, workerId, safety ? 'review' : 'write', context);
     const { doc, bytes } = await this.file(actor, siteId, workerId, documentId);
     const ocr = await this.ocr.read(bytes, doc.file.mediaType);
     return this.source.transaction(async (manager) => {
+      await this.reauthorizeMutation(manager, actor, context, safety ? siteId : undefined);
       await this.access(manager, actor, siteId, workerId, safety ? 'review' : 'write', true);
       const row = await manager
         .getRepository(WorkerDocumentEntity)
@@ -752,9 +801,10 @@ export class WorkerDocumentsService {
     workerId: string,
     side: string,
     file: DocumentUpload | undefined,
+    context?: MainConfigurationCommandContext,
   ) {
     if (side !== 'FRONT' && side !== 'BACK') invalid('Invalid citizen ID side');
-    await this.access(this.source.manager, actor, siteId, workerId, 'write');
+    await this.mutationAccess(actor, siteId, workerId, 'write', context);
     const format = validateWorkerDocument(file);
     if (format.mediaType === 'application/pdf') invalid('Citizen ID requires a JPEG or PNG image');
     await this.requireQuality(file!);
@@ -763,6 +813,7 @@ export class WorkerDocumentsService {
     try {
       const ocr = await this.ocr.read(file!.buffer, format.mediaType);
       const result = await this.source.transaction(async (manager) => {
+        await this.reauthorizeMutation(manager, actor, context);
         const worker = await this.access(manager, actor, siteId, workerId, 'write', true);
         const repo = manager.getRepository(WorkerIdentityImageEntity);
         const existing = await repo
@@ -816,16 +867,28 @@ export class WorkerDocumentsService {
     return { image, bytes: await this.storage.read(image.file) };
   }
 
-  async retryIdentityOcr(actor: WorkforceActor, siteId: string, workerId: string, id: string) {
+  async retryIdentityOcr(
+    actor: WorkforceActor,
+    siteId: string,
+    workerId: string,
+    id: string,
+    context?: MainConfigurationCommandContext,
+  ) {
     const mode = actor.roleAssignments.some(
       (r) => r.role === UserRole.SAFETY_OFFICER && r.siteId === siteId,
     )
       ? 'review'
       : 'write';
-    await this.access(this.source.manager, actor, siteId, workerId, mode);
+    await this.mutationAccess(actor, siteId, workerId, mode, context);
     const { image, bytes } = await this.identityFile(actor, siteId, workerId, id);
     const ocr = await this.ocr.read(bytes, image.file.mediaType);
     await this.source.transaction(async (manager) => {
+      await this.reauthorizeMutation(
+        manager,
+        actor,
+        context,
+        mode === 'review' ? siteId : undefined,
+      );
       await this.access(manager, actor, siteId, workerId, mode, true);
       await manager
         .getRepository(WorkerIdentityImageEntity)

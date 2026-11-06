@@ -81,7 +81,14 @@ export class WorkerDocumentsController {
     @Param('side') side: string,
     @UploadedFile() file: DocumentUpload,
   ) {
-    return this.service.uploadIdentity(r.user!, siteId, workerId, side, file);
+    return this.service.uploadIdentity(
+      r.user!,
+      siteId,
+      workerId,
+      side,
+      file,
+      configurationCommandContext(r, this.auth),
+    );
   }
   @Get('workers/:workerId/identity-images/:id/file')
   @Header('Cache-Control', 'private, no-store')
@@ -105,7 +112,13 @@ export class WorkerDocumentsController {
     @Body() body: Record<string, unknown>,
   ) {
     if (Object.keys(body ?? {}).length) invalid();
-    return this.service.retryIdentityOcr(r.user!, siteId, workerId, id);
+    return this.service.retryIdentityOcr(
+      r.user!,
+      siteId,
+      workerId,
+      id,
+      configurationCommandContext(r, this.auth),
+    );
   }
   @Get('worker-compliance')
   @Header('Cache-Control', 'private, no-store')
@@ -164,7 +177,15 @@ export class WorkerDocumentsController {
     @UploadedFile() file: DocumentUpload,
     @Body() body: UploadWorkerDocumentDto,
   ) {
-    return this.service.upload(r.user!, siteId, workerId, kind, file, body);
+    return this.service.upload(
+      r.user!,
+      siteId,
+      workerId,
+      kind,
+      file,
+      body,
+      configurationCommandContext(r, this.auth),
+    );
   }
   @Patch('workers/:workerId/documents/:id/submitted-expiry')
   @Header('Cache-Control', 'private, no-store')
@@ -175,7 +196,14 @@ export class WorkerDocumentsController {
     @Param('id') id: string,
     @Body() body: UpdateWorkerDocumentExpiryDto,
   ) {
-    return this.service.updateSubmittedExpiry(r.user!, siteId, workerId, id, body);
+    return this.service.updateSubmittedExpiry(
+      r.user!,
+      siteId,
+      workerId,
+      id,
+      body,
+      configurationCommandContext(r, this.auth),
+    );
   }
   @Get('workers/:workerId/documents/:id/file')
   @Header('Cache-Control', 'private, no-store')
@@ -203,7 +231,13 @@ export class WorkerDocumentsController {
     @Body() body: Record<string, unknown>,
   ) {
     if (Object.keys(body ?? {}).length) invalid();
-    return this.service.retryOcr(r.user!, siteId, workerId, id);
+    return this.service.retryOcr(
+      r.user!,
+      siteId,
+      workerId,
+      id,
+      configurationCommandContext(r, this.auth),
+    );
   }
   @Post('workers/:workerId/documents/:id/reviews')
   @Header('Cache-Control', 'private, no-store')
