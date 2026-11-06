@@ -78,19 +78,33 @@ export function FocusedCameraMedia({ camera, aiPaused, observationMode = 'ppe', 
   const denied = [401, 403, 404].includes(current.errorStatus ?? 0);
   return (
     <section className="rounded-2xl border overflow-hidden bg-white">
-      <header className="flex flex-wrap items-center justify-between gap-3 p-4">
-        <h2 className="font-semibold truncate">{camera.name}</h2>
-        <div role="group" aria-label={t('focus.views')} className="flex flex-wrap gap-2">
-          {(['ai', 'live', 'recorded'] as const).map((view) => (
-            <button
-              key={view}
-              aria-pressed={mode === view}
-              className="rounded-lg border px-3 py-2 text-sm aria-pressed:bg-slate-900 aria-pressed:text-white"
-              onClick={() => setMode(view)}
-            >
-              {t(`focus.${view}`)}
-            </button>
-          ))}
+      <header className="space-y-3 p-4">
+        <div className="min-w-0">
+          <h2 className="min-w-0 text-base font-semibold leading-snug tracking-tight text-slate-950 break-words [overflow-wrap:anywhere]">
+            {camera.name}
+          </h2>
+        </div>
+        <div className="flex flex-wrap items-center justify-between gap-2 border-t border-slate-100 pt-3">
+          <span aria-hidden="true" className="text-xs font-medium text-slate-500">
+            {t('focus.views')}
+          </span>
+          <div
+            role="group"
+            aria-label={t('focus.views')}
+            className="flex flex-wrap items-center gap-1.5 rounded-xl border border-slate-200/90 bg-slate-100/80 p-1"
+          >
+            {(['ai', 'live', 'recorded'] as const).map((view) => (
+              <button
+                key={view}
+                type="button"
+                aria-pressed={mode === view}
+                className="rounded-lg border border-transparent px-3 py-1.5 text-sm font-medium text-slate-700 transition-colors hover:bg-white hover:text-slate-950 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-400 focus-visible:ring-offset-1 aria-pressed:border-slate-900 aria-pressed:bg-slate-900 aria-pressed:font-semibold aria-pressed:text-white aria-pressed:shadow-xs"
+                onClick={() => setMode(view)}
+              >
+                {t(`focus.${view}`)}
+              </button>
+            ))}
+          </div>
         </div>
       </header>
       {mode !== 'ai' && <p className="px-4 pb-3 text-sm text-slate-600">{t('focus.rawHint')}</p>}

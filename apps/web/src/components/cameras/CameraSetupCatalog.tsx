@@ -127,7 +127,7 @@ export function CameraSetupCatalog({
             )}
             {cameraError}
             {rows.length > 0 && (
-              <ul className="mt-4 space-y-2.5">
+              <ul className="mt-4 space-y-3">
                 {rows.map((row) => {
                   const isEnabled = row.status === 'ACTIVE';
                   const isSelectedCamera = selectedCamera?.id === row.id;
@@ -143,29 +143,33 @@ export function CameraSetupCatalog({
                   const monitorParams = canMonitorRow
                     ? new URLSearchParams({ siteId: row.siteId, cameraId: row.id }).toString()
                     : '';
-                  const regionsButtonClass = isSelectedCamera ? primaryButton : secondaryButton;
-                  const manageButtonClass =
+                  const regionsButtonClass = `${
+                    isSelectedCamera ? primaryButton : secondaryButton
+                  } min-h-9 shrink-0`;
+                  const manageButtonClass = `${
                     !isEnabled && isSelectedCamera
-                      ? `${secondaryButton} shrink-0`
-                      : `${CAMERA_BUTTON_STYLES.compactSecondary} shrink-0`;
+                      ? secondaryButton
+                      : CAMERA_BUTTON_STYLES.compactSecondary
+                  } min-h-9 shrink-0`;
+                  const monitorLinkClass = `${CAMERA_BUTTON_STYLES.compactSecondary} min-h-9 shrink-0`;
 
                   return (
                     <li
                       key={row.id}
                       aria-labelledby={nameId}
                       aria-current={isSelectedCamera ? 'true' : undefined}
-                      className={`flex flex-col justify-between gap-3.5 rounded-xl border px-4 py-3.5 transition-colors sm:flex-row sm:items-center ${
+                      className={`min-w-0 space-y-3 rounded-xl border p-4 transition-colors xl:flex xl:items-start xl:justify-between xl:gap-5 xl:space-y-0 ${
                         isSelectedCamera
-                          ? 'border-slate-900 bg-slate-50/90 shadow-2xs ring-1 ring-slate-900/10'
-                          : 'border-slate-200/90 bg-white hover:border-slate-300 hover:bg-slate-50/50'
+                          ? 'border-slate-300 border-l-4 border-l-slate-900 bg-slate-50/90 shadow-2xs ring-1 ring-slate-900/10'
+                          : 'border-slate-200/90 bg-white hover:border-slate-300 hover:bg-slate-50/40'
                       }`}
                     >
-                      <div className="min-w-0 flex-1 space-y-1.5">
-                        <div className="min-w-0 flex flex-wrap items-start justify-between gap-2">
+                      <div className="min-w-0 flex-1 space-y-2">
+                        <div className="flex min-w-0 flex-wrap items-start justify-between gap-2.5">
                           <h3
                             id={nameId}
                             title={row.name}
-                            className="min-w-0 max-w-full flex-1 break-words [overflow-wrap:anywhere] text-base font-semibold tracking-tight text-slate-900"
+                            className="min-w-0 max-w-full flex-[1_1_12rem] break-words [overflow-wrap:anywhere] text-base leading-snug font-semibold tracking-tight text-slate-950"
                           >
                             {canManageCameras ? (
                               <button
@@ -192,7 +196,7 @@ export function CameraSetupCatalog({
                             <button
                               type="button"
                               aria-pressed={isSelectedCamera}
-                              className={`inline-flex shrink-0 items-center justify-center rounded-lg border px-2.5 py-1 text-xs font-medium transition-colors cursor-pointer focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#0F172A] ${
+                              className={`inline-flex min-h-8 shrink-0 items-center justify-center rounded-lg border px-2.5 py-1 text-xs font-medium tabular-nums transition-colors cursor-pointer focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#0F172A] ${
                                 isSelectedCamera
                                   ? 'border-slate-900/30 bg-slate-900/10 font-semibold text-slate-900'
                                   : 'border-slate-200 bg-slate-50 text-slate-600 hover:border-slate-300 hover:bg-white hover:text-[#111111]'
@@ -208,7 +212,9 @@ export function CameraSetupCatalog({
                             </button>
                           )}
                         </div>
-                        <CameraSetupRowMetadata row={row} isEnabled={isEnabled} />
+                        <div className="min-w-0 pt-0.5">
+                          <CameraSetupRowMetadata row={row} isEnabled={isEnabled} />
+                        </div>
                         {!isEnabled && canManageCameras && (
                           <p
                             id={hintId}
@@ -221,33 +227,9 @@ export function CameraSetupCatalog({
                         )}
                       </div>
                       {(canManageCameras || canMonitorRow) && (
-                        <div className="flex shrink-0 flex-wrap items-center gap-2 sm:self-center">
-                          {canMonitorRow && (
-                            <div className="flex flex-wrap items-center gap-2">
-                              <Link
-                                id={ppeMonitorId}
-                                aria-labelledby={`${ppeMonitorId} ${nameId}`}
-                                className={`${CAMERA_BUTTON_STYLES.compactSecondary} shrink-0`}
-                                to={`/ppe?${monitorParams}`}
-                              >
-                                {t('cameraSetup.monitorPpe')}
-                              </Link>
-                              <Link
-                                id={zonesMonitorId}
-                                aria-labelledby={`${zonesMonitorId} ${nameId}`}
-                                className={`${CAMERA_BUTTON_STYLES.compactSecondary} shrink-0`}
-                                to={`/zones?${monitorParams}`}
-                              >
-                                {t('cameraSetup.monitorZones')}
-                              </Link>
-                            </div>
-                          )}
+                        <div className="flex min-w-0 flex-wrap items-center justify-between gap-2.5 border-t border-slate-200/70 pt-3 xl:shrink-0 xl:justify-end xl:self-center xl:border-t-0 xl:pt-0">
                           {canManageCameras && (
-                            <div
-                              className={`flex flex-wrap items-center gap-2 ${
-                                canMonitorRow ? 'sm:border-l sm:border-slate-200 sm:pl-3' : ''
-                              }`}
-                            >
+                            <div className="flex flex-wrap items-center gap-2">
                               {isEnabled && (
                                 <button
                                   type="button"
@@ -273,6 +255,30 @@ export function CameraSetupCatalog({
                               >
                                 {t('cameraSetup.manageAction')}
                               </button>
+                            </div>
+                          )}
+                          {canMonitorRow && (
+                            <div
+                              className={`flex flex-wrap items-center gap-2 ${
+                                canManageCameras ? 'sm:border-l sm:border-slate-200 sm:pl-2.5' : ''
+                              }`}
+                            >
+                              <Link
+                                id={ppeMonitorId}
+                                aria-labelledby={`${ppeMonitorId} ${nameId}`}
+                                className={monitorLinkClass}
+                                to={`/ppe?${monitorParams}`}
+                              >
+                                {t('cameraSetup.monitorPpe')}
+                              </Link>
+                              <Link
+                                id={zonesMonitorId}
+                                aria-labelledby={`${zonesMonitorId} ${nameId}`}
+                                className={monitorLinkClass}
+                                to={`/zones?${monitorParams}`}
+                              >
+                                {t('cameraSetup.monitorZones')}
+                              </Link>
                             </div>
                           )}
                         </div>
