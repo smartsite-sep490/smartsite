@@ -1,5 +1,6 @@
+import { ContractorSchedule } from '../contractor/contractor-schedule';
 import { localizedLabel } from '../../i18n/messages';
-import { translate as tr, uiLocale } from '../../i18n';
+import { translate as tr } from '../../i18n';
 import { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import type {
@@ -11,15 +12,7 @@ import type {
 import { useWorkspace } from '../workspace/workspace-context';
 import { useScopedWorkers } from '../workspace/use-scoped-workers';
 import { requestInScope } from './request-scope';
-import {
-  allPages,
-  displayTime,
-  displayShiftTime,
-  localDate,
-  required,
-  useCommand,
-  validDates,
-} from '../shared/data';
+import { allPages, displayTime, displayShiftTime, required, useCommand } from '../shared/data';
 import {
   Body,
   Button,
@@ -31,182 +24,41 @@ import {
   Page,
   Pager,
   QueryState,
+  Disclosure,
 } from '../shared/ui';
-import { View, Text, StyleSheet, Pressable } from 'react-native';
+import { View, Text, StyleSheet } from 'react-native';
 import { useTranslation } from '../../i18n';
-import { IconClock, IconChevronRight } from '../../components/common/Icons';
 import { colors } from '../../theme/colors';
-import { DateRangeFilter } from '../shared/date-range-filter';
+import { WorkerScheduleScreen } from './worker-schedule-screen';
 
 export function ScheduleScreen({ initialDate }: { initialDate?: string }) {
-  const { t } = useTranslation();
-  const { scope, client, token, queryKey, workerId } = useWorkspace();
-  const [range, setRange] = useState(() => {
-    if (initialDate) return { fromDate: initialDate, toDate: initialDate };
-    const now = localDate();
-    return { fromDate: `${now.slice(0, 8)}01`, toDate: now };
-  });
-  const [offset, setOffset] = useState(0);
-  const [selected, setSelected] = useState<WorkerScheduleResponse | null>(null);
-  const schedules = useQuery({
-    queryKey: [...queryKey, 'schedules', range, offset],
-    queryFn: () =>
-      client.listWorkerSchedules(token, scope.siteId, {
-        ...range,
-        offset,
-        limit: 20,
-        status: 'ALL',
-        ...(scope.role === 'worker' ? { workerId } : {}),
-        ...(scope.contractorId ? { contractorId: scope.contractorId } : {}),
-      }),
-  });
-  const shifts = useQuery({
-    queryKey: [...queryKey, 'shifts'],
-    queryFn: ({ signal }) => allPages((p) => client.listShifts(token, scope.siteId, p), signal),
-  });
-  const workers = useScopedWorkers();
-  if (selected)
+  const { scope } = useWorkspace();
+  const [calendarDay, setCalendarDay] = useState(initialDate);
+  const [request, setRequest] = useState<{
+    schedule: WorkerScheduleResponse;
+    shift?: ShiftResponse;
+  } | null>(null);
+  if (scope.role === 'contractor') return <ContractorSchedule initialDate={initialDate} />;
+  if (request)
     return (
       <ScheduleRequest
-        key={selected.id}
-        schedule={selected}
-        shift={shifts.data?.find((s) => s.id === selected.shiftId)}
-        onBack={() => setSelected(null)}
+        key={request.schedule.id}
+        schedule={request.schedule}
+        shift={request.shift}
+        onBack={() => setRequest(null)}
       />
     );
-
   return (
-    <Page
-      title={scope.role === 'worker' ? t('schedule.title') : t('contractorHome.assignSchedule')}
-    >
-      {/* Draggable / Swipeable Date Range Filter (matching Attendance screen) */}
-      <DateRangeFilter
-        range={range}
-        onChange={(newRange) => {
-          setRange(newRange);
-          setOffset(0);
-        }}
-        onValidate={(newRange) => validDates(newRange.fromDate, newRange.toDate)}
-      />
-
-      <QueryState query={shifts}>
-        {() => (
-          <QueryState query={workers}>
-            {() => (
-              <QueryState query={schedules}>
-                {(data) => (
-                  <>
-                    {!data.items.length && <Hint>{t('schedule.noSchedules')}</Hint>}
-                    {data.items
-                      .filter((s) => scope.role !== 'worker' || s.workerId === workerId)
-                      .map((s) => {
-                        const shift = shifts.data?.find((v) => v.id === s.shiftId);
-                        const worker = workers.data?.find((v) => v.id === s.workerId);
-                        const isWorker = scope.role === 'worker';
-                        return (
-                          <View key={s.id} style={schedStyles.scheduleCard}>
-                            <View style={schedStyles.scheduleCardHeader}>
-                              {/* Date badge matching attendance screen */}
-                              <View style={schedStyles.dateBadge}>
-                                <Text style={schedStyles.dateBadgeDay}>{s.workDate.slice(8)}</Text>
-                                <Text style={schedStyles.dateBadgeMonth}>
-                                  {new Intl.DateTimeFormat(uiLocale(), {
-                                    month: 'short',
-                                    timeZone: 'UTC',
-                                  }).format(new Date(`${s.workDate}T00:00:00Z`))}
-                                </Text>
-                              </View>
-
-                              {/* Details col */}
-                              <View style={schedStyles.shiftDetailsCol}>
-                                <View style={schedStyles.shiftTopRow}>
-                                  <Text
-                                    numberOfLines={2}
-                                    ellipsizeMode="tail"
-                                    style={schedStyles.shiftTypeTitle}
-                                  >
-                                    {shift?.name ?? t('schedule.shift')}
-                                  </Text>
-                                  {/* Status pill */}
-                                  <View
-                                    style={[
-                                      schedStyles.statusPill,
-                                      { backgroundColor: s.isActive ? '#EDFAF2' : '#F1F5F9' },
-                                    ]}
-                                  >
-                                    <View
-                                      style={[
-                                        schedStyles.statusDot,
-                                        { backgroundColor: s.isActive ? '#10B981' : '#94A3B8' },
-                                      ]}
-                                    />
-                                    <Text
-                                      style={[
-                                        schedStyles.statusText,
-                                        { color: s.isActive ? '#065F46' : '#64748B' },
-                                      ]}
-                                    >
-                                      {s.isActive
-                                        ? t('workforce.statusActive')
-                                        : t('workforce.statusInactive')}
-                                    </Text>
-                                  </View>
-                                </View>
-
-                                <View style={schedStyles.shiftTimeRow}>
-                                  <IconClock size={15} color="#2563EB" />
-                                  <Text numberOfLines={1} style={schedStyles.shiftTimeText}>
-                                    {shift
-                                      ? `${displayShiftTime(shift.startsAt)} – ${displayShiftTime(shift.endsAt)}`
-                                      : s.workDate}
-                                  </Text>
-                                </View>
-
-                                <Text
-                                  numberOfLines={1}
-                                  ellipsizeMode="tail"
-                                  style={schedStyles.shiftLocationText}
-                                >
-                                  📍 {scope.siteName}
-                                  {!isWorker && worker?.displayName
-                                    ? ` · ${worker.displayName}`
-                                    : ''}
-                                </Text>
-                              </View>
-                            </View>
-
-                            {/* Request Action Button matching test accessibilityLabel */}
-                            {isWorker && s.isActive && (
-                              <Pressable
-                                accessibilityRole="button"
-                                accessibilityLabel={t('schedule.requestAction')}
-                                style={({ pressed }) => [
-                                  schedStyles.requestActionBtn,
-                                  pressed && { opacity: 0.8 },
-                                ]}
-                                onPress={() => setSelected(s)}
-                              >
-                                <Text style={schedStyles.requestActionText}>
-                                  {t('schedule.requestAction')}
-                                </Text>
-                                <IconChevronRight size={16} color="#F66B17" />
-                              </Pressable>
-                            )}
-                          </View>
-                        );
-                      })}
-                    <Pager offset={offset} total={data.total} onChange={setOffset} />
-                  </>
-                )}
-              </QueryState>
-            )}
-          </QueryState>
-        )}
-      </QueryState>
-      {scope.role === 'contractor' && <Hint>{tr('schedule.managerAssignmentHint')}</Hint>}
-    </Page>
+    <WorkerScheduleScreen
+      initialDate={calendarDay}
+      onRequest={(schedule, shift) => {
+        setCalendarDay(schedule.workDate);
+        setRequest({ schedule, shift });
+      }}
+    />
   );
 }
+
 function ScheduleRequest({
   schedule,
   shift,
@@ -334,6 +186,8 @@ export function ShiftRequestsScreen({
   const { t } = useTranslation();
   const { scope, client, token, user, queryKey } = useWorkspace();
   const rep = scope.role === 'contractor';
+  const pageSize = rep ? 8 : 20;
+  const [notificationDismissed, setNotificationDismissed] = useState(false);
   const [view, setView] = useState<ShiftRequestListOptions['view']>(rep ? 'REVIEW' : 'WORKER'),
     [type, setType] = useState<'ALL' | 'CHANGE' | 'SWAP'>('ALL'),
     [offset, setOffset] = useState(0);
@@ -353,7 +207,7 @@ export function ShiftRequestsScreen({
         )
       ).filter((r) => requestInScope(r, workerIds, scope.role));
       return {
-        items: rows.slice(offset, offset + 20),
+        items: rows.slice(offset, offset + pageSize),
         total: rows.length,
         pendingCount: rows.filter((r) => r.status === 'PENDING_MANAGER').length,
         incomingCount: rows.filter((r) => r.status === 'PENDING_COWORKER').length,
@@ -386,7 +240,7 @@ export function ShiftRequestsScreen({
       allPages((p) => client.listAbsenceRequests(token, scope.siteId, p), signal),
     enabled: !rep,
   });
-  const detail = selected ?? incoming.data;
+  const detail = selected ?? (notificationDismissed ? undefined : incoming.data);
   const renderDetail = (r: ShiftRequestResponse) => {
     if (!requestInScope(r, workerIds, scope.role)) return <Hint>{tr('requests.outOfScope')}</Hint>;
     const canReview =
@@ -414,6 +268,7 @@ export function ShiftRequestsScreen({
           else await client.rejectShiftSwapRequest(token, scope.siteId, r.id, { reason });
         } else throw new Error(tr('validation.requestStateChanged'));
         setSelected(null);
+        setNotificationDismissed(true);
         setReason('');
       });
     return (
@@ -510,42 +365,57 @@ export function ShiftRequestsScreen({
         <QueryState query={workers}>{() => null}</QueryState>
       </Page>
     );
+  if (rep && detail)
+    return (
+      <Page
+        title={t('requests.viewRequest')}
+        onBack={() => {
+          setSelected(null);
+          setNotificationDismissed(true);
+        }}
+      >
+        <ErrorNotice error={command.error} />
+        {renderDetail(detail)}
+      </Page>
+    );
   return (
     <Page title={rep ? t('contractorHome.approveRequests') : t('requests.title')} onBack={onBack}>
-      <Choice
-        label={tr('requests.list')}
-        value={view}
-        onChange={(v) => {
-          setView(v as ShiftRequestListOptions['view']);
-          setOffset(0);
-          setSelected(null);
-          command.reset();
-        }}
-        options={
-          rep
-            ? [
-                { value: 'REVIEW', label: tr('requests.awaitingMyReview') },
-                { value: 'HISTORY', label: tr('requests.history') },
-              ]
-            : [
-                { value: 'WORKER', label: tr('requests.submittedByMe') },
-                { value: 'INCOMING', label: tr('requests.awaitingMyConsent') },
-              ]
-        }
-      />
-      <Choice
-        label={tr('requests.kind')}
-        value={type}
-        onChange={(v) => {
-          setType(v as typeof type);
-          setOffset(0);
-        }}
-        options={[
-          { value: 'ALL', label: t('common.all') },
-          { value: 'CHANGE', label: t('requests.changeShift') },
-          { value: 'SWAP', label: t('requests.swapRequest') },
-        ]}
-      />
+      <Disclosure title={t('contractorUi.filters')} collapsible={rep}>
+        <Choice
+          label={tr('requests.list')}
+          value={view}
+          onChange={(v) => {
+            setView(v as ShiftRequestListOptions['view']);
+            setOffset(0);
+            setSelected(null);
+            command.reset();
+          }}
+          options={
+            rep
+              ? [
+                  { value: 'REVIEW', label: tr('requests.awaitingMyReview') },
+                  { value: 'HISTORY', label: tr('requests.history') },
+                ]
+              : [
+                  { value: 'WORKER', label: tr('requests.submittedByMe') },
+                  { value: 'INCOMING', label: tr('requests.awaitingMyConsent') },
+                ]
+          }
+        />
+        <Choice
+          label={tr('requests.kind')}
+          value={type}
+          onChange={(v) => {
+            setType(v as typeof type);
+            setOffset(0);
+          }}
+          options={[
+            { value: 'ALL', label: t('common.all') },
+            { value: 'CHANGE', label: t('requests.changeShift') },
+            { value: 'SWAP', label: t('requests.swapRequest') },
+          ]}
+        />
+      </Disclosure>
       <ErrorNotice error={command.error} />
       {initialId && <QueryState query={incoming}>{() => null}</QueryState>}
       {detail && renderDetail(detail)}
@@ -621,7 +491,9 @@ export function ShiftRequestsScreen({
                   </View>
                 </View>
 
-                <Text style={schedStyles.requestReasonText}>{r.reason}</Text>
+                <Text numberOfLines={rep ? 2 : undefined} style={schedStyles.requestReasonText}>
+                  {r.reason}
+                </Text>
 
                 <Button
                   secondary
@@ -634,7 +506,7 @@ export function ShiftRequestsScreen({
                 />
               </View>
             ))}
-            <Pager offset={offset} total={data.total} onChange={setOffset} />
+            <Pager offset={offset} total={data.total} size={pageSize} onChange={setOffset} />
           </>
         )}
       </QueryState>

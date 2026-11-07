@@ -1,5 +1,6 @@
 import React from 'react';
 import { View, Text, StyleSheet, Pressable } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { colors } from '../../theme/colors';
 import { SmartSiteLogo, IconBell, IconChevronLeft } from './Icons';
 import { WorkerAvatar } from './WorkerAvatar';
@@ -49,7 +50,7 @@ export function ScreenHeader({
 
   if (mode === 'detail') {
     return (
-      <View style={styles.detailContainer}>
+      <SafeAreaView edges={['top', 'left', 'right']} style={styles.detailContainer}>
         <Pressable
           accessibilityRole="button"
           accessibilityLabel={t('common.back')}
@@ -78,12 +79,12 @@ export function ScreenHeader({
             <Text style={styles.langPillText}>{currentLang.toUpperCase()}</Text>
           </Pressable>
         </View>
-      </View>
+      </SafeAreaView>
     );
   }
 
   return (
-    <View style={styles.rootContainer}>
+    <SafeAreaView edges={['top', 'left', 'right']} style={styles.rootContainer}>
       <View style={styles.topRow}>
         <Pressable
           accessibilityRole="button"
@@ -159,7 +160,7 @@ export function ScreenHeader({
           </Text>
         </View>
       )}
-    </View>
+    </SafeAreaView>
   );
 }
 

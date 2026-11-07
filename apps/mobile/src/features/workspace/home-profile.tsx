@@ -1,5 +1,7 @@
+import { ContractorHome } from '../contractor/contractor-home';
 import React, { useState } from 'react';
 import { View, Text, StyleSheet, Pressable, ScrollView, Modal, Platform } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { useQuery } from '@tanstack/react-query';
 import { useAuth } from '../auth/auth-context';
 import { useWorkspace } from './workspace-context';
@@ -11,39 +13,36 @@ import {
   required,
   useCommand,
 } from '../shared/data';
-import { Button, ErrorNotice, Field, Hint, Page, QueryState, palette } from '../shared/ui';
+import { Button, ErrorNotice, Field, Page, QueryState, palette } from '../shared/ui';
 import { WorkerAvatar } from '../../components/common/WorkerAvatar';
 import { WorkerQrModal } from '../../components/worker/WorkerQrModal';
 import { WorkerRequestModal } from '../../components/modals/WorkerRequestModal';
-import { CreateWorkerModal } from '../../components/modals/CreateWorkerModal';
 import { WorkerDocuments } from '../contractor/worker-documents';
-import { ScheduleAssignModal } from '../../components/modals/ScheduleAssignModal';
 import {
-  IconCalendar,
-  IconClock,
   IconDocument,
   IconPlus,
   IconQrCode,
   IconShield,
   IconChevronRight,
-  IconUsers,
-  IconUserPlus,
   IconAlert,
   IconLock,
+  IconUser,
+  IconMapPin,
+  IconGlobe,
+  IconLogout,
+  IconSwap,
 } from '../../components/common/Icons';
 import { colors } from '../../theme/colors';
-import { useTranslation } from '../../i18n';
+import { useTranslation, setLanguage } from '../../i18n';
 import type { NavigationTarget } from '../../SmartSiteMobileApp';
 
 export function HomeScreen({ navigate }: { navigate: (target: NavigationTarget) => void }) {
   const { t } = useTranslation();
-  const { scope, client, token, user, queryKey, workerId, workerDocumentStatus } = useWorkspace();
+  const { scope, client, token, user, queryKey, workerId } = useWorkspace();
   const contractor = scope.role === 'contractor';
   const today = localDate();
   const [showQrModal, setShowQrModal] = useState(false);
   const [showRequestModal, setShowRequestModal] = useState(false);
-  const [showCreateWorkerModal, setShowCreateWorkerModal] = useState(false);
-  const [showScheduleAssignModal, setShowScheduleAssignModal] = useState(false);
 
   // Queries for Worker
   const team = useQuery({
@@ -80,419 +79,7 @@ export function HomeScreen({ navigate }: { navigate: (target: NavigationTarget) 
     enabled: !contractor,
   });
 
-  // Queries for Contractor
-  const dashboard = useQuery({
-    queryKey: [...queryKey, 'dashboard'],
-    queryFn: () => client.contractorDashboard(token, scope.siteId, scope.contractorId),
-    enabled: contractor,
-  });
-  const pendingRequests = useQuery({
-    queryKey: [...queryKey, 'contractor-requests-count'],
-    queryFn: () =>
-      client.listShiftRequests(token, scope.siteId, {
-        view: 'REVIEW',
-        limit: 1,
-      }),
-    enabled: contractor,
-  });
-  const safetyChecklists = useQuery({
-    queryKey: [...queryKey, 'contractor-safety-count'],
-    queryFn: () =>
-      client.listSafetyChecklists(token, scope.siteId, {
-        limit: 1,
-      }),
-    enabled: contractor,
-  });
-
-  if (contractor) {
-    return (
-      <ScrollView
-        contentContainerStyle={homeStyles.contractorScrollContent}
-        showsVerticalScrollIndicator={false}
-      >
-        {/* Executive Dashboard Bar */}
-        <View style={homeStyles.dashboardContextBar}>
-          <View style={homeStyles.contextTextGroup}>
-            <Text numberOfLines={1} ellipsizeMode="tail" style={homeStyles.contextDashboardTitle}>
-              {t('contractorHome.dashboardTitle')}
-            </Text>
-            <Text style={homeStyles.contextSubInfo} numberOfLines={1}>
-              {today} · 🏢 {scope.contractorName || scope.siteName}
-            </Text>
-          </View>
-
-          <Pressable
-            accessibilityRole="button"
-            accessibilityLabel={t('header.account')}
-            onPress={() => navigate({ route: 'profile' })}
-            style={homeStyles.contextAvatarBtn}
-          >
-            <WorkerAvatar size={42} role="contractor" />
-          </Pressable>
-        </View>
-
-        {/* Realtime Workforce Stats Card - Modern Lovable Executive Card */}
-        <QueryState query={dashboard}>
-          {(data) => {
-            const total = data.workerCount ?? 0;
-            const inside = Math.max(0, total - (data.unassignedWorkerCount ?? 0));
-            const outside = Math.max(0, Math.floor(total * 0.15));
-            const unassigned = data.unassignedWorkerCount ?? 0;
-            const presencePercent = total > 0 ? Math.round((inside / total) * 100) : 0;
-
-            return (
-              <View style={homeStyles.workforceCard}>
-                {/* Workforce Header */}
-                <View style={homeStyles.workforceCardHeader}>
-                  <View style={homeStyles.workforceTitleGroup}>
-                    <View style={homeStyles.workforceIconCircle}>
-                      <IconUsers size={16} color="#2563EB" />
-                    </View>
-                    <View style={{ flexShrink: 1, minWidth: 0 }}>
-                      <Text
-                        numberOfLines={1}
-                        ellipsizeMode="tail"
-                        style={homeStyles.workforceCardTitle}
-                      >
-                        {t('contractorHome.overview')}
-                      </Text>
-                      <Text
-                        numberOfLines={1}
-                        ellipsizeMode="tail"
-                        style={homeStyles.workforceTeamBadge}
-                      >
-                        {t('contractorHome.teamsCount', { count: data.teamCount ?? 0 })}
-                      </Text>
-                    </View>
-                  </View>
-
-                  <Pressable
-                    accessibilityRole="button"
-                    accessibilityLabel={t('contractorHome.seeAll')}
-                    onPress={() => navigate({ route: 'workforce' })}
-                    style={homeStyles.viewListBtn}
-                  >
-                    <Text numberOfLines={1} style={homeStyles.viewListText}>
-                      {t('contractorHome.seeAll')} ›
-                    </Text>
-                  </Pressable>
-                </View>
-
-                {/* Hero Total Numbers & Presence Rate */}
-                <View style={homeStyles.workforceHeroRow}>
-                  <View
-                    accessible={true}
-                    accessibilityLabel={t('contractorHome.totalWorkers')}
-                    style={homeStyles.workforceHeroLeft}
-                  >
-                    <Text numberOfLines={1} style={homeStyles.workforceTotalNum}>
-                      {total}
-                    </Text>
-                    <Text
-                      numberOfLines={1}
-                      ellipsizeMode="tail"
-                      style={homeStyles.workforceTotalLabel}
-                    >
-                      {t('contractorHome.totalWorkers')}
-                    </Text>
-                  </View>
-
-                  <View style={homeStyles.presenceRateChip}>
-                    <View style={homeStyles.presencePulseDot} />
-                    <Text numberOfLines={1} style={homeStyles.presenceRateVal}>
-                      {presencePercent}%
-                    </Text>
-                    <Text numberOfLines={1} style={homeStyles.presenceRateLabel}>
-                      {t('contractorHome.present')}
-                    </Text>
-                  </View>
-                </View>
-
-                {/* Multi-segment Ratio Bar */}
-                <View style={homeStyles.ratioBarTrack}>
-                  {total > 0 ? (
-                    <>
-                      <View style={[homeStyles.ratioBarInside, { flex: Math.max(inside, 0.05) }]} />
-                      <View
-                        style={[homeStyles.ratioBarOutside, { flex: Math.max(outside, 0.05) }]}
-                      />
-                      <View
-                        style={[
-                          homeStyles.ratioBarUnassigned,
-                          { flex: Math.max(unassigned, 0.05) },
-                        ]}
-                      />
-                    </>
-                  ) : (
-                    <View style={homeStyles.ratioBarEmpty} />
-                  )}
-                </View>
-
-                {/* 3 Rich-Color Status Metric Cards */}
-                <View style={homeStyles.workforceMetricsGrid}>
-                  <Pressable
-                    accessibilityRole="button"
-                    accessibilityLabel={t('contractorHome.insideSite')}
-                    style={({ pressed }) => [
-                      homeStyles.metricCardGreen,
-                      pressed && { opacity: 0.85 },
-                    ]}
-                    onPress={() => navigate({ route: 'workforce' })}
-                  >
-                    <View style={homeStyles.metricCardTop}>
-                      <View style={[homeStyles.metricStatusDot, { backgroundColor: '#10B981' }]} />
-                      <Text
-                        numberOfLines={1}
-                        ellipsizeMode="tail"
-                        style={homeStyles.metricLabelGreen}
-                      >
-                        {t('contractorHome.insideSite')}
-                      </Text>
-                    </View>
-                    <Text numberOfLines={1} style={homeStyles.metricValueGreen}>
-                      {inside}
-                    </Text>
-                  </Pressable>
-
-                  <Pressable
-                    accessibilityRole="button"
-                    accessibilityLabel={t('contractorHome.outsideSite')}
-                    style={({ pressed }) => [
-                      homeStyles.metricCardOrange,
-                      pressed && { opacity: 0.85 },
-                    ]}
-                    onPress={() => navigate({ route: 'workforce' })}
-                  >
-                    <View style={homeStyles.metricCardTop}>
-                      <View style={[homeStyles.metricStatusDot, { backgroundColor: '#F97316' }]} />
-                      <Text
-                        numberOfLines={1}
-                        ellipsizeMode="tail"
-                        style={homeStyles.metricLabelOrange}
-                      >
-                        {t('contractorHome.outsideSite')}
-                      </Text>
-                    </View>
-                    <Text numberOfLines={1} style={homeStyles.metricValueOrange}>
-                      {outside}
-                    </Text>
-                  </Pressable>
-
-                  <Pressable
-                    accessibilityRole="button"
-                    accessibilityLabel={t('contractorHome.unassignedWorkers', {
-                      count: unassigned,
-                    })}
-                    style={({ pressed }) => [
-                      homeStyles.metricCardSlate,
-                      pressed && { opacity: 0.85 },
-                    ]}
-                    onPress={() => navigate({ route: 'workforce' })}
-                  >
-                    <View style={homeStyles.metricCardTop}>
-                      <View style={[homeStyles.metricStatusDot, { backgroundColor: '#94A3B8' }]} />
-                      <Text
-                        numberOfLines={1}
-                        ellipsizeMode="tail"
-                        style={homeStyles.metricLabelSlate}
-                      >
-                        {t('contractorHome.notEntered')}
-                      </Text>
-                    </View>
-                    <Text numberOfLines={1} style={homeStyles.metricValueSlate}>
-                      {unassigned}
-                    </Text>
-                  </Pressable>
-                </View>
-              </View>
-            );
-          }}
-        </QueryState>
-
-        {/* Needs Action / Cần xử lý Card */}
-        <View style={homeStyles.needsActionCard}>
-          <View style={homeStyles.needsActionHeader}>
-            <View style={homeStyles.needsActionTitleGroup}>
-              <Text numberOfLines={1} style={homeStyles.needsActionTitle}>
-                {t('contractorHome.needsAction')}
-              </Text>
-              {Boolean(pendingRequests.data?.total) && (
-                <View style={homeStyles.pendingTotalChip}>
-                  <Text numberOfLines={1} style={homeStyles.pendingTotalText}>
-                    {pendingRequests.data?.total}
-                  </Text>
-                </View>
-              )}
-            </View>
-            <Pressable
-              accessibilityRole="button"
-              accessibilityLabel={t('contractorHome.seeAll')}
-              onPress={() => navigate({ route: 'requests' })}
-            >
-              <Text numberOfLines={1} style={homeStyles.needsActionSeeAll}>
-                {t('contractorHome.seeAll')} ›
-              </Text>
-            </Pressable>
-          </View>
-
-          {/* Row 1: Yêu cầu chờ duyệt */}
-          <Pressable
-            accessibilityRole="button"
-            accessibilityLabel={t('contractorHome.pendingRequests')}
-            style={({ pressed }) => [
-              homeStyles.compactActionRow,
-              pendingRequests.data?.total ? homeStyles.urgentRowHighlight : homeStyles.normalRow,
-              pressed && { opacity: 0.85 },
-            ]}
-            onPress={() => navigate({ route: 'requests' })}
-          >
-            <View
-              style={[
-                homeStyles.compactIconBox,
-                { backgroundColor: pendingRequests.data?.total ? '#FFEDD5' : '#F1F5F9' },
-              ]}
-            >
-              <IconDocument size={18} color={pendingRequests.data?.total ? '#EA580C' : '#64748B'} />
-            </View>
-            <View style={{ flex: 1, minWidth: 0 }}>
-              <Text numberOfLines={2} ellipsizeMode="tail" style={homeStyles.compactActionTitle}>
-                {t('contractorHome.pendingRequests')}
-              </Text>
-              <Text numberOfLines={2} ellipsizeMode="tail" style={homeStyles.compactActionSub}>
-                {pendingRequests.data?.total
-                  ? t('contractorHome.pendingRequestsSub', { count: pendingRequests.data.total })
-                  : t('contractorHome.allRequestsProcessed')}
-              </Text>
-            </View>
-            {pendingRequests.data?.total ? (
-              <View style={homeStyles.urgentBadge}>
-                <Text numberOfLines={1} style={homeStyles.urgentBadgeText}>
-                  {t('contractorHome.reviewNow')}
-                </Text>
-              </View>
-            ) : (
-              <Text numberOfLines={1} style={homeStyles.allClearText}>
-                {t('contractorHome.allClear')}
-              </Text>
-            )}
-          </Pressable>
-
-          <View style={homeStyles.compactRowDivider} />
-
-          {/* Row 2: Đối soát ngày công */}
-          <Pressable
-            accessibilityRole="button"
-            accessibilityLabel={t('contractorHome.attendanceReconciliation')}
-            style={({ pressed }) => [homeStyles.compactActionRow, pressed && { opacity: 0.85 }]}
-            onPress={() => navigate({ route: 'attendance' })}
-          >
-            <View style={[homeStyles.compactIconBox, { backgroundColor: '#EFF6FF' }]}>
-              <IconClock size={18} color="#2563EB" />
-            </View>
-            <View style={{ flex: 1, minWidth: 0 }}>
-              <Text numberOfLines={2} ellipsizeMode="tail" style={homeStyles.compactActionTitle}>
-                {t('contractorHome.attendanceReconciliation')}
-              </Text>
-              <Text numberOfLines={2} ellipsizeMode="tail" style={homeStyles.compactActionSub}>
-                {t('contractorHome.attendanceSub')}
-              </Text>
-            </View>
-            <IconChevronRight size={18} color="#94A3B8" />
-          </Pressable>
-
-          <View style={homeStyles.compactRowDivider} />
-
-          {/* Row 3: Checklist an toàn */}
-          <Pressable
-            accessibilityRole="button"
-            accessibilityLabel={t('contractorHome.assignedChecklists')}
-            style={({ pressed }) => [homeStyles.compactActionRow, pressed && { opacity: 0.85 }]}
-            onPress={() => navigate({ route: 'assigned' })}
-          >
-            <View style={[homeStyles.compactIconBox, { backgroundColor: '#ECFDF5' }]}>
-              <IconShield size={18} color="#10B981" />
-            </View>
-            <View style={{ flex: 1, minWidth: 0 }}>
-              <Text numberOfLines={2} ellipsizeMode="tail" style={homeStyles.compactActionTitle}>
-                {t('contractorHome.assignedChecklists')}
-              </Text>
-              <Text numberOfLines={2} ellipsizeMode="tail" style={homeStyles.compactActionSub}>
-                {safetyChecklists.data?.total
-                  ? t('contractorHome.safetyChecklistsSub', { count: safetyChecklists.data?.total })
-                  : t('contractorHome.safetyTasksDefault')}
-              </Text>
-            </View>
-            <IconChevronRight size={18} color="#94A3B8" />
-          </Pressable>
-        </View>
-
-        {/* Bento Quick Actions Grid */}
-        <View style={homeStyles.quickActionsRow}>
-          <Pressable
-            accessibilityRole="button"
-            accessibilityLabel={t('contractorHome.addWorker')}
-            style={({ pressed }) => [homeStyles.bentoCardPrimary, pressed && { opacity: 0.9 }]}
-            onPress={() => setShowCreateWorkerModal(true)}
-          >
-            <View style={homeStyles.bentoIconPrimary}>
-              <IconUserPlus size={18} color="#FFFFFF" />
-            </View>
-            <Text numberOfLines={2} ellipsizeMode="tail" style={homeStyles.bentoTitlePrimary}>
-              {t('contractorHome.addWorker')}
-            </Text>
-            <Text numberOfLines={2} ellipsizeMode="tail" style={homeStyles.bentoSubPrimary}>
-              {t('contractorHome.addWorkerSub')}
-            </Text>
-          </Pressable>
-
-          <Pressable
-            accessibilityRole="button"
-            accessibilityLabel={t('contractorHome.assignSchedule')}
-            style={({ pressed }) => [homeStyles.bentoCardSecondary, pressed && { opacity: 0.88 }]}
-            onPress={() => setShowScheduleAssignModal(true)}
-          >
-            <View style={homeStyles.bentoIconSecondary}>
-              <IconCalendar size={18} color="#2563EB" />
-            </View>
-            <Text numberOfLines={2} ellipsizeMode="tail" style={homeStyles.bentoTitleSecondary}>
-              {t('contractorHome.assignSchedule')}
-            </Text>
-            <Text numberOfLines={2} ellipsizeMode="tail" style={homeStyles.bentoSubSecondary}>
-              {t('contractorHome.assignScheduleSub')}
-            </Text>
-          </Pressable>
-        </View>
-
-        {/* Worker Teams and Zones Link */}
-        <Pressable
-          accessibilityRole="button"
-          accessibilityLabel={t('contractorHome.workerTeamsAndZones')}
-          style={({ pressed }) => [homeStyles.teamsManageBar, pressed && { opacity: 0.85 }]}
-          onPress={() => navigate({ route: 'teams' })}
-        >
-          <View style={homeStyles.teamsManageBarLeft}>
-            <View style={homeStyles.teamsIconSmall}>
-              <IconUsers size={15} color="#475569" />
-            </View>
-            <Text numberOfLines={1} ellipsizeMode="tail" style={homeStyles.teamsManageBarText}>
-              {t('contractorHome.workerTeamsAndZones')}
-            </Text>
-          </View>
-          <IconChevronRight size={18} color="#94A3B8" />
-        </Pressable>
-
-        {/* Modals for Contractor */}
-        <CreateWorkerModal
-          visible={showCreateWorkerModal}
-          onClose={() => setShowCreateWorkerModal(false)}
-        />
-        <ScheduleAssignModal
-          visible={showScheduleAssignModal}
-          onClose={() => setShowScheduleAssignModal(false)}
-        />
-      </ScrollView>
-    );
-  }
+  if (contractor) return <ContractorHome navigate={navigate} />;
 
   // Worker Experience
   const currentSchedule = todaySchedules.data?.items?.[0];
@@ -512,9 +99,6 @@ export function HomeScreen({ navigate }: { navigate: (target: NavigationTarget) 
       showsVerticalScrollIndicator={false}
     >
       {/* Worker Greeting Section */}
-      {workerDocumentStatus && workerDocumentStatus !== 'ACTIVE' && (
-        <Hint>{t('documents.readOnly')}</Hint>
-      )}
       <View style={homeStyles.greetingSection}>
         <View style={homeStyles.greetingTextContainer}>
           <Text numberOfLines={1} ellipsizeMode="tail" style={homeStyles.greetingSub}>
@@ -787,7 +371,7 @@ export function ProfileScreen({
   onScopeChange: () => void;
   initialDocuments?: boolean;
 }) {
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
   const { scope, user, client, token, queryKey, canSwitchScope } = useWorkspace();
   const { session } = useAuth();
   const [showPasswordModal, setShowPasswordModal] = useState(false);
@@ -805,262 +389,350 @@ export function ProfileScreen({
 
   if (documents && scope.role === 'worker' && worker.data)
     return (
-      <Page title={t('documents.title')} onBack={() => setDocuments(false)}>
-        <WorkerDocuments workerId={worker.data.id} canSubmitDocuments />
-      </Page>
+      <SafeAreaView edges={['top']} style={{ flex: 1 }}>
+        <Page title={t('documents.title')} onBack={() => setDocuments(false)}>
+          <WorkerDocuments workerId={worker.data.id} canSubmitDocuments />
+        </Page>
+      </SafeAreaView>
     );
 
+  const docStatus = worker.data?.documentStatus ?? 'PENDING';
+  const isApproved = docStatus === 'ACTIVE';
+  const isPending = docStatus === 'PENDING';
+  const isExpired = docStatus === 'EXPIRED';
+  const docBadgeBg = isApproved
+    ? '#EDFAF2'
+    : isPending
+      ? '#FFF7ED'
+      : isExpired
+        ? '#FEF2F2'
+        : '#F8FAFC';
+  const docBadgeColor = isApproved
+    ? '#065F46'
+    : isPending
+      ? '#C2410C'
+      : isExpired
+        ? '#991B1B'
+        : '#475569';
+  const isEn = (i18n.resolvedLanguage ?? i18n.language)?.startsWith('en');
+
   return (
-    <Page title={t('profile.title')}>
-      {/* Hero Profile Identity Card */}
-      <View style={homeStyles.profileHeroCard}>
-        <View style={homeStyles.profileAvatarRow}>
-          <View style={homeStyles.avatarWrapper}>
-            <WorkerAvatar size={64} role={scope.role} />
+    <SafeAreaView edges={['top']} style={{ flex: 1, backgroundColor: '#FFF7ED' }}>
+      <ScrollView
+        showsVerticalScrollIndicator={false}
+        contentContainerStyle={profileStyles.scrollContainer}
+      >
+        {/* 1. Peach Gradient Top Section */}
+        <View style={profileStyles.headerCard}>
+          {/* Top Header Row with Centered Title & Hexagon/Shield Right Icon */}
+          <View style={profileStyles.topHeaderRow}>
+            <View style={{ width: 40 }} />
+            <Text style={profileStyles.topHeaderTitle}>{t('profile.title')}</Text>
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel={t('profile.changePassword')}
+              onPress={() => setShowPasswordModal(true)}
+              hitSlop={8}
+              style={({ pressed }) => [profileStyles.topRightBtn, pressed && { opacity: 0.7 }]}
+            >
+              <View style={profileStyles.hexagonBadge}>
+                <IconShield size={18} color="#EA580C" />
+              </View>
+            </Pressable>
+          </View>
+
+          {/* Centered Large Avatar with Ring */}
+          <View style={profileStyles.avatarCenteredWrapper}>
+            <View style={profileStyles.avatarRing}>
+              <WorkerAvatar size={92} role={scope.role} />
+            </View>
             <View
               style={[
-                homeStyles.avatarRoleBadge,
+                profileStyles.avatarRoleBadge,
                 { backgroundColor: scope.role === 'worker' ? '#10B981' : '#2563EB' },
               ]}
             >
-              <View style={homeStyles.avatarRoleDot} />
+              <View style={profileStyles.avatarRoleDot} />
             </View>
           </View>
 
-          <View style={homeStyles.profileHeroInfo}>
-            <Text numberOfLines={2} ellipsizeMode="tail" style={homeStyles.profileHeroName}>
-              {user.displayName}
-            </Text>
-            <Text numberOfLines={1} ellipsizeMode="tail" style={homeStyles.profileHeroUsername}>
-              @{user.username}
-            </Text>
+          {/* Centered Display Name */}
+          <Text numberOfLines={2} ellipsizeMode="tail" style={profileStyles.userName}>
+            {user.displayName}
+          </Text>
 
-            <View style={homeStyles.heroPillsRow}>
-              <View
+          {/* Location Pin Row */}
+          <View style={profileStyles.locationRow}>
+            <IconMapPin size={15} color="#EA580C" />
+            <Text numberOfLines={1} ellipsizeMode="tail" style={profileStyles.locationText}>
+              {scope.siteName}
+            </Text>
+          </View>
+
+          {/* Role, Worker Code & Username Badges */}
+          <View style={profileStyles.tagsRow}>
+            <View
+              style={[
+                profileStyles.rolePill,
+                { backgroundColor: scope.role === 'worker' ? '#EDFAF2' : '#EFF6FF' },
+              ]}
+            >
+              <Text
                 style={[
-                  homeStyles.profileRoleBadge,
-                  { backgroundColor: scope.role === 'worker' ? '#EDFAF2' : '#EFF6FF' },
+                  profileStyles.rolePillText,
+                  { color: scope.role === 'worker' ? '#065F46' : '#1D4ED8' },
                 ]}
               >
-                <View
-                  style={[
-                    homeStyles.miniDot,
-                    { backgroundColor: scope.role === 'worker' ? '#10B981' : '#2563EB' },
-                  ]}
-                />
-                <Text
-                  numberOfLines={1}
-                  style={[
-                    homeStyles.profileRoleText,
-                    { color: scope.role === 'worker' ? '#065F46' : '#1D4ED8' },
-                  ]}
-                >
-                  {scope.role === 'worker' ? t('scope.workerRole') : t('scope.contractorRole')}
-                </Text>
-              </View>
-
-              {scope.role === 'worker' && (
-                <QueryState query={worker}>
-                  {(data) =>
-                    data ? (
-                      <View style={homeStyles.workerCodeBadge}>
-                        <Text numberOfLines={1} style={homeStyles.workerCodeText}>
-                          {data.externalId}
-                        </Text>
-                      </View>
-                    ) : (
-                      <Text numberOfLines={1} style={homeStyles.noProfileText}>
-                        {t('profile.noWorkerProfile')}
-                      </Text>
-                    )
-                  }
-                </QueryState>
-              )}
+                {scope.role === 'worker' ? t('scope.workerRole') : t('scope.contractorRole')}
+              </Text>
             </View>
 
-            {/* Clean Site scope row inside Hero Card, identical to Home screen */}
-            {canSwitchScope ? (
-              <Pressable
-                accessibilityRole="button"
-                accessibilityLabel={t('scope.switchScope')}
-                style={({ pressed }) => [homeStyles.heroSiteRow, pressed && { opacity: 0.75 }]}
-                onPress={onScopeChange}
-              >
-                <Text numberOfLines={1} ellipsizeMode="tail" style={homeStyles.heroSiteText}>
-                  🏢 {scope.siteName}
-                </Text>
-                <View style={homeStyles.heroSwitchPill}>
-                  <Text style={homeStyles.heroSwitchPillText}>{t('scope.chooseAgain')}</Text>
-                  <IconChevronRight size={13} color="#1D4ED8" />
-                </View>
-              </Pressable>
-            ) : (
-              <View style={homeStyles.heroSiteRow}>
-                <Text numberOfLines={1} ellipsizeMode="tail" style={homeStyles.heroSiteText}>
-                  🏢 {scope.siteName}
-                </Text>
-                <View style={homeStyles.heroSiteBadge}>
-                  <View style={homeStyles.heroSiteDot} />
-                  <Text style={homeStyles.heroSiteBadgeText}>{t('workerHome.zoneEffective')}</Text>
-                </View>
-              </View>
+            {scope.role === 'worker' && (
+              <QueryState query={worker}>
+                {(data) =>
+                  data ? (
+                    <View style={profileStyles.workerIdPill}>
+                      <Text style={profileStyles.workerIdText}>{data.externalId}</Text>
+                    </View>
+                  ) : (
+                    <Text style={profileStyles.noProfileText}>{t('profile.noWorkerProfile')}</Text>
+                  )
+                }
+              </QueryState>
             )}
+
+            <Text style={profileStyles.usernameText}>@{user.username}</Text>
           </View>
         </View>
-      </View>
 
-      {/* Worker Documents Hero Card (Worker only) */}
-      {scope.role === 'worker' && (
-        <QueryState query={worker}>
-          {(data) => {
-            const docStatus = data?.documentStatus ?? 'PENDING';
-            const isApproved = docStatus === 'ACTIVE';
-            const isPending = docStatus === 'PENDING';
-            const isExpired = docStatus === 'EXPIRED';
+        {/* 2. Section "General" (Cài đặt chung) */}
+        <View style={profileStyles.generalSection}>
+          <Text style={profileStyles.sectionTitle}>{t('profile.generalSection')}</Text>
 
-            const statusBadgeBg = isApproved
-              ? '#EDFAF2'
-              : isPending
-                ? '#FFF7ED'
-                : isExpired
-                  ? '#FEF2F2'
-                  : '#F8FAFC';
-            const statusBadgeBorder = isApproved
-              ? '#A7F3D0'
-              : isPending
-                ? '#FED7AA'
-                : isExpired
-                  ? '#FECACA'
-                  : '#E2E8F0';
-            const statusBadgeColor = isApproved
-              ? '#065F46'
-              : isPending
-                ? '#C2410C'
-                : isExpired
-                  ? '#991B1B'
-                  : '#475569';
-            const statusDotColor = isApproved
-              ? '#10B981'
-              : isPending
-                ? '#F97316'
-                : isExpired
-                  ? '#EF4444'
-                  : '#94A3B8';
-            const cardAccentColor = isApproved
-              ? '#10B981'
-              : isPending
-                ? '#F97316'
-                : isExpired
-                  ? '#EF4444'
-                  : '#CBD5E1';
+          <View style={profileStyles.menuGroupCard}>
+            {/* Row 1: Profile Setting / Thông tin tài khoản */}
+            <View style={profileStyles.menuItem}>
+              <View style={[profileStyles.menuIconBox, { backgroundColor: '#EFF6FF' }]}>
+                <IconUser size={18} color="#2563EB" />
+              </View>
+              <View style={profileStyles.menuTextCol}>
+                <Text numberOfLines={1} ellipsizeMode="tail" style={profileStyles.menuTitle}>
+                  {t('profile.personalInfo')}
+                </Text>
+                <Text numberOfLines={1} ellipsizeMode="tail" style={profileStyles.menuSubtitle}>
+                  @{user.username}
+                </Text>
+              </View>
+              <IconChevronRight size={16} color="#CBD5E1" />
+            </View>
 
-            return (
-              <Pressable
-                accessibilityRole="button"
-                accessibilityLabel={t('documents.title')}
-                style={({ pressed }) => [
-                  homeStyles.documentHeroCard,
-                  { borderLeftColor: cardAccentColor },
-                  pressed && { opacity: 0.85, transform: [{ scale: 0.99 }] },
-                ]}
-                onPress={() => setDocuments(true)}
-              >
-                {/* Header Row: Icon + Title & Subtitle */}
-                <View style={homeStyles.docHeroHeaderRow}>
-                  <View style={homeStyles.docHeroIconBadge}>
-                    <IconDocument size={22} color="#F66B17" />
+            <View style={profileStyles.menuDivider} />
+
+            {/* Row 2: Location / Công trường */}
+            <View style={profileStyles.menuItem}>
+              <View style={[profileStyles.menuIconBox, { backgroundColor: '#FEF3C7' }]}>
+                <IconMapPin size={18} color="#D97706" />
+              </View>
+              <View style={profileStyles.menuTextCol}>
+                <Text numberOfLines={1} ellipsizeMode="tail" style={profileStyles.menuTitle}>
+                  {t('profile.siteLocation')}
+                </Text>
+                <Text numberOfLines={1} ellipsizeMode="tail" style={profileStyles.menuSubtitle}>
+                  {scope.siteName}
+                </Text>
+              </View>
+              <IconChevronRight size={16} color="#CBD5E1" />
+            </View>
+
+            {/* Optional: Switch Scope (Only for multi-scope users) */}
+            {canSwitchScope && (
+              <>
+                <View style={profileStyles.menuDivider} />
+                <Pressable
+                  accessibilityRole="button"
+                  accessibilityLabel={t('scope.switchScope')}
+                  style={({ pressed }) => [
+                    profileStyles.menuItem,
+                    pressed && { opacity: 0.75, backgroundColor: '#F8FAFC' },
+                  ]}
+                  onPress={onScopeChange}
+                >
+                  <View style={[profileStyles.menuIconBox, { backgroundColor: '#FFF7ED' }]}>
+                    <IconSwap size={18} color="#EA580C" />
                   </View>
-                  <View style={homeStyles.docHeroTitleCol}>
-                    <Text numberOfLines={2} ellipsizeMode="tail" style={homeStyles.docHeroTitle}>
-                      {t('documents.certificatesHeading')}
+                  <View style={profileStyles.menuTextCol}>
+                    <Text numberOfLines={1} ellipsizeMode="tail" style={profileStyles.menuTitle}>
+                      {scope.role === 'worker'
+                        ? t('profile.switchMode')
+                        : t('profile.switchContractor')}
                     </Text>
-                    <Text numberOfLines={2} ellipsizeMode="tail" style={homeStyles.docHeroSub}>
-                      {t('documents.title')}
+                    <Text numberOfLines={1} ellipsizeMode="tail" style={profileStyles.menuSubtitle}>
+                      {t('scope.chooseAgain')}
                     </Text>
                   </View>
-                </View>
+                  <IconChevronRight size={16} color="#CBD5E1" />
+                </Pressable>
+              </>
+            )}
 
-                {/* Bottom Status & CTA Strip */}
-                <View style={homeStyles.docHeroBottomRow}>
-                  <View
-                    style={[
-                      homeStyles.docHeroStatusBadge,
-                      { backgroundColor: statusBadgeBg, borderColor: statusBadgeBorder },
-                    ]}
-                  >
-                    <View style={[homeStyles.miniDot, { backgroundColor: statusDotColor }]} />
+            {/* Row 3: Manage Documents / Worker Documents (Worker only) */}
+            {scope.role === 'worker' && (
+              <>
+                <View style={profileStyles.menuDivider} />
+                <Pressable
+                  accessibilityRole="button"
+                  accessibilityLabel={t('documents.title')}
+                  style={({ pressed }) => [
+                    profileStyles.menuItem,
+                    pressed && { opacity: 0.75, backgroundColor: '#F8FAFC' },
+                  ]}
+                  onPress={() => setDocuments(true)}
+                >
+                  <View style={[profileStyles.menuIconBox, { backgroundColor: '#FFF7ED' }]}>
+                    <IconDocument size={18} color="#EA580C" />
+                  </View>
+                  <View style={profileStyles.menuTextCol}>
+                    <Text numberOfLines={1} ellipsizeMode="tail" style={profileStyles.menuTitle}>
+                      {t('profile.safetyCertificates')}
+                    </Text>
+                    <Text numberOfLines={1} ellipsizeMode="tail" style={profileStyles.menuSubtitle}>
+                      {t('profile.safetyCertificatesSubtitle')}
+                    </Text>
+                  </View>
+                  <View style={[profileStyles.statusBadge, { backgroundColor: docBadgeBg }]}>
                     <Text
                       numberOfLines={1}
-                      style={[homeStyles.docHeroStatusText, { color: statusBadgeColor }]}
+                      style={[profileStyles.statusBadgeText, { color: docBadgeColor }]}
                     >
-                      {t(`documents.${docStatus}`)}
+                      {isApproved
+                        ? t('profile.validStatus')
+                        : isPending
+                          ? t('documents.PENDING')
+                          : isExpired
+                            ? t('profile.expiredStatus')
+                            : t('profile.notSubmitted')}
                     </Text>
                   </View>
+                  <IconChevronRight size={16} color="#CBD5E1" />
+                </Pressable>
+              </>
+            )}
 
-                  <View style={homeStyles.docHeroCtaGroup}>
-                    <Text style={homeStyles.docHeroFooterAction}>{t('common.details')}</Text>
-                    <View style={homeStyles.docHeroChevronCircle}>
-                      <IconChevronRight size={14} color="#F66B17" />
-                    </View>
-                  </View>
-                </View>
-              </Pressable>
-            );
-          }}
-        </QueryState>
-      )}
+            <View style={profileStyles.menuDivider} />
 
-      {/* Account Security Action Card */}
-      <Pressable
-        accessibilityRole="button"
-        accessibilityLabel={t('profile.changePassword')}
-        style={({ pressed }) => [
-          homeStyles.compactActionCard,
-          pressed && { opacity: 0.8, transform: [{ scale: 0.99 }] },
-        ]}
-        onPress={() => setShowPasswordModal(true)}
-      >
-        <View style={homeStyles.actionRowLeft}>
-          <View style={[homeStyles.rowIconBox, { backgroundColor: '#F1F5F9' }]}>
-            <IconLock size={18} color="#0F1E36" />
-          </View>
-          <View style={homeStyles.rowTextCol}>
-            <Text numberOfLines={1} ellipsizeMode="tail" style={homeStyles.rowTitle}>
-              {t('profile.changePassword')}
-            </Text>
-            <Text numberOfLines={1} ellipsizeMode="tail" style={homeStyles.rowSubtitle}>
-              {t('profile.changePasswordSubtitle')}
-            </Text>
+            {/* Row 4: Security / Change Password */}
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel={t('profile.changePassword')}
+              style={({ pressed }) => [
+                profileStyles.menuItem,
+                pressed && { opacity: 0.75, backgroundColor: '#F8FAFC' },
+              ]}
+              onPress={() => setShowPasswordModal(true)}
+            >
+              <View style={[profileStyles.menuIconBox, { backgroundColor: '#F1F5F9' }]}>
+                <IconLock size={18} color="#475569" />
+              </View>
+              <View style={profileStyles.menuTextCol}>
+                <Text numberOfLines={1} ellipsizeMode="tail" style={profileStyles.menuTitle}>
+                  {t('profile.changePassword')}
+                </Text>
+                <Text numberOfLines={1} ellipsizeMode="tail" style={profileStyles.menuSubtitle}>
+                  {t('profile.changePasswordSubtitle')}
+                </Text>
+              </View>
+              <IconChevronRight size={16} color="#CBD5E1" />
+            </Pressable>
+
+            <View style={profileStyles.menuDivider} />
+
+            {/* Row 5: Language Toggle */}
+            <View style={profileStyles.menuItem}>
+              <View style={[profileStyles.menuIconBox, { backgroundColor: '#F0FDF4' }]}>
+                <IconGlobe size={18} color="#16A34A" />
+              </View>
+              <View style={profileStyles.menuTextCol}>
+                <Text numberOfLines={1} ellipsizeMode="tail" style={profileStyles.menuTitle}>
+                  {t('profile.displayLanguage')}
+                </Text>
+                <Text numberOfLines={1} ellipsizeMode="tail" style={profileStyles.menuSubtitle}>
+                  {isEn ? 'English' : 'Tiếng Việt'}
+                </Text>
+              </View>
+              <View style={profileStyles.langSwitchRow}>
+                <Pressable
+                  hitSlop={6}
+                  onPress={() => void setLanguage('vi')}
+                  style={[profileStyles.langOption, !isEn && profileStyles.langOptionActive]}
+                >
+                  <Text
+                    style={[
+                      profileStyles.langOptionText,
+                      !isEn && profileStyles.langOptionTextActive,
+                    ]}
+                  >
+                    VI
+                  </Text>
+                </Pressable>
+                <Pressable
+                  hitSlop={6}
+                  onPress={() => void setLanguage('en')}
+                  style={[profileStyles.langOption, isEn && profileStyles.langOptionActive]}
+                >
+                  <Text
+                    style={[
+                      profileStyles.langOptionText,
+                      isEn && profileStyles.langOptionTextActive,
+                    ]}
+                  >
+                    EN
+                  </Text>
+                </Pressable>
+              </View>
+            </View>
+
+            <View style={profileStyles.menuDivider} />
+
+            {/* Row 6: Logout */}
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel={t('common.logout')}
+              disabled={command.isPending}
+              style={({ pressed }) => [
+                profileStyles.menuItem,
+                pressed && { opacity: 0.75, backgroundColor: '#FEF2F2' },
+                command.isPending && { opacity: 0.6 },
+              ]}
+              onPress={() => command.mutate(() => session.logout())}
+            >
+              <View style={[profileStyles.menuIconBox, { backgroundColor: '#FEF2F2' }]}>
+                <IconLogout size={18} color="#EF4444" />
+              </View>
+              <View style={profileStyles.menuTextCol}>
+                <Text
+                  numberOfLines={1}
+                  ellipsizeMode="tail"
+                  style={[profileStyles.menuTitle, { color: '#EF4444', fontWeight: '700' }]}
+                >
+                  {t('common.logout')}
+                </Text>
+                <Text numberOfLines={1} ellipsizeMode="tail" style={profileStyles.menuSubtitle}>
+                  {t('profile.logoutDevice')}
+                </Text>
+              </View>
+              <IconChevronRight size={16} color="#FECACA" />
+            </Pressable>
           </View>
         </View>
 
-        <IconChevronRight size={16} color="#94A3B8" />
-      </Pressable>
+        <Text style={profileStyles.appVersionFooter}>SmartSite v0.1.0 · 2026</Text>
 
-      {/* Logout & App Footer */}
-      <View style={{ marginTop: 4, marginBottom: 24, gap: 12 }}>
-        <Pressable
-          accessibilityRole="button"
-          accessibilityLabel={t('common.logout')}
-          disabled={command.isPending}
-          style={({ pressed }) => [
-            homeStyles.modernLogoutBtn,
-            pressed && { opacity: 0.8 },
-            command.isPending && { opacity: 0.6 },
-          ]}
-          onPress={() => command.mutate(() => session.logout())}
-        >
-          <Text style={homeStyles.modernLogoutBtnText}>{t('common.logout')}</Text>
-        </Pressable>
-
-        <Text style={homeStyles.appVersionFooter}>SmartSite v0.1.0 · 2026</Text>
-      </View>
-
-      <ChangePasswordModal
-        visible={showPasswordModal}
-        onClose={() => setShowPasswordModal(false)}
-      />
-    </Page>
+        <ChangePasswordModal
+          visible={showPasswordModal}
+          onClose={() => setShowPasswordModal(false)}
+        />
+      </ScrollView>
+    </SafeAreaView>
   );
 }
 
@@ -2345,5 +2017,399 @@ const homeStyles = StyleSheet.create({
     fontSize: 13,
     fontWeight: '700',
     color: '#1E293B',
+  },
+});
+
+const profileStyles = StyleSheet.create({
+  scrollContainer: {
+    paddingBottom: 40,
+    backgroundColor: '#F8FAFC',
+  },
+  headerCard: {
+    backgroundColor: '#FFF7ED',
+    borderBottomLeftRadius: 36,
+    borderBottomRightRadius: 36,
+    paddingTop: 16,
+    paddingBottom: 22,
+    paddingHorizontal: 20,
+    shadowColor: '#EA580C',
+    shadowOffset: { width: 0, height: 6 },
+    shadowOpacity: 0.06,
+    shadowRadius: 16,
+    elevation: 3,
+  },
+  topHeaderRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: 16,
+  },
+  topHeaderTitle: {
+    fontSize: 18,
+    fontWeight: '800',
+    color: '#0F1E36',
+    letterSpacing: -0.3,
+  },
+  topRightBtn: {
+    width: 38,
+    height: 38,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  hexagonBadge: {
+    width: 36,
+    height: 36,
+    borderRadius: 12,
+    backgroundColor: '#FFFFFF',
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 1,
+    borderColor: '#FED7AA',
+    shadowColor: '#EA580C',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+    elevation: 2,
+  },
+  avatarCenteredWrapper: {
+    alignSelf: 'center',
+    marginBottom: 12,
+    position: 'relative',
+  },
+  avatarRing: {
+    padding: 4,
+    borderRadius: 60,
+    backgroundColor: '#FFFFFF',
+    borderWidth: 3,
+    borderColor: '#FFFFFF',
+    shadowColor: '#EA580C',
+    shadowOffset: { width: 0, height: 6 },
+    shadowOpacity: 0.18,
+    shadowRadius: 12,
+    elevation: 6,
+  },
+  avatarRoleBadge: {
+    position: 'absolute',
+    bottom: 4,
+    right: 4,
+    width: 22,
+    height: 22,
+    borderRadius: 11,
+    borderWidth: 3,
+    borderColor: '#FFFFFF',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  avatarRoleDot: {
+    width: 7,
+    height: 7,
+    borderRadius: 3.5,
+    backgroundColor: '#FFFFFF',
+  },
+  userName: {
+    fontSize: 22,
+    fontWeight: '800',
+    color: '#0F1E36',
+    textAlign: 'center',
+    letterSpacing: -0.4,
+    marginBottom: 4,
+  },
+  locationRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 4,
+    marginBottom: 10,
+  },
+  locationText: {
+    fontSize: 13.5,
+    color: '#64748B',
+    fontWeight: '600',
+  },
+  tagsRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    flexWrap: 'wrap',
+    marginBottom: 6,
+  },
+  rolePill: {
+    paddingHorizontal: 10,
+    paddingVertical: 3.5,
+    borderRadius: 10,
+  },
+  rolePillText: {
+    fontSize: 11.5,
+    fontWeight: '700',
+  },
+  workerIdPill: {
+    paddingHorizontal: 10,
+    paddingVertical: 3.5,
+    borderRadius: 10,
+    backgroundColor: '#F1F5F9',
+  },
+  workerIdText: {
+    fontSize: 11.5,
+    fontWeight: '700',
+    color: '#475569',
+  },
+  noProfileText: {
+    fontSize: 11.5,
+    color: '#94A3B8',
+    fontStyle: 'italic',
+  },
+  usernameText: {
+    fontSize: 12,
+    color: '#94A3B8',
+    fontWeight: '500',
+  },
+  statsCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-around',
+    backgroundColor: '#FFFFFF',
+    borderRadius: 20,
+    paddingVertical: 14,
+    paddingHorizontal: 12,
+    borderWidth: 1,
+    borderColor: '#FED7AA',
+    shadowColor: '#EA580C',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.08,
+    shadowRadius: 10,
+    elevation: 3,
+  },
+  statCol: {
+    alignItems: 'center',
+    flex: 1,
+    paddingHorizontal: 4,
+    minWidth: 0,
+  },
+  statLabel: {
+    fontSize: 11,
+    color: '#94A3B8',
+    fontWeight: '600',
+    marginBottom: 4,
+    textAlign: 'center',
+  },
+  statValueRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 4,
+    maxWidth: '100%',
+  },
+  statIconEmoji: {
+    fontSize: 13,
+  },
+  statValueText: {
+    fontSize: 13.5,
+    fontWeight: '800',
+    color: '#0F1E36',
+    flexShrink: 1,
+    textAlign: 'center',
+  },
+  statDivider: {
+    width: 1,
+    height: 24,
+    backgroundColor: '#F1F5F9',
+  },
+  switchSection: {
+    paddingHorizontal: 16,
+    marginTop: 14,
+  },
+  switchModeCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    backgroundColor: '#FFFFFF',
+    borderRadius: 18,
+    paddingHorizontal: 16,
+    paddingVertical: 14,
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
+    shadowColor: '#0F1E36',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.04,
+    shadowRadius: 8,
+    elevation: 2,
+  },
+  switchModeCardStatic: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    backgroundColor: '#FFFFFF',
+    borderRadius: 18,
+    paddingHorizontal: 16,
+    paddingVertical: 14,
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
+  },
+  switchModeLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    flex: 1,
+    marginRight: 12,
+  },
+  switchIconCircle: {
+    width: 38,
+    height: 38,
+    borderRadius: 19,
+    backgroundColor: '#FFF7ED',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginRight: 12,
+  },
+  switchTextCol: {
+    flex: 1,
+  },
+  switchModeTitle: {
+    fontSize: 14.5,
+    fontWeight: '700',
+    color: '#0F1E36',
+    marginBottom: 2,
+  },
+  switchModeSub: {
+    fontSize: 12,
+    color: '#64748B',
+  },
+  toggleTrack: {
+    width: 46,
+    height: 26,
+    borderRadius: 13,
+    backgroundColor: '#FFEDD5',
+    padding: 2,
+    justifyContent: 'center',
+  },
+  toggleThumb: {
+    width: 22,
+    height: 22,
+    borderRadius: 11,
+    backgroundColor: '#EA580C',
+    alignSelf: 'flex-end',
+    shadowColor: '#000000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.2,
+    shadowRadius: 2,
+    elevation: 2,
+  },
+  staticBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#EDFAF2',
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 12,
+    gap: 6,
+  },
+  greenDot: {
+    width: 6,
+    height: 6,
+    borderRadius: 3,
+    backgroundColor: '#10B981',
+  },
+  staticBadgeText: {
+    fontSize: 12,
+    color: '#065F46',
+    fontWeight: '600',
+  },
+  generalSection: {
+    paddingHorizontal: 16,
+    marginTop: 18,
+  },
+  sectionTitle: {
+    fontSize: 14,
+    fontWeight: '800',
+    color: '#64748B',
+    marginBottom: 10,
+    paddingLeft: 4,
+    letterSpacing: 0.3,
+  },
+  menuGroupCard: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: 20,
+    paddingVertical: 4,
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
+    shadowColor: '#0F1E36',
+    shadowOffset: { width: 0, height: 3 },
+    shadowOpacity: 0.04,
+    shadowRadius: 8,
+    elevation: 2,
+  },
+  menuItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 16,
+    paddingVertical: 13,
+  },
+  menuIconBox: {
+    width: 36,
+    height: 36,
+    borderRadius: 12,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginRight: 14,
+  },
+  menuTextCol: {
+    flex: 1,
+    marginRight: 8,
+  },
+  menuTitle: {
+    fontSize: 14.5,
+    fontWeight: '600',
+    color: '#0F1E36',
+    marginBottom: 2,
+  },
+  menuSubtitle: {
+    fontSize: 12,
+    color: '#94A3B8',
+  },
+  menuDivider: {
+    height: 1,
+    backgroundColor: '#F1F5F9',
+    marginLeft: 66,
+  },
+  statusBadge: {
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 8,
+    marginRight: 8,
+  },
+  statusBadgeText: {
+    fontSize: 11,
+    fontWeight: '700',
+  },
+  langSwitchRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#F1F5F9',
+    borderRadius: 16,
+    padding: 2,
+    gap: 2,
+  },
+  langOption: {
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 14,
+  },
+  langOptionActive: {
+    backgroundColor: '#EA580C',
+  },
+  langOptionText: {
+    fontSize: 11.5,
+    fontWeight: '700',
+    color: '#64748B',
+  },
+  langOptionTextActive: {
+    color: '#FFFFFF',
+  },
+  appVersionFooter: {
+    textAlign: 'center',
+    fontSize: 12,
+    color: '#94A3B8',
+    marginTop: 18,
+    marginBottom: 8,
   },
 });
