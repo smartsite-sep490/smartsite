@@ -298,9 +298,12 @@ it.each([403, 500])(
 it('offers an exit inside its fullscreen target and restores the original control', async () => {
   let fullscreenElement: Element | null = null;
   const change = () => document.dispatchEvent(new Event('fullscreenchange'));
-  const exit = vi.fn(async () => {
-    fullscreenElement = null;
+  const setFullscreenElement = (element: Element | null) => {
+    fullscreenElement = element;
     change();
+  };
+  const exit = vi.fn(async () => {
+    setFullscreenElement(null);
   });
   const overrides: [object, string, PropertyDescriptor][] = [
     [document, 'fullscreenElement', { get: () => fullscreenElement }],
@@ -310,8 +313,7 @@ it('offers an exit inside its fullscreen target and restores the original contro
       'requestFullscreen',
       {
         value: async function (this: HTMLElement) {
-          fullscreenElement = this;
-          change();
+          setFullscreenElement(this);
         },
       },
     ],
