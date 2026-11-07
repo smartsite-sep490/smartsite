@@ -14,7 +14,7 @@ import { createIsolatedTestDatabase } from '../support/isolated-test-database.js
 import { createTestConfig } from '../support/config.js';
 
 test('representative commands keep transaction authentication, Site scope and atomicity', async (t) => {
-  const owned = createIsolatedTestDatabase(),
+  const owned = createIsolatedTestDatabase({ beforeAuthorityInstall: true }),
     db = owned.dataSource;
   try {
     await owned.initialize();

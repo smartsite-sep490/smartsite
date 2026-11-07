@@ -14,7 +14,7 @@ import { createTestConfig } from '../support/config.js';
 import { createIsolatedTestDatabase } from '../support/isolated-test-database.js';
 
 test('Contractor Worker account and profile commands bind the original session to atomic writes', async (t) => {
-  const owned = createIsolatedTestDatabase(),
+  const owned = createIsolatedTestDatabase({ beforeAuthorityInstall: true }),
     db = owned.dataSource;
   try {
     await owned.initialize();

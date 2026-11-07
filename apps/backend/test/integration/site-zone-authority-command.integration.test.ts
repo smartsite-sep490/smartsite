@@ -11,7 +11,7 @@ import { createTestConfig } from '../support/config.js';
 import { createIsolatedTestDatabase } from '../support/isolated-test-database.js';
 
 test('Site Zone commands preserve scoped authority, retry and atomic audit', async (t) => {
-  const owned = createIsolatedTestDatabase(),
+  const owned = createIsolatedTestDatabase({ beforeAuthorityInstall: true }),
     db = owned.dataSource;
   try {
     await owned.initialize();

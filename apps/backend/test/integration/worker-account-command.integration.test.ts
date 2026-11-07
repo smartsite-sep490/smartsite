@@ -11,7 +11,7 @@ import { createIsolatedTestDatabase } from '../support/isolated-test-database.js
 import { createTestConfig } from '../support/config.js';
 
 test('Worker account commands preserve enrollment and linking while rechecking Admin authentication', async (t) => {
-  const owned = createIsolatedTestDatabase(),
+  const owned = createIsolatedTestDatabase({ beforeAuthorityInstall: true }),
     db = owned.dataSource;
   try {
     await owned.initialize();

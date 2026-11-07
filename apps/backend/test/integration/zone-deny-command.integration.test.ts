@@ -12,7 +12,7 @@ import { createIsolatedTestDatabase } from '../support/isolated-test-database.js
 import { createTestConfig } from '../support/config.js';
 
 test('Zone DENY commands recheck bearer, Site scope and journal before writes or no-ops', async (t) => {
-  const owned = createIsolatedTestDatabase(),
+  const owned = createIsolatedTestDatabase({ beforeAuthorityInstall: true }),
     db = owned.dataSource;
   try {
     await owned.initialize();

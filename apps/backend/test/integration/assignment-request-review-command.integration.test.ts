@@ -12,7 +12,7 @@ import { createIsolatedTestDatabase } from '../support/isolated-test-database.js
 import { createTestConfig } from '../support/config.js';
 
 test('Assignment requests and Safety reviews keep current scoped authentication and atomic audit', async (t) => {
-  const owned = createIsolatedTestDatabase(),
+  const owned = createIsolatedTestDatabase({ beforeAuthorityInstall: true }),
     db = owned.dataSource;
   try {
     await owned.initialize();

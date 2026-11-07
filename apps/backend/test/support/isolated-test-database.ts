@@ -1,21 +1,32 @@
 import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
 import { DataSource } from 'typeorm';
+import { InstallAuthorityJournal1795046400000 } from '../../src/database/migrations/1795046400000-InstallAuthorityJournal.js';
+import { InstallAuthorityCutover1795046400001 } from '../../src/database/migrations/1795046400001-InstallAuthorityCutover.js';
 import { buildTypeOrmOptions } from '../../src/database/typeorm.options.js';
 import { resolveTestDatabaseUrl } from './test-environment.js';
 
 /** A file-owned schema; never migrate or truncate another suite's application tables. */
-export function createIsolatedTestDatabase() {
+export function createIsolatedTestDatabase({ beforeAuthorityInstall = false } = {}) {
   const connection = resolveTestDatabaseUrl();
   assert.equal(new URL(connection).port, '5433', 'Dedicated test PostgreSQL port required');
   const options = buildTypeOrmOptions({ DATABASE_URL: connection });
   assert.equal(options.type, 'postgres');
+  assert.ok(Array.isArray(options.migrations));
   const schema = `isolated_test_${randomUUID().replaceAll('-', '')}`;
   assert.match(schema, /^isolated_test_[0-9a-f]{32}$/);
   const control = new DataSource({ ...options, entities: [], migrations: [] });
   const dataSource = new DataSource({
     ...options,
     schema,
+    // Only fixtures that construct a pre-install or partial journal opt out.
+    migrations: beforeAuthorityInstall
+      ? options.migrations.filter(
+          (migration) =>
+            migration !== InstallAuthorityJournal1795046400000 &&
+            migration !== InstallAuthorityCutover1795046400001,
+        )
+      : options.migrations,
     extra: { ...options.extra, options: `-c search_path=${schema}` },
   });
   let created = false;

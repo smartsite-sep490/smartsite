@@ -11,7 +11,7 @@ import { createIsolatedTestDatabase } from '../support/isolated-test-database.js
 import { createTestConfig } from '../support/config.js';
 
 test('Site contractor commands recheck the original Site Manager while preserving profile rules', async (t) => {
-  const owned = createIsolatedTestDatabase(),
+  const owned = createIsolatedTestDatabase({ beforeAuthorityInstall: true }),
     db = owned.dataSource;
   try {
     await owned.initialize();

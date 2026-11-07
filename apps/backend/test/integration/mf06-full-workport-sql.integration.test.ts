@@ -14,7 +14,7 @@ import { finalizeMainAuthoritySnapshot } from '../../src/modules/zones/main-auth
 import { createIsolatedTestDatabase } from '../support/isolated-test-database.js';
 import { storeVersionFixture } from '../support/mf06-store-version.fixture.js';
 
-const owned = createIsolatedTestDatabase();
+const owned = createIsolatedTestDatabase({ beforeAuthorityInstall: true });
 const db = owned.dataSource;
 before(async () => {
   await owned.initialize();

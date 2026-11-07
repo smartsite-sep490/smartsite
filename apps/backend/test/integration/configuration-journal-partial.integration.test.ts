@@ -6,7 +6,7 @@ import { executeMainConfigurationCommand } from '../../src/common/configuration/
 import { createIsolatedTestDatabase } from '../support/isolated-test-database.js';
 
 test('baseline-only partial canonical history rejects configuration before any mutation', async () => {
-  const owned = createIsolatedTestDatabase(),
+  const owned = createIsolatedTestDatabase({ beforeAuthorityInstall: true }),
     db = owned.dataSource;
   try {
     await owned.initialize();

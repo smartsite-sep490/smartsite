@@ -1,3 +1,5 @@
+import { InstallAuthorityJournal1795046400000 } from './migrations/1795046400000-InstallAuthorityJournal.js';
+import { InstallAuthorityCutover1795046400001 } from './migrations/1795046400001-InstallAuthorityCutover.js';
 import { ZoneSoftDeletion1794355200000 } from './migrations/1794355200000-ZoneSoftDeletion.js';
 import { SafetyEventRoutes1794873600000 } from './migrations/1794873600000-SafetyEventRoutes.js';
 import { SafetyEpisodes1794355200000 } from './migrations/1794355200000-SafetyEpisodes.js';
@@ -108,6 +110,8 @@ export function buildTypeOrmOptions(config: DatabaseConnectionConfig): DataSourc
       RetireLegacyAttendance1794960000001,
       RetireTimesheetReplica1794960000002,
       MergeVisitorGateEvents1794960000003,
+      InstallAuthorityJournal1795046400000,
+      InstallAuthorityCutover1795046400001,
       WorkerEventAdmission1794700800000,
       ExactMf06AuthorityTime1794787200000,
       CanonicalSafetyFaceProvenance1794268800000,
