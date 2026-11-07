@@ -52,6 +52,7 @@ function SafetyTaskTourSession({ taskId, tourVersion, userId, steps }: SafetyTas
   const focusPrimaryRef = useRef(false);
   const wasTourVisibleRef = useRef(false);
   const prevStepIdRef = useRef<string | null>(null);
+  const prevIndexRef = useRef(-1);
   const stepsRef = useRef(steps);
 
   useEffect(() => {
@@ -82,6 +83,7 @@ function SafetyTaskTourSession({ taskId, tourVersion, userId, steps }: SafetyTas
     focusPrimaryRef.current = false;
     wasTourVisibleRef.current = false;
     prevStepIdRef.current = null;
+    prevIndexRef.current = -1;
     setIsOpen(false);
     setActiveStepId(null);
     if (restoreFocus) {
@@ -172,6 +174,7 @@ function SafetyTaskTourSession({ taskId, tourVersion, userId, steps }: SafetyTas
       if (wasTourVisibleRef.current) {
         wasTourVisibleRef.current = false;
         prevStepIdRef.current = null;
+        prevIndexRef.current = -1;
         focusPrimaryRef.current = false;
         queueMicrotask(() => {
           if (triggerRef.current?.isConnected && !hasBlockingDialog(triggerRef.current)) {
@@ -182,11 +185,12 @@ function SafetyTaskTourSession({ taskId, tourVersion, userId, steps }: SafetyTas
       return;
     }
     const stepChangedToFirst =
-      prevStepIdRef.current !== null &&
-      prevStepIdRef.current !== currentStep.id &&
-      currentIndex === 0;
+      currentIndex === 0 &&
+      ((prevStepIdRef.current !== null && prevStepIdRef.current !== currentStep.id) ||
+        prevIndexRef.current > 0);
     wasTourVisibleRef.current = true;
     prevStepIdRef.current = currentStep.id;
+    prevIndexRef.current = currentIndex;
 
     const active = document.activeElement;
     const lost =
@@ -394,8 +398,18 @@ function SafetyTaskTourSession({ taskId, tourVersion, userId, steps }: SafetyTas
                     type="button"
                     data-testid="safety-task-tour-back"
                     onClick={() => {
-                      if (currentIndex <= 1) focusPrimaryRef.current = true;
-                      setActiveStepId(availableSteps[currentIndex - 1]?.id ?? null);
+                      const prevSteps = availableSteps
+                        .slice(0, currentIndex)
+                        .filter(
+                          (step) =>
+                            (!step.isAllowed || step.isAllowed()) &&
+                            isElementAvailable(
+                              document.querySelector<HTMLElement>(step.anchorSelector),
+                            ),
+                        );
+                      if (prevSteps.length <= 1) focusPrimaryRef.current = true;
+                      setDomTick((n) => n + 1);
+                      setActiveStepId(prevSteps.at(-1)?.id ?? currentStep.id);
                     }}
                     className="rounded-lg border border-slate-200 bg-white px-2.5 py-1 text-xs font-semibold text-slate-700 hover:bg-slate-50 cursor-pointer focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-slate-900"
                   >
