@@ -1,6 +1,7 @@
 import { Buffer } from 'node:buffer';
 import { computeCanonicalPayloadHash } from './hashing/canonical-hash.js';
 import {
+  validateEightFamilyObservationEvent,
   validateObservationEvent,
   validatePartitionedObservationEvent,
 } from './validation/schema-validator.js';
@@ -88,7 +89,9 @@ export function parseWorkerEventDeliveryEnvelope(
     const validation =
       value.event.schemaVersion === '1.4.0'
         ? validatePartitionedObservationEvent(value.event)
-        : validateObservationEvent(value.event);
+        : value.event.schemaVersion === '1.3.0'
+          ? validateEightFamilyObservationEvent(value.event)
+          : validateObservationEvent(value.event);
     if (!validation.isValid) return null;
     const serialized = JSON.stringify(value);
     if (Buffer.byteLength(serialized, 'utf8') > 1024 * 1024) return null;

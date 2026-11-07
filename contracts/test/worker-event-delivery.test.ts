@@ -133,3 +133,20 @@ test('strict envelope rejects fields that JSON serialization would silently remo
     null,
   );
 });
+
+test('bound envelope preserves a v1.3 event with SHA-bound evidence', () => {
+  const evidence = { kind: 'FRAME', uri: 'evidence/synthetic.jpg', sha256: 'a'.repeat(64) };
+  const v13 = { ...event, schemaVersion: '1.3.0', evidence: [evidence] };
+  const envelope = { schemaVersion: '1.0.0', context, event: v13 };
+  assert.deepEqual(api.parseWorkerEventDeliveryEnvelope(envelope), envelope);
+
+  for (const invalid of [
+    { kind: evidence.kind, uri: evidence.uri },
+    { ...evidence, sha256: 'invalid' },
+  ]) {
+    assert.equal(
+      api.parseWorkerEventDeliveryEnvelope({ ...envelope, event: { ...v13, evidence: [invalid] } }),
+      null,
+    );
+  }
+});
