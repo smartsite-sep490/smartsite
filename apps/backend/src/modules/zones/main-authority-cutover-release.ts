@@ -68,6 +68,16 @@ export interface MainAuthorityCutoverReleaseConfig {
 }
 
 export const MAIN_AUTHORITY_CUTOVER_RELEASE_FILES = [
+  'common/configuration/authorization-history-cutover-predecessor-v1.ts',
+  'config/cli-environment.ts',
+  'database/typeorm.data-source.ts',
+  'database/typeorm.options.ts',
+  'database/migrations/1795046400000-InstallAuthorityJournal.ts',
+  'database/migrations/1795046400001-InstallAuthorityCutover.ts',
+  'database/migrations/extendAuthorityJournalToTeams.ts',
+  'database/migrations/installAuthorityJournal.ts',
+  'modules/auth/auth-token.service.ts',
+  'scripts/activate-authority-cutover.ts',
   'common/configuration/main-configuration-authority.ts',
   'common/configuration/authority-storage-relations.ts',
   'common/configuration/zone-entry-storage-profile-v1.ts',

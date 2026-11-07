@@ -24,7 +24,7 @@ async function waitFor(predicate: () => boolean) {
     await sleep(20);
   }
 }
-async function syntheticRelease(omitPath?: string) {
+async function syntheticRelease(omitPath?: string, omitRuntimePath?: string) {
   const runs = tmpdir();
   await mkdir(runs, { recursive: true });
   const root = await mkdtemp(join(runs, 'mf06-synthetic-runtime-'));
@@ -41,10 +41,12 @@ async function syntheticRelease(omitPath?: string) {
     files.push({ path, sha256: hash(bytes) });
   }
   const runtimeFiles = await Promise.all(
-    MAIN_AUTHORITY_CUTOVER_RUNTIME_FILES.map(async (path) => ({
-      path,
-      sha256: hash(await readFile(resolve(runtimeRoot, path))),
-    })),
+    MAIN_AUTHORITY_CUTOVER_RUNTIME_FILES.filter((path) => path !== omitRuntimePath).map(
+      async (path) => ({
+        path,
+        sha256: hash(await readFile(resolve(runtimeRoot, path))),
+      }),
+    ),
   );
   const manifestPath = join(root, 'SYNTHETIC-NOT-OPERATIONAL.json');
   const releaseCommit = 'b'.repeat(40);
@@ -94,6 +96,16 @@ async function syntheticRelease(omitPath?: string) {
 }
 for (const path of [
   'apps/backend/src/modules/zones/zone-authority-transaction.ts',
+  'apps/backend/src/common/configuration/authorization-history-cutover-predecessor-v1.ts',
+  'apps/backend/src/config/cli-environment.ts',
+  'apps/backend/src/database/typeorm.data-source.ts',
+  'apps/backend/src/database/typeorm.options.ts',
+  'apps/backend/src/database/migrations/1795046400000-InstallAuthorityJournal.ts',
+  'apps/backend/src/database/migrations/1795046400001-InstallAuthorityCutover.ts',
+  'apps/backend/src/database/migrations/extendAuthorityJournalToTeams.ts',
+  'apps/backend/src/database/migrations/installAuthorityJournal.ts',
+  'apps/backend/src/modules/auth/auth-token.service.ts',
+  'apps/backend/src/scripts/activate-authority-cutover.ts',
   'apps/backend/src/common/configuration/authority-storage-relations.ts',
   'apps/backend/src/common/configuration/zone-entry-storage-profile-v1.ts',
   'apps/backend/src/modules/users/site-representatives.controller.ts',
@@ -128,6 +140,17 @@ for (const path of [
     }
   });
 }
+test('runtime refuses release missing the loaded cutover operator even with complete source pins', async () => {
+  const release = await syntheticRelease(undefined, 'scripts/activate-authority-cutover.js');
+  const db = idleDatabase();
+  const runtime = new Mf06AssessmentWorkerRuntime(db.db, release.config);
+  try {
+    await assert.rejects(runtime.onModuleInit());
+    assert.equal(db.count(), 0);
+  } finally {
+    await runtime.onModuleDestroy();
+  }
+});
 function idleDatabase(beforeClaim: () => Promise<void> = async () => {}) {
   let count = 0,
     active = 0,

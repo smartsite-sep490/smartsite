@@ -35,6 +35,7 @@ COPY --from=dependencies --chown=node:node /workspace/apps/backend/node_modules 
 COPY --from=build --chown=node:node /workspace/contracts/dist /workspace/contracts/dist
 COPY --from=build --chown=node:node /workspace/contracts/schemas /workspace/contracts/schemas
 COPY --from=build --chown=node:node /workspace/apps/backend/dist ./dist
+COPY --from=build /workspace/apps/backend/src /opt/smartsite/release-source/apps/backend/src
 COPY --from=build --chown=node:node /workspace/apps/backend/package.json ./package.json
 COPY --chown=node:node apps/backend/ocr/worker_document_ocr.py ./ocr/worker_document_ocr.py
 RUN mkdir -p /var/lib/smartsite && chown node:node /var/lib/smartsite && chmod 700 /var/lib/smartsite
