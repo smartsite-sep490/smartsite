@@ -1,6 +1,8 @@
 import { Injectable, Logger, type OnModuleDestroy, type OnModuleInit } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { DataSource } from 'typeorm';
+import { MAIN_AUTHORITY_V2_SOURCES } from '../../../common/configuration/main-team-authority-sources.js';
+import { ZONE_ENTRY_STORAGE_NAMES } from '../../../common/configuration/zone-entry-storage-profile-v1.js';
 import type { BackendEnvironment } from '../../../config/environment.js';
 import {
   verifyMainAuthorityCutoverRelease,
@@ -44,6 +46,10 @@ const RELEASE_VERIFY_TIMEOUT_MS = 10_000;
 const ACTIVE_TICK_MS = 25;
 const IDLE_TICK_MS = 1_000;
 const PAUSE_RETRY_MS = 1_000;
+const AUTHORITY_SOURCES = MAIN_AUTHORITY_V2_SOURCES.map(([, table]) => table);
+const AUTHORITY_JOURNAL = Object.values(ZONE_ENTRY_STORAGE_NAMES).filter(
+  (table) => table.startsWith('authorization_history_') || table.endsWith('_command_receipt'),
+);
 
 /**
  * Explicit fail-closed Face preparation when MF06 Face identity is not configured.
@@ -107,6 +113,7 @@ export class Mf06AssessmentWorkerRuntime implements OnModuleInit, OnModuleDestro
       releaseCommit,
     });
 
+    if (nodeEnv === 'production') await this.verifyDatabaseRole();
     await this.verifyRelease(releaseConfig, nodeEnv);
     if (this.stopping || this.loopAbort.signal.aborted) {
       throw new Error('MF06_RUNTIME_ABORTED');
@@ -236,6 +243,69 @@ export class Mf06AssessmentWorkerRuntime implements OnModuleInit, OnModuleDestro
     }
 
     this.scheduleNext(nextDelayMs);
+  }
+
+  private async verifyDatabaseRole(): Promise<void> {
+    const schema = this.db.driver.schema;
+    if (typeof schema !== 'string' || !schema) {
+      throw new Error('MF06_UNSAFE_RUNTIME_DATABASE_ROLE');
+    }
+
+    const safe = await this.db
+      .transaction('READ COMMITTED', async (manager) => {
+        await manager.query('SET TRANSACTION READ ONLY');
+        const [result]: { safe: boolean }[] = await manager.query(
+          `WITH target_schema AS (
+            SELECT oid, nspowner FROM pg_catalog.pg_namespace
+            WHERE nspname = $1 AND nspname = pg_catalog.current_schema()
+          ), relations AS (
+            SELECT c.oid, c.relowner
+            FROM pg_catalog.pg_class c JOIN target_schema n ON n.oid = c.relnamespace
+            WHERE c.relkind = 'r' AND c.relname::text = ANY($2::text[] || $3::text[])
+          ), owners AS (
+            SELECT nspowner AS oid FROM target_schema
+            UNION SELECT relowner FROM relations
+            UNION SELECT p.proowner FROM pg_catalog.pg_proc p
+              JOIN target_schema n ON n.oid = p.pronamespace
+              WHERE pg_catalog.starts_with(p.proname::text, 'mf06_')
+          ), runtime_roles AS (
+            SELECT oid, rolsuper FROM pg_catalog.pg_roles
+            WHERE rolname IN (current_user, session_user)
+              OR pg_catalog.pg_has_role(session_user, oid, 'SET')
+          )
+          SELECT EXISTS (SELECT 1 FROM target_schema)
+            AND (SELECT count(*) FROM relations) = pg_catalog.cardinality($2::text[] || $3::text[])
+            AND pg_catalog.pg_my_temp_schema() = 0
+            AND pg_catalog.current_setting('transaction_read_only') = 'on'
+            AND pg_catalog.current_setting('session_replication_role') = 'origin'
+            AND NOT EXISTS (
+              SELECT 1 FROM runtime_roles r WHERE r.rolsuper
+                OR EXISTS (SELECT 1 FROM owners o WHERE pg_catalog.pg_has_role(r.oid, o.oid, 'USAGE'))
+                OR EXISTS (
+                  SELECT 1 FROM pg_catalog.pg_auth_members m
+                  WHERE m.admin_option
+                    AND pg_catalog.pg_has_role(r.oid, m.roleid, 'MEMBER WITH ADMIN OPTION')
+                )
+                OR EXISTS (
+                  SELECT 1 FROM pg_catalog.pg_roles p
+                  WHERE p.rolname IN ('pg_read_server_files', 'pg_write_server_files', 'pg_execute_server_program')
+                    AND pg_catalog.pg_has_role(r.oid, p.oid, 'USAGE')
+                )
+                OR EXISTS (
+                  SELECT 1 FROM relations t
+                  WHERE pg_catalog.has_table_privilege(r.oid, t.oid, 'TRIGGER')
+                )
+                OR pg_catalog.has_parameter_privilege(r.oid, 'session_replication_role', 'SET')
+                OR pg_catalog.has_parameter_privilege(r.oid, 'session_replication_role', 'ALTER SYSTEM')
+            ) AS safe`,
+          [schema, AUTHORITY_SOURCES, AUTHORITY_JOURNAL],
+        );
+        return result?.safe === true;
+      })
+      .catch(() => {
+        throw new Error('MF06_RUNTIME_DATABASE_ROLE_UNVERIFIED');
+      });
+    if (!safe) throw new Error('MF06_UNSAFE_RUNTIME_DATABASE_ROLE');
   }
 
   private verifyRelease(

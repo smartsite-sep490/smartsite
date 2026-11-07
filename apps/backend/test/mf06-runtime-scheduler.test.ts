@@ -151,7 +151,39 @@ test('runtime refuses release missing the loaded cutover operator even with comp
     await runtime.onModuleDestroy();
   }
 });
-function idleDatabase(beforeClaim: () => Promise<void> = async () => {}) {
+test('production worker refuses an unverified database role before scheduling claims', async () => {
+  const release = await syntheticRelease();
+  release.config.set('NODE_ENV', 'production');
+  const db = idleDatabase();
+  const runtime = new Mf06AssessmentWorkerRuntime(db.db, release.config);
+  try {
+    await assert.rejects(runtime.onModuleInit(), /MF06_UNSAFE_RUNTIME_DATABASE_ROLE/);
+    assert.equal(db.count(), 1);
+  } finally {
+    await runtime.onModuleDestroy();
+  }
+});
+
+test('production worker checks the release even when the database role passes', async () => {
+  const release = await syntheticRelease();
+  release.config.set('NODE_ENV', 'production');
+  const db = idleDatabase(
+    async () => {},
+    async (sql) => (sql.startsWith('WITH target_schema') ? [{ safe: true }] : []),
+  );
+  const runtime = new Mf06AssessmentWorkerRuntime(db.db, release.config);
+  try {
+    await assert.rejects(runtime.onModuleInit(), /Synthetic cutover release is test-only/);
+    assert.equal(db.count(), 1);
+  } finally {
+    await runtime.onModuleDestroy();
+  }
+});
+
+function idleDatabase(
+  beforeClaim: () => Promise<void> = async () => {},
+  query: (sql: string) => Promise<unknown[]> = async () => [],
+) {
   let count = 0,
     active = 0,
     maxActive = 0;
@@ -164,7 +196,7 @@ function idleDatabase(beforeClaim: () => Promise<void> = async () => {}) {
       maxActive = Math.max(maxActive, active);
       try {
         await beforeClaim();
-        return await work({ query: async () => [] } as unknown as EntityManager);
+        return await work({ query } as unknown as EntityManager);
       } finally {
         active--;
       }
