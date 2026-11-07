@@ -14,6 +14,9 @@ import { ApiError } from '@smartsite/api-client';
 import type { UseQueryResult } from '@tanstack/react-query';
 import { useTranslation, translate } from '../../i18n';
 import { localizeMessage } from '../../i18n/messages';
+import { useCompactLayout } from './mobile-layout';
+import { IconChevronDown, IconChevronUp, IconChevronLeft } from '../../components/common/Icons';
+import { colors } from '../../theme/colors';
 
 export const palette = {
   navy: '#0F1E36',
@@ -23,10 +26,11 @@ export const palette = {
   bg: '#F8FAFC',
 };
 
-export function errorMessage(error: unknown) {
+export function errorMessage(error: unknown, context?: 'login') {
   if (error instanceof ApiError) {
     if (error.status === 403) return translate('auth.permissionDenied');
-    if (error.status === 401) return translate('auth.sessionExpired');
+    if (error.status === 401)
+      return translate(context === 'login' ? 'auth.invalidCredentials' : 'auth.sessionExpired');
     if (error.status === 409) return translate('auth.conflictError');
     if (error.code === 'network' || error.code === 'timeout') return translate('auth.networkError');
   }
@@ -46,6 +50,7 @@ export function Button({
   disabled?: boolean;
   secondary?: boolean;
 }) {
+  const compact = useCompactLayout();
   return (
     <Pressable
       accessibilityRole="button"
@@ -56,6 +61,7 @@ export function Button({
       style={({ pressed }) => [
         styles.button,
         secondary && styles.secondary,
+        compact && compactStyles.button,
         (disabled || pressed) && { opacity: 0.55 },
       ]}
     >
@@ -65,6 +71,7 @@ export function Button({
 }
 
 export function Field({ label, ...props }: TextInputProps & { label: string }) {
+  const compact = useCompactLayout();
   return (
     <View style={styles.field}>
       <Text style={styles.label}>{label}</Text>
@@ -75,6 +82,7 @@ export function Field({ label, ...props }: TextInputProps & { label: string }) {
         {...props}
         style={[
           styles.input,
+          compact && compactStyles.input,
           props.multiline && { minHeight: 90, textAlignVertical: 'top' },
           props.style,
         ]}
@@ -98,6 +106,13 @@ export function Choice({
 }) {
   const { t } = useTranslation();
   const [open, setOpen] = useState(false);
+  const compact = useCompactLayout();
+  const [search, setSearch] = useState('');
+  const visibleOptions = compact
+    ? options.filter((option) =>
+        option.label.toLocaleLowerCase().includes(search.toLocaleLowerCase()),
+      )
+    : options;
   const selectedLabel = options.find((o) => o.value === value)?.label;
 
   return (
@@ -111,24 +126,34 @@ export function Choice({
       />
       {open && (
         <View style={styles.options}>
-          {options.map((option) => (
-            <Pressable
-              key={option.value}
-              accessibilityRole="radio"
-              accessibilityState={{ checked: value === option.value }}
-              onPress={() => {
-                onChange(option.value);
-                setOpen(false);
-              }}
-              style={styles.option}
-            >
-              <Text style={styles.text}>
-                {value === option.value ? '● ' : '○ '}
-                {option.label}
-              </Text>
-            </Pressable>
-          ))}
-          {!options.length && <Hint>{t('common.noOptions')}</Hint>}
+          {compact && options.length > 8 && (
+            <Field
+              label={t('contractorUi.searchOptions')}
+              value={search}
+              onChangeText={setSearch}
+            />
+          )}
+          <ScrollView nestedScrollEnabled style={compact ? { maxHeight: 264 } : undefined}>
+            {visibleOptions.map((option) => (
+              <Pressable
+                key={option.value}
+                accessibilityRole="radio"
+                accessibilityState={{ checked: value === option.value }}
+                onPress={() => {
+                  onChange(option.value);
+                  setOpen(false);
+                  setSearch('');
+                }}
+                style={styles.option}
+              >
+                <Text style={styles.text}>
+                  {value === option.value ? '● ' : '○ '}
+                  {option.label}
+                </Text>
+              </Pressable>
+            ))}
+            {!visibleOptions.length && <Hint>{t('common.noOptions')}</Hint>}
+          </ScrollView>
         </View>
       )}
     </View>
@@ -136,7 +161,76 @@ export function Choice({
 }
 
 export function Card({ children }: PropsWithChildren) {
-  return <View style={styles.card}>{children}</View>;
+  const compact = useCompactLayout();
+  return <View style={[styles.card, compact && compactStyles.card]}>{children}</View>;
+}
+
+export function Disclosure({
+  title,
+  children,
+  initiallyOpen = false,
+  collapsible = true,
+}: PropsWithChildren<{ title: string; initiallyOpen?: boolean; collapsible?: boolean }>) {
+  const [open, setOpen] = useState(initiallyOpen);
+  const [visited, setVisited] = useState(initiallyOpen);
+  if (!collapsible) return <>{children}</>;
+  return (
+    <View style={compactStyles.disclosure}>
+      <Pressable
+        accessibilityRole="button"
+        accessibilityLabel={title}
+        accessibilityState={{ expanded: open }}
+        onPress={() => {
+          setVisited(true);
+          setOpen(!open);
+        }}
+        style={({ pressed }) => [compactStyles.disclosureHeading, pressed && { opacity: 0.65 }]}
+      >
+        <Text style={compactStyles.disclosureTitle}>{title}</Text>
+        {open ? <IconChevronUp size={19} /> : <IconChevronDown size={19} />}
+      </Pressable>
+      {visited && (
+        <View
+          accessibilityElementsHidden={!open}
+          importantForAccessibility={open ? 'auto' : 'no-hide-descendants'}
+          style={[compactStyles.disclosureBody, !open && { display: 'none' }]}
+        >
+          {children}
+        </View>
+      )}
+    </View>
+  );
+}
+
+export function CompactTabs({
+  value,
+  options,
+  onChange,
+}: {
+  value: string;
+  options: { value: string; label: string }[];
+  onChange: (value: string) => void;
+}) {
+  return (
+    <View style={compactStyles.tabs}>
+      {options.map((option) => (
+        <Pressable
+          key={option.value}
+          accessibilityRole="tab"
+          accessibilityLabel={option.label}
+          accessibilityState={{ selected: option.value === value }}
+          onPress={() => onChange(option.value)}
+          style={[compactStyles.tab, option.value === value && compactStyles.selectedTab]}
+        >
+          <Text
+            style={[compactStyles.tabText, option.value === value && compactStyles.selectedTabText]}
+          >
+            {option.label}
+          </Text>
+        </Pressable>
+      ))}
+    </View>
+  );
 }
 
 export function Heading({ children }: PropsWithChildren) {
@@ -159,11 +253,11 @@ export function Body({ children }: PropsWithChildren) {
   );
 }
 
-export function ErrorNotice({ error }: { error: unknown }) {
+export function ErrorNotice({ error, context }: { error: unknown; context?: 'login' }) {
   useTranslation();
   return error ? (
     <Text accessibilityRole="alert" style={styles.error}>
-      {errorMessage(error)}
+      {errorMessage(error, context)}
     </Text>
   ) : null;
 }
@@ -212,10 +306,42 @@ export function Page({
   children,
 }: PropsWithChildren<{ title: string; onBack?: () => void }>) {
   const { t } = useTranslation();
+  const compact = useCompactLayout();
   return (
-    <ScrollView keyboardShouldPersistTaps="handled" contentContainerStyle={styles.page}>
-      {onBack && <Button secondary label={t('common.back')} onPress={onBack} />}
-      <Heading>{title}</Heading>
+    <ScrollView
+      keyboardShouldPersistTaps="handled"
+      style={compact && compactStyles.screen}
+      contentContainerStyle={[styles.page, compact && compactStyles.page]}
+      showsVerticalScrollIndicator={false}
+    >
+      {onBack ? (
+        <View style={styles.pageHeaderRow}>
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel={t('common.back')}
+            onPress={onBack}
+            hitSlop={10}
+            style={({ pressed }) => [
+              styles.smallBackBtn,
+              pressed && { opacity: 0.7, backgroundColor: '#E2E8F0' },
+            ]}
+          >
+            <IconChevronLeft size={20} color={palette.navy} />
+          </Pressable>
+          <View style={{ flex: 1 }}>
+            <Text
+              accessibilityRole="header"
+              numberOfLines={1}
+              ellipsizeMode="tail"
+              style={styles.pageHeaderTitle}
+            >
+              {title}
+            </Text>
+          </View>
+        </View>
+      ) : (
+        <Heading>{title}</Heading>
+      )}
       {children}
     </ScrollView>
   );
@@ -270,6 +396,34 @@ export function Pager({
 
 export const styles = StyleSheet.create({
   page: { padding: 18, paddingBottom: 40, gap: 14 },
+  pageHeaderRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    marginBottom: 4,
+    paddingVertical: 2,
+  },
+  smallBackBtn: {
+    width: 38,
+    height: 38,
+    borderRadius: 12,
+    backgroundColor: '#FFFFFF',
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
+    alignItems: 'center',
+    justifyContent: 'center',
+    shadowColor: '#0F172A',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.05,
+    shadowRadius: 2,
+    elevation: 1,
+  },
+  pageHeaderTitle: {
+    fontSize: 20,
+    fontWeight: '800',
+    color: palette.navy,
+    letterSpacing: -0.3,
+  },
   card: {
     backgroundColor: '#F8F9FB',
     borderRadius: 20,
@@ -384,4 +538,89 @@ export const styles = StyleSheet.create({
     marginTop: 4,
   },
   option: { padding: 14, minHeight: 48, borderBottomWidth: 1, borderBottomColor: '#F1F5F9' },
+});
+
+const compactStyles = StyleSheet.create({
+  screen: { backgroundColor: colors.background },
+  page: { padding: 16, paddingBottom: 28, gap: 14 },
+  pageHeading: { flexDirection: 'row', alignItems: 'center', gap: 10, marginBottom: 3 },
+  eyebrow: {
+    color: colors.primary,
+    fontSize: 10,
+    fontWeight: '700',
+    textTransform: 'uppercase',
+    letterSpacing: 1.1,
+    marginBottom: 5,
+  },
+  title: {
+    color: colors.textPrimary,
+    fontSize: 24,
+    lineHeight: 32,
+    fontWeight: '800',
+    letterSpacing: -0.5,
+  },
+  back: {
+    minWidth: 44,
+    height: 44,
+    borderRadius: 12,
+    backgroundColor: colors.surface,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  card: {
+    backgroundColor: colors.surface,
+    borderRadius: 16,
+    padding: 14,
+    gap: 10,
+    borderWidth: 0,
+    shadowColor: '#0F172A',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.035,
+    shadowRadius: 7,
+    elevation: 1,
+  },
+  button: { minHeight: 44, padding: 11, borderRadius: 12, shadowOpacity: 0, elevation: 0 },
+  input: { backgroundColor: colors.surface, minHeight: 44, padding: 12, borderRadius: 12 },
+  disclosure: {
+    backgroundColor: colors.surface,
+    borderRadius: 16,
+    paddingHorizontal: 14,
+    borderWidth: 1,
+    borderColor: colors.borderLight,
+  },
+  disclosureHeading: {
+    minHeight: 52,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    paddingVertical: 10,
+  },
+  disclosureTitle: {
+    flex: 1,
+    color: colors.textPrimary,
+    fontSize: 14,
+    fontWeight: '700',
+    lineHeight: 21,
+  },
+  disclosureBody: { paddingBottom: 14, gap: 12 },
+  tabs: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 6,
+    padding: 4,
+    borderRadius: 14,
+    backgroundColor: '#EDEFF3',
+  },
+  tab: {
+    flex: 1,
+    minWidth: 75,
+    minHeight: 44,
+    padding: 9,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderRadius: 11,
+  },
+  selectedTab: { backgroundColor: colors.surface },
+  tabText: { fontSize: 12, fontWeight: '600', color: colors.textMuted, textAlign: 'center' },
+  selectedTabText: { color: colors.primary, fontWeight: '800' },
 });
