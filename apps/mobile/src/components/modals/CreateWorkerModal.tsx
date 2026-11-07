@@ -25,7 +25,7 @@ import type {
 import { healthCertificateExpiry } from '@smartsite/api-client';
 import { Attachments } from '../../features/shared/uploads';
 import { documentKinds } from '../../features/contractor/worker-documents';
-import { Choice, Field, Hint } from '../../features/shared/ui';
+import { Choice, Disclosure, Field, Hint } from '../../features/shared/ui';
 
 interface CreateWorkerModalProps {
   visible: boolean;
@@ -197,74 +197,78 @@ export function CreateWorkerModal({ visible, onClose, onSuccess }: CreateWorkerM
               />
             </View>
 
-            <View style={styles.fieldGroup}>
-              <Text style={styles.label}>{t('documents.nationalId')}</Text>
-              <TextInput
-                accessibilityLabel={t('documents.nationalId')}
-                style={styles.input}
-                value={nationalId}
-                onChangeText={(v) => setNationalId(v.trim())}
-                keyboardType="number-pad"
-                maxLength={12}
-                editable={!pendingAccount && !command.isPending}
-              />
-            </View>
-            <View style={styles.fieldGroup}>
-              <Text style={styles.label}>{t('documents.phoneNumber')}</Text>
-              <TextInput
-                accessibilityLabel={t('documents.phoneNumber')}
-                style={styles.input}
-                value={phoneNumber}
-                onChangeText={(v) => setPhoneNumber(v.replace(/\s/g, ''))}
-                keyboardType="phone-pad"
-                maxLength={16}
-                editable={!pendingAccount && !command.isPending}
-              />
-            </View>
-            <View pointerEvents={pendingAccount || command.isPending ? 'none' : 'auto'}>
-              <Choice
-                label={t('documents.gender')}
-                value={gender}
-                onChange={(v) => setGender(v as typeof gender)}
-                options={(['MALE', 'FEMALE', 'OTHER'] as const).map((value) => ({
-                  value,
-                  label: t(`documents.${value}`),
-                }))}
-              />
-            </View>
-            <View style={styles.fieldGroup}>
-              <Text style={styles.label}>{t('documents.address')}</Text>
-              <TextInput
-                accessibilityLabel={t('documents.address')}
-                style={styles.input}
-                multiline
-                maxLength={1000}
-                value={address}
-                onChangeText={setAddress}
-                editable={!pendingAccount && !command.isPending}
-              />
-            </View>
-            <View pointerEvents={pendingAccount || command.isPending ? 'none' : 'auto'}>
-              {(['FRONT', 'BACK'] as const).map((side) => (
-                <View key={side} style={styles.fieldGroup}>
-                  <Text style={styles.label}>{t(`documents.${side}`)}</Text>
-                  <Attachments
-                    files={identityFiles[side] ?? []}
-                    maxFiles={1}
-                    allowPdf={false}
-                    validateFile={validateImage}
-                    onChange={(selected) =>
-                      setIdentityFiles((previous) => ({ ...previous, [side]: selected }))
-                    }
-                  />
-                </View>
-              ))}
-            </View>
+            <Disclosure title={t('contractorUi.requiredProfile')}>
+              <View style={styles.fieldGroup}>
+                <Text style={styles.label}>{t('documents.nationalId')}</Text>
+                <TextInput
+                  accessibilityLabel={t('documents.nationalId')}
+                  style={styles.input}
+                  value={nationalId}
+                  onChangeText={(v) => setNationalId(v.trim())}
+                  keyboardType="number-pad"
+                  maxLength={12}
+                  editable={!pendingAccount && !command.isPending}
+                />
+              </View>
+              <View style={styles.fieldGroup}>
+                <Text style={styles.label}>{t('documents.phoneNumber')}</Text>
+                <TextInput
+                  accessibilityLabel={t('documents.phoneNumber')}
+                  style={styles.input}
+                  value={phoneNumber}
+                  onChangeText={(v) => setPhoneNumber(v.replace(/\s/g, ''))}
+                  keyboardType="phone-pad"
+                  maxLength={16}
+                  editable={!pendingAccount && !command.isPending}
+                />
+              </View>
+              <View pointerEvents={pendingAccount || command.isPending ? 'none' : 'auto'}>
+                <Choice
+                  label={t('documents.gender')}
+                  value={gender}
+                  onChange={(v) => setGender(v as typeof gender)}
+                  options={(['MALE', 'FEMALE', 'OTHER'] as const).map((value) => ({
+                    value,
+                    label: t(`documents.${value}`),
+                  }))}
+                />
+              </View>
+              <View style={styles.fieldGroup}>
+                <Text style={styles.label}>{t('documents.address')}</Text>
+                <TextInput
+                  accessibilityLabel={t('documents.address')}
+                  style={styles.input}
+                  multiline
+                  maxLength={1000}
+                  value={address}
+                  onChangeText={setAddress}
+                  editable={!pendingAccount && !command.isPending}
+                />
+              </View>
+              <View pointerEvents={pendingAccount || command.isPending ? 'none' : 'auto'}>
+                {(['FRONT', 'BACK'] as const).map((side) => (
+                  <View key={side} style={styles.fieldGroup}>
+                    <Text style={styles.label}>{t(`documents.${side}`)}</Text>
+                    <Attachments
+                      files={identityFiles[side] ?? []}
+                      maxFiles={1}
+                      allowPdf={false}
+                      validateFile={validateImage}
+                      onChange={(selected) =>
+                        setIdentityFiles((previous) => ({ ...previous, [side]: selected }))
+                      }
+                    />
+                  </View>
+                ))}
+              </View>
+            </Disclosure>
             <Text style={styles.hintText}>{t('documents.hint')}</Text>
             <View pointerEvents={command.isPending ? 'none' : 'auto'}>
               {documentKinds.map((kind) => (
-                <View key={kind} style={styles.fieldGroup}>
-                  <Text style={styles.label}>{t(`documents.${kind}`)}</Text>
+                <Disclosure
+                  key={kind}
+                  title={`${t(`documents.${kind}`)} · ${files[kind]?.length ?? 0}/1`}
+                >
                   <Field
                     label={`${t(`documents.${kind}`)} - ${t(kind === 'HEALTH_CERTIFICATE' ? 'documents.submittedIssuedOn' : 'documents.submittedExpiresOn')} (YYYY-MM-DD)`}
                     placeholder="YYYY-MM-DD"
@@ -293,7 +297,7 @@ export function CreateWorkerModal({ visible, onClose, onSuccess }: CreateWorkerM
                       setFiles((previous) => ({ ...previous, [kind]: selected }))
                     }
                   />
-                </View>
+                </Disclosure>
               ))}
             </View>
             {pendingAccount && <Text style={styles.hintText}>{t('documents.accountPending')}</Text>}
