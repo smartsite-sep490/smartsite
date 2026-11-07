@@ -294,3 +294,84 @@ it.each([403, 500])(
     expect(screen.queryByTestId('safety-task-tour-trigger')).toBeNull();
   },
 );
+
+it('offers an exit inside its fullscreen target and restores the original control', async () => {
+  let fullscreenElement: Element | null = null;
+  const change = () => document.dispatchEvent(new Event('fullscreenchange'));
+  const setFullscreenElement = (element: Element | null) => {
+    fullscreenElement = element;
+    change();
+  };
+  const exit = vi.fn(async () => {
+    setFullscreenElement(null);
+  });
+  const overrides: [object, string, PropertyDescriptor][] = [
+    [document, 'fullscreenElement', { get: () => fullscreenElement }],
+    [document, 'exitFullscreen', { value: exit }],
+    [
+      HTMLElement.prototype,
+      'requestFullscreen',
+      {
+        value: async function (this: HTMLElement) {
+          setFullscreenElement(this);
+        },
+      },
+    ],
+  ];
+  const restore = overrides.map(([target, key, descriptor]) => {
+    const original = Object.getOwnPropertyDescriptor(target, key);
+    Object.defineProperty(target, key, { ...descriptor, configurable: true });
+    return () => {
+      if (original) Object.defineProperty(target, key, original);
+      else Reflect.deleteProperty(target, key);
+    };
+  });
+  try {
+    render(<PpeMonitorWorkspace apiUrl="https://backend.example" session={session()} aiPaused />, {
+      wrapper,
+    });
+    const enter = await screen.findByRole('button', { name: /^Fullscreen$/ });
+    fireEvent.click(enter);
+    const leave = await screen.findByRole('button', { name: /^Exit fullscreen$/ });
+    expect(document.fullscreenElement?.contains(leave)).toBe(true);
+    exit.mockRejectedValueOnce(new Error('browser refused'));
+    fireEvent.click(leave);
+    const error = await screen.findByRole('alert');
+    expect(document.fullscreenElement?.contains(error)).toBe(true);
+    expect(screen.getByRole('button', { name: /^Exit fullscreen$/ })).toBe(leave);
+
+    fireEvent.click(leave);
+    await waitFor(() =>
+      expect(screen.queryByRole('button', { name: 'Exit fullscreen' })).toBeNull(),
+    );
+    await waitFor(() => expect(document.activeElement).toBe(enter));
+    expect(exit).toHaveBeenCalledTimes(2);
+
+    fireEvent.click(enter);
+    const leaveAgain = await screen.findByRole('button', { name: /^Exit fullscreen$/ });
+    let rejectExit: (reason: Error) => void = () => {
+      throw new Error('Expected an outstanding exit request');
+    };
+    exit.mockImplementationOnce(
+      () =>
+        new Promise<void>((_resolve, reject) => {
+          rejectExit = reject;
+        }),
+    );
+    fireEvent.click(leaveAgain);
+    fullscreenElement = null;
+    act(change);
+    await act(async () => rejectExit(new Error('late exit rejection')));
+    expect(screen.queryByRole('alert')).toBeNull();
+    await waitFor(() =>
+      expect(screen.queryByRole('button', { name: 'Exit fullscreen' })).toBeNull(),
+    );
+    await waitFor(() => expect(document.activeElement).toBe(enter));
+    fullscreenElement = document.body;
+    act(change);
+    expect(screen.queryByRole('button', { name: 'Exit fullscreen' })).toBeNull();
+    expect(exit).toHaveBeenCalledTimes(3);
+  } finally {
+    restore.forEach((reset) => reset());
+  }
+});

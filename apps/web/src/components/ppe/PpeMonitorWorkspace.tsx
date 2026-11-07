@@ -1,4 +1,4 @@
-import { useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import {
@@ -32,7 +32,9 @@ registerFeatureCatalog({
     'monitor.grid': 'Camera grid',
     'monitor.focus': 'Focus',
     'monitor.fullscreen': 'Fullscreen',
+    'monitor.exitFullscreen': 'Exit fullscreen',
     'monitor.fullscreenError': 'Fullscreen is unavailable in this browser.',
+    'monitor.exitFullscreenError': 'Fullscreen exit is unavailable in this browser.',
     'monitor.paused': 'AI processing is paused. Camera previews are disabled.',
     'monitor.evidence': 'Open safety records',
     'monitor.denied':
@@ -57,7 +59,9 @@ registerFeatureCatalog({
     'monitor.grid': 'Lưới camera',
     'monitor.focus': 'Tiêu điểm',
     'monitor.fullscreen': 'Toàn màn hình',
+    'monitor.exitFullscreen': 'Thoát toàn màn hình',
     'monitor.fullscreenError': 'Trình duyệt chưa cho phép toàn màn hình.',
+    'monitor.exitFullscreenError': 'Trình duyệt chưa cho phép thoát toàn màn hình.',
     'monitor.paused': 'Đang tạm dừng xử lý AI. Xem trước camera đã tắt.',
     'monitor.evidence': 'Mở hồ sơ an toàn',
     'monitor.denied': 'Cần phiên Admin hoặc Cán bộ an toàn đang hoạt động và được phân công.',
@@ -255,10 +259,31 @@ function CameraScope({
   siteMetadataReady: boolean;
 }) {
   const { t } = useTranslation(SAFETY_NAMESPACE);
+  const container = useRef<HTMLDivElement>(null);
+  const entryButton = useRef<HTMLButtonElement>(null);
+  const wasFullscreen = useRef(false);
   const [chosen, setCamera] = useState(''),
     [focus, setFocus] = useState(false),
-    [fullscreenError, setFullscreenError] = useState(false);
-  const container = useRef<HTMLDivElement>(null);
+    [fullscreenError, setFullscreenError] = useState(false),
+    [exitFullscreenError, setExitFullscreenError] = useState(false),
+    [isFullscreen, setIsFullscreen] = useState(false);
+  useEffect(() => {
+    const syncFullscreen = () => {
+      const current = document.fullscreenElement;
+      const active = container.current !== null && current === container.current;
+      const ended = wasFullscreen.current && !active;
+      wasFullscreen.current = active;
+      setIsFullscreen(active);
+      setExitFullscreenError(false);
+      if (active) setFullscreenError(false);
+      if (ended && !current && entryButton.current?.isConnected) {
+        entryButton.current.focus();
+      }
+    };
+    syncFullscreen();
+    document.addEventListener('fullscreenchange', syncFullscreen);
+    return () => document.removeEventListener('fullscreenchange', syncFullscreen);
+  }, []);
   const cameras = useMonitorPages(scope, `cameras:${site.id}`, true, (offset, signal) =>
     client.listPreviewCameras(session.accessToken, site.id, { offset, limit: 20 }, { signal }),
   );
@@ -320,6 +345,7 @@ function CameraScope({
                   {t(focus ? 'monitor.grid' : 'monitor.focus')}
                 </button>
                 <button
+                  ref={entryButton}
                   type="button"
                   data-tour-anchor="monitor-fullscreen"
                   className="inline-flex min-h-10 items-center justify-center rounded-lg border border-slate-300 bg-white px-3.5 py-2 text-sm font-medium text-slate-800 transition-colors hover:bg-slate-50 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-slate-900"
@@ -386,8 +412,36 @@ function CameraScope({
           </div>
         </div>
       </div>
-      {fullscreenError && <p role="alert">{t('monitor.fullscreenError')}</p>}
+      {fullscreenError && !isFullscreen && <p role="alert">{t('monitor.fullscreenError')}</p>}
       <div ref={container} className="bg-slate-50 min-w-0">
+        {isFullscreen && (
+          <div className="flex flex-wrap items-center justify-end gap-3 p-3">
+            {exitFullscreenError && <p role="alert">{t('monitor.exitFullscreenError')}</p>}
+            <button
+              type="button"
+              className="inline-flex min-h-10 items-center justify-center rounded-lg border border-slate-300 bg-white px-3.5 py-2 text-sm font-medium text-slate-800 transition-colors hover:bg-slate-50 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-slate-900"
+              onClick={() => {
+                const target = container.current;
+                if (!target || document.fullscreenElement !== target) return;
+                setExitFullscreenError(false);
+                const reportFailure = () => {
+                  if (container.current === target && document.fullscreenElement === target) {
+                    setExitFullscreenError(true);
+                  }
+                };
+                try {
+                  const pending = document.exitFullscreen?.();
+                  if (pending) void pending.catch(reportFailure);
+                  else reportFailure();
+                } catch {
+                  reportFailure();
+                }
+              }}
+            >
+              {t('monitor.exitFullscreen')}
+            </button>
+          </div>
+        )}
         {selected &&
           (focus ? (
             <FocusedCameraMedia
