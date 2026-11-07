@@ -23,6 +23,7 @@ import {
   Page,
   Pager,
   QueryState,
+  CompactTabs,
 } from '../shared/ui';
 import { Attachments, EvidenceButton } from '../shared/uploads';
 import { useTranslation } from '../../i18n';
@@ -50,7 +51,7 @@ export function AssignedWorkScreen({
           signal,
         )
       ).filter((c) => c.contractorId === scope.contractorId);
-      return { items: rows.slice(offset, offset + 20), total: rows.length };
+      return { items: rows.slice(offset, offset + 8), total: rows.length };
     },
     enabled: kind === 'checklist' && !id,
   });
@@ -63,7 +64,7 @@ export function AssignedWorkScreen({
           signal,
         )
       ).filter((i) => i.siteId === scope.siteId && i.contractorId === scope.contractorId);
-      return { items: rows.slice(offset, offset + 20), total: rows.length };
+      return { items: rows.slice(offset, offset + 8), total: rows.length };
     },
     enabled: kind === 'incident' && !id,
     refetchOnMount: 'always',
@@ -84,8 +85,7 @@ export function AssignedWorkScreen({
     );
   return (
     <Page title={tr('assignedWork.title')} onBack={onBack}>
-      <Choice
-        label={tr('assignedWork.workType')}
+      <CompactTabs
         value={kind}
         onChange={(v) => {
           setKind(v);
@@ -127,7 +127,7 @@ export function AssignedWorkScreen({
                     />
                   </Card>
                 ))}
-              <Pager offset={offset} total={data.total} onChange={setOffset} />
+              <Pager offset={offset} total={data.total} size={8} onChange={setOffset} />
             </>
           )}
         </QueryState>
@@ -151,7 +151,7 @@ export function AssignedWorkScreen({
                     />
                   </Card>
                 ))}
-              <Pager offset={offset} total={data.total} onChange={setOffset} />
+              <Pager offset={offset} total={data.total} size={8} onChange={setOffset} />
             </>
           )}
         </QueryState>

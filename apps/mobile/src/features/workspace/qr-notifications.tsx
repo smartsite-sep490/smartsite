@@ -252,6 +252,7 @@ export function NotificationsScreen({
 }) {
   const { t } = useTranslation();
   const { client, token, scope, queryKey } = useWorkspace();
+  const pageSize = scope.role === 'contractor' ? 8 : 20;
   const [offset, setOffset] = useState(0);
   const [filter, setFilter] = useState<'ALL' | 'UNREAD'>('ALL');
   const [selectedNotification, setSelectedNotification] = useState<UserNotificationResponse | null>(
@@ -261,7 +262,7 @@ export function NotificationsScreen({
 
   const query = useQuery({
     queryKey: [...queryKey, 'notifications', offset, filter],
-    queryFn: () => client.listNotifications(token, { offset, limit: 20, readStatus: filter }),
+    queryFn: () => client.listNotifications(token, { offset, limit: pageSize, readStatus: filter }),
     refetchInterval: 30000,
   });
 
@@ -395,7 +396,7 @@ export function NotificationsScreen({
               );
             })}
 
-            <Pager offset={offset} total={data.total} onChange={setOffset} />
+            <Pager offset={offset} total={data.total} size={pageSize} onChange={setOffset} />
           </View>
         )}
       </QueryState>

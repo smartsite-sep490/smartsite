@@ -33,6 +33,8 @@ import {
   Page,
   Pager,
   QueryState,
+  CompactTabs,
+  Disclosure,
 } from '../shared/ui';
 import { useTranslation } from '../../i18n';
 import { IconUsers } from '../../components/common/Icons';
@@ -54,7 +56,7 @@ export function TeamsScreen({ onBack }: { onBack: () => void }) {
         search,
         status,
         offset,
-        limit: 20,
+        limit: 8,
       }),
   });
 
@@ -72,8 +74,7 @@ export function TeamsScreen({ onBack }: { onBack: () => void }) {
           setOffset(0);
         }}
       />
-      <Choice
-        label={t('teams.status')}
+      <CompactTabs
         value={status}
         options={[
           { value: 'ACTIVE', label: t('teams.active') },
@@ -97,11 +98,6 @@ export function TeamsScreen({ onBack }: { onBack: () => void }) {
                   </View>
                   <View style={teamStyles.teamInfoCol}>
                     <Text style={teamStyles.teamNameText}>{teamItem.name}</Text>
-                    {teamItem.description ? (
-                      <Text style={teamStyles.teamDescText} numberOfLines={2}>
-                        {teamItem.description}
-                      </Text>
-                    ) : null}
                   </View>
                   <View
                     style={[
@@ -139,7 +135,7 @@ export function TeamsScreen({ onBack }: { onBack: () => void }) {
                 />
               </View>
             ))}
-            <Pager offset={offset} total={data.total} onChange={setOffset} />
+            <Pager offset={offset} total={data.total} size={8} onChange={setOffset} />
           </>
         )}
       </QueryState>
@@ -312,31 +308,33 @@ function TeamDetail({ teamId, onBack }: { teamId: string; onBack: () => void }) 
                       />
                     </>
                   )}
-                  <Field
-                    label={tr('teams.membershipReason')}
-                    value={reason}
-                    onChangeText={setReason}
-                  />
-                  <Button
-                    secondary
-                    label={tr('teams.archiveEmpty')}
-                    disabled={command.isPending || t.memberCount > 0 || !reason.trim()}
-                    onPress={() =>
-                      command.mutate(async () => {
-                        await client.archiveContractorTeam(
-                          token,
-                          scope.siteId,
-                          scope.contractorId,
-                          t.id,
-                          {
-                            expectedVersion: t.version,
-                            reason: required(reason, tr('validation.reasonLabel')),
-                          },
-                        );
-                        onBack();
-                      })
-                    }
-                  />
+                  <Disclosure title={tr('contractorUi.archiveTeam')}>
+                    <Field
+                      label={tr('teams.membershipReason')}
+                      value={reason}
+                      onChangeText={setReason}
+                    />
+                    <Button
+                      secondary
+                      label={tr('teams.archiveEmpty')}
+                      disabled={command.isPending || t.memberCount > 0 || !reason.trim()}
+                      onPress={() =>
+                        command.mutate(async () => {
+                          await client.archiveContractorTeam(
+                            token,
+                            scope.siteId,
+                            scope.contractorId,
+                            t.id,
+                            {
+                              expectedVersion: t.version,
+                              reason: required(reason, tr('validation.reasonLabel')),
+                            },
+                          );
+                          onBack();
+                        })
+                      }
+                    />
+                  </Disclosure>
                 </>
               )}
             </Card>
@@ -353,7 +351,12 @@ function TeamDetail({ teamId, onBack }: { teamId: string; onBack: () => void }) 
                     <Hint>{tr('teams.noMembers')}</Hint>
                   )}
                   {t.isActive && (
-                    <>
+                    <Disclosure title={tr('contractorUi.manageMembers')}>
+                      <Field
+                        label={tr('teams.membershipReason')}
+                        value={reason}
+                        onChangeText={setReason}
+                      />
                       <Choice
                         label={tr('teams.workerToMove')}
                         value={workerId}
@@ -405,7 +408,7 @@ function TeamDetail({ teamId, onBack }: { teamId: string; onBack: () => void }) 
                           })
                         }
                       />
-                    </>
+                    </Disclosure>
                   )}
                 </Card>
               )}
@@ -431,8 +434,7 @@ function TeamZones({ teamId }: { teamId: string }) {
   });
   const timezone = Intl.DateTimeFormat().resolvedOptions().timeZone;
   return (
-    <Card>
-      <Body>{tr('teams.zones')}</Body>
+    <Disclosure title={tr('teams.zones')}>
       <QueryState query={query}>
         {(data) => {
           const current = data.permissions.find((p) => !p.revokedAt);
@@ -528,7 +530,7 @@ function TeamZones({ teamId }: { teamId: string }) {
           );
         }}
       </QueryState>
-    </Card>
+    </Disclosure>
   );
 }
 
