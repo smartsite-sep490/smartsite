@@ -330,15 +330,15 @@ it('offers an exit inside its fullscreen target and restores the original contro
     render(<PpeMonitorWorkspace apiUrl="https://backend.example" session={session()} aiPaused />, {
       wrapper,
     });
-    const enter = await screen.findByRole('button', { name: 'Fullscreen', exact: true });
+    const enter = await screen.findByRole('button', { name: /^Fullscreen$/ });
     fireEvent.click(enter);
-    const leave = await screen.findByRole('button', { name: 'Exit fullscreen', exact: true });
+    const leave = await screen.findByRole('button', { name: /^Exit fullscreen$/ });
     expect(document.fullscreenElement?.contains(leave)).toBe(true);
     exit.mockRejectedValueOnce(new Error('browser refused'));
     fireEvent.click(leave);
     const error = await screen.findByRole('alert');
     expect(document.fullscreenElement?.contains(error)).toBe(true);
-    expect(screen.getByRole('button', { name: 'Exit fullscreen', exact: true })).toBe(leave);
+    expect(screen.getByRole('button', { name: /^Exit fullscreen$/ })).toBe(leave);
 
     fireEvent.click(leave);
     await waitFor(() =>
@@ -348,7 +348,7 @@ it('offers an exit inside its fullscreen target and restores the original contro
     expect(exit).toHaveBeenCalledTimes(2);
 
     fireEvent.click(enter);
-    const leaveAgain = await screen.findByRole('button', { name: 'Exit fullscreen', exact: true });
+    const leaveAgain = await screen.findByRole('button', { name: /^Exit fullscreen$/ });
     let rejectExit: (reason: Error) => void = () => {
       throw new Error('Expected an outstanding exit request');
     };
