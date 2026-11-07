@@ -25,7 +25,7 @@ function budgetFor(client: QueryClient, apiUrl: string): Budget {
     .origin;
   let budget = byServer.get(server);
   if (!budget) {
-    budget = { tokens: BURST, updatedAt: Date.now(), blockedUntil: 0, queue: [] };
+    budget = { tokens: BURST, updatedAt: performance.now(), blockedUntil: 0, queue: [] };
     byServer.set(server, budget);
   }
   return budget;
@@ -34,7 +34,7 @@ function budgetFor(client: QueryClient, apiUrl: string): Budget {
 function drain(budget: Budget) {
   clearTimeout(budget.timer);
   budget.timer = undefined;
-  const now = Date.now();
+  const now = performance.now();
   budget.tokens = Math.min(BURST, budget.tokens + Math.max(0, now - budget.updatedAt) / REFILL_MS);
   budget.updatedAt = Math.max(now, budget.updatedAt);
   while (budget.queue.length && budget.tokens >= 1 && now >= budget.blockedUntil) {
@@ -87,7 +87,7 @@ export function deferPreviewReads(client: QueryClient, apiUrl: string, retryAfte
   const delay = Number.isFinite(retryAfterSeconds) ? (retryAfterSeconds as number) * 1000 : 4000;
   budget.blockedUntil = Math.max(
     budget.blockedUntil,
-    Date.now() + Math.min(60000, Math.max(1000, delay)),
+    performance.now() + Math.min(60000, Math.max(1000, delay)),
   );
   drain(budget);
 }
