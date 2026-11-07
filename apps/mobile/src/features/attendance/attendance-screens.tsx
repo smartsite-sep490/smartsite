@@ -27,7 +27,6 @@ import {
 import {
   Body,
   Button,
-  Card,
   Choice,
   ErrorNotice,
   Field,
@@ -41,8 +40,19 @@ import type { AttendanceSessionResponse, AttendanceDaysResponse } from '@smartsi
 import { useScopedWorkers } from '../workspace/use-scoped-workers';
 import { AttendanceReport } from './attendance-report';
 import { useTranslation } from '../../i18n';
-import { IconChevronDown, IconChevronUp, IconChevronRight } from '../../components/common/Icons';
+import {
+  IconCalendar,
+  IconChevronDown,
+  IconChevronUp,
+  IconChevronLeft,
+  IconChevronRight,
+  IconClock,
+  IconMapPin,
+  IconFilter,
+} from '../../components/common/Icons';
 import { DateRangeFilter } from '../shared/date-range-filter';
+import { colors } from '../../theme/colors';
+import { MonthYearPicker } from '../shared/month-year-picker';
 
 export function AttendanceScreen({
   initialDayId,
@@ -59,6 +69,8 @@ export function AttendanceScreen({
     [offset, setOffset] = useState(0);
   const [dayId, setDayId] = useState(initialDayId ?? ''),
     [requestOpen, setRequestOpen] = useState(false);
+  const [showFilters, setShowFilters] = useState(false);
+  const [showMonths, setShowMonths] = useState(false);
   const workers = useScopedWorkers();
   const workerIds = new Set(workers.data?.map((w) => w.id));
 
@@ -121,38 +133,145 @@ export function AttendanceScreen({
       </Page>
     );
 
-  return (
-    <Page
-      title={scope.role === 'worker' ? t('attendance.myTitle') : t('attendance.teamTitle')}
-      onBack={onBack}
-    >
-      {/* Draggable / Swipeable Date Range Filter */}
-      <DateRangeFilter
-        range={range}
-        onChange={(newRange) => {
-          setRange(newRange);
-          setOffset(0);
-        }}
-        onValidate={(newRange) => validDates(newRange.fromDate, newRange.toDate)}
-      />
+  const dateLabel = (date: string, options: Intl.DateTimeFormatOptions) =>
+    new Intl.DateTimeFormat(uiLocale(), { ...options, timeZone: 'UTC' }).format(
+      new Date(`${date}T00:00:00Z`),
+    );
+  const changeRange = (next: { fromDate: string; toDate: string }) => {
+    setRange(next);
+    setOffset(0);
+  };
+  const selectMonth = (year: number, month: number) => {
+    changeRange({
+      fromDate: new Date(Date.UTC(year, month, 1)).toISOString().slice(0, 10),
+      toDate: new Date(Date.UTC(year, month + 1, 0)).toISOString().slice(0, 10),
+    });
+  };
+  const moveMonth = (direction: number) =>
+    selectMonth(
+      Number(range.fromDate.slice(0, 4)),
+      Number(range.fromDate.slice(5, 7)) - 1 + direction,
+    );
 
-      {/* 3-Column Summary Stats Card */}
+  return (
+    <ScrollView
+      style={attStyles.screen}
+      contentContainerStyle={attStyles.content}
+      showsVerticalScrollIndicator={false}
+    >
+      <View style={attStyles.headingRow}>
+        {onBack && (
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel={t('common.back')}
+            onPress={onBack}
+            style={attStyles.iconButton}
+          >
+            <IconChevronLeft size={20} color={colors.textPrimary} />
+          </Pressable>
+        )}
+        <View style={attStyles.headingCopy}>
+          <Text style={attStyles.eyebrow}>{t('attendance.myTitle')}</Text>
+          <Text accessibilityRole="header" style={attStyles.pageTitle}>
+            {scope.role === 'worker' ? t('tabs.attendance') : t('attendance.teamTitle')}
+          </Text>
+        </View>
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel={t('attendance.today')}
+          onPress={() => changeRange({ fromDate: today, toDate: today })}
+          style={({ pressed }) => [attStyles.iconButton, pressed && attStyles.pressed]}
+        >
+          <IconCalendar size={21} color={colors.primary} />
+        </Pressable>
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel={t('requests.filter')}
+          accessibilityState={{ expanded: showFilters }}
+          onPress={() => setShowFilters(!showFilters)}
+          style={({ pressed }) => [
+            attStyles.iconButton,
+            showFilters && attStyles.iconButtonActive,
+            pressed && attStyles.pressed,
+          ]}
+        >
+          <IconFilter size={20} color={colors.textSecondary} />
+        </Pressable>
+      </View>
+
+      <View style={attStyles.periodRow}>
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel={t('attendance.period')}
+          accessibilityHint={t('schedule.chooseMonth')}
+          accessibilityState={{ expanded: showMonths }}
+          onPress={() => {
+            setShowFilters(false);
+            setShowMonths(true);
+          }}
+          style={({ pressed }) => [attStyles.periodPill, pressed && attStyles.pressed]}
+        >
+          <IconCalendar size={17} color={colors.textSecondary} />
+          <Text style={attStyles.periodText}>
+            {range.fromDate.slice(0, 7) === range.toDate.slice(0, 7)
+              ? dateLabel(range.fromDate, { month: 'long', year: 'numeric' })
+              : t('attendance.customRange')}
+          </Text>
+          <IconChevronDown size={16} color={colors.textSecondary} />
+        </Pressable>
+        <View style={attStyles.periodNavigation}>
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel={t('attendance.previousMonth')}
+            onPress={() => moveMonth(-1)}
+            style={attStyles.periodArrow}
+          >
+            <IconChevronLeft size={20} color={colors.textPrimary} />
+          </Pressable>
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel={t('attendance.nextMonth')}
+            onPress={() => moveMonth(1)}
+            style={attStyles.periodArrow}
+          >
+            <IconChevronRight size={20} color={colors.textPrimary} />
+          </Pressable>
+        </View>
+      </View>
+      <Text style={attStyles.rangeCaption}>
+        {dateLabel(range.fromDate, { day: '2-digit', month: '2-digit', year: 'numeric' })} –{' '}
+        {dateLabel(range.toDate, { day: '2-digit', month: '2-digit', year: 'numeric' })}
+      </Text>
+
+      {showFilters && (
+        <DateRangeFilter
+          range={range}
+          onChange={changeRange}
+          onValidate={(newRange) => validDates(newRange.fromDate, newRange.toDate)}
+        />
+      )}
+
+      {/* Confirmed total with separate overtime and provisional hours. */}
       <QueryState query={summary}>
         {(s) => (
           <View style={attStyles.summaryCard}>
-            <Text style={attStyles.summaryCardTitle}>{t('attendance.overview')}</Text>
-            <View style={attStyles.summaryGrid}>
-              <View style={attStyles.summaryCol}>
-                <Text style={attStyles.summaryValueGreen}>{minutes(s.totalMinutes)}</Text>
-                <Text style={attStyles.summaryLabel}>{t('attendance.confirmedHours')}</Text>
+            <View style={attStyles.summaryHeading}>
+              <View style={attStyles.summaryIcon}>
+                <IconClock size={22} color={colors.primary} />
               </View>
-              <View style={attStyles.colDivider} />
-              <View style={attStyles.summaryCol}>
+              <View style={attStyles.headingCopy}>
+                <Text style={attStyles.summaryCardTitle}>{t('attendance.overview')}</Text>
+                <Text style={attStyles.summarySubtitle}>{scope.siteName}</Text>
+              </View>
+            </View>
+            <Text style={attStyles.confirmedLabel}>{t('attendance.confirmedHours')}</Text>
+            <Text style={attStyles.confirmedTotal}>{minutes(s.totalMinutes)}</Text>
+            <View style={attStyles.summaryGrid}>
+              <View style={[attStyles.summaryCol, { backgroundColor: colors.primaryLight }]}>
                 <Text style={attStyles.summaryValueOrange}>{minutes(s.overtimeMinutes)}</Text>
                 <Text style={attStyles.summaryLabel}>{t('attendance.overtime')}</Text>
               </View>
-              <View style={attStyles.colDivider} />
-              <View style={attStyles.summaryCol}>
+              <View style={[attStyles.summaryCol, { backgroundColor: '#EFF6FF' }]}>
                 <Text style={attStyles.summaryValueBlue}>{minutes(s.provisionalMinutes)}</Text>
                 <Text style={attStyles.summaryLabel}>{t('attendance.provisionalHours')}</Text>
               </View>
@@ -192,85 +311,132 @@ export function AttendanceScreen({
                 onPress={() => setRequestOpen(true)}
               />
             )}
-            {!data.items.length && <Hint>{t('attendance.noDaysInRange')}</Hint>}
-            {data.items.map((day) => (
-              <Pressable
-                key={day.id}
-                accessibilityRole="button"
-                accessibilityLabel={`${day.workDate} ${scope.role === 'contractor' ? day.workerName : (day.shiftName ?? t('attendance.shiftNotAssigned'))}`}
-                style={({ pressed }) => [attStyles.dayCard, pressed && { opacity: 0.92 }]}
-                onPress={() => setDayId(day.id)}
-              >
-                <View style={attStyles.dayCardHeader}>
-                  <View style={attStyles.dateBadge}>
-                    <Text style={attStyles.dateBadgeDay}>{day.workDate.slice(8)}</Text>
-                    <Text style={attStyles.dateBadgeMonth}>
-                      {new Intl.DateTimeFormat(uiLocale(), {
-                        month: 'short',
-                        timeZone: 'UTC',
-                      }).format(new Date(`${day.workDate}T00:00:00Z`))}
-                    </Text>
-                  </View>
-                  <View style={attStyles.dayInfoCol}>
-                    <Text style={attStyles.dayWorkerName}>
-                      {scope.role === 'contractor'
-                        ? day.workerName
-                        : (day.shiftName ?? t('attendance.shiftNotAssigned'))}
-                    </Text>
-                    <View style={attStyles.presenceBadge}>
+            <View style={attStyles.listHeading}>
+              <Text style={attStyles.listTitle}>{t('attendance.attendanceHistory')}</Text>
+              <View style={attStyles.countBadge}>
+                <Text style={attStyles.countText}>
+                  {t('attendance.recordCount', { count: data.total })}
+                </Text>
+              </View>
+            </View>
+            {!data.items.length && (
+              <View style={attStyles.emptyState}>
+                <View style={attStyles.emptyIcon}>
+                  <IconClock size={32} color={colors.primary} />
+                </View>
+                <Text style={attStyles.emptyTitle}>{t('attendance.noDaysInRange')}</Text>
+                <Text style={attStyles.emptySubtitle}>{t('attendance.emptyHistoryHint')}</Text>
+              </View>
+            )}
+            {data.items.map((day, index) => (
+              <View key={day.id} style={attStyles.dayTimelineRow}>
+                <View style={attStyles.dayRail}>
+                  <Text style={attStyles.railDay}>{day.workDate.slice(8)}</Text>
+                  <Text style={attStyles.railMonth}>
+                    {dateLabel(day.workDate, { month: 'short' })}
+                  </Text>
+                  <View style={attStyles.railDot} />
+                  {index < data.items.length - 1 && <View style={attStyles.railLine} />}
+                </View>
+                <Pressable
+                  accessibilityRole="button"
+                  accessibilityLabel={`${day.workDate} ${scope.role === 'contractor' ? day.workerName : (day.shiftName ?? t('attendance.shiftNotAssigned'))}`}
+                  style={({ pressed }) => [
+                    attStyles.dayCard,
+                    {
+                      borderLeftColor:
+                        day.status === 'CONFIRMED'
+                          ? colors.success
+                          : day.status === 'NEEDS_REVIEW'
+                            ? colors.warning
+                            : colors.primary,
+                    },
+                    pressed && attStyles.pressed,
+                  ]}
+                  onPress={() => setDayId(day.id)}
+                >
+                  <View style={attStyles.dayCardHeader}>
+                    <View style={attStyles.dayInfoCol}>
                       <View
                         style={[
-                          attStyles.miniDot,
-                          { backgroundColor: day.presence === 'INSIDE' ? '#10B981' : '#F66B17' },
-                        ]}
-                      />
-                      <Text
-                        style={[
-                          attStyles.presenceText,
-                          { color: day.presence === 'INSIDE' ? '#065F46' : '#C2410C' },
+                          attStyles.dayStatusPill,
+                          {
+                            backgroundColor:
+                              day.status === 'CONFIRMED'
+                                ? colors.successBg
+                                : day.status === 'NEEDS_REVIEW'
+                                  ? colors.warningBg
+                                  : colors.primaryLight,
+                          },
                         ]}
                       >
-                        {day.presence === 'INSIDE'
-                          ? t('attendance.insideSite')
-                          : t('attendance.outsideSite')}
+                        <Text style={attStyles.dayStatusText}>{localizedLabel(day.status)}</Text>
+                      </View>
+                      <Text style={attStyles.dayWorkerName}>
+                        {scope.role === 'contractor'
+                          ? day.workerName
+                          : (day.shiftName ?? t('attendance.shiftNotAssigned'))}
+                      </Text>
+                      <View style={attStyles.presenceBadge}>
+                        <View
+                          style={[
+                            attStyles.miniDot,
+                            { backgroundColor: day.presence === 'INSIDE' ? '#10B981' : '#F66B17' },
+                          ]}
+                        />
+                        <Text
+                          style={[
+                            attStyles.presenceText,
+                            { color: day.presence === 'INSIDE' ? '#065F46' : '#C2410C' },
+                          ]}
+                        >
+                          {day.presence === 'INSIDE'
+                            ? t('attendance.insideSite')
+                            : t('attendance.outsideSite')}
+                        </Text>
+                      </View>
+                    </View>
+                    <View style={attStyles.dayHoursCol}>
+                      <Text style={attStyles.hoursText}>
+                        {day.confirmedMinutes === null
+                          ? minutes(day.provisionalMinutes)
+                          : minutes(day.confirmedMinutes)}
+                      </Text>
+                      <Text style={attStyles.hoursSub}>
+                        {day.confirmedMinutes === null
+                          ? t('attendance.provisionalHours')
+                          : t('attendance.confirmedHours')}
                       </Text>
                     </View>
                   </View>
-                  <View style={attStyles.dayHoursCol}>
-                    <Text style={attStyles.hoursText}>
-                      {day.confirmedMinutes === null
-                        ? minutes(day.provisionalMinutes)
-                        : minutes(day.confirmedMinutes)}
-                    </Text>
-                    <Text style={attStyles.hoursSub}>
-                      {day.confirmedMinutes === null
-                        ? t('attendance.provisionalHours')
-                        : t('attendance.confirmedHours')}
-                    </Text>
-                  </View>
-                </View>
 
-                {day.anomalies.length > 0 && (
-                  <View style={attStyles.anomaliesRow}>
-                    {day.anomalies.map((a, i) => (
-                      <View key={i} style={attStyles.anomalyPill}>
-                        <Text style={attStyles.anomalyText}>⚠️ {a}</Text>
-                      </View>
-                    ))}
+                  <View style={attStyles.cardLocation}>
+                    <IconMapPin size={15} color={colors.textMuted} />
+                    <Text style={attStyles.locationText}>{scope.siteName}</Text>
                   </View>
-                )}
 
-                <View style={attStyles.dayCardFooter}>
-                  <Text style={attStyles.dayDetailLink}>{t('attendance.dayDetail')}</Text>
-                  <IconChevronRight size={18} color="#F66B17" />
-                </View>
-              </Pressable>
+                  {day.anomalies.length > 0 && (
+                    <View style={attStyles.anomaliesRow}>
+                      {day.anomalies.map((a, i) => (
+                        <View key={i} style={attStyles.anomalyPill}>
+                          <Text style={attStyles.anomalyText}>⚠️ {a}</Text>
+                        </View>
+                      ))}
+                    </View>
+                  )}
+
+                  <View style={attStyles.dayCardFooter}>
+                    <Text style={attStyles.dayDetailLink}>{t('attendance.dayDetail')}</Text>
+                    <IconChevronRight size={16} color="#FFFFFF" />
+                  </View>
+                </Pressable>
+              </View>
             ))}
 
             <Pager offset={offset} total={data.total} onChange={setOffset} />
 
-            <Card>
-              <Body>{t('attendance.requestsInRange')}</Body>
+            <View style={attStyles.secondaryCard}>
+              <Text style={attStyles.listTitle}>{t('attendance.requestsInRange')}</Text>
               {!data.requests.length && <Hint>{t('attendance.noRequests')}</Hint>}
               {data.requests.map((r) => (
                 <Body key={r.id}>
@@ -279,7 +445,7 @@ export function AttendanceScreen({
                   {r.reviewNote ? ` · ${r.reviewNote}` : ''}
                 </Body>
               ))}
-            </Card>
+            </View>
           </>
         )}
       </QueryState>
@@ -294,8 +460,8 @@ export function AttendanceScreen({
 
       <QueryState query={timesheets}>
         {(data) => (
-          <Card>
-            <Body>{t('attendance.confirmedTimesheet')}</Body>
+          <View style={attStyles.secondaryCard}>
+            <Text style={attStyles.listTitle}>{t('attendance.confirmedTimesheet')}</Text>
             {!data.items.length && <Hint>{t('attendance.noConfirmedHours')}</Hint>}
             {data.items.map((w) => (
               <Body key={w.workerId}>
@@ -303,13 +469,19 @@ export function AttendanceScreen({
                 {minutes(w.totalMinutes)}
               </Body>
             ))}
-          </Card>
+          </View>
         )}
       </QueryState>
 
       {/* Slide-up Modal: Gửi yêu cầu nghỉ / tăng ca */}
       <TimeRequestModal visible={requestOpen} onClose={() => setRequestOpen(false)} />
-    </Page>
+      <MonthYearPicker
+        visible={showMonths}
+        value={range.fromDate}
+        onChange={selectMonth}
+        onClose={() => setShowMonths(false)}
+      />
+    </ScrollView>
   );
 }
 
@@ -346,7 +518,27 @@ function AttendanceDetail({ dayId, onBack }: { dayId: string; onBack: () => void
     );
 
   return (
-    <Page title={t('attendance.dayDetail')} onBack={onBack}>
+    <ScrollView
+      style={attStyles.screen}
+      contentContainerStyle={attStyles.content}
+      showsVerticalScrollIndicator={false}
+    >
+      <View style={attStyles.headingRow}>
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel={t('common.back')}
+          onPress={onBack}
+          style={attStyles.iconButton}
+        >
+          <IconChevronLeft size={20} color={colors.textPrimary} />
+        </Pressable>
+        <View style={attStyles.headingCopy}>
+          <Text style={attStyles.eyebrow}>{t('tabs.attendance')}</Text>
+          <Text accessibilityRole="header" style={attStyles.detailPageTitle}>
+            {t('attendance.dayDetail')}
+          </Text>
+        </View>
+      </View>
       <QueryState query={query}>
         {(data) => (
           <>
@@ -392,9 +584,20 @@ function AttendanceDetail({ dayId, onBack }: { dayId: string; onBack: () => void
               {!data.sessions.length && <Hint>{tr('attendance.noSessions')}</Hint>}
               {data.sessions.map((s, index) => {
                 const isLast = index === data.sessions.length - 1;
+                const entry = s.effectiveInAt ?? s.rawInAt;
                 return (
                   <View key={s.id} style={attStyles.timelineRow}>
                     <View style={attStyles.timelineTrackCol}>
+                      <Text style={attStyles.sessionRailTime}>
+                        {entry
+                          ? new Date(entry).toLocaleTimeString(uiLocale(), {
+                              timeZone: data.day.timezone,
+                              hour: '2-digit',
+                              minute: '2-digit',
+                              hour12: false,
+                            })
+                          : '—'}
+                      </Text>
                       <View style={attStyles.timelineDot} />
                       {!isLast && <View style={attStyles.timelineTrackLine} />}
                     </View>
@@ -410,10 +613,13 @@ function AttendanceDetail({ dayId, onBack }: { dayId: string; onBack: () => void
                         </View>
                       </View>
 
-                      <Text style={attStyles.sessionTimes}>
-                        {displayTime(s.effectiveInAt ?? s.rawInAt)} →{' '}
-                        {displayTime(s.effectiveOutAt ?? s.rawOutAt)}
-                      </Text>
+                      <View style={attStyles.sessionClockRow}>
+                        <IconClock size={15} color={colors.primary} />
+                        <Text style={attStyles.sessionTimes}>
+                          {displayTime(s.effectiveInAt ?? s.rawInAt)} →{' '}
+                          {displayTime(s.effectiveOutAt ?? s.rawOutAt)}
+                        </Text>
+                      </View>
                       <Text style={attStyles.sessionRawTimes}>
                         {t('attendance.rawTime', {
                           in: displayTime(s.rawInAt),
@@ -439,7 +645,13 @@ function AttendanceDetail({ dayId, onBack }: { dayId: string; onBack: () => void
 
             {/* Collapsible Rules Card */}
             <View style={attStyles.rulesCard}>
-              <Pressable style={attStyles.rulesHeader} onPress={() => setShowRules(!showRules)}>
+              <Pressable
+                accessibilityRole="button"
+                accessibilityLabel={t('attendance.rulesTitle')}
+                accessibilityState={{ expanded: showRules }}
+                style={attStyles.rulesHeader}
+                onPress={() => setShowRules(!showRules)}
+              >
                 <Text style={attStyles.rulesTitle}>{t('attendance.rulesTitle')}</Text>
                 {showRules ? (
                   <IconChevronUp size={18} color="#64748B" />
@@ -458,8 +670,8 @@ function AttendanceDetail({ dayId, onBack }: { dayId: string; onBack: () => void
       {/* Correction History */}
       <QueryState query={overview}>
         {(data) => (
-          <Card>
-            <Body>{t('attendance.correctionHistory')}</Body>
+          <View style={attStyles.secondaryCard}>
+            <Text style={attStyles.listTitle}>{t('attendance.correctionHistory')}</Text>
             {data.hasPendingCorrection && <Hint>{t('attendance.pendingCorrectionWarning')}</Hint>}
             {!data.corrections.length && <Hint>{t('attendance.noRequests')}</Hint>}
             {data.corrections.map((c) => (
@@ -469,7 +681,7 @@ function AttendanceDetail({ dayId, onBack }: { dayId: string; onBack: () => void
                 {c.reviewNote ? ` · ${c.reviewNote}` : ''}
               </Body>
             ))}
-          </Card>
+          </View>
         )}
       </QueryState>
 
@@ -481,7 +693,7 @@ function AttendanceDetail({ dayId, onBack }: { dayId: string; onBack: () => void
           onClose={() => setSession(null)}
         />
       )}
-    </Page>
+    </ScrollView>
   );
 }
 
@@ -704,13 +916,174 @@ function TimeRequestModal({ visible, onClose }: { visible: boolean; onClose: () 
 }
 
 const attStyles = StyleSheet.create({
+  secondaryCard: {
+    backgroundColor: colors.surface,
+    borderRadius: 16,
+    padding: 16,
+    gap: 12,
+    shadowColor: '#0F172A',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.04,
+    shadowRadius: 8,
+    elevation: 2,
+  },
+  screen: { flex: 1, backgroundColor: colors.background },
+  content: { paddingHorizontal: 16, paddingTop: 20, paddingBottom: 32, gap: 18 },
+  headingRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+  headingCopy: { flex: 1, minWidth: 0 },
+  eyebrow: {
+    color: colors.primary,
+    fontSize: 10,
+    fontWeight: '800',
+    letterSpacing: 1.6,
+    textTransform: 'uppercase',
+    marginBottom: 5,
+  },
+  pageTitle: {
+    color: colors.textPrimary,
+    fontSize: 26,
+    lineHeight: 34,
+    fontWeight: '800',
+    letterSpacing: -0.7,
+  },
+  detailPageTitle: {
+    color: colors.textPrimary,
+    fontSize: 22,
+    lineHeight: 30,
+    fontWeight: '800',
+    letterSpacing: -0.5,
+  },
+  iconButton: {
+    width: 44,
+    height: 44,
+    borderRadius: 14,
+    backgroundColor: colors.surface,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 1,
+    borderColor: colors.border,
+  },
+  iconButtonActive: { backgroundColor: colors.primaryLight, borderColor: colors.primaryBorder },
+  pressed: { opacity: 0.65 },
+  periodRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: 8,
+  },
+  periodPill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    backgroundColor: colors.surface,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    borderRadius: 999,
+    minHeight: 44,
+    flexShrink: 1,
+    borderWidth: 1,
+    borderColor: colors.border,
+  },
+  periodText: {
+    fontSize: 13,
+    fontWeight: '700',
+    color: colors.textPrimary,
+    flexShrink: 1,
+    textTransform: 'capitalize',
+  },
+  periodNavigation: { flexDirection: 'row', gap: 2 },
+  periodArrow: { width: 44, height: 44, alignItems: 'center', justifyContent: 'center' },
+  rangeCaption: { fontSize: 12, color: colors.textMuted, marginTop: -10, paddingHorizontal: 4 },
+  summaryHeading: { flexDirection: 'row', alignItems: 'center', gap: 10, marginBottom: 6 },
+  summaryIcon: {
+    width: 44,
+    height: 44,
+    borderRadius: 14,
+    backgroundColor: colors.primaryLight,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  summarySubtitle: { fontSize: 12, color: colors.textMuted, marginTop: 3 },
+  confirmedLabel: { color: colors.textMuted, fontSize: 12, fontWeight: '600' },
+  confirmedTotal: {
+    color: colors.textPrimary,
+    fontSize: 34,
+    lineHeight: 43,
+    fontWeight: '800',
+    letterSpacing: -1,
+    marginTop: -7,
+    marginBottom: 6,
+  },
+  listHeading: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    gap: 8,
+  },
+  listTitle: { flex: 1, color: colors.textPrimary, fontSize: 17, fontWeight: '800' },
+  countBadge: {
+    borderRadius: 999,
+    backgroundColor: colors.primaryLight,
+    paddingHorizontal: 11,
+    paddingVertical: 6,
+  },
+  countText: { fontSize: 11, fontWeight: '700', color: colors.primary },
+  emptyState: {
+    alignItems: 'center',
+    paddingVertical: 32,
+    paddingHorizontal: 20,
+    borderRadius: 20,
+    backgroundColor: colors.surface,
+    gap: 12,
+  },
+  emptyIcon: {
+    width: 72,
+    height: 72,
+    borderRadius: 24,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: colors.primaryLight,
+    marginBottom: 4,
+  },
+  emptyTitle: {
+    fontSize: 17,
+    fontWeight: '700',
+    textAlign: 'center',
+    lineHeight: 25,
+    color: colors.textPrimary,
+  },
+  emptySubtitle: { fontSize: 13, lineHeight: 21, textAlign: 'center', color: colors.textMuted },
+  dayTimelineRow: { flexDirection: 'row', gap: 10 },
+  dayRail: { width: 43, alignItems: 'center' },
+  railDay: { fontSize: 20, fontWeight: '800', color: colors.textPrimary, marginTop: 16 },
+  railMonth: { fontSize: 10, fontWeight: '600', color: colors.textMuted, marginTop: 2 },
+  railDot: {
+    width: 11,
+    height: 11,
+    borderWidth: 3,
+    borderColor: colors.primary,
+    borderRadius: 6,
+    backgroundColor: colors.surface,
+    marginTop: 10,
+  },
+  railLine: { width: 1, flex: 1, backgroundColor: colors.border, marginTop: 6, marginBottom: -18 },
+  dayStatusPill: {
+    alignSelf: 'flex-start',
+    borderRadius: 999,
+    paddingHorizontal: 9,
+    paddingVertical: 5,
+  },
+  dayStatusText: { fontSize: 10, fontWeight: '700', color: colors.textSecondary },
+  cardLocation: { flexDirection: 'row', alignItems: 'center', gap: 7 },
+  locationText: { flex: 1, color: colors.textMuted, fontSize: 12, lineHeight: 18 },
+  sessionRailTime: { fontSize: 12, fontWeight: '700', color: colors.textSecondary, marginTop: 14 },
+  sessionClockRow: { flexDirection: 'row', alignItems: 'center', gap: 7 },
   summaryCard: {
     backgroundColor: '#FFFFFF',
-    borderRadius: 20,
+    borderRadius: 16,
     padding: 16,
-    marginBottom: 14,
     borderWidth: 1,
-    borderColor: '#E2E8F0',
+    borderColor: colors.borderLight,
     shadowColor: '#0F1E36',
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.05,
@@ -728,12 +1101,15 @@ const attStyles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
+    gap: 10,
   },
   summaryCol: {
     flex: 1,
     alignItems: 'center',
     minWidth: 0,
-    paddingHorizontal: 4,
+    paddingHorizontal: 8,
+    paddingVertical: 14,
+    borderRadius: 14,
   },
   colDivider: {
     width: 1,
@@ -746,17 +1122,17 @@ const attStyles = StyleSheet.create({
     color: '#10B981',
   },
   summaryValueOrange: {
-    fontSize: 24,
+    fontSize: 20,
     fontWeight: '800',
     color: '#F66B17',
   },
   summaryValueBlue: {
-    fontSize: 22,
+    fontSize: 20,
     fontWeight: '800',
     color: '#2563EB',
   },
   summaryLabel: {
-    fontSize: 13.5,
+    fontSize: 12,
     fontWeight: '700',
     color: '#475569',
     marginTop: 4,
@@ -792,12 +1168,12 @@ const attStyles = StyleSheet.create({
     fontWeight: '700',
   },
   dayCard: {
+    flex: 1,
+    minWidth: 0,
     backgroundColor: '#FFFFFF',
-    borderRadius: 20,
+    borderRadius: 16,
     padding: 16,
-    marginBottom: 12,
-    borderWidth: 1,
-    borderColor: '#E2E8F0',
+    borderLeftWidth: 4,
     gap: 12,
     shadowColor: '#0F1E36',
     shadowOffset: { width: 0, height: 2 },
@@ -835,8 +1211,8 @@ const attStyles = StyleSheet.create({
   dayInfoCol: {
     flex: 1,
     gap: 5,
-    minWidth: 100,
-    flexBasis: 120,
+    minWidth: 90,
+    flexBasis: 100,
   },
   dayWorkerName: {
     fontSize: 16.5,
@@ -850,7 +1226,7 @@ const attStyles = StyleSheet.create({
     gap: 6,
   },
   presenceText: {
-    fontSize: 13.5,
+    fontSize: 11,
     fontWeight: '700',
   },
   dayHoursCol: {
@@ -887,24 +1263,26 @@ const attStyles = StyleSheet.create({
   dayCardFooter: {
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'flex-end',
+    justifyContent: 'center',
     gap: 4,
-    paddingTop: 8,
-    borderTopWidth: StyleSheet.hairlineWidth,
-    borderTopColor: '#F1F5F9',
+    paddingVertical: 10,
+    paddingHorizontal: 10,
+    borderRadius: 12,
+    backgroundColor: colors.primary,
+    minHeight: 44,
+    alignSelf: 'flex-end',
   },
   dayDetailLink: {
-    fontSize: 14,
+    fontSize: 12,
     fontWeight: '700',
-    color: '#F66B17',
+    color: '#FFFFFF',
   },
   detailHeaderCard: {
     backgroundColor: '#FFFFFF',
-    borderRadius: 20,
+    borderRadius: 16,
     padding: 16,
-    marginBottom: 16,
-    borderWidth: 1,
-    borderColor: '#E2E8F0',
+    borderLeftWidth: 4,
+    borderLeftColor: colors.primary,
     gap: 14,
     shadowColor: '#0F1E36',
     shadowOffset: { width: 0, height: 2 },
@@ -934,7 +1312,7 @@ const attStyles = StyleSheet.create({
     backgroundColor: '#EDFAF2',
     paddingHorizontal: 12,
     paddingVertical: 6,
-    borderRadius: 12,
+    borderRadius: 999,
   },
   detailStatusText: {
     fontSize: 13,
@@ -988,9 +1366,10 @@ const attStyles = StyleSheet.create({
   },
   timelineTrackCol: {
     alignItems: 'center',
-    width: 20,
+    width: 43,
   },
   timelineDot: {
+    marginTop: 10,
     width: 12,
     height: 12,
     borderRadius: 6,
@@ -1015,14 +1394,14 @@ const attStyles = StyleSheet.create({
     borderRadius: 16,
     padding: 14,
     marginBottom: 12,
-    borderWidth: 1,
-    borderColor: '#E2E8F0',
+    borderLeftWidth: 4,
+    borderLeftColor: colors.primary,
     gap: 8,
     shadowColor: '#0F1E36',
     shadowOffset: { width: 0, height: 1 },
     shadowOpacity: 0.03,
     shadowRadius: 4,
-    elevation: 1,
+    elevation: 2,
   },
   sessionCardHeader: {
     flexDirection: 'row',
@@ -1042,7 +1421,7 @@ const attStyles = StyleSheet.create({
     backgroundColor: '#EDFAF2',
     paddingHorizontal: 10,
     paddingVertical: 3,
-    borderRadius: 8,
+    borderRadius: 999,
   },
   workedBadgeText: {
     fontSize: 13,
@@ -1050,7 +1429,9 @@ const attStyles = StyleSheet.create({
     color: '#065F46',
   },
   sessionTimes: {
-    fontSize: 15,
+    flex: 1,
+    fontSize: 13,
+    lineHeight: 21,
     fontWeight: '800',
     color: '#0F1E36',
   },
