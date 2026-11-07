@@ -85,6 +85,7 @@ export interface ZoneResponse {
 }
 
 export interface RegionResponse {
+  geometryConfirmation?: import('./camera-region-geometry-confirmation.js').RegionGeometryConfirmation;
   id: string;
   cameraId: string;
   zoneId: string;
@@ -312,6 +313,23 @@ export interface ZoneEntryDecisionResponse {
   reasonCode: string;
   evaluatedAt: string;
   createdAt: string;
+}
+
+export interface RenameSiteProfileCommand {
+  name: string;
+  expectedName: string;
+}
+export interface SiteProfileNameResponse {
+  id: string;
+  name: string;
+}
+export interface CreateContractorRepresentativeCommand {
+  contractorName: string;
+  username: string;
+  displayName: string;
+  temporaryPassword: string;
+  validFrom: string;
+  validUntil: string | null;
 }
 
 export interface ContractorResponse {

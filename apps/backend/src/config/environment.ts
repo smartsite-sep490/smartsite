@@ -126,6 +126,42 @@ const cameraIdsSchema = z
     return [...new Set(ids)];
   });
 
+const previewSourcesSchema = z
+  .string()
+  .default('{}')
+  .transform((value, context) => {
+    try {
+      const parsed: unknown = JSON.parse(value);
+      const valid = z
+        .record(
+          z.string().min(1).max(128),
+          z.string().refine((origin) => {
+            try {
+              const url = new URL(origin);
+              return (
+                ['http:', 'https:'].includes(url.protocol) &&
+                url.origin === origin &&
+                !url.username &&
+                !url.password
+              );
+            } catch {
+              return false;
+            }
+          }),
+        )
+        .safeParse(parsed);
+      if (valid.success && Object.keys(valid.data).length <= 128) return valid.data;
+    } catch {
+      /* Input can contain private configuration; retain only a static error. */
+    }
+    context.addIssue({
+      code: 'custom',
+      message:
+        'must map camera external IDs to exact HTTP(S) origins without paths, credentials, queries or fragments',
+    });
+    return z.NEVER;
+  });
+
 export const backendEnvironmentSchema = z
   .object({
     WORKER_DOCUMENT_PYTHON: z
@@ -229,6 +265,11 @@ export const backendEnvironmentSchema = z
       .enum(['false', 'true'])
       .default('false')
       .transform((value) => value === 'true'),
+    SAFETY_EPISODE_PROJECTION_ENABLED: z
+      .enum(['false', 'true'])
+      .default('false')
+      .transform((value) => value === 'true'),
+    SAFETY_EPISODE_ROUTE_EPOCH: z.uuid().optional(),
     ALERT_COOLDOWN_SECONDS: integer(60, 1, MAX_SAFE_SECONDS),
     MAX_PAST_EVENT_AGE_SECONDS: integer(300, 1, MAX_SAFE_SECONDS),
     MAX_FUTURE_CLOCK_SKEW_SECONDS: integer(30, 1, MAX_SAFE_SECONDS),
@@ -243,6 +284,7 @@ export const backendEnvironmentSchema = z
     AI_RATE_LIMIT_TTL_MS: integer(60000, 1, MAX_TIMER_MS),
     AI_RATE_LIMIT_LIMIT: integer(600, 1, Number.MAX_SAFE_INTEGER),
     AI_CONFIGURATION_CAMERA_IDS: cameraIdsSchema,
+    SMARTSITE_AI_PREVIEW_SOURCES: previewSourcesSchema,
     STORAGE_PROVIDER: z.enum(['LOCAL', 'R2']).default('LOCAL'),
     STORAGE_LOCAL_ROOT: z
       .string()
@@ -312,6 +354,13 @@ export const backendEnvironmentSchema = z
   })
   .superRefine((config, context) => {
     productionDatabase(config, context);
+    if (config.SAFETY_EPISODE_PROJECTION_ENABLED && !config.SAFETY_EPISODE_ROUTE_EPOCH) {
+      context.addIssue({
+        code: 'custom',
+        path: ['SAFETY_EPISODE_ROUTE_EPOCH'],
+        message: 'must be explicitly set when non-delivering episode projection is enabled',
+      });
+    }
     if (config.MF06_ENQUEUE_ENABLED && config.MF06_ENQUEUE_MAX_OUTSTANDING === undefined) {
       context.addIssue({
         code: 'custom',

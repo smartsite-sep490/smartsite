@@ -1,4 +1,3 @@
-import { VisitorRoster1792022400000 } from '../../src/database/migrations/1792022400000-VisitorRoster.js';
 import { VisitorEmailService } from '../../src/modules/workforce/access/visitor-email.service.js';
 import type {
   VerifyVisitorQrCommand,
@@ -25,7 +24,6 @@ import {
   WorkerSiteZoneAssignmentStatus,
   GateEventEntity,
   VisitorVisitEntity,
-  VisitorGateEventEntity,
   QrFallbackSessionEntity,
   QrCredentialEntity,
   GateAccessLogEntity,
@@ -115,18 +113,6 @@ test('real PostgreSQL visitor approval, group counts, expiring QR, replay and wo
     const visit = await service.register(siteId, registration);
     assert.equal(visit.status, 'PENDING');
     assert.equal(visit.members?.length, 20);
-    const downgrade = dataSource.createQueryRunner();
-    await downgrade.connect();
-    await downgrade.startTransaction();
-    try {
-      await assert.rejects(
-        new VisitorRoster1792022400000().down(downgrade),
-        /Visitor identity history/,
-      );
-    } finally {
-      await downgrade.rollbackTransaction();
-      await downgrade.release();
-    }
     assert.equal('bookingCodeHash' in visit, false);
     assert.equal('bookingCodeCiphertext' in visit, false);
     assert.equal((await service.register(siteId, registration)).id, visit.id);
@@ -218,10 +204,7 @@ test('real PostgreSQL visitor approval, group counts, expiring QR, replay and wo
     assert.equal(results[0].attendees?.[0]?.replacedFrom?.fullName, 'Synthetic guest 0');
     assert.equal(results[0].visit.members?.filter((m) => m.inside).length, 18);
     assert.equal(results[0].visit.members?.[0]?.registeredFullName, 'Synthetic guest 0');
-    assert.equal(
-      await dataSource.getRepository(VisitorGateEventEntity).countBy({ visitId: visit.id }),
-      1,
-    );
+    assert.equal(await dataSource.getRepository(GateEventEntity).countBy({ visitId: visit.id }), 1);
     await assert.rejects(
       service.visitorGate(security, siteId, gateId, { ...entry, requestId: randomUUID() }),
       /Reload/,
@@ -286,11 +269,8 @@ test('real PostgreSQL visitor approval, group counts, expiring QR, replay and wo
       /schedule/,
     );
     assert.equal(
-      (
-        await dataSource
-          .getRepository(VisitorGateEventEntity)
-          .findOneByOrFail({ id: results[0].id })
-      ).attendees[0]?.fullName,
+      (await dataSource.getRepository(GateEventEntity).findOneByOrFail({ id: results[0].id }))
+        .attendees?.[0]?.fullName,
       'Synthetic replacement',
     );
     // Single visitors retain a one-person passage using the same permanent code.
@@ -907,10 +887,6 @@ test('real PostgreSQL visitor approval, group counts, expiring QR, replay and wo
     await dataSource.query('DELETE FROM shift WHERE site_id=$1', [siteId]);
     await dataSource.query('DELETE FROM schedule_version WHERE site_id=$1', [siteId]);
     await dataSource.query('DELETE FROM qr_credential WHERE site_id = ANY($1)', [sites]);
-    await dataSource.query(
-      'DELETE FROM visitor_gate_event WHERE visit_id IN (SELECT id FROM visitor_visit WHERE site_id = ANY($1))',
-      [sites],
-    );
     const representatives = await dataSource.query<{ representative_visitor_id: string }[]>(
       'SELECT representative_visitor_id FROM visitor_visit WHERE site_id = ANY($1)',
       [sites],
@@ -921,7 +897,6 @@ test('real PostgreSQL visitor approval, group counts, expiring QR, replay and wo
     ]);
     await dataSource.query('DELETE FROM qr_fallback_session WHERE site_id = ANY($1)', [sites]);
     await dataSource.query('DELETE FROM gate_access_log WHERE site_id = ANY($1)', [sites]);
-    await dataSource.query('DELETE FROM worker_gate_permission WHERE site_id = ANY($1)', [sites]);
     await dataSource.query('DELETE FROM face_profile WHERE worker_id = $1', [workerId]);
     await dataSource.query('DELETE FROM worker_site_zone_assignment WHERE worker_id = $1', [
       workerId,

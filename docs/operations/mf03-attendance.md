@@ -1,5 +1,9 @@
 # MF03 — Vận hành chấm công và xác nhận giờ làm
 
+Sau migration thu gọn ERD, dữ liệu dùng cho bảng công và xuất báo cáo tiếp tục lấy từ
+`attendance_day`, `attendance_session` và bộ tính công hiện có. Bảng bản sao `timesheet` cùng bốn
+bảng chấm công legacy được loại khỏi schema; các endpoint, response và màn hình hiện tại vẫn giữ nguyên.
+
 ## Quy tắc
 
 - Luồng Face và QR dùng chung điểm xác nhận qua cổng. Chỉ lượt qua cổng đã xác nhận mới tạo chấm công; kết quả nhận diện đơn thuần chưa tính giờ.

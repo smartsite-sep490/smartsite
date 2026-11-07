@@ -1,7 +1,7 @@
 import 'reflect-metadata';
 import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
-import { after, test } from 'node:test';
+import { after, before, test } from 'node:test';
 import { ConfigService } from '@nestjs/config';
 import { Test } from '@nestjs/testing';
 import { getDataSourceToken } from '@nestjs/typeorm';
@@ -9,7 +9,7 @@ import type { NestExpressApplication } from '@nestjs/platform-express';
 import { parseCameraRegionConfigurationPayload } from '@smartsite/contracts';
 import { PARAMS_PROVIDER_TOKEN } from 'nestjs-pino';
 import { DataSource } from 'typeorm';
-import dataSource from '../support/test-data-source.js';
+import { createIsolatedTestDatabase } from '../support/isolated-test-database.js';
 import { AppModule } from '../../src/app.module.js';
 import { configureApplication } from '../../src/configure-app.js';
 import { validateEnvironment, type BackendEnvironment } from '../../src/config/environment.js';
@@ -18,12 +18,13 @@ import { UsersService } from '../../src/modules/users/users.service.js';
 import { UserRole } from '../../src/database/entities/user.entity.js';
 import { SiteConfigurationService } from '../../src/modules/sites/site-configuration.service.js';
 
-after(async () => {
-  if (dataSource.isInitialized) await dataSource.destroy();
-});
+const owned = createIsolatedTestDatabase();
+const dataSource = owned.dataSource;
+before(() => owned.initialize());
+after(() => owned.dispose());
 
 test('Admin Site setup and scoped Manager Zone setup feed an allowlisted AI snapshot and versioned observation', async () => {
-  await dataSource.initialize();
+  if (!dataSource.isInitialized) await dataSource.initialize();
   const suffix = randomUUID().slice(0, 8);
   const temporaryPassword = 'TempAdmin123!';
   const newPassword = 'PermanentAdmin123!';
@@ -135,7 +136,15 @@ test('Admin Site setup and scoped Manager Zone setup feed an allowlisted AI snap
     const managerId = ((await managerResponse.json()) as { id: string }).id;
     const revokePath = `${url}/api/v1/users/${managerId}/site-manager/${site.id}`;
     assert.equal((await fetch(revokePath, { method: 'DELETE' })).status, 401);
-    assert.equal((await fetch(revokePath, { method: 'DELETE', headers: { Authorization: `Bearer ${managerToken}` } })).status, 403);
+    assert.equal(
+      (
+        await fetch(revokePath, {
+          method: 'DELETE',
+          headers: { Authorization: `Bearer ${managerToken}` },
+        })
+      ).status,
+      403,
+    );
     const contractorPath = `/sites/${site.id}/contractors`;
     const contractorInput = { code: `CTR-${suffix}`, name: 'HTTP contractor' };
     assert.equal((await post(contractorPath, contractorInput, adminToken)).status, 403);
@@ -514,6 +523,67 @@ test('Admin Site setup and scoped Manager Zone setup feed an allowlisted AI snap
     );
     assert.equal(stale.status, 202);
     assert.equal(((await stale.json()) as { status: string }).status, 'SKIPPED_NO_CANDIDATE');
+    const combinedPath = `/sites/${site.id}/contractor-representative-accounts`;
+    const combinedInput = {
+      contractorName: 'Combined HTTP contractor',
+      username: `combined-${suffix}`,
+      displayName: 'Combined representative',
+      temporaryPassword: 'TempDemo2026!',
+      validFrom: new Date(Date.now() - 60000).toISOString(),
+      validUntil: null,
+    };
+    assert.equal((await post(combinedPath, combinedInput)).status, 401);
+    assert.equal((await post(combinedPath, combinedInput, adminToken)).status, 403);
+    assert.equal((await post(combinedPath, combinedInput, representativeToken)).status, 403);
+    assert.equal(
+      (
+        await post(
+          `/sites/${randomUUID()}/contractor-representative-accounts`,
+          combinedInput,
+          managerToken,
+        )
+      ).status,
+      403,
+    );
+    assert.equal(
+      (await post(combinedPath, { ...combinedInput, roleAssignments: [] }, managerToken)).status,
+      400,
+    );
+    const combinedResult = await post(combinedPath, combinedInput, managerToken);
+    assert.equal(combinedResult.status, 201);
+    const combinedAccount = (await combinedResult.json()) as { id: string };
+    assert.equal((await post(combinedPath, combinedInput, managerToken)).status, 409);
+    const patch = (path: string, body: unknown, token?: string) =>
+      fetch(`${url}/api/v1${path}`, {
+        method: 'PATCH',
+        headers: {
+          'Content-Type': 'application/json',
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        },
+        body: JSON.stringify(body),
+      });
+    const repNamePath = `/sites/${site.id}/representative-accounts/${combinedAccount.id}/name`;
+    const nameInput = { name: 'Corrected representative', expectedName: combinedInput.displayName };
+    assert.equal((await patch(repNamePath, nameInput)).status, 401);
+    assert.equal((await patch(repNamePath, nameInput, adminToken)).status, 403);
+    assert.equal((await patch(repNamePath, nameInput, representativeToken)).status, 403);
+    assert.equal(
+      (await patch(repNamePath, { ...nameInput, username: 'forbidden' }, managerToken)).status,
+      400,
+    );
+    assert.equal((await patch(repNamePath, { ...nameInput, name: ' ' }, managerToken)).status, 400);
+    assert.equal((await patch(repNamePath, nameInput, managerToken)).status, 200);
+    assert.equal((await patch(repNamePath, nameInput, managerToken)).status, 409);
+    assert.equal(
+      (
+        await patch(
+          `/sites/${site.id}/contractors/${contractor.id}/name`,
+          { name: 'Corrected HTTP contractor', expectedName: contractorInput.name },
+          managerToken,
+        )
+      ).status,
+      200,
+    );
   } finally {
     await app.close();
   }

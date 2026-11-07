@@ -498,7 +498,7 @@
     "validThrough": "Valid until: {{date}}",
     "noZones": "No zones currently authorized.",
     "revoked": "Revoked",
-    "authorizationHint": "ℹ️ Gate and zone access is checked by the server against the current schedule and permissions.",
+    "authorizationHint": "ℹ️ Site entry and zone access are checked by the server against the current schedule and permissions.",
     "requestAssignment": "Request an assignment",
     "assignmentHint": "Requests follow the approval workflow. Representatives cannot approve their own entry access.",
     "requestedZones": "Requested zones",

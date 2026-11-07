@@ -47,6 +47,8 @@ Admin **Site Setup** includes **Contractor Site directory**. `GET /api/v1/contra
 
 Participation status is evaluated at query time with precedence: inactive participation or Contractor → `INACTIVE`; end at/before now → `EXPIRED`; start after now → `FUTURE`; otherwise `ACTIVE`. Null end means no end date. All intervals are returned, including future, expired and inactive ones; `total` counts intervals, not distinct Sites. To derive currently participating Sites, read every page, retain `ACTIVE` and deduplicate by Site ID. Ordering is stable by Site name/ID and interval start/ID. Pagination defaults to 20 with a maximum of 100. Contractor pages and participation pages have separate controls; changing Contractor pages clears the previous selection. Unavailable/denied responses offer retry without displaying a false empty list. No write permission, migration, runtime dependency or AI contract is added.
 
+The Site Manager Web participation form accepts calendar dates in the browser's timezone. The start is local midnight and the optional end includes the whole selected day, sent as exclusive midnight on the following day in UTC. A blank end remains indefinite. Existing timestamp-based API inputs and historical intervals are unchanged.
+
 Missing authentication returns 401, non-global Admin returns 403, malformed UUID/pagination returns 400 and an unknown Contractor returns 404. An existing Contractor without intervals returns an empty page with total zero. These are read-only GETs without request bodies or idempotency keys.
 
 ## Contractor Zone dates

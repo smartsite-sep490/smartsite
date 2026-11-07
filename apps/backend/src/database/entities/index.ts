@@ -1,3 +1,5 @@
+import { SafetyEpisodeEntity, SafetyEpisodeRecipientEntity } from './safety-episode.entity.js';
+export * from './safety-episode.entity.js';
 import { ZoneEntryAssessmentEntity } from './zone-entry-assessment.entity.js';
 export * from './zone-entry-assessment.entity.js';
 import { ZoneEntryAuthorityArtifactEntity } from './zone-entry-authority-artifact.entity.js';
@@ -51,7 +53,6 @@ import {
   VisitorVisitEntity,
   QrFallbackSessionEntity,
   QrCredentialEntity,
-  VisitorGateEventEntity,
   VisitorEntity,
   VisitZoneEntity,
 } from './qr-access.entity.js';
@@ -75,10 +76,6 @@ import { SafetyAlertReviewEntity } from './safety-alert-review.entity.js';
 import { ShiftEntity } from './shift.entity.js';
 import { ScheduleVersionEntity } from './schedule-version.entity.js';
 import { WorkerScheduleEntity } from './worker-schedule.entity.js';
-import { AttendancePairEntity } from './attendance-pair.entity.js';
-import { AttendanceAnomalyEntity } from './attendance-anomaly.entity.js';
-import { AttendanceCorrectionRequestEntity } from './attendance-correction-request.entity.js';
-import { TimesheetEntity } from './timesheet.entity.js';
 import { ShiftChangeRequestEntity } from './shift-change-request.entity.js';
 import { ShiftSwapRequestEntity } from './shift-swap-request.entity.js';
 import { AbsenceRequestEntity } from './absence-request.entity.js';
@@ -90,7 +87,6 @@ import { WorkerSiteZoneAssignmentEntity } from './worker-site-zone-assignment.en
 import { FaceProfileEntity } from './face-profile.entity.js';
 import { FaceEnrollmentSessionEntity } from './face-enrollment-session.entity.js';
 import { GateAccessLogEntity } from './gate-access-log.entity.js';
-import { WorkerGatePermissionEntity } from './worker-gate-permission.entity.js';
 import { UserNotificationEntity } from './user-notification.entity.js';
 
 export * from './enums.js';
@@ -115,10 +111,6 @@ export * from './safety-alert-review.entity.js';
 export * from './shift.entity.js';
 export * from './schedule-version.entity.js';
 export * from './worker-schedule.entity.js';
-export * from './attendance-pair.entity.js';
-export * from './attendance-anomaly.entity.js';
-export * from './attendance-correction-request.entity.js';
-export * from './timesheet.entity.js';
 export * from './shift-change-request.entity.js';
 export * from './shift-swap-request.entity.js';
 export * from './absence-request.entity.js';
@@ -131,11 +123,39 @@ export * from './worker-site-zone-assignment.entity.js';
 export * from './face-profile.entity.js';
 export * from './face-enrollment-session.entity.js';
 export * from './gate-access-log.entity.js';
-export * from './worker-gate-permission.entity.js';
 export * from './user-notification.entity.js';
 
 export * from './safety-workflow.entity.js';
+import {
+  CameraViewRevisionEntity,
+  CameraConfigurationReferenceEntity,
+} from './camera-configuration-reference.entity.js';
+export * from './camera-configuration-reference.entity.js';
+import { CameraRegionGeometryRevisionEntity } from './camera-region-geometry-revision.entity.js';
+export * from './camera-region-geometry-revision.entity.js';
+import { ZonePolicyRevisionEntity } from './zone-policy-revision.entity.js';
+import {
+  CameraConfigurationBundleEntity,
+  CameraConfigurationBundleRegionEntity,
+} from './camera-configuration-bundle.entity.js';
+export * from './zone-policy-revision.entity.js';
+export * from './camera-configuration-bundle.entity.js';
+import {
+  CameraWorkerGenerationEntity,
+  CameraConfigurationApplicationReceiptEntity,
+} from './camera-worker-generation.entity.js';
+export * from './camera-worker-generation.entity.js';
 export const ENTITIES = [
+  CameraWorkerGenerationEntity,
+  CameraConfigurationApplicationReceiptEntity,
+  ZonePolicyRevisionEntity,
+  CameraConfigurationBundleEntity,
+  CameraConfigurationBundleRegionEntity,
+  CameraRegionGeometryRevisionEntity,
+  SafetyEpisodeEntity,
+  SafetyEpisodeRecipientEntity,
+  CameraViewRevisionEntity,
+  CameraConfigurationReferenceEntity,
   ZoneEntryAssessmentEntity,
   ZoneEntryAuthorityArtifactEntity,
   ZoneEntryAssessmentRequestEntity,
@@ -166,7 +186,6 @@ export const ENTITIES = [
   VisitorVisitEntity,
   QrFallbackSessionEntity,
   QrCredentialEntity,
-  VisitorGateEventEntity,
   IncidentEntity,
   IncidentWorkerEntity,
   CorrectiveActionEntity,
@@ -194,10 +213,6 @@ export const ENTITIES = [
   ShiftEntity,
   ScheduleVersionEntity,
   WorkerScheduleEntity,
-  AttendancePairEntity,
-  AttendanceAnomalyEntity,
-  AttendanceCorrectionRequestEntity,
-  TimesheetEntity,
   ShiftChangeRequestEntity,
   ShiftSwapRequestEntity,
   AbsenceRequestEntity,
@@ -210,7 +225,6 @@ export const ENTITIES = [
   FaceProfileEntity,
   FaceEnrollmentSessionEntity,
   GateAccessLogEntity,
-  WorkerGatePermissionEntity,
   UserNotificationEntity,
   TeamZonePermissionEntity,
 ] as const;

@@ -25,6 +25,8 @@ import {
 import { ZoneRestrictionPolicy, ZoneType } from '../../database/entities/enums.js';
 import { ZoneEntity } from '../../database/entities/zone.entity.js';
 import { SiteConfigurationService } from '../sites/site-configuration.service.js';
+import { appendZonePolicyRevision } from './zone-policy-revisions.js';
+import { ZonePolicyRevisionEntity } from '../../database/entities/zone-policy-revision.entity.js';
 
 const trim = ({ value }: { value: unknown }) => (typeof value === 'string' ? value.trim() : value);
 
@@ -83,13 +85,17 @@ export class ZoneConfigurationService {
     const value = command(CreateZoneCommand, input);
     await this.sites.get(siteId);
     try {
-      return await this.dataSource.getRepository(ZoneEntity).save({
-        id: randomUUID(),
-        siteId,
-        ...value,
-        code: value.code ?? `ZONE-${randomUUID().toUpperCase()}`,
-        requiredPpe: [...value.requiredPpe].sort(),
-        configurationLocked: false,
+      return await this.dataSource.transaction(async (manager) => {
+        const zone = await manager.getRepository(ZoneEntity).save({
+          id: randomUUID(),
+          siteId,
+          ...value,
+          code: value.code ?? `ZONE-${randomUUID().toUpperCase()}`,
+          requiredPpe: [...value.requiredPpe].sort(),
+          configurationLocked: false,
+        });
+        await appendZonePolicyRevision(manager, zone, true);
+        return zone;
       });
     } catch (error) {
       knownUnique(error, ['uq_zone_site_code']);
@@ -99,8 +105,11 @@ export class ZoneConfigurationService {
   async referenceName(siteId: string, zoneId: string | null): Promise<string | null> {
     if (!zoneId) return null;
     return (
-      (await this.dataSource.getRepository(ZoneEntity).findOneBy({ siteId, id: zoneId }))?.name ??
-      null
+      (
+        await this.dataSource
+          .getRepository(ZoneEntity)
+          .findOne({ where: { siteId, id: zoneId }, withDeleted: true })
+      )?.name ?? null
     );
   }
   async get(siteId: string, zoneId: string): Promise<ZoneEntity> {
@@ -137,6 +146,26 @@ export class ZoneConfigurationService {
     return zone;
   }
 
+  async remove(siteId: string, zoneId: string): Promise<{ id: string }> {
+    return this.dataSource.transaction(async (manager) => {
+      const zone = await this.lockForRegion(manager, siteId, zoneId);
+      const [usage] = await manager.query<Array<{ assigned: boolean; linked: boolean }>>(
+        `SELECT EXISTS(SELECT 1 FROM contractor_zone_permission WHERE zone_id=$1 AND revoked_at IS NULL)
+          OR EXISTS(SELECT 1 FROM worker_site_zone_assignment WHERE $1=ANY(zone_ids) AND site_id=$2 AND status IN ('PENDING','SAFETY_REVIEWED','APPROVED'))
+          OR EXISTS(SELECT 1 FROM zone_access_grant WHERE zone_id=$1 AND revoked_at IS NULL)
+          OR EXISTS(SELECT 1 FROM visit_zone WHERE zone_id=$1 AND valid_until>now()) AS assigned,
+          EXISTS(SELECT 1 FROM camera_observation_region WHERE zone_id=$1 AND is_active) AS linked`,
+        [zone.id, siteId],
+      );
+      if (!usage) conflict('Zone usage is unavailable');
+      if (usage.assigned) conflict('Zone is assigned. Revoke its assignments before deleting it.');
+      if (usage.linked)
+        conflict('Zone has active camera regions. Deactivate them before deleting it.');
+      await manager.getRepository(ZoneEntity).softDelete({ id: zone.id, siteId });
+      return { id: zone.id };
+    });
+  }
+
   async updatePolicy(
     siteId: string,
     zoneId: string,
@@ -166,6 +195,7 @@ export class ZoneConfigurationService {
       zone.type = value.type;
       zone.restrictionPolicy = value.restrictionPolicy;
       zone.requiredPpe = requiredPpe;
+      await appendZonePolicyRevision(manager, zone);
       return zone;
     });
   }
@@ -187,5 +217,23 @@ export class ZoneConfigurationService {
     if (zone.configurationLocked) return;
     await manager.getRepository(ZoneEntity).update({ id: zone.id }, { configurationLocked: true });
     zone.configurationLocked = true;
+  }
+
+  async configurationPolicy(manager: EntityManager, siteId: string, zoneId: string) {
+    const zone = await manager.getRepository(ZoneEntity).findOneBy({ id: zoneId, siteId });
+    // Linked policy is immutable through Main; no cross-camera Zone lock cycle.
+    if (!zone?.configurationLocked) conflict('Zone policy history is unavailable');
+    const policy = await manager
+      .getRepository(ZonePolicyRevisionEntity)
+      .findOne({ where: { zoneId: zone.id, siteId }, order: { policyRevision: 'DESC' } });
+    if (
+      !policy ||
+      policy.zoneType !== zone.type ||
+      policy.restrictionPolicy !== zone.restrictionPolicy ||
+      JSON.stringify([...policy.requiredPpe].sort()) !==
+        JSON.stringify([...zone.requiredPpe].sort())
+    )
+      conflict('Zone policy history is unavailable');
+    return policy;
   }
 }
