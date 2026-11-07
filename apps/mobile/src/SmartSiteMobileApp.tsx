@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { View, BackHandler } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { StatusBar } from 'expo-status-bar';
 import { useMutation, useQuery } from '@tanstack/react-query';
 import { AuthProvider, API_URL, useAuth, useCurrentUser } from './features/auth/auth-context';
 import { LoginScreen } from './screens/auth/LoginScreen';
@@ -24,6 +25,7 @@ import { AssignedWorkScreen } from './features/assigned-work/assigned-work-scree
 import { QrScreen, NotificationsScreen } from './features/workspace/qr-notifications';
 import { useTranslation, initSavedLanguage } from './i18n';
 import { localizeMessage } from './i18n/messages';
+import { MobileLayoutProvider } from './features/shared/mobile-layout';
 
 export type UserRole = 'worker' | 'contractor';
 export type MobileRoute =
@@ -89,79 +91,93 @@ function WorkspaceApp({ onScopeChange }: { onScopeChange: () => void }) {
     (contractor && route === 'requests');
 
   return (
-    <SafeAreaView style={{ flex: 1, backgroundColor: palette.bg }}>
-      {/* Top Header */}
-      <ScreenHeader
-        mode={main ? 'root' : 'detail'}
-        title={
-          !main
-            ? route === 'teams'
-              ? t('teams.title')
-              : route === 'access'
-                ? t('access.title')
-                : route === 'assigned'
-                  ? t('assignedWork.title')
-                  : route === 'qr'
-                    ? t('qr.title')
-                    : route === 'notifications'
-                      ? t('notifications.title')
-                      : undefined
-            : undefined
-        }
-        siteName={scope.siteName}
-        scopeLabel={contractor ? scope.contractorName : t('scope.workerRole')}
-        avatarRole={scope.role}
-        showAvatar={false}
-        showSiteInfo={false}
-        unreadCount={notices.data?.unreadCount ?? 0}
-        onBack={!main ? back : undefined}
-        onScopeChange={onScopeChange}
-        onNotificationPress={() => navigate({ route: 'notifications' })}
-        onAvatarPress={() => navigate({ route: 'profile' })}
-      />
-
-      <View style={{ flex: 1 }} key={`${route}:${navigation.id ?? ''}`}>
-        {route === 'home' && <HomeScreen navigate={navigate} />}
-        {route === 'profile' && (
-          <ProfileScreen
+    <MobileLayoutProvider compact={contractor}>
+      <View style={{ flex: 1, backgroundColor: palette.bg }}>
+        <StatusBar style="dark" />
+        {/* Top Header */}
+        {route !== 'profile' && (
+          <ScreenHeader
+            mode={main ? 'root' : 'detail'}
+            title={
+              !main
+                ? route === 'teams'
+                  ? t('teams.title')
+                  : route === 'access'
+                    ? t('access.title')
+                    : route === 'assigned'
+                      ? t('assignedWork.title')
+                      : route === 'qr'
+                        ? t('qr.title')
+                        : route === 'notifications'
+                          ? t('notifications.title')
+                          : undefined
+                : undefined
+            }
+            siteName={scope.siteName}
+            scopeLabel={contractor ? scope.contractorName : t('scope.workerRole')}
+            avatarRole={scope.role}
+            showAvatar={contractor && route !== 'home'}
+            showTagline={!contractor}
+            showSiteInfo={false}
+            unreadCount={notices.data?.unreadCount ?? 0}
+            onBack={!main ? back : undefined}
             onScopeChange={onScopeChange}
-            initialDocuments={navigation.kind === 'documents'}
+            onNotificationPress={() => navigate({ route: 'notifications' })}
+            onAvatarPress={() => navigate({ route: 'profile' })}
           />
         )}
-        {route === 'schedule' && <ScheduleScreen initialDate={navigation.workDate} />}
-        {route === 'attendance' && (
-          <AttendanceScreen initialDayId={navigation.id} onBack={main ? undefined : back} />
-        )}
-        {route === 'requests' && (
-          <ShiftRequestsScreen
-            initialId={navigation.id}
-            initialKind={navigation.kind}
-            onBack={main ? undefined : back}
-          />
-        )}
-        {route === 'workforce' && contractor && <WorkforceScreen initialWorkerId={navigation.id} />}
-        {route === 'teams' && contractor && <TeamsScreen onBack={back} />}
-        {route === 'access' && <AccessScreen onBack={back} />}
-        {route === 'assigned' && contractor && (
-          <AssignedWorkScreen
-            initialId={navigation.id}
-            initialKind={navigation.kind}
-            onBack={back}
-          />
-        )}
-        {route === 'qr' && !contractor && <QrScreen onBack={back} />}
-        {route === 'notifications' && <NotificationsScreen navigate={navigate} onBack={back} />}
-      </View>
 
-      {main && (
-        <BottomTabBar
-          role={scope.role}
-          activeTab={route}
-          pendingRequestsCount={contractor ? (pendingRequests.data?.total ?? 0) : 0}
-          onSelectTab={(tab: WorkerTab | ContractorTab) => navigate({ route: tab })}
-        />
-      )}
-    </SafeAreaView>
+        <SafeAreaView
+          edges={main ? ['left', 'right'] : ['left', 'right', 'bottom']}
+          style={{ flex: 1 }}
+          key={`${route}:${navigation.id ?? ''}`}
+        >
+          {route === 'home' && <HomeScreen navigate={navigate} />}
+          {route === 'profile' && (
+            <MobileLayoutProvider compact={false}>
+              <ProfileScreen
+                onScopeChange={onScopeChange}
+                initialDocuments={navigation.kind === 'documents'}
+              />
+            </MobileLayoutProvider>
+          )}
+          {route === 'schedule' && <ScheduleScreen initialDate={navigation.workDate} />}
+          {route === 'attendance' && (
+            <AttendanceScreen initialDayId={navigation.id} onBack={main ? undefined : back} />
+          )}
+          {route === 'requests' && (
+            <ShiftRequestsScreen
+              initialId={navigation.id}
+              initialKind={navigation.kind}
+              onBack={main ? undefined : back}
+            />
+          )}
+          {route === 'workforce' && contractor && (
+            <WorkforceScreen initialWorkerId={navigation.id} />
+          )}
+          {route === 'teams' && contractor && <TeamsScreen onBack={back} />}
+          {route === 'access' && <AccessScreen onBack={back} />}
+          {route === 'assigned' && contractor && (
+            <AssignedWorkScreen
+              initialId={navigation.id}
+              initialKind={navigation.kind}
+              onBack={back}
+            />
+          )}
+          {route === 'qr' && !contractor && <QrScreen onBack={back} />}
+          {route === 'notifications' && <NotificationsScreen navigate={navigate} onBack={back} />}
+        </SafeAreaView>
+
+        {main && (
+          <BottomTabBar
+            role={scope.role}
+            activeTab={route}
+            pendingRequestsCount={contractor ? (pendingRequests.data?.pendingCount ?? 0) : 0}
+            onSelectTab={(tab: WorkerTab | ContractorTab) => navigate({ route: tab })}
+          />
+        )}
+      </View>
+    </MobileLayoutProvider>
   );
 }
 
@@ -191,22 +207,28 @@ function ScopePicker() {
 
   if (profile.isError || sites.isError || (isRep && scopes.isError))
     return (
-      <Page title={t('scope.failedToLoad')}>
-        <ErrorNotice error={profile.error ?? sites.error ?? scopes.error} />
-        <Button
-          label={t('common.retry')}
-          onPress={() => {
-            void profile.refetch();
-            void sites.refetch();
-            if (isRep) void scopes.refetch();
-          }}
-        />
-        <Button secondary label={t('common.logout')} onPress={() => logout.mutate()} />
-      </Page>
+      <SafeAreaView style={{ flex: 1, backgroundColor: palette.bg }}>
+        <Page title={t('scope.failedToLoad')}>
+          <ErrorNotice error={profile.error ?? sites.error ?? scopes.error} />
+          <Button
+            label={t('common.retry')}
+            onPress={() => {
+              void profile.refetch();
+              void sites.refetch();
+              if (isRep) void scopes.refetch();
+            }}
+          />
+          <Button secondary label={t('common.logout')} onPress={() => logout.mutate()} />
+        </Page>
+      </SafeAreaView>
     );
 
   if (profile.isPending || sites.isPending || (isRep && scopes.isPending))
-    return <Page title={t('scope.loadingScopes')} />;
+    return (
+      <SafeAreaView style={{ flex: 1, backgroundColor: palette.bg }}>
+        <Page title={t('scope.loadingScopes')} />
+      </SafeAreaView>
+    );
 
   const user = profile.data;
   if (!user) return null;
@@ -302,7 +324,7 @@ function AuthenticatedApp() {
 
   const restore = useQuery({
     queryKey: ['mobile-restore'],
-    queryFn: () => session.restore(),
+    queryFn: () => session.restore({ timeoutMs: 5000 }),
     enabled: !!API_URL,
     retry: false,
     staleTime: Infinity,
@@ -315,37 +337,27 @@ function AuthenticatedApp() {
       session.login(username, password),
   });
 
-  if (splash) return <SplashScreen onFinish={() => setSplash(false)} />;
+  if (splash) return <SplashScreen onFinish={() => setSplash(false)} ready={!restore.isPending} />;
+
   if (!API_URL)
     return (
-      <Page title={t('auth.notConfigured')}>
-        <Hint>{t('auth.configHint')}</Hint>
-      </Page>
+      <SafeAreaView style={{ flex: 1, backgroundColor: palette.bg }}>
+        <Page title={t('auth.notConfigured')}>
+          <Hint>{t('auth.configHint')}</Hint>
+        </Page>
+      </SafeAreaView>
     );
 
   if (response) return <ScopePicker />;
-  if (restore.isPending) return <Page title={t('auth.restoringSession')} />;
 
   return (
-    <SafeAreaView style={{ flex: 1 }}>
-      {restore.isError && (
-        <Card>
-          <ErrorNotice error={restore.error} />
-          <Button
-            secondary
-            label={t('auth.restoreSession')}
-            onPress={() => void restore.refetch()}
-          />
-        </Card>
-      )}
-      {expired && <Hint>{t('auth.sessionExpired')}</Hint>}
-      {notice && <Hint>{localizeMessage(notice)}</Hint>}
-      <LoginScreen
-        pending={login.isPending}
-        error={login.error}
-        onLogin={(username, password) => login.mutate({ username, password })}
-      />
-    </SafeAreaView>
+    <LoginScreen
+      pending={login.isPending}
+      error={login.error}
+      expired={expired}
+      notice={notice ? localizeMessage(notice) : null}
+      onLogin={(username, password) => login.mutate({ username, password })}
+    />
   );
 }
 
