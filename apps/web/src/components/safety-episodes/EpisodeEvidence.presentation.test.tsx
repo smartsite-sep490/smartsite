@@ -1,9 +1,10 @@
 // @vitest-environment jsdom
 import React from 'react';
-import { cleanup, fireEvent, render, screen, within } from '@testing-library/react';
+import { act, cleanup, fireEvent, render, screen, within } from '@testing-library/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
+  ApiError,
   SmartSiteManagementClient,
   type SafetyAlertDetailResponse,
   type SafetyEpisode,
@@ -228,5 +229,145 @@ describe('EpisodeEvidence presentation and selection semantics', () => {
     );
     expect(status.textContent).toBe('No authorized evidence is available for this observation.');
     expect(evidencePanelSpy).not.toHaveBeenCalled();
+  });
+
+  it('offers Retry on a transient metadata error and loads the same finding on explicit retry', async () => {
+    const client = new SmartSiteManagementClient('http://api.test');
+    const getSafetyAlertSpy = vi
+      .spyOn(client, 'getSafetyAlert')
+      .mockRejectedValueOnce(new ApiError('network', 'Temporary network failure'))
+      .mockResolvedValueOnce(
+        makeAlertDetail({
+          id: 'hat-alert',
+          detectionsTotal: 1,
+          detections: [
+            {
+              eventId,
+              cameraExternalId: 'CAM-01',
+              capturedAt: '2026-10-31T10:00:00Z',
+              processingStatus: 'PROCESSED',
+              evidence: [{ index: 1, kind: 'CROP', available: true }],
+            },
+          ],
+        }),
+      );
+
+    renderEvidence(makeEpisode(), client);
+
+    fireEvent.click(screen.getByRole('button', { name: 'Dấu hiệu thiếu mũ bảo hộ' }));
+
+    const alert = await screen.findByRole('alert');
+    expect(
+      within(alert).getByText('Chưa có bằng chứng được phép xem cho quan sát này.'),
+    ).toBeTruthy();
+    const retryButton = within(alert).getByRole('button', { name: 'Thử lại' });
+    expect(getSafetyAlertSpy).toHaveBeenCalledTimes(1);
+
+    fireEvent.click(retryButton);
+
+    await screen.findByText('Authorized evidence');
+    expect(getSafetyAlertSpy).toHaveBeenCalledTimes(2);
+    expect(getSafetyAlertSpy).toHaveBeenLastCalledWith(
+      'synthetic-session-token',
+      siteId,
+      'hat-alert',
+      expect.objectContaining({ signal: expect.any(AbortSignal) }),
+    );
+    expect(screen.queryByRole('alert')).toBeNull();
+  });
+
+  it('removes Retry while a retry request is pending and keeps one request in flight', async () => {
+    const client = new SmartSiteManagementClient('http://api.test');
+    let resolveRetry: (detail: SafetyAlertDetailResponse) => void = () => {};
+    const getSafetyAlertSpy = vi
+      .spyOn(client, 'getSafetyAlert')
+      .mockRejectedValueOnce(new ApiError('timeout', 'Request timed out'))
+      .mockImplementationOnce(
+        () =>
+          new Promise<SafetyAlertDetailResponse>((resolve) => {
+            resolveRetry = resolve;
+          }),
+      );
+
+    renderEvidence(makeEpisode(), client);
+
+    fireEvent.click(screen.getByRole('button', { name: 'Dấu hiệu thiếu mũ bảo hộ' }));
+
+    const retryButton = await screen.findByRole('button', { name: 'Thử lại' });
+    expect(retryButton.hasAttribute('disabled')).toBe(false);
+
+    fireEvent.click(retryButton);
+
+    const loadingStatus = await screen.findByRole('status');
+    expect(loadingStatus.textContent).toBe('Đang tải hồ sơ…');
+    expect(screen.queryByRole('button', { name: 'Thử lại' })).toBeNull();
+    expect(getSafetyAlertSpy).toHaveBeenCalledTimes(2);
+
+    await act(async () => {
+      resolveRetry(
+        makeAlertDetail({
+          id: 'hat-alert',
+          detectionsTotal: 1,
+          detections: [
+            {
+              eventId,
+              cameraExternalId: 'CAM-01',
+              capturedAt: '2026-10-31T10:00:00Z',
+              processingStatus: 'PROCESSED',
+              evidence: [{ index: 1, kind: 'CROP', available: true }],
+            },
+          ],
+        }),
+      );
+    });
+
+    await screen.findByText('Authorized evidence');
+  });
+
+  it('does not offer Retry on 401, 403, or 404 hard denials or when the selected finding is gone', async () => {
+    const client = new SmartSiteManagementClient('http://api.test');
+    const getSafetyAlertSpy = vi
+      .spyOn(client, 'getSafetyAlert')
+      .mockRejectedValueOnce(new ApiError('http', 'Unauthorized', 401))
+      .mockRejectedValueOnce(new ApiError('http', 'Forbidden', 403))
+      .mockRejectedValueOnce(new ApiError('http', 'Not Found', 404))
+      .mockRejectedValueOnce(new ApiError('http', 'Service Unavailable', 503));
+
+    const { queryClient, rerender } = renderEvidence(makeEpisode(), client);
+
+    fireEvent.click(screen.getByRole('button', { name: 'Dấu hiệu thiếu mũ bảo hộ' }));
+    const alert401 = await screen.findByRole('alert');
+    expect(getSafetyAlertSpy).toHaveBeenCalledTimes(1);
+    expect(within(alert401).queryByRole('button', { name: 'Thử lại' })).toBeNull();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Dấu hiệu thiếu áo phản quang' }));
+    const alert403 = await screen.findByRole('alert');
+    expect(getSafetyAlertSpy).toHaveBeenCalledTimes(2);
+    expect(within(alert403).queryByRole('button', { name: 'Thử lại' })).toBeNull();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Dấu hiệu thiếu mũ bảo hộ' }));
+    const alert404 = await screen.findByRole('alert');
+    expect(getSafetyAlertSpy).toHaveBeenCalledTimes(3);
+    expect(within(alert404).queryByRole('button', { name: 'Thử lại' })).toBeNull();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Dấu hiệu thiếu áo phản quang' }));
+    const alert503 = await screen.findByRole('alert');
+    expect(getSafetyAlertSpy).toHaveBeenCalledTimes(4);
+    expect(within(alert503).getByRole('button', { name: 'Thử lại' })).toBeTruthy();
+
+    rerender(
+      <QueryClientProvider client={queryClient}>
+        <EpisodeEvidence
+          episode={makeEpisode({ findings: [makeEpisode().findings[0]!] })}
+          client={client}
+          token="synthetic-session-token"
+          scope="scope-nonce-1"
+          apiUrl="http://api.test"
+        />
+      </QueryClientProvider>,
+    );
+
+    expect(screen.queryByRole('button', { name: 'Thử lại' })).toBeNull();
+    expect(screen.getByText('Chọn phát hiện để tải bằng chứng đã lưu.')).toBeTruthy();
   });
 });

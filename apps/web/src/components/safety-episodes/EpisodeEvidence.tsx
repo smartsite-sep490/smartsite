@@ -1,10 +1,35 @@
 import { useId, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
-import type { SafetyEpisode, SmartSiteManagementClient } from '@smartsite/api-client';
+import {
+  ApiError,
+  type SafetyEpisode,
+  type SmartSiteManagementClient,
+} from '@smartsite/api-client';
 import { useTranslation } from 'react-i18next';
 import { localizedLabel } from '../../i18n/labels';
 import { SafetyAlertEvidencePanel } from '../alerts/SafetyAlertEvidencePanel';
 import { Button } from '../ui';
+
+interface ScopedFindingSelection {
+  readonly findingId: string;
+  readonly apiUrl: string;
+  readonly scope: string;
+  readonly token: string;
+  readonly siteId: string;
+  readonly episodeId: string;
+  readonly eventId: string;
+  readonly personObservationIndex: number;
+}
+
+function isHardDeniedOrMissingError(error: unknown): boolean {
+  const status =
+    error instanceof ApiError
+      ? (error.status ?? error.backendError?.statusCode)
+      : typeof error === 'object' && error !== null && 'status' in error
+        ? (error as { status?: unknown }).status
+        : undefined;
+  return typeof status === 'number' && [401, 403, 404].includes(status);
+}
 
 export function EpisodeEvidence({
   episode,
@@ -21,8 +46,22 @@ export function EpisodeEvidence({
 }) {
   const { t } = useTranslation();
   const headingId = useId();
-  const [findingId, setFindingId] = useState<string | null>(null);
-  const finding = episode.findings.find((f) => f.alertId === findingId);
+  const [selection, setSelection] = useState<ScopedFindingSelection | null>(null);
+  const isCurrentContext =
+    selection !== null &&
+    selection.apiUrl === apiUrl &&
+    selection.scope === scope &&
+    selection.token === token &&
+    selection.siteId === episode.siteId &&
+    selection.episodeId === episode.id &&
+    selection.eventId === episode.subject.eventId &&
+    selection.personObservationIndex === episode.subject.personObservationIndex;
+  if (selection !== null && !isCurrentContext) {
+    setSelection(null);
+  }
+  const findingId = isCurrentContext ? selection.findingId : null;
+  const finding =
+    findingId !== null ? episode.findings.find((f) => f.alertId === findingId) : undefined;
   const query = useQuery({
     queryKey: [
       'safety-episode-workspace',
@@ -38,6 +77,7 @@ export function EpisodeEvidence({
     retry: false,
     gcTime: 0,
   });
+  const canRetry = Boolean(finding) && query.isError && !isHardDeniedOrMissingError(query.error);
   const response = query.data;
   const original =
     response?.id === findingId && response.siteId === episode.siteId
@@ -80,7 +120,18 @@ export function EpisodeEvidence({
               key={f.alertId}
               size="md"
               variant={isSelected ? 'default' : 'outline'}
-              onClick={() => setFindingId(f.alertId)}
+              onClick={() =>
+                setSelection({
+                  findingId: f.alertId,
+                  apiUrl,
+                  scope,
+                  token,
+                  siteId: episode.siteId,
+                  episodeId: episode.id,
+                  eventId: episode.subject.eventId,
+                  personObservationIndex: episode.subject.personObservationIndex,
+                })
+              }
               aria-pressed={isSelected}
               data-state={isSelected ? 'selected' : 'unselected'}
               title={label}
@@ -117,12 +168,25 @@ export function EpisodeEvidence({
         </p>
       )}
       {finding && query.isError && (
-        <p
+        <div
           role="alert"
-          className="rounded-xl border border-amber-300 bg-amber-50 px-4 py-3.5 text-sm font-medium text-slate-900"
+          className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-amber-300 bg-amber-50 px-4 py-3.5 text-sm font-medium text-slate-900"
         >
-          {t('episodes.evidenceUnavailable')}
-        </p>
+          <p>{t('episodes.evidenceUnavailable')}</p>
+          {canRetry && (
+            <Button
+              size="sm"
+              variant="outline"
+              disabled={query.isFetching}
+              onClick={() => {
+                if (!finding || query.isFetching) return;
+                void query.refetch();
+              }}
+            >
+              {t('episodes.retry')}
+            </Button>
+          )}
+        </div>
       )}
       {finding &&
         query.isSuccess &&
