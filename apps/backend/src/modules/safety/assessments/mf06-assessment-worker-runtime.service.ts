@@ -150,14 +150,13 @@ export class Mf06AssessmentWorkerRuntime implements OnModuleInit, OnModuleDestro
 
   async onModuleDestroy(): Promise<void> {
     this.stopping = true;
+    const drain = this.worker?.drain();
     this.loopAbort.abort(new Error('MF06_RUNTIME_ABORTED'));
     if (this.timer !== undefined) {
       clearTimeout(this.timer);
       this.timer = undefined;
     }
-    if (this.worker) {
-      await this.worker.drain();
-    }
+    await drain;
     if (this.activeTick) {
       await this.activeTick;
     }

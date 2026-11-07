@@ -33,6 +33,8 @@ export class Mf06RetryableWorkError extends Error {
     super(code);
   }
 }
+const workerShutdown = Symbol('MF06_WORKER_SHUTDOWN');
+
 /** Private caller-driven orchestration. No scheduler, model adapter or runtime provider. */
 export class Mf06AssessmentWorker {
   private readonly settings: Readonly<Mf06WorkerOptions>;
@@ -82,7 +84,7 @@ export class Mf06AssessmentWorker {
   }
   async drain(): Promise<void> {
     this.draining = true;
-    this.controller?.abort();
+    this.controller?.abort(workerShutdown);
     const active = this.active;
     if (!active) return;
     let timer: ReturnType<typeof setTimeout> | undefined;
@@ -104,11 +106,17 @@ export class Mf06AssessmentWorker {
     }
   }
 
+  private finishAbortedClaim(claim: Mf06JobClaim, signal: AbortSignal) {
+    return signal.reason === workerShutdown
+      ? this.leases.retry(claim, 'WORKER_SHUTDOWN')
+      : this.leases.cancel(claim);
+  }
+
   private async execute(controller: AbortController): Promise<Mf06WorkerResult> {
     const signal = controller.signal;
     const claim = await this.leases.claim(signal);
     if (!claim) return 'IDLE';
-    if (signal.aborted) return this.leases.cancel(claim);
+    if (signal.aborted) return this.finishAbortedClaim(claim, signal);
     // Local time bounds resource use; final authorization still requires the database lease CAS.
     const expiresAt = Math.min(Date.parse(claim.leaseExpiresAt), Date.parse(claim.deadlineAt));
     const remaining = () => expiresAt - Date.now();
@@ -127,7 +135,7 @@ export class Mf06AssessmentWorker {
         return this.work.prepare(claim, preparationSignal);
       }, preparationSignal);
     } catch (error) {
-      if (signal.aborted) return this.leases.cancel(claim);
+      if (signal.aborted) return this.finishAbortedClaim(claim, signal);
       if (remaining() <= 0) return 'STALE';
       if (timeout.signal.aborted) return this.leases.retry(claim, 'RESOLVER_TIMEOUT');
       if (error instanceof Mf06RetryableWorkError) return this.leases.retry(claim, error.code);
@@ -138,7 +146,7 @@ export class Mf06AssessmentWorker {
       clearTimeout(timer);
     }
     for (let attempt = 0; attempt < this.settings.maxDatabaseAttempts; attempt++) {
-      if (signal.aborted) return this.leases.cancel(claim);
+      if (signal.aborted) return this.finishAbortedClaim(claim, signal);
       if (remaining() <= 0) return 'STALE';
       try {
         const finalize = async (manager: EntityManager) => {
@@ -156,7 +164,7 @@ export class Mf06AssessmentWorker {
         if (result.state === 'STALE') return 'STALE';
         return this.leases.fail(claim, 'INVALID_CONTEXT');
       } catch (error) {
-        if (signal.aborted) return this.leases.cancel(claim);
+        if (signal.aborted) return this.finishAbortedClaim(claim, signal);
         // A stale prepared authority snapshot needs a new lease/preparation, not a SQL retry.
         if (error instanceof Mf06RetryableWorkError) return this.leases.retry(claim, error.code);
         const code = databaseErrorCode(error);

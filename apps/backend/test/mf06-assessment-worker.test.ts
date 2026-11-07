@@ -569,9 +569,9 @@ describe('Mf06AssessmentWorker unit tests', () => {
   });
 
   describe('drain lifecycle and shutdown', () => {
-    it('aborts active prepare and permanently stops new claims idempotently', async () => {
+    it('requeues interrupted work and permanently stops new claims idempotently', async () => {
       let prepareAborted = false;
-      const { db, leases, work } = createMocks({
+      const { db, leases, work, calls } = createMocks({
         prepareImpl: (_claim, signal) =>
           new Promise((_, reject) => {
             signal.addEventListener('abort', () => {
@@ -585,7 +585,9 @@ describe('Mf06AssessmentWorker unit tests', () => {
       const runPromise = worker.runOnce();
       await new Promise((r) => setTimeout(r, 5));
       await worker.drain();
-      await runPromise;
+      assert.equal(await runPromise, 'RETRY');
+      assert.equal(calls.retry[0]?.errorCode, 'WORKER_SHUTDOWN');
+      assert.equal(calls.cancel.length, 0);
 
       assert.equal(prepareAborted, true, 'Active prepare must be aborted on drain');
       assert.equal(await worker.runOnce(), 'IDLE', 'Subsequent runOnce must be permanently IDLE');
