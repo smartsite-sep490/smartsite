@@ -1,6 +1,6 @@
 import { translate as tr } from '../../i18n';
 import { useState } from 'react';
-import { StyleSheet, Text, View } from 'react-native';
+import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { useMutation, useQuery } from '@tanstack/react-query';
 import type {
   NativeUploadFile,
@@ -12,8 +12,21 @@ import type {
 import { healthCertificateExpiry, isWorkerDocumentDate } from '@smartsite/api-client';
 import { useWorkspace } from '../workspace/workspace-context';
 import { useCommand, validDates } from '../shared/data';
-import { Body, Button, Card, ErrorNotice, Hint, QueryState, Field } from '../shared/ui';
+import { Body, Button, ErrorNotice, Hint, QueryState, Field } from '../shared/ui';
 import { Attachments, EvidenceButton } from '../shared/uploads';
+import { WorkerAvatar } from '../../components/common/WorkerAvatar';
+import {
+  IconDocument,
+  IconShield,
+  IconUser,
+  IconMapPin,
+  IconCheck,
+  IconAlert,
+  IconClock,
+  IconCalendar,
+  IconChevronDown,
+  IconChevronUp,
+} from '../../components/common/Icons';
 import { useTranslation } from '../../i18n';
 
 export const documentKinds: readonly WorkerDocumentKind[] = [
@@ -33,18 +46,11 @@ function IdentityNotice({
   if (check?.status === 'MATCH') return <Hint>{t('documents.identityMatch')}</Hint>;
   if (check?.status !== 'MISMATCH') return null;
   return (
-    <View
-      accessibilityRole="alert"
-      style={{
-        gap: 5,
-        padding: 12,
-        backgroundColor: '#FFFBEB',
-        borderColor: '#F59E0B',
-        borderWidth: 1,
-        borderRadius: 8,
-      }}
-    >
-      <Body>{t('documents.identityMismatch')}</Body>
+    <View accessibilityRole="alert" style={docStyles.mismatchBox}>
+      <View style={docStyles.noticeHeaderRow}>
+        <IconAlert size={16} color="#B45309" />
+        <Body>{t('documents.identityMismatch')}</Body>
+      </View>
       <Hint>
         {t('documents.identityValues', {
           expected: reference ?? '—',
@@ -76,323 +82,596 @@ export function WorkerDocuments({
     Partial<Record<'FRONT' | 'BACK', NativeUploadFile[]>>
   >({});
 
+  // Collapsible state: Collapsed by default for a sleek, non-wrapping mobile UI
+  const [overviewExpanded, setOverviewExpanded] = useState(false);
+  const [expandedIdentity, setExpandedIdentity] = useState<Record<string, boolean>>({
+    FRONT: false,
+    BACK: false,
+  });
+  const [expandedCerts, setExpandedCerts] = useState<Record<WorkerDocumentKind, boolean>>({
+    SAFETY_CARD: true,
+    HEALTH_CERTIFICATE: false,
+    PERSONAL_INSURANCE: false,
+  });
+
   return (
     <View style={docStyles.container}>
-      {/* Header Info */}
-      <View style={docStyles.headerBlock}>
-        <Text style={docStyles.screenTitle}>{t('documents.title')}</Text>
-        <Hint>{t(canSubmitDocuments ? 'documents.renewalHint' : 'documents.hint')}</Hint>
+      {/* 1. Header Info Banner */}
+      <View style={docStyles.headerBannerCard}>
+        <View style={docStyles.headerIconCircle}>
+          <IconShield size={20} color="#EA580C" />
+        </View>
+        <View style={docStyles.headerTextCol}>
+          <Text numberOfLines={1} ellipsizeMode="tail" style={docStyles.screenTitle}>
+            {t('documents.title')}
+          </Text>
+          <Text numberOfLines={2} ellipsizeMode="tail" style={docStyles.screenSubtitle}>
+            {t(canSubmitDocuments ? 'documents.renewalHint' : 'documents.hint')}
+          </Text>
+        </View>
       </View>
 
       <QueryState query={profile}>
         {(data) => {
           const isReviewed = data.submissionStatus === 'REVIEWED';
           const isPending = data.submissionStatus === 'PENDING_REVIEW';
-          const initials =
-            data.displayName
-              .split(' ')
-              .map((p) => p[0])
-              .filter(Boolean)
-              .slice(-2)
-              .join('')
-              .toUpperCase() || 'W';
 
           return (
             <>
-              {/* Worker Profile Overview Card */}
-              <Card>
-                <View style={docStyles.workerHeroRow}>
-                  <View style={docStyles.avatarCircle}>
-                    <Text style={docStyles.avatarText}>{initials}</Text>
+              {/* 2. Worker Profile Overview Card (Collapsible) */}
+              <View style={docStyles.overviewCard}>
+                <Pressable
+                  accessibilityRole="button"
+                  accessibilityLabel={t('workforce.workerProfile')}
+                  onPress={() => setOverviewExpanded((prev) => !prev)}
+                  style={docStyles.workerHeroRow}
+                >
+                  <View style={docStyles.avatarRingWrapper}>
+                    <WorkerAvatar size={44} role="worker" />
                   </View>
+
                   <View style={docStyles.workerHeroText}>
-                    <Text style={docStyles.workerName}>{data.displayName}</Text>
-                    <Text style={docStyles.workerCode}>{data.externalId}</Text>
+                    <Text style={docStyles.workerName} numberOfLines={1} ellipsizeMode="tail">
+                      {data.displayName}
+                    </Text>
+                    <View style={docStyles.workerMetaPills}>
+                      <View style={docStyles.codeBadge}>
+                        <Text style={docStyles.workerCode} numberOfLines={1}>
+                          {data.externalId}
+                        </Text>
+                      </View>
+                    </View>
                   </View>
-                  <View
-                    style={[
-                      docStyles.statusPill,
-                      {
-                        backgroundColor: isReviewed ? '#ECFDF5' : isPending ? '#FFFBEB' : '#F8FAFC',
-                        borderColor: isReviewed ? '#A7F3D0' : isPending ? '#FDE68A' : '#E2E8F0',
-                      },
-                    ]}
-                  >
+
+                  <View style={docStyles.heroRightCol}>
                     <View
                       style={[
-                        docStyles.statusDot,
+                        docStyles.compactBadge,
                         {
                           backgroundColor: isReviewed
-                            ? '#10B981'
+                            ? '#EDFAF2'
                             : isPending
-                              ? '#F59E0B'
-                              : '#64748B',
+                              ? '#FFFBEB'
+                              : '#FEF2F2',
+                          borderColor: isReviewed
+                            ? '#A7F3D0'
+                            : isPending
+                              ? '#FDE68A'
+                              : '#FECACA',
                         },
                       ]}
-                    />
-                    <Text
-                      style={[
-                        docStyles.statusText,
-                        { color: isReviewed ? '#047857' : isPending ? '#92400E' : '#475569' },
-                      ]}
                     >
-                      {t(`documents.${data.submissionStatus}`)}
-                    </Text>
-                  </View>
-                </View>
-
-                <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8 }}>
-                  {data.status === 'EXPIRED' && (
-                    <Text
-                      style={{
-                        fontSize: 12,
-                        fontWeight: '700',
-                        color: '#B91C1C',
-                        backgroundColor: '#FEF2F2',
-                        borderColor: '#FCA5A5',
-                        borderWidth: 1,
-                        borderRadius: 8,
-                        paddingHorizontal: 8,
-                        paddingVertical: 4,
-                      }}
-                    >
-                      {t('documents.EXPIRED')}
-                    </Text>
-                  )}
-                  {data.needsSupplement && (
-                    <View
-                      style={{
-                        backgroundColor: '#FEF2F2',
-                        borderColor: '#FCA5A5',
-                        borderWidth: 1,
-                        borderRadius: 8,
-                        paddingHorizontal: 8,
-                        paddingVertical: 4,
-                      }}
-                    >
-                      <Text style={{ color: '#B91C1C', fontSize: 12, fontWeight: '700' }}>
-                        {t('documents.needsSupplement')}
+                      <View
+                        style={[
+                          docStyles.statusDot,
+                          {
+                            backgroundColor: isReviewed
+                              ? '#10B981'
+                              : isPending
+                                ? '#F59E0B'
+                                : '#EF4444',
+                          },
+                        ]}
+                      />
+                      <Text
+                        numberOfLines={1}
+                        style={[
+                          docStyles.compactBadgeText,
+                          {
+                            color: isReviewed
+                              ? '#065F46'
+                              : isPending
+                                ? '#92400E'
+                                : '#991B1B',
+                          },
+                        ]}
+                      >
+                        {isReviewed
+                          ? t('profile.validStatus')
+                          : isPending
+                            ? t('documents.PENDING')
+                            : t('profile.expiredStatus')}
                       </Text>
                     </View>
-                  )}
-                </View>
-                {/* Details Grid */}
-                <View style={docStyles.metaGrid}>
-                  <View style={docStyles.metaItem}>
-                    <Text style={docStyles.metaLabel}>{t('documents.nationalId')}</Text>
-                    <Text style={docStyles.metaValue}>{data.nationalId ?? '—'}</Text>
-                  </View>
-                  <View style={docStyles.metaItem}>
-                    <Text style={docStyles.metaLabel}>{t('documents.phoneNumber')}</Text>
-                    <Text style={docStyles.metaValue}>{data.phoneNumber ?? '—'}</Text>
-                  </View>
-                  <View style={docStyles.metaItemFull}>
-                    <Text style={docStyles.metaLabel}>
-                      {t('documents.gender')} · {t('documents.address')}
-                    </Text>
-                    <Text style={docStyles.metaValue}>
-                      {data.gender ? t(`documents.${data.gender}`) : '—'} · {data.address ?? '—'}
-                    </Text>
-                  </View>
-                </View>
 
-                {data.expiringKinds.length > 0 && (
-                  <View style={docStyles.expiringBanner}>
-                    <Text style={docStyles.expiringText}>⚠️ {t('documents.expiring')}</Text>
-                  </View>
-                )}
-              </Card>
-
-              {/* Identity Images (Front & Back) */}
-              <View style={docStyles.sectionHeader}>
-                <Text style={docStyles.sectionTitle}>{tr('documents.identityHeading')}</Text>
-              </View>
-
-              {(['FRONT', 'BACK'] as const).map((side) => {
-                const image = data.identityImages.find((i) => i.side === side);
-                return (
-                  <Card key={side}>
-                    <View style={docStyles.cardHeaderRow}>
-                      <Text style={docStyles.cardTitle}>{t(`documents.${side}`)}</Text>
-                      {image ? (
-                        <View style={docStyles.acceptedBadge}>
-                          <Text style={docStyles.acceptedText}>
-                            ✓ {t('documents.qualityAccepted')}
-                          </Text>
-                        </View>
+                    <View style={docStyles.chevronCircle}>
+                      {overviewExpanded ? (
+                        <IconChevronUp size={14} color="#64748B" />
                       ) : (
-                        <View style={docStyles.emptyBadge}>
-                          <Text style={docStyles.emptyText}>{t('documents.noFile')}</Text>
+                        <IconChevronDown size={14} color="#64748B" />
+                      )}
+                    </View>
+                  </View>
+                </Pressable>
+
+                {/* Collapsible Overview Body */}
+                <View style={!overviewExpanded && { display: 'none' }}>
+                  {/* Status warning badges */}
+                  {(data.status === 'EXPIRED' || data.needsSupplement) && (
+                    <View style={docStyles.alertChipsRow}>
+                      {data.status === 'EXPIRED' && (
+                        <View style={docStyles.expiredTag}>
+                          <IconAlert size={14} color="#B91C1C" />
+                          <Text style={docStyles.expiredTagText}>{t('documents.EXPIRED')}</Text>
+                        </View>
+                      )}
+                      {data.needsSupplement && (
+                        <View style={docStyles.supplementTag}>
+                          <IconAlert size={14} color="#B45309" />
+                          <Text style={docStyles.supplementTagText}>
+                            {t('documents.needsSupplement')}
+                          </Text>
                         </View>
                       )}
                     </View>
+                  )}
 
-                    {image ? (
-                      <View style={{ gap: 10, marginTop: 4 }}>
-                        <EvidenceButton
-                          label={t('documents.view')}
-                          mediaType={image.mediaType}
-                          load={() =>
-                            client.workerIdentityImageFile(token, scope.siteId, workerId, image.id)
-                          }
-                        />
-                        <IdentityNotice check={image.identityCheck} reference={data.nationalId} />
-                        {canUpload && (
+                  {/* Details Grid: 4 Modern Info Tiles */}
+                  <View style={docStyles.metaGrid}>
+                    <View style={docStyles.metaTile}>
+                      <View style={docStyles.metaTileHeader}>
+                        <IconShield size={13} color="#EA580C" />
+                        <Text style={docStyles.metaLabel}>{t('documents.nationalId')}</Text>
+                      </View>
+                      <Text style={docStyles.metaValue}>{data.nationalId ?? '—'}</Text>
+                    </View>
+
+                    <View style={docStyles.metaTile}>
+                      <View style={docStyles.metaTileHeader}>
+                        <IconUser size={13} color="#2563EB" />
+                        <Text style={docStyles.metaLabel}>{t('documents.phoneNumber')}</Text>
+                      </View>
+                      <Text style={docStyles.metaValue}>{data.phoneNumber ?? '—'}</Text>
+                    </View>
+
+                    <View style={docStyles.metaTile}>
+                      <View style={docStyles.metaTileHeader}>
+                        <IconUser size={13} color="#059669" />
+                        <Text style={docStyles.metaLabel}>{t('documents.gender')}</Text>
+                      </View>
+                      <Text style={docStyles.metaValue}>
+                        {data.gender ? t(`documents.${data.gender}`) : '—'}
+                      </Text>
+                    </View>
+
+                    <View style={docStyles.metaTileFull}>
+                      <View style={docStyles.metaTileHeader}>
+                        <IconMapPin size={13} color="#D97706" />
+                        <Text style={docStyles.metaLabel}>{t('documents.address')}</Text>
+                      </View>
+                      <Text style={docStyles.metaValue} numberOfLines={2}>
+                        {data.address ?? '—'}
+                      </Text>
+                    </View>
+                  </View>
+
+                  {data.expiringKinds.length > 0 && (
+                    <View style={docStyles.expiringBanner}>
+                      <IconAlert size={16} color="#B45309" />
+                      <Text style={docStyles.expiringText}>{t('documents.expiring')}</Text>
+                    </View>
+                  )}
+                </View>
+              </View>
+
+              {/* 3. Identity Images (Front & Back - Collapsible Accordion) */}
+              <View style={docStyles.sectionHeaderRow}>
+                <View style={docStyles.sectionHeaderLeft}>
+                  <View style={docStyles.sectionIconBox}>
+                    <IconDocument size={16} color="#EA580C" />
+                  </View>
+                  <Text style={docStyles.sectionTitle}>{tr('documents.identityHeading')}</Text>
+                </View>
+                <View style={docStyles.sectionCountBadge}>
+                  <Text style={docStyles.sectionCountText}>{data.identityImages.length}/2</Text>
+                </View>
+              </View>
+
+              {(['FRONT', 'BACK'] as const).map((side, idx) => {
+                const image = data.identityImages.find((i) => i.side === side);
+                const isSideExpanded = !!expandedIdentity[side];
+
+                return (
+                  <View key={side} style={docStyles.itemCard}>
+                    <Pressable
+                      accessibilityRole="button"
+                      accessibilityLabel={t(`documents.${side}`)}
+                      onPress={() =>
+                        setExpandedIdentity((prev) => ({ ...prev, [side]: !prev[side] }))
+                      }
+                      style={docStyles.cardHeaderRow}
+                    >
+                      <View style={docStyles.cardTitleGroup}>
+                        <View style={docStyles.cardIndexBadge}>
+                          <Text style={docStyles.cardIndexText}>{idx + 1}</Text>
+                        </View>
+                        <Text style={docStyles.cardTitle} numberOfLines={1} ellipsizeMode="tail">
+                          {t(`documents.${side}`)}
+                        </Text>
+                      </View>
+
+                      <View style={docStyles.headerActionsRight}>
+                        <View
+                          style={[
+                            docStyles.compactBadge,
+                            {
+                              backgroundColor: image ? '#EDFAF2' : '#F1F5F9',
+                              borderColor: image ? '#A7F3D0' : '#E2E8F0',
+                            },
+                          ]}
+                        >
+                          <View
+                            style={[
+                              docStyles.statusDot,
+                              { backgroundColor: image ? '#10B981' : '#94A3B8' },
+                            ]}
+                          />
+                          <Text
+                            numberOfLines={1}
+                            style={[
+                              docStyles.compactBadgeText,
+                              { color: image ? '#065F46' : '#64748B' },
+                            ]}
+                          >
+                            {image ? t('documents.qualityAccepted') : t('documents.noFile')}
+                          </Text>
+                        </View>
+
+                        <View style={docStyles.chevronCircle}>
+                          {isSideExpanded ? (
+                            <IconChevronUp size={14} color="#64748B" />
+                          ) : (
+                            <IconChevronDown size={14} color="#64748B" />
+                          )}
+                        </View>
+                      </View>
+                    </Pressable>
+
+                    {/* Detailed Body (Expanded view) */}
+                    <View style={!isSideExpanded && { display: 'none' }}>
+                      {image ? (
+                        <View style={{ gap: 10, marginTop: 4 }}>
+                          <EvidenceButton
+                            label={t('documents.view')}
+                            mediaType={image.mediaType}
+                            load={() =>
+                              client.workerIdentityImageFile(token, scope.siteId, workerId, image.id)
+                            }
+                          />
+                          <IdentityNotice check={image.identityCheck} reference={data.nationalId} />
+                          {canUpload && (
+                            <Button
+                              secondary
+                              disabled={command.isPending}
+                              label={t('documents.ocr')}
+                              onPress={() =>
+                                command.mutate(() =>
+                                  client.retryWorkerIdentityOcr(
+                                    token,
+                                    scope.siteId,
+                                    workerId,
+                                    image.id,
+                                  ),
+                                )
+                              }
+                            />
+                          )}
+                        </View>
+                      ) : canUpload && data.contractorId ? (
+                        <View style={{ gap: 10, marginTop: 4 }}>
+                          <Attachments
+                            files={identityDrafts[side] ?? []}
+                            maxFiles={1}
+                            allowPdf={false}
+                            validateFile={async (file) => {
+                              const result = await client.checkDocumentImageQuality(
+                                token,
+                                scope.siteId,
+                                data.contractorId!,
+                                file,
+                              );
+                              if (result.status !== 'ACCEPTED')
+                                throw new Error(t(`documents.${result.reason}`));
+                            }}
+                            onChange={(files) =>
+                              setIdentityDrafts((previous) => ({ ...previous, [side]: files }))
+                            }
+                          />
                           <Button
-                            secondary
-                            disabled={command.isPending}
-                            label={t('documents.ocr')}
+                            label={t('documents.upload')}
+                            disabled={command.isPending || !identityDrafts[side]?.[0]}
                             onPress={() =>
-                              command.mutate(() =>
-                                client.retryWorkerIdentityOcr(
+                              command.mutate(async () => {
+                                await client.uploadWorkerIdentityImage(
                                   token,
                                   scope.siteId,
                                   workerId,
-                                  image.id,
-                                ),
-                              )
+                                  side,
+                                  identityDrafts[side]![0]!,
+                                );
+                                setIdentityDrafts((previous) => ({ ...previous, [side]: [] }));
+                              })
                             }
                           />
-                        )}
-                      </View>
-                    ) : canUpload && data.contractorId ? (
-                      <View style={{ gap: 10, marginTop: 4 }}>
-                        <Attachments
-                          files={identityDrafts[side] ?? []}
-                          maxFiles={1}
-                          allowPdf={false}
-                          validateFile={async (file) => {
-                            const result = await client.checkDocumentImageQuality(
-                              token,
-                              scope.siteId,
-                              data.contractorId!,
-                              file,
-                            );
-                            if (result.status !== 'ACCEPTED')
-                              throw new Error(t(`documents.${result.reason}`));
-                          }}
-                          onChange={(files) =>
-                            setIdentityDrafts((previous) => ({ ...previous, [side]: files }))
-                          }
-                        />
-                        <Button
-                          label={t('documents.upload')}
-                          disabled={command.isPending || !identityDrafts[side]?.[0]}
-                          onPress={() =>
-                            command.mutate(async () => {
-                              await client.uploadWorkerIdentityImage(
-                                token,
-                                scope.siteId,
-                                workerId,
-                                side,
-                                identityDrafts[side]![0]!,
-                              );
-                              setIdentityDrafts((previous) => ({ ...previous, [side]: [] }));
-                            })
-                          }
-                        />
-                      </View>
-                    ) : (
-                      <Hint>{t('documents.noFile')}</Hint>
-                    )}
-                  </Card>
+                        </View>
+                      ) : (
+                        <Hint>{t('documents.noFile')}</Hint>
+                      )}
+                    </View>
+                  </View>
                 );
               })}
 
-              {/* 3 Safety & Health Certificates */}
-              <View style={docStyles.sectionHeader}>
-                <Text style={docStyles.sectionTitle}>{tr('documents.certificatesHeading')}</Text>
+              {/* 4. 3 Safety & Health Certificates (Collapsible Accordion) */}
+              <View style={docStyles.sectionHeaderRow}>
+                <View style={docStyles.sectionHeaderLeft}>
+                  <View style={docStyles.sectionIconBox}>
+                    <IconShield size={16} color="#EA580C" />
+                  </View>
+                  <Text style={docStyles.sectionTitle}>{tr('documents.certificatesHeading')}</Text>
+                </View>
+                <View style={docStyles.sectionCountBadge}>
+                  <Text style={docStyles.sectionCountText}>
+                    {data.documents.filter((d) => d.status === 'APPROVED').length}/3
+                  </Text>
+                </View>
               </View>
 
               {documentKinds.map((kind) => {
                 const documents = data.documents.filter((d) => d.kind === kind);
-                return (
-                  <Card key={kind}>
-                    <View style={docStyles.cardHeaderRow}>
-                      <Text style={docStyles.cardTitle}>{t(`documents.${kind}`)}</Text>
-                      {!documents.length && (
-                        <View style={docStyles.emptyBadge}>
-                          <Text style={docStyles.emptyText}>{t('documents.noFile')}</Text>
-                        </View>
-                      )}
-                    </View>
+                // Only display the relevant current version (APPROVED, or current PENDING renewal), hiding historical superseded versions
+                const displayDoc =
+                  documents.find((d) => d.status === 'APPROVED') ??
+                  documents.find((d) => d.status === 'PENDING') ??
+                  documents.find((d) => d.status !== 'SUPERSEDED') ??
+                  null;
 
-                    {documents.map((doc) => {
-                      const isApproved = doc.status === 'APPROVED';
-                      const isPendingDoc = doc.status === 'PENDING';
-                      return (
-                        <View key={doc.id} style={docStyles.docRow}>
+                const isCertExpanded = !!expandedCerts[kind];
+                const kindIconColor =
+                  kind === 'SAFETY_CARD'
+                    ? '#EA580C'
+                    : kind === 'HEALTH_CERTIFICATE'
+                      ? '#0D9488'
+                      : '#2563EB';
+                const kindIconBg =
+                  kind === 'SAFETY_CARD'
+                    ? '#FFF7ED'
+                    : kind === 'HEALTH_CERTIFICATE'
+                      ? '#F0FDFA'
+                      : '#EFF6FF';
+
+                const statusColor = !displayDoc
+                  ? '#64748B'
+                  : displayDoc.status === 'APPROVED'
+                    ? '#065F46'
+                    : displayDoc.status === 'PENDING'
+                      ? '#92400E'
+                      : '#991B1B';
+
+                const statusBg = !displayDoc
+                  ? '#F1F5F9'
+                  : displayDoc.status === 'APPROVED'
+                    ? '#EDFAF2'
+                    : displayDoc.status === 'PENDING'
+                      ? '#FFFBEB'
+                      : '#FEF2F2';
+
+                const statusBorder = !displayDoc
+                  ? '#E2E8F0'
+                  : displayDoc.status === 'APPROVED'
+                    ? '#A7F3D0'
+                    : displayDoc.status === 'PENDING'
+                      ? '#FDE68A'
+                      : '#FECACA';
+
+                return (
+                  <View key={kind} style={docStyles.itemCard}>
+                    <Pressable
+                      accessibilityRole="button"
+                      accessibilityLabel={t(`documents.${kind}`)}
+                      onPress={() =>
+                        setExpandedCerts((prev) => ({ ...prev, [kind]: !prev[kind] }))
+                      }
+                      style={docStyles.cardHeaderRow}
+                    >
+                      <View style={docStyles.cardTitleGroup}>
+                        <View style={[docStyles.cardKindIconBox, { backgroundColor: kindIconBg }]}>
+                          {kind === 'SAFETY_CARD' ? (
+                            <IconShield size={16} color={kindIconColor} />
+                          ) : kind === 'HEALTH_CERTIFICATE' ? (
+                            <IconUser size={16} color={kindIconColor} />
+                          ) : (
+                            <IconDocument size={16} color={kindIconColor} />
+                          )}
+                        </View>
+                        <Text style={docStyles.cardTitle} numberOfLines={1} ellipsizeMode="tail">
+                          {t(`documents.${kind}`)}
+                        </Text>
+                      </View>
+
+                      <View style={docStyles.headerActionsRight}>
+                        <View
+                          style={[
+                            docStyles.compactBadge,
+                            { backgroundColor: statusBg, borderColor: statusBorder },
+                          ]}
+                        >
+                          <View
+                            style={[
+                              docStyles.statusDot,
+                              {
+                                backgroundColor: !displayDoc
+                                  ? '#94A3B8'
+                                  : displayDoc.status === 'APPROVED'
+                                    ? '#10B981'
+                                    : displayDoc.status === 'PENDING'
+                                      ? '#F59E0B'
+                                      : '#EF4444',
+                              },
+                            ]}
+                          />
+                          <Text
+                            numberOfLines={1}
+                            style={[docStyles.compactBadgeText, { color: statusColor }]}
+                          >
+                            {!displayDoc
+                              ? t('documents.noFile')
+                              : displayDoc.status === 'APPROVED'
+                                ? t('documents.APPROVED')
+                                : displayDoc.status === 'PENDING'
+                                  ? t('documents.PENDING')
+                                  : t(`documents.${displayDoc.status}`)}
+                          </Text>
+                        </View>
+
+                        <View style={docStyles.chevronCircle}>
+                          {isCertExpanded ? (
+                            <IconChevronUp size={14} color="#64748B" />
+                          ) : (
+                            <IconChevronDown size={14} color="#64748B" />
+                          )}
+                        </View>
+                      </View>
+                    </Pressable>
+
+                    {/* Detailed Body (Expanded view - only showing the active/approved document) */}
+                    <View style={!isCertExpanded && { display: 'none' }}>
+                      {displayDoc && (
+                        <View key={displayDoc.id} style={docStyles.docRow}>
                           <View style={docStyles.docStatusRow}>
-                            <Text style={docStyles.docFilename} numberOfLines={2}>
-                              {doc.originalName}
-                            </Text>
+                            <View style={docStyles.docFilenameWrapper}>
+                              <IconDocument size={15} color="#EA580C" />
+                              <Text
+                                style={docStyles.docFilename}
+                                numberOfLines={1}
+                                ellipsizeMode="middle"
+                              >
+                                {displayDoc.originalName}
+                              </Text>
+                            </View>
                             <View
                               style={[
                                 docStyles.docStatusPill,
                                 {
-                                  backgroundColor: isApproved
-                                    ? '#ECFDF5'
-                                    : isPendingDoc
-                                      ? '#FFFBEB'
-                                      : '#FEF2F2',
-                                  borderColor: isApproved
-                                    ? '#A7F3D0'
-                                    : isPendingDoc
-                                      ? '#FDE68A'
-                                      : '#FECACA',
+                                  backgroundColor:
+                                    displayDoc.status === 'APPROVED'
+                                      ? '#EDFAF2'
+                                      : displayDoc.status === 'PENDING'
+                                        ? '#FFFBEB'
+                                        : '#FEF2F2',
+                                  borderColor:
+                                    displayDoc.status === 'APPROVED'
+                                      ? '#A7F3D0'
+                                      : displayDoc.status === 'PENDING'
+                                        ? '#FDE68A'
+                                        : '#FECACA',
                                 },
                               ]}
                             >
+                              <View
+                                style={[
+                                  docStyles.statusDot,
+                                  {
+                                    backgroundColor:
+                                      displayDoc.status === 'APPROVED'
+                                        ? '#10B981'
+                                        : displayDoc.status === 'PENDING'
+                                          ? '#F59E0B'
+                                          : '#EF4444',
+                                  },
+                                ]}
+                              />
                               <Text
+                                numberOfLines={1}
                                 style={[
                                   docStyles.docStatusText,
                                   {
-                                    color: isApproved
-                                      ? '#065F46'
-                                      : isPendingDoc
-                                        ? '#92400E'
-                                        : '#991B1B',
+                                    color:
+                                      displayDoc.status === 'APPROVED'
+                                        ? '#065F46'
+                                        : displayDoc.status === 'PENDING'
+                                          ? '#92400E'
+                                          : '#991B1B',
                                   },
                                 ]}
                               >
-                                {t(`documents.${doc.status}`)}
+                                {t(`documents.${displayDoc.status}`)}
                               </Text>
                             </View>
                           </View>
 
-                          {/* Dates row */}
+                          {/* Dates Row */}
                           <View style={docStyles.dateBox}>
-                            <Text style={docStyles.dateText}>
-                              📅 {t('documents.issuedOn')}: {doc.issuedOn ?? '—'}
-                            </Text>
-                            <Text style={docStyles.dateText}>
-                              ⏳ {t('documents.expiresOn')}: {doc.expiresOn ?? '—'}
-                            </Text>
+                            <View style={docStyles.dateCol}>
+                              <View style={docStyles.dateColHeader}>
+                                <IconCalendar size={13} color="#64748B" />
+                                <Text style={docStyles.dateLabel}>{t('documents.issuedOn')}</Text>
+                              </View>
+                              <Text numberOfLines={1} style={docStyles.dateValue}>
+                                {displayDoc.issuedOn ?? '—'}
+                              </Text>
+                            </View>
+
+                            <View style={docStyles.dateDivider} />
+
+                            <View style={docStyles.dateCol}>
+                              <View style={docStyles.dateColHeader}>
+                                <IconClock size={13} color="#EA580C" />
+                                <Text style={docStyles.dateLabel}>{t('documents.expiresOn')}</Text>
+                              </View>
+                              <Text
+                                numberOfLines={1}
+                                style={[docStyles.dateValue, { color: '#0F172A', fontWeight: '800' }]}
+                              >
+                                {displayDoc.expiresOn ?? '—'}
+                              </Text>
+                            </View>
                           </View>
 
-                          {doc.reviewNote && (
+                          {displayDoc.reviewNote && (
                             <View style={docStyles.noteBox}>
-                              <Text style={docStyles.noteText}>💬 {doc.reviewNote}</Text>
+                              <Text style={docStyles.noteText}>💬 {displayDoc.reviewNote}</Text>
                             </View>
                           )}
 
-                          {doc.submittedExpiresOn &&
-                            (kind !== 'HEALTH_CERTIFICATE' || doc.submittedIssuedOn) && (
+                          {displayDoc.submittedExpiresOn &&
+                            (kind !== 'HEALTH_CERTIFICATE' || displayDoc.submittedIssuedOn) && (
                               <View style={docStyles.submittedPill}>
-                                <Text style={docStyles.submittedPillText}>
-                                  ⏱ {t('documents.submittedExpiryLabel')}: {doc.submittedExpiresOn}
+                                <IconClock size={13} color="#C2410C" />
+                                <Text numberOfLines={1} style={docStyles.submittedPillText}>
+                                  {t('documents.submittedExpiryLabel')}: {displayDoc.submittedExpiresOn}
                                 </Text>
                               </View>
                             )}
 
-                          <IdentityNotice check={doc.identityCheck} reference={data.nationalId} />
+                          <IdentityNotice check={displayDoc.identityCheck} reference={data.nationalId} />
 
-                          {doc.status === 'PENDING' && (
+                          {displayDoc.status === 'PENDING' && (
                             <View style={docStyles.pendingSection}>
                               {canUploadCertificates && (
                                 <SubmittedExpiryEditor
-                                  key={`${doc.id}:${doc.version}`}
-                                  doc={doc}
+                                  key={`${displayDoc.id}:${displayDoc.version}`}
+                                  doc={displayDoc}
                                   disabled={command.isPending}
                                   save={(value) =>
                                     command.mutate(async () => {
@@ -401,9 +680,9 @@ export function WorkerDocuments({
                                         token,
                                         scope.siteId,
                                         workerId,
-                                        doc.id,
+                                        displayDoc.id,
                                         {
-                                          expectedVersion: doc.version,
+                                          expectedVersion: displayDoc.version,
                                           ...(kind === 'HEALTH_CERTIFICATE'
                                             ? { submittedIssuedOn: value }
                                             : { submittedExpiresOn: value }),
@@ -417,12 +696,12 @@ export function WorkerDocuments({
                               <View style={docStyles.ocrBox}>
                                 <Text style={docStyles.ocrText}>
                                   🔍 {t('documents.ocrIssued')}:{' '}
-                                  {doc.ocr.issuedOn ?? t('documents.notDetermined')}
+                                  {displayDoc.ocr.issuedOn ?? t('documents.notDetermined')}
                                   {kind !== 'HEALTH_CERTIFICATE' && (
                                     <>
                                       {' '}
                                       · {t('documents.ocrExpires')}:{' '}
-                                      {doc.ocr.expiresOn ?? t('documents.notDetermined')}
+                                      {displayDoc.ocr.expiresOn ?? t('documents.notDetermined')}
                                     </>
                                   )}
                                 </Text>
@@ -434,7 +713,7 @@ export function WorkerDocuments({
                                   )}{' '}
                                   {kind === 'HEALTH_CERTIFICATE'
                                     ? (healthCertificateExpiry(
-                                        doc.submittedIssuedOn ?? doc.ocr.issuedOn,
+                                        displayDoc.submittedIssuedOn ?? displayDoc.ocr.issuedOn,
                                       ) ?? t('documents.notDetermined'))
                                     : ''}
                                 </Text>
@@ -444,24 +723,24 @@ export function WorkerDocuments({
 
                           <EvidenceButton
                             label={t('documents.view')}
-                            mediaType={doc.mediaType}
+                            mediaType={displayDoc.mediaType}
                             load={() =>
-                              client.workerDocumentFile(token, scope.siteId, workerId, doc.id)
+                              client.workerDocumentFile(token, scope.siteId, workerId, displayDoc.id)
                             }
                           />
                         </View>
-                      );
-                    })}
+                      )}
 
-                    {canUploadCertificates && (canSubmitDocuments || data.contractorId) && (
-                      <WorkerCertificateSubmission
-                        workerId={workerId}
-                        kind={kind}
-                        requireDate={canSubmitDocuments}
-                        disabled={command.isPending}
-                      />
-                    )}
-                  </Card>
+                      {canUploadCertificates && (canSubmitDocuments || data.contractorId) && (
+                        <WorkerCertificateSubmission
+                          workerId={workerId}
+                          kind={kind}
+                          requireDate={canSubmitDocuments}
+                          disabled={command.isPending}
+                        />
+                      )}
+                    </View>
+                  </View>
                 );
               })}
             </>
@@ -481,18 +760,27 @@ function DocumentDateNotice({ check }: { check: WorkerDocumentDateCheck }) {
     UNAVAILABLE: 'documents.dateUnavailable',
     NO_REFERENCE: 'documents.dateNoReference',
   }[check.status];
+  const isMatch = check.status === 'MATCH';
   const date = (value: string | null) =>
     value?.split('-').reverse().join('/') ?? t('documents.notDetermined');
   return (
     <View
-      style={{
-        padding: 12,
-        gap: 4,
-        borderRadius: 8,
-        backgroundColor: check.status === 'MATCH' ? '#ECFDF5' : '#FFFBEB',
-      }}
+      style={[
+        docStyles.noticeBox,
+        {
+          backgroundColor: isMatch ? '#EDFAF2' : '#FFFBEB',
+          borderColor: isMatch ? '#A7F3D0' : '#FDE68A',
+        },
+      ]}
     >
-      <Body>{t(label)}</Body>
+      <View style={docStyles.noticeHeaderRow}>
+        {isMatch ? (
+          <IconCheck size={16} color="#059669" />
+        ) : (
+          <IconAlert size={16} color="#D97706" />
+        )}
+        <Body>{t(label)}</Body>
+      </View>
       <Hint>
         {t('documents.dateDeclared')}: {date(check.submittedDate)} · {t('documents.dateDetected')}:{' '}
         {date(check.detectedDate)}
@@ -550,7 +838,12 @@ function WorkerCertificateSubmission({
   const busy = disabled || command.isPending || check.isPending;
   return (
     <View style={docStyles.uploadSection}>
-      <Text style={docStyles.uploadHeading}>{t('documents.upload')}</Text>
+      <View style={docStyles.uploadHeaderRow}>
+        <View style={docStyles.uploadHeaderIconBox}>
+          <IconDocument size={14} color="#EA580C" />
+        </View>
+        <Text style={docStyles.uploadHeading}>{t('documents.upload')}</Text>
+      </View>
       <Hint>{t('documents.ocrDateHint')}</Hint>
       <Field
         label={`${t(`documents.${kind}`)} - ${t(health ? 'documents.declaredIssuedOn' : 'documents.declaredExpiresOn')} (YYYY-MM-DD)`}
@@ -669,70 +962,115 @@ function SubmittedExpiryEditor({
 
 const docStyles = StyleSheet.create({
   container: {
-    gap: 14,
-    paddingBottom: 24,
+    gap: 12,
+    paddingBottom: 28,
   },
-  headerBlock: {
-    gap: 4,
-    marginBottom: 4,
-  },
-  screenTitle: {
-    fontSize: 20,
-    fontWeight: '900',
-    color: '#041D2E',
-    letterSpacing: -0.3,
-  },
-  workerHeroRow: {
+  headerBannerCard: {
+    backgroundColor: '#FFF7ED',
+    borderRadius: 18,
+    padding: 14,
     flexDirection: 'row',
     alignItems: 'center',
     gap: 12,
-    paddingBottom: 12,
-    borderBottomWidth: 1,
-    borderBottomColor: '#F1F5F9',
-    flexWrap: 'wrap',
-  },
-  avatarCircle: {
-    width: 46,
-    height: 46,
-    borderRadius: 23,
-    backgroundColor: '#FFF4EE',
     borderWidth: 1,
-    borderColor: '#FFD9C6',
+    borderColor: '#FED7AA',
+    shadowColor: '#EA580C',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.04,
+    shadowRadius: 6,
+    elevation: 1,
+  },
+  headerIconCircle: {
+    width: 38,
+    height: 38,
+    borderRadius: 12,
+    backgroundColor: '#FFEDD5',
     alignItems: 'center',
     justifyContent: 'center',
     flexShrink: 0,
   },
-  avatarText: {
+  headerTextCol: {
+    flex: 1,
+    minWidth: 0,
+    gap: 2,
+  },
+  screenTitle: {
     fontSize: 16,
-    fontWeight: '900',
-    color: '#F66B17',
+    fontWeight: '800',
+    color: '#0F172A',
+    letterSpacing: -0.2,
+  },
+  screenSubtitle: {
+    fontSize: 12,
+    color: '#64748B',
+    lineHeight: 16,
+  },
+  overviewCard: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: 18,
+    padding: 14,
+    gap: 10,
+    borderWidth: 1,
+    borderColor: '#F1F5F9',
+    shadowColor: '#0F172A',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.03,
+    shadowRadius: 6,
+    elevation: 1,
+  },
+  workerHeroRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+  },
+  avatarRingWrapper: {
+    flexShrink: 0,
   },
   workerHeroText: {
     flex: 1,
-    gap: 2,
-    minWidth: 100,
-    flexBasis: 120,
+    minWidth: 0,
+    gap: 3,
   },
   workerName: {
-    fontSize: 15,
+    fontSize: 15.5,
     fontWeight: '800',
     color: '#0F172A',
+  },
+  workerMetaPills: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+  },
+  codeBadge: {
+    backgroundColor: '#FFF7ED',
+    paddingHorizontal: 7,
+    paddingVertical: 1.5,
+    borderRadius: 6,
+    borderWidth: 1,
+    borderColor: '#FFEDD5',
+    alignSelf: 'flex-start',
   },
   workerCode: {
     fontSize: 11,
     fontWeight: '700',
     fontFamily: 'monospace',
-    color: '#64748B',
+    color: '#EA580C',
   },
-  statusPill: {
+  heroRightCol: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingHorizontal: 9,
-    paddingVertical: 4,
-    borderRadius: 12,
+    gap: 6,
+    flexShrink: 0,
+  },
+  chevronCircle: {
+    width: 26,
+    height: 26,
+    borderRadius: 13,
+    backgroundColor: '#F8FAFC',
     borderWidth: 1,
-    gap: 5,
-    maxWidth: '100%',
+    borderColor: '#E2E8F0',
+    alignItems: 'center',
+    justifyContent: 'center',
     flexShrink: 0,
   },
   statusDot: {
@@ -741,191 +1079,330 @@ const docStyles = StyleSheet.create({
     borderRadius: 3,
     flexShrink: 0,
   },
-  statusText: {
-    fontSize: 13,
-    fontWeight: '800',
-    flexShrink: 1,
-    lineHeight: 18,
+  alertChipsRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
+    marginTop: 6,
+  },
+  expiredTag: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
+    backgroundColor: '#FEF2F2',
+    borderColor: '#FECACA',
+    borderWidth: 1,
+    borderRadius: 8,
+    paddingHorizontal: 9,
+    paddingVertical: 3,
+  },
+  expiredTagText: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: '#B91C1C',
+  },
+  supplementTag: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
+    backgroundColor: '#FFFBEB',
+    borderColor: '#FDE68A',
+    borderWidth: 1,
+    borderRadius: 8,
+    paddingHorizontal: 9,
+    paddingVertical: 3,
+  },
+  supplementTagText: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: '#B45309',
   },
   metaGrid: {
     flexDirection: 'row',
     flexWrap: 'wrap',
     gap: 8,
-    paddingTop: 10,
+    paddingTop: 8,
+    borderTopWidth: 1,
+    borderTopColor: '#F8FAFC',
+    marginTop: 4,
   },
-  metaItem: {
-    flexBasis: 'auto',
+  metaTile: {
     flexGrow: 1,
-    minWidth: 144,
-    maxWidth: '100%',
+    flexBasis: 130,
+    minWidth: 120,
     backgroundColor: '#F8FAFC',
-    padding: 10,
+    padding: 8,
     borderRadius: 10,
     borderWidth: 1,
     borderColor: '#E2E8F0',
-    gap: 3,
+    gap: 2,
   },
-  metaItemFull: {
+  metaTileFull: {
     width: '100%',
     backgroundColor: '#F8FAFC',
-    padding: 10,
+    padding: 8,
     borderRadius: 10,
     borderWidth: 1,
     borderColor: '#E2E8F0',
-    gap: 3,
+    gap: 2,
+  },
+  metaTileHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
   },
   metaLabel: {
-    fontSize: 12.5,
+    fontSize: 10.5,
     fontWeight: '700',
     textTransform: 'uppercase',
-    color: '#475569',
+    color: '#64748B',
   },
   metaValue: {
-    fontSize: 15,
+    fontSize: 13,
     fontWeight: '700',
     color: '#0F172A',
   },
   expiringBanner: {
-    marginTop: 8,
-    padding: 10,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    padding: 8,
     backgroundColor: '#FFFBEB',
     borderRadius: 10,
     borderWidth: 1,
     borderColor: '#FDE68A',
+    marginTop: 6,
   },
   expiringText: {
-    fontSize: 14,
+    fontSize: 12.5,
     fontWeight: '700',
     color: '#92400E',
+    flex: 1,
   },
-  sectionHeader: {
-    marginTop: 10,
-    marginBottom: 4,
+  sectionHeaderRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginTop: 4,
+    marginBottom: 1,
+    paddingHorizontal: 2,
+  },
+  sectionHeaderLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  sectionIconBox: {
+    width: 24,
+    height: 24,
+    borderRadius: 7,
+    backgroundColor: '#FFF7ED',
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   sectionTitle: {
-    fontSize: 14.5,
-    fontWeight: '900',
+    fontSize: 13,
+    fontWeight: '800',
     textTransform: 'uppercase',
     letterSpacing: 0.5,
-    color: '#0F1E36',
+    color: '#0F172A',
+  },
+  sectionCountBadge: {
+    backgroundColor: '#F1F5F9',
+    paddingHorizontal: 7,
+    paddingVertical: 1.5,
+    borderRadius: 6,
+  },
+  sectionCountText: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: '#475569',
+  },
+  itemCard: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: 18,
+    padding: 14,
+    gap: 10,
+    borderWidth: 1,
+    borderColor: '#F1F5F9',
+    shadowColor: '#0F172A',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.03,
+    shadowRadius: 5,
+    elevation: 1,
   },
   cardHeaderRow: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    paddingBottom: 8,
-    borderBottomWidth: 1,
-    borderBottomColor: '#F1F5F9',
-    marginBottom: 6,
+    gap: 8,
+  },
+  cardTitleGroup: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    flex: 1,
+    minWidth: 0,
+  },
+  cardIndexBadge: {
+    width: 22,
+    height: 22,
+    borderRadius: 11,
+    backgroundColor: '#FFF7ED',
+    alignItems: 'center',
+    justifyContent: 'center',
+    flexShrink: 0,
+  },
+  cardIndexText: {
+    fontSize: 11.5,
+    fontWeight: '800',
+    color: '#EA580C',
+  },
+  cardKindIconBox: {
+    width: 26,
+    height: 26,
+    borderRadius: 7,
+    alignItems: 'center',
+    justifyContent: 'center',
+    flexShrink: 0,
   },
   cardTitle: {
-    fontSize: 16,
+    fontSize: 14,
     fontWeight: '800',
     color: '#0F172A',
+    flex: 1,
   },
-  acceptedBadge: {
-    paddingHorizontal: 10,
-    paddingVertical: 4,
+  headerActionsRight: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    flexShrink: 0,
+  },
+  compactBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
+    paddingHorizontal: 8,
+    paddingVertical: 3.5,
     borderRadius: 8,
-    backgroundColor: '#ECFDF5',
     borderWidth: 1,
-    borderColor: '#A7F3D0',
+    flexShrink: 0,
   },
-  acceptedText: {
-    fontSize: 13,
-    fontWeight: '800',
-    color: '#065F46',
-  },
-  emptyBadge: {
-    paddingHorizontal: 10,
-    paddingVertical: 4,
-    borderRadius: 8,
-    backgroundColor: '#F1F5F9',
-    borderWidth: 1,
-    borderColor: '#E2E8F0',
-  },
-  emptyText: {
-    fontSize: 13,
+  compactBadgeText: {
+    fontSize: 11.5,
     fontWeight: '700',
-    color: '#475569',
+    lineHeight: 15,
   },
   docRow: {
     gap: 8,
-    paddingVertical: 8,
-    borderBottomWidth: 1,
-    borderBottomColor: '#F8FAFC',
+    paddingTop: 8,
+    borderTopWidth: 1,
+    borderTopColor: '#F8FAFC',
   },
   docStatusRow: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
     gap: 8,
-    flexWrap: 'wrap',
+  },
+  docFilenameWrapper: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    flex: 1,
+    minWidth: 0,
   },
   docFilename: {
-    flex: 1,
-    fontSize: 15,
+    fontSize: 13,
     fontWeight: '700',
     color: '#1E293B',
-    minWidth: 120,
-    flexBasis: 160,
+    flex: 1,
   },
   docStatusPill: {
-    paddingHorizontal: 10,
-    paddingVertical: 4,
-    borderRadius: 8,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 7,
     borderWidth: 1,
+    flexShrink: 0,
   },
   docStatusText: {
-    fontSize: 13,
-    fontWeight: '800',
+    fontSize: 11.5,
+    fontWeight: '700',
   },
   dateBox: {
+    flexDirection: 'row',
+    alignItems: 'center',
     backgroundColor: '#F8FAFC',
-    borderRadius: 8,
+    borderRadius: 10,
     borderWidth: 1,
     borderColor: '#E2E8F0',
-    padding: 10,
+    padding: 8,
+  },
+  dateCol: {
+    flex: 1,
+    minWidth: 0,
+    gap: 2,
+  },
+  dateColHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
     gap: 4,
   },
-  dateText: {
-    fontSize: 14,
+  dateLabel: {
+    fontSize: 10.5,
     fontWeight: '600',
+    color: '#64748B',
+  },
+  dateValue: {
+    fontSize: 12.5,
+    fontWeight: '700',
     color: '#334155',
+  },
+  dateDivider: {
+    width: 1,
+    height: 24,
+    backgroundColor: '#E2E8F0',
+    marginHorizontal: 8,
   },
   noteBox: {
     backgroundColor: '#FFF7ED',
     borderRadius: 8,
     borderWidth: 1,
-    borderColor: '#FFEDD5',
-    padding: 10,
+    borderColor: '#FED7AA',
+    padding: 8,
   },
   noteText: {
-    fontSize: 14,
+    fontSize: 12.5,
     fontStyle: 'italic',
     color: '#9A3412',
   },
   submittedPill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
     alignSelf: 'flex-start',
     backgroundColor: '#FFF7ED',
-    paddingHorizontal: 10,
-    paddingVertical: 5,
-    borderRadius: 8,
+    paddingHorizontal: 8,
+    paddingVertical: 3.5,
+    borderRadius: 7,
     borderWidth: 1,
     borderColor: '#FFEDD5',
   },
   submittedPillText: {
-    fontSize: 13,
-    fontWeight: '800',
+    fontSize: 11.5,
+    fontWeight: '700',
     color: '#C2410C',
   },
   pendingSection: {
     gap: 8,
-    paddingTop: 4,
+    paddingTop: 2,
   },
   expiryEditorBox: {
-    gap: 8,
-    padding: 12,
+    gap: 6,
+    padding: 10,
     backgroundColor: '#FFFDF9',
     borderRadius: 10,
     borderWidth: 1,
@@ -936,66 +1413,61 @@ const docStyles = StyleSheet.create({
     borderRadius: 10,
     borderWidth: 1,
     borderColor: '#E2E8F0',
-    padding: 10,
-    gap: 4,
+    padding: 8,
+    gap: 2,
   },
   ocrText: {
-    fontSize: 13.5,
+    fontSize: 12.5,
     fontWeight: '700',
     color: '#1E293B',
   },
   ocrHintText: {
-    fontSize: 12.5,
-    color: '#475569',
+    fontSize: 11.5,
+    color: '#64748B',
   },
   uploadSection: {
     gap: 8,
-    marginTop: 10,
+    marginTop: 6,
     paddingTop: 10,
     borderTopWidth: 1,
     borderTopColor: '#F1F5F9',
   },
+  uploadHeaderRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+  },
+  uploadHeaderIconBox: {
+    width: 20,
+    height: 20,
+    borderRadius: 5,
+    backgroundColor: '#FFF7ED',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
   uploadHeading: {
-    fontSize: 13.5,
+    fontSize: 12,
     fontWeight: '800',
     textTransform: 'uppercase',
-    color: '#0F1E36',
+    color: '#0F172A',
   },
-  matchBadge: {
-    alignSelf: 'flex-start',
-    paddingHorizontal: 10,
-    paddingVertical: 4,
-    backgroundColor: '#ECFDF5',
+  noticeBox: {
+    padding: 10,
+    gap: 3,
     borderRadius: 8,
     borderWidth: 1,
-    borderColor: '#A7F3D0',
   },
-  matchText: {
-    fontSize: 13,
-    fontWeight: '800',
-    color: '#065F46',
+  noticeHeaderRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
   },
   mismatchBox: {
-    gap: 6,
-    padding: 12,
+    gap: 4,
+    padding: 10,
     backgroundColor: '#FFFBEB',
     borderColor: '#F59E0B',
     borderWidth: 1,
-    borderRadius: 10,
-  },
-  mismatchTitle: {
-    fontSize: 14,
-    fontWeight: '800',
-    color: '#92400E',
-  },
-  mismatchText: {
-    fontSize: 13.5,
-    fontWeight: '700',
-    color: '#B45309',
-  },
-  mismatchAdvisory: {
-    fontSize: 12.5,
-    color: '#78350F',
-    lineHeight: 18,
+    borderRadius: 8,
   },
 });

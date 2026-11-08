@@ -17,10 +17,14 @@ import smartsiteAppIcon from '../../assets/smartsite-app-icon-white.png';
 
 interface SplashScreenProps {
   onFinish: () => void;
+  ready?: boolean;
 }
 
-export function SplashScreen({ onFinish }: SplashScreenProps) {
+export function SplashScreen({ onFinish, ready = true }: SplashScreenProps) {
   useTranslation();
+  const [minTimeElapsed, setMinTimeElapsed] = useState(false);
+  const exitedRef = React.useRef(false);
+
   // Animation drivers using useState to satisfy React 19 render-ref rules
   const [logoScale] = useState(() => new Animated.Value(0.5));
   const [logoOpacity] = useState(() => new Animated.Value(0));
@@ -32,9 +36,11 @@ export function SplashScreen({ onFinish }: SplashScreenProps) {
   const [screenFade] = useState(() => new Animated.Value(1));
 
   const exitSplash = React.useCallback(() => {
+    if (exitedRef.current) return;
+    exitedRef.current = true;
     Animated.timing(screenFade, {
       toValue: 0,
-      duration: 400,
+      duration: 350,
       useNativeDriver: true,
     }).start(() => {
       onFinish();
@@ -100,18 +106,24 @@ export function SplashScreen({ onFinish }: SplashScreenProps) {
     // 4. Progress bar filling
     Animated.timing(progressAnim, {
       toValue: 1,
-      duration: 1800,
+      duration: 1600,
       useNativeDriver: false,
     }).start();
 
-    // 5. Automatic transition to login after 2400ms
-    const finishTimer = setTimeout(() => {
+    // 5. Minimum duration before allowing exit
+    const minTimer = setTimeout(() => {
+      setMinTimeElapsed(true);
+    }, 1800);
+
+    // 6. Safety fallback timeout so splash never stays indefinitely
+    const maxTimer = setTimeout(() => {
       exitSplash();
-    }, 2400);
+    }, 3200);
 
     return () => {
       clearTimeout(textTimer);
-      clearTimeout(finishTimer);
+      clearTimeout(minTimer);
+      clearTimeout(maxTimer);
     };
   }, [
     exitSplash,
@@ -123,6 +135,12 @@ export function SplashScreen({ onFinish }: SplashScreenProps) {
     textOpacity,
     textTranslateY,
   ]);
+
+  useEffect(() => {
+    if (minTimeElapsed && ready) {
+      exitSplash();
+    }
+  }, [minTimeElapsed, ready, exitSplash]);
 
   const progressWidth = progressAnim.interpolate({
     inputRange: [0, 1],

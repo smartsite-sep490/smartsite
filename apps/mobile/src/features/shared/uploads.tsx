@@ -1,12 +1,13 @@
 import { translate as tr } from '../../i18n';
 import { useEffect, useRef, useState } from 'react';
-import { Image, View } from 'react-native';
+import { Image, View, Text, Pressable, StyleSheet } from 'react-native';
 import * as ImagePicker from 'expo-image-picker';
 import * as DocumentPicker from 'expo-document-picker';
 import { File, Paths } from 'expo-file-system';
 import * as Sharing from 'expo-sharing';
 import type { NativeUploadFile } from '@smartsite/api-client';
-import { Body, Button, Card, ErrorNotice, Hint } from './ui';
+import { Body, Card, ErrorNotice, Hint } from './ui';
+import { IconCamera, IconImage, IconDocument, IconTrash, IconEye } from '../../components/common/Icons';
 import { useTranslation } from '../../i18n';
 
 function removeCached(file: NativeUploadFile) {
@@ -156,48 +157,101 @@ export function Attachments({
       setPending(false);
     }
   };
+  const cameraLabel = validateFile ? t('documents.camera') : tr('uploads.takePhoto');
   return (
     <View style={{ gap: 10 }}>
       <Hint>{jpegOnly ? tr('uploads.jpegSizeLimit') : tr('uploads.attachmentsHint')}</Hint>
       {files.map((file, index) => (
         <Card key={`${file.uri}:${index}`}>
-          <Body>{file.name}</Body>
+          <View style={uploadStyles.fileItemHeader}>
+            <View style={uploadStyles.fileItemLeft}>
+              <IconDocument size={16} color="#EA580C" />
+              <Body>{file.name}</Body>
+            </View>
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel={tr('uploads.removeFile', { name: file.name })}
+              disabled={disabled || pending}
+              onPress={() => onChange(files.filter((_, i) => i !== index))}
+              hitSlop={8}
+              style={({ pressed }) => [
+                uploadStyles.removeFileBtn,
+                pressed && { opacity: 0.6 },
+              ]}
+            >
+              <IconTrash size={16} color="#DC2626" />
+            </Pressable>
+          </View>
           {file.type.startsWith('image/') && (
             <Image
               source={{ uri: file.uri }}
-              style={{ height: 140, borderRadius: 10 }}
+              style={uploadStyles.uploadedImagePreview}
               resizeMode="contain"
             />
           )}
-          <Button
-            secondary
-            label={tr('uploads.removeFile', { name: file.name })}
-            disabled={disabled || pending}
-            onPress={() => onChange(files.filter((_, i) => i !== index))}
-          />
         </Card>
       ))}
       <ErrorNotice error={error} />
-      <Button
-        secondary
-        label={validateFile ? t('documents.camera') : tr('uploads.takePhoto')}
-        disabled={disabled || pending || files.length >= maxFiles}
-        onPress={() => void add('camera')}
-      />
-      {validateFile && (
-        <Button
-          secondary
-          label={t('documents.gallery')}
+      <View style={uploadStyles.actionsRow}>
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel={cameraLabel}
           disabled={disabled || pending || files.length >= maxFiles}
-          onPress={() => void add('gallery')}
-        />
-      )}
-      <Button
-        secondary
-        label={tr('uploads.chooseAttachment')}
-        disabled={disabled || pending || files.length >= maxFiles}
-        onPress={() => void add('file')}
-      />
+          onPress={() => void add('camera')}
+          style={({ pressed }) => [
+            uploadStyles.actionBtn,
+            (disabled || pending || files.length >= maxFiles) && uploadStyles.btnDisabled,
+            pressed && { opacity: 0.75, transform: [{ scale: 0.98 }] },
+          ]}
+        >
+          <View style={[uploadStyles.iconBox, { backgroundColor: '#FFF7ED' }]}>
+            <IconCamera size={18} color="#EA580C" />
+          </View>
+          <Text numberOfLines={1} ellipsizeMode="tail" style={uploadStyles.actionBtnText}>
+            {cameraLabel}
+          </Text>
+        </Pressable>
+
+        {validateFile && (
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel={t('documents.gallery')}
+            disabled={disabled || pending || files.length >= maxFiles}
+            onPress={() => void add('gallery')}
+            style={({ pressed }) => [
+              uploadStyles.actionBtn,
+              (disabled || pending || files.length >= maxFiles) && uploadStyles.btnDisabled,
+              pressed && { opacity: 0.75, transform: [{ scale: 0.98 }] },
+            ]}
+          >
+            <View style={[uploadStyles.iconBox, { backgroundColor: '#EFF6FF' }]}>
+              <IconImage size={18} color="#2563EB" />
+            </View>
+            <Text numberOfLines={1} ellipsizeMode="tail" style={uploadStyles.actionBtnText}>
+              {t('documents.gallery')}
+            </Text>
+          </Pressable>
+        )}
+
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel={tr('uploads.chooseAttachment')}
+          disabled={disabled || pending || files.length >= maxFiles}
+          onPress={() => void add('file')}
+          style={({ pressed }) => [
+            uploadStyles.actionBtn,
+            (disabled || pending || files.length >= maxFiles) && uploadStyles.btnDisabled,
+            pressed && { opacity: 0.75, transform: [{ scale: 0.98 }] },
+          ]}
+        >
+          <View style={[uploadStyles.iconBox, { backgroundColor: '#F1F5F9' }]}>
+            <IconDocument size={18} color="#475569" />
+          </View>
+          <Text numberOfLines={1} ellipsizeMode="tail" style={uploadStyles.actionBtnText}>
+            {tr('uploads.chooseAttachment')}
+          </Text>
+        </Pressable>
+      </View>
     </View>
   );
 }
@@ -253,14 +307,148 @@ export function EvidenceButton({
   };
   return (
     <View style={{ gap: 8 }}>
-      <Button secondary label={label} disabled={pending} onPress={() => void open()} />
+      <Pressable
+        accessibilityRole="button"
+        accessibilityLabel={label}
+        disabled={pending}
+        onPress={() => void open()}
+        style={({ pressed }) => [
+          uploadStyles.evidenceBtn,
+          pending && { opacity: 0.5 },
+          pressed && { opacity: 0.75 },
+        ]}
+      >
+        <IconEye size={16} color="#EA580C" />
+        <Text style={uploadStyles.evidenceBtnText}>{label}</Text>
+      </Pressable>
       <ErrorNotice error={error} />
       {uri && (
-        <>
-          <Image source={{ uri }} style={{ height: 260 }} resizeMode="contain" />
-          <Button secondary label={tr('uploads.closeImage')} onPress={() => setUri('')} />
-        </>
+        <View style={uploadStyles.evidencePreviewBox}>
+          <Image source={{ uri }} style={uploadStyles.evidenceImage} resizeMode="contain" />
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel={tr('uploads.closeImage')}
+            onPress={() => setUri('')}
+            style={({ pressed }) => [
+              uploadStyles.closeImageBtn,
+              pressed && { opacity: 0.7 },
+            ]}
+          >
+            <Text style={uploadStyles.closeImageText}>{tr('uploads.closeImage')}</Text>
+          </Pressable>
+        </View>
       )}
     </View>
   );
 }
+
+const uploadStyles = StyleSheet.create({
+  actionsRow: {
+    flexDirection: 'row',
+    gap: 8,
+    marginTop: 2,
+  },
+  actionBtn: {
+    flex: 1,
+    flexDirection: 'column',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6,
+    paddingVertical: 10,
+    paddingHorizontal: 4,
+    backgroundColor: '#FFFFFF',
+    borderRadius: 14,
+    borderWidth: 1.5,
+    borderColor: '#E2E8F0',
+    shadowColor: '#0F172A',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.04,
+    shadowRadius: 3,
+    elevation: 1,
+  },
+  btnDisabled: {
+    opacity: 0.45,
+  },
+  iconBox: {
+    width: 34,
+    height: 34,
+    borderRadius: 10,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  actionBtnText: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: '#334155',
+    textAlign: 'center',
+  },
+  fileItemHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: 8,
+  },
+  fileItemLeft: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+  },
+  removeFileBtn: {
+    width: 32,
+    height: 32,
+    borderRadius: 8,
+    backgroundColor: '#FEF2F2',
+    borderWidth: 1,
+    borderColor: '#FECACA',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  uploadedImagePreview: {
+    height: 140,
+    borderRadius: 10,
+    marginTop: 8,
+    backgroundColor: '#F8FAFC',
+  },
+  evidenceBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    backgroundColor: '#FFF7ED',
+    borderWidth: 1.5,
+    borderColor: '#FED7AA',
+    borderRadius: 12,
+    paddingVertical: 10,
+    paddingHorizontal: 14,
+  },
+  evidenceBtnText: {
+    fontSize: 13.5,
+    fontWeight: '700',
+    color: '#EA580C',
+  },
+  evidencePreviewBox: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: 14,
+    padding: 10,
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
+    gap: 8,
+  },
+  evidenceImage: {
+    height: 240,
+    borderRadius: 8,
+  },
+  closeImageBtn: {
+    alignSelf: 'center',
+    paddingVertical: 6,
+    paddingHorizontal: 14,
+    borderRadius: 8,
+    backgroundColor: '#F1F5F9',
+  },
+  closeImageText: {
+    fontSize: 12.5,
+    fontWeight: '700',
+    color: '#475569',
+  },
+});

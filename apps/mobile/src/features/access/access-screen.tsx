@@ -4,7 +4,17 @@ import { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { useWorkspace } from '../workspace/workspace-context';
 import { displayTime, instant, useCommand, useRequestId } from '../shared/data';
-import { Body, Button, Card, Choice, ErrorNotice, Hint, Page, QueryState } from '../shared/ui';
+import {
+  Body,
+  Button,
+  Card,
+  Choice,
+  Disclosure,
+  ErrorNotice,
+  Hint,
+  Page,
+  QueryState,
+} from '../shared/ui';
 import { DateTimeField } from '../shared/date-time-field';
 import { useTranslation } from '../../i18n';
 
@@ -142,8 +152,7 @@ function ContractorAccess({ onBack }: { onBack: () => void }) {
           );
           return (
             <>
-              <Card>
-                <Body>{tr('access.requestAssignment')}</Body>
+              <Disclosure title={tr('access.requestAssignment')}>
                 <Hint>{tr('access.assignmentHint')}</Hint>
                 <Choice
                   label={tr('schedule.worker')}
@@ -185,9 +194,8 @@ function ContractorAccess({ onBack }: { onBack: () => void }) {
                     })
                   }
                 />
-              </Card>
-              <Card>
-                <Body>{tr('access.assignmentStatus')}</Body>
+              </Disclosure>
+              <Disclosure title={tr('access.assignmentStatus')}>
                 {!assignments.length && <Hint>{tr('access.noAssignments')}</Hint>}
                 {assignments.map((a) => (
                   <Card key={a.id}>
@@ -200,10 +208,9 @@ function ContractorAccess({ onBack }: { onBack: () => void }) {
                     {a.reviewNote && <Hint>{a.reviewNote}</Hint>}
                   </Card>
                 ))}
-              </Card>
+              </Disclosure>
               {data.canGrantWorkerZones && (
-                <Card>
-                  <Body>{tr('access.grantWithinScope')}</Body>
+                <Disclosure title={tr('access.grantWithinScope')}>
                   <Choice
                     label={tr('access.approvedAssignment')}
                     value={assignmentId}
@@ -222,6 +229,8 @@ function ContractorAccess({ onBack }: { onBack: () => void }) {
                     }))}
                   />
                   <Hint>{tr('access.selectedValidity')}</Hint>
+                  <DateTimeField label={tr('access.validFrom')} value={from} onChange={setFrom} />
+                  <DateTimeField label={tr('access.validUntil')} value={to} onChange={setTo} />
                   <Button
                     label={tr('access.grantWorker')}
                     disabled={command.isPending || !assignmentId || !permissionId || !from || !to}
@@ -264,7 +273,7 @@ function ContractorAccess({ onBack }: { onBack: () => void }) {
                         )}
                       </Card>
                     ))}
-                </Card>
+                </Disclosure>
               )}
             </>
           );

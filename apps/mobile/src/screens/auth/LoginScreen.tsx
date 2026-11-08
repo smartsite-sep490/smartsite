@@ -13,6 +13,8 @@ import {
   Alert,
   Dimensions,
 } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { StatusBar } from 'expo-status-bar';
 import { colors } from '../../theme/colors';
 import { SmartSiteLogo, IconUser, IconLock, IconEye } from '../../components/common/Icons';
 import constructionHeroImage from '../../assets/construction_login_hero.jpg';
@@ -26,11 +28,14 @@ interface LoginScreenProps {
   onLogin: (username: string, password: string) => void;
   pending?: boolean;
   error?: unknown;
+  expired?: boolean;
+  notice?: string | null;
 }
 
-export function LoginScreen({ onLogin, pending, error }: LoginScreenProps) {
+export function LoginScreen({ onLogin, pending, error, expired, notice }: LoginScreenProps) {
   const { t } = useTranslation();
   const currentLang = uiLanguage();
+  const insets = useSafeAreaInsets();
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
@@ -44,18 +49,19 @@ export function LoginScreen({ onLogin, pending, error }: LoginScreenProps) {
       style={styles.container}
       behavior={Platform.OS === 'ios' ? 'padding' : undefined}
     >
+      <StatusBar style="light" />
       <ScrollView
         contentContainerStyle={styles.scrollContent}
         bounces={false}
         showsVerticalScrollIndicator={false}
       >
-        {/* Top Hero Construction Photo Section */}
+        {/* Top Hero Construction Photo Section (Bleeds into top corners and behind status bar) */}
         <ImageBackground
           source={constructionHeroImage}
-          style={styles.heroSection}
+          style={[styles.heroSection, { height: HERO_HEIGHT + insets.top }]}
           resizeMode="cover"
         >
-          <View style={styles.heroOverlay}>
+          <View style={[styles.heroOverlay, { paddingTop: Math.max(insets.top + 14, 46) }]}>
             <View style={styles.brandRow}>
               <SmartSiteLogo size={38} />
               <Text style={styles.heroBrandName}>
@@ -66,7 +72,7 @@ export function LoginScreen({ onLogin, pending, error }: LoginScreenProps) {
         </ImageBackground>
 
         {/* Bottom Rounded Form Card */}
-        <View style={styles.sheetCard}>
+        <View style={[styles.sheetCard, { paddingBottom: Math.max(insets.bottom + 24, 40) }]}>
           {/* Language Switcher */}
           <View style={styles.langRow}>
             <Pressable
@@ -90,7 +96,20 @@ export function LoginScreen({ onLogin, pending, error }: LoginScreenProps) {
 
           {/* Heading */}
           <Text style={styles.heading}>{t('auth.login')}</Text>
-          <ErrorNotice error={error} />
+
+          {/* Notices / Session Expired */}
+          {expired && (
+            <View style={styles.noticeBox}>
+              <Text style={styles.noticeText}>{t('auth.sessionExpired')}</Text>
+            </View>
+          )}
+          {notice && (
+            <View style={styles.noticeBox}>
+              <Text style={styles.noticeText}>{notice}</Text>
+            </View>
+          )}
+
+          <ErrorNotice error={error} context="login" />
 
           {/* Input: Username */}
           <View style={styles.inputWrapper}>
@@ -157,7 +176,7 @@ export function LoginScreen({ onLogin, pending, error }: LoginScreenProps) {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#FFFFFF',
+    backgroundColor: '#0F172A',
   },
   scrollContent: {
     flexGrow: 1,
@@ -172,7 +191,6 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: 'rgba(15, 23, 42, 0.45)',
     paddingHorizontal: 24,
-    paddingTop: Platform.OS === 'android' ? 36 : 52,
   },
   brandRow: {
     flexDirection: 'row',
@@ -196,12 +214,25 @@ const styles = StyleSheet.create({
     marginTop: -32,
     paddingHorizontal: 24,
     paddingTop: 24,
-    paddingBottom: 40,
     shadowColor: '#000000',
     shadowOffset: { width: 0, height: -4 },
     shadowOpacity: 0.08,
     shadowRadius: 16,
     elevation: 8,
+  },
+  noticeBox: {
+    backgroundColor: '#EFF6FF',
+    borderColor: '#BFDBFE',
+    borderWidth: 1,
+    borderRadius: 12,
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    marginBottom: 14,
+  },
+  noticeText: {
+    fontSize: 13,
+    color: '#1E40AF',
+    lineHeight: 18,
   },
   langRow: {
     flexDirection: 'row',

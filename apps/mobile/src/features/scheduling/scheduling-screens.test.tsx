@@ -9,6 +9,7 @@ import {
 } from '@smartsite/api-client';
 import { ScheduleScreen, ShiftRequestsScreen } from './scheduling-screens';
 import type { useWorkspace } from '../workspace/workspace-context';
+import { localDate } from '../shared/data';
 let workspace: ReturnType<typeof useWorkspace>;
 vi.mock('../workspace/workspace-context', () => ({ useWorkspace: () => workspace }));
 let root: ReactTestRenderer;
@@ -146,6 +147,7 @@ it('opens a real swap form for the selected schedule and submits its coworker sc
   const swap = vi.spyOn(workspace.client, 'createShiftSwapRequest').mockResolvedValue({} as never);
   const leave = vi.spyOn(workspace.client, 'createAbsenceRequest');
   await mount(createElement(ScheduleScreen, { initialDate: '2026-11-20' }));
+  await click('Chi tiết');
   await click('Đổi ca / hoán đổi / xin nghỉ');
   await settle();
   await click('Đổi sang ca khác ▾');
@@ -239,4 +241,107 @@ it('shows a retriable error when schedules cannot load instead of rendering synt
   await mount(createElement(ScheduleScreen, {}));
   expect(buttons('Thử lại')).toHaveLength(1);
   expect(buttons('Đổi ca / hoán đổi / xin nghỉ')).toHaveLength(0);
+});
+
+it('loads the full selected week within the Worker scope and changes the daily agenda', async () => {
+  await mount(createElement(ScheduleScreen, { initialDate: '2026-11-20' }));
+  expect(workspace.client.listWorkerSchedules).toHaveBeenCalledWith('token', 'site-a', {
+    fromDate: '2026-11-16',
+    toDate: '2026-11-22',
+    workerId: 'own-worker',
+    status: 'ALL',
+    offset: 0,
+    limit: 100,
+  });
+  expect(buttons('Chi tiết')).toHaveLength(1);
+  const days = root.root.findAll(
+    (node) => String(node.type) === 'Pressable' && node.props.accessibilityRole === 'tab',
+  );
+  expect(days).toHaveLength(7);
+  expect(days[4]!.props.accessibilityState.selected).toBe(true);
+  expect(days[4]!.props.accessibilityLabel).toContain('Có ca làm việc');
+  await act(async () => days[5]!.props.onPress());
+  expect(buttons('Chi tiết')).toHaveLength(0);
+  expect(JSON.stringify(root.toJSON())).toContain('Bạn không có lịch trực trong ngày này');
+  expect(workspace.client.listWorkerSchedules).toHaveBeenCalledTimes(1);
+});
+
+it('navigates weeks, selects a month and year, and returns to today', async () => {
+  await mount(createElement(ScheduleScreen, { initialDate: '2026-11-20' }));
+  await click('Tuần sau');
+  await settle();
+  expect(workspace.client.listWorkerSchedules).toHaveBeenLastCalledWith(
+    'token',
+    'site-a',
+    expect.objectContaining({ fromDate: '2026-11-23', toDate: '2026-11-29' }),
+  );
+  await click('Chọn tháng và năm');
+  await click('Năm sau');
+  const month = root.root.findAll(
+    (node) =>
+      String(node.type) === 'Pressable' &&
+      /tháng 2.*2027/.test(node.props.accessibilityLabel ?? ''),
+  )[0]!;
+  expect(month).toBeDefined();
+  await act(async () => month.props.onPress());
+  await settle();
+  expect(workspace.client.listWorkerSchedules).toHaveBeenLastCalledWith(
+    'token',
+    'site-a',
+    expect.objectContaining({ fromDate: '2027-02-22', toDate: '2027-02-28' }),
+  );
+  await click('Hôm nay');
+  await settle();
+  const selectedDay = root.root.findAll(
+    (node) =>
+      String(node.type) === 'Pressable' &&
+      node.props.accessibilityRole === 'tab' &&
+      node.props.accessibilityState.selected,
+  )[0]!;
+  expect(selectedDay.props.accessibilityLabel).toContain(localDate().slice(8));
+});
+
+it('filters cancelled schedules without exposing another Worker or allowing requests on cancelled shifts', async () => {
+  vi.mocked(workspace.client.listWorkerSchedules).mockResolvedValue({
+    items: [
+      schedule,
+      { ...schedule, id: 'cancelled', isActive: false },
+      { ...schedule, id: 'other', workerId: 'another-worker' },
+    ],
+    total: 3,
+  });
+  await mount(createElement(ScheduleScreen, { initialDate: '2026-11-20' }));
+  expect(buttons('Chi tiết')).toHaveLength(1);
+  await click('Bộ lọc');
+  await click('Đã hủy');
+  expect(buttons('Chi tiết')).toHaveLength(1);
+  await click('Chi tiết');
+  expect(JSON.stringify(root.toJSON())).toContain('Lịch đã hủy');
+  expect(buttons('Đổi ca / hoán đổi / xin nghỉ')).toHaveLength(0);
+});
+
+it('loads later API pages before declaring the selected day empty', async () => {
+  vi.mocked(workspace.client.listWorkerSchedules).mockImplementation(
+    async (_token, _site, options) =>
+      options?.offset === 0
+        ? {
+            items: Array.from({ length: 100 }, (_, index) => ({
+              ...schedule,
+              id: `old-${index}`,
+              workDate: '2026-11-19',
+              isActive: false,
+            })),
+            total: 101,
+          }
+        : { items: [schedule], total: 101 },
+  );
+  await mount(createElement(ScheduleScreen, { initialDate: '2026-11-20' }));
+  for (let attempt = 0; !buttons('Chi tiết').length && attempt < 80; attempt++) await settle();
+  expect(buttons('Chi tiết')).toHaveLength(1);
+  expect(workspace.client.listWorkerSchedules).toHaveBeenCalledTimes(2);
+  expect(workspace.client.listWorkerSchedules).toHaveBeenLastCalledWith(
+    'token',
+    'site-a',
+    expect.objectContaining({ offset: 100, workerId: 'own-worker' }),
+  );
 });
