@@ -17,18 +17,6 @@ import { CameraConfigurationBundleEntity } from './camera-configuration-bundle.e
   onDelete: 'RESTRICT',
 })
 @Unique('uq_camera_worker_generation_scope', ['id', 'cameraId', 'siteId', 'streamSessionId'])
-@Unique('uq_generation_observation_route', [
-  'id',
-  'cameraId',
-  'siteId',
-  'streamSessionId',
-  'observationRouteMode',
-  'trackingRouteEpoch',
-])
-@Check(
-  'chk_generation_observation_route',
-  "((observation_route_mode IS NULL AND tracking_route_epoch IS NULL) OR (observation_route_mode='LEGACY' AND tracking_route_epoch IS NULL) OR (observation_route_mode='EPISODE_TRACKED' AND tracking_route_epoch IS NOT NULL)) IS TRUE",
-)
 @Index('uq_camera_worker_generation_current', ['cameraId'], { unique: true, where: 'is_current' })
 @Index('idx_camera_worker_generation_camera_site', ['cameraId', 'siteId'])
 @Check('chk_camera_worker_generation_hash', "credential_sha256 ~ '^[a-f0-9]{64}$'")
@@ -50,26 +38,7 @@ export class CameraWorkerGenerationEntity {
     primaryKeyConstraintName: 'pk_camera_worker_generation',
   })
   id!: string;
-  // Owned by the raw-insert transaction/SQL guard; no credential or public DTO field.
-  @Column({
-    name: 'observation_route_mode',
-    type: 'varchar',
-    length: 24,
-    nullable: true,
-    select: false,
-    insert: false,
-    update: false,
-  })
-  observationRouteMode!: 'LEGACY' | 'EPISODE_TRACKED' | null;
-  @Column({
-    name: 'tracking_route_epoch',
-    type: 'uuid',
-    nullable: true,
-    select: false,
-    insert: false,
-    update: false,
-  })
-  trackingRouteEpoch!: string | null;
+  // TRACKED route fencing is migration-owned and stays outside this registered profile.
   @Column({ name: 'camera_id', type: 'uuid' }) cameraId!: string;
   @Column({ name: 'site_id', type: 'uuid' }) siteId!: string;
   @Column({ name: 'stream_session_id', type: 'uuid' }) streamSessionId!: string;

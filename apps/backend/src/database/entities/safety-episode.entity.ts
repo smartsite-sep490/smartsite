@@ -4,7 +4,7 @@ import { CameraEntity } from './camera.entity.js';
 import { AiObservationEventEntity } from './ai-observation-event.entity.js';
 import { UserEntity } from './user.entity.js';
 
-/** Immutable original anchor; prototype TRACKED storage does not qualify identity or delivery. */
+/** Registered EVENT_LOCAL profile. TRACKED columns belong to the explicit prototype migration. */
 @Entity({ name: 'safety_episode' })
 @Unique('uq_safety_episode_id_site', ['id', 'siteId'])
 @Unique('uq_safety_episode_event_subject', ['eventId', 'personObservationIndex'])
@@ -18,36 +18,9 @@ import { UserEntity } from './user.entity.js';
 @Check('safety_episode_content_revision_check', 'content_revision BETWEEN 1 AND 2147483647')
 @Check('safety_episode_collection_state_check', "collection_state IN ('COLLECTING','SEALED')")
 @Check('chk_safety_episode_interval', 'last_observed_at>=first_observed_at')
-@Check(
-  'chk_safety_episode_subject_kind',
-  "(subject_kind='EVENT_LOCAL' AND tracking_segment_id IS NULL AND tracking_scope_sha256 IS NULL) OR (subject_kind='TRACKED' AND tracking_segment_id IS NOT NULL AND tracking_scope_sha256 IS NOT NULL AND tracking_scope_sha256 ~ '^[a-f0-9]{64}$')",
-)
-@Index('uq_safety_episode_tracking_segment', { synchronize: false })
 export class SafetyEpisodeEntity {
   @PrimaryColumn({ type: 'uuid', primaryKeyConstraintName: 'safety_episode_pkey', update: false })
   id!: string;
-
-  /** Migration-owned composite FK binds the technical segment, scope, Site and camera. */
-  @Column({
-    name: 'subject_kind',
-    type: 'varchar',
-    length: 16,
-    default: 'EVENT_LOCAL',
-    update: false,
-  })
-  subjectKind!: 'EVENT_LOCAL' | 'TRACKED';
-
-  @Column({ name: 'tracking_segment_id', type: 'uuid', nullable: true, update: false })
-  trackingSegmentId!: string | null;
-
-  @Column({
-    name: 'tracking_scope_sha256',
-    type: 'char',
-    length: 64,
-    nullable: true,
-    update: false,
-  })
-  trackingScopeSha256!: string | null;
 
   @Column({ name: 'site_id', type: 'uuid', update: false })
   @ForeignKey(() => SiteEntity, { name: 'safety_episode_site_id_fkey', onDelete: 'RESTRICT' })

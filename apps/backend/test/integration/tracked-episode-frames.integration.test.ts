@@ -2,7 +2,8 @@ import 'reflect-metadata';
 import assert from 'node:assert/strict';
 import { createHash, randomUUID } from 'node:crypto';
 import { computeCanonicalPayloadHash } from '@smartsite/contracts';
-import { mkdir, writeFile } from 'node:fs/promises';
+import { mkdtemp, writeFile } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { test } from 'node:test';
 import sharp from 'sharp';
@@ -27,15 +28,11 @@ import { readMf06FrameMedia } from '../../src/modules/safety/assessments/mf06-fr
 test('tracked finding pages and JPEG reads retain exact original sources and recheck real account/session scope after IO', async () => {
   const owned = createIsolatedTestDatabase(),
     db = owned.dataSource;
-  const root = join(
-    'D:/Ky9-FPT/SmartSiteData/runs/c04-tracked-storage-prototype-20261101-v1',
-    `frame-fixture-${randomUUID()}`,
-  );
+  const root = await mkdtemp(join(tmpdir(), 'smartsite-tracked-frames-'));
   let httpApp: NestExpressApplication | undefined;
   try {
     await owned.initialize();
 
-    await mkdir(root);
     const f = await seedTrackedFrameFixture(db, ['HARD_HAT', 'SAFETY_VEST']);
     const actor = randomUUID(),
       session = randomUUID(),
