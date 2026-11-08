@@ -11,8 +11,12 @@ import {
   TrackedFrameAdmission,
   type TrackedProjectionPort,
 } from '../../src/integrations/ai/tracked-frame-admission.js';
+import { PublicHttpException } from '../../src/common/http/public-http-exception.js';
 import { CameraEventAdmissionService } from '../../src/modules/cameras/camera-event-admission.service.js';
-import { provisionCameraWorkerGeneration } from '../../src/modules/cameras/camera-worker-generations.js';
+import {
+  provisionCameraWorkerGeneration,
+  revokeCameraWorkerGeneration,
+} from '../../src/modules/cameras/camera-worker-generations.js';
 import { recordCameraConfigurationAcknowledgement } from '../../src/modules/cameras/camera-configuration-acknowledgement.js';
 
 test('unregistered frame admission atomically seals technical heads and the supplied projection port', async (t) => {
@@ -29,6 +33,7 @@ test('unregistered frame admission atomically seals technical heads and the supp
         routeEpoch: '00000000-0000-4000-8000-000000000001',
       });
       return {
+        partAuth: auth,
         store: new TrackedFramePrototypeStore(auth, {
           pendingTtlMs: 30000,
           maxPendingFrames: 16,
@@ -196,22 +201,48 @@ test('unregistered frame admission atomically seals technical heads and the supp
           ).kind,
           'PENDING_PREDECESSOR',
         );
-        await service.admission.process(
-          db,
-          key(f, first.framePartition.frameId),
-          f.generation.secret,
+        const unauthorized = (error: unknown) =>
+          error instanceof PublicHttpException && error.getStatus() === 401;
+        // The producer path cannot enter the stored-record path by omitting its credential.
+        await assert.rejects(
+          service.admission.process(db, key(f, first.framePartition.frameId), undefined as never),
+          unauthorized,
+        );
+        const changed = { ...first, observations: [{ type: 'PERSON', trackId: 2 }] };
+        await assert.rejects(
+          db.transaction((manager) =>
+            service.partAuth.recheckStored(manager, changed, f.context, first.eventId),
+          ),
+          unauthorized,
+        );
+        const missing = { ...first, eventId: randomUUID() };
+        await assert.rejects(
+          db.transaction((manager) =>
+            service.partAuth.recheckStored(manager, missing, f.context, missing.eventId),
+          ),
+          unauthorized,
         );
         const recovered = make(f.cameraId, noBusinessFindings);
-        assert.equal(
-          (
-            await recovered.admission.process(
-              db,
-              key(f, next.framePartition.frameId),
-              f.generation.secret,
-            )
-          ).kind,
-          'SEALED',
+        const scope = {
+          cameraId: f.cameraId,
+          generationId: f.generation.workerGenerationId,
+          streamSessionId: f.generation.streamSessionId,
+        };
+        assert.deepEqual(
+          await recovered.admission.recoverPending(
+            db,
+            { ...scope, streamSessionId: randomUUID() },
+            1,
+          ),
+          [],
         );
+        assert.deepEqual(await recovered.admission.recoverCurrent(db, f.cameraId, 1), [
+          { frameId: first.framePartition.frameId, kind: 'SEALED' },
+        ]);
+        assert.deepEqual(await recovered.admission.recoverCurrent(db, f.cameraId, 1), [
+          { frameId: next.framePartition.frameId, kind: 'SEALED' },
+        ]);
+        assert.deepEqual(await recovered.admission.recoverCurrent(db, f.cameraId, 1), []);
         const fork = person(f, '2', segment, first.eventId);
         await service.store.store(db, fork, f.context, f.generation.secret);
         const rejected = await service.admission.process(
@@ -220,6 +251,20 @@ test('unregistered frame admission atomically seals technical heads and the supp
           f.generation.secret,
         );
         assert.equal(rejected.kind, 'REVIEW_ONLY');
+        const pending = person(f, '3', segment, next.eventId);
+        await service.store.store(db, pending, f.context, f.generation.secret);
+        await revokeCameraWorkerGeneration(db, f.cameraId, [f.cameraId], scope.generationId);
+        await assert.rejects(recovered.admission.recoverPending(db, scope, 1), unauthorized);
+        assert.deepEqual(await recovered.admission.recoverCurrent(db, f.cameraId, 1), []);
+        assert.equal(
+          (
+            await db.query(
+              'SELECT tracking_frame_state FROM ai_observation_event WHERE event_id=$1',
+              [pending.eventId],
+            )
+          )[0].tracking_frame_state,
+          'PENDING_PARTS',
+        );
         assert.equal(
           (
             await db.query('SELECT head_event_id FROM ai_subject_segment WHERE segment_id=$1', [

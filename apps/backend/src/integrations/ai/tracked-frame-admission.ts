@@ -100,10 +100,57 @@ export class TrackedFrameAdmission {
   process(source: DataSource, key: TrackedFrameKey, secret: string) {
     if (!Object.values(key).every((value) => uuid.test(value)))
       throw new Error('Invalid stored frame key');
-    return source.transaction((manager) => this.processInTransaction(manager, key, secret));
+    return source.transaction((manager) => this.processInTransaction(manager, key, { secret }));
   }
 
-  private async processInTransaction(manager: EntityManager, key: TrackedFrameKey, secret: string) {
+  /** Resolve the active tracked source from durable state, for a server-selected camera. */
+  async recoverCurrent(source: DataSource, cameraId: string, limit: number) {
+    if (!uuid.test(cameraId) || !Number.isSafeInteger(limit) || limit < 1)
+      throw new Error('Invalid tracked frame recovery scope');
+
+    const [scope] = await source.query<Array<Omit<TrackedFrameKey, 'frameId'>>>(
+      `SELECT g.camera_id AS "cameraId",g.id AS "generationId",g.stream_session_id AS "streamSessionId"
+      FROM camera_worker_generation g
+      JOIN camera c ON c.id=g.camera_id AND c.site_id=g.site_id
+      WHERE g.camera_id=$1 AND g.is_current AND g.revoked_at IS NULL AND g.superseded_at IS NULL
+        AND g.issued_at<=statement_timestamp() AND g.expires_at>statement_timestamp()
+        AND g.observation_route_mode='EPISODE_TRACKED' AND c.status='ACTIVE'`,
+      [cameraId],
+    );
+    return scope ? this.recoverPending(source, scope, limit) : [];
+  }
+
+  /** Server-owned batch for an issued generation/session, including after restart. */
+  async recoverPending(source: DataSource, scope: Omit<TrackedFrameKey, 'frameId'>, limit: number) {
+    const { cameraId, generationId, streamSessionId } = scope;
+    const sourceKey = [cameraId, generationId, streamSessionId];
+    if (sourceKey.some((id) => !uuid.test(id)) || !Number.isSafeInteger(limit) || limit < 1)
+      throw new Error('Invalid tracked frame recovery scope');
+
+    const candidates = await source.query<Array<{ frameId: string }>>(
+      `SELECT tracking_frame_id AS "frameId" FROM ai_observation_event
+      WHERE resolved_camera_id=$1 AND tracking_generation_id=$2 AND stream_session_id=$3
+        AND tracking_part_index=0 AND tracking_frame_state IN ('PENDING_PARTS','PENDING_PREDECESSOR')
+      ORDER BY tracking_source_sequence,event_id LIMIT $4`,
+      [...sourceKey, limit],
+    );
+    const recovered = [];
+    for (const { frameId } of candidates) {
+      // Admission rechecks every candidate under its original camera/frame locks.
+      const key = { cameraId, generationId, streamSessionId, frameId };
+      const { kind } = await source.transaction((manager) =>
+        this.processInTransaction(manager, key, 'stored'),
+      );
+      recovered.push({ frameId, kind });
+    }
+    return recovered;
+  }
+
+  private async processInTransaction(
+    manager: EntityManager,
+    key: TrackedFrameKey,
+    authentication: { secret: string } | 'stored',
+  ) {
     const cameras = await manager.query('SELECT id FROM camera WHERE id=$1 FOR UPDATE', [
       key.cameraId,
     ]);
@@ -129,12 +176,16 @@ export class TrackedFrameAdmission {
     const parts: Bound[] = [];
     for (const row of rows) {
       if (!row.admissionContext) unavailable();
-      const bound = await this.authenticator.authenticate(
-        manager,
-        row.rawPayload,
-        row.admissionContext.context,
-        secret,
-      );
+      const context = row.admissionContext.context;
+      const bound =
+        authentication === 'stored'
+          ? await this.authenticator.recheckStored(manager, row.rawPayload, context, row.eventId)
+          : await this.authenticator.authenticate(
+              manager,
+              row.rawPayload,
+              context,
+              authentication.secret,
+            );
       if (
         bound.payloadHash !== row.payloadHash ||
         row.routeMode !== 'EPISODE_TRACKED' ||

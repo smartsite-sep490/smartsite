@@ -45,7 +45,7 @@ function freezeJson(value: unknown): unknown {
 }
 
 /** Unregistered prototype. Authenticates one original part; does not store/seal a frame or deliver.
- * Every invocation, including an exact retry, calls the existing issued-generation/receipt gate.
+ * Both producer intake and stored recovery recheck the issued generation and receipt.
  */
 export class TrackedPartAuthenticator {
   private readonly policy?: TrackedPartProfilePolicy;
@@ -76,6 +76,24 @@ export class TrackedPartAuthenticator {
     rawContext: unknown,
     secret: string,
   ) {
+    return this.bind(manager, rawPayload, rawContext, { secret });
+  }
+
+  async recheckStored(
+    manager: EntityManager,
+    rawPayload: unknown,
+    rawContext: unknown,
+    storedEventId: string,
+  ) {
+    return this.bind(manager, rawPayload, rawContext, { storedEventId });
+  }
+
+  private async bind(
+    manager: EntityManager,
+    rawPayload: unknown,
+    rawContext: unknown,
+    authentication: { secret: string } | { storedEventId: string },
+  ) {
     if (!manager.queryRunner?.isTransactionActive)
       throw new Error('Tracked authentication requires a transaction');
     if (!this.policy) reject(503);
@@ -94,15 +112,25 @@ export class TrackedPartAuthenticator {
     const capturedAt = parseNormalizedCapturedAt(event.capturedAt);
     if (!capturedAt) reject(400);
     const payloadHash = computeCanonicalPayloadHash(payload);
-    const admission = await this.admission.admit(
-      manager,
-      context,
-      secret,
+    const eventId = event.eventId.toLowerCase();
+    const bindingHash = computeWorkerEventBindingHash(payloadHash, context);
+    const policy = this.policy;
+    const cameraScope = [
       event.cameraExternalId,
-      this.policy.allowedCameraIds,
+      policy.allowedCameraIds,
       capturedAt,
-      this.policy.clockToleranceMs,
-    );
+      policy.clockToleranceMs,
+    ] as const;
+    if ('storedEventId' in authentication && authentication.storedEventId !== eventId) reject(503);
+    const admission =
+      'secret' in authentication
+        ? await this.admission.admit(manager, context, authentication.secret, ...cameraScope)
+        : await this.admission.recheckStoredTracked(
+            manager,
+            context,
+            { eventId, payloadHash, bindingHash, routeEpoch: policy.routeEpoch },
+            ...cameraScope,
+          );
     const view = await manager.getRepository(CameraViewRevisionEntity).findOneBy({
       cameraId: admission.camera.id,
       siteId: admission.camera.siteId,
@@ -114,7 +142,6 @@ export class TrackedPartAuthenticator {
       view.height !== event.frameDimensions.height
     )
       reject(409);
-    const bindingHash = computeWorkerEventBindingHash(payloadHash, context);
     // Receipt is deliberately absent here, but remains authenticated above and in original binding.
     const scopeSha256 = computeCanonicalPayloadHash({
       siteId: admission.camera.siteId.toLowerCase(),
@@ -129,7 +156,7 @@ export class TrackedPartAuthenticator {
     });
     return Object.freeze({
       routeEpoch: this.policy.routeEpoch,
-      eventId: event.eventId.toLowerCase(),
+      eventId,
       payloadHash,
       payload: freezeJson(payload),
       context: Object.freeze(context),
