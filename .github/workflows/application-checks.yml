@@ -53,10 +53,10 @@ jobs:
         run: |
           curl --fail --max-time 10 http://localhost:3000/api/v1/health/ready
           curl --fail --max-time 10 http://localhost:5173/healthz
-      # Keep this required gate after runtime checks so SDK advisories cannot hide DB/runtime results.
-      - run: pnpm --filter @smartsite/mobile check:dependencies
-        env:
-          EXPO_OFFLINE: '0'
+      # Validate against the locked Expo SDK's bundled compatibility map.
+      # Remote recommendations can change without any repository change.
+      - name: Check Mobile dependencies against the pinned Expo SDK
+        run: pnpm --filter @smartsite/mobile check:dependencies
       - name: Show container status
         if: always()
         run: docker compose -f infra/compose.yaml --profile test ps -a
