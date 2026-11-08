@@ -4,6 +4,31 @@ Expo/React Native application for Workers and Contractor Representatives, using 
 
 ## Worker and Contractor workflows
 
+The Contractor Representative workspace uses a compact layout across Overview, Workforce,
+Schedule and Requests. Overview shows API-backed Worker/team totals and pending requests,
+with secondary management tools behind one expandable section. Contractor lists show eight
+records per page. Forms for membership changes, archival, access and onboarding documents
+open on demand; collapsing a form preserves its draft. Large dropdowns offer search and a
+bounded scrolling list. The **Personal** bottom tab opens the account page, which retains its original profile layout.
+These presentation changes apply to the Contractor mobile workspace;
+Worker presentation and Backend authorization remain independent.
+
+The Worker's **Work schedule** tab shows a Monday-to-Sunday calendar with a month/year picker,
+Today shortcut and daily shift timeline. Dots mark active assignments; filters select shift and
+active/cancelled status. The calendar loads every API page for the selected week, uses each
+shift's timezone and marks overnight shifts. **Details** opens the existing change/swap/absence
+request flow. Assignment cards show the signed-in Worker and their current team when available;
+the API does not supply coworkers for each scheduled shift.
+
+The **Attendance** tab uses the same header, period pill, orange actions and soft cards as the
+Worker calendar. Today and month navigation update the existing reporting range; the filter
+button expands the full range picker. Tapping the period pill opens the same month/year picker
+as the Worker calendar and loads the entire chosen month. Day records and entry/exit sessions use timelines.
+Confirmed, overtime and provisional hours remain separate; corrections, leave/overtime requests,
+reports and CSV sharing retain their existing authorization and APIs.
+The Worker attendance report starts collapsed; tap its heading to open or close the report
+and CSV controls. Report data loads when the section is opened.
+
 After sign-in, choose an explicitly assigned role and Site. Representatives also choose an active Contractor scope. Changing scope unmounts drafts and aborts requests from the previous workspace. Accounts with multiple roles still see only the selected Worker/Contractor workspace; the Backend independently authorizes every request.
 
 Workers can view their linked profile/team/Zone information, work schedules, attendance days and sessions, confirmed versus provisional hours, daily reports and CSV exports. They can submit and track attendance corrections, partial leave, overtime, full-shift absence, shift changes and swaps. Swap recipients confirm/decline before Contractor review. Opening QR on the home screen fetches the Worker's own QR and matching 8-character manual code without entering a Security session code. The code and QR share the same expiry and change together only when creating/refreshing the QR or changing direction; there is no timed code rotation. Mobile hides expired/failed codes. Security scans or types that code in its gate fallback flow; server authorization and passage confirmation still apply. See [Worker QR contract](../../contracts/worker-qr.md) and apply its Backend migration before using this flow. Workers can read, open or delete their own notifications. They cannot enroll or manage face profiles; enrollment is handled by an authorized Contractor Representative with the Worker's explicit consent, while Security verifies identity at the gate.
