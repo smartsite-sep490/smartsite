@@ -49,6 +49,12 @@ export type { ValidationIssue } from './validation/geometry-validator.js';
 export { validateObservationEvent } from './validation/schema-validator.js';
 export { validateEightFamilyObservationEvent } from './validation/schema-validator.js';
 export { validatePartitionedObservationEvent } from './validation/schema-validator.js';
+export { validateTrackedObservationEvent } from './validation/schema-validator.js';
+export type {
+  ContinuityResetReason,
+  TrackedFrameSubject,
+  TrackedFrameContinuity,
+} from './tracked-frame-continuity.js';
 export type { ObservationFramePartition } from './validation/schema-validator.js';
 
 export { validateCameraRegionConfiguration } from './validation/schema-validator.js';
@@ -189,3 +195,4 @@ export * from './camera-region-geometry-confirmation.js';
 export * from './camera-configuration-bundle.js';
 export * from './camera-configuration-ack.js';
 export * from './camera-application-status.js';
+export * from './worker-event-delivery.js';

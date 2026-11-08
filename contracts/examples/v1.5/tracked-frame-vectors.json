@@ -1,0 +1,573 @@
+{
+  "status": "SYNTHETIC_CANDIDATE_NOT_ADMITTED_OR_QUALIFIED",
+  "vectors": [
+    {
+      "name": "ten-people-three-affected-start",
+      "context": {
+        "schemaVersion": "1.0.0",
+        "cameraId": "00000000-0000-4000-8000-000000000090",
+        "workerGenerationId": "00000000-0000-4000-8000-000000000091",
+        "streamSessionId": "00000000-0000-4000-8000-000000000002",
+        "configurationVersion": 1,
+        "bundleSha256": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+        "viewRevision": 1,
+        "receiptCommandId": "00000000-0000-4000-8000-000000000092",
+        "sourceKind": "LIVE"
+      },
+      "event": {
+        "eventId": "00000000-0000-4000-8000-000000000001",
+        "schemaVersion": "1.5.0",
+        "cameraExternalId": "CAM-1",
+        "streamSessionId": "00000000-0000-4000-8000-000000000002",
+        "capturedAt": "2026-11-01T00:00:00.000Z",
+        "frameDimensions": {
+          "width": 1280,
+          "height": 720
+        },
+        "framePartition": {
+          "frameId": "00000000-0000-4000-8000-000000000003",
+          "sequenceNumber": "0",
+          "partIndex": 0,
+          "partCount": 1
+        },
+        "observations": [
+          {
+            "type": "PERSON",
+            "trackId": 0
+          },
+          {
+            "type": "PERSON",
+            "trackId": 1
+          },
+          {
+            "type": "PERSON",
+            "trackId": 2
+          },
+          {
+            "type": "PERSON",
+            "trackId": 3
+          },
+          {
+            "type": "PERSON",
+            "trackId": 4
+          },
+          {
+            "type": "PERSON",
+            "trackId": 5
+          },
+          {
+            "type": "PERSON",
+            "trackId": 6
+          },
+          {
+            "type": "PERSON",
+            "trackId": 7
+          },
+          {
+            "type": "PERSON",
+            "trackId": 8
+          },
+          {
+            "type": "PERSON",
+            "trackId": 9
+          },
+          {
+            "type": "PPE",
+            "trackId": 1,
+            "ppeItem": "HARD_HAT",
+            "status": "MISSING",
+            "regionId": "00000000-0000-4000-8000-000000000050",
+            "geometryVersion": 1
+          },
+          {
+            "type": "PPE",
+            "trackId": 1,
+            "ppeItem": "SAFETY_VEST",
+            "status": "MISSING",
+            "regionId": "00000000-0000-4000-8000-000000000050",
+            "geometryVersion": 1
+          },
+          {
+            "type": "PPE",
+            "trackId": 4,
+            "ppeItem": "HARD_HAT",
+            "status": "MISSING",
+            "regionId": "00000000-0000-4000-8000-000000000050",
+            "geometryVersion": 1
+          },
+          {
+            "type": "PPE",
+            "trackId": 4,
+            "ppeItem": "SAFETY_VEST",
+            "status": "MISSING",
+            "regionId": "00000000-0000-4000-8000-000000000050",
+            "geometryVersion": 1
+          },
+          {
+            "type": "PPE",
+            "trackId": 8,
+            "ppeItem": "HARD_HAT",
+            "status": "MISSING",
+            "regionId": "00000000-0000-4000-8000-000000000050",
+            "geometryVersion": 1
+          },
+          {
+            "type": "PPE",
+            "trackId": 8,
+            "ppeItem": "SAFETY_VEST",
+            "status": "MISSING",
+            "regionId": "00000000-0000-4000-8000-000000000050",
+            "geometryVersion": 1
+          }
+        ],
+        "evidence": [],
+        "continuity": {
+          "schemaVersion": "1.0.0",
+          "profileSha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "coverage": {
+            "status": "COMPLETE"
+          },
+          "subjects": [
+            {
+              "personObservationIndex": 0,
+              "segmentId": "00000000-0000-4000-8000-000000000020",
+              "link": {
+                "kind": "START",
+                "reason": "INITIAL"
+              }
+            },
+            {
+              "personObservationIndex": 1,
+              "segmentId": "00000000-0000-4000-8000-000000000021",
+              "link": {
+                "kind": "START",
+                "reason": "INITIAL"
+              }
+            },
+            {
+              "personObservationIndex": 2,
+              "segmentId": "00000000-0000-4000-8000-000000000022",
+              "link": {
+                "kind": "START",
+                "reason": "INITIAL"
+              }
+            },
+            {
+              "personObservationIndex": 3,
+              "segmentId": "00000000-0000-4000-8000-000000000023",
+              "link": {
+                "kind": "START",
+                "reason": "INITIAL"
+              }
+            },
+            {
+              "personObservationIndex": 4,
+              "segmentId": "00000000-0000-4000-8000-000000000024",
+              "link": {
+                "kind": "START",
+                "reason": "INITIAL"
+              }
+            },
+            {
+              "personObservationIndex": 5,
+              "segmentId": "00000000-0000-4000-8000-000000000025",
+              "link": {
+                "kind": "START",
+                "reason": "INITIAL"
+              }
+            },
+            {
+              "personObservationIndex": 6,
+              "segmentId": "00000000-0000-4000-8000-000000000026",
+              "link": {
+                "kind": "START",
+                "reason": "INITIAL"
+              }
+            },
+            {
+              "personObservationIndex": 7,
+              "segmentId": "00000000-0000-4000-8000-000000000027",
+              "link": {
+                "kind": "START",
+                "reason": "INITIAL"
+              }
+            },
+            {
+              "personObservationIndex": 8,
+              "segmentId": "00000000-0000-4000-8000-000000000028",
+              "link": {
+                "kind": "START",
+                "reason": "INITIAL"
+              }
+            },
+            {
+              "personObservationIndex": 9,
+              "segmentId": "00000000-0000-4000-8000-000000000029",
+              "link": {
+                "kind": "START",
+                "reason": "INITIAL"
+              }
+            }
+          ],
+          "retiredSegments": []
+        }
+      },
+      "expectedPayloadHash": "863d424184b0787122f63251cbdfaa961508a859fe6b7f55a090dc7e3d560c84",
+      "expectedBindingHash": "47cabcd3fc57896ffc27ded1c44f0df7eb90172e4776b48f9a770ef7afcf56a3"
+    },
+    {
+      "name": "same-subjects-next-frame-new-receipt",
+      "context": {
+        "schemaVersion": "1.0.0",
+        "cameraId": "00000000-0000-4000-8000-000000000090",
+        "workerGenerationId": "00000000-0000-4000-8000-000000000091",
+        "streamSessionId": "00000000-0000-4000-8000-000000000002",
+        "configurationVersion": 1,
+        "bundleSha256": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+        "viewRevision": 1,
+        "receiptCommandId": "00000000-0000-4000-8000-000000000093",
+        "sourceKind": "LIVE"
+      },
+      "event": {
+        "eventId": "00000000-0000-4000-8000-000000000005",
+        "schemaVersion": "1.5.0",
+        "cameraExternalId": "CAM-1",
+        "streamSessionId": "00000000-0000-4000-8000-000000000002",
+        "capturedAt": "2026-11-01T00:00:01.000Z",
+        "frameDimensions": {
+          "width": 1280,
+          "height": 720
+        },
+        "framePartition": {
+          "frameId": "00000000-0000-4000-8000-000000000006",
+          "sequenceNumber": "1",
+          "partIndex": 0,
+          "partCount": 1
+        },
+        "observations": [
+          {
+            "type": "PERSON",
+            "trackId": 0
+          },
+          {
+            "type": "PERSON",
+            "trackId": 1
+          },
+          {
+            "type": "PERSON",
+            "trackId": 2
+          },
+          {
+            "type": "PERSON",
+            "trackId": 3
+          },
+          {
+            "type": "PERSON",
+            "trackId": 4
+          },
+          {
+            "type": "PERSON",
+            "trackId": 5
+          },
+          {
+            "type": "PERSON",
+            "trackId": 6
+          },
+          {
+            "type": "PERSON",
+            "trackId": 7
+          },
+          {
+            "type": "PERSON",
+            "trackId": 8
+          },
+          {
+            "type": "PERSON",
+            "trackId": 9
+          },
+          {
+            "type": "PPE",
+            "trackId": 1,
+            "ppeItem": "HARD_HAT",
+            "status": "MISSING",
+            "regionId": "00000000-0000-4000-8000-000000000050",
+            "geometryVersion": 1
+          },
+          {
+            "type": "PPE",
+            "trackId": 1,
+            "ppeItem": "SAFETY_VEST",
+            "status": "MISSING",
+            "regionId": "00000000-0000-4000-8000-000000000050",
+            "geometryVersion": 1
+          },
+          {
+            "type": "PPE",
+            "trackId": 4,
+            "ppeItem": "HARD_HAT",
+            "status": "MISSING",
+            "regionId": "00000000-0000-4000-8000-000000000050",
+            "geometryVersion": 1
+          },
+          {
+            "type": "PPE",
+            "trackId": 4,
+            "ppeItem": "SAFETY_VEST",
+            "status": "MISSING",
+            "regionId": "00000000-0000-4000-8000-000000000050",
+            "geometryVersion": 1
+          },
+          {
+            "type": "PPE",
+            "trackId": 8,
+            "ppeItem": "HARD_HAT",
+            "status": "MISSING",
+            "regionId": "00000000-0000-4000-8000-000000000050",
+            "geometryVersion": 1
+          },
+          {
+            "type": "PPE",
+            "trackId": 8,
+            "ppeItem": "SAFETY_VEST",
+            "status": "MISSING",
+            "regionId": "00000000-0000-4000-8000-000000000050",
+            "geometryVersion": 1
+          }
+        ],
+        "evidence": [],
+        "continuity": {
+          "schemaVersion": "1.0.0",
+          "profileSha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "coverage": {
+            "status": "COMPLETE"
+          },
+          "subjects": [
+            {
+              "personObservationIndex": 0,
+              "segmentId": "00000000-0000-4000-8000-000000000020",
+              "link": {
+                "kind": "CONTINUE",
+                "previousEventId": "00000000-0000-4000-8000-000000000001",
+                "previousPersonObservationIndex": 0
+              }
+            },
+            {
+              "personObservationIndex": 1,
+              "segmentId": "00000000-0000-4000-8000-000000000021",
+              "link": {
+                "kind": "CONTINUE",
+                "previousEventId": "00000000-0000-4000-8000-000000000001",
+                "previousPersonObservationIndex": 1
+              }
+            },
+            {
+              "personObservationIndex": 2,
+              "segmentId": "00000000-0000-4000-8000-000000000022",
+              "link": {
+                "kind": "CONTINUE",
+                "previousEventId": "00000000-0000-4000-8000-000000000001",
+                "previousPersonObservationIndex": 2
+              }
+            },
+            {
+              "personObservationIndex": 3,
+              "segmentId": "00000000-0000-4000-8000-000000000023",
+              "link": {
+                "kind": "CONTINUE",
+                "previousEventId": "00000000-0000-4000-8000-000000000001",
+                "previousPersonObservationIndex": 3
+              }
+            },
+            {
+              "personObservationIndex": 4,
+              "segmentId": "00000000-0000-4000-8000-000000000024",
+              "link": {
+                "kind": "CONTINUE",
+                "previousEventId": "00000000-0000-4000-8000-000000000001",
+                "previousPersonObservationIndex": 4
+              }
+            },
+            {
+              "personObservationIndex": 5,
+              "segmentId": "00000000-0000-4000-8000-000000000025",
+              "link": {
+                "kind": "CONTINUE",
+                "previousEventId": "00000000-0000-4000-8000-000000000001",
+                "previousPersonObservationIndex": 5
+              }
+            },
+            {
+              "personObservationIndex": 6,
+              "segmentId": "00000000-0000-4000-8000-000000000026",
+              "link": {
+                "kind": "CONTINUE",
+                "previousEventId": "00000000-0000-4000-8000-000000000001",
+                "previousPersonObservationIndex": 6
+              }
+            },
+            {
+              "personObservationIndex": 7,
+              "segmentId": "00000000-0000-4000-8000-000000000027",
+              "link": {
+                "kind": "CONTINUE",
+                "previousEventId": "00000000-0000-4000-8000-000000000001",
+                "previousPersonObservationIndex": 7
+              }
+            },
+            {
+              "personObservationIndex": 8,
+              "segmentId": "00000000-0000-4000-8000-000000000028",
+              "link": {
+                "kind": "CONTINUE",
+                "previousEventId": "00000000-0000-4000-8000-000000000001",
+                "previousPersonObservationIndex": 8
+              }
+            },
+            {
+              "personObservationIndex": 9,
+              "segmentId": "00000000-0000-4000-8000-000000000029",
+              "link": {
+                "kind": "CONTINUE",
+                "previousEventId": "00000000-0000-4000-8000-000000000001",
+                "previousPersonObservationIndex": 9
+              }
+            }
+          ],
+          "retiredSegments": []
+        }
+      },
+      "expectedPayloadHash": "35aa871eb446a38359515aa984e189ec4579b6f6e37f6b37f985f63393f22a8c",
+      "expectedBindingHash": "a8a30c6cb590bcc268efe40feccb6b9480c6bf2b8eaa5d55c54180b4564eb9db"
+    },
+    {
+      "name": "empty-lifecycle-retirement-claim-not-zone-exit",
+      "context": {
+        "schemaVersion": "1.0.0",
+        "cameraId": "00000000-0000-4000-8000-000000000090",
+        "workerGenerationId": "00000000-0000-4000-8000-000000000091",
+        "streamSessionId": "00000000-0000-4000-8000-000000000002",
+        "configurationVersion": 1,
+        "bundleSha256": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+        "viewRevision": 1,
+        "receiptCommandId": "00000000-0000-4000-8000-000000000092",
+        "sourceKind": "LIVE"
+      },
+      "event": {
+        "eventId": "00000000-0000-4000-8000-000000000007",
+        "schemaVersion": "1.5.0",
+        "cameraExternalId": "CAM-1",
+        "streamSessionId": "00000000-0000-4000-8000-000000000002",
+        "capturedAt": "2026-11-01T00:00:02.000Z",
+        "frameDimensions": {
+          "width": 1280,
+          "height": 720
+        },
+        "framePartition": {
+          "frameId": "00000000-0000-4000-8000-000000000008",
+          "sequenceNumber": "2",
+          "partIndex": 0,
+          "partCount": 1
+        },
+        "observations": [],
+        "evidence": [],
+        "continuity": {
+          "schemaVersion": "1.0.0",
+          "profileSha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "coverage": {
+            "status": "COMPLETE"
+          },
+          "subjects": [],
+          "retiredSegments": [
+            {
+              "segmentId": "00000000-0000-4000-8000-000000000020",
+              "reason": "LOST_TRACK"
+            },
+            {
+              "segmentId": "00000000-0000-4000-8000-000000000021",
+              "reason": "LOST_TRACK"
+            },
+            {
+              "segmentId": "00000000-0000-4000-8000-000000000022",
+              "reason": "LOST_TRACK"
+            },
+            {
+              "segmentId": "00000000-0000-4000-8000-000000000023",
+              "reason": "LOST_TRACK"
+            },
+            {
+              "segmentId": "00000000-0000-4000-8000-000000000024",
+              "reason": "LOST_TRACK"
+            },
+            {
+              "segmentId": "00000000-0000-4000-8000-000000000025",
+              "reason": "LOST_TRACK"
+            },
+            {
+              "segmentId": "00000000-0000-4000-8000-000000000026",
+              "reason": "LOST_TRACK"
+            },
+            {
+              "segmentId": "00000000-0000-4000-8000-000000000027",
+              "reason": "LOST_TRACK"
+            },
+            {
+              "segmentId": "00000000-0000-4000-8000-000000000028",
+              "reason": "LOST_TRACK"
+            },
+            {
+              "segmentId": "00000000-0000-4000-8000-000000000029",
+              "reason": "LOST_TRACK"
+            }
+          ]
+        }
+      },
+      "expectedPayloadHash": "212eb305f671f69d28e9f4cf07cdfa655dab4f8cb2215254c07a44e76ccd5f35",
+      "expectedBindingHash": "e5e116b31724ab373e201e97ef2734a57b4c20175dd08bbefe9fe0456be9ec2b"
+    },
+    {
+      "name": "incomplete-processing-not-observed-empty",
+      "context": {
+        "schemaVersion": "1.0.0",
+        "cameraId": "00000000-0000-4000-8000-000000000090",
+        "workerGenerationId": "00000000-0000-4000-8000-000000000091",
+        "streamSessionId": "00000000-0000-4000-8000-000000000002",
+        "configurationVersion": 1,
+        "bundleSha256": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+        "viewRevision": 1,
+        "receiptCommandId": "00000000-0000-4000-8000-000000000092",
+        "sourceKind": "LIVE"
+      },
+      "event": {
+        "eventId": "00000000-0000-4000-8000-000000000009",
+        "schemaVersion": "1.5.0",
+        "cameraExternalId": "CAM-1",
+        "streamSessionId": "00000000-0000-4000-8000-000000000002",
+        "capturedAt": "2026-11-01T00:00:03.000Z",
+        "frameDimensions": {
+          "width": 1280,
+          "height": 720
+        },
+        "framePartition": {
+          "frameId": "00000000-0000-4000-8000-000000000010",
+          "sequenceNumber": "3",
+          "partIndex": 0,
+          "partCount": 1
+        },
+        "observations": [],
+        "evidence": [],
+        "continuity": {
+          "schemaVersion": "1.0.0",
+          "profileSha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "coverage": {
+            "status": "INCOMPLETE",
+            "reason": "INFERENCE_ERROR"
+          },
+          "subjects": [],
+          "retiredSegments": []
+        }
+      },
+      "expectedPayloadHash": "c5fa7751a2ac21958289a0e793df9d3c5f2412f355d6c507af5c9010547b49f9",
+      "expectedBindingHash": "e97722186e7f3f79ff48e9be505c1132f318a64d6d71239cc22d5ad5fae3a3f6"
+    }
+  ]
+}

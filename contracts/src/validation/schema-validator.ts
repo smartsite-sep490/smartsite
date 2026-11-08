@@ -3,6 +3,7 @@ import Ajv2020Pkg from 'ajv/dist/2020.js';
 import addFormatsPkg from 'ajv-formats';
 import { validateGeometries } from './geometry-validator.js';
 import type { ValidationIssue } from './geometry-validator.js';
+import type { TrackedFrameContinuity } from '../tracked-frame-continuity.js';
 
 export type { ValidationIssue } from './geometry-validator.js';
 
@@ -107,6 +108,14 @@ const validatePartitionedFrameSchema: CompiledSchemaValidator = ajv.compile(
 const validateCameraRegionConfigurationSchema: CompiledSchemaValidator = ajv.compile(
   cameraRegionConfigurationSchema,
 );
+const validateTrackedFrameSchema: CompiledSchemaValidator = ajv.compile(
+  JSON.parse(
+    readFileSync(
+      new URL('../../schemas/v1.5/technical-observation-event.json', import.meta.url),
+      'utf8',
+    ),
+  ) as unknown,
+);
 
 function schemaValidationIssues(
   validateSchema: CompiledSchemaValidator,
@@ -189,6 +198,16 @@ export function validatePartitionedObservationEvent(data: unknown): ValidationRe
     framePartition: ObservationFramePartition;
     observations: Array<{ type: string; trackId: number }>;
   };
+  return validateFrameSemantics(payload, issues);
+}
+
+function validateFrameSemantics(
+  payload: {
+    framePartition: ObservationFramePartition;
+    observations: Array<{ type: string; trackId: number }>;
+  },
+  issues: ValidationIssue[],
+): ValidationResult {
   const frame = payload.framePartition;
   if (frame.partIndex >= frame.partCount) {
     issues.push({
@@ -219,6 +238,54 @@ export function validatePartitionedObservationEvent(data: unknown): ValidationRe
       });
     }
   });
+  return { isValid: issues.length === 0, issues };
+}
+
+/** Candidate only. Existing envelope/intake admission deliberately does not call this. */
+export function validateTrackedObservationEvent(data: unknown): ValidationResult {
+  const issues = schemaValidationIssues(validateTrackedFrameSchema, data);
+  issues.push(...validateGeometries(data));
+  if (issues.length) return { isValid: false, issues };
+  const payload = data as {
+    eventId: string;
+    framePartition: ObservationFramePartition;
+    observations: Array<{ type: string; trackId: number }>;
+    continuity: TrackedFrameContinuity;
+  };
+  validateFrameSemantics(payload, issues);
+  const fail = (path: string, message: string) =>
+    issues.push({ code: 'SCHEMA_VIOLATION', path: `/continuity/${path}`, message });
+  const indices = new Set<number>();
+  const segments = new Set<string>();
+  const predecessors = new Set<string>();
+  for (const [position, subject] of payload.continuity.subjects.entries()) {
+    const path = `subjects/${position}`;
+    if (payload.observations[subject.personObservationIndex]?.type !== 'PERSON')
+      fail(path, 'Subject index must identify an original PERSON observation');
+    if (indices.has(subject.personObservationIndex) || segments.has(subject.segmentId))
+      fail(path, 'Each PERSON and segment must occur once in a part');
+    indices.add(subject.personObservationIndex);
+    segments.add(subject.segmentId);
+    if (subject.link.kind === 'CONTINUE') {
+      const link = subject.link;
+      const key = `${link.previousEventId}:${link.previousPersonObservationIndex}`;
+      if (link.previousEventId === payload.eventId.toLowerCase() || predecessors.has(key))
+        fail(path, 'A predecessor cannot be this event or shared by different subjects');
+      predecessors.add(key);
+    }
+  }
+  if (payload.continuity.coverage.status === 'COMPLETE') {
+    payload.observations.forEach((observation, index) => {
+      if (observation.type === 'PERSON' && !indices.has(index))
+        fail('subjects', 'Every original PERSON needs one explicit subject claim');
+    });
+  }
+  const retired = new Set<string>();
+  for (const [position, item] of payload.continuity.retiredSegments.entries()) {
+    if (retired.has(item.segmentId) || segments.has(item.segmentId))
+      fail(`retiredSegments/${position}`, 'Retired segments must be unique and not active');
+    retired.add(item.segmentId);
+  }
   return { isValid: issues.length === 0, issues };
 }
 
