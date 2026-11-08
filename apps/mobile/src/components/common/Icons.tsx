@@ -10,6 +10,30 @@ interface IconProps {
   color?: string;
 }
 
+export function IconFilter({ size = 20, color = colors.textSecondary }: IconProps) {
+  return (
+    <View style={{ width: size, height: size, justifyContent: 'space-around' }}>
+      {[0.2, 0.65, 0.35].map((position, index) => (
+        <View key={index} style={{ height: 1.5, backgroundColor: color }}>
+          <View
+            style={{
+              position: 'absolute',
+              left: size * position,
+              top: -2.5,
+              width: 5,
+              height: 6.5,
+              borderRadius: 2,
+              backgroundColor: '#FFFFFF',
+              borderWidth: 1.5,
+              borderColor: color,
+            }}
+          />
+        </View>
+      ))}
+    </View>
+  );
+}
+
 /**
  * SmartSite official brand icon / symbol
  */
@@ -840,6 +864,224 @@ export function IconTrash({ size = 18, color = colors.danger }: IconProps) {
         }}
       >
         <View style={{ width: 1.5, height: size * 0.32, backgroundColor: color }} />
+      </View>
+    </View>
+  );
+}
+
+/**
+ * Camera Icon (compact for attachment upload actions)
+ */
+export function IconCamera({ size = 20, color = colors.primary }: IconProps) {
+  return (
+    <View style={{ width: size, height: size, alignItems: 'center', justifyContent: 'center' }}>
+      {/* Camera top notch */}
+      <View
+        style={{
+          width: size * 0.35,
+          height: size * 0.12,
+          backgroundColor: color,
+          borderTopLeftRadius: 2,
+          borderTopRightRadius: 2,
+          marginBottom: -1,
+        }}
+      />
+      {/* Camera body */}
+      <View
+        style={{
+          width: size * 0.9,
+          height: size * 0.65,
+          borderWidth: 1.8,
+          borderColor: color,
+          borderRadius: 4,
+          alignItems: 'center',
+          justifyContent: 'center',
+        }}
+      >
+        {/* Lens circle */}
+        <View
+          style={{
+            width: size * 0.35,
+            height: size * 0.35,
+            borderRadius: (size * 0.35) / 2,
+            borderWidth: 1.8,
+            borderColor: color,
+          }}
+        />
+      </View>
+    </View>
+  );
+}
+
+/**
+ * Gallery / Image Icon
+ */
+export function IconImage({ size = 20, color = colors.primary }: IconProps) {
+  return (
+    <View
+      style={{
+        width: size * 0.88,
+        height: size * 0.72,
+        borderWidth: 1.8,
+        borderColor: color,
+        borderRadius: 4,
+        alignItems: 'center',
+        justifyContent: 'center',
+        overflow: 'hidden',
+        position: 'relative',
+      }}
+    >
+      <View
+        style={{
+          position: 'absolute',
+          top: 2.5,
+          right: 3,
+          width: 4,
+          height: 4,
+          borderRadius: 2,
+          backgroundColor: color,
+        }}
+      />
+      <View
+        style={{
+          position: 'absolute',
+          bottom: 0,
+          left: 2,
+          width: 0,
+          height: 0,
+          borderLeftWidth: 5,
+          borderRightWidth: 5,
+          borderBottomWidth: 6,
+          borderLeftColor: 'transparent',
+          borderRightColor: 'transparent',
+          borderBottomColor: color,
+        }}
+      />
+    </View>
+  );
+}
+
+/**
+ * Map Pin / Location Icon
+ */
+export function IconMapPin({ size = 18, color = colors.primary }: IconProps) {
+  return (
+    <View style={{ width: size, height: size, alignItems: 'center', justifyContent: 'center' }}>
+      <View
+        style={{
+          width: size * 0.65,
+          height: size * 0.65,
+          borderRadius: (size * 0.65) / 2,
+          borderWidth: 1.8,
+          borderColor: color,
+          alignItems: 'center',
+          justifyContent: 'center',
+        }}
+      >
+        <View
+          style={{
+            width: size * 0.22,
+            height: size * 0.22,
+            borderRadius: (size * 0.22) / 2,
+            backgroundColor: color,
+          }}
+        />
+      </View>
+      <View
+        style={{
+          width: 0,
+          height: 0,
+          borderLeftWidth: size * 0.18,
+          borderRightWidth: size * 0.18,
+          borderTopWidth: size * 0.28,
+          borderLeftColor: 'transparent',
+          borderRightColor: 'transparent',
+          borderTopColor: color,
+          marginTop: -2,
+        }}
+      />
+    </View>
+  );
+}
+
+/**
+ * Globe / Language Icon
+ */
+export function IconGlobe({ size = 18, color = colors.primary }: IconProps) {
+  return (
+    <View style={{ width: size, height: size, alignItems: 'center', justifyContent: 'center' }}>
+      <View
+        style={{
+          width: size * 0.82,
+          height: size * 0.82,
+          borderRadius: (size * 0.82) / 2,
+          borderWidth: 1.8,
+          borderColor: color,
+          alignItems: 'center',
+          justifyContent: 'center',
+        }}
+      >
+        <View
+          style={{
+            width: size * 0.44,
+            height: size * 0.82,
+            borderRadius: (size * 0.44) / 2,
+            borderWidth: 1.4,
+            borderColor: color,
+          }}
+        />
+        <View
+          style={{
+            position: 'absolute',
+            width: '100%',
+            height: 1.5,
+            backgroundColor: color,
+          }}
+        />
+      </View>
+    </View>
+  );
+}
+
+/**
+ * Logout Icon
+ */
+export function IconLogout({ size = 18, color = colors.danger }: IconProps) {
+  return (
+    <View style={{ width: size, height: size, alignItems: 'center', justifyContent: 'center' }}>
+      <View
+        style={{
+          width: size * 0.58,
+          height: size * 0.72,
+          borderWidth: 1.8,
+          borderRightWidth: 0,
+          borderColor: color,
+          borderTopLeftRadius: 4,
+          borderBottomLeftRadius: 4,
+          marginRight: 4,
+        }}
+      />
+      <View
+        style={{
+          position: 'absolute',
+          right: 2,
+          flexDirection: 'row',
+          alignItems: 'center',
+        }}
+      >
+        <View style={{ width: size * 0.42, height: 2, backgroundColor: color }} />
+        <View
+          style={{
+            width: 0,
+            height: 0,
+            borderTopWidth: 3.5,
+            borderBottomWidth: 3.5,
+            borderLeftWidth: 4.5,
+            borderTopColor: 'transparent',
+            borderBottomColor: 'transparent',
+            borderLeftColor: color,
+          }}
+        />
       </View>
     </View>
   );

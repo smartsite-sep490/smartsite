@@ -1,4 +1,4 @@
-import { createElement, type PropsWithChildren } from 'react';
+import { createElement, Fragment, type PropsWithChildren, type ReactNode } from 'react';
 type Props = PropsWithChildren<Record<string, unknown>>;
 function host(name: string) {
   return function Host({ children, ...props }: Props) {
@@ -9,11 +9,34 @@ export const View = host('View'),
   Text = host('Text'),
   TextInput = host('TextInput'),
   ScrollView = host('ScrollView'),
+  KeyboardAvoidingView = host('KeyboardAvoidingView'),
   Pressable = host('Pressable'),
   ActivityIndicator = host('ActivityIndicator'),
   Image = host('Image'),
   Switch = host('Switch');
 export const Modal = host('Modal');
+export function FlatList<T>({
+  data,
+  renderItem,
+  keyExtractor,
+  ...props
+}: Props & {
+  data: readonly T[];
+  renderItem: (info: { item: T; index: number }) => ReactNode;
+  keyExtractor?: (item: T, index: number) => string;
+}) {
+  return createElement(
+    'FlatList',
+    props,
+    data.map((item, index) =>
+      createElement(
+        Fragment,
+        { key: keyExtractor?.(item, index) ?? index },
+        renderItem({ item, index }),
+      ),
+    ),
+  );
+}
 export const AppState = {
   currentState: 'active',
   addEventListener: (_event: string, _listener: (state: string) => void) => {

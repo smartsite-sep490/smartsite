@@ -1,11 +1,12 @@
 import React from 'react';
 import { View, Text, StyleSheet, Pressable } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { colors } from '../../theme/colors';
 import { IconHome, IconCalendar, IconClock, IconUser, IconUsers, IconDocument } from './Icons';
 import { useTranslation } from '../../i18n';
 
 export type WorkerTab = 'home' | 'schedule' | 'attendance' | 'profile';
-export type ContractorTab = 'home' | 'workforce' | 'schedule' | 'requests';
+export type ContractorTab = 'home' | 'workforce' | 'schedule' | 'requests' | 'profile';
 
 interface BottomTabBarProps {
   role: 'worker' | 'contractor';
@@ -25,7 +26,7 @@ export function BottomTabBar({
 
   if (isWorker) {
     return (
-      <View style={styles.container}>
+      <SafeAreaView edges={['bottom', 'left', 'right']} style={styles.container}>
         {/* Tab 1: Trang chủ */}
         <Pressable
           accessibilityRole="button"
@@ -36,7 +37,7 @@ export function BottomTabBar({
         >
           <IconHome size={24} color={activeTab === 'home' ? colors.primary : colors.textTertiary} />
           <Text
-            numberOfLines={2}
+            numberOfLines={1}
             ellipsizeMode="tail"
             style={[styles.tabLabel, activeTab === 'home' && styles.tabLabelActive]}
           >
@@ -58,7 +59,7 @@ export function BottomTabBar({
             color={activeTab === 'schedule' ? colors.primary : colors.textTertiary}
           />
           <Text
-            numberOfLines={2}
+            numberOfLines={1}
             ellipsizeMode="tail"
             style={[styles.tabLabel, activeTab === 'schedule' && styles.tabLabelActive]}
           >
@@ -80,7 +81,7 @@ export function BottomTabBar({
             color={activeTab === 'attendance' ? colors.primary : colors.textTertiary}
           />
           <Text
-            numberOfLines={2}
+            numberOfLines={1}
             ellipsizeMode="tail"
             style={[styles.tabLabel, activeTab === 'attendance' && styles.tabLabelActive]}
           >
@@ -102,7 +103,7 @@ export function BottomTabBar({
             color={activeTab === 'profile' ? colors.primary : colors.textTertiary}
           />
           <Text
-            numberOfLines={2}
+            numberOfLines={1}
             ellipsizeMode="tail"
             style={[styles.tabLabel, activeTab === 'profile' && styles.tabLabelActive]}
           >
@@ -110,13 +111,13 @@ export function BottomTabBar({
           </Text>
           {activeTab === 'profile' && <View style={styles.tabIndicator} />}
         </Pressable>
-      </View>
+      </SafeAreaView>
     );
   }
 
-  // Contractor Tabs: Tổng quan | Nhân sự | Lịch làm | Yêu cầu
+  // Contractor Tabs: Tổng quan | Nhân sự | Lịch làm | Yêu cầu | Cá nhân
   return (
-    <View style={styles.container}>
+    <SafeAreaView edges={['bottom', 'left', 'right']} style={styles.container}>
       {/* Tab 1: Tổng quan */}
       <Pressable
         accessibilityRole="button"
@@ -127,7 +128,7 @@ export function BottomTabBar({
       >
         <IconHome size={24} color={activeTab === 'home' ? colors.primary : colors.textTertiary} />
         <Text
-          numberOfLines={2}
+          numberOfLines={1}
           ellipsizeMode="tail"
           style={[styles.tabLabel, activeTab === 'home' && styles.tabLabelActive]}
         >
@@ -149,7 +150,7 @@ export function BottomTabBar({
           color={activeTab === 'workforce' ? colors.primary : colors.textTertiary}
         />
         <Text
-          numberOfLines={2}
+          numberOfLines={1}
           ellipsizeMode="tail"
           style={[styles.tabLabel, activeTab === 'workforce' && styles.tabLabelActive]}
         >
@@ -171,7 +172,7 @@ export function BottomTabBar({
           color={activeTab === 'schedule' ? colors.primary : colors.textTertiary}
         />
         <Text
-          numberOfLines={2}
+          numberOfLines={1}
           ellipsizeMode="tail"
           style={[styles.tabLabel, activeTab === 'schedule' && styles.tabLabelActive]}
         >
@@ -202,7 +203,7 @@ export function BottomTabBar({
           )}
         </View>
         <Text
-          numberOfLines={2}
+          numberOfLines={1}
           ellipsizeMode="tail"
           style={[styles.tabLabel, activeTab === 'requests' && styles.tabLabelActive]}
         >
@@ -210,24 +211,44 @@ export function BottomTabBar({
         </Text>
         {activeTab === 'requests' && <View style={styles.tabIndicator} />}
       </Pressable>
-    </View>
+
+      <Pressable
+        accessibilityRole="button"
+        accessibilityLabel={t('tabs.profile')}
+        style={styles.tabItem}
+        onPress={() => onSelectTab('profile')}
+        hitSlop={8}
+      >
+        <IconUser
+          size={24}
+          color={activeTab === 'profile' ? colors.primary : colors.textTertiary}
+        />
+        <Text
+          numberOfLines={1}
+          ellipsizeMode="tail"
+          style={[styles.tabLabel, activeTab === 'profile' && styles.tabLabelActive]}
+        >
+          {t('tabs.profile')}
+        </Text>
+        {activeTab === 'profile' && <View style={styles.tabIndicator} />}
+      </Pressable>
+    </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
   container: {
     flexDirection: 'row',
-
     backgroundColor: '#FFFFFF',
     borderTopWidth: 1,
     borderTopColor: '#EFF2F6',
-    paddingBottom: 4,
+    paddingBottom: 2,
     elevation: 8,
     shadowColor: '#000000',
     shadowOffset: { width: 0, height: -2 },
     shadowOpacity: 0.05,
     shadowRadius: 6,
-    minHeight: 64,
+    minHeight: 56,
   },
   tabItem: {
     flex: 1,
@@ -236,17 +257,18 @@ const styles = StyleSheet.create({
     position: 'relative',
     paddingTop: 4,
     minWidth: 0,
-    paddingHorizontal: 2,
-    paddingVertical: 6,
+    paddingHorizontal: 0,
+    paddingVertical: 4,
   },
   tabLabel: {
-    fontSize: 11,
+    fontSize: 10.5,
     color: colors.textTertiary,
-    marginTop: 4,
-    fontWeight: '500',
+    marginTop: 2,
+    fontWeight: '600',
     textAlign: 'center',
     maxWidth: '100%',
-    lineHeight: 16,
+    lineHeight: 14,
+    includeFontPadding: false,
   },
   tabLabelActive: {
     color: colors.primary,
