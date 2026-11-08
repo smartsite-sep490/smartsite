@@ -83,14 +83,14 @@ export class MobileSession {
       return this.accept(result, epoch);
     });
   }
-  restore() {
+  restore(options?: { timeoutMs?: number }) {
     if (this.snapshot.response) return Promise.resolve(this.snapshot.response);
-    return this.refresh().catch((error) => {
+    return this.refresh(options?.timeoutMs ? { timeoutMs: options.timeoutMs } : undefined).catch((error) => {
       if (error instanceof ApiError && (error.status === 401 || error.status === 403)) return null;
       throw error;
     });
   }
-  private refresh(): Promise<LoginResponse> {
+  private refresh(options?: { timeoutMs?: number }): Promise<LoginResponse> {
     if (this.pendingRefresh) return this.pendingRefresh;
     const epoch = this.snapshot.epoch;
     const pending = this.serial(async () => {
@@ -99,7 +99,9 @@ export class MobileSession {
       this.assertEpoch(epoch);
       if (!token) throw new ApiError('http', tr('auth.signInRequired'), 401);
       try {
-        const response = await this.client.refresh('MOBILE', token, { timeoutMs: 15000 });
+        const response = await this.client.refresh('MOBILE', token, {
+          timeoutMs: options?.timeoutMs ?? 15000,
+        });
         if (this.snapshot.response && response.user.id !== this.snapshot.response.user.id)
           throw new ApiError('http', tr('auth.accountChanged'), 401);
         return await this.accept(response, epoch);
