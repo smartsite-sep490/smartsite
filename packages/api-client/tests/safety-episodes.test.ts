@@ -9,8 +9,9 @@ vi.mock('@smartsite/contracts', () => {
 
 afterEach(() => vi.unstubAllGlobals());
 const client = () => new SmartSiteManagementClient('https://api.example.test');
+const recipientId = '11111111-1111-4111-8111-111111111111';
 function reply(payload: unknown, status = 200) {
-  const mock = vi.fn<typeof fetch>(async () => new Response(JSON.stringify(payload), { status }));
+  const mock = vi.fn<typeof fetch>(async () => Response.json(payload, { status }));
   vi.stubGlobal('fetch', mock);
   return mock;
 }
@@ -85,24 +86,24 @@ describe('episode API transport contract (endpoints not deployed)', () => {
 
   it('does not turn an empty explicit Site filter into an all-Sites request', async () => {
     const mock = reply({ items: [], total: 0, unreadCount: 0 });
-    await client().listSafetyEpisodeInbox('token', {
-      offset: 20,
-      limit: 20,
-      siteId: '',
-      readStatus: 'UNREAD',
-    });
-    expect(mock.mock.calls[0]![0]).toBe(
-      'https://api.example.test/api/v1/me/safety-episode-inbox?offset=20&limit=20&siteId=&readStatus=UNREAD',
-    );
+    await expect(
+      client().listSafetyEpisodeInbox('token', {
+        offset: 20,
+        limit: 20,
+        siteId: '',
+        readStatus: 'UNREAD',
+      }),
+    ).rejects.toThrow('Invalid episode inbox options');
+    expect(mock).not.toHaveBeenCalled();
   });
 
   it('sends only the observed revision; a newer server revision remains unread', async () => {
-    const response = { id: 'notice', contentRevision: 3, seenRevision: 2, unread: true };
+    const response = { id: recipientId, contentRevision: 3, seenRevision: 2, unread: true };
     const mock = reply(response);
-    const result = await client().readSafetyEpisodeInbox('token', 'notice/1', { seenRevision: 2 });
+    const result = await client().readSafetyEpisodeInbox('token', recipientId, { seenRevision: 2 });
     expect(result).toEqual(response);
     expect(mock.mock.calls[0]![0]).toBe(
-      'https://api.example.test/api/v1/me/safety-episode-inbox/notice%2F1/read',
+      `https://api.example.test/api/v1/me/safety-episode-inbox/${recipientId}/read`,
     );
     expect(mock.mock.calls[0]![1]).toMatchObject({
       method: 'PATCH',
@@ -114,7 +115,7 @@ describe('episode API transport contract (endpoints not deployed)', () => {
     const mock = reply({});
     const api = client();
     for (const body of [{ seenRevision: 0 }, { seenRevision: 2, recipientId: 'other' }]) {
-      await expect(api.readSafetyEpisodeInbox('token', 'notice', body)).rejects.toThrow();
+      await expect(api.readSafetyEpisodeInbox('token', recipientId, body)).rejects.toThrow();
     }
     expect(mock).not.toHaveBeenCalled();
   });
@@ -124,7 +125,7 @@ describe('episode API transport contract (endpoints not deployed)', () => {
     async (status) => {
       reply({ message: 'Denied' }, status);
       await expect(
-        client().readSafetyEpisodeInbox('token', 'notice', { seenRevision: 2 }),
+        client().readSafetyEpisodeInbox('token', recipientId, { seenRevision: 2 }),
       ).rejects.toMatchObject({ status });
     },
   );
@@ -139,7 +140,7 @@ describe('episode API transport contract (endpoints not deployed)', () => {
       () => api.listSafetyEpisodes('token', 'site', {}, options),
       () => api.getSafetyEpisode('token', 'site', 'episode', options),
       () => api.listSafetyEpisodeInbox('token', {}, options),
-      () => api.readSafetyEpisodeInbox('token', 'notice', { seenRevision: 1 }, options),
+      () => api.readSafetyEpisodeInbox('token', recipientId, { seenRevision: 1 }, options),
     ])
       await expect(run()).rejects.toBeInstanceOf(ApiError);
     expect(mock).not.toHaveBeenCalled();
