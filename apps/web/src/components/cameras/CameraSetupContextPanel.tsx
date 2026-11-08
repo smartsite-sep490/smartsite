@@ -31,8 +31,22 @@ const en = {
   'cameraSetup.revisionLabel': 'Saved config version',
   'cameraSetup.savedConfigVersionStatus':
     'Saved config version v{{version}}; worker application status unavailable.',
+  'cameraSetup.savedMetadataOnlyActiveHint':
+    'Saved status is Enabled in configuration only (not worker-applied or ready). Open Regions to review reference-frame status or Manage for source details.',
+  'cameraSetup.savedMetadataOnlyInactiveHint':
+    'Saved status is Disabled in configuration only. Open Manage to review source details or enable the camera before checking region reference status.',
+  'cameraSetup.savedMetadataOnlyReadOnlyActiveHint':
+    'Saved status is Enabled in configuration only (not worker-applied or ready). Check the camera status summary when available for worker receipts and reference-frame validity.',
+  'cameraSetup.savedMetadataOnlyReadOnlyInactiveHint':
+    'Saved status is Disabled in configuration only. Check the camera status summary when available for worker receipts; camera activation is a Site Manager action.',
+  'cameraSetup.revisionDistinctionDisclosure':
+    'Catalog status (Enabled/Disabled) and vN reflect saved configuration only, not worker application or live video. Check the selected camera status summary for worker receipts and Regions for reference-frame status.',
+  'cameraSetup.revisionDistinctionReadOnlyDisclosure':
+    'Catalog status (Enabled/Disabled) and vN reflect saved configuration only, not worker application or live video. Check the selected camera status summary for worker receipts and reference-frame validity.',
   'cameraSetup.sourceIdDisclosure':
     'Source identifier is viewed in Manage; registration does not verify source status or connection.',
+  'cameraSetup.sourceIdReadOnlyDisclosure':
+    'Source identifier and camera settings are managed by the assigned Site Manager; registration does not verify source status or connection.',
   'cameraSetup.metadataDisclosureLabel': 'Configuration & revision details',
   'cameraSetup.selectedHeading': 'Selected camera',
   'cameraSetup.selectedActiveNext':
@@ -68,8 +82,22 @@ const vi: Record<keyof typeof en, string> = {
   'cameraSetup.revisionLabel': 'Phiên bản cấu hình đã lưu',
   'cameraSetup.savedConfigVersionStatus':
     'Phiên bản cấu hình đã lưu v{{version}}; chưa có trạng thái áp dụng của worker.',
+  'cameraSetup.savedMetadataOnlyActiveHint':
+    'Trạng thái đã lưu chỉ cho biết Đang bật trong cấu hình (chưa xác nhận worker đã áp dụng hay sẵn sàng). Mở Vùng quan sát để xem trạng thái ảnh tham chiếu hoặc Quản lý để xem chi tiết nguồn.',
+  'cameraSetup.savedMetadataOnlyInactiveHint':
+    'Trạng thái đã lưu chỉ cho biết Đang tắt trong cấu hình. Mở Quản lý để xem chi tiết nguồn hoặc bật camera trước khi kiểm tra trạng thái ảnh tham chiếu vùng quan sát.',
+  'cameraSetup.savedMetadataOnlyReadOnlyActiveHint':
+    'Trạng thái đã lưu chỉ cho biết Đang bật trong cấu hình (chưa xác nhận worker đã áp dụng hay sẵn sàng). Xem tóm tắt trạng thái camera khi khả dụng để kiểm tra biên nhận worker và độ hợp lệ của khung tham chiếu.',
+  'cameraSetup.savedMetadataOnlyReadOnlyInactiveHint':
+    'Trạng thái đã lưu chỉ cho biết Đang tắt trong cấu hình. Xem tóm tắt trạng thái camera khi khả dụng để kiểm tra biên nhận worker; việc bật camera thuộc quyền Quản lý công trường.',
+  'cameraSetup.revisionDistinctionDisclosure':
+    'Trạng thái danh mục (Đang bật/Đang tắt) và vN chỉ phản ánh cấu hình đã lưu, không đồng nghĩa worker đã áp dụng hay có video trực tiếp. Xem tóm tắt trạng thái ở camera đang chọn để kiểm tra biên nhận worker và mở Vùng quan sát để xem trạng thái ảnh tham chiếu.',
+  'cameraSetup.revisionDistinctionReadOnlyDisclosure':
+    'Trạng thái danh mục (Đang bật/Đang tắt) và vN chỉ phản ánh cấu hình đã lưu, không đồng nghĩa worker đã áp dụng hay có video trực tiếp. Xem tóm tắt trạng thái ở camera đang chọn để kiểm tra biên nhận worker và độ hợp lệ của khung tham chiếu.',
   'cameraSetup.sourceIdDisclosure':
     'Mã định danh nguồn được xem trong Quản lý; đăng ký không xác nhận trạng thái nguồn hay kết nối.',
+  'cameraSetup.sourceIdReadOnlyDisclosure':
+    'Mã định danh nguồn và cài đặt camera do Quản lý công trường được phân công quản lý; đăng ký không xác nhận trạng thái nguồn hay kết nối.',
   'cameraSetup.metadataDisclosureLabel': 'Chi tiết cấu hình & phiên bản',
   'cameraSetup.selectedHeading': 'Camera đang chọn',
   'cameraSetup.selectedActiveNext':
@@ -216,15 +244,19 @@ export function CameraSetupContextBar({
             </span>
           </summary>
           <div className="mt-2 min-w-0 space-y-1.5 rounded-lg border border-slate-200/90 bg-white px-3.5 py-2.5 text-xs leading-5 text-slate-600">
-            {selectedCamera && !statusContext && (
-              <p className="break-words [overflow-wrap:anywhere]">
-                {t('cameraSetup.savedConfigVersionStatus', {
-                  version: selectedCamera.configurationVersion,
-                })}
-              </p>
-            )}
             <p className="break-words [overflow-wrap:anywhere]">
-              {t('cameraSetup.sourceIdDisclosure')}
+              {t(
+                canManageCameras
+                  ? 'cameraSetup.revisionDistinctionDisclosure'
+                  : 'cameraSetup.revisionDistinctionReadOnlyDisclosure',
+              )}
+            </p>
+            <p className="break-words [overflow-wrap:anywhere]">
+              {t(
+                canManageCameras
+                  ? 'cameraSetup.sourceIdDisclosure'
+                  : 'cameraSetup.sourceIdReadOnlyDisclosure',
+              )}
             </p>
             {canManageCameras && !canOpenMonitoring && (
               <p className="break-words [overflow-wrap:anywhere]">
@@ -301,8 +333,31 @@ export function CameraSetupContextBar({
             )}
           </div>
 
-          {statusContext && (
+          {statusContext ? (
             <CameraApplicationStatusSummary camera={selectedCamera} context={statusContext} />
+          ) : (
+            <div
+              data-testid="camera-saved-config-summary"
+              data-application-state="SAVED_METADATA_ONLY"
+              className="mt-2 min-w-0 space-y-1 rounded-lg border border-slate-200/80 bg-slate-50/80 px-3 py-2 text-xs text-slate-600"
+            >
+              <p className="min-w-0 break-words [overflow-wrap:anywhere] font-medium text-slate-800">
+                {t('cameraSetup.savedConfigVersionStatus', {
+                  version: selectedCamera.configurationVersion,
+                })}
+              </p>
+              <p className="min-w-0 break-words [overflow-wrap:anywhere] text-slate-600">
+                {t(
+                  canManageCameras
+                    ? isSelectedActive
+                      ? 'cameraSetup.savedMetadataOnlyActiveHint'
+                      : 'cameraSetup.savedMetadataOnlyInactiveHint'
+                    : isSelectedActive
+                      ? 'cameraSetup.savedMetadataOnlyReadOnlyActiveHint'
+                      : 'cameraSetup.savedMetadataOnlyReadOnlyInactiveHint',
+                )}
+              </p>
+            </div>
           )}
         </div>
       )}
