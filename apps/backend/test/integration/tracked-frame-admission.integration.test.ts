@@ -2,6 +2,14 @@ import 'reflect-metadata';
 import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
 import { test } from 'node:test';
+import { Test } from '@nestjs/testing';
+import { ConfigService } from '@nestjs/config';
+import { DataSource } from 'typeorm';
+import { ServiceAuthGuard } from '../../src/modules/auth/service-auth.guard.js';
+import {
+  TrackedFrameResultController,
+  TrackedRawPartController,
+} from '../../src/integrations/ai/tracked-frame-result.controller.js';
 import { createIsolatedTestDatabase } from '../support/isolated-test-database.js';
 import { seedTrackedFrameFixture } from '../support/tracked-frame-fixture.js';
 import { TrackedSubjectStorage1795046400003 } from '../../src/database/migrations/1795046400003-TrackedSubjectStorage.js';
@@ -223,6 +231,23 @@ test('unregistered frame admission atomically seals technical heads and the supp
           unauthorized,
         );
         const recovered = make(f.cameraId, noBusinessFindings);
+        assert.equal(
+          await recovered.admission.readSealed(
+            db,
+            key(f, first.framePartition.frameId),
+            f.generation.secret,
+          ),
+          null,
+        );
+        assert.equal(
+          (
+            await db.query(
+              'SELECT tracking_frame_state FROM ai_observation_event WHERE event_id=$1',
+              [first.eventId],
+            )
+          )[0].tracking_frame_state,
+          'PENDING_PARTS',
+        );
         const scope = {
           cameraId: f.cameraId,
           generationId: f.generation.workerGenerationId,
@@ -243,6 +268,22 @@ test('unregistered frame admission atomically seals technical heads and the supp
           { frameId: next.framePartition.frameId, kind: 'SEALED' },
         ]);
         assert.deepEqual(await recovered.admission.recoverCurrent(db, f.cameraId, 1), []);
+        const nextKey = key(f, next.framePartition.frameId);
+        const result = await recovered.admission.readSealed(db, nextKey, f.generation.secret);
+        assert.equal(result?.kind, 'ADMITTED_TRACKED_FRAME');
+        assert.equal(result?.sequenceNumber, '1');
+        assert.deepEqual(result?.subjects, [
+          { segmentId: segment, eventId: next.eventId, personObservationIndex: 0 },
+        ]);
+        assert.equal(await recovered.admission.readSealed(db, nextKey, 'a'.repeat(43)), null);
+        assert.equal(
+          await recovered.admission.readSealed(
+            db,
+            { ...nextKey, streamSessionId: randomUUID() },
+            f.generation.secret,
+          ),
+          null,
+        );
         const fork = person(f, '2', segment, first.eventId);
         await service.store.store(db, fork, f.context, f.generation.secret);
         const rejected = await service.admission.process(
@@ -254,6 +295,7 @@ test('unregistered frame admission atomically seals technical heads and the supp
         const pending = person(f, '3', segment, next.eventId);
         await service.store.store(db, pending, f.context, f.generation.secret);
         await revokeCameraWorkerGeneration(db, f.cameraId, [f.cameraId], scope.generationId);
+        assert.equal(await recovered.admission.readSealed(db, nextKey, f.generation.secret), null);
         await assert.rejects(recovered.admission.recoverPending(db, scope, 1), unauthorized);
         assert.deepEqual(await recovered.admission.recoverCurrent(db, f.cameraId, 1), []);
         assert.equal(
@@ -273,6 +315,112 @@ test('unregistered frame admission atomically seals technical heads and the supp
           )[0].head_event_id,
           next.eventId,
         );
+      },
+    );
+    await t.test(
+      'worker HTTP requires both credentials and separates raw storage from the seal',
+      async () => {
+        const f = await seedTrackedFrameFixture(db);
+        const segment = randomUUID();
+        const event = person(f, '0', segment);
+        const service = make(f.cameraId, noBusinessFindings);
+        const token = 'synthetic-tracked-seal-service-token';
+        const module = await Test.createTestingModule({
+          controllers: [TrackedFrameResultController, TrackedRawPartController],
+          providers: [
+            ServiceAuthGuard,
+            {
+              provide: ConfigService,
+              useValue: new ConfigService({ SMARTSITE_AI_SERVICE_TOKEN: token }),
+            },
+            { provide: DataSource, useValue: db },
+            { provide: TrackedFrameAdmission, useValue: service.admission },
+            { provide: TrackedFramePrototypeStore, useValue: service.store },
+          ],
+        }).compile();
+        const app = module.createNestApplication({ logger: false });
+        try {
+          await app.listen(0, '127.0.0.1');
+          const frameKey = key(f, event.framePartition.frameId);
+          const base = await app.getUrl();
+          const url = (session: string) =>
+            `${base}/integrations/ai/cameras/${frameKey.cameraId}/generations/${frameKey.generationId}/sessions/${session}/tracked-frames/${frameKey.frameId}/result`;
+          const headers = {
+            Authorization: `Bearer ${token}`,
+            'x-worker-generation-secret': f.generation.secret,
+          };
+          const envelope = { schemaVersion: '1.0.0', context: f.context, event };
+          const send = (
+            withHeaders: Record<string, string> = headers,
+            payload: unknown = envelope,
+          ) =>
+            fetch(`${base}/integrations/ai/tracked-parts`, {
+              method: 'POST',
+              headers: { ...withHeaders, 'Content-Type': 'application/json' },
+              body: JSON.stringify(payload),
+              signal: AbortSignal.timeout(3000),
+            });
+          assert.equal(
+            (await send({ 'x-worker-generation-secret': f.generation.secret })).status,
+            401,
+          );
+          assert.equal((await send({ Authorization: headers.Authorization })).status, 401);
+          assert.equal((await send(headers, { ...envelope, extra: true })).status, 400);
+          const stored = await send();
+          assert.equal(stored.status, 200);
+          assert.equal(stored.headers.get('cache-control'), 'no-store');
+          const receipt = await stored.json();
+          assert.equal(receipt.kind, 'RAW_STORED');
+          assert.equal(receipt.eventId, event.eventId);
+          assert.match(receipt.payloadHash, /^[a-f0-9]{64}$/);
+          assert.match(receipt.bindingHash, /^[a-f0-9]{64}$/);
+          assert.deepEqual(await (await send()).json(), receipt);
+          assert.equal(
+            (
+              await db.query(
+                'SELECT COUNT(*)::int AS n FROM ai_subject_segment WHERE segment_id=$1',
+                [segment],
+              )
+            )[0].n,
+            0,
+          );
+          const read = (
+            withHeaders: Record<string, string> = headers,
+            session = frameKey.streamSessionId,
+          ) => fetch(url(session), { headers: withHeaders, signal: AbortSignal.timeout(3000) });
+          assert.equal(
+            (await read({ 'x-worker-generation-secret': f.generation.secret })).status,
+            401,
+          );
+          assert.equal((await read({ Authorization: headers.Authorization })).status, 401);
+          const pending = await read();
+          assert.equal(pending.status, 404);
+          assert.equal(pending.headers.get('cache-control'), 'no-store');
+          const [row] = await db.query(
+            'SELECT tracking_frame_state AS state FROM ai_observation_event WHERE event_id=$1',
+            [event.eventId],
+          );
+          assert.equal(row.state, 'PENDING_PARTS');
+          assert.equal(
+            (await service.admission.process(db, frameKey, f.generation.secret)).kind,
+            'SEALED',
+          );
+          const sealed = await read();
+          assert.equal(sealed.status, 200);
+          assert.equal(sealed.headers.get('cache-control'), 'no-store');
+          assert.deepEqual((await sealed.json()).subjects, [
+            { segmentId: segment, eventId: event.eventId, personObservationIndex: 0 },
+          ]);
+          assert.equal(
+            (await read({ ...headers, 'x-worker-generation-secret': 'a'.repeat(43) })).status,
+            404,
+          );
+          assert.equal((await read(headers, randomUUID())).status, 404);
+          await revokeCameraWorkerGeneration(db, f.cameraId, [f.cameraId], frameKey.generationId);
+          assert.equal((await read()).status, 404);
+        } finally {
+          await app.close();
+        }
       },
     );
     await t.test(

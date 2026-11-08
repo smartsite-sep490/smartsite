@@ -103,6 +103,22 @@ export class TrackedFrameAdmission {
     return source.transaction((manager) => this.processInTransaction(manager, key, { secret }));
   }
 
+  /** Read the persisted seal for a live producer without advancing frame state. */
+  async readSealed(source: DataSource, key: TrackedFrameKey, secret: string) {
+    if (!Object.values(key).every((value) => uuid.test(value)))
+      throw new Error('Invalid stored frame key');
+    try {
+      const outcome = await source.transaction((manager) =>
+        this.processInTransaction(manager, key, { secret, readOnly: true }),
+      );
+      return outcome.kind === 'SEALED' ? outcome.result : null;
+    } catch (error) {
+      // Keep missing and unauthorized frames indistinguishable to callers.
+      if (error instanceof PublicHttpException && error.getStatus() === 401) return null;
+      throw error;
+    }
+  }
+
   /** Resolve the active tracked source from durable state, for a server-selected camera. */
   async recoverCurrent(source: DataSource, cameraId: string, limit: number) {
     if (!uuid.test(cameraId) || !Number.isSafeInteger(limit) || limit < 1)
@@ -149,12 +165,16 @@ export class TrackedFrameAdmission {
   private async processInTransaction(
     manager: EntityManager,
     key: TrackedFrameKey,
-    authentication: { secret: string } | 'stored',
+    authentication: { secret: string; readOnly?: true } | 'stored',
   ) {
     const cameras = await manager.query('SELECT id FROM camera WHERE id=$1 FOR UPDATE', [
       key.cameraId,
     ]);
-    if (!cameras.length) unavailable();
+    const readOnly = authentication !== 'stored' && authentication.readOnly === true;
+    if (!cameras.length) {
+      if (readOnly) return { kind: 'NOT_FOUND' as const };
+      unavailable();
+    }
     const sourceKey = [key.cameraId, key.generationId, key.streamSessionId];
     const [header] = await manager.query<Array<{ sequence: string }>>(
       `SELECT tracking_source_sequence::text AS sequence FROM ai_observation_event
@@ -200,6 +220,13 @@ export class TrackedFrameAdmission {
       parts.push(bound);
     }
     const coordinator = rows.find((row) => row.partIndex === 0);
+    if (
+      readOnly &&
+      (coordinator?.frameState !== 'SEALED' ||
+        parts.some((part) => part.classification !== 'LIVE') ||
+        rows.some((row) => row.admissionContext?.classification !== 'LIVE'))
+    )
+      return { kind: 'NOT_FOUND' as const };
     if (coordinator?.frameState === 'SEALED') {
       if (coordinator.frameResult?.kind !== 'ADMITTED_TRACKED_FRAME') unavailable();
       return { kind: 'SEALED' as const, result: coordinator.frameResult };
