@@ -4,6 +4,16 @@ import path from 'node:path';
 import ts from 'typescript';
 import en from './locales/en.json';
 import { SITE_GATES } from '@smartsite/contracts/gates';
+import { hasRegisteredFeatureKey } from './feature-catalog-registry';
+import '../components/ppe/camera-region-reference-catalog';
+import '../components/ppe/region-polygon-editor-catalog';
+import '../components/ppe/PpeDialog';
+import '../components/safety-episodes/safety-episode-triage-catalog';
+import '../components/safety-episodes/safety-episode-inbox-catalog';
+import '../components/safety-episodes/tracked-observation-identity-catalog';
+import '../components/safety-episodes/tracked-observation-history-catalog';
+import '../components/safety-episodes/tracked-evidence-viewer-catalog';
+import '../components/safety-episodes/tracked-episode-workspace-catalog';
 
 it('includes the shared gate catalog in the UI translations', () => {
   for (const gate of SITE_GATES) expect(`gates.${gate.id}` in en, gate.id).toBe(true);
@@ -38,6 +48,8 @@ it('scans every production UI source for missing keys and untranslated visible l
   const failures: string[] = [];
   // Language names are intentionally shown in their own language in the selector.
   const brands = new Set([
+    // The printed keyboard key is the same in both locales.
+    'Esc',
     'Smart',
     'Site',
     'SmartSite',
@@ -131,7 +143,12 @@ it('scans every production UI source for missing keys and untranslated visible l
       }
       function checkTranslationKey(node: ts.Expression): void {
         if (ts.isStringLiteral(node)) {
-          if (!(node.text in en) && !(`${node.text}_other` in en))
+          if (
+            !(node.text in en) &&
+            !(`${node.text}_other` in en) &&
+            !hasRegisteredFeatureKey(node.text) &&
+            !hasRegisteredFeatureKey(`${node.text}_other`)
+          )
             report(node, `missing key ${node.text}`);
         } else if (ts.isConditionalExpression(node)) {
           checkTranslationKey(node.whenTrue);
