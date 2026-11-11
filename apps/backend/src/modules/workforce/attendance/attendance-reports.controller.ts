@@ -1,4 +1,4 @@
-import { Controller, Get, Param, Query, Req, UseGuards } from '@nestjs/common';
+import { Controller, Get, Header, Param, Query, Req, UseGuards } from '@nestjs/common';
 import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
 import { UserAuthGuard } from '../../auth/user-auth.guard.js';
 import type { AuthenticatedRequest } from '../../auth/auth.service.js';
@@ -11,6 +11,15 @@ import { AttendanceReportDto, AttendanceWorkersDto } from './dto/attendance-repo
 @Controller('sites/:siteId')
 export class AttendanceReportsController {
   constructor(private readonly reports: AttendanceReportsService) {}
+  @Get('attendance-export')
+  @Header('Cache-Control', 'private, no-store')
+  export(
+    @Req() req: AuthenticatedRequest,
+    @Param('siteId') siteId: string,
+    @Query() query: AttendanceReportDto,
+  ) {
+    return this.reports.export(req.user!, siteId, query);
+  }
   @Get('attendance-summary') summary(
     @Req() req: AuthenticatedRequest,
     @Param('siteId') siteId: string,

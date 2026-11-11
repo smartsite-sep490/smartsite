@@ -4,6 +4,7 @@ import type {
   AttendanceSummaryResponse,
   AttendanceWorkersResponse,
   AttendanceWorkerReport,
+  AttendanceExportResponse,
 } from '@smartsite/contracts';
 import { command, invalid, missing, page, uuid } from '../../../common/configuration/commands.js';
 import { PublicHttpException } from '../../../common/http/public-http-exception.js';
@@ -81,6 +82,7 @@ export class AttendanceReportsService {
     actor: WorkforceActor,
     siteId: string,
     value: AttendanceReportDto,
+    exportOnly = false,
   ): Promise<WorkerEntity[]> {
     const user = await manager
       .getRepository(UserEntity)
@@ -93,7 +95,8 @@ export class AttendanceReportsService {
       (r) =>
         (r.role === UserRole.ADMIN && r.siteId === null) ||
         (r.siteId === siteId &&
-          [UserRole.SITE_MANAGER, UserRole.SECURITY_OFFICER].includes(r.role)),
+          (r.role === UserRole.SITE_MANAGER ||
+            (!exportOnly && r.role === UserRole.SECURITY_OFFICER))),
     );
     const contractors: string[] = [];
     if (roles.some((r) => r.siteId === siteId && r.role === UserRole.CONTRACTOR_REPRESENTATIVE)) {
@@ -104,11 +107,12 @@ export class AttendanceReportsService {
         if (await hasActiveContractorParticipation(manager, a.contractorId, siteId))
           contractors.push(a.contractorId);
     }
-    const self = roles.some((r) => r.siteId === siteId && r.role === UserRole.WORKER)
-      ? await manager
-          .getRepository(WorkerEntity)
-          .findOneBy({ userId: actor.id, siteId, isActive: true })
-      : null;
+    const self =
+      !exportOnly && roles.some((r) => r.siteId === siteId && r.role === UserRole.WORKER)
+        ? await manager
+            .getRepository(WorkerEntity)
+            .findOneBy({ userId: actor.id, siteId, isActive: true })
+        : null;
     const selfAllowed =
       self?.contractorId &&
       (await hasActiveContractorParticipation(manager, self.contractorId, siteId));
@@ -161,9 +165,10 @@ export class AttendanceReportsService {
     now: Date,
     includeDaily: boolean,
     compare: boolean,
+    exportOnly = false,
   ) {
     const range = this.range(value, now);
-    const workers = await this.workers(manager, actor, siteId, value);
+    const workers = await this.workers(manager, actor, siteId, value, exportOnly);
     const metadata = {
       siteId,
       fromDate: range.fromDate,
@@ -215,13 +220,11 @@ export class AttendanceReportsService {
           .findBy({ siteId, dayId: In(days.map((d) => d.id)) })
       : [];
     const leaves = schedules.length
-      ? await manager
-          .getRepository(AbsenceRequestEntity)
-          .findBy({
-            siteId,
-            workerScheduleId: In(schedules.map((s) => s.id)),
-            status: AbsenceRequestStatus.APPROVED,
-          })
+      ? await manager.getRepository(AbsenceRequestEntity).findBy({
+          siteId,
+          workerScheduleId: In(schedules.map((s) => s.id)),
+          status: AbsenceRequestStatus.APPROVED,
+        })
       : [];
     const dates = reportDates(value.fromDate, value.toDate);
     const selectedSchedules = value.shiftId
@@ -356,6 +359,31 @@ export class AttendanceReportsService {
         total: rows.length,
         ...pagination,
       };
+    });
+  }
+
+  async export(
+    actor: WorkforceActor,
+    siteValue: string,
+    input: AttendanceReportDto,
+    now = new Date(),
+  ): Promise<AttendanceExportResponse> {
+    const siteId = uuid(siteValue).toLowerCase(),
+      value = command(AttendanceReportDto, input);
+    return this.source.transaction('REPEATABLE READ', async (manager) => {
+      const { metadata, rows } = await this.read(
+        manager,
+        actor,
+        siteId,
+        value,
+        now,
+        false,
+        false,
+        true,
+      );
+      const site = await manager.getRepository(SiteEntity).findOneBy({ id: siteId });
+      if (!site) missing();
+      return { ...metadata, siteName: site.name, items: rows, total: rows.length };
     });
   }
 }

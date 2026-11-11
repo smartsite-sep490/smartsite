@@ -11,9 +11,10 @@ import { WorkerAttendanceSummary } from './WorkerAttendanceSummary';
 import { attendanceDate, attendanceLabel } from './attendance-display';
 import { AttendanceSummaryCards } from './AttendanceSummaryCards';
 import { AttendanceWorkersTable } from './AttendanceWorkersTable';
+import { AttendanceExport } from './AttendanceExport';
 import { WorkerAttendanceDetailPanel } from './WorkerAttendanceDetailPanel';
 import { SmartDatePicker, SmartTimePicker, Tabs } from '../../ui';
-import { IconSearch, IconRefresh, IconExport, IconCalendar, IconClock } from '../../icons';
+import { IconSearch, IconRefresh, IconCalendar, IconClock } from '../../icons';
 import type { AttendanceReportStatus } from '@smartsite/contracts';
 
 function localDateTime(value: string | null | undefined) {
@@ -114,6 +115,7 @@ export function AttendanceView({
   sessionScope,
   isWorker,
   showRequests = true,
+  canExport = false,
 }: {
   apiUrl: string;
   token: string;
@@ -121,6 +123,7 @@ export function AttendanceView({
   sessionScope: string;
   isWorker?: boolean;
   showRequests?: boolean;
+  canExport?: boolean;
 }) {
   useTranslation();
 
@@ -164,7 +167,6 @@ export function AttendanceView({
     return 'timesheet';
   });
   const activeSubTab = showRequests ? selectedSubTab : 'timesheet';
-  const [isExporting, setIsExporting] = useState(false);
 
   const handleSelectSubTab = (tab: 'timesheet' | 'requests') => {
     setActiveSubTab(tab);
@@ -252,20 +254,20 @@ export function AttendanceView({
   ];
 
   const hasReportsApi = typeof client.attendanceSummary === 'function';
+  const reportFilters = {
+    fromDate,
+    toDate,
+    timezone,
+    ...(contractorId ? { contractorId } : {}),
+    ...(shiftId ? { shiftId } : {}),
+    ...(debouncedSearch ? { search: debouncedSearch } : {}),
+    ...(statusFilter ? { todayStatus: statusFilter } : {}),
+  };
 
   const summary = useQuery({
     queryKey: summaryQueryKey,
     enabled: hasReportsApi,
-    queryFn: () =>
-      client.attendanceSummary(token, siteId, {
-        fromDate,
-        toDate,
-        timezone,
-        ...(contractorId ? { contractorId } : {}),
-        ...(shiftId ? { shiftId } : {}),
-        ...(debouncedSearch ? { search: debouncedSearch } : {}),
-        ...(statusFilter ? { todayStatus: statusFilter } : {}),
-      }),
+    queryFn: () => client.attendanceSummary(token, siteId, reportFilters),
     refetchInterval: 30000,
   });
 
@@ -291,13 +293,7 @@ export function AttendanceView({
     enabled: hasReportsApi,
     queryFn: () =>
       client.attendanceWorkers(token, siteId, {
-        fromDate,
-        toDate,
-        timezone,
-        ...(contractorId ? { contractorId } : {}),
-        ...(shiftId ? { shiftId } : {}),
-        ...(debouncedSearch ? { search: debouncedSearch } : {}),
-        ...(statusFilter ? { todayStatus: statusFilter } : {}),
+        ...reportFilters,
         offset,
         limit: pageSize,
       }),
@@ -322,75 +318,6 @@ export function AttendanceView({
       }),
       cache.invalidateQueries({ queryKey: ['notifications'] }),
     ]);
-
-  // Export CSV handler: exports all pages within current scope
-  const handleExportCsv = async () => {
-    try {
-      setIsExporting(true);
-      const allWorkers: Array<import('@smartsite/contracts').AttendanceWorkerReport> = [];
-      let currentOffset = 0;
-      const fetchLimit = 100;
-      let totalToFetch = 1;
-
-      while (currentOffset < totalToFetch) {
-        const pageRes = await client.attendanceWorkers(token, siteId, {
-          fromDate,
-          toDate,
-          timezone,
-          ...(contractorId ? { contractorId } : {}),
-          ...(shiftId ? { shiftId } : {}),
-          ...(debouncedSearch ? { search: debouncedSearch } : {}),
-          ...(statusFilter ? { todayStatus: statusFilter } : {}),
-          offset: currentOffset,
-          limit: fetchLimit,
-        });
-        totalToFetch = pageRes.total;
-        allWorkers.push(...pageRes.items);
-        if (!pageRes.items.length) break;
-        currentOffset += pageRes.items.length;
-      }
-
-      // Generate CSV content
-      const headers = [
-        tr('attendance_export.worker_code'),
-        tr('attendance_export.worker_name'),
-        tr('attendance_export.today_status'),
-        tr('attendance_export.total_minutes'),
-        tr('attendance_export.regular_minutes'),
-        tr('attendance_export.overtime_minutes'),
-        tr('attendance_export.provisional_minutes'),
-        tr('attendance_export.days_present'),
-        tr('attendance_export.days_required'),
-        tr('attendance_export.attendance_rate'),
-      ];
-
-      const rows = allWorkers.map((w) => [
-        `"${w.workerCode.replace(/"/g, '""')}"`,
-        `"${w.workerName.replace(/"/g, '""')}"`,
-        `"${localizedLabel(w.todayStatus)}"`,
-        w.totalMinutes,
-        w.regularMinutes,
-        w.overtimeMinutes,
-        w.provisionalMinutes,
-        w.presentDays,
-        w.requiredDays,
-        w.attendanceRate !== null ? w.attendanceRate : '',
-      ]);
-
-      const csvContent = [headers.join(','), ...rows.map((r) => r.join(','))].join('\n');
-      const blob = new Blob(['\uFEFF', csvContent], { type: 'text/csv;charset=utf-8;' });
-      const url = URL.createObjectURL(blob);
-      const link = document.createElement('a');
-      link.setAttribute('href', url);
-      link.setAttribute('download', `attendance-${siteId}-${fromDate}-${toDate}.csv`);
-      document.body.appendChild(link);
-      link.click();
-      document.body.removeChild(link);
-      URL.revokeObjectURL(url);
-    } finally {
-      setIsExporting(false);
-    }
-  };
 
   // Legacy correction overview query for review workflow
   const overviewKey = ['attendance', apiUrl, sessionScope, siteId];
@@ -1105,19 +1032,19 @@ export function AttendanceView({
                   />
                 </div>
 
-                {/* Export Button */}
-                <button
-                  onClick={handleExportCsv}
-                  disabled={isExporting}
-                  className="flex items-center gap-1.5 px-3.5 py-2 rounded-xl border border-slate-200 bg-white text-xs font-semibold text-slate-700 hover:bg-slate-50 transition-colors shadow-2xs disabled:opacity-50 cursor-pointer"
-                >
-                  <IconExport className="w-3.5 h-3.5 text-slate-500" />
-                  <span>
-                    {isExporting
-                      ? tr('attendance_report.exporting')
-                      : tr('attendance_report.export')}
-                  </span>
-                </button>
+                {canExport && activeSubTab === 'timesheet' && (
+                  <AttendanceExport
+                    key={JSON.stringify([apiUrl, sessionScope, siteId, token])}
+                    filters={reportFilters}
+                    shiftName={shiftsQuery.data?.items.find((shift) => shift.id === shiftId)?.name}
+                    disabled={
+                      !fromDate || !toDate || fromDate > toDate || search.trim() !== debouncedSearch
+                    }
+                    loadReport={(filters, signal) =>
+                      client.attendanceExport(token, siteId, filters, { signal })
+                    }
+                  />
+                )}
               </div>
             </div>
 

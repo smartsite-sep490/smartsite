@@ -1,9 +1,9 @@
 # Attendance reporting API (MF03/MF07)
 
-These two authenticated, read-only endpoints are additive. Existing attendance
+These authenticated, read-only endpoints are additive. Existing attendance
 routes remain supported; no table, migration or AI contract change is introduced.
 Canonical types: `contracts/src/attendance-reports-api.ts`. Shared client:
-`SmartSiteManagementClient.attendanceSummary` and `attendanceWorkers`.
+`SmartSiteManagementClient.attendanceSummary`, `attendanceWorkers` and `attendanceExport`.
 
 ## Requests
 
@@ -36,6 +36,59 @@ Missing/revoked permissions produce 403; unavailable permission data fails the
 request, never a successful empty report. The report roster includes active
 Workers only. Valid empty scopes return zero totals/items. Totals and pagination
 use one repeatable-read database snapshot. Ordering is Worker display name then ID.
+
+## Export snapshot
+
+`GET /api/v1/sites/:siteId/attendance-export` accepts the same date range and
+filters as `AttendanceReportQuery`. The Backend returns every authorized matching
+Worker in one `REPEATABLE READ` transaction, with the Site name and report metadata
+from that snapshot. `offset`, `limit` and `includeDaily` are rejected with 400.
+The response carries `Cache-Control: private, no-store`.
+
+The shared `AttendanceExportResponse` is
+`Omit<AttendanceWorkersResponse, 'offset' | 'limit'> & { siteName: string }`.
+It contains `siteId`, `siteName`, `fromDate`, `toDate`, `timezone`, `today`, `asOf`,
+all matching `items` and their `total`. Each row uses the existing report
+calculations and omits the optional `daily` array. Empty authorized results
+contain an empty `items` array and `total: 0`.
+
+Export requires a current persisted active account and one of these roles.
+
+- Global Admin can export the requested Site.
+- Site Manager can export their assigned Site.
+- Contractor Representative can export active Workers belonging to their assigned
+  Contractors at that Site, with current active Contractor participation.
+
+Worker, Security Officer and Safety Officer alone receive 403 from the export
+endpoint. For accounts with multiple roles, only the permitted export roles
+contribute scope. A Representative who also has a Worker role cannot include
+their own Worker record from another Contractor through that personal grant.
+Ordinary personal report reads retain their existing Worker scope. Export checks
+account, role, assignment and participation data within the report transaction.
+
+Web offers CSV, XLSX and direct PDF downloads from this endpoint. Filters and
+interface language are captured when export starts; changing Site or session
+cancels the download. Empty results and failures are shown without downloading
+a file. XLSX uses numeric elapsed durations (`[h]:mm`) and percentages, frozen
+headers and an autofilter. PDF embeds the licensed Noto Sans fonts for Vietnamese,
+repeats table headings and includes page numbers. Both formats are loaded lazily.
+Files include Site, dates, timezone, filters and snapshot/export timestamps.
+Mobile retains Contractor CSV sharing through this endpoint and removes personal
+Worker CSV sharing; personal attendance viewing is unchanged.
+
+```ts
+const snapshot = await client.attendanceExport(
+  token,
+  siteId,
+  {
+    fromDate: '2026-10-12',
+    toDate: '2026-10-18',
+    timezone: 'Asia/Ho_Chi_Minh',
+    search: 'Worker',
+  },
+  { signal: abortController.signal },
+);
+```
 
 ## Examples and field semantics
 

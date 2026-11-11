@@ -557,6 +557,12 @@ export function AccessControlView({ apiUrl }: AccessControlViewProps) {
               token={token}
               siteId={siteId}
               sessionScope={sessionScope}
+              canExport={
+                isGlobalAdmin ||
+                siteRoles.some((role) =>
+                  ['SITE_MANAGER', 'CONTRACTOR_REPRESENTATIVE'].includes(role),
+                )
+              }
               showRequests={
                 !siteRoles.includes('SITE_MANAGER') ||
                 siteRoles.includes('CONTRACTOR_REPRESENTATIVE')

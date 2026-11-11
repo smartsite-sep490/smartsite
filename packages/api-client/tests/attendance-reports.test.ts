@@ -41,3 +41,45 @@ it('attendance report queries encode filters/booleans, omit undefined fields and
     expect(init.headers).toMatchObject({ Authorization: 'Bearer synthetic-token' });
   }
 });
+
+it('exports all report filters with authentication and supports cancellation', async () => {
+  const controller = new AbortController();
+  const fetchMock = vi.fn(async (_url: string, init?: RequestInit) => {
+    expect(init?.headers).toMatchObject({ Authorization: 'Bearer synthetic-token' });
+    expect(init?.signal).toBeInstanceOf(AbortSignal);
+    return new Promise<Response>((_resolve, reject) => {
+      init!.signal!.addEventListener('abort', () => reject(init!.signal!.reason), { once: true });
+    });
+  });
+  vi.stubGlobal('fetch', fetchMock);
+  const client = new SmartSiteManagementClient('https://api.example.test');
+  const result = client.attendanceExport(
+    'synthetic-token',
+    'site/1',
+    {
+      fromDate: '2026-10-12',
+      toDate: '2026-10-18',
+      timezone: 'Asia/Ho_Chi_Minh',
+      search: 'Worker & 01',
+      contractorId: 'contractor/1',
+      workerId: 'worker/1',
+      shiftId: 'shift/1',
+      todayStatus: 'ABSENT',
+    },
+    { signal: controller.signal },
+  );
+  const url = new URL(fetchMock.mock.calls[0]![0]);
+  expect(url.pathname).toBe('/api/v1/sites/site%2F1/attendance-export');
+  expect(Object.fromEntries(url.searchParams)).toEqual({
+    fromDate: '2026-10-12',
+    toDate: '2026-10-18',
+    timezone: 'Asia/Ho_Chi_Minh',
+    search: 'Worker & 01',
+    contractorId: 'contractor/1',
+    workerId: 'worker/1',
+    shiftId: 'shift/1',
+    todayStatus: 'ABSENT',
+  });
+  controller.abort();
+  await expect(result).rejects.toMatchObject({ code: 'cancelled' });
+});

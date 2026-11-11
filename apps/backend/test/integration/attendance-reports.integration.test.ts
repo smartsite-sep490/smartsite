@@ -37,7 +37,11 @@ import { AuthTokenService } from '../../src/modules/auth/auth-token.service.js';
 import { hashPassword } from '../../src/modules/auth/password.js';
 import { HttpExceptionFilter } from '../../src/common/http/http-exception.filter.js';
 import { scheduledShiftWindow } from '../../src/modules/workforce/attendance/attendance-calculation.js';
-import type { AttendanceSummaryResponse, AttendanceWorkersResponse } from '@smartsite/contracts';
+import type {
+  AttendanceExportResponse,
+  AttendanceSummaryResponse,
+  AttendanceWorkersResponse,
+} from '@smartsite/contracts';
 
 test('attendance reports: real HTTP/auth, PostgreSQL totals, calendar data, search/filter pagination and scope revocation', async (t) => {
   t.mock.timers.enable({ apis: ['Date'], now: Date.parse('2026-10-14T11:00:00Z') });
@@ -355,6 +359,166 @@ test('attendance reports: real HTTP/auth, PostgreSQL totals, calendar data, sear
         .status,
       403,
     );
+    const exportUrl = `${url}/api/v1/sites/${siteId}/attendance-export?${suffix}`;
+    await t.test(
+      'export has its own persisted role boundary and excludes Worker self scope',
+      async () => {
+        assert.equal((await fetch(exportUrl)).status, 401);
+        const denied = (error: unknown) => (error as { getStatus(): number }).getStatus() === 403;
+        for (const role of [UserRole.WORKER, UserRole.SECURITY_OFFICER, UserRole.SAFETY_OFFICER]) {
+          await dataSource.getRepository(UserRoleAssignmentEntity).delete({ userId });
+          await dataSource.getRepository(UserRoleAssignmentEntity).save({
+            id: randomUUID(),
+            userId,
+            role,
+            siteId,
+          });
+          const session = await auth.login(userId, password);
+          assert.equal(
+            (
+              await fetch(exportUrl, {
+                headers: { Authorization: `Bearer ${session.accessToken}` },
+              })
+            ).status,
+            403,
+          );
+        }
+        await dataSource.getRepository(UserRoleAssignmentEntity).save({
+          id: randomUUID(),
+          userId,
+          siteId,
+          role: UserRole.SITE_MANAGER,
+        });
+        assert.equal((await service.export(actor(userId), siteId, query)).total, 3);
+        await assert.rejects(service.export(actor(userId), otherSite, query), denied);
+        await dataSource
+          .getRepository(UserRoleAssignmentEntity)
+          .delete({ userId, role: UserRole.SITE_MANAGER });
+        await assert.rejects(service.export(actor(userId), siteId, query), denied);
+        assert.equal((await service.export(actor(adminId), siteId, query)).total, 3);
+        await assert.rejects(service.export(actor(repId), otherSite, query), denied);
+        await assert.rejects(
+          service.export(actor(repId), siteId, { ...query, workerId: excluded.id }),
+          denied,
+        );
+        await assert.rejects(
+          service.export(actor(repId), siteId, { ...query, contractorId: otherContractor }),
+          denied,
+        );
+        await dataSource.getRepository(UserRoleAssignmentEntity).save({
+          id: randomUUID(),
+          userId: repId,
+          siteId,
+          role: UserRole.WORKER,
+        });
+        await dataSource.getRepository(WorkerEntity).update(excluded.id, { userId: repId });
+        assert.equal((await service.list(actor(repId), siteId, query)).total, 3);
+        assert.equal((await service.export(actor(repId), siteId, query)).total, 2);
+        await assert.rejects(
+          service.export(actor(repId), siteId, { ...query, contractorId: otherContractor }),
+          denied,
+        );
+        await dataSource.getRepository(UserRoleAssignmentEntity).save({
+          id: randomUUID(),
+          userId: repId,
+          siteId,
+          role: UserRole.SECURITY_OFFICER,
+        });
+        assert.equal((await service.export(actor(repId), siteId, query)).total, 2);
+        await dataSource
+          .getRepository(UserRoleAssignmentEntity)
+          .delete({ userId: repId, role: UserRole.SECURITY_OFFICER });
+        await dataSource.getRepository(WorkerEntity).update(excluded.id, { userId: null });
+        await dataSource
+          .getRepository(UserRoleAssignmentEntity)
+          .delete({ userId: repId, role: UserRole.WORKER });
+      },
+    );
+    await t.test(
+      'export returns every matching row without daily or pagination fields',
+      async () => {
+        await dataSource.getRepository(WorkerEntity).save(
+          Array.from({ length: 101 }, (_, index) => ({
+            id: randomUUID(),
+            siteId,
+            contractorId,
+            externalId: `EXPORT-${siteId}-${index}`,
+            displayName: `Export Synthetic Worker ${String(index).padStart(3, '0')}`,
+            isActive: true,
+          })),
+        );
+        const exported = await fetch(exportUrl, { headers });
+        assert.equal(exported.status, 200);
+        assert.match(exported.headers.get('cache-control') ?? '', /no-store/);
+        const body = (await exported.json()) as AttendanceExportResponse;
+        assert.equal(body.siteName, 'Synthetic reports Site');
+        assert.equal(body.total, 103);
+        assert.equal(body.items.length, 103);
+        assert.equal('offset' in body, false);
+        assert.equal('limit' in body, false);
+        assert.ok(body.items.every((row) => !('daily' in row)));
+        const existing = (
+          await service.list(actor(repId), siteId, { ...query, workerId: worker.id })
+        ).items[0];
+        assert.deepEqual(
+          body.items.find((row) => row.workerId === worker.id),
+          existing,
+        );
+        for (const extra of ['&offset=0', '&limit=100', '&includeDaily=true', '&asOf=2020-01-01'])
+          assert.equal((await fetch(exportUrl + extra, { headers })).status, 400);
+        assert.equal(
+          (await service.export(actor(repId), siteId, { ...query, search: 'Export Synthetic' }))
+            .total,
+          101,
+        );
+        assert.equal(
+          (await service.export(actor(repId), siteId, { ...query, todayStatus: 'ABSENT' })).total,
+          1,
+        );
+        assert.equal(
+          (await service.export(actor(repId), siteId, { ...query, shiftId: evening.id })).total,
+          0,
+        );
+      },
+    );
+    await t.test('export metadata and all rows share one PostgreSQL snapshot', async () => {
+      let transactions = 0;
+      const snapshotSource = {
+        transaction: (
+          isolation: 'REPEATABLE READ',
+          read: (manager: import('typeorm').EntityManager) => Promise<unknown>,
+        ) => {
+          transactions++;
+          assert.equal(isolation, 'REPEATABLE READ');
+          return dataSource.transaction(isolation, async (manager) => {
+            await manager.query('SELECT id FROM site WHERE id=$1', [siteId]);
+            await dataSource
+              .getRepository(SiteEntity)
+              .update(siteId, { name: 'Concurrent site update' });
+            await dataSource
+              .getRepository(WorkerEntity)
+              .update(second.id, { displayName: 'Concurrent worker update' });
+            return read(manager);
+          });
+        },
+      } as unknown as DataSource;
+      const snapshot = await new AttendanceReportsService(snapshotSource).export(
+        actor(repId),
+        siteId,
+        query,
+      );
+      assert.equal(transactions, 1);
+      assert.equal(snapshot.siteName, 'Synthetic reports Site');
+      assert.equal(
+        snapshot.items.find((row) => row.workerId === second.id)?.workerName,
+        'B Synthetic Worker',
+      );
+      assert.equal(snapshot.items.length, 103);
+      await dataSource.getRepository(SiteEntity).update(siteId, { name: 'Synthetic reports Site' });
+      await dataSource
+        .getRepository(WorkerEntity)
+        .update(second.id, { displayName: 'B Synthetic Worker' });
+    });
     await dataSource
       .getRepository(ContractorSiteParticipationEntity)
       .update({ siteId, contractorId }, { isActive: false });
@@ -363,6 +527,7 @@ test('attendance reports: real HTTP/auth, PostgreSQL totals, calendar data, sear
         .status,
       403,
     );
+    assert.equal((await fetch(exportUrl, { headers })).status, 403);
     await dataSource
       .getRepository(ContractorSiteParticipationEntity)
       .update({ siteId, contractorId }, { isActive: true });
@@ -374,12 +539,14 @@ test('attendance reports: real HTTP/auth, PostgreSQL totals, calendar data, sear
         .status,
       403,
     );
+    assert.equal((await fetch(exportUrl, { headers })).status, 403);
     await dataSource.getRepository(UserEntity).update(repId, { isActive: false });
     assert.equal(
       (await fetch(`${url}/api/v1/sites/${siteId}/attendance-summary?${suffix}`, { headers }))
         .status,
       401,
     );
+    assert.equal((await fetch(exportUrl, { headers })).status, 401);
   } finally {
     if (app) await app.close();
     await cleanupSiteAccess(dataSource, [siteId, otherSite]);
