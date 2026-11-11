@@ -125,7 +125,7 @@ it('does not load or assign a contractor outside the authenticated scopes from a
   await screen.findByText('No active contractor assignment is available for this site.');
   expect(SmartSiteManagementClient.prototype.listContractorTeams).not.toHaveBeenCalled();
 });
-function mount() {
+function mount(props?: Partial<React.ComponentProps<typeof ScheduleAssignmentForm>>) {
   cache = new QueryClient({
     defaultOptions: { queries: { retry: false }, mutations: { retry: false } },
   });
@@ -146,6 +146,8 @@ function mount() {
             createdAt: '2030-01-01',
           },
         ]}
+        initialExpanded={true}
+        {...props}
       />
     </QueryClientProvider>,
   );
@@ -203,6 +205,59 @@ it('shows a single-day batch date once', async () => {
   expect(await screen.findByText('07/10/2030')).toBeTruthy();
   expect(screen.getAllByText('07/10/2030')).toHaveLength(1);
   expect(screen.queryByText('2030-10-07')).toBeNull();
+});
+
+it('hides past batches by default and displays them without Edit button when show past batches is toggled', async () => {
+  const pastBatch = {
+    ...batchData,
+    id: 'past-batch',
+    targetName: 'Team Past',
+    dates: ['2020-01-01', '2020-01-02'],
+  };
+  vi.mocked(SmartSiteManagementClient.prototype.listScheduleAssignments).mockResolvedValue({
+    items: [pastBatch],
+    total: 1,
+  });
+  mount();
+  expect(await screen.findByText('No active or upcoming assignment batches.')).toBeTruthy();
+  expect(screen.queryByRole('heading', { name: 'Team Past' })).toBeNull();
+
+  fireEvent.click(screen.getByLabelText('Show past batches'));
+  expect(await screen.findByRole('heading', { name: 'Team Past' })).toBeTruthy();
+  expect(screen.getByText('Past')).toBeTruthy();
+  expect(screen.queryByRole('button', { name: 'Edit' })).toBeNull();
+});
+
+it('enforces min date in BatchEditor for batches with upcoming dates', async () => {
+  vi.mocked(SmartSiteManagementClient.prototype.listScheduleAssignments).mockResolvedValue({
+    items: [batchData],
+    total: 1,
+  });
+  mount();
+  const editButton = await screen.findByRole('button', { name: 'Edit' });
+  fireEvent.click(editButton);
+  const changeDateInput = screen.getByLabelText('Change date') as HTMLInputElement;
+  expect(changeDateInput.min).toBeTruthy();
+  expect(changeDateInput.min.length).toBe(10);
+});
+
+it('starts collapsed when initialExpanded is false and toggles open/close on button click', async () => {
+  mount({ initialExpanded: false });
+  expect(screen.queryByLabelText('Team')).toBeNull();
+  expect(screen.queryByLabelText('Shift')).toBeNull();
+
+  const toggleButton = screen.getByRole('button', { name: /New assignment/i });
+  expect(toggleButton.getAttribute('aria-expanded')).toBe('false');
+  fireEvent.click(toggleButton);
+
+  expect(toggleButton.getAttribute('aria-expanded')).toBe('true');
+  await screen.findByRole('option', { name: /^Team A \(2(?: members)?\)$/ });
+  expect(screen.getByLabelText('Team')).toBeTruthy();
+
+  const collapseButton = screen.getByRole('button', { name: /Collapse/i });
+  fireEvent.click(collapseButton);
+
+  expect(screen.queryByLabelText('Team')).toBeNull();
 });
 
 async function select() {

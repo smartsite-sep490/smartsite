@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
+import { existsSync } from 'node:fs';
 import { mkdtemp, readFile } from 'node:fs/promises';
 import path from 'node:path';
 import { tmpdir } from 'node:os';
@@ -11,7 +12,10 @@ import {
   parseWorkerGenerationArguments,
 } from '../src/scripts/worker-generation-delivery.js';
 
-const fixtureRoot = process.platform === 'win32' ? 'D:/Ky9-FPT/SmartSiteData/runs' : tmpdir();
+const fixtureRoot =
+  process.platform === 'win32' && existsSync('D:/Ky9-FPT/SmartSiteData/runs')
+    ? 'D:/Ky9-FPT/SmartSiteData/runs'
+    : tmpdir();
 
 const cameraId = '11111111-1111-4111-8111-111111111111';
 const credential = {

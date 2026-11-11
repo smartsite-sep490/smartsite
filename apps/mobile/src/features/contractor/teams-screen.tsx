@@ -40,14 +40,22 @@ import { useTranslation } from '../../i18n';
 import { IconUsers } from '../../components/common/Icons';
 import { colors } from '../../theme/colors';
 
-export function TeamsScreen({ onBack }: { onBack: () => void }) {
+export function TeamsScreen({
+  selectedTeam,
+  onSelectTeam,
+}: {
+  selectedTeam?: ContractorTeamResponse | null;
+  onSelectTeam?: (team: ContractorTeamResponse | null) => void;
+}) {
   const { t } = useTranslation();
   const { scope, client, token, queryKey } = useWorkspace();
   const [search, setSearch] = useState(''),
     [status, setStatus] = useState<'ACTIVE' | 'ARCHIVED' | 'ALL'>('ACTIVE'),
-    [offset, setOffset] = useState(0),
-    [team, setTeam] = useState<ContractorTeamResponse | null>(null),
-    [creating, setCreating] = useState(false);
+    [offset, setOffset] = useState(0);
+  const [internalTeam, setInternalTeam] = useState<ContractorTeamResponse | null>(null);
+  const team = selectedTeam !== undefined ? selectedTeam : internalTeam;
+  const setTeam = onSelectTeam ?? setInternalTeam;
+  const [creating, setCreating] = useState(false);
 
   const query = useQuery({
     queryKey: [...queryKey, 'teams', search, status, offset],
@@ -60,10 +68,18 @@ export function TeamsScreen({ onBack }: { onBack: () => void }) {
       }),
   });
 
-  if (team) return <TeamDetail key={team.id} teamId={team.id} onBack={() => setTeam(null)} />;
+  if (team)
+    return (
+      <TeamDetail
+        key={team.id}
+        teamId={team.id}
+        standalone={!onSelectTeam}
+        onBack={() => setTeam(null)}
+      />
+    );
 
   return (
-    <Page title={t('teams.title')} onBack={onBack}>
+    <Page>
       <Button label={t('teams.createTeam')} onPress={() => setCreating(true)} />
 
       <Field
@@ -216,7 +232,15 @@ function CreateTeamModal({
     </Modal>
   );
 }
-function TeamDetail({ teamId, onBack }: { teamId: string; onBack: () => void }) {
+function TeamDetail({
+  teamId,
+  standalone = false,
+  onBack,
+}: {
+  teamId: string;
+  standalone?: boolean;
+  onBack: () => void;
+}) {
   useTranslation();
   const { scope, client, token, queryKey } = useWorkspace();
   const [edit, setEdit] = useState(false),
@@ -255,7 +279,10 @@ function TeamDetail({ teamId, onBack }: { teamId: string; onBack: () => void }) 
     (w) => w.workerId === workerId,
   );
   return (
-    <Page title={tr('teams.details')} onBack={onBack}>
+    <Page
+      title={standalone ? tr('teams.details') : undefined}
+      onBack={standalone ? onBack : undefined}
+    >
       <ErrorNotice error={command.error} />
       <QueryState query={detail}>
         {(t) => (

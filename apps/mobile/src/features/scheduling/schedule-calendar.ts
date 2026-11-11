@@ -31,6 +31,10 @@ export function shiftClock(shift: ShiftResponse, edge: 'start' | 'end'): string 
   }).format(new Date(edge === 'start' ? shift.startsAt : shift.endsAt));
 }
 
+export function shiftRange(shift: ShiftResponse): string {
+  return `${shiftClock(shift, 'start')} – ${shiftClock(shift, 'end')}`;
+}
+
 export function shiftDayOffset(shift: ShiftResponse): number {
   const format = new Intl.DateTimeFormat('en-CA', {
     timeZone: shift.timezone,

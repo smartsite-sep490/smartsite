@@ -6,6 +6,7 @@ import {
   changeCalendarMonth,
   shiftClock,
   shiftDayOffset,
+  shiftRange,
 } from './schedule-calendar';
 
 it('keeps a Monday-to-Sunday week intact across month and year boundaries', () => {
@@ -39,4 +40,5 @@ it('displays a night shift in its configured timezone and marks its following da
   expect(shiftClock(shift, 'start')).toBe('22:00');
   expect(shiftClock(shift, 'end')).toBe('06:00');
   expect(shiftDayOffset(shift)).toBe(1);
+  expect(shiftRange(shift)).toBe('22:00 – 06:00');
 });

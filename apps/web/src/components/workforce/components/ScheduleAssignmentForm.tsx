@@ -3,7 +3,7 @@ import { localizeMessage, userErrorMessage } from '../../../i18n/messages';
 import { translate as tr } from '../../../i18n';
 import { useTranslation } from 'react-i18next';
 import React, { useEffect, useRef, useState } from 'react';
-import { CalendarBlank, PencilSimple } from '@phosphor-icons/react';
+import { CalendarBlank, CaretDown, CaretUp, PencilSimple, Plus } from '@phosphor-icons/react';
 import { SmartDatePicker } from '../../ui';
 import { formatShiftRange, formatWorkDate } from '../utils/workforce-format';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
@@ -64,6 +64,7 @@ export function ScheduleAssignmentForm({
   versions,
   onScopeChange,
   managerScope = false,
+  initialExpanded = false,
 }: {
   managerScope?: boolean;
   apiUrl: string;
@@ -72,6 +73,7 @@ export function ScheduleAssignmentForm({
   shifts: ShiftResponse[];
   versions: ScheduleVersionResponse[];
   onScopeChange?: (scope: { siteId: string; contractorId: string }) => void;
+  initialExpanded?: boolean;
 }) {
   useTranslation();
 
@@ -96,6 +98,8 @@ export function ScheduleAssignmentForm({
     return workerId ? [workerId] : undefined;
   });
   const [batchPage, setBatchPage] = useState(0);
+  const [showPastBatches, setShowPastBatches] = useState(false);
+  const [isExpanded, setIsExpanded] = useState(initialExpanded);
   const [message, setMessage] = useState('');
   const request = useRef<{ key: string; id: string } | null>(null);
   const scopes = useQuery({
@@ -233,18 +237,47 @@ export function ScheduleAssignmentForm({
   const loadError = scopes.error || teams.error || workers.error || grants.error;
   return (
     <section className="space-y-4">
-      <div className="space-y-1">
-        <div className="inline-flex items-center gap-1.5 rounded-full px-2.5 py-0.5 text-[9px] uppercase tracking-[0.2em] font-bold bg-orange-50 text-orange-600 border border-orange-200/60 w-fit">
-          <span className="w-1.5 h-1.5 rounded-full bg-orange-500 animate-pulse" />
-          {tr('common.roster_dispatch')}
+      <div className="flex items-start justify-between gap-3">
+        <div className="space-y-1">
+          <div className="inline-flex items-center gap-1.5 rounded-full px-2.5 py-0.5 text-[9px] uppercase tracking-[0.2em] font-bold bg-orange-50 text-orange-600 border border-orange-200/60 w-fit">
+            <span className="w-1.5 h-1.5 rounded-full bg-orange-500 animate-pulse" />
+            {tr('common.roster_dispatch')}
+          </div>
+          <h3 className="text-base font-extrabold text-[#071A2B] tracking-tight">
+            {tr('common.assign_schedules')}
+          </h3>
+          <p className="text-xs text-slate-500 leading-relaxed">
+            {tr('schedule_assignment_form.assign_a_team_or_worker_then_preview_before_saving')}
+          </p>
         </div>
-        <h3 className="text-base font-extrabold text-[#071A2B] tracking-tight">
-          {tr('common.assign_schedules')}
-        </h3>
-        <p className="text-xs text-slate-500 leading-relaxed">
-          {tr('schedule_assignment_form.assign_a_team_or_worker_then_preview_before_saving')}
-        </p>
+        <button
+          type="button"
+          aria-expanded={isExpanded}
+          aria-controls="schedule-assignment-form-wrapper"
+          onClick={() => setIsExpanded(!isExpanded)}
+          className={`inline-flex shrink-0 items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-xl border transition-all cursor-pointer ${
+            isExpanded
+              ? 'bg-slate-100 text-slate-700 border-slate-200 hover:bg-slate-200'
+              : 'bg-[#F66B17] text-white border-transparent hover:bg-[#E05D0D] shadow-xs'
+          }`}
+        >
+          {isExpanded ? (
+            <>
+              <span>{tr('common.collapse')}</span>
+              <CaretUp size={14} weight="bold" aria-hidden="true" />
+            </>
+          ) : (
+            <>
+              <Plus size={14} weight="bold" aria-hidden="true" />
+              <span>{tr('schedule_assignment_form.new_assignment')}</span>
+              <CaretDown size={14} weight="bold" aria-hidden="true" />
+            </>
+          )}
+        </button>
       </div>
+
+      {isExpanded && (
+        <div id="schedule-assignment-form-wrapper" className="space-y-3.5 animate-in fade-in duration-200">
       {loadError && (
         <p
           role="alert"
@@ -760,8 +793,29 @@ export function ScheduleAssignmentForm({
           </button>
         </div>
       )}
+        </div>
+      )}
+      {!isExpanded && message && (
+        <p
+          role="status"
+          className="text-xs text-emerald-800 bg-emerald-50 p-3 rounded-xl border border-emerald-200 font-semibold"
+        >
+          {localizeMessage(message)}
+        </p>
+      )}
       <div className="space-y-3 border-t border-slate-200 pt-4">
-        <h4 className="text-sm font-bold">{tr('common.assignment_batches')}</h4>
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <h4 className="text-sm font-bold text-[#071A2B]">{tr('common.assignment_batches')}</h4>
+          <label className="inline-flex items-center gap-1.5 text-xs text-slate-500 cursor-pointer select-none">
+            <input
+              type="checkbox"
+              checked={showPastBatches}
+              onChange={(e) => setShowPastBatches(e.target.checked)}
+              className="rounded border-slate-300 text-blue-600 focus:ring-blue-500"
+            />
+            <span>{tr('common.show_past_batches')}</span>
+          </label>
+        </div>
         {batches.isPending && <p role="status">{tr('common.loading_batches')}</p>}
         {batches.error && (
           <p role="alert">
@@ -774,17 +828,37 @@ export function ScheduleAssignmentForm({
             {tr('schedule_assignment_form.no_team_or_bulk_assignments_yet')}
           </p>
         )}
-        {batches.data?.items.map((batch) => (
-          <BatchEditor
-            key={batch.id}
-            batch={batch}
-            shifts={availableShifts}
-            onChange={(command) =>
-              client.changeScheduleAssignment(token, siteId, batch.id, command)
-            }
-            onSaved={invalidate}
-          />
-        ))}
+        {batches.data?.items &&
+          batches.data.items.length > 0 &&
+          !batches.data.items.some((batch) => showPastBatches || batch.dates.some((day) => day >= today())) && (
+            <div className="rounded-xl border border-dashed border-slate-200 p-4 text-center">
+              <p className="text-xs text-slate-500">
+                {tr('schedule_assignment_form.no_upcoming_batches')}
+              </p>
+              <button
+                type="button"
+                onClick={() => setShowPastBatches(true)}
+                className="mt-1 text-xs font-semibold text-blue-600 hover:underline cursor-pointer"
+              >
+                {tr('common.show_past_batches')}
+              </button>
+            </div>
+          )}
+        <div className="space-y-3 max-h-[460px] overflow-y-auto pr-1">
+          {batches.data?.items
+            .filter((batch) => showPastBatches || batch.dates.some((day) => day >= today()))
+            .map((batch) => (
+              <BatchEditor
+                key={batch.id}
+                batch={batch}
+                shifts={availableShifts}
+                onChange={(command) =>
+                  client.changeScheduleAssignment(token, siteId, batch.id, command)
+                }
+                onSaved={invalidate}
+              />
+            ))}
+        </div>
         {(batches.data?.total ?? 0) > 10 && (
           <div className="flex gap-2">
             <button disabled={!batchPage} onClick={() => setBatchPage(batchPage - 1)}>
@@ -816,6 +890,7 @@ function BatchEditor({
 }) {
   useTranslation();
 
+  const isPastBatch = batch.dates.length > 0 && batch.dates.every((day) => day < today());
   const [open, setOpen] = useState(false);
   const [actionValue, setAction] = useState<ChangeScheduleAssignmentCommand['action']>('CANCEL');
   const [scope, setScope] = useState<ChangeScheduleAssignmentCommand['scope']>('DAY');
@@ -893,21 +968,30 @@ function BatchEditor({
             )}
           </p>
         </div>
-        <button
-          type="button"
-          className="inline-flex min-h-9 shrink-0 items-center justify-center gap-1.5 whitespace-nowrap rounded-lg border border-slate-200 bg-slate-50 px-3 text-xs font-semibold text-slate-700 hover:border-slate-300 hover:bg-slate-100 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-600"
-          aria-expanded={open}
-          onClick={() => setOpen(!open)}
-        >
-          <PencilSimple size={14} aria-hidden="true" />
-          {tr('common.edit')}
-        </button>
+        {!isPastBatch ? (
+          <button
+            type="button"
+            className="inline-flex min-h-9 shrink-0 items-center justify-center gap-1.5 whitespace-nowrap rounded-lg border border-slate-200 bg-slate-50 px-3 text-xs font-semibold text-slate-700 hover:border-slate-300 hover:bg-slate-100 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-600 cursor-pointer"
+            aria-expanded={open}
+            onClick={() => setOpen(!open)}
+          >
+            <PencilSimple size={14} aria-hidden="true" />
+            {tr('common.edit')}
+          </button>
+        ) : (
+          <span className="inline-flex min-h-8 shrink-0 items-center justify-center rounded-lg border border-slate-200 bg-slate-100/90 px-2.5 text-[11px] font-semibold text-slate-500">
+            {tr('common.past')}
+          </span>
+        )}
       </div>
       {open && (
         <form
           className="space-y-3 border-t border-slate-200 bg-slate-50/60 p-4"
           onSubmit={(e) => {
             e.preventDefault();
+            if (scope !== 'UNSTARTED' && date < today()) {
+              return;
+            }
             mutation.mutate();
           }}
         >
@@ -945,6 +1029,7 @@ function BatchEditor({
                 required
                 className={field}
                 type="date"
+                min={today()}
                 value={date}
                 onChange={(e) => setDate(e.target.value)}
               />

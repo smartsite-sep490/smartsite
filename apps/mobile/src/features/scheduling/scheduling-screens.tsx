@@ -196,6 +196,22 @@ export function ShiftRequestsScreen({
   const command = useCommand();
   const workers = useScopedWorkers();
   const workerIds = new Set(workers.data?.map((w) => w.id));
+  const shifts = useQuery({
+    queryKey: [...queryKey, 'shifts'],
+    queryFn: ({ signal }) => allPages((p) => client.listShifts(token, scope.siteId, p), signal),
+  });
+  const getWorkerName = (id?: string | null) => {
+    if (!id) return t('schedule.worker');
+    const w = workers.data?.find((item) => item.id === id || item.userId === id);
+    return w?.displayName || id.slice(0, 8);
+  };
+  const getShiftLabel = (id?: string | null) => {
+    if (!id) return '—';
+    const s = shifts.data?.find((item) => item.id === id);
+    return s
+      ? `${s.name} (${displayShiftTime(s.startsAt)} - ${displayShiftTime(s.endsAt)})`
+      : id.slice(0, 8);
+  };
   const query = useQuery({
     queryKey: [...queryKey, 'shift-requests', view, type, offset],
     enabled: workers.isSuccess,
@@ -320,15 +336,46 @@ export function ShiftRequestsScreen({
           </View>
         </View>
 
-        <Text style={schedStyles.detailReasonText}>{r.reason}</Text>
+        <Text style={schedStyles.detailWorkerText}>
+          {r.requestType === 'SWAP'
+            ? `${getWorkerName(r.requesterWorkerId)} ↔ ${getWorkerName(r.coworkerWorkerId)}`
+            : getWorkerName(r.workerId)}
+        </Text>
+
+        <View style={schedStyles.shiftTransitionBox}>
+          <Text style={schedStyles.shiftDateText}>
+            📅 {t('schedule.date')}:{' '}
+            <Text style={{ fontWeight: '700' }}>
+              {r.requestType === 'SWAP'
+                ? `${r.requesterWorkDate ?? '—'} ↔ ${r.coworkerWorkDate ?? '—'}`
+                : (r.workDate ?? '—')}
+            </Text>
+          </Text>
+          <View style={schedStyles.shiftRow}>
+            {r.requestType === 'SWAP' ? (
+              <Text style={schedStyles.shiftTransitionText}>
+                <Text style={schedStyles.shiftSourceText}>{getShiftLabel(r.requesterShiftId)}</Text>
+                {' ↔ '}
+                <Text style={schedStyles.shiftTargetText}>{getShiftLabel(r.coworkerShiftId)}</Text>
+              </Text>
+            ) : (
+              <Text style={schedStyles.shiftTransitionText}>
+                <Text style={schedStyles.shiftSourceText}>{getShiftLabel(r.fromShiftId)}</Text>
+                {' → '}
+                <Text style={schedStyles.shiftTargetText}>{getShiftLabel(r.toShiftId)}</Text>
+              </Text>
+            )}
+          </View>
+        </View>
+
+        {r.reason ? (
+          <View style={schedStyles.reasonBox}>
+            <Text style={schedStyles.reasonLabel}>{t('schedule.reason')}:</Text>
+            <Text style={schedStyles.reasonContent}>"{r.reason}"</Text>
+          </View>
+        ) : null}
 
         <View style={schedStyles.detailInfoGrid}>
-          <Text style={schedStyles.detailInfoLine}>
-            📅 {t('schedule.date')}:{' '}
-            {r.requestType === 'SWAP'
-              ? `${r.requesterWorkDate ?? '—'} ↔ ${r.coworkerWorkDate ?? '—'}`
-              : (r.workDate ?? '—')}
-          </Text>
           <Text style={schedStyles.detailInfoSub}>
             {tr('requests.submittedAt')} {displayTime(r.createdAt)} {tr('requests.reviewedAt')}{' '}
             {displayTime(r.reviewedAt)}
@@ -491,9 +538,54 @@ export function ShiftRequestsScreen({
                   </View>
                 </View>
 
-                <Text numberOfLines={rep ? 2 : undefined} style={schedStyles.requestReasonText}>
-                  {r.reason}
+                <Text style={schedStyles.cardWorkerText}>
+                  {r.requestType === 'SWAP'
+                    ? `${getWorkerName(r.requesterWorkerId)} ↔ ${getWorkerName(r.coworkerWorkerId)}`
+                    : getWorkerName(r.workerId)}
                 </Text>
+
+                <View style={schedStyles.cardShiftBox}>
+                  <Text style={schedStyles.cardDateText}>
+                    📅 {t('schedule.date')}:{' '}
+                    <Text style={{ fontWeight: '700' }}>
+                      {r.requestType === 'SWAP'
+                        ? `${r.requesterWorkDate ?? '—'} ↔ ${r.coworkerWorkDate ?? '—'}`
+                        : (r.workDate ?? '—')}
+                    </Text>
+                  </Text>
+                  <Text style={schedStyles.shiftTransitionText} numberOfLines={1}>
+                    {r.requestType === 'SWAP' ? (
+                      <>
+                        <Text style={schedStyles.shiftSourceText}>
+                          {getShiftLabel(r.requesterShiftId)}
+                        </Text>
+                        {' ↔ '}
+                        <Text style={schedStyles.shiftTargetText}>
+                          {getShiftLabel(r.coworkerShiftId)}
+                        </Text>
+                      </>
+                    ) : (
+                      <>
+                        <Text style={schedStyles.shiftSourceText}>
+                          {getShiftLabel(r.fromShiftId)}
+                        </Text>
+                        {' → '}
+                        <Text style={schedStyles.shiftTargetText}>
+                          {getShiftLabel(r.toShiftId)}
+                        </Text>
+                      </>
+                    )}
+                  </Text>
+                </View>
+
+                {r.reason ? (
+                  <Text numberOfLines={rep ? 2 : undefined} style={schedStyles.requestReasonText}>
+                    <Text style={{ fontWeight: '600', color: '#64748B' }}>
+                      {t('schedule.reason')}:{' '}
+                    </Text>
+                    "{r.reason}"
+                  </Text>
+                ) : null}
 
                 <Button
                   secondary
@@ -742,6 +834,60 @@ const schedStyles = StyleSheet.create({
     fontSize: 13,
     fontWeight: '700',
   },
+  detailWorkerText: {
+    fontSize: 16.5,
+    fontWeight: '800',
+    color: '#0F1E36',
+  },
+  shiftTransitionBox: {
+    backgroundColor: '#F8FAFC',
+    borderRadius: 12,
+    padding: 12,
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
+    gap: 6,
+  },
+  shiftDateText: {
+    fontSize: 13.5,
+    color: '#475569',
+  },
+  shiftRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    flexWrap: 'wrap',
+  },
+  shiftTransitionText: {
+    fontSize: 13.5,
+    fontWeight: '600',
+    color: '#334155',
+  },
+  shiftSourceText: {
+    fontWeight: '600',
+    color: '#475569',
+  },
+  shiftTargetText: {
+    fontWeight: '700',
+    color: '#F66B17',
+  },
+  reasonBox: {
+    backgroundColor: '#FFF7ED',
+    borderRadius: 12,
+    padding: 12,
+    borderWidth: 1,
+    borderColor: '#FFEDD5',
+    gap: 4,
+  },
+  reasonLabel: {
+    fontSize: 12.5,
+    fontWeight: '700',
+    color: '#C2410C',
+  },
+  reasonContent: {
+    fontSize: 14,
+    fontStyle: 'italic',
+    color: '#334155',
+    lineHeight: 20,
+  },
   detailReasonText: {
     fontSize: 16.5,
     fontWeight: '800',
@@ -767,6 +913,24 @@ const schedStyles = StyleSheet.create({
     color: '#475569',
     fontStyle: 'italic',
   },
+  cardWorkerText: {
+    fontSize: 15,
+    fontWeight: '700',
+    color: '#0F1E36',
+  },
+  cardShiftBox: {
+    backgroundColor: '#F8FAFC',
+    borderRadius: 10,
+    padding: 10,
+    borderWidth: 1,
+    borderColor: '#EFF2F6',
+    gap: 4,
+  },
+  cardDateText: {
+    fontSize: 12.5,
+    fontWeight: '600',
+    color: '#64748B',
+  },
   requestItemCard: {
     backgroundColor: '#FFFFFF',
     borderRadius: 20,
@@ -787,9 +951,9 @@ const schedStyles = StyleSheet.create({
     alignItems: 'center',
   },
   requestReasonText: {
-    fontSize: 15.5,
-    fontWeight: '700',
-    color: '#0F1E36',
-    lineHeight: 22,
+    fontSize: 14,
+    color: '#334155',
+    fontStyle: 'italic',
+    lineHeight: 20,
   },
 });

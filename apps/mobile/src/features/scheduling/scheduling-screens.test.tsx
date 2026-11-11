@@ -236,6 +236,38 @@ it('approves the chosen change request through the correct API and refreshes the
   expect(approve).toHaveBeenCalledWith('token', 'site-a', 'change-id');
   expect(list.mock.calls.length).toBeGreaterThan(1);
 });
+it('renders worker name, shift transition, and labeled reason for shift change requests', async () => {
+  workspace = {
+    ...workspace,
+    scope: { ...workspace.scope, role: 'contractor', contractorId: 'contractor' },
+  };
+  vi.spyOn(workspace.client, 'listShiftRequests').mockResolvedValue({
+    items: [
+      request({
+        workerId: 'own-worker',
+        fromShiftId: 'shift-a',
+        toShiftId: 'shift-b',
+        reason: 'Need change',
+      }),
+    ],
+    total: 1,
+    pendingCount: 1,
+    incomingCount: 0,
+    pendingScheduleIds: [],
+  });
+  await mount(createElement(ShiftRequestsScreen, {}));
+  const listJson = JSON.stringify(root.toJSON());
+  expect(listJson).toContain('Synthetic Worker');
+  expect(listJson).toContain('Morning');
+  expect(listJson).toContain('Need change');
+
+  await click('Xem yêu cầu');
+  const detailJson = JSON.stringify(root.toJSON());
+  expect(detailJson).toContain('Synthetic Worker');
+  expect(detailJson).toContain('Morning');
+  expect(detailJson).toContain('Lý do');
+  expect(detailJson).toContain('Need change');
+});
 it('shows a retriable error when schedules cannot load instead of rendering synthetic shifts', async () => {
   vi.mocked(workspace.client.listWorkerSchedules).mockRejectedValue(new Error('offline'));
   await mount(createElement(ScheduleScreen, {}));

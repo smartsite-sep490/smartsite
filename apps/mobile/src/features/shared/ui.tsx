@@ -304,7 +304,7 @@ export function Page({
   title,
   onBack,
   children,
-}: PropsWithChildren<{ title: string; onBack?: () => void }>) {
+}: PropsWithChildren<{ title?: string; onBack?: () => void }>) {
   const { t } = useTranslation();
   const compact = useCompactLayout();
   return (
@@ -328,20 +328,22 @@ export function Page({
           >
             <IconChevronLeft size={20} color={palette.navy} />
           </Pressable>
-          <View style={{ flex: 1 }}>
-            <Text
-              accessibilityRole="header"
-              numberOfLines={1}
-              ellipsizeMode="tail"
-              style={styles.pageHeaderTitle}
-            >
-              {title}
-            </Text>
-          </View>
+          {title ? (
+            <View style={{ flex: 1 }}>
+              <Text
+                accessibilityRole="header"
+                numberOfLines={1}
+                ellipsizeMode="tail"
+                style={styles.pageHeaderTitle}
+              >
+                {title}
+              </Text>
+            </View>
+          ) : null}
         </View>
-      ) : (
+      ) : title ? (
         <Heading>{title}</Heading>
-      )}
+      ) : null}
       {children}
     </ScrollView>
   );

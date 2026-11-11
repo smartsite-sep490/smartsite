@@ -20,6 +20,7 @@ import { ScheduleScreen, ShiftRequestsScreen } from './features/scheduling/sched
 import { AttendanceScreen } from './features/attendance/attendance-screens';
 import { WorkforceScreen } from './features/contractor/workforce-screen';
 import { TeamsScreen } from './features/contractor/teams-screen';
+import type { ContractorTeamResponse } from '@smartsite/api-client';
 import { AccessScreen } from './features/access/access-screen';
 import { AssignedWorkScreen } from './features/assigned-work/assigned-work-screen';
 import { QrScreen, NotificationsScreen } from './features/workspace/qr-notifications';
@@ -51,17 +52,34 @@ export type NavigationTarget = {
 function WorkspaceApp({ onScopeChange }: { onScopeChange: () => void }) {
   const { t } = useTranslation();
   const { scope, client, token, queryKey } = useWorkspace();
-  const [navigation, navigate] = useState<NavigationTarget>({ route: 'home' });
-  const back = () => navigate({ route: 'home' });
+  const [navigation, setNavigation] = useState<NavigationTarget>({ route: 'home' });
+  const [selectedTeam, setSelectedTeam] = useState<ContractorTeamResponse | null>(null);
+  const navigate = (target: NavigationTarget) => {
+    if (target.route !== 'teams') setSelectedTeam(null);
+    setNavigation(target);
+  };
+  const back = () => {
+    if (navigation.route === 'teams' && selectedTeam) {
+      setSelectedTeam(null);
+      return;
+    }
+    setSelectedTeam(null);
+    navigate({ route: 'home' });
+  };
 
   useEffect(() => {
     const sub = BackHandler.addEventListener('hardwareBackPress', () => {
+      if (navigation.route === 'teams' && selectedTeam) {
+        setSelectedTeam(null);
+        return true;
+      }
       if (navigation.route === 'home') return false;
+      setSelectedTeam(null);
       navigate({ route: 'home' });
       return true;
     });
     return () => sub.remove();
-  }, [navigation.route]);
+  }, [navigation.route, selectedTeam]);
 
   const notices = useQuery({
     queryKey: [...queryKey, 'badge'],
@@ -101,7 +119,9 @@ function WorkspaceApp({ onScopeChange }: { onScopeChange: () => void }) {
             title={
               !main
                 ? route === 'teams'
-                  ? t('teams.title')
+                  ? selectedTeam
+                    ? t('teams.details')
+                    : t('teams.title')
                   : route === 'access'
                     ? t('access.title')
                     : route === 'assigned'
@@ -155,7 +175,12 @@ function WorkspaceApp({ onScopeChange }: { onScopeChange: () => void }) {
           {route === 'workforce' && contractor && (
             <WorkforceScreen initialWorkerId={navigation.id} />
           )}
-          {route === 'teams' && contractor && <TeamsScreen onBack={back} />}
+          {route === 'teams' && contractor && (
+            <TeamsScreen
+              selectedTeam={selectedTeam}
+              onSelectTeam={setSelectedTeam}
+            />
+          )}
           {route === 'access' && <AccessScreen onBack={back} />}
           {route === 'assigned' && contractor && (
             <AssignedWorkScreen
