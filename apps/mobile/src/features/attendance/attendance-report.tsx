@@ -1,13 +1,13 @@
 import { useTranslation } from '../../i18n';
 import { localizedLabel } from '../../i18n/messages';
 import { translate as tr } from '../../i18n';
-import { useState } from 'react';
+import { useLayoutEffect, useRef, useState } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { useQuery } from '@tanstack/react-query';
 import { File, Paths } from 'expo-file-system';
 import * as Sharing from 'expo-sharing';
 import { useWorkspace } from '../workspace/workspace-context';
-import { allPages, displayTime, minutes, useCommand } from '../shared/data';
+import { displayTime, minutes, useCommand } from '../shared/data';
 import { Body, Button, ErrorNotice, Hint, Pager, QueryState } from '../shared/ui';
 import { attendanceCsv } from './report-csv';
 import { colors } from '../../theme/colors';
@@ -22,7 +22,19 @@ export function AttendanceReport({
   onDay: (id: string) => void;
 }) {
   useTranslation();
-  const { scope, client, token, workerId, queryKey } = useWorkspace();
+  const { scope, client, token, workerId, queryKey, user } = useWorkspace();
+  const canExport =
+    scope.role === 'contractor' &&
+    user.isActive &&
+    !user.mustChangePassword &&
+    user.roleAssignments.some(
+      (role) => role.role === 'CONTRACTOR_REPRESENTATIVE' && role.siteId === scope.siteId,
+    );
+  const exportController = useRef<AbortController | null>(null);
+  useLayoutEffect(
+    () => () => exportController.current?.abort(),
+    [client, token, user.id, scope.siteId, scope.contractorId, scope.role, canExport],
+  );
   const [open, setOpen] = useState(false);
   const [offset, setOffset] = useState(0),
     [expanded, setExpanded] = useState('');
@@ -62,34 +74,41 @@ export function AttendanceReport({
       {open && (
         <View style={reportStyles.content}>
           <ErrorNotice error={command.error} />
-          <Button
-            secondary
-            label={tr('attendance.shareCsv')}
-            disabled={command.isPending}
-            onPress={() =>
-              command.mutate(async () => {
-                if (!(await Sharing.isAvailableAsync()))
-                  throw new Error(tr('validation.sharingUnavailable'));
-                const rows = await allPages((p) =>
-                  client.attendanceWorkers(token, scope.siteId, { ...filter, ...p }),
-                );
-                const file = new File(
-                  Paths.cache,
-                  `attendance-${fromDate}-${toDate}-${Date.now()}.csv`,
-                );
-                try {
-                  file.create();
-                  file.write(attendanceCsv(rows));
-                  await Sharing.shareAsync(file.uri, {
-                    mimeType: 'text/csv',
-                    UTI: 'public.comma-separated-values-text',
+          {canExport && (
+            <Button
+              secondary
+              label={tr('attendance.shareCsv')}
+              disabled={command.isPending}
+              onPress={() =>
+                command.mutate(async () => {
+                  const controller = new AbortController();
+                  exportController.current = controller;
+                  if (!(await Sharing.isAvailableAsync()))
+                    throw new Error(tr('validation.sharingUnavailable'));
+                  const result = await client.attendanceExport(token, scope.siteId, filter, {
+                    signal: controller.signal,
                   });
-                } finally {
-                  if (file.exists) file.delete();
-                }
-              })
-            }
-          />
+                  controller.signal.throwIfAborted();
+                  if (!result.items.length) throw new Error(tr('common.noData'));
+                  const file = new File(
+                    Paths.cache,
+                    `attendance-${fromDate}-${toDate}-${Date.now()}.csv`,
+                  );
+                  try {
+                    file.create();
+                    file.write(attendanceCsv(result.items));
+                    controller.signal.throwIfAborted();
+                    await Sharing.shareAsync(file.uri, {
+                      mimeType: 'text/csv',
+                      UTI: 'public.comma-separated-values-text',
+                    });
+                  } finally {
+                    if (file.exists) file.delete();
+                  }
+                })
+              }
+            />
+          )}
           <QueryState query={query}>
             {(data) => (
               <>

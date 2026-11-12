@@ -12,6 +12,7 @@ import { AttendanceReportsService } from '../src/modules/workforce/attendance/at
 import { AttendanceReportsController } from '../src/modules/workforce/attendance/attendance-reports.controller.js';
 import { UserAuthGuard } from '../src/modules/auth/user-auth.guard.js';
 import type { AuthenticatedRequest } from '../src/modules/auth/auth.service.js';
+import { UserRole, UserEntity, UserRoleAssignmentEntity } from '../src/database/entities/index.js';
 
 const range = { fromDate: '2026-10-05', toDate: '2026-10-11' };
 test('report HTTP queries transform pagination/booleans and reject spoofed authority, invalid dates, enums and bounds', async () => {
@@ -67,4 +68,38 @@ test('unavailable permission data propagates and never returns a successful empt
     ),
     /synthetic unavailable/,
   );
+  await assert.rejects(
+    service.export(
+      { id: 'actor', mustChangePassword: false, roleAssignments: [] },
+      '00000000-0000-4000-8000-000000000001',
+      range,
+    ),
+    /synthetic unavailable/,
+  );
+});
+
+test('export rejects persisted Worker, Security and Safety roles even when the actor claims Admin', async () => {
+  const actor = {
+    id: 'actor',
+    mustChangePassword: false,
+    roleAssignments: [{ role: UserRole.ADMIN, siteId: null }],
+  };
+  const siteId = '00000000-0000-4000-8000-000000000001';
+  for (const role of [UserRole.WORKER, UserRole.SECURITY_OFFICER, UserRole.SAFETY_OFFICER]) {
+    const manager = {
+      getRepository: (entity: unknown) => {
+        if (entity === UserEntity) return { findOneBy: async () => ({ id: actor.id }) };
+        if (entity === UserRoleAssignmentEntity) return { findBy: async () => [{ role, siteId }] };
+        throw new Error('Denied export must not read worker report data');
+      },
+    };
+    const service = new AttendanceReportsService({
+      transaction: async (_isolation: string, read: (value: unknown) => Promise<unknown>) =>
+        read(manager),
+    } as unknown as DataSource);
+    await assert.rejects(
+      service.export(actor, siteId, range),
+      (error: unknown) => (error as { getStatus(): number }).getStatus() === 403,
+    );
+  }
 });

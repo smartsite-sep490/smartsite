@@ -83,6 +83,9 @@ export interface AttendanceWorkersResponse {
   offset: number;
   limit: number;
 }
+export type AttendanceExportResponse = Omit<AttendanceWorkersResponse, 'offset' | 'limit'> & {
+  siteName: string;
+};
 export interface AttendanceSummaryResponse extends AttendanceReportMetrics {
   siteId: string;
   fromDate: string;

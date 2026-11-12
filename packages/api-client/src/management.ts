@@ -54,6 +54,7 @@ import type {
   AttendanceWorkersQuery,
   AttendanceSummaryResponse,
   AttendanceWorkersResponse,
+  AttendanceExportResponse,
   AttendanceTimeRequestsQuery,
   AttendanceTimeRequestsResponse,
   AttendanceDayDetailResponse,
@@ -479,6 +480,24 @@ export class SmartSiteManagementClient {
       'GET',
       `/sites/${pathId(siteId)}/attendance-summary?${query}`,
       token,
+    );
+  }
+  attendanceExport(
+    token: string,
+    siteId: string,
+    filters: AttendanceReportQuery,
+    options?: RequestOptions,
+  ): Promise<AttendanceExportResponse> {
+    const query = new URLSearchParams();
+    for (const [key, value] of Object.entries(filters))
+      if (value !== undefined) query.set(key, String(value));
+    return this.request<AttendanceExportResponse>(
+      'GET',
+      `/sites/${pathId(siteId)}/attendance-export?${query}`,
+      token,
+      undefined,
+      undefined,
+      options,
     );
   }
   attendanceWorkers(token: string, siteId: string, options: AttendanceWorkersQuery) {
