@@ -1162,7 +1162,7 @@ export function ScheduleSetupView({ apiUrl }: ScheduleSetupViewProps) {
       {activeTab === 'assignment' && canViewAssignments && (
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-5 items-start">
           {/* Assignment Form Card (4 cols) - Double-Bezel Architecture */}
-          <div className="lg:col-span-4 rounded-3xl p-1.5 bg-gradient-to-b from-slate-100 to-slate-200/70 border border-slate-200/80 shadow-xs">
+          <div className="lg:col-span-4 rounded-3xl p-1.5 bg-gradient-to-b from-slate-100 to-slate-200/70 border border-slate-200/80 shadow-xs lg:sticky lg:top-4">
             <div className="bg-white rounded-[22px] p-5 border border-slate-100 shadow-[0_1px_3px_rgba(0,0,0,0.04)] space-y-4">
               {!canAssignWorker && isManager && (
                 <label>
