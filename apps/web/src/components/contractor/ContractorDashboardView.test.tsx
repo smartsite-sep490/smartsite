@@ -251,14 +251,14 @@ describe('ContractorDashboardView Integration & UI Rules', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Retry' }));
     await screen.findByRole('heading', { name: /Skyline Tower A/i });
   });
-  it('loads scopes, displays selected scope name/code, and renders KPI metrics from backend', async () => {
+  it('shows scope names without Site codes and renders KPI metrics from backend', async () => {
     renderView();
 
     expect(screen.getByRole('status', { name: /loading contractor scopes/i })).not.toBeNull();
 
     await waitFor(() => {
       expect(screen.getByRole('heading', { name: /Skyline Tower A/i })).not.toBeNull();
-      expect(screen.getByText('(SKY-A)')).not.toBeNull();
+      expect(document.body.textContent).not.toContain('SKY-A');
       expect(screen.getAllByText('Apex Painting Ltd')[0]).not.toBeNull();
 
       // Check KPI cards
@@ -285,6 +285,8 @@ describe('ContractorDashboardView Integration & UI Rules', () => {
     });
 
     const select = screen.getByLabelText(/Active Site Scope/i);
+    expect(select.textContent).not.toContain('SKY-A');
+    expect(select.textContent).not.toContain('RIV-B');
     fireEvent.change(select, { target: { value: 'site-beta:contractor-paint' } });
 
     await waitFor(() => {

@@ -746,7 +746,7 @@ export function ScheduleSetupView({ apiUrl }: ScheduleSetupViewProps) {
               className="w-full"
               options={availableSites.map((site) => ({
                 value: site.id,
-                label: `${site.name} (${site.code})`,
+                label: site.name,
               }))}
             />
           </div>
@@ -1757,7 +1757,7 @@ export function ScheduleSetupView({ apiUrl }: ScheduleSetupViewProps) {
               onChange={setAssignContractorId}
               options={contractors.map((c) => ({
                 value: c.id,
-                label: `${c.name} (${c.code})`,
+                label: c.name,
               }))}
             />
           </div>

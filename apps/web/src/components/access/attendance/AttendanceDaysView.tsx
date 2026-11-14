@@ -13,7 +13,7 @@ import {
   attendanceDate,
   formatWorkDate,
 } from './attendance-display';
-import { SmartDatePicker } from '../../ui';
+import { SmartDatePicker, SmartSelect, type SmartSelectOption } from '../../ui';
 import { requestTimeInstant, requestShiftTimes, requestWallTime } from './attendance-request-time';
 import type {
   AttendanceDayResponse,
@@ -24,6 +24,7 @@ import type {
 import {
   IconChevronRight,
   IconChevronLeft,
+  IconChevronDown,
   IconRefresh,
   IconClock,
   IconCalendar,
@@ -1232,15 +1233,20 @@ export function AttendanceDaysView({
           </section>
         )}
         {data.canRequest && !submittedRequest ? (
-          <div className="rounded-2xl border border-slate-200/80 bg-white shadow-xs overflow-hidden mt-6">
-            <div className="flex items-center gap-3 px-6 py-4 border-b border-slate-100">
-              <div className="w-10 h-10 rounded-xl bg-orange-50 text-[#F66B17] flex items-center justify-center border border-orange-100/60 shadow-2xs">
-                <IconClock className="w-5 h-5" />
-              </div>
-              <div>
-                <h3 className="text-sm font-bold text-[#071A2B]">
-                  {tr('attendance_days_view.request_overtime_or_leave')}
-                </h3>
+          <div className="rounded-2xl border border-slate-200/80 bg-white shadow-[0_4px_20px_-4px_rgba(7,26,43,0.06)] overflow-hidden mt-6">
+            <div className="flex items-center justify-between px-6 py-4.5 border-b border-slate-100 bg-gradient-to-r from-slate-50/60 to-white">
+              <div className="flex items-center gap-3.5">
+                <div className="w-10 h-10 rounded-xl bg-orange-50 text-[#F66B17] flex items-center justify-center border border-orange-200/60 shadow-2xs">
+                  <IconClock className="w-5 h-5" />
+                </div>
+                <div>
+                  <span className="text-[10px] font-mono font-bold uppercase tracking-[0.16em] text-[#F66B17] block mb-0.5">
+                    {tr('common.workforce_operations')}
+                  </span>
+                  <h3 className="text-sm font-extrabold text-[#071A2B] tracking-tight">
+                    {tr('attendance_days_view.request_overtime_or_leave')}
+                  </h3>
+                </div>
               </div>
             </div>
             {(schedules.isPending || requestShifts.isPending) && (
@@ -1259,7 +1265,7 @@ export function AttendanceDaysView({
                     void schedules.refetch();
                     void requestShifts.refetch();
                   }}
-                  className="rounded-lg border border-red-200 bg-white px-2.5 py-1 text-xs font-bold text-red-700 hover:bg-red-50"
+                  className="rounded-lg border border-red-200 bg-white px-2.5 py-1 text-xs font-bold text-red-700 hover:bg-red-50 cursor-pointer"
                 >
                   {tr('common.retry_assigned_shifts')}
                 </button>
@@ -1272,9 +1278,48 @@ export function AttendanceDaysView({
                 )}
               </p>
             )}
-            {availableSchedules.length > 0 && !schedules.isError && !requestShifts.isError && (
+            {availableSchedules.length > 0 && !schedules.isError && !requestShifts.isError && (() => {
+              const requestKindOptions: SmartSelectOption[] = [
+                {
+                  value: 'OVERTIME',
+                  label: tr('common.overtime'),
+                  icon: (
+                    <span className="w-6 h-6 rounded-lg bg-orange-50 text-[#F66B17] flex items-center justify-center shrink-0 border border-orange-200/60 shadow-2xs">
+                      <IconClock className="w-3.5 h-3.5" />
+                    </span>
+                  ),
+                  badge: '+OT',
+                  description: tr('attendance_days_view.overtime_desc'),
+                },
+                {
+                  value: 'LEAVE',
+                  label: tr('attendance_days_view.leave_whole_or_partial_shift'),
+                  icon: (
+                    <span className="w-6 h-6 rounded-lg bg-blue-50 text-blue-600 flex items-center justify-center shrink-0 border border-blue-200/60 shadow-2xs">
+                      <IconCalendar className="w-3.5 h-3.5" />
+                    </span>
+                  ),
+                  badge: 'LEAVE',
+                  description: tr('attendance_days_view.leave_desc'),
+                },
+              ];
+
+              const scheduleOptions: SmartSelectOption[] = availableSchedules.map(
+                ({ schedule, shift, startsAt, endsAt }) => ({
+                  value: schedule.id,
+                  label: `${schedule.workDate} · ${shift.name}`,
+                  description: `${startsAt.slice(11)}–${endsAt.slice(11)} (${shift.timezone})`,
+                  icon: (
+                    <span className="w-6 h-6 rounded-lg bg-orange-50 text-[#F66B17] flex items-center justify-center shrink-0 border border-orange-200/60 shadow-2xs">
+                      <IconCalendar className="w-3.5 h-3.5" />
+                    </span>
+                  ),
+                }),
+              );
+
+              return (
               <form
-                className="p-6 space-y-5"
+                className="p-6 sm:p-7 space-y-6"
                 onSubmit={(e) => {
                   e.preventDefault();
                   request.mutate();
@@ -1284,14 +1329,24 @@ export function AttendanceDaysView({
                   <div className="space-y-1.5">
                     <label
                       htmlFor="assigned-shift"
-                      className="block text-[10px] font-bold uppercase tracking-wider text-slate-500"
+                      className="block text-[10px] font-bold uppercase tracking-[0.16em] text-slate-500"
                     >
                       {tr('common.assigned_shift')}
                     </label>
+                    <SmartSelect
+                      id="assigned-shift-select"
+                      placeholder={tr('common.select_shift')}
+                      options={scheduleOptions}
+                      value={selectedRequestSchedule ? scheduleId : ''}
+                      onChange={(val) => suggestTimes(val, kind, new Date())}
+                      className="w-full"
+                    />
                     <select
                       id="assigned-shift"
                       required
-                      className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200/90 bg-white text-xs font-semibold text-[#071A2B] shadow-2xs focus:border-[#F66B17] focus:ring-2 focus:ring-orange-100 focus:outline-none transition-all cursor-pointer"
+                      aria-label={tr('common.assigned_shift')}
+                      className="sr-only"
+                      tabIndex={-1}
                       value={selectedRequestSchedule ? scheduleId : ''}
                       onChange={(e) => suggestTimes(e.target.value, kind, new Date())}
                     >
@@ -1304,16 +1359,30 @@ export function AttendanceDaysView({
                       ))}
                     </select>
                   </div>
+
                   <div className="space-y-1.5">
                     <label
                       htmlFor="request-kind"
-                      className="block text-[10px] font-bold uppercase tracking-wider text-slate-500"
+                      className="block text-[10px] font-bold uppercase tracking-[0.16em] text-slate-500"
                     >
                       {tr('common.request_type')}
                     </label>
+                    <SmartSelect
+                      id="request-kind-select"
+                      options={requestKindOptions}
+                      value={kind}
+                      onChange={(val) => {
+                        const next = val as 'OVERTIME' | 'LEAVE';
+                        setKind(next);
+                        suggestTimes(scheduleId, next, new Date());
+                      }}
+                      className="w-full"
+                    />
                     <select
                       id="request-kind"
-                      className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200/90 bg-white text-xs font-semibold text-[#071A2B] shadow-2xs focus:border-[#F66B17] focus:ring-2 focus:ring-orange-100 focus:outline-none transition-all cursor-pointer"
+                      aria-label={tr('common.request_type')}
+                      className="sr-only"
+                      tabIndex={-1}
                       value={kind}
                       onChange={(e) => {
                         const next = e.target.value as 'OVERTIME' | 'LEAVE';
@@ -1331,33 +1400,42 @@ export function AttendanceDaysView({
                   <div className="space-y-1.5">
                     <label
                       htmlFor="request-start"
-                      className="block text-[10px] font-bold uppercase tracking-wider text-slate-500"
+                      className="block text-[10px] font-bold uppercase tracking-[0.16em] text-slate-500"
                     >
                       {tr('attendance_days_view.start_date_time')}
                     </label>
-                    <div className="flex items-center gap-2">
+                    <div className="flex items-center gap-2.5">
                       <div className="relative flex-1">
-                        <IconCalendar className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-slate-400" />
+                        <SmartDatePicker
+                          value={startsAt.slice(0, 10)}
+                          onChange={(val) =>
+                            setStartsAt(`${val}T${startsAt.split('T')[1] ?? ''}`)
+                          }
+                          disablePast={false}
+                          compact
+                          placeholder={tr('common.start_date')}
+                          className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200/90 bg-white text-xs font-semibold text-[#071A2B] shadow-2xs hover:border-slate-300 focus:border-[#F66B17] focus:ring-2 focus:ring-[#F66B17]/15 transition-all"
+                        />
                         <input
                           id="request-start-date"
                           aria-label={tr('common.start_date')}
                           type="date"
-                          required
-                          className="w-full pl-8 pr-3 py-2.5 rounded-xl border border-slate-200/90 bg-white text-xs font-semibold text-[#071A2B] shadow-2xs focus:border-[#F66B17] focus:ring-2 focus:ring-orange-100 focus:outline-none transition-all"
+                          className="sr-only"
+                          tabIndex={-1}
                           value={startsAt.slice(0, 10)}
                           onChange={(e) =>
                             setStartsAt(`${e.target.value}T${startsAt.split('T')[1] ?? ''}`)
                           }
                         />
                       </div>
-                      <div className="relative flex-1">
-                        <IconClock className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-slate-400" />
+                      <div className="relative flex-1 group">
+                        <IconClock className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400 group-focus-within:text-[#F66B17] transition-colors pointer-events-none" />
                         <input
                           id="request-start"
                           aria-label={tr('common.start_time')}
                           type="time"
                           required
-                          className="w-full pl-8 pr-3 py-2.5 rounded-xl border border-slate-200/90 bg-white text-xs font-semibold text-[#071A2B] shadow-2xs focus:border-[#F66B17] focus:ring-2 focus:ring-orange-100 focus:outline-none transition-all"
+                          className="w-full pl-9 pr-3 py-2.5 rounded-xl border border-slate-200/90 bg-white text-xs font-semibold text-[#071A2B] shadow-2xs hover:border-slate-300 focus:border-[#F66B17] focus:ring-2 focus:ring-[#F66B17]/15 focus:outline-none transition-all"
                           value={startsAt.split('T')[1] ?? ''}
                           onChange={(e) =>
                             setStartsAt(`${startsAt.slice(0, 10)}T${e.target.value}`)
@@ -1369,33 +1447,42 @@ export function AttendanceDaysView({
                   <div className="space-y-1.5">
                     <label
                       htmlFor="request-end"
-                      className="block text-[10px] font-bold uppercase tracking-wider text-slate-500"
+                      className="block text-[10px] font-bold uppercase tracking-[0.16em] text-slate-500"
                     >
                       {tr('attendance_days_view.end_date_time')}
                     </label>
-                    <div className="flex items-center gap-2">
+                    <div className="flex items-center gap-2.5">
                       <div className="relative flex-1">
-                        <IconCalendar className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-slate-400" />
+                        <SmartDatePicker
+                          value={endsAt.slice(0, 10)}
+                          onChange={(val) =>
+                            setEndsAt(`${val}T${endsAt.split('T')[1] ?? ''}`)
+                          }
+                          disablePast={false}
+                          compact
+                          placeholder={tr('common.end_date')}
+                          className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200/90 bg-white text-xs font-semibold text-[#071A2B] shadow-2xs hover:border-slate-300 focus:border-[#F66B17] focus:ring-2 focus:ring-[#F66B17]/15 transition-all"
+                        />
                         <input
                           id="request-end-date"
                           aria-label={tr('common.end_date')}
                           type="date"
-                          required
-                          className="w-full pl-8 pr-3 py-2.5 rounded-xl border border-slate-200/90 bg-white text-xs font-semibold text-[#071A2B] shadow-2xs focus:border-[#F66B17] focus:ring-2 focus:ring-orange-100 focus:outline-none transition-all"
+                          className="sr-only"
+                          tabIndex={-1}
                           value={endsAt.slice(0, 10)}
                           onChange={(e) =>
                             setEndsAt(`${e.target.value}T${endsAt.split('T')[1] ?? ''}`)
                           }
                         />
                       </div>
-                      <div className="relative flex-1">
-                        <IconClock className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-slate-400" />
+                      <div className="relative flex-1 group">
+                        <IconClock className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400 group-focus-within:text-[#F66B17] transition-colors pointer-events-none" />
                         <input
                           id="request-end"
                           aria-label={tr('common.end_time')}
                           type="time"
                           required
-                          className="w-full pl-8 pr-3 py-2.5 rounded-xl border border-slate-200/90 bg-white text-xs font-semibold text-[#071A2B] shadow-2xs focus:border-[#F66B17] focus:ring-2 focus:ring-orange-100 focus:outline-none transition-all"
+                          className="w-full pl-9 pr-3 py-2.5 rounded-xl border border-slate-200/90 bg-white text-xs font-semibold text-[#071A2B] shadow-2xs hover:border-slate-300 focus:border-[#F66B17] focus:ring-2 focus:ring-[#F66B17]/15 focus:outline-none transition-all"
                           value={endsAt.split('T')[1] ?? ''}
                           onChange={(e) => setEndsAt(`${endsAt.slice(0, 10)}T${e.target.value}`)}
                         />
@@ -1406,7 +1493,7 @@ export function AttendanceDaysView({
                   <div className="space-y-1.5 sm:col-span-2">
                     <label
                       htmlFor="request-reason"
-                      className="block text-[10px] font-bold uppercase tracking-wider text-slate-500"
+                      className="block text-[10px] font-bold uppercase tracking-[0.16em] text-slate-500"
                     >
                       {tr('common.reason')}
                     </label>
@@ -1415,23 +1502,26 @@ export function AttendanceDaysView({
                       required
                       minLength={5}
                       maxLength={1000}
-                      className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200/90 text-xs font-semibold text-[#071A2B] shadow-2xs focus:border-[#F66B17] focus:ring-2 focus:ring-orange-100 focus:outline-none transition-all"
+                      className="w-full px-4 py-2.5 rounded-xl border border-slate-200/90 text-xs font-semibold text-[#071A2B] shadow-2xs hover:border-slate-300 focus:border-[#F66B17] focus:ring-2 focus:ring-[#F66B17]/15 focus:outline-none transition-all duration-200"
                       value={reason}
                       onChange={(e) => setReason(e.target.value)}
                     />
                   </div>
                 </div>
-                <div className="flex items-center gap-3 pt-1">
+                <div className="flex items-center gap-3 pt-2">
                   <button
                     type="submit"
                     aria-label={tr('common.submit_request')}
-                    className="flex items-center gap-2 px-5 py-2.5 rounded-xl bg-[#071A2B] text-white text-xs font-bold disabled:opacity-50 hover:bg-slate-800 transition-all shadow-2xs active:scale-[0.98] cursor-pointer"
+                    className="group flex items-center gap-2.5 px-6 py-2.5 rounded-xl bg-[#071A2B] text-white text-xs font-bold disabled:opacity-40 hover:bg-[#04121D] transition-all shadow-sm hover:shadow active:scale-[0.98] cursor-pointer"
                     disabled={request.isPending || !selectedRequestSchedule}
                   >
-                    {tr('common.submit_request')}
+                    <span>{tr('common.submit_request')}</span>
+                    <div className="w-5 h-5 rounded-lg bg-white/10 group-hover:bg-[#F66B17] flex items-center justify-center transition-colors">
+                      <IconChevronRight className="w-3 h-3 text-white group-hover:translate-x-0.5 transition-transform" />
+                    </div>
                   </button>
                   {request.isSuccess && (
-                    <span className="flex items-center gap-1.5 text-xs text-emerald-700 font-semibold">
+                    <span className="flex items-center gap-1.5 text-xs text-emerald-700 font-semibold bg-emerald-50 border border-emerald-200/60 px-3 py-1.5 rounded-xl">
                       <IconCheck className="w-3.5 h-3.5" /> {tr('common.request_submitted')}
                     </span>
                   )}
@@ -1442,49 +1532,68 @@ export function AttendanceDaysView({
                   </p>
                 )}
               </form>
-            )}
+            );
+          })()}
           </div>
         ) : null}
 
         {/* ── TIME REQUESTS QUEUE ─────────────────────────────── */}
-        <div className="rounded-2xl border border-slate-200 bg-white shadow-xs overflow-hidden">
-          <div className="flex items-center justify-between px-6 py-4 border-b border-slate-100">
-            <h3 className="text-sm font-bold text-[#071A2B]">{tr('common.time_requests')}</h3>
-            <div className="flex items-center gap-2">
+        <div className="rounded-2xl border border-slate-200/80 bg-white shadow-xs overflow-hidden">
+          <div className="flex flex-wrap items-center justify-between gap-3 px-6 py-4 border-b border-slate-100 bg-gradient-to-r from-slate-50/50 to-white">
+            <div className="flex items-center gap-3">
+              <div className="w-8 h-8 rounded-lg bg-orange-50 text-[#F66B17] flex items-center justify-center border border-orange-200/60 shadow-2xs">
+                <IconClock className="w-4 h-4" />
+              </div>
+              <h3 className="text-sm font-extrabold text-[#071A2B] tracking-tight">
+                {tr('common.time_requests')}
+              </h3>
+            </div>
+            <div className="flex items-center gap-2.5">
               <label htmlFor="queue-kind" className="sr-only">
                 {tr('common.queue_type')}
               </label>
-              <select
-                id="queue-kind"
-                aria-label={tr('common.queue_type')}
-                className="px-2.5 py-1.5 rounded-lg border border-slate-200 bg-white text-xs font-semibold text-[#071A2B] focus:outline-none"
-                value={requestKind}
-                onChange={(e) => {
-                  setRequestKind(e.target.value as 'OVERTIME' | 'LEAVE');
-                  setRequestOffset(0);
-                }}
-              >
-                <option value="OVERTIME">{tr('common.overtime')}</option>
-                <option value="LEAVE">{tr('common.leave')}</option>
-              </select>
+              <div className="relative group">
+                <select
+                  id="queue-kind"
+                  aria-label={tr('common.queue_type')}
+                  className="pl-3.5 pr-8 py-1.5 rounded-xl border border-slate-200/90 bg-slate-50/70 hover:bg-white text-xs font-bold text-[#071A2B] shadow-2xs hover:border-slate-300 hover:shadow-xs focus:border-[#F66B17] focus:ring-2 focus:ring-[#F66B17]/15 focus:outline-none transition-all duration-150 cursor-pointer appearance-none"
+                  value={requestKind}
+                  onChange={(e) => {
+                    setRequestKind(e.target.value as 'OVERTIME' | 'LEAVE');
+                    setRequestOffset(0);
+                  }}
+                >
+                  <option value="OVERTIME">{tr('common.overtime')}</option>
+                  <option value="LEAVE">{tr('common.leave')}</option>
+                </select>
+                <div className="absolute right-2.5 top-1/2 -translate-y-1/2 pointer-events-none text-slate-400 group-focus-within:text-[#F66B17] transition-colors">
+                  <IconChevronDown className="w-3.5 h-3.5" />
+                </div>
+              </div>
+
               <label htmlFor="queue-status" className="sr-only">
                 {tr('common.request_status')}
               </label>
-              <select
-                id="queue-status"
-                aria-label={tr('common.request_status')}
-                className="px-2.5 py-1.5 rounded-lg border border-slate-200 bg-white text-xs font-semibold text-[#071A2B] focus:outline-none"
-                value={requestStatus}
-                onChange={(e) => {
-                  setRequestStatus(e.target.value as typeof requestStatus);
-                  setRequestOffset(0);
-                }}
-              >
-                <option value="">{tr('common.all_statuses')}</option>
-                <option value="PENDING">{tr('common.pending')}</option>
-                <option value="APPROVED">{tr('common.approved')}</option>
-                <option value="REJECTED">{tr('common.rejected')}</option>
-              </select>
+              <div className="relative group">
+                <select
+                  id="queue-status"
+                  aria-label={tr('common.request_status')}
+                  className="pl-3.5 pr-8 py-1.5 rounded-xl border border-slate-200/90 bg-slate-50/70 hover:bg-white text-xs font-bold text-[#071A2B] shadow-2xs hover:border-slate-300 hover:shadow-xs focus:border-[#F66B17] focus:ring-2 focus:ring-[#F66B17]/15 focus:outline-none transition-all duration-150 cursor-pointer appearance-none"
+                  value={requestStatus}
+                  onChange={(e) => {
+                    setRequestStatus(e.target.value as typeof requestStatus);
+                    setRequestOffset(0);
+                  }}
+                >
+                  <option value="">{tr('common.all_statuses')}</option>
+                  <option value="PENDING">{tr('common.pending')}</option>
+                  <option value="APPROVED">{tr('common.approved')}</option>
+                  <option value="REJECTED">{tr('common.rejected')}</option>
+                </select>
+                <div className="absolute right-2.5 top-1/2 -translate-y-1/2 pointer-events-none text-slate-400 group-focus-within:text-[#F66B17] transition-colors">
+                  <IconChevronDown className="w-3.5 h-3.5" />
+                </div>
+              </div>
             </div>
           </div>
 

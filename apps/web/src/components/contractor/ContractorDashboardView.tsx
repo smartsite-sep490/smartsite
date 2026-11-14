@@ -648,8 +648,7 @@ export function ContractorDashboardView({
           </div>
           {activeScope ? (
             <h1 className="text-2xl font-black text-[#071A2B] tracking-tight mt-1.5">
-              {activeScope.siteName}{' '}
-              <span className="text-base font-medium text-slate-400">({activeScope.siteCode})</span>
+              {activeScope.siteName}
             </h1>
           ) : (
             <h1 className="text-2xl font-black text-[#071A2B] tracking-tight mt-1.5">
@@ -687,7 +686,7 @@ export function ContractorDashboardView({
                 key={`${scope.siteId}:${scope.contractorId}`}
                 value={`${scope.siteId}:${scope.contractorId}`}
               >
-                {scope.siteName} ({scope.siteCode}) — {scope.contractorName}
+                {scope.siteName} — {scope.contractorName}
               </option>
             ))}
           </select>

@@ -71,7 +71,8 @@ it('Admin selects a contractor and pages Site intervals; switching contractor pa
     });
   const cache = mount(),
     user = userEvent.setup();
-  await user.click(await screen.findByRole('button', { name: /Alpha CTR-A/ }));
+  await user.click(await screen.findByRole('button', { name: 'Alpha' }));
+  expect(screen.queryByText('CTR-A')).toBeNull();
   await screen.findByText('No end date', { exact: false });
   expect(screen.getByText('Active')).toBeTruthy();
   expect(participations).toHaveBeenCalledWith('token', 'contractor-a', { offset: 0, limit: 20 });
@@ -92,7 +93,7 @@ it('unavailable participation data has retry and never looks like an empty Site 
     .mockResolvedValueOnce({ ...data, items: [], total: 0 });
   const cache = mount(),
     user = userEvent.setup();
-  await user.click(await screen.findByRole('button', { name: /Alpha CTR-A/ }));
+  await user.click(await screen.findByRole('button', { name: 'Alpha' }));
   await screen.findByText('Site participations unavailable.', { exact: false });
   expect(screen.queryByText('No Site participations.')).toBeNull();
   await user.click(screen.getByRole('button', { name: 'Retry participations' }));
