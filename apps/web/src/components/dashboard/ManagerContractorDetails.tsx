@@ -51,7 +51,6 @@ export function ManagerContractorDetails({
       open
       onClose={onClose}
       title={data?.name ?? tr('common.contractor_details')}
-      description={data?.code}
       maxWidth="xl"
     >
       <div className="max-h-[65vh] overflow-y-auto space-y-5 pr-1">

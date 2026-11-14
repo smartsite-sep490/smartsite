@@ -25,7 +25,7 @@ afterEach(() => {
   vi.restoreAllMocks();
 });
 
-async function setupManager() {
+async function setupManager(linkRepresentative = false) {
   vi.spyOn(SmartSiteManagementClient.prototype, 'listSites').mockResolvedValue({
     items: ['a', 'b'].map((id) => ({
       id: `site-${id}`,
@@ -40,7 +40,7 @@ async function setupManager() {
       {
         id: 'contractor-a',
         siteId: 'site-a',
-        code: 'A',
+        code: 'CTR-PRIVATE-123',
         name: 'Contractor A',
         isActive: true,
         createdAt: '2026-01-01T00:00:00Z',
@@ -49,7 +49,11 @@ async function setupManager() {
     total: 1,
   });
   vi.spyOn(SmartSiteManagementClient.prototype, 'contractorParticipationOptions').mockResolvedValue(
-    { items: [{ id: 'contractor-a', code: 'A', name: 'Contractor A', isActive: true }] },
+    {
+      items: [
+        { id: 'contractor-a', code: 'CTR-PRIVATE-123', name: 'Contractor A', isActive: true },
+      ],
+    },
   );
   const globalUsers = vi.spyOn(SmartSiteManagementClient.prototype, 'listUsers');
   const representatives = vi
@@ -76,7 +80,20 @@ async function setupManager() {
   vi.spyOn(
     SmartSiteManagementClient.prototype,
     'listContractorRepresentativeAssignments',
-  ).mockResolvedValue({ items: [], total: 0 });
+  ).mockResolvedValue({
+    items: linkRepresentative
+      ? [
+          {
+            id: 'assignment',
+            userId: 'rep-a',
+            contractorId: 'contractor-a',
+            siteId: 'site-a',
+            createdAt: '2026-01-01T00:00:00Z',
+          },
+        ]
+      : [],
+    total: linkRepresentative ? 1 : 0,
+  });
   vi.spyOn(SmartSiteManagementClient.prototype, 'listZones').mockResolvedValue({
     items: [],
     total: 0,
@@ -168,6 +185,16 @@ async function setupManager() {
     attendance,
   };
 }
+
+it('shows contractor names without contractor codes in the contractor and representative lists', async () => {
+  const { user, cache } = await setupManager(true);
+  await screen.findAllByText('Contractor A');
+  expect(screen.queryByText('CTR-PRIVATE-123')).toBeNull();
+  await user.click(screen.getByRole('button', { name: /^Representatives/ }));
+  await screen.findAllByText('Contractor A');
+  expect(screen.queryByText(/CTR-PRIVATE-123/)).toBeNull();
+  cache.clear();
+});
 
 it('manager creates contractors and configures scoped Zones', async () => {
   const { user, cache, createContractor, createZone, grantZone, attendance } = await setupManager();

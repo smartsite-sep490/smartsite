@@ -93,7 +93,6 @@ export function ContractorParticipationDirectory({ apiUrl }: { apiUrl: string })
                 >
                   {contractor.name}{' '}
                   <span className="text-xs text-slate-500">
-                    {contractor.code}
                     {contractor.isActive ? '' : tr('common.inactive_9558f5')}
                   </span>
                 </button>

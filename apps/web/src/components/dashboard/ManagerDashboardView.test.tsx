@@ -110,6 +110,7 @@ it('manager Dashboard displays API counts, scopes Sites and opens dated contract
   const cache = renderDashboard(),
     user = userEvent.setup();
   await screen.findByText('24', { selector: 'dd' });
+  expect(screen.queryByText('CTR-A')).toBeNull();
   expect(screen.getByText('3', { selector: 'dd' })).toBeTruthy();
   expect(screen.getByText('42', { selector: 'dd' })).toBeTruthy();
   expect(screen.queryByRole('option', { name: 'Site b' })).toBeNull();
@@ -121,6 +122,7 @@ it('manager Dashboard displays API counts, scopes Sites and opens dated contract
   await user.click(screen.getByRole('button', { name: 'View details for Alpha' }));
   const dialog = within(await screen.findByRole('dialog'));
   await dialog.findByText('Tower A');
+  expect(dialog.queryByText('CTR-A')).toBeNull();
   expect(dialog.getByText('Team work area')).toBeTruthy();
   expect(dialog.getAllByText('01/01/2026 – 01/01/2027')).toHaveLength(2);
   expect(dialog.getByText(/\d{2}:\d{2}/)).toBeTruthy();

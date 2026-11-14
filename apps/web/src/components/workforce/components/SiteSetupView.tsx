@@ -1246,10 +1246,6 @@ export function SiteSetupView({ apiUrl }: SiteSetupViewProps) {
                                     {contractor.name}
                                   </p>
                                   <div className="flex items-center gap-2 mt-0.5 flex-wrap">
-                                    {/* Code chip */}
-                                    <span className="inline-flex items-center font-mono text-[9px] font-bold bg-slate-100 border border-slate-200 text-slate-700 px-2 py-0.5 rounded-md tracking-wider">
-                                      {contractor.code}
-                                    </span>
                                     {/* Created date */}
                                     <span className="text-[10px] text-slate-400">
                                       {new Date(contractor.createdAt).toLocaleDateString(
@@ -1411,7 +1407,6 @@ export function SiteSetupView({ apiUrl }: SiteSetupViewProps) {
                                           className="inline-flex items-center gap-1 font-mono text-[9px] font-bold bg-slate-100 border border-slate-200 text-slate-700 px-2 py-0.5 rounded-md"
                                         >
                                           <span>{c.name}</span>
-                                          <span className="text-slate-400">({c.code})</span>
                                         </span>
                                       ))
                                     ) : (
@@ -1928,7 +1923,6 @@ export function SiteSetupView({ apiUrl }: SiteSetupViewProps) {
                 options={contractors.map((contractor) => ({
                   value: contractor.id,
                   label: contractor.name,
-                  badge: contractor.code,
                 }))}
               />
 
@@ -2108,7 +2102,6 @@ export function SiteSetupView({ apiUrl }: SiteSetupViewProps) {
                     ...contractors.map((c) => ({
                       value: c.id,
                       label: c.name,
-                      badge: c.code,
                     })),
                   ]}
                 />

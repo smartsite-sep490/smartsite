@@ -190,9 +190,6 @@ export function ManagerDashboardView({
                             >
                               <td className="p-4">
                                 <p className="font-bold text-[#041D2E]">{contractor.name}</p>
-                                <p className="mt-0.5 text-xs font-semibold text-[#F66B17]">
-                                  {contractor.code}
-                                </p>
                               </td>
                               <td className="p-4 font-semibold text-[#041D2E]">
                                 {contractor.teamCount}
