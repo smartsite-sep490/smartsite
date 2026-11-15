@@ -94,7 +94,22 @@ function getGateFaceMessage(reasonCode: string): string {
   );
 }
 
-export function SecurityGateDeskView({
+export function SecurityGateDeskView(props: SecurityGateDeskViewProps) {
+  // A new operator workspace must not retain another Site's pending attempts or QR sessions.
+  return (
+    <ScopedSecurityGateDeskView
+      key={JSON.stringify([
+        props.apiUrl,
+        props.sessionScope,
+        props.selectedSiteId,
+        props.isSecurityOfficer,
+      ])}
+      {...props}
+    />
+  );
+}
+
+function ScopedSecurityGateDeskView({
   isSecurityOfficer = false,
   apiUrl,
   token,
@@ -160,7 +175,7 @@ export function SecurityGateDeskView({
     setSeparatePassage(false);
   }, []);
   const passageKey = useRef<{ attemptId: string; idempotencyKey: string } | null>(null);
-  const passage = useMutation({
+  const passage = useMutation<GateEventResponse, Error, number>({
     mutationFn: () => {
       if (!currentAttempt) throw new Error(tr('security_gate_desk_view.verify_the_worker_first'));
       if (passageKey.current?.attemptId !== currentAttempt.id)
@@ -171,7 +186,8 @@ export function SecurityGateDeskView({
         separatePassage: separatePassage || undefined,
       });
     },
-    onSuccess: (event) => {
+    onSuccess: (event, generation) => {
+      if (generation !== scanGeneration.current || !cameraMountedRef.current) return;
       setRepeatNotice('');
       setSeparatePassage(false);
       setCurrentAttempt(null);
@@ -186,7 +202,8 @@ export function SecurityGateDeskView({
         queryKey: ['gate-access-logs', apiUrl, sessionScope, selectedSiteId, selectedGateId],
       });
     },
-    onError: (error) => {
+    onError: (error, generation) => {
+      if (generation !== scanGeneration.current || !cameraMountedRef.current) return;
       if (error instanceof ApiError && error.backendError?.code === 'WORKER_NO_SCHEDULE') {
         handleNoScheduleDenial();
         return;
@@ -216,18 +233,20 @@ export function SecurityGateDeskView({
     ? `${localizedLabel(qrResult.authorization)}: ${qrResult.worker.displayName} · ${getSafeReasonMessage(qrResult.reasonCode)}`
     : '';
   const qrCommand = useRef<WorkerQrVerificationCommand | null>(null);
-  const fallbackMutation = useMutation({
+  const fallbackMutation = useMutation<QrFallbackResponse, Error, number>({
     mutationFn: () =>
       client.openCameraQrFallback(token!, selectedSiteId, selectedGateId, direction),
-    onSuccess: (r) => {
+    onSuccess: (r, generation) => {
+      if (generation !== scanGeneration.current || !cameraMountedRef.current) return;
       setFallback(r);
       setQrModalOpen(true);
     },
   });
   const qrVerification = useMutation({
-    mutationFn: (input: WorkerQrVerificationCommand) =>
+    mutationFn: ({ input }: { input: WorkerQrVerificationCommand; generation: number }) =>
       client.verifyWorkerQr(token!, selectedSiteId, selectedGateId, input),
-    onSuccess: (r) => {
+    onSuccess: (r, { generation }) => {
+      if (generation !== scanGeneration.current || !cameraMountedRef.current) return;
       setRepeatNotice('');
       setSeparatePassage(false);
       setQrResult(r);
@@ -502,6 +521,11 @@ export function SecurityGateDeskView({
     setNetworkError(false);
     setFallback(null);
     setQrCodeInput('');
+    setQrResult(null);
+    setQrModalOpen(false);
+    fallbackMutation.reset();
+    qrVerification.reset();
+    passage.reset();
     qrCommand.current = null;
   };
 
@@ -527,7 +551,7 @@ export function SecurityGateDeskView({
           };
     qrCommand.current = input;
     setQrResult(null);
-    qrVerification.mutate(input);
+    qrVerification.mutate({ input, generation: scanGeneration.current });
   };
 
   const uiState = resolveGateUiState({
@@ -727,7 +751,7 @@ export function SecurityGateDeskView({
                           stopCamera();
                           qrVerification.reset();
                           setQrResult(null);
-                          fallbackMutation.mutate();
+                          fallbackMutation.mutate(scanGeneration.current);
                         }}
                       >
                         <IconKey className="h-3.5 w-3.5" />
@@ -1144,7 +1168,7 @@ export function SecurityGateDeskView({
                   currentAttempt.scheduleStatus !== 'SCHEDULED' &&
                   !isSecurityOfficer)
               }
-              onClick={() => passage.mutate()}
+              onClick={() => passage.mutate(scanGeneration.current)}
             >
               {tr('common.confirm_actual_passage')}
             </button>
