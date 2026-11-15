@@ -133,3 +133,17 @@ test('strict envelope rejects fields that JSON serialization would silently remo
     null,
   );
 });
+
+test('envelope rejects an event changed by a hidden serializer after validation', () => {
+  for (const replacement of [
+    { ...event, streamSessionId: context.cameraId },
+    { ...event, observations: [] },
+  ]) {
+    const altered = { ...event };
+    Object.defineProperty(altered, 'toJSON', { value: () => replacement });
+    assert.equal(
+      api.parseWorkerEventDeliveryEnvelope({ schemaVersion: '1.0.0', context, event: altered }),
+      null,
+    );
+  }
+});

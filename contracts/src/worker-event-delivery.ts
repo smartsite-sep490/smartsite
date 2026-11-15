@@ -82,18 +82,30 @@ export function parseWorkerEventDeliveryEnvelope(
       value.schemaVersion !== '1.0.0'
     )
       return null;
-    const context = parseWorkerEventDeliveryContext(value.context);
-    if (!context || !object(value.event) || value.event.streamSessionId !== context.streamSessionId)
+    const originalContext = parseWorkerEventDeliveryContext(value.context);
+    if (
+      !originalContext ||
+      !object(value.event) ||
+      value.event.streamSessionId !== originalContext.streamSessionId
+    )
       return null;
-    const validation =
+    const originalValidation =
       value.event.schemaVersion === '1.4.0'
         ? validatePartitionedObservationEvent(value.event)
         : validateObservationEvent(value.event);
-    if (!validation.isValid) return null;
+    if (!originalValidation.isValid) return null;
     const serialized = JSON.stringify(value);
     if (Buffer.byteLength(serialized, 'utf8') > 1024 * 1024) return null;
     const copy: Record<string, unknown> = JSON.parse(serialized);
-    return { schemaVersion: '1.0.0', context, event: copy.event as Record<string, unknown> };
+    const context = parseWorkerEventDeliveryContext(copy.context);
+    if (!context || !object(copy.event) || copy.event.streamSessionId !== context.streamSessionId)
+      return null;
+    const validation =
+      copy.event.schemaVersion === '1.4.0'
+        ? validatePartitionedObservationEvent(copy.event)
+        : validateObservationEvent(copy.event);
+    if (!validation.isValid) return null;
+    return { schemaVersion: '1.0.0', context, event: copy.event };
   } catch {
     return null;
   }
