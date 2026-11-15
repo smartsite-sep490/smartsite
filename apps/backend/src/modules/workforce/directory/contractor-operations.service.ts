@@ -388,11 +388,18 @@ export class ContractorOperationsService {
       if (!worker?.contractorId || !worker.isActive) this.forbidden();
       await this.requireContractorRepresentative(manager, actor, worker.contractorId, siteId);
       await this.requireActiveParticipation(manager, worker.contractorId, siteId, range.from);
-      const participation = await manager
-        .getRepository(ContractorSiteParticipationEntity)
-        .findOneBy({ contractorId: worker.contractorId, siteId, isActive: true });
-      if (!participation || (participation.validUntil && participation.validUntil < range.until!))
-        conflict('Assignment must fit the contractor participation interval');
+      // A contractor may renew participation while its historical row stays active.
+      // Bind the request to one participation that contains the entire interval.
+      const participations = await manager.getRepository(ContractorSiteParticipationEntity).find({
+        where: { contractorId: worker.contractorId, siteId, isActive: true },
+        order: { validFrom: 'DESC', id: 'ASC' },
+      });
+      const participation = participations.find(
+        (candidate) =>
+          candidate.validFrom <= range.from &&
+          (!candidate.validUntil || candidate.validUntil >= range.until!),
+      );
+      if (!participation) conflict('Assignment must fit the contractor participation interval');
       const zones = await manager.getRepository(ZoneEntity).findBy({ id: In(zoneIds), siteId });
       if (zones.length !== zoneIds.length) this.forbidden();
       const assignment = await manager.getRepository(WorkerSiteZoneAssignmentEntity).save({

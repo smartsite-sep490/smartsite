@@ -722,6 +722,55 @@ test('MF01: contractor onboarding, assignment requests, consent and current entr
         );
       },
     );
+    await t.test(
+      'renewal selects a participation covering the full request instead of an expired historical row',
+      async () => {
+        const renewedId = randomUUID();
+        let renewedAssignmentId: string | undefined;
+        await dataSource.getRepository(ContractorSiteParticipationEntity).update(participationId, {
+          validFrom: new Date(+from - 3 * 86400_000),
+          validUntil: new Date(+from - 86400_000),
+        });
+        try {
+          await dataSource.getRepository(ContractorSiteParticipationEntity).save({
+            id: renewedId,
+            contractorId,
+            siteId,
+            validFrom: from,
+            validUntil: parentUntil,
+            isActive: true,
+          });
+          const renewedAssignment = await operations.requestAssignment(
+            representative,
+            worker.id,
+            request,
+          );
+          renewedAssignmentId = renewedAssignment.id;
+          assert.equal(renewedAssignment.siteContractorId, renewedId);
+          assert.equal(renewedAssignment.status, WorkerSiteZoneAssignmentStatus.PENDING);
+          await assert.rejects(
+            operations.requestAssignment(representative, worker.id, {
+              ...request,
+              validUntil: new Date(+parentUntil + 60_000).toISOString(),
+            }),
+            /participation interval/,
+          );
+        } finally {
+          if (renewedAssignmentId) {
+            await dataSource
+              .getRepository(AccessAuditEntity)
+              .delete({ entityId: renewedAssignmentId });
+            await dataSource
+              .getRepository(WorkerSiteZoneAssignmentEntity)
+              .delete(renewedAssignmentId);
+          }
+          await dataSource.getRepository(ContractorSiteParticipationEntity).delete(renewedId);
+          await dataSource
+            .getRepository(ContractorSiteParticipationEntity)
+            .update(participationId, { validFrom: from, validUntil: parentUntil });
+        }
+      },
+    );
     const assignment = await operations.requestAssignment(representative, worker.id, request);
     await t.test(
       'valid assignment stays pending and records the requester and audit history',

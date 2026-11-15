@@ -7,6 +7,9 @@ import { ContractorRepresentativeGrantEntity } from '../src/database/entities/co
 import { ContractorSiteParticipationEntity } from '../src/database/entities/contractor-site-participation.entity.js';
 import { UserRole } from '../src/database/entities/user.entity.js';
 import { WorkerEntity } from '../src/database/entities/worker.entity.js';
+import { WorkerSiteZoneAssignmentEntity } from '../src/database/entities/worker-site-zone-assignment.entity.js';
+import { ZoneEntity } from '../src/database/entities/zone.entity.js';
+import { AccessAuditEntity } from '../src/database/entities/access-audit.entity.js';
 import {
   ContractorOperationsService,
   type WorkforceActor,
@@ -188,4 +191,76 @@ test('ContractorOperationsService denies enrollment of an unassigned site worker
     (error: unknown) =>
       error instanceof PublicHttpException && error.publicPayload.code === 'FORBIDDEN',
   );
+});
+
+test('assignment requests select a renewed participation that contains the entire interval', async () => {
+  const workerId = '00000000-0000-4000-8000-000000000010';
+  const zoneId = '00000000-0000-4000-8000-000000000011';
+  const historical = {
+    id: 'historical',
+    validFrom: new Date('2026-01-01Z'),
+    validUntil: new Date('2026-10-01Z'),
+  };
+  const renewed = {
+    id: 'renewed',
+    validFrom: new Date('2026-11-01Z'),
+    validUntil: new Date('2026-12-01Z'),
+  };
+  const saved: Array<Record<string, unknown>> = [];
+  const manager = {
+    getRepository(target: unknown) {
+      if (target === WorkerEntity)
+        return {
+          findOneBy: async () => ({
+            id: workerId,
+            siteId: IDs.site,
+            contractorId: IDs.contractor,
+            isActive: true,
+          }),
+        };
+      if (target === ContractorRepresentativeGrantEntity)
+        return { findOneBy: async () => ({ id: 'grant' }) };
+      if (target === ContractorEntity)
+        return { findOneBy: async () => ({ id: IDs.contractor, isActive: true }) };
+      if (target === ContractorSiteParticipationEntity)
+        return {
+          findBy: async () => [historical, renewed],
+          findOneBy: async () => historical,
+          find: async () => [historical, renewed],
+        };
+      if (target === ZoneEntity) return { findBy: async () => [{ id: zoneId }] };
+      if (target === WorkerSiteZoneAssignmentEntity)
+        return {
+          save: async (value: Record<string, unknown>) => {
+            saved.push(value);
+            return value;
+          },
+        };
+      if (target === AccessAuditEntity) return { save: async () => ({}) };
+      throw new Error('Unexpected repository');
+    },
+  } as unknown as EntityManager;
+  const service = new ContractorOperationsService({
+    transaction: async (callback: (manager: EntityManager) => Promise<unknown>) =>
+      callback(manager),
+  } as never);
+  const input = {
+    siteId: IDs.site,
+    zoneIds: [zoneId],
+    validFrom: '2026-11-15T00:00:00Z',
+    validUntil: '2026-11-16T00:00:00Z',
+  };
+  await service.requestAssignment(representative(), workerId, input);
+  assert.equal(saved[0]?.siteContractorId, renewed.id);
+  assert.equal(saved[0]?.status, 'PENDING');
+  for (const invalid of [
+    { ...input, validUntil: '2026-12-02T00:00:00Z' },
+    { ...input, validFrom: '2026-09-30T00:00:00Z' },
+  ]) {
+    await assert.rejects(
+      service.requestAssignment(representative(), workerId, invalid),
+      /participation interval/,
+    );
+  }
+  assert.equal(saved.length, 1);
 });
