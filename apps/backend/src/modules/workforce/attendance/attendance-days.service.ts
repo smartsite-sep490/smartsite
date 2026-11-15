@@ -1,3 +1,4 @@
+import { leaveNotice } from '@smartsite/contracts';
 import { Injectable } from '@nestjs/common';
 import { PublicHttpException } from '../../../common/http/public-http-exception.js';
 import { randomUUID } from 'node:crypto';
@@ -98,6 +99,8 @@ export class AttendanceDaysService {
         items: requests.map((r) => ({
           id: r.id,
           kind: 'OVERTIME',
+          createdAt: r.createdAt.toISOString(),
+          requestedByUserId: r.requestedBy,
           workerId: r.workerId,
           workerName: visible.find((w) => w.id === r.workerId)!.displayName,
           scheduleId: r.scheduleId,
@@ -141,6 +144,12 @@ export class AttendanceDaysService {
         return {
           id: r.id,
           kind: 'LEAVE' as const,
+          noticeType: r.noticeType,
+          shortNotice: r.shortNotice,
+          createdAt: r.createdAt.toISOString(),
+          requestedByUserId: r.requestedByUserId,
+          submittedOnBehalf:
+            visible.find((w) => w.id === r.workerId)!.userId !== r.requestedByUserId,
           workerId: r.workerId,
           workerName: visible.find((w) => w.id === r.workerId)!.displayName,
           scheduleId: r.workerScheduleId,
@@ -303,6 +312,8 @@ export class AttendanceDaysService {
       ...overtime.map((r) => ({
         id: r.id,
         kind: 'OVERTIME' as const,
+        createdAt: r.createdAt.toISOString(),
+        requestedByUserId: r.requestedBy,
         workerId: r.workerId,
         workerName: visible.find((w) => w.id === r.workerId)!.displayName,
         scheduleId: r.scheduleId,
@@ -324,6 +335,12 @@ export class AttendanceDaysService {
               {
                 id: r.id,
                 kind: 'LEAVE' as const,
+                noticeType: r.noticeType,
+                shortNotice: r.shortNotice,
+                createdAt: r.createdAt.toISOString(),
+                requestedByUserId: r.requestedByUserId,
+                submittedOnBehalf:
+                  visible.find((w) => w.id === r.workerId)!.userId !== r.requestedByUserId,
                 workerId: r.workerId,
                 workerName: visible.find((w) => w.id === r.workerId)!.displayName,
                 scheduleId: r.workerScheduleId,
@@ -524,9 +541,12 @@ export class AttendanceDaysService {
         .getRepository(WorkerEntity)
         .findOne({ where: { id: schedule.workerId, siteId }, lock: { mode: 'pessimistic_write' } });
       if (!worker) missing();
-      if ((await attendanceAccess(manager, actor, worker)) !== 'SELF')
-        conflict('Workers submit their own time requests');
-      await requireWorkerDocuments(manager, worker);
+      const access = await attendanceAccess(manager, actor, worker);
+      if (access !== 'SELF' && !(value.kind === 'LEAVE' && access === 'REPRESENTATIVE'))
+        conflict('Workers submit their own time requests; representatives may record leave');
+      if (access === 'SELF') await requireWorkerDocuments(manager, worker);
+      if (value.kind === 'OVERTIME' && value.noticeType)
+        invalid('Notice type is only applicable to leave');
       await manager.query('SELECT pg_advisory_xact_lock(hashtext($1))', [
         `mf03:${siteId}:${worker.id}`,
       ]);
@@ -550,7 +570,8 @@ export class AttendanceDaysService {
           requester !== actor.id ||
           old.reason !== value.reason ||
           +old.startsAt! !== +start ||
-          +old.endsAt! !== +end
+          +old.endsAt! !== +end ||
+          ('noticeType' in old && (old.noticeType ?? 'PLANNED') !== (value.noticeType ?? 'PLANNED'))
         )
           conflict('Request ID was used for different details');
         return { id: old.id };
@@ -596,6 +617,7 @@ export class AttendanceDaysService {
         });
       else
         await manager.getRepository(AbsenceRequestEntity).save({
+          ...leaveNotice(shift.startsAt, value.noticeType),
           id: value.requestId,
           siteId,
           workerId: worker.id,
@@ -634,7 +656,7 @@ export class AttendanceDaysService {
         value.kind === 'OVERTIME' ? 'overtime_request' : 'absence_request',
         value.requestId,
         value.reason,
-        { dayId: day.id },
+        { dayId: day.id, submittedOnBehalf: worker.userId !== actor.id },
       );
       return { id: value.requestId };
     });

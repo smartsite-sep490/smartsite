@@ -189,3 +189,7 @@ export * from './camera-region-geometry-confirmation.js';
 export * from './camera-configuration-bundle.js';
 export * from './camera-configuration-ack.js';
 export * from './camera-application-status.js';
+export { LEAVE_NOTICE_HOURS, leaveNotice } from './leave-notice.js';
+export type { LeaveNoticeType } from './leave-notice.js';
+
+export { scheduledShiftWindow } from './scheduled-shift.js';

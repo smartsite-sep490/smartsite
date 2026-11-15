@@ -5,11 +5,10 @@ import { useQuery } from '@tanstack/react-query';
 import { useWorkspace } from '../workspace/workspace-context';
 import { displayTime, instant, useCommand, useRequestId } from '../shared/data';
 import {
-  Body,
   Button,
   Card,
   Choice,
-  Disclosure,
+  CompactTabs,
   ErrorNotice,
   Hint,
   Page,
@@ -18,9 +17,20 @@ import {
 import { DateTimeField } from '../shared/date-time-field';
 import { useTranslation } from '../../i18n';
 
-import { StyleSheet, View, Text } from 'react-native';
+import { StyleSheet, View, Text, Pressable } from 'react-native';
+import { colors } from '../../theme/colors';
+import { IconMapPin, IconDocument, IconShield } from '../../components/common/Icons';
+import { RequestSheet } from '../shared/request-sheet';
+import { FormSection } from '../shared/form-section';
+import { EmptyState, ListHeading } from '../contractor/contractor-presentation';
 
-export function AccessScreen({ onBack }: { onBack: () => void }) {
+export function AccessScreen({
+  onBack,
+  embedded = false,
+}: {
+  onBack: () => void;
+  embedded?: boolean;
+}) {
   const { t } = useTranslation();
   const { scope, client, token, queryKey } = useWorkspace();
   const team = useQuery({
@@ -111,23 +121,37 @@ export function AccessScreen({ onBack }: { onBack: () => void }) {
         </QueryState>
       </Page>
     );
-  return <ContractorAccess onBack={onBack} />;
+  return <ContractorAccess onBack={onBack} embedded={embedded} />;
 }
-function ContractorAccess({ onBack }: { onBack: () => void }) {
-  useTranslation();
+function ContractorAccess({ onBack, embedded }: { onBack: () => void; embedded: boolean }) {
+  const { t } = useTranslation();
   const { scope, client, token, queryKey } = useWorkspace();
-  const [workerId, setWorker] = useState(''),
-    [zoneIds, setZones] = useState<string[]>([]),
-    [assignmentId, setAssignment] = useState(''),
-    [permissionId, setPermission] = useState(''),
-    [from, setFrom] = useState(''),
-    [to, setTo] = useState('');
+  const [tab, setTab] = useState('ZONES');
+  const [modal, setModal] = useState<'ASSIGN' | 'GRANT' | null>(null);
+  const [workerId, setWorker] = useState('');
+  const [zoneIds, setZones] = useState<string[]>([]);
+  const [assignmentId, setAssignment] = useState('');
+  const [permissionId, setPermission] = useState('');
+  const [from, setFrom] = useState('');
+  const [to, setTo] = useState('');
+  const [openedAt] = useState(() => Date.now());
   const command = useCommand(),
     requestId = useRequestId();
   const query = useQuery({
     queryKey: [...queryKey, 'access-setup'],
     queryFn: () => client.accessSetup(token, scope.siteId),
   });
+  const open = (kind: 'ASSIGN' | 'GRANT') => {
+    command.reset();
+    setWorker('');
+    setZones([]);
+    setAssignment('');
+    setPermission('');
+    const start = new Date();
+    setFrom(start.toISOString());
+    setTo(new Date(+start + 8 * 3600_000).toISOString());
+    setModal(kind);
+  };
   const interval = () => {
     const validFrom = instant(from),
       validUntil = instant(to);
@@ -135,145 +159,424 @@ function ContractorAccess({ onBack }: { onBack: () => void }) {
     return { validFrom, validUntil };
   };
   return (
-    <Page title={tr('access.title')} onBack={onBack}>
-      <ErrorNotice error={command.error} />
+    <Page title={embedded ? undefined : t('access.title')} onBack={embedded ? undefined : onBack}>
+      <Text style={contractorAccessStyles.caption}>
+        {scope.contractorName} · {scope.siteName}
+      </Text>
       <QueryState query={query}>
         {(data) => {
-          const workers = data.workers.filter((w) => w.contractorId === scope.contractorId);
-          const workerIds = new Set(workers.map((w) => w.id));
-          const assignments = data.assignments.filter((a) => workerIds.has(a.workerId));
-          const participationIds = new Set(
-            data.participations
-              .filter((p) => p.contractorId === scope.contractorId)
-              .map((p) => p.id),
+          const workers = data.workers.filter(
+            (worker) => worker.contractorId === scope.contractorId,
           );
+          const workerIds = new Set(workers.map((worker) => worker.id));
+          const assignments = data.assignments.filter((assignment) =>
+            workerIds.has(assignment.workerId),
+          );
+          const participations = data.participations.filter(
+            (participation) => participation.contractorId === scope.contractorId,
+          );
+          const participationIds = new Set(participations.map((participation) => participation.id));
           const permissions = data.contractorPermissions.filter(
-            (p) => participationIds.has(p.siteContractorId) && !p.revokedAt,
+            (permission) =>
+              participationIds.has(permission.siteContractorId) && !permission.revokedAt,
           );
+          const workerPermissions = data.workerPermissions.filter((permission) =>
+            assignments.some((assignment) => assignment.id === permission.workerAssignmentId),
+          );
+          const approvedAssignments = assignments.filter(
+            (assignment) => assignment.status === 'APPROVED' && assignment.validUntil,
+          );
+          const selectedAssignment = approvedAssignments.find(
+            (assignment) => assignment.id === assignmentId,
+          );
+          const matchingPermissions = permissions.filter(
+            (permission) =>
+              !selectedAssignment ||
+              permission.siteContractorId === selectedAssignment.siteContractorId,
+          );
+          const fits = (
+            start: string,
+            end: string,
+            parentStart: string,
+            parentEnd: string | null,
+          ) =>
+            Date.parse(start) >= Date.parse(parentStart) &&
+            (!parentEnd || Date.parse(end) <= Date.parse(parentEnd));
           return (
             <>
-              <Disclosure title={tr('access.requestAssignment')}>
-                <Hint>{tr('access.assignmentHint')}</Hint>
-                <Choice
-                  label={tr('schedule.worker')}
-                  value={workerId}
-                  options={workers.map((w) => ({ value: w.id, label: w.name }))}
-                  onChange={setWorker}
-                />
-                <Body>{tr('access.requestedZones')}</Body>
-                {data.zones.map((z) => (
+              <CompactTabs
+                value={tab}
+                options={[
+                  { value: 'ZONES', label: t('access.contractorZones') },
+                  { value: 'ASSIGNMENTS', label: t('access.assignmentsTab') },
+                  ...(data.canGrantWorkerZones
+                    ? [{ value: 'WORKERS', label: t('access.workerPermissionsTab') }]
+                    : []),
+                ]}
+                onChange={setTab}
+              />
+              {!modal && <ErrorNotice error={command.error} />}
+              {tab === 'ZONES' && (
+                <>
+                  <ListHeading
+                    title={t('access.contractorZones')}
+                    count={t('access.zoneCount', { count: permissions.length })}
+                  />
+                  {!permissions.length && (
+                    <EmptyState
+                      icon={<IconMapPin size={26} color={colors.primary} />}
+                      title={t('access.noZones')}
+                    />
+                  )}
+                  {!permissions.length && (
+                    <Text style={contractorAccessStyles.notice}>
+                      {t('access.noContractorGrantHint')}
+                    </Text>
+                  )}
+                  {permissions.map((permission) => (
+                    <Card key={permission.id}>
+                      <View style={contractorAccessStyles.heading}>
+                        <View style={contractorAccessStyles.icon}>
+                          <IconMapPin size={20} color={colors.primary} />
+                        </View>
+                        <Text style={contractorAccessStyles.name}>
+                          {data.zones.find((zone) => zone.id === permission.zoneId)?.name ??
+                            t('common.zone')}
+                        </Text>
+                      </View>
+                      <Text style={contractorAccessStyles.caption}>
+                        {t('access.validFrom')}: {displayTime(permission.validFrom)}
+                      </Text>
+                      <Text style={contractorAccessStyles.caption}>
+                        {t('access.validUntil')}: {displayTime(permission.validUntil)}
+                      </Text>
+                    </Card>
+                  ))}
+                  <Text style={contractorAccessStyles.notice}>{t('access.authorizationHint')}</Text>
+                </>
+              )}
+              {tab === 'ASSIGNMENTS' && (
+                <>
+                  <Text style={contractorAccessStyles.notice}>{t('access.flowHint')}</Text>
                   <Button
-                    key={z.id}
-                    secondary
-                    label={`${zoneIds.includes(z.id) ? '☑' : '☐'} ${z.name}`}
-                    onPress={() =>
-                      setZones(
-                        zoneIds.includes(z.id)
-                          ? zoneIds.filter((v) => v !== z.id)
-                          : [...zoneIds, z.id],
-                      )
-                    }
+                    label={t('access.requestAssignment')}
+                    disabled={!workers.length || !data.zones.length || query.isRefetchError}
+                    onPress={() => open('ASSIGN')}
                   />
-                ))}
-                <DateTimeField label={tr('access.validFrom')} value={from} onChange={setFrom} />
-                <DateTimeField label={tr('access.validUntil')} value={to} onChange={setTo} />
-                <Button
-                  label={tr('access.submitAssignment')}
-                  disabled={command.isPending || !workerId || !zoneIds.length || !from || !to}
-                  onPress={() =>
-                    command.mutate(async () => {
-                      const times = interval();
-                      await client.createWorkerSiteZoneAssignment(token, workerId, {
-                        siteId: scope.siteId,
-                        zoneIds,
-                        validFrom: times.validFrom,
-                        validUntil: times.validUntil,
-                      });
-                      setWorker('');
-                      setZones([]);
-                    })
-                  }
-                />
-              </Disclosure>
-              <Disclosure title={tr('access.assignmentStatus')}>
-                {!assignments.length && <Hint>{tr('access.noAssignments')}</Hint>}
-                {assignments.map((a) => (
-                  <Card key={a.id}>
-                    <Body>
-                      {a.workerName} · {localizedLabel(a.status)}
-                    </Body>
-                    <Hint>
-                      {displayTime(a.validFrom)} → {displayTime(a.validUntil)}
-                    </Hint>
-                    {a.reviewNote && <Hint>{a.reviewNote}</Hint>}
-                  </Card>
-                ))}
-              </Disclosure>
-              {data.canGrantWorkerZones && (
-                <Disclosure title={tr('access.grantWithinScope')}>
-                  <Choice
-                    label={tr('access.approvedAssignment')}
-                    value={assignmentId}
-                    onChange={setAssignment}
-                    options={assignments
-                      .filter((a) => a.status === 'APPROVED')
-                      .map((a) => ({ value: a.id, label: a.workerName }))}
+                  {!workers.length && <Hint>{t('access.noWorkersHint')}</Hint>}
+                  <ListHeading
+                    title={t('access.assignmentStatus')}
+                    count={t('access.assignmentCount', { count: assignments.length })}
                   />
-                  <Choice
-                    label={tr('access.contractorZoneGrant')}
-                    value={permissionId}
-                    onChange={setPermission}
-                    options={permissions.map((p) => ({
-                      value: p.id,
-                      label: `${data.zones.find((z) => z.id === p.zoneId)?.name ?? tr('common.zone')} · ${displayTime(p.validUntil)}`,
-                    }))}
-                  />
-                  <Hint>{tr('access.selectedValidity')}</Hint>
-                  <DateTimeField label={tr('access.validFrom')} value={from} onChange={setFrom} />
-                  <DateTimeField label={tr('access.validUntil')} value={to} onChange={setTo} />
-                  <Button
-                    label={tr('access.grantWorker')}
-                    disabled={command.isPending || !assignmentId || !permissionId || !from || !to}
-                    onPress={() =>
-                      command.mutate(() => {
-                        const input = {
-                          workerAssignmentId: assignmentId,
-                          contractorZonePermissionId: permissionId,
-                          ...interval(),
-                        };
-                        return client.grantWorkerZone(token, scope.siteId, {
-                          ...input,
-                          requestId: requestId(input),
-                        });
-                      })
-                    }
-                  />
-                  {data.workerPermissions
-                    .filter((p) => assignments.some((a) => a.id === p.workerAssignmentId))
-                    .map((p) => (
-                      <Card key={p.id}>
-                        <Body>
-                          {assignments.find((a) => a.id === p.workerAssignmentId)?.workerName} ·{' '}
-                          {p.revokedAt ? tr('access.revoked') : tr('access.granted')}
-                        </Body>
-                        <Hint>
-                          {displayTime(p.validFrom)} → {displayTime(p.validUntil)}
-                        </Hint>
-                        {!p.revokedAt && (
-                          <Button
-                            secondary
-                            label={tr('access.revokeWorker')}
-                            disabled={command.isPending}
-                            onPress={() =>
-                              command.mutate(() =>
-                                client.revokeZonePermission(token, scope.siteId, p.id, 'worker'),
-                              )
-                            }
-                          />
+                  {!assignments.length && (
+                    <EmptyState
+                      icon={<IconDocument size={26} color={colors.primary} />}
+                      title={t('access.noAssignments')}
+                    />
+                  )}
+                  {assignments.map((assignment) => (
+                    <Card key={assignment.id}>
+                      <View style={contractorAccessStyles.heading}>
+                        <Text style={contractorAccessStyles.name}>{assignment.workerName}</Text>
+                        <Text style={contractorAccessStyles.badge}>
+                          {localizedLabel(assignment.status)}
+                        </Text>
+                      </View>
+                      <Text style={contractorAccessStyles.caption}>
+                        {displayTime(assignment.validFrom)} → {displayTime(assignment.validUntil)}
+                      </Text>
+                      {assignment.status === 'APPROVED' &&
+                        assignment.validUntil &&
+                        Date.parse(assignment.validUntil) <= openedAt && (
+                          <Hint>{t('access.assignmentExpired')}</Hint>
                         )}
-                      </Card>
-                    ))}
-                </Disclosure>
+                      {assignment.reviewNote && (
+                        <Text style={contractorAccessStyles.reason}>{assignment.reviewNote}</Text>
+                      )}
+                    </Card>
+                  ))}
+                </>
+              )}
+              {tab === 'WORKERS' && data.canGrantWorkerZones && (
+                <>
+                  <Button
+                    secondary
+                    label={t('access.grantWithinScope')}
+                    disabled={
+                      !permissions.length || !approvedAssignments.length || query.isRefetchError
+                    }
+                    onPress={() => open('GRANT')}
+                  />
+                  {!permissions.length && (
+                    <Text style={contractorAccessStyles.notice}>
+                      {t('access.noContractorGrantHint')}
+                    </Text>
+                  )}
+                  {!approvedAssignments.length && (
+                    <Hint>{t('access.approvedAssignmentRequired')}</Hint>
+                  )}
+                  <ListHeading
+                    title={t('access.workerPermissionsTab')}
+                    count={t('access.permissionCount', { count: workerPermissions.length })}
+                  />
+                  {!workerPermissions.length && (
+                    <EmptyState
+                      icon={<IconShield size={26} color={colors.primary} />}
+                      title={t('access.noWorkerPermissions')}
+                    />
+                  )}
+                  {workerPermissions.map((permission) => (
+                    <Card key={permission.id}>
+                      <View style={contractorAccessStyles.heading}>
+                        <Text style={contractorAccessStyles.name}>
+                          {
+                            assignments.find(
+                              (assignment) => assignment.id === permission.workerAssignmentId,
+                            )?.workerName
+                          }
+                        </Text>
+                        <Text style={contractorAccessStyles.badge}>
+                          {t(permission.revokedAt ? 'access.revoked' : 'access.granted')}
+                        </Text>
+                      </View>
+                      <Text style={contractorAccessStyles.caption}>
+                        {displayTime(permission.validFrom)} → {displayTime(permission.validUntil)}
+                      </Text>
+                      {!permission.revokedAt && (
+                        <Button
+                          secondary
+                          label={t('access.revokeWorker')}
+                          disabled={command.isPending || query.isRefetchError}
+                          onPress={() =>
+                            command.mutate(() =>
+                              client.revokeZonePermission(
+                                token,
+                                scope.siteId,
+                                permission.id,
+                                'worker',
+                              ),
+                            )
+                          }
+                        />
+                      )}
+                    </Card>
+                  ))}
+                </>
+              )}
+              {modal && (modal === 'ASSIGN' || data.canGrantWorkerZones) && (
+                <RequestSheet
+                  visible
+                  variant="form"
+                  title={t(
+                    modal === 'ASSIGN' ? 'access.requestAssignment' : 'access.grantWithinScope',
+                  )}
+                  subtitle={scope.contractorName}
+                  icon={<IconMapPin size={23} color={colors.primary} />}
+                  onClose={() => setModal(null)}
+                  busy={command.isPending}
+                  footer={
+                    <View style={contractorAccessStyles.form}>
+                      <ErrorNotice error={command.error} />
+                      <Button
+                        label={t(
+                          modal === 'ASSIGN' ? 'access.submitAssignment' : 'access.grantWorker',
+                        )}
+                        disabled={
+                          command.isPending ||
+                          query.isRefetchError ||
+                          !from ||
+                          !to ||
+                          (modal === 'ASSIGN'
+                            ? !workerId || !zoneIds.length
+                            : !assignmentId || !permissionId)
+                        }
+                        onPress={() =>
+                          command.mutate(async () => {
+                            if (modal === 'ASSIGN') {
+                              const times = interval();
+                              if (
+                                !participations.some((participation) =>
+                                  fits(
+                                    times.validFrom,
+                                    times.validUntil,
+                                    participation.validFrom,
+                                    participation.validUntil,
+                                  ),
+                                )
+                              )
+                                throw new Error(t('access.assignmentOutsideParticipation'));
+                              await client.createWorkerSiteZoneAssignment(token, workerId, {
+                                siteId: scope.siteId,
+                                zoneIds,
+                                ...times,
+                              });
+                              setWorker('');
+                              setZones([]);
+                              setTab('ASSIGNMENTS');
+                            } else {
+                              const input = {
+                                workerAssignmentId: assignmentId,
+                                contractorZonePermissionId: permissionId,
+                                ...interval(),
+                              };
+                              const selectedPermission = matchingPermissions.find(
+                                (permission) => permission.id === permissionId,
+                              );
+                              const participation = participations.find(
+                                (participation) =>
+                                  participation.id === selectedAssignment?.siteContractorId,
+                              );
+                              if (
+                                !selectedAssignment ||
+                                !selectedPermission ||
+                                !participation ||
+                                !fits(
+                                  input.validFrom,
+                                  input.validUntil,
+                                  selectedAssignment.validFrom,
+                                  selectedAssignment.validUntil,
+                                ) ||
+                                !fits(
+                                  input.validFrom,
+                                  input.validUntil,
+                                  selectedPermission.validFrom,
+                                  selectedPermission.validUntil,
+                                ) ||
+                                !fits(
+                                  input.validFrom,
+                                  input.validUntil,
+                                  participation.validFrom,
+                                  participation.validUntil,
+                                )
+                              )
+                                throw new Error(t('access.workerGrantOutsideScope'));
+                              await client.grantWorkerZone(token, scope.siteId, {
+                                ...input,
+                                requestId: requestId(input),
+                              });
+                              setTab('WORKERS');
+                            }
+                            setModal(null);
+                          })
+                        }
+                      />
+                    </View>
+                  }
+                >
+                  <View
+                    pointerEvents={command.isPending ? 'none' : 'auto'}
+                    style={contractorAccessStyles.form}
+                  >
+                    <FormSection number="01" title={t('schedule.worker')}>
+                      {modal === 'ASSIGN' ? (
+                        <>
+                          <Text style={contractorAccessStyles.caption}>
+                            {t('access.assignmentHint')}
+                          </Text>
+                          <Choice
+                            label={t('schedule.worker')}
+                            value={workerId}
+                            options={workers.map((worker) => ({
+                              value: worker.id,
+                              label: worker.name,
+                            }))}
+                            onChange={setWorker}
+                          />
+                        </>
+                      ) : (
+                        <Choice
+                          label={t('access.approvedAssignment')}
+                          value={assignmentId}
+                          onChange={(next) => {
+                            setAssignment(next);
+                            setPermission('');
+                          }}
+                          options={approvedAssignments.map((assignment) => ({
+                            value: assignment.id,
+                            label: assignment.workerName,
+                          }))}
+                        />
+                      )}
+                    </FormSection>
+                    <FormSection
+                      number="02"
+                      title={t(
+                        modal === 'ASSIGN' ? 'access.requestedZones' : 'access.contractorZoneGrant',
+                      )}
+                    >
+                      {modal === 'ASSIGN' ? (
+                        <>
+                          {!data.zones.length && <Hint>{t('access.noZones')}</Hint>}
+                          {data.zones.map((zone) => (
+                            <Pressable
+                              key={zone.id}
+                              accessibilityRole="checkbox"
+                              accessibilityLabel={zone.name}
+                              accessibilityState={{ checked: zoneIds.includes(zone.id) }}
+                              onPress={() =>
+                                setZones((previous) =>
+                                  previous.includes(zone.id)
+                                    ? previous.filter((id) => id !== zone.id)
+                                    : [...previous, zone.id],
+                                )
+                              }
+                              style={contractorAccessStyles.zoneOption}
+                            >
+                              <View
+                                style={[
+                                  contractorAccessStyles.checkbox,
+                                  zoneIds.includes(zone.id) && contractorAccessStyles.checked,
+                                ]}
+                              >
+                                <Text style={contractorAccessStyles.checkmark}>
+                                  {zoneIds.includes(zone.id) ? '✓' : ''}
+                                </Text>
+                              </View>
+                              <Text style={contractorAccessStyles.zoneOptionText}>{zone.name}</Text>
+                            </Pressable>
+                          ))}
+                        </>
+                      ) : (
+                        <Choice
+                          label={t('access.contractorZoneGrant')}
+                          value={permissionId}
+                          onChange={setPermission}
+                          options={matchingPermissions.map((permission) => ({
+                            value: permission.id,
+                            label: `${data.zones.find((zone) => zone.id === permission.zoneId)?.name ?? t('common.zone')} · ${displayTime(permission.validUntil)}`,
+                          }))}
+                        />
+                      )}
+                    </FormSection>
+                    <FormSection number="03" title={t('access.validityTitle')}>
+                      {participations.map((participation) => (
+                        <Hint key={participation.id}>
+                          {t('access.participationRange', {
+                            from: displayTime(participation.validFrom),
+                            to: participation.validUntil
+                              ? displayTime(participation.validUntil)
+                              : t('access.noEnd'),
+                          })}
+                        </Hint>
+                      ))}
+                      {modal === 'GRANT' && <Hint>{t('access.workerGrantIntervalHint')}</Hint>}
+                      <DateTimeField
+                        compact
+                        label={t('access.validFrom')}
+                        value={from}
+                        onChange={setFrom}
+                        disabled={command.isPending}
+                      />
+                      <DateTimeField
+                        compact
+                        label={t('access.validUntil')}
+                        value={to}
+                        onChange={setTo}
+                        disabled={command.isPending}
+                      />
+                    </FormSection>
+                  </View>
+                </RequestSheet>
               )}
             </>
           );
@@ -282,6 +585,75 @@ function ContractorAccess({ onBack }: { onBack: () => void }) {
     </Page>
   );
 }
+
+const contractorAccessStyles = StyleSheet.create({
+  form: { gap: 12 },
+  heading: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    alignItems: 'center',
+    gap: 10,
+    justifyContent: 'space-between',
+  },
+  name: {
+    flex: 1,
+    minWidth: 100,
+    fontSize: 15,
+    lineHeight: 23,
+    fontWeight: '700',
+    color: colors.textPrimary,
+  },
+  caption: { fontSize: 12, lineHeight: 20, color: colors.textMuted },
+  badge: {
+    maxWidth: '100%',
+    paddingHorizontal: 9,
+    paddingVertical: 5,
+    fontSize: 12,
+    lineHeight: 18,
+    color: colors.textSecondary,
+    backgroundColor: colors.surfaceSubtle,
+    borderRadius: 8,
+    overflow: 'hidden',
+  },
+  icon: {
+    width: 38,
+    height: 38,
+    borderRadius: 12,
+    backgroundColor: colors.primaryLight,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  notice: {
+    padding: 14,
+    borderRadius: 12,
+    fontSize: 12,
+    lineHeight: 20,
+    color: colors.textMuted,
+    backgroundColor: colors.surfaceSubtle,
+  },
+  reason: { fontSize: 14, lineHeight: 22, color: colors.textPrimary },
+  zoneOption: {
+    minHeight: 48,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    paddingVertical: 10,
+    borderBottomWidth: 1,
+    borderBottomColor: colors.borderLight,
+  },
+  checkbox: {
+    width: 22,
+    height: 22,
+    borderWidth: 1.5,
+    borderColor: colors.border,
+    borderRadius: 6,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  checked: { backgroundColor: colors.primary, borderColor: colors.primary },
+  checkmark: { fontSize: 13, fontWeight: '700', color: colors.textWhite },
+  zoneOptionText: { flex: 1, fontSize: 14, lineHeight: 21, color: colors.textPrimary },
+});
 
 const accessStyles = StyleSheet.create({
   teamBadgeCard: {

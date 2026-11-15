@@ -595,6 +595,8 @@ export interface AbsenceRequestResponse {
   reviewedByUserId: string | null;
   reviewedAt: string | null;
   createdAt: string;
+  noticeType?: 'PLANNED' | 'EMERGENCY' | null;
+  shortNotice?: boolean | null;
 }
 
 export type ShiftRequestResponse =

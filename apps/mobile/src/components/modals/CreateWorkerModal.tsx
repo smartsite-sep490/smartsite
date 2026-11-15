@@ -1,17 +1,6 @@
 import { translate as tr } from '../../i18n';
 import React, { useState } from 'react';
-import {
-  Modal,
-  View,
-  Text,
-  TextInput,
-  Pressable,
-  StyleSheet,
-  ActivityIndicator,
-  KeyboardAvoidingView,
-  Platform,
-  ScrollView,
-} from 'react-native';
+import { View, Text, TextInput, Pressable, StyleSheet, ActivityIndicator } from 'react-native';
 import { colors } from '../../theme/colors';
 import { useWorkspace } from '../../features/workspace/workspace-context';
 import { useCommand, required, validDates } from '../../features/shared/data';
@@ -26,6 +15,9 @@ import { healthCertificateExpiry } from '@smartsite/api-client';
 import { Attachments } from '../../features/shared/uploads';
 import { documentKinds } from '../../features/contractor/worker-documents';
 import { Choice, Disclosure, Field, Hint } from '../../features/shared/ui';
+
+import { RequestSheet } from '../../features/shared/request-sheet';
+import { FormSection } from '../../features/shared/form-section';
 
 interface CreateWorkerModalProps {
   visible: boolean;
@@ -131,310 +123,196 @@ export function CreateWorkerModal({ visible, onClose, onSuccess }: CreateWorkerM
   };
 
   return (
-    <Modal visible={visible} transparent animationType="slide" onRequestClose={onClose}>
-      <KeyboardAvoidingView
-        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-        style={styles.overlay}
-      >
-        <Pressable style={styles.backdrop} onPress={onClose} />
-        <View style={styles.sheetCard}>
-          {/* Header */}
-          <View style={styles.header}>
-            <View style={styles.headerLeft}>
-              <View style={styles.iconCircle}>
-                <IconUserPlus size={20} color={colors.primary} />
-              </View>
-              <View style={{ flex: 1, minWidth: 0 }}>
-                <Text style={styles.title}>{t('workforce.createTitle')}</Text>
-                <Text style={styles.subtitle}>
-                  {scope.contractorName} · {scope.siteName}
-                </Text>
-              </View>
+    <RequestSheet
+      visible={visible}
+      variant="form"
+      busy={command.isPending}
+      onClose={onClose}
+      title={t('workforce.createTitle')}
+      subtitle={scope.contractorName + ' · ' + scope.siteName}
+      icon={<IconUserPlus size={23} color={colors.primary} />}
+      footer={
+        <View style={styles.footerActions}>
+          {Boolean(localError || command.error) && (
+            <View style={styles.errorBox}>
+              <Text accessibilityRole="alert" style={styles.errorText}>
+                {localError ??
+                  (command.error instanceof Error
+                    ? command.error.message
+                    : t('common.unexpectedError'))}
+              </Text>
             </View>
-            <Pressable
-              accessibilityRole="button"
-              accessibilityLabel={t('common.cancel')}
-              onPress={onClose}
-              style={styles.closeBtn}
-              hitSlop={10}
-            >
-              <Text style={styles.closeText}>✕</Text>
-            </Pressable>
-          </View>
-
-          <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.body}>
-            {/* Field: Full Name */}
-            <View style={styles.fieldGroup}>
-              <Text style={styles.label}>{t('workforce.fullName')}</Text>
-              <TextInput
-                style={styles.input}
-                placeholder={tr('workforce.nameExample')}
-                placeholderTextColor={colors.textMuted}
-                value={displayName}
-                editable={!pendingAccount && !command.isPending}
-                onChangeText={(v) => {
-                  setDisplayName(v);
-                  if (localError) setLocalError(null);
-                }}
-                autoCapitalize="words"
-              />
-            </View>
-
-            {/* Field: Username */}
-            <View style={styles.fieldGroup}>
-              <Text style={styles.label}>{t('workforce.username')}</Text>
-              <TextInput
-                style={styles.input}
-                placeholder={tr('workforce.usernameExample')}
-                placeholderTextColor={colors.textMuted}
-                value={username}
-                editable={!pendingAccount && !command.isPending}
-                onChangeText={(v) => {
-                  setUsername(v);
-                  if (localError) setLocalError(null);
-                }}
-                autoCapitalize="none"
-              />
-            </View>
-
-            <Disclosure title={t('contractorUi.requiredProfile')}>
-              <View style={styles.fieldGroup}>
-                <Text style={styles.label}>{t('documents.nationalId')}</Text>
-                <TextInput
-                  accessibilityLabel={t('documents.nationalId')}
-                  style={styles.input}
-                  value={nationalId}
-                  onChangeText={(v) => setNationalId(v.trim())}
-                  keyboardType="number-pad"
-                  maxLength={12}
-                  editable={!pendingAccount && !command.isPending}
-                />
-              </View>
-              <View style={styles.fieldGroup}>
-                <Text style={styles.label}>{t('documents.phoneNumber')}</Text>
-                <TextInput
-                  accessibilityLabel={t('documents.phoneNumber')}
-                  style={styles.input}
-                  value={phoneNumber}
-                  onChangeText={(v) => setPhoneNumber(v.replace(/\s/g, ''))}
-                  keyboardType="phone-pad"
-                  maxLength={16}
-                  editable={!pendingAccount && !command.isPending}
-                />
-              </View>
-              <View pointerEvents={pendingAccount || command.isPending ? 'none' : 'auto'}>
-                <Choice
-                  label={t('documents.gender')}
-                  value={gender}
-                  onChange={(v) => setGender(v as typeof gender)}
-                  options={(['MALE', 'FEMALE', 'OTHER'] as const).map((value) => ({
-                    value,
-                    label: t(`documents.${value}`),
-                  }))}
-                />
-              </View>
-              <View style={styles.fieldGroup}>
-                <Text style={styles.label}>{t('documents.address')}</Text>
-                <TextInput
-                  accessibilityLabel={t('documents.address')}
-                  style={styles.input}
-                  multiline
-                  maxLength={1000}
-                  value={address}
-                  onChangeText={setAddress}
-                  editable={!pendingAccount && !command.isPending}
-                />
-              </View>
-              <View pointerEvents={pendingAccount || command.isPending ? 'none' : 'auto'}>
-                {(['FRONT', 'BACK'] as const).map((side) => (
-                  <View key={side} style={styles.fieldGroup}>
-                    <Text style={styles.label}>{t(`documents.${side}`)}</Text>
-                    <Attachments
-                      files={identityFiles[side] ?? []}
-                      maxFiles={1}
-                      allowPdf={false}
-                      validateFile={validateImage}
-                      onChange={(selected) =>
-                        setIdentityFiles((previous) => ({ ...previous, [side]: selected }))
-                      }
-                    />
-                  </View>
-                ))}
-              </View>
-            </Disclosure>
-            <Text style={styles.hintText}>{t('documents.hint')}</Text>
-            <View pointerEvents={command.isPending ? 'none' : 'auto'}>
-              {documentKinds.map((kind) => (
-                <Disclosure
-                  key={kind}
-                  title={`${t(`documents.${kind}`)} · ${files[kind]?.length ?? 0}/1`}
-                >
-                  <Field
-                    label={`${t(`documents.${kind}`)} - ${t(kind === 'HEALTH_CERTIFICATE' ? 'documents.submittedIssuedOn' : 'documents.submittedExpiresOn')} (YYYY-MM-DD)`}
-                    placeholder="YYYY-MM-DD"
-                    value={expiries[kind] ?? ''}
-                    maxLength={10}
-                    editable={!command.isPending}
-                    onChangeText={(value) =>
-                      setExpiries((previous) => ({ ...previous, [kind]: value }))
-                    }
-                  />
-                  <Hint>
-                    {t(
-                      kind === 'HEALTH_CERTIFICATE'
-                        ? 'documents.healthExpiryRule'
-                        : 'documents.submittedExpiryHint',
-                    )}{' '}
-                    {kind === 'HEALTH_CERTIFICATE'
-                      ? (healthCertificateExpiry(expiries[kind]) ?? '')
-                      : ''}
-                  </Hint>
-                  <Attachments
-                    files={files[kind] ?? []}
-                    maxFiles={1}
-                    validateFile={validateImage}
-                    onChange={(selected) =>
-                      setFiles((previous) => ({ ...previous, [kind]: selected }))
-                    }
-                  />
-                </Disclosure>
-              ))}
-            </View>
-            {pendingAccount && <Text style={styles.hintText}>{t('documents.accountPending')}</Text>}
-            {/* Hint Box */}
-            <View style={styles.hintBox}>
-              <Text style={styles.hintText}>{t('documents.accountHint')}</Text>
-            </View>
-
-            {/* Error Message */}
-            {Boolean(localError || command.error) && (
-              <View style={styles.errorBox}>
-                <Text style={styles.errorText}>
-                  {localError ??
-                    (command.error instanceof Error
-                      ? command.error.message
-                      : t('common.unexpectedError'))}
-                </Text>
-              </View>
+          )}
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel={t('workforce.createAccount')}
+            accessibilityState={{ disabled: command.isPending, busy: command.isPending }}
+            style={[styles.submitBtn, command.isPending && { opacity: 0.7 }]}
+            onPress={handleCreate}
+            disabled={command.isPending}
+          >
+            {command.isPending ? (
+              <ActivityIndicator size="small" color="#FFFFFF" />
+            ) : (
+              <Text style={styles.submitBtnText}>{t('workforce.createAccount')}</Text>
             )}
-
-            {/* Buttons Row */}
-            <View style={styles.actionsRow}>
-              <Pressable
-                accessibilityRole="button"
-                accessibilityLabel={t('common.cancel')}
-                style={styles.cancelBtn}
-                onPress={onClose}
-              >
-                <Text style={styles.cancelBtnText}>{t('common.cancel')}</Text>
-              </Pressable>
-
-              <Pressable
-                accessibilityRole="button"
-                accessibilityLabel={t('workforce.createAccount')}
-                style={[styles.submitBtn, command.isPending && { opacity: 0.7 }]}
-                onPress={handleCreate}
-                disabled={command.isPending}
-              >
-                {command.isPending ? (
-                  <ActivityIndicator size="small" color="#FFFFFF" />
-                ) : (
-                  <Text style={styles.submitBtnText}>{t('workforce.createAccount')}</Text>
-                )}
-              </Pressable>
-            </View>
-          </ScrollView>
+          </Pressable>
         </View>
-      </KeyboardAvoidingView>
-    </Modal>
+      }
+    >
+      <FormSection number="01" title={t('contractorUi.accountInfo')}>
+        {/* Field: Full Name */}
+        <View style={styles.fieldGroup}>
+          <Text style={styles.label}>{t('workforce.fullName')}</Text>
+          <TextInput
+            accessibilityLabel={t('workforce.fullName')}
+            style={styles.input}
+            placeholder={tr('workforce.nameExample')}
+            placeholderTextColor={colors.textMuted}
+            value={displayName}
+            editable={!pendingAccount && !command.isPending}
+            onChangeText={(v) => {
+              setDisplayName(v);
+              if (localError) setLocalError(null);
+            }}
+            autoCapitalize="words"
+          />
+        </View>
+
+        {/* Field: Username */}
+        <View style={styles.fieldGroup}>
+          <Text style={styles.label}>{t('workforce.username')}</Text>
+          <TextInput
+            accessibilityLabel={t('workforce.username')}
+            style={styles.input}
+            placeholder={tr('workforce.usernameExample')}
+            placeholderTextColor={colors.textMuted}
+            value={username}
+            editable={!pendingAccount && !command.isPending}
+            onChangeText={(v) => {
+              setUsername(v);
+              if (localError) setLocalError(null);
+            }}
+            autoCapitalize="none"
+          />
+        </View>
+      </FormSection>
+      <FormSection number="02" title={t('contractorUi.requiredProfile')}>
+        <View style={styles.fieldGroup}>
+          <Text style={styles.label}>{t('documents.nationalId')}</Text>
+          <TextInput
+            accessibilityLabel={t('documents.nationalId')}
+            style={styles.input}
+            value={nationalId}
+            onChangeText={(v) => setNationalId(v.trim())}
+            keyboardType="number-pad"
+            maxLength={12}
+            editable={!pendingAccount && !command.isPending}
+          />
+        </View>
+        <View style={styles.fieldGroup}>
+          <Text style={styles.label}>{t('documents.phoneNumber')}</Text>
+          <TextInput
+            accessibilityLabel={t('documents.phoneNumber')}
+            style={styles.input}
+            value={phoneNumber}
+            onChangeText={(v) => setPhoneNumber(v.replace(/\s/g, ''))}
+            keyboardType="phone-pad"
+            maxLength={16}
+            editable={!pendingAccount && !command.isPending}
+          />
+        </View>
+        <View pointerEvents={pendingAccount || command.isPending ? 'none' : 'auto'}>
+          <Choice
+            label={t('documents.gender')}
+            value={gender}
+            onChange={(v) => setGender(v as typeof gender)}
+            options={(['MALE', 'FEMALE', 'OTHER'] as const).map((value) => ({
+              value,
+              label: t(`documents.${value}`),
+            }))}
+          />
+        </View>
+        <View style={styles.fieldGroup}>
+          <Text style={styles.label}>{t('documents.address')}</Text>
+          <TextInput
+            accessibilityLabel={t('documents.address')}
+            style={styles.input}
+            multiline
+            maxLength={1000}
+            value={address}
+            onChangeText={setAddress}
+            editable={!pendingAccount && !command.isPending}
+          />
+        </View>
+        <View pointerEvents={pendingAccount || command.isPending ? 'none' : 'auto'}>
+          {(['FRONT', 'BACK'] as const).map((side) => (
+            <View key={side} style={styles.fieldGroup}>
+              <Text style={styles.label}>{t(`documents.${side}`)}</Text>
+              <Attachments
+                files={identityFiles[side] ?? []}
+                maxFiles={1}
+                allowPdf={false}
+                validateFile={validateImage}
+                onChange={(selected) =>
+                  setIdentityFiles((previous) => ({ ...previous, [side]: selected }))
+                }
+              />
+            </View>
+          ))}
+        </View>
+      </FormSection>
+      <FormSection number="03" title={t('documents.title')}>
+        <Text style={styles.hintText}>{t('documents.hint')}</Text>
+        <View pointerEvents={command.isPending ? 'none' : 'auto'}>
+          {documentKinds.map((kind) => (
+            <Disclosure
+              key={kind}
+              title={`${t(`documents.${kind}`)} · ${files[kind]?.length ?? 0}/1`}
+            >
+              <Field
+                label={`${t(`documents.${kind}`)} - ${t(kind === 'HEALTH_CERTIFICATE' ? 'documents.submittedIssuedOn' : 'documents.submittedExpiresOn')} (YYYY-MM-DD)`}
+                placeholder="YYYY-MM-DD"
+                value={expiries[kind] ?? ''}
+                maxLength={10}
+                editable={!command.isPending}
+                onChangeText={(value) =>
+                  setExpiries((previous) => ({ ...previous, [kind]: value }))
+                }
+              />
+              <Hint>
+                {t(
+                  kind === 'HEALTH_CERTIFICATE'
+                    ? 'documents.healthExpiryRule'
+                    : 'documents.submittedExpiryHint',
+                )}{' '}
+                {kind === 'HEALTH_CERTIFICATE'
+                  ? (healthCertificateExpiry(expiries[kind]) ?? '')
+                  : ''}
+              </Hint>
+              <Attachments
+                files={files[kind] ?? []}
+                maxFiles={1}
+                validateFile={validateImage}
+                onChange={(selected) => setFiles((previous) => ({ ...previous, [kind]: selected }))}
+              />
+            </Disclosure>
+          ))}
+        </View>
+        {pendingAccount && <Text style={styles.hintText}>{t('documents.accountPending')}</Text>}
+        {/* Hint Box */}
+        <View style={styles.hintBox}>
+          <Text style={styles.hintText}>{t('documents.accountHint')}</Text>
+        </View>
+      </FormSection>
+    </RequestSheet>
   );
 }
 
 const styles = StyleSheet.create({
-  overlay: {
-    flex: 1,
-    justifyContent: 'flex-end',
-    backgroundColor: 'rgba(15, 30, 54, 0.45)',
-  },
-  backdrop: {
-    position: 'absolute',
-    top: 0,
-    left: 0,
-    right: 0,
-    bottom: 0,
-  },
-  sheetCard: {
-    backgroundColor: '#FFFFFF',
-    borderTopLeftRadius: 24,
-    borderTopRightRadius: 24,
-    paddingHorizontal: 20,
-    paddingTop: 16,
-    paddingBottom: Platform.OS === 'ios' ? 36 : 24,
-    maxHeight: '85%',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: -3 },
-    shadowOpacity: 0.15,
-    shadowRadius: 10,
-    elevation: 8,
-  },
-  header: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingBottom: 16,
-    borderBottomWidth: 1,
-    borderBottomColor: '#EFF2F6',
-    marginBottom: 16,
-    gap: 10,
-  },
-  headerLeft: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 12,
-    flex: 1,
-    minWidth: 0,
-  },
-  iconCircle: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    backgroundColor: '#FFF4EE',
-    alignItems: 'center',
-    justifyContent: 'center',
-    flexShrink: 0,
-  },
-  title: {
-    fontSize: 17,
-    fontWeight: '800',
-    color: '#0F1E36',
-    letterSpacing: -0.3,
-    flexShrink: 1,
-    lineHeight: 24,
-  },
-  subtitle: {
-    fontSize: 12,
-    color: colors.textMuted,
-    marginTop: 2,
-  },
-  closeBtn: {
-    width: 32,
-    height: 32,
-    borderRadius: 16,
-    backgroundColor: '#F1F5F9',
-    alignItems: 'center',
-    justifyContent: 'center',
-    flexShrink: 0,
-  },
-  closeText: {
-    fontSize: 14,
-    fontWeight: '700',
-    color: '#64748B',
-  },
-  body: {
-    paddingBottom: 10,
-  },
+  footerActions: { gap: 10 },
   fieldGroup: {
-    marginBottom: 14,
+    gap: 6,
   },
   label: {
     fontSize: 13,
@@ -451,6 +329,7 @@ const styles = StyleSheet.create({
     paddingVertical: 12,
     fontSize: 15,
     color: colors.textPrimary,
+    minHeight: 48,
   },
   hintBox: {
     backgroundColor: '#FEF9ED',
@@ -462,7 +341,7 @@ const styles = StyleSheet.create({
   },
   hintText: {
     fontSize: 12,
-    color: '#92400E',
+    color: colors.textMuted,
     lineHeight: 18,
   },
   errorBox: {
@@ -478,43 +357,12 @@ const styles = StyleSheet.create({
     color: '#B91C1C',
     lineHeight: 18,
   },
-  actionsRow: {
-    flexDirection: 'row',
-    gap: 12,
-    marginTop: 6,
-    flexWrap: 'wrap',
-  },
-  cancelBtn: {
-    flex: 1,
-    backgroundColor: '#F1F5F9',
-    borderRadius: 14,
-    paddingVertical: 14,
-    alignItems: 'center',
-    justifyContent: 'center',
-    minWidth: 96,
-    paddingHorizontal: 12,
-    minHeight: 48,
-  },
-  cancelBtnText: {
-    fontSize: 15,
-    fontWeight: '700',
-    color: colors.textSecondary,
-    textAlign: 'center',
-    lineHeight: 22,
-    flexShrink: 1,
-  },
   submitBtn: {
-    flex: 2,
     backgroundColor: colors.primary,
     borderRadius: 14,
     paddingVertical: 14,
     alignItems: 'center',
     justifyContent: 'center',
-    shadowColor: colors.primary,
-    shadowOffset: { width: 0, height: 3 },
-    shadowOpacity: 0.25,
-    shadowRadius: 5,
-    elevation: 3,
     minWidth: 152,
     paddingHorizontal: 12,
     minHeight: 48,

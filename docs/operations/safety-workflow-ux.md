@@ -36,8 +36,9 @@ No API, database, permission, Mobile or AI changes.
 
 - Safety review of Worker Site/Zone assignments is optional before the Manager's
   decision in the current implementation.
-- Scheduling and attendance expose different leave-approval paths over absence
-  records. This branch does not reconcile those authorities.
+- Scheduling and attendance leave APIs share the same contractor-scoped review.
+  Only the assigned Contractor Representative may approve or reject; Site Managers retain read access.
+  See [Worker leave](worker-leave.md) for planned and emergency reporting.
 - Zone-grant scope and the requirement to cover the whole checklist work window
   remain backend rules. This branch does not widen grants or bypass validation.
 
