@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 import React from 'react';
 import { afterEach, expect, it, vi } from 'vitest';
-import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { ApiError, SmartSiteManagementClient } from '@smartsite/api-client';
 import { SecurityGateDeskView } from './SecurityGateDeskView';
@@ -33,6 +33,241 @@ vi.mock('../enrollment/gateCameraSession', () => ({
   },
 }));
 let queries: QueryClient;
+
+function deferred<T>() {
+  let resolve!: (value: T) => void;
+  let reject!: (error: Error) => void;
+  const promise = new Promise<T>((yes, no) => {
+    resolve = yes;
+    reject = no;
+  });
+  return { promise, resolve, reject };
+}
+
+function renderQrDesk() {
+  cameraMock.failed = true;
+  vi.spyOn(SmartSiteManagementClient.prototype, 'listGateAccessLogs').mockResolvedValue({
+    items: [],
+  });
+  queries = new QueryClient({
+    defaultOptions: { queries: { retry: false }, mutations: { retry: false } },
+  });
+  return render(
+    <QueryClientProvider client={queries}>
+      <SecurityGateDeskView
+        apiUrl="https://synthetic.test"
+        token="synthetic-token"
+        sessionScope="test"
+        selectedSiteId="site-1"
+        sites={[{ id: 'site-1', name: 'Synthetic site' }]}
+        onSelectSite={() => {}}
+        isSecurityOfficer
+      />
+    </QueryClientProvider>,
+  );
+}
+
+function changeGateContext(kind: 'gate' | 'direction') {
+  if (kind === 'direction')
+    fireEvent.click(screen.getByRole('button', { name: /OUT.*Check.?Out/i }));
+  else {
+    const gate = screen.getByLabelText('Access Gate') as HTMLSelectElement;
+    fireEvent.change(gate, { target: { value: gate.options[1]!.value } });
+  }
+}
+
+const fallbackSession = {
+  id: 'session-1',
+  siteId: 'site-1',
+  gateId: 'gate-north-01',
+  direction: 'IN' as const,
+  expiresAt: '2030-01-01T00:05:00Z',
+};
+const qrAllowed: Awaited<ReturnType<SmartSiteManagementClient['verifyWorkerQr']>> = {
+  authorization: 'ALLOWED',
+  reasonCode: 'VALID_ASSIGNMENT',
+  attempt: {
+    id: 'qr-attempt-1',
+    status: 'READY',
+    scheduleStatus: 'SCHEDULED',
+    expiresAt: '2030-01-01T00:05:00Z',
+  },
+  worker: {
+    id: 'worker-1',
+    userId: 'user-1',
+    username: 'synthetic',
+    externalId: 'W1',
+    displayName: 'Old QR worker',
+    contractorName: 'Synthetic contractor',
+    assignmentStatus: 'APPROVED',
+  },
+  log: {
+    id: 'qr-log',
+    createdAt: '2030-01-01T00:00:00Z',
+    gateId: 'gate-north-01',
+    direction: 'IN',
+    method: 'QR',
+    workerId: 'worker-1',
+    userId: 'user-1',
+    workerName: 'Old QR worker',
+    workerExternalId: 'W1',
+    contractorName: 'Synthetic contractor',
+    username: 'synthetic',
+    decision: { authorization: 'ALLOWED', reasonCode: 'VALID_ASSIGNMENT' },
+  },
+};
+
+async function submitQr() {
+  fireEvent.click(await screen.findByRole('button', { name: 'Camera Error · Use Fallback QR' }));
+  fireEvent.change(await screen.findByLabelText('Worker QR Code or Token'), {
+    target: { value: 'ABCD2345' },
+  });
+  fireEvent.click(screen.getByRole('button', { name: /Confirm.*QR/ }));
+}
+
+it.each(['gate', 'direction'] as const)(
+  'ignores a pending fallback after changing %s and allows a fresh session',
+  async (kind) => {
+    const pending = deferred<typeof fallbackSession>();
+    const opened = vi
+      .spyOn(SmartSiteManagementClient.prototype, 'openCameraQrFallback')
+      .mockReturnValueOnce(pending.promise)
+      .mockResolvedValue({ ...fallbackSession, id: 'new-session' });
+    renderQrDesk();
+    fireEvent.click(await screen.findByRole('button', { name: 'Camera Error · Use Fallback QR' }));
+    await waitFor(() => expect(opened).toHaveBeenCalledTimes(1));
+    changeGateContext(kind);
+    await act(async () => pending.resolve(fallbackSession));
+    expect(screen.queryByLabelText('Worker QR Code or Token')).toBeNull();
+    fireEvent.click(screen.getByRole('button', { name: 'Camera Error · Use Fallback QR' }));
+    expect(await screen.findByLabelText('Worker QR Code or Token')).toBeTruthy();
+    expect(opened).toHaveBeenCalledTimes(2);
+    const call = opened.mock.calls[1]!;
+    if (kind === 'direction') expect(call[3]).toBe('OUT');
+    else expect(call[2]).not.toBe(fallbackSession.gateId);
+  },
+);
+
+it.each(['gate', 'direction'] as const)(
+  'ignores a pending QR decision after changing %s',
+  async (kind) => {
+    const pending = deferred<typeof qrAllowed>();
+    vi.spyOn(SmartSiteManagementClient.prototype, 'openCameraQrFallback').mockResolvedValue(
+      fallbackSession,
+    );
+    const verify = vi
+      .spyOn(SmartSiteManagementClient.prototype, 'verifyWorkerQr')
+      .mockReturnValue(pending.promise);
+    renderQrDesk();
+    await submitQr();
+    await waitFor(() => expect(verify).toHaveBeenCalledTimes(1));
+    changeGateContext(kind);
+    await act(async () => pending.resolve(qrAllowed));
+    expect(screen.queryByText(/Old QR worker/)).toBeNull();
+    expect(screen.queryByRole('button', { name: 'Confirm actual passage' })).toBeNull();
+  },
+);
+
+it.each(['success', 'error'] as const)(
+  'ignores a late passage %s after the direction changes',
+  async (outcome) => {
+    const pending =
+      deferred<Awaited<ReturnType<SmartSiteManagementClient['confirmGatePassage']>>>();
+    vi.spyOn(SmartSiteManagementClient.prototype, 'openCameraQrFallback').mockResolvedValue(
+      fallbackSession,
+    );
+    vi.spyOn(SmartSiteManagementClient.prototype, 'verifyWorkerQr').mockResolvedValue(qrAllowed);
+    const confirm = vi
+      .spyOn(SmartSiteManagementClient.prototype, 'confirmGatePassage')
+      .mockReturnValue(pending.promise);
+    renderQrDesk();
+    await submitQr();
+    fireEvent.click(await screen.findByRole('button', { name: 'Confirm actual passage' }));
+    await waitFor(() => expect(confirm).toHaveBeenCalledTimes(1));
+    changeGateContext('direction');
+    await act(async () => {
+      if (outcome === 'success')
+        pending.resolve({
+          id: 'old-event',
+          accessAttemptId: 'qr-attempt-1',
+          siteId: 'site-1',
+          workerId: 'worker-1',
+          visitId: null,
+          direction: 'IN',
+          occurredAt: '2030-01-01T00:00:00Z',
+          gateName: 'gate-north-01',
+        });
+      else
+        pending.reject(
+          new ApiError('http', 'Old passage failure', 409, {
+            success: false,
+            statusCode: 409,
+            code: 'WORKER_NO_SCHEDULE',
+            message: 'Old passage failure',
+            requestId: 'synthetic-request',
+            timestamp: '2030-01-01T00:00:00Z',
+            path: '/api/v1/sites/site-1/access-attempts/qr-attempt-1/confirm',
+          }),
+        );
+    });
+    expect(screen.queryByText(/Actual passage recorded/i)).toBeNull();
+    expect(screen.queryByText(/Old passage failure/)).toBeNull();
+    expect(screen.queryByText(/Old QR worker/)).toBeNull();
+    expect(screen.queryByText(/Worker has no assigned shift for this workday/)).toBeNull();
+  },
+);
+
+it('ignores an old QR fallback response after the selected Site changes', async () => {
+  cameraMock.failed = true;
+  vi.spyOn(SmartSiteManagementClient.prototype, 'listGateAccessLogs').mockResolvedValue({
+    items: [],
+  });
+  let finish!: (
+    value: Awaited<ReturnType<SmartSiteManagementClient['openCameraQrFallback']>>,
+  ) => void;
+  const opened = vi
+    .spyOn(SmartSiteManagementClient.prototype, 'openCameraQrFallback')
+    .mockImplementation(
+      () =>
+        new Promise((resolve) => {
+          finish = resolve;
+        }),
+    );
+  queries = new QueryClient({
+    defaultOptions: { queries: { retry: false }, mutations: { retry: false } },
+  });
+  const view = (site: string) => (
+    <QueryClientProvider client={queries}>
+      <SecurityGateDeskView
+        apiUrl="https://synthetic.test"
+        token="synthetic-token"
+        sessionScope="test"
+        selectedSiteId={site}
+        sites={[
+          { id: 'site-1', name: 'First Site' },
+          { id: 'site-2', name: 'Second Site' },
+        ]}
+        onSelectSite={() => {}}
+        isSecurityOfficer
+      />
+    </QueryClientProvider>
+  );
+  const ui = render(view('site-1'));
+  fireEvent.click(await screen.findByRole('button', { name: 'Camera Error · Use Fallback QR' }));
+  await waitFor(() => expect(opened).toHaveBeenCalled());
+  ui.rerender(view('site-2'));
+  await act(async () => {
+    finish({
+      id: 'old-site-session',
+      siteId: 'site-1',
+      gateId: 'gate-north-01',
+      direction: 'IN',
+      expiresAt: '2030-01-01T00:05:00Z',
+    });
+  });
+  expect((screen.getByLabelText('Active Site') as HTMLSelectElement).value).toBe('site-2');
+  expect(screen.queryByLabelText('Worker QR Code or Token')).toBeNull();
+});
 afterEach(() => {
   cleanup();
   queries?.clear();
