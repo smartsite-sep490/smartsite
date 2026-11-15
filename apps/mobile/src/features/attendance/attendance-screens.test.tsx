@@ -137,6 +137,9 @@ beforeEach(() => {
     workingMinutesChangePercent: null,
   });
   vi.spyOn(client, 'attendanceTimesheets').mockResolvedValue({ items: [] });
+  vi.spyOn(client, 'attendanceTimeRequests').mockResolvedValue({ items: [], total: 0 });
+  vi.spyOn(client, 'listWorkerSchedules').mockResolvedValue({ items: [], total: 0 });
+  vi.spyOn(client, 'listShifts').mockResolvedValue({ items: [], total: 0 });
   vi.spyOn(client, 'attendanceDayDetail').mockResolvedValue({
     day,
     sessions: [
@@ -180,6 +183,97 @@ it('keeps confirmed, overtime and provisional totals distinct and opens the real
   expect(buttons('Yêu cầu sửa phiên công')).toHaveLength(0);
 });
 
+it('keeps reports collapsed and hides unnecessary paging for a single page of worker history', async () => {
+  await mount();
+  const reportLabel = 'Báo cáo và bảng công chi tiết';
+  expect(buttons(reportLabel)[0]!.props.accessibilityState.expanded).toBe(false);
+  expect(JSON.stringify(root.toJSON())).not.toContain('Bảng công đã xác nhận');
+  expect(buttons('Trước')).toHaveLength(0);
+  expect(buttons('Sau')).toHaveLength(0);
+  await click(reportLabel);
+  expect(buttons(reportLabel)[0]!.props.accessibilityState.expanded).toBe(true);
+  expect(JSON.stringify(root.toJSON())).toContain('Bảng công đã xác nhận');
+});
+
+it('keeps the worker day focused on date, schedule, hours and review status', async () => {
+  await mount();
+  const card = buttons(`${today} Morning shift`)[0]!
+    .findAll((node) => String(node.type) === 'Text')
+    .map((node) => node.children.join(''))
+    .join('\n');
+  expect(card).toContain('Morning shift');
+  expect(card).toContain('08:00');
+  expect(card).toContain('17:00');
+  expect(card).toContain(minutes(480));
+  expect(card).toContain('Đã xác nhận');
+  expect(card).not.toContain('Synthetic Site');
+  expect(card).not.toContain('Ngoài công trường');
+});
+
+it('keeps additional worker history reachable when the range spans multiple pages', async () => {
+  vi.mocked(workspace.client.attendanceDays).mockResolvedValue({
+    items: Array.from({ length: 21 }, (_, index) => ({
+      ...day,
+      id: `day-${index}`,
+      shiftName: `Shift ${index + 1}`,
+    })),
+    total: 21,
+    requests: [],
+    canRequest: true,
+    canReview: false,
+  });
+  await mount();
+  expect(buttons(`${today} Shift 1`)).toHaveLength(1);
+  expect(buttons(`${today} Shift 21`)).toHaveLength(0);
+  await click('Sau');
+  expect(buttons(`${today} Shift 21`)).toHaveLength(1);
+  expect(buttons(`${today} Shift 1`)).toHaveLength(0);
+  await click('Trước');
+  expect(buttons(`${today} Shift 1`)).toHaveLength(1);
+});
+
+it('separates requests from the board and opens the overtime form with its type already selected', async () => {
+  await mount();
+  expect(workspace.client.attendanceTimeRequests).not.toHaveBeenCalled();
+  await click('Yêu cầu của tôi');
+  expect(workspace.client.attendanceTimeRequests).toHaveBeenCalledWith('token', 'site', {
+    kind: 'LEAVE',
+    workerId: 'own-worker',
+    offset: 0,
+    limit: 8,
+  });
+  expect(buttons(`${today} Morning shift`)).toHaveLength(0);
+  await click('Bảng công');
+  await click('Tăng ca');
+  expect(buttons('Tăng ca ngoài giờ')[0]!.props.accessibilityState.checked).toBe(true);
+  expect(JSON.stringify(root.toJSON())).toContain('Chọn ca ở trên để điền sẵn khung thời gian.');
+});
+
+it('shows actual clock times today and keeps missing checkout visible as unrecorded', async () => {
+  vi.mocked(workspace.client.attendanceDayDetail).mockResolvedValue({
+    day: { ...day, confirmedMinutes: null, provisionalMinutes: 125, presence: 'INSIDE' },
+    sessions: [
+      {
+        id: 'open-session',
+        workerId: day.workerId,
+        workerName: day.workerName,
+        rawInAt: `${today}T01:00:00Z`,
+        effectiveInAt: null,
+        rawOutAt: null,
+        effectiveOutAt: null,
+        status: 'OPEN',
+        version: 1,
+        workedMinutes: 125,
+      },
+    ],
+  });
+  await mount();
+  const content = JSON.stringify(root.toJSON());
+  expect(content).toContain('08:00');
+  expect(content).toContain('Chưa ghi nhận');
+  expect(content).toContain('Phiên ra vào gần nhất trong ngày');
+});
+
 it('moves reporting months and applies Today to the scoped API and report range', async () => {
   await mount();
   await click('Tháng trước');
@@ -192,6 +286,7 @@ it('moves reporting months and applies Today to the scoped API and report range'
     'site',
     expect.objectContaining({ fromDate, toDate, workerId: 'own-worker' }),
   );
+  await click('Báo cáo và bảng công chi tiết');
   const report = root.root.findAll((node) => String(node.type) === 'AttendanceReport')[0]!;
   expect(report.props.fromDate).toBe(fromDate);
   expect(report.props.toDate).toBe(toDate);
@@ -238,6 +333,7 @@ it('opens the month/year picker from the period pill and loads the whole chosen 
     'site',
     expect.objectContaining({ fromDate, toDate, workerId: 'own-worker' }),
   );
+  await click('Báo cáo và bảng công chi tiết');
   const report = root.root.findAll((node) => String(node.type) === 'AttendanceReport')[0]!;
   expect(report.props.fromDate).toBe(fromDate);
   expect(report.props.toDate).toBe(toDate);
@@ -268,3 +364,33 @@ it('denies a deep-linked day outside the selected Worker scope', async () => {
   expect(JSON.stringify(root.toJSON())).not.toContain('Private other worker');
   expect(workspace.client.attendanceOverview).not.toHaveBeenCalled();
 });
+
+it.each([
+  { remainingHours: 24, expected: 'Nghỉ đang chờ đại diện xử lý' },
+  { remainingHours: -1, expected: 'Vắng — đang chờ xử lý nghỉ' },
+])(
+  'only labels a pending leave as absent after the shift ends ($remainingHours hours)',
+  async ({ remainingHours, expected }) => {
+    vi.mocked(workspace.client.attendanceDays).mockResolvedValue({
+      items: [
+        {
+          ...day,
+          status: 'NEEDS_REVIEW',
+          confirmedMinutes: null,
+          provisionalMinutes: 0,
+          presence: 'OUTSIDE',
+          anomalies: ['PENDING_REQUEST', 'PENDING_LEAVE'],
+          endsAt: new Date(Date.now() + remainingHours * 3600000).toISOString(),
+        },
+      ],
+      total: 1,
+      requests: [],
+      canRequest: true,
+      canReview: false,
+    });
+    await mount();
+    const rendered = JSON.stringify(root.toJSON());
+    expect(rendered).toContain(expected);
+    if (remainingHours > 0) expect(rendered).not.toContain('Vắng — đang chờ xử lý nghỉ');
+  },
+);

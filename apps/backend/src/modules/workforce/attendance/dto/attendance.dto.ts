@@ -56,6 +56,9 @@ export class AttendanceTimeRequestsDto {
   limit?: number;
 }
 export class AttendanceTimeRequestDto {
+  @ValidateIf((_object, value: unknown) => value !== undefined)
+  @IsIn(['PLANNED', 'EMERGENCY'])
+  noticeType?: 'PLANNED' | 'EMERGENCY';
   @IsUUID() requestId!: string;
   @IsUUID() workerScheduleId!: string;
   @IsIn(['OVERTIME', 'LEAVE']) kind!: 'OVERTIME' | 'LEAVE';

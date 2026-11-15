@@ -53,6 +53,8 @@ async function mount(component: React.ReactNode) {
     root = create(createElement(QueryClientProvider, { client: cache }, component));
   });
   await settle();
+  for (let attempt = 0; cache.isFetching() && attempt < 50; attempt++) await settle();
+  await settle();
 }
 beforeEach(() => {
   cache = new QueryClient({
@@ -118,6 +120,11 @@ beforeEach(() => {
     teamName: null,
   });
   vi.spyOn(client, 'listAbsenceRequests').mockResolvedValue({ items: [], total: 0 });
+  vi.spyOn(client, 'attendanceTimeRequests').mockResolvedValue({ items: [], total: 0 });
+  vi.spyOn(client, 'getShiftChangeRequest').mockImplementation(async (_token, _siteId, id) => {
+    const rows = await client.listShiftRequests('token', 'site-a', { view: 'WORKER' });
+    return rows.items.find((row) => row.id === id) as never;
+  });
 });
 afterEach(async () => {
   if (root) await act(async () => root.unmount());
@@ -194,6 +201,34 @@ function request(overrides: Partial<ShiftRequestResponse> = {}): ShiftRequestRes
     ...overrides,
   } as ShiftRequestResponse;
 }
+it('refreshes the approval status and review reason while a worker keeps the request detail open', async () => {
+  const pending = request();
+  const approved = request({
+    status: 'APPROVED',
+    reviewReason: 'Approved by representative',
+    reviewedAt: '2026-11-14T03:00:00Z',
+  });
+  let current = pending;
+  vi.spyOn(workspace.client, 'listShiftRequests').mockImplementation(async () => ({
+    items: [current],
+    total: 1,
+    pendingCount: current.status === 'PENDING_MANAGER' ? 1 : 0,
+    incomingCount: 0,
+    pendingScheduleIds: [],
+  }));
+  vi.spyOn(workspace.client, 'getShiftChangeRequest').mockImplementation(
+    async () => current as never,
+  );
+  await mount(createElement(ShiftRequestsScreen, {}));
+  await click('Xem yêu cầu');
+  await settle();
+  current = approved;
+  await act(async () => {
+    await cache.invalidateQueries({ queryKey: workspace.queryKey });
+  });
+  await settle();
+  expect(JSON.stringify(root.toJSON())).toContain('Approved by representative');
+});
 it('does not offer contractor approval to a worker, or permit a representative to approve their own request', async () => {
   vi.spyOn(workspace.client, 'listShiftRequests').mockResolvedValue({
     items: [request({ requestedByUserId: 'user-a' })],

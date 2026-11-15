@@ -25,11 +25,19 @@ import {
   Pager,
   QueryState,
   Disclosure,
+  CompactTabs,
 } from '../shared/ui';
 import { View, Text, StyleSheet } from 'react-native';
 import { useTranslation } from '../../i18n';
 import { colors } from '../../theme/colors';
 import { WorkerScheduleScreen } from './worker-schedule-screen';
+import { LeaveNoticeFields } from './leave-notice-fields';
+import { TimeRequestsPanel } from '../attendance/time-requests-panel';
+import { RequestSheet } from '../shared/request-sheet';
+import { FormSection } from '../shared/form-section';
+import { DetailLink, EmptyState, ListHeading } from '../contractor/contractor-presentation';
+import { IconDocument } from '../../components/common/Icons';
+import type { LeaveNoticeType } from '@smartsite/api-client';
 
 export function ScheduleScreen({ initialDate }: { initialDate?: string }) {
   const { scope } = useWorkspace();
@@ -70,6 +78,7 @@ function ScheduleRequest({
 }) {
   const { t } = useTranslation();
   const { scope, client, token, queryKey } = useWorkspace();
+  const [noticeType, setNoticeType] = useState<LeaveNoticeType>('PLANNED');
   const [kind, setKind] = useState('CHANGE'),
     [target, setTarget] = useState(''),
     [reason, setReason] = useState('');
@@ -143,9 +152,12 @@ function ScheduleRequest({
               : tr('requests.absenceReviewHint')}
         </Hint>
         <ErrorNotice error={command.error} />
+        {kind === 'ABSENCE' && <LeaveNoticeFields value={noticeType} onChange={setNoticeType} />}
         <Button
           label={command.isPending ? t('requests.sending') : t('requests.submitRequest')}
-          disabled={command.isPending || !reason.trim() || (kind !== 'ABSENCE' && !target)}
+          disabled={
+            command.isPending || !reason.trim() || !shift || (kind !== 'ABSENCE' && !target)
+          }
           onPress={() =>
             command.mutate(async () => {
               const why = required(reason, t('schedule.reason'));
@@ -165,6 +177,7 @@ function ScheduleRequest({
                 await client.createAbsenceRequest(token, scope.siteId, {
                   workerScheduleId: schedule.id,
                   reason: why,
+                  noticeType,
                 });
               onBack();
             })
@@ -187,6 +200,7 @@ export function ShiftRequestsScreen({
   const { scope, client, token, user, queryKey } = useWorkspace();
   const rep = scope.role === 'contractor';
   const pageSize = rep ? 8 : 20;
+  const [category, setCategory] = useState<'SHIFTS' | 'TIME'>('SHIFTS');
   const [notificationDismissed, setNotificationDismissed] = useState(false);
   const [view, setView] = useState<ShiftRequestListOptions['view']>(rep ? 'REVIEW' : 'WORKER'),
     [type, setType] = useState<'ALL' | 'CHANGE' | 'SWAP'>('ALL'),
@@ -231,17 +245,21 @@ export function ShiftRequestsScreen({
     },
     refetchInterval: 15000,
   });
+  const detailId = selected?.id ?? (notificationDismissed ? undefined : initialId);
+  const detailKind = selected?.requestType ?? initialKind;
   const incoming = useQuery({
-    queryKey: [...queryKey, 'request-from-notification', initialId, initialKind],
-    enabled: !!initialId,
+    queryKey: [...queryKey, 'shift-request-detail', detailId, detailKind],
+    enabled: !!detailId,
+    initialData: selected ?? undefined,
+    refetchInterval: 15000,
     queryFn: async (): Promise<ShiftRequestResponse> =>
-      initialKind === 'SWAP'
+      detailKind === 'SWAP'
         ? {
-            ...(await client.getShiftSwapRequest(token, scope.siteId, initialId!)),
+            ...(await client.getShiftSwapRequest(token, scope.siteId, detailId!)),
             requestType: 'SWAP',
           }
         : {
-            ...(await client.getShiftChangeRequest(token, scope.siteId, initialId!)),
+            ...(await client.getShiftChangeRequest(token, scope.siteId, detailId!)),
             requestType: 'CHANGE',
           },
   });
@@ -256,8 +274,8 @@ export function ShiftRequestsScreen({
       allPages((p) => client.listAbsenceRequests(token, scope.siteId, p), signal),
     enabled: !rep,
   });
-  const detail = selected ?? (notificationDismissed ? undefined : incoming.data);
-  const renderDetail = (r: ShiftRequestResponse) => {
+  const detail = detailId ? incoming.data : undefined;
+  const renderDetail = (r: ShiftRequestResponse, part?: 'footer') => {
     if (!requestInScope(r, workerIds, scope.role)) return <Hint>{tr('requests.outOfScope')}</Hint>;
     const canReview =
       rep &&
@@ -287,6 +305,88 @@ export function ShiftRequestsScreen({
         setNotificationDismissed(true);
         setReason('');
       });
+    if (rep) {
+      if (part === 'footer')
+        return (
+          <View style={schedStyles.repActions}>
+            <ErrorNotice error={command.error} />
+            {canReview ? (
+              <>
+                <Button
+                  label={t('requests.approveRequest')}
+                  disabled={command.isPending || incoming.isRefetchError}
+                  onPress={() => run(true)}
+                />
+                <Button
+                  secondary
+                  label={t('requests.reject')}
+                  disabled={command.isPending || !reason.trim() || incoming.isRefetchError}
+                  onPress={() => run(false)}
+                />
+              </>
+            ) : (
+              <Button
+                secondary
+                label={t('common.close')}
+                onPress={() => {
+                  setSelected(null);
+                  setNotificationDismissed(true);
+                }}
+              />
+            )}
+          </View>
+        );
+      return (
+        <>
+          <FormSection number="01" title={t('requests.requester')}>
+            <Text style={schedStyles.repName}>
+              {r.requestType === 'SWAP'
+                ? getWorkerName(r.requesterWorkerId) + ' ↔ ' + getWorkerName(r.coworkerWorkerId)
+                : getWorkerName(r.workerId)}
+            </Text>
+            <Text style={schedStyles.repBadge}>{localizedLabel(r.status)}</Text>
+            <Text style={schedStyles.repCaption}>
+              {r.requestType === 'SWAP'
+                ? (r.requesterWorkDate ?? '—') + ' ↔ ' + (r.coworkerWorkDate ?? '—')
+                : (r.workDate ?? '—')}
+            </Text>
+            <Text style={schedStyles.repShift}>
+              {r.requestType === 'SWAP'
+                ? getShiftLabel(r.requesterShiftId) + ' ↔ ' + getShiftLabel(r.coworkerShiftId)
+                : getShiftLabel(r.fromShiftId) + ' → ' + getShiftLabel(r.toShiftId)}
+            </Text>
+            <Text style={schedStyles.repCaption}>
+              {tr('requests.submittedAt')} {displayTime(r.createdAt)}
+            </Text>
+            {r.reviewedAt && (
+              <Text style={schedStyles.repCaption}>
+                {tr('requests.reviewedAt')} {displayTime(r.reviewedAt)}
+              </Text>
+            )}
+          </FormSection>
+          <FormSection number="02" title={t('requests.reason')}>
+            <Text style={schedStyles.repReason}>{r.reason || '—'}</Text>
+            {r.reviewReason && (
+              <Text style={schedStyles.repReason}>
+                {tr('requests.reviewReason')} {r.reviewReason}
+              </Text>
+            )}
+          </FormSection>
+          {canReview && (
+            <FormSection number="03" title={t('attendanceUi.reviewNote')}>
+              <Field
+                label={t('requests.rejectionReason')}
+                value={reason}
+                onChangeText={setReason}
+                multiline
+                editable={!command.isPending}
+              />
+              <Text style={schedStyles.repCaption}>{t('contractorUi.rejectHint')}</Text>
+            </FormSection>
+          )}
+        </>
+      );
+    }
     return (
       <View style={schedStyles.detailCard}>
         <View style={schedStyles.detailHeaderRow}>
@@ -412,196 +512,328 @@ export function ShiftRequestsScreen({
         <QueryState query={workers}>{() => null}</QueryState>
       </Page>
     );
-  if (rep && detail)
-    return (
-      <Page
-        title={t('requests.viewRequest')}
-        onBack={() => {
-          setSelected(null);
-          setNotificationDismissed(true);
-        }}
-      >
-        <ErrorNotice error={command.error} />
-        {renderDetail(detail)}
-      </Page>
-    );
   return (
     <Page title={rep ? t('contractorHome.approveRequests') : t('requests.title')} onBack={onBack}>
-      <Disclosure title={t('contractorUi.filters')} collapsible={rep}>
-        <Choice
-          label={tr('requests.list')}
-          value={view}
-          onChange={(v) => {
-            setView(v as ShiftRequestListOptions['view']);
-            setOffset(0);
-            setSelected(null);
-            command.reset();
-          }}
-          options={
-            rep
-              ? [
+      {rep && (
+        <>
+          <Text style={schedStyles.repSubtitle}>
+            {scope.contractorName} · {scope.siteName}
+          </Text>
+          <CompactTabs
+            value={category}
+            options={[
+              { value: 'SHIFTS', label: t('contractorUi.shiftRequests') },
+              { value: 'TIME', label: t('leavePolicy.title') },
+            ]}
+            onChange={(value) => setCategory(value as typeof category)}
+          />
+        </>
+      )}
+
+      {rep && category === 'TIME' ? (
+        <TimeRequestsPanel />
+      ) : (
+        <>
+          {rep ? (
+            <View style={schedStyles.repActions}>
+              <CompactTabs
+                value={view ?? 'REVIEW'}
+                options={[
                   { value: 'REVIEW', label: tr('requests.awaitingMyReview') },
                   { value: 'HISTORY', label: tr('requests.history') },
-                ]
-              : [
-                  { value: 'WORKER', label: tr('requests.submittedByMe') },
-                  { value: 'INCOMING', label: tr('requests.awaitingMyConsent') },
-                ]
-          }
-        />
-        <Choice
-          label={tr('requests.kind')}
-          value={type}
-          onChange={(v) => {
-            setType(v as typeof type);
-            setOffset(0);
-          }}
-          options={[
-            { value: 'ALL', label: t('common.all') },
-            { value: 'CHANGE', label: t('requests.changeShift') },
-            { value: 'SWAP', label: t('requests.swapRequest') },
-          ]}
-        />
-      </Disclosure>
-      <ErrorNotice error={command.error} />
-      {initialId && <QueryState query={incoming}>{() => null}</QueryState>}
-      {detail && renderDetail(detail)}
-      <QueryState query={query}>
-        {(data) => (
-          <>
-            <Hint>
-              {data.pendingCount} {tr('requests.pendingReviewUnit')} {data.incomingCount}{' '}
-              {tr('requests.pendingConsentUnit')}
-            </Hint>
-            {!data.items.length && <Hint>{t('requests.noRequests')}</Hint>}
-            {data.items.map((r) => (
-              <View key={r.id} style={schedStyles.requestItemCard}>
-                <View style={schedStyles.requestItemHeader}>
-                  <View
-                    style={[
-                      schedStyles.typePill,
-                      { backgroundColor: r.requestType === 'SWAP' ? '#EFF6FF' : '#FFF4EE' },
-                    ]}
-                  >
-                    <Text
-                      style={[
-                        schedStyles.typePillText,
-                        { color: r.requestType === 'SWAP' ? '#2563EB' : '#F66B17' },
-                      ]}
-                    >
-                      {r.requestType === 'SWAP'
-                        ? t('requests.swapRequest')
-                        : t('requests.changeShift')}
-                    </Text>
-                  </View>
-                  <View
-                    style={[
-                      schedStyles.statusPill,
-                      {
-                        backgroundColor:
-                          r.status === 'APPROVED'
-                            ? '#EDFAF2'
-                            : r.status === 'REJECTED'
-                              ? '#FEE2E2'
-                              : '#FEF3C7',
-                      },
-                    ]}
-                  >
-                    <View
-                      style={[
-                        schedStyles.statusDot,
-                        {
-                          backgroundColor:
-                            r.status === 'APPROVED'
-                              ? '#10B981'
-                              : r.status === 'REJECTED'
-                                ? '#EF4444'
-                                : '#F59E0B',
-                        },
-                      ]}
+                ]}
+                onChange={(value) => {
+                  setView(value as ShiftRequestListOptions['view']);
+                  setOffset(0);
+                  command.reset();
+                }}
+              />
+              <CompactTabs
+                value={type}
+                options={[
+                  { value: 'ALL', label: t('common.all') },
+                  { value: 'CHANGE', label: t('requests.typeChange') },
+                  { value: 'SWAP', label: t('requests.typeSwap') },
+                ]}
+                onChange={(value) => {
+                  setType(value as typeof type);
+                  setOffset(0);
+                }}
+              />
+            </View>
+          ) : (
+            <Disclosure title={t('contractorUi.filters')} collapsible={rep}>
+              <Choice
+                label={tr('requests.list')}
+                value={view}
+                onChange={(v) => {
+                  setView(v as ShiftRequestListOptions['view']);
+                  setOffset(0);
+                  setSelected(null);
+                  command.reset();
+                }}
+                options={
+                  rep
+                    ? [
+                        { value: 'REVIEW', label: tr('requests.awaitingMyReview') },
+                        { value: 'HISTORY', label: tr('requests.history') },
+                      ]
+                    : [
+                        { value: 'WORKER', label: tr('requests.submittedByMe') },
+                        { value: 'INCOMING', label: tr('requests.awaitingMyConsent') },
+                      ]
+                }
+              />
+              <Choice
+                label={tr('requests.kind')}
+                value={type}
+                onChange={(v) => {
+                  setType(v as typeof type);
+                  setOffset(0);
+                }}
+                options={[
+                  { value: 'ALL', label: t('common.all') },
+                  { value: 'CHANGE', label: t('requests.changeShift') },
+                  { value: 'SWAP', label: t('requests.swapRequest') },
+                ]}
+              />
+            </Disclosure>
+          )}
+
+          <ErrorNotice error={command.error} />
+          {detailId && <QueryState query={incoming}>{() => null}</QueryState>}
+          {!rep && detail && renderDetail(detail)}
+          <QueryState query={query}>
+            {(data) => (
+              <>
+                {rep ? (
+                  <ListHeading
+                    title={t(view === 'HISTORY' ? 'requests.history' : 'requests.awaitingMyReview')}
+                    count={t('contractorUi.requestCount', { count: data.total })}
+                  />
+                ) : (
+                  <Hint>
+                    {data.pendingCount} {tr('requests.pendingReviewUnit')} {data.incomingCount}{' '}
+                    {tr('requests.pendingConsentUnit')}
+                  </Hint>
+                )}
+                {!data.items.length &&
+                  (rep ? (
+                    <EmptyState
+                      icon={<IconDocument size={26} color={colors.primary} />}
+                      title={t('requests.noRequests')}
+                      hint={t('contractorUi.requestEmptyHint')}
                     />
-                    <Text
-                      style={[
-                        schedStyles.statusPillText,
-                        {
-                          color:
-                            r.status === 'APPROVED'
-                              ? '#065F46'
-                              : r.status === 'REJECTED'
-                                ? '#DC2626'
-                                : '#B45309',
-                        },
-                      ]}
-                    >
-                      {localizedLabel(r.status)}
-                    </Text>
-                  </View>
-                </View>
-
-                <Text style={schedStyles.cardWorkerText}>
-                  {r.requestType === 'SWAP'
-                    ? `${getWorkerName(r.requesterWorkerId)} ↔ ${getWorkerName(r.coworkerWorkerId)}`
-                    : getWorkerName(r.workerId)}
-                </Text>
-
-                <View style={schedStyles.cardShiftBox}>
-                  <Text style={schedStyles.cardDateText}>
-                    📅 {t('schedule.date')}:{' '}
-                    <Text style={{ fontWeight: '700' }}>
-                      {r.requestType === 'SWAP'
-                        ? `${r.requesterWorkDate ?? '—'} ↔ ${r.coworkerWorkDate ?? '—'}`
-                        : (r.workDate ?? '—')}
-                    </Text>
-                  </Text>
-                  <Text style={schedStyles.shiftTransitionText} numberOfLines={1}>
-                    {r.requestType === 'SWAP' ? (
-                      <>
-                        <Text style={schedStyles.shiftSourceText}>
-                          {getShiftLabel(r.requesterShiftId)}
+                  ) : (
+                    <Hint>{t('requests.noRequests')}</Hint>
+                  ))}
+                {data.items.map((r) => {
+                  const workerName =
+                    r.requestType === 'SWAP'
+                      ? `${getWorkerName(r.requesterWorkerId)} ↔ ${getWorkerName(r.coworkerWorkerId)}`
+                      : getWorkerName(r.workerId);
+                  if (rep)
+                    return (
+                      <Card key={r.id}>
+                        <View style={schedStyles.repHeading}>
+                          <Text style={schedStyles.repName}>{workerName}</Text>
+                          <Text style={schedStyles.repBadge}>{localizedLabel(r.status)}</Text>
+                        </View>
+                        <Text style={schedStyles.repCaption}>
+                          {t(
+                            r.requestType === 'SWAP'
+                              ? 'requests.swapRequest'
+                              : 'requests.changeShift',
+                          )}{' '}
+                          ·{' '}
+                          {r.requestType === 'SWAP'
+                            ? (r.requesterWorkDate ?? '—') + ' ↔ ' + (r.coworkerWorkDate ?? '—')
+                            : (r.workDate ?? '—')}
                         </Text>
-                        {' ↔ '}
-                        <Text style={schedStyles.shiftTargetText}>
-                          {getShiftLabel(r.coworkerShiftId)}
+                        <Text style={schedStyles.repShift}>
+                          {r.requestType === 'SWAP'
+                            ? getShiftLabel(r.requesterShiftId) +
+                              ' ↔ ' +
+                              getShiftLabel(r.coworkerShiftId)
+                            : getShiftLabel(r.fromShiftId) + ' → ' + getShiftLabel(r.toShiftId)}
                         </Text>
-                      </>
-                    ) : (
-                      <>
-                        <Text style={schedStyles.shiftSourceText}>
-                          {getShiftLabel(r.fromShiftId)}
-                        </Text>
-                        {' → '}
-                        <Text style={schedStyles.shiftTargetText}>
-                          {getShiftLabel(r.toShiftId)}
-                        </Text>
-                      </>
-                    )}
-                  </Text>
-                </View>
+                        {r.reason && (
+                          <Text numberOfLines={2} style={schedStyles.repReason}>
+                            {t('requests.reason')}: {r.reason}
+                          </Text>
+                        )}
+                        <DetailLink
+                          label={t('requests.viewRequest')}
+                          onPress={() => {
+                            setSelected(r);
+                            setReason('');
+                            command.reset();
+                          }}
+                        />
+                      </Card>
+                    );
+                  const initials =
+                    workerName
+                      .split(' ')
+                      .map((p) => p[0])
+                      .filter(Boolean)
+                      .slice(-2)
+                      .join('')
+                      .toUpperCase() || 'W';
+                  const isApproved = r.status === 'APPROVED';
+                  const isRejected = r.status === 'REJECTED';
 
-                {r.reason ? (
-                  <Text numberOfLines={rep ? 2 : undefined} style={schedStyles.requestReasonText}>
-                    <Text style={{ fontWeight: '600', color: '#64748B' }}>
-                      {t('schedule.reason')}:{' '}
-                    </Text>
-                    "{r.reason}"
-                  </Text>
-                ) : null}
+                  return (
+                    <View key={r.id} style={schedStyles.requestItemCard}>
+                      <View style={schedStyles.requestItemHeader}>
+                        <View
+                          style={[
+                            schedStyles.typePill,
+                            { backgroundColor: r.requestType === 'SWAP' ? '#EFF6FF' : '#FFF4EE' },
+                          ]}
+                        >
+                          <Text
+                            style={[
+                              schedStyles.typePillText,
+                              { color: r.requestType === 'SWAP' ? '#2563EB' : '#F66B17' },
+                            ]}
+                          >
+                            {r.requestType === 'SWAP'
+                              ? t('requests.swapRequest')
+                              : t('requests.changeShift')}
+                          </Text>
+                        </View>
+                        <View
+                          style={[
+                            schedStyles.statusPill,
+                            {
+                              backgroundColor: isApproved
+                                ? '#EDFAF2'
+                                : isRejected
+                                  ? '#FEE2E2'
+                                  : '#FEF3C7',
+                            },
+                          ]}
+                        >
+                          <View
+                            style={[
+                              schedStyles.statusDot,
+                              {
+                                backgroundColor: isApproved
+                                  ? '#10B981'
+                                  : isRejected
+                                    ? '#EF4444'
+                                    : '#F59E0B',
+                              },
+                            ]}
+                          />
+                          <Text
+                            style={[
+                              schedStyles.statusPillText,
+                              {
+                                color: isApproved ? '#065F46' : isRejected ? '#DC2626' : '#B45309',
+                              },
+                            ]}
+                          >
+                            {localizedLabel(r.status)}
+                          </Text>
+                        </View>
+                      </View>
 
-                <Button
-                  secondary
-                  label={t('requests.viewRequest')}
-                  onPress={() => {
-                    setSelected(r);
-                    setReason('');
-                    command.reset();
-                  }}
-                />
-              </View>
-            ))}
-            <Pager offset={offset} total={data.total} size={pageSize} onChange={setOffset} />
-          </>
-        )}
-      </QueryState>
+                      <View style={schedStyles.workerRow}>
+                        <View style={schedStyles.avatarCircle}>
+                          <Text style={schedStyles.avatarText}>{initials}</Text>
+                        </View>
+                        <Text style={schedStyles.cardWorkerText}>{workerName}</Text>
+                      </View>
+
+                      <View style={schedStyles.cardShiftBox}>
+                        <Text style={schedStyles.cardDateText}>
+                          📅 {t('schedule.date')}:{' '}
+                          <Text style={{ fontWeight: '700' }}>
+                            {r.requestType === 'SWAP'
+                              ? `${r.requesterWorkDate ?? '—'} ↔ ${r.coworkerWorkDate ?? '—'}`
+                              : (r.workDate ?? '—')}
+                          </Text>
+                        </Text>
+                        <Text style={schedStyles.shiftTransitionText} numberOfLines={1}>
+                          {r.requestType === 'SWAP' ? (
+                            <>
+                              <Text style={schedStyles.shiftSourceText}>
+                                {getShiftLabel(r.requesterShiftId)}
+                              </Text>
+                              {' ↔ '}
+                              <Text style={schedStyles.shiftTargetText}>
+                                {getShiftLabel(r.coworkerShiftId)}
+                              </Text>
+                            </>
+                          ) : (
+                            <>
+                              <Text style={schedStyles.shiftSourceText}>
+                                {getShiftLabel(r.fromShiftId)}
+                              </Text>
+                              {' → '}
+                              <Text style={schedStyles.shiftTargetText}>
+                                {getShiftLabel(r.toShiftId)}
+                              </Text>
+                            </>
+                          )}
+                        </Text>
+                      </View>
+
+                      {r.reason ? (
+                        <Text
+                          numberOfLines={rep ? 2 : undefined}
+                          style={schedStyles.requestReasonText}
+                        >
+                          <Text style={{ fontWeight: '600', color: '#64748B' }}>
+                            {t('schedule.reason')}:{' '}
+                          </Text>
+                          "{r.reason}"
+                        </Text>
+                      ) : null}
+
+                      <Button
+                        secondary
+                        label={t('requests.viewRequest')}
+                        onPress={() => {
+                          setSelected(r);
+                          setReason('');
+                          command.reset();
+                        }}
+                      />
+                    </View>
+                  );
+                })}
+                {(!rep || data.total > pageSize) && (
+                  <Pager offset={offset} total={data.total} size={pageSize} onChange={setOffset} />
+                )}
+              </>
+            )}
+          </QueryState>
+        </>
+      )}
+      {rep && detailId && (
+        <RequestSheet
+          visible
+          variant="form"
+          icon={<IconDocument size={23} color={colors.primary} />}
+          title={t('requests.viewRequest')}
+          subtitle={t(detailKind === 'SWAP' ? 'requests.swapRequest' : 'requests.changeShift')}
+          busy={command.isPending}
+          onClose={() => {
+            setSelected(null);
+            setNotificationDismissed(true);
+            setReason('');
+            command.reset();
+          }}
+          footer={
+            <QueryState query={incoming}>{(data) => renderDetail(data, 'footer')}</QueryState>
+          }
+        >
+          <QueryState query={incoming}>{(data) => renderDetail(data)}</QueryState>
+        </RequestSheet>
+      )}
       {!rep && (
         <QueryState query={absence}>
           {(data) => (
@@ -622,146 +854,37 @@ export function ShiftRequestsScreen({
 }
 
 const schedStyles = StyleSheet.create({
-  weekCard: {
-    backgroundColor: '#F8F9FB',
-    borderRadius: 20,
-    paddingVertical: 14,
-    paddingHorizontal: 10,
-    borderWidth: 1,
-    borderColor: '#EFF2F6',
-    marginBottom: 4,
-  },
-  weekDaysRow: {
+  repSubtitle: { fontSize: 12, lineHeight: 20, color: colors.textMuted, marginTop: -8 },
+  repActions: { gap: 10 },
+  repHeading: {
     flexDirection: 'row',
-    justifyContent: 'space-between',
-  },
-  dayCol: {
-    flex: 1,
-    alignItems: 'center',
-    paddingVertical: 10,
-    borderRadius: 14,
-    marginHorizontal: 2,
-  },
-  dayColSelected: {
-    backgroundColor: colors.primary,
-    shadowColor: colors.primary,
-    shadowOffset: { width: 0, height: 3 },
-    shadowOpacity: 0.3,
-    shadowRadius: 5,
-    elevation: 3,
-  },
-  dayName: {
-    fontSize: 12,
-    color: colors.textMuted,
-    fontWeight: '600',
-    marginBottom: 4,
-  },
-  dayNameSelected: {
-    color: '#FFFFFF',
-  },
-  dayDate: {
-    fontSize: 16,
-    fontWeight: '800',
-    color: colors.textPrimary,
-    marginBottom: 4,
-  },
-  dayDateSelected: {
-    color: '#FFFFFF',
-  },
-  selectedDot: {
-    width: 5,
-    height: 5,
-    borderRadius: 2.5,
-    backgroundColor: '#FFFFFF',
-  },
-  shiftItemRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 12,
-  },
-  scheduleCard: {
-    backgroundColor: '#FFFFFF',
-    borderRadius: 20,
-    padding: 16,
-    marginBottom: 12,
-    borderWidth: 1,
-    borderColor: '#E2E8F0',
-    gap: 12,
-    shadowColor: '#0F1E36',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.04,
-    shadowRadius: 6,
-    elevation: 2,
-  },
-  scheduleCardHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 12,
-  },
-  dateBadge: {
-    backgroundColor: '#FFF4EE',
-    borderRadius: 14,
-    paddingVertical: 10,
-    paddingHorizontal: 12,
-    alignItems: 'center',
-    justifyContent: 'center',
-    minWidth: 54,
-    flexShrink: 0,
-  },
-  dateBadgeDay: {
-    fontSize: 20,
-    fontWeight: '800',
-    color: '#F66B17',
-  },
-  dateBadgeMonth: {
-    fontSize: 12.5,
-    fontWeight: '800',
-    color: '#C2410C',
-    textTransform: 'uppercase',
-  },
-  iconBox: {
-    width: 44,
-    height: 44,
-    borderRadius: 14,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  shiftDetailsCol: {
-    flex: 1,
-    gap: 4,
-    minWidth: 0,
-  },
-  shiftTopRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    gap: 8,
     flexWrap: 'wrap',
-  },
-  shiftTypeTitle: {
-    fontSize: 16.5,
-    fontWeight: '800',
-    color: '#0F1E36',
-    flex: 1,
-    minWidth: 120,
-    flexBasis: 140,
-    lineHeight: 24,
-  },
-  shiftTimeRow: {
-    flexDirection: 'row',
     alignItems: 'center',
-    gap: 5,
+    justifyContent: 'space-between',
+    gap: 10,
   },
-  shiftTimeText: {
+  repName: {
+    flexShrink: 1,
     fontSize: 15,
+    lineHeight: 23,
     fontWeight: '700',
-    color: '#1D4ED8',
+    color: colors.textPrimary,
   },
-  shiftLocationText: {
-    fontSize: 13.5,
-    color: '#64748B',
-    fontWeight: '500',
+  repBadge: {
+    alignSelf: 'flex-start',
+    maxWidth: '100%',
+    color: colors.textSecondary,
+    backgroundColor: colors.surfaceSubtle,
+    borderRadius: 8,
+    paddingHorizontal: 9,
+    paddingVertical: 5,
+    fontSize: 12,
+    lineHeight: 18,
+    overflow: 'hidden',
   },
+  repCaption: { fontSize: 12, lineHeight: 20, color: colors.textMuted },
+  repShift: { fontSize: 13, lineHeight: 21, color: colors.textSecondary },
+  repReason: { fontSize: 14, lineHeight: 22, color: colors.textPrimary },
   statusPill: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -777,27 +900,6 @@ const schedStyles = StyleSheet.create({
     height: 6,
     borderRadius: 3,
     flexShrink: 0,
-  },
-  statusText: {
-    fontSize: 12,
-    fontWeight: '700',
-    flexShrink: 1,
-    lineHeight: 18,
-  },
-  requestActionBtn: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    backgroundColor: '#FFF7ED',
-    borderRadius: 10,
-    paddingVertical: 8,
-    paddingHorizontal: 12,
-    minHeight: 38,
-  },
-  requestActionText: {
-    fontSize: 13.5,
-    fontWeight: '700',
-    color: '#C2410C',
   },
   statusPillText: {
     fontSize: 13,
@@ -888,21 +990,11 @@ const schedStyles = StyleSheet.create({
     color: '#334155',
     lineHeight: 20,
   },
-  detailReasonText: {
-    fontSize: 16.5,
-    fontWeight: '800',
-    color: '#0F1E36',
-  },
   detailInfoGrid: {
     gap: 4,
     paddingTop: 8,
     borderTopWidth: StyleSheet.hairlineWidth,
     borderTopColor: '#F1F5F9',
-  },
-  detailInfoLine: {
-    fontSize: 14.5,
-    fontWeight: '600',
-    color: '#334155',
   },
   detailInfoSub: {
     fontSize: 13.5,
@@ -933,27 +1025,51 @@ const schedStyles = StyleSheet.create({
   },
   requestItemCard: {
     backgroundColor: '#FFFFFF',
-    borderRadius: 20,
+    borderRadius: 16,
     padding: 16,
     marginBottom: 12,
-    borderWidth: StyleSheet.hairlineWidth,
-    borderColor: '#EFF2F6',
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
     gap: 10,
-    shadowColor: '#000000',
+    shadowColor: '#0F172A',
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.04,
     shadowRadius: 6,
-    elevation: 1,
+    elevation: 2,
   },
   requestItemHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
+    gap: 8,
   },
   requestReasonText: {
-    fontSize: 14,
+    fontSize: 13.5,
     color: '#334155',
     fontStyle: 'italic',
     lineHeight: 20,
+    backgroundColor: '#FFF7ED',
+    padding: 10,
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: '#FFEDD5',
+  },
+  workerRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+  },
+  avatarCircle: {
+    width: 38,
+    height: 38,
+    borderRadius: 19,
+    backgroundColor: '#FFF4EE',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  avatarText: {
+    fontSize: 14,
+    fontWeight: '800',
+    color: '#EA580C',
   },
 });

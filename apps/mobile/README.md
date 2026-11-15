@@ -10,8 +10,23 @@ with secondary management tools behind one expandable section. Contractor lists 
 records per page. Forms for membership changes, archival, access and onboarding documents
 open on demand; collapsing a form preserves its draft. Large dropdowns offer search and a
 bounded scrolling list. The **Personal** bottom tab opens the account page, which retains its original profile layout.
-These presentation changes apply to the Contractor mobile workspace;
-Worker presentation and Backend authorization remain independent.
+The Workforce, Schedule and Requests tabs use the same white bordered cards, neutral summaries
+and compact selectors as the Worker workspace. Worker creation/editing, assignment preview/save,
+shift review, leave/overtime review and delegated leave use the same request sheet, grouped fields
+and fixed footer actions. Required identity fields are visible during worker creation; document
+uploads retain their existing expandable sections and retry behavior.
+Schedule week navigation updates the selected date and API range together. Assignment and attendance
+ranges are independent. Attendance rows are filtered to the scoped workers before pagination and
+open the same daily session details used by Workers. Entry/exit timestamps are shown only in session
+details, where the API actually supplies them. Backend authorization remains authoritative.
+Overview no longer repeats the team attendance shortcut; team hours remain in Schedule.
+Teams and Zones use the same cards and request sheets. Team creation, editing, membership changes,
+archival and zone validity are separate forms with fixed footer actions. Team zone dates use the
+shared date picker and remain calendar-date strings. iOS uses a light inline spinner with explicit
+dark text; Android uses scrolling columns. Both show the current draft and keep Done/Cancel separate
+from submission. Zone management separates contractor permissions, assignment status and individual
+worker grants; all lists retain their contractor scope. Assignment requests are created only from
+the Assignments tab, while individual worker grants have their own action.
 
 The Worker's **Work schedule** tab shows a Monday-to-Sunday calendar with a month/year picker,
 Today shortcut and daily shift timeline. Dots mark active assignments; filters select shift and
@@ -23,9 +38,16 @@ the API does not supply coworkers for each scheduled shift.
 The **Attendance** tab uses the same header, period pill, orange actions and soft cards as the
 Worker calendar. Today and month navigation update the existing reporting range; the filter
 button expands the full range picker. Tapping the period pill opens the same month/year picker
-as the Worker calendar and loads the entire chosen month. Day records and entry/exit sessions use timelines.
-Confirmed, overtime and provisional hours remain separate; corrections, leave/overtime requests,
+as the Worker calendar and loads the entire chosen month. Worker history uses compact day cards
+with the date, scheduled shift, counted hours and review status; tapping a card opens its session timeline.
+The summary emphasizes confirmed hours, identifies the included overtime and separates provisional hours.
+Day counts use a quiet three-column row. History pagination appears only when there is more than one page.
+Detailed reports and confirmed timesheets start collapsed. Corrections, leave/overtime requests,
 reports and CSV sharing retain their existing authorization and APIs.
+Leave and overtime request sheets group shift selection, requested times and reason into cards.
+Request type and leave notice use direct selection; compact date/time controls open the shared
+picker. The footer keeps the requested duration and submission button visible while fields scroll,
+and waits for an open date/time draft to be confirmed or cancelled before allowing submission.
 The Worker attendance report starts collapsed; tap its heading to open or close the report
 and CSV controls. Report data loads when the section is opened.
 
@@ -33,7 +55,7 @@ After sign-in, choose an explicitly assigned role and Site. Representatives also
 
 Workers can view their linked profile/team/Zone information, work schedules, attendance days and sessions, confirmed versus provisional hours, daily reports and CSV exports. They can submit and track attendance corrections, partial leave, overtime, full-shift absence, shift changes and swaps. Swap recipients confirm/decline before Contractor review. Opening QR on the home screen fetches the Worker's own QR and matching 8-character manual code without entering a Security session code. The code and QR share the same expiry and change together only when creating/refreshing the QR or changing direction; there is no timed code rotation. Mobile hides expired/failed codes. Security scans or types that code in its gate fallback flow; server authorization and passage confirmation still apply. See [Worker QR contract](../../contracts/worker-qr.md) and apply its Backend migration before using this flow. Workers can read, open or delete their own notifications. They cannot enroll or manage face profiles; enrollment is handled by an authorized Contractor Representative with the Worker's explicit consent, while Security verifies identity at the gate.
 
-Representatives can view Contractor totals; create Worker accounts with server-generated codes and the existing initial-password policy; edit/suspend/restore Worker profiles; create/rename/archive teams; add/transfer/remove members; and assign/update/revoke team Zone permissions within existing Contractor grants. They can send Site/Zone assignment requests, grant/revoke Worker Zone permissions when the API allows, read schedules and attendance reports, and review shift changes/swaps without self-approval. Direct schedule configuration and attendance/leave/overtime approval remain Site Manager operations.
+Representatives can view Contractor totals; create Worker accounts with server-generated codes and the existing initial-password policy; edit/suspend/restore Worker profiles; create/rename/archive teams; add/transfer/remove members; and assign/update/revoke team Zone permissions within existing Contractor grants. They can send Site/Zone assignment requests, grant/revoke Worker Zone permissions when the API allows, read schedules and attendance reports, and review shift changes/swaps without self-approval. Assigned Representatives review leave and overtime within their Contractor scope and cannot approve their own requests, including leave they recorded on behalf of a Worker. Site Managers retain schedule configuration and read access to these requests.
 
 Assigned safety work includes starting checklists, answering every criterion, attaching JPEG/PNG/PDF evidence, submitting reports, reading returned/accepted submissions, and following linked incidents. Assigned corrective actions support start, result submission with an optional JPEG, protected evidence viewing and history. Representatives do not get the general Safety monitoring/review workspace.
 

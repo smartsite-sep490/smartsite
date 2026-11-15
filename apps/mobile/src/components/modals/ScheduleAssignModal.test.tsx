@@ -17,7 +17,11 @@ vi.mock('../../features/workspace/use-scoped-workers', () => ({
 vi.mock('../../features/shared/ui', () => ({
   Button: (props: object) => React.createElement('TestButton', props),
   Choice: (props: object) => React.createElement('TestChoice', props),
+  CompactTabs: (props: object) => React.createElement('TestTabs', props),
   Field: (props: object) => React.createElement('TestField', props),
+}));
+vi.mock('../../features/shared/calendar-date-field', () => ({
+  CalendarDateField: (props: object) => React.createElement('TestCalendarField', props),
 }));
 
 const page = (items: unknown[]) => Promise.resolve({ items, total: items.length });
@@ -85,9 +89,18 @@ const choice = (label: string, value: string) =>
 const field = (label: string, value: string) =>
   act(() =>
     root.root
-      .findAllByType('TestField' as never)
+      .findAllByType('TestCalendarField' as never)
       .find((n) => n.props.label === label)!
-      .props.onChangeText(value),
+      .props.onChange(value),
+  );
+const tabs = (value: string) =>
+  act(() =>
+    root.root
+      .findAllByType('TestTabs' as never)
+      .find((node) =>
+        node.props.options.some((option: { value: string }) => option.value === value),
+      )!
+      .props.onChange(value),
   );
 const button = async (label: string) => {
   await act(async () => {
@@ -112,11 +125,11 @@ it('previews team assignments and preserves the request ID after a network failu
     );
   });
   await settle();
-  choice('Phân công cho', 'TEAM');
+  tabs('TEAM');
   choice('Tổ', 'team');
   choice('Ca làm việc', 'shift');
-  choice('Cách phân lịch', 'WEEK');
-  field('Từ ngày (YYYY-MM-DD)', '2026-11-16');
+  tabs('WEEK');
+  field('Từ ngày', '2026-11-16');
   await button('Xem trước');
   expect(client.previewScheduleAssignment).toHaveBeenCalledWith(
     'token',
@@ -150,7 +163,7 @@ it('previews an individual day and a repeating range', async () => {
   await settle();
   choice('Công nhân', 'worker');
   choice('Ca làm việc', 'shift');
-  field('Ngày làm việc (YYYY-MM-DD)', '2026-11-16');
+  field('Ngày làm việc', '2026-11-16');
   await button('Xem trước');
   expect(client.previewScheduleAssignment).toHaveBeenLastCalledWith(
     'token',
@@ -163,8 +176,8 @@ it('previews an individual day and a repeating range', async () => {
       toDate: '2026-11-16',
     }),
   );
-  choice('Cách phân lịch', 'REPEAT');
-  field('Đến ngày (YYYY-MM-DD)', '2026-11-22');
+  tabs('REPEAT');
+  field('Đến ngày', '2026-11-22');
   await button('Xem trước');
   expect(client.previewScheduleAssignment).toHaveBeenLastCalledWith(
     'token',
@@ -203,7 +216,7 @@ it('does not allow saving when the preview reports a conflict', async () => {
   await settle();
   choice('Công nhân', 'worker');
   choice('Ca làm việc', 'shift');
-  field('Ngày làm việc (YYYY-MM-DD)', '2026-11-16');
+  field('Ngày làm việc', '2026-11-16');
   await button('Xem trước');
   const saveButton = root.root
     .findAllByType('TestButton' as never)

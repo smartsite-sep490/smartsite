@@ -106,13 +106,10 @@ export function Choice({
 }) {
   const { t } = useTranslation();
   const [open, setOpen] = useState(false);
-  const compact = useCompactLayout();
   const [search, setSearch] = useState('');
-  const visibleOptions = compact
-    ? options.filter((option) =>
-        option.label.toLocaleLowerCase().includes(search.toLocaleLowerCase()),
-      )
-    : options;
+  const visibleOptions = options.filter((option) =>
+    option.label.toLocaleLowerCase().includes(search.toLocaleLowerCase()),
+  );
   const selectedLabel = options.find((o) => o.value === value)?.label;
 
   return (
@@ -126,14 +123,18 @@ export function Choice({
       />
       {open && (
         <View style={styles.options}>
-          {compact && options.length > 8 && (
+          {options.length > 8 && (
             <Field
               label={t('contractorUi.searchOptions')}
               value={search}
               onChangeText={setSearch}
             />
           )}
-          <ScrollView nestedScrollEnabled style={compact ? { maxHeight: 264 } : undefined}>
+          <ScrollView
+            nestedScrollEnabled
+            keyboardShouldPersistTaps="handled"
+            style={{ maxHeight: 264 }}
+          >
             {visibleOptions.map((option) => (
               <Pressable
                 key={option.value}
@@ -571,15 +572,11 @@ const compactStyles = StyleSheet.create({
   },
   card: {
     backgroundColor: colors.surface,
-    borderRadius: 16,
-    padding: 14,
-    gap: 10,
-    borderWidth: 0,
-    shadowColor: '#0F172A',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.035,
-    shadowRadius: 7,
-    elevation: 1,
+    borderRadius: 18,
+    padding: 16,
+    gap: 14,
+    borderWidth: 1,
+    borderColor: colors.border,
   },
   button: { minHeight: 44, padding: 11, borderRadius: 12, shadowOpacity: 0, elevation: 0 },
   input: { backgroundColor: colors.surface, minHeight: 44, padding: 12, borderRadius: 12 },

@@ -109,7 +109,11 @@ function WorkspaceApp({ onScopeChange }: { onScopeChange: () => void }) {
     (contractor && route === 'requests');
 
   return (
-    <MobileLayoutProvider compact={contractor}>
+    <MobileLayoutProvider
+      compact={
+        contractor && ['workforce', 'schedule', 'requests', 'teams', 'access'].includes(route)
+      }
+    >
       <View style={{ flex: 1, backgroundColor: palette.bg }}>
         <StatusBar style="dark" />
         {/* Top Header */}
@@ -176,12 +180,9 @@ function WorkspaceApp({ onScopeChange }: { onScopeChange: () => void }) {
             <WorkforceScreen initialWorkerId={navigation.id} />
           )}
           {route === 'teams' && contractor && (
-            <TeamsScreen
-              selectedTeam={selectedTeam}
-              onSelectTeam={setSelectedTeam}
-            />
+            <TeamsScreen selectedTeam={selectedTeam} onSelectTeam={setSelectedTeam} />
           )}
-          {route === 'access' && <AccessScreen onBack={back} />}
+          {route === 'access' && <AccessScreen onBack={back} embedded={contractor} />}
           {route === 'assigned' && contractor && (
             <AssignedWorkScreen
               initialId={navigation.id}

@@ -87,6 +87,8 @@ to assign workers. No schema migration is required for this authorization correc
 
 Scheduled no-shows, in-app notifications and worker calendar `ABSENT` status are documented in [Scheduled absence](docs/operations/attendance-absence.md). Apply the attendance-absence migration before enabling the updated Backend.
 
+Planned and emergency Worker leave, retrospective reporting, contractor representative approval and Mobile entry points are documented in [Worker leave and overtime](docs/operations/worker-leave.md). Apply `LeaveNotice1795046400000` before deploying this Backend and Mobile change.
+
 The read-only attendance summary and worker reports, rate definitions and shared client usage are documented in [Attendance reporting API](docs/operations/attendance-reports.md).
 
 ### Prerequisites

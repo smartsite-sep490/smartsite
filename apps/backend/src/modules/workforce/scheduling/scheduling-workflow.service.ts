@@ -17,8 +17,9 @@ import type { AuthenticatedUser } from '../../auth/auth.service.js';
 import { SchedulingNotificationService } from '../notifications/scheduling-notification.service.js';
 import { requireWorkerDocuments } from '../documents/worker-compliance.js';
 import { hasActiveContractorParticipation } from '../shared/contractor-participation.js';
-import { isShiftEnded } from '@smartsite/contracts';
+import { isShiftEnded, leaveNotice } from '@smartsite/contracts';
 import { AttendanceReconciliationService } from '../attendance/attendance-reconciliation.service.js';
+import { AttendanceDaysService } from '../attendance/attendance-days.service.js';
 import { auditAccess } from '../shared/access-audit.js';
 import { scheduledShiftWindow } from '../attendance/attendance-calculation.js';
 import { teamSwapEligibility } from '../teams/team-swap-eligibility.js';
@@ -39,6 +40,10 @@ export class SchedulingWorkflowService {
     private readonly reconciliation: AttendanceReconciliationService = new AttendanceReconciliationService(
       dataSource,
       notifications,
+    ),
+    private readonly attendanceDays: AttendanceDaysService = new AttendanceDaysService(
+      dataSource,
+      reconciliation,
     ),
   ) {}
   private async notifyAbsence(
@@ -84,7 +89,11 @@ export class SchedulingWorkflowService {
       'absence_request',
       request.id,
       request.reason,
-      { status: request.status, dayId: day.id },
+      {
+        status: request.status,
+        dayId: day.id,
+        submittedOnBehalf: worker.userId !== request.requestedByUserId,
+      },
     );
     return request;
   }
@@ -999,6 +1008,11 @@ export class SchedulingWorkflowService {
       ]);
       const authority = await this.assertRequestAuthority(manager, actor, worker);
       if (authority === 'WORKER') await requireWorkerDocuments(manager, worker);
+      const template = await manager.getRepository(ShiftEntity).findOneByOrFail({
+        id: schedule.shiftId,
+        siteId: scopedSiteId,
+      });
+      const shift = scheduledShiftWindow(template, schedule.workDate);
       let replacementWorkerId: string | null = null;
       if (value.replacementWorkerId) {
         if (authority !== 'CONTRACTOR_REPRESENTATIVE') this.forbidden();
@@ -1025,6 +1039,7 @@ export class SchedulingWorkflowService {
         manager,
         actor,
         await manager.getRepository(AbsenceRequestEntity).save({
+          ...leaveNotice(shift.startsAt, value.noticeType),
           id: randomUUID(),
           siteId: scopedSiteId,
           workerId: worker.id,
@@ -1043,115 +1058,12 @@ export class SchedulingWorkflowService {
     });
   }
 
-  private absenceScheduleStillMatches(
-    schedule: WorkerScheduleEntity | null,
-    request: AbsenceRequestEntity,
-  ): schedule is WorkerScheduleEntity {
-    return (
-      !!schedule &&
-      schedule.isActive &&
-      schedule.id === request.workerScheduleId &&
-      schedule.siteId === request.siteId &&
-      schedule.workerId === request.workerId &&
-      schedule.shiftId === request.shiftId &&
-      schedule.scheduleVersionId === request.expectedScheduleVersionId
-    );
-  }
-
-  async approveAbsence(
-    actor: AuthenticatedUser,
-    siteId: string,
-    requestId: string,
-  ): Promise<AbsenceRequestEntity> {
-    const scopedSiteId = uuid(siteId).toLowerCase();
-    const scopedRequestId = uuid(requestId);
-    this.assertPasswordChanged(actor);
-    if (!this.hasSiteRole(actor, UserRole.SITE_MANAGER, scopedSiteId)) this.forbidden();
-    return this.dataSource.transaction(async (manager) => {
-      const seed = await manager
-        .getRepository(AbsenceRequestEntity)
-        .findOneBy({ id: scopedRequestId, siteId: scopedSiteId });
-      if (!seed) missing();
-      await manager.getRepository(WorkerEntity).findOne({
-        where: { id: seed.workerId, siteId: scopedSiteId },
-        lock: { mode: 'pessimistic_write' },
-      });
-      await manager.query('SELECT pg_advisory_xact_lock(hashtext($1))', [
-        `mf03:${scopedSiteId}:${seed.workerId}`,
-      ]);
-      const request = await manager
-        .getRepository(AbsenceRequestEntity)
-        .createQueryBuilder('request')
-        .setLock('pessimistic_write')
-        .where('request.id = :id AND request.site_id = :siteId', {
-          id: scopedRequestId,
-          siteId: scopedSiteId,
-        })
-        .getOne();
-      if (!request) missing();
-      const absentWorker = await manager
-        .getRepository(WorkerEntity)
-        .findOneBy({ id: request.workerId, siteId: scopedSiteId, isActive: true });
-      if (!absentWorker) this.forbidden();
-      await this.assertWorkerParticipation(manager, absentWorker);
-      if (request.requestedByUserId === actor.id) this.forbidden();
-      if (request.status !== AbsenceRequestStatus.PENDING_MANAGER)
-        conflict('Request is not pending manager review');
-      const schedule = await this.lockedSchedule(manager, request.workerScheduleId);
-      if (!this.absenceScheduleStillMatches(schedule, request)) {
-        request.status = AbsenceRequestStatus.CONFLICTED;
-        request.isUnderstaffed = false;
-        request.reviewedByUserId = actor.id;
-        request.reviewedAt = new Date();
-        return manager.getRepository(AbsenceRequestEntity).save(request);
-      }
-      const template = await manager
-        .getRepository(ShiftEntity)
-        .findOneByOrFail({ id: request.shiftId, siteId: scopedSiteId });
-      const shift = { ...template, ...scheduledShiftWindow(template, schedule.workDate) };
-      const wholeShift =
-        !request.startsAt ||
-        (request.startsAt <= shift.startsAt && request.endsAt && request.endsAt >= shift.endsAt);
-      if (wholeShift) {
-        schedule.isActive = false;
-        await manager.getRepository(WorkerScheduleEntity).save(schedule);
-      }
-      if (request.replacementWorkerId && wholeShift) {
-        const replacement = await manager.getRepository(WorkerEntity).findOneBy({
-          id: request.replacementWorkerId,
-          siteId: scopedSiteId,
-          isActive: true,
-        });
-        const absentWorker = await this.workerForSchedule(manager, schedule);
-        if (!replacement || replacement.contractorId !== absentWorker.contractorId)
-          conflict('Replacement worker is no longer eligible');
-        const existing = await manager.getRepository(WorkerScheduleEntity).findOneBy({
-          siteId: scopedSiteId,
-          scheduleVersionId: schedule.scheduleVersionId,
-          workerId: replacement.id,
-          workDate: schedule.workDate,
-          isActive: true,
-        });
-        if (existing) conflict('Replacement worker already has an active shift');
-        await manager.getRepository(WorkerScheduleEntity).insert({
-          id: randomUUID(),
-          siteId: scopedSiteId,
-          scheduleVersionId: schedule.scheduleVersionId,
-          workerId: replacement.id,
-          shiftId: schedule.shiftId,
-          workDate: schedule.workDate,
-          isActive: true,
-        });
-      }
-      request.status = AbsenceRequestStatus.APPROVED;
-      request.isUnderstaffed = request.replacementWorkerId === null;
-      request.reviewedByUserId = actor.id;
-      request.reviewedAt = new Date();
-      return this.notifyAbsence(
-        manager,
-        actor,
-        await manager.getRepository(AbsenceRequestEntity).save(request),
-      );
+  // Both public leave APIs use the same scoped review, locking and attendance rules.
+  async approveAbsence(actor: AuthenticatedUser, siteId: string, requestId: string) {
+    await this.attendanceDays.review(actor, siteId, requestId, 'LEAVE', { approve: true });
+    return this.dataSource.getRepository(AbsenceRequestEntity).findOneByOrFail({
+      id: uuid(requestId),
+      siteId: uuid(siteId),
     });
   }
 
@@ -1159,49 +1071,16 @@ export class SchedulingWorkflowService {
     actor: AuthenticatedUser,
     siteId: string,
     requestId: string,
-  ): Promise<AbsenceRequestEntity> {
-    const scopedSiteId = uuid(siteId).toLowerCase();
-    const scopedRequestId = uuid(requestId);
-    this.assertPasswordChanged(actor);
-    if (!this.hasSiteRole(actor, UserRole.SITE_MANAGER, scopedSiteId)) this.forbidden();
-    return this.dataSource.transaction(async (manager) => {
-      const seed = await manager
-        .getRepository(AbsenceRequestEntity)
-        .findOneBy({ id: scopedRequestId, siteId: scopedSiteId });
-      if (!seed) missing();
-      await manager.getRepository(WorkerEntity).findOne({
-        where: { id: seed.workerId, siteId: scopedSiteId },
-        lock: { mode: 'pessimistic_write' },
-      });
-      await manager.query('SELECT pg_advisory_xact_lock(hashtext($1))', [
-        `mf03:${scopedSiteId}:${seed.workerId}`,
-      ]);
-      const request = await manager
-        .getRepository(AbsenceRequestEntity)
-        .createQueryBuilder('request')
-        .setLock('pessimistic_write')
-        .where('request.id = :id AND request.site_id = :siteId', {
-          id: scopedRequestId,
-          siteId: scopedSiteId,
-        })
-        .getOne();
-      if (!request) missing();
-      const absentWorker = await manager
-        .getRepository(WorkerEntity)
-        .findOneBy({ id: request.workerId, siteId: scopedSiteId, isActive: true });
-      if (!absentWorker) this.forbidden();
-      await this.assertWorkerParticipation(manager, absentWorker);
-      if (request.requestedByUserId === actor.id) this.forbidden();
-      if (request.status !== AbsenceRequestStatus.PENDING_MANAGER)
-        conflict('Request is not pending manager review');
-      request.status = AbsenceRequestStatus.REJECTED;
-      request.reviewedByUserId = actor.id;
-      request.reviewedAt = new Date();
-      return this.notifyAbsence(
-        manager,
-        actor,
-        await manager.getRepository(AbsenceRequestEntity).save(request),
-      );
+    input: RejectSchedulingRequestDto,
+  ) {
+    const value = command(RejectSchedulingRequestDto, input);
+    await this.attendanceDays.review(actor, siteId, requestId, 'LEAVE', {
+      approve: false,
+      reviewNote: value.reason,
+    });
+    return this.dataSource.getRepository(AbsenceRequestEntity).findOneByOrFail({
+      id: uuid(requestId),
+      siteId: uuid(siteId),
     });
   }
 

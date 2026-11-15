@@ -64,6 +64,8 @@ export interface AttendanceTimeRequestCommand {
   startsAt: string;
   endsAt: string;
   reason: string;
+  /** Leave only; omitted by older clients means planned leave. */
+  noticeType?: 'PLANNED' | 'EMERGENCY';
 }
 export interface AttendanceTimeRequestResponse {
   id: string;
@@ -76,6 +78,11 @@ export interface AttendanceTimeRequestResponse {
   reason: string;
   status: string;
   reviewNote: string | null;
+  noticeType?: 'PLANNED' | 'EMERGENCY' | null;
+  shortNotice?: boolean | null;
+  createdAt?: string;
+  requestedByUserId?: string;
+  submittedOnBehalf?: boolean;
 }
 export interface AttendanceTimeRequestsQuery {
   kind: 'OVERTIME' | 'LEAVE';

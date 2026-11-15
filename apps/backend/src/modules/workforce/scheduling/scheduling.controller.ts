@@ -252,8 +252,9 @@ export class SchedulingController {
     @Req() request: AuthenticatedRequest,
     @Param('siteId') siteId: string,
     @Param('requestId') requestId: string,
+    @Body() input: RejectSchedulingRequestDto,
   ) {
-    const result = await this.scheduling.rejectAbsence(request.user!, siteId, requestId);
+    const result = await this.scheduling.rejectAbsence(request.user!, siteId, requestId, input);
     this.logger.log({
       actorId: request.user!.id,
       action: 'scheduling.absence.reject',

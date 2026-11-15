@@ -41,6 +41,7 @@ import { Mf08SafetyWorkflow1791000000000 } from './migrations/1791000000000-Mf08
 import { IncidentContractorResponsibility1791504000000 } from './migrations/1791504000000-IncidentContractorResponsibility.js';
 import { SiteManagerReviewNotifications1792108800000 } from './migrations/1792108800000-SiteManagerReviewNotifications.js';
 import type { DataSourceOptions } from 'typeorm';
+import { LeaveNotice1795046400000 } from './migrations/1795046400000-LeaveNotice.js';
 import { ENTITIES } from './entities/index.js';
 import { CameraConfigurationReferences1793491200000 } from './migrations/1793491200000-CameraConfigurationReferences.js';
 import { CameraRegionGeometryRevisions1793577600000 } from './migrations/1793577600000-CameraRegionGeometryRevisions.js';
@@ -96,6 +97,7 @@ export function buildTypeOrmOptions(config: DatabaseConnectionConfig): DataSourc
     connectTimeoutMS: timeoutMs,
     entities: [...ENTITIES],
     migrations: [
+      LeaveNotice1795046400000,
       ZonePolicyRevisions1794441600000,
       CameraConfigurationBundles1794528000000,
       CameraWorkerGenerations1794614400000,
