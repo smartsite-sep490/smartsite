@@ -21,9 +21,6 @@ import constructionHeroImage from '../../assets/construction_login_hero.jpg';
 import { ErrorNotice } from '../../features/shared/ui';
 import { useTranslation, setLanguage, uiLanguage } from '../../i18n';
 
-const { height: screenHeight } = Dimensions.get('window');
-const HERO_HEIGHT = Math.max(340, Math.round(screenHeight * 0.42));
-
 interface LoginScreenProps {
   onLogin: (username: string, password: string) => void;
   pending?: boolean;
@@ -36,6 +33,12 @@ export function LoginScreen({ onLogin, pending, error, expired, notice }: LoginS
   const { t } = useTranslation();
   const currentLang = uiLanguage();
   const insets = useSafeAreaInsets();
+  // Capture the base size once; Android can resize the window for the keyboard.
+  const [stableScreenHeight] = useState(() =>
+    Math.max(Dimensions.get('screen').height, Dimensions.get('window').height),
+  );
+  // Sheet card occupies ~3/5 of mobile screen height; hero section occupies remaining ~2/5
+  const heroHeight = Math.max(220, Math.round(stableScreenHeight * 0.4) + 32 - insets.top);
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
@@ -53,12 +56,16 @@ export function LoginScreen({ onLogin, pending, error, expired, notice }: LoginS
       <ScrollView
         contentContainerStyle={styles.scrollContent}
         bounces={false}
+        overScrollMode="never"
+        keyboardShouldPersistTaps="handled"
+        keyboardDismissMode="on-drag"
+        contentInsetAdjustmentBehavior="never"
         showsVerticalScrollIndicator={false}
       >
         {/* Top Hero Construction Photo Section (Bleeds into top corners and behind status bar) */}
         <ImageBackground
           source={constructionHeroImage}
-          style={[styles.heroSection, { height: HERO_HEIGHT + insets.top }]}
+          style={[styles.heroSection, { height: heroHeight + insets.top }]}
           resizeMode="cover"
         >
           <View style={[styles.heroOverlay, { paddingTop: Math.max(insets.top + 14, 46) }]}>
@@ -180,12 +187,10 @@ const styles = StyleSheet.create({
   },
   scrollContent: {
     flexGrow: 1,
-    minHeight: screenHeight,
     backgroundColor: '#FFFFFF',
   },
   heroSection: {
     width: '100%',
-    height: HERO_HEIGHT,
   },
   heroOverlay: {
     flex: 1,
@@ -207,7 +212,8 @@ const styles = StyleSheet.create({
     color: colors.primary,
   },
   sheetCard: {
-    flex: 1,
+    flexGrow: 1,
+    flexShrink: 0,
     backgroundColor: '#FFFFFF',
     borderTopLeftRadius: 32,
     borderTopRightRadius: 32,

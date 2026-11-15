@@ -28,6 +28,7 @@ import {
   IconChevronUp,
 } from '../../components/common/Icons';
 import { useTranslation } from '../../i18n';
+import { useCompactLayout } from '../shared/mobile-layout';
 
 export const documentKinds: readonly WorkerDocumentKind[] = [
   'SAFETY_CARD',
@@ -71,6 +72,7 @@ export function WorkerDocuments({
   canSubmitDocuments?: boolean;
 }) {
   const { t } = useTranslation();
+  const compact = useCompactLayout();
   const { client, token, scope, queryKey } = useWorkspace();
   const canUploadCertificates = canUpload || canSubmitDocuments;
   const profile = useQuery({
@@ -97,7 +99,7 @@ export function WorkerDocuments({
   return (
     <View style={docStyles.container}>
       {/* 1. Header Info Banner */}
-      <View style={docStyles.headerBannerCard}>
+      <View style={[docStyles.headerBannerCard, compact && docStyles.uniformCard]}>
         <View style={docStyles.headerIconCircle}>
           <IconShield size={20} color="#EA580C" />
         </View>
@@ -119,7 +121,7 @@ export function WorkerDocuments({
           return (
             <>
               {/* 2. Worker Profile Overview Card (Collapsible) */}
-              <View style={docStyles.overviewCard}>
+              <View style={[docStyles.overviewCard, compact && docStyles.uniformCard]}>
                 <Pressable
                   accessibilityRole="button"
                   accessibilityLabel={t('workforce.workerProfile')}
@@ -153,11 +155,7 @@ export function WorkerDocuments({
                             : isPending
                               ? '#FFFBEB'
                               : '#FEF2F2',
-                          borderColor: isReviewed
-                            ? '#A7F3D0'
-                            : isPending
-                              ? '#FDE68A'
-                              : '#FECACA',
+                          borderColor: isReviewed ? '#A7F3D0' : isPending ? '#FDE68A' : '#FECACA',
                         },
                       ]}
                     >
@@ -178,11 +176,7 @@ export function WorkerDocuments({
                         style={[
                           docStyles.compactBadgeText,
                           {
-                            color: isReviewed
-                              ? '#065F46'
-                              : isPending
-                                ? '#92400E'
-                                : '#991B1B',
+                            color: isReviewed ? '#065F46' : isPending ? '#92400E' : '#991B1B',
                           },
                         ]}
                       >
@@ -292,7 +286,7 @@ export function WorkerDocuments({
                 const isSideExpanded = !!expandedIdentity[side];
 
                 return (
-                  <View key={side} style={docStyles.itemCard}>
+                  <View key={side} style={[docStyles.itemCard, compact && docStyles.uniformCard]}>
                     <Pressable
                       accessibilityRole="button"
                       accessibilityLabel={t(`documents.${side}`)}
@@ -355,7 +349,12 @@ export function WorkerDocuments({
                             label={t('documents.view')}
                             mediaType={image.mediaType}
                             load={() =>
-                              client.workerIdentityImageFile(token, scope.siteId, workerId, image.id)
+                              client.workerIdentityImageFile(
+                                token,
+                                scope.siteId,
+                                workerId,
+                                image.id,
+                              )
                             }
                           />
                           <IdentityNotice check={image.identityCheck} reference={data.nationalId} />
@@ -485,13 +484,11 @@ export function WorkerDocuments({
                       : '#FECACA';
 
                 return (
-                  <View key={kind} style={docStyles.itemCard}>
+                  <View key={kind} style={[docStyles.itemCard, compact && docStyles.uniformCard]}>
                     <Pressable
                       accessibilityRole="button"
                       accessibilityLabel={t(`documents.${kind}`)}
-                      onPress={() =>
-                        setExpandedCerts((prev) => ({ ...prev, [kind]: !prev[kind] }))
-                      }
+                      onPress={() => setExpandedCerts((prev) => ({ ...prev, [kind]: !prev[kind] }))}
                       style={docStyles.cardHeaderRow}
                     >
                       <View style={docStyles.cardTitleGroup}>
@@ -641,7 +638,10 @@ export function WorkerDocuments({
                               </View>
                               <Text
                                 numberOfLines={1}
-                                style={[docStyles.dateValue, { color: '#0F172A', fontWeight: '800' }]}
+                                style={[
+                                  docStyles.dateValue,
+                                  { color: '#0F172A', fontWeight: '800' },
+                                ]}
                               >
                                 {displayDoc.expiresOn ?? '—'}
                               </Text>
@@ -659,12 +659,16 @@ export function WorkerDocuments({
                               <View style={docStyles.submittedPill}>
                                 <IconClock size={13} color="#C2410C" />
                                 <Text numberOfLines={1} style={docStyles.submittedPillText}>
-                                  {t('documents.submittedExpiryLabel')}: {displayDoc.submittedExpiresOn}
+                                  {t('documents.submittedExpiryLabel')}:{' '}
+                                  {displayDoc.submittedExpiresOn}
                                 </Text>
                               </View>
                             )}
 
-                          <IdentityNotice check={displayDoc.identityCheck} reference={data.nationalId} />
+                          <IdentityNotice
+                            check={displayDoc.identityCheck}
+                            reference={data.nationalId}
+                          />
 
                           {displayDoc.status === 'PENDING' && (
                             <View style={docStyles.pendingSection}>
@@ -725,7 +729,12 @@ export function WorkerDocuments({
                             label={t('documents.view')}
                             mediaType={displayDoc.mediaType}
                             load={() =>
-                              client.workerDocumentFile(token, scope.siteId, workerId, displayDoc.id)
+                              client.workerDocumentFile(
+                                token,
+                                scope.siteId,
+                                workerId,
+                                displayDoc.id,
+                              )
                             }
                           />
                         </View>
@@ -961,6 +970,16 @@ function SubmittedExpiryEditor({
 }
 
 const docStyles = StyleSheet.create({
+  uniformCard: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: 18,
+    borderWidth: 1,
+    borderColor: '#E5E7EB',
+    padding: 16,
+    gap: 14,
+    shadowOpacity: 0,
+    elevation: 0,
+  },
   container: {
     gap: 12,
     paddingBottom: 28,

@@ -1,6 +1,8 @@
 import { Transform } from 'class-transformer';
 import {
   IsNotEmpty,
+  IsIn,
+  ValidateIf,
   IsOptional,
   IsString,
   IsUUID,
@@ -38,6 +40,9 @@ export class CreateShiftSwapRequestDto extends RequestReasonDto {
 }
 
 export class CreateAbsenceRequestDto extends RequestReasonDto {
+  @ValidateIf((_object, value: unknown) => value !== undefined)
+  @IsIn(['PLANNED', 'EMERGENCY'])
+  noticeType?: 'PLANNED' | 'EMERGENCY';
   @IsUUID()
   workerScheduleId!: string;
 

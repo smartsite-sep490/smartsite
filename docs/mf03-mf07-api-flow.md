@@ -122,7 +122,7 @@ Hệ thống phân định rõ ràng quyền hạn giữa các vai trò người
 |                             | `POST /api/v1/sites/:siteId/shift-swap-requests`                                 |     ❌      |         ❌         |            ❌             |           ✅            |         ❌         |
 |                             | `PATCH /api/v1/sites/:siteId/shift-swap-requests/:id/confirm`                    |     ❌      |         ❌         |            ❌             |    ✅ (Đồng nghiệp)     |         ❌         |
 |                             | `PATCH /api/v1/sites/:siteId/shift-swap-requests/:id/approve`                    |     ❌      |         ❌         |            ✅             |           ❌            |         ❌         |
-|                             | `POST /api/v1/sites/:siteId/absence-requests`                                    |     ❌      |         ❌         |            ❌             |           ✅            |         ❌         |
+|                             | `POST /api/v1/sites/:siteId/absence-requests`                                    |     ❌      |         ❌         |   ✅ (ghi nhận nghỉ hộ)   |           ✅            |         ❌         |
 |                             | `PATCH /api/v1/sites/:siteId/absence-requests/:id/approve`                       |     ❌      |         ❌         |            ✅             |           ❌            |         ❌         |
 | **Chấm công Cổng**          | `POST /api/v1/sites/:siteId/gates/:id/face-verifications`                        |     ✅      |         ✅         |            ❌             |           ❌            |         ✅         |
 |                             | `POST /api/v1/sites/:siteId/access-attempts/:id/confirm`                         |     ✅      |         ✅         |            ❌             |           ❌            |         ✅         |
@@ -132,7 +132,7 @@ Hệ thống phân định rõ ràng quyền hạn giữa các vai trò người
 |                             | `GET /api/v1/sites/:siteId/attendance-days/:id`                                  |     ✅      |         ✅         |            ✅             |           ✅            |         ✅         |
 |                             | `POST /api/v1/sites/:siteId/attendance-sessions/:id/corrections`                 |     ❌      |         ❌         |            ❌             | ✅ (Chỉ phiên của mình) |         ❌         |
 |                             | `POST /api/v1/sites/:siteId/attendance-corrections/:id/review`                   |     ❌      |         ❌         |            ✅             |           ❌            |         ❌         |
-|                             | `POST /api/v1/sites/:siteId/attendance-time-requests` (OT/Leave)                 |     ❌      |         ❌         |            ❌             |           ✅            |         ❌         |
+|                             | `POST /api/v1/sites/:siteId/attendance-time-requests` (OT/Leave)                 |     ❌      |         ❌         |   ✅ (ghi nhận nghỉ hộ)   |           ✅            |         ❌         |
 |                             | `POST /api/v1/sites/:siteId/attendance-time-requests/:kind/:id/review`           |     ❌      |         ❌         |            ✅             |           ❌            |         ❌         |
 |                             | `POST /api/v1/sites/:siteId/attendance-sessions/:id/ignore-duplicate`            |     ❌      |         ❌         |            ✅             |           ❌            |         ❌         |
 |                             | `POST /api/v1/sites/:siteId/attendance-days/:id/confirm`                         |     ❌      |         ❌         |            ✅             |           ❌            |         ❌         |
@@ -781,13 +781,15 @@ Tài liệu vận hành: [Team schedule assignments](../docs/operations/team-sch
 
 #### API 4.5.3: Yêu cầu Nghỉ phép (Absence / Leave Request)
 
-- **Công nhân gửi đơn**: `POST /api/v1/sites/:siteId/absence-requests`
-  - Body: `{ "workerScheduleId": "...", "reason": "Nghỉ phép năm", "replacementWorkerId": "..." }`
+- **Công nhân gửi đơn hoặc đại diện ghi nhận hộ**: `POST /api/v1/sites/:siteId/absence-requests`
+  - Body: `{ "workerScheduleId": "...", "reason": "Nghỉ phép năm", "noticeType": "PLANNED" }`. `replacementWorkerId` tùy chọn, chỉ đại diện được gửi.
+  - `noticeType`: `PLANNED` hoặc `EMERGENCY`; mốc báo trước 24 giờ dùng để cảnh báo, không tự từ chối đơn báo gấp/báo sau ca. Xem [nghiệp vụ xin nghỉ](operations/worker-leave.md).
   - Trạng thái: `PENDING_MANAGER`.
 - **Đại diện nhà thầu duyệt**: `PATCH /api/v1/sites/:siteId/absence-requests/:requestId/approve`
   - Nếu nghỉ trọn ca (`start <= shift.startsAt && end >= shift.endsAt`), `worker_schedule.isActive = false`. Nếu có `replacementWorkerId`, tạo lịch mới cho người thay thế.
 - **Đại diện nhà thầu từ chối**: `PATCH /api/v1/sites/:siteId/absence-requests/:requestId/reject`
-- **Danh sách yêu cầu hợp nhất**: `GET /api/v1/sites/:siteId/shift-requests?type=ALL&status=ALL` (xử lý qua [ShiftRequestReaderService](../apps/backend/src/modules/workforce/scheduling/shift-request-reader.service.ts)).
+  - Body bắt buộc `{ "reason": "Lý do từ chối" }`. Cả hai đường duyệt nghỉ dùng chung kiểm tra phạm vi nhà thầu và không tự duyệt; Site Manager không có quyền duyệt.
+- **Danh sách nghỉ hợp nhất**: `GET /api/v1/sites/:siteId/attendance-time-requests?kind=LEAVE`. Danh sách `shift-requests` dành cho đổi/hoán đổi ca.
 
 ---
 

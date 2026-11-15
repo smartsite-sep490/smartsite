@@ -1,16 +1,13 @@
 import { translate as tr } from '../../i18n';
 import React, { useState } from 'react';
 import {
-  Modal,
   View,
   Text,
   TextInput,
   Pressable,
   StyleSheet,
   ActivityIndicator,
-  KeyboardAvoidingView,
   Platform,
-  ScrollView,
 } from 'react-native';
 import { colors } from '../../theme/colors';
 import { useWorkspace } from '../../features/workspace/workspace-context';
@@ -18,6 +15,10 @@ import { useQuery } from '@tanstack/react-query';
 import { allPages, localDate, required, useCommand } from '../../features/shared/data';
 import { useTranslation } from '../../i18n';
 import { IconChevronDown } from '../common/Icons';
+import { LeaveNoticeFields } from '../../features/scheduling/leave-notice-fields';
+import type { LeaveNoticeType } from '@smartsite/api-client';
+import { ErrorNotice, Button } from '../../features/shared/ui';
+import { RequestSheet } from '../../features/shared/request-sheet';
 
 interface WorkerRequestModalProps {
   visible: boolean;
@@ -26,7 +27,11 @@ interface WorkerRequestModalProps {
   onSuccess?: () => void;
 }
 
-export function WorkerRequestModal({
+export function WorkerRequestModal(props: WorkerRequestModalProps) {
+  return props.visible ? <WorkerRequestForm key={props.initialTab ?? 'leave'} {...props} /> : null;
+}
+
+function WorkerRequestForm({
   visible,
   initialTab = 'leave',
   onClose,
@@ -38,6 +43,7 @@ export function WorkerRequestModal({
     initialTab === 'adjustment' ? 'change' : (initialTab as 'leave' | 'swap' | 'change'),
   );
   const [reason, setReason] = useState('');
+  const [noticeType, setNoticeType] = useState<LeaveNoticeType>('PLANNED');
   const [selectedScheduleId, setSelectedScheduleId] = useState('');
   const [targetCoworkerId, setTargetCoworkerId] = useState('');
   const [targetShiftId, setTargetShiftId] = useState('');
@@ -48,16 +54,22 @@ export function WorkerRequestModal({
   const command = useCommand();
 
   const schedules = useQuery({
-    queryKey: [...queryKey, 'my-schedules-for-request'],
-    queryFn: () =>
-      client.listWorkerSchedules(token, scope.siteId, {
-        fromDate: localDate(),
-        toDate: localDate(new Date(Date.now() + 14 * 86400000)),
-        workerId: workerId || undefined,
-        limit: 10,
-        status: 'ALL',
-      }),
-    enabled: visible,
+    queryKey: [...queryKey, 'my-schedules-for-request', activeTab],
+    queryFn: async ({ signal }) => {
+      const items = await allPages(
+        (page) =>
+          client.listWorkerSchedules(token, scope.siteId, {
+            ...page,
+            ...(activeTab === 'leave' ? {} : { fromDate: localDate() }),
+            toDate: localDate(new Date(Date.now() + 14 * 86400000)),
+            workerId,
+            status: 'ACTIVE',
+          }),
+        signal,
+      );
+      return { items: items.filter((s) => s.workerId === workerId), total: items.length };
+    },
+    enabled: visible && !!workerId,
   });
 
   const shifts = useQuery({
@@ -80,6 +92,10 @@ export function WorkerRequestModal({
 
   const switchTab = (tab: 'leave' | 'swap' | 'change') => {
     setActiveTab(tab);
+    setSelectedScheduleId('');
+    setTargetCoworkerId('');
+    setTargetShiftId('');
+    command.reset();
     setLocalError(null);
     setShowScheduleDropdown(false);
     setShowSwapDropdown(false);
@@ -90,6 +106,15 @@ export function WorkerRequestModal({
     try {
       setLocalError(null);
       const why = required(reason, t('schedule.reason'));
+      if (
+        !schedules.isSuccess ||
+        !shifts.isSuccess ||
+        schedules.isRefetchError ||
+        shifts.isRefetchError
+      )
+        throw new Error(t('common.retry'));
+      if (!selectedSchedule || selectedSchedule.workerId !== workerId || !selectedSchedule.isActive)
+        throw new Error(tr('requests.outOfScope'));
 
       await command.mutateAsync(async () => {
         if (activeTab === 'leave') {
@@ -98,6 +123,7 @@ export function WorkerRequestModal({
           await client.createAbsenceRequest(token, scope.siteId, {
             workerScheduleId: selectedScheduleId,
             reason: why,
+            noticeType,
           });
         } else if (activeTab === 'swap') {
           if (!selectedScheduleId)
@@ -136,305 +162,305 @@ export function WorkerRequestModal({
   };
 
   return (
-    <Modal visible={visible} transparent animationType="slide" onRequestClose={onClose}>
-      <KeyboardAvoidingView
-        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-        style={styles.overlay}
-      >
-        <Pressable style={styles.backdrop} onPress={onClose} />
-        <View style={styles.sheetCard}>
-          {/* Header */}
-          <View style={styles.header}>
-            <Text style={styles.title}>{t('requests.submitRequest')}</Text>
+    <RequestSheet
+      visible={visible}
+      onClose={onClose}
+      busy={command.isPending}
+      title={t('requests.submitRequest')}
+      subtitle={t('attendanceUi.scheduleRequestHint')}
+      footer={
+        <View>
+          <ErrorNotice error={localError ? new Error(localError) : command.error} />
+          <View style={styles.actionsRow}>
             <Pressable
               accessibilityRole="button"
               accessibilityLabel={t('common.cancel')}
+              style={styles.cancelBtn}
               onPress={onClose}
-              style={styles.closeBtn}
-              hitSlop={10}
+              disabled={command.isPending}
             >
-              <Text style={styles.closeText}>✕</Text>
+              <Text style={styles.cancelBtnText}>{t('common.cancel')}</Text>
+            </Pressable>
+
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel={t('requests.submitRequest')}
+              style={[styles.submitBtn, command.isPending && { opacity: 0.7 }]}
+              onPress={handleSubmit}
+              disabled={
+                command.isPending ||
+                !selectedScheduleId ||
+                reason.trim().length < 5 ||
+                (activeTab === 'swap' && !targetCoworkerId) ||
+                (activeTab === 'change' && !targetShiftId) ||
+                !schedules.isSuccess ||
+                !shifts.isSuccess ||
+                schedules.isRefetchError ||
+                shifts.isRefetchError
+              }
+            >
+              {command.isPending ? (
+                <ActivityIndicator size="small" color="#FFFFFF" />
+              ) : (
+                <Text style={styles.submitBtnText}>{t('requests.submitRequest')}</Text>
+              )}
             </Pressable>
           </View>
+        </View>
+      }
+    >
+      {/* Segmented Tab Bar */}
+      <View style={styles.tabBar}>
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel={t('requests.typeLeave')}
+          style={[styles.tabBtn, activeTab === 'leave' && styles.tabBtnActive]}
+          onPress={() => switchTab('leave')}
+        >
+          <Text style={[styles.tabBtnText, activeTab === 'leave' && styles.tabBtnTextActive]}>
+            {t('requests.typeLeave')}
+          </Text>
+        </Pressable>
 
-          {/* Segmented Tab Bar */}
-          <View style={styles.tabBar}>
-            <Pressable
-              accessibilityRole="button"
-              accessibilityLabel={t('requests.typeLeave')}
-              style={[styles.tabBtn, activeTab === 'leave' && styles.tabBtnActive]}
-              onPress={() => switchTab('leave')}
-            >
-              <Text style={[styles.tabBtnText, activeTab === 'leave' && styles.tabBtnTextActive]}>
-                {t('requests.typeLeave')}
-              </Text>
-            </Pressable>
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel={t('requests.typeSwap')}
+          style={[styles.tabBtn, activeTab === 'swap' && styles.tabBtnActive]}
+          onPress={() => switchTab('swap')}
+        >
+          <Text style={[styles.tabBtnText, activeTab === 'swap' && styles.tabBtnTextActive]}>
+            {t('requests.typeSwap')}
+          </Text>
+        </Pressable>
 
-            <Pressable
-              accessibilityRole="button"
-              accessibilityLabel={t('requests.typeSwap')}
-              style={[styles.tabBtn, activeTab === 'swap' && styles.tabBtnActive]}
-              onPress={() => switchTab('swap')}
-            >
-              <Text style={[styles.tabBtnText, activeTab === 'swap' && styles.tabBtnTextActive]}>
-                {t('requests.typeSwap')}
-              </Text>
-            </Pressable>
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel={t('requests.typeChange')}
+          style={[styles.tabBtn, activeTab === 'change' && styles.tabBtnActive]}
+          onPress={() => switchTab('change')}
+        >
+          <Text style={[styles.tabBtnText, activeTab === 'change' && styles.tabBtnTextActive]}>
+            {t('requests.typeChange')}
+          </Text>
+        </Pressable>
+      </View>
 
-            <Pressable
-              accessibilityRole="button"
-              accessibilityLabel={t('requests.typeChange')}
-              style={[styles.tabBtn, activeTab === 'change' && styles.tabBtnActive]}
-              onPress={() => switchTab('change')}
-            >
-              <Text style={[styles.tabBtnText, activeTab === 'change' && styles.tabBtnTextActive]}>
-                {t('requests.typeChange')}
-              </Text>
-            </Pressable>
-          </View>
+      <View style={styles.body}>
+        {activeTab === 'leave' && <LeaveNoticeFields value={noticeType} onChange={setNoticeType} />}
+        {/* Field: Schedule Selector */}
+        <View style={styles.fieldGroup}>
+          <Text style={styles.label}>{t('schedule.shift')}</Text>
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel={t('attendance.assignedShift')}
+            style={styles.selectBox}
+            onPress={() => {
+              setShowScheduleDropdown(!showScheduleDropdown);
+              setShowSwapDropdown(false);
+              setShowShiftDropdown(false);
+            }}
+          >
+            <Text style={selectedSchedule ? styles.selectTextActive : styles.selectTextPlaceholder}>
+              {selectedSchedule
+                ? `${selectedSchedule.workDate} · ${selectedShift?.name ?? tr('schedule.shift')}`
+                : t('requests.selectShiftPlaceholder')}
+            </Text>
+            <IconChevronDown size={18} color={colors.textMuted} />
+          </Pressable>
 
-          <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.body}>
-            {/* Field: Schedule Selector */}
-            <View style={styles.fieldGroup}>
-              <Text style={styles.label}>{t('schedule.shift')}</Text>
-              <Pressable
-                style={styles.selectBox}
-                onPress={() => {
-                  setShowScheduleDropdown(!showScheduleDropdown);
-                  setShowSwapDropdown(false);
-                  setShowShiftDropdown(false);
-                }}
-              >
-                <Text
-                  style={selectedSchedule ? styles.selectTextActive : styles.selectTextPlaceholder}
-                >
-                  {selectedSchedule
-                    ? `${selectedSchedule.workDate} · ${selectedShift?.name ?? tr('schedule.shift')}`
-                    : t('requests.selectShiftPlaceholder')}
-                </Text>
-                <IconChevronDown size={18} color={colors.textMuted} />
-              </Pressable>
-
-              {showScheduleDropdown && (
-                <View style={styles.dropdownList}>
-                  {schedules.data?.items?.map((item) => {
-                    const sh = shifts.data?.find((s) => s.id === item.shiftId);
-                    return (
-                      <Pressable
-                        key={item.id}
-                        style={[
-                          styles.dropdownItem,
-                          item.id === selectedScheduleId && styles.dropdownItemActive,
-                        ]}
-                        onPress={() => {
-                          setSelectedScheduleId(item.id);
-                          setShowScheduleDropdown(false);
-                        }}
-                      >
-                        <Text
-                          style={[
-                            styles.dropdownItemText,
-                            item.id === selectedScheduleId && styles.dropdownItemTextActive,
-                          ]}
-                        >
-                          {item.workDate} · {sh?.name ?? tr('schedule.shift')}
-                        </Text>
-                      </Pressable>
-                    );
-                  })}
-                  {!schedules.data?.items?.length && (
-                    <Text style={styles.emptyNotice}>{t('schedule.noSchedules')}</Text>
-                  )}
-                </View>
+          {showScheduleDropdown && (
+            <View style={styles.dropdownList}>
+              {schedules.data?.items?.map((item) => {
+                const sh = shifts.data?.find((s) => s.id === item.shiftId);
+                return (
+                  <Pressable
+                    key={item.id}
+                    accessibilityRole="button"
+                    accessibilityLabel={`${item.workDate} · ${sh?.name ?? tr('schedule.shift')}`}
+                    style={[
+                      styles.dropdownItem,
+                      item.id === selectedScheduleId && styles.dropdownItemActive,
+                    ]}
+                    onPress={() => {
+                      setSelectedScheduleId(item.id);
+                      setShowScheduleDropdown(false);
+                    }}
+                  >
+                    <Text
+                      style={[
+                        styles.dropdownItemText,
+                        item.id === selectedScheduleId && styles.dropdownItemTextActive,
+                      ]}
+                    >
+                      {item.workDate} · {sh?.name ?? tr('schedule.shift')}
+                    </Text>
+                  </Pressable>
+                );
+              })}
+              {!schedules.data?.items?.length && (
+                <Text style={styles.emptyNotice}>{t('schedule.noSchedules')}</Text>
               )}
             </View>
-
-            {/* Field: Swap Target Coworker (when tab is swap) */}
-            {activeTab === 'swap' && (
-              <View style={styles.fieldGroup}>
-                <Text style={styles.label}>{t('schedule.coworkerSchedule')}</Text>
-                <Pressable
-                  style={styles.selectBox}
-                  onPress={() => {
-                    setShowSwapDropdown(!showSwapDropdown);
-                    setShowScheduleDropdown(false);
-                    setShowShiftDropdown(false);
-                  }}
-                >
-                  <Text
-                    style={
-                      targetCoworkerId ? styles.selectTextActive : styles.selectTextPlaceholder
-                    }
-                  >
-                    {swapCandidates.data?.items?.find(
-                      (c) => c.candidateWorkerScheduleId === targetCoworkerId,
-                    )
-                      ? `${swapCandidates.data?.items?.find((c) => c.candidateWorkerScheduleId === targetCoworkerId)?.candidateWorkerDisplayName} (${swapCandidates.data?.items?.find((c) => c.candidateWorkerScheduleId === targetCoworkerId)?.workDate})`
-                      : t('requests.selectCoworkerPlaceholder')}
-                  </Text>
-                  <IconChevronDown size={18} color={colors.textMuted} />
-                </Pressable>
-
-                {showSwapDropdown && (
-                  <View style={styles.dropdownList}>
-                    {swapCandidates.data?.items?.map((c) => (
-                      <Pressable
-                        key={c.candidateWorkerScheduleId}
-                        style={[
-                          styles.dropdownItem,
-                          c.candidateWorkerScheduleId === targetCoworkerId &&
-                            styles.dropdownItemActive,
-                        ]}
-                        onPress={() => {
-                          setTargetCoworkerId(c.candidateWorkerScheduleId);
-                          setShowSwapDropdown(false);
-                        }}
-                      >
-                        <Text
-                          style={[
-                            styles.dropdownItemText,
-                            c.candidateWorkerScheduleId === targetCoworkerId &&
-                              styles.dropdownItemTextActive,
-                          ]}
-                        >
-                          {c.candidateWorkerDisplayName} ({c.workDate})
-                        </Text>
-                      </Pressable>
-                    ))}
-                    {!swapCandidates.data?.items?.length && (
-                      <Text style={styles.emptyNotice}>{t('schedule.noCandidates')}</Text>
-                    )}
-                  </View>
-                )}
-              </View>
-            )}
-
-            {/* Field: Change Target Shift (when tab is change) */}
-            {activeTab === 'change' && (
-              <View style={styles.fieldGroup}>
-                <Text style={styles.label}>{t('requests.alternativeShift')}</Text>
-                <Pressable
-                  style={styles.selectBox}
-                  onPress={() => {
-                    setShowShiftDropdown(!showShiftDropdown);
-                    setShowScheduleDropdown(false);
-                    setShowSwapDropdown(false);
-                  }}
-                >
-                  <Text
-                    style={targetShiftId ? styles.selectTextActive : styles.selectTextPlaceholder}
-                  >
-                    {selectedTargetShift
-                      ? `${selectedTargetShift.name} (${selectedTargetShift.startsAt} - ${selectedTargetShift.endsAt})`
-                      : t('requests.selectAlternativeShiftPlaceholder')}
-                  </Text>
-                  <IconChevronDown size={18} color={colors.textMuted} />
-                </Pressable>
-
-                {showShiftDropdown && (
-                  <View style={styles.dropdownList}>
-                    {shifts.data
-                      ?.filter((s) => s.id !== selectedShift?.id)
-                      .map((sh) => (
-                        <Pressable
-                          key={sh.id}
-                          style={[
-                            styles.dropdownItem,
-                            sh.id === targetShiftId && styles.dropdownItemActive,
-                          ]}
-                          onPress={() => {
-                            setTargetShiftId(sh.id);
-                            setShowShiftDropdown(false);
-                          }}
-                        >
-                          <Text
-                            style={[
-                              styles.dropdownItemText,
-                              sh.id === targetShiftId && styles.dropdownItemTextActive,
-                            ]}
-                          >
-                            {sh.name} ({sh.startsAt} - {sh.endsAt})
-                          </Text>
-                        </Pressable>
-                      ))}
-                    {!shifts.data?.length && (
-                      <Text style={styles.emptyNotice}>{t('common.noOptions')}</Text>
-                    )}
-                  </View>
-                )}
-              </View>
-            )}
-
-            {/* Field: Lý do */}
-            <View style={styles.fieldGroup}>
-              <Text style={styles.label}>{t('schedule.reason')}</Text>
-              <TextInput
-                style={styles.textArea}
-                placeholder={t('requests.reasonPlaceholder')}
-                placeholderTextColor={colors.textMuted}
-                value={reason}
-                onChangeText={(v) => {
-                  setReason(v);
-                  if (localError) setLocalError(null);
-                }}
-                multiline
-                numberOfLines={3}
-                textAlignVertical="top"
-              />
-            </View>
-
-            {/* Info hint banner */}
-            <View style={styles.infoBanner}>
-              <Text style={styles.infoBannerText}>
-                {activeTab === 'leave'
-                  ? t('requests.leaveNotice')
-                  : activeTab === 'swap'
-                    ? t('requests.swapNotice')
-                    : t('requests.changeNotice')}
-              </Text>
-            </View>
-
-            {/* Error Message */}
-            {Boolean(localError || command.error) && (
-              <View style={styles.errorBox}>
-                <Text style={styles.errorText}>
-                  {localError ??
-                    (command.error instanceof Error
-                      ? command.error.message
-                      : t('common.unexpectedError'))}
-                </Text>
-              </View>
-            )}
-
-            {/* Actions */}
-            <View style={styles.actionsRow}>
-              <Pressable
-                accessibilityRole="button"
-                accessibilityLabel={t('common.cancel')}
-                style={styles.cancelBtn}
-                onPress={onClose}
-              >
-                <Text style={styles.cancelBtnText}>{t('common.cancel')}</Text>
-              </Pressable>
-
-              <Pressable
-                accessibilityRole="button"
-                accessibilityLabel={t('requests.submitRequest')}
-                style={[styles.submitBtn, command.isPending && { opacity: 0.7 }]}
-                onPress={handleSubmit}
-                disabled={command.isPending}
-              >
-                {command.isPending ? (
-                  <ActivityIndicator size="small" color="#FFFFFF" />
-                ) : (
-                  <Text style={styles.submitBtnText}>{t('requests.submitRequest')}</Text>
-                )}
-              </Pressable>
-            </View>
-          </ScrollView>
+          )}
         </View>
-      </KeyboardAvoidingView>
-    </Modal>
+
+        {/* Field: Swap Target Coworker (when tab is swap) */}
+        {activeTab === 'swap' && (
+          <View style={styles.fieldGroup}>
+            <Text style={styles.label}>{t('schedule.coworkerSchedule')}</Text>
+            <Pressable
+              style={styles.selectBox}
+              onPress={() => {
+                setShowSwapDropdown(!showSwapDropdown);
+                setShowScheduleDropdown(false);
+                setShowShiftDropdown(false);
+              }}
+            >
+              <Text
+                style={targetCoworkerId ? styles.selectTextActive : styles.selectTextPlaceholder}
+              >
+                {swapCandidates.data?.items?.find(
+                  (c) => c.candidateWorkerScheduleId === targetCoworkerId,
+                )
+                  ? `${swapCandidates.data?.items?.find((c) => c.candidateWorkerScheduleId === targetCoworkerId)?.candidateWorkerDisplayName} (${swapCandidates.data?.items?.find((c) => c.candidateWorkerScheduleId === targetCoworkerId)?.workDate})`
+                  : t('requests.selectCoworkerPlaceholder')}
+              </Text>
+              <IconChevronDown size={18} color={colors.textMuted} />
+            </Pressable>
+
+            {showSwapDropdown && (
+              <View style={styles.dropdownList}>
+                {swapCandidates.data?.items?.map((c) => (
+                  <Pressable
+                    key={c.candidateWorkerScheduleId}
+                    style={[
+                      styles.dropdownItem,
+                      c.candidateWorkerScheduleId === targetCoworkerId && styles.dropdownItemActive,
+                    ]}
+                    onPress={() => {
+                      setTargetCoworkerId(c.candidateWorkerScheduleId);
+                      setShowSwapDropdown(false);
+                    }}
+                  >
+                    <Text
+                      style={[
+                        styles.dropdownItemText,
+                        c.candidateWorkerScheduleId === targetCoworkerId &&
+                          styles.dropdownItemTextActive,
+                      ]}
+                    >
+                      {c.candidateWorkerDisplayName} ({c.workDate})
+                    </Text>
+                  </Pressable>
+                ))}
+                {!swapCandidates.data?.items?.length && (
+                  <Text style={styles.emptyNotice}>{t('schedule.noCandidates')}</Text>
+                )}
+              </View>
+            )}
+          </View>
+        )}
+
+        {/* Field: Change Target Shift (when tab is change) */}
+        {activeTab === 'change' && (
+          <View style={styles.fieldGroup}>
+            <Text style={styles.label}>{t('requests.alternativeShift')}</Text>
+            <Pressable
+              style={styles.selectBox}
+              onPress={() => {
+                setShowShiftDropdown(!showShiftDropdown);
+                setShowScheduleDropdown(false);
+                setShowSwapDropdown(false);
+              }}
+            >
+              <Text style={targetShiftId ? styles.selectTextActive : styles.selectTextPlaceholder}>
+                {selectedTargetShift
+                  ? `${selectedTargetShift.name} (${selectedTargetShift.startsAt} - ${selectedTargetShift.endsAt})`
+                  : t('requests.selectAlternativeShiftPlaceholder')}
+              </Text>
+              <IconChevronDown size={18} color={colors.textMuted} />
+            </Pressable>
+
+            {showShiftDropdown && (
+              <View style={styles.dropdownList}>
+                {shifts.data
+                  ?.filter((s) => s.id !== selectedShift?.id)
+                  .map((sh) => (
+                    <Pressable
+                      key={sh.id}
+                      style={[
+                        styles.dropdownItem,
+                        sh.id === targetShiftId && styles.dropdownItemActive,
+                      ]}
+                      onPress={() => {
+                        setTargetShiftId(sh.id);
+                        setShowShiftDropdown(false);
+                      }}
+                    >
+                      <Text
+                        style={[
+                          styles.dropdownItemText,
+                          sh.id === targetShiftId && styles.dropdownItemTextActive,
+                        ]}
+                      >
+                        {sh.name} ({sh.startsAt} - {sh.endsAt})
+                      </Text>
+                    </Pressable>
+                  ))}
+                {!shifts.data?.length && (
+                  <Text style={styles.emptyNotice}>{t('common.noOptions')}</Text>
+                )}
+              </View>
+            )}
+          </View>
+        )}
+
+        {/* Field: Lý do */}
+        <View style={styles.fieldGroup}>
+          <Text style={styles.label}>{t('schedule.reason')}</Text>
+          <TextInput
+            accessibilityLabel={t('schedule.reason')}
+            style={styles.textArea}
+            placeholder={t('requests.reasonPlaceholder')}
+            placeholderTextColor={colors.textMuted}
+            value={reason}
+            onChangeText={(v) => {
+              setReason(v);
+              if (localError) setLocalError(null);
+            }}
+            multiline
+            maxLength={1000}
+            numberOfLines={3}
+            textAlignVertical="top"
+          />
+        </View>
+
+        {/* Info hint banner */}
+        <View style={styles.infoBanner}>
+          <Text style={styles.infoBannerText}>
+            {activeTab === 'leave'
+              ? t('requests.leaveNotice')
+              : activeTab === 'swap'
+                ? t('requests.swapNotice')
+                : t('requests.changeNotice')}
+          </Text>
+        </View>
+
+        {(schedules.isError || shifts.isError) && (
+          <>
+            <ErrorNotice error={schedules.error ?? shifts.error} />
+            <Button
+              secondary
+              label={t('common.retry')}
+              onPress={() => {
+                void schedules.refetch();
+                void shifts.refetch();
+              }}
+            />
+          </>
+        )}
+      </View>
+    </RequestSheet>
   );
 }
 

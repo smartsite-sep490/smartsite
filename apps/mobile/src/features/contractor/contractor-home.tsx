@@ -5,7 +5,6 @@ import type { NavigationTarget } from '../../SmartSiteMobileApp';
 import {
   IconCalendar,
   IconChevronRight,
-  IconClock,
   IconDocument,
   IconShield,
   IconUsers,
@@ -100,12 +99,6 @@ export function ContractorHome({ navigate }: { navigate: (target: NavigationTarg
           />
         )}
       </QueryState>
-      <HomeAction
-        title={t('contractorHome.teamAttendance')}
-        subtitle={t('contractorUi.attendanceHint')}
-        icon={<IconClock size={21} color={colors.primary} />}
-        onPress={() => navigate({ route: 'attendance' })}
-      />
       <HomeAction
         title={t('contractorUi.assignedWork')}
         subtitle={t('contractorUi.assignedHint')}

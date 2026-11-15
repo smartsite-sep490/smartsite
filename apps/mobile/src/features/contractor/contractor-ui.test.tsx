@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import { act, create, type ReactTestRenderer } from 'react-test-renderer';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { SmartSiteManagementClient } from '@smartsite/api-client';
+import { SmartSiteManagementClient, type AttendanceDayResponse } from '@smartsite/api-client';
 import type { useWorkspace } from '../workspace/workspace-context';
 import { MobileLayoutProvider } from '../shared/mobile-layout';
 import { translate as t } from '../../i18n';
@@ -148,6 +148,7 @@ it('shows real workforce and pending totals and keeps secondary tools one tap aw
   expect(JSON.stringify(root.toJSON())).toContain(t('contractorUi.unassigned', { count: 2 }));
   expect(JSON.stringify(root.toJSON())).toContain(t('contractorUi.pending', { count: 4 }));
   expect(workspace.client.contractorDashboard).toHaveBeenCalledWith('token', 'site', 'contractor');
+  expect(buttons(t('contractorHome.teamAttendance'))).toHaveLength(0);
   expect(buttons(t('teams.title'))).toHaveLength(0);
   await click(t('contractorUi.managementTools'));
   await click(t('teams.title'));
@@ -167,6 +168,7 @@ it('paginates the contractor roster in eight compact rows without leaking anothe
   await click(t('common.next'));
   expect(profiles()).toHaveLength(2);
   await click(`${t('workforce.workerProfile')}: Synthetic Worker 8`);
+  await click(t('workforce.editWorker'));
   expect(buttons(t('common.save'))).toHaveLength(1);
 });
 
@@ -185,6 +187,105 @@ it('keeps contractor schedule filters collapsed and sends the contractor scope a
   expect(buttons(t('requests.filter'))[0]!.props.accessibilityState.expanded).toBe(false);
   expect(JSON.stringify(root.toJSON())).toContain('Synthetic Shift');
   expect(JSON.stringify(root.toJSON())).not.toContain(t('attendance.customRange'));
+});
+
+it('keeps the chosen contractor day and API range in sync while navigating weeks', async () => {
+  await mount(<ContractorSchedule initialDate="2026-11-09" />);
+  await click(t('schedule.nextWeek'));
+  expect(workspace.client.listWorkerSchedules).toHaveBeenLastCalledWith(
+    'token',
+    'site',
+    expect.objectContaining({
+      fromDate: '2026-11-16',
+      toDate: '2026-11-16',
+      contractorId: 'contractor',
+    }),
+  );
+  await click(t('schedule.previousWeek'));
+  expect(workspace.client.listWorkerSchedules).toHaveBeenLastCalledWith(
+    'token',
+    'site',
+    expect.objectContaining({ fromDate: '2026-11-09', toDate: '2026-11-09' }),
+  );
+  await click(t('requests.filter'));
+  expect(JSON.stringify(root.toJSON())).toContain(t('attendance.customRange'));
+  await click(t('requests.filter'));
+  expect(JSON.stringify(root.toJSON())).not.toContain(t('attendance.customRange'));
+});
+
+it('scopes attendance before paging and opens real session details without fabricated clock times', async () => {
+  const day: AttendanceDayResponse = {
+    id: 'day',
+    workerId: 'worker-0',
+    workerName: 'Synthetic Worker 0',
+    workDate: '2026-11-09',
+    timezone: 'Asia/Ho_Chi_Minh',
+    scheduleId: 'schedule',
+    shiftName: 'Synthetic Shift',
+    startsAt: '2026-11-09T01:00:00Z',
+    endsAt: '2026-11-09T10:00:00Z',
+    status: 'CONFIRMED',
+    regularMinutes: 480,
+    overtimeMinutes: 0,
+    provisionalMinutes: 0,
+    confirmedMinutes: 480,
+    presence: 'OUTSIDE',
+    anomalies: [],
+    version: 1,
+    canRequest: false,
+  };
+  vi.spyOn(workspace.client, 'attendanceDays').mockResolvedValue({
+    items: [day, { ...day, id: 'private', workerId: 'other', workerName: 'Private Other Worker' }],
+    total: 2,
+    requests: [],
+    canReview: false,
+    canRequest: false,
+  });
+  vi.spyOn(workspace.client, 'attendanceSummary').mockResolvedValue({
+    siteId: 'site',
+    fromDate: day.workDate,
+    toDate: day.workDate,
+    today: day.workDate,
+    asOf: day.endsAt!,
+    timezone: day.timezone,
+    regularMinutes: 480,
+    overtimeMinutes: 0,
+    totalMinutes: 480,
+    provisionalMinutes: 0,
+    confirmedDays: 1,
+    requiredDays: 1,
+    presentDays: 1,
+    absentDays: 0,
+    reviewDays: 0,
+    attendanceRate: 100,
+    isProvisional: false,
+    totalWorkers: 1,
+    absentTodayCount: 0,
+    overtimeWorkerCount: 0,
+    previousPeriod: { fromDate: day.workDate, toDate: day.workDate, totalMinutes: 0 },
+    workingMinutesChangePercent: null,
+  });
+  vi.spyOn(workspace.client, 'attendanceDayDetail').mockResolvedValue({ day, sessions: [] });
+  vi.spyOn(workspace.client, 'attendanceOverview').mockResolvedValue({
+    sessions: [],
+    corrections: [],
+    canRequestCorrection: false,
+    canReviewCorrection: false,
+  });
+  await mount(<ContractorSchedule initialDate="2026-11-09" />);
+  await click(t('schedule.tabAttendance'));
+  expect(JSON.stringify(root.toJSON())).not.toContain('Private Other Worker');
+  expect(workspace.client.attendanceDays).toHaveBeenCalledWith('token', 'site', {
+    fromDate: day.workDate,
+    toDate: day.workDate,
+    offset: 0,
+    limit: 100,
+  });
+  await click('2026-11-09 Synthetic Worker 0');
+  expect(workspace.client.attendanceDayDetail).toHaveBeenCalledWith('token', 'site', 'day');
+  expect(JSON.stringify(root.toJSON())).toContain(t('attendance.noSessions'));
+  await click(t('common.back'));
+  expect(buttons(t('schedule.tabAttendance'))[0]!.props.accessibilityState.selected).toBe(true);
 });
 
 it('keeps the original representative profile and account actions', async () => {

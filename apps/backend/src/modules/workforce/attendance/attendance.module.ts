@@ -19,6 +19,6 @@ import { AttendanceReportsController } from './attendance-reports.controller.js'
     AttendanceReconciliationService,
     AttendanceReportsService,
   ],
-  exports: [AttendanceReconciliationService],
+  exports: [AttendanceReconciliationService, AttendanceDaysService],
 })
 export class WorkforceAttendanceModule {}

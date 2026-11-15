@@ -3095,6 +3095,7 @@ export class SmartSiteManagementClient {
       workerScheduleId: string;
       reason: string;
       replacementWorkerId?: string;
+      noticeType?: 'PLANNED' | 'EMERGENCY';
     },
   ) {
     return this.request<AbsenceRequestResponse>(
@@ -3111,11 +3112,17 @@ export class SmartSiteManagementClient {
       token,
     );
   }
-  rejectAbsenceRequest(token: string, siteId: string, requestId: string) {
+  rejectAbsenceRequest(
+    token: string,
+    siteId: string,
+    requestId: string,
+    input: { reason: string },
+  ) {
     return this.request<AbsenceRequestResponse>(
       'PATCH',
       `/sites/${pathId(siteId)}/absence-requests/${pathId(requestId)}/reject`,
       token,
+      input,
     );
   }
 

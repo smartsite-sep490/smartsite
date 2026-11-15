@@ -4,37 +4,30 @@ import { useQuery } from '@tanstack/react-query';
 import type { WorkerResponse } from '@smartsite/api-client';
 import { useWorkspace } from '../workspace/workspace-context';
 import { allPages, required, useCommand } from '../shared/data';
-import {
-  Body,
-  Button,
-  Card,
-  ErrorNotice,
-  Field,
-  Hint,
-  Page,
-  Pager,
-  QueryState,
-} from '../shared/ui';
+import { Button, CompactTabs, ErrorNotice, Field, Page, Pager, QueryState } from '../shared/ui';
+import { RequestSheet } from '../shared/request-sheet';
+import { FormSection } from '../shared/form-section';
 import { CreateWorkerModal } from '../../components/modals/CreateWorkerModal';
 import { WorkerDocuments } from './worker-documents';
 import { WorkerAvatar } from '../../components/common/WorkerAvatar';
-import { IconDocument, IconUser, IconChevronRight } from '../../components/common/Icons';
+import { IconDocument, IconUser, IconChevronRight, IconUsers } from '../../components/common/Icons';
 import { useTranslation } from '../../i18n';
+import { colors } from '../../theme/colors';
+import { EmptyState, ListHeading, Metrics } from './contractor-presentation';
 
 export function WorkforceScreen({ initialWorkerId }: { initialWorkerId?: string } = {}) {
   const { t } = useTranslation();
   const { scope, client, token, queryKey } = useWorkspace();
   const [requestedWorker, setRequestedWorker] = useState(initialWorkerId ?? '');
-  const [search, setSearch] = useState(''),
-    [offset, setOffset] = useState(0),
-    [selected, setSelected] = useState<WorkerResponse | null>(null),
-    [creating, setCreating] = useState(false);
-
+  const [search, setSearch] = useState('');
+  const [statusFilter, setStatusFilter] = useState('ALL');
+  const [offset, setOffset] = useState(0);
+  const [selected, setSelected] = useState<WorkerResponse | null>(null);
+  const [creating, setCreating] = useState(false);
   const workers = useQuery({
     queryKey: [...queryKey, 'workers'],
     queryFn: ({ signal }) => allPages((p) => client.listWorkers(token, scope.siteId, p), signal),
   });
-
   const opened =
     selected ??
     workers.data?.find((w) => w.id === requestedWorker && w.contractorId === scope.contractorId);
@@ -50,110 +43,127 @@ export function WorkforceScreen({ initialWorkerId }: { initialWorkerId?: string 
         }}
       />
     );
-
-  const avatarColors = [
-    { bg: '#FFF4EE', text: '#F66B17' },
-    { bg: '#EDFAF2', text: '#10B981' },
-    { bg: '#EFF6FF', text: '#2563EB' },
-    { bg: '#FEF3C7', text: '#D97706' },
-  ];
-
   return (
     <Page title={t('workforce.title')}>
-      <Field
-        label={t('workforce.searchPlaceholder')}
-        value={search}
-        onChangeText={(v) => {
-          setSearch(v);
-          setOffset(0);
-        }}
-      />
-      <Button label={t('workforce.createAccount')} onPress={() => setCreating(true)} />
-
+      <Text style={styles.subtitle}>
+        {scope.contractorName} · {scope.siteName}
+      </Text>
       <QueryState query={workers}>
-        {(data) => {
-          const filtered = data.filter(
-            (w) =>
-              w.contractorId === scope.contractorId &&
-              `${w.displayName} ${w.externalId}`
+        {(allData) => {
+          const people = allData.filter((w) => w.contractorId === scope.contractorId);
+          const operational = (w: WorkerResponse) => w.isActive && w.documentStatus === 'ACTIVE';
+          const activeCount = people.filter(operational).length;
+          const filtered = people.filter((w) => {
+            if (
+              !`${w.displayName} ${w.externalId}`
                 .toLocaleLowerCase()
-                .includes(search.toLocaleLowerCase()),
-          );
+                .includes(search.trim().toLocaleLowerCase())
+            )
+              return false;
+            return (
+              statusFilter === 'ALL' ||
+              (statusFilter === 'ACTIVE' ? operational(w) : !operational(w))
+            );
+          });
           return (
             <>
-              {!filtered.length && <Hint>{t('workforce.noWorkers')}</Hint>}
-              {filtered.slice(offset, offset + 8).map((w, index) => {
-                const operational = w.isActive && w.documentStatus === 'ACTIVE';
-                const colorScheme = avatarColors[index % avatarColors.length] ?? {
-                  bg: '#FFF4EE',
-                  text: '#F66B17',
-                };
-                const initials =
-                  w.displayName
-                    .split(' ')
-                    .map((p) => p[0])
-                    .filter(Boolean)
-                    .slice(-2)
-                    .join('')
-                    .toUpperCase() || 'W';
-
-                return (
-                  <Pressable
-                    key={w.id}
-                    accessibilityRole="button"
-                    accessibilityLabel={`${t('workforce.workerProfile')}: ${w.displayName}`}
-                    onPress={() => setSelected(w)}
-                  >
-                    <Card>
-                      <View style={wfStyles.workerHeaderRow}>
-                        <View style={[wfStyles.avatarCircle, { backgroundColor: colorScheme.bg }]}>
-                          <Text style={[wfStyles.avatarText, { color: colorScheme.text }]}>
-                            {initials}
-                          </Text>
-                        </View>
-
-                        <View style={wfStyles.workerInfoCol}>
-                          <Body>{w.displayName}</Body>
-                          <Hint>{w.externalId}</Hint>
-                        </View>
-
-                        <View
-                          style={[
-                            wfStyles.statusPill,
-                            { backgroundColor: operational ? '#EDFAF2' : '#F1F5F9' },
-                          ]}
-                        >
-                          <View
-                            style={[
-                              wfStyles.statusDot,
-                              { backgroundColor: operational ? '#10B981' : '#64748B' },
-                            ]}
-                          />
-                          <Text
-                            style={[
-                              wfStyles.statusText,
-                              { color: operational ? '#065F46' : '#64748B' },
-                            ]}
-                          >
-                            {!w.isActive
-                              ? t('workforce.statusInactive')
-                              : w.documentStatus === 'ACTIVE'
-                                ? t('workforce.statusActive')
-                                : t(`documents.${w.documentStatus ?? 'PENDING'}`)}
-                          </Text>
-                        </View>
-                      </View>
-                    </Card>
-                  </Pressable>
-                );
-              })}
-              <Pager offset={offset} total={filtered.length} size={8} onChange={setOffset} />
+              <Metrics
+                items={[
+                  { label: t('profile.totalWorkforce'), value: people.length },
+                  { label: t('workforce.statusActive'), value: activeCount },
+                  {
+                    label: t('contractorHome.needsAction'),
+                    value: people.length - activeCount,
+                    attention: true,
+                  },
+                ]}
+              />
+              <Button label={t('workforce.createAccount')} onPress={() => setCreating(true)} />
+              <View style={styles.searchCard}>
+                <Field
+                  label={t('workforce.searchPlaceholder')}
+                  placeholder={t('workforce.searchPlaceholder')}
+                  value={search}
+                  onChangeText={(value) => {
+                    setSearch(value);
+                    setOffset(0);
+                  }}
+                />
+                <CompactTabs
+                  value={statusFilter}
+                  options={[
+                    { value: 'ALL', label: t('common.all') },
+                    { value: 'ACTIVE', label: t('workforce.statusActive') },
+                    { value: 'PENDING', label: t('contractorHome.needsAction') },
+                  ]}
+                  onChange={(value) => {
+                    setStatusFilter(value);
+                    setOffset(0);
+                  }}
+                />
+              </View>
+              <ListHeading
+                title={t('workforce.title')}
+                count={t('contractorUi.workerCount', { count: filtered.length })}
+              />
+              {!filtered.length && (
+                <EmptyState
+                  icon={<IconUsers size={26} color={colors.primary} />}
+                  title={t('workforce.noWorkers')}
+                  hint={t('contractorUi.workerEmptyHint')}
+                />
+              )}
+              {filtered.slice(offset, offset + 8).map((worker) => (
+                <Pressable
+                  key={worker.id}
+                  accessibilityRole="button"
+                  accessibilityLabel={`${t('workforce.workerProfile')}: ${worker.displayName}`}
+                  onPress={() => setSelected(worker)}
+                  style={({ pressed }) => [styles.workerCard, pressed && styles.pressed]}
+                >
+                  <View style={styles.workerHeading}>
+                    <View style={styles.initials}>
+                      <Text style={styles.initialsText}>
+                        {worker.displayName
+                          .split(' ')
+                          .map((part) => part[0])
+                          .filter(Boolean)
+                          .slice(-2)
+                          .join('')
+                          .toUpperCase() || 'W'}
+                      </Text>
+                    </View>
+                    <View style={styles.copy}>
+                      <Text style={styles.workerName}>{worker.displayName}</Text>
+                      <Text style={styles.caption}>{worker.externalId}</Text>
+                    </View>
+                    <IconChevronRight size={18} color={colors.textMuted} />
+                  </View>
+                  <View style={styles.workerFooter}>
+                    <Text style={styles.caption}>
+                      {t(worker.userId ? 'workforce.hasAccount' : 'workforce.noAccount')}
+                    </Text>
+                    <View style={[styles.status, !operational(worker) && styles.attentionStatus]}>
+                      <Text
+                        style={[styles.statusText, !operational(worker) && styles.attentionText]}
+                      >
+                        {!worker.isActive
+                          ? t('workforce.statusInactive')
+                          : worker.documentStatus === 'ACTIVE'
+                            ? t('workforce.statusActive')
+                            : t(`documents.${worker.documentStatus ?? 'PENDING'}`)}
+                      </Text>
+                    </View>
+                  </View>
+                </Pressable>
+              ))}
+              {filtered.length > 8 && (
+                <Pager offset={offset} total={filtered.length} size={8} onChange={setOffset} />
+              )}
             </>
           );
         }}
       </QueryState>
-
-      {/* Modal: Thêm công nhân (Chỉ mở khi bấm nút) */}
       <CreateWorkerModal
         visible={creating}
         onClose={() => setCreating(false)}
@@ -178,437 +188,162 @@ export function WorkerDetail({
 }) {
   const { t } = useTranslation();
   const { scope, client, token } = useWorkspace();
-  const [name, setName] = useState(worker.displayName),
-    [active, setActive] = useState(worker.isActive);
-  const command = useCommand();
+  const [name, setName] = useState(worker.displayName);
+  const [active, setActive] = useState(worker.isActive);
   const [documents, setDocuments] = useState(initialDocuments);
+  const [editing, setEditing] = useState(false);
+  const command = useCommand();
   if (documents)
     return (
       <Page title={t('documents.title')} onBack={() => setDocuments(false)}>
         <WorkerDocuments workerId={worker.id} canUpload />
       </Page>
     );
-
   return (
     <Page title={t('workforce.workerProfile')} onBack={onBack}>
-      <View style={wfStyles.detailContainer}>
-        {/* 1. Hero Worker Card */}
-        <View style={wfStyles.heroCard}>
-          <View style={wfStyles.heroAvatarWrapper}>
-            <WorkerAvatar size={62} role="worker" />
-            <View
-              style={[
-                wfStyles.heroStatusDotBadge,
-                { backgroundColor: active ? '#10B981' : '#94A3B8' },
-              ]}
-            />
-          </View>
-
-          <View style={wfStyles.heroTextCol}>
-            <Text style={wfStyles.heroName} numberOfLines={1} ellipsizeMode="tail">
-              {name || worker.displayName}
-            </Text>
-
-            <View style={wfStyles.heroPillsRow}>
-              <View style={wfStyles.codeBadge}>
-                <Text style={wfStyles.codeBadgeText}>{worker.externalId}</Text>
-              </View>
-
-              <View
-                style={[
-                  wfStyles.accountBadge,
-                  { backgroundColor: worker.userId ? '#EDFAF2' : '#F1F5F9' },
-                ]}
-              >
-                <View
-                  style={[
-                    wfStyles.accountDot,
-                    { backgroundColor: worker.userId ? '#10B981' : '#94A3B8' },
-                  ]}
-                />
-                <Text
-                  style={[
-                    wfStyles.accountBadgeText,
-                    { color: worker.userId ? '#065F46' : '#64748B' },
-                  ]}
-                >
-                  {worker.userId ? t('workforce.hasAccount') : t('workforce.noAccount')}
-                </Text>
-              </View>
-            </View>
+      <View style={styles.workerCard}>
+        <View style={styles.workerHeading}>
+          <WorkerAvatar size={54} role="worker" />
+          <View style={styles.copy}>
+            <Text style={styles.workerName}>{worker.displayName}</Text>
+            <Text style={styles.caption}>{worker.externalId}</Text>
           </View>
         </View>
-
-        {/* 2. Form Card: Thông tin cơ bản */}
-        <View style={wfStyles.formCard}>
-          <View style={wfStyles.formCardHeader}>
-            <View style={wfStyles.formHeaderIconBox}>
-              <IconUser size={16} color="#EA580C" />
-            </View>
-            <Text style={wfStyles.formCardTitle}>{t('workforce.editWorker')}</Text>
-          </View>
-
-          <Field
-            label={t('workforce.fullName')}
-            value={name}
-            onChangeText={setName}
-            autoCapitalize="words"
-          />
-
-          {/* Status selector */}
-          <View style={wfStyles.statusFieldGroup}>
-            <Text style={wfStyles.statusFieldLabel}>{t('common.status')}</Text>
-            <View style={wfStyles.statusToggleRow}>
-              <Pressable
-                accessibilityRole="button"
-                accessibilityLabel={t('workforce.statusActive')}
-                onPress={() => setActive(true)}
-                style={[wfStyles.statusToggleBtn, active && wfStyles.statusToggleBtnActive]}
-              >
-                <View
-                  style={[
-                    wfStyles.statusDotIndicator,
-                    { backgroundColor: active ? '#10B981' : '#CBD5E1' },
-                  ]}
-                />
-                <Text
-                  style={[wfStyles.statusToggleText, active && wfStyles.statusToggleTextActive]}
-                >
-                  {t('workforce.statusActive')}
-                </Text>
-              </Pressable>
-
-              <Pressable
-                accessibilityRole="button"
-                accessibilityLabel={t('workforce.statusInactive')}
-                onPress={() => setActive(false)}
-                style={[wfStyles.statusToggleBtn, !active && wfStyles.statusToggleBtnInactive]}
-              >
-                <View
-                  style={[
-                    wfStyles.statusDotIndicator,
-                    { backgroundColor: !active ? '#EF4444' : '#CBD5E1' },
-                  ]}
-                />
-                <Text
-                  style={[wfStyles.statusToggleText, !active && wfStyles.statusToggleTextInactive]}
-                >
-                  {t('workforce.statusInactive')}
-                </Text>
-              </Pressable>
-            </View>
-          </View>
-        </View>
-
-        {/* 3. Quick Action: Hồ sơ giấy tờ & Chứng chỉ */}
-        <Pressable
-          accessibilityRole="button"
-          accessibilityLabel={t('documents.title')}
-          onPress={() => setDocuments(true)}
-          style={({ pressed }) => [
-            wfStyles.documentsNavCard,
-            pressed && { opacity: 0.85, transform: [{ scale: 0.99 }] },
-          ]}
-        >
-          <View style={wfStyles.docNavIconBox}>
-            <IconDocument size={20} color="#EA580C" />
-          </View>
-          <View style={wfStyles.docNavTextCol}>
-            <Text style={wfStyles.docNavTitle}>{t('documents.title')}</Text>
-            <Text style={wfStyles.docNavSubtitle}>{t('profile.safetyCertificatesSubtitle')}</Text>
-          </View>
-          <IconChevronRight size={18} color="#94A3B8" />
-        </Pressable>
-
-        <ErrorNotice error={command.error} />
-
-        {/* 4. Action Button */}
-        <View style={wfStyles.actionBtnWrapper}>
-          <Button
-            label={t('common.save')}
-            disabled={command.isPending || !name.trim()}
-            onPress={() =>
-              command.mutate(async () => {
-                await client.updateContractorWorker(
-                  token,
-                  scope.siteId,
-                  scope.contractorId,
-                  worker.id,
-                  {
-                    externalId: worker.externalId,
-                    displayName: required(name, t('workforce.fullName')),
-                    isActive: active,
-                    expectedSnapshot: {
-                      externalId: worker.externalId,
-                      displayName: worker.displayName,
-                      isActive: worker.isActive,
-                    },
-                  },
-                );
-                onBack();
-              })
-            }
-          />
+        <View style={styles.workerFooter}>
+          <Text style={styles.caption}>
+            {t(worker.userId ? 'workforce.hasAccount' : 'workforce.noAccount')}
+          </Text>
+          <Text style={styles.caption}>
+            {t(worker.isActive ? 'workforce.statusActive' : 'workforce.statusInactive')}
+          </Text>
         </View>
       </View>
+      <Button label={t('workforce.editWorker')} onPress={() => setEditing(true)} />
+      <Pressable
+        accessibilityRole="button"
+        accessibilityLabel={t('documents.title')}
+        onPress={() => setDocuments(true)}
+        style={({ pressed }) => [styles.workerCard, pressed && styles.pressed]}
+      >
+        <View style={styles.workerHeading}>
+          <IconDocument size={24} color={colors.primary} />
+          <View style={styles.copy}>
+            <Text style={styles.workerName}>{t('documents.title')}</Text>
+            <Text style={styles.caption}>{t('profile.safetyCertificatesSubtitle')}</Text>
+          </View>
+          <IconChevronRight size={18} color={colors.textMuted} />
+        </View>
+      </Pressable>
+      {editing && (
+        <RequestSheet
+          visible
+          onClose={() => setEditing(false)}
+          busy={command.isPending}
+          variant="form"
+          icon={<IconUser size={23} color={colors.primary} />}
+          title={t('workforce.editWorker')}
+          subtitle={`${worker.externalId} · ${worker.displayName}`}
+          footer={
+            <View style={styles.form}>
+              <ErrorNotice error={command.error} />
+              <Button
+                label={t('common.save')}
+                disabled={command.isPending || !name.trim()}
+                onPress={() =>
+                  command.mutate(async () => {
+                    await client.updateContractorWorker(
+                      token,
+                      scope.siteId,
+                      scope.contractorId,
+                      worker.id,
+                      {
+                        externalId: worker.externalId,
+                        displayName: required(name, t('workforce.fullName')),
+                        isActive: active,
+                        expectedSnapshot: {
+                          externalId: worker.externalId,
+                          displayName: worker.displayName,
+                          isActive: worker.isActive,
+                        },
+                      },
+                    );
+                    onBack();
+                  })
+                }
+              />
+            </View>
+          }
+        >
+          <FormSection number="01" title={t('workforce.editWorker')}>
+            <Field
+              label={t('workforce.fullName')}
+              value={name}
+              onChangeText={setName}
+              autoCapitalize="words"
+              editable={!command.isPending}
+            />
+            <Text style={styles.caption}>{t('common.status')}</Text>
+            <View pointerEvents={command.isPending ? 'none' : 'auto'}>
+              <CompactTabs
+                value={active ? 'ACTIVE' : 'INACTIVE'}
+                options={[
+                  { value: 'ACTIVE', label: t('workforce.statusActive') },
+                  { value: 'INACTIVE', label: t('workforce.statusInactive') },
+                ]}
+                onChange={(value) => setActive(value === 'ACTIVE')}
+              />
+            </View>
+          </FormSection>
+        </RequestSheet>
+      )}
     </Page>
   );
 }
 
-const wfStyles = StyleSheet.create({
-  workerHeaderRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 12,
-    flexWrap: 'wrap',
+const styles = StyleSheet.create({
+  subtitle: { fontSize: 12, lineHeight: 20, color: colors.textMuted, marginTop: -8 },
+  searchCard: { gap: 14 },
+  workerCard: {
+    padding: 16,
+    borderRadius: 18,
+    gap: 14,
+    backgroundColor: colors.surface,
+    borderWidth: 1,
+    borderColor: colors.border,
   },
-  avatarCircle: {
+  workerHeading: { flexDirection: 'row', alignItems: 'center', gap: 12 },
+  copy: { flex: 1, minWidth: 0, gap: 4 },
+  initials: {
     width: 44,
     height: 44,
-    borderRadius: 22,
+    borderRadius: 14,
+    backgroundColor: colors.primaryLight,
     alignItems: 'center',
     justifyContent: 'center',
-    flexShrink: 0,
   },
-  avatarText: {
-    fontSize: 15,
-    fontWeight: '800',
-  },
-  workerInfoCol: {
-    flex: 1,
-    gap: 2,
-    minWidth: 100,
-    flexBasis: 120,
-  },
-  statusPill: {
+  initialsText: { fontSize: 14, fontWeight: '700', color: colors.primaryHover },
+  workerName: { fontSize: 15, lineHeight: 23, fontWeight: '700', color: colors.textPrimary },
+  caption: { fontSize: 12, lineHeight: 19, color: colors.textMuted },
+  workerFooter: {
     flexDirection: 'row',
+    flexWrap: 'wrap',
     alignItems: 'center',
-    paddingHorizontal: 10,
+    justifyContent: 'space-between',
+    gap: 8,
+    paddingTop: 12,
+    borderTopWidth: 1,
+    borderTopColor: colors.borderLight,
+  },
+  status: {
+    paddingHorizontal: 9,
     paddingVertical: 5,
-    borderRadius: 14,
-    gap: 5,
+    borderRadius: 8,
+    backgroundColor: colors.surfaceSubtle,
     maxWidth: '100%',
-    flexShrink: 0,
   },
-  statusDot: {
-    width: 6,
-    height: 6,
-    borderRadius: 3,
-    flexShrink: 0,
-  },
-  statusText: {
-    fontSize: 11,
-    fontWeight: '700',
-    flexShrink: 1,
-    lineHeight: 18,
-  },
-  /* Modern Worker Detail Styles */
-  detailContainer: {
-    gap: 14,
-    paddingBottom: 24,
-  },
-  heroCard: {
-    backgroundColor: '#FFFFFF',
-    borderRadius: 20,
-    padding: 16,
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 14,
-    borderWidth: 1,
-    borderColor: '#F1F5F9',
-    shadowColor: '#0F172A',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.04,
-    shadowRadius: 8,
-    elevation: 2,
-  },
-  heroAvatarWrapper: {
-    position: 'relative',
-    flexShrink: 0,
-  },
-  heroStatusDotBadge: {
-    position: 'absolute',
-    bottom: -1,
-    right: -1,
-    width: 14,
-    height: 14,
-    borderRadius: 7,
-    borderWidth: 2,
-    borderColor: '#FFFFFF',
-  },
-  heroTextCol: {
-    flex: 1,
-    gap: 6,
-    minWidth: 120,
-  },
-  heroName: {
-    fontSize: 17,
-    fontWeight: '800',
-    color: '#0F172A',
-    letterSpacing: -0.2,
-  },
-  heroPillsRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    flexWrap: 'wrap',
-    gap: 6,
-  },
-  codeBadge: {
-    backgroundColor: '#FFF7ED',
-    paddingHorizontal: 8,
-    paddingVertical: 3,
-    borderRadius: 8,
-    borderWidth: 1,
-    borderColor: '#FFEDD5',
-  },
-  codeBadgeText: {
-    fontSize: 12,
-    fontWeight: '700',
-    fontFamily: 'monospace',
-    color: '#EA580C',
-  },
-  accountBadge: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 5,
-    paddingHorizontal: 8,
-    paddingVertical: 3,
-    borderRadius: 8,
-    borderWidth: 1,
-    borderColor: '#E2E8F0',
-  },
-  accountDot: {
-    width: 6,
-    height: 6,
-    borderRadius: 3,
-  },
-  accountBadgeText: {
-    fontSize: 12,
-    fontWeight: '600',
-  },
-  formCard: {
-    backgroundColor: '#FFFFFF',
-    borderRadius: 20,
-    padding: 16,
-    gap: 14,
-    borderWidth: 1,
-    borderColor: '#F1F5F9',
-    shadowColor: '#0F172A',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.03,
-    shadowRadius: 6,
-    elevation: 1,
-  },
-  formCardHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-    paddingBottom: 10,
-    borderBottomWidth: 1,
-    borderBottomColor: '#F8FAFC',
-  },
-  formHeaderIconBox: {
-    width: 28,
-    height: 28,
-    borderRadius: 8,
-    backgroundColor: '#FFF7ED',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  formCardTitle: {
-    fontSize: 15,
-    fontWeight: '800',
-    color: '#0F172A',
-  },
-  statusFieldGroup: {
-    gap: 8,
-  },
-  statusFieldLabel: {
-    fontSize: 13,
-    fontWeight: '700',
-    color: '#334155',
-  },
-  statusToggleRow: {
-    flexDirection: 'row',
-    gap: 10,
-  },
-  statusToggleBtn: {
-    flex: 1,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 8,
-    paddingVertical: 12,
-    paddingHorizontal: 12,
-    borderRadius: 14,
-    borderWidth: 1.5,
-    borderColor: '#E2E8F0',
-    backgroundColor: '#F8FAFC',
-  },
-  statusToggleBtnActive: {
-    backgroundColor: '#EDFAF2',
-    borderColor: '#10B981',
-  },
-  statusToggleBtnInactive: {
-    backgroundColor: '#FEF2F2',
-    borderColor: '#EF4444',
-  },
-  statusDotIndicator: {
-    width: 8,
-    height: 8,
-    borderRadius: 4,
-  },
-  statusToggleText: {
-    fontSize: 13,
-    fontWeight: '700',
-    color: '#64748B',
-  },
-  statusToggleTextActive: {
-    color: '#065F46',
-  },
-  statusToggleTextInactive: {
-    color: '#991B1B',
-  },
-  documentsNavCard: {
-    backgroundColor: '#FFFFFF',
-    borderRadius: 20,
-    padding: 16,
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 12,
-    borderWidth: 1,
-    borderColor: '#FED7AA',
-    shadowColor: '#EA580C',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.05,
-    shadowRadius: 8,
-    elevation: 2,
-  },
-  docNavIconBox: {
-    width: 44,
-    height: 44,
-    borderRadius: 12,
-    backgroundColor: '#FFF7ED',
-    borderWidth: 1,
-    borderColor: '#FFEDD5',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  docNavTextCol: {
-    flex: 1,
-    gap: 2,
-  },
-  docNavTitle: {
-    fontSize: 15,
-    fontWeight: '800',
-    color: '#0F172A',
-  },
-  docNavSubtitle: {
-    fontSize: 12,
-    fontWeight: '500',
-    color: '#64748B',
-  },
-  actionBtnWrapper: {
-    marginTop: 4,
-  },
+  statusText: { fontSize: 12, lineHeight: 18, fontWeight: '600', color: colors.textSecondary },
+  attentionStatus: { backgroundColor: colors.warningLightBg },
+  attentionText: { color: colors.warningText },
+  pressed: { opacity: 0.65 },
+  form: { gap: 12 },
 });

@@ -8,8 +8,36 @@ import { CreateShiftDto } from '../src/modules/workforce/scheduling/dto/schedule
 import {
   AttendanceDaysDto,
   AttendanceTimeRequestsDto,
+  AttendanceTimeRequestDto,
   ReviewAttendanceTimeDto,
 } from '../src/modules/workforce/attendance/dto/attendance.dto.js';
+import { CreateAbsenceRequestDto } from '../src/modules/workforce/scheduling/dto/scheduling-request.dto.js';
+import { randomUUID } from 'node:crypto';
+
+test('leave classification accepts planned/emergency and legacy omission but rejects null and forged metadata', () => {
+  const base = { workerScheduleId: randomUUID(), reason: 'Unexpected illness' };
+  for (const fields of [{}, { noticeType: 'PLANNED' }, { noticeType: 'EMERGENCY' }]) {
+    assert.doesNotThrow(() => command(CreateAbsenceRequestDto, { ...base, ...fields }));
+  }
+  for (const fields of [
+    { noticeType: null },
+    { noticeType: 'OTHER' },
+    { shortNotice: false },
+    { requestedByUserId: randomUUID() },
+  ]) {
+    assert.throws(() => command(CreateAbsenceRequestDto, { ...base, ...fields }));
+    assert.throws(() =>
+      command(AttendanceTimeRequestDto, {
+        ...base,
+        ...fields,
+        requestId: randomUUID(),
+        kind: 'LEAVE',
+        startsAt: '2026-11-13T01:00:00Z',
+        endsAt: '2026-11-13T10:00:00Z',
+      }),
+    );
+  }
+});
 
 test('exit policy validates integer minutes 0-120 and counts 0-10 at the HTTP boundary', async () => {
   const pipe = new ValidationPipe({ transform: true, whitelist: true, forbidNonWhitelisted: true });

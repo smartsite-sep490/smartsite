@@ -1,15 +1,6 @@
 import { translate as tr } from '../../i18n';
 import { useState } from 'react';
-import {
-  View,
-  Text,
-  StyleSheet,
-  Pressable,
-  Modal,
-  KeyboardAvoidingView,
-  Platform,
-  ScrollView,
-} from 'react-native';
+import { View, Text, StyleSheet } from 'react-native';
 import { useQuery } from '@tanstack/react-query';
 import type { ContractorTeamResponse, ContractorTeamWorkerResponse } from '@smartsite/api-client';
 import { useWorkspace } from '../workspace/workspace-context';
@@ -34,11 +25,14 @@ import {
   Pager,
   QueryState,
   CompactTabs,
-  Disclosure,
 } from '../shared/ui';
 import { useTranslation } from '../../i18n';
 import { IconUsers } from '../../components/common/Icons';
 import { colors } from '../../theme/colors';
+import { RequestSheet } from '../shared/request-sheet';
+import { FormSection } from '../shared/form-section';
+import { CalendarDateField } from '../shared/calendar-date-field';
+import { DetailLink, EmptyState, ListHeading } from './contractor-presentation';
 
 export function TeamsScreen({
   selectedTeam,
@@ -80,10 +74,14 @@ export function TeamsScreen({
 
   return (
     <Page>
+      <Text style={teamStyles.caption}>
+        {scope.contractorName} · {scope.siteName}
+      </Text>
       <Button label={t('teams.createTeam')} onPress={() => setCreating(true)} />
 
       <Field
         label={t('teams.searchTeam')}
+        placeholder={t('teams.searchTeam')}
         value={search}
         onChangeText={(v) => {
           setSearch(v);
@@ -105,7 +103,17 @@ export function TeamsScreen({
       <QueryState query={query}>
         {(data) => (
           <>
-            {!data.items.length && <Hint>{tr('teams.noneInScope')}</Hint>}
+            <ListHeading
+              title={t('teams.title')}
+              count={t('teams.listCount', { count: data.total })}
+            />
+            {!data.items.length && (
+              <EmptyState
+                icon={<IconUsers size={26} color={colors.primary} />}
+                title={tr('teams.noneInScope')}
+                hint={t('teams.emptyHint')}
+              />
+            )}
             {data.items.map((teamItem) => (
               <View key={teamItem.id} style={teamStyles.teamCard}>
                 <View style={teamStyles.teamHeaderRow}>
@@ -140,18 +148,16 @@ export function TeamsScreen({
 
                 <View style={teamStyles.memberCountRow}>
                   <Text style={teamStyles.memberCountText}>
-                    👥 {teamItem.memberCount} {tr('teams.membersUnit')}
+                    {teamItem.memberCount} {tr('teams.membersUnit')}
                   </Text>
                 </View>
 
-                <Button
-                  secondary
-                  label={tr('teams.membersAndZones')}
-                  onPress={() => setTeam(teamItem)}
-                />
+                <DetailLink label={tr('teams.membersAndZones')} onPress={() => setTeam(teamItem)} />
               </View>
             ))}
-            <Pager offset={offset} total={data.total} size={8} onChange={setOffset} />
+            {data.total > 8 && (
+              <Pager offset={offset} total={data.total} size={8} onChange={setOffset} />
+            )}
           </>
         )}
       </QueryState>
@@ -183,55 +189,59 @@ function CreateTeamModal({
     requestId = useRequestId();
 
   return (
-    <Modal visible={visible} transparent animationType="slide" onRequestClose={onClose}>
-      <KeyboardAvoidingView
-        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-        style={teamStyles.modalOverlay}
-      >
-        <Pressable style={teamStyles.modalBackdrop} onPress={onClose} />
-        <View style={teamStyles.modalSheet}>
-          <View style={teamStyles.modalDragHandle} />
-          <Text style={teamStyles.modalTitle}>{t('teams.createTeam')}</Text>
-
-          <ScrollView showsVerticalScrollIndicator={false}>
-            <Field label={t('teams.newTeamName')} value={name} onChangeText={setName} />
-            <Field
-              label={t('teams.newTeamDesc')}
-              value={description}
-              onChangeText={setDescription}
-              multiline
-            />
-            <ErrorNotice error={command.error} />
-
-            <View style={{ marginTop: 16 }}>
-              <Button
-                label={t('teams.saveTeam')}
-                disabled={command.isPending || !name.trim()}
-                onPress={() =>
-                  command.mutate(async () => {
-                    const input = {
-                      name: required(name, t('teams.newTeamName')),
-                      description: description.trim(),
-                    };
-                    await client.createContractorTeam(token, scope.siteId, scope.contractorId, {
-                      ...input,
-                      requestId: requestId(input),
-                    });
-                    setName('');
-                    setDescription('');
-                    onSuccess?.();
-                    onClose();
-                  })
-                }
-              />
-              <Button secondary label={t('common.cancel')} onPress={onClose} />
-            </View>
-          </ScrollView>
+    <RequestSheet
+      visible={visible}
+      variant="form"
+      title={t('teams.createTeam')}
+      subtitle={scope.contractorName + ' · ' + scope.siteName}
+      icon={<IconUsers size={23} color={colors.primary} />}
+      busy={command.isPending}
+      onClose={onClose}
+      footer={
+        <View style={teamStyles.form}>
+          <ErrorNotice error={command.error} />
+          <Button
+            label={t('teams.saveTeam')}
+            disabled={command.isPending || !name.trim()}
+            onPress={() =>
+              command.mutate(async () => {
+                const input = {
+                  name: required(name, t('teams.newTeamName')),
+                  description: description.trim(),
+                };
+                await client.createContractorTeam(token, scope.siteId, scope.contractorId, {
+                  ...input,
+                  requestId: requestId(input),
+                });
+                setName('');
+                setDescription('');
+                onSuccess?.();
+                onClose();
+              })
+            }
+          />
         </View>
-      </KeyboardAvoidingView>
-    </Modal>
+      }
+    >
+      <FormSection number="01" title={t('teams.details')}>
+        <Field
+          label={t('teams.newTeamName')}
+          value={name}
+          onChangeText={setName}
+          editable={!command.isPending}
+        />
+        <Field
+          label={t('teams.newTeamDesc')}
+          value={description}
+          onChangeText={setDescription}
+          multiline
+          editable={!command.isPending}
+        />
+      </FormSection>
+    </RequestSheet>
   );
 }
+
 function TeamDetail({
   teamId,
   standalone = false,
@@ -243,6 +253,8 @@ function TeamDetail({
 }) {
   useTranslation();
   const { scope, client, token, queryKey } = useWorkspace();
+  const [managing, setManaging] = useState(false);
+  const [archiving, setArchiving] = useState(false);
   const [edit, setEdit] = useState(false),
     [name, setName] = useState(''),
     [description, setDescription] = useState(''),
@@ -288,80 +300,140 @@ function TeamDetail({
         {(t) => (
           <>
             <Card>
-              <Body>
-                {t.name} · {t.isActive ? tr('teams.active') : tr('teams.archived')} ·{' '}
-                {t.memberCount} {tr('teams.membersUnit')}
-              </Body>
+              <View style={teamStyles.teamHeaderRow}>
+                <View style={teamStyles.teamIconBox}>
+                  <IconUsers size={22} color={colors.primary} />
+                </View>
+                <View style={teamStyles.teamInfoCol}>
+                  <Text style={teamStyles.teamNameText}>{t.name}</Text>
+                  <Text style={teamStyles.caption}>
+                    {t.memberCount} {tr('teams.membersUnit')}
+                  </Text>
+                </View>
+                <Text style={teamStyles.badge}>
+                  {t.isActive ? tr('teams.active') : tr('teams.archived')}
+                </Text>
+              </View>
               <Hint>{t.description}</Hint>
               {t.isActive && (
                 <>
                   <Button
                     secondary
-                    label={edit ? tr('teams.closeEditing') : tr('teams.editNameDescription')}
+                    label={tr('teams.editNameDescription')}
                     onPress={() => {
                       setName(t.name);
                       setDescription(t.description);
+                      command.reset();
                       setEdit(!edit);
                     }}
                   />
                   {edit && (
-                    <>
-                      <Field label={tr('teams.teamName')} value={name} onChangeText={setName} />
-                      <Field
-                        label={tr('common.description')}
-                        value={description}
-                        onChangeText={setDescription}
-                        multiline
-                      />
-                      <Button
-                        label={tr('teams.saveChanges')}
-                        disabled={command.isPending || !name.trim()}
-                        onPress={() =>
-                          command.mutate(async () => {
-                            await client.updateContractorTeam(
-                              token,
-                              scope.siteId,
-                              scope.contractorId,
-                              t.id,
-                              {
-                                expectedVersion: t.version,
-                                name: required(name, tr('validation.teamNameLabel')),
-                                description,
-                              },
-                            );
-                            setEdit(false);
-                          })
-                        }
-                      />
-                    </>
-                  )}
-                  <Disclosure title={tr('contractorUi.archiveTeam')}>
-                    <Field
-                      label={tr('teams.membershipReason')}
-                      value={reason}
-                      onChangeText={setReason}
-                    />
-                    <Button
-                      secondary
-                      label={tr('teams.archiveEmpty')}
-                      disabled={command.isPending || t.memberCount > 0 || !reason.trim()}
-                      onPress={() =>
-                        command.mutate(async () => {
-                          await client.archiveContractorTeam(
-                            token,
-                            scope.siteId,
-                            scope.contractorId,
-                            t.id,
-                            {
-                              expectedVersion: t.version,
-                              reason: required(reason, tr('validation.reasonLabel')),
-                            },
-                          );
-                          onBack();
-                        })
+                    <RequestSheet
+                      visible
+                      variant="form"
+                      title={tr('teams.editNameDescription')}
+                      subtitle={t.name}
+                      icon={<IconUsers size={23} color={colors.primary} />}
+                      busy={command.isPending}
+                      onClose={() => setEdit(false)}
+                      footer={
+                        <View style={teamStyles.form}>
+                          <ErrorNotice error={command.error} />
+                          <Button
+                            label={tr('teams.saveChanges')}
+                            disabled={command.isPending || !name.trim()}
+                            onPress={() =>
+                              command.mutate(async () => {
+                                await client.updateContractorTeam(
+                                  token,
+                                  scope.siteId,
+                                  scope.contractorId,
+                                  t.id,
+                                  {
+                                    expectedVersion: t.version,
+                                    name: required(name, tr('validation.teamNameLabel')),
+                                    description,
+                                  },
+                                );
+                                setEdit(false);
+                              })
+                            }
+                          />
+                        </View>
                       }
-                    />
-                  </Disclosure>
+                    >
+                      <FormSection number="01" title={tr('teams.details')}>
+                        <View
+                          pointerEvents={command.isPending ? 'none' : 'auto'}
+                          style={teamStyles.form}
+                        >
+                          <Field label={tr('teams.teamName')} value={name} onChangeText={setName} />
+                          <Field
+                            label={tr('common.description')}
+                            value={description}
+                            onChangeText={setDescription}
+                            multiline
+                          />
+                        </View>
+                      </FormSection>
+                    </RequestSheet>
+                  )}
+                  <Button
+                    secondary
+                    label={tr('contractorUi.archiveTeam')}
+                    onPress={() => {
+                      setReason('');
+                      setArchiving(true);
+                      command.reset();
+                    }}
+                  />
+                  {archiving && (
+                    <RequestSheet
+                      visible
+                      variant="form"
+                      title={tr('contractorUi.archiveTeam')}
+                      subtitle={t.name}
+                      icon={<IconUsers size={23} color={colors.primary} />}
+                      busy={command.isPending}
+                      onClose={() => setArchiving(false)}
+                      footer={
+                        <View style={teamStyles.form}>
+                          <ErrorNotice error={command.error} />
+                          <Button
+                            secondary
+                            label={tr('teams.archiveEmpty')}
+                            disabled={command.isPending || t.memberCount > 0 || !reason.trim()}
+                            onPress={() =>
+                              command.mutate(async () => {
+                                await client.archiveContractorTeam(
+                                  token,
+                                  scope.siteId,
+                                  scope.contractorId,
+                                  t.id,
+                                  {
+                                    expectedVersion: t.version,
+                                    reason: required(reason, tr('validation.reasonLabel')),
+                                  },
+                                );
+                                onBack();
+                              })
+                            }
+                          />
+                        </View>
+                      }
+                    >
+                      <FormSection number="01" title={tr('contractorUi.archiveTeam')}>
+                        <Hint>{tr('teams.archiveHint')}</Hint>
+                        <Field
+                          label={tr('teams.membershipReason')}
+                          value={reason}
+                          onChangeText={setReason}
+                          multiline
+                          editable={!command.isPending}
+                        />
+                      </FormSection>
+                    </RequestSheet>
+                  )}
                 </>
               )}
             </Card>
@@ -372,70 +444,111 @@ function TeamDetail({
                   {members
                     .filter((w) => w.teamId === teamId)
                     .map((w) => (
-                      <Body key={w.workerId}>{w.displayName}</Body>
+                      <View key={w.workerId} style={teamStyles.memberRow}>
+                        <View style={teamStyles.memberInitial}>
+                          <Text style={teamStyles.memberLetter}>
+                            {w.displayName.slice(0, 1).toUpperCase()}
+                          </Text>
+                        </View>
+                        <Text style={teamStyles.memberName}>{w.displayName}</Text>
+                      </View>
                     ))}
                   {!members.some((w) => w.teamId === teamId) && (
                     <Hint>{tr('teams.noMembers')}</Hint>
                   )}
                   {t.isActive && (
-                    <Disclosure title={tr('contractorUi.manageMembers')}>
-                      <Field
-                        label={tr('teams.membershipReason')}
-                        value={reason}
-                        onChangeText={setReason}
-                      />
-                      <Choice
-                        label={tr('teams.workerToMove')}
-                        value={workerId}
-                        onChange={setWorkerId}
-                        options={members.map((w) => ({
-                          value: w.workerId,
-                          label: `${w.displayName} · ${w.teamName ?? tr('teams.unassigned')}`,
-                        }))}
-                      />
-                      <QueryState query={teams}>
-                        {(list) => (
-                          <Choice
-                            label={tr('teams.targetTeam')}
-                            value={targetTeam}
-                            onChange={setTargetTeam}
-                            options={[
-                              { value: '', label: tr('teams.removeFromCurrent') },
-                              ...list.map((v) => ({ value: v.id, label: v.name })),
-                            ]}
-                          />
-                        )}
-                      </QueryState>
+                    <>
                       <Button
-                        label={tr('teams.confirmMembership')}
-                        disabled={
-                          command.isPending ||
-                          !worker ||
-                          targetTeam === worker.teamId ||
-                          (!targetTeam && !worker.membershipId)
-                        }
-                        onPress={() =>
-                          command.mutate(async () => {
-                            if (!worker) throw new Error(tr('validation.chooseWorker'));
-                            if (worker.membershipId)
-                              required(reason, tr('validation.transferReasonLabel'));
-                            const input = {
-                              teamId: targetTeam || null,
-                              expectedMembershipId: worker.membershipId,
-                              ...(worker.membershipId ? { reason: reason.trim() } : {}),
-                            };
-                            await client.assignContractorTeam(
-                              token,
-                              scope.siteId,
-                              scope.contractorId,
-                              worker.workerId,
-                              { ...input, requestId: requestId([worker.workerId, input]) },
-                            );
-                            setWorkerId('');
-                          })
-                        }
+                        secondary
+                        label={tr('contractorUi.manageMembers')}
+                        onPress={() => {
+                          setReason('');
+                          command.reset();
+                          setManaging(true);
+                        }}
                       />
-                    </Disclosure>
+                      {managing && (
+                        <RequestSheet
+                          visible
+                          variant="form"
+                          title={tr('contractorUi.manageMembers')}
+                          subtitle={t.name}
+                          icon={<IconUsers size={23} color={colors.primary} />}
+                          busy={command.isPending}
+                          onClose={() => setManaging(false)}
+                          footer={
+                            <View style={teamStyles.form}>
+                              <ErrorNotice error={command.error} />
+                              <Button
+                                label={tr('teams.confirmMembership')}
+                                disabled={
+                                  command.isPending ||
+                                  !worker ||
+                                  targetTeam === worker.teamId ||
+                                  (!targetTeam && !worker.membershipId)
+                                }
+                                onPress={() =>
+                                  command.mutate(async () => {
+                                    if (!worker) throw new Error(tr('validation.chooseWorker'));
+                                    if (worker.membershipId)
+                                      required(reason, tr('validation.transferReasonLabel'));
+                                    const input = {
+                                      teamId: targetTeam || null,
+                                      expectedMembershipId: worker.membershipId,
+                                      ...(worker.membershipId ? { reason: reason.trim() } : {}),
+                                    };
+                                    await client.assignContractorTeam(
+                                      token,
+                                      scope.siteId,
+                                      scope.contractorId,
+                                      worker.workerId,
+                                      { ...input, requestId: requestId([worker.workerId, input]) },
+                                    );
+                                    setWorkerId('');
+                                    setManaging(false);
+                                  })
+                                }
+                              />
+                            </View>
+                          }
+                        >
+                          <FormSection number="01" title={tr('teams.currentMembers')}>
+                            <View
+                              pointerEvents={command.isPending ? 'none' : 'auto'}
+                              style={teamStyles.form}
+                            >
+                              <Field
+                                label={tr('teams.membershipReason')}
+                                value={reason}
+                                onChangeText={setReason}
+                              />
+                              <Choice
+                                label={tr('teams.workerToMove')}
+                                value={workerId}
+                                onChange={setWorkerId}
+                                options={members.map((w) => ({
+                                  value: w.workerId,
+                                  label: `${w.displayName} · ${w.teamName ?? tr('teams.unassigned')}`,
+                                }))}
+                              />
+                              <QueryState query={teams}>
+                                {(list) => (
+                                  <Choice
+                                    label={tr('teams.targetTeam')}
+                                    value={targetTeam}
+                                    onChange={setTargetTeam}
+                                    options={[
+                                      { value: '', label: tr('teams.removeFromCurrent') },
+                                      ...list.map((v) => ({ value: v.id, label: v.name })),
+                                    ]}
+                                  />
+                                )}
+                              </QueryState>
+                            </View>
+                          </FormSection>
+                        </RequestSheet>
+                      )}
+                    </>
                   )}
                 </Card>
               )}
@@ -450,6 +563,7 @@ function TeamDetail({
 function TeamZones({ teamId }: { teamId: string }) {
   useTranslation();
   const { scope, client, token, queryKey } = useWorkspace();
+  const [managing, setManaging] = useState(false);
   const [permission, setPermission] = useState(''),
     [from, setFrom] = useState(''),
     [to, setTo] = useState('');
@@ -461,12 +575,13 @@ function TeamZones({ teamId }: { teamId: string }) {
   });
   const timezone = Intl.DateTimeFormat().resolvedOptions().timeZone;
   return (
-    <Disclosure title={tr('teams.zones')}>
+    <FormSection title={tr('teams.zones')}>
       <QueryState query={query}>
         {(data) => {
           const current = data.permissions.find((p) => !p.revokedAt);
           return (
             <>
+              {!data.permissions.length && <Hint>{tr('access.noZones')}</Hint>}
               {data.permissions.map((p) => (
                 <Card key={p.id}>
                   <Body>
@@ -500,81 +615,157 @@ function TeamZones({ teamId }: { teamId: string }) {
                   )}
                 </Card>
               ))}
-              <Choice
-                label={tr('teams.contractorZone')}
-                value={permission}
-                options={data.availableZones.map((p) => ({ value: p.permissionId, label: p.name }))}
-                onChange={(v) => {
-                  setPermission(v);
-                  const p = data.availableZones.find((vv) => vv.permissionId === v);
-                  if (p) {
-                    setFrom(localDate(new Date(p.validFrom), timezone));
-                    setTo(localDate(new Date(Date.parse(p.validUntil) - 1), timezone));
-                  }
+              <Button
+                secondary
+                label={current ? tr('teams.updateZone') : tr('teams.grantZone')}
+                onPress={() => {
+                  setPermission('');
+                  setFrom('');
+                  setTo('');
+                  command.reset();
+                  setManaging(true);
                 }}
               />
-              <Field label={tr('teams.validFromDate')} value={from} onChangeText={setFrom} />
-              <Field label={tr('teams.validUntilDate')} value={to} onChangeText={setTo} />
-              <Hint>
-                {tr('teams.timezone')} {timezone}
-                {tr('teams.zoneValidityHint')}
-              </Hint>
               <ErrorNotice error={command.error} />
-              <Button
-                label={current ? tr('teams.updateZone') : tr('teams.grantZone')}
-                disabled={command.isPending || !permission || !from || !to}
-                onPress={() =>
-                  command.mutate(async () => {
-                    validDates(from, to);
-                    const input = {
-                      contractorZonePermissionId: permission,
-                      startDate: from,
-                      endDate: to,
-                      timezone,
-                    };
-                    const commandInput = { ...input, requestId: requestId([current?.id, input]) };
-                    if (current)
-                      await client.updateTeamZone(
-                        token,
-                        scope.siteId,
-                        scope.contractorId,
-                        teamId,
-                        current.id,
-                        commandInput,
-                      );
-                    else
-                      await client.grantTeamZone(
-                        token,
-                        scope.siteId,
-                        scope.contractorId,
-                        teamId,
-                        commandInput,
-                      );
-                  })
-                }
-              />
+              {managing && (
+                <RequestSheet
+                  visible
+                  variant="form"
+                  title={current ? tr('teams.updateZone') : tr('teams.grantZone')}
+                  subtitle={scope.contractorName}
+                  icon={<IconUsers size={23} color={colors.primary} />}
+                  busy={command.isPending}
+                  onClose={() => setManaging(false)}
+                  footer={
+                    <View style={teamStyles.form}>
+                      <ErrorNotice error={command.error} />
+                      <Button
+                        label={current ? tr('teams.updateZone') : tr('teams.grantZone')}
+                        disabled={command.isPending || !permission || !from || !to}
+                        onPress={() =>
+                          command.mutate(async () => {
+                            validDates(from, to);
+                            const input = {
+                              contractorZonePermissionId: permission,
+                              startDate: from,
+                              endDate: to,
+                              timezone,
+                            };
+                            const commandInput = {
+                              ...input,
+                              requestId: requestId([current?.id, input]),
+                            };
+                            if (current)
+                              await client.updateTeamZone(
+                                token,
+                                scope.siteId,
+                                scope.contractorId,
+                                teamId,
+                                current.id,
+                                commandInput,
+                              );
+                            else
+                              await client.grantTeamZone(
+                                token,
+                                scope.siteId,
+                                scope.contractorId,
+                                teamId,
+                                commandInput,
+                              );
+                            setManaging(false);
+                          })
+                        }
+                      />
+                    </View>
+                  }
+                >
+                  <FormSection number="01" title={tr('teams.zones')}>
+                    <View
+                      pointerEvents={command.isPending ? 'none' : 'auto'}
+                      style={teamStyles.form}
+                    >
+                      <Choice
+                        label={tr('teams.contractorZone')}
+                        value={permission}
+                        options={data.availableZones.map((p) => ({
+                          value: p.permissionId,
+                          label: p.name,
+                        }))}
+                        onChange={(v) => {
+                          setPermission(v);
+                          const p = data.availableZones.find((vv) => vv.permissionId === v);
+                          if (p) {
+                            setFrom(localDate(new Date(p.validFrom), timezone));
+                            setTo(localDate(new Date(Date.parse(p.validUntil) - 1), timezone));
+                          }
+                        }}
+                      />
+                      <CalendarDateField
+                        label={tr('teams.validFromLabel')}
+                        value={from}
+                        onChange={setFrom}
+                        disabled={command.isPending}
+                      />
+                      <CalendarDateField
+                        label={tr('teams.validUntilLabel')}
+                        value={to}
+                        onChange={setTo}
+                        disabled={command.isPending}
+                      />
+                      <Hint>
+                        {tr('teams.timezone')} {timezone}
+                        {tr('teams.zoneValidityHint')}
+                      </Hint>
+                    </View>
+                  </FormSection>
+                </RequestSheet>
+              )}
             </>
           );
         }}
       </QueryState>
-    </Disclosure>
+    </FormSection>
   );
 }
 
 const teamStyles = StyleSheet.create({
+  caption: { fontSize: 12, lineHeight: 20, color: colors.textMuted },
+  form: { gap: 12 },
+  badge: {
+    fontSize: 12,
+    lineHeight: 18,
+    color: colors.textSecondary,
+    backgroundColor: colors.surfaceSubtle,
+    padding: 8,
+    borderRadius: 8,
+    overflow: 'hidden',
+  },
+  memberRow: {
+    minHeight: 48,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    paddingVertical: 6,
+    borderBottomWidth: 1,
+    borderBottomColor: colors.borderLight,
+  },
+  memberInitial: {
+    width: 34,
+    height: 34,
+    borderRadius: 11,
+    backgroundColor: colors.primaryLight,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  memberLetter: { fontSize: 13, fontWeight: '600', color: colors.primaryHover },
+  memberName: { flex: 1, fontSize: 14, lineHeight: 22, color: colors.textPrimary },
   teamCard: {
     backgroundColor: '#FFFFFF',
-    borderRadius: 20,
+    borderRadius: 18,
     padding: 16,
-    marginBottom: 12,
-    borderWidth: StyleSheet.hairlineWidth,
-    borderColor: '#EFF2F6',
+    borderWidth: 1,
+    borderColor: colors.border,
     gap: 12,
-    shadowColor: '#000000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.04,
-    shadowRadius: 6,
-    elevation: 1,
   },
   teamHeaderRow: {
     flexDirection: 'row',
@@ -598,13 +789,10 @@ const teamStyles = StyleSheet.create({
     flexBasis: 120,
   },
   teamNameText: {
-    fontSize: 16,
-    fontWeight: '800',
+    fontSize: 15,
+    lineHeight: 23,
+    fontWeight: '700',
     color: '#0F1E36',
-  },
-  teamDescText: {
-    fontSize: 12,
-    color: '#64748B',
   },
   statusPill: {
     flexDirection: 'row',
@@ -636,40 +824,5 @@ const teamStyles = StyleSheet.create({
     fontSize: 12,
     fontWeight: '600',
     color: '#475569',
-  },
-  modalOverlay: {
-    flex: 1,
-    justifyContent: 'flex-end',
-    backgroundColor: 'rgba(0, 0, 0, 0.45)',
-  },
-  modalBackdrop: {
-    position: 'absolute',
-    top: 0,
-    left: 0,
-    right: 0,
-    bottom: 0,
-  },
-  modalSheet: {
-    backgroundColor: '#FFFFFF',
-    borderTopLeftRadius: 28,
-    borderTopRightRadius: 28,
-    paddingHorizontal: 20,
-    paddingBottom: Platform.OS === 'ios' ? 36 : 24,
-    paddingTop: 12,
-    maxHeight: '85%',
-  },
-  modalDragHandle: {
-    width: 40,
-    height: 4,
-    borderRadius: 2,
-    backgroundColor: '#CBD5E1',
-    alignSelf: 'center',
-    marginBottom: 14,
-  },
-  modalTitle: {
-    fontSize: 18,
-    fontWeight: '800',
-    color: '#0F1E36',
-    marginBottom: 14,
   },
 });

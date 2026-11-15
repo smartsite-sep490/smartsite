@@ -356,7 +356,7 @@ test('normal upgrade rolls every cleanup back for an unexpected dependency, then
     );
 
     await runner.query('DROP VIEW external_legacy_dependency');
-    assert.equal((await source.runMigrations()).length, 4);
+    assert.equal((await source.runMigrations()).length, source.migrations.length - previous.length);
     for (const table of retired) assert.equal(await runner.hasTable(table), false, table);
     assert.equal(
       (await runner.query('SELECT confirmed_minutes FROM attendance_day WHERE id=$1', [f.day]))[0]

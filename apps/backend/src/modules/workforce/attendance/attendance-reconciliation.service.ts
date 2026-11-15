@@ -520,6 +520,8 @@ export class AttendanceReconciliationService implements OnModuleInit, OnModuleDe
       day.deductedMinutes = 0;
     }
     const anomalies: string[] = [];
+    const pendingLeave = leaves.some((r) => r.status === 'PENDING_MANAGER');
+    if (pendingLeave) anomalies.push('PENDING_LEAVE');
     if (!day.scheduleId) anomalies.push('NO_SCHEDULE');
     if (schedules.length > 1) anomalies.push('MULTIPLE_SHIFTS');
     const currentSchedule = day.scheduleId
