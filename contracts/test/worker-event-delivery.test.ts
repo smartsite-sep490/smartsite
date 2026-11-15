@@ -147,3 +147,45 @@ test('envelope rejects an event changed by a hidden serializer after validation'
     );
   }
 });
+
+test('delivery parser accepts every advertised observation version', () => {
+  for (const schemaVersion of ['1.0.0', '1.1.0', '1.2.0', '1.3.0', '1.4.0']) {
+    const observation = {
+      ...event,
+      schemaVersion,
+      observations:
+        schemaVersion === '1.4.0'
+          ? [{ type: 'PERSON', trackId: 7 }, ...event.observations]
+          : event.observations,
+      ...(schemaVersion === '1.4.0'
+        ? {
+            framePartition: {
+              frameId: event.eventId,
+              sequenceNumber: '1',
+              partIndex: 0,
+              partCount: 1,
+            },
+          }
+        : {}),
+    };
+    const parsed = api.parseWorkerEventDeliveryEnvelope({
+      schemaVersion: '1.0.0',
+      context,
+      event: observation,
+    });
+    assert.ok(parsed, 'Advertised observation version must be accepted: ' + schemaVersion);
+    assert.deepEqual(parsed.event, observation);
+  }
+});
+
+test('delivery session comparison accepts UUID letter case without rewriting raw event', () => {
+  const streamSessionId = 'abcdefab-abcd-4abc-8abc-abcdefabcdef';
+  const observation = { ...event, streamSessionId: streamSessionId.toUpperCase() };
+  const parsed = api.parseWorkerEventDeliveryEnvelope({
+    schemaVersion: '1.0.0',
+    context: { ...context, streamSessionId },
+    event: observation,
+  });
+  assert.ok(parsed);
+  assert.deepEqual(parsed.event, observation);
+});

@@ -2,6 +2,7 @@ import { Buffer } from 'node:buffer';
 import { computeCanonicalPayloadHash } from './hashing/canonical-hash.js';
 import {
   validateObservationEvent,
+  validateEightFamilyObservationEvent,
   validatePartitionedObservationEvent,
 } from './validation/schema-validator.js';
 
@@ -71,6 +72,11 @@ export function parseWorkerEventDeliveryContext(value: unknown): WorkerEventDeli
   return { ...value } as unknown as WorkerEventDeliveryContext;
 }
 
+function validateDeliveredEvent(event: Record<string, unknown>) {
+  if (event.schemaVersion === '1.4.0') return validatePartitionedObservationEvent(event);
+  if (event.schemaVersion === '1.3.0') return validateEightFamilyObservationEvent(event);
+  return validateObservationEvent(event);
+}
 /** Envelope budget is shared with event content; raw event remains unchanged. */
 export function parseWorkerEventDeliveryEnvelope(
   value: unknown,
@@ -86,24 +92,24 @@ export function parseWorkerEventDeliveryEnvelope(
     if (
       !originalContext ||
       !object(value.event) ||
-      value.event.streamSessionId !== originalContext.streamSessionId
+      typeof value.event.streamSessionId !== 'string' ||
+      value.event.streamSessionId.toLowerCase() !== originalContext.streamSessionId
     )
       return null;
-    const originalValidation =
-      value.event.schemaVersion === '1.4.0'
-        ? validatePartitionedObservationEvent(value.event)
-        : validateObservationEvent(value.event);
+    const originalValidation = validateDeliveredEvent(value.event);
     if (!originalValidation.isValid) return null;
     const serialized = JSON.stringify(value);
     if (Buffer.byteLength(serialized, 'utf8') > 1024 * 1024) return null;
     const copy: Record<string, unknown> = JSON.parse(serialized);
     const context = parseWorkerEventDeliveryContext(copy.context);
-    if (!context || !object(copy.event) || copy.event.streamSessionId !== context.streamSessionId)
+    if (
+      !context ||
+      !object(copy.event) ||
+      typeof copy.event.streamSessionId !== 'string' ||
+      copy.event.streamSessionId.toLowerCase() !== context.streamSessionId
+    )
       return null;
-    const validation =
-      copy.event.schemaVersion === '1.4.0'
-        ? validatePartitionedObservationEvent(copy.event)
-        : validateObservationEvent(copy.event);
+    const validation = validateDeliveredEvent(copy.event);
     if (!validation.isValid) return null;
     return { schemaVersion: '1.0.0', context, event: copy.event };
   } catch {
