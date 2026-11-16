@@ -314,9 +314,11 @@ export function SafetyEpisodeInbox({
               >
                 <span className="flex items-center justify-between gap-2">
                   <strong>
-                    {t('episodes.subject', {
-                      number: row.episode.subject.personObservationIndex + 1,
-                    })}
+                    {row.episode.subject.kind === 'EVENT_LOCAL'
+                      ? t('episodes.subject', {
+                          number: row.episode.subject.personObservationIndex + 1,
+                        })
+                      : t('episodes.trackedSubject')}
                   </strong>
                   <span className="text-xs">
                     {t(row.unread ? 'episodes.unread' : 'episodes.read')}

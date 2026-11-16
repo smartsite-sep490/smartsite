@@ -4021,6 +4021,7 @@
   "episodes.empty": "No episodes in this scope yet.",
   "episodes.list": "Episode list",
   "episodes.subject": "Subject {{number}}",
+  "episodes.trackedSubject": "Tracked person",
   "episodes.findings": "{{count}} findings",
   "episodes.more": "Load more episodes",
   "episodes.detail": "Episode detail",
