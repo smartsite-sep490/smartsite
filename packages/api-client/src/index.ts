@@ -17,7 +17,7 @@ export type {
   AttendanceSummaryResponse,
 } from '@smartsite/contracts';
 export { SmartSiteManagementClient } from './management';
-export type { ManagementSession } from './management';
+export type { ManagementSession, SavedPpePolicy, PpePolicySaveReceipt } from './management';
 export type { NativeUploadFile, UploadFile } from './management';
 export type { SafetyAlertListOptions, ZoneEntryDecisionListOptions } from './management';
 export type {

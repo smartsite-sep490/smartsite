@@ -339,6 +339,7 @@
   "shell.access": "Kiểm soát ra vào",
   "shell.safety": "An toàn",
   "shell.live": "Giám sát trực tiếp",
+  "shell.cameraSetup": "Thiết lập camera",
   "shell.ppe": "Giám sát bảo hộ",
   "shell.zones": "Khu vực hạn chế",
   "shell.incidents": "Xử lý an toàn",

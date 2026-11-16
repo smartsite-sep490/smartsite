@@ -1,5 +1,5 @@
 import { translate as tr } from './i18n';
-import React, { useState } from 'react';
+import React, { lazy, Suspense, useState } from 'react';
 import { Routes, Route, Navigate, useNavigate, useLocation } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import {
@@ -8,6 +8,7 @@ import {
   type SafetyAlertType,
 } from '@smartsite/api-client';
 import { AppLayout, type ActiveTab } from './components/layout/AppLayout';
+import { CameraSetupBoundary } from './components/cameras/CameraSetupBoundary';
 import { LiveMonitoringView } from './components/live/LiveMonitoringView';
 import { RestrictedZoneView } from './components/zones/RestrictedZoneView';
 import { PpeMonitoringView } from './components/ppe/PpeMonitoringView';
@@ -46,6 +47,12 @@ interface AlertsNavigationContext {
   alertId?: string;
   status?: SafetyAlertStatus;
 }
+
+const CameraSetupRoute = lazy(() =>
+  import('./components/cameras/CameraSetupRoute').then(({ CameraSetupRoute }) => ({
+    default: CameraSetupRoute,
+  })),
+);
 
 interface ProtectedRoutesProps {
   defaultAuthTab: string;
@@ -155,6 +162,16 @@ function ProtectedRoutes({ defaultAuthTab, alertsContext, onNavigate }: Protecte
         <Route
           path="/ppe"
           element={<PpeMonitoringView onNavigate={(tab, context) => onNavigate(tab, context)} />}
+        />
+        <Route
+          path="/camera-setup"
+          element={
+            <CameraSetupBoundary>
+              <Suspense fallback={<p role="status">{t('auth.loadingAccount')}</p>}>
+                <CameraSetupRoute apiUrl={apiUrl} />
+              </Suspense>
+            </CameraSetupBoundary>
+          }
         />
         <Route
           path="/zones"
