@@ -8,7 +8,7 @@ Both `AI_TRACKED_FRAME_RUNTIME_ENABLED` and `SAFETY_TRACKED_HISTORY_READ_ENABLED
 
 Enabling either requires:
 
-- `SMARTSITE_DB_MIGRATION_PROFILE=tracked-v16` and an explicit reviewed `DATABASE_SCHEMA` (`^[a-z_][a-z0-9_]{0,62}$`, excluding `pg_*` and `information_schema`).
+- `SMARTSITE_DB_MIGRATION_PROFILE=tracked-v16` and an explicit reviewed `DATABASE_SCHEMA` (`^[a-z_][a-z0-9_]{0,62}$`, excluding `pg_*` and `information_schema`). The separately reviewed `tracked-v16-identification` profile includes this same tracked foundation plus the two optional C02 tables; see the [identification workflow guide](safety-identification-workflow.md).
 - The approved target schema must already exist and contain the optional migrations (`1795046400002-WorkerEventAdmission`, `1795046400003-TrackedSubjectStorage`, `1795046400004-TrackedPendingRecoveryIndex`, and `1795046400008-TrackedWireGenerationFence`). Startup never runs migrations or enables `synchronize`.
 - The runtime connection and migration CLI share `buildMigrationOptions()`, while `typeorm.data-source.ts` reads `SMARTSITE_DB_MIGRATION_PROFILE` and `DATABASE_SCHEMA` from the process environment during `db:migrate:*` runs. Connection URL `options` overrides and reserved schemas are refused.
 

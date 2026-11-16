@@ -12,9 +12,24 @@ import {
   type TrackedEpisodeMediaSource,
   type TrackedEpisodeMediaRepresentation,
 } from '@smartsite/contracts/tracked-episode-frames';
+import type {
+  CreateSafetyIdentificationRequest,
+  ReassignSafetyIdentificationRequest,
+  RespondSafetyIdentificationRequest,
+  ReviewSafetyIdentificationRequest,
+  SafetyIdentificationAssignee,
+  SafetyIdentificationEvidencePreview,
+  SafetyIdentificationHistoryPage,
+  SafetyIdentificationMutation,
+  SafetyIdentificationRequest,
+  SafetyIdentificationRequestPage,
+  SafetyIdentificationStatus,
+  SafetyIdentificationVersionCommand,
+} from '@smartsite/contracts/safety-identification';
 import {
   trackedEpisodeMediaPath,
   readTrackedEpisodeMediaResponse,
+  readSafetyEvidenceJpeg,
   type TrackedEpisodeMediaResult,
 } from './tracked-episode-media-response';
 import {
@@ -2034,6 +2049,199 @@ export class SmartSiteManagementClient {
         signal,
       );
     });
+  }
+
+  previewSafetyIdentificationEvidence(
+    token: string,
+    siteId: string,
+    input: SafetyIdentificationEvidencePreview,
+    expectedFrameSha256: string,
+    options?: RequestOptions,
+  ) {
+    if (!/^[a-f0-9]{64}$/.test(expectedFrameSha256))
+      throw new ApiError('invalid-response', 'Invalid evidence source digest.');
+    return this.requestSafetyIdentificationJpeg(
+      token,
+      `/sites/${pathId(siteId)}/safety-identification-requests/evidence-preview`,
+      expectedFrameSha256,
+      input,
+      options,
+    );
+  }
+
+  readSafetyIdentificationEvidence(
+    token: string,
+    siteId: string,
+    requestId: string,
+    evidenceId: string,
+    options?: RequestOptions,
+  ) {
+    return this.requestSafetyIdentificationJpeg(
+      token,
+      `/sites/${pathId(siteId)}/safety-identification-requests/${pathId(requestId)}/evidence/${pathId(evidenceId)}`,
+      null,
+      undefined,
+      options,
+    );
+  }
+
+  private requestSafetyIdentificationJpeg(
+    token: string,
+    path: string,
+    expectedFrameSha256: string | null,
+    input?: SafetyIdentificationEvidencePreview,
+    options?: RequestOptions,
+  ) {
+    const sessionScopes = captureSessionScopes(token);
+    return this.runRequest(this.requestOptions(token, options), async (signal) => {
+      const started = performance.now();
+      const response = await this.fetchAuthenticated(
+        path,
+        token,
+        {
+          method: input ? 'POST' : 'GET',
+          headers: input
+            ? { Accept: 'image/jpeg', 'Content-Type': 'application/json' }
+            : { Accept: 'image/jpeg' },
+          ...(input ? { body: JSON.stringify(input) } : {}),
+          cache: 'no-store',
+          redirect: 'error',
+        },
+        signal,
+        true,
+      );
+      if (!response.ok) {
+        if (!this.session && response.status === 401 && sessionScopes.length)
+          dispatchSessionExpired(sessionScopes);
+        return this.responseError(response, signal, 4096);
+      }
+      const image = await readSafetyEvidenceJpeg(
+        response,
+        expectedFrameSha256,
+        null,
+        (read, currentSignal) => this.readBody(read, currentSignal),
+        signal,
+      );
+      if (input) return { ...image, validUntil: null };
+      const ttl = response.headers.get('x-smartsite-evidence-ttl-ms');
+      const validUntil = started + Number(ttl);
+      if (
+        !ttl ||
+        !/^\d{1,10}$/.test(ttl) ||
+        Number(ttl) > 3_600_000 ||
+        validUntil <= performance.now()
+      )
+        throw new ApiError('invalid-response', 'Invalid or expired evidence lifetime.');
+      return { ...image, validUntil };
+    });
+  }
+
+  getSafetyIdentificationAssignee(token: string, siteId: string, requestOptions?: RequestOptions) {
+    return this.request<{ assignee: SafetyIdentificationAssignee | null }>(
+      'GET',
+      `/sites/${pathId(siteId)}/safety-identification-requests/assignee`,
+      token,
+      undefined,
+      undefined,
+      requestOptions,
+    );
+  }
+
+  listSafetyIdentificationRequests(
+    token: string,
+    siteId: string,
+    options: PageOptions & { status?: SafetyIdentificationStatus } = {},
+    requestOptions?: RequestOptions,
+  ): Promise<SafetyIdentificationRequestPage> {
+    const query = new URLSearchParams();
+    if (options.offset !== undefined) query.set('offset', String(options.offset));
+    if (options.limit !== undefined) query.set('limit', String(options.limit));
+    if (options.status !== undefined) query.set('status', options.status);
+    const path = `/sites/${pathId(siteId)}/safety-identification-requests`;
+    return this.request(
+      'GET',
+      `${path}${query.size ? `?${query}` : ''}`,
+      token,
+      undefined,
+      undefined,
+      requestOptions,
+    );
+  }
+
+  listSafetyIdentificationHistory(
+    token: string,
+    siteId: string,
+    id: string,
+    options: PageOptions = {},
+    requestOptions?: RequestOptions,
+  ): Promise<SafetyIdentificationHistoryPage> {
+    const query = new URLSearchParams();
+    if (options.offset !== undefined) query.set('offset', String(options.offset));
+    if (options.limit !== undefined) query.set('limit', String(options.limit));
+    const path = `/sites/${pathId(siteId)}/safety-identification-requests/${pathId(id)}/history`;
+    return this.request(
+      'GET',
+      `${path}${query.size ? `?${query}` : ''}`,
+      token,
+      undefined,
+      undefined,
+      requestOptions,
+    );
+  }
+
+  getSafetyIdentificationRequest(
+    token: string,
+    siteId: string,
+    id: string,
+    requestOptions?: RequestOptions,
+  ): Promise<SafetyIdentificationRequest> {
+    return this.request(
+      'GET',
+      `/sites/${pathId(siteId)}/safety-identification-requests/${pathId(id)}`,
+      token,
+      undefined,
+      undefined,
+      requestOptions,
+    );
+  }
+
+  createSafetyIdentificationRequest(
+    token: string,
+    siteId: string,
+    input: CreateSafetyIdentificationRequest,
+    requestOptions?: RequestOptions,
+  ): Promise<SafetyIdentificationMutation> {
+    return this.request(
+      'POST',
+      `/sites/${pathId(siteId)}/safety-identification-requests`,
+      token,
+      input,
+      undefined,
+      requestOptions,
+    );
+  }
+
+  changeSafetyIdentificationRequest(
+    token: string,
+    siteId: string,
+    id: string,
+    command:
+      | { action: 'respond'; input: RespondSafetyIdentificationRequest }
+      | { action: 'review'; input: ReviewSafetyIdentificationRequest }
+      | { action: 'reassign'; input: ReassignSafetyIdentificationRequest }
+      | { action: 'cancel'; input: SafetyIdentificationVersionCommand },
+    requestOptions?: RequestOptions,
+  ): Promise<SafetyIdentificationMutation> {
+    if (!command || !['respond', 'review', 'reassign', 'cancel'].includes(command.action))
+      throw new TypeError('Invalid safety identification action');
+    return this.request(
+      'POST',
+      `/sites/${pathId(siteId)}/safety-identification-requests/${pathId(id)}/${command.action}`,
+      token,
+      command.input,
+      undefined,
+      requestOptions,
+    );
   }
 
   listSafetyEpisodes(

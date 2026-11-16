@@ -1,4 +1,7 @@
 import { SafetyChecklistService } from './safety-checklist.service.js';
+import { SafetyIdentificationController } from './identification/safety-identification.controller.js';
+import { SafetyIdentificationService } from './identification/safety-identification.service.js';
+import { SafetyIdentificationEnabledGuard } from './identification/safety-identification-enabled.guard.js';
 import { SafetyChecklistController } from './safety-checklist.controller.js';
 import { SafetyOverviewService } from './safety-overview.service.js';
 import { SafetyOverviewController } from './safety-overview.controller.js';
@@ -54,6 +57,7 @@ import { ZoneAccessManagementService } from '../zones/zone-access-management.ser
     UsersModule,
   ],
   controllers: [
+    SafetyIdentificationController,
     SafetyEpisodesController,
     SafetyEpisodeInboxController,
     TrackedEpisodeFramesController,
@@ -64,6 +68,8 @@ import { ZoneAccessManagementService } from '../zones/zone-access-management.ser
     SafetyWorkflowController,
   ],
   providers: [
+    SafetyIdentificationService,
+    SafetyIdentificationEnabledGuard,
     SafetyEpisodeProjectionService,
     SafetyEpisodeQueryService,
     {

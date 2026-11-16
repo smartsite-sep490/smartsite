@@ -70,6 +70,23 @@ export async function readTrackedEpisodeMediaResponse(
   readBody: BodyReadRunner,
   signal?: AbortSignal,
 ): Promise<TrackedEpisodeMediaResult> {
+  const image = await readSafetyEvidenceJpeg(
+    response,
+    expectedFrameSha256,
+    representation,
+    readBody,
+    signal,
+  );
+  return { ...image, frameSha256: expectedFrameSha256, representation };
+}
+
+export async function readSafetyEvidenceJpeg(
+  response: Response,
+  expectedFrameSha256: string | null,
+  representation: TrackedEpisodeMediaRepresentation | null,
+  readBody: BodyReadRunner,
+  signal?: AbortSignal,
+) {
   const frameSha256 = response.headers.get('x-smartsite-frame-sha256');
   const sha256 = response.headers.get('x-smartsite-content-sha256');
   const length = response.headers.get('content-length');
@@ -80,7 +97,8 @@ export async function readTrackedEpisodeMediaResponse(
     frameSha256 !== expectedFrameSha256 ||
     !sha256 ||
     !SHA.test(sha256) ||
-    response.headers.get('x-smartsite-media-representation') !== representation ||
+    (representation !== null &&
+      response.headers.get('x-smartsite-media-representation') !== representation) ||
     (representation === 'FRAME' && sha256 !== frameSha256) ||
     (length !== null &&
       (!/^\d+$/.test(length) || Number(length) < 4 || Number(length) > MAX_MEDIA_BYTES))
@@ -138,6 +156,5 @@ export async function readTrackedEpisodeMediaResponse(
     blob: new Blob([bytes.buffer], { type: 'image/jpeg' }),
     sha256,
     frameSha256,
-    representation,
   };
 }

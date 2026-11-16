@@ -1,4 +1,5 @@
 import type { DataSourceOptions } from 'typeorm';
+import { SafetyIdentificationRequests1795046400009 } from './migrations/1795046400009-SafetyIdentificationRequests.js';
 import { WorkerEventAdmission1795046400002 } from './migrations/1795046400002-WorkerEventAdmission.js';
 import { TrackedSubjectStorage1795046400003 } from './migrations/1795046400003-TrackedSubjectStorage.js';
 import { TrackedPendingRecoveryIndex1795046400004 } from './migrations/1795046400004-TrackedPendingRecoveryIndex.js';
@@ -11,7 +12,11 @@ export function buildMigrationOptions(
   selection: { profile?: string; schema?: string; runtime?: boolean } = {},
 ): DataSourceOptions {
   const { profile, schema } = selection;
-  if (profile !== undefined && profile !== 'tracked-v16')
+  if (
+    profile !== undefined &&
+    profile !== 'tracked-v16' &&
+    profile !== 'tracked-v16-identification'
+  )
     throw new Error('Unsupported migration profile');
   const options = buildTypeOrmOptions({
     DATABASE_URL: config.DATABASE_URL,
@@ -43,6 +48,9 @@ export function buildMigrationOptions(
       TrackedSubjectStorage1795046400003,
       TrackedPendingRecoveryIndex1795046400004,
       TrackedWireGenerationFence1795046400008,
+      ...(profile === 'tracked-v16-identification'
+        ? [SafetyIdentificationRequests1795046400009]
+        : []),
     ],
   };
 }
