@@ -6,6 +6,7 @@ import { useQuery } from '@tanstack/react-query';
 import { useManagementClient, useAuth, useCurrentUser } from '../../features/auth/auth-session';
 import { loadAllPages } from '../workforce/load-all-pages';
 import { ManagerContractorDetails } from './ManagerContractorDetails';
+import { ManagerSafetyTaskPanel } from './ManagerSafetyTaskPanel';
 import type { ActiveTab } from '../layout/AppLayout';
 
 export function ManagerDashboardView({
@@ -31,7 +32,8 @@ export function ManagerDashboardView({
   const managed = (sites.data?.items ?? []).filter((site) =>
     user?.roleAssignments.some((role) => role.role === 'SITE_MANAGER' && role.siteId === site.id),
   );
-  const siteId = managed.find((site) => site.id === selection.siteId)?.id ?? managed[0]?.id ?? '';
+  const selectedSite = managed.find((site) => site.id === selection.siteId) ?? managed[0];
+  const siteId = selectedSite?.id ?? '';
   const overview = useQuery({
     queryKey: ['manager-overview', apiUrl, user?.id, siteId, selection.offset],
     queryFn: () =>
@@ -109,6 +111,8 @@ export function ManagerDashboardView({
               {tr('common.refresh')}
             </button>
           </div>
+
+          <ManagerSafetyTaskPanel apiUrl={apiUrl} siteId={siteId} siteName={selectedSite?.name} />
 
           {/* Overview content */}
           {overview.isPending ? (
