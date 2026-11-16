@@ -8,6 +8,8 @@ import { useMutation, useInfiniteQuery, useQueryClient } from '@tanstack/react-q
 import { useNavigate } from 'react-router-dom';
 import { type UserNotificationResponse } from '@smartsite/api-client';
 import { useManagementClient, useAuth } from '../auth/auth-session';
+import { PpeInboxBellPreview } from './PpeInboxBellPreview';
+import { usePpeFrameInboxPreview } from './usePpeFrameInboxPreview';
 import {
   IconBell,
   IconCheck,
@@ -54,11 +56,13 @@ export function NotificationBell({
   userId,
   enabled = true,
   assignedWork = false,
+  ppeInboxSiteIds = [],
 }: {
   apiUrl: string;
   userId: string;
   enabled?: boolean;
   assignedWork?: boolean;
+  ppeInboxSiteIds?: readonly string[];
 }) {
   useTranslation();
 
@@ -80,6 +84,14 @@ export function NotificationBell({
         ? tr('common.notification_deleted')
         : tr('counts.deletedNotifications', { count: deletedCount });
   const hasSession = !!accessToken;
+  const showPpeInbox = enabled && hasSession && !!userId && ppeInboxSiteIds.length > 0;
+  const ppeFrames = usePpeFrameInboxPreview({
+    apiUrl,
+    token: accessToken,
+    userId,
+    siteIds: ppeInboxSiteIds,
+    enabled: showPpeInbox,
+  });
   const key = ['notifications', apiUrl, userId];
 
   const query = useInfiniteQuery({
@@ -156,7 +168,11 @@ export function NotificationBell({
   });
 
   const unavailable = query.isError || !enabled;
-  const count = unavailable ? undefined : data?.unreadCount;
+  const legacyCount = unavailable ? undefined : data?.unreadCount;
+  const count =
+    legacyCount === undefined || (showPpeInbox && !ppeFrames.isSuccess)
+      ? undefined
+      : legacyCount + (showPpeInbox ? (ppeFrames.data?.unreadCount ?? 0) : 0);
   const actionError = markRead.isError || markAll.isError;
   const actionPending =
     markRead.isPending || markAll.isPending || deleteRead.isPending || deleteSingle.isPending;
@@ -239,13 +255,27 @@ export function NotificationBell({
             <button
               type="button"
               className="inline-flex items-center gap-1 rounded-lg px-2.5 py-1 text-xs font-semibold text-slate-600 hover:text-[#071A2B] hover:bg-slate-200/70 focus-visible:outline-2 disabled:opacity-40 disabled:pointer-events-none transition-colors cursor-pointer"
-              disabled={unavailable || !count || actionPending}
+              disabled={unavailable || !legacyCount || actionPending}
               onClick={() => markAll.mutate()}
             >
               <IconCheck className="w-3 h-3 text-[#F66B17]" />
-              <span>{tr('notification_bell.mark_all_as_read')}</span>
+              <span>
+                {tr(
+                  showPpeInbox
+                    ? 'notification_bell.mark_other_as_read'
+                    : 'notification_bell.mark_all_as_read',
+                )}
+              </span>
             </button>
           </div>
+
+          {showPpeInbox && accessToken && open && (
+            <PpeInboxBellPreview
+              query={ppeFrames}
+              siteIds={ppeInboxSiteIds}
+              onNavigate={() => setOpen(false)}
+            />
+          )}
 
           {/* Segmented Filter Control */}
           <div
@@ -438,16 +468,26 @@ export function NotificationBell({
                       </div>
                       <p className="text-xs font-semibold text-slate-600">
                         {readStatus === 'UNREAD'
-                          ? tr('notification_bell.you_have_no_unread_notifications')
-                          : tr('common.no_notifications_yet')}
-                      </p>
-                      <p className="text-[11px] text-slate-400">
-                        {readStatus === 'UNREAD'
-                          ? tr('notification_bell.all_recent_notifications_have_been_reviewed')
+                          ? tr(
+                              showPpeInbox
+                                ? 'notification_bell.no_other_unread_notifications'
+                                : 'notification_bell.you_have_no_unread_notifications',
+                            )
                           : tr(
-                              'notification_bell.updates_regarding_shifts_swaps_and_decisions_will_appear_here',
+                              showPpeInbox
+                                ? 'notification_bell.no_other_notifications_yet'
+                                : 'common.no_notifications_yet',
                             )}
                       </p>
+                      {!showPpeInbox && (
+                        <p className="text-[11px] text-slate-400">
+                          {readStatus === 'UNREAD'
+                            ? tr('notification_bell.all_recent_notifications_have_been_reviewed')
+                            : tr(
+                                'notification_bell.updates_regarding_shifts_swaps_and_decisions_will_appear_here',
+                              )}
+                        </p>
+                      )}
                     </div>
                   )}
 

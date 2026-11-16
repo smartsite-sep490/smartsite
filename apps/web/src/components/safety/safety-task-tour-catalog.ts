@@ -1,8 +1,12 @@
-import { registerFeatureCatalog } from '../../i18n/feature-catalog-registry';
+import {
+  hasRegisteredFeatureKey,
+  registerFeatureCatalog,
+} from '../../i18n/feature-catalog-registry';
 
 const SAFETY_TASK_TOUR_EN = {
   'tour.triggerBtn': 'Guided help',
   'tour.replayBtn': 'Replay guide',
+  'tour.resetBtn': 'Reset guide',
   'tour.invite.aria': 'First-use guided help',
   'tour.invite.prompt': 'New to this workspace? Take a quick guided tour.',
   'tour.invite.startBtn': 'Start guide',
@@ -65,11 +69,30 @@ const SAFETY_TASK_TOUR_EN = {
   'tour.polygon.save.title': 'Save or Cancel',
   'tour.polygon.save.body':
     'Review the drawn region against the reference image, tick the confirmation checkbox, then click Save Region (or Cancel / Esc to close). Any point edit or new reference image requires ticking confirmation again. Saving updates configuration only and does not mean live camera monitoring is active.',
+  'tour.frameInbox.filters.title': 'Filter by Site & Camera',
+  'tour.frameInbox.filters.body':
+    'Narrow the Frame Inbox by authorized Site and Camera, or clear active filters to return to all assigned scopes.',
+  'tour.frameInbox.frameSummary.title': 'One Grouped Frame vs Per-Person Cases',
+  'tour.frameInbox.frameSummary.body':
+    'Each card groups one camera timestamp with separate per-case read acknowledgement and PPE findings. Counts reflect only flagged cases (affected people with recorded checks in this frame) — never a healthy-person total or current live person count.',
+  'tour.frameInbox.mediaEvidence.title': 'Original Frame JPEG vs Person Crop',
+  'tour.frameInbox.mediaEvidence.body':
+    'Open the shared original frame JPEG for full scene context, or toggle an individual mechanical person crop to inspect PPE details without treating crops as verified identity.',
+  'tour.frameInbox.subjectStatus.title': 'Pending, Denied & Unconfirmed Identity',
+  'tour.frameInbox.subjectStatus.body':
+    'Identity stays Unconfirmed (Unknown) until human review. Zone checks distinguish Pending assessment (awaiting authorization check, not denied) from confirmed Denied entries and fail-closed Insufficient evidence.',
+  'tour.frameInbox.caseReview.title': 'Open Case & Return to Frame',
+  'tour.frameInbox.caseReview.body':
+    'Open a person’s case to inspect full episode evidence and findings, then use Back to this frame to return with your Site and Camera filters preserved.',
+  'tour.frameInbox.caseHandoff.title': 'Open Case, Request Identification & Return',
+  'tour.frameInbox.caseHandoff.body':
+    'Open a person’s case to inspect full episode evidence (and request Site Manager identification when enabled), then use Back to this frame to return with your Site and Camera filters preserved.',
 } as const;
 
 const SAFETY_TASK_TOUR_VI: Record<keyof typeof SAFETY_TASK_TOUR_EN, string> = {
   'tour.triggerBtn': 'Hướng dẫn nhanh',
   'tour.replayBtn': 'Xem lại hướng dẫn',
+  'tour.resetBtn': 'Đặt lại hướng dẫn',
   'tour.invite.aria': 'Hướng dẫn sử dụng lần đầu',
   'tour.invite.prompt': 'Mới dùng màn hình này? Xem hướng dẫn nhanh các bước chính.',
   'tour.invite.startBtn': 'Bắt đầu hướng dẫn',
@@ -132,11 +155,32 @@ const SAFETY_TASK_TOUR_VI: Record<keyof typeof SAFETY_TASK_TOUR_EN, string> = {
   'tour.polygon.save.title': 'Lưu hoặc Hủy',
   'tour.polygon.save.body':
     'Kiểm tra vùng vừa vẽ khớp với ảnh tham chiếu, tích ô xác nhận rồi nhấn Lưu vùng (hoặc Hủy / Esc để đóng). Mọi chỉnh sửa điểm hoặc ảnh tham chiếu mới đều cần tích xác nhận lại. Lưu vùng chỉ cập nhật cấu hình, không đồng nghĩa giám sát camera trực tiếp đã hoạt động.',
+  'tour.frameInbox.filters.title': 'Lọc theo Công trường & Camera',
+  'tour.frameInbox.filters.body':
+    'Thu hẹp Hộp thư khung hình theo Công trường và Camera được phân quyền, hoặc xóa bộ lọc đang bật để xem lại toàn bộ phạm vi được giao.',
+  'tour.frameInbox.frameSummary.title': 'Một Khung hình Gộp & Hồ sơ Từng người',
+  'tour.frameInbox.frameSummary.body':
+    'Mỗi thẻ gộp một thời điểm chụp camera với trạng thái xác nhận đã đọc riêng cho từng ca và phát hiện PPE. Số lượng chỉ tính số ca được gắn cờ (người có ghi nhận kiểm tra cần xem xét trong khung hình này — không báo số người trực tiếp hiện tại, tổng số người an toàn hay tổng quân số tại hiện trường).',
+  'tour.frameInbox.mediaEvidence.title': 'Ảnh Gốc Toàn Khung & Ảnh Cắt Từng Người',
+  'tour.frameInbox.mediaEvidence.body':
+    'Mở ảnh JPEG gốc dùng chung để xem toàn cảnh hiện trường, hoặc bật ảnh cắt cơ học của từng người để kiểm tra PPE mà không coi ảnh cắt là danh tính đã xác minh.',
+  'tour.frameInbox.subjectStatus.title': 'Đang chờ, Từ chối & Danh tính Chưa xác nhận',
+  'tour.frameInbox.subjectStatus.body':
+    'Danh tính luôn ở trạng thái Chưa xác nhận (Unknown) cho đến khi có đối chiếu của con người. Kiểm tra vùng phân biệt rõ Đang chờ đánh giá (chưa kết luận từ chối) với Không được phép đã xác nhận và Chưa đủ bằng chứng.',
+  'tour.frameInbox.caseReview.title': 'Mở Hồ sơ & Quay lại Khung hình',
+  'tour.frameInbox.caseReview.body':
+    'Mở hồ sơ của từng người để xem toàn bộ bằng chứng và phát hiện ca việc, rồi dùng liên kết Quay lại khung hình này để trở về mà vẫn giữ nguyên bộ lọc Công trường và Camera.',
+  'tour.frameInbox.caseHandoff.title': 'Mở Hồ sơ, Yêu cầu Xác minh & Quay lại',
+  'tour.frameInbox.caseHandoff.body':
+    'Mở hồ sơ của từng người để xem toàn bộ bằng chứng ca việc (và gửi yêu cầu Quản lý công trường xác minh danh tính khi tính năng được bật), rồi dùng liên kết Quay lại khung hình này để trở về mà vẫn giữ nguyên bộ lọc Công trường và Camera.',
 };
 
 export type SafetyTaskTourCatalogKey = keyof typeof SAFETY_TASK_TOUR_EN;
 
 export function registerSafetyTaskTourCatalog(): void {
+  if (hasRegisteredFeatureKey('tour.triggerBtn')) {
+    return;
+  }
   registerFeatureCatalog({
     en: SAFETY_TASK_TOUR_EN,
     vi: SAFETY_TASK_TOUR_VI,

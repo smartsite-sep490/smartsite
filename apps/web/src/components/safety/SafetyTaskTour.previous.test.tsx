@@ -266,4 +266,62 @@ describe('SafetyTaskTour previous step navigation', () => {
       tourVersion: 1,
     });
   });
+
+  it('resets stored progress for the active task only, restores Guided help and invitation, and supports Escape close', async () => {
+    window.localStorage.setItem(
+      SAFETY_TOUR_STORAGE_KEY,
+      JSON.stringify({
+        'officer-1:monitor:v1': { status: 'COMPLETED', tourVersion: 1 },
+        'officer-1:alerts:v1': { status: 'SKIPPED', tourVersion: 1 },
+      }),
+    );
+
+    render(
+      <div>
+        <div data-tour-anchor="monitor-scope">Scope Anchor</div>
+        <div data-tour-anchor="monitor-view-mode">View Mode Anchor</div>
+        <SafetyTaskTour
+          taskId="monitor"
+          tourVersion={1}
+          userId="officer-1"
+          scopeKey="site-a"
+          steps={THREE_STEPS.slice(0, 2)}
+        />
+      </div>,
+    );
+
+    const trigger = await screen.findByTestId('safety-task-tour-trigger');
+    expect(trigger.textContent).toBe('Replay guide');
+    expect(screen.queryByTestId('safety-task-tour-invitation')).toBeNull();
+
+    const resetBtn = screen.getByTestId('safety-task-tour-reset');
+    expect(resetBtn.textContent).toBe('Reset guide');
+
+    await act(async () => {
+      await i18n.changeLanguage('vi');
+    });
+    expect(screen.getByTestId('safety-task-tour-reset').textContent).toBe('Đặt lại hướng dẫn');
+    await act(async () => {
+      await i18n.changeLanguage('en');
+    });
+
+    fireEvent.click(screen.getByTestId('safety-task-tour-reset'));
+
+    expect(screen.queryByTestId('safety-task-tour-reset')).toBeNull();
+    expect(screen.getByTestId('safety-task-tour-trigger').textContent).toBe('Guided help');
+    expect(await screen.findByTestId('safety-task-tour-invitation')).toBeTruthy();
+    expect(JSON.parse(window.localStorage.getItem(SAFETY_TOUR_STORAGE_KEY) ?? '{}')).toEqual({
+      'officer-1:alerts:v1': { status: 'SKIPPED', tourVersion: 1 },
+    });
+
+    fireEvent.click(screen.getByTestId('safety-task-tour-invitation-start'));
+    expect(await screen.findByTestId('safety-task-tour')).toBeTruthy();
+
+    fireEvent.keyDown(window, { key: 'Escape' });
+    expect(screen.queryByTestId('safety-task-tour')).toBeNull();
+    expect(JSON.parse(window.localStorage.getItem(SAFETY_TOUR_STORAGE_KEY) ?? '{}')).toEqual({
+      'officer-1:alerts:v1': { status: 'SKIPPED', tourVersion: 1 },
+    });
+    await waitFor(() => expect(document.activeElement).toBe(trigger));
+  });
 });
