@@ -58,6 +58,7 @@ export interface SafetyEpisodeInboxOptions {
   offset?: number;
   limit?: number;
   siteId?: string;
+  recipientId?: string;
   readStatus?: 'ALL' | 'UNREAD';
 }
 

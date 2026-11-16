@@ -17,6 +17,7 @@ import { UserAuthGuard } from '../../auth/user-auth.guard.js';
 
 class InboxFilter {
   @IsOptional() @IsUUID() siteId?: string;
+  @IsOptional() @IsUUID() recipientId?: string;
   @IsOptional() @IsIn(['ALL', 'UNREAD']) readStatus?: 'ALL' | 'UNREAD';
 }
 interface InboxRow {
@@ -88,7 +89,7 @@ export class SafetyEpisodeInboxService {
     query: Record<string, unknown> = {},
   ): Promise<SafetyEpisodeInboxPage> {
     const { offset, limit, ...filter } = query;
-    for (const key of ['siteId', 'readStatus'] as const)
+    for (const key of ['siteId', 'recipientId', 'readStatus'] as const)
       if (query[key] !== undefined && typeof query[key] !== 'string') invalid();
     if (
       (offset !== undefined && typeof offset !== 'string') ||
@@ -103,8 +104,9 @@ export class SafetyEpisodeInboxService {
       const actor = await this.scope(manager, request),
         schema = this.schema();
       if (siteId !== null && !actor.siteIds.includes(siteId)) this.forbidden();
-      const params = [actor.userId, actor.siteIds, siteId, unreadOnly];
+      const params = [actor.userId, actor.siteIds, siteId, unreadOnly, options.recipientId ?? null];
       const eligible = `r.recipient_user_id=$1 AND r.site_id=ANY($2::uuid[]) AND ($3::uuid IS NULL OR r.site_id=$3)
+        AND ($5::uuid IS NULL OR r.id=$5)
         AND EXISTS(SELECT 1 FROM ${schema}.safety_alert a WHERE a.episode_id=e.id AND a.site_id=e.site_id)`;
       const [counts]: { total: number; unread_count: number }[] = await manager.query(
         `SELECT
@@ -120,7 +122,7 @@ export class SafetyEpisodeInboxService {
         e.content_revision,e.collection_state,(SELECT count(*)::int FROM ${schema}.safety_alert a WHERE a.episode_id=e.id AND a.site_id=e.site_id) AS finding_count
         FROM ${schema}.safety_episode_recipient r JOIN ${schema}.safety_episode e ON e.id=r.episode_id AND e.site_id=r.site_id
         WHERE ${eligible} AND (NOT $4::boolean OR r.seen_revision<e.content_revision)
-        ORDER BY r.first_delivered_at DESC,r.id DESC OFFSET $5 LIMIT $6`,
+        ORDER BY r.first_delivered_at DESC,r.id DESC OFFSET $6 LIMIT $7`,
         [...params, page.offset, page.limit],
       );
       return {
