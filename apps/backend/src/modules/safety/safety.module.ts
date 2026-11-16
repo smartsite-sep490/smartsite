@@ -1,6 +1,7 @@
 import { SafetyChecklistService } from './safety-checklist.service.js';
 import { SafetyIdentificationController } from './identification/safety-identification.controller.js';
 import { SafetyIdentificationService } from './identification/safety-identification.service.js';
+import { SafetyIdentificationRuntime } from './identification/safety-identification-runtime.js';
 import { SafetyIdentificationEnabledGuard } from './identification/safety-identification-enabled.guard.js';
 import { SafetyChecklistController } from './safety-checklist.controller.js';
 import { SafetyOverviewService } from './safety-overview.service.js';
@@ -69,6 +70,7 @@ import { ZoneAccessManagementService } from '../zones/zone-access-management.ser
   ],
   providers: [
     SafetyIdentificationService,
+    SafetyIdentificationRuntime,
     SafetyIdentificationEnabledGuard,
     SafetyEpisodeProjectionService,
     SafetyEpisodeQueryService,

@@ -26,8 +26,15 @@ import { createIsolatedTestDatabase } from '../support/isolated-test-database.js
 import { seedTrackedFrameFixture } from '../support/tracked-frame-fixture.js';
 import { TrackedFrameAdmission } from '../../src/integrations/ai/tracked-frame-admission.js';
 import { TrackedFrameRecovery } from '../../src/integrations/ai/tracked-frame-recovery.js';
+import { buildMigrationOptions } from '../../src/database/typeorm.migration-profile.js';
 
-for (const variant of ['ppe-only', 'zone-uppercase', 'zone-unissued', 'zone-disabled'] as const)
+for (const variant of [
+  'ppe-only',
+  'ppe-c02',
+  'zone-uppercase',
+  'zone-unissued',
+  'zone-disabled',
+] as const)
   test(`registered v1.6 worker HTTP intake preserves ${variant} handling`, async () => {
     const owned = createIsolatedTestDatabase();
     const db = owned.dataSource;
@@ -35,15 +42,29 @@ for (const variant of ['ppe-only', 'zone-uppercase', 'zone-unissued', 'zone-disa
     const saved = new Map<string, string | undefined>();
     try {
       await owned.initialize();
-      await db.transaction(async (manager) => {
-        for (const migration of [
-          new WorkerEventAdmission1795046400002(),
-          new TrackedSubjectStorage1795046400003(),
-          new TrackedPendingRecoveryIndex1795046400004(),
-          new TrackedWireGenerationFence1795046400008(),
-        ])
-          await migration.up(manager.queryRunner!);
-      });
+      if (variant === 'ppe-c02') {
+        const cli = new DataSource(
+          buildMigrationOptions(
+            { DATABASE_URL: resolveTestDatabaseUrl() },
+            { profile: 'tracked-v16-identification', schema: db.driver.schema! },
+          ),
+        );
+        try {
+          await cli.initialize();
+          await cli.runMigrations();
+        } finally {
+          if (cli.isInitialized) await cli.destroy();
+        }
+      } else
+        await db.transaction(async (manager) => {
+          for (const migration of [
+            new WorkerEventAdmission1795046400002(),
+            new TrackedSubjectStorage1795046400003(),
+            new TrackedPendingRecoveryIndex1795046400004(),
+            new TrackedWireGenerationFence1795046400008(),
+          ])
+            await migration.up(manager.queryRunner!);
+        });
       const fixture = await seedTrackedFrameFixture(db, ['HARD_HAT', 'SAFETY_VEST']);
       const routeEpoch = randomUUID();
       await db.query(
@@ -53,6 +74,7 @@ for (const variant of ['ppe-only', 'zone-uppercase', 'zone-unissued', 'zone-disa
       const officer = randomUUID();
       const password = 'Synthetic_tracked_officer_123';
       const passwordHash = await hashPassword(password);
+      const managerId = randomUUID();
       const evidenceRoot = await mkdtemp(join(tmpdir(), 'tracked-http-evidence-'));
       await db.query(
         "INSERT INTO app_user(id,username,display_name,password_hash) VALUES($1,$1::uuid::text,'Synthetic officer',$2)",
@@ -62,15 +84,28 @@ for (const variant of ['ppe-only', 'zone-uppercase', 'zone-unissued', 'zone-disa
         "INSERT INTO user_role_assignment(id,user_id,site_id,role) VALUES($1,$2,$3,'SAFETY_OFFICER')",
         [randomUUID(), officer, fixture.siteId],
       );
+      if (variant === 'ppe-c02') {
+        await db.query(
+          "INSERT INTO app_user(id,username,display_name,password_hash) VALUES($1,$1::uuid::text,'Synthetic manager',$2)",
+          [managerId, passwordHash],
+        );
+        await db.query(
+          "INSERT INTO user_role_assignment(id,user_id,site_id,role) VALUES($1,$2,$3,'SITE_MANAGER')",
+          [randomUUID(), managerId, fixture.siteId],
+        );
+      }
       const token = randomUUID() + randomUUID();
       const env = {
         NODE_ENV: 'test',
         EVIDENCE_LOCAL_ROOT: evidenceRoot,
+        STORAGE_LOCAL_ROOT: evidenceRoot,
+        SAFETY_IDENTIFICATION_ENABLED: variant === 'ppe-c02' ? 'true' : 'false',
         SMARTSITE_AI_SERVICE_TOKEN: token,
         AI_CONFIGURATION_CAMERA_IDS: fixture.cameraId,
         DATABASE_URL: resolveTestDatabaseUrl(),
         DATABASE_SCHEMA: db.driver.schema!,
-        SMARTSITE_DB_MIGRATION_PROFILE: 'tracked-v16',
+        SMARTSITE_DB_MIGRATION_PROFILE:
+          variant === 'ppe-c02' ? 'tracked-v16-identification' : 'tracked-v16',
         AI_TRACKED_FRAME_RUNTIME_ENABLED: 'true',
         MF06_ENQUEUE_ENABLED:
           variant === 'zone-uppercase' || variant === 'zone-unissued' ? 'true' : 'false',
@@ -130,9 +165,17 @@ for (const variant of ['ppe-only', 'zone-uppercase', 'zone-unissued', 'zone-disa
       await app.listen(0, '127.0.0.1');
       const prefix = (await app.getUrl()) + '/api/v1/integrations/ai';
       const base = fixture.event();
+      const rectangles = Array.from({ length: 10 }, (_, i) => ({
+        input: Buffer.from(
+          `<svg width="12" height="20"><rect width="12" height="20" fill="${i === 1 ? '#00ff00' : '#ff0000'}"/></svg>`,
+        ),
+        left: 15 + 18 * (i % 5),
+        top: i < 5 ? 10 : 44,
+      }));
       const bytes = await sharp({
         create: { width: 120, height: 80, channels: 3, background: '#456789' },
       })
+        .composite(variant === 'ppe-c02' ? rectangles : [])
         .jpeg()
         .toBuffer();
       const digest = createHash('sha256').update(bytes).digest('hex');
@@ -175,7 +218,7 @@ for (const variant of ['ppe-only', 'zone-uppercase', 'zone-unissued', 'zone-disa
             regionId: fixture.ppeRegionId,
             geometryVersion: 1,
           })),
-          ...(variant !== 'ppe-only'
+          ...(variant.startsWith('zone-')
             ? [
                 {
                   type: 'ZONE_ENTRY',
@@ -203,6 +246,42 @@ for (const variant of ['ppe-only', 'zone-uppercase', 'zone-unissued', 'zone-disa
           ],
         },
       };
+      if (variant === 'ppe-c02') {
+        event.observations = Array.from({ length: 10 }, (_, i) => [
+          {
+            type: 'PERSON',
+            trackId: i + 1,
+            boundingBox: {
+              coordinateSpace: 'NORMALIZED_0_1',
+              x1: 0.125 + 0.15 * (i % 5),
+              y1: i < 5 ? 0.125 : 0.55,
+              x2: 0.225 + 0.15 * (i % 5),
+              y2: i < 5 ? 0.375 : 0.8,
+            },
+          },
+          ...(i < 3
+            ? ['HARD_HAT', 'SAFETY_VEST'].map((ppeItem) => ({
+                type: 'PPE',
+                trackId: i + 1,
+                ppeItem,
+                status: 'MISSING',
+                regionId: fixture.ppeRegionId,
+                geometryVersion: 1,
+              }))
+            : []),
+        ]).flat();
+        event.continuity.subjects = event.observations.flatMap((observation, index) =>
+          observation.type === 'PERSON'
+            ? [
+                {
+                  personObservationIndex: index,
+                  segmentId: randomUUID(),
+                  link: { kind: 'START', reason: 'INITIAL' },
+                },
+              ]
+            : [],
+        );
+      }
       const headers = {
         authorization: 'Bearer ' + token,
         'x-worker-generation-secret': fixture.generation.secret,
@@ -297,9 +376,9 @@ for (const variant of ['ppe-only', 'zone-uppercase', 'zone-unissued', 'zone-disa
       assert.deepEqual(
         { episodes, findings, recipients, legacy },
         {
-          episodes: 1,
-          findings: 2,
-          recipients: 1,
+          episodes: variant === 'ppe-c02' ? 3 : 1,
+          findings: variant === 'ppe-c02' ? 6 : 2,
+          recipients: variant === 'ppe-c02' ? 3 : 1,
           legacy: 0,
         },
       );
@@ -311,7 +390,7 @@ for (const variant of ['ppe-only', 'zone-uppercase', 'zone-unissued', 'zone-disa
       });
       assert.equal(inbox.status, 200);
       const page = await inbox.json();
-      assert.equal(page.total, 1);
+      assert.equal(page.total, variant === 'ppe-c02' ? 3 : 1);
       const row = page.items[0];
       assert.equal(row.unread, true);
       assert.equal(row.episode.findingCount, 2);
@@ -327,12 +406,17 @@ for (const variant of ['ppe-only', 'zone-uppercase', 'zone-unissued', 'zone-disa
       assert.equal(grouped.status, 200);
       const frames = await grouped.json();
       assert.equal(frames.total, 1);
-      assert.equal(frames.items[0].cases.length, 1);
-      const frameCase = frames.items[0].cases[0];
+      assert.equal(frames.items[0].cases.length, variant === 'ppe-c02' ? 3 : 1);
+      const frameCase = frames.items[0].cases.find(
+        (item: { episodeId: string }) => item.episodeId === row.episode.id,
+      );
+      assert.ok(frameCase);
       assert.equal(frameCase.episodeId, row.episode.id);
       assert.equal(frameCase.findingCount, 2);
       assert.equal(frameCase.source.eventId, event.eventId);
-      assert.equal(frameCase.source.personObservationIndex, 0);
+      assert.ok(
+        (variant === 'ppe-c02' ? [0, 3, 6] : [0]).includes(frameCase.source.personObservationIndex),
+      );
       assert.equal(frameCase.source.evidenceIndex, 0);
       assert.equal(frameCase.source.sha256, createHash('sha256').update(bytes).digest('hex'));
       if (variant === 'zone-uppercase') {
@@ -358,11 +442,154 @@ for (const variant of ['ppe-only', 'zone-uppercase', 'zone-unissued', 'zone-disa
             finding.alertId +
             '/events/' +
             event.eventId +
-            '/frame?personObservationIndex=0&evidenceIndex=0',
+            '/frame?personObservationIndex=' +
+            frameCase.source.personObservationIndex +
+            '&evidenceIndex=0',
           { headers: officerHeaders },
         );
         assert.equal(media.status, 200, await media.clone().text());
         assert.deepEqual(Buffer.from(await media.arrayBuffer()), bytes);
+      }
+      if (variant === 'ppe-c02') {
+        const target = frames.items[0].cases.find(
+          (item: { source: { personObservationIndex: number } }) =>
+            item.source.personObservationIndex === 3,
+        );
+        assert.ok(target);
+        const root = api + '/sites/' + fixture.siteId + '/safety-identification-requests';
+        const previewInput = {
+          episodeId: target.episodeId,
+          alertId: target.source.alertId,
+          eventId: event.eventId,
+          personObservationIndex: 3,
+          evidenceIndex: 0,
+          masks: [],
+        };
+        const send = async (path: string, auth: string, body: unknown, status: number) => {
+          const response = await fetch(root + path, {
+            method: 'POST',
+            headers: { authorization: 'Bearer ' + auth, 'content-type': 'application/json' },
+            body: JSON.stringify(body),
+          });
+          assert.equal(response.status, status, await response.clone().text());
+          return response;
+        };
+        await send(
+          '/evidence-preview',
+          login.accessToken,
+          { ...previewInput, personObservationIndex: 0 },
+          404,
+        );
+        const preview = await send('/evidence-preview', login.accessToken, previewInput, 200);
+        assert.equal(preview.headers.get('x-smartsite-frame-sha256'), digest);
+        const crop = Buffer.from(await preview.arrayBuffer());
+        const { data, info } = await sharp(crop).raw().toBuffer({ resolveWithObject: true });
+        assert.ok(info.width < 120 && info.height < 80);
+        const center =
+          (Math.floor(info.height / 2) * info.width + Math.floor(info.width / 2)) * info.channels;
+        assert.ok(
+          data[center + 1]! > 150 && data[center]! < 100 && data[center + 2]! < 100,
+          'crop must show second, green subject',
+        );
+        const created = await (
+          await send(
+            '',
+            login.accessToken,
+            {
+              commandId: randomUUID(),
+              episodeId: target.episodeId,
+              assignedTo: managerId,
+              reason: 'Identify exact second flagged subject',
+              evidenceRefs: [],
+              evidenceApproval: {
+                preview: previewInput,
+                frameSha256: digest,
+                sha256: createHash('sha256').update(crop).digest('hex'),
+              },
+            },
+            201,
+          )
+        ).json();
+        const request = created.request;
+        assert.equal(request.episodeId, target.episodeId);
+        assert.equal(request.subject.kind, 'TRACKED');
+        assert.equal(request.evidenceAvailability.status, 'AVAILABLE');
+        const manager = await module
+          .get(AuthService)
+          .login(managerId, password, AuthClientType.WEB);
+        const managerHeaders = { authorization: 'Bearer ' + manager.accessToken };
+        const published = await fetch(
+          root + '/' + request.id + '/evidence/' + request.evidenceRefs[0],
+          { headers: managerHeaders },
+        );
+        assert.equal(published.status, 200, await published.clone().text());
+        assert.equal(published.headers.get('x-smartsite-frame-sha256'), null);
+        assert.equal(
+          published.headers.get('x-smartsite-content-sha256'),
+          createHash('sha256').update(crop).digest('hex'),
+        );
+        assert.ok(Number(published.headers.get('x-smartsite-evidence-ttl-ms')) > 0);
+        assert.equal(published.headers.get('cache-control'), 'private, no-store');
+        assert.deepEqual(Buffer.from(await published.arrayBuffer()), crop);
+        assert.equal(
+          (
+            await fetch(api + '/me/safety-episode-inbox/frames?siteId=' + fixture.siteId, {
+              headers: managerHeaders,
+            })
+          ).status,
+          403,
+        );
+        const rawPath =
+          api +
+          '/sites/' +
+          fixture.siteId +
+          '/safety-episodes/' +
+          target.episodeId +
+          '/findings/' +
+          target.source.alertId +
+          '/events/' +
+          event.eventId +
+          '/frame?personObservationIndex=3&evidenceIndex=0';
+        assert.equal((await fetch(rawPath, { headers: managerHeaders })).status, 403);
+        await send('/evidence-preview', manager.accessToken, previewInput, 403);
+        const proposal = await (
+          await send(
+            '/' + request.id + '/respond',
+            manager.accessToken,
+            {
+              commandId: randomUUID(),
+              expectedVersion: request.version,
+              outcome: 'UNRESOLVED',
+              workerId: null,
+              contractorId: null,
+              evidenceRefs: [],
+              reason: 'No verified identity for the observed subject',
+            },
+            201,
+          )
+        ).json();
+        const closed = await (
+          await send(
+            '/' + request.id + '/review',
+            login.accessToken,
+            {
+              commandId: randomUUID(),
+              expectedVersion: proposal.request.version,
+              decision: 'ACCEPT',
+              reason: 'Retain unresolved identity without granting access',
+            },
+            201,
+          )
+        ).json();
+        assert.equal(closed.request.status, 'CLOSED');
+        assert.equal(closed.request.result.workerId, null);
+        assert.equal(closed.request.result.contractorId, null);
+        assert.deepEqual(
+          await db.query(
+            'SELECT count(*)::int AS unread FROM safety_episode_recipient WHERE seen_revision=0',
+          ),
+          [{ unread: 3 }],
+        );
       }
     } finally {
       if (app) await app.close();
