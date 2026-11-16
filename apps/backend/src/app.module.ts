@@ -7,6 +7,11 @@ import { validateEnvironment, type BackendEnvironment } from './config/environme
 import { runtimeEnvironmentOptions } from './config/runtime-environment.js';
 import { HttpExceptionFilter } from './common/http/http-exception.filter.js';
 import { createLoggerParams } from './observability/logger.js';
+import { TrackedFrameRuntimeModule } from './integrations/ai/tracked-frame-runtime.module.js';
+import {
+  TrackedFrameResultController,
+  TrackedRawPartController,
+} from './integrations/ai/tracked-frame-result.controller.js';
 import { AiIntegrationModule } from './integrations/ai/ai-integration.module.js';
 import { AiIngestionController } from './integrations/ai/ai-ingestion.controller.js';
 import { AiConfigurationController } from './integrations/ai/ai-configuration.controller.js';
@@ -19,18 +24,32 @@ import { WorkforceModule } from './modules/workforce/workforce.module.js';
 
 function isAiEndpoint(context: ExecutionContext): boolean {
   return (
-    context.getClass() === AiIngestionController || context.getClass() === AiConfigurationController
+    context.getClass() === AiIngestionController ||
+    context.getClass() === AiConfigurationController ||
+    context.getClass() === TrackedFrameResultController ||
+    context.getClass() === TrackedRawPartController
   );
 }
 
+function configuredRuntimeImports() {
+  let trackedPolicy: BackendEnvironment['AI_TRACKED_FRAME_RUNTIME_POLICY'];
+  const config = ConfigModule.forRoot({
+    isGlobal: true,
+    ...runtimeEnvironmentOptions(),
+    validate: (input) => {
+      const environment = validateEnvironment(input);
+      trackedPolicy = environment.AI_TRACKED_FRAME_RUNTIME_ENABLED
+        ? environment.AI_TRACKED_FRAME_RUNTIME_POLICY
+        : undefined;
+      return environment;
+    },
+    skipProcessEnv: true,
+  });
+  return [config, config.then(() => TrackedFrameRuntimeModule.register(trackedPolicy))];
+}
 @Module({
   imports: [
-    ConfigModule.forRoot({
-      isGlobal: true,
-      ...runtimeEnvironmentOptions(),
-      validate: validateEnvironment,
-      skipProcessEnv: true,
-    }),
+    ...configuredRuntimeImports(),
     LoggerModule.forRootAsync({
       inject: [ConfigService],
       useFactory: (config: ConfigService<BackendEnvironment, true>) => createLoggerParams(config),

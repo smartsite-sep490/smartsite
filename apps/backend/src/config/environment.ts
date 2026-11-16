@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { trackedRuntimePolicyEnvironment } from './tracked-runtime-environment.js';
 import { isAbsolute } from 'node:path';
 import {
   isValidPassword,
@@ -265,6 +266,13 @@ export const backendEnvironmentSchema = z
       .enum(['false', 'true'])
       .default('false')
       .transform((value) => value === 'true'),
+    AI_TRACKED_FRAME_RUNTIME_ENABLED: z
+      .enum(['false', 'true'])
+      .default('false')
+      .transform((value) => value === 'true'),
+    AI_TRACKED_FRAME_RUNTIME_POLICY: trackedRuntimePolicyEnvironment.optional(),
+    DATABASE_SCHEMA: z.string().optional(),
+    SMARTSITE_DB_MIGRATION_PROFILE: z.enum(['tracked-v16']).optional(),
     SAFETY_TRACKED_HISTORY_READ_ENABLED: z
       .enum(['true', 'false'])
       .default('false')
@@ -371,6 +379,56 @@ export const backendEnvironmentSchema = z
         path: ['MF06_ENQUEUE_MAX_OUTSTANDING'],
         message: 'must be explicitly set when MF06 enqueue is enabled',
       });
+    }
+    const trackedSchemaRequired =
+      config.AI_TRACKED_FRAME_RUNTIME_ENABLED || config.SAFETY_TRACKED_HISTORY_READ_ENABLED;
+    if (
+      (trackedSchemaRequired || config.DATABASE_SCHEMA !== undefined) &&
+      !config.SMARTSITE_DB_MIGRATION_PROFILE
+    ) {
+      context.addIssue({
+        code: 'custom',
+        path: ['SMARTSITE_DB_MIGRATION_PROFILE'],
+        message: 'must explicitly select the tracked database migration profile',
+      });
+    }
+    if (
+      (trackedSchemaRequired || config.SMARTSITE_DB_MIGRATION_PROFILE !== undefined) &&
+      (!config.DATABASE_SCHEMA ||
+        !/^[a-z_][a-z0-9_]{0,62}$/.test(config.DATABASE_SCHEMA) ||
+        /^(pg_|information_schema$)/.test(config.DATABASE_SCHEMA))
+    ) {
+      context.addIssue({
+        code: 'custom',
+        path: ['DATABASE_SCHEMA'],
+        message: 'must explicitly select a valid tracked database schema',
+      });
+    }
+    if (config.AI_TRACKED_FRAME_RUNTIME_ENABLED) {
+      const policy = config.AI_TRACKED_FRAME_RUNTIME_POLICY;
+      if (
+        !policy ||
+        policy.profile.allowedCameraIds.some(
+          (id) => !config.AI_CONFIGURATION_CAMERA_IDS.includes(id),
+        )
+      ) {
+        context.addIssue({
+          code: 'custom',
+          path: ['AI_TRACKED_FRAME_RUNTIME_POLICY'],
+          message: 'must explicitly scope the tracked runtime to configured cameras',
+        });
+      }
+      if (
+        !config.SMARTSITE_AI_SERVICE_TOKEN ||
+        config.SMARTSITE_AI_SERVICE_TOKEN === LOCAL_SERVICE_TOKEN ||
+        config.SMARTSITE_AI_SERVICE_TOKEN.length < 32
+      ) {
+        context.addIssue({
+          code: 'custom',
+          path: ['SMARTSITE_AI_SERVICE_TOKEN'],
+          message: 'must be explicitly configured for tracked runtime',
+        });
+      }
     }
     if (Boolean(config.RESEND_API_KEY) !== Boolean(config.RESEND_FROM_EMAIL)) {
       context.addIssue({

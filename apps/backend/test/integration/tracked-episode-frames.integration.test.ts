@@ -264,6 +264,8 @@ for (const version of ['v1', 'v2-uppercase', 'v2-disabled-overlap'] as const)
       const config = createTestConfig({
         LOG_FORMAT: 'json',
         EVIDENCE_LOCAL_ROOT: root,
+        DATABASE_SCHEMA: db.driver.schema,
+        SMARTSITE_DB_MIGRATION_PROFILE: 'tracked-v16',
         SAFETY_TRACKED_HISTORY_READ_ENABLED: 'true',
       });
       const module = await Test.createTestingModule({ imports: [AppModule] })
