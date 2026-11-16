@@ -8,6 +8,7 @@
     "schemas"
   ],
   "exports": {
+    "./camera-preview": "./dist/camera-preview.js",
     "./camera-policy-configuration-bundle": "./dist/camera-policy-configuration-bundle.js",
     "./camera-ppe-policy-command": "./dist/camera-ppe-policy-command.js",
     "./leave-notice": "./dist/leave-notice.js",
