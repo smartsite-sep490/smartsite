@@ -3,6 +3,7 @@ import Ajv2020Pkg from 'ajv/dist/2020.js';
 import addFormatsPkg from 'ajv-formats';
 import { validateGeometries } from './geometry-validator.js';
 import type { ValidationIssue } from './geometry-validator.js';
+import type { TrackedFrameContinuity } from '../tracked-frame-continuity.js';
 
 export type { ValidationIssue } from './geometry-validator.js';
 
@@ -107,6 +108,16 @@ const validatePartitionedFrameSchema: CompiledSchemaValidator = ajv.compile(
 const validateCameraRegionConfigurationSchema: CompiledSchemaValidator = ajv.compile(
   cameraRegionConfigurationSchema,
 );
+const validateTrackedFrameSchema: CompiledSchemaValidator = ajv.compile(
+  JSON.parse(
+    readFileSync(
+      new URL('../../schemas/v1.5/technical-observation-event.json', import.meta.url),
+      'utf8',
+    ),
+  ) as unknown,
+);
+
+let validateTrackedEntryOriginSchema: CompiledSchemaValidator | undefined;
 
 function schemaValidationIssues(
   validateSchema: CompiledSchemaValidator,
@@ -189,6 +200,16 @@ export function validatePartitionedObservationEvent(data: unknown): ValidationRe
     framePartition: ObservationFramePartition;
     observations: Array<{ type: string; trackId: number }>;
   };
+  return validateFrameSemantics(payload, issues);
+}
+
+function validateFrameSemantics(
+  payload: {
+    framePartition: ObservationFramePartition;
+    observations: Array<{ type: string; trackId: number }>;
+  },
+  issues: ValidationIssue[],
+): ValidationResult {
   const frame = payload.framePartition;
   if (frame.partIndex >= frame.partCount) {
     issues.push({
@@ -219,6 +240,98 @@ export function validatePartitionedObservationEvent(data: unknown): ValidationRe
       });
     }
   });
+  return { isValid: issues.length === 0, issues };
+}
+
+export type TrackedEntryOrigin = 'OUTSIDE_TO_INSIDE' | 'INSIDE_ENTRY_UNOBSERVED';
+
+/** Candidate only. Existing envelope/intake admission deliberately does not call this. */
+export function validateTrackedObservationEvent(data: unknown): ValidationResult {
+  return validateTrackedFrame(data, validateTrackedFrameSchema, false);
+}
+
+/** Validate the original tracked v1.6 event without changing its wire bytes or hashes. */
+export function validateTrackedEntryOriginEvent(data: unknown): ValidationResult {
+  validateTrackedEntryOriginSchema ??= ajv.compile(
+    JSON.parse(
+      readFileSync(
+        new URL('../../schemas/v1.6/technical-observation-event.json', import.meta.url),
+        'utf8',
+      ),
+    ) as unknown,
+  );
+  return validateTrackedFrame(data, validateTrackedEntryOriginSchema, true);
+}
+
+function validateTrackedFrame(
+  data: unknown,
+  schema: CompiledSchemaValidator,
+  hasEntryOrigins: boolean,
+): ValidationResult {
+  const issues = schemaValidationIssues(schema, data);
+  issues.push(...validateGeometries(data));
+  if (issues.length) return { isValid: false, issues };
+  const payload = data as {
+    eventId: string;
+    framePartition: ObservationFramePartition;
+    observations: Array<{ type: string; trackId: number; entryOrigin?: TrackedEntryOrigin }>;
+    continuity: TrackedFrameContinuity;
+  };
+  validateFrameSemantics(payload, issues);
+  const fail = (path: string, message: string) =>
+    issues.push({ code: 'SCHEMA_VIOLATION', path: `/continuity/${path}`, message });
+  const indices = new Set<number>();
+  const segments = new Set<string>();
+  const predecessors = new Set<string>();
+  for (const [position, subject] of payload.continuity.subjects.entries()) {
+    const path = `subjects/${position}`;
+    if (payload.observations[subject.personObservationIndex]?.type !== 'PERSON')
+      fail(path, 'Subject index must identify an original PERSON observation');
+    if (indices.has(subject.personObservationIndex) || segments.has(subject.segmentId))
+      fail(path, 'Each PERSON and segment must occur once in a part');
+    indices.add(subject.personObservationIndex);
+    segments.add(subject.segmentId);
+    if (subject.link.kind === 'CONTINUE') {
+      const link = subject.link;
+      const key = `${link.previousEventId}:${link.previousPersonObservationIndex}`;
+      if (link.previousEventId === payload.eventId.toLowerCase() || predecessors.has(key))
+        fail(path, 'A predecessor cannot be this event or shared by different subjects');
+      predecessors.add(key);
+    }
+  }
+  if (payload.continuity.coverage.status === 'COMPLETE') {
+    payload.observations.forEach((observation, index) => {
+      if (observation.type === 'PERSON' && !indices.has(index))
+        fail('subjects', 'Every original PERSON needs one explicit subject claim');
+    });
+  }
+  if (hasEntryOrigins) {
+    const continuing = new Set(
+      payload.continuity.subjects
+        .filter((subject) => subject.link.kind === 'CONTINUE')
+        .map((subject) => payload.observations[subject.personObservationIndex]?.trackId),
+    );
+    payload.observations.forEach((observation, index) => {
+      if (observation.entryOrigin !== 'OUTSIDE_TO_INSIDE') return;
+      if (
+        payload.continuity.coverage.status !== 'COMPLETE' ||
+        !continuing.has(observation.trackId)
+      ) {
+        issues.push({
+          code: 'SCHEMA_VIOLATION',
+          path: '/observations/' + index + '/entryOrigin',
+          message:
+            'Observed crossing requires complete coverage and a continuing subject in this part',
+        });
+      }
+    });
+  }
+  const retired = new Set<string>();
+  for (const [position, item] of payload.continuity.retiredSegments.entries()) {
+    if (retired.has(item.segmentId) || segments.has(item.segmentId))
+      fail(`retiredSegments/${position}`, 'Retired segments must be unique and not active');
+    retired.add(item.segmentId);
+  }
   return { isValid: issues.length === 0, issues };
 }
 
