@@ -376,6 +376,17 @@ test('registered HTTP routes require authentication, reject unscoped input and r
   assert.equal(list.status, 200);
   assert.equal(list.headers.get('cache-control'), 'no-store');
   assert.equal((await list.json()).total, 2);
+  const firstPage = await (await fetch(url + '?limit=1', { headers })).json();
+  const target = f.recipients.find((id) => id !== firstPage.items[0].id)!;
+  const exact = await fetch(url + '?recipientId=' + target.toUpperCase() + '&limit=1', { headers });
+  assert.equal(exact.status, 200);
+  assert.equal(exact.headers.get('cache-control'), 'no-store');
+  const page = await exact.json();
+  assert.deepEqual([page.total, page.unreadCount, page.items[0]?.id], [1, 1, target]);
+  assert.deepEqual(
+    await (await fetch(url + '?recipientId=' + f.strangerRecipient, { headers })).json(),
+    { items: [], total: 0, unreadCount: 0 },
+  );
   for (const query of ['?siteId=', '?recipientId=other', '?readStatus=INVALID', '?limit=101'])
     assert.equal((await fetch(url + query, { headers })).status, 400);
   const response = await fetch(`${url}/${f.recipients[0]}/read`, {

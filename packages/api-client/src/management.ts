@@ -1854,7 +1854,7 @@ export class SmartSiteManagementClient {
     );
   }
 
-  listSafetyEpisodeInbox(
+  async listSafetyEpisodeInbox(
     token: string,
     options: SafetyEpisodeInboxOptions = {},
     requestOptions?: RequestOptions,
@@ -1862,7 +1862,17 @@ export class SmartSiteManagementClient {
     const query = new URLSearchParams();
     for (const key of ['offset', 'limit', 'siteId', 'readStatus'] as const)
       if (options[key] !== undefined) query.set(key, String(options[key]));
-    return this.request(
+    const recipientId = options.recipientId;
+    if (
+      recipientId !== undefined &&
+      (typeof recipientId !== 'string' ||
+        !/^[a-f0-9]{8}(-[a-f0-9]{4}){3}-[a-f0-9]{12}$/i.test(recipientId))
+    )
+      throw new TypeError('Invalid episode inbox recipient ID');
+    const target = recipientId?.toLowerCase();
+    const site = target === undefined ? undefined : options.siteId?.toLowerCase();
+    if (target !== undefined) query.set('recipientId', target);
+    const page = await this.request<SafetyEpisodeInboxPage>(
       'GET',
       `/me/safety-episode-inbox${query.size ? `?${query}` : ''}`,
       token,
@@ -1870,6 +1880,20 @@ export class SmartSiteManagementClient {
       undefined,
       requestOptions,
     );
+    if (
+      target !== undefined &&
+      (!page ||
+        !Array.isArray(page.items) ||
+        (page.total !== 0 && page.total !== 1) ||
+        (page.unreadCount !== 0 && page.unreadCount !== 1) ||
+        page.unreadCount > page.total ||
+        page.items.length > page.total ||
+        page.items.some(
+          (row) => row?.id !== target || (site !== undefined && row.episode?.siteId !== site),
+        ))
+    )
+      throw new ApiError('invalid-response', 'Backend returned inconsistent episode inbox.');
+    return page;
   }
 
   async readSafetyEpisodeInbox(
