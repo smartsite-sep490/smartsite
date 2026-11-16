@@ -6,16 +6,22 @@ import { afterEach, expect, it, vi } from 'vitest';
 import { SmartSiteManagementClient } from '@smartsite/api-client';
 import { DashboardView } from './DashboardView';
 
+const defaultRoleAssignments: { role: 'SITE_MANAGER'; siteId: string }[] = [
+  { role: 'SITE_MANAGER', siteId: 'site-a' },
+];
+let currentRoleAssignments = defaultRoleAssignments;
+
 vi.mock('../../features/auth/auth-session', async (importOriginal) => ({
   ...(await importOriginal<typeof import('../../features/auth/auth-session')>()),
   useAuth: () => ({ accessToken: 'manager-token' }),
   useCurrentUser: () => ({
-    data: { id: 'manager', roleAssignments: [{ role: 'SITE_MANAGER', siteId: 'site-a' }] },
+    data: { id: 'manager', roleAssignments: currentRoleAssignments },
   }),
 }));
 afterEach(() => {
   cleanup();
   vi.restoreAllMocks();
+  currentRoleAssignments = defaultRoleAssignments;
 });
 function renderDashboard() {
   const cache = new QueryClient({ defaultOptions: { queries: { retry: false } } });
@@ -166,5 +172,97 @@ it('failed API shows unavailable and Retry without reporting zero contractors', 
   expect(screen.queryByText('0', { selector: 'dd' })).toBeNull();
   await userEvent.setup().click(screen.getByRole('button', { name: 'Retry' }));
   await screen.findByText('No active contractors on this Site.');
+  cache.clear();
+});
+
+it('surfaces Manager operational task panel with scoped links and clears previous site queue on site switch', async () => {
+  currentRoleAssignments = [
+    { role: 'SITE_MANAGER', siteId: 'site-a' },
+    { role: 'SITE_MANAGER', siteId: 'site-b' },
+  ];
+  sites();
+  vi.spyOn(SmartSiteManagementClient.prototype, 'managerOverview').mockImplementation(
+    async (_token, siteId) => ({
+      site: { id: siteId, code: siteId.toUpperCase(), name: `Site ${siteId}` },
+      contractorCount: 2,
+      zoneCount: 4,
+      teamCount: 3,
+      workerCount: 15,
+      contractors: {
+        total: 1,
+        items: [{ id: 'contractor-a', code: 'CTR-A', name: 'Alpha', teamCount: 1, workerCount: 5 }],
+      },
+    }),
+  );
+
+  let resolveSiteBRequests!: (value: { items: never[]; total: number }) => void;
+  const siteBRequestsPromise = new Promise<{ items: never[]; total: number }>((resolve) => {
+    resolveSiteBRequests = resolve;
+  });
+  vi.spyOn(
+    SmartSiteManagementClient.prototype,
+    'listSafetyIdentificationRequests',
+  ).mockImplementation((_token, siteId) => {
+    if (siteId === 'site-a') {
+      return Promise.resolve({
+        items: [
+          {
+            id: '11111111-2222-3333-4444-555555555555',
+            siteId: 'site-a',
+            episodeId: 'aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee',
+            subject: { kind: 'TRACKED', segmentId: 'seg-1', scopeSha256: 'a'.repeat(64) },
+            assignedTo: 'manager',
+            requestedBy: 'officer',
+            reason: 'Pending vest check at Site A',
+            status: 'OPEN',
+            version: 1,
+            dueAt: null,
+            evidenceRefs: ['ev-1'],
+            evidenceAvailability: { status: 'AVAILABLE', reason: null },
+            result: null,
+            createdAt: '2026-11-17T01:00:00Z',
+            updatedAt: '2026-11-17T01:00:00Z',
+          },
+        ],
+        total: 2,
+      });
+    }
+    return siteBRequestsPromise;
+  });
+
+  vi.spyOn(SmartSiteManagementClient.prototype, 'listCameras').mockResolvedValue({
+    items: [],
+    total: 0,
+  });
+
+  const cache = renderDashboard();
+  const user = userEvent.setup();
+
+  await screen.findByText('Pending vest check at Site A');
+  expect(screen.getByText(/2 open requests/i)).toBeTruthy();
+  expect(screen.getByText(/No cameras are registered for this site yet/i)).toBeTruthy();
+  expect(screen.getByText('15', { selector: 'dd' })).toBeTruthy();
+  expect(
+    screen.getByRole('link', { name: /Open identification queue/i }).getAttribute('href'),
+  ).toBe('/incidents?tab=identification&siteId=site-a');
+  expect(screen.getByRole('link', { name: /Set up site cameras/i }).getAttribute('href')).toBe(
+    '/camera-setup?siteId=site-a',
+  );
+
+  // Switch Managed Site from Site a to Site b -> previous site's queue and counts clear immediately
+  await user.selectOptions(screen.getByLabelText('Managed Site'), 'site-b');
+  expect(screen.queryByText('Pending vest check at Site A')).toBeNull();
+  expect(screen.queryByText(/2 open requests/i)).toBeNull();
+
+  await waitFor(() =>
+    expect(screen.getByRole('link', { name: /Set up site cameras/i }).getAttribute('href')).toBe(
+      '/camera-setup?siteId=site-b',
+    ),
+  );
+  resolveSiteBRequests({ items: [], total: 0 });
+  await screen.findByText(/No open identification requests/i);
+  expect(
+    screen.getByRole('link', { name: /Open identification queue/i }).getAttribute('href'),
+  ).toBe('/incidents?tab=identification&siteId=site-b');
   cache.clear();
 });

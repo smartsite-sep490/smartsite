@@ -24,6 +24,8 @@ import {
   type SafetyAlertType,
 } from '@smartsite/api-client';
 import { SafetyAlertEvidencePanel } from './SafetyAlertEvidencePanel';
+import { SafetyTaskTour } from '../safety/SafetyTaskTour';
+import { ALERTS_TOUR_VERSION, buildAlertsTourSteps } from '../safety/safetyTaskTourModel';
 
 export interface SafetyAlertsViewProps {
   apiUrl: string;
@@ -496,6 +498,48 @@ export function SafetyAlertsView({
     queryClient.removeQueries({ queryKey: contextKey });
   }, [detailAccessDenied, apiUrl, sessionScope, selectedSiteId, selectedAlertId, queryClient]);
 
+  const hasAlertQueueFilter = Boolean(selectedSiteId && workspaceTab === 'Alerts' && canAlerts);
+  const hasSelectedAlertSummary = Boolean(
+    hasAlertQueueFilter && detail.data && !detailAccessDenied,
+  );
+  const canRecordAlertReview = Boolean(
+    hasSelectedAlertSummary && canReviewSafety && detail.data?.status === 'PENDING_REVIEW',
+  );
+  const canCreateIncidentFromAlert = Boolean(
+    hasSelectedAlertSummary &&
+    canReviewSafety &&
+    detail.data?.status === 'CONFIRMED' &&
+    !detail.data?.incidentId,
+  );
+  const hasAlertWorkContextAnchor = Boolean(
+    hasSelectedAlertSummary && (detail.data?.detections.length ?? 0) > 0,
+  );
+  const hasAlertFollowupContext = hasAlertWorkContextAnchor || canCreateIncidentFromAlert;
+  const alertsTourSteps = useMemo(
+    () =>
+      buildAlertsTourSteps({
+        hasQueueFilter: hasAlertQueueFilter,
+        hasSelectedCase: hasSelectedAlertSummary,
+        canRecordReview: canRecordAlertReview,
+        hasFollowupContext: hasAlertFollowupContext,
+      }),
+    [hasAlertQueueFilter, hasSelectedAlertSummary, canRecordAlertReview, hasAlertFollowupContext],
+  );
+  const alertsTourScopeKey = `${sessionScope}:${session?.user.id ?? 'anon'}:${selectedSiteId}:${workspaceTab}`;
+  const isAlertsTourAuthorized = Boolean(
+    session &&
+    token.length > 0 &&
+    session.user.isActive !== false &&
+    !session.user.mustChangePassword &&
+    hasAlertQueueFilter &&
+    !alertSiteUnavailable &&
+    !sites.isPending &&
+    !sites.error &&
+    !alerts.isPending &&
+    !alerts.error &&
+    (!selectedAlertId || (!detail.isPending && !detailAccessDenied)),
+  );
+
   const review = useMutation({
     mutationFn: async (targetStatus: SafetyAlertReviewTargetStatus) => {
       if (!detail.data || detailAccessDenied)
@@ -699,6 +743,7 @@ export function SafetyAlertsView({
         ))}
       </nav>
       <section
+        data-tour-anchor="alerts-queue-filter"
         className={
           'grid gap-3 sm:gap-4 rounded-xl border border-[#EAEAEA] bg-white p-4 grid-cols-1 sm:grid-cols-2 min-w-0 ' +
           (workspaceTab === 'Alerts' && canAlerts
@@ -917,6 +962,18 @@ export function SafetyAlertsView({
         />
       )}
       {selectedSiteId && workspaceTab === 'Alerts' && canAlerts && (
+        <div className="flex flex-wrap items-center justify-end gap-2">
+          <SafetyTaskTour
+            taskId="alerts"
+            tourVersion={ALERTS_TOUR_VERSION}
+            userId={session.user.id}
+            scopeKey={alertsTourScopeKey}
+            isAuthorized={isAlertsTourAuthorized}
+            steps={alertsTourSteps}
+          />
+        </div>
+      )}
+      {selectedSiteId && workspaceTab === 'Alerts' && canAlerts && (
         <div className="grid items-start gap-5 lg:grid-cols-[minmax(240px,0.65fr)_minmax(0,1.35fr)] min-w-0">
           <section
             aria-label={tr('common.alert_list')}
@@ -1048,99 +1105,112 @@ export function SafetyAlertsView({
             )}
             {detail.data && !detailAccessDenied && (
               <div className="mt-4 space-y-5 min-w-0">
-                <TechnicalDetails>
-                  {tr('safety_alerts_view.alert_value_revision_value', {
-                    value1: detail.data.id,
-                    value2: detail.data.revision,
-                  })}
-                </TechnicalDetails>
-                <dl className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4 text-sm min-w-0">
+                <div data-tour-anchor="alerts-case-summary" className="space-y-5 min-w-0">
+                  <TechnicalDetails>
+                    {tr('safety_alerts_view.alert_value_revision_value', {
+                      value1: detail.data.id,
+                      value2: detail.data.revision,
+                    })}
+                  </TechnicalDetails>
+                  <dl className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4 text-sm min-w-0">
+                    <div>
+                      <dt className="text-[#6B6B6B]">{tr('common.candidate_identity')}</dt>
+                      <dd className="mt-1 font-semibold text-[#2F3437] break-words">
+                        {detail.data.candidateWorkerId ?? tr('common.unknown')}
+                      </dd>
+                    </div>
+                    <div>
+                      <dt className="text-[#6B6B6B]">{tr('common.detections')}</dt>
+                      <dd className="mt-1 font-semibold text-[#2F3437]">
+                        {detail.data.detectionsTotal}
+                      </dd>
+                    </div>
+                    <div>
+                      <dt className="text-[#6B6B6B]">{tr('common.status')}</dt>
+                      <dd className="mt-1 font-semibold text-[#2F3437] break-words">
+                        <StatusBadge value={detail.data.status} />
+                      </dd>
+                    </div>
+                    <div>
+                      <dt className="text-[#6B6B6B]">{tr('common.first_seen')}</dt>
+                      <dd className="mt-1 font-semibold text-[#2F3437] break-words">
+                        {formatDate(detail.data.firstDetectedAt)}
+                      </dd>
+                    </div>
+                    <div>
+                      <dt className="text-[#6B6B6B]">{tr('common.last_seen')}</dt>
+                      <dd className="mt-1 font-semibold text-[#2F3437] break-words">
+                        {formatDate(detail.data.lastDetectedAt)}
+                      </dd>
+                    </div>
+                  </dl>
                   <div>
-                    <dt className="text-[#6B6B6B]">{tr('common.candidate_identity')}</dt>
-                    <dd className="mt-1 font-semibold text-[#2F3437] break-words">
-                      {detail.data.candidateWorkerId ?? tr('common.unknown')}
-                    </dd>
-                  </div>
-                  <div>
-                    <dt className="text-[#6B6B6B]">{tr('common.detections')}</dt>
-                    <dd className="mt-1 font-semibold text-[#2F3437]">
-                      {detail.data.detectionsTotal}
-                    </dd>
-                  </div>
-                  <div>
-                    <dt className="text-[#6B6B6B]">{tr('common.status')}</dt>
-                    <dd className="mt-1 font-semibold text-[#2F3437] break-words">
-                      <StatusBadge value={detail.data.status} />
-                    </dd>
-                  </div>
-                  <div>
-                    <dt className="text-[#6B6B6B]">{tr('common.first_seen')}</dt>
-                    <dd className="mt-1 font-semibold text-[#2F3437] break-words">
-                      {formatDate(detail.data.firstDetectedAt)}
-                    </dd>
-                  </div>
-                  <div>
-                    <dt className="text-[#6B6B6B]">{tr('common.last_seen')}</dt>
-                    <dd className="mt-1 font-semibold text-[#2F3437] break-words">
-                      {formatDate(detail.data.lastDetectedAt)}
-                    </dd>
-                  </div>
-                </dl>
-                <div>
-                  <h3 className="text-sm font-bold text-[#2F3437]">
-                    {tr('common.evidence_amp_sources')}
-                  </h3>
-                  <div
-                    className={`mt-2 space-y-2 ${canReviewSafety ? '' : 'max-h-80 overflow-auto'}`}
-                  >
-                    {detail.data.detections.map((detection) => (
-                      <div
-                        key={`${detail.data.id}:${detection.eventId}`}
-                        className="rounded-md bg-[#F7F6F3] p-3 text-xs min-w-0"
-                      >
-                        <div className="flex justify-between gap-3">
-                          <span className="font-mono font-semibold text-[#2F3437]">
-                            {detection.cameraExternalId}
-                          </span>
-                          <span className="font-bold text-[#346538]">
-                            {formatLabel(detection.processingStatus)}
-                          </span>
+                    <h3 className="text-sm font-bold text-[#2F3437]">
+                      {tr('common.evidence_amp_sources')}
+                    </h3>
+                    <div
+                      className={`mt-2 space-y-2 ${canReviewSafety ? '' : 'max-h-80 overflow-auto'}`}
+                    >
+                      {detail.data.detections.map((detection, detectionIndex) => (
+                        <div
+                          key={`${detail.data.id}:${detection.eventId}`}
+                          className="rounded-md bg-[#F7F6F3] p-3 text-xs min-w-0"
+                        >
+                          <div className="flex justify-between gap-3">
+                            <span className="font-mono font-semibold text-[#2F3437]">
+                              {detection.cameraExternalId}
+                            </span>
+                            <span className="font-bold text-[#346538]">
+                              {formatLabel(detection.processingStatus)}
+                            </span>
+                          </div>
+                          <p className="mt-1 text-[#6B6B6B]">{formatDate(detection.capturedAt)}</p>
+                          <TechnicalDetails>
+                            {tr('common.observation')} <span>{detection.eventId}</span>
+                          </TechnicalDetails>
+                          <div
+                            data-tour-anchor={
+                              !canCreateIncidentFromAlert && detectionIndex === 0
+                                ? 'alerts-followup'
+                                : undefined
+                            }
+                          >
+                            <AlertWorkContext
+                              client={client}
+                              apiUrl={apiUrl}
+                              scope={sessionScope}
+                              token={token}
+                              siteId={selectedSiteId}
+                              user={session.user}
+                              alertId={detail.data.id}
+                              revision={detail.data.revision}
+                            />
+                          </div>
+                          <SafetyAlertEvidencePanel
+                            client={client}
+                            apiUrl={apiUrl}
+                            sessionScope={sessionScope}
+                            token={token}
+                            siteId={selectedSiteId}
+                            alertId={detail.data.id}
+                            detection={detection}
+                            canReviewIdentity={canReviewSafety}
+                          />
                         </div>
-                        <p className="mt-1 text-[#6B6B6B]">{formatDate(detection.capturedAt)}</p>
-                        <TechnicalDetails>
-                          {tr('common.observation')} <span>{detection.eventId}</span>
-                        </TechnicalDetails>
-                        <AlertWorkContext
-                          client={client}
-                          apiUrl={apiUrl}
-                          scope={sessionScope}
-                          token={token}
-                          siteId={selectedSiteId}
-                          user={session.user}
-                          alertId={detail.data.id}
-                          revision={detail.data.revision}
-                        />
-                        <SafetyAlertEvidencePanel
-                          client={client}
-                          apiUrl={apiUrl}
-                          sessionScope={sessionScope}
-                          token={token}
-                          siteId={selectedSiteId}
-                          alertId={detail.data.id}
-                          detection={detection}
-                          canReviewIdentity={canReviewSafety}
-                        />
-                      </div>
-                    ))}
-                    {detail.data.detections.length === 0 && (
-                      <p className="rounded-md bg-[#F7F6F3] p-3 text-sm text-[#6B6B6B]">
-                        {tr('safety_alerts_view.no_source_observation_is_linked_to_this_alert')}
-                      </p>
-                    )}
+                      ))}
+                      {detail.data.detections.length === 0 && (
+                        <p className="rounded-md bg-[#F7F6F3] p-3 text-sm text-[#6B6B6B]">
+                          {tr('safety_alerts_view.no_source_observation_is_linked_to_this_alert')}
+                        </p>
+                      )}
+                    </div>
                   </div>
                 </div>
                 {canReviewSafety && detail.data.status === 'PENDING_REVIEW' && (
-                  <section className="rounded-lg border border-[#EAEAEA] bg-[#F7F6F3] p-3 sm:p-4 min-w-0">
+                  <section
+                    data-tour-anchor="alerts-action-bar"
+                    className="rounded-lg border border-[#EAEAEA] bg-[#F7F6F3] p-3 sm:p-4 min-w-0"
+                  >
                     <h3 className="text-sm font-bold text-[#111111]">
                       {tr('common.record_review_decision')}
                     </h3>
@@ -1208,23 +1278,20 @@ export function SafetyAlertsView({
                     </div>
                   </section>
                 )}
-                {detail.data.status === 'CONFIRMED' &&
-                  !detail.data.incidentId &&
-                  session.user.roleAssignments.some(
-                    (r) => r.role === 'SAFETY_OFFICER' && r.siteId === selectedSiteId,
-                  ) && (
-                    <button
-                      type="button"
-                      className="min-h-10 rounded-lg bg-[var(--action-primary)] px-4 py-2 text-sm font-semibold text-white hover:bg-[var(--action-primary-hover)]"
-                      onClick={() => {
-                        setIncidentReturn(relatedAlertFilter ? 'Overview' : undefined);
-                        setIncidentSourceAlert(detail.data!.id);
-                        setWorkspaceTab('Incidents');
-                      }}
-                    >
-                      {tr('safety_alerts_view.create_incident_from_alert')}
-                    </button>
-                  )}
+                {canCreateIncidentFromAlert && (
+                  <button
+                    type="button"
+                    data-tour-anchor="alerts-followup"
+                    className="min-h-10 rounded-lg bg-[var(--action-primary)] px-4 py-2 text-sm font-semibold text-white hover:bg-[var(--action-primary-hover)]"
+                    onClick={() => {
+                      setIncidentReturn(relatedAlertFilter ? 'Overview' : undefined);
+                      setIncidentSourceAlert(detail.data!.id);
+                      setWorkspaceTab('Incidents');
+                    }}
+                  >
+                    {tr('safety_alerts_view.create_incident_from_alert')}
+                  </button>
+                )}
                 <section className="min-w-0">
                   <h3 className="text-sm font-bold text-[#2F3437]">
                     {tr('common.review_history_value', { value1: detail.data.reviewsTotal })}
