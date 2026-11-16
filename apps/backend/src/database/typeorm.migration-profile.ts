@@ -1,7 +1,9 @@
 import type { DataSourceOptions } from 'typeorm';
+import { TrackedCameraPpeWire1795046400011 } from './migrations/1795046400011-TrackedCameraPpeWire.js';
 import { CameraPpePolicyStorage1795046400010 } from './migrations/1795046400010-CameraPpePolicyStorage.js';
 import {
   includesIdentificationProfile,
+  includesCameraPpeProfile,
   TRACKED_MIGRATION_PROFILES,
 } from './migration-profile-names.js';
 import { SafetyIdentificationRequests1795046400009 } from './migrations/1795046400009-SafetyIdentificationRequests.js';
@@ -52,9 +54,8 @@ export function buildMigrationOptions(
       ...(includesIdentificationProfile(profile)
         ? [SafetyIdentificationRequests1795046400009]
         : []),
-      ...(profile === 'tracked-v16-identification-ppe'
-        ? [CameraPpePolicyStorage1795046400010]
-        : []),
+      ...(includesCameraPpeProfile(profile) ? [CameraPpePolicyStorage1795046400010] : []),
+      ...(profile === 'tracked-v17-identification-ppe' ? [TrackedCameraPpeWire1795046400011] : []),
     ],
   };
 }

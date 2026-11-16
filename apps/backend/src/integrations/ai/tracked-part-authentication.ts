@@ -4,6 +4,7 @@ import {
   parseWorkerEventDeliveryContext,
   validateTrackedObservationEvent,
   validateTrackedEntryOriginEvent,
+  validateTrackedCameraPpeEvent,
 } from '@smartsite/contracts';
 import type { EntityManager } from 'typeorm';
 import { PublicHttpException } from '../../common/http/public-http-exception.js';
@@ -17,7 +18,7 @@ export interface TrackedPartProfilePolicy {
   readonly profileSha256: string;
   readonly allowedCameraIds: readonly string[];
   readonly clockToleranceMs: number;
-  readonly wireVersion?: '1.5.0' | '1.6.0';
+  readonly wireVersion?: keyof typeof trackedValidators;
 }
 interface EventIdentity {
   eventId: string;
@@ -38,14 +39,21 @@ function reject(status: 400 | 409 | 503): never {
     message: 'Tracked part admission is unavailable',
   });
 }
+const trackedValidators = {
+  '1.5.0': validateTrackedObservationEvent,
+  '1.6.0': validateTrackedEntryOriginEvent,
+  '1.7.0': validateTrackedCameraPpeEvent,
+};
+
 /** Validate original payloads from immutable tracked storage. */
 export function isStoredTrackedPayloadValid(payload: unknown): boolean {
   const version = (payload as { schemaVersion?: unknown } | null)?.schemaVersion;
-  return (version === '1.6.0' ? validateTrackedEntryOriginEvent : validateTrackedObservationEvent)(
-    payload,
-  ).isValid;
+  return (
+    typeof version === 'string' &&
+    Object.hasOwn(trackedValidators, version) &&
+    trackedValidators[version as keyof typeof trackedValidators](payload).isValid
+  );
 }
-
 function freezeJson(value: unknown): unknown {
   if (value && typeof value === 'object') {
     for (const child of Object.values(value)) freezeJson(child);
@@ -71,7 +79,7 @@ export class TrackedPartAuthenticator {
         !policy.allowedCameraIds.length ||
         !Number.isSafeInteger(policy.clockToleranceMs) ||
         policy.clockToleranceMs < 0 ||
-        (policy.wireVersion !== undefined && !['1.5.0', '1.6.0'].includes(policy.wireVersion))
+        (policy.wireVersion !== undefined && !Object.hasOwn(trackedValidators, policy.wireVersion))
       )
         throw new Error('Invalid server tracking profile policy');
       this.policy = Object.freeze({
@@ -126,10 +134,7 @@ export class TrackedPartAuthenticator {
       reject(400);
     }
     const context = parseWorkerEventDeliveryContext(rawContext);
-    const incomingValidator =
-      this.policy.wireVersion === '1.6.0'
-        ? validateTrackedEntryOriginEvent
-        : validateTrackedObservationEvent;
+    const incomingValidator = trackedValidators[this.policy.wireVersion ?? '1.5.0'];
     const valid =
       authentication.storedEventId === undefined
         ? incomingValidator(payload).isValid

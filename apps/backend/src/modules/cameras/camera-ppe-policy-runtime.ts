@@ -2,6 +2,7 @@ import { Injectable, type OnModuleInit } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { DataSource } from 'typeorm';
 import type { BackendEnvironment } from '../../config/environment.js';
+import { includesCameraPpeProfile } from '../../database/migration-profile-names.js';
 
 /** Readiness of the explicit combined profile; not a policy adoption or permission decision. */
 @Injectable()
@@ -13,8 +14,7 @@ export class CameraPpePolicyRuntime implements OnModuleInit {
 
   async onModuleInit(): Promise<void> {
     if (
-      this.config.get('SMARTSITE_DB_MIGRATION_PROFILE', { infer: true }) !==
-      'tracked-v16-identification-ppe'
+      !includesCameraPpeProfile(this.config.get('SMARTSITE_DB_MIGRATION_PROFILE', { infer: true }))
     )
       return;
     const schema = this.config.get('DATABASE_SCHEMA', { infer: true });

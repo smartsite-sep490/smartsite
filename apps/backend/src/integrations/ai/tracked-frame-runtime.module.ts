@@ -19,20 +19,32 @@ import {
 } from './tracked-part-authentication.js';
 
 export interface TrackedFrameRuntimeOptions {
-  readonly profile: TrackedPartProfilePolicy & { readonly wireVersion: '1.5.0' | '1.6.0' };
+  readonly profile: TrackedPartProfilePolicy & {
+    readonly wireVersion: '1.5.0' | '1.6.0' | '1.7.0';
+  };
   readonly pending: TrackedPendingPolicy;
   readonly heads: ConstructorParameters<typeof TrackedFrameAdmission>[1];
   readonly recovery: Omit<ConstructorParameters<typeof TrackedFrameRecovery>[2], 'cameraIds'>;
   readonly maxRecipients: number;
 }
 
-const constraintPins = {
+const v16ConstraintPins = {
   'ai_observation_event.chk_ai_event_tracking_fields':
     '4fe09662a7f23611c1fec1204a2aa722f0944b7756aa4a7929ec68f05fa4d05c',
   'ai_observation_event.chk_v16_requires_tracked_route':
     '11901da3905d345db0180f02b95ed1057a423fd3c0f6d5db26c2016ca9333148',
   'camera_worker_generation.chk_generation_tracked_wire_version':
     '8e31c8279ff93c5813ea2513f62697c6c816884e53d52f454a1c01d267dd26f8',
+};
+
+const v17ConstraintPins = {
+  ...v16ConstraintPins,
+  'ai_observation_event.chk_ai_event_tracking_fields':
+    '6f578c9510650ce74e507049f73fca5631d56d1821df7de612eb1f217b8b6fac',
+  'camera_worker_generation.chk_generation_tracked_wire_version':
+    '132aec098458b30551465815ae6b20ff866e7ca9f0a56d7b02a6f21ff8168549',
+  'ai_observation_event.chk_v17_requires_tracked_route':
+    'cf3b240fb6dfc06077b0c0e0d7348024a4f0f9089e600bc0351dd5c73e83cffb',
 };
 
 const triggerPins = {
@@ -49,9 +61,15 @@ const triggerPins = {
 };
 
 // The tracked profile must see the reviewed forward-migration fence before binding routes.
-async function requireV16DatabaseFence(db: DataSource): Promise<void> {
+async function requireTrackedDatabaseFence(
+  db: DataSource,
+  version: '1.6.0' | '1.7.0',
+): Promise<void> {
+  const constraintPins = version === '1.7.0' ? v17ConstraintPins : v16ConstraintPins;
   const schema = db.driver.schema;
-  if (typeof schema !== 'string') throw new Error('Tracked v1.6 database fencing is unavailable');
+  if (typeof schema !== 'string')
+    throw new Error('Tracked database fencing is unavailable for ' + version);
+
   const [active] = await db.query('SELECT current_schema() AS schema');
   if (active?.schema !== schema)
     throw new Error('Tracked database connection does not match its selected schema');
@@ -105,14 +123,17 @@ async function requireV16DatabaseFence(db: DataSource): Promise<void> {
     );
   });
   if (!constraintsMatch || !triggersMatch)
-    throw new Error('Tracked v1.6 database fencing is unavailable');
+    throw new Error('Tracked database fencing is unavailable for ' + version);
 }
 
 class TrackedDatabaseFence implements OnModuleInit {
-  constructor(private readonly db: DataSource) {}
+  constructor(
+    private readonly db: DataSource,
+    private readonly version: '1.6.0' | '1.7.0',
+  ) {}
 
   async onModuleInit(): Promise<void> {
-    await requireV16DatabaseFence(this.db);
+    await requireTrackedDatabaseFence(this.db, this.version);
   }
 }
 
@@ -121,7 +142,7 @@ class TrackedDatabaseFence implements OnModuleInit {
 export class TrackedFrameRuntimeModule {
   static register(options?: TrackedFrameRuntimeOptions): DynamicModule {
     if (options === undefined) return { module: TrackedFrameRuntimeModule };
-    if (options.profile?.wireVersion !== '1.5.0' && options.profile?.wireVersion !== '1.6.0')
+    if (!options.profile || !['1.5.0', '1.6.0', '1.7.0'].includes(options.profile.wireVersion))
       throw new Error('An explicit tracked wire version is required');
     const { profile, pending, heads, recovery, maxRecipients } = structuredClone(options);
     return {
@@ -140,12 +161,13 @@ export class TrackedFrameRuntimeModule {
           useFactory: (auth: TrackedPartAuthenticator) =>
             new TrackedFramePrototypeStore(auth, pending),
         },
-        ...(profile.wireVersion === '1.6.0'
+        ...(profile.wireVersion !== '1.5.0'
           ? [
               {
                 provide: TrackedDatabaseFence,
                 inject: [DataSource],
-                useFactory: (db: DataSource) => new TrackedDatabaseFence(db),
+                useFactory: (db: DataSource) =>
+                  new TrackedDatabaseFence(db, profile.wireVersion as '1.6.0' | '1.7.0'),
               },
             ]
           : []),

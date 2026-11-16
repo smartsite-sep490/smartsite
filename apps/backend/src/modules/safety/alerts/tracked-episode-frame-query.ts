@@ -272,8 +272,18 @@ export class TrackedEpisodeFrameQuery {
     if (!bundle) conflict('Tracked evidence configuration is unavailable');
     const contexts = new Map<string, ResolvedObservationContext>(),
       resolver = new ObservationContextResolverService();
+    let cameraPpe: Parameters<AlertCandidateEvaluator['evaluate']>[3];
     for (const o of raw.observations) {
       if (o.type !== 'PPE' || o.trackId !== person.trackId) continue;
+      if (o.scope === 'CAMERA') {
+        if (bundle.schemaVersion !== '2.0.0')
+          conflict('Tracked evidence camera policy is unavailable');
+        const location = resolveIssuedPpeLocation(bundle, person.boundingBox);
+        if (location?.policy.scope !== 'CAMERA')
+          conflict('Tracked evidence camera scope is invalid');
+        cameraPpe = { cameraId: e.cameraId, requiredPpe: location.policy.requiredPpe };
+        continue;
+      }
       const key = `${o.regionId}:${o.geometryVersion}`;
       if (bundle.schemaVersion === '2.0.0') {
         const location = resolveIssuedPpeLocation(bundle, person.boundingBox);
@@ -306,6 +316,8 @@ export class TrackedEpisodeFrameQuery {
           observations: raw.observations.filter((o) => o.type !== 'ZONE_ENTRY'),
         },
         contexts,
+        undefined,
+        cameraPpe,
       )
       .find(
         (c) =>
@@ -322,6 +334,8 @@ export class TrackedEpisodeFrameQuery {
         o.ppeItem !== candidate.details.ppeItem
       )
         return [];
+      if (o.scope === 'CAMERA')
+        return row.zoneId === null && cameraPpe?.requiredPpe.includes(o.ppeItem) ? [i] : [];
       const regionContext = contexts.get(`${o.regionId}:${o.geometryVersion}`);
       return regionContext?.zoneId === row.zoneId &&
         regionContext.zone.requiredPpe.includes(o.ppeItem)
