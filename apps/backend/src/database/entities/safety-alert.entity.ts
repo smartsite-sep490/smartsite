@@ -13,10 +13,9 @@ import { numericTransformer } from './numeric.transformer.js';
 import { SiteEntity } from './site.entity.js';
 import { ZoneEntity } from './zone.entity.js';
 import { IncidentEntity } from './safety-workflow.entity.js';
-import { SafetyEpisodeEntity } from './safety-episode.entity.js';
 
 @Entity({ name: 'safety_alert' })
-@ForeignKey(() => SafetyEpisodeEntity, ['episodeId', 'siteId'], ['id', 'siteId'], {
+@ForeignKey('safety_episode', ['episodeId', 'siteId'], ['id', 'siteId'], {
   name: 'fk_safety_alert_episode_scope',
   onDelete: 'RESTRICT',
 })

@@ -7,7 +7,6 @@ import {
   PrimaryColumn,
   Unique,
 } from 'typeorm';
-import { AiObservationEventEntity } from './ai-observation-event.entity.js';
 import { SiteEntity } from './site.entity.js';
 import { ObservationIdentityDecisionEntity } from './observation-identity-decision.entity.js';
 import type { ObservationSubjectRef } from '../../modules/safety/identity/observation-identity.types.js';
@@ -33,7 +32,7 @@ export class ObservationIdentityResolutionEntity {
   id!: string;
 
   @Column({ name: 'event_id', type: 'uuid' })
-  @ForeignKey(() => AiObservationEventEntity, {
+  @ForeignKey('ai_observation_event', {
     name: 'fk_identity_resolution_event',
     onDelete: 'RESTRICT',
   })

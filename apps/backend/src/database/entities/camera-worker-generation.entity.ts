@@ -53,7 +53,7 @@ export class CameraWorkerGenerationEntity {
 
 @Entity({ name: 'camera_configuration_application_receipt' })
 @ForeignKey(
-  () => CameraWorkerGenerationEntity,
+  'camera_worker_generation',
   ['workerGenerationId', 'cameraId', 'siteId', 'streamSessionId'],
   ['id', 'cameraId', 'siteId', 'streamSessionId'],
   { name: 'fk_camera_application_receipt_generation', onDelete: 'RESTRICT' },
