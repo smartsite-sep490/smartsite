@@ -10,6 +10,11 @@ import { SafetyWorkflowController } from './safety-workflow.controller.js';
 import { SafetyUploadService } from './safety-upload.service.js';
 import { Mf06IngestionEnqueueService } from './assessments/mf06-ingestion-enqueue.service.js';
 import { Module } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
+import type { BackendEnvironment } from '../../config/environment.js';
+import { UserAuthGuard } from '../auth/user-auth.guard.js';
+import { TrackedEpisodeFrameQuery } from './alerts/tracked-episode-frame-query.js';
+import { TrackedEpisodeFramesController } from './alerts/tracked-episode-frames.controller.js';
 import { SafetyEpisodeInboxController } from './alerts/safety-episode-inbox.controller.js';
 import { SafetyEpisodeInboxService } from './alerts/safety-episode-inbox.service.js';
 import { SafetyEpisodeQueryService } from './alerts/safety-episode-query.service.js';
@@ -51,6 +56,7 @@ import { ZoneAccessManagementService } from '../zones/zone-access-management.ser
   controllers: [
     SafetyEpisodesController,
     SafetyEpisodeInboxController,
+    TrackedEpisodeFramesController,
     SafetyChecklistController,
     SafetyOverviewController,
     SafetyAlertsController,
@@ -61,6 +67,23 @@ import { ZoneAccessManagementService } from '../zones/zone-access-management.ser
     SafetyEpisodeProjectionService,
     SafetyEpisodeQueryService,
     SafetyEpisodeInboxService,
+    {
+      provide: TrackedEpisodeFrameQuery,
+      inject: [DataSource, UserAuthGuard, ConfigService],
+      useFactory: (
+        db: DataSource,
+        auth: UserAuthGuard,
+        config: ConfigService<BackendEnvironment, true>,
+      ) =>
+        new TrackedEpisodeFrameQuery(
+          db,
+          auth,
+          config.get('EVIDENCE_LOCAL_ROOT', { infer: true }) ?? '',
+          undefined,
+          undefined,
+          () => config.get('SAFETY_TRACKED_HISTORY_READ_ENABLED', { infer: true }) === true,
+        ),
+    },
     Mf06IngestionEnqueueService,
     SafetyChecklistService,
     SafetyOverviewService,

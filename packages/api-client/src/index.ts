@@ -190,3 +190,5 @@ export type { CameraApplicationStatus } from '@smartsite/contracts/camera-applic
 export { LEAVE_NOTICE_HOURS } from '@smartsite/contracts/leave-notice';
 export { scheduledShiftWindow } from '@smartsite/contracts/scheduled-shift';
 export type { LeaveNoticeType } from '@smartsite/contracts/leave-notice';
+
+export type { TrackedEpisodeMediaResult } from './tracked-episode-media-response';
