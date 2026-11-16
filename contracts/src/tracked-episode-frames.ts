@@ -1,0 +1,531 @@
+import type { SafetyAlertStatus, SafetyAlertType } from './management-api.js';
+import {
+  parseObservationIdentitySubjectRef,
+  parseObservationIdentityDecisionResponse,
+  type ObservationIdentitySubjectRef,
+  type ObservationIdentityDecisionResponse,
+} from './observation-identity-management.js';
+
+export interface TrackedObservationIdentity {
+  episodeId: string;
+  siteId: string;
+  source: TrackedEpisodeMediaSource;
+  subjectRef: ObservationIdentitySubjectRef;
+  revision: number;
+  latestDecision: ObservationIdentityDecisionResponse | null;
+}
+
+/** TRACKED metadata only: identity and original media belong to each original observation. */
+export interface TrackedEpisodeDetail {
+  episodeId: string;
+  siteId: string;
+  cameraId: string;
+  subject: { kind: 'TRACKED'; segmentId: string; scopeSha256: string };
+  firstObservedAt: string;
+  lastObservedAt: string;
+  contentRevision: number;
+  collectionState: 'COLLECTING' | 'SEALED';
+  findings: {
+    alertId: string;
+    alertType: SafetyAlertType;
+    candidateSubtype: string;
+    status: SafetyAlertStatus;
+    alertRevision: number;
+    zoneId: string | null;
+    /** Original contributor mappings, not unique people, frames or notifications. */
+    observationCount: number;
+  }[];
+}
+
+/** Additive transport contract. The internal tracked reader is not registered by this module. */
+export interface TrackedEpisodeObservationOptions {
+  offset?: number;
+  limit?: number;
+  /** Keep the first page's exact upper fence for subsequent pages; never convert to Number. */
+  throughSequence?: string;
+  alertId?: string;
+}
+export interface TrackedEpisodeOriginalObservation {
+  alertId: string;
+  eventId: string;
+  personObservationIndex: number;
+  payloadHash: string;
+  sourceSequence: string;
+  capturedAt: string;
+  observationIndexes: number[];
+  /** Descriptors only. Availability requires an authenticated media read and SHA verification. */
+  frames: { evidenceIndex: number; sha256: string }[];
+}
+export interface TrackedEpisodeObservationPage {
+  episodeId: string;
+  contentRevision: number;
+  throughSequence: string;
+  offset: number;
+  limit: number;
+  total: number;
+  hasMore: boolean;
+  items: TrackedEpisodeOriginalObservation[];
+}
+export type TrackedEpisodeMediaRepresentation = 'FRAME' | 'SUBJECT';
+export interface TrackedEpisodeMediaQuery {
+  personObservationIndex: number;
+  evidenceIndex: number;
+  representation: TrackedEpisodeMediaRepresentation;
+}
+export interface TrackedEpisodeMediaSource {
+  alertId: string;
+  eventId: string;
+  personObservationIndex: number;
+  evidenceIndex: number;
+}
+const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+function fields(input: unknown, allowed: readonly string[]): Record<string, string> | null {
+  if (
+    !input ||
+    typeof input !== 'object' ||
+    Array.isArray(input) ||
+    ![Object.prototype, null].includes(Object.getPrototypeOf(input))
+  )
+    return null;
+  const result: Record<string, string> = {};
+  for (const key of Reflect.ownKeys(input)) {
+    if (typeof key !== 'string' || !allowed.includes(key)) return null;
+    const descriptor = Object.getOwnPropertyDescriptor(input, key);
+    if (!descriptor?.enumerable || !('value' in descriptor) || typeof descriptor.value !== 'string')
+      return null;
+    result[key] = descriptor.value;
+  }
+  return result;
+}
+function integer(value: string, max: number): number | null {
+  if (!/^(0|[1-9][0-9]*)$/.test(value)) return null;
+  const number = Number(value);
+  return Number.isSafeInteger(number) && number <= max ? number : null;
+}
+/** Exact HTTP query parsing only. Site, episode, finding and actor are authorized by Backend. */
+export function parseTrackedEpisodeObservationQuery(
+  input: unknown,
+): TrackedEpisodeObservationOptions | null {
+  try {
+    const value = fields(input, ['offset', 'limit', 'throughSequence', 'alertId']);
+    if (!value) return null;
+    const result: TrackedEpisodeObservationOptions = {};
+    if (value.offset !== undefined) {
+      const n = integer(value.offset, Number.MAX_SAFE_INTEGER);
+      if (n === null) return null;
+      result.offset = n;
+    }
+    if (value.limit !== undefined) {
+      const n = integer(value.limit, 20);
+      if (n === null || n < 1) return null;
+      result.limit = n;
+    }
+    if (value.throughSequence !== undefined) {
+      if (
+        !/^(0|[1-9][0-9]{0,19})$/.test(value.throughSequence) ||
+        BigInt(value.throughSequence) > 18446744073709551615n
+      )
+        return null;
+      result.throughSequence = value.throughSequence;
+    }
+    if (value.alertId !== undefined) {
+      if (!UUID.test(value.alertId)) return null;
+      result.alertId = value.alertId.toLowerCase();
+    }
+    return result;
+  } catch {
+    return null;
+  }
+}
+/** SUBJECT means a mechanical original PERSON crop, never Face/Worker identity. */
+export function parseTrackedEpisodeMediaQuery(input: unknown): TrackedEpisodeMediaQuery | null {
+  try {
+    const value = fields(input, ['personObservationIndex', 'evidenceIndex', 'representation']);
+    if (!value) return null;
+    if (value.personObservationIndex === undefined || value.evidenceIndex === undefined)
+      return null;
+    const personObservationIndex = integer(value.personObservationIndex, 255),
+      evidenceIndex = integer(value.evidenceIndex, 255);
+    const representation = value.representation ?? 'FRAME';
+    if (
+      personObservationIndex === null ||
+      evidenceIndex === null ||
+      !['FRAME', 'SUBJECT'].includes(representation)
+    )
+      return null;
+    return {
+      personObservationIndex,
+      evidenceIndex,
+      representation: representation as TrackedEpisodeMediaRepresentation,
+    };
+  } catch {
+    return null;
+  }
+}
+
+function objectFields(input: unknown, keys: readonly string[]): Record<string, unknown> | null {
+  if (
+    !input ||
+    typeof input !== 'object' ||
+    Array.isArray(input) ||
+    ![Object.prototype, null].includes(Object.getPrototypeOf(input))
+  )
+    return null;
+  const own = Reflect.ownKeys(input);
+  if (own.length !== keys.length) return null;
+  const result: Record<string, unknown> = {};
+  for (const key of own) {
+    if (typeof key !== 'string' || !keys.includes(key)) return null;
+    const field = Object.getOwnPropertyDescriptor(input, key);
+    if (!field?.enumerable || !('value' in field)) return null;
+    result[key] = field.value;
+  }
+  return result;
+}
+function arrayValues(input: unknown, max: number): unknown[] | null {
+  if (
+    !Array.isArray(input) ||
+    input.length > max ||
+    Object.getPrototypeOf(input) !== Array.prototype ||
+    Reflect.ownKeys(input).length !== input.length + 1
+  )
+    return null;
+  const values = [];
+  for (let i = 0; i < input.length; i++) {
+    const d = Object.getOwnPropertyDescriptor(input, String(i));
+    if (!d?.enumerable || !('value' in d)) return null;
+    values.push(d.value);
+  }
+  return values;
+}
+const uint64 = (v: unknown): v is string =>
+  typeof v === 'string' && /^(0|[1-9][0-9]{0,19})$/.test(v) && BigInt(v) <= 18446744073709551615n;
+const safe = (v: unknown, max = Number.MAX_SAFE_INTEGER): v is number =>
+  typeof v === 'number' && Number.isSafeInteger(v) && v >= 0 && v <= max;
+const id = (v: unknown): v is string =>
+  typeof v === 'string' && UUID.test(v) && v === v.toLowerCase();
+const hash = (v: unknown): v is string => typeof v === 'string' && /^[a-f0-9]{64}$/.test(v);
+const time = (v: unknown): v is string =>
+  typeof v === 'string' &&
+  /^\d{4}-\d\d-\d\d[Tt](?:[01]\d|2[0-3]):[0-5]\d:(?:[0-5]\d|60)(?:\.\d+)?(?:[Zz]|[+-](?:[01]\d|2[0-3]):[0-5]\d)$/.test(
+    v,
+  ) &&
+  Number.isFinite(Date.parse(v.replace(/:60(?=\.|[Zz]|[+-])/, ':59')));
+
+export function parseTrackedEpisodeMediaSource(input: unknown): TrackedEpisodeMediaSource | null {
+  try {
+    const s = objectFields(input, [
+      'alertId',
+      'eventId',
+      'personObservationIndex',
+      'evidenceIndex',
+    ]);
+    if (
+      !s ||
+      !id(s.alertId) ||
+      !id(s.eventId) ||
+      !safe(s.personObservationIndex, 255) ||
+      !safe(s.evidenceIndex, 255)
+    )
+      return null;
+    return {
+      alertId: s.alertId,
+      eventId: s.eventId,
+      personObservationIndex: s.personObservationIndex,
+      evidenceIndex: s.evidenceIndex,
+    };
+  } catch {
+    return null;
+  }
+}
+function identityRefKey(ref: ObservationIdentitySubjectRef): string {
+  const b = ref.personBoundingBox;
+  return JSON.stringify([
+    ref.eventId,
+    ref.personObservationIndex,
+    ref.payloadHash,
+    ref.cameraId,
+    ref.cameraExternalId,
+    ref.streamSessionId,
+    ref.capturedAt,
+    ref.trackId,
+    b.x1,
+    b.y1,
+    b.x2,
+    b.y2,
+    b.coordinateSpace,
+  ]);
+}
+export function parseTrackedObservationIdentity(
+  input: unknown,
+  siteId: string,
+  episodeId: string,
+  source: TrackedEpisodeMediaSource,
+  expectedPayloadHash: string,
+): TrackedObservationIdentity | null {
+  try {
+    const expected = parseTrackedEpisodeMediaSource(source);
+    const p = objectFields(input, [
+      'episodeId',
+      'siteId',
+      'source',
+      'subjectRef',
+      'revision',
+      'latestDecision',
+    ]);
+    if (
+      !p ||
+      !id(siteId) ||
+      !id(episodeId) ||
+      !expected ||
+      !hash(expectedPayloadHash) ||
+      p.siteId !== siteId ||
+      p.episodeId !== episodeId ||
+      !safe(p.revision, 2147483647)
+    )
+      return null;
+    const s = parseTrackedEpisodeMediaSource(p.source),
+      ref = parseObservationIdentitySubjectRef(p.subjectRef);
+    if (
+      !s ||
+      !ref ||
+      JSON.stringify(s) !== JSON.stringify(expected) ||
+      ref.eventId !== s.eventId ||
+      ref.personObservationIndex !== s.personObservationIndex ||
+      ref.payloadHash !== expectedPayloadHash
+    )
+      return null;
+    let latestDecision: ObservationIdentityDecisionResponse | null = null;
+    if (p.latestDecision !== null) {
+      const d = parseObservationIdentityDecisionResponse(p.latestDecision);
+      if (!d || d.revision !== p.revision || identityRefKey(d.subjectRef) !== identityRefKey(ref))
+        return null;
+      latestDecision = d;
+    } else if (p.revision !== 0) return null;
+    return { episodeId, siteId, source: s, subjectRef: ref, revision: p.revision, latestDecision };
+  } catch {
+    return null;
+  }
+}
+
+export function parseTrackedEpisodeDetail(
+  input: unknown,
+  siteId: string,
+  episodeId: string,
+): TrackedEpisodeDetail | null {
+  try {
+    const p = objectFields(input, [
+      'episodeId',
+      'siteId',
+      'cameraId',
+      'subject',
+      'firstObservedAt',
+      'lastObservedAt',
+      'contentRevision',
+      'collectionState',
+      'findings',
+    ]);
+    if (
+      !id(siteId) ||
+      !id(episodeId) ||
+      !p ||
+      p.siteId !== siteId ||
+      p.episodeId !== episodeId ||
+      !id(p.cameraId) ||
+      !time(p.firstObservedAt) ||
+      !time(p.lastObservedAt) ||
+      Date.parse(p.firstObservedAt) > Date.parse(p.lastObservedAt) ||
+      !safe(p.contentRevision, 2147483647) ||
+      p.contentRevision < 1 ||
+      !['COLLECTING', 'SEALED'].includes(p.collectionState as string)
+    )
+      return null;
+    const s = objectFields(p.subject, ['kind', 'segmentId', 'scopeSha256']);
+    if (!s || s.kind !== 'TRACKED' || !id(s.segmentId) || !hash(s.scopeSha256)) return null;
+    const rows = arrayValues(p.findings, 256);
+    if (!rows?.length) return null;
+    const findings: TrackedEpisodeDetail['findings'] = [],
+      seen = new Set<string>();
+    for (const row of rows) {
+      const f = objectFields(row, [
+        'alertId',
+        'alertType',
+        'candidateSubtype',
+        'status',
+        'alertRevision',
+        'zoneId',
+        'observationCount',
+      ]);
+      if (
+        !f ||
+        !id(f.alertId) ||
+        seen.has(f.alertId) ||
+        !['PPE_VIOLATION', 'RESTRICTED_ZONE_INTRUSION'].includes(f.alertType as string) ||
+        typeof f.candidateSubtype !== 'string' ||
+        !/^[A-Z][A-Z0-9_]{0,63}$/.test(f.candidateSubtype) ||
+        !['PENDING_REVIEW', 'NEEDS_MORE_EVIDENCE', 'CONFIRMED', 'DISMISSED', 'CLOSED'].includes(
+          f.status as string,
+        ) ||
+        !safe(f.alertRevision, 2147483647) ||
+        (f.zoneId !== null && !id(f.zoneId)) ||
+        !safe(f.observationCount, 2147483647) ||
+        f.observationCount < 1
+      )
+        return null;
+      seen.add(f.alertId);
+      findings.push({
+        alertId: f.alertId,
+        alertType: f.alertType as SafetyAlertType,
+        candidateSubtype: f.candidateSubtype,
+        status: f.status as SafetyAlertStatus,
+        alertRevision: f.alertRevision,
+        zoneId: f.zoneId as string | null,
+        observationCount: f.observationCount,
+      });
+    }
+    return {
+      episodeId,
+      siteId,
+      cameraId: p.cameraId,
+      subject: { kind: 'TRACKED', segmentId: s.segmentId, scopeSha256: s.scopeSha256 },
+      firstObservedAt: p.firstObservedAt,
+      lastObservedAt: p.lastObservedAt,
+      contentRevision: p.contentRevision,
+      collectionState: p.collectionState as 'COLLECTING' | 'SEALED',
+      findings,
+    };
+  } catch {
+    return null;
+  }
+}
+
+/** Runtime response validation against the exact requested episode, page and optional finding.
+ * Shape/hash descriptors are not a claim that bytes are available or a Worker is identified.
+ */
+export function parseTrackedEpisodeObservationPage(
+  input: unknown,
+  episodeId: string,
+  options: TrackedEpisodeObservationOptions = {},
+): TrackedEpisodeObservationPage | null {
+  try {
+    if (!id(episodeId)) return null;
+    const p = objectFields(input, [
+      'episodeId',
+      'contentRevision',
+      'throughSequence',
+      'offset',
+      'limit',
+      'total',
+      'hasMore',
+      'items',
+    ]);
+    if (
+      !p ||
+      p.episodeId !== episodeId ||
+      !safe(p.contentRevision, 2147483647) ||
+      p.contentRevision < 1 ||
+      !uint64(p.throughSequence) ||
+      !safe(p.offset) ||
+      !safe(p.limit, 20) ||
+      p.limit < 1 ||
+      !safe(p.total) ||
+      typeof p.hasMore !== 'boolean' ||
+      p.offset !== (options.offset ?? 0) ||
+      p.limit !== (options.limit ?? 20) ||
+      (options.throughSequence !== undefined && p.throughSequence !== options.throughSequence)
+    )
+      return null;
+    const rawItems = arrayValues(p.items, p.limit);
+    if (!rawItems) return null;
+    const expected = Math.min(p.limit, Math.max(0, p.total - p.offset));
+    if (rawItems.length !== expected || p.hasMore !== p.offset + rawItems.length < p.total)
+      return null;
+    const items: TrackedEpisodeOriginalObservation[] = [],
+      seen = new Set<string>();
+    const eventHeaders = new Map<string, string>();
+    let previous: bigint | null = null;
+    for (const raw of rawItems) {
+      const item = objectFields(raw, [
+        'alertId',
+        'eventId',
+        'personObservationIndex',
+        'payloadHash',
+        'sourceSequence',
+        'capturedAt',
+        'observationIndexes',
+        'frames',
+      ]);
+      if (
+        !item ||
+        !id(item.alertId) ||
+        !id(item.eventId) ||
+        !safe(item.personObservationIndex, 255) ||
+        !hash(item.payloadHash) ||
+        !uint64(item.sourceSequence) ||
+        BigInt(item.sourceSequence) > BigInt(p.throughSequence) ||
+        !time(item.capturedAt) ||
+        (options.alertId !== undefined && item.alertId !== options.alertId.toLowerCase())
+      )
+        return null;
+      const current = BigInt(item.sourceSequence);
+      if (previous !== null && current > previous) return null;
+      previous = current;
+      const key = `${item.alertId}:${item.eventId}:${item.personObservationIndex}`;
+      if (seen.has(key)) return null;
+      seen.add(key);
+      const indexes = arrayValues(item.observationIndexes, 256),
+        rawFrames = arrayValues(item.frames, 256);
+      if (
+        !indexes?.length ||
+        !rawFrames ||
+        indexes.some((i) => !safe(i, 255) || i === item.personObservationIndex) ||
+        new Set(indexes).size !== indexes.length
+      )
+        return null;
+      const frames: { evidenceIndex: number; sha256: string }[] = [];
+      const frameIndexes = new Set<number>();
+      for (const rawFrame of rawFrames) {
+        const frame = objectFields(rawFrame, ['evidenceIndex', 'sha256']);
+        if (
+          !frame ||
+          !safe(frame.evidenceIndex, 255) ||
+          !hash(frame.sha256) ||
+          frameIndexes.has(frame.evidenceIndex)
+        )
+          return null;
+        frameIndexes.add(frame.evidenceIndex);
+        frames.push({ evidenceIndex: frame.evidenceIndex, sha256: frame.sha256 });
+      }
+      const header = JSON.stringify([
+        item.payloadHash,
+        item.sourceSequence,
+        item.capturedAt,
+        frames,
+      ]);
+      if (eventHeaders.has(item.eventId) && eventHeaders.get(item.eventId) !== header) return null;
+      eventHeaders.set(item.eventId, header);
+      items.push({
+        alertId: item.alertId,
+        eventId: item.eventId,
+        personObservationIndex: item.personObservationIndex,
+        payloadHash: item.payloadHash,
+        sourceSequence: item.sourceSequence,
+        capturedAt: item.capturedAt,
+        observationIndexes: indexes as number[],
+        frames,
+      });
+    }
+    return {
+      episodeId,
+      contentRevision: p.contentRevision,
+      throughSequence: p.throughSequence,
+      offset: p.offset,
+      limit: p.limit,
+      total: p.total,
+      hasMore: p.hasMore,
+      items,
+    };
+  } catch {
+    return null;
+  }
+}

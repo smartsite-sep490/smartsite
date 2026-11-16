@@ -1,4 +1,22 @@
 import {
+  parseTrackedEpisodeObservationQuery,
+  parseTrackedEpisodeObservationPage,
+  parseTrackedEpisodeDetail,
+  parseTrackedEpisodeMediaSource,
+  parseTrackedObservationIdentity,
+  type TrackedEpisodeDetail,
+  type TrackedObservationIdentity,
+  type TrackedEpisodeObservationOptions,
+  type TrackedEpisodeObservationPage,
+  type TrackedEpisodeMediaSource,
+  type TrackedEpisodeMediaRepresentation,
+} from '@smartsite/contracts/tracked-episode-frames';
+import {
+  trackedEpisodeMediaPath,
+  readTrackedEpisodeMediaResponse,
+  type TrackedEpisodeMediaResult,
+} from './tracked-episode-media-response';
+import {
   parseCreateReferenceRegionCommand,
   parseUpdateReferenceRegionPolygonCommand,
   type CreateReferenceRegionCommand,
@@ -1818,6 +1836,168 @@ export class SmartSiteManagementClient {
     return this.request<SiteResponse>('GET', `/sites/${pathId(siteId)}`, token);
   }
   /** Prepared episode transport; callers must wait for Backend rollout before exposing this UI. */
+  async getTrackedObservationIdentity(
+    token: string,
+    siteId: string,
+    episodeId: string,
+    input: TrackedEpisodeMediaSource,
+    expectedPayloadHash: string,
+    options?: RequestOptions,
+  ): Promise<TrackedObservationIdentity> {
+    const source = parseTrackedEpisodeMediaSource(input);
+    if (
+      !source ||
+      typeof expectedPayloadHash !== 'string' ||
+      !/^[a-f0-9]{64}$/.test(expectedPayloadHash)
+    )
+      throw new ApiError('invalid-response', 'Invalid original identity source.');
+    const query = new URLSearchParams({
+      personObservationIndex: String(source.personObservationIndex),
+      evidenceIndex: String(source.evidenceIndex),
+    });
+    const payload = await this.request<unknown>(
+      'GET',
+      `/sites/${pathId(siteId)}/safety-episodes/${pathId(episodeId)}/findings/${source.alertId}/events/${source.eventId}/identity?${query}`,
+      token,
+      undefined,
+      undefined,
+      options,
+      { cache: 'no-store', redirect: 'error' },
+      16384,
+    );
+    const result = parseTrackedObservationIdentity(
+      payload,
+      siteId.toLowerCase(),
+      episodeId.toLowerCase(),
+      source,
+      expectedPayloadHash,
+    );
+    if (!result)
+      throw new ApiError('invalid-response', 'Backend returned inconsistent original identity.');
+    return result;
+  }
+
+  /** Prepared episode transport; callers must wait for Backend rollout before exposing this UI. */
+  async getTrackedEpisode(
+    token: string,
+    siteId: string,
+    episodeId: string,
+    options?: RequestOptions,
+  ): Promise<TrackedEpisodeDetail> {
+    const payload = await this.request<unknown>(
+      'GET',
+      `/sites/${pathId(siteId)}/safety-episodes/${pathId(episodeId)}/tracked`,
+      token,
+      undefined,
+      undefined,
+      options,
+      { cache: 'no-store', redirect: 'error' },
+      131072,
+    );
+    const detail = parseTrackedEpisodeDetail(
+      payload,
+      siteId.toLowerCase(),
+      episodeId.toLowerCase(),
+    );
+    if (!detail)
+      throw new ApiError('invalid-response', 'Backend returned inconsistent tracked episode.');
+    return detail;
+  }
+
+  /** Prepared episode transport; callers must wait for Backend rollout before exposing this UI. */
+  async listTrackedEpisodeObservations(
+    token: string,
+    siteId: string,
+    episodeId: string,
+    options: TrackedEpisodeObservationOptions = {},
+    requestOptions?: RequestOptions,
+  ): Promise<TrackedEpisodeObservationPage> {
+    const allowed = ['offset', 'limit', 'throughSequence', 'alertId'];
+    if (
+      !options ||
+      Object.keys(options).some((k) => !allowed.includes(k)) ||
+      (options.offset !== undefined &&
+        (typeof options.offset !== 'number' ||
+          !Number.isSafeInteger(options.offset) ||
+          options.offset < 0)) ||
+      (options.limit !== undefined &&
+        (typeof options.limit !== 'number' ||
+          !Number.isSafeInteger(options.limit) ||
+          options.limit < 1 ||
+          options.limit > 20)) ||
+      (options.throughSequence !== undefined && typeof options.throughSequence !== 'string') ||
+      (options.alertId !== undefined && typeof options.alertId !== 'string')
+    )
+      throw new ApiError('invalid-response', 'Invalid tracked history request.');
+    const query = new URLSearchParams(),
+      raw: Record<string, string> = {};
+    for (const key of ['offset', 'limit', 'throughSequence', 'alertId'] as const)
+      if (options[key] !== undefined) raw[key] = String(options[key]);
+    const parsed = parseTrackedEpisodeObservationQuery(raw);
+    if (!parsed) throw new ApiError('invalid-response', 'Invalid tracked history request.');
+    for (const [key, value] of Object.entries(parsed)) query.set(key, String(value));
+    const path = `/sites/${pathId(siteId)}/safety-episodes/${pathId(episodeId)}/observations`;
+    const payload = await this.request<unknown>(
+      'GET',
+      `${path}${query.size ? '?' + query : ''}`,
+      token,
+      undefined,
+      undefined,
+      requestOptions,
+      { cache: 'no-store', redirect: 'error' },
+      524288,
+    );
+    const page = parseTrackedEpisodeObservationPage(payload, episodeId.toLowerCase(), parsed);
+    if (!page)
+      throw new ApiError('invalid-response', 'Backend returned inconsistent tracked history.');
+    return page;
+  }
+
+  /** Candidate route only. expectedFrameSha256 must come from the validated history descriptor. */
+  async readTrackedEpisodeMedia(
+    token: string,
+    siteId: string,
+    episodeId: string,
+    source: TrackedEpisodeMediaSource,
+    representation: TrackedEpisodeMediaRepresentation,
+    expectedFrameSha256: string,
+    options?: RequestOptions,
+  ): Promise<TrackedEpisodeMediaResult> {
+    const path = trackedEpisodeMediaPath(
+      siteId,
+      episodeId,
+      source,
+      representation,
+      expectedFrameSha256,
+    );
+    const sessionScopes = captureSessionScopes(token);
+    return this.runRequest(this.requestOptions(token, options), async (signal) => {
+      const response = await this.fetchAuthenticated(
+        path,
+        token,
+        {
+          headers: { Accept: 'image/jpeg' },
+          cache: 'no-store',
+          redirect: 'error',
+        },
+        signal,
+        true,
+      );
+      if (!response.ok) {
+        if (!this.session && response.status === 401 && sessionScopes.length)
+          dispatchSessionExpired(sessionScopes);
+        return this.responseError(response, signal, 4096);
+      }
+      return readTrackedEpisodeMediaResponse(
+        response,
+        expectedFrameSha256,
+        representation,
+        (read, currentSignal) => this.readBody(read, currentSignal),
+        signal,
+      );
+    });
+  }
+
   listSafetyEpisodes(
     token: string,
     siteId: string,

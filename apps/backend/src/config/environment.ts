@@ -265,6 +265,10 @@ export const backendEnvironmentSchema = z
       .enum(['false', 'true'])
       .default('false')
       .transform((value) => value === 'true'),
+    SAFETY_TRACKED_HISTORY_READ_ENABLED: z
+      .enum(['true', 'false'])
+      .default('false')
+      .transform((value) => value === 'true'),
     SAFETY_EPISODE_PROJECTION_ENABLED: z
       .enum(['false', 'true'])
       .default('false')

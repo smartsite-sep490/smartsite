@@ -249,30 +249,43 @@ it('separates requests from the board and opens the overtime form with its type 
   expect(JSON.stringify(root.toJSON())).toContain('Chọn ca ở trên để điền sẵn khung thời gian.');
 });
 
-it('shows actual clock times today and keeps missing checkout visible as unrecorded', async () => {
-  vi.mocked(workspace.client.attendanceDayDetail).mockResolvedValue({
-    day: { ...day, confirmedMinutes: null, provisionalMinutes: 125, presence: 'INSIDE' },
-    sessions: [
-      {
-        id: 'open-session',
-        workerId: day.workerId,
-        workerName: day.workerName,
-        rawInAt: `${today}T01:00:00Z`,
-        effectiveInAt: null,
-        rawOutAt: null,
-        effectiveOutAt: null,
-        status: 'OPEN',
-        version: 1,
-        workedMinutes: 125,
-      },
-    ],
-  });
-  await mount();
-  const content = JSON.stringify(root.toJSON());
-  expect(content).toContain('08:00');
-  expect(content).toContain('Chưa ghi nhận');
-  expect(content).toContain('Phiên ra vào gần nhất trong ngày');
-});
+it.each([0, 100])(
+  'shows actual clock times and missing checkout with %i ms day-detail latency',
+  async (delayMs) => {
+    const detail: Awaited<ReturnType<typeof workspace.client.attendanceDayDetail>> = {
+      day: { ...day, confirmedMinutes: null, provisionalMinutes: 125, presence: 'INSIDE' },
+      sessions: [
+        {
+          id: 'open-session',
+          workerId: day.workerId,
+          workerName: day.workerName,
+          rawInAt: `${today}T01:00:00Z`,
+          effectiveInAt: null,
+          rawOutAt: null,
+          effectiveOutAt: null,
+          status: 'OPEN',
+          version: 1,
+          workedMinutes: 125,
+        },
+      ],
+    };
+    vi.mocked(workspace.client.attendanceDayDetail).mockImplementation(async () => {
+      await new Promise((resolve) => setTimeout(resolve, delayMs));
+      return detail;
+    });
+    await mount();
+    for (
+      let attempt = 0;
+      !JSON.stringify(root.toJSON()).includes('Phiên ra vào gần nhất trong ngày') && attempt < 50;
+      attempt++
+    )
+      await settle();
+    const content = JSON.stringify(root.toJSON());
+    expect(content).toContain('08:00');
+    expect(content).toContain('Chưa ghi nhận');
+    expect(content).toContain('Phiên ra vào gần nhất trong ngày');
+  },
+);
 
 it('moves reporting months and applies Today to the scoped API and report range', async () => {
   await mount();
