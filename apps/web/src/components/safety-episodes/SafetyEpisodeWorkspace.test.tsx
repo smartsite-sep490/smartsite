@@ -883,8 +883,88 @@ describe('frame Inbox entry', () => {
     client.listSafetyFrameInbox.mockResolvedValue({ items: [], total: 0, unreadCount: 0 });
     render(view(session(), '/incidents?tab=ppe-frames'));
     await screen.findByText('0 khung chưa đọc');
-    expect(screen.getByRole('region', { name: 'Inbox PPE theo khung hình' })).toBeTruthy();
+    expect(screen.getByRole('region', { name: 'Cảnh báo theo khung hình' })).toBeTruthy();
     expect(client.listSafetyEpisodeInbox).not.toHaveBeenCalled();
+  });
+
+  it('distinguishes grouped Frame intro from single-subject Episode intro in VI/EN and uses non-conclusive VI PPE finding wording', async () => {
+    const { view } = setup();
+    client.listSafetyFrameInbox.mockResolvedValue({
+      total: 1,
+      unreadCount: 1,
+      items: [
+        {
+          frameKey: 'tracked:' + 'b'.repeat(64) + ':frame-3',
+          siteId: site,
+          cameraId: episode.cameraId,
+          siteName: 'Site A',
+          cameraName: 'Camera A',
+          capturedAt: episode.firstObservedAt,
+          unread: true,
+          findingCount: 6,
+          cases: [1, 2, 3].map((n) => ({
+            recipientId: `55555555-5555-4555-8555-55555555555${n}`,
+            episodeId: `22222222-2222-4222-8222-22222222222${n}`,
+            findingCount: 2,
+            contentRevision: 1,
+            unread: true,
+            source: null,
+            zoneEntries: [],
+          })),
+        },
+      ],
+    });
+
+    render(view(session(), `/incidents?tab=ppe-frames&siteId=${site}`));
+
+    expect(await screen.findByRole('region', { name: 'Cảnh báo theo khung hình' })).toBeTruthy();
+    expect(
+      screen.getByText(
+        'Gom theo từng khung hình camera; xem xét và xử lý riêng hồ sơ, phát hiện PPE của từng người.',
+      ),
+    ).toBeTruthy();
+    expect(screen.queryByText('Một chủ thể, từng phát hiện riêng.')).toBeNull();
+    expect(
+      await screen.findByRole('button', { name: /3 người cần xem xét · 6 phát hiện PPE/ }),
+    ).toBeTruthy();
+    expect(document.body.textContent ?? '').not.toMatch(/lỗi PPE|vi phạm PPE/i);
+
+    await act(async () => {
+      await i18n.changeLanguage('en');
+    });
+    expect(
+      screen.getByText(
+        "Grouped by camera frame; review each flagged person's case and PPE findings separately.",
+      ),
+    ).toBeTruthy();
+    expect(screen.queryByText('One subject, separate findings.')).toBeNull();
+
+    // Navigate out to Safety workflow (/incidents) -> entryHint, then into Person episodes (tab=episodes) -> single-subject intro
+    fireEvent.click(screen.getByRole('link', { name: 'Safety workflow' }));
+    expect(await screen.findByText('Review related PPE findings together.')).toBeTruthy();
+    expect(
+      screen.queryByText(
+        "Grouped by camera frame; review each flagged person's case and PPE findings separately.",
+      ),
+    ).toBeNull();
+
+    fireEvent.click(screen.getByRole('link', { name: 'Person episodes' }));
+    expect(await screen.findByText('One subject, separate findings.')).toBeTruthy();
+    expect(
+      screen.queryByText(
+        "Grouped by camera frame; review each flagged person's case and PPE findings separately.",
+      ),
+    ).toBeNull();
+
+    await act(async () => {
+      await i18n.changeLanguage('vi');
+    });
+    expect(screen.getByText('Một chủ thể, từng phát hiện riêng.')).toBeTruthy();
+    expect(
+      screen.queryByText(
+        'Gom theo từng khung hình camera; xem xét và xử lý riêng hồ sơ, phát hiện PPE của từng người.',
+      ),
+    ).toBeNull();
   });
 
   it('denies the frame Inbox without a Safety Officer assignment', () => {

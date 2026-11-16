@@ -65,7 +65,7 @@ export function SafetyIdentificationWorkspace({
 
   if (!hasValidSession) {
     return (
-      <Card role="alert" className="space-y-2">
+      <Card role="alert" className="min-w-0 space-y-2">
         <div className="flex items-center gap-2 text-rose-700">
           <IconAlertTriangle className="w-4 h-4 shrink-0" />
           <h2 className="text-sm font-bold">{copy.access.deniedTitle}</h2>
@@ -200,7 +200,10 @@ function ScopedIdentificationWorkspace({
   }
 
   return (
-    <section className="space-y-5" aria-labelledby={`${baseId}-workspace-heading`}>
+    <section
+      className="min-w-0 space-y-5 max-sm:[&_.grid:not(.grid-cols-2)]:grid-cols-1 [&_.grid>*]:min-w-0 [&_select]:max-w-full [&_select]:min-w-0"
+      aria-labelledby={`${baseId}-workspace-heading`}
+    >
       <SafetyIdentificationToolbar
         baseId={baseId}
         scopeNonce={scopeNonce}
@@ -280,7 +283,7 @@ function ScopedIdentificationWorkspace({
         }
       />
 
-      <div className="grid gap-5 lg:grid-cols-12 items-start">
+      <div className="grid grid-cols-1 gap-5 lg:grid-cols-12 items-start [&>*]:min-w-0">
         <SafetyIdentificationQueueCard
           queueItems={queries.queueItems}
           queueTotal={queries.queueTotal}
@@ -300,7 +303,7 @@ function ScopedIdentificationWorkspace({
           onNextPage={() => scope.setQueueOffset((current) => current + QUEUE_PAGE_SIZE)}
         />
 
-        <div className="lg:col-span-7">
+        <div className="min-w-0 lg:col-span-7">
           {queries.siteQueueUnavailable ? (
             <Card>
               <EmptyState

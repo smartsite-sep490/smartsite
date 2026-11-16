@@ -166,9 +166,11 @@ export function SafetyEpisodeWorkspace({
           <p className="text-sm text-slate-600">
             {identification
               ? tSafety('episodes.identificationWorkspaceIntro')
-              : grouped
-                ? t('episodes.intro')
-                : t('episodes.entryHint')}
+              : frameGrouped
+                ? t('frameInbox.intro')
+                : grouped
+                  ? t('episodes.intro')
+                  : t('episodes.entryHint')}
           </p>
           {allowed && !frameGrouped && !identification && (
             <Link

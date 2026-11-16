@@ -104,9 +104,9 @@ export function SafetyIdentificationToolbar({
 
   return (
     <>
-      <Card className="space-y-4">
-        <div className="flex flex-wrap items-start justify-between gap-4">
-          <div className="space-y-1.5">
+      <Card className="min-w-0 space-y-4">
+        <div className="flex flex-wrap items-start justify-between gap-4 min-w-0">
+          <div className="min-w-0 space-y-1.5">
             <div className="flex flex-wrap items-center gap-2">
               <span className="text-[11px] font-bold uppercase tracking-wider text-[#F66B17]">
                 {copy.header.eyebrow}
@@ -133,7 +133,7 @@ export function SafetyIdentificationToolbar({
             </p>
           </div>
 
-          <div className="flex flex-wrap items-center gap-2">
+          <div className="flex flex-wrap items-center gap-2 min-w-0 max-w-full">
             <Button
               type="button"
               variant="outline"
@@ -164,20 +164,20 @@ export function SafetyIdentificationToolbar({
           </div>
         </div>
 
-        <div className="flex flex-wrap items-end gap-3 border-t border-slate-100 pt-3.5">
-          <div className="space-y-1">
+        <div className="flex flex-wrap items-end gap-3 border-t border-slate-100 pt-3.5 min-w-0">
+          <div className="min-w-0 w-full sm:w-auto sm:max-w-md space-y-1">
             <label
               htmlFor={`${baseId}-site-select`}
               className="flex items-center gap-1.5 text-[11px] font-bold uppercase tracking-wider text-slate-600"
             >
-              <IconBuilding className="w-3.5 h-3.5 text-slate-500" />
+              <IconBuilding className="w-3.5 h-3.5 shrink-0 text-slate-500" />
               <span>{copy.filters.siteLabel}</span>
             </label>
             <select
               id={`${baseId}-site-select`}
               value={selectedSiteId}
               onChange={(event) => onSiteSwitch(event.target.value)}
-              className={WORKSPACE_SELECT_CLASS}
+              className={`${WORKSPACE_SELECT_CLASS} w-full max-w-full min-w-0 truncate`}
             >
               {authorizedSites.map((entry) => {
                 const resolvedName = siteLabelsById.get(entry.siteId.toLowerCase());
@@ -190,19 +190,19 @@ export function SafetyIdentificationToolbar({
             </select>
           </div>
 
-          <div className="space-y-1">
+          <div className="min-w-0 w-full sm:w-auto sm:max-w-xs space-y-1">
             <label
               htmlFor={`${baseId}-status-select`}
               className="flex items-center gap-1.5 text-[11px] font-bold uppercase tracking-wider text-slate-600"
             >
-              <IconFilter className="w-3.5 h-3.5 text-slate-500" />
+              <IconFilter className="w-3.5 h-3.5 shrink-0 text-slate-500" />
               <span>{copy.filters.statusLabel}</span>
             </label>
             <select
               id={`${baseId}-status-select`}
               value={statusFilter}
               onChange={(event) => onStatusFilterChange(event.target.value as StatusFilterValue)}
-              className={WORKSPACE_SELECT_CLASS}
+              className={`${WORKSPACE_SELECT_CLASS} w-full max-w-full min-w-0 truncate`}
             >
               <option value="ALL">{copy.filters.allStatuses}</option>
               {SAFETY_IDENTIFICATION_STATUSES.map((status: SafetyIdentificationStatus) => (
@@ -216,9 +216,9 @@ export function SafetyIdentificationToolbar({
       </Card>
 
       {isOfficer && isCreateOpen && !siteQueueDenied && (
-        <div className="space-y-3">
+        <div className="min-w-0 space-y-3">
           {!prefilledEpisodeLocked && shouldLoadEpisodes ? (
-            <Card className="space-y-2 bg-slate-50/70">
+            <Card className="min-w-0 space-y-2 bg-slate-50/70">
               <label
                 htmlFor={`${baseId}-create-episode-select`}
                 className="block text-xs font-bold text-[#071A2B]"
@@ -235,7 +235,7 @@ export function SafetyIdentificationToolbar({
                   value={createEpisodeId}
                   disabled={createPending}
                   onChange={(event) => onCreateEpisodeChange(event.target.value)}
-                  className={`${WORKSPACE_SELECT_CLASS} w-full`}
+                  className={`${WORKSPACE_SELECT_CLASS} w-full max-w-full min-w-0 truncate`}
                 >
                   <option value="">
                     {episodeOptions.length === 0

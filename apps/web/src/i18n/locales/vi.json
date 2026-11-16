@@ -4059,7 +4059,8 @@
   "episodes.laterFrameZoneDenials_other": "{{count}} kết quả Zone không được phép ở khung sau",
   "episodes.frameTitle": "Thông báo theo khung hình",
   "notification_bell.mark_other_as_read": "Đọc các thông báo khác",
-  "frameInbox.title": "Inbox PPE theo khung hình",
+  "frameInbox.title": "Cảnh báo theo khung hình",
+  "frameInbox.intro": "Gom theo từng khung hình camera; xem xét và xử lý riêng hồ sơ, phát hiện PPE của từng người.",
   "frameInbox.siteLoadError": "Chưa tải được tên công trường.",
   "frameInbox.siteDenied": "Không có quyền xem công trường này.",
   "frameInbox.allFrames": "Xem tất cả khung",
@@ -4075,8 +4076,8 @@
   "frameInbox.empty": "Không có thông báo phù hợp.",
   "frameInbox.people_one": "{{count}} người cần xem xét",
   "frameInbox.people_other": "{{count}} người cần xem xét",
-  "frameInbox.findings_one": "{{count}} lỗi PPE",
-  "frameInbox.findings_other": "{{count}} lỗi PPE",
+  "frameInbox.findings_one": "{{count}} phát hiện PPE",
+  "frameInbox.findings_other": "{{count}} phát hiện PPE",
   "frameInbox.markingRead": "Đang lưu…",
   "frameInbox.markRead": "Đánh dấu cả khung đã đọc",
   "frameInbox.person": "Người {{number}}",
@@ -4098,7 +4099,7 @@
   "frameInbox.showBreakdown": "Xem từng người & bằng chứng",
   "frameInbox.hideBreakdown": "Thu gọn chi tiết",
   "frameInbox.personBreakdown": "Chi tiết từng người & bằng chứng PPE trong khung",
-  "frameInbox.noPpeFindings": "Chưa ghi nhận vi phạm PPE",
+  "frameInbox.noPpeFindings": "Chưa ghi nhận phát hiện PPE",
   "frameInbox.personCropAvailable": "Có ảnh cắt người từ khung gốc",
   "frameInbox.evidenceInCase": "Xem bằng chứng PPE trong hồ sơ",
   "frameInbox.viewPersonEvidence": "Xem ảnh bằng chứng người {{number}}",
@@ -4121,6 +4122,6 @@
   "frameInbox.openOriginalJpeg": "Mở ảnh JPEG gốc",
   "frameInbox.originalJpegTitle": "Ảnh JPEG khung hình gốc",
   "frameInbox.closeOriginalJpeg": "Đóng ảnh JPEG gốc",
-  "frameInbox.subjectFindingsLoading": "Đang tải chi tiết lỗi PPE…",
-  "frameInbox.subjectFindingsLabel": "Chi tiết lỗi PPE"
+  "frameInbox.subjectFindingsLoading": "Đang tải chi tiết phát hiện PPE…",
+  "frameInbox.subjectFindingsLabel": "Chi tiết phát hiện PPE"
 }

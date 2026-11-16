@@ -266,11 +266,11 @@ it('opens an exact Bell target directly and sends its Site and frame filters', a
   expect(
     screen
       .getByRole('button', {
-        name: /2 người cần xem xét · 1 lỗi PPE · 1 lượt vào vùng không được phép/,
+        name: /2 người cần xem xét · 1 phát hiện PPE · 1 lượt vào vùng không được phép/,
       })
       .getAttribute('aria-expanded'),
   ).toBe('true');
-  expect(screen.queryByText(/0 lỗi PPE/)).toBeNull();
+  expect(screen.queryByText(/0 phát hiện PPE/)).toBeNull();
   expect(screen.getByText('Vùng hạn chế (khung sau) · Không được phép')).toBeTruthy();
   await act(async () => {
     await i18n.changeLanguage('en');
