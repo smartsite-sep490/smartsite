@@ -1,0 +1,178 @@
+import { createHash } from 'node:crypto';
+import { Module, type DynamicModule, type OnModuleInit } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
+import { DataSource } from 'typeorm';
+import type { BackendEnvironment } from '../../config/environment.js';
+import { ServiceAuthGuard } from '../../modules/auth/service-auth.guard.js';
+import { CameraEventAdmissionService } from '../../modules/cameras/camera-event-admission.service.js';
+import { TrackedSafetyProjection } from '../../modules/safety/alerts/tracked-safety-projection.js';
+import { TrackedFrameAdmission } from './tracked-frame-admission.js';
+import { TrackedFrameRecovery } from './tracked-frame-recovery.js';
+import {
+  TrackedFrameResultController,
+  TrackedRawPartController,
+} from './tracked-frame-result.controller.js';
+import { TrackedFramePrototypeStore, type TrackedPendingPolicy } from './tracked-frame-storage.js';
+import {
+  TrackedPartAuthenticator,
+  type TrackedPartProfilePolicy,
+} from './tracked-part-authentication.js';
+
+export interface TrackedFrameRuntimeOptions {
+  readonly profile: TrackedPartProfilePolicy & { readonly wireVersion: '1.5.0' | '1.6.0' };
+  readonly pending: TrackedPendingPolicy;
+  readonly heads: ConstructorParameters<typeof TrackedFrameAdmission>[1];
+  readonly recovery: Omit<ConstructorParameters<typeof TrackedFrameRecovery>[2], 'cameraIds'>;
+  readonly maxRecipients: number;
+}
+
+const constraintPins = {
+  'ai_observation_event.chk_ai_event_tracking_fields':
+    '4fe09662a7f23611c1fec1204a2aa722f0944b7756aa4a7929ec68f05fa4d05c',
+  'ai_observation_event.chk_v16_requires_tracked_route':
+    '11901da3905d345db0180f02b95ed1057a423fd3c0f6d5db26c2016ca9333148',
+  'camera_worker_generation.chk_generation_tracked_wire_version':
+    '8e31c8279ff93c5813ea2513f62697c6c816884e53d52f454a1c01d267dd26f8',
+};
+
+const triggerPins = {
+  'ai_observation_event.trg_claim_tracked_generation_wire': {
+    definition:
+      'CREATE TRIGGER trg_claim_tracked_generation_wire AFTER INSERT ON <schema>.ai_observation_event FOR EACH ROW WHEN ((new.tracking_scope_sha256 IS NOT NULL)) EXECUTE FUNCTION claim_tracked_generation_wire()',
+    bodySha256: 'f0f156872d863dc5532d91849bb5009e8e271b98131b352302e7d201021e56ab',
+  },
+  'camera_worker_generation.trg_guard_tracked_generation_wire': {
+    definition:
+      'CREATE TRIGGER trg_guard_tracked_generation_wire BEFORE UPDATE OF tracked_wire_version ON <schema>.camera_worker_generation FOR EACH ROW EXECUTE FUNCTION guard_tracked_generation_wire()',
+    bodySha256: 'c237b598fd59438637a2451b22785271fcb58dc4d23e84d8fad58847805f20cb',
+  },
+};
+
+// The tracked profile must see the reviewed forward-migration fence before binding routes.
+async function requireV16DatabaseFence(db: DataSource): Promise<void> {
+  const schema = db.driver.schema;
+  if (typeof schema !== 'string') throw new Error('Tracked v1.6 database fencing is unavailable');
+  const [active] = await db.query('SELECT current_schema() AS schema');
+  if (active?.schema !== schema)
+    throw new Error('Tracked database connection does not match its selected schema');
+
+  const rows = await db.query<
+    {
+      key: string;
+      definition: string;
+      body: string | null;
+    }[]
+  >(
+    `SELECT r.relname || '.' || c.conname AS key, pg_get_constraintdef(c.oid) AS definition,
+            NULL::text AS body
+       FROM pg_catalog.pg_constraint c
+       JOIN pg_catalog.pg_class r ON r.oid = c.conrelid
+       JOIN pg_catalog.pg_namespace n ON n.oid = r.relnamespace
+      WHERE n.nspname = $1 AND n.nspname = current_schema()
+        AND current_setting('session_replication_role') = 'origin'
+        AND c.contype = 'c' AND c.convalidated
+        AND r.relname || '.' || c.conname = ANY($2::text[])
+      UNION ALL
+     SELECT r.relname || '.' || t.tgname AS key, pg_get_triggerdef(t.oid) AS definition, p.prosrc AS body
+       FROM pg_catalog.pg_trigger t
+       JOIN pg_catalog.pg_class r ON r.oid = t.tgrelid
+       JOIN pg_catalog.pg_namespace n ON n.oid = r.relnamespace
+       JOIN pg_catalog.pg_proc p ON p.oid = t.tgfoid
+       JOIN pg_catalog.pg_language l ON l.oid = p.prolang
+      WHERE n.nspname = $1 AND n.nspname = current_schema()
+        AND current_setting('session_replication_role') = 'origin'
+        AND NOT t.tgisinternal AND t.tgenabled IN ('O', 'A')
+        AND p.pronamespace = n.oid AND 'trg_' || p.proname = t.tgname
+        AND NOT p.prosecdef AND p.proconfig IS NULL AND l.lanname = 'plpgsql'
+        AND r.relname || '.' || t.tgname = ANY($3::text[])`,
+    [schema, Object.keys(constraintPins), Object.keys(triggerPins)],
+  );
+
+  const byKey = new Map(rows.map((row) => [row.key, row]));
+  const sha256 = (value: string) => createHash('sha256').update(value).digest('hex');
+  const constraintsMatch = Object.entries(constraintPins).every(([key, pin]) => {
+    const row = byKey.get(key);
+    return row?.body === null && sha256(row.definition) === pin;
+  });
+  const triggersMatch = Object.entries(triggerPins).every(([key, pin]) => {
+    const row = byKey.get(key);
+    return (
+      typeof row?.body === 'string' &&
+      row.definition
+        .replaceAll('"' + schema + '".', '<schema>.')
+        .replaceAll(schema + '.', '<schema>.') === pin.definition &&
+      sha256(row.body.replaceAll('"' + schema + '".', '"<schema>".')) === pin.bodySha256
+    );
+  });
+  if (!constraintsMatch || !triggersMatch)
+    throw new Error('Tracked v1.6 database fencing is unavailable');
+}
+
+class TrackedDatabaseFence implements OnModuleInit {
+  constructor(private readonly db: DataSource) {}
+
+  async onModuleInit(): Promise<void> {
+    await requireV16DatabaseFence(this.db);
+  }
+}
+
+/** Composition for a server-owned policy. The application does not register an enabled instance. */
+@Module({})
+export class TrackedFrameRuntimeModule {
+  static register(options?: TrackedFrameRuntimeOptions): DynamicModule {
+    if (options === undefined) return { module: TrackedFrameRuntimeModule };
+    if (options.profile?.wireVersion !== '1.5.0' && options.profile?.wireVersion !== '1.6.0')
+      throw new Error('An explicit tracked wire version is required');
+    const { profile, pending, heads, recovery, maxRecipients } = structuredClone(options);
+    return {
+      module: TrackedFrameRuntimeModule,
+      controllers: [TrackedRawPartController, TrackedFrameResultController],
+      providers: [
+        ServiceAuthGuard,
+        {
+          provide: TrackedPartAuthenticator,
+          useFactory: () =>
+            new TrackedPartAuthenticator(new CameraEventAdmissionService(), profile),
+        },
+        {
+          provide: TrackedFramePrototypeStore,
+          inject: [TrackedPartAuthenticator],
+          useFactory: (auth: TrackedPartAuthenticator) =>
+            new TrackedFramePrototypeStore(auth, pending),
+        },
+        ...(profile.wireVersion === '1.6.0'
+          ? [
+              {
+                provide: TrackedDatabaseFence,
+                inject: [DataSource],
+                useFactory: (db: DataSource) => new TrackedDatabaseFence(db),
+              },
+            ]
+          : []),
+        {
+          provide: TrackedFrameAdmission,
+          inject: [TrackedPartAuthenticator, DataSource, ConfigService],
+          useFactory: (
+            auth: TrackedPartAuthenticator,
+            db: DataSource,
+            config: ConfigService<BackendEnvironment, true>,
+          ) =>
+            new TrackedFrameAdmission(
+              auth,
+              heads,
+              new TrackedSafetyProjection(db, config, { maxRecipients }),
+            ),
+        },
+        {
+          provide: TrackedFrameRecovery,
+          inject: [DataSource, TrackedFrameAdmission],
+          useFactory: (db: DataSource, admission: TrackedFrameAdmission) =>
+            new TrackedFrameRecovery(db, admission, {
+              ...recovery,
+              cameraIds: profile.allowedCameraIds,
+            }),
+        },
+      ],
+    };
+  }
+}

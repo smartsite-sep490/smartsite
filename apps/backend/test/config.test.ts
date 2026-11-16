@@ -476,3 +476,27 @@ test('timing variables reject non-positive, non-integer, or out-of-range values 
   assert.equal(custom.MAX_PAST_EVENT_AGE_SECONDS, 600);
   assert.equal(custom.MAX_FUTURE_CLOCK_SKEW_SECONDS, 45);
 });
+
+test('tracked history requires an explicit matching migration profile and schema', () => {
+  assert.throws(
+    () => validateEnvironment({ SAFETY_TRACKED_HISTORY_READ_ENABLED: 'true' }),
+    /profile|schema/i,
+  );
+  assert.throws(
+    () => validateEnvironment({ SMARTSITE_DB_MIGRATION_PROFILE: 'tracked-v16' }),
+    /schema/i,
+  );
+  for (const schema of ['public;DROP TABLE camera', 'pg_catalog', 'information_schema'])
+    assert.throws(() =>
+      validateEnvironment({
+        DATABASE_SCHEMA: schema,
+        SMARTSITE_DB_MIGRATION_PROFILE: 'tracked-v16',
+      }),
+    );
+  const config = validateEnvironment({
+    SAFETY_TRACKED_HISTORY_READ_ENABLED: 'true',
+    SMARTSITE_DB_MIGRATION_PROFILE: 'tracked-v16',
+    DATABASE_SCHEMA: 'isolated_tracked_runtime',
+  });
+  assert.equal(config.DATABASE_SCHEMA, 'isolated_tracked_runtime');
+});

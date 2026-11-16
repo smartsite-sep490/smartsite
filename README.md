@@ -449,6 +449,9 @@ Architecture decisions and technical baselines are maintained under [docs/archit
 The verified local YOLO11s-to-alert demonstration is documented in the
 [MF05/MF06 end-to-end runbook](docs/operations/mf05-mf06-local-demo.md).
 
+Configuration and processing boundaries for the optional worker are described in the
+[tracked camera runtime guide](docs/operations/tracked-frame-runtime.md).
+
 Per repository policy, generated task plans, execution specs, and working documentation are local-only artifacts and are not committed to Git.
 
 Contribution conventions are documented in [CONTRIBUTING.md](CONTRIBUTING.md).

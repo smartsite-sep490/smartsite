@@ -121,7 +121,7 @@ class TrackedGenerationEntity extends CameraWorkerGenerationEntity {
 @Index('idx_ai_tracking_pending_coordinator', { synchronize: false })
 class TrackedEventEntity extends AiObservationEventEntity {
   @Column({ ...nullable, name: 'admission_context', type: 'jsonb' })
-  admissionContext!: unknown;
+  declare admissionContext: NonNullable<AiObservationEventEntity['admissionContext']> | null;
   @Column({ ...nullable, name: 'tracking_scope_sha256', type: 'char', length: 64 })
   trackingScopeSha256!: string | null;
   @Column({ ...nullable, name: 'tracking_generation_id', type: 'uuid' })

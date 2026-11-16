@@ -81,7 +81,9 @@ import { ZoneAccessManagementService } from '../zones/zone-access-management.ser
           config.get('EVIDENCE_LOCAL_ROOT', { infer: true }) ?? '',
           undefined,
           undefined,
-          () => config.get('SAFETY_TRACKED_HISTORY_READ_ENABLED', { infer: true }) === true,
+          () =>
+            config.get('AI_TRACKED_FRAME_RUNTIME_ENABLED', { infer: true }) === true ||
+            config.get('SAFETY_TRACKED_HISTORY_READ_ENABLED', { infer: true }) === true,
         ),
     },
     Mf06IngestionEnqueueService,
