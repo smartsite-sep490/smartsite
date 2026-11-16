@@ -6,6 +6,38 @@ import { runtimeEnvironmentOptions } from '../src/config/runtime-environment.js'
 import path from 'node:path';
 import fs from 'node:fs';
 
+test('identification routes stay off unless their explicit isolated schema/profile is selected', () => {
+  assert.equal(validateEnvironment({}).SAFETY_IDENTIFICATION_ENABLED, false);
+  assert.throws(
+    () => validateEnvironment({ SAFETY_IDENTIFICATION_ENABLED: 'true' }),
+    /SMARTSITE_DB_MIGRATION_PROFILE/,
+  );
+  assert.throws(
+    () =>
+      validateEnvironment({
+        SAFETY_IDENTIFICATION_ENABLED: 'true',
+        SMARTSITE_DB_MIGRATION_PROFILE: 'tracked-v16',
+        DATABASE_SCHEMA: 'synthetic_c02',
+      }),
+    /SMARTSITE_DB_MIGRATION_PROFILE/,
+  );
+  assert.throws(
+    () =>
+      validateEnvironment({
+        SAFETY_IDENTIFICATION_ENABLED: 'true',
+        SMARTSITE_DB_MIGRATION_PROFILE: 'tracked-v16-identification',
+      }),
+    /DATABASE_SCHEMA/,
+  );
+  const config = validateEnvironment({
+    SAFETY_IDENTIFICATION_ENABLED: 'true',
+    SMARTSITE_DB_MIGRATION_PROFILE: 'tracked-v16-identification',
+    DATABASE_SCHEMA: 'synthetic_c02',
+  });
+  assert.equal(config.SAFETY_IDENTIFICATION_ENABLED, true);
+  assert.equal(config.AI_TRACKED_FRAME_RUNTIME_ENABLED, false);
+});
+
 test('development starts with local PostgreSQL and a restrictive browser origin', () => {
   const config = validateEnvironment({});
   assert.equal(config.PORT, 3000);

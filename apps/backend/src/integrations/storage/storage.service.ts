@@ -1,5 +1,5 @@
 import { randomUUID, createHash } from 'node:crypto';
-import { mkdir, realpath, open, unlink } from 'node:fs/promises';
+import { mkdir, realpath, open, opendir, unlink } from 'node:fs/promises';
 import { constants } from 'node:fs';
 import { join } from 'node:path';
 import { Injectable, Logger } from '@nestjs/common';
@@ -21,7 +21,9 @@ const unavailable = (): never => {
   });
 };
 const validKey = (key: string) =>
-  /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\.[a-z0-9]{1,12}$/.test(key);
+  /^(?:c02-evidence-(?:[0-9]{13}-)?)?[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\.[a-z0-9]{1,12}$/.test(
+    key,
+  );
 @Injectable()
 export class StorageService {
   private readonly logger = new Logger(StorageService.name);
@@ -44,29 +46,88 @@ export class StorageService {
     });
     return { client: this.client, bucket, sdk };
   }
-  private async root() {
+  private async root(create = true) {
     const root =
       this.config.get('STORAGE_LOCAL_ROOT', { infer: true }) ??
       this.config.get('SAFETY_UPLOAD_LOCAL_ROOT', { infer: true });
     if (!root) return unavailable();
     try {
-      await mkdir(root, { recursive: true, mode: 0o700 });
+      if (create) await mkdir(root, { recursive: true, mode: 0o700 });
       return await realpath(root);
     } catch {
       return unavailable();
     }
   }
-  async save(bytes: Buffer, mediaType: string, extension: string): Promise<StoredObject> {
+  /** Enumerates flat JPEG keys only. The caller must verify ownership against receipts. */
+  async *listEvidenceJpegKeyBatches(
+    provider: StoredObject['storageProvider'],
+    signal?: AbortSignal,
+  ): AsyncGenerator<string[]> {
+    const limit = 200;
+    const isJpegKey = (key: string) => key.endsWith('.jpg') && validKey(key);
+    signal?.throwIfAborted();
+    if (provider === 'LOCAL') {
+      const directory = await opendir(await this.root(false));
+      let batch: string[] = [];
+      for await (const entry of directory) {
+        signal?.throwIfAborted();
+        if (!entry.isFile() || !isJpegKey(entry.name)) continue;
+        batch.push(entry.name);
+        if (batch.length === limit) {
+          yield batch;
+          batch = [];
+        }
+      }
+      if (batch.length) yield batch;
+      return;
+    }
+    if (provider !== 'R2') return unavailable();
+    const { client, bucket, sdk } = await this.r2();
+    let cursor: string | undefined;
+    do {
+      signal?.throwIfAborted();
+      const response = await client.send(
+        new sdk.ListObjectsV2Command({
+          Bucket: bucket,
+          MaxKeys: limit,
+          ContinuationToken: cursor,
+        }),
+        {
+          abortSignal: signal
+            ? AbortSignal.any([signal, AbortSignal.timeout(30000)])
+            : AbortSignal.timeout(30000),
+        },
+      );
+      if ((response.Contents?.length ?? 0) > limit) return unavailable();
+      const next = response.IsTruncated ? response.NextContinuationToken : undefined;
+      if (response.IsTruncated && (!next || next === cursor)) return unavailable();
+      const keys = (response.Contents ?? []).flatMap(({ Key }) =>
+        Key && isJpegKey(Key) ? [Key] : [],
+      );
+      if (keys.length) yield keys;
+      cursor = next;
+    } while (cursor);
+  }
+
+  async save(
+    bytes: Buffer,
+    mediaType: string,
+    extension: string,
+    namespace?: 'c02-evidence',
+  ): Promise<StoredObject> {
     if (
       !Buffer.isBuffer(bytes) ||
       !bytes.length ||
+      (namespace !== undefined &&
+        (namespace !== 'c02-evidence' || mediaType !== 'image/jpeg' || extension !== 'jpg')) ||
       !/^[a-z0-9]{1,12}$/.test(extension) ||
       !/^[a-z0-9.+-]+\/[a-z0-9.+-]+$/.test(mediaType)
     )
       return unavailable();
     const ref: StoredObject = {
       storageProvider: this.config.get('STORAGE_PROVIDER', { infer: true }) ?? 'LOCAL',
-      storageKey: randomUUID() + '.' + extension,
+      storageKey:
+        (namespace ? namespace + '-' + Date.now() + '-' : '') + randomUUID() + '.' + extension,
       sha256: createHash('sha256').update(bytes).digest('hex'),
       size: bytes.length,
       mediaType,
@@ -102,15 +163,7 @@ export class StorageService {
   async remove(ref: Pick<StoredObject, 'storageProvider' | 'storageKey'>): Promise<void> {
     if (!validKey(ref.storageKey)) return;
     try {
-      if (ref.storageProvider === 'R2') {
-        const { client, bucket, sdk } = await this.r2();
-        await client.send(new sdk.DeleteObjectCommand({ Bucket: bucket, Key: ref.storageKey }), {
-          abortSignal: AbortSignal.timeout(30000),
-        });
-      } else
-        await unlink(join(await this.root(), ref.storageKey)).catch((error: unknown) => {
-          if ((error as { code?: string }).code !== 'ENOENT') throw error;
-        });
+      await this.removeChecked(ref);
     } catch {
       this.logger.error({
         event: 'storage_cleanup_failed',
@@ -119,6 +172,21 @@ export class StorageService {
       });
     }
   }
+
+  async removeChecked(ref: Pick<StoredObject, 'storageProvider' | 'storageKey'>): Promise<void> {
+    if (!validKey(ref.storageKey)) return unavailable();
+    if (ref.storageProvider === 'R2') {
+      const { client, bucket, sdk } = await this.r2();
+      await client.send(new sdk.DeleteObjectCommand({ Bucket: bucket, Key: ref.storageKey }), {
+        abortSignal: AbortSignal.timeout(30000),
+      });
+    } else if (ref.storageProvider === 'LOCAL') {
+      await unlink(join(await this.root(false), ref.storageKey)).catch((error: unknown) => {
+        if ((error as { code?: string }).code !== 'ENOENT') throw error;
+      });
+    } else return unavailable();
+  }
+
   async read(ref: StoredObject): Promise<Buffer> {
     if (
       !validKey(ref.storageKey) ||

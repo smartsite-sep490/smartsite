@@ -272,7 +272,13 @@ export const backendEnvironmentSchema = z
       .transform((value) => value === 'true'),
     AI_TRACKED_FRAME_RUNTIME_POLICY: trackedRuntimePolicyEnvironment.optional(),
     DATABASE_SCHEMA: z.string().optional(),
-    SMARTSITE_DB_MIGRATION_PROFILE: z.enum(['tracked-v16']).optional(),
+    SMARTSITE_DB_MIGRATION_PROFILE: z
+      .enum(['tracked-v16', 'tracked-v16-identification'])
+      .optional(),
+    SAFETY_IDENTIFICATION_ENABLED: z
+      .enum(['false', 'true'])
+      .default('false')
+      .transform((value) => value === 'true'),
     SAFETY_TRACKED_HISTORY_READ_ENABLED: z
       .enum(['true', 'false'])
       .default('false')
@@ -381,7 +387,19 @@ export const backendEnvironmentSchema = z
       });
     }
     const trackedSchemaRequired =
-      config.AI_TRACKED_FRAME_RUNTIME_ENABLED || config.SAFETY_TRACKED_HISTORY_READ_ENABLED;
+      config.AI_TRACKED_FRAME_RUNTIME_ENABLED ||
+      config.SAFETY_TRACKED_HISTORY_READ_ENABLED ||
+      config.SAFETY_IDENTIFICATION_ENABLED;
+    if (
+      config.SAFETY_IDENTIFICATION_ENABLED &&
+      config.SMARTSITE_DB_MIGRATION_PROFILE !== 'tracked-v16-identification'
+    ) {
+      context.addIssue({
+        code: 'custom',
+        path: ['SMARTSITE_DB_MIGRATION_PROFILE'],
+        message: 'must explicitly select the identification database migration profile',
+      });
+    }
     if (
       (trackedSchemaRequired || config.DATABASE_SCHEMA !== undefined) &&
       !config.SMARTSITE_DB_MIGRATION_PROFILE
