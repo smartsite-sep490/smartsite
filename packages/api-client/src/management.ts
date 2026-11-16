@@ -32,7 +32,12 @@ import {
   MAX_CAMERA_APPLICATION_STATUS_RESPONSE_BYTES,
   parseScopedCameraApplicationStatus,
 } from './camera-configuration-response';
-import { parseSafetyEpisodeReadCommand } from '@smartsite/contracts/safety-episodes';
+import {
+  parseSafetyEpisodeReadCommand,
+  parseSafetyFrameInboxPage,
+  type SafetyFrameInboxOptions,
+  type SafetyFrameInboxPage,
+} from '@smartsite/contracts/safety-episodes';
 import type {
   SafetyEpisode,
   SafetyEpisodePage,
@@ -2106,6 +2111,68 @@ export class SmartSiteManagementClient {
         ))
     )
       throw new ApiError('invalid-response', 'Backend returned inconsistent episode inbox.');
+    return page;
+  }
+
+  async listSafetyFrameInbox(
+    token: string,
+    options: SafetyFrameInboxOptions = {},
+    requestOptions?: RequestOptions,
+  ): Promise<SafetyFrameInboxPage> {
+    const keys = ['offset', 'limit', 'siteId', 'cameraId', 'readStatus', 'frameKey'] as const;
+    if (
+      !options ||
+      typeof options !== 'object' ||
+      Array.isArray(options) ||
+      Object.keys(options).some((key) => !keys.includes(key as (typeof keys)[number]))
+    )
+      throw new TypeError('Invalid frame inbox filters');
+    if (
+      (options.offset !== undefined &&
+        (!Number.isSafeInteger(options.offset) || options.offset < 0)) ||
+      (options.limit !== undefined &&
+        (!Number.isSafeInteger(options.limit) || options.limit < 1 || options.limit > 100)) ||
+      (options.readStatus !== undefined && !['ALL', 'UNREAD'].includes(options.readStatus)) ||
+      (options.frameKey !== undefined &&
+        (typeof options.frameKey !== 'string' ||
+          !options.frameKey.trim() ||
+          options.frameKey.length > 200))
+    )
+      throw new TypeError('Invalid frame inbox filters');
+    const uuid = /^[a-f0-9]{8}(-[a-f0-9]{4}){3}-[a-f0-9]{12}$/i;
+    for (const key of ['siteId', 'cameraId'] as const) {
+      const value = options[key];
+      if (value !== undefined && (typeof value !== 'string' || !uuid.test(value)))
+        throw new TypeError('Invalid frame inbox scope');
+    }
+    const siteId = options.siteId?.toLowerCase();
+    const cameraId = options.cameraId?.toLowerCase();
+    const normalized = { ...options, siteId, cameraId };
+    const query = new URLSearchParams();
+    for (const key of keys)
+      if (normalized[key] !== undefined) query.set(key, String(normalized[key]));
+    const response = await this.request<unknown>(
+      'GET',
+      `/me/safety-episode-inbox/frames${query.size ? `?${query}` : ''}`,
+      token,
+      undefined,
+      undefined,
+      requestOptions,
+    );
+    const page = parseSafetyFrameInboxPage(response);
+    if (
+      !page ||
+      page.items.length > (options.limit ?? 20) ||
+      page.items.some(
+        (frame) =>
+          (siteId !== undefined && frame.siteId !== siteId) ||
+          (cameraId !== undefined && frame.cameraId !== cameraId) ||
+          (options.frameKey !== undefined && frame.frameKey !== options.frameKey),
+      ) ||
+      (options.readStatus === 'UNREAD' &&
+        (page.total !== page.unreadCount || page.items.some((frame) => !frame.unread)))
+    )
+      throw new ApiError('invalid-response', 'Backend returned inconsistent frame inbox.');
     return page;
   }
 

@@ -17,6 +17,12 @@ export class SafetyEpisodeInboxController {
     return this.inbox.list(request, query);
   }
 
+  @Get('frames')
+  @Header('Cache-Control', 'no-store')
+  listFrames(@Req() request: AuthenticatedRequest, @Query() query: Record<string, unknown>) {
+    return this.inbox.listFrames(request, query);
+  }
+
   @Patch(':id/read')
   @Header('Cache-Control', 'no-store')
   read(@Req() request: AuthenticatedRequest, @Param('id') id: string, @Body() body: unknown) {

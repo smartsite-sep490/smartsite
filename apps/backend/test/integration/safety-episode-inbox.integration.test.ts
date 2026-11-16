@@ -251,7 +251,7 @@ after(async () => {
 });
 
 // Synthetic persisted projections test query/auth behavior, not detector or notification delivery.
-async function fixture() {
+async function fixture(personCount = 1) {
   const user = randomUUID(),
     stranger = randomUUID();
   const username = `inbox-${user}`;
@@ -280,7 +280,12 @@ async function fixture() {
         'a'.repeat(64),
         camera,
         randomUUID(),
-        JSON.stringify({ observations: [{ type: 'PERSON', trackId: 7 }] }),
+        JSON.stringify({
+          observations: Array.from({ length: personCount }, (_, index) => ({
+            type: 'PERSON',
+            trackId: 7 + index,
+          })),
+        }),
       ],
     );
     await db.query(
@@ -316,6 +321,135 @@ async function fixture() {
   });
   return { user, sites, episodes, recipients, strangerRecipient, session, request };
 }
+test('frame inbox groups three flagged people among ten and six PPE findings, with scoped Camera pagination and revision acknowledgement', async () => {
+  const f = await fixture(10);
+  const headers = { Authorization: `Bearer ${f.session.accessToken}` };
+  const [anchor] = await db.query('SELECT camera_id,event_id FROM safety_episode WHERE id=$1', [
+    f.episodes[0],
+  ]);
+  const caseIds = [f.episodes[0]!];
+  for (const index of [1, 2]) {
+    const episode = randomUUID();
+    await db.query(
+      `INSERT INTO safety_episode(id,site_id,camera_id,event_id,person_observation_index,payload_hash,first_observed_at,last_observed_at)
+       SELECT $1,site_id,camera_id,event_id,$2,payload_hash,first_observed_at,last_observed_at FROM safety_episode WHERE id=$3`,
+      [episode, index, f.episodes[0]],
+    );
+    await db.query(
+      'INSERT INTO safety_episode_recipient(id,episode_id,site_id,recipient_user_id) VALUES($1,$2,$3,$4)',
+      [randomUUID(), episode, f.sites[0], f.user],
+    );
+    caseIds.push(episode);
+  }
+  for (const [index, episode] of caseIds.entries()) {
+    for (const subtype of index === 0
+      ? ['PPE_SAFETY_VEST_MISSING']
+      : ['PPE_HARD_HAT_MISSING', 'PPE_SAFETY_VEST_MISSING']) {
+      await db.query(
+        `INSERT INTO safety_alert(id,site_id,episode_id,alert_type,candidate_subtype,grouping_key,first_detected_at,last_detected_at)
+         VALUES($1::uuid,$2,$3,'PPE_VIOLATION',$4,$1::text,now(),now())`,
+        [randomUUID(), f.sites[0], episode, subtype],
+      );
+    }
+  }
+  const endpoint = `${url}/frames`;
+  const response = await fetch(
+    `${endpoint}?siteId=${f.sites[0]}&cameraId=${anchor.camera_id}&limit=1`,
+    { headers },
+  );
+  assert.equal(response.status, 200);
+  assert.equal(response.headers.get('cache-control'), 'no-store');
+  const page = await response.json();
+  assert.equal(page.total, 1);
+  assert.equal(page.items.length, 1);
+  const frame = page.items[0];
+  assert.equal(frame.cameraId, anchor.camera_id);
+  assert.equal(frame.siteId, f.sites[0]);
+  assert.equal(frame.frameKey, `event:${anchor.event_id}`);
+  assert.equal(frame.findingCount, 6);
+  assert.equal(frame.cases.length, 3);
+  assert.deepEqual(
+    frame.cases.map((entry: { episodeId: string }) => entry.episodeId).sort(),
+    caseIds.sort(),
+  );
+  for (const entry of frame.cases) assert.equal(entry.source, null);
+  const otherCamera = randomUUID(),
+    otherEvent = randomUUID(),
+    otherEpisode = randomUUID();
+  await db.query(
+    'INSERT INTO camera(id,site_id,external_id,code,name) VALUES($1::uuid,$2,$1::text,$1::text,$1::text)',
+    [otherCamera, f.sites[0]],
+  );
+  await db.query(
+    `INSERT INTO ai_observation_event(event_id,payload_hash,camera_external_id,resolved_camera_id,stream_session_id,captured_at,raw_payload,processing_status)
+     SELECT $1,payload_hash,$2::text,$2::uuid,stream_session_id,captured_at,raw_payload,processing_status FROM ai_observation_event WHERE event_id=$3`,
+    [otherEvent, otherCamera, anchor.event_id],
+  );
+  await db.query(
+    `INSERT INTO safety_episode(id,site_id,camera_id,event_id,person_observation_index,payload_hash,first_observed_at,last_observed_at)
+     SELECT $1,site_id,$2,$3,0,payload_hash,first_observed_at,last_observed_at FROM safety_episode WHERE id=$4`,
+    [otherEpisode, otherCamera, otherEvent, f.episodes[0]],
+  );
+  await db.query(
+    `INSERT INTO safety_alert(id,site_id,episode_id,alert_type,candidate_subtype,grouping_key,first_detected_at,last_detected_at)
+     VALUES($1::uuid,$2,$3,'PPE_VIOLATION','PPE_HARD_HAT_MISSING',$1::text,now(),now())`,
+    [randomUUID(), f.sites[0], otherEpisode],
+  );
+  await db.query(
+    'INSERT INTO safety_episode_recipient(id,episode_id,site_id,recipient_user_id) VALUES($1,$2,$3,$4)',
+    [randomUUID(), otherEpisode, f.sites[0], f.user],
+  );
+  const sitePage = await (
+    await fetch(`${endpoint}?siteId=${f.sites[0]}&limit=1`, { headers })
+  ).json();
+  assert.equal(sitePage.total, 2);
+  assert.equal(sitePage.items[0].cameraId, otherCamera);
+  const cameraPage = await (
+    await fetch(`${endpoint}?siteId=${f.sites[0]}&cameraId=${anchor.camera_id}&limit=1`, {
+      headers,
+    })
+  ).json();
+  assert.equal(cameraPage.total, 1);
+  assert.equal(cameraPage.items[0].frameKey, frame.frameKey);
+  const beyondCameraPage = await (
+    await fetch(`${endpoint}?cameraId=${anchor.camera_id}&limit=1&offset=1`, { headers })
+  ).json();
+  assert.equal(beyondCameraPage.total, 1);
+  assert.equal(beyondCameraPage.items.length, 0);
+  const exactFrame = await (
+    await fetch(
+      `${endpoint}?siteId=${f.sites[0]}&frameKey=${encodeURIComponent(frame.frameKey)}&limit=1`,
+      { headers },
+    )
+  ).json();
+  assert.equal(exactFrame.total, 1);
+  assert.equal(exactFrame.items[0].cameraId, anchor.camera_id);
+  const read = await fetch(`${url}/${frame.cases[0].recipientId}/read`, {
+    method: 'PATCH',
+    headers: { ...headers, 'Content-Type': 'application/json' },
+    body: JSON.stringify({ seenRevision: frame.cases[0].contentRevision }),
+  });
+  assert.equal(read.status, 200);
+  const unread = await (
+    await fetch(`${endpoint}?siteId=${f.sites[0]}&cameraId=${anchor.camera_id}&readStatus=UNREAD`, {
+      headers,
+    })
+  ).json();
+  assert.equal(unread.total, 1);
+  assert.equal(
+    unread.items[0].cases.filter((entry: { unread: boolean }) => entry.unread).length,
+    2,
+  );
+  const absent = await (
+    await fetch(`${endpoint}?cameraId=${randomUUID()}&limit=1`, { headers })
+  ).json();
+  assert.equal(absent.total, 0);
+  assert.equal(absent.items.length, 0);
+  assert.equal((await fetch(`${endpoint}?siteId=${f.sites[2]}`, { headers })).status, 403);
+  assert.equal((await fetch(`${endpoint}?cameraId=bad`, { headers })).status, 400);
+  assert.equal((await fetch(endpoint)).status, 401);
+});
+
 const status =
   (expected: number) =>
   (error: unknown): boolean =>
