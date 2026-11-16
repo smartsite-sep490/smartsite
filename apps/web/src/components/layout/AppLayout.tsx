@@ -406,6 +406,9 @@ export function AppLayout({ currentTab: propCurrentTab, onSelectTab, children }:
               key={currentUser?.id ?? 'signed-out'}
               apiUrl={apiUrl}
               userId={currentUser?.id ?? ''}
+              ppeInboxSiteIds={currentUser?.roleAssignments.flatMap(({ role, siteId }) =>
+                role === 'SAFETY_OFFICER' && siteId ? [siteId] : [],
+              )}
               enabled={!!currentUser && !currentUser.mustChangePassword}
             />
 

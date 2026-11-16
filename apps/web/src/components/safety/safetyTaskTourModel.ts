@@ -1,3 +1,4 @@
+import { isSafetyIdentificationRouteEnabled } from '../safety-episodes/safetyUrlParams';
 import { registerSafetyTaskTourCatalog } from './safety-task-tour-catalog';
 
 registerSafetyTaskTourCatalog();
@@ -6,8 +7,9 @@ export const SAFETY_TOUR_STORAGE_KEY = 'smartsite.safetyTaskTour.v1';
 export const MONITOR_TOUR_VERSION = 1;
 export const ALERTS_TOUR_VERSION = 1;
 export const CAMERA_SETUP_TOUR_VERSION = 1;
+export const FRAME_INBOX_TOUR_VERSION = 1;
 
-export type SafetyTaskId = 'monitor' | 'alerts' | 'camera-setup' | 'polygon';
+export type SafetyTaskId = 'monitor' | 'alerts' | 'camera-setup' | 'polygon' | 'frame-inbox';
 
 export type SafetyTourProgressStatus = 'COMPLETED' | 'SKIPPED';
 
@@ -112,6 +114,53 @@ export function buildCameraSetupTourSteps(
   });
 }
 
+export const FRAME_INBOX_TOUR_STEPS: readonly SafetyTourStepSpec[] = [
+  stepSpec('frame-inbox-filters', 'frame-inbox-filters', 'tour.frameInbox.filters'),
+  stepSpec('frame-inbox-card-summary', 'frame-inbox-card-summary', 'tour.frameInbox.frameSummary'),
+  stepSpec(
+    'frame-inbox-media-evidence',
+    'frame-inbox-media-evidence',
+    'tour.frameInbox.mediaEvidence',
+  ),
+  stepSpec(
+    'frame-inbox-subject-status',
+    'frame-inbox-subject-status',
+    'tour.frameInbox.subjectStatus',
+  ),
+  stepSpec('frame-inbox-open-case', 'frame-inbox-open-case', 'tour.frameInbox.caseHandoff'),
+];
+
+export interface FrameInboxTourStepOptions {
+  hasFrames: boolean;
+  hasExpandedSubject?: boolean;
+  enableIdentification?: boolean;
+}
+
+export function buildFrameInboxTourSteps(
+  options: FrameInboxTourStepOptions,
+): readonly SafetyTourStepSpec[] {
+  const c02Enabled = isSafetyIdentificationRouteEnabled(options.enableIdentification);
+  return FRAME_INBOX_TOUR_STEPS.map((step) => {
+    if (step.id === 'frame-inbox-card-summary') {
+      return { ...step, isAllowed: () => options.hasFrames };
+    }
+    if (
+      step.id === 'frame-inbox-media-evidence' ||
+      step.id === 'frame-inbox-subject-status' ||
+      step.id === 'frame-inbox-open-case'
+    ) {
+      const prefix =
+        step.id === 'frame-inbox-open-case' && !c02Enabled ? 'tour.frameInbox.caseReview' : null;
+      return {
+        ...step,
+        ...(prefix ? { titleKey: `${prefix}.title`, bodyKey: `${prefix}.body` } : {}),
+        isAllowed: () => options.hasFrames && (options.hasExpandedSubject ?? true),
+      };
+    }
+    return step;
+  });
+}
+
 export function sanitizeTourUserId(userId: string | null | undefined): string | null {
   if (typeof userId !== 'string') return null;
   const trimmed = userId.trim();
@@ -168,6 +217,45 @@ export function writeSafetyTourProgress(
     }
     safeStore[`${safeUser}:${taskId}:v${tourVersion}`] = { status, tourVersion };
     window.localStorage.setItem(SAFETY_TOUR_STORAGE_KEY, JSON.stringify(safeStore));
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+export function clearSafetyTourProgress(
+  userId: string | null | undefined,
+  taskId: string,
+  tourVersion: number,
+): boolean {
+  const safeUser = sanitizeTourUserId(userId);
+  if (!safeUser || !Number.isSafeInteger(tourVersion) || tourVersion < 1) return false;
+  try {
+    const raw = window.localStorage.getItem(SAFETY_TOUR_STORAGE_KEY);
+    if (!raw) return true;
+    const parsed = JSON.parse(raw) as Record<string, unknown> | null;
+    if (!parsed || typeof parsed !== 'object') {
+      window.localStorage.removeItem(SAFETY_TOUR_STORAGE_KEY);
+      return true;
+    }
+    const targetKey = `${safeUser}:${taskId}:v${tourVersion}`;
+    const safeStore: Record<string, { status: SafetyTourProgressStatus; tourVersion: number }> = {};
+    for (const [k, v] of Object.entries(parsed)) {
+      if (k === targetKey) continue;
+      const rec = v as { status?: unknown; tourVersion?: unknown } | null;
+      if (
+        rec &&
+        (rec.status === 'COMPLETED' || rec.status === 'SKIPPED') &&
+        typeof rec.tourVersion === 'number'
+      ) {
+        safeStore[k] = { status: rec.status, tourVersion: rec.tourVersion };
+      }
+    }
+    if (Object.keys(safeStore).length === 0) {
+      window.localStorage.removeItem(SAFETY_TOUR_STORAGE_KEY);
+    } else {
+      window.localStorage.setItem(SAFETY_TOUR_STORAGE_KEY, JSON.stringify(safeStore));
+    }
     return true;
   } catch {
     return false;

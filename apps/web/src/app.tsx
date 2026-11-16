@@ -183,6 +183,7 @@ function ProtectedRoutes({ defaultAuthTab, alertsContext, onNavigate }: Protecte
               <PpeMonitorWorkspace
                 apiUrl={apiUrl}
                 session={{ accessToken, user: currentUser.data! }}
+                enableFrameInboxLink
               />
             </SafetyRouteBoundary>
           }

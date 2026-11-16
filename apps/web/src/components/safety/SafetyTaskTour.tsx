@@ -6,6 +6,7 @@ import { registerSafetyTaskTourCatalog } from './safety-task-tour-catalog';
 import {
   MONITOR_TOUR_STEPS,
   MONITOR_TOUR_VERSION,
+  clearSafetyTourProgress,
   isElementAvailable,
   readSafetyTourProgress,
   sanitizeTourUserId,
@@ -43,7 +44,7 @@ interface SafetyTaskTourSessionProps {
 
 function SafetyTaskTourSession({ taskId, tourVersion, userId, steps }: SafetyTaskTourSessionProps) {
   registerSafetyTaskTourCatalog();
-  const { t: tr } = useTranslation(SAFETY_NAMESPACE, { lng: uiLanguage() });
+  const { t: tSafety } = useTranslation(SAFETY_NAMESPACE, { lng: uiLanguage() });
   const titleId = useId();
   const bodyId = useId();
   const triggerRef = useRef<HTMLButtonElement | null>(null);
@@ -62,12 +63,15 @@ function SafetyTaskTourSession({ taskId, tourVersion, userId, steps }: SafetyTas
   const [isOpen, setIsOpen] = useState(false);
   const [activeStepId, setActiveStepId] = useState<string | null>(null);
   const [domTick, setDomTick] = useState(0);
-  const [writtenProgress, setWrittenProgress] = useState<SafetyTourProgressStatus | null>(null);
+  const [progressOverride, setProgressOverride] = useState<
+    SafetyTourProgressStatus | 'RESET' | undefined
+  >(undefined);
 
-  const progress = useMemo(
-    () => writtenProgress ?? readSafetyTourProgress(userId, taskId, tourVersion),
-    [writtenProgress, userId, taskId, tourVersion],
-  );
+  const progress = useMemo(() => {
+    if (progressOverride === 'RESET') return null;
+    if (progressOverride) return progressOverride;
+    return readSafetyTourProgress(userId, taskId, tourVersion);
+  }, [progressOverride, userId, taskId, tourVersion]);
 
   const availableSteps = useMemo(() => {
     if (typeof document === 'undefined') return [];
@@ -285,7 +289,13 @@ function SafetyTaskTourSession({ taskId, tourVersion, userId, steps }: SafetyTas
 
   const finishWithStatus = (status: SafetyTourProgressStatus) => {
     writeSafetyTourProgress(userId, taskId, tourVersion, status);
-    setWrittenProgress(status);
+    setProgressOverride(status);
+    closeTour(true);
+  };
+
+  const resetProgress = () => {
+    clearSafetyTourProgress(userId, taskId, tourVersion);
+    setProgressOverride('RESET');
     closeTour(true);
   };
 
@@ -321,15 +331,26 @@ function SafetyTaskTourSession({ taskId, tourVersion, userId, steps }: SafetyTas
         }}
         className="px-3 py-1 rounded-full border border-slate-200/90 bg-white hover:bg-slate-50 text-xs font-semibold text-slate-700 hover:text-slate-900 transition-colors cursor-pointer shadow-xs focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-slate-900"
       >
-        {progress ? tr('tour.replayBtn') : tr('tour.triggerBtn')}
+        {progress ? tSafety('tour.replayBtn') : tSafety('tour.triggerBtn')}
       </button>
+
+      {progress && !isTourVisible && sanitizeTourUserId(userId) !== null && (
+        <button
+          type="button"
+          data-testid="safety-task-tour-reset"
+          onClick={resetProgress}
+          className="px-2.5 py-1 rounded-full border border-slate-200/80 bg-slate-50 hover:bg-slate-100 text-xs font-medium text-slate-600 hover:text-slate-900 transition-colors cursor-pointer focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-slate-900"
+        >
+          {tSafety('tour.resetBtn')}
+        </button>
+      )}
 
       {showInvitation && (
         <SafetyTourInvitation
-          ariaLabel={tr('tour.invite.aria')}
-          promptText={tr('tour.invite.prompt')}
-          startLabel={tr('tour.invite.startBtn')}
-          skipLabel={tr('tour.invite.skipBtn')}
+          ariaLabel={tSafety('tour.invite.aria')}
+          promptText={tSafety('tour.invite.prompt')}
+          startLabel={tSafety('tour.invite.startBtn')}
+          skipLabel={tSafety('tour.invite.skipBtn')}
           onStart={startTour}
           onSkip={() => finishWithStatus('SKIPPED')}
         />
@@ -355,7 +376,7 @@ function SafetyTaskTourSession({ taskId, tourVersion, userId, steps }: SafetyTas
             <div className="flex items-start justify-between gap-2">
               <div className="min-w-0">
                 <p className="text-[11px] font-semibold uppercase tracking-wider text-slate-500">
-                  {tr('tour.stepCounter', {
+                  {tSafety('tour.stepCounter', {
                     current: currentIndex + 1,
                     total: availableSteps.length,
                   })}
@@ -364,13 +385,13 @@ function SafetyTaskTourSession({ taskId, tourVersion, userId, steps }: SafetyTas
                   id={titleId}
                   className="text-sm font-bold text-slate-900 mt-0.5 break-words [overflow-wrap:anywhere]"
                 >
-                  {tr(currentStep.titleKey)}
+                  {tSafety(currentStep.titleKey)}
                 </h2>
               </div>
               <button
                 type="button"
                 data-testid="safety-task-tour-close"
-                aria-label={tr('tour.closeAria')}
+                aria-label={tSafety('tour.closeAria')}
                 onClick={() => closeTour(true)}
                 className="rounded-lg px-2 py-1 text-xs font-semibold text-slate-500 hover:bg-slate-100 hover:text-slate-900 cursor-pointer focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-slate-900"
               >
@@ -381,7 +402,7 @@ function SafetyTaskTourSession({ taskId, tourVersion, userId, steps }: SafetyTas
               id={bodyId}
               className="text-xs text-slate-600 leading-relaxed break-words [overflow-wrap:anywhere]"
             >
-              {tr(currentStep.bodyKey)}
+              {tSafety(currentStep.bodyKey)}
             </p>
             <div className="flex flex-wrap items-center justify-between gap-2 pt-1 border-t border-slate-100">
               <button
@@ -390,7 +411,7 @@ function SafetyTaskTourSession({ taskId, tourVersion, userId, steps }: SafetyTas
                 onClick={() => finishWithStatus('SKIPPED')}
                 className="rounded px-1.5 py-0.5 text-xs font-semibold text-slate-500 hover:text-slate-800 cursor-pointer focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-slate-900"
               >
-                {tr('tour.skipBtn')}
+                {tSafety('tour.skipBtn')}
               </button>
               <div className="flex flex-wrap items-center gap-1.5">
                 {currentIndex > 0 && (
@@ -413,7 +434,7 @@ function SafetyTaskTourSession({ taskId, tourVersion, userId, steps }: SafetyTas
                     }}
                     className="rounded-lg border border-slate-200 bg-white px-2.5 py-1 text-xs font-semibold text-slate-700 hover:bg-slate-50 cursor-pointer focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-slate-900"
                   >
-                    {tr('tour.backBtn')}
+                    {tSafety('tour.backBtn')}
                   </button>
                 )}
                 <button
@@ -429,7 +450,7 @@ function SafetyTaskTourSession({ taskId, tourVersion, userId, steps }: SafetyTas
                   }}
                   className="rounded-lg bg-[#0F172A] px-3 py-1 text-xs font-semibold text-white hover:bg-slate-800 cursor-pointer focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-slate-900"
                 >
-                  {tr(isLastStep ? 'tour.doneBtn' : 'tour.nextBtn')}
+                  {tSafety(isLastStep ? 'tour.doneBtn' : 'tour.nextBtn')}
                 </button>
               </div>
             </div>
