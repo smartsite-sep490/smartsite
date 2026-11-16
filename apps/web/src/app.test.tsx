@@ -52,29 +52,38 @@ vi.mock('./components/landing/LandingPage', () => ({
   LandingPage: ({ onEnterApp }: { onEnterApp: (tab?: string) => void }) => (
     <div>
       <h1>Landing Page</h1>
-      <button onClick={() => onEnterApp('ppe')}>Enter PPE</button>
+      <button onClick={() => onEnterApp('zones')}>Enter Zones</button>
       <button onClick={() => onEnterApp('incidents')}>Enter Incidents Direct</button>
     </div>
   ),
 }));
 
-vi.mock('./components/ppe/PpeMonitoringView', () => ({
-  PpeMonitoringView: ({ onNavigate }: { onNavigate?: (tab: string, ctx?: unknown) => void }) => (
-    <div>
-      <h2>PPE Monitoring</h2>
-      <button onClick={() => onNavigate?.('incidents', { alertType: 'PPE_VIOLATION' })}>
-        Navigate with PPE context
-      </button>
-    </div>
-  ),
-}));
-
-vi.mock('./components/zones/RestrictedZoneView', () => ({
-  RestrictedZoneView: () => <div>Restricted Zones</div>,
+vi.mock('./components/ppe/PpeMonitorWorkspace', () => ({
+  PpeMonitorWorkspace: () => <h2>PPE Monitoring</h2>,
 }));
 
 vi.mock('./components/cameras/CameraSetupRoute', () => ({
   CameraSetupRoute: () => <h2>Camera setup workspace</h2>,
+}));
+
+vi.mock('./components/zones/RestrictedZoneView', () => ({
+  RestrictedZoneView: ({
+    onNavigate,
+    linkedSiteId,
+    linkedCameraId,
+  }: {
+    onNavigate?: (tab: string, context: unknown) => void;
+    linkedSiteId?: string;
+    linkedCameraId?: string;
+  }) => (
+    <div>
+      <h2>Restricted Zones</h2>
+      <output>{[linkedSiteId, linkedCameraId].filter(Boolean).join('/')}</output>
+      <button onClick={() => onNavigate?.('incidents', { alertType: 'RESTRICTED_ZONE_INTRUSION' })}>
+        Navigate with Zone context
+      </button>
+    </div>
+  ),
 }));
 
 vi.mock('./components/alerts/SafetyAlertsView', () => ({
@@ -255,7 +264,7 @@ describe('App Navigation and Context Lifecycle', () => {
     expect(screen.queryByRole('heading', { name: 'Safety Alerts Queue' })).toBeNull();
   });
 
-  it('retains other explicitly assigned roles for a Security/Admin account', () => {
+  it('retains other explicitly assigned roles for a Security/Admin account', async () => {
     accountState.roleAssignments = [
       { role: 'SECURITY_OFFICER', siteId: 'site-alpha' },
       { role: 'ADMIN', siteId: null },
@@ -267,7 +276,7 @@ describe('App Navigation and Context Lifecycle', () => {
         </QueryClientProvider>
       </MemoryRouter>,
     );
-    expect(screen.getByRole('heading', { name: 'PPE Monitoring' })).toBeTruthy();
+    expect(await screen.findByRole('heading', { name: 'PPE Monitoring' })).toBeTruthy();
   });
 
   it.each(['ADMIN', 'SITE_MANAGER'] as const)('opens Camera Setup as %s', async (role) => {
@@ -295,6 +304,17 @@ describe('App Navigation and Context Lifecycle', () => {
     expect(screen.getByRole('heading', { name: 'Safety Alerts Queue' })).toBeTruthy();
   });
 
+  it('forwards the linked Site and camera to Restricted Zones', async () => {
+    render(
+      <MemoryRouter initialEntries={['/zones?siteId=site-alpha&cameraId=cam-2']}>
+        <QueryClientProvider client={queryClient}>
+          <App />
+        </QueryClientProvider>
+      </MemoryRouter>,
+    );
+    expect(await screen.findByText('site-alpha/cam-2')).toBeTruthy();
+  });
+
   it('sets initialType when navigated with context, and clears it when navigating via sidebar without context', async () => {
     const user = userEvent.setup();
 
@@ -306,14 +326,14 @@ describe('App Navigation and Context Lifecycle', () => {
       </MemoryRouter>,
     );
 
-    // 1. Enter app at PPE tab
-    await user.click(screen.getByRole('button', { name: 'Enter PPE' }));
-    expect(screen.getByRole('heading', { name: 'PPE Monitoring' })).not.toBeNull();
+    // 1. Enter app at Zones tab
+    await user.click(screen.getByRole('button', { name: 'Enter Zones' }));
+    expect(screen.getByRole('heading', { name: 'Restricted Zones' })).not.toBeNull();
 
-    // 2. Navigate to incidents with PPE context
-    await user.click(screen.getByRole('button', { name: 'Navigate with PPE context' }));
+    // 2. Navigate to incidents with Zone context
+    await user.click(screen.getByRole('button', { name: 'Navigate with Zone context' }));
     expect(screen.getByRole('heading', { name: 'Safety Alerts Queue' })).not.toBeNull();
-    expect(screen.getByTestId('initial-type').textContent).toBe('PPE_VIOLATION');
+    expect(screen.getByTestId('initial-type').textContent).toBe('RESTRICTED_ZONE_INTRUSION');
 
     // 3. Switch back to PPE via sidebar
     await user.click(screen.getByRole('button', { name: 'Sidebar PPE' }));
@@ -336,13 +356,13 @@ describe('App Navigation and Context Lifecycle', () => {
       </MemoryRouter>,
     );
 
-    // 1. Enter app at PPE tab
-    await user.click(screen.getByRole('button', { name: 'Enter PPE' }));
+    // 1. Enter app at Zones tab
+    await user.click(screen.getByRole('button', { name: 'Enter Zones' }));
 
-    // 2. Navigate from PPE to incidents with PPE context
-    await user.click(screen.getByRole('button', { name: 'Navigate with PPE context' }));
+    // 2. Navigate from Zones to incidents with Zone context
+    await user.click(screen.getByRole('button', { name: 'Navigate with Zone context' }));
     expect(screen.getByRole('heading', { name: 'Safety Alerts Queue' })).not.toBeNull();
-    expect(screen.getByTestId('initial-type').textContent).toBe('PPE_VIOLATION');
+    expect(screen.getByTestId('initial-type').textContent).toBe('RESTRICTED_ZONE_INTRUSION');
 
     // 3. Click sidebar incidents immediately (while already on incidents, without going back to PPE)
     await user.click(screen.getByRole('button', { name: 'Sidebar Incidents' }));

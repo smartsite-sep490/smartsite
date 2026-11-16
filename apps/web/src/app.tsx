@@ -8,10 +8,23 @@ import {
   type SafetyAlertType,
 } from '@smartsite/api-client';
 import { AppLayout, type ActiveTab } from './components/layout/AppLayout';
+const LiveMonitoringView = lazy(() =>
+  import('./components/live/LiveMonitoringView').then((module) => ({
+    default: module.LiveMonitoringView,
+  })),
+);
+const RestrictedZoneView = lazy(() =>
+  import('./components/zones/RestrictedZoneView').then((module) => ({
+    default: module.RestrictedZoneView,
+  })),
+);
+const PpeMonitorWorkspace = lazy(() =>
+  import('./components/ppe/PpeMonitorWorkspace').then((module) => ({
+    default: module.PpeMonitorWorkspace,
+  })),
+);
+import { SafetyRouteBoundary } from './components/layout/SafetyRouteBoundary';
 import { CameraSetupBoundary } from './components/cameras/CameraSetupBoundary';
-import { LiveMonitoringView } from './components/live/LiveMonitoringView';
-import { RestrictedZoneView } from './components/zones/RestrictedZoneView';
-import { PpeMonitoringView } from './components/ppe/PpeMonitoringView';
 import { DashboardView } from './components/dashboard/DashboardView';
 import { LandingPage } from './components/landing/LandingPage';
 import { SafetyAlertsView } from './components/alerts/SafetyAlertsView';
@@ -157,11 +170,22 @@ function ProtectedRoutes({ defaultAuthTab, alertsContext, onNavigate }: Protecte
         <Route path="/access" element={<AccessControlView apiUrl={apiUrl} />} />
         <Route
           path="/live-monitoring"
-          element={<LiveMonitoringView onNavigate={(tab) => onNavigate(tab)} />}
+          element={
+            <SafetyRouteBoundary>
+              <LiveMonitoringView onNavigate={(tab) => onNavigate(tab)} />
+            </SafetyRouteBoundary>
+          }
         />
         <Route
           path="/ppe"
-          element={<PpeMonitoringView onNavigate={(tab, context) => onNavigate(tab, context)} />}
+          element={
+            <SafetyRouteBoundary>
+              <PpeMonitorWorkspace
+                apiUrl={apiUrl}
+                session={{ accessToken, user: currentUser.data! }}
+              />
+            </SafetyRouteBoundary>
+          }
         />
         <Route
           path="/camera-setup"
@@ -173,15 +197,21 @@ function ProtectedRoutes({ defaultAuthTab, alertsContext, onNavigate }: Protecte
             </CameraSetupBoundary>
           }
         />
+
         <Route
           path="/zones"
           element={
-            <RestrictedZoneView
-              authenticatedSession={{ accessToken, user: currentUser.data! }}
-              onSignOut={() => logout.mutate()}
-              apiUrl={apiUrl}
-              onNavigate={(tab, context) => onNavigate(tab, context)}
-            />
+            <SafetyRouteBoundary>
+              <RestrictedZoneView
+                key={location.search}
+                linkedSiteId={incidentLink.get('siteId') ?? undefined}
+                linkedCameraId={incidentLink.get('cameraId') ?? undefined}
+                authenticatedSession={{ accessToken, user: currentUser.data! }}
+                onSignOut={() => logout.mutate()}
+                apiUrl={apiUrl}
+                onNavigate={(tab, context) => onNavigate(tab, context)}
+              />
+            </SafetyRouteBoundary>
           }
         />
         <Route

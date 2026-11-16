@@ -4,11 +4,198 @@ import path from 'node:path';
 import { pathToFileURL } from 'node:url';
 import ts from 'typescript';
 import en from './locales/en.json';
-import { hasRegisteredFeatureKey } from './feature-catalog-registry';
+import { hasRegisteredFeatureKey, registerFeatureCatalog } from './feature-catalog-registry';
 import { SITE_GATES } from '@smartsite/contracts/gates';
+
+function readStringMap(
+  node: ts.Expression,
+  bindings: ReadonlyMap<string, ts.Expression>,
+): Record<string, string> | null {
+  let expr = node;
+  while (
+    ts.isAsExpression(expr) ||
+    ts.isSatisfiesExpression(expr) ||
+    ts.isParenthesizedExpression(expr)
+  ) {
+    expr = expr.expression;
+  }
+  if (ts.isIdentifier(expr)) {
+    const bound = bindings.get(expr.text);
+    return bound ? readStringMap(bound, bindings) : null;
+  }
+  if (!ts.isObjectLiteralExpression(expr)) return null;
+  const out: Record<string, string> = {};
+  for (const prop of expr.properties) {
+    if (!ts.isPropertyAssignment(prop)) return null;
+    const key = ts.isIdentifier(prop.name) || ts.isStringLiteral(prop.name) ? prop.name.text : null;
+    let val = prop.initializer;
+    while (ts.isAsExpression(val) || ts.isParenthesizedExpression(val)) val = val.expression;
+    if (key === null || (!ts.isStringLiteral(val) && !ts.isNoSubstitutionTemplateLiteral(val))) {
+      return null;
+    }
+    out[key] = val.text;
+  }
+  return out;
+}
+
+function registerStaticCatalogFromAst(filename: string, raw: string): boolean {
+  const sf = ts.createSourceFile(filename, raw, ts.ScriptTarget.Latest, true);
+  const bindings = new Map<string, ts.Expression>();
+  const catalogCallees = new Set<string>(['registerFeatureCatalog']);
+  function collectBindings(node: ts.Node) {
+    if (ts.isImportSpecifier(node)) {
+      const imported = (node.propertyName ?? node.name).text;
+      if (imported === 'registerFeatureCatalog') {
+        catalogCallees.add(node.name.text);
+      }
+    } else if (ts.isVariableDeclaration(node) && ts.isIdentifier(node.name) && node.initializer) {
+      bindings.set(node.name.text, node.initializer);
+    }
+    ts.forEachChild(node, collectBindings);
+  }
+  collectBindings(sf);
+
+  let totalCalls = 0;
+  let hasUnresolved = false;
+  const resolvedBatch: Array<{ en: Record<string, string>; vi: Record<string, string> }> = [];
+
+  function isCatalogCallee(expr: ts.Expression): boolean {
+    return (
+      (ts.isIdentifier(expr) && catalogCallees.has(expr.text)) ||
+      (ts.isPropertyAccessExpression(expr) && expr.name.text === 'registerFeatureCatalog')
+    );
+  }
+
+  function findCalls(node: ts.Node) {
+    if (
+      ts.isIdentifier(node) &&
+      catalogCallees.has(node.text) &&
+      !ts.isImportSpecifier(node.parent) &&
+      !(ts.isCallExpression(node.parent) && node.parent.expression === node)
+    ) {
+      hasUnresolved = true;
+    }
+    if (ts.isCallExpression(node) && isCatalogCallee(node.expression)) {
+      totalCalls += 1;
+      if (node.arguments.length !== 1 || ts.isSpreadElement(node.arguments[0]!)) {
+        hasUnresolved = true;
+      } else {
+        let arg: ts.Expression | undefined = node.arguments[0];
+        if (arg && ts.isIdentifier(arg)) arg = bindings.get(arg.text);
+        while (
+          arg &&
+          (ts.isAsExpression(arg) ||
+            ts.isSatisfiesExpression(arg) ||
+            ts.isParenthesizedExpression(arg))
+        ) {
+          arg = arg.expression;
+        }
+        if (!arg || !ts.isObjectLiteralExpression(arg) || arg.properties.length !== 2) {
+          hasUnresolved = true;
+        } else {
+          let enExpr: ts.Expression | undefined;
+          let viExpr: ts.Expression | undefined;
+          for (const prop of arg.properties) {
+            const propName =
+              prop.name && (ts.isIdentifier(prop.name) || ts.isStringLiteral(prop.name))
+                ? prop.name.text
+                : null;
+            if (ts.isShorthandPropertyAssignment(prop)) {
+              if (propName === 'en') enExpr = bindings.get('en');
+              else if (propName === 'vi') viExpr = bindings.get('vi');
+            } else if (ts.isPropertyAssignment(prop)) {
+              if (propName === 'en') enExpr = prop.initializer;
+              else if (propName === 'vi') viExpr = prop.initializer;
+            }
+          }
+          const enMap = enExpr ? readStringMap(enExpr, bindings) : null;
+          const viMap = viExpr ? readStringMap(viExpr, bindings) : null;
+          const enKeys = enMap ? Object.keys(enMap) : [];
+          const viKeys = viMap ? Object.keys(viMap) : [];
+          if (
+            !enMap ||
+            !viMap ||
+            enKeys.length !== viKeys.length ||
+            enKeys.some((k) => !k || !Object.hasOwn(viMap, k))
+          ) {
+            hasUnresolved = true;
+          } else {
+            resolvedBatch.push({ en: enMap, vi: viMap });
+          }
+        }
+      }
+    }
+    ts.forEachChild(node, findCalls);
+  }
+  findCalls(sf);
+
+  if (hasUnresolved || totalCalls === 0 || resolvedBatch.length !== totalCalls) {
+    return false;
+  }
+  for (const pair of resolvedBatch) {
+    registerFeatureCatalog(pair);
+  }
+  return true;
+}
 
 it('includes the shared gate catalog in the UI translations', () => {
   for (const gate of SITE_GATES) expect(`gates.${gate.id}` in en, gate.id).toBe(true);
+});
+
+it('falls back to the dynamic loader unless all registerFeatureCatalog calls in a module resolve statically', async () => {
+  const mixedModuleSource = `
+    import { registerFeatureCatalog } from './feature-catalog-registry';
+
+    registerFeatureCatalog({
+      en: { '__auditTest.mixed.static': 'Static label' },
+      vi: { '__auditTest.mixed.static': 'Nhãn tĩnh' },
+    });
+
+    function buildComputedCatalog() {
+      const key = ['__auditTest', 'mixed', 'dynamic'].join('.');
+      return {
+        en: { [key]: 'Dynamic label' },
+        vi: { [key]: 'Nhãn động' },
+      };
+    }
+
+    export function registerMixedTestCatalog(): void {
+      registerFeatureCatalog(buildComputedCatalog());
+    }
+  `;
+
+  let dynamicLoaderCalled = false;
+  if (!registerStaticCatalogFromAst('mixed-catalog-fixture.ts', mixedModuleSource)) {
+    expect(hasRegisteredFeatureKey('__auditTest.mixed.static')).toBe(false);
+    dynamicLoaderCalled = true;
+    registerFeatureCatalog({
+      en: { '__auditTest.mixed.static': 'Static label' },
+      vi: { '__auditTest.mixed.static': 'Nhãn tĩnh' },
+    });
+    registerFeatureCatalog({
+      en: { '__auditTest.mixed.dynamic': 'Dynamic label' },
+      vi: { '__auditTest.mixed.dynamic': 'Nhãn động' },
+    });
+  }
+
+  expect(dynamicLoaderCalled).toBe(true);
+  expect(hasRegisteredFeatureKey('__auditTest.mixed.static')).toBe(true);
+  expect(hasRegisteredFeatureKey('__auditTest.mixed.dynamic')).toBe(true);
+
+  const dualStaticModuleSource = `
+    import { registerFeatureCatalog } from './feature-catalog-registry';
+    registerFeatureCatalog({
+      en: { '__auditTest.dual.first': 'First' },
+      vi: { '__auditTest.dual.first': 'Thứ nhất' },
+    });
+    registerFeatureCatalog({
+      en: { '__auditTest.dual.second': 'Second' },
+      vi: { '__auditTest.dual.second': 'Thứ hai' },
+    });
+  `;
+  expect(registerStaticCatalogFromAst('dual-static-fixture.ts', dualStaticModuleSource)).toBe(true);
+  expect(hasRegisteredFeatureKey('__auditTest.dual.first')).toBe(true);
+  expect(hasRegisteredFeatureKey('__auditTest.dual.second')).toBe(true);
 });
 
 it('includes every access tab in the catalog, including keys composed at runtime', () => {
@@ -50,23 +237,27 @@ it('scans every production UI source for missing keys and untranslated visible l
       if (filename === path.join(root, 'i18n', 'feature-catalog-registry.ts')) continue;
       const content = readFileSync(filename, 'utf8');
       if (content.includes('registerFeatureCatalog(')) {
-        catalogModules.push(filename);
+        if (!registerStaticCatalogFromAst(filename, content)) {
+          catalogModules.push(filename);
+        }
       }
     }
   }
   collectCatalogModules(root);
-  for (const mod of catalogModules) {
-    const loaded = (await import(pathToFileURL(mod).href)) as Record<string, unknown>;
-    for (const [exportName, exportedValue] of Object.entries(loaded)) {
-      if (
-        exportName.startsWith('register') &&
-        typeof exportedValue === 'function' &&
-        exportedValue.length === 0
-      ) {
-        (exportedValue as () => void)();
+  await Promise.all(
+    catalogModules.map(async (mod) => {
+      const loaded = (await import(pathToFileURL(mod).href)) as Record<string, unknown>;
+      for (const [exportName, exportedValue] of Object.entries(loaded)) {
+        if (
+          exportName.startsWith('register') &&
+          typeof exportedValue === 'function' &&
+          exportedValue.length === 0
+        ) {
+          (exportedValue as () => void)();
+        }
       }
-    }
-  }
+    }),
+  );
   // Language names are intentionally shown in their own language in the selector.
   const brands = new Set([
     'Smart',
@@ -219,4 +410,4 @@ it('scans every production UI source for missing keys and untranslated visible l
   }
   scan(root);
   expect(failures).toEqual([]);
-});
+}, 15_000);
