@@ -316,11 +316,41 @@ for (const variant of ['ppe-only', 'zone-uppercase', 'zone-unissued', 'zone-disa
       assert.equal(row.unread, true);
       assert.equal(row.episode.findingCount, 2);
       assert.equal(row.episode.subject.kind, 'TRACKED');
+      const grouped = await fetch(
+        api +
+          '/me/safety-episode-inbox/frames?siteId=' +
+          fixture.siteId +
+          '&cameraId=' +
+          fixture.cameraId,
+        { headers: officerHeaders },
+      );
+      assert.equal(grouped.status, 200);
+      const frames = await grouped.json();
+      assert.equal(frames.total, 1);
+      assert.equal(frames.items[0].cases.length, 1);
+      const frameCase = frames.items[0].cases[0];
+      assert.equal(frameCase.episodeId, row.episode.id);
+      assert.equal(frameCase.findingCount, 2);
+      assert.equal(frameCase.source.eventId, event.eventId);
+      assert.equal(frameCase.source.personObservationIndex, 0);
+      assert.equal(frameCase.source.evidenceIndex, 0);
+      assert.equal(frameCase.source.sha256, createHash('sha256').update(bytes).digest('hex'));
+      if (variant === 'zone-uppercase') {
+        assert.equal(frameCase.zoneEntries.length, 1);
+        assert.equal(frameCase.zoneEntries[0].status, 'PENDING');
+        assert.equal(frameCase.zoneEntries[0].reasonCode, null);
+        assert.equal(frameCase.zoneEntries[0].provenance, null);
+      } else assert.deepEqual(frameCase.zoneEntries, []);
       const detailPath = api + '/sites/' + fixture.siteId + '/safety-episodes/' + row.episode.id;
       const detailResponse = await fetch(detailPath + '/tracked', { headers: officerHeaders });
       assert.equal(detailResponse.status, 200);
       const detail = await detailResponse.json();
       assert.equal(detail.findings.length, 2);
+      assert.ok(
+        detail.findings.some(
+          (finding: { alertId: string }) => finding.alertId === frameCase.source.alertId,
+        ),
+      );
       for (const finding of detail.findings) {
         const media = await fetch(
           detailPath +

@@ -66,7 +66,22 @@ import { ZoneAccessManagementService } from '../zones/zone-access-management.ser
   providers: [
     SafetyEpisodeProjectionService,
     SafetyEpisodeQueryService,
-    SafetyEpisodeInboxService,
+    {
+      provide: SafetyEpisodeInboxService,
+      inject: [DataSource, UserAuthGuard, ConfigService],
+      useFactory: (
+        db: DataSource,
+        auth: UserAuthGuard,
+        config: ConfigService<BackendEnvironment, true>,
+      ) =>
+        new SafetyEpisodeInboxService(
+          db,
+          auth,
+          () =>
+            config.get('AI_TRACKED_FRAME_RUNTIME_ENABLED', { infer: true }) === true ||
+            config.get('SAFETY_TRACKED_HISTORY_READ_ENABLED', { infer: true }) === true,
+        ),
+    },
     {
       provide: TrackedEpisodeFrameQuery,
       inject: [DataSource, UserAuthGuard, ConfigService],

@@ -1,9 +1,13 @@
+import {
+  parseTrackedEpisodeMediaSource,
+  type TrackedEpisodeMediaSource,
+} from './tracked-episode-frames.js';
 import type { Page, SafetyAlertStatus, SafetyAlertType } from './management-api.js';
 import type { ObservationIdentityDecisionResponse } from './observation-identity-management.js';
 import type { EventLocalEpisodeSubject } from './safety-episode-subject.js';
 import type { CorrectiveActionStatus, IncidentStatus } from './safety-workflow-api.js';
 
-/** Transport preparation only; no episode endpoints or delivery cutover are active yet. */
+/** Shared episode transport; source integration and operational rollout are separate gates. */
 export interface SafetyEpisodeSummary {
   id: string;
   siteId: string;
@@ -84,6 +88,145 @@ export interface SafetyEpisodeReadResponse {
   contentRevision: number;
   seenRevision: number;
   unread: boolean;
+}
+
+/** Frame presentation groups cases; acknowledgement remains per recipient revision. */
+export interface SafetyFrameInboxPage {
+  total: number;
+  unreadCount: number;
+  items: Array<{
+    siteId: string;
+    cameraId: string;
+    frameKey: string;
+    siteName: string;
+    cameraName: string;
+    capturedAt: string;
+    unread: boolean;
+    findingCount: number;
+    cases: Array<{
+      recipientId: string;
+      episodeId: string;
+      findingCount: number;
+      unread: boolean;
+      contentRevision: number;
+      source: (TrackedEpisodeMediaSource & { sha256: string }) | null;
+      zoneEntries: Array<{
+        requestId: string;
+        zoneId: string;
+        status: 'PENDING' | 'ALLOWED' | 'DENIED' | 'UNAVAILABLE';
+        reasonCode: string | null;
+        provenance: string | null;
+        laterFrame?: boolean;
+      }>;
+    }>;
+  }>;
+}
+export type SafetyFrameInboxOptions = Omit<SafetyEpisodeInboxOptions, 'recipientId'> & {
+  frameKey?: string;
+  cameraId?: string;
+};
+
+export function parseSafetyFrameInboxPage(value: unknown): SafetyFrameInboxPage | null {
+  const object = (v: unknown): v is Record<string, unknown> =>
+    !!v && typeof v === 'object' && !Array.isArray(v);
+  const integer = (v: unknown, min = 0): v is number =>
+    typeof v === 'number' && Number.isSafeInteger(v) && v >= min;
+  const id = (v: unknown): v is string =>
+    typeof v === 'string' && /^[a-f0-9]{8}(-[a-f0-9]{4}){3}-[a-f0-9]{12}$/.test(v);
+  const text = (v: unknown): v is string => typeof v === 'string' && v.trim().length > 0;
+  try {
+    if (
+      !object(value) ||
+      !integer(value.total) ||
+      !integer(value.unreadCount) ||
+      value.unreadCount > value.total ||
+      !Array.isArray(value.items) ||
+      value.items.length > value.total
+    )
+      return null;
+    const frameKeys = new Set<string>();
+    for (const frame of value.items) {
+      if (
+        !object(frame) ||
+        !id(frame.siteId) ||
+        !id(frame.cameraId) ||
+        !text(frame.frameKey) ||
+        !text(frame.siteName) ||
+        !text(frame.cameraName) ||
+        !text(frame.capturedAt) ||
+        !Number.isFinite(Date.parse(frame.capturedAt)) ||
+        typeof frame.unread !== 'boolean' ||
+        !integer(frame.findingCount) ||
+        !Array.isArray(frame.cases) ||
+        !frame.cases.length
+      )
+        return null;
+      const key = JSON.stringify([frame.siteId, frame.cameraId, frame.frameKey]);
+      if (frameKeys.has(key)) return null;
+      frameKeys.add(key);
+      const recipients = new Set<string>(),
+        episodes = new Set<string>();
+      let findings = 0,
+        unread = false;
+      for (const entry of frame.cases) {
+        if (
+          !object(entry) ||
+          !id(entry.recipientId) ||
+          !id(entry.episodeId) ||
+          recipients.has(entry.recipientId) ||
+          episodes.has(entry.episodeId) ||
+          !integer(entry.findingCount) ||
+          !integer(entry.contentRevision, 1) ||
+          typeof entry.unread !== 'boolean' ||
+          !Array.isArray(entry.zoneEntries)
+        )
+          return null;
+        recipients.add(entry.recipientId);
+        episodes.add(entry.episodeId);
+        findings += entry.findingCount;
+        unread ||= entry.unread;
+        if (entry.source !== null) {
+          if (!object(entry.source)) return null;
+          const { sha256, ...source } = entry.source;
+          if (
+            typeof sha256 !== 'string' ||
+            !/^[a-f0-9]{64}$/.test(sha256) ||
+            !parseTrackedEpisodeMediaSource(source)
+          )
+            return null;
+        }
+        const requests = new Set<string>();
+        for (const zone of entry.zoneEntries) {
+          if (
+            !object(zone) ||
+            !id(zone.requestId) ||
+            !id(zone.zoneId) ||
+            requests.has(zone.requestId) ||
+            (zone.laterFrame !== undefined && typeof zone.laterFrame !== 'boolean') ||
+            !['PENDING', 'ALLOWED', 'DENIED', 'UNAVAILABLE'].includes(String(zone.status)) ||
+            (zone.reasonCode !== null && !text(zone.reasonCode)) ||
+            (zone.provenance !== null &&
+              !['UNAVAILABLE', 'SYNTHETIC_TEST', 'TRUSTED_SERVICE'].includes(
+                String(zone.provenance),
+              )) ||
+            (zone.status === 'PENDING' && (zone.reasonCode !== null || zone.provenance !== null))
+          )
+            return null;
+          requests.add(zone.requestId);
+        }
+      }
+      if (
+        !Number.isSafeInteger(findings) ||
+        findings !== frame.findingCount ||
+        unread !== frame.unread
+      )
+        return null;
+    }
+    if (value.items.filter((frame) => frame.unread).length > value.unreadCount) return null;
+    return value as unknown as SafetyFrameInboxPage;
+  } catch {
+    return null;
+  }
 }
 
 /** Backend still checks current revision and recipient ownership in its transaction. */

@@ -40,6 +40,8 @@ Tracked history remains scoped to current authenticated users and Sites (`SAFETY
 
 ## Verification and rollout
 
+`GET /api/v1/me/safety-episode-inbox/frames` groups persisted recipient cases by their initial source frame within the authenticated Officer's current Site grants. Site, Camera, exact-frame and unread filters apply before pagination. Each case retains its own recipient/content revision acknowledgement; opening one case does not acknowledge the other cases in the frame. Case counts describe flagged cases, not a live camera headcount or verified Worker identities. Repeated frames update the existing subject episode rather than producing a bell per frame. Media references are supplied only when tracked history is enabled and remain subject to the history/media authorization checks.
+
 Use the dedicated local test database and owned-schema integration harness. `TEST_DATABASE_URL` must identify the approved `smartsite_test` database on loopback port 5433; never substitute the website database, port 5434 or a hosted URL. Configuration examples are not authorization to migrate or enable a deployment.
 
 Relevant tests include `main-tracked-http.integration.test.ts`, `tracked-episode-frames.integration.test.ts`, `main-tracked-migration-profile.integration.test.ts`, `tracked-frame-recovery.test.ts`, and `config.test.ts`. Deployment must separately rehearse the exact target migration profile, retain original evidence/history, verify capture/latency/model behavior, and prepare rollback. Disabling processing must not delete evidence or reinterpret already committed cases.
