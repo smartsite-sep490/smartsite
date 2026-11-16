@@ -118,6 +118,7 @@ const validateTrackedFrameSchema: CompiledSchemaValidator = ajv.compile(
 );
 
 let validateTrackedEntryOriginSchema: CompiledSchemaValidator | undefined;
+let validateTrackedCameraPpeSchema: CompiledSchemaValidator | undefined;
 
 function schemaValidationIssues(
   validateSchema: CompiledSchemaValidator,
@@ -261,6 +262,46 @@ export function validateTrackedEntryOriginEvent(data: unknown): ValidationResult
     ) as unknown,
   );
   return validateTrackedFrame(data, validateTrackedEntryOriginSchema, true);
+}
+
+/** Dedicated v1.7 contract. Older intake routes retain their version gates. */
+export function validateTrackedCameraPpeEvent(data: unknown): ValidationResult {
+  validateTrackedCameraPpeSchema ??= ajv.compile(
+    JSON.parse(
+      readFileSync(
+        new URL('../../schemas/v1.7/technical-observation-event.json', import.meta.url),
+        'utf8',
+      ),
+    ) as unknown,
+  );
+  const validation = validateTrackedFrame(data, validateTrackedCameraPpeSchema, true);
+  if (!validation.isValid) return validation;
+  const { observations } = data as {
+    observations: Array<{ type: string; trackId: number; scope?: string; boundingBox?: unknown }>;
+  };
+  const positioned = new Set(
+    observations.filter((o) => o.type === 'PERSON' && o.boundingBox).map((o) => o.trackId),
+  );
+  const regionalTracks = new Set(
+    observations.filter((o) => o.type === 'PPE' && o.scope !== 'CAMERA').map((o) => o.trackId),
+  );
+  const issues: ValidationIssue[] = [];
+  observations.forEach((observation, index) => {
+    if (observation.type !== 'PPE' || observation.scope !== 'CAMERA') return;
+    const message = !positioned.has(observation.trackId)
+      ? 'Camera-scope PPE requires a matching PERSON with a bounding box'
+      : regionalTracks.has(observation.trackId)
+        ? 'A single track cannot report both camera-scope and Region-scope PPE'
+        : undefined;
+    if (message) {
+      issues.push({
+        code: 'SCHEMA_VIOLATION',
+        path: `/observations/${index}/trackId`,
+        message,
+      });
+    }
+  });
+  return { isValid: issues.length === 0, issues };
 }
 
 function validateTrackedFrame(

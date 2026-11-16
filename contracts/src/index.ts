@@ -53,6 +53,7 @@ export { validatePartitionedObservationEvent } from './validation/schema-validat
 export {
   validateTrackedObservationEvent,
   validateTrackedEntryOriginEvent,
+  validateTrackedCameraPpeEvent,
 } from './validation/schema-validator.js';
 export type { TrackedEntryOrigin } from './validation/schema-validator.js';
 export type {
