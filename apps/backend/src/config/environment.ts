@@ -1,4 +1,8 @@
 import { z } from 'zod';
+import {
+  includesIdentificationProfile,
+  TRACKED_MIGRATION_PROFILES,
+} from '../database/migration-profile-names.js';
 import { trackedRuntimePolicyEnvironment } from './tracked-runtime-environment.js';
 import { isAbsolute } from 'node:path';
 import {
@@ -272,9 +276,7 @@ export const backendEnvironmentSchema = z
       .transform((value) => value === 'true'),
     AI_TRACKED_FRAME_RUNTIME_POLICY: trackedRuntimePolicyEnvironment.optional(),
     DATABASE_SCHEMA: z.string().optional(),
-    SMARTSITE_DB_MIGRATION_PROFILE: z
-      .enum(['tracked-v16', 'tracked-v16-identification'])
-      .optional(),
+    SMARTSITE_DB_MIGRATION_PROFILE: z.enum(TRACKED_MIGRATION_PROFILES).optional(),
     SAFETY_IDENTIFICATION_ENABLED: z
       .enum(['false', 'true'])
       .default('false')
@@ -392,7 +394,7 @@ export const backendEnvironmentSchema = z
       config.SAFETY_IDENTIFICATION_ENABLED;
     if (
       config.SAFETY_IDENTIFICATION_ENABLED &&
-      config.SMARTSITE_DB_MIGRATION_PROFILE !== 'tracked-v16-identification'
+      !includesIdentificationProfile(config.SMARTSITE_DB_MIGRATION_PROFILE)
     ) {
       context.addIssue({
         code: 'custom',

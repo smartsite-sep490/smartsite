@@ -12,6 +12,8 @@ Enabling either requires:
 - The approved target schema must already exist and contain the optional migrations (`1795046400002-WorkerEventAdmission`, `1795046400003-TrackedSubjectStorage`, `1795046400004-TrackedPendingRecoveryIndex`, and `1795046400008-TrackedWireGenerationFence`). Startup never runs migrations or enables `synchronize`.
 - The runtime connection and migration CLI share `buildMigrationOptions()`, while `typeorm.data-source.ts` reads `SMARTSITE_DB_MIGRATION_PROFILE` and `DATABASE_SCHEMA` from the process environment during `db:migrate:*` runs. Connection URL `options` overrides and reserved schemas are refused.
 
+The explicit `tracked-v16-identification-ppe` profile adds both optional C02 migration `0009` and existing Camera PPE v2 storage migration `0010` to this same foundation. Select it only for a reviewed target needing both features, and use that exact profile for CLI and runtime. It adds no unrelated MF06 historical-authority migrations, enables no AI/identification flag, and does not authorize an operational database cutover.
+
 Enabling the runtime additionally requires a non-default service token (`>= 32` non-whitespace characters), an explicit camera allowlist, and `AI_TRACKED_FRAME_RUNTIME_POLICY`. This JSON has no implicit policy values. Its strict schema is defined in `apps/backend/src/config/tracked-runtime-environment.ts`:
 
 | Section         | Required choices                                                                                                                   |

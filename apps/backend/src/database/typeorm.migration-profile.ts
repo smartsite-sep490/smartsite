@@ -1,4 +1,9 @@
 import type { DataSourceOptions } from 'typeorm';
+import { CameraPpePolicyStorage1795046400010 } from './migrations/1795046400010-CameraPpePolicyStorage.js';
+import {
+  includesIdentificationProfile,
+  TRACKED_MIGRATION_PROFILES,
+} from './migration-profile-names.js';
 import { SafetyIdentificationRequests1795046400009 } from './migrations/1795046400009-SafetyIdentificationRequests.js';
 import { WorkerEventAdmission1795046400002 } from './migrations/1795046400002-WorkerEventAdmission.js';
 import { TrackedSubjectStorage1795046400003 } from './migrations/1795046400003-TrackedSubjectStorage.js';
@@ -12,11 +17,7 @@ export function buildMigrationOptions(
   selection: { profile?: string; schema?: string; runtime?: boolean } = {},
 ): DataSourceOptions {
   const { profile, schema } = selection;
-  if (
-    profile !== undefined &&
-    profile !== 'tracked-v16' &&
-    profile !== 'tracked-v16-identification'
-  )
+  if (profile !== undefined && !TRACKED_MIGRATION_PROFILES.some((value) => value === profile))
     throw new Error('Unsupported migration profile');
   const options = buildTypeOrmOptions({
     DATABASE_URL: config.DATABASE_URL,
@@ -48,8 +49,11 @@ export function buildMigrationOptions(
       TrackedSubjectStorage1795046400003,
       TrackedPendingRecoveryIndex1795046400004,
       TrackedWireGenerationFence1795046400008,
-      ...(profile === 'tracked-v16-identification'
+      ...(includesIdentificationProfile(profile)
         ? [SafetyIdentificationRequests1795046400009]
+        : []),
+      ...(profile === 'tracked-v16-identification-ppe'
+        ? [CameraPpePolicyStorage1795046400010]
         : []),
     ],
   };
