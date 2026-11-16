@@ -1,6 +1,7 @@
 import { Injectable, type OnModuleInit } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { DataSource } from 'typeorm';
+import { includesIdentificationProfile } from '../../../database/migration-profile-names.js';
 import type { BackendEnvironment } from '../../../config/environment.js';
 
 /** An enabled workflow must not start healthy against an unprepared schema. */
@@ -22,8 +23,9 @@ export class SafetyIdentificationRuntime implements OnModuleInit {
         !identifier.test(schema) ||
         !identifier.test(migrations) ||
         this.db.driver.schema !== schema ||
-        this.config.get('SMARTSITE_DB_MIGRATION_PROFILE', { infer: true }) !==
-          'tracked-v16-identification'
+        !includesIdentificationProfile(
+          this.config.get('SMARTSITE_DB_MIGRATION_PROFILE', { infer: true }),
+        )
       ) {
         throw new Error();
       }

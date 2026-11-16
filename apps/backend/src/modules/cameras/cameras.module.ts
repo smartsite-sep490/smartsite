@@ -9,6 +9,7 @@ import { AuthModule } from '../auth/auth.module.js';
 import { CamerasController } from './cameras.controller.js';
 import { CameraPpePolicyController } from './camera-ppe-policy.controller.js';
 import { CameraPpePolicyService } from './camera-ppe-policy.service.js';
+import { CameraPpePolicyRuntime } from './camera-ppe-policy-runtime.js';
 import { CameraConfigurationImageController } from './camera-configuration-image.controller.js';
 import {
   CAMERA_CONFIGURATION_IMAGE_FETCH,
@@ -30,6 +31,7 @@ import { CameraApplicationStatusService } from './camera-application-status.serv
     CameraConfigurationReferenceController,
   ],
   providers: [
+    CameraPpePolicyRuntime,
     CameraPreviewService,
     CameraApplicationStatusService,
     { provide: CAMERA_CONFIGURATION_IMAGE_FETCH, useFactory: () => globalThis.fetch },

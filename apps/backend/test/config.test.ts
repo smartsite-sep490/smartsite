@@ -51,6 +51,34 @@ test('development starts with local PostgreSQL and a restrictive browser origin'
   assert.equal(config.EVIDENCE_LOCAL_ROOT, undefined);
 });
 
+test('combined identification/PPE profile is explicit and does not enable workflows', () => {
+  const selection = {
+    SMARTSITE_DB_MIGRATION_PROFILE: 'tracked-v16-identification-ppe',
+    DATABASE_SCHEMA: 'synthetic_combined_profile',
+  };
+  const disabled = validateEnvironment(selection);
+  assert.equal(disabled.SAFETY_IDENTIFICATION_ENABLED, false);
+  assert.equal(disabled.AI_TRACKED_FRAME_RUNTIME_ENABLED, false);
+  assert.equal(disabled.SAFETY_TRACKED_HISTORY_READ_ENABLED, false);
+  assert.equal(
+    validateEnvironment({ ...selection, SAFETY_IDENTIFICATION_ENABLED: 'true' })
+      .SAFETY_IDENTIFICATION_ENABLED,
+    true,
+  );
+  assert.throws(
+    () => validateEnvironment({ ...selection, DATABASE_SCHEMA: undefined }),
+    /DATABASE_SCHEMA/,
+  );
+  assert.throws(
+    () =>
+      validateEnvironment({
+        ...selection,
+        SMARTSITE_DB_MIGRATION_PROFILE: 'tracked-v16-identification-ppe-unreviewed',
+      }),
+    /SMARTSITE_DB_MIGRATION_PROFILE/,
+  );
+});
+
 test('document OCR executables are explicit local commands, not inherited service credentials', () => {
   assert.equal(validateEnvironment({}).WORKER_DOCUMENT_PYTHON, undefined);
   for (const field of [
