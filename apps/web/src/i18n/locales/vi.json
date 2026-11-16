@@ -4021,6 +4021,7 @@
   "episodes.empty": "Chưa có hồ sơ trong phạm vi này.",
   "episodes.list": "Danh sách hồ sơ",
   "episodes.subject": "Chủ thể {{number}}",
+  "episodes.trackedSubject": "Người đang theo dõi",
   "episodes.findings": "{{count}} phát hiện",
   "episodes.more": "Tải thêm hồ sơ",
   "episodes.detail": "Chi tiết hồ sơ",

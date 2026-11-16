@@ -4,6 +4,9 @@ import { CameraEntity } from '../../database/entities/camera.entity.js';
 import { CameraObservationRegionEntity } from '../../database/entities/camera-observation-region.entity.js';
 import { CameraStatus } from '../../database/entities/enums.js';
 import { ZoneEntity } from '../../database/entities/zone.entity.js';
+import { ZonePolicyRevisionEntity } from '../../database/entities/zone-policy-revision.entity.js';
+import { resolvePpePolicyAtLocation } from '@smartsite/contracts/camera-ppe-policy';
+import type { HistoricalCameraBundle } from '../cameras/camera-configuration-bundle-reader.js';
 
 export interface ResolvedObservationContext {
   cameraId: string;
@@ -16,6 +19,49 @@ export interface ResolvedObservationContext {
 
 @Injectable()
 export class ObservationContextResolverService {
+  /** Issuance must already be authenticated; metadata names are current, policy is immutable. */
+  async resolveIssuedRegion(
+    manager: EntityManager,
+    siteId: string,
+    bundle: HistoricalCameraBundle,
+    regionId: string,
+    geometryVersion: number,
+  ): Promise<ResolvedObservationContext | undefined> {
+    const binding = bundle.regions.find(
+      (row) => row.regionId === regionId.toLowerCase() && row.geometryVersion === geometryVersion,
+    );
+    if (!binding) return undefined;
+    const policy = await manager.getRepository(ZonePolicyRevisionEntity).findOneBy({
+      zoneId: binding.zoneId,
+      siteId,
+      policyRevision: String(binding.policyRevision),
+    });
+    const metadata = await manager
+      .getRepository(ZoneEntity)
+      .findOneBy({ id: binding.zoneId, siteId });
+    if (!policy || !metadata) return undefined;
+    const zone = Object.assign(new ZoneEntity(), metadata, {
+      type: policy.zoneType,
+      restrictionPolicy: policy.restrictionPolicy,
+      requiredPpe:
+        'requiredPpe' in binding
+          ? [...binding.requiredPpe]
+          : bundle.schemaVersion === '2.0.0'
+            ? [
+                ...resolvePpePolicyAtLocation(bundle.cameraPpePolicy, [binding.ppePolicy])
+                  .requiredPpe,
+              ]
+            : [],
+    });
+    return {
+      cameraId: bundle.cameraId,
+      siteId,
+      regionId,
+      zoneId: binding.zoneId,
+      zone,
+      geometryVersion,
+    };
+  }
   async resolveCamera(
     manager: EntityManager,
     cameraExternalId: string,

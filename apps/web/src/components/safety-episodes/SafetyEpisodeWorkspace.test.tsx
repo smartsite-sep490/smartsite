@@ -121,6 +121,33 @@ function setup() {
   return { query, view };
 }
 describe('recipient episode workspace', () => {
+  it('labels a tracked person without inventing an event-local ordinal or Worker identity', async () => {
+    const { view } = setup();
+    client.listSafetyEpisodeInbox.mockResolvedValue({
+      items: [
+        {
+          id: 'tracked-inbox',
+          episode: {
+            ...episode,
+            subject: {
+              kind: 'TRACKED',
+              segmentId: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
+              scopeSha256: 'a'.repeat(64),
+            },
+          },
+          seenRevision: 0,
+          unread: true,
+          firstDeliveredAt: episode.firstObservedAt,
+          updatedAt: episode.firstObservedAt,
+        },
+      ],
+      total: 1,
+      unreadCount: 1,
+    });
+    render(view());
+    expect(await screen.findByRole('button', { name: /Người đang theo dõi/ })).toBeTruthy();
+    expect(screen.queryByText(/NaN|aaaaaaaa-aaaa|Chủ thể 1/)).toBeNull();
+  });
   it('links persisted incidents and corrective actions without treating read status as completion', async () => {
     const { view } = setup();
     client.getSafetyEpisode.mockResolvedValue({
