@@ -73,6 +73,10 @@ vi.mock('./components/zones/RestrictedZoneView', () => ({
   RestrictedZoneView: () => <div>Restricted Zones</div>,
 }));
 
+vi.mock('./components/cameras/CameraSetupRoute', () => ({
+  CameraSetupRoute: () => <h2>Camera setup workspace</h2>,
+}));
+
 vi.mock('./components/alerts/SafetyAlertsView', () => ({
   SafetyAlertsView: ({
     initialType,
@@ -229,6 +233,7 @@ describe('App Navigation and Context Lifecycle', () => {
     '/accounts',
     '/workforce',
     '/site-setup',
+    '/camera-setup',
     '/schedule-setup',
     '/incidents',
     '/ppe',
@@ -263,6 +268,31 @@ describe('App Navigation and Context Lifecycle', () => {
       </MemoryRouter>,
     );
     expect(screen.getByRole('heading', { name: 'PPE Monitoring' })).toBeTruthy();
+  });
+
+  it.each(['ADMIN', 'SITE_MANAGER'] as const)('opens Camera Setup as %s', async (role) => {
+    accountState.roleAssignments = [{ role, siteId: role === 'ADMIN' ? null : 'site-alpha' }];
+    render(
+      <MemoryRouter initialEntries={['/camera-setup']}>
+        <QueryClientProvider client={queryClient}>
+          <App />
+        </QueryClientProvider>
+      </MemoryRouter>,
+    );
+    expect(await screen.findByRole('heading', { name: 'Camera setup workspace' })).toBeTruthy();
+  });
+
+  it('redirects a Safety-only account away from Camera Setup', () => {
+    accountState.roleAssignments = [{ role: 'SAFETY_OFFICER', siteId: 'site-alpha' }];
+    render(
+      <MemoryRouter initialEntries={['/camera-setup']}>
+        <QueryClientProvider client={queryClient}>
+          <App />
+        </QueryClientProvider>
+      </MemoryRouter>,
+    );
+    expect(screen.queryByRole('heading', { name: 'Camera setup workspace' })).toBeNull();
+    expect(screen.getByRole('heading', { name: 'Safety Alerts Queue' })).toBeTruthy();
   });
 
   it('sets initialType when navigated with context, and clears it when navigating via sidebar without context', async () => {

@@ -1,3 +1,4 @@
+import { parseCameraObservationZones } from '@smartsite/contracts/camera-observation-zones';
 import {
   parseTrackedEpisodeObservationQuery,
   parseTrackedEpisodeObservationPage,
@@ -18,8 +19,10 @@ import {
 } from './tracked-episode-media-response';
 import {
   parseCreateReferenceRegionCommand,
+  parseCreatePolicyReferenceRegionCommand,
   parseUpdateReferenceRegionPolygonCommand,
   type CreateReferenceRegionCommand,
+  type CreatePolicyReferenceRegionCommand,
   type UpdateReferenceRegionPolygonCommand,
 } from '@smartsite/contracts/camera-region-reference';
 import type { ReferenceRegionMutationResponse } from '@smartsite/contracts/camera-region-geometry-confirmation';
@@ -207,6 +210,36 @@ function appendFile(form: FormData, field: string, file: Blob | NativeUploadFile
 }
 
 import { ApiError, parseBackendErrorEnvelope, type RequestOptions } from './errors';
+import {
+  parseCameraPpePolicy,
+  parseRegionPpePolicy,
+  type RegionPpePolicy,
+} from '@smartsite/contracts/camera-ppe-policy';
+import {
+  parseInitializeCameraPpePolicyCommand,
+  parseCameraPpePolicyChangeCommand,
+  parseRegionPpePolicyChangeCommand,
+  type InitializeCameraPpePolicyCommand,
+  type CameraPpePolicyChangeCommand,
+  type RegionPpePolicyChangeCommand,
+} from '@smartsite/contracts/camera-ppe-policy-command';
+
+export interface SavedPpePolicy {
+  cameraId: string;
+  regionId: string | null;
+  configurationVersion: number;
+  savedRevision: number | null;
+  policy: RegionPpePolicy | null;
+}
+
+export interface PpePolicySaveReceipt {
+  commandId: string;
+  cameraId: string;
+  configurationVersion: number;
+  viewRevision: number;
+  bundleSha256: string;
+  replayed: boolean;
+}
 
 export type PageOptions = { offset?: number; limit?: number };
 export type WorkerScheduleListOptions = PageOptions & {
@@ -2717,6 +2750,39 @@ export class SmartSiteManagementClient {
       requestOptions,
     );
   }
+  async listPreviewCameras(
+    token: string,
+    siteId: string,
+    paging: PageOptions = {},
+    options?: RequestOptions,
+  ): Promise<Page<CameraResponse>> {
+    const offset = paging.offset ?? 0,
+      limit = paging.limit ?? 20;
+    if (
+      !Number.isSafeInteger(offset) ||
+      offset < 0 ||
+      !Number.isSafeInteger(limit) ||
+      limit < 1 ||
+      limit > 100
+    ) {
+      throw new RangeError('Invalid preview camera pagination');
+    }
+    const value = await this.request<unknown>(
+      'GET',
+      this.listPath(`/sites/${pathId(siteId)}/preview-cameras`, { offset, limit }),
+      token,
+      undefined,
+      undefined,
+      { ...options, timeoutMs: options?.timeoutMs ?? 3000 },
+      { cache: 'no-store', redirect: 'error' },
+      256_000,
+    );
+    try {
+      return parsePreviewCameraPage(value, siteId, limit);
+    } catch {
+      throw new ApiError('invalid-response', 'Invalid scoped preview camera page.');
+    }
+  }
   getCamera(token: string, siteId: string, cameraId: string, options?: RequestOptions) {
     return this.request<CameraResponse>(
       'GET',
@@ -2764,6 +2830,51 @@ export class SmartSiteManagementClient {
       MAX_CONFIGURATION_REFERENCE_RESPONSE_BYTES,
     );
     return parseScopedCameraConfigurationReference(value, siteId, cameraId);
+  }
+  async getCameraObservationZones(
+    token: string,
+    siteId: string,
+    cameraId: string,
+    paging: PageOptions = {},
+    options?: RequestOptions,
+  ) {
+    const offset = paging.offset ?? 0;
+    const limit = paging.limit ?? 20;
+    if (
+      !Number.isSafeInteger(offset) ||
+      offset < 0 ||
+      !Number.isSafeInteger(limit) ||
+      limit < 1 ||
+      limit > 100
+    ) {
+      throw new ApiError('invalid-response', 'Invalid camera observation page request.');
+    }
+    const query = new URLSearchParams();
+    if (paging.offset !== undefined) query.set('offset', String(paging.offset));
+    if (paging.limit !== undefined) query.set('limit', String(paging.limit));
+    const result = await this.request<unknown>(
+      'GET',
+      `/sites/${pathId(siteId)}/cameras/${pathId(cameraId)}/observation-zones${query.size ? `?${query}` : ''}`,
+      token,
+      undefined,
+      undefined,
+      { ...options, timeoutMs: options?.timeoutMs ?? 5000 },
+      { cache: 'no-store', redirect: 'error' },
+      128_000,
+    );
+    try {
+      const context = parseCameraObservationZones(result);
+      if (
+        context.siteId.toLowerCase() !== siteId.toLowerCase() ||
+        context.cameraId.toLowerCase() !== cameraId.toLowerCase() ||
+        context.items.length !== Math.min(limit, Math.max(0, context.total - offset))
+      ) {
+        throw new Error('Scope or page mismatch');
+      }
+      return context;
+    } catch {
+      throw new ApiError('invalid-response', 'Invalid camera observation Zone metadata.');
+    }
   }
   async getCameraApplicationStatus(
     token: string,
@@ -2944,6 +3055,188 @@ export class SmartSiteManagementClient {
     const payload = await this.request<unknown>(
       'POST',
       `/sites/${pathId(siteId)}/cameras/${pathId(cameraId)}/reference-regions`,
+      token,
+      body,
+      undefined,
+      requestOptions,
+      { cache: 'no-store', redirect: 'error' },
+      65536,
+    );
+    return parseReferenceRegionMutation(payload, body, { cameraId, zoneId: body.zoneId });
+  }
+
+  initializePpePolicy(
+    token: string,
+    siteId: string,
+    cameraId: string,
+    input: InitializeCameraPpePolicyCommand,
+    options?: RequestOptions,
+  ) {
+    return this.writePpePolicy(
+      token,
+      siteId,
+      cameraId,
+      'POST',
+      '/initialize',
+      parseInitializeCameraPpePolicyCommand(input),
+      options,
+    );
+  }
+
+  updateCameraPpePolicy(
+    token: string,
+    siteId: string,
+    cameraId: string,
+    input: CameraPpePolicyChangeCommand,
+    options?: RequestOptions,
+  ) {
+    return this.writePpePolicy(
+      token,
+      siteId,
+      cameraId,
+      'PATCH',
+      '',
+      parseCameraPpePolicyChangeCommand(input),
+      options,
+    );
+  }
+
+  updateRegionPpePolicy(
+    token: string,
+    siteId: string,
+    cameraId: string,
+    regionId: string,
+    input: RegionPpePolicyChangeCommand,
+    options?: RequestOptions,
+  ) {
+    return this.writePpePolicy(
+      token,
+      siteId,
+      cameraId,
+      'PATCH',
+      `/regions/${pathId(regionId)}`,
+      parseRegionPpePolicyChangeCommand(input),
+      options,
+    );
+  }
+
+  activateRegionWithPpePolicy(
+    token: string,
+    siteId: string,
+    cameraId: string,
+    regionId: string,
+    input: RegionPpePolicyChangeCommand,
+    options?: RequestOptions,
+  ) {
+    return this.writePpePolicy(
+      token,
+      siteId,
+      cameraId,
+      'POST',
+      `/regions/${pathId(regionId)}/activate`,
+      parseRegionPpePolicyChangeCommand(input),
+      options,
+    );
+  }
+
+  private async writePpePolicy(
+    token: string,
+    siteId: string,
+    cameraId: string,
+    method: 'POST' | 'PATCH',
+    suffix: string,
+    command: RegionPpePolicyChangeCommand | InitializeCameraPpePolicyCommand | null,
+    options?: RequestOptions,
+  ): Promise<PpePolicySaveReceipt> {
+    if (!command || command.expectedConfigurationVersion >= Number.MAX_SAFE_INTEGER) {
+      throw new TypeError('Invalid PPE policy command.');
+    }
+    const receipt = await this.request<PpePolicySaveReceipt | null>(
+      method,
+      `/sites/${pathId(siteId)}/cameras/${pathId(cameraId)}/ppe-policy${suffix}`,
+      token,
+      command,
+      undefined,
+      options,
+      { cache: 'no-store', redirect: 'error' },
+      65536,
+    );
+    if (
+      !receipt ||
+      receipt.commandId !== command.commandId ||
+      receipt.cameraId !== cameraId.toLowerCase() ||
+      receipt.configurationVersion !== command.expectedConfigurationVersion + 1 ||
+      !Number.isSafeInteger(receipt.viewRevision) ||
+      receipt.viewRevision < 1 ||
+      typeof receipt.bundleSha256 !== 'string' ||
+      !/^[a-f0-9]{64}$/.test(receipt.bundleSha256) ||
+      typeof receipt.replayed !== 'boolean'
+    ) {
+      throw new ApiError('invalid-response', 'Backend returned invalid PPE policy receipt.');
+    }
+    const { commandId, configurationVersion, viewRevision, bundleSha256, replayed } = receipt;
+    return {
+      cameraId: receipt.cameraId,
+      commandId,
+      configurationVersion,
+      viewRevision,
+      bundleSha256,
+      replayed,
+    };
+  }
+
+  async readSavedPpePolicy(
+    token: string,
+    siteId: string,
+    cameraId: string,
+    regionId: string | null = null,
+    requestOptions?: RequestOptions,
+  ): Promise<SavedPpePolicy> {
+    const suffix = regionId === null ? '' : `/regions/${pathId(regionId)}`;
+    const result = await this.request<SavedPpePolicy | null>(
+      'GET',
+      `/sites/${pathId(siteId)}/cameras/${pathId(cameraId)}/ppe-policy${suffix}`,
+      token,
+      undefined,
+      undefined,
+      requestOptions,
+      { cache: 'no-store', redirect: 'error' },
+      65536,
+    );
+    const policy =
+      regionId === null
+        ? parseCameraPpePolicy(result?.policy)
+        : parseRegionPpePolicy(result?.policy);
+    if (
+      !result ||
+      result.cameraId !== cameraId.toLowerCase() ||
+      result.regionId !== (regionId?.toLowerCase() ?? null) ||
+      !Number.isSafeInteger(result.configurationVersion) ||
+      result.configurationVersion < 1 ||
+      (result.policy === null
+        ? result.savedRevision !== null
+        : !policy ||
+          result.savedRevision === null ||
+          !Number.isSafeInteger(result.savedRevision) ||
+          result.savedRevision < 1 ||
+          result.savedRevision > result.configurationVersion)
+    ) {
+      throw new ApiError('invalid-response', 'Backend returned invalid saved PPE policy.');
+    }
+    return { ...result, policy };
+  }
+
+  async createPolicyReferenceRegion(
+    token: string,
+    siteId: string,
+    cameraId: string,
+    input: CreatePolicyReferenceRegionCommand,
+    requestOptions?: RequestOptions,
+  ): Promise<ReferenceRegionMutationResponse> {
+    const body = parseCreatePolicyReferenceRegionCommand(input);
+    const payload = await this.request<unknown>(
+      'POST',
+      `/sites/${pathId(siteId)}/cameras/${pathId(cameraId)}/ppe-policy/reference-regions`,
       token,
       body,
       undefined,
@@ -3506,4 +3799,5 @@ import {
   parseScopedCameraConfigurationImage,
   parseScopedCameraConfigurationReference,
 } from './camera-configuration-response';
+import { parsePreviewCameraPage } from './preview-camera-page';
 import { captureSessionScopes, dispatchSessionExpired } from './session-expiry';

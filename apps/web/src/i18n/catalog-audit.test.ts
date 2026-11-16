@@ -1,8 +1,10 @@
 import { expect, it } from 'vitest';
 import { readdirSync, readFileSync } from 'node:fs';
 import path from 'node:path';
+import { pathToFileURL } from 'node:url';
 import ts from 'typescript';
 import en from './locales/en.json';
+import { hasRegisteredFeatureKey } from './feature-catalog-registry';
 import { SITE_GATES } from '@smartsite/contracts/gates';
 
 it('includes the shared gate catalog in the UI translations', () => {
@@ -33,9 +35,38 @@ it('includes every access tab in the catalog, including keys composed at runtime
   }
 });
 
-it('scans every production UI source for missing keys and untranslated visible literals', () => {
+it('scans every production UI source for missing keys and untranslated visible literals', async () => {
   const root = path.resolve('src');
   const failures: string[] = [];
+  const catalogModules: string[] = [];
+  function collectCatalogModules(dir: string) {
+    for (const entry of readdirSync(dir, { withFileTypes: true })) {
+      const filename = path.join(dir, entry.name);
+      if (entry.isDirectory()) {
+        collectCatalogModules(filename);
+        continue;
+      }
+      if (!/\.tsx?$/.test(filename) || filename.includes('.test.')) continue;
+      if (filename === path.join(root, 'i18n', 'feature-catalog-registry.ts')) continue;
+      const content = readFileSync(filename, 'utf8');
+      if (content.includes('registerFeatureCatalog(')) {
+        catalogModules.push(filename);
+      }
+    }
+  }
+  collectCatalogModules(root);
+  for (const mod of catalogModules) {
+    const loaded = (await import(pathToFileURL(mod).href)) as Record<string, unknown>;
+    for (const [exportName, exportedValue] of Object.entries(loaded)) {
+      if (
+        exportName.startsWith('register') &&
+        typeof exportedValue === 'function' &&
+        exportedValue.length === 0
+      ) {
+        (exportedValue as () => void)();
+      }
+    }
+  }
   // Language names are intentionally shown in their own language in the selector.
   const brands = new Set([
     'Smart',
@@ -71,12 +102,12 @@ it('scans every production UI source for missing keys and untranslated visible l
         continue;
       }
       if (!/\.tsx?$/.test(filename) || filename.includes('.test.')) continue;
-      const source = ts.createSourceFile(
-        filename,
-        readFileSync(filename, 'utf8'),
-        ts.ScriptTarget.Latest,
-        true,
-      );
+      const rawContent = readFileSync(filename, 'utf8');
+      const usesSafetyNamespace =
+        /\bSAFETY_NAMESPACE\b/.test(rawContent) ||
+        (!/\buseTranslation\s*\(\s*\)/.test(rawContent) &&
+          !/\bimport\s*\{[^}]*\btranslate\b[^}]*\}\s*from\b/.test(rawContent));
+      const source = ts.createSourceFile(filename, rawContent, ts.ScriptTarget.Latest, true);
       const report = (node: ts.Node, text: string) =>
         failures.push(
           `${path.relative(root, filename)}:${source.getLineAndCharacterOfPosition(node.getStart(source)).line + 1}: ${text}`,
@@ -131,8 +162,11 @@ it('scans every production UI source for missing keys and untranslated visible l
       }
       function checkTranslationKey(node: ts.Expression): void {
         if (ts.isStringLiteral(node)) {
-          if (!(node.text in en) && !(`${node.text}_other` in en))
-            report(node, `missing key ${node.text}`);
+          const inCommon = node.text in en || `${node.text}_other` in en;
+          const inSafetyCatalog =
+            usesSafetyNamespace &&
+            (hasRegisteredFeatureKey(node.text) || hasRegisteredFeatureKey(`${node.text}_other`));
+          if (!inCommon && !inSafetyCatalog) report(node, `missing key ${node.text}`);
         } else if (ts.isConditionalExpression(node)) {
           checkTranslationKey(node.whenTrue);
           checkTranslationKey(node.whenFalse);

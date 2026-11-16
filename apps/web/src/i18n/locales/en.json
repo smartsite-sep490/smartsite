@@ -339,6 +339,7 @@
   "shell.access": "Site Access",
   "shell.safety": "Safety",
   "shell.live": "Live Monitoring",
+  "shell.cameraSetup": "Camera setup",
   "shell.ppe": "PPE Monitoring",
   "shell.zones": "Restricted Zones",
   "shell.incidents": "Safety Operations",
