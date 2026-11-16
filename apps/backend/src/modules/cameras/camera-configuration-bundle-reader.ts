@@ -52,6 +52,13 @@ export async function readIssuedCameraBundleInTransaction(
       configurationVersion: String(camera.configurationVersion),
     });
     if (!header) conflict('Issued camera configuration is unavailable');
+    const [wire] = await manager.query(
+      `SELECT to_jsonb(h)->>'schema_version' AS schema_version FROM camera_configuration_bundle h
+       WHERE camera_id=$1 AND configuration_version=$2`,
+      [cameraId, header.configurationVersion],
+    );
+    if (wire?.schema_version === '2.0.0')
+      conflict('Camera requires policy configuration bundle v2');
     if (header.cameraExternalId !== camera.externalId)
       conflict('Issued camera configuration is unavailable');
     const view = await manager.getRepository(CameraViewRevisionEntity).findOneBy({
@@ -130,4 +137,13 @@ export async function readIssuedCameraBundleInTransaction(
     if (error instanceof PublicHttpException) throw error;
     unavailable();
   }
+}
+
+export interface HistoricalIssuedCameraBundleKey {
+  readonly cameraId: string;
+  readonly siteId: string;
+  readonly cameraExternalId: string;
+  readonly configurationVersion: number;
+  readonly viewRevision: number;
+  readonly bundleSha256: string;
 }

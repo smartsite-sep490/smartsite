@@ -208,3 +208,6 @@ export { scheduledShiftWindow } from './scheduled-shift.js';
 export * from './camera-ppe-policy-command.js';
 
 export * from './camera-policy-configuration-bundle.js';
+
+export * from './camera-preview.js';
+export * from './camera-observation-zones.js';

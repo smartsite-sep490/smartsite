@@ -3,6 +3,8 @@ import {
   computeCanonicalPayloadHash,
   parseCameraConfigurationBundlePayload,
   type CameraRegionConfiguration,
+  type CameraConfigurationBundle,
+  type RegionPpePolicy,
 } from '@smartsite/contracts';
 import { conflict } from '../../common/configuration/commands.js';
 import type { CameraEntity } from '../../database/entities/camera.entity.js';
@@ -15,14 +17,15 @@ import {
   CameraConfigurationBundleRegionEntity,
 } from '../../database/entities/camera-configuration-bundle.entity.js';
 import type { ZoneConfigurationService } from '../zones/zone-configuration.service.js';
+import { preserveCameraPolicyBundle } from './camera-policy-bundle-write.js';
 
 /** Only real camera-counter advances call this under their existing Camera lock/transaction. */
-export async function recordCameraConfigurationBundle(
+export async function buildCameraConfigurationBundle(
   manager: EntityManager,
   camera: CameraEntity,
   geometry: CameraRegionConfiguration,
   zones: ZoneConfigurationService,
-): Promise<void> {
+): Promise<CameraConfigurationBundle | undefined> {
   if (!manager.queryRunner?.isTransactionActive)
     throw new Error('Camera bundle requires a transaction');
   if (camera.status !== CameraStatus.ACTIVE) return;
@@ -84,20 +87,36 @@ export async function recordCameraConfigurationBundle(
     regions,
   };
   const bundleSha256 = computeCanonicalPayloadHash(content);
-  if (!parseCameraConfigurationBundlePayload(JSON.stringify({ ...content, bundleSha256 })).isValid)
-    conflict('Camera bundle is invalid');
+  const parsed = parseCameraConfigurationBundlePayload(
+    JSON.stringify({ ...content, bundleSha256 }),
+  );
+  if (!parsed.isValid || !parsed.value) conflict('Camera bundle is invalid');
+  return parsed.value;
+}
+
+/** Existing geometry/status callers preserve v2 lineage after explicit adoption. */
+export async function recordCameraConfigurationBundle(
+  manager: EntityManager,
+  camera: CameraEntity,
+  geometry: CameraRegionConfiguration,
+  zones: ZoneConfigurationService,
+  newPolicies?: ReadonlyMap<string, RegionPpePolicy>,
+): Promise<void> {
+  const bundle = await buildCameraConfigurationBundle(manager, camera, geometry, zones);
+  if (!bundle) return;
+  if (await preserveCameraPolicyBundle(manager, camera.siteId, bundle, newPolicies)) return;
   await manager.getRepository(CameraConfigurationBundleEntity).insert({
     cameraId: camera.id,
     configurationVersion: String(camera.configurationVersion),
     siteId: camera.siteId,
     cameraExternalId: camera.externalId,
-    viewRevision: view.revision,
-    issuedAt: now,
-    bundleSha256,
+    viewRevision: String(bundle.viewRevision),
+    issuedAt: new Date(bundle.issuedAt),
+    bundleSha256: bundle.bundleSha256,
   });
-  if (regions.length)
+  if (bundle.regions.length)
     await manager.getRepository(CameraConfigurationBundleRegionEntity).insert(
-      regions.map((region) => ({
+      bundle.regions.map((region) => ({
         cameraId: camera.id,
         configurationVersion: String(camera.configurationVersion),
         regionId: region.regionId,

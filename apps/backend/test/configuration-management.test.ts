@@ -120,6 +120,11 @@ test('reactivating a region refuses to exceed 64 active regions', async () => {
     },
   };
   const manager = {
+    async query(sql: string) {
+      if (sql.includes('FROM pg_class')) return [{ n: 0, legacy: 0, baseline: 0 }];
+      if (sql.includes(' AS adopted')) return [{ adopted: false, bound: false }];
+      throw new Error('Unexpected SQL in camera unit fixture');
+    },
     getRepository: (entity: unknown) =>
       entity === CameraEntity
         ? cameraRepository
@@ -169,6 +174,11 @@ test('camera status survives a reload and both lifecycle transitions advance the
     },
   };
   const manager = {
+    async query(sql: string) {
+      if (sql.includes('FROM pg_class')) return [{ n: 0, legacy: 0, baseline: 0 }];
+      if (sql.includes(' AS adopted')) return [{ adopted: false, bound: false }];
+      throw new Error('Unexpected SQL in camera unit fixture');
+    },
     getRepository: (entity: unknown) =>
       entity === CameraEntity
         ? cameraRepository

@@ -1,10 +1,14 @@
 import { Module } from '@nestjs/common';
+import { CameraPreviewController } from './camera-preview.controller.js';
+import { CameraPreviewService } from './camera-preview.service.js';
 import { DatabaseModule } from '../../database/database.module.js';
 import { SitesModule } from '../sites/sites.module.js';
 import { ZonesModule } from '../zones/zones.module.js';
 import { CameraConfigurationService } from './camera-configuration.service.js';
 import { AuthModule } from '../auth/auth.module.js';
 import { CamerasController } from './cameras.controller.js';
+import { CameraPpePolicyController } from './camera-ppe-policy.controller.js';
+import { CameraPpePolicyService } from './camera-ppe-policy.service.js';
 import { CameraConfigurationImageController } from './camera-configuration-image.controller.js';
 import {
   CAMERA_CONFIGURATION_IMAGE_FETCH,
@@ -18,15 +22,19 @@ import { CameraApplicationStatusService } from './camera-application-status.serv
 @Module({
   imports: [DatabaseModule, SitesModule, ZonesModule, AuthModule],
   controllers: [
+    CameraPreviewController,
     CameraApplicationStatusController,
     CamerasController,
+    CameraPpePolicyController,
     CameraConfigurationImageController,
     CameraConfigurationReferenceController,
   ],
   providers: [
+    CameraPreviewService,
     CameraApplicationStatusService,
     { provide: CAMERA_CONFIGURATION_IMAGE_FETCH, useFactory: () => globalThis.fetch },
     CameraConfigurationService,
+    CameraPpePolicyService,
     CameraConfigurationImageService,
     CameraConfigurationReferenceService,
   ],

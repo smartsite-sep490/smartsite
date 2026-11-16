@@ -146,4 +146,23 @@ export class AiConfigurationController {
     }
     return bundle;
   }
+  @Get(':cameraId/configuration-bundle/v2')
+  @ApiOkResponse({ description: 'Persisted CameraPolicyConfigurationBundle 2.0.0.' })
+  @ApiNotModifiedResponse({ description: 'The validated current v2 bundle matches the ETag.' })
+  @Header('Cache-Control', 'no-store')
+  async policyConfigurationBundle(
+    @Param('cameraId') cameraId: string,
+    @Headers('if-none-match') ifNoneMatch: string | undefined,
+    @Res({ passthrough: true }) response: Response,
+  ) {
+    this.assertCameraAllowed(cameraId);
+    const bundle = await this.cameras.readPolicyConfigurationBundleForCamera(cameraId);
+    const etag = `"sha256:${bundle.bundleSha256}"`;
+    response.setHeader('ETag', etag);
+    if (matchesIfNoneMatch(ifNoneMatch, etag)) {
+      response.status(HttpStatus.NOT_MODIFIED);
+      return;
+    }
+    return bundle;
+  }
 }
