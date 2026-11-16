@@ -7,6 +7,7 @@ import { createIsolatedTestDatabase } from '../support/isolated-test-database.js
 import { resolveTestDatabaseUrl } from '../support/test-environment.js';
 
 const migrations = [
+  'WorkerEventAdmission1795046400002',
   'TrackedSubjectStorage1795046400003',
   'TrackedPendingRecoveryIndex1795046400004',
   'TrackedWireGenerationFence1795046400008',
@@ -132,6 +133,46 @@ test('Main tracked profile upgrades and rolls back a populated event-local schem
       (await profile.runMigrations()).map(({ name }) => name),
       migrations,
     );
+    const freshSchema = 'fresh_tracked_' + randomUUID().replaceAll('-', '');
+    let fresh: DataSource | undefined;
+    await db.query('CREATE SCHEMA "' + freshSchema + '"');
+    try {
+      process.env.DATABASE_SCHEMA = freshSchema;
+      fresh = await openProfile('fresh-bootstrap');
+      await fresh.initialize();
+      const applied = await fresh.runMigrations();
+      assert.deepEqual(
+        applied.slice(-migrations.length).map(({ name }) => name),
+        migrations,
+      );
+      for (let index = 0; index < migrations.length; index++) await fresh.undoLastMigration();
+      const remaining = await fresh.query('SELECT name FROM migrations ORDER BY id');
+      assert.deepEqual(
+        remaining.map((row: { name: string }) => row.name),
+        applied.slice(0, -migrations.length).map(({ name }) => name),
+      );
+      assert.equal(
+        (
+          await fresh.query(
+            "SELECT to_jsonb(e)->'admission_context' AS admission FROM ai_observation_event e LIMIT 1",
+          )
+        ).length,
+        0,
+      );
+      assert.equal(
+        (
+          await fresh.query(
+            "SELECT count(*)::int AS n FROM information_schema.columns WHERE table_schema=$1 AND table_name='ai_observation_event' AND column_name='admission_context'",
+            [freshSchema],
+          )
+        )[0].n,
+        0,
+      );
+    } finally {
+      if (fresh?.isInitialized) await fresh.destroy();
+      await db.query('DROP SCHEMA "' + freshSchema + '" CASCADE');
+      process.env.DATABASE_SCHEMA = db.driver.schema!;
+    }
     const generation = randomUUID();
     await db.query(
       `INSERT INTO camera_worker_generation(id,camera_id,site_id,stream_session_id,credential_sha256,

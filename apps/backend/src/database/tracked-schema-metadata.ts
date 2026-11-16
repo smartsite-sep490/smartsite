@@ -53,6 +53,10 @@ class TrackedGenerationEntity extends CameraWorkerGenerationEntity {
 
 @Entity({ name: 'ai_observation_event' })
 @Check(
+  'chk_ai_event_admission_object',
+  "admission_context IS NULL OR jsonb_typeof(admission_context)='object'",
+)
+@Check(
   'chk_ai_event_tracking_fields',
   `(num_nonnulls(tracking_scope_sha256,tracking_generation_id,tracking_site_id,tracking_frame_id,tracking_source_sequence,tracking_part_index,tracking_part_count,tracking_frame_state,tracking_pending_until,tracking_frame_result,tracking_transport_ack)=0) OR (
           num_nonnulls(tracking_scope_sha256,tracking_generation_id,tracking_site_id,tracking_frame_id,
@@ -116,6 +120,8 @@ class TrackedGenerationEntity extends CameraWorkerGenerationEntity {
 @Index('idx_ai_tracking_pending', { synchronize: false })
 @Index('idx_ai_tracking_pending_coordinator', { synchronize: false })
 class TrackedEventEntity extends AiObservationEventEntity {
+  @Column({ ...nullable, name: 'admission_context', type: 'jsonb' })
+  admissionContext!: unknown;
   @Column({ ...nullable, name: 'tracking_scope_sha256', type: 'char', length: 64 })
   trackingScopeSha256!: string | null;
   @Column({ ...nullable, name: 'tracking_generation_id', type: 'uuid' })

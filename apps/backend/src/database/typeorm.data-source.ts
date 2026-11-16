@@ -1,5 +1,6 @@
 import { DataSource, type DataSourceOptions } from 'typeorm';
 import { resolveCliEnvironment } from '../config/cli-environment.js';
+import { WorkerEventAdmission1795046400002 } from './migrations/1795046400002-WorkerEventAdmission.js';
 import { TrackedSubjectStorage1795046400003 } from './migrations/1795046400003-TrackedSubjectStorage.js';
 import { TrackedPendingRecoveryIndex1795046400004 } from './migrations/1795046400004-TrackedPendingRecoveryIndex.js';
 import { TrackedWireGenerationFence1795046400008 } from './migrations/1795046400008-TrackedWireGenerationFence.js';
@@ -38,6 +39,7 @@ function migrationOptions(): DataSourceOptions {
     entities: trackedSchemaEntities(options.entities),
     migrations: [
       ...options.migrations,
+      WorkerEventAdmission1795046400002,
       TrackedSubjectStorage1795046400003,
       TrackedPendingRecoveryIndex1795046400004,
       TrackedWireGenerationFence1795046400008,
