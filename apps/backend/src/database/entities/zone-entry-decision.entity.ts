@@ -8,7 +8,6 @@ import {
   PrimaryColumn,
   Unique,
 } from 'typeorm';
-import { AiObservationEventEntity } from './ai-observation-event.entity.js';
 import { SiteEntity } from './site.entity.js';
 import { WorkerEntity } from './worker.entity.js';
 import { ZoneEntity } from './zone.entity.js';
@@ -25,7 +24,7 @@ export class ZoneEntryDecisionEntity {
   id!: string;
 
   @Column({ name: 'event_id', type: 'uuid' })
-  @ForeignKey(() => AiObservationEventEntity, {
+  @ForeignKey('ai_observation_event', {
     name: 'fk_zone_entry_decision_event',
     onDelete: 'CASCADE',
   })

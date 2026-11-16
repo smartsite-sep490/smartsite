@@ -1,7 +1,6 @@
 import { Check, Column, Entity, ForeignKey, Index, PrimaryColumn, Unique } from 'typeorm';
 import { SiteEntity } from './site.entity.js';
 import { CameraEntity } from './camera.entity.js';
-import { AiObservationEventEntity } from './ai-observation-event.entity.js';
 import { UserEntity } from './user.entity.js';
 
 /** Exact-event projection only. Storage does not qualify continuity, identity or delivery. */
@@ -31,7 +30,7 @@ export class SafetyEpisodeEntity {
   cameraId!: string;
 
   @Column({ name: 'event_id', type: 'uuid', update: false })
-  @ForeignKey(() => AiObservationEventEntity, {
+  @ForeignKey('ai_observation_event', {
     name: 'safety_episode_event_id_fkey',
     onDelete: 'RESTRICT',
   })
@@ -66,7 +65,7 @@ export class SafetyEpisodeEntity {
 
 @Entity({ name: 'safety_episode_recipient' })
 @Unique('uq_safety_episode_recipient', ['recipientUserId', 'episodeId'])
-@ForeignKey(() => SafetyEpisodeEntity, ['episodeId', 'siteId'], ['id', 'siteId'], {
+@ForeignKey('safety_episode', ['episodeId', 'siteId'], ['id', 'siteId'], {
   name: 'fk_safety_episode_recipient_scope',
   onDelete: 'RESTRICT',
 })
