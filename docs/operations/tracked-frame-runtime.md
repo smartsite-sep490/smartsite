@@ -16,15 +16,23 @@ The explicit `tracked-v16-identification-ppe` profile adds both optional C02 mig
 
 Enabling the runtime additionally requires a non-default service token (`>= 32` non-whitespace characters), an explicit camera allowlist, and `AI_TRACKED_FRAME_RUNTIME_POLICY`. This JSON has no implicit policy values. Its strict schema is defined in `apps/backend/src/config/tracked-runtime-environment.ts`:
 
-| Section         | Required choices                                                                                                                   |
-| --------------- | ---------------------------------------------------------------------------------------------------------------------------------- |
-| `profile`       | `wireVersion` exactly `1.6.0`; reviewed route epoch/profile hash; distinct lowercase allowed Camera UUIDs; capture-clock tolerance |
-| `pending`       | TTL and maximum pending frame, part and payload-byte budgets                                                                       |
-| `heads`         | `FIRST_COMMITTED_CAPTURE`; capture-gap limit; positive uint64 decimal-string sequence-gap limit; segment-row budget                |
-| `recovery`      | Poll interval and maximum frames recovered per Camera per sweep                                                                    |
-| `maxRecipients` | Atomic recipient fanout cap, from 1 to 4096                                                                                        |
+| Section         | Required choices                                                                                                                                 |
+| --------------- | ------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `profile`       | `wireVersion` explicitly `1.6.0` or `1.7.0`; reviewed route epoch/profile hash; distinct lowercase allowed Camera UUIDs; capture-clock tolerance |
+| `pending`       | TTL and maximum pending frame, part and payload-byte budgets                                                                                     |
+| `heads`         | `FIRST_COMMITTED_CAPTURE`; capture-gap limit; positive uint64 decimal-string sequence-gap limit; segment-row budget                              |
+| `recovery`      | Poll interval and maximum frames recovered per Camera per sweep                                                                                  |
+| `maxRecipients` | Atomic recipient fanout cap, from 1 to 4096                                                                                                      |
 
 The policy Camera list must be a subset of `AI_CONFIGURATION_CAMERA_IDS`. A matching profile hash is a protocol binding, not measured model quality. Choose budgets from the reviewed workload; the policy is not supplied by a browser or camera payload.
+
+### Explicit Camera PPE wire v1.7
+
+The opt-in `tracked-v17-identification-ppe` profile adds forward migration `0011` after the existing identification/PPE storage. Published migration `0008` remains unchanged; the forward migration checks its predecessor before widening the wire fence. CLI and runtime must select the same reviewed schema/profile. The v1.7 runtime verifies the v1.7 database fences at startup. A v1.6 runtime against this widened schema is not a supported mixed-version canary: it fails its strict v1.6 fence check. This contribution does not enable automatic fleet rollout.
+
+Wire v1.7 adds explicit `scope: CAMERA` PPE observations, with a matching PERSON bounding box and no fabricated Region. The Backend binds them to the exact issued v2 configuration receipt and checks the subject location: Camera scope applies only outside all configured Regions. Inside a Region, its historical inherited/explicit/disabled PPE policy applies instead. Only an explicit `MISSING` observation for an item required at capture time can create a finding. An absent/unsupported detector observation never means missing PPE. Track IDs are not Worker identities or Zone access permissions.
+
+Both projection and media qualification use the retained capture-time bundle, geometry and effective PPE policy. Later policy edits do not erase an already committed finding or reinterpret its source image. The older EVENT_LOCAL path has no issued v2 context and refuses Camera-scope PPE rather than falling back to current Region policy. Original JPEG SHA/person indices and existing per-recipient authorization still apply. Selecting the profile alone does not activate AI or C02, run migrations at startup, adopt a model, or authorize a website database cutover.
 
 ## Intake and completion
 

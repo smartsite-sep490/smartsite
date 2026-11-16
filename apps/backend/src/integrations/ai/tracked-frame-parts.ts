@@ -13,7 +13,7 @@ export interface StoredTrackedPart {
   scopeSha256: string;
 }
 interface Part {
-  schemaVersion: '1.5.0' | '1.6.0';
+  schemaVersion: '1.5.0' | '1.6.0' | '1.7.0';
   eventId: string;
   cameraExternalId: string;
   streamSessionId: string;

@@ -27,26 +27,40 @@ import { seedTrackedFrameFixture } from '../support/tracked-frame-fixture.js';
 import { TrackedFrameAdmission } from '../../src/integrations/ai/tracked-frame-admission.js';
 import { TrackedFrameRecovery } from '../../src/integrations/ai/tracked-frame-recovery.js';
 import { buildMigrationOptions } from '../../src/database/typeorm.migration-profile.js';
+import { recordCameraConfigurationAcknowledgement } from '../../src/modules/cameras/camera-configuration-acknowledgement.js';
 
 for (const variant of [
   'ppe-only',
   'ppe-c02',
+  'camera-v17',
+  'region-v17',
+  'camera-region-mismatch-v17',
+  'region-disabled-v17',
+  'region-stale-v17',
   'zone-uppercase',
   'zone-unissued',
   'zone-disabled',
 ] as const)
-  test(`registered v1.6 worker HTTP intake preserves ${variant} handling`, async () => {
+  test(`registered tracked worker HTTP intake preserves ${variant} handling`, async () => {
+    const wire17 = variant.endsWith('-v17');
+    const cameraScope = variant === 'camera-v17' || variant === 'camera-region-mismatch-v17';
+    const invalidScope = variant === 'camera-region-mismatch-v17' || variant === 'region-stale-v17';
+    const withC02 = variant === 'ppe-c02' || wire17;
+    const findingCount = variant === 'region-v17' ? 1 : 2;
     const owned = createIsolatedTestDatabase();
     const db = owned.dataSource;
     let app: NestExpressApplication | undefined;
     const saved = new Map<string, string | undefined>();
     try {
       await owned.initialize();
-      if (variant === 'ppe-c02') {
+      if (withC02) {
         const cli = new DataSource(
           buildMigrationOptions(
             { DATABASE_URL: resolveTestDatabaseUrl() },
-            { profile: 'tracked-v16-identification', schema: db.driver.schema! },
+            {
+              profile: wire17 ? 'tracked-v17-identification-ppe' : 'tracked-v16-identification',
+              schema: db.driver.schema!,
+            },
           ),
         );
         try {
@@ -65,11 +79,14 @@ for (const variant of [
           ])
             await migration.up(manager.queryRunner!);
         });
-      const fixture = await seedTrackedFrameFixture(db, ['HARD_HAT', 'SAFETY_VEST']);
+      const fixture = await seedTrackedFrameFixture(
+        db,
+        variant === 'camera-v17' ? [] : ['HARD_HAT', 'SAFETY_VEST'],
+      );
       const routeEpoch = randomUUID();
       await db.query(
-        "UPDATE camera_worker_generation SET observation_route_mode='EPISODE_TRACKED',tracking_route_epoch=$2,tracked_wire_version='1.6.0' WHERE id=$1",
-        [fixture.generation.workerGenerationId, routeEpoch],
+        "UPDATE camera_worker_generation SET observation_route_mode='EPISODE_TRACKED',tracking_route_epoch=$2,tracked_wire_version=$3 WHERE id=$1",
+        [fixture.generation.workerGenerationId, routeEpoch, wire17 ? '1.7.0' : '1.6.0'],
       );
       const officer = randomUUID();
       const password = 'Synthetic_tracked_officer_123';
@@ -84,7 +101,7 @@ for (const variant of [
         "INSERT INTO user_role_assignment(id,user_id,site_id,role) VALUES($1,$2,$3,'SAFETY_OFFICER')",
         [randomUUID(), officer, fixture.siteId],
       );
-      if (variant === 'ppe-c02') {
+      if (withC02) {
         await db.query(
           "INSERT INTO app_user(id,username,display_name,password_hash) VALUES($1,$1::uuid::text,'Synthetic manager',$2)",
           [managerId, passwordHash],
@@ -99,13 +116,16 @@ for (const variant of [
         NODE_ENV: 'test',
         EVIDENCE_LOCAL_ROOT: evidenceRoot,
         STORAGE_LOCAL_ROOT: evidenceRoot,
-        SAFETY_IDENTIFICATION_ENABLED: variant === 'ppe-c02' ? 'true' : 'false',
+        SAFETY_IDENTIFICATION_ENABLED: withC02 ? 'true' : 'false',
         SMARTSITE_AI_SERVICE_TOKEN: token,
         AI_CONFIGURATION_CAMERA_IDS: fixture.cameraId,
         DATABASE_URL: resolveTestDatabaseUrl(),
         DATABASE_SCHEMA: db.driver.schema!,
-        SMARTSITE_DB_MIGRATION_PROFILE:
-          variant === 'ppe-c02' ? 'tracked-v16-identification' : 'tracked-v16',
+        SMARTSITE_DB_MIGRATION_PROFILE: wire17
+          ? 'tracked-v17-identification-ppe'
+          : withC02
+            ? 'tracked-v16-identification'
+            : 'tracked-v16',
         AI_TRACKED_FRAME_RUNTIME_ENABLED: 'true',
         MF06_ENQUEUE_ENABLED:
           variant === 'zone-uppercase' || variant === 'zone-unissued' ? 'true' : 'false',
@@ -114,7 +134,7 @@ for (const variant of [
           : {}),
         AI_TRACKED_FRAME_RUNTIME_POLICY: JSON.stringify({
           profile: {
-            wireVersion: '1.6.0',
+            wireVersion: wire17 ? '1.7.0' : '1.6.0',
             routeEpoch,
             profileSha256: 'a'.repeat(64),
             allowedCameraIds: [fixture.cameraId],
@@ -164,6 +184,65 @@ for (const variant of [
       await configureApplication(app);
       await app.listen(0, '127.0.0.1');
       const prefix = (await app.getUrl()) + '/api/v1/integrations/ai';
+      if (wire17) {
+        const manager = await module
+          .get(AuthService)
+          .login(managerId, password, AuthClientType.WEB);
+        const activeRegions = await runtimeDb.query<Array<{ id: string }>>(
+          'SELECT id FROM camera_observation_region WHERE camera_id=$1 AND is_active=true',
+          [fixture.cameraId],
+        );
+        const initialized = await fetch(
+          (await app.getUrl()) +
+            '/api/v1/sites/' +
+            fixture.siteId +
+            '/cameras/' +
+            fixture.cameraId +
+            '/ppe-policy/initialize',
+          {
+            method: 'POST',
+            headers: {
+              authorization: 'Bearer ' + manager.accessToken,
+              'content-type': 'application/json',
+            },
+            body: JSON.stringify({
+              commandId: randomUUID(),
+              expectedConfigurationVersion: 1,
+              policy: { mode: 'EXPLICIT', requiredPpe: ['HARD_HAT', 'SAFETY_VEST'] },
+              regionPolicies: activeRegions.map(({ id }) => ({
+                regionId: id,
+                policy:
+                  variant === 'region-disabled-v17'
+                    ? { mode: 'DISABLED', reason: 'Synthetic disabled region' }
+                    : variant === 'region-v17'
+                      ? { mode: 'EXPLICIT', requiredPpe: ['SAFETY_VEST'] }
+                      : { mode: 'INHERIT' },
+              })),
+            }),
+          },
+        );
+        assert.equal(initialized.status, 201, await initialized.clone().text());
+        const [{ bundle_sha256: bundleSha256 }] = await runtimeDb.query(
+          'SELECT bundle_sha256 FROM camera_configuration_bundle WHERE camera_id=$1 AND configuration_version=2',
+          [fixture.cameraId],
+        );
+        const receiptCommandId = randomUUID();
+        await recordCameraConfigurationAcknowledgement(
+          runtimeDb,
+          fixture.cameraId,
+          fixture.generation.secret,
+          {
+            commandId: receiptCommandId,
+            workerGenerationId: fixture.generation.workerGenerationId,
+            streamSessionId: fixture.generation.streamSessionId,
+            configurationVersion: 2,
+            bundleSha256,
+            viewRevision: 1,
+            outcome: 'LOADED',
+          },
+        );
+        Object.assign(fixture.context, { configurationVersion: 2, bundleSha256, receiptCommandId });
+      }
       const base = fixture.event();
       const rectangles = Array.from({ length: 10 }, (_, i) => ({
         input: Buffer.from(
@@ -175,7 +254,7 @@ for (const variant of [
       const bytes = await sharp({
         create: { width: 120, height: 80, channels: 3, background: '#456789' },
       })
-        .composite(variant === 'ppe-c02' ? rectangles : [])
+        .composite(withC02 ? rectangles : [])
         .jpeg()
         .toBuffer();
       const digest = createHash('sha256').update(bytes).digest('hex');
@@ -186,7 +265,7 @@ for (const variant of [
       );
       const event = {
         ...base,
-        schemaVersion: '1.6.0',
+        schemaVersion: wire17 ? '1.7.0' : '1.6.0',
         evidence: [
           {
             kind: 'FRAME',
@@ -246,7 +325,7 @@ for (const variant of [
           ],
         },
       };
-      if (variant === 'ppe-c02') {
+      if (withC02) {
         event.observations = Array.from({ length: 10 }, (_, i) => [
           {
             type: 'PERSON',
@@ -265,8 +344,15 @@ for (const variant of [
                 trackId: i + 1,
                 ppeItem,
                 status: 'MISSING',
-                regionId: fixture.ppeRegionId,
-                geometryVersion: 1,
+                ...(cameraScope
+                  ? { scope: 'CAMERA' }
+                  : {
+                      regionId:
+                        variant === 'region-v17'
+                          ? fixture.ppeRegionId!.toUpperCase()
+                          : fixture.ppeRegionId,
+                      geometryVersion: variant === 'region-stale-v17' ? 2 : 1,
+                    }),
               }))
             : []),
         ]).flat();
@@ -308,7 +394,7 @@ for (const variant of [
         '/tracked-frames/' +
         event.framePartition.frameId +
         '/result';
-      if (variant === 'zone-disabled' || variant === 'zone-unissued') {
+      if (variant === 'zone-disabled' || variant === 'zone-unissued' || invalidScope) {
         // Stop automatic retries, then invoke the same registered admission owner deterministically.
         await module.get(TrackedFrameRecovery).onModuleDestroy();
         await assert.rejects(
@@ -367,6 +453,54 @@ for (const variant of [
       const retry = await post();
       assert.equal(retry.status, 200);
       assert.deepEqual(await retry.json(), receipt);
+      if (variant === 'region-disabled-v17') {
+        for (const table of ['safety_episode', 'safety_alert', 'safety_episode_recipient'])
+          assert.equal((await db.query(`SELECT count(*)::int AS n FROM ${table}`))[0].n, 0);
+        assert.equal(
+          (await db.query('SELECT count(*)::int AS n FROM ai_subject_segment'))[0].n,
+          10,
+        );
+        const login = await module.get(AuthService).login(officer, password, AuthClientType.WEB);
+        const inbox = await fetch((await app.getUrl()) + '/api/v1/me/safety-episode-inbox/frames', {
+          headers: { authorization: 'Bearer ' + login.accessToken },
+        });
+        assert.equal(inbox.status, 200);
+        assert.equal((await inbox.json()).total, 0);
+        return;
+      }
+      if (variant === 'camera-v17') {
+        // A later policy change must not erase the capture-time finding or its image access.
+        const manager = await module
+          .get(AuthService)
+          .login(managerId, password, AuthClientType.WEB);
+        const changed = await fetch(
+          (await app.getUrl()) +
+            '/api/v1/sites/' +
+            fixture.siteId +
+            '/cameras/' +
+            fixture.cameraId +
+            '/ppe-policy',
+          {
+            method: 'PATCH',
+            headers: {
+              authorization: 'Bearer ' + manager.accessToken,
+              'content-type': 'application/json',
+            },
+            body: JSON.stringify({
+              commandId: randomUUID(),
+              expectedConfigurationVersion: 2,
+              policy: { mode: 'DISABLED', reason: 'Synthetic subsequent policy change' },
+            }),
+          },
+        );
+        assert.equal(changed.status, 200, await changed.clone().text());
+        assert.equal((await changed.json()).configurationVersion, 3);
+        const historical = await runtimeDb.query<Array<{ bundle_sha256: string }>>(
+          'SELECT bundle_sha256 FROM camera_configuration_bundle WHERE camera_id=$1 AND configuration_version=2',
+          [fixture.cameraId],
+        );
+        assert.equal(historical[0]?.bundle_sha256, fixture.context.bundleSha256);
+      }
       const [{ episodes, findings, recipients, legacy }] = await db.query(
         'SELECT (SELECT count(*)::int FROM safety_episode) episodes, ' +
           '(SELECT count(*)::int FROM safety_alert) findings, ' +
@@ -376,9 +510,9 @@ for (const variant of [
       assert.deepEqual(
         { episodes, findings, recipients, legacy },
         {
-          episodes: variant === 'ppe-c02' ? 3 : 1,
-          findings: variant === 'ppe-c02' ? 6 : 2,
-          recipients: variant === 'ppe-c02' ? 3 : 1,
+          episodes: withC02 ? 3 : 1,
+          findings: withC02 ? 3 * findingCount : findingCount,
+          recipients: withC02 ? 3 : 1,
           legacy: 0,
         },
       );
@@ -390,10 +524,10 @@ for (const variant of [
       });
       assert.equal(inbox.status, 200);
       const page = await inbox.json();
-      assert.equal(page.total, variant === 'ppe-c02' ? 3 : 1);
+      assert.equal(page.total, withC02 ? 3 : 1);
       const row = page.items[0];
       assert.equal(row.unread, true);
-      assert.equal(row.episode.findingCount, 2);
+      assert.equal(row.episode.findingCount, findingCount);
       assert.equal(row.episode.subject.kind, 'TRACKED');
       const grouped = await fetch(
         api +
@@ -406,17 +540,15 @@ for (const variant of [
       assert.equal(grouped.status, 200);
       const frames = await grouped.json();
       assert.equal(frames.total, 1);
-      assert.equal(frames.items[0].cases.length, variant === 'ppe-c02' ? 3 : 1);
+      assert.equal(frames.items[0].cases.length, withC02 ? 3 : 1);
       const frameCase = frames.items[0].cases.find(
         (item: { episodeId: string }) => item.episodeId === row.episode.id,
       );
       assert.ok(frameCase);
       assert.equal(frameCase.episodeId, row.episode.id);
-      assert.equal(frameCase.findingCount, 2);
+      assert.equal(frameCase.findingCount, findingCount);
       assert.equal(frameCase.source.eventId, event.eventId);
-      assert.ok(
-        (variant === 'ppe-c02' ? [0, 3, 6] : [0]).includes(frameCase.source.personObservationIndex),
-      );
+      assert.ok((withC02 ? [0, 3, 6] : [0]).includes(frameCase.source.personObservationIndex));
       assert.equal(frameCase.source.evidenceIndex, 0);
       assert.equal(frameCase.source.sha256, createHash('sha256').update(bytes).digest('hex'));
       if (variant === 'zone-uppercase') {
@@ -429,7 +561,7 @@ for (const variant of [
       const detailResponse = await fetch(detailPath + '/tracked', { headers: officerHeaders });
       assert.equal(detailResponse.status, 200);
       const detail = await detailResponse.json();
-      assert.equal(detail.findings.length, 2);
+      assert.equal(detail.findings.length, findingCount);
       assert.ok(
         detail.findings.some(
           (finding: { alertId: string }) => finding.alertId === frameCase.source.alertId,
@@ -450,7 +582,7 @@ for (const variant of [
         assert.equal(media.status, 200, await media.clone().text());
         assert.deepEqual(Buffer.from(await media.arrayBuffer()), bytes);
       }
-      if (variant === 'ppe-c02') {
+      if (withC02) {
         const target = frames.items[0].cases.find(
           (item: { source: { personObservationIndex: number } }) =>
             item.source.personObservationIndex === 3,

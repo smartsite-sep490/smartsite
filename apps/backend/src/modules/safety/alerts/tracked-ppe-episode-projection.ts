@@ -181,9 +181,24 @@ export class TrackedPpeEpisodeProjection {
       });
       if (!bundle) unavailable();
       const contexts = new Map<string, ResolvedObservationContext>();
+      let cameraPpe: Parameters<AlertCandidateEvaluator['evaluate']>[3];
       const resolver = new ObservationContextResolverService();
       for (const observation of payload.observations) {
         if (observation.type !== 'PPE') continue;
+
+        if (observation.scope === 'CAMERA') {
+          if (bundle.schemaVersion !== '2.0.0') unavailable();
+          const person = payload.observations.find(
+            (entry) => entry.type === 'PERSON' && entry.trackId === observation.trackId,
+          );
+          const location = resolveIssuedPpeLocation(
+            bundle,
+            person?.type === 'PERSON' ? person.boundingBox : undefined,
+          );
+          if (location?.policy.scope !== 'CAMERA') unavailable();
+          cameraPpe = { cameraId: scope.cameraId, requiredPpe: location.policy.requiredPpe };
+          continue;
+        }
 
         if (bundle.schemaVersion === '2.0.0') {
           const person = payload.observations.find(
@@ -223,6 +238,8 @@ export class TrackedPpeEpisodeProjection {
           observations: payload.observations.filter((o) => o.type !== 'ZONE_ENTRY'),
         },
         contexts,
+        undefined,
+        cameraPpe,
       );
       for (const candidate of candidates) {
         if (candidate.alertType !== 'PPE_VIOLATION') unavailable();
@@ -409,6 +426,7 @@ export class TrackedPpeEpisodeProjection {
         payload.observations.flatMap((o) => {
           if (
             o.type !== 'PPE' ||
+            o.scope === 'CAMERA' ||
             o.trackId !== person.trackId ||
             o.status !== 'MISSING' ||
             o.ppeItem !== candidate.details.ppeItem

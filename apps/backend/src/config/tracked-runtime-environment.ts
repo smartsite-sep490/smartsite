@@ -6,7 +6,7 @@ const pendingInteger = positiveInteger.max(Number.MAX_SAFE_INTEGER - 1);
 const lowerUuid = z.uuid().refine((value) => value === value.toLowerCase(), 'must be lowercase');
 const policySchema = z.strictObject({
   profile: z.strictObject({
-    wireVersion: z.literal('1.6.0'),
+    wireVersion: z.enum(['1.6.0', '1.7.0']),
     routeEpoch: lowerUuid,
     profileSha256: z.string().regex(/^[0-9a-f]{64}$/),
     allowedCameraIds: z
