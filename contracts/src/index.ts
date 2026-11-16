@@ -204,3 +204,7 @@ export { LEAVE_NOTICE_HOURS, leaveNotice } from './leave-notice.js';
 export type { LeaveNoticeType } from './leave-notice.js';
 
 export { scheduledShiftWindow } from './scheduled-shift.js';
+
+export * from './camera-ppe-policy-command.js';
+
+export * from './camera-policy-configuration-bundle.js';

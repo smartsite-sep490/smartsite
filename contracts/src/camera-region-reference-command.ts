@@ -1,5 +1,6 @@
 import type { NormalizedCoordinate } from './camera-region-configuration.js';
 import { polygonError } from './validation/polygon-validator.js';
+import { parseRegionPpePolicy, type RegionPpePolicy } from './camera-ppe-policy.js';
 
 /** Shape only: Backend must validate issuance, current revision/view, expiry and actor scope. */
 export interface UpdateReferenceRegionPolygonCommand {
@@ -12,6 +13,21 @@ export interface UpdateReferenceRegionPolygonCommand {
 
 export interface CreateReferenceRegionCommand extends UpdateReferenceRegionPolygonCommand {
   readonly zoneId: string;
+}
+
+export interface CreatePolicyReferenceRegionCommand extends CreateReferenceRegionCommand {
+  readonly ppePolicy: RegionPpePolicy;
+}
+
+/** Deliberate PPE binding for new Regions on an initialized v2 Camera. */
+export function parseCreatePolicyReferenceRegionCommand(
+  value: unknown,
+): CreatePolicyReferenceRegionCommand {
+  check(object(value) && Object.hasOwn(value, 'ppePolicy'));
+  const { ppePolicy, ...reference } = value;
+  const policy = parseRegionPpePolicy(ppePolicy);
+  check(policy);
+  return { ...parseCreateReferenceRegionCommand(reference), ppePolicy: policy };
 }
 
 const keys = [
