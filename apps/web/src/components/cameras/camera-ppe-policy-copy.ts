@@ -41,6 +41,15 @@ const en = {
   'item.GLOVES': 'Gloves',
   'item.BOOTS': 'Boots',
   'item.GOGGLES': 'Goggles',
+  requiredItemsGroup: 'Required PPE items',
+  readinessCoreBadge: 'Core',
+  readinessExperimentalBadge: 'Experimental',
+  readinessGuidanceNote:
+    'Hard hat and safety vest are baseline checks; gloves, boots, and goggles are experimental. Saved changes take effect only after the camera confirms the updated configuration.',
+  validationExplicitEmpty: 'Select at least one PPE item before saving this custom policy.',
+  validationDisabledReasonRequired: 'Enter a reason for turning off PPE checks before saving.',
+  validationDisabledReasonInvalid:
+    'Enter a valid reason (up to 500 characters, without control characters) before saving.',
   'modeBadge.INHERIT': 'Use camera default',
   'modeBadge.EXPLICIT': 'Custom',
   'modeBadge.DISABLED': 'Disabled',
@@ -145,6 +154,15 @@ const vi: Record<keyof typeof en, string> = {
   'item.GLOVES': 'Găng tay',
   'item.BOOTS': 'Giày bảo hộ',
   'item.GOGGLES': 'Kính bảo hộ',
+  requiredItemsGroup: 'Các hạng mục PPE bắt buộc',
+  readinessCoreBadge: 'Cơ bản',
+  readinessExperimentalBadge: 'Thử nghiệm',
+  readinessGuidanceNote:
+    'Mũ bảo hộ và áo phản quang là nhóm kiểm tra cơ bản; găng tay, giày bảo hộ và kính bảo hộ đang ở mức thử nghiệm. Cấu hình đã lưu chỉ bắt đầu giám sát sau khi camera xác nhận áp dụng.',
+  validationExplicitEmpty: 'Chọn ít nhất một hạng mục PPE trước khi lưu chính sách tùy chỉnh.',
+  validationDisabledReasonRequired: 'Nhập lý do tắt kiểm tra PPE trước khi lưu.',
+  validationDisabledReasonInvalid:
+    'Nhập lý do hợp lệ (tối đa 500 ký tự, không chứa ký tự điều khiển) trước khi lưu.',
   'modeBadge.INHERIT': 'Dùng mặc định camera',
   'modeBadge.EXPLICIT': 'Tùy chỉnh',
   'modeBadge.DISABLED': 'Tắt',
@@ -216,6 +234,12 @@ export const PPE_ITEM_LABEL_KEY: Record<PpeItem, CameraPpeCopyKey> = {
   BOOTS: 'cameraPpe.item.BOOTS',
   GOGGLES: 'cameraPpe.item.GOGGLES',
 };
+
+const CORE_BASELINE_PPE_ITEMS: ReadonlySet<PpeItem> = new Set<PpeItem>(['HARD_HAT', 'SAFETY_VEST']);
+
+export function isCoreBaselinePpeItem(item: PpeItem): boolean {
+  return CORE_BASELINE_PPE_ITEMS.has(item);
+}
 
 let registered = false;
 

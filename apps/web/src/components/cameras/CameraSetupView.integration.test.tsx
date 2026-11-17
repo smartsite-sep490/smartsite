@@ -677,7 +677,7 @@ describe('CameraSetupView parent workspace integration', () => {
     });
 
     // Updating camera default adds BOOTS to inherited region effective PPE and moves sync to not-yet-applied
-    fireEvent.click(screen.getByRole('checkbox', { name: 'BOOTS' }));
+    fireEvent.click(screen.getByRole('checkbox', { name: 'Boots' }));
     fireEvent.click(screen.getByRole('button', { name: 'Save PPE policy' }));
 
     await waitFor(() => {

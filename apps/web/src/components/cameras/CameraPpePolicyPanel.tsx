@@ -1,4 +1,4 @@
-import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useId, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { useMutation, useQueries, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useTranslation } from 'react-i18next';
 import {
@@ -24,7 +24,12 @@ import {
   useCameraApplicationStatus,
   type CameraApplicationStatusContext,
 } from './useCameraApplicationStatus';
-import { PPE_ITEM_LABEL_KEY, registerCameraPpePolicyCopy } from './camera-ppe-policy-copy';
+import {
+  PPE_ITEM_LABEL_KEY,
+  isCoreBaselinePpeItem,
+  registerCameraPpePolicyCopy,
+  type CameraPpeCopyKey,
+} from './camera-ppe-policy-copy';
 import {
   parsePolicyDraft,
   parseSavedCameraPolicy,
@@ -70,15 +75,48 @@ export function PolicyFields({
   onChange,
   allowInherit,
   label,
+  readOnly = false,
 }: {
   value: PpePolicyDraft;
   onChange: (draft: PpePolicyDraft) => void;
   allowInherit: boolean;
   label: string;
+  readOnly?: boolean;
 }) {
   const { t } = useTranslation(SAFETY_NAMESPACE);
+  const fieldId = useId();
+  const readinessGuidanceId = `${fieldId}-readiness-guidance`;
+  const explicitErrorId = `${fieldId}-explicit-error`;
+  const disabledErrorId = `${fieldId}-disabled-error`;
+
+  const isExplicitEmpty =
+    !readOnly && value.mode === 'EXPLICIT' && (value.requiredPpe?.length ?? 0) === 0;
+  const rawReason = value.reason ?? '';
+  const trimmedReason = rawReason.trim();
+  const hasInvalidReasonFormat = trimmedReason.length > 500 || /[\p{Cc}\p{Cs}]/u.test(rawReason);
+  const disabledValidationKey: CameraPpeCopyKey | null =
+    !readOnly && value.mode === 'DISABLED'
+      ? trimmedReason.length === 0
+        ? 'cameraPpe.validationDisabledReasonRequired'
+        : hasInvalidReasonFormat
+          ? 'cameraPpe.validationDisabledReasonInvalid'
+          : null
+      : null;
+
+  const activeFieldsetErrorId = isExplicitEmpty
+    ? explicitErrorId
+    : disabledValidationKey
+      ? disabledErrorId
+      : undefined;
+  const explicitGroupDescribedBy = [readinessGuidanceId, isExplicitEmpty ? explicitErrorId : null]
+    .filter(Boolean)
+    .join(' ');
+
   return (
-    <fieldset className="grid gap-3 rounded-xl border border-slate-200 bg-slate-50/40 p-3.5 min-w-0">
+    <fieldset
+      aria-describedby={activeFieldsetErrorId}
+      className="grid gap-3 rounded-xl border border-slate-200 bg-slate-50/40 p-3.5 min-w-0"
+    >
       <legend className="px-1 text-xs font-semibold text-slate-900">{label}</legend>
       <label className="grid gap-1 text-xs font-medium text-slate-700">
         <span>{t('cameraPpe.mode')}</span>
@@ -94,42 +132,105 @@ export function PolicyFields({
         </select>
       </label>
       {value.mode === 'EXPLICIT' && (
-        <div className="flex flex-wrap gap-2">
-          {PPE_ITEMS.map((item) => (
-            <div
-              key={item}
-              className="flex items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-2.5 py-1.5"
+        <div className="grid gap-2 min-w-0">
+          <div
+            role="group"
+            aria-label={t('cameraPpe.requiredItemsGroup')}
+            aria-describedby={explicitGroupDescribedBy}
+            className="flex flex-wrap gap-2 min-w-0"
+          >
+            {PPE_ITEMS.map((item) => {
+              const isCore = isCoreBaselinePpeItem(item);
+              const itemBadgeId = `${fieldId}-badge-${item.toLowerCase()}`;
+              const itemDescribedBy = [
+                itemBadgeId,
+                readinessGuidanceId,
+                isExplicitEmpty ? explicitErrorId : null,
+              ]
+                .filter(Boolean)
+                .join(' ');
+              return (
+                <div
+                  key={item}
+                  data-readiness-tier={isCore ? 'core' : 'experimental'}
+                  className="inline-flex flex-wrap items-center gap-2 rounded-lg border border-slate-200 bg-white px-2.5 py-1.5 min-w-0"
+                >
+                  <label className="inline-flex items-center gap-2 text-xs font-medium text-slate-800 cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={value.requiredPpe?.includes(item) ?? false}
+                      aria-invalid={isExplicitEmpty ? 'true' : undefined}
+                      aria-describedby={itemDescribedBy}
+                      onChange={(event) =>
+                        onChange({
+                          mode: 'EXPLICIT',
+                          requiredPpe: event.target.checked
+                            ? [...(value.requiredPpe ?? []), item]
+                            : (value.requiredPpe ?? []).filter((entry) => entry !== item),
+                        })
+                      }
+                    />
+                    <span>{t(PPE_ITEM_LABEL_KEY[item])}</span>
+                  </label>
+                  <span
+                    id={itemBadgeId}
+                    className={
+                      isCore
+                        ? 'inline-flex items-center rounded border border-emerald-200 bg-emerald-50 px-1.5 py-0.5 text-[10px] font-semibold text-emerald-800'
+                        : 'inline-flex items-center rounded border border-sky-200 bg-sky-50 px-1.5 py-0.5 text-[10px] font-semibold text-sky-800'
+                    }
+                  >
+                    {t(
+                      isCore
+                        ? 'cameraPpe.readinessCoreBadge'
+                        : 'cameraPpe.readinessExperimentalBadge',
+                    )}
+                  </span>
+                </div>
+              );
+            })}
+          </div>
+          <p
+            id={readinessGuidanceId}
+            data-testid="ppe-readiness-guidance"
+            className="text-xs leading-relaxed text-slate-600 break-words"
+          >
+            {t('cameraPpe.readinessGuidanceNote')}
+          </p>
+          {isExplicitEmpty && (
+            <p
+              id={explicitErrorId}
+              data-testid="ppe-policy-explicit-validation"
+              className="rounded-lg border border-amber-200 bg-amber-50 px-2.5 py-1.5 text-xs font-medium text-amber-900 break-words"
             >
-              <label className="flex items-center gap-2 text-xs font-mono text-slate-800 cursor-pointer">
-                <input
-                  type="checkbox"
-                  checked={value.requiredPpe?.includes(item) ?? false}
-                  onChange={(event) =>
-                    onChange({
-                      ...value,
-                      requiredPpe: event.target.checked
-                        ? [...(value.requiredPpe ?? []), item]
-                        : (value.requiredPpe ?? []).filter((entry) => entry !== item),
-                    })
-                  }
-                />
-                <span>{item}</span>
-              </label>
-              <span className="text-xs text-slate-500">· {t(PPE_ITEM_LABEL_KEY[item])}</span>
-            </div>
-          ))}
+              {t('cameraPpe.validationExplicitEmpty')}
+            </p>
+          )}
         </div>
       )}
       {value.mode === 'DISABLED' && (
-        <label className="grid gap-1 text-xs font-medium text-slate-700">
-          <span>{t('cameraPpe.reason')}</span>
-          <input
-            className={CAMERA_FIELD_STYLES.input}
-            value={value.reason ?? ''}
-            maxLength={500}
-            onChange={(event) => onChange({ ...value, reason: event.target.value })}
-          />
-        </label>
+        <div className="grid gap-1.5 min-w-0">
+          <label className="grid gap-1 text-xs font-medium text-slate-700">
+            <span>{t('cameraPpe.reason')}</span>
+            <input
+              className={CAMERA_FIELD_STYLES.input}
+              value={value.reason ?? ''}
+              maxLength={500}
+              aria-invalid={disabledValidationKey ? 'true' : undefined}
+              aria-describedby={disabledValidationKey ? disabledErrorId : undefined}
+              onChange={(event) => onChange({ mode: 'DISABLED', reason: event.target.value })}
+            />
+          </label>
+          {disabledValidationKey && (
+            <p
+              id={disabledErrorId}
+              data-testid="ppe-policy-disabled-validation"
+              className="rounded-lg border border-amber-200 bg-amber-50 px-2.5 py-1.5 text-xs font-medium text-amber-900 break-words"
+            >
+              {t(disabledValidationKey)}
+            </p>
+          )}
+        </div>
       )}
     </fieldset>
   );
@@ -736,6 +837,7 @@ function PolicyEditor({
                 value={value}
                 onChange={changeDraft}
                 allowInherit={Boolean(regionId)}
+                readOnly={!canWrite}
               />
               {!initial && regionId && value.mode && (
                 <EffectivePpePreviewBox effective={editingRegionPreview} />
