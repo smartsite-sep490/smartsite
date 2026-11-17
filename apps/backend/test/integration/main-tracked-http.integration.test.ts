@@ -28,6 +28,7 @@ import { TrackedFrameAdmission } from '../../src/integrations/ai/tracked-frame-a
 import { TrackedFrameRecovery } from '../../src/integrations/ai/tracked-frame-recovery.js';
 import { buildMigrationOptions } from '../../src/database/typeorm.migration-profile.js';
 import { recordCameraConfigurationAcknowledgement } from '../../src/modules/cameras/camera-configuration-acknowledgement.js';
+import { proveMf06RetrospectiveHttp } from '../support/mf06-retrospective-http-proof.js';
 
 for (const variant of [
   'ppe-only',
@@ -39,12 +40,21 @@ for (const variant of [
   'region-stale-v17',
   'zone-uppercase',
   'zone-uppercase-v17',
+  'zone-retrospective-v17',
   'zone-unissued',
   'zone-disabled',
 ] as const)
   test(`registered tracked worker HTTP intake preserves ${variant} handling`, async () => {
     const wire17 = variant.endsWith('-v17');
-    const uppercaseZone = variant === 'zone-uppercase' || variant === 'zone-uppercase-v17';
+    const retrospective = variant === 'zone-retrospective-v17';
+    const uppercaseZone =
+      variant === 'zone-uppercase' || variant === 'zone-uppercase-v17' || retrospective;
+    const zoneSubjectIndex = retrospective ? 3 : 0;
+    const migrationProfile = retrospective
+      ? 'tracked-v17-identification-ppe-authority'
+      : wire17
+        ? 'tracked-v17-identification-ppe'
+        : 'tracked-v16-identification';
     const cameraScope = variant === 'camera-v17' || variant === 'camera-region-mismatch-v17';
     const invalidScope = variant === 'camera-region-mismatch-v17' || variant === 'region-stale-v17';
     const withC02 = variant === 'ppe-c02' || wire17;
@@ -60,7 +70,7 @@ for (const variant of [
           buildMigrationOptions(
             { DATABASE_URL: resolveTestDatabaseUrl() },
             {
-              profile: wire17 ? 'tracked-v17-identification-ppe' : 'tracked-v16-identification',
+              profile: migrationProfile,
               schema: db.driver.schema!,
             },
           ),
@@ -123,11 +133,7 @@ for (const variant of [
         AI_CONFIGURATION_CAMERA_IDS: fixture.cameraId,
         DATABASE_URL: resolveTestDatabaseUrl(),
         DATABASE_SCHEMA: db.driver.schema!,
-        SMARTSITE_DB_MIGRATION_PROFILE: wire17
-          ? 'tracked-v17-identification-ppe'
-          : withC02
-            ? 'tracked-v16-identification'
-            : 'tracked-v16',
+        SMARTSITE_DB_MIGRATION_PROFILE: withC02 ? migrationProfile : 'tracked-v16',
         AI_TRACKED_FRAME_RUNTIME_ENABLED: 'true',
         MF06_ENQUEUE_ENABLED: uppercaseZone || variant === 'zone-unissued' ? 'true' : 'false',
         ...(uppercaseZone || variant === 'zone-unissued'
@@ -360,7 +366,7 @@ for (const variant of [
         if (uppercaseZone) {
           event.observations.push({
             type: 'ZONE_ENTRY',
-            trackId: 1,
+            trackId: retrospective ? 2 : 1,
             regionId: fixture.ppeRegionId!.toUpperCase(),
             geometryVersion: 1,
             entryOrigin: 'INSIDE_ENTRY_UNOBSERVED',
@@ -457,7 +463,10 @@ for (const variant of [
           'SELECT region_id,person_observation_index FROM zone_entry_assessment_request',
         );
         assert.deepEqual(requests, [
-          { region_id: fixture.ppeRegionId!.toLowerCase(), person_observation_index: 0 },
+          {
+            region_id: fixture.ppeRegionId!.toLowerCase(),
+            person_observation_index: zoneSubjectIndex,
+          },
         ]);
         assert.deepEqual(await db.query('SELECT status FROM zone_entry_assessment_job'), [
           { status: 'PENDING' },
@@ -564,7 +573,7 @@ for (const variant of [
       assert.equal(frameCase.source.sha256, createHash('sha256').update(bytes).digest('hex'));
       if (uppercaseZone) {
         const zoneCase = frames.items[0].cases.find(
-          (item: typeof frameCase) => item.source.personObservationIndex === 0,
+          (item: typeof frameCase) => item.source.personObservationIndex === zoneSubjectIndex,
         );
         assert.ok(zoneCase);
         assert.equal(zoneCase.zoneEntries.length, 1);
@@ -702,6 +711,23 @@ for (const variant of [
           '/frame?personObservationIndex=3&evidenceIndex=0';
         assert.equal((await fetch(rawPath, { headers: managerHeaders })).status, 403);
         await send('/evidence-preview', manager.accessToken, previewInput, 403);
+        if (retrospective) {
+          await proveMf06RetrospectiveHttp({
+            db: runtimeDb,
+            api,
+            siteId: fixture.siteId,
+            regionId: fixture.ppeRegionId!,
+            passwordHash,
+            request,
+            episodeId: target.episodeId,
+            eventId: event.eventId,
+            personObservationIndex: 3,
+            frameSha256: digest,
+            officerToken: login.accessToken,
+            managerToken: manager.accessToken,
+          });
+          return;
+        }
         const proposal = await (
           await send(
             '/' + request.id + '/respond',

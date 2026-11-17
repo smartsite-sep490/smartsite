@@ -1,3 +1,4 @@
+import { computeMf06InitialBinding } from '../../src/modules/safety/assessments/mf06-event-admission.js';
 import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
 import { computeCanonicalPayloadHash } from '@smartsite/contracts';
@@ -90,6 +91,7 @@ export async function storeVersionFixture(
   });
   const subject = selectZoneEntrySubject(raw, 1);
   assert(subject.zoneEligible);
+  const bindingHash = computeMf06InitialBinding(eventId, subject);
   const insert = async (table: string, row: Record<string, unknown>) => {
     const columns = Object.keys(row);
     assert(['zone_entry_assessment_request', 'zone_entry_assessment_job'].includes(table));
@@ -117,7 +119,7 @@ export async function storeVersionFixture(
     captured_at: new Date(captured),
     requested_purpose: 'INITIAL_OBSERVATION_ASSESSMENT',
     request_revision: 1,
-    binding_hash: 'b'.repeat(64),
+    binding_hash: bindingHash,
   });
   await insert('zone_entry_assessment_job', {
     request_id: requestId,
@@ -183,7 +185,7 @@ export async function storeVersionFixture(
     claim: { requestId, leaseToken, headRevision: 2 },
     commandId: randomUUID(),
     siteId,
-    bindingHash: 'b'.repeat(64),
+    bindingHash,
     evaluatorVersion: 'SYNTHETIC_FORMAT_FIXTURE',
     outcome: 'UNAVAILABLE',
     reasonCode: 'AUTHORITY_UNAVAILABLE',
