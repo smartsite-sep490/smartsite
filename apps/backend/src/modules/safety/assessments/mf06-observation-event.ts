@@ -10,13 +10,18 @@ import type { AiObservationEventEntity } from '../../../database/entities/ai-obs
 import { parseNormalizedCapturedAt } from '../../../common/parse-normalized-captured-at.js';
 import { snapshotMf06Json } from './mf06-json-snapshot.js';
 
-export function isMf06TrackedWireVersion(value: unknown): value is '1.5.0' | '1.6.0' {
-  return value === '1.5.0' || value === '1.6.0';
+export function isMf06TrackedWireVersion(value: unknown): value is '1.5.0' | '1.6.0' | '1.7.0' {
+  return value === '1.5.0' || value === '1.6.0' || value === '1.7.0';
 }
 
 /** Internal callers pass descriptor-safe JSON snapshots, never resolver or browser objects. */
 export function validateMf06ObservationEvent(raw: unknown) {
-  if (raw && typeof raw === 'object' && 'schemaVersion' in raw && raw.schemaVersion === '1.6.0')
+  if (
+    raw &&
+    typeof raw === 'object' &&
+    'schemaVersion' in raw &&
+    (raw.schemaVersion === '1.6.0' || raw.schemaVersion === '1.7.0')
+  )
     return { isValid: isStoredTrackedPayloadValid(raw) };
   if (raw && typeof raw === 'object' && 'schemaVersion' in raw && raw.schemaVersion === '1.5.0') {
     return validateTrackedObservationEvent(raw);
