@@ -5,6 +5,7 @@ import {
 } from '../database/migration-profile-names.js';
 import { trackedRuntimePolicyEnvironment } from './tracked-runtime-environment.js';
 import { isAbsolute } from 'node:path';
+import { mf06EnvironmentFields, refineMf06Environment } from './mf06-worker-environment.js';
 import {
   isValidPassword,
   PASSWORD_MAX_LENGTH,
@@ -267,6 +268,7 @@ export const backendEnvironmentSchema = z
         }
       }, 'must be an absolute HTTP(S) URL without credentials')
       .optional(),
+    ...mf06EnvironmentFields,
     MF06_ENQUEUE_ENABLED: z
       .enum(['false', 'true'])
       .default('false')
@@ -387,6 +389,7 @@ export const backendEnvironmentSchema = z
       .optional(),
   })
   .superRefine((config, context) => {
+    refineMf06Environment(config, context, LOCAL_SERVICE_TOKEN);
     productionDatabase(config, context);
     if (config.SAFETY_EPISODE_PROJECTION_ENABLED && !config.SAFETY_EPISODE_ROUTE_EPOCH) {
       context.addIssue({
