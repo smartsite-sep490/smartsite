@@ -449,6 +449,9 @@ for (const variant of [
         await new Promise((resolve) => setTimeout(resolve, 50));
       }
       assert.ok(sealed, 'Recovery did not seal the accepted frame');
+      const retry = await post();
+      assert.equal(retry.status, 200);
+      assert.deepEqual(await retry.json(), receipt);
       if (uppercaseZone) {
         const requests = await db.query(
           'SELECT region_id,person_observation_index FROM zone_entry_assessment_request',
@@ -460,9 +463,7 @@ for (const variant of [
           { status: 'PENDING' },
         ]);
       }
-      const retry = await post();
-      assert.equal(retry.status, 200);
-      assert.deepEqual(await retry.json(), receipt);
+
       if (variant === 'region-disabled-v17') {
         for (const table of ['safety_episode', 'safety_alert', 'safety_episode_recipient'])
           assert.equal((await db.query(`SELECT count(*)::int AS n FROM ${table}`))[0].n, 0);
@@ -570,6 +571,9 @@ for (const variant of [
         assert.equal(zoneCase.zoneEntries[0].status, 'PENDING');
         assert.equal(zoneCase.zoneEntries[0].reasonCode, null);
         assert.equal(zoneCase.zoneEntries[0].provenance, null);
+        for (const sibling of frames.items[0].cases) {
+          if (sibling.episodeId !== zoneCase.episodeId) assert.deepEqual(sibling.zoneEntries, []);
+        }
       } else assert.deepEqual(frameCase.zoneEntries, []);
       const detailPath = api + '/sites/' + fixture.siteId + '/safety-episodes/' + row.episode.id;
       const detailResponse = await fetch(detailPath + '/tracked', { headers: officerHeaders });
