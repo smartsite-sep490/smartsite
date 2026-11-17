@@ -51,6 +51,7 @@ export async function provisionCameraWorker(args: string[], env = process.env): 
         allowed,
         input.leaseMs,
         deliver,
+        input.transition,
       );
     } finally {
       if (source.isInitialized) await source.destroy();
