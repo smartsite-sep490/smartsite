@@ -329,7 +329,7 @@ test('database retry exhaustion returns the real claim to PENDING with its separ
   });
 });
 
-test('drain during finalization rolls back an append before commit and cancels its timely claim', async () => {
+test('drain during finalization rolls back an append before commit and requeues its timely claim', async () => {
   const f = await fixture(),
     work = workFor(f);
   let ready!: () => void, release!: () => void;
@@ -352,7 +352,7 @@ test('drain during finalization rolls back an append before commit and cancels i
   const drain = worker.drain();
   release();
   await drain;
-  assert.equal(await run, 'CANCELLED');
+  assert.equal(await run, 'RETRY');
   assert.equal(
     (
       await db.query(
@@ -362,12 +362,22 @@ test('drain during finalization rolls back an append before commit and cancels i
     )[0].total,
     0,
   );
-  assert.equal(
-    (
-      await db.query('SELECT status FROM zone_entry_assessment_job WHERE request_id=$1', [
-        f.requestId,
-      ])
-    )[0].status,
-    'CANCELLED',
+  const [queued] = await db.query(
+    'SELECT status, lease_token, last_error_code FROM zone_entry_assessment_job WHERE request_id=$1',
+    [f.requestId],
   );
+  assert.deepEqual(queued, {
+    status: 'PENDING',
+    lease_token: null,
+    last_error_code: 'WORKER_SHUTDOWN',
+  });
+  const restarted = new Mf06AssessmentWorker(db, leases(), workFor(f), options);
+  await delay(1100);
+  assert.equal(await restarted.runOnce(), 'COMPLETED');
+  assert.equal(await restarted.runOnce(), 'IDLE');
+  const [completed] = await db.query(
+    'SELECT j.status,count(a.assessment_id)::integer AS assessments FROM zone_entry_assessment_job j LEFT JOIN zone_entry_assessment a USING(request_id) WHERE j.request_id=$1 GROUP BY j.status',
+    [f.requestId],
+  );
+  assert.deepEqual(completed, { status: 'SUCCEEDED', assessments: 1 });
 });
