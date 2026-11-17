@@ -1,4 +1,8 @@
 import 'reflect-metadata';
+import { mkdtemp, readFile } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+import { provisionCameraWorker } from '../../src/scripts/provision-camera-worker.js';
 import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
 import { setTimeout as delay } from 'node:timers/promises';
@@ -7,6 +11,7 @@ import { createIsolatedTestDatabase } from '../support/isolated-test-database.js
 import { seedTrackedFrameFixture } from '../support/tracked-frame-fixture.js';
 import {
   provisionCameraWorkerGeneration,
+  renewCameraWorkerGeneration,
   revokeCameraWorkerGeneration,
 } from '../../src/modules/cameras/camera-worker-generations.js';
 import { PublicHttpException } from '../../src/common/http/public-http-exception.js';
@@ -60,14 +65,14 @@ test('conditional issuance serializes current ownership and revocation without b
       )[0].expired,
       true,
     );
-    const current = await provisionCameraWorkerGeneration(
+    const current = await renewCameraWorkerGeneration(
       db,
       camera,
       [camera],
       60000,
       undefined,
-      undefined,
       initial.workerGenerationId,
+      randomUUID(),
     );
     assert.notEqual(current.streamSessionId, initial.streamSessionId);
     const snapshot = () =>
@@ -205,6 +210,18 @@ test('conditional issuance serializes current ownership and revocation without b
       ),
       conflict,
     );
+    await assert.rejects(
+      renewCameraWorkerGeneration(
+        db,
+        f.cameraId,
+        [f.cameraId],
+        60000,
+        undefined,
+        f.generation.workerGenerationId,
+        randomUUID(),
+      ),
+      conflict,
+    );
     // Explicit trusted manual recovery stays distinct from automatic renewal.
     const recovered = await provisionCameraWorkerGeneration(
       db,
@@ -214,14 +231,14 @@ test('conditional issuance serializes current ownership and revocation without b
       undefined,
       transition,
     );
-    const retried = await provisionCameraWorkerGeneration(
+    const retried = await renewCameraWorkerGeneration(
       db,
       f.cameraId,
       [f.cameraId],
       60000,
       undefined,
-      undefined,
       recovered.workerGenerationId,
+      randomUUID(),
     );
     const receiptCommandId = randomUUID();
     await recordCameraConfigurationAcknowledgement(db, f.cameraId, retried.secret, {
@@ -246,15 +263,46 @@ test('conditional issuance serializes current ownership and revocation without b
       },
       retried.secret,
     );
-    const active = await provisionCameraWorkerGeneration(
-      db,
-      f.cameraId,
-      [f.cameraId],
-      60000,
-      undefined,
-      { ...transition, commandId: randomUUID(), expectedGenerationId: retried.workerGenerationId },
-      retried.workerGenerationId,
+    // Use the actual trusted operator composition and confirm it returns only committed metadata.
+    const directory = await mkdtemp(join(tmpdir(), 'supervisor-issuer-proof-'));
+    const output = join(directory, 'generation.json');
+    const connection = process.env.TEST_DATABASE_URL!;
+    const url = new URL(connection);
+    const active = await provisionCameraWorker(
+      [
+        '--camera-id',
+        f.cameraId,
+        '--lease-ms',
+        '60000',
+        '--output',
+        output,
+        '--database-identity',
+        url.hostname +
+          ':' +
+          (url.port || '5432') +
+          '/' +
+          decodeURIComponent(url.pathname.slice(1)) +
+          '/' +
+          db.driver.schema,
+        '--expected-current-generation',
+        retried.workerGenerationId,
+      ],
+      {
+        DATABASE_URL: connection,
+        DATABASE_SCHEMA: db.driver.schema,
+        AI_CONFIGURATION_CAMERA_IDS: f.cameraId,
+      },
+      randomUUID(),
     );
+    assert.deepEqual(
+      Object.keys(active).sort(),
+      ['cameraId', 'workerGenerationId', 'streamSessionId', 'expiresAt'].sort(),
+    );
+    const privateArtifact = JSON.parse(await readFile(output, 'utf8'));
+    assert.equal(privateArtifact.workerGenerationId, active.workerGenerationId);
+    assert.equal(privateArtifact.streamSessionId, active.streamSessionId);
+    assert.equal(typeof privateArtifact.secret, 'string');
+    assert.notEqual(active.workerGenerationId, retried.workerGenerationId);
 
     // Observe actual Camera lock contention, then commit revocation before the waiter can check ownership.
     const locker = db.createQueryRunner();
@@ -263,14 +311,14 @@ test('conditional issuance serializes current ownership and revocation without b
       await locker.connect();
       await locker.startTransaction();
       await locker.query('SELECT id FROM camera WHERE id=$1 FOR UPDATE', [f.cameraId]);
-      pending = provisionCameraWorkerGeneration(
+      pending = renewCameraWorkerGeneration(
         db,
         f.cameraId,
         [f.cameraId],
         60000,
         undefined,
-        undefined,
         active.workerGenerationId,
+        randomUUID(),
       ).then(
         () => ({ ok: true as const }),
         (error) => ({ ok: false as const, error }),

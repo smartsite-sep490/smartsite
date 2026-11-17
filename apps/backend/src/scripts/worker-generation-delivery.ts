@@ -102,11 +102,11 @@ export function parseWorkerGenerationArguments(args: string[]): {
   return { cameraId, leaseMs, output, databaseIdentity, ...condition };
 }
 
-export async function deliverWorkerGeneration(
+export async function deliverWorkerGeneration<T>(
   output: string,
   cameraId: string,
-  issue: (deliver: (credential: WorkerGenerationCredential) => Promise<void>) => Promise<unknown>,
-): Promise<void> {
+  issue: (deliver: (credential: WorkerGenerationCredential) => Promise<void>) => Promise<T>,
+): Promise<T> {
   if (!path.isAbsolute(output)) throw new Error('Absolute credential output required');
   const parent = path.dirname(path.resolve(output));
   const resolved = await realpath(parent);
@@ -126,7 +126,7 @@ export async function deliverWorkerGeneration(
   const file = await open(output, 'wx', 0o600);
   let delivered = false;
   try {
-    await issue(async (credential) => {
+    const result = await issue(async (credential) => {
       if (delivered) throw new Error('Credential delivery must occur once');
       delivered = true;
       await file.writeFile(
@@ -135,6 +135,7 @@ export async function deliverWorkerGeneration(
       await file.sync();
     });
     if (!delivered) throw new Error('Issuer did not deliver a credential');
+    return result;
   } finally {
     await file.close();
   }
