@@ -163,9 +163,9 @@ describe('FE-2 human PPE labels, compact Core/Experimental badges, and field-lin
 
     // One concise operational guidance note covering baseline vs experimental and camera confirmation
     const guidanceNote = screen.getByTestId('ppe-readiness-guidance');
-    expect(guidanceNote.textContent).toMatch(/Hard hat and safety vest are baseline checks/i);
-    expect(guidanceNote.textContent).toMatch(/gloves, boots, and goggles are experimental/i);
-    expect(guidanceNote.textContent).toMatch(/confirms the updated configuration/i);
+    expect(guidanceNote.textContent).toMatch(/Hard hat, vest: baseline/i);
+    expect(guidanceNote.textContent).toMatch(/gloves, boots, goggles: experimental/i);
+    expect(guidanceNote.textContent).toMatch(/Saved changes apply once camera confirms/i);
     expect(guidanceNote.textContent).not.toMatch(/Hold|model readiness claim/i);
 
     // Accessible descriptions bind each checkbox to its compact badge and the concise guidance note
@@ -190,9 +190,9 @@ describe('FE-2 human PPE labels, compact Core/Experimental badges, and field-lin
       expect(resolveDescribedByText(viHardHat)).toContain('Cơ bản');
       expect(resolveDescribedByText(viGloves)).toContain('Thử nghiệm');
       const viGuidance = screen.getByTestId('ppe-readiness-guidance');
-      expect(viGuidance.textContent).toMatch(/Mũ bảo hộ và áo phản quang là nhóm kiểm tra cơ bản/i);
-      expect(viGuidance.textContent).toMatch(/đang ở mức thử nghiệm/i);
-      expect(viGuidance.textContent).toMatch(/xác nhận áp dụng/i);
+      expect(viGuidance.textContent).toMatch(/Mũ, áo: cơ bản/i);
+      expect(viGuidance.textContent).toMatch(/găng, giày, kính: thử nghiệm/i);
+      expect(viGuidance.textContent).toMatch(/Bản đã lưu chỉ áp dụng sau khi camera xác nhận/i);
       expect(viGuidance.textContent).not.toMatch(/Tạm giữ/i);
     });
 
