@@ -141,15 +141,18 @@ test('Main tracked profile upgrades and rolls back a populated event-local schem
       fresh = await openProfile('fresh-bootstrap');
       await fresh.initialize();
       const applied = await fresh.runMigrations();
+      const firstProfileIndex = applied.findIndex(({ name }) => name === migrations[0]);
+      assert.ok(firstProfileIndex >= 0);
       assert.deepEqual(
-        applied.slice(-migrations.length).map(({ name }) => name),
+        applied.filter(({ name }) => migrations.includes(name)).map(({ name }) => name),
         migrations,
       );
-      for (let index = 0; index < migrations.length; index++) await fresh.undoLastMigration();
+      for (let index = firstProfileIndex; index < applied.length; index++)
+        await fresh.undoLastMigration();
       const remaining = await fresh.query('SELECT name FROM migrations ORDER BY id');
       assert.deepEqual(
         remaining.map((row: { name: string }) => row.name),
-        applied.slice(0, -migrations.length).map(({ name }) => name),
+        applied.slice(0, firstProfileIndex).map(({ name }) => name),
       );
       assert.equal(
         (
