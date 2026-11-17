@@ -10,6 +10,9 @@ import { resolveTestDatabaseUrl } from '../support/test-environment.js';
 const authorityMigrations = [
   'InstallAuthorityJournal1795046400012',
   'InstallAuthorityCutover1795046400013',
+  'ExactMf06AuthorityTime1795046400014',
+  'Mf06RetrospectiveBinding1795046400015',
+  'Mf06RetrospectiveResult1795046400016',
 ];
 
 for (const upgrade of [false, true]) {
@@ -41,7 +44,10 @@ for (const upgrade of [false, true]) {
       assert.ok(before.some((row) => row.name === 'LeaveNotice1795046400000'));
       const source = await open('tracked-v17-identification-ppe-authority');
       const applied = (await source.runMigrations()).map((row) => row.name);
-      assert.deepEqual(upgrade ? applied : applied.slice(-2), authorityMigrations);
+      assert.deepEqual(
+        upgrade ? applied : applied.slice(-authorityMigrations.length),
+        authorityMigrations,
+      );
       assert.deepEqual(await source.runMigrations(), []);
       const after = await db.query('SELECT timestamp,name FROM migrations ORDER BY id');
       assert.deepEqual(after.slice(0, before.length), before);

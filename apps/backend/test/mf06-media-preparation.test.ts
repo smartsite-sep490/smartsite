@@ -158,6 +158,7 @@ function makeMatchedClaimContext(
     contextDigest: inspected.contextDigest,
     claimContextDigest,
     subject: inspected.subject,
+    authorityCapturedAt: null,
     frameReference: selectMf06FrameReference(rawPayload, inspected.request),
   });
 }

@@ -1,3 +1,4 @@
+import { Mf06IngestionEnqueueService } from '../../src/modules/safety/assessments/mf06-ingestion-enqueue.service.js';
 import 'reflect-metadata';
 import assert from 'node:assert/strict';
 import { createHash, randomUUID } from 'node:crypto';
@@ -236,6 +237,7 @@ test('C02 storage retains subject scope, versioned responses and append-only com
       new StorageService(createTestConfig()),
       new TrackedEpisodeFrameQuery(db, new UserAuthGuard(auth), ''),
       new SafetyAlertEvidenceService(db, createTestConfig()),
+      new Mf06IngestionEnqueueService(db, createTestConfig()),
     );
     const input = {
       commandId: randomUUID(),

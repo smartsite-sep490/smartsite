@@ -1,3 +1,4 @@
+import { Mf06AssessmentWorkerRuntime } from './assessments/mf06-assessment-worker-runtime.service.js';
 import { SafetyChecklistService } from './safety-checklist.service.js';
 import { SafetyIdentificationController } from './identification/safety-identification.controller.js';
 import { SafetyIdentificationService } from './identification/safety-identification.service.js';
@@ -69,6 +70,7 @@ import { ZoneAccessManagementService } from '../zones/zone-access-management.ser
     SafetyWorkflowController,
   ],
   providers: [
+    Mf06AssessmentWorkerRuntime,
     SafetyIdentificationService,
     SafetyIdentificationRuntime,
     SafetyIdentificationEnabledGuard,
