@@ -307,3 +307,48 @@ test('6. accessor properties on raw nested FRAME uri or expected.payloadHash are
   );
   assert.equal(getterCalls, 0);
 });
+
+test('v1.7 Zone evidence preserves the uint64 frame sequence and binds the original event', () => {
+  const sequenceNumber = '9007199254740993';
+  const { raw, expected } = makeFixture({
+    schemaVersion: '1.7.0',
+    framePartition: { frameId: OTHER_EVENT_ID, sequenceNumber, partIndex: 0, partCount: 1 },
+    observations: [
+      makeFixture().raw.observations[0],
+      {
+        type: 'ZONE_ENTRY',
+        trackId: 7,
+        regionId: REGION_ID,
+        geometryVersion: 3,
+        entryOrigin: 'INSIDE_ENTRY_UNOBSERVED',
+      },
+    ],
+    continuity: {
+      schemaVersion: '1.0.0',
+      profileSha256: FRAME_SHA,
+      coverage: { status: 'COMPLETE' },
+      subjects: [
+        {
+          personObservationIndex: 0,
+          segmentId: OTHER_SESSION_ID,
+          link: { kind: 'START', reason: 'INITIAL' },
+        },
+      ],
+      retiredSegments: [],
+    },
+    evidence: [{ kind: 'FRAME', uri: makeFrameUri(SESSION_ID, sequenceNumber), sha256: FRAME_SHA }],
+  });
+  const reference = selectMf06FrameReference(raw, expected);
+  assert.ok(reference);
+  assert.equal(reference.sequenceNumber, sequenceNumber);
+  assert.equal(reference.sha256, FRAME_SHA);
+  const [frameEvidence] = raw.evidence;
+  assert.ok(frameEvidence);
+  frameEvidence.sha256 = ALT_SHA;
+  assert.equal(selectMf06FrameReference(raw, expected), null);
+  frameEvidence.uri = makeFrameUri(SESSION_ID, Number(sequenceNumber));
+  assert.equal(
+    selectMf06FrameReference(raw, { ...expected, payloadHash: computeCanonicalPayloadHash(raw) }),
+    null,
+  );
+});
