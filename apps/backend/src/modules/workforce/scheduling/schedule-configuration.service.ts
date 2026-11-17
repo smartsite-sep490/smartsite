@@ -24,6 +24,7 @@ import { ContractorEntity } from '../../../database/entities/contractor.entity.j
 import { ContractorSiteParticipationEntity } from '../../../database/entities/contractor-site-participation.entity.js';
 import { AuthenticatedUser } from '../../auth/auth.service.js';
 import { page } from '../../../common/configuration/commands.js';
+import { allocateScheduleVersion } from './schedule-version-allocation.js';
 import { hasActiveContractorParticipation } from '../shared/contractor-participation.js';
 import {
   CreateScheduleVersionDto,
@@ -344,21 +345,14 @@ export class ScheduleConfigurationService {
     return this.dataSource.transaction(async (manager) => {
       const site = await manager.getRepository(SiteEntity).findOneBy({ id: scopedSiteId });
       if (!site) missing();
-      const latest = await manager
-        .getRepository(ScheduleVersionEntity)
-        .createQueryBuilder('scheduleVersion')
-        .setLock('pessimistic_write')
-        .where('scheduleVersion.site_id = :siteId', { siteId: scopedSiteId })
-        .orderBy('scheduleVersion.version', 'DESC')
-        .getOne();
       try {
-        return await manager.getRepository(ScheduleVersionEntity).save({
-          id: randomUUID(),
-          siteId: scopedSiteId,
-          version: (latest?.version ?? 0) + 1,
+        return await allocateScheduleVersion(
+          manager,
+          scopedSiteId,
           effectiveFrom,
           effectiveUntil,
-        });
+          false,
+        );
       } catch (error) {
         knownUnique(error, ['uq_schedule_version_site_version']);
       }

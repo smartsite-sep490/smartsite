@@ -11,6 +11,7 @@ import { healthCertificateExpiry } from '@smartsite/api-client';
 import { translate as tr } from '../../../i18n';
 import { userErrorMessage } from '../../../i18n/messages';
 import { DocumentMediaPicker } from './DocumentMediaPicker';
+import { SmartDatePicker } from '../../ui';
 import { DocumentIdentityNotice } from './DocumentIdentityNotice';
 import {
   WorkerCertificateSubmission,
@@ -73,23 +74,14 @@ export function DocumentFileInputs({
             key={kind}
             className="space-y-3 rounded-2xl border border-slate-200/90 bg-white p-4 shadow-2xs"
           >
-            <label className="block text-xs font-bold text-slate-700 space-y-1">
-              <span>
-                {tr(`documents.${kind}`)} -{' '}
-                {tr(
-                  kind === 'HEALTH_CERTIFICATE'
-                    ? 'documents.submittedIssuedOn'
-                    : 'documents.submittedExpiresOn',
-                )}
-              </span>
-              <input
-                className={fieldClass}
-                type="date"
+            <fieldset disabled={disabled}>
+              <SmartDatePicker
+                label={`${tr(`documents.${kind}`)} - ${tr(kind === 'HEALTH_CERTIFICATE' ? 'documents.submittedIssuedOn' : 'documents.submittedExpiresOn')}`}
                 value={expiries[kind] ?? ''}
-                disabled={disabled}
-                onChange={(event) => onExpiryChange(kind, event.target.value)}
+                disablePast={false}
+                onChange={(value) => onExpiryChange(kind, value)}
               />
-            </label>
+            </fieldset>
             {kind === 'HEALTH_CERTIFICATE' && (
               <p className="text-xs text-slate-500">
                 {tr('documents.healthExpiryRule')}{' '}
@@ -892,15 +884,13 @@ function SubmittedExpiryEditor({
       disabled={disabled}
       className="space-y-2 rounded-xl border border-orange-200/80 bg-orange-50/30 p-3.5"
     >
-      <label className="block text-xs font-bold text-slate-700 space-y-1">
-        <span>{tr(health ? 'documents.submittedIssuedOn' : 'documents.submittedExpiresOn')}</span>
-        <input
-          className={fieldClass}
-          type="date"
-          value={value}
-          onChange={(event) => setValue(event.target.value)}
-        />
-      </label>
+      <SmartDatePicker
+        label={tr(health ? 'documents.submittedIssuedOn' : 'documents.submittedExpiresOn')}
+        value={value}
+        disablePast={false}
+        clearable
+        onChange={setValue}
+      />
       <p className="text-[11px] text-slate-500">
         {tr(health ? 'documents.healthExpiryRule' : 'documents.submittedExpiryHint')}{' '}
         {health ? (healthCertificateExpiry(value) ?? '') : ''}
@@ -946,31 +936,35 @@ function ReviewDocument({
       </div>
 
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-        <label className="block text-xs font-bold text-slate-700 space-y-1">
-          <span>{tr('documents.issuedOn')}</span>
-          <input
-            className={fieldClass}
-            type="date"
-            value={issuedOn}
-            onChange={(e) => {
-              setIssuedOn(e.target.value);
-              setConfirmed(false);
-            }}
-          />
-        </label>
-        <label className="block text-xs font-bold text-slate-700 space-y-1">
-          <span>{tr('documents.expiresOn')}</span>
-          <input
-            className={fieldClass}
-            type="date"
+        <SmartDatePicker
+          label={tr('documents.issuedOn')}
+          value={issuedOn}
+          disablePast={false}
+          onChange={(value) => {
+            setIssuedOn(value);
+            setConfirmed(false);
+          }}
+        />
+        {health ? (
+          <div className="space-y-1.5">
+            <span className="block text-[10px] font-bold uppercase tracking-wider text-slate-500">
+              {tr('documents.expiresOn')}
+            </span>
+            <output aria-label={tr('documents.expiresOn')} className={fieldClass}>
+              {expiresOn ? expiresOn.split('-').reverse().join('/') : '—'}
+            </output>
+          </div>
+        ) : (
+          <SmartDatePicker
+            label={tr('documents.expiresOn')}
             value={expiresOn}
-            readOnly={health}
-            onChange={(e) => {
-              setExpiresOn(e.target.value);
+            disablePast={false}
+            onChange={(value) => {
+              setExpiresOn(value);
               setConfirmed(false);
             }}
           />
-        </label>
+        )}
       </div>
 
       {health && <p className="text-xs font-normal">{tr('documents.healthExpiryRule')}</p>}

@@ -12,6 +12,7 @@ import {
 import { translate as tr } from '../../../i18n';
 import { userErrorMessage } from '../../../i18n/messages';
 import { DocumentMediaPicker } from './DocumentMediaPicker';
+import { SmartDatePicker } from '../../ui';
 
 export function WorkerDocumentDateNotice({ check }: { check: WorkerDocumentDateCheck }) {
   useTranslation();
@@ -93,23 +94,18 @@ export function WorkerCertificateSubmission({
   return (
     <div className="mt-4 space-y-3 rounded-2xl border border-slate-200 bg-slate-50 p-4">
       <p className="text-xs font-bold">{tr('documents.ocrDateHint')}</p>
-      <label className="block space-y-1 text-xs font-semibold">
-        <span>
-          {tr(`documents.${kind}`)} -{' '}
-          {tr(health ? 'documents.declaredIssuedOn' : 'documents.declaredExpiresOn')}
-        </span>
-        <input
-          type="date"
-          required={requireDate}
+      <fieldset disabled={busy}>
+        <SmartDatePicker
+          label={`${tr(`documents.${kind}`)} - ${tr(health ? 'documents.declaredIssuedOn' : 'documents.declaredExpiresOn')}`}
+          fieldRequired={requireDate}
           value={date}
-          disabled={busy}
-          onChange={(e) => {
-            setDate(e.target.value);
-            setDateEdited(!!e.target.value);
+          disablePast={false}
+          onChange={(value) => {
+            setDate(value);
+            setDateEdited(!!value);
           }}
-          className="block w-full rounded-xl border border-slate-200 bg-white px-3 py-2"
         />
-      </label>
+      </fieldset>
       {health && (
         <p className="text-xs text-slate-600">
           {tr('documents.healthExpiryRule')}{' '}

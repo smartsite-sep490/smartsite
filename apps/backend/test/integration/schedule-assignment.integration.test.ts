@@ -164,6 +164,21 @@ test('team assignments: scope, finite recurrence, stale preview, concurrent retr
         shiftId,
       })),
     );
+    const automaticInput = {
+      contractorId,
+      shiftId,
+      target: 'WORKER' as const,
+      workerId: workerIds[0]!,
+      mode: 'DAY' as const,
+      fromDate: '2031-01-06',
+      toDate: '2031-01-06',
+      weekdays: [1],
+    };
+    const versions = source.getRepository(ScheduleVersionEntity);
+    const firstAutomaticPreview = await service.preview(rep, siteId, automaticInput);
+    assert.equal(firstAutomaticPreview.assignmentCount, 1);
+    assert.equal(await versions.countBy({ siteId }), 0, 'preview must not create a version');
+
     await source.getRepository(ScheduleVersionEntity).save({
       id: versionId,
       siteId,
@@ -688,6 +703,60 @@ test('team assignments: scope, finite recurrence, stale preview, concurrent retr
     );
     assert.equal((await notifications.list(workerActor)).total, 0);
     await source.getRepository(UserEntity).update(workerActor.id, { isActive: true });
+    const automaticSchedules = source.getRepository(WorkerScheduleEntity);
+    const previews = [
+      firstAutomaticPreview,
+      await service.preview(rep, siteId, { ...automaticInput, workerId: workerIds[1]! }),
+    ];
+    const commands = previews.map((preview, i) => ({
+      ...automaticInput,
+      workerId: workerIds[i]!,
+      requestId: randomUUID(),
+      expectedFingerprint: preview.fingerprint,
+    }));
+    const automaticBatches = await Promise.all(
+      commands.map((command) => service.create(rep, siteId, command)),
+    );
+    assert.equal((await service.create(rep, siteId, commands[0]!)).id, automaticBatches[0]!.id);
+    const assigned = await automaticSchedules.findBy({ siteId, workDate: automaticInput.fromDate });
+    assert.equal(assigned.length, 2);
+    assert.equal(new Set(assigned.map((schedule) => schedule.scheduleVersionId)).size, 1);
+    assert.notEqual(assigned[0]!.scheduleVersionId, versionId);
+    assert.equal(await versions.countBy({ siteId }), 2);
+    assert.equal(
+      (await automaticSchedules.findOneByOrFail({ id: protectedRow.id })).scheduleVersionId,
+      versionId,
+    );
+    assert.equal((await service.preview(rep, siteId, automaticInput)).conflicts.length, 1);
+    const legacyConflict = await service.preview(rep, siteId, {
+      ...automaticInput,
+      workerId: single.workerId!,
+      fromDate: single.fromDate,
+      toDate: single.toDate,
+    });
+    assert.equal(legacyConflict.conflicts.length, 1);
+    assert.equal(
+      (await automaticSchedules.findOneByOrFail({ id: legacyConflict.conflicts[0]!.scheduleId }))
+        .scheduleVersionId,
+      versionId,
+    );
+
+    await service.change(rep, siteId, automaticBatches[0]!.id, {
+      requestId: randomUUID(),
+      expectedVersion: 1,
+      action: 'CANCEL',
+      scope: 'DAY',
+      workDate: automaticInput.fromDate,
+      reason: 'Synthetic cancellation',
+    });
+    const cancelledConflict = await service.preview(rep, siteId, automaticInput);
+    assert.equal(cancelledConflict.conflicts.length, 1);
+    assert.equal(
+      (await automaticSchedules.findOneByOrFail({ id: cancelledConflict.conflicts[0]!.scheduleId }))
+        .isActive,
+      false,
+    );
+
     await source.getRepository(UserRoleAssignmentEntity).delete({ userId: repId });
     await assert.rejects(service.list(rep, siteId, contractorId));
   } finally {

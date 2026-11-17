@@ -1,13 +1,6 @@
 import { localizeMessage } from '../../i18n/messages';
 import { vi, enUS } from 'date-fns/locale';
 import { uiLanguage } from '../../i18n';
-/* eslint-disable react-refresh/only-export-components */
-/**
- * SmartFormControls — Premium form primitives for SmartSite
- * Built on Radix UI Popover + react-day-picker + date-fns
- * Design language: Soft Structuralism, #071A2B palette
- */
-
 import { translate as tr } from '../../i18n';
 import { useTranslation } from 'react-i18next';
 import React, { useState, useId } from 'react';
@@ -45,14 +38,28 @@ const FIELD_BASE =
   'w-full px-4 py-3 rounded-2xl border border-slate-200 bg-slate-50 text-sm font-semibold text-[#071A2B] placeholder-slate-400 outline-none transition-all duration-300 hover:border-slate-300 focus:border-[#071A2B] focus:bg-white focus:ring-4 focus:ring-[#071A2B]/5 shadow-sm';
 
 // ── SmartInput ────────────────────────────────────────────────────────────────
-export interface SmartInputProps extends React.InputHTMLAttributes<HTMLInputElement> {
+export interface SmartInputProps
+  extends Omit<React.InputHTMLAttributes<HTMLInputElement>, 'size'> {
   label?: string;
   fieldRequired?: boolean;
   error?: string;
+  size?: 'sm' | 'md';
 }
 
 export const SmartInput = React.forwardRef<HTMLInputElement, SmartInputProps>(
-  ({ label, fieldRequired, error, className = '', id: propId, type, ...props }, ref) => {
+  (
+    {
+      label,
+      fieldRequired,
+      error,
+      className = '',
+      id: propId,
+      type,
+      size = 'md',
+      ...props
+    },
+    ref,
+  ) => {
     useTranslation();
 
     const fallbackId = useId();
@@ -60,6 +67,13 @@ export const SmartInput = React.forwardRef<HTMLInputElement, SmartInputProps>(
     const [showPassword, setShowPassword] = useState(false);
     const isPassword = type === 'password';
     const inputType = isPassword ? (showPassword ? 'text' : 'password') : type;
+
+    const baseClasses =
+      size === 'sm'
+        ? `w-full h-[34px] px-3 py-1.5 rounded-xl border border-slate-200 bg-white text-xs font-semibold text-slate-800 placeholder-slate-400 outline-none transition-all duration-200 ease-out hover:border-slate-300 focus:border-[#F66B17] focus:ring-2 focus:ring-[#F66B17]/10 shadow-xs leading-tight ${
+            isPassword ? 'pr-8' : ''
+          }`
+        : `${FIELD_BASE} ${isPassword ? 'pr-10' : ''}`;
 
     return (
       <div className="space-y-1.5">
@@ -77,7 +91,7 @@ export const SmartInput = React.forwardRef<HTMLInputElement, SmartInputProps>(
             id={id}
             ref={ref}
             type={inputType}
-            className={`${FIELD_BASE} ${isPassword ? 'pr-10' : ''} ${error ? 'border-red-300 focus:border-red-400 focus:ring-red-100' : ''} ${className}`}
+            className={`${baseClasses} ${error ? 'border-red-300 focus:border-red-400 focus:ring-red-100' : ''} ${className}`}
             {...props}
           />
           {isPassword && (
@@ -199,7 +213,7 @@ export function SmartSelect({
 
   const triggerClasses =
     size === 'sm'
-      ? `w-full px-3 py-1.5 rounded-xl border border-slate-200 bg-white text-xs font-bold text-slate-800 outline-none transition-all duration-200 ease-out hover:border-slate-300 focus:border-[#F66B17] focus:ring-2 focus:ring-[#F66B17]/10 shadow-xs flex items-center justify-between cursor-pointer gap-2 ${
+      ? `w-full h-[34px] px-3 py-1.5 rounded-xl border border-slate-200 bg-white text-xs font-bold text-slate-800 outline-none transition-all duration-200 ease-out hover:border-slate-300 focus:border-[#F66B17] focus:ring-2 focus:ring-[#F66B17]/10 shadow-xs flex items-center justify-between cursor-pointer gap-2 ${
           error ? 'border-red-300 focus:border-red-400 focus:ring-red-100' : ''
         } ${!selectedOption && !placeholder ? 'text-[#94A3B8] font-normal' : ''} ${
           disabled ? 'opacity-50 cursor-not-allowed' : ''
@@ -650,6 +664,9 @@ export function SmartDatePicker({
                 locale={uiLanguage() === 'vi' ? vi : enUS}
                 labels={calendarLabels()}
                 mode="single"
+                captionLayout="dropdown"
+                startMonth={new Date(today.getFullYear() - 100, 0, 1)}
+                endMonth={new Date(today.getFullYear() + 30, 11, 1)}
                 fixedWeeks
                 showOutsideDays
                 selected={validDate}
@@ -674,7 +691,7 @@ export function SmartDatePicker({
 
 // ── SmartDateTimePicker ───────────────────────────────────────────────────────
 // ── Time Helpers for Shadcn Luxury Time Selector ──────────────────────────────
-export function parseHHMM(timeStr: string) {
+function parseHHMM(timeStr: string) {
   const defaultRes = { hour12: 8, minute: 0, period: 'AM' as const };
   if (!timeStr) return defaultRes;
   const parts = timeStr.split(':');
@@ -691,7 +708,7 @@ export function parseHHMM(timeStr: string) {
   return { hour12, minute: mm, period };
 }
 
-export function format24h(hour12: number, minute: number, period: 'AM' | 'PM') {
+function format24h(hour12: number, minute: number, period: 'AM' | 'PM') {
   let hh = hour12;
   if (period === 'PM' && hour12 < 12) {
     hh = hour12 + 12;
@@ -703,7 +720,7 @@ export function format24h(hour12: number, minute: number, period: 'AM' | 'PM') {
   return `${hhStr}:${mmStr}`;
 }
 
-export function formatDisplayTime(timeStr: string) {
+function formatDisplayTime(timeStr: string) {
   const { hour12, minute, period } = parseHHMM(timeStr);
   const hStr = String(hour12).padStart(2, '0');
   const mStr = String(minute).padStart(2, '0');

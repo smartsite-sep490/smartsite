@@ -36,6 +36,10 @@ import { hasActiveContractorParticipation } from '../shared/contractor-participa
 import { auditAccess } from '../shared/access-audit.js';
 import { scheduledShiftWindow } from '../attendance/attendance-calculation.js';
 import { assignmentDates } from './schedule-assignment-dates.js';
+import {
+  allocateScheduleVersion,
+  automaticScheduleVersionStart,
+} from './schedule-version-allocation.js';
 import { SchedulingNotificationService } from '../notifications/scheduling-notification.service.js';
 import {
   ChangeScheduleAssignmentDto,
@@ -57,7 +61,7 @@ const hash = (value: unknown) =>
 function normalized(input: ScheduleAssignmentInput): ScheduleAssignmentInput {
   return {
     contractorId: input.contractorId,
-    scheduleVersionId: input.scheduleVersionId,
+    ...(input.scheduleVersionId ? { scheduleVersionId: input.scheduleVersionId } : {}),
     shiftId: input.shiftId,
     target: input.target,
     ...(input.teamId ? { teamId: input.teamId } : {}),
@@ -120,18 +124,21 @@ export class ScheduleAssignmentService {
     siteId: string,
     input: ScheduleAssignmentInput,
     lock: boolean,
-  ): Promise<{ preview: ScheduleAssignmentPreview; shift: ShiftEntity }> {
+  ): Promise<{ preview: ScheduleAssignmentPreview; version: ScheduleVersionEntity | null }> {
     await this.scope(m, actor, siteId, input.contractorId);
     const dates = assignmentDates(input);
-    const version = await m.getRepository(ScheduleVersionEntity).findOne({
-      where: { id: input.scheduleVersionId, siteId },
-      ...(lock ? { lock: { mode: 'pessimistic_read' as const } } : {}),
-    });
+    const versions = m.getRepository(ScheduleVersionEntity);
+    const explicitVersion = input.scheduleVersionId
+      ? await versions.findOne({
+          where: { id: input.scheduleVersionId, siteId },
+          ...(lock ? { lock: { mode: 'pessimistic_read' as const } } : {}),
+        })
+      : null;
     const shift = await m.getRepository(ShiftEntity).findOne({
       where: { id: input.shiftId, siteId },
       ...(lock ? { lock: { mode: 'pessimistic_read' as const } } : {}),
     });
-    if (!version || !shift) missing();
+    if ((input.scheduleVersionId && !explicitVersion) || !shift) missing();
     if (shift.archivedAt) conflict('Archived shifts cannot receive assignments');
     if (
       !(await m
@@ -193,8 +200,10 @@ export class ScheduleAssignmentService {
     if (input.target === 'WORKER') targetName = workers[0]!.displayName;
     for (const date of dates) {
       if (
-        date < version.effectiveFrom.toISOString().slice(0, 10) ||
-        (version.effectiveUntil && date >= version.effectiveUntil.toISOString().slice(0, 10))
+        explicitVersion &&
+        (date < explicitVersion.effectiveFrom.toISOString().slice(0, 10) ||
+          (explicitVersion.effectiveUntil &&
+            date >= explicitVersion.effectiveUntil.toISOString().slice(0, 10)))
       )
         conflict('Work date is outside the schedule version effective period');
       if (scheduledShiftWindow(shift, date).endsAt <= new Date())
@@ -205,13 +214,16 @@ export class ScheduleAssignmentService {
         'SELECT pg_advisory_xact_lock(hashtext(key)) FROM unnest($1::text[]) AS keys(key) ORDER BY key',
         [workers.flatMap((worker) => dates.map((date) => `${siteId}${worker.id}${date}`))],
       );
+    // Read after the worker/day locks so a concurrent first assignment and
+    // cancellation cannot hide a historical row under the new version.
+    const version = explicitVersion ?? (await versions.findOneBy({ siteId, isAutomatic: true }));
     const schedules = await m.getRepository(WorkerScheduleEntity).find({
       where: { siteId, workerId: In(workers.map((worker) => worker.id)), workDate: In(dates) },
       order: { id: 'ASC' },
     });
     // Inactive rows also retain the version/worker/shift/date unique key.
     const conflicts = schedules
-      .filter((s) => s.isActive || (s.scheduleVersionId === version.id && s.shiftId === shift.id))
+      .filter((s) => s.isActive || (s.scheduleVersionId === version?.id && s.shiftId === shift.id))
       .map((s) => ({
         workerId: s.workerId,
         workerName: workers.find((w) => w.id === s.workerId)!.displayName,
@@ -237,11 +249,14 @@ export class ScheduleAssignmentService {
       members,
       dates,
       conflicts,
-      version: [version.effectiveFrom, version.effectiveUntil],
+      // Provisioning the automatic version must not invalidate another valid preview.
+      version: explicitVersion
+        ? [explicitVersion.effectiveFrom, explicitVersion.effectiveUntil]
+        : [automaticScheduleVersionStart, null],
       shift: [shift.startsAt, shift.endsAt, shift.timezone, shift.breakStartsAt, shift.breakEndsAt],
     });
     return {
-      shift,
+      version,
       preview: {
         fingerprint,
         targetName,
@@ -282,17 +297,26 @@ export class ScheduleAssignmentService {
           conflict('Request ID was used for different assignment details');
         return this.view(existing);
       }
-      const { preview } = await this.resolve(m, actor, siteId, selected, true);
+      const { preview, version } = await this.resolve(m, actor, siteId, selected, true);
       if (preview.fingerprint !== value.expectedFingerprint)
         conflict('Assignment preview changed. Preview again before saving');
       if (preview.conflicts.length)
         conflict('Existing schedules conflict. No assignments were saved');
+      const resolvedVersion =
+        version ??
+        (await allocateScheduleVersion(
+          m,
+          siteId,
+          new Date(automaticScheduleVersionStart),
+          null,
+          true,
+        ));
       const rows = preview.members.flatMap((member) =>
         preview.dates.map((workDate) => ({
           id: randomUUID(),
           siteId,
           workerId: member.workerId,
-          scheduleVersionId: selected.scheduleVersionId,
+          scheduleVersionId: resolvedVersion.id,
           shiftId: selected.shiftId,
           workDate,
           isActive: true,

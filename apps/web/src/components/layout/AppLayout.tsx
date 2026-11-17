@@ -110,7 +110,6 @@ export function AppLayout({ currentTab: propCurrentTab, onSelectTab, children }:
       items: [
         { id: 'dashboard', label: t('shell.dashboard'), icon: IconDashboard },
         { id: 'contractor-teams', label: t('shell.contractorTeams'), icon: IconUsers },
-        { id: 'assigned-work', label: t('shell.assignedWork'), icon: IconUsers },
         { id: 'worker-onboarding', label: t('shell.workerOnboarding'), icon: IconUsers },
         { id: 'worker-documents', label: t('documents.title'), icon: IconUsers },
         {
@@ -167,7 +166,9 @@ export function AppLayout({ currentTab: propCurrentTab, onSelectTab, children }:
       ? t('auth.password.title')
       : activeTab === 'dashboard' && roles.includes('SITE_MANAGER')
         ? t('common.site_management_overview')
-        : (currentItem?.label ?? '');
+        : activeTab === 'assigned-work' && allowedTabs.includes('assigned-work')
+          ? t('shell.assignedWork')
+          : (currentItem?.label ?? '');
   const functionLabel =
     activeTab === 'workforce' && (workforceTabs.showReview || workforceTabs.showSchedule)
       ? t(workforceTab === 'review' ? 'shell.contractorReview' : 'app_layout.my_schedule_requests')
@@ -395,6 +396,7 @@ export function AppLayout({ currentTab: propCurrentTab, onSelectTab, children }:
             {!mainSafetyUi && <LanguageSwitcher />}
             {mainSafetyUi && <LanguageSwitcher />}
             <NotificationBell
+              showApprovalToast={roles.includes('WORKER')}
               assignedWork={
                 allowedTabs.includes('assigned-work') && !allowedTabs.includes('incidents')
               }

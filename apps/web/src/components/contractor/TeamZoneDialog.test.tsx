@@ -48,8 +48,10 @@ it('loads only granted Zones, formats dates and retains request ID through faile
     .mockRejectedValueOnce(new Error('Connection unavailable'))
     .mockResolvedValue({ id: 'permission' });
   const user = mount();
-  await screen.findByLabelText('Granted Zone');
-  await user.selectOptions(screen.getByLabelText('Granted Zone'), 'parent');
+  const zone = await screen.findByLabelText(/Granted Zone/);
+  expect(zone.tagName).toBe('BUTTON');
+  await user.click(zone);
+  await user.click(screen.getByRole('button', { name: /Gạch.*12.*13/ }));
   expect(screen.getByLabelText('Start date').textContent).toContain('12/10/2026');
   expect(screen.getByLabelText('End date').textContent).toContain('13/10/2026');
   await user.click(screen.getByRole('button', { name: 'Assign Team Zone' }));
@@ -89,7 +91,7 @@ it('edits the assigned Zone with prefilled dates instead of posting another assi
   const user = mount();
   await screen.findByRole('button', { name: 'Save Zone Changes' });
   expect(screen.queryByRole('button', { name: 'Assign Team Zone' })).toBeNull();
-  expect((screen.getByLabelText('Granted Zone') as HTMLSelectElement).value).toBe('parent');
+  expect(screen.getByLabelText(/Granted Zone/).textContent).toContain('Gạch');
   await user.click(screen.getByRole('button', { name: 'Save Zone Changes' }));
   await waitFor(() => expect(edit).toHaveBeenCalled());
   expect(edit.mock.calls[0]!.slice(0, 5)).toEqual([

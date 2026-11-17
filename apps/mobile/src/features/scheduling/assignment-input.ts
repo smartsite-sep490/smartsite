@@ -8,13 +8,3 @@ export function assignmentEndDate(mode: 'DAY' | 'WEEK' | 'REPEAT', from: string,
       : '';
   return to;
 }
-
-export function matchingVersions<
-  T extends { effectiveFrom: string; effectiveUntil: string | null },
->(versions: T[], from: string, to: string): T[] {
-  return versions.filter(
-    (v) =>
-      v.effectiveFrom.slice(0, 10) <= from &&
-      (!v.effectiveUntil || v.effectiveUntil.slice(0, 10) > to),
-  );
-}

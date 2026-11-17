@@ -2323,6 +2323,7 @@
   "common.week_starting_monday": "Week starting Monday",
   "common.select_a_monday": "Select a Monday",
   "schedule_assignment_form.week_ends_on_sunday_value": "Week ends on Sunday, {{value1}}.",
+  "schedule_assignment_form.end_date_before_start": "End date must be on or after start date.",
   "schedule_assignment_form.select_a_monday_to_continue": "Select a Monday to continue.",
   "common.working_days": "Working days",
   "common.preview_assignments": "Preview assignments",

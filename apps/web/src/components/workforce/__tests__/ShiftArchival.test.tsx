@@ -44,7 +44,6 @@ beforeEach(() => {
   });
   for (const method of [
     'listContractors',
-    'listScheduleVersions',
     'listWorkers',
     'listWorkerSchedules',
     'listShiftContractorAssignments',

@@ -5,7 +5,7 @@ import { translate as tr } from '../../i18n';
 import { useTranslation } from 'react-i18next';
 import { useRef, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { Dialog, SmartDatePicker } from '../ui';
+import { Dialog, SmartDatePicker, SmartSelect } from '../ui';
 export function TeamZoneDialog({
   apiUrl,
   token,
@@ -121,30 +121,23 @@ export function TeamZoneDialog({
                   grant.mutate();
                 }}
               >
-                <label className="grid gap-2 text-sm font-semibold">
-                  {tr('common.granted_zone')}
-                  <select
-                    required
-                    value={permissionId}
-                    onChange={(e) => {
-                      const p = data.data.availableZones.find(
-                        (p) => p.permissionId === e.target.value,
-                      );
-                      setPermissionId(e.target.value);
-                      setStart(p ? day(p.validFrom) : '');
-                      setEnd(p ? day(new Date(+new Date(p.validUntil) - 1).toISOString()) : '');
-                    }}
-                    className="rounded-xl border border-slate-200 p-2"
-                  >
-                    <option value="">{tr('common.select_zone')}</option>
-                    {data.data.availableZones.map((p) => (
-                      <option key={p.permissionId} value={p.permissionId}>
-                        {p.name} · {display(p.validFrom)} –{' '}
-                        {display(new Date(+new Date(p.validUntil) - 1).toISOString())}
-                      </option>
-                    ))}
-                  </select>
-                </label>
+                <SmartSelect
+                  label={tr('common.granted_zone')}
+                  fieldRequired
+                  value={permissionId}
+                  placeholder={tr('common.select_zone')}
+                  searchable
+                  options={data.data.availableZones.map((p) => ({
+                    value: p.permissionId,
+                    label: `${p.name} · ${display(p.validFrom)} – ${display(new Date(+new Date(p.validUntil) - 1).toISOString())}`,
+                  }))}
+                  onChange={(value) => {
+                    const p = data.data.availableZones.find((p) => p.permissionId === value);
+                    setPermissionId(value);
+                    setStart(p ? day(p.validFrom) : '');
+                    setEnd(p ? day(new Date(+new Date(p.validUntil) - 1).toISOString()) : '');
+                  }}
+                />
                 <SmartDatePicker
                   label={tr('common.start_date')}
                   value={start}

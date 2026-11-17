@@ -1,6 +1,7 @@
 export interface ScheduleAssignmentInput {
   contractorId: string;
-  scheduleVersionId: string;
+  /** Older clients may select an explicit version. Omit to let the server assign one. */
+  scheduleVersionId?: string;
   shiftId: string;
   target: 'TEAM' | 'WORKER';
   teamId?: string;

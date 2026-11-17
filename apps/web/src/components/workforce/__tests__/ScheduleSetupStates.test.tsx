@@ -145,19 +145,15 @@ it('lets a manager retry failed site discovery without claiming access was denie
   expect(await screen.findByText('Day shift')).toBeTruthy();
 });
 
-it.each(['listShifts', 'listScheduleVersions'] as const)(
-  'does not render zero summaries or empty lists when %s initially fails',
-  async (method) => {
-    vi.mocked(SmartSiteManagementClient.prototype[method]).mockRejectedValue(
-      new ApiError('invalid-response', 'Backend returned invalid JSON.', 502),
-    );
-    mount();
-    expect((await screen.findByRole('alert')).textContent).not.toContain('invalid JSON');
-    expect(screen.queryByText('Configured Shifts')).toBeNull();
-    expect(screen.queryByText('No Schedule Versions')).toBeNull();
-    expect(screen.getByRole('button', { name: 'Retry' })).toBeTruthy();
-  },
-);
+it('does not render zero summaries or empty lists when shifts initially fail', async () => {
+  vi.mocked(SmartSiteManagementClient.prototype.listShifts).mockRejectedValue(
+    new ApiError('invalid-response', 'Backend returned invalid JSON.', 502),
+  );
+  mount();
+  expect((await screen.findByRole('alert')).textContent).not.toContain('invalid JSON');
+  expect(screen.queryByText('Configured Shifts')).toBeNull();
+  expect(screen.getByRole('button', { name: 'Retry' })).toBeTruthy();
+});
 
 it('keeps loaded data and an entered shift draft visible when a background request fails', async () => {
   const listShifts = vi.mocked(SmartSiteManagementClient.prototype.listShifts);
@@ -178,13 +174,23 @@ it('keeps loaded data and an entered shift draft visible when a background reque
   expect((screen.getByLabelText(/Shift Name/) as HTMLInputElement).value).toBe('Keep this draft');
 });
 
-it('refreshes site discovery along with shift and version data', async () => {
+it('refreshes site discovery and shifts without fetching versions', async () => {
   mount();
   await screen.findByText('Day shift');
   fireEvent.click(screen.getByRole('button', { name: 'Refresh' }));
   await waitFor(() => expect(SmartSiteManagementClient.prototype.getSite).toHaveBeenCalledTimes(2));
   expect(SmartSiteManagementClient.prototype.listShifts).toHaveBeenCalledTimes(2);
-  expect(SmartSiteManagementClient.prototype.listScheduleVersions).toHaveBeenCalledTimes(2);
+  expect(SmartSiteManagementClient.prototype.listScheduleVersions).not.toHaveBeenCalled();
+});
+
+it('opens Shifts from an old version link without exposing Schedule Version controls', async () => {
+  window.history.replaceState({}, '', '/schedule-setup?tab=version');
+  mount();
+  expect(await screen.findByText('Day shift')).toBeTruthy();
+  expect(screen.getByRole('button', { name: 'New Shift' })).toBeTruthy();
+  expect(screen.queryAllByText('Schedule Versions')).toHaveLength(0);
+  expect(screen.queryByRole('button', { name: 'New Version' })).toBeNull();
+  expect(SmartSiteManagementClient.prototype.listScheduleVersions).not.toHaveBeenCalled();
 });
 
 it('retains the refresh action without rendering a duplicate page heading inside the view', async () => {
@@ -233,6 +239,16 @@ function mountAssignments() {
   });
   mount();
 }
+
+it('loads worker assignments without fetching the schedule version list', async () => {
+  vi.mocked(SmartSiteManagementClient.prototype.listWorkerSchedules).mockResolvedValue({
+    items: [assignedSchedule],
+    total: 1,
+  });
+  mountAssignments();
+  expect(await screen.findByText('Assigned Worker')).toBeTruthy();
+  expect(SmartSiteManagementClient.prototype.listScheduleVersions).not.toHaveBeenCalled();
+});
 
 it('shows a retryable assignment load error instead of an empty schedule list', async () => {
   const read = vi
