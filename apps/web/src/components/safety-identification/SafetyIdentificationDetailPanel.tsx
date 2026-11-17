@@ -1,4 +1,4 @@
-import { useMemo, useState, type JSX } from 'react';
+import { useMemo, useState, type JSX, type ReactNode } from 'react';
 import { Alert, AlertDescription } from '../ui';
 import { IdentificationResponseForm, type NamedCandidate } from './SafetyIdentificationForms';
 import { SafetyIdentificationAdminCard } from './SafetyIdentificationAdminCard';
@@ -25,6 +25,7 @@ const UUID_VALUE_RE = /^[a-f0-9]{8}(?:-[a-f0-9]{4}){3}-[a-f0-9]{12}$/i;
 export function SafetyIdentificationDetailPanel({
   request,
   approvedEvidence,
+  retrospectiveHistory,
   originRecipientId,
   originFrameKey,
   originCameraId,
@@ -59,7 +60,10 @@ export function SafetyIdentificationDetailPanel({
   historyPageSize,
   onHistoryOffsetChange,
   onRetryHistory,
-}: SafetyIdentificationDetailPanelProps & { originCameraId?: string }): JSX.Element {
+}: SafetyIdentificationDetailPanelProps & {
+  originCameraId?: string;
+  retrospectiveHistory?: ReactNode;
+}): JSX.Element {
   const [responseContractorId, setResponseContractorId] = useState<string | null>(null);
 
   const isAnyPending = pendingAction !== null;
@@ -155,6 +159,7 @@ export function SafetyIdentificationDetailPanel({
       />
 
       {approvedEvidence}
+      {retrospectiveHistory}
 
       {canManagerRespond && (
         <IdentificationResponseForm

@@ -22,6 +22,7 @@ import {
 } from './IdentificationWorkspaceScope';
 import { SafetyIdentificationEvidenceImage } from './SafetyIdentificationEvidenceImage';
 import { SafetyIdentificationDetailPanel } from './SafetyIdentificationDetailPanel';
+import { SafetyIdentificationRetrospectiveHistory } from './SafetyIdentificationRetrospectiveHistory';
 import { SafetyIdentificationQueueCard } from './SafetyIdentificationQueueCard';
 import { SafetyIdentificationToolbar } from './SafetyIdentificationToolbar';
 import { useIdentificationRequestRevocation } from './useIdentificationRequestRevocation';
@@ -370,6 +371,24 @@ function ScopedIdentificationWorkspace({
             <SafetyIdentificationDetailPanel
               key={`${scopeNonce}:${scope.siteEpoch}:${scope.selectedSiteId}:${queries.activeRequest.id}`}
               request={queries.activeRequest}
+              retrospectiveHistory={
+                scope.isOfficer &&
+                queries.activeRequest.status === 'CLOSED' &&
+                queries.activeRequest.result?.outcome === 'IDENTIFIED' ? (
+                  <SafetyIdentificationRetrospectiveHistory
+                    client={client}
+                    accessToken={session.accessToken}
+                    scopeKey={`${scopeNonce}:${scope.siteEpoch}`}
+                    queryPrefix={scope.queryPrefix}
+                    runGuardedQuery={scope.runGuardedQuery}
+                    siteId={scope.selectedSiteId}
+                    caseId={queries.activeRequest.id}
+                    episodeId={queries.activeRequest.episodeId}
+                    caseVersion={queries.activeRequest.version}
+                    vietnamese={language?.startsWith('vi') ?? false}
+                  />
+                ) : undefined
+              }
               approvedEvidence={
                 !queries.detailFetching &&
                 queries.activeRequest.evidenceAvailability.status === 'AVAILABLE' &&
