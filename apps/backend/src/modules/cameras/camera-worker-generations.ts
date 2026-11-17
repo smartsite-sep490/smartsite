@@ -182,20 +182,22 @@ async function requireOrdinaryIssuance(manager: EntityManager, camera: CameraEnt
   if (state.fenced) conflict('Tracked source transition is required');
 }
 
+type GenerationDelivery = (
+  credential: Readonly<{
+    workerGenerationId: string;
+    streamSessionId: string;
+    secret: string;
+    expiresAt: string;
+  }>,
+) => Promise<void>;
+
 /** Internal operator command; never expose through shared-token or business-user enrollment. */
 export async function provisionCameraWorkerGeneration(
   source: DataSource,
   cameraId: string,
   allowedCameraIds: readonly string[],
   leaseMs: number,
-  deliver?: (
-    credential: Readonly<{
-      workerGenerationId: string;
-      streamSessionId: string;
-      secret: string;
-      expiresAt: string;
-    }>,
-  ) => Promise<void>,
+  deliver?: GenerationDelivery,
   requestedTransition?: TrustedTrackedTransition,
   expectedCurrentGenerationId?: string,
 ) {
@@ -206,6 +208,49 @@ export async function provisionCameraWorkerGeneration(
       : uuid(expectedCurrentGenerationId).toLowerCase();
   if (transition && expectedCurrent && transition.expectedGenerationId !== expectedCurrent)
     invalid('Generation owner conditions disagree');
+  return issueGeneration(
+    source,
+    cameraId,
+    allowedCameraIds,
+    leaseMs,
+    deliver,
+    transition,
+    expectedCurrent,
+  );
+}
+
+/** Trusted supervisor only: select the renewal lane under the same Camera lock as ownership. */
+export async function renewCameraWorkerGeneration(
+  source: DataSource,
+  cameraId: string,
+  allowedCameraIds: readonly string[],
+  leaseMs: number,
+  deliver: GenerationDelivery | undefined,
+  expectedGenerationId: string,
+  commandId: string,
+) {
+  return issueGeneration(
+    source,
+    cameraId,
+    allowedCameraIds,
+    leaseMs,
+    deliver,
+    undefined,
+    uuid(expectedGenerationId).toLowerCase(),
+    uuid(commandId).toLowerCase(),
+  );
+}
+
+async function issueGeneration(
+  source: DataSource,
+  cameraId: string,
+  allowedCameraIds: readonly string[],
+  leaseMs: number,
+  deliver: GenerationDelivery | undefined,
+  transition: TrustedTrackedTransition | undefined,
+  expectedCurrent: string | undefined,
+  renewalCommandId?: string,
+) {
   cameraId = allowedCamera(cameraId, allowedCameraIds);
   if (!Number.isSafeInteger(leaseMs) || leaseMs < 1000 || leaseMs > 86400000) invalid();
   return source.transaction(async (manager) => {
@@ -218,6 +263,20 @@ export async function provisionCameraWorkerGeneration(
       });
       if (!current?.isCurrent || current.revokedAt || current.supersededAt)
         conflict('Worker generation is no longer current');
+    }
+    if (renewalCommandId) {
+      const [owner] = await manager.query<Array<{ route: string | null }>>(
+        "SELECT to_jsonb(g)->>'observation_route_mode' AS route FROM camera_worker_generation g WHERE g.id=$1 AND g.camera_id=$2 AND g.site_id=$3",
+        [expectedCurrent, camera.id, camera.siteId],
+      );
+      if (!owner || (owner.route !== null && !['LEGACY', 'EPISODE_TRACKED'].includes(owner.route)))
+        conflict('Worker generation route is unavailable');
+      if (owner.route === 'EPISODE_TRACKED')
+        transition = {
+          commandId: renewalCommandId,
+          expectedGenerationId: expectedCurrent!,
+          reason: 'SOURCE_RESTART',
+        };
     }
     if (!transition) await requireOrdinaryIssuance(manager, camera);
     const now = await databaseTime(manager);

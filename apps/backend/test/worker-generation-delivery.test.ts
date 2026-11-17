@@ -318,3 +318,36 @@ test('operator rejects unsafe schema and connection search_path override before 
     /Connection options override/,
   );
 });
+
+test('automatic issuer context refuses missing owner and manual recovery before I/O', async () => {
+  const args = [
+    '--camera-id',
+    cameraId,
+    '--lease-ms',
+    '1000',
+    '--output',
+    path.resolve(fixtureRoot, 'never-created-auto.json'),
+    '--database-identity',
+    '127.0.0.1:5433/smartsite_test/owned',
+  ];
+  const command = '44444444-4444-4444-8444-444444444444';
+  await assert.rejects(provisionCameraWorker(args, {}, command), /Automatic renewal/);
+  await assert.rejects(
+    provisionCameraWorker(
+      [
+        ...args,
+        '--expected-current-generation',
+        credential.workerGenerationId,
+        '--transition-from-generation',
+        credential.workerGenerationId,
+        '--transition-command',
+        command,
+        '--transition-reason',
+        'SOURCE_RESTART',
+      ],
+      {},
+      command,
+    ),
+    /Automatic renewal/,
+  );
+});
