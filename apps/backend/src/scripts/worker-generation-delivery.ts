@@ -1,5 +1,6 @@
 import { open, realpath, stat } from 'node:fs/promises';
 import path from 'node:path';
+import type { TrustedTrackedTransition } from '../modules/cameras/camera-worker-generations.js';
 
 export interface WorkerGenerationCredential {
   workerGenerationId: string;
@@ -13,10 +14,19 @@ export function parseWorkerGenerationArguments(args: string[]): {
   leaseMs: number;
   output: string;
   databaseIdentity: string;
+  transition?: TrustedTrackedTransition;
 } {
-  const names = ['--camera-id', '--lease-ms', '--output', '--database-identity'];
+  const names = [
+    '--camera-id',
+    '--lease-ms',
+    '--output',
+    '--database-identity',
+    '--transition-from-generation',
+    '--transition-command',
+    '--transition-reason',
+  ];
   const values = new Map<string, string>();
-  if (args.length !== 8) throw new Error('Invalid operator arguments');
+  if (args.length !== 8 && args.length !== 14) throw new Error('Invalid operator arguments');
   for (let i = 0; i < args.length; i += 2) {
     const key = args[i],
       value = args[i + 1];
@@ -24,6 +34,8 @@ export function parseWorkerGenerationArguments(args: string[]): {
       throw new Error('Invalid operator arguments');
     values.set(key, value);
   }
+  if (names.slice(0, 4).some((key) => !values.has(key)))
+    throw new Error('Invalid operator arguments');
   const cameraId = values.get('--camera-id')!.toLowerCase();
   const rawLease = values.get('--lease-ms')!;
   const leaseMs = Number(rawLease);
@@ -40,6 +52,38 @@ export function parseWorkerGenerationArguments(args: string[]): {
     !/^[^/\s]+:\d+\/[^/\s]+\/[^/\s]+$/.test(databaseIdentity)
   )
     throw new Error('Invalid operator arguments');
+  const transitionNames = names.slice(4);
+  if (transitionNames.some((key) => values.has(key))) {
+    const expectedGenerationId = values.get('--transition-from-generation')?.toLowerCase();
+    const commandId = values.get('--transition-command')?.toLowerCase();
+    const reason = values.get('--transition-reason');
+    const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/;
+    if (
+      !expectedGenerationId ||
+      !commandId ||
+      !uuid.test(expectedGenerationId) ||
+      !uuid.test(commandId) ||
+      ![
+        'CONFIGURATION_CHANGED',
+        'VIEW_CHANGED',
+        'PROFILE_CHANGED',
+        'SOURCE_RESTART',
+        'LEASE_RENEWED',
+      ].includes(reason ?? '')
+    )
+      throw new Error('Invalid tracked transition arguments');
+    return {
+      cameraId,
+      leaseMs,
+      output,
+      databaseIdentity,
+      transition: {
+        expectedGenerationId,
+        commandId,
+        reason: reason as TrustedTrackedTransition['reason'],
+      },
+    };
+  }
   return { cameraId, leaseMs, output, databaseIdentity };
 }
 
