@@ -129,7 +129,7 @@ it.runIf(process.env.SMARTSITE_C02_OWNED_FIXTURE === '1')(
           expect(
             (screen.getByRole('button', { name: 'Save Region' }) as HTMLButtonElement).disabled,
           ).toBe(true);
-          await user.click(screen.getByRole('checkbox', { name: 'GLOVES' }));
+          await user.click(screen.getByRole('checkbox', { name: 'Gloves' }));
         }
         await waitFor(() =>
           expect(

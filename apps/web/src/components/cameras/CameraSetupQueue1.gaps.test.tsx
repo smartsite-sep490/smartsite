@@ -313,7 +313,7 @@ describe('Camera Setup Queue 1 approved missing UI regressions', () => {
       </QueryClientProvider>,
     );
 
-    const vestBox = await screen.findByRole('checkbox', { name: 'SAFETY_VEST' });
+    const vestBox = await screen.findByRole('checkbox', { name: 'Safety vest' });
     expect(document.querySelector('fieldset legend')?.textContent).toBe('Camera default');
     expect(screen.queryByTestId('camera-ppe-unsaved-draft')).toBeNull();
     fireEvent.click(vestBox);
@@ -454,7 +454,7 @@ describe('Camera Setup Queue 1 approved missing UI regressions', () => {
     const modeSelects = (await screen.findAllByLabelText('Policy mode')) as HTMLSelectElement[];
     expect(modeSelects).toHaveLength(2);
     fireEvent.change(modeSelects[0]!, { target: { value: 'EXPLICIT' } });
-    fireEvent.click(await screen.findByRole('checkbox', { name: 'HARD_HAT' }));
+    fireEvent.click(await screen.findByRole('checkbox', { name: 'Hard hat' }));
     fireEvent.change(modeSelects[1]!, { target: { value: 'DISABLED' } });
     fireEvent.change(await screen.findByLabelText('Reason'), {
       target: { value: 'Public sidewalk buffer' },
