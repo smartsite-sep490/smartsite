@@ -474,3 +474,54 @@ test('wrong committed camera metadata cannot launch and latches reconciliation',
   assert.equal(issued, 1);
   assert.equal(launched, 0);
 });
+
+test('an explicitly reconciled initial owner is normalized and conditioned before the first launch', async () => {
+  const id = 'cccccccc-cccc-4ccc-8ccc-cccccccccccc',
+    previous = 'dddddddd-dddd-4ddd-8ddd-dddddddddddd';
+  let launches = 0;
+  await superviseCameraWorker(
+    { ...options(id), initialExpectedGenerationId: previous.toUpperCase(), maximumStarts: 1 },
+    {
+      issue: async (args) => {
+        const at = args.indexOf('--expected-current-generation');
+        assert(at >= 0);
+        assert.equal(args[at + 1], previous);
+        return metadata(id);
+      },
+      launch: async () => {
+        launches++;
+        return {
+          exited: Promise.resolve({ code: 0, termination: 'EXITED' as const }),
+          stop: async () => {},
+        };
+      },
+    },
+    new AbortController().signal,
+  );
+  assert.equal(launches, 1);
+});
+
+test('invalid initial owner is refused before issuing or launching', async () => {
+  let issued = 0;
+  for (const invalid of ['', 'not-an-owner', null] as unknown as string[]) {
+    await assert.rejects(
+      superviseCameraWorker(
+        {
+          ...options('eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee'),
+          initialExpectedGenerationId: invalid,
+        },
+        {
+          issue: async () => {
+            issued++;
+            return metadata();
+          },
+          launch: async () => {
+            throw Error('must not launch');
+          },
+        },
+        new AbortController().signal,
+      ),
+    );
+  }
+  assert.equal(issued, 0);
+});

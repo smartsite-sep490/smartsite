@@ -1,5 +1,5 @@
 import { createHash, randomBytes, randomUUID } from 'node:crypto';
-import type { DataSource, EntityManager } from 'typeorm';
+import { IsNull, type DataSource, type EntityManager } from 'typeorm';
 import { conflict, invalid, missing, uuid } from '../../common/configuration/commands.js';
 import { PublicHttpException } from '../../common/http/public-http-exception.js';
 import { CameraEntity } from '../../database/entities/camera.entity.js';
@@ -208,15 +208,10 @@ export async function provisionCameraWorkerGeneration(
       : uuid(expectedCurrentGenerationId).toLowerCase();
   if (transition && expectedCurrent && transition.expectedGenerationId !== expectedCurrent)
     invalid('Generation owner conditions disagree');
-  return issueGeneration(
-    source,
-    cameraId,
-    allowedCameraIds,
-    leaseMs,
-    deliver,
+  return issueGeneration(source, cameraId, allowedCameraIds, leaseMs, deliver, {
     transition,
     expectedCurrent,
-  );
+  });
 }
 
 /** Trusted supervisor only: select the renewal lane under the same Camera lock as ownership. */
@@ -229,16 +224,23 @@ export async function renewCameraWorkerGeneration(
   expectedGenerationId: string,
   commandId: string,
 ) {
-  return issueGeneration(
-    source,
-    cameraId,
-    allowedCameraIds,
-    leaseMs,
-    deliver,
-    undefined,
-    uuid(expectedGenerationId).toLowerCase(),
-    uuid(commandId).toLowerCase(),
-  );
+  return issueGeneration(source, cameraId, allowedCameraIds, leaseMs, deliver, {
+    expectedCurrent: uuid(expectedGenerationId).toLowerCase(),
+    renewalCommandId: uuid(commandId).toLowerCase(),
+  });
+}
+
+/** A new supervisor cannot silently displace or recover an existing owner. */
+export async function bootstrapCameraWorkerGeneration(
+  source: DataSource,
+  cameraId: string,
+  allowedCameraIds: readonly string[],
+  leaseMs: number,
+  deliver?: GenerationDelivery,
+) {
+  return issueGeneration(source, cameraId, allowedCameraIds, leaseMs, deliver, {
+    requireUnowned: true,
+  });
 }
 
 async function issueGeneration(
@@ -247,15 +249,30 @@ async function issueGeneration(
   allowedCameraIds: readonly string[],
   leaseMs: number,
   deliver: GenerationDelivery | undefined,
-  transition: TrustedTrackedTransition | undefined,
-  expectedCurrent: string | undefined,
-  renewalCommandId?: string,
+  condition: {
+    transition?: TrustedTrackedTransition;
+    expectedCurrent?: string;
+    renewalCommandId?: string;
+    requireUnowned?: true;
+  },
 ) {
+  let { transition } = condition;
+  const { expectedCurrent, renewalCommandId, requireUnowned } = condition;
   cameraId = allowedCamera(cameraId, allowedCameraIds);
   if (!Number.isSafeInteger(leaseMs) || leaseMs < 1000 || leaseMs > 86400000) invalid();
   return source.transaction(async (manager) => {
     const camera = await lockCamera(manager, cameraId);
     if (camera.status !== CameraStatus.ACTIVE) conflict('Camera is inactive');
+    if (requireUnowned) {
+      const existing = await manager.getRepository(CameraWorkerGenerationEntity).findOne({
+        where: [
+          { cameraId, siteId: camera.siteId, isCurrent: true },
+          { cameraId, siteId: camera.siteId, supersededAt: IsNull() },
+        ],
+        lock: { mode: 'pessimistic_write' },
+      });
+      if (existing) conflict('Worker ownership requires operator reconciliation');
+    }
     if (expectedCurrent) {
       const current = await manager.getRepository(CameraWorkerGenerationEntity).findOne({
         where: { id: expectedCurrent, cameraId, siteId: camera.siteId },

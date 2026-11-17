@@ -6,6 +6,7 @@ import { resolveCliEnvironment } from '../config/cli-environment.js';
 import { buildTypeOrmOptions } from '../database/typeorm.options.js';
 import {
   provisionCameraWorkerGeneration,
+  bootstrapCameraWorkerGeneration,
   renewCameraWorkerGeneration,
 } from '../modules/cameras/camera-worker-generations.js';
 import { uuid } from '../common/configuration/commands.js';
@@ -26,7 +27,26 @@ export async function provisionCameraWorker(
   env = process.env,
   renewalCommandId?: string,
 ): Promise<IssuedWorkerGeneration> {
+  return provision(args, env, renewalCommandId);
+}
+
+/** Trusted supervisor bootstrap; manual CLI provisioning intentionally remains separate. */
+export async function bootstrapUnownedCameraWorker(
+  args: string[],
+  env = process.env,
+): Promise<IssuedWorkerGeneration> {
+  return provision(args, env, undefined, true);
+}
+
+async function provision(
+  args: string[],
+  env: NodeJS.ProcessEnv,
+  renewalCommandId?: string,
+  bootstrap = false,
+): Promise<IssuedWorkerGeneration> {
   const input = parseWorkerGenerationArguments(args);
+  if (bootstrap && (input.expectedCurrentGenerationId || input.transition))
+    throw new Error('Bootstrap cannot carry owner or manual recovery conditions');
   const renewal = renewalCommandId === undefined ? undefined : uuid(renewalCommandId).toLowerCase();
   if (renewal && (!input.expectedCurrentGenerationId || input.transition))
     throw new Error('Automatic renewal requires only the current owner condition');
@@ -63,25 +83,33 @@ export async function provisionCameraWorker(
         actual?.schema !== schema
       )
         throw new Error('Connected database identity mismatch');
-      const credential = renewal
-        ? await renewCameraWorkerGeneration(
+      const credential = bootstrap
+        ? await bootstrapCameraWorkerGeneration(
             source,
             input.cameraId,
             allowed,
             input.leaseMs,
             deliver,
-            input.expectedCurrentGenerationId!,
-            renewal,
           )
-        : await provisionCameraWorkerGeneration(
-            source,
-            input.cameraId,
-            allowed,
-            input.leaseMs,
-            deliver,
-            input.transition,
-            input.expectedCurrentGenerationId,
-          );
+        : renewal
+          ? await renewCameraWorkerGeneration(
+              source,
+              input.cameraId,
+              allowed,
+              input.leaseMs,
+              deliver,
+              input.expectedCurrentGenerationId!,
+              renewal,
+            )
+          : await provisionCameraWorkerGeneration(
+              source,
+              input.cameraId,
+              allowed,
+              input.leaseMs,
+              deliver,
+              input.transition,
+              input.expectedCurrentGenerationId,
+            );
       // Returned only after transaction completion; the child never receives issuer metadata/DB access.
       return {
         cameraId: input.cameraId,
