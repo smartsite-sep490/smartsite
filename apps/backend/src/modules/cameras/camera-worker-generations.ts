@@ -197,13 +197,28 @@ export async function provisionCameraWorkerGeneration(
     }>,
   ) => Promise<void>,
   requestedTransition?: TrustedTrackedTransition,
+  expectedCurrentGenerationId?: string,
 ) {
   const transition = transitionInput(requestedTransition);
+  const expectedCurrent =
+    expectedCurrentGenerationId === undefined
+      ? undefined
+      : uuid(expectedCurrentGenerationId).toLowerCase();
+  if (transition && expectedCurrent && transition.expectedGenerationId !== expectedCurrent)
+    invalid('Generation owner conditions disagree');
   cameraId = allowedCamera(cameraId, allowedCameraIds);
   if (!Number.isSafeInteger(leaseMs) || leaseMs < 1000 || leaseMs > 86400000) invalid();
   return source.transaction(async (manager) => {
     const camera = await lockCamera(manager, cameraId);
     if (camera.status !== CameraStatus.ACTIVE) conflict('Camera is inactive');
+    if (expectedCurrent) {
+      const current = await manager.getRepository(CameraWorkerGenerationEntity).findOne({
+        where: { id: expectedCurrent, cameraId, siteId: camera.siteId },
+        lock: { mode: 'pessimistic_write' },
+      });
+      if (!current?.isCurrent || current.revokedAt || current.supersededAt)
+        conflict('Worker generation is no longer current');
+    }
     if (!transition) await requireOrdinaryIssuance(manager, camera);
     const now = await databaseTime(manager);
     const generations = manager.getRepository(CameraWorkerGenerationEntity);

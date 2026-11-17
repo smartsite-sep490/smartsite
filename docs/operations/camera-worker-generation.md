@@ -80,3 +80,27 @@ heads or unfinished tracked frames, so it cannot silently bypass the fence.
 Profiles without tracked storage remain compatible.
 Automatic supervisor stop/drain/restart orchestration, physical source/model
 qualification and deployment remain separate integration gates.
+
+## Conditional replacement of a current owner
+
+Trusted supervision can additionally pass `--expected-current-generation <UUID>`.
+The generation must still belong to this Camera/Site, be current and neither
+revoked nor superseded when checked under the Camera lock. If another issuer or
+revocation won first, nothing is issued or delivered. Credential lease expiry
+alone does not erase current ownership; the old expired credential remains
+unusable for LIVE admission while the trusted issuer can create a fresh lease.
+
+On an unclaimed/legacy source, use this condition with ordinary issuance. On an
+already tracked source, also supply the three explicit transition arguments,
+using the same expected generation UUID in both conditions. The condition never
+bypasses tracked storage/head/pending checks. Disagreeing owner conditions are
+rejected before database acquisition.
+
+This lets a future supervisor replace a credential consumed by failed startup
+before any tracked claim, while also refusing automatic renewal of a revoked
+tracked generation. Deliberate manual recovery of a revoked tracked generation
+continues to use the explicit transition without this stricter current-owner
+condition. The supervisor must obtain the expected owner from its trusted issuer
+state, never from arbitrary worker output, and must still await its owned prior
+child's exit before replacement. This option does not install a supervisor,
+establish cross-host ownership or declare configuration/source readiness.
