@@ -38,11 +38,13 @@ for (const variant of [
   'region-disabled-v17',
   'region-stale-v17',
   'zone-uppercase',
+  'zone-uppercase-v17',
   'zone-unissued',
   'zone-disabled',
 ] as const)
   test(`registered tracked worker HTTP intake preserves ${variant} handling`, async () => {
     const wire17 = variant.endsWith('-v17');
+    const uppercaseZone = variant === 'zone-uppercase' || variant === 'zone-uppercase-v17';
     const cameraScope = variant === 'camera-v17' || variant === 'camera-region-mismatch-v17';
     const invalidScope = variant === 'camera-region-mismatch-v17' || variant === 'region-stale-v17';
     const withC02 = variant === 'ppe-c02' || wire17;
@@ -127,9 +129,8 @@ for (const variant of [
             ? 'tracked-v16-identification'
             : 'tracked-v16',
         AI_TRACKED_FRAME_RUNTIME_ENABLED: 'true',
-        MF06_ENQUEUE_ENABLED:
-          variant === 'zone-uppercase' || variant === 'zone-unissued' ? 'true' : 'false',
-        ...(variant === 'zone-uppercase' || variant === 'zone-unissued'
+        MF06_ENQUEUE_ENABLED: uppercaseZone || variant === 'zone-unissued' ? 'true' : 'false',
+        ...(uppercaseZone || variant === 'zone-unissued'
           ? { MF06_ENQUEUE_MAX_OUTSTANDING: '8' }
           : {}),
         AI_TRACKED_FRAME_RUNTIME_POLICY: JSON.stringify({
@@ -305,7 +306,7 @@ for (const variant of [
                   regionId:
                     variant === 'zone-unissued'
                       ? randomUUID()
-                      : variant === 'zone-uppercase'
+                      : uppercaseZone
                         ? fixture.ppeRegionId!.toUpperCase()
                         : fixture.ppeRegionId!,
                   geometryVersion: 1,
@@ -356,6 +357,15 @@ for (const variant of [
               }))
             : []),
         ]).flat();
+        if (uppercaseZone) {
+          event.observations.push({
+            type: 'ZONE_ENTRY',
+            trackId: 1,
+            regionId: fixture.ppeRegionId!.toUpperCase(),
+            geometryVersion: 1,
+            entryOrigin: 'INSIDE_ENTRY_UNOBSERVED',
+          });
+        }
         event.continuity.subjects = event.observations.flatMap((observation, index) =>
           observation.type === 'PERSON'
             ? [
@@ -439,7 +449,7 @@ for (const variant of [
         await new Promise((resolve) => setTimeout(resolve, 50));
       }
       assert.ok(sealed, 'Recovery did not seal the accepted frame');
-      if (variant === 'zone-uppercase') {
+      if (uppercaseZone) {
         const requests = await db.query(
           'SELECT region_id,person_observation_index FROM zone_entry_assessment_request',
         );
@@ -551,11 +561,15 @@ for (const variant of [
       assert.ok((withC02 ? [0, 3, 6] : [0]).includes(frameCase.source.personObservationIndex));
       assert.equal(frameCase.source.evidenceIndex, 0);
       assert.equal(frameCase.source.sha256, createHash('sha256').update(bytes).digest('hex'));
-      if (variant === 'zone-uppercase') {
-        assert.equal(frameCase.zoneEntries.length, 1);
-        assert.equal(frameCase.zoneEntries[0].status, 'PENDING');
-        assert.equal(frameCase.zoneEntries[0].reasonCode, null);
-        assert.equal(frameCase.zoneEntries[0].provenance, null);
+      if (uppercaseZone) {
+        const zoneCase = frames.items[0].cases.find(
+          (item: typeof frameCase) => item.source.personObservationIndex === 0,
+        );
+        assert.ok(zoneCase);
+        assert.equal(zoneCase.zoneEntries.length, 1);
+        assert.equal(zoneCase.zoneEntries[0].status, 'PENDING');
+        assert.equal(zoneCase.zoneEntries[0].reasonCode, null);
+        assert.equal(zoneCase.zoneEntries[0].provenance, null);
       } else assert.deepEqual(frameCase.zoneEntries, []);
       const detailPath = api + '/sites/' + fixture.siteId + '/safety-episodes/' + row.episode.id;
       const detailResponse = await fetch(detailPath + '/tracked', { headers: officerHeaders });
