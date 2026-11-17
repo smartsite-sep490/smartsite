@@ -4,7 +4,7 @@ import { parseWorkerGenerationArguments } from './worker-generation-delivery.js'
 import { lstat, readFile, realpath } from 'node:fs/promises';
 import path from 'node:path';
 import { setTimeout as delay } from 'node:timers/promises';
-import { provisionCameraWorker } from './provision-camera-worker.js';
+import { bootstrapUnownedCameraWorker, provisionCameraWorker } from './provision-camera-worker.js';
 import {
   workerChildEnvironment,
   type OwnedWorker,
@@ -101,11 +101,9 @@ export async function operatorSupervisorPorts(
     issue: (args) => {
       const command = parseWorkerGenerationArguments(args);
       if (command.transition) throw new Error('Supervisor cannot use manual recovery');
-      return provisionCameraWorker(
-        args,
-        issuer,
-        command.expectedCurrentGenerationId ? randomUUID() : undefined,
-      );
+      return command.expectedCurrentGenerationId
+        ? provisionCameraWorker(args, issuer, randomUUID())
+        : bootstrapUnownedCameraWorker(args, issuer);
     },
     launch: async (context): Promise<OwnedWorker> => {
       await checkedPath(worker.pythonExecutable, false);

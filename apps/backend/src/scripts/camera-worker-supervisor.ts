@@ -12,6 +12,8 @@ export interface SupervisorOptions {
   databaseIdentity: string;
   leaseMs: number;
   maximumStarts: number;
+  /** Explicit operator reconciliation only; never infer an existing owner after reboot. */
+  initialExpectedGenerationId?: string;
 }
 export interface OwnedWorker {
   exited: Promise<{ code: number | null; termination: 'EXITED' | 'FORCED' }>;
@@ -61,7 +63,7 @@ function issuerArguments(options: SupervisorOptions, output: string, previous?: 
     output,
     '--database-identity',
     options.databaseIdentity,
-    ...(previous ? ['--expected-current-generation', previous] : []),
+    ...(previous !== undefined ? ['--expected-current-generation', previous] : []),
   ];
 }
 
@@ -81,21 +83,28 @@ export async function superviseCameraWorker(
     !path.isAbsolute(options.credentialDirectory) ||
     !path.isAbsolute(options.outboxPath) ||
     !/^127\.0\.0\.1:5433\/smartsite_test\/[^/\s]+$/.test(options.databaseIdentity) ||
+    (options.initialExpectedGenerationId !== undefined &&
+      typeof options.initialExpectedGenerationId !== 'string') ||
     !Number.isInteger(options.maximumStarts) ||
     options.maximumStarts < 1 ||
     options.maximumStarts > 3 ||
     !options.allowedCameraIds.some((id) => id.toLowerCase() === cameraId)
   )
     throw new Error('Invalid test supervisor configuration');
+  const initialExpected = options.initialExpectedGenerationId?.toLowerCase();
   parseWorkerGenerationArguments(
-    issuerArguments(options, path.join(options.credentialDirectory, 'validation.json')),
+    issuerArguments(
+      options,
+      path.join(options.credentialDirectory, 'validation.json'),
+      initialExpected,
+    ),
   );
   if (ownedCameras.has(cameraId))
     throw new Error('Camera supervisor already owned or reconciliation required');
   ownedCameras.add(cameraId);
   let uncertain = false;
   let starts = 0;
-  let previous: string | undefined;
+  let previous = initialExpected;
   const generations = new Set<string>(),
     sessions = new Set<string>();
   const exits: { code: number | null; termination: 'EXITED' | 'FORCED' }[] = [];
