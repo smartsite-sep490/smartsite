@@ -15,6 +15,7 @@ export function parseWorkerGenerationArguments(args: string[]): {
   output: string;
   databaseIdentity: string;
   transition?: TrustedTrackedTransition;
+  expectedCurrentGenerationId?: string;
 } {
   const names = [
     '--camera-id',
@@ -24,9 +25,10 @@ export function parseWorkerGenerationArguments(args: string[]): {
     '--transition-from-generation',
     '--transition-command',
     '--transition-reason',
+    '--expected-current-generation',
   ];
   const values = new Map<string, string>();
-  if (args.length !== 8 && args.length !== 14) throw new Error('Invalid operator arguments');
+  if (![8, 10, 14, 16].includes(args.length)) throw new Error('Invalid operator arguments');
   for (let i = 0; i < args.length; i += 2) {
     const key = args[i],
       value = args[i + 1];
@@ -52,7 +54,17 @@ export function parseWorkerGenerationArguments(args: string[]): {
     !/^[^/\s]+:\d+\/[^/\s]+\/[^/\s]+$/.test(databaseIdentity)
   )
     throw new Error('Invalid operator arguments');
-  const transitionNames = names.slice(4);
+  const expectedCurrentGenerationId = values.get('--expected-current-generation')?.toLowerCase();
+  if (
+    expectedCurrentGenerationId !== undefined &&
+    !/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/.test(
+      expectedCurrentGenerationId,
+    )
+  )
+    throw new Error('Invalid current generation condition');
+  const condition =
+    expectedCurrentGenerationId === undefined ? {} : { expectedCurrentGenerationId };
+  const transitionNames = names.slice(4, 7);
   if (transitionNames.some((key) => values.has(key))) {
     const expectedGenerationId = values.get('--transition-from-generation')?.toLowerCase();
     const commandId = values.get('--transition-command')?.toLowerCase();
@@ -72,11 +84,14 @@ export function parseWorkerGenerationArguments(args: string[]): {
       ].includes(reason ?? '')
     )
       throw new Error('Invalid tracked transition arguments');
+    if (expectedCurrentGenerationId && expectedCurrentGenerationId !== expectedGenerationId)
+      throw new Error('Generation owner conditions disagree');
     return {
       cameraId,
       leaseMs,
       output,
       databaseIdentity,
+      ...condition,
       transition: {
         expectedGenerationId,
         commandId,
@@ -84,7 +99,7 @@ export function parseWorkerGenerationArguments(args: string[]): {
       },
     };
   }
-  return { cameraId, leaseMs, output, databaseIdentity };
+  return { cameraId, leaseMs, output, databaseIdentity, ...condition };
 }
 
 export async function deliverWorkerGeneration(

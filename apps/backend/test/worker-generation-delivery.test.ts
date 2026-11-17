@@ -12,6 +12,7 @@ import {
   type TrustedTrackedTransition,
 } from '../src/modules/cameras/camera-worker-generations.js';
 import type { DataSource } from 'typeorm';
+import { PublicHttpException } from '../src/common/http/public-http-exception.js';
 import {
   deliverWorkerGeneration,
   parseWorkerGenerationArguments,
@@ -116,6 +117,77 @@ test('transition input rejects accessors and exotic prototypes before touching d
       ),
     );
   assert.equal(evaluated, false);
+});
+
+test('conditional issuance accepts one expected current owner and rejects ambiguous owner conditions', () => {
+  const args = [
+    '--camera-id',
+    cameraId,
+    '--lease-ms',
+    '60000',
+    '--output',
+    path.resolve('credential.json'),
+    '--database-identity',
+    'localhost:5433/smartsite_test/owned',
+  ];
+  const original = parseWorkerGenerationArguments(args);
+  const expected = ['--expected-current-generation', credential.workerGenerationId];
+  assert.deepEqual(parseWorkerGenerationArguments([...args, ...expected]), {
+    ...original,
+    expectedCurrentGenerationId: credential.workerGenerationId,
+  });
+  const transition = [
+    '--transition-from-generation',
+    credential.workerGenerationId,
+    '--transition-command',
+    credential.streamSessionId,
+    '--transition-reason',
+    'SOURCE_RESTART',
+  ];
+  assert.deepEqual(parseWorkerGenerationArguments([...args, ...transition, ...expected]), {
+    ...parseWorkerGenerationArguments([...args, ...transition]),
+    expectedCurrentGenerationId: credential.workerGenerationId,
+  });
+  for (const invalid of [
+    [...args, '--expected-current-generation', 'invalid'],
+    [...args, ...expected, ...expected],
+    [...args, ...transition, '--expected-current-generation', credential.streamSessionId],
+    [...args, ...expected, ...transition.slice(0, 4)],
+  ])
+    assert.throws(() => parseWorkerGenerationArguments(invalid));
+});
+
+test('invalid or disagreeing current-owner conditions fail before database acquisition', async () => {
+  const invalid = (error: unknown) =>
+    error instanceof PublicHttpException && error.getStatus() === 400;
+  await assert.rejects(
+    provisionCameraWorkerGeneration(
+      {} as DataSource,
+      cameraId,
+      [cameraId],
+      60000,
+      undefined,
+      undefined,
+      'not-a-uuid',
+    ),
+    invalid,
+  );
+  await assert.rejects(
+    provisionCameraWorkerGeneration(
+      {} as DataSource,
+      cameraId,
+      [cameraId],
+      60000,
+      undefined,
+      {
+        commandId: credential.streamSessionId,
+        expectedGenerationId: credential.workerGenerationId,
+        reason: 'SOURCE_RESTART',
+      },
+      credential.streamSessionId,
+    ),
+    invalid,
+  );
 });
 
 test('exclusive credential delivery flushes before issuer commit and refuses overwrite', async () => {
