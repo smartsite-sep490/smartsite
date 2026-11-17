@@ -6,6 +6,38 @@ import { runtimeEnvironmentOptions } from '../src/config/runtime-environment.js'
 import path from 'node:path';
 import fs from 'node:fs';
 
+test('identification routes stay off unless their explicit isolated schema/profile is selected', () => {
+  assert.equal(validateEnvironment({}).SAFETY_IDENTIFICATION_ENABLED, false);
+  assert.throws(
+    () => validateEnvironment({ SAFETY_IDENTIFICATION_ENABLED: 'true' }),
+    /SMARTSITE_DB_MIGRATION_PROFILE/,
+  );
+  assert.throws(
+    () =>
+      validateEnvironment({
+        SAFETY_IDENTIFICATION_ENABLED: 'true',
+        SMARTSITE_DB_MIGRATION_PROFILE: 'tracked-v16',
+        DATABASE_SCHEMA: 'synthetic_c02',
+      }),
+    /SMARTSITE_DB_MIGRATION_PROFILE/,
+  );
+  assert.throws(
+    () =>
+      validateEnvironment({
+        SAFETY_IDENTIFICATION_ENABLED: 'true',
+        SMARTSITE_DB_MIGRATION_PROFILE: 'tracked-v16-identification',
+      }),
+    /DATABASE_SCHEMA/,
+  );
+  const config = validateEnvironment({
+    SAFETY_IDENTIFICATION_ENABLED: 'true',
+    SMARTSITE_DB_MIGRATION_PROFILE: 'tracked-v16-identification',
+    DATABASE_SCHEMA: 'synthetic_c02',
+  });
+  assert.equal(config.SAFETY_IDENTIFICATION_ENABLED, true);
+  assert.equal(config.AI_TRACKED_FRAME_RUNTIME_ENABLED, false);
+});
+
 test('development starts with local PostgreSQL and a restrictive browser origin', () => {
   const config = validateEnvironment({});
   assert.equal(config.PORT, 3000);
@@ -17,6 +49,34 @@ test('development starts with local PostgreSQL and a restrictive browser origin'
   assert.deepEqual(config.CORS_ORIGINS, ['http://localhost:5173']);
   assert.equal(config.AUTH_JWT_SECRET, 'smartsite_local_dev_jwt_secret_only_32_bytes');
   assert.equal(config.EVIDENCE_LOCAL_ROOT, undefined);
+});
+
+test('combined identification/PPE profile is explicit and does not enable workflows', () => {
+  const selection = {
+    SMARTSITE_DB_MIGRATION_PROFILE: 'tracked-v16-identification-ppe',
+    DATABASE_SCHEMA: 'synthetic_combined_profile',
+  };
+  const disabled = validateEnvironment(selection);
+  assert.equal(disabled.SAFETY_IDENTIFICATION_ENABLED, false);
+  assert.equal(disabled.AI_TRACKED_FRAME_RUNTIME_ENABLED, false);
+  assert.equal(disabled.SAFETY_TRACKED_HISTORY_READ_ENABLED, false);
+  assert.equal(
+    validateEnvironment({ ...selection, SAFETY_IDENTIFICATION_ENABLED: 'true' })
+      .SAFETY_IDENTIFICATION_ENABLED,
+    true,
+  );
+  assert.throws(
+    () => validateEnvironment({ ...selection, DATABASE_SCHEMA: undefined }),
+    /DATABASE_SCHEMA/,
+  );
+  assert.throws(
+    () =>
+      validateEnvironment({
+        ...selection,
+        SMARTSITE_DB_MIGRATION_PROFILE: 'tracked-v16-identification-ppe-unreviewed',
+      }),
+    /SMARTSITE_DB_MIGRATION_PROFILE/,
+  );
 });
 
 test('document OCR executables are explicit local commands, not inherited service credentials', () => {
@@ -475,4 +535,28 @@ test('timing variables reject non-positive, non-integer, or out-of-range values 
   assert.equal(custom.ALERT_COOLDOWN_SECONDS, 120);
   assert.equal(custom.MAX_PAST_EVENT_AGE_SECONDS, 600);
   assert.equal(custom.MAX_FUTURE_CLOCK_SKEW_SECONDS, 45);
+});
+
+test('tracked history requires an explicit matching migration profile and schema', () => {
+  assert.throws(
+    () => validateEnvironment({ SAFETY_TRACKED_HISTORY_READ_ENABLED: 'true' }),
+    /profile|schema/i,
+  );
+  assert.throws(
+    () => validateEnvironment({ SMARTSITE_DB_MIGRATION_PROFILE: 'tracked-v16' }),
+    /schema/i,
+  );
+  for (const schema of ['public;DROP TABLE camera', 'pg_catalog', 'information_schema'])
+    assert.throws(() =>
+      validateEnvironment({
+        DATABASE_SCHEMA: schema,
+        SMARTSITE_DB_MIGRATION_PROFILE: 'tracked-v16',
+      }),
+    );
+  const config = validateEnvironment({
+    SAFETY_TRACKED_HISTORY_READ_ENABLED: 'true',
+    SMARTSITE_DB_MIGRATION_PROFILE: 'tracked-v16',
+    DATABASE_SCHEMA: 'isolated_tracked_runtime',
+  });
+  assert.equal(config.DATABASE_SCHEMA, 'isolated_tracked_runtime');
 });

@@ -1,0 +1,251 @@
+import type { PpeItem } from '@smartsite/contracts/ppe-items';
+import { registerFeatureCatalog } from '../../i18n/feature-catalog-registry';
+
+const en = {
+  title: 'Camera PPE policy',
+  subtitle: 'Set camera or region PPE rules and compare saved vs applied state.',
+  target: 'Policy scope',
+  camera: 'Camera default',
+  region: 'Region',
+  mode: 'Policy mode',
+  choose: 'Choose mode',
+  EXPLICIT: 'Custom PPE',
+  DISABLED: 'Disable PPE',
+  INHERIT: 'Camera default',
+  reason: 'Reason',
+  save: 'Save PPE policy',
+  loading: 'Loading saved PPE policy…',
+  error: 'Could not load the PPE policy.',
+  retry: 'Retry',
+  failed: 'Could not save the PPE policy. Retry or refresh the configuration.',
+  failed400:
+    'Invalid PPE policy input. Verify the selected PPE items or disable reason and try again.',
+  failed403: 'You do not have permission to modify PPE policies for this Site.',
+  failed404:
+    'Target camera or observation region was not found. Refresh the catalog and try again.',
+  failed409:
+    'Configuration version conflict: another update was saved first. Latest policy has been reloaded — review and save again.',
+  failed429: 'Too many policy save requests. Wait a moment before trying again.',
+  unsavedDraftBadge: 'Unsaved draft',
+  preservedRegionDrafts:
+    '{{count}} per-region draft(s) preserved after reload — select each region in Policy scope to review and save, or click Reset draft.',
+  resetDraft: 'Reset draft',
+  saved: 'Saved revision {{revision}}. Check worker status separately.',
+  current: 'Saved revision {{revision}}',
+  absent: 'No saved v2 policy for this scope.',
+  initialize: 'Initialize PPE policies',
+  activation: 'Activate region with this policy',
+  'item.HARD_HAT': 'Hard hat',
+  'item.SAFETY_VEST': 'Safety vest',
+  'item.GLOVES': 'Gloves',
+  'item.BOOTS': 'Boots',
+  'item.GOGGLES': 'Goggles',
+  requiredItemsGroup: 'Required PPE items',
+  readinessCoreBadge: 'Core',
+  readinessExperimentalBadge: 'Experimental',
+  readinessGuidanceNote:
+    'Hard hat, vest: baseline; gloves, boots, goggles: experimental. Saved changes apply once camera confirms.',
+  validationExplicitEmpty: 'Select at least one PPE item before saving this custom policy.',
+  validationDisabledReasonRequired: 'Enter a reason for turning off PPE checks before saving.',
+  validationDisabledReasonInvalid:
+    'Enter a valid reason (up to 500 characters, without control characters) before saving.',
+  'modeBadge.INHERIT': 'Use camera default',
+  'modeBadge.EXPLICIT': 'Custom',
+  'modeBadge.DISABLED': 'Disabled',
+  'modeBadge.UNCONFIGURED': 'Not configured',
+  cameraSummaryHeading: 'Camera default policy',
+  cameraUninitializedNote:
+    'Camera default PPE policy (v2) is not initialized yet. Effective PPE is unavailable until configured.',
+  editCameraDefault: 'Edit camera default',
+  regionsHeading: 'Regions on this camera ({{count}})',
+  regionsEmpty: 'No observation regions linked to this camera yet.',
+  effectivePpeLabel: 'Effective PPE',
+  effectiveFromCamera: 'From camera default',
+  effectiveFromRegion: 'Custom on this region',
+  effectiveDisabled: 'PPE checks disabled',
+  effectiveDisabledByCamera: 'PPE checks disabled (via camera default)',
+  effectiveReason: 'Reason: {{reason}}',
+  effectiveUnknownUninitialized:
+    'Effective PPE unavailable — this region has no saved v2 PPE policy.',
+  effectiveUnknownCameraDefault:
+    'Effective PPE unavailable — camera default policy is not initialized.',
+  effectiveLoading: 'Loading region policy…',
+  effectiveError: 'Could not load saved policy for this region.',
+  previewHeading: 'Effective PPE if saved',
+  previewRequiresCameraInit:
+    'Select or save a valid camera default policy to preview inherited PPE.',
+  regionActive: 'Active',
+  regionInactive: 'Inactive',
+  regionVersionMeta: 'Region v{{version}}',
+  regionNumberBadge: 'Region #{{index}}',
+  regionUnresolvedLabel: 'Observation region #{{index}}',
+  zoneMetadataUnavailable: 'Zone metadata unavailable',
+  technicalIdsSummary: 'Technical IDs',
+  technicalRegionId: 'Region ID: {{id}}',
+  technicalZoneId: 'Zone ID: {{id}}',
+  capabilityTruthNote:
+    'Saved PPE selections record desired policy configuration only. Live enforcement requires a matching worker-applied receipt and depends on the PPE classes supported by the active worker model (no per-camera model-quality badges are reported here).',
+  editRegion: 'Edit',
+  editRegionAria: 'Edit policy for {{target}}',
+  readOnlyNotice:
+    'Read-only mode: Site Manager role is required to modify camera or region PPE policies.',
+  editorHeading: 'Edit policy scope',
+  savedConfigMeta: 'Config v{{configVersion}} · Policy rev {{revision}}',
+  savedConfigOnlyMeta: 'Saved config v{{configVersion}} · No saved v2 policy',
+  syncHeading: 'Saved vs worker-applied status',
+  syncSavedVersion: 'Saved config: v{{version}}',
+  syncSavedUnknown: 'Saved config: unavailable',
+  syncApplied: 'Applied by worker (ACK v{{reported}})',
+  syncNotYetApplied: 'Saved only · Not yet applied to this revision (worker ACK: {{reported}})',
+  syncPending: 'Saved only · Applying / awaiting worker ACK (reported: {{reported}})',
+  syncUnconfirmed: 'Saved only · Not confirmed by worker (no ACK yet)',
+  syncStale:
+    'Worker ACK stale · Saved revision is not currently confirmed (last ACK: {{reported}})',
+  syncRejected: 'Worker rejected configuration ({{reason}})',
+  syncUnavailable: 'Saved configuration only · Worker application status unavailable',
+  syncNoContext: 'Saved configuration only · Check camera worker status separately',
+  syncChecking: 'Checking worker application status…',
+  syncNoneReported: 'none',
+  regionSyncApplied: 'Worker applied (v{{version}})',
+  regionSyncInactive: 'Saved v{{version}} · Region inactive',
+  regionSyncNotApplied: 'Saved v{{version}} · Not yet confirmed by worker',
+  regionSyncUnavailable: 'Saved v{{version}} · Worker ACK unavailable',
+  regionSyncUnconfigured: 'Not saved in v2',
+} as const;
+
+const vi: Record<keyof typeof en, string> = {
+  title: 'Chính sách PPE',
+  subtitle: 'Cấu hình PPE cho camera hoặc vùng, đối chiếu trạng thái đã áp dụng.',
+  target: 'Phạm vi chính sách',
+  camera: 'Mặc định camera',
+  region: 'Vùng',
+  mode: 'Chế độ chính sách',
+  choose: 'Chọn chế độ',
+  EXPLICIT: 'Tùy chỉnh PPE',
+  DISABLED: 'Tắt kiểm tra',
+  INHERIT: 'Theo mặc định',
+  reason: 'Lý do',
+  save: 'Lưu chính sách PPE',
+  loading: 'Đang tải chính sách PPE…',
+  error: 'Không tải được chính sách PPE.',
+  retry: 'Thử lại',
+  failed: 'Không lưu được chính sách PPE. Hãy thử lại hoặc tải lại cấu hình.',
+  failed400:
+    'Dữ liệu chính sách PPE chưa hợp lệ. Hãy kiểm tra danh sách PPE đã chọn hoặc lý do tắt rồi thử lại.',
+  failed403: 'Bạn không có quyền thay đổi chính sách PPE tại công trường này.',
+  failed404:
+    'Không tìm thấy camera hoặc vùng quan sát mục tiêu. Vui lòng làm mới danh mục và thử lại.',
+  failed409:
+    'Xung đột phiên bản cấu hình: đã có cập nhật mới hơn. Chính sách mới nhất vừa được tải lại — vui lòng kiểm tra và lưu lại.',
+  failed429: 'Quá nhiều yêu cầu lưu chính sách. Vui lòng chờ giây lát rồi thử lại.',
+  unsavedDraftBadge: 'Bản nháp chưa lưu',
+  preservedRegionDrafts:
+    'Đã giữ nguyên {{count}} bản nháp theo vùng sau khi tải lại — hãy chọn từng vùng tại Phạm vi chính sách để xem và lưu, hoặc nhấn Đặt lại bản nháp.',
+  resetDraft: 'Đặt lại bản nháp',
+  saved: 'Đã lưu phiên bản {{revision}}. Xem riêng trạng thái worker.',
+  current: 'Phiên bản đã lưu {{revision}}',
+  absent: 'Phạm vi này chưa có chính sách PPE v2.',
+  initialize: 'Khởi tạo chính sách PPE',
+  activation: 'Bật vùng với chính sách này',
+  'item.HARD_HAT': 'Mũ bảo hộ',
+  'item.SAFETY_VEST': 'Áo phản quang',
+  'item.GLOVES': 'Găng tay',
+  'item.BOOTS': 'Giày bảo hộ',
+  'item.GOGGLES': 'Kính bảo hộ',
+  requiredItemsGroup: 'Các hạng mục PPE bắt buộc',
+  readinessCoreBadge: 'Cơ bản',
+  readinessExperimentalBadge: 'Thử nghiệm',
+  readinessGuidanceNote:
+    'Mũ, áo: cơ bản; găng, giày, kính: thử nghiệm. Bản đã lưu chỉ áp dụng sau khi camera xác nhận.',
+  validationExplicitEmpty: 'Chọn ít nhất một hạng mục PPE trước khi lưu chính sách tùy chỉnh.',
+  validationDisabledReasonRequired: 'Nhập lý do tắt kiểm tra PPE trước khi lưu.',
+  validationDisabledReasonInvalid:
+    'Nhập lý do hợp lệ (tối đa 500 ký tự, không chứa ký tự điều khiển) trước khi lưu.',
+  'modeBadge.INHERIT': 'Dùng mặc định camera',
+  'modeBadge.EXPLICIT': 'Tùy chỉnh',
+  'modeBadge.DISABLED': 'Tắt',
+  'modeBadge.UNCONFIGURED': 'Chưa cấu hình',
+  cameraSummaryHeading: 'Chính sách mặc định của camera',
+  cameraUninitializedNote:
+    'Chính sách PPE mặc định của camera (v2) chưa được khởi tạo. Chưa thể xác định PPE hiệu lực cho đến khi cấu hình.',
+  editCameraDefault: 'Sửa mặc định camera',
+  regionsHeading: 'Các vùng quan sát trên camera ({{count}})',
+  regionsEmpty: 'Chưa có vùng quan sát nào được gắn với camera này.',
+  effectivePpeLabel: 'PPE hiệu lực',
+  effectiveFromCamera: 'Theo mặc định của camera',
+  effectiveFromRegion: 'Tùy chỉnh riêng của vùng',
+  effectiveDisabled: 'Đã tắt kiểm tra PPE',
+  effectiveDisabledByCamera: 'Đã tắt kiểm tra PPE (theo mặc định camera)',
+  effectiveReason: 'Lý do: {{reason}}',
+  effectiveUnknownUninitialized:
+    'Chưa xác định PPE hiệu lực — vùng này chưa có chính sách PPE v2 đã lưu.',
+  effectiveUnknownCameraDefault: 'Chưa xác định PPE hiệu lực — mặc định camera chưa được khởi tạo.',
+  effectiveLoading: 'Đang tải chính sách của vùng…',
+  effectiveError: 'Không tải được chính sách đã lưu của vùng này.',
+  previewHeading: 'PPE hiệu lực dự kiến sau khi lưu',
+  previewRequiresCameraInit:
+    'Cần chọn hoặc lưu chính sách mặc định camera hợp lệ để xem PPE kế thừa.',
+  regionActive: 'Đang bật',
+  regionInactive: 'Đang tắt',
+  regionVersionMeta: 'Vùng v{{version}}',
+  regionNumberBadge: 'Vùng #{{index}}',
+  regionUnresolvedLabel: 'Vùng quan sát #{{index}}',
+  zoneMetadataUnavailable: 'Chưa có thông tin khu vực',
+  technicalIdsSummary: 'Mã định danh kỹ thuật',
+  technicalRegionId: 'Mã vùng (Region ID): {{id}}',
+  technicalZoneId: 'Mã khu vực (Zone ID): {{id}}',
+  capabilityTruthNote:
+    'Các lựa chọn PPE đã lưu chỉ ghi nhận cấu hình chính sách mong muốn. Việc giám sát thực tế cần biên nhận worker đã áp dụng khớp phiên bản và phụ thuộc các lớp PPE mà mô hình worker đang chạy hỗ trợ (màn hình này không hiển thị nhãn chất lượng mô hình tĩnh theo từng camera).',
+  editRegion: 'Chỉnh sửa',
+  editRegionAria: 'Chỉnh sửa chính sách cho {{target}}',
+  readOnlyNotice:
+    'Chế độ chỉ đọc: Cần quyền Quản lý công trường để thay đổi chính sách PPE của camera hoặc vùng.',
+  editorHeading: 'Chỉnh sửa phạm vi chính sách',
+  savedConfigMeta: 'Cấu hình v{{configVersion}} · Phiên bản chính sách {{revision}}',
+  savedConfigOnlyMeta: 'Cấu hình đã lưu v{{configVersion}} · Chưa có chính sách v2',
+  syncHeading: 'Trạng thái đã lưu so với đã áp dụng',
+  syncSavedVersion: 'Cấu hình đã lưu: v{{version}}',
+  syncSavedUnknown: 'Cấu hình đã lưu: chưa có',
+  syncApplied: 'Worker đã áp dụng (ACK v{{reported}})',
+  syncNotYetApplied: 'Mới lưu · Chưa áp dụng bản hiện tại (worker ACK: {{reported}})',
+  syncPending: 'Mới lưu · Đang chờ worker áp dụng (đã báo: {{reported}})',
+  syncUnconfirmed: 'Mới lưu · Chưa có xác nhận áp dụng (chưa có ACK từ worker)',
+  syncStale: 'ACK của worker đã cũ · Chưa xác nhận bản hiện tại (ACK gần nhất: {{reported}})',
+  syncRejected: 'Worker từ chối cấu hình ({{reason}})',
+  syncUnavailable: 'Chỉ hiển thị cấu hình đã lưu · Không lấy được trạng thái áp dụng của worker',
+  syncNoContext: 'Chỉ hiển thị cấu hình đã lưu · Xem riêng trạng thái worker',
+  syncChecking: 'Đang kiểm tra trạng thái áp dụng của worker…',
+  syncNoneReported: 'chưa có',
+  regionSyncApplied: 'Worker đã áp dụng (v{{version}})',
+  regionSyncInactive: 'Đã lưu v{{version}} · Vùng đang tắt',
+  regionSyncNotApplied: 'Đã lưu v{{version}} · Worker chưa xác nhận áp dụng',
+  regionSyncUnavailable: 'Đã lưu v{{version}} · Chưa có ACK từ worker',
+  regionSyncUnconfigured: 'Chưa lưu bản v2',
+};
+
+export type CameraPpeCopyKey = `cameraPpe.${keyof typeof en}`;
+
+export const PPE_ITEM_LABEL_KEY: Record<PpeItem, CameraPpeCopyKey> = {
+  HARD_HAT: 'cameraPpe.item.HARD_HAT',
+  SAFETY_VEST: 'cameraPpe.item.SAFETY_VEST',
+  GLOVES: 'cameraPpe.item.GLOVES',
+  BOOTS: 'cameraPpe.item.BOOTS',
+  GOGGLES: 'cameraPpe.item.GOGGLES',
+};
+
+const CORE_BASELINE_PPE_ITEMS: ReadonlySet<PpeItem> = new Set<PpeItem>(['HARD_HAT', 'SAFETY_VEST']);
+
+export function isCoreBaselinePpeItem(item: PpeItem): boolean {
+  return CORE_BASELINE_PPE_ITEMS.has(item);
+}
+
+let registered = false;
+
+export function registerCameraPpePolicyCopy(): void {
+  if (registered) return;
+  registered = true;
+  registerFeatureCatalog({
+    en: Object.fromEntries(Object.entries(en).map(([key, value]) => [`cameraPpe.${key}`, value])),
+    vi: Object.fromEntries(Object.entries(vi).map(([key, value]) => [`cameraPpe.${key}`, value])),
+  });
+}

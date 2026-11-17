@@ -122,6 +122,8 @@ export class DurableGroupingService {
         observation.status !== 'MISSING'
       )
         continue;
+      // EVENT_LOCAL has no issued v2 bundle. Camera-scope PPE belongs to tracked admission.
+      if (observation.scope === 'CAMERA') return refuse();
       const context = await resolver.resolve(
         manager,
         event.cameraExternalId,

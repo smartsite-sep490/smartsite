@@ -1,11 +1,21 @@
+import { isMf06TrackedWireVersion } from './mf06-observation-event.js';
 import type { DataSource, EntityManager } from 'typeorm';
 import type { QueryDeepPartialEntity } from 'typeorm/query-builder/QueryPartialEntity.js';
 import { randomUUID } from 'node:crypto';
-import { computeCanonicalPayloadHash } from '@smartsite/contracts';
+
 import { AiObservationEventEntity } from '../../../database/entities/ai-observation-event.entity.js';
 import { EventProcessingStatus } from '../../../database/entities/enums.js';
 import { readConsistentMf06RawEvent } from './mf06-observation-event.js';
 import { selectZoneEntrySubject } from '../identity/observation-identity-subject.js';
+import {
+  isTrackedProjectionTransaction,
+  type TrackedProjectionFrame,
+} from '../../../integrations/ai/tracked-frame-admission.js';
+import {
+  snapshotMf06Admission,
+  loadMf06EventAdmission,
+  computeMf06InitialBinding,
+} from './mf06-event-admission.js';
 
 // Only a successful INSERT here may authorize new work; UPDATE also changes PostgreSQL xmin.
 const insertReceipts = new WeakMap<
@@ -20,13 +30,26 @@ const insertReceipts = new WeakMap<
 export class Mf06EnqueueService {
   constructor(private readonly db: DataSource) {}
 
-  async insertFresh(manager: EntityManager, event: AiObservationEventEntity): Promise<void> {
+  async insertFresh(
+    manager: EntityManager,
+    event: AiObservationEventEntity,
+    admission?: AiObservationEventEntity['admissionContext'],
+  ): Promise<void> {
     this.requireTransaction(manager);
     const eventId = event.eventId;
     const hash = event.payloadHash;
+    const savedAdmission = snapshotMf06Admission(event, admission);
+    if (savedAdmission && !event.resolvedCameraId) throw new Error('MF06_INVALID_ADMISSION');
     await manager
       .getRepository(AiObservationEventEntity)
       .insert(event as QueryDeepPartialEntity<AiObservationEventEntity>);
+    // This UPDATE can only follow our successful INSERT, never adopt an existing row.
+    // Take the cmin receipt afterwards so this owned write does not invalidate it.
+    if (savedAdmission)
+      await manager.query(
+        'UPDATE ai_observation_event SET admission_context=$2::jsonb WHERE event_id=$1',
+        [eventId, JSON.stringify(savedAdmission)],
+      );
     const [{ transaction, command }] = await manager.query(
       'SELECT pg_current_xact_id()::text AS transaction, cmin::text AS command FROM ai_observation_event WHERE event_id=$1',
       [eventId],
@@ -83,7 +106,7 @@ export class Mf06EnqueueService {
 
     // 3. Replay existing INITIAL_OBSERVATION_ASSESSMENT/revision 1 requests before registry checks
     const existingRequests = await manager.query(
-      `SELECT request_id
+      `SELECT request_id, site_id
        FROM zone_entry_assessment_request
        WHERE event_id = $1
          AND requested_purpose = 'INITIAL_OBSERVATION_ASSESSMENT'
@@ -93,6 +116,8 @@ export class Mf06EnqueueService {
     );
 
     if (Array.isArray(existingRequests) && existingRequests.length > 0) {
+      if (!(await loadMf06EventAdmission(manager, storedEvent, existingRequests[0].site_id)))
+        return [];
       return Object.freeze(existingRequests.map((row: { request_id: string }) => row.request_id));
     }
 
@@ -105,6 +130,50 @@ export class Mf06EnqueueService {
     if (receipt.transaction !== transaction || receipt.command !== command) return [];
     insertReceipts.get(manager)!.delete(eventId);
 
+    return this.enqueueQualified(manager, storedEvent);
+  }
+
+  /** Separate admission capability; never manufactures or consumes a fresh INSERT receipt. */
+  async enqueueSealedFrame(
+    manager: EntityManager,
+    frame: TrackedProjectionFrame,
+  ): Promise<readonly string[]> {
+    this.requireTransaction(manager);
+    if (!isTrackedProjectionTransaction(manager, frame))
+      throw new Error('MF06_SEALED_PROJECTION_REQUIRED');
+    const ids: string[] = [];
+    for (const part of frame.parts) {
+      const event = await manager
+        .getRepository(AiObservationEventEntity)
+        .findOneBy({ eventId: part.eventId });
+      if (
+        !event ||
+        event.payloadHash !== part.payloadHash ||
+        event.resolvedCameraId !== frame.scope.cameraId
+      )
+        throw new Error('MF06_INVALID_SEALED_ORIGINAL');
+      const raw = readConsistentMf06RawEvent(event);
+      if (!raw || !isMf06TrackedWireVersion(raw.schemaVersion))
+        throw new Error('MF06_INVALID_SEALED_ORIGINAL');
+      const zoneCount = (raw.observations as Array<{ type: string }>).filter(
+        (item) => item.type === 'ZONE_ENTRY',
+      ).length;
+      if (zoneCount === 0) continue;
+      const issued = await loadMf06EventAdmission(manager, event, frame.scope.siteId);
+      if (!issued || issued.admission?.classification !== 'LIVE')
+        throw new Error('MF06_INVALID_SEALED_ORIGINAL');
+      const enqueued = await this.enqueueQualified(manager, event, issued);
+      if (enqueued.length !== zoneCount) throw new Error('MF06_INVALID_SEALED_ORIGINAL');
+      ids.push(...enqueued);
+    }
+    return Object.freeze(ids);
+  }
+
+  private async enqueueQualified(
+    manager: EntityManager,
+    storedEvent: AiObservationEventEntity,
+    qualified?: Awaited<ReturnType<typeof loadMf06EventAdmission>>,
+  ): Promise<readonly string[]> {
     // Must be eligible processing status (PROCESSED or SKIPPED_NO_CANDIDATE)
     if (
       storedEvent.processingStatus !== EventProcessingStatus.PROCESSED &&
@@ -133,6 +202,9 @@ export class Mf06EnqueueService {
       return [];
     }
     const camera = cameraRows[0];
+    const issued =
+      qualified ?? (await loadMf06EventAdmission(manager, storedEvent, camera.site_id));
+    if (!issued || issued.admission?.classification === 'REVIEW_ONLY') return [];
 
     // 7. Process observations independently
     const raw = storedEvent.rawPayload as { observations?: unknown[] };
@@ -164,16 +236,25 @@ export class Mf06EnqueueService {
       }
 
       // Region SHARE lock: exact active geometry, camera, version
-      const regionRows = await manager.query(
-        `SELECT id, camera_id, zone_id, version, is_active
+      const pinned = issued.bundle?.regions.find(
+        (region) =>
+          region.regionId === selected.regionId.toLowerCase() &&
+          region.geometryVersion === selected.geometryVersion,
+      );
+      const regionRows = issued.admission
+        ? pinned
+          ? [{ zone_id: pinned.zoneId }]
+          : []
+        : await manager.query(
+            `SELECT id, camera_id, zone_id, version, is_active
          FROM camera_observation_region
          WHERE id = $1
            AND camera_id = $2
            AND version = $3
            AND is_active = true
          FOR SHARE`,
-        [selected.regionId, camera.id, selected.geometryVersion],
-      );
+            [selected.regionId, camera.id, selected.geometryVersion],
+          );
 
       if (!Array.isArray(regionRows) || regionRows.length === 0) {
         continue;
@@ -196,19 +277,11 @@ export class Mf06EnqueueService {
       const zone = zoneRows[0];
 
       // Compute canonical server subject binding hash
-      const bindingHash = computeCanonicalPayloadHash({
-        algorithm: 'MF06_OBSERVATION_SUBJECT_BINDING_V1',
-        eventId: storedEvent.eventId,
-        zoneObservationIndex,
-        personObservationIndex: selected.personObservationIndex,
-        subjectBindingStatus: selected.subjectBindingStatus,
-        trackId: selected.trackId,
-        regionId: selected.regionId,
-        geometryVersion: selected.geometryVersion,
-        ...(selected.subjectBindingStatus === 'BOUND' && selected.personBoundingBox
-          ? { personBoundingBox: selected.personBoundingBox }
-          : {}),
-      });
+      const bindingHash = computeMf06InitialBinding(
+        storedEvent.eventId,
+        selected,
+        issued.admission,
+      );
 
       const candidateRequestId = randomUUID();
       const insertRequestSql = `

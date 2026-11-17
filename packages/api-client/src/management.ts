@@ -1,7 +1,43 @@
+import { parseCameraObservationZones } from '@smartsite/contracts/camera-observation-zones';
+import {
+  parseTrackedEpisodeObservationQuery,
+  parseTrackedEpisodeObservationPage,
+  parseTrackedEpisodeDetail,
+  parseTrackedEpisodeMediaSource,
+  parseTrackedObservationIdentity,
+  type TrackedEpisodeDetail,
+  type TrackedObservationIdentity,
+  type TrackedEpisodeObservationOptions,
+  type TrackedEpisodeObservationPage,
+  type TrackedEpisodeMediaSource,
+  type TrackedEpisodeMediaRepresentation,
+} from '@smartsite/contracts/tracked-episode-frames';
+import type {
+  CreateSafetyIdentificationRequest,
+  ReassignSafetyIdentificationRequest,
+  RespondSafetyIdentificationRequest,
+  ReviewSafetyIdentificationRequest,
+  SafetyIdentificationAssignee,
+  SafetyIdentificationEvidencePreview,
+  SafetyIdentificationHistoryPage,
+  SafetyIdentificationMutation,
+  SafetyIdentificationRequest,
+  SafetyIdentificationRequestPage,
+  SafetyIdentificationStatus,
+  SafetyIdentificationVersionCommand,
+} from '@smartsite/contracts/safety-identification';
+import {
+  trackedEpisodeMediaPath,
+  readTrackedEpisodeMediaResponse,
+  readSafetyEvidenceJpeg,
+  type TrackedEpisodeMediaResult,
+} from './tracked-episode-media-response';
 import {
   parseCreateReferenceRegionCommand,
+  parseCreatePolicyReferenceRegionCommand,
   parseUpdateReferenceRegionPolygonCommand,
   type CreateReferenceRegionCommand,
+  type CreatePolicyReferenceRegionCommand,
   type UpdateReferenceRegionPolygonCommand,
 } from '@smartsite/contracts/camera-region-reference';
 import type { ReferenceRegionMutationResponse } from '@smartsite/contracts/camera-region-geometry-confirmation';
@@ -11,7 +47,12 @@ import {
   MAX_CAMERA_APPLICATION_STATUS_RESPONSE_BYTES,
   parseScopedCameraApplicationStatus,
 } from './camera-configuration-response';
-import { parseSafetyEpisodeReadCommand } from '@smartsite/contracts/safety-episodes';
+import {
+  parseSafetyEpisodeReadCommand,
+  parseSafetyFrameInboxPage,
+  type SafetyFrameInboxOptions,
+  type SafetyFrameInboxPage,
+} from '@smartsite/contracts/safety-episodes';
 import type {
   SafetyEpisode,
   SafetyEpisodePage,
@@ -189,6 +230,36 @@ function appendFile(form: FormData, field: string, file: Blob | NativeUploadFile
 }
 
 import { ApiError, parseBackendErrorEnvelope, type RequestOptions } from './errors';
+import {
+  parseCameraPpePolicy,
+  parseRegionPpePolicy,
+  type RegionPpePolicy,
+} from '@smartsite/contracts/camera-ppe-policy';
+import {
+  parseInitializeCameraPpePolicyCommand,
+  parseCameraPpePolicyChangeCommand,
+  parseRegionPpePolicyChangeCommand,
+  type InitializeCameraPpePolicyCommand,
+  type CameraPpePolicyChangeCommand,
+  type RegionPpePolicyChangeCommand,
+} from '@smartsite/contracts/camera-ppe-policy-command';
+
+export interface SavedPpePolicy {
+  cameraId: string;
+  regionId: string | null;
+  configurationVersion: number;
+  savedRevision: number | null;
+  policy: RegionPpePolicy | null;
+}
+
+export interface PpePolicySaveReceipt {
+  commandId: string;
+  cameraId: string;
+  configurationVersion: number;
+  viewRevision: number;
+  bundleSha256: string;
+  replayed: boolean;
+}
 
 export type PageOptions = { offset?: number; limit?: number };
 export type WorkerScheduleListOptions = PageOptions & {
@@ -1818,6 +1889,361 @@ export class SmartSiteManagementClient {
     return this.request<SiteResponse>('GET', `/sites/${pathId(siteId)}`, token);
   }
   /** Prepared episode transport; callers must wait for Backend rollout before exposing this UI. */
+  async getTrackedObservationIdentity(
+    token: string,
+    siteId: string,
+    episodeId: string,
+    input: TrackedEpisodeMediaSource,
+    expectedPayloadHash: string,
+    options?: RequestOptions,
+  ): Promise<TrackedObservationIdentity> {
+    const source = parseTrackedEpisodeMediaSource(input);
+    if (
+      !source ||
+      typeof expectedPayloadHash !== 'string' ||
+      !/^[a-f0-9]{64}$/.test(expectedPayloadHash)
+    )
+      throw new ApiError('invalid-response', 'Invalid original identity source.');
+    const query = new URLSearchParams({
+      personObservationIndex: String(source.personObservationIndex),
+      evidenceIndex: String(source.evidenceIndex),
+    });
+    const payload = await this.request<unknown>(
+      'GET',
+      `/sites/${pathId(siteId)}/safety-episodes/${pathId(episodeId)}/findings/${source.alertId}/events/${source.eventId}/identity?${query}`,
+      token,
+      undefined,
+      undefined,
+      options,
+      { cache: 'no-store', redirect: 'error' },
+      16384,
+    );
+    const result = parseTrackedObservationIdentity(
+      payload,
+      siteId.toLowerCase(),
+      episodeId.toLowerCase(),
+      source,
+      expectedPayloadHash,
+    );
+    if (!result)
+      throw new ApiError('invalid-response', 'Backend returned inconsistent original identity.');
+    return result;
+  }
+
+  /** Prepared episode transport; callers must wait for Backend rollout before exposing this UI. */
+  async getTrackedEpisode(
+    token: string,
+    siteId: string,
+    episodeId: string,
+    options?: RequestOptions,
+  ): Promise<TrackedEpisodeDetail> {
+    const payload = await this.request<unknown>(
+      'GET',
+      `/sites/${pathId(siteId)}/safety-episodes/${pathId(episodeId)}/tracked`,
+      token,
+      undefined,
+      undefined,
+      options,
+      { cache: 'no-store', redirect: 'error' },
+      131072,
+    );
+    const detail = parseTrackedEpisodeDetail(
+      payload,
+      siteId.toLowerCase(),
+      episodeId.toLowerCase(),
+    );
+    if (!detail)
+      throw new ApiError('invalid-response', 'Backend returned inconsistent tracked episode.');
+    return detail;
+  }
+
+  /** Prepared episode transport; callers must wait for Backend rollout before exposing this UI. */
+  async listTrackedEpisodeObservations(
+    token: string,
+    siteId: string,
+    episodeId: string,
+    options: TrackedEpisodeObservationOptions = {},
+    requestOptions?: RequestOptions,
+  ): Promise<TrackedEpisodeObservationPage> {
+    const allowed = ['offset', 'limit', 'throughSequence', 'alertId'];
+    if (
+      !options ||
+      Object.keys(options).some((k) => !allowed.includes(k)) ||
+      (options.offset !== undefined &&
+        (typeof options.offset !== 'number' ||
+          !Number.isSafeInteger(options.offset) ||
+          options.offset < 0)) ||
+      (options.limit !== undefined &&
+        (typeof options.limit !== 'number' ||
+          !Number.isSafeInteger(options.limit) ||
+          options.limit < 1 ||
+          options.limit > 20)) ||
+      (options.throughSequence !== undefined && typeof options.throughSequence !== 'string') ||
+      (options.alertId !== undefined && typeof options.alertId !== 'string')
+    )
+      throw new ApiError('invalid-response', 'Invalid tracked history request.');
+    const query = new URLSearchParams(),
+      raw: Record<string, string> = {};
+    for (const key of ['offset', 'limit', 'throughSequence', 'alertId'] as const)
+      if (options[key] !== undefined) raw[key] = String(options[key]);
+    const parsed = parseTrackedEpisodeObservationQuery(raw);
+    if (!parsed) throw new ApiError('invalid-response', 'Invalid tracked history request.');
+    for (const [key, value] of Object.entries(parsed)) query.set(key, String(value));
+    const path = `/sites/${pathId(siteId)}/safety-episodes/${pathId(episodeId)}/observations`;
+    const payload = await this.request<unknown>(
+      'GET',
+      `${path}${query.size ? '?' + query : ''}`,
+      token,
+      undefined,
+      undefined,
+      requestOptions,
+      { cache: 'no-store', redirect: 'error' },
+      524288,
+    );
+    const page = parseTrackedEpisodeObservationPage(payload, episodeId.toLowerCase(), parsed);
+    if (!page)
+      throw new ApiError('invalid-response', 'Backend returned inconsistent tracked history.');
+    return page;
+  }
+
+  /** Candidate route only. expectedFrameSha256 must come from the validated history descriptor. */
+  async readTrackedEpisodeMedia(
+    token: string,
+    siteId: string,
+    episodeId: string,
+    source: TrackedEpisodeMediaSource,
+    representation: TrackedEpisodeMediaRepresentation,
+    expectedFrameSha256: string,
+    options?: RequestOptions,
+  ): Promise<TrackedEpisodeMediaResult> {
+    const path = trackedEpisodeMediaPath(
+      siteId,
+      episodeId,
+      source,
+      representation,
+      expectedFrameSha256,
+    );
+    const sessionScopes = captureSessionScopes(token);
+    return this.runRequest(this.requestOptions(token, options), async (signal) => {
+      const response = await this.fetchAuthenticated(
+        path,
+        token,
+        {
+          headers: { Accept: 'image/jpeg' },
+          cache: 'no-store',
+          redirect: 'error',
+        },
+        signal,
+        true,
+      );
+      if (!response.ok) {
+        if (!this.session && response.status === 401 && sessionScopes.length)
+          dispatchSessionExpired(sessionScopes);
+        return this.responseError(response, signal, 4096);
+      }
+      return readTrackedEpisodeMediaResponse(
+        response,
+        expectedFrameSha256,
+        representation,
+        (read, currentSignal) => this.readBody(read, currentSignal),
+        signal,
+      );
+    });
+  }
+
+  previewSafetyIdentificationEvidence(
+    token: string,
+    siteId: string,
+    input: SafetyIdentificationEvidencePreview,
+    expectedFrameSha256: string,
+    options?: RequestOptions,
+  ) {
+    if (!/^[a-f0-9]{64}$/.test(expectedFrameSha256))
+      throw new ApiError('invalid-response', 'Invalid evidence source digest.');
+    return this.requestSafetyIdentificationJpeg(
+      token,
+      `/sites/${pathId(siteId)}/safety-identification-requests/evidence-preview`,
+      expectedFrameSha256,
+      input,
+      options,
+    );
+  }
+
+  readSafetyIdentificationEvidence(
+    token: string,
+    siteId: string,
+    requestId: string,
+    evidenceId: string,
+    options?: RequestOptions,
+  ) {
+    return this.requestSafetyIdentificationJpeg(
+      token,
+      `/sites/${pathId(siteId)}/safety-identification-requests/${pathId(requestId)}/evidence/${pathId(evidenceId)}`,
+      null,
+      undefined,
+      options,
+    );
+  }
+
+  private requestSafetyIdentificationJpeg(
+    token: string,
+    path: string,
+    expectedFrameSha256: string | null,
+    input?: SafetyIdentificationEvidencePreview,
+    options?: RequestOptions,
+  ) {
+    const sessionScopes = captureSessionScopes(token);
+    return this.runRequest(this.requestOptions(token, options), async (signal) => {
+      const started = performance.now();
+      const response = await this.fetchAuthenticated(
+        path,
+        token,
+        {
+          method: input ? 'POST' : 'GET',
+          headers: input
+            ? { Accept: 'image/jpeg', 'Content-Type': 'application/json' }
+            : { Accept: 'image/jpeg' },
+          ...(input ? { body: JSON.stringify(input) } : {}),
+          cache: 'no-store',
+          redirect: 'error',
+        },
+        signal,
+        true,
+      );
+      if (!response.ok) {
+        if (!this.session && response.status === 401 && sessionScopes.length)
+          dispatchSessionExpired(sessionScopes);
+        return this.responseError(response, signal, 4096);
+      }
+      const image = await readSafetyEvidenceJpeg(
+        response,
+        expectedFrameSha256,
+        null,
+        (read, currentSignal) => this.readBody(read, currentSignal),
+        signal,
+      );
+      if (input) return { ...image, validUntil: null };
+      const ttl = response.headers.get('x-smartsite-evidence-ttl-ms');
+      const validUntil = started + Number(ttl);
+      if (
+        !ttl ||
+        !/^\d{1,10}$/.test(ttl) ||
+        Number(ttl) > 3_600_000 ||
+        validUntil <= performance.now()
+      )
+        throw new ApiError('invalid-response', 'Invalid or expired evidence lifetime.');
+      return { ...image, validUntil };
+    });
+  }
+
+  getSafetyIdentificationAssignee(token: string, siteId: string, requestOptions?: RequestOptions) {
+    return this.request<{ assignee: SafetyIdentificationAssignee | null }>(
+      'GET',
+      `/sites/${pathId(siteId)}/safety-identification-requests/assignee`,
+      token,
+      undefined,
+      undefined,
+      requestOptions,
+    );
+  }
+
+  listSafetyIdentificationRequests(
+    token: string,
+    siteId: string,
+    options: PageOptions & { status?: SafetyIdentificationStatus } = {},
+    requestOptions?: RequestOptions,
+  ): Promise<SafetyIdentificationRequestPage> {
+    const query = new URLSearchParams();
+    if (options.offset !== undefined) query.set('offset', String(options.offset));
+    if (options.limit !== undefined) query.set('limit', String(options.limit));
+    if (options.status !== undefined) query.set('status', options.status);
+    const path = `/sites/${pathId(siteId)}/safety-identification-requests`;
+    return this.request(
+      'GET',
+      `${path}${query.size ? `?${query}` : ''}`,
+      token,
+      undefined,
+      undefined,
+      requestOptions,
+    );
+  }
+
+  listSafetyIdentificationHistory(
+    token: string,
+    siteId: string,
+    id: string,
+    options: PageOptions = {},
+    requestOptions?: RequestOptions,
+  ): Promise<SafetyIdentificationHistoryPage> {
+    const query = new URLSearchParams();
+    if (options.offset !== undefined) query.set('offset', String(options.offset));
+    if (options.limit !== undefined) query.set('limit', String(options.limit));
+    const path = `/sites/${pathId(siteId)}/safety-identification-requests/${pathId(id)}/history`;
+    return this.request(
+      'GET',
+      `${path}${query.size ? `?${query}` : ''}`,
+      token,
+      undefined,
+      undefined,
+      requestOptions,
+    );
+  }
+
+  getSafetyIdentificationRequest(
+    token: string,
+    siteId: string,
+    id: string,
+    requestOptions?: RequestOptions,
+  ): Promise<SafetyIdentificationRequest> {
+    return this.request(
+      'GET',
+      `/sites/${pathId(siteId)}/safety-identification-requests/${pathId(id)}`,
+      token,
+      undefined,
+      undefined,
+      requestOptions,
+    );
+  }
+
+  createSafetyIdentificationRequest(
+    token: string,
+    siteId: string,
+    input: CreateSafetyIdentificationRequest,
+    requestOptions?: RequestOptions,
+  ): Promise<SafetyIdentificationMutation> {
+    return this.request(
+      'POST',
+      `/sites/${pathId(siteId)}/safety-identification-requests`,
+      token,
+      input,
+      undefined,
+      requestOptions,
+    );
+  }
+
+  changeSafetyIdentificationRequest(
+    token: string,
+    siteId: string,
+    id: string,
+    command:
+      | { action: 'respond'; input: RespondSafetyIdentificationRequest }
+      | { action: 'review'; input: ReviewSafetyIdentificationRequest }
+      | { action: 'reassign'; input: ReassignSafetyIdentificationRequest }
+      | { action: 'cancel'; input: SafetyIdentificationVersionCommand },
+    requestOptions?: RequestOptions,
+  ): Promise<SafetyIdentificationMutation> {
+    if (!command || !['respond', 'review', 'reassign', 'cancel'].includes(command.action))
+      throw new TypeError('Invalid safety identification action');
+    return this.request(
+      'POST',
+      `/sites/${pathId(siteId)}/safety-identification-requests/${pathId(id)}/${command.action}`,
+      token,
+      command.input,
+      undefined,
+      requestOptions,
+    );
+  }
+
   listSafetyEpisodes(
     token: string,
     siteId: string,
@@ -1854,7 +2280,7 @@ export class SmartSiteManagementClient {
     );
   }
 
-  listSafetyEpisodeInbox(
+  async listSafetyEpisodeInbox(
     token: string,
     options: SafetyEpisodeInboxOptions = {},
     requestOptions?: RequestOptions,
@@ -1862,7 +2288,17 @@ export class SmartSiteManagementClient {
     const query = new URLSearchParams();
     for (const key of ['offset', 'limit', 'siteId', 'readStatus'] as const)
       if (options[key] !== undefined) query.set(key, String(options[key]));
-    return this.request(
+    const recipientId = options.recipientId;
+    if (
+      recipientId !== undefined &&
+      (typeof recipientId !== 'string' ||
+        !/^[a-f0-9]{8}(-[a-f0-9]{4}){3}-[a-f0-9]{12}$/i.test(recipientId))
+    )
+      throw new TypeError('Invalid episode inbox recipient ID');
+    const target = recipientId?.toLowerCase();
+    const site = target === undefined ? undefined : options.siteId?.toLowerCase();
+    if (target !== undefined) query.set('recipientId', target);
+    const page = await this.request<SafetyEpisodeInboxPage>(
       'GET',
       `/me/safety-episode-inbox${query.size ? `?${query}` : ''}`,
       token,
@@ -1870,6 +2306,82 @@ export class SmartSiteManagementClient {
       undefined,
       requestOptions,
     );
+    if (
+      target !== undefined &&
+      (!page ||
+        !Array.isArray(page.items) ||
+        (page.total !== 0 && page.total !== 1) ||
+        (page.unreadCount !== 0 && page.unreadCount !== 1) ||
+        page.unreadCount > page.total ||
+        page.items.length > page.total ||
+        page.items.some(
+          (row) => row?.id !== target || (site !== undefined && row.episode?.siteId !== site),
+        ))
+    )
+      throw new ApiError('invalid-response', 'Backend returned inconsistent episode inbox.');
+    return page;
+  }
+
+  async listSafetyFrameInbox(
+    token: string,
+    options: SafetyFrameInboxOptions = {},
+    requestOptions?: RequestOptions,
+  ): Promise<SafetyFrameInboxPage> {
+    const keys = ['offset', 'limit', 'siteId', 'cameraId', 'readStatus', 'frameKey'] as const;
+    if (
+      !options ||
+      typeof options !== 'object' ||
+      Array.isArray(options) ||
+      Object.keys(options).some((key) => !keys.includes(key as (typeof keys)[number]))
+    )
+      throw new TypeError('Invalid frame inbox filters');
+    if (
+      (options.offset !== undefined &&
+        (!Number.isSafeInteger(options.offset) || options.offset < 0)) ||
+      (options.limit !== undefined &&
+        (!Number.isSafeInteger(options.limit) || options.limit < 1 || options.limit > 100)) ||
+      (options.readStatus !== undefined && !['ALL', 'UNREAD'].includes(options.readStatus)) ||
+      (options.frameKey !== undefined &&
+        (typeof options.frameKey !== 'string' ||
+          !options.frameKey.trim() ||
+          options.frameKey.length > 200))
+    )
+      throw new TypeError('Invalid frame inbox filters');
+    const uuid = /^[a-f0-9]{8}(-[a-f0-9]{4}){3}-[a-f0-9]{12}$/i;
+    for (const key of ['siteId', 'cameraId'] as const) {
+      const value = options[key];
+      if (value !== undefined && (typeof value !== 'string' || !uuid.test(value)))
+        throw new TypeError('Invalid frame inbox scope');
+    }
+    const siteId = options.siteId?.toLowerCase();
+    const cameraId = options.cameraId?.toLowerCase();
+    const normalized = { ...options, siteId, cameraId };
+    const query = new URLSearchParams();
+    for (const key of keys)
+      if (normalized[key] !== undefined) query.set(key, String(normalized[key]));
+    const response = await this.request<unknown>(
+      'GET',
+      `/me/safety-episode-inbox/frames${query.size ? `?${query}` : ''}`,
+      token,
+      undefined,
+      undefined,
+      requestOptions,
+    );
+    const page = parseSafetyFrameInboxPage(response);
+    if (
+      !page ||
+      page.items.length > (options.limit ?? 20) ||
+      page.items.some(
+        (frame) =>
+          (siteId !== undefined && frame.siteId !== siteId) ||
+          (cameraId !== undefined && frame.cameraId !== cameraId) ||
+          (options.frameKey !== undefined && frame.frameKey !== options.frameKey),
+      ) ||
+      (options.readStatus === 'UNREAD' &&
+        (page.total !== page.unreadCount || page.items.some((frame) => !frame.unread)))
+    )
+      throw new ApiError('invalid-response', 'Backend returned inconsistent frame inbox.');
+    return page;
   }
 
   async readSafetyEpisodeInbox(
@@ -2513,6 +3025,39 @@ export class SmartSiteManagementClient {
       requestOptions,
     );
   }
+  async listPreviewCameras(
+    token: string,
+    siteId: string,
+    paging: PageOptions = {},
+    options?: RequestOptions,
+  ): Promise<Page<CameraResponse>> {
+    const offset = paging.offset ?? 0,
+      limit = paging.limit ?? 20;
+    if (
+      !Number.isSafeInteger(offset) ||
+      offset < 0 ||
+      !Number.isSafeInteger(limit) ||
+      limit < 1 ||
+      limit > 100
+    ) {
+      throw new RangeError('Invalid preview camera pagination');
+    }
+    const value = await this.request<unknown>(
+      'GET',
+      this.listPath(`/sites/${pathId(siteId)}/preview-cameras`, { offset, limit }),
+      token,
+      undefined,
+      undefined,
+      { ...options, timeoutMs: options?.timeoutMs ?? 3000 },
+      { cache: 'no-store', redirect: 'error' },
+      256_000,
+    );
+    try {
+      return parsePreviewCameraPage(value, siteId, limit);
+    } catch {
+      throw new ApiError('invalid-response', 'Invalid scoped preview camera page.');
+    }
+  }
   getCamera(token: string, siteId: string, cameraId: string, options?: RequestOptions) {
     return this.request<CameraResponse>(
       'GET',
@@ -2560,6 +3105,362 @@ export class SmartSiteManagementClient {
       MAX_CONFIGURATION_REFERENCE_RESPONSE_BYTES,
     );
     return parseScopedCameraConfigurationReference(value, siteId, cameraId);
+  }
+  async getCameraObservationZones(
+    token: string,
+    siteId: string,
+    cameraId: string,
+    paging: PageOptions = {},
+    options?: RequestOptions,
+  ) {
+    const offset = paging.offset ?? 0;
+    const limit = paging.limit ?? 20;
+    if (
+      !Number.isSafeInteger(offset) ||
+      offset < 0 ||
+      !Number.isSafeInteger(limit) ||
+      limit < 1 ||
+      limit > 100
+    ) {
+      throw new ApiError('invalid-response', 'Invalid camera observation page request.');
+    }
+    const query = new URLSearchParams();
+    if (paging.offset !== undefined) query.set('offset', String(paging.offset));
+    if (paging.limit !== undefined) query.set('limit', String(paging.limit));
+    const result = await this.request<unknown>(
+      'GET',
+      `/sites/${pathId(siteId)}/cameras/${pathId(cameraId)}/observation-zones${query.size ? `?${query}` : ''}`,
+      token,
+      undefined,
+      undefined,
+      { ...options, timeoutMs: options?.timeoutMs ?? 5000 },
+      { cache: 'no-store', redirect: 'error' },
+      128_000,
+    );
+    try {
+      const context = parseCameraObservationZones(result);
+      if (
+        context.siteId.toLowerCase() !== siteId.toLowerCase() ||
+        context.cameraId.toLowerCase() !== cameraId.toLowerCase() ||
+        context.items.length !== Math.min(limit, Math.max(0, context.total - offset))
+      ) {
+        throw new Error('Scope or page mismatch');
+      }
+      return context;
+    } catch {
+      throw new ApiError('invalid-response', 'Invalid camera observation Zone metadata.');
+    }
+  }
+  async streamCameraVideo(
+    token: string,
+    siteId: string,
+    cameraId: string,
+    onFrame: (frame: CameraMediaFrame) => void,
+    options?: CameraVideoStreamOptions,
+  ): Promise<void> {
+    if (options?.timeoutMs !== undefined && !validTimeout(options.timeoutMs)) {
+      throw new RangeError(
+        'timeoutMs must be a finite positive integer no greater than 2147483647.',
+      );
+    }
+    return this.runRequest(this.requestOptions(token, { signal: options?.signal }), (signal) =>
+      this.streamCameraVideoRequest(token, siteId, cameraId, onFrame, { ...options, signal }),
+    );
+  }
+
+  private async streamCameraVideoRequest(
+    token: string,
+    siteId: string,
+    cameraId: string,
+    onFrame: (frame: CameraMediaFrame) => void,
+    options?: CameraVideoStreamOptions,
+  ): Promise<void> {
+    const sessionScopes = captureSessionScopes(token);
+    const path = `/sites/${pathId(siteId)}/cameras/${pathId(cameraId)}/video-stream`;
+    const callerSignal = this.requestOptions(token, options)?.signal;
+
+    // Initial connection timeout: only bounds the time to receive response headers,
+    // ensuring a timeout does not terminate a healthy long-running stream.
+    const timeoutMs = options?.timeoutMs ?? 5000;
+    const connectionController = new AbortController();
+    let isConnected = false;
+    let timeoutTimer: ReturnType<typeof setTimeout> | null = null;
+
+    if (timeoutMs !== undefined && timeoutMs > 0) {
+      timeoutTimer = setTimeout(() => {
+        if (!isConnected) {
+          connectionController.abort();
+        }
+      }, timeoutMs);
+    }
+
+    const abortHandler = () => {
+      connectionController.abort();
+    };
+    if (callerSignal) {
+      if (callerSignal.aborted) {
+        connectionController.abort();
+      } else {
+        callerSignal.addEventListener('abort', abortHandler, { once: true });
+      }
+    }
+
+    let response: Response;
+    try {
+      response = await this.fetchAuthenticated(
+        path,
+        token,
+        {
+          method: 'GET',
+          headers: {
+            Accept: 'application/x-ndjson',
+          },
+          cache: 'no-store',
+          redirect: 'error',
+        },
+        connectionController.signal,
+        true,
+      );
+      isConnected = true;
+    } catch (error) {
+      if (callerSignal?.aborted) {
+        throw new ApiError('cancelled', 'Camera video stream request cancelled.');
+      }
+      if (connectionController.signal.aborted && !callerSignal?.aborted) {
+        throw new ApiError(
+          'timeout',
+          `Initial connection to video stream timed out after ${timeoutMs}ms.`,
+        );
+      }
+      if (error instanceof ApiError) {
+        throw error;
+      }
+      throw new ApiError(
+        'network',
+        error instanceof Error ? error.message : 'Could not connect to backend video stream.',
+      );
+    } finally {
+      if (timeoutTimer) {
+        clearTimeout(timeoutTimer);
+      }
+      if (callerSignal) {
+        callerSignal.removeEventListener('abort', abortHandler);
+      }
+    }
+
+    if (callerSignal?.aborted)
+      throw new ApiError('cancelled', 'Camera video stream request cancelled.');
+    if (connectionController.signal.aborted)
+      throw new ApiError(
+        'timeout',
+        `Initial connection to video stream timed out after ${timeoutMs}ms.`,
+      );
+    if (!this.session && response.status === 401 && sessionScopes.length > 0)
+      dispatchSessionExpired(sessionScopes);
+    if (!response.ok) {
+      // Healthy streams have no body deadline. Error bodies are finite JSON,
+      // bounded separately, and remain cancellable after headers arrive.
+      return this.runRequest(
+        { signal: callerSignal, ...(timeoutMs > 0 ? { timeoutMs } : {}) },
+        (signal) => this.responseError(response, signal, 16_000),
+      );
+    }
+
+    // Verify response content-type is application/x-ndjson
+    const contentType =
+      response.headers.get('content-type')?.split(';', 1)[0]?.trim().toLowerCase() ?? '';
+    if (contentType !== 'application/x-ndjson') {
+      await response.body?.cancel().catch(() => undefined);
+      throw new ApiError(
+        'invalid-response',
+        `Expected application/x-ndjson stream response, received: '${contentType}'.`,
+      );
+    }
+
+    if (!response.body) {
+      throw new ApiError(
+        'invalid-response',
+        'Backend returned an empty response body for video stream.',
+      );
+    }
+
+    await processCameraMediaNdjsonStream(
+      response.body,
+      (frame) => {
+        if (!callerSignal?.aborted) onFrame(frame);
+      },
+      { ...options, signal: callerSignal },
+    );
+    if (callerSignal?.aborted)
+      throw new ApiError('cancelled', 'Camera video stream request cancelled.');
+  }
+
+  async readRecordedCameraVideo(
+    token: string,
+    siteId: string,
+    cameraId: string,
+    options?: RecordedCameraVideoOptions,
+  ): Promise<Blob> {
+    if (options?.timeoutMs !== undefined && !validTimeout(options.timeoutMs)) {
+      throw new RangeError(
+        'timeoutMs must be a finite positive integer no greater than 2147483647.',
+      );
+    }
+    return this.runRequest(this.requestOptions(token, { signal: options?.signal }), (signal) =>
+      this.readRecordedCameraVideoRequest(token, siteId, cameraId, { ...options, signal }),
+    );
+  }
+
+  private async readRecordedCameraVideoRequest(
+    token: string,
+    siteId: string,
+    cameraId: string,
+    options?: RecordedCameraVideoOptions,
+  ): Promise<Blob> {
+    const sessionScopes = captureSessionScopes(token);
+    const path = `/sites/${pathId(siteId)}/cameras/${pathId(cameraId)}/recorded-video`;
+    const callerSignal = this.requestOptions(token, options)?.signal;
+    const timeoutMs = options?.timeoutMs ?? 5000;
+    const controller = new AbortController();
+    const abortHandler = () => controller.abort();
+    const timer = timeoutMs > 0 ? setTimeout(abortHandler, timeoutMs) : null;
+    let response: Response | null = null;
+    if (callerSignal?.aborted) controller.abort();
+    else callerSignal?.addEventListener('abort', abortHandler, { once: true });
+    const readBounded = async (maximum: number): Promise<Uint8Array<ArrayBuffer>[]> => {
+      if (!response?.body)
+        throw new ApiError('invalid-response', 'Recorded video response body is missing.');
+      const reader = response.body.getReader();
+      const chunks: Uint8Array<ArrayBuffer>[] = [];
+      let size = 0;
+      let onAbort = () => {};
+      const aborted = new Promise<never>((_, reject) => {
+        onAbort = () => reject(new Error('Recorded read aborted'));
+        controller.signal.addEventListener('abort', onAbort, { once: true });
+      });
+      try {
+        if (controller.signal.aborted) throw new Error('Recorded read aborted');
+        while (true) {
+          const row = await Promise.race([reader.read(), aborted]);
+          if (row.done) break;
+          size += row.value.byteLength;
+          if (size > maximum)
+            throw new ApiError('invalid-response', 'Recorded video body exceeds maximum limit.');
+          chunks.push(new Uint8Array(row.value));
+        }
+        return chunks;
+      } finally {
+        controller.signal.removeEventListener('abort', onAbort);
+        await reader.cancel().catch(() => undefined);
+        reader.releaseLock();
+      }
+    };
+    try {
+      if (controller.signal.aborted) throw new Error('Recorded request aborted');
+      response = await this.fetchAuthenticated(
+        path,
+        token,
+        {
+          method: 'GET',
+          headers: { Accept: 'video/mp4' },
+          cache: 'no-store',
+          redirect: 'error',
+        },
+        controller.signal,
+        true,
+      );
+      if (controller.signal.aborted) throw new Error('Recorded request aborted');
+      if (!this.session && response.status === 401 && sessionScopes.length > 0)
+        dispatchSessionExpired(sessionScopes);
+      if (!response.ok) {
+        const retry = response.headers.get('Retry-After');
+        const retryAfterSeconds =
+          retry && /^\d+$/.test(retry) ? Math.min(Number(retry), 60) : undefined;
+        let payload: unknown;
+        try {
+          const chunks = await readBounded(16000);
+          payload = JSON.parse(await new Blob(chunks).text());
+        } catch {
+          payload = undefined;
+        }
+        const backendError = parseBackendErrorEnvelope(payload, response.status);
+        throw new ApiError(
+          'http',
+          backendError?.message ?? `Backend returned HTTP ${response.status} for recorded video.`,
+          response.status,
+          backendError,
+          retryAfterSeconds,
+        );
+      }
+      if (
+        response.headers.get('content-type')?.split(';', 1)[0]?.trim().toLowerCase() !== 'video/mp4'
+      )
+        throw new ApiError('invalid-response', 'Expected video/mp4 response.');
+      if (
+        options?.expectedCameraExternalId &&
+        response.headers.get('x-camera-external-id') !== options.expectedCameraExternalId
+      )
+        throw new ApiError(
+          'invalid-response',
+          'Recorded video camera external ID is missing or mismatched.',
+        );
+      const length = response.headers.get('content-length');
+      if (length !== null && (!/^\d+$/.test(length) || Number(length) > MAX_RECORDED_VIDEO_BYTES))
+        throw new ApiError(
+          'invalid-response',
+          'Recorded video content length exceeds maximum limit.',
+        );
+      const chunks = await readBounded(MAX_RECORDED_VIDEO_BYTES);
+      if (controller.signal.aborted) throw new Error('Recorded read aborted');
+      return new Blob(chunks, { type: 'video/mp4' });
+    } catch (error) {
+      if (callerSignal?.aborted)
+        throw new ApiError('cancelled', 'Recorded camera video request cancelled.');
+      if (controller.signal.aborted)
+        throw new ApiError('timeout', `Recorded video request timed out after ${timeoutMs}ms.`);
+      if (error instanceof ApiError) throw error;
+      throw new ApiError(
+        'network',
+        error instanceof Error ? error.message : 'Could not fetch recorded video.',
+      );
+    } finally {
+      if (timer) clearTimeout(timer);
+      callerSignal?.removeEventListener('abort', abortHandler);
+      await response?.body?.cancel().catch(() => undefined);
+    }
+  }
+
+  async getCameraPreview(
+    token: string,
+    siteId: string,
+    cameraId: string,
+    options?: RequestOptions,
+  ): Promise<CameraPreviewResponse> {
+    const payload = await this.request<unknown>(
+      'GET',
+      `/sites/${pathId(siteId)}/cameras/${pathId(cameraId)}/preview`,
+      token,
+      undefined,
+      undefined,
+      { ...options, timeoutMs: options?.timeoutMs ?? 3000 },
+      { cache: 'no-store', redirect: 'error' },
+      2_000_000,
+    );
+    try {
+      const preview = parseCameraPreviewResponse(payload);
+      if (
+        preview.siteId.toLowerCase() !== siteId.toLowerCase() ||
+        preview.cameraId.toLowerCase() !== cameraId.toLowerCase()
+      ) {
+        throw new Error('Camera preview scope does not match the request.');
+      }
+      return preview;
+    } catch (error) {
+      throw new ApiError(
+        'invalid-response',
+        error instanceof Error ? error.message : 'Invalid camera preview response from backend.',
+      );
+    }
   }
   async getCameraApplicationStatus(
     token: string,
@@ -2740,6 +3641,188 @@ export class SmartSiteManagementClient {
     const payload = await this.request<unknown>(
       'POST',
       `/sites/${pathId(siteId)}/cameras/${pathId(cameraId)}/reference-regions`,
+      token,
+      body,
+      undefined,
+      requestOptions,
+      { cache: 'no-store', redirect: 'error' },
+      65536,
+    );
+    return parseReferenceRegionMutation(payload, body, { cameraId, zoneId: body.zoneId });
+  }
+
+  initializePpePolicy(
+    token: string,
+    siteId: string,
+    cameraId: string,
+    input: InitializeCameraPpePolicyCommand,
+    options?: RequestOptions,
+  ) {
+    return this.writePpePolicy(
+      token,
+      siteId,
+      cameraId,
+      'POST',
+      '/initialize',
+      parseInitializeCameraPpePolicyCommand(input),
+      options,
+    );
+  }
+
+  updateCameraPpePolicy(
+    token: string,
+    siteId: string,
+    cameraId: string,
+    input: CameraPpePolicyChangeCommand,
+    options?: RequestOptions,
+  ) {
+    return this.writePpePolicy(
+      token,
+      siteId,
+      cameraId,
+      'PATCH',
+      '',
+      parseCameraPpePolicyChangeCommand(input),
+      options,
+    );
+  }
+
+  updateRegionPpePolicy(
+    token: string,
+    siteId: string,
+    cameraId: string,
+    regionId: string,
+    input: RegionPpePolicyChangeCommand,
+    options?: RequestOptions,
+  ) {
+    return this.writePpePolicy(
+      token,
+      siteId,
+      cameraId,
+      'PATCH',
+      `/regions/${pathId(regionId)}`,
+      parseRegionPpePolicyChangeCommand(input),
+      options,
+    );
+  }
+
+  activateRegionWithPpePolicy(
+    token: string,
+    siteId: string,
+    cameraId: string,
+    regionId: string,
+    input: RegionPpePolicyChangeCommand,
+    options?: RequestOptions,
+  ) {
+    return this.writePpePolicy(
+      token,
+      siteId,
+      cameraId,
+      'POST',
+      `/regions/${pathId(regionId)}/activate`,
+      parseRegionPpePolicyChangeCommand(input),
+      options,
+    );
+  }
+
+  private async writePpePolicy(
+    token: string,
+    siteId: string,
+    cameraId: string,
+    method: 'POST' | 'PATCH',
+    suffix: string,
+    command: RegionPpePolicyChangeCommand | InitializeCameraPpePolicyCommand | null,
+    options?: RequestOptions,
+  ): Promise<PpePolicySaveReceipt> {
+    if (!command || command.expectedConfigurationVersion >= Number.MAX_SAFE_INTEGER) {
+      throw new TypeError('Invalid PPE policy command.');
+    }
+    const receipt = await this.request<PpePolicySaveReceipt | null>(
+      method,
+      `/sites/${pathId(siteId)}/cameras/${pathId(cameraId)}/ppe-policy${suffix}`,
+      token,
+      command,
+      undefined,
+      options,
+      { cache: 'no-store', redirect: 'error' },
+      65536,
+    );
+    if (
+      !receipt ||
+      receipt.commandId !== command.commandId ||
+      receipt.cameraId !== cameraId.toLowerCase() ||
+      receipt.configurationVersion !== command.expectedConfigurationVersion + 1 ||
+      !Number.isSafeInteger(receipt.viewRevision) ||
+      receipt.viewRevision < 1 ||
+      typeof receipt.bundleSha256 !== 'string' ||
+      !/^[a-f0-9]{64}$/.test(receipt.bundleSha256) ||
+      typeof receipt.replayed !== 'boolean'
+    ) {
+      throw new ApiError('invalid-response', 'Backend returned invalid PPE policy receipt.');
+    }
+    const { commandId, configurationVersion, viewRevision, bundleSha256, replayed } = receipt;
+    return {
+      cameraId: receipt.cameraId,
+      commandId,
+      configurationVersion,
+      viewRevision,
+      bundleSha256,
+      replayed,
+    };
+  }
+
+  async readSavedPpePolicy(
+    token: string,
+    siteId: string,
+    cameraId: string,
+    regionId: string | null = null,
+    requestOptions?: RequestOptions,
+  ): Promise<SavedPpePolicy> {
+    const suffix = regionId === null ? '' : `/regions/${pathId(regionId)}`;
+    const result = await this.request<SavedPpePolicy | null>(
+      'GET',
+      `/sites/${pathId(siteId)}/cameras/${pathId(cameraId)}/ppe-policy${suffix}`,
+      token,
+      undefined,
+      undefined,
+      requestOptions,
+      { cache: 'no-store', redirect: 'error' },
+      65536,
+    );
+    const policy =
+      regionId === null
+        ? parseCameraPpePolicy(result?.policy)
+        : parseRegionPpePolicy(result?.policy);
+    if (
+      !result ||
+      result.cameraId !== cameraId.toLowerCase() ||
+      result.regionId !== (regionId?.toLowerCase() ?? null) ||
+      !Number.isSafeInteger(result.configurationVersion) ||
+      result.configurationVersion < 1 ||
+      (result.policy === null
+        ? result.savedRevision !== null
+        : !policy ||
+          result.savedRevision === null ||
+          !Number.isSafeInteger(result.savedRevision) ||
+          result.savedRevision < 1 ||
+          result.savedRevision > result.configurationVersion)
+    ) {
+      throw new ApiError('invalid-response', 'Backend returned invalid saved PPE policy.');
+    }
+    return { ...result, policy };
+  }
+
+  async createPolicyReferenceRegion(
+    token: string,
+    siteId: string,
+    cameraId: string,
+    input: CreatePolicyReferenceRegionCommand,
+    requestOptions?: RequestOptions,
+  ): Promise<ReferenceRegionMutationResponse> {
+    const body = parseCreatePolicyReferenceRegionCommand(input);
+    const payload = await this.request<unknown>(
+      'POST',
+      `/sites/${pathId(siteId)}/cameras/${pathId(cameraId)}/ppe-policy/reference-regions`,
       token,
       body,
       undefined,
@@ -3302,4 +4385,32 @@ import {
   parseScopedCameraConfigurationImage,
   parseScopedCameraConfigurationReference,
 } from './camera-configuration-response';
+import { parsePreviewCameraPage } from './preview-camera-page';
 import { captureSessionScopes, dispatchSessionExpired } from './session-expiry';
+import {
+  processCameraMediaNdjsonStream,
+  type CameraVideoStreamOptions,
+} from './camera-media-stream';
+import {
+  parseCameraPreviewResponse,
+  type CameraMediaFrame,
+  type CameraPreviewResponse,
+} from '@smartsite/contracts/camera-preview';
+
+export const MAX_RECORDED_VIDEO_BYTES = 2_000_000;
+export interface RecordedCameraVideoOptions {
+  signal?: AbortSignal;
+  timeoutMs?: number;
+  expectedCameraExternalId?: string;
+}
+
+export async function readRecordedCameraVideo(
+  token: string,
+  siteId: string,
+  cameraId: string,
+  options: RecordedCameraVideoOptions | undefined,
+  client: SmartSiteManagementClient,
+): Promise<Blob> {
+  if (!client) throw new TypeError('A configured management client is required.');
+  return client.readRecordedCameraVideo(token, siteId, cameraId, options);
+}

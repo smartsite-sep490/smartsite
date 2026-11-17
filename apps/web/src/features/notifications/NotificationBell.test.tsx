@@ -50,7 +50,12 @@ function Location() {
     </output>
   );
 }
-function mount(userId = 'worker-1', onExpired = vi.fn(), showApprovalToast = false) {
+function mount(
+  userId = 'worker-1',
+  onExpired = vi.fn(),
+  ppeInboxSiteIds?: readonly string[],
+  showApprovalToast = false,
+) {
   queryClient = new QueryClient({
     defaultOptions: { queries: { retry: false }, mutations: { retry: false } },
   });
@@ -70,6 +75,7 @@ function mount(userId = 'worker-1', onExpired = vi.fn(), showApprovalToast = fal
             apiUrl="https://api.example.test"
             userId={userId}
             showApprovalToast={showApprovalToast}
+            ppeInboxSiteIds={ppeInboxSiteIds}
           />
           <Location />
         </MemoryRouter>
@@ -130,7 +136,7 @@ describe('durable Web notification bell', () => {
         view: 'requests',
       },
     };
-    const mounted = mount('worker-1', vi.fn(), true);
+    const mounted = mount('worker-1', vi.fn(), undefined, true);
     await screen.findByRole('button', { name: 'Notifications, 0 unread' });
     list.mockResolvedValue({ items: [approved], total: 1, unreadCount: 1 });
     await act(async () => {
@@ -146,7 +152,7 @@ describe('durable Web notification bell', () => {
     });
     expect(screen.queryByRole('status', { name: 'Shift Swap Approved' })).toBeNull();
     mounted.unmount();
-    mount('worker-1', vi.fn(), true);
+    mount('worker-1', vi.fn(), undefined, true);
     await screen.findByRole('button', { name: 'Notifications, 1 unread' });
     expect(screen.queryByRole('status', { name: 'Shift Swap Approved' })).toBeNull();
     fireEvent.click(screen.getByRole('button', { name: 'Notifications, 1 unread' }));
@@ -174,6 +180,132 @@ describe('durable Web notification bell', () => {
     mount('contractor-1');
     await screen.findByRole('button', { name: 'Notifications, 1 unread' });
     expect(screen.queryByRole('status', { name: 'Shift Swap Approved' })).toBeNull();
+  });
+
+  it('opens one frame containing three people without changing their read state or legacy notices', async () => {
+    const siteId = '11111111-1111-4111-8111-111111111111';
+    const frameKey = 'event:33333333-3333-4333-8333-333333333333';
+    vi.mocked(SmartSiteManagementClient.prototype.listNotifications).mockResolvedValue({
+      items: [],
+      total: 0,
+      unreadCount: 0,
+    });
+    vi.spyOn(SmartSiteManagementClient.prototype, 'listSafetyFrameInbox').mockResolvedValue({
+      total: 1,
+      unreadCount: 1,
+      items: [
+        {
+          siteId,
+          frameKey,
+          cameraId: '44444444-4444-4444-8444-444444444444',
+          siteName: 'Site A',
+          cameraName: 'Camera A',
+          capturedAt: '2030-01-01T00:00:00Z',
+          unread: true,
+          findingCount: 4,
+          cases: [2, 1, 1].map((findingCount, index) => ({
+            recipientId: `00000000-0000-4000-8000-00000000000${index}`,
+            episodeId: `00000000-0000-4000-8000-10000000000${index}`,
+            findingCount,
+            unread: true,
+            contentRevision: 1,
+            source: null,
+            zoneEntries: [],
+          })),
+        },
+      ],
+    });
+    const readEpisode = vi.spyOn(SmartSiteManagementClient.prototype, 'readSafetyEpisodeInbox');
+    mount('officer-1', vi.fn(), [siteId]);
+    fireEvent.click(await screen.findByRole('button', { name: /notifications.*1 unread/i }));
+    const item = await screen.findByTestId('notification-bell-ppe-frame');
+    expect(item.textContent).toMatch(/3 people/);
+    expect(item.textContent).toMatch(/4 findings/);
+    expect(screen.getAllByTestId('notification-bell-ppe-frame')).toHaveLength(1);
+    expect(await screen.findByText('No other notifications yet.')).toBeTruthy();
+    fireEvent.click(item);
+    expect(screen.getByTestId('location').textContent).toBe(
+      `/incidents?${new URLSearchParams({
+        tab: 'ppe-frames',
+        siteId,
+        cameraId: '44444444-4444-4444-8444-444444444444',
+        frameKey,
+      })}`,
+    );
+    expect(readEpisode).not.toHaveBeenCalled();
+    expect(SmartSiteManagementClient.prototype.readNotification).not.toHaveBeenCalled();
+  });
+
+  it('strips untrusted cameraId and frameKey values in grouped Bell preview links while preserving same-app relative routes', async () => {
+    const siteId = '11111111-1111-4111-8111-111111111111';
+    const validFrameKey = 'event:33333333-3333-4333-8333-333333333333';
+    vi.mocked(SmartSiteManagementClient.prototype.listNotifications).mockResolvedValue({
+      items: [],
+      total: 0,
+      unreadCount: 0,
+    });
+    vi.spyOn(SmartSiteManagementClient.prototype, 'listSafetyFrameInbox').mockResolvedValue({
+      total: 2,
+      unreadCount: 2,
+      items: [
+        {
+          siteId,
+          frameKey: validFrameKey,
+          cameraId: '//evil.example/hijack',
+          siteName: 'Site A',
+          cameraName: 'Camera A',
+          capturedAt: '2030-01-01T00:00:00Z',
+          unread: true,
+          findingCount: 1,
+          cases: [
+            {
+              recipientId: '00000000-0000-4000-8000-000000000001',
+              episodeId: '00000000-0000-4000-8000-100000000001',
+              findingCount: 1,
+              unread: true,
+              contentRevision: 1,
+              source: null,
+              zoneEntries: [],
+            },
+          ],
+        },
+        {
+          siteId,
+          frameKey: 'javascript:alert(1)',
+          cameraId: '44444444-4444-4444-8444-444444444444',
+          siteName: 'Site A',
+          cameraName: 'Camera B',
+          capturedAt: '2030-01-01T00:01:00Z',
+          unread: true,
+          findingCount: 1,
+          cases: [
+            {
+              recipientId: '00000000-0000-4000-8000-000000000002',
+              episodeId: '00000000-0000-4000-8000-100000000002',
+              findingCount: 1,
+              unread: true,
+              contentRevision: 1,
+              source: null,
+              zoneEntries: [],
+            },
+          ],
+        },
+      ],
+    });
+    mount('officer-1', vi.fn(), [siteId]);
+    fireEvent.click(await screen.findByRole('button', { name: /notifications.*2 unread/i }));
+    const items = await screen.findAllByTestId('notification-bell-ppe-frame');
+    expect(items).toHaveLength(2);
+    expect(items[0]!.getAttribute('href')).toBe(
+      `/incidents?${new URLSearchParams({ tab: 'ppe-frames', siteId, frameKey: validFrameKey })}`,
+    );
+    expect(items[1]!.getAttribute('href')).toBe(
+      `/incidents?${new URLSearchParams({
+        tab: 'ppe-frames',
+        siteId,
+        cameraId: '44444444-4444-4444-8444-444444444444',
+      })}`,
+    );
   });
   it('marks a PPE notice read and opens the persisted alert without reviewing it', async () => {
     await i18n.changeLanguage('en');

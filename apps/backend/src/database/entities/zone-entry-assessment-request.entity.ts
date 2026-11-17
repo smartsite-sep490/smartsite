@@ -9,7 +9,6 @@ import {
   Unique,
   type ValueTransformer,
 } from 'typeorm';
-import { AiObservationEventEntity } from './ai-observation-event.entity.js';
 import { SiteEntity } from './site.entity.js';
 import { ZoneEntity } from './zone.entity.js';
 
@@ -44,7 +43,7 @@ function safeIntegerTransformer(minimum: number): ValueTransformer {
   'requestedPurpose',
   'requestRevision',
 ])
-@ForeignKey(() => AiObservationEventEntity, ['eventId'], ['eventId'], {
+@ForeignKey('ai_observation_event', ['eventId'], ['eventId'], {
   name: 'fk_mf06_request_event',
   onDelete: 'RESTRICT',
 })

@@ -1,5 +1,4 @@
 import { Check, Column, CreateDateColumn, Entity, ForeignKey, PrimaryColumn } from 'typeorm';
-import { AiObservationEventEntity } from './ai-observation-event.entity.js';
 import { SafetyAlertEntity } from './safety-alert.entity.js';
 
 @Entity({ name: 'alert_detection_mapping' })
@@ -18,7 +17,7 @@ export class AlertDetectionMappingEntity {
     type: 'uuid',
     primaryKeyConstraintName: 'pk_alert_detection_mapping',
   })
-  @ForeignKey(() => AiObservationEventEntity, (event) => event.eventId, {
+  @ForeignKey('ai_observation_event', 'eventId', {
     name: 'fk_mapping_event',
     onDelete: 'CASCADE',
   })

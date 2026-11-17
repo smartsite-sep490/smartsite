@@ -16,6 +16,19 @@ function reply(payload: unknown, status = 200) {
 }
 
 describe('episode API transport contract (endpoints not deployed)', () => {
+  it('serializes exact Inbox recipient lookup and rejects a response for another row', async () => {
+    const recipientId = '11111111-1111-4111-8111-111111111111';
+    const other = '22222222-2222-4222-8222-222222222222';
+    const options = { recipientId, limit: 1 };
+    const mock = reply({ items: [{ id: recipientId }], total: 1, unreadCount: 1 });
+    const api = client();
+    await api.listSafetyEpisodeInbox('token', options);
+    expect(mock.mock.calls[0]?.[0]).toContain(`recipientId=${recipientId}`);
+    reply({ items: [{ id: other }], total: 1, unreadCount: 1 });
+    await expect(api.listSafetyEpisodeInbox('token', options)).rejects.toMatchObject({
+      code: 'invalid-response',
+    });
+  });
   it('uses scoped encoded resource paths and preserves all explicit list filters', async () => {
     const mock = reply({ items: [], total: 0 });
     const api = client();

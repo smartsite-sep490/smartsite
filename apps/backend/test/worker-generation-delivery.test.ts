@@ -8,6 +8,12 @@ import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { provisionCameraWorker } from '../src/scripts/provision-camera-worker.js';
 import {
+  provisionCameraWorkerGeneration,
+  type TrustedTrackedTransition,
+} from '../src/modules/cameras/camera-worker-generations.js';
+import type { DataSource } from 'typeorm';
+import { PublicHttpException } from '../src/common/http/public-http-exception.js';
+import {
   deliverWorkerGeneration,
   parseWorkerGenerationArguments,
 } from '../src/scripts/worker-generation-delivery.js';
@@ -45,6 +51,143 @@ test('operator arguments reject unknown, duplicate and implicit target options',
   ]) {
     assert.throws(() => parseWorkerGenerationArguments(invalid));
   }
+});
+
+test('tracked transition arguments require exact generation, command and reason together', () => {
+  const base = [
+    '--camera-id',
+    cameraId,
+    '--lease-ms',
+    '60000',
+    '--output',
+    path.resolve('credential.json'),
+    '--database-identity',
+    'localhost:5433/test/owned',
+  ];
+  const extra = [
+    '--transition-from-generation',
+    credential.workerGenerationId,
+    '--transition-command',
+    credential.streamSessionId,
+    '--transition-reason',
+    'CONFIGURATION_CHANGED',
+  ];
+  assert.deepEqual(parseWorkerGenerationArguments([...base, ...extra]).transition, {
+    expectedGenerationId: credential.workerGenerationId,
+    commandId: credential.streamSessionId,
+    reason: 'CONFIGURATION_CHANGED',
+  });
+  for (const input of [
+    extra.slice(0, 2),
+    extra.slice(0, 4),
+    extra.map((value) => (value === 'CONFIGURATION_CHANGED' ? 'ALL_CLEAR' : value)),
+    extra.map((value) => (value === credential.workerGenerationId ? 'not-a-uuid' : value)),
+    [...extra.slice(0, 4), '--transition-command', credential.streamSessionId],
+  ])
+    assert.throws(() => parseWorkerGenerationArguments([...base, ...input]));
+});
+
+test('transition input rejects accessors and exotic prototypes before touching database resources', async () => {
+  const input = {
+    commandId: credential.streamSessionId,
+    expectedGenerationId: credential.workerGenerationId,
+    reason: 'SOURCE_RESTART' as const,
+  };
+  let evaluated = false;
+  const accessor = Object.defineProperty({ ...input }, 'reason', {
+    enumerable: true,
+    get() {
+      evaluated = true;
+      return 'SOURCE_RESTART';
+    },
+  });
+  for (const value of [
+    accessor,
+    Object.assign(new Date(), input),
+    { ...input, [Symbol('extra')]: true },
+  ])
+    await assert.rejects(
+      provisionCameraWorkerGeneration(
+        {} as DataSource,
+        cameraId,
+        [cameraId],
+        60000,
+        undefined,
+        value as TrustedTrackedTransition,
+      ),
+    );
+  assert.equal(evaluated, false);
+});
+
+test('conditional issuance accepts one expected current owner and rejects ambiguous owner conditions', () => {
+  const args = [
+    '--camera-id',
+    cameraId,
+    '--lease-ms',
+    '60000',
+    '--output',
+    path.resolve('credential.json'),
+    '--database-identity',
+    'localhost:5433/smartsite_test/owned',
+  ];
+  const original = parseWorkerGenerationArguments(args);
+  const expected = ['--expected-current-generation', credential.workerGenerationId];
+  assert.deepEqual(parseWorkerGenerationArguments([...args, ...expected]), {
+    ...original,
+    expectedCurrentGenerationId: credential.workerGenerationId,
+  });
+  const transition = [
+    '--transition-from-generation',
+    credential.workerGenerationId,
+    '--transition-command',
+    credential.streamSessionId,
+    '--transition-reason',
+    'SOURCE_RESTART',
+  ];
+  assert.deepEqual(parseWorkerGenerationArguments([...args, ...transition, ...expected]), {
+    ...parseWorkerGenerationArguments([...args, ...transition]),
+    expectedCurrentGenerationId: credential.workerGenerationId,
+  });
+  for (const invalid of [
+    [...args, '--expected-current-generation', 'invalid'],
+    [...args, ...expected, ...expected],
+    [...args, ...transition, '--expected-current-generation', credential.streamSessionId],
+    [...args, ...expected, ...transition.slice(0, 4)],
+  ])
+    assert.throws(() => parseWorkerGenerationArguments(invalid));
+});
+
+test('invalid or disagreeing current-owner conditions fail before database acquisition', async () => {
+  const invalid = (error: unknown) =>
+    error instanceof PublicHttpException && error.getStatus() === 400;
+  await assert.rejects(
+    provisionCameraWorkerGeneration(
+      {} as DataSource,
+      cameraId,
+      [cameraId],
+      60000,
+      undefined,
+      undefined,
+      'not-a-uuid',
+    ),
+    invalid,
+  );
+  await assert.rejects(
+    provisionCameraWorkerGeneration(
+      {} as DataSource,
+      cameraId,
+      [cameraId],
+      60000,
+      undefined,
+      {
+        commandId: credential.streamSessionId,
+        expectedGenerationId: credential.workerGenerationId,
+        reason: 'SOURCE_RESTART',
+      },
+      credential.streamSessionId,
+    ),
+    invalid,
+  );
 });
 
 test('exclusive credential delivery flushes before issuer commit and refuses overwrite', async () => {
@@ -173,5 +316,38 @@ test('operator rejects unsafe schema and connection search_path override before 
       DATABASE_URL: env.DATABASE_URL + '?options=-c%20search_path%3Dpublic',
     }),
     /Connection options override/,
+  );
+});
+
+test('automatic issuer context refuses missing owner and manual recovery before I/O', async () => {
+  const args = [
+    '--camera-id',
+    cameraId,
+    '--lease-ms',
+    '1000',
+    '--output',
+    path.resolve(fixtureRoot, 'never-created-auto.json'),
+    '--database-identity',
+    '127.0.0.1:5433/smartsite_test/owned',
+  ];
+  const command = '44444444-4444-4444-8444-444444444444';
+  await assert.rejects(provisionCameraWorker(args, {}, command), /Automatic renewal/);
+  await assert.rejects(
+    provisionCameraWorker(
+      [
+        ...args,
+        '--expected-current-generation',
+        credential.workerGenerationId,
+        '--transition-from-generation',
+        credential.workerGenerationId,
+        '--transition-command',
+        command,
+        '--transition-reason',
+        'SOURCE_RESTART',
+      ],
+      {},
+      command,
+    ),
+    /Automatic renewal/,
   );
 });

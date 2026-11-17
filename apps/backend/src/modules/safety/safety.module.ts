@@ -1,4 +1,8 @@
 import { SafetyChecklistService } from './safety-checklist.service.js';
+import { SafetyIdentificationController } from './identification/safety-identification.controller.js';
+import { SafetyIdentificationService } from './identification/safety-identification.service.js';
+import { SafetyIdentificationRuntime } from './identification/safety-identification-runtime.js';
+import { SafetyIdentificationEnabledGuard } from './identification/safety-identification-enabled.guard.js';
 import { SafetyChecklistController } from './safety-checklist.controller.js';
 import { SafetyOverviewService } from './safety-overview.service.js';
 import { SafetyOverviewController } from './safety-overview.controller.js';
@@ -10,6 +14,11 @@ import { SafetyWorkflowController } from './safety-workflow.controller.js';
 import { SafetyUploadService } from './safety-upload.service.js';
 import { Mf06IngestionEnqueueService } from './assessments/mf06-ingestion-enqueue.service.js';
 import { Module } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
+import type { BackendEnvironment } from '../../config/environment.js';
+import { UserAuthGuard } from '../auth/user-auth.guard.js';
+import { TrackedEpisodeFrameQuery } from './alerts/tracked-episode-frame-query.js';
+import { TrackedEpisodeFramesController } from './alerts/tracked-episode-frames.controller.js';
 import { SafetyEpisodeInboxController } from './alerts/safety-episode-inbox.controller.js';
 import { SafetyEpisodeInboxService } from './alerts/safety-episode-inbox.service.js';
 import { SafetyEpisodeQueryService } from './alerts/safety-episode-query.service.js';
@@ -49,8 +58,10 @@ import { ZoneAccessManagementService } from '../zones/zone-access-management.ser
     UsersModule,
   ],
   controllers: [
+    SafetyIdentificationController,
     SafetyEpisodesController,
     SafetyEpisodeInboxController,
+    TrackedEpisodeFramesController,
     SafetyChecklistController,
     SafetyOverviewController,
     SafetyAlertsController,
@@ -58,9 +69,46 @@ import { ZoneAccessManagementService } from '../zones/zone-access-management.ser
     SafetyWorkflowController,
   ],
   providers: [
+    SafetyIdentificationService,
+    SafetyIdentificationRuntime,
+    SafetyIdentificationEnabledGuard,
     SafetyEpisodeProjectionService,
     SafetyEpisodeQueryService,
-    SafetyEpisodeInboxService,
+    {
+      provide: SafetyEpisodeInboxService,
+      inject: [DataSource, UserAuthGuard, ConfigService],
+      useFactory: (
+        db: DataSource,
+        auth: UserAuthGuard,
+        config: ConfigService<BackendEnvironment, true>,
+      ) =>
+        new SafetyEpisodeInboxService(
+          db,
+          auth,
+          () =>
+            config.get('AI_TRACKED_FRAME_RUNTIME_ENABLED', { infer: true }) === true ||
+            config.get('SAFETY_TRACKED_HISTORY_READ_ENABLED', { infer: true }) === true,
+        ),
+    },
+    {
+      provide: TrackedEpisodeFrameQuery,
+      inject: [DataSource, UserAuthGuard, ConfigService],
+      useFactory: (
+        db: DataSource,
+        auth: UserAuthGuard,
+        config: ConfigService<BackendEnvironment, true>,
+      ) =>
+        new TrackedEpisodeFrameQuery(
+          db,
+          auth,
+          config.get('EVIDENCE_LOCAL_ROOT', { infer: true }) ?? '',
+          undefined,
+          undefined,
+          () =>
+            config.get('AI_TRACKED_FRAME_RUNTIME_ENABLED', { infer: true }) === true ||
+            config.get('SAFETY_TRACKED_HISTORY_READ_ENABLED', { infer: true }) === true,
+        ),
+    },
     Mf06IngestionEnqueueService,
     SafetyChecklistService,
     SafetyOverviewService,

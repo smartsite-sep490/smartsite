@@ -17,7 +17,7 @@ export type {
   AttendanceSummaryResponse,
 } from '@smartsite/contracts';
 export { SmartSiteManagementClient } from './management';
-export type { ManagementSession } from './management';
+export type { ManagementSession, SavedPpePolicy, PpePolicySaveReceipt } from './management';
 export type { NativeUploadFile, UploadFile } from './management';
 export type { SafetyAlertListOptions, ZoneEntryDecisionListOptions } from './management';
 export type {
@@ -190,3 +190,9 @@ export type { CameraApplicationStatus } from '@smartsite/contracts/camera-applic
 export { LEAVE_NOTICE_HOURS } from '@smartsite/contracts/leave-notice';
 export { scheduledShiftWindow } from '@smartsite/contracts/scheduled-shift';
 export type { LeaveNoticeType } from '@smartsite/contracts/leave-notice';
+
+export type { TrackedEpisodeMediaResult } from './tracked-episode-media-response';
+export { readRecordedCameraVideo, MAX_RECORDED_VIDEO_BYTES } from './management';
+export type { RecordedCameraVideoOptions } from './management';
+export type { CameraMediaFrame } from '@smartsite/contracts/camera-preview';
+export type { CameraVideoStreamOptions } from './camera-media-stream';

@@ -1,3 +1,5 @@
+import type { EntityManager } from 'typeorm';
+import { uuid } from '../../common/configuration/commands.js';
 import { Injectable, type CanActivate, type ExecutionContext } from '@nestjs/common';
 import { PublicHttpException } from '../../common/http/public-http-exception.js';
 import { UserRole } from '../../database/entities/user.entity.js';
@@ -15,6 +17,22 @@ export function requireSiteManager(user: AuthenticatedUser | undefined, siteId: 
       message: 'Site Manager access to this site is required',
     });
   }
+}
+
+export function siteManagerCommandAuthorization(siteId: string, actorUserId?: string) {
+  if (actorUserId === undefined) return undefined;
+  const normalizedSite = uuid(siteId).toLowerCase();
+  return async (manager: EntityManager): Promise<void> => {
+    const assignments = await manager.query(
+      "SELECT id FROM user_role_assignment WHERE user_id=$1 AND site_id=$2 AND role='SITE_MANAGER' FOR SHARE",
+      [actorUserId, normalizedSite],
+    );
+    if (!assignments.length)
+      throw new PublicHttpException(403, {
+        code: 'FORBIDDEN',
+        message: 'Site Manager access to this site is required',
+      });
+  };
 }
 
 @Injectable()

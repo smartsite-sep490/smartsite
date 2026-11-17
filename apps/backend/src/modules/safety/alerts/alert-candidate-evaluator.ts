@@ -33,16 +33,20 @@ export interface PersonObservation {
   boundingBox?: Record<string, unknown>;
 }
 
-export interface PpeObservation {
+interface PpeObservationFields {
   type: 'PPE';
   trackId: number;
   ppeItem: PpeItem;
   status: 'PRESENT' | 'MISSING';
-  regionId: string;
-  geometryVersion: number;
   confidence?: number;
   boundingBox?: Record<string, unknown>;
 }
+
+export type PpeObservation = PpeObservationFields &
+  (
+    | { scope?: never; regionId: string; geometryVersion: number }
+    | { scope: 'CAMERA'; regionId?: never; geometryVersion?: never }
+  );
 
 export interface ZoneEntryObservation {
   type: 'ZONE_ENTRY';
@@ -184,6 +188,7 @@ export class AlertCandidateEvaluator {
     event: EvaluationEvent,
     contextLookup: ContextLookup,
     authorizationLookup?: ZoneAuthorizationLookup,
+    cameraPpe?: { cameraId: string; requiredPpe: readonly PpeItem[] },
   ): AlertCandidate[] {
     // 1. Preserve ambiguity; these per-event summaries are never trusted identity.
     const identityEvidenceByTrack = summarizeIdentityEvidenceByTrack(event.observations);
@@ -201,16 +206,15 @@ export class AlertCandidateEvaluator {
           continue;
         }
 
-        const context = getContext(contextLookup, obs.regionId, obs.geometryVersion);
-        if (!context) {
-          continue;
-        }
-
-        const requiredPpe = context.zone.requiredPpe ?? [];
-        if (!requiredPpe.includes(obs.ppeItem)) {
-          continue;
-        }
-
+        const regionContext =
+          obs.scope === 'CAMERA'
+            ? undefined
+            : getContext(contextLookup, obs.regionId, obs.geometryVersion);
+        const cameraId = obs.scope === 'CAMERA' ? cameraPpe?.cameraId : regionContext?.cameraId;
+        const zoneId = regionContext?.zoneId;
+        const requiredPpe =
+          obs.scope === 'CAMERA' ? cameraPpe?.requiredPpe : regionContext?.zone.requiredPpe;
+        if (!cameraId || !requiredPpe?.includes(obs.ppeItem)) continue;
         const candidateSubtype = Object.hasOwn(PPE_MISSING_SUBTYPES, obs.ppeItem)
           ? PPE_MISSING_SUBTYPES[obs.ppeItem]
           : undefined;
@@ -219,18 +223,18 @@ export class AlertCandidateEvaluator {
         const identity = identityEvidenceByTrack.get(obs.trackId);
         const groupingKey = buildGroupingKey(
           candidateSubtype,
-          context.cameraId,
+          cameraId,
           event.streamSessionId,
-          context.zoneId,
+          zoneId,
           obs.trackId,
         );
 
         uncollapsedCandidates.push({
           alertType: 'PPE_VIOLATION',
           candidateSubtype,
-          cameraId: context.cameraId,
+          cameraId,
           streamSessionId: event.streamSessionId,
-          zoneId: context.zoneId,
+          zoneId,
           trackId: obs.trackId,
           groupingKey,
           candidateWorkerId: identity?.candidateWorkerId,

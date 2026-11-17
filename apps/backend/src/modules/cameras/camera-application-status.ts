@@ -13,6 +13,7 @@ import {
   CameraConfigurationApplicationReceiptEntity,
 } from '../../database/entities/camera-worker-generation.entity.js';
 import { readIssuedCameraBundleInTransaction } from './camera-configuration-bundle-reader.js';
+import { readCurrentCameraPolicyBundle } from './camera-policy-bundle-reader.js';
 
 /** A saved version, worker application and physical pose remain separate facts. */
 export async function readCameraApplicationStatus(
@@ -82,7 +83,15 @@ export async function readCameraApplicationStatus(
       if (!view) return set('STALE', 'VIEW_UNAVAILABLE');
       let bundle;
       try {
-        bundle = await readIssuedCameraBundleInTransaction(manager, cameraId);
+        const [issued] = await manager.query(
+          `SELECT to_jsonb(h)->>'schema_version' AS version FROM camera_configuration_bundle h
+           WHERE camera_id=$1 AND site_id=$2 AND configuration_version=$3`,
+          [cameraId, siteId, camera.configurationVersion],
+        );
+        bundle =
+          issued?.version === '2.0.0'
+            ? await readCurrentCameraPolicyBundle(manager, cameraId)
+            : await readIssuedCameraBundleInTransaction(manager, cameraId);
       } catch (error) {
         if (error instanceof PublicHttpException && error.getStatus() === 409) {
           viewValidity = 'NEEDS_REVALIDATION';

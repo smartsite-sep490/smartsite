@@ -1,4 +1,5 @@
 export const CONTRACTS_VERSION = '1.0.0';
+export * from './worker-event-delivery.js';
 export * from './camera-ppe-policy.js';
 export { PPE_ITEMS } from './ppe-items.js';
 export type { PpeItem } from './ppe-items.js';
@@ -49,6 +50,17 @@ export type { ValidationIssue } from './validation/geometry-validator.js';
 export { validateObservationEvent } from './validation/schema-validator.js';
 export { validateEightFamilyObservationEvent } from './validation/schema-validator.js';
 export { validatePartitionedObservationEvent } from './validation/schema-validator.js';
+export {
+  validateTrackedObservationEvent,
+  validateTrackedEntryOriginEvent,
+  validateTrackedCameraPpeEvent,
+} from './validation/schema-validator.js';
+export type { TrackedEntryOrigin } from './validation/schema-validator.js';
+export type {
+  ContinuityResetReason,
+  TrackedFrameSubject,
+  TrackedFrameContinuity,
+} from './tracked-frame-continuity.js';
 export type { ObservationFramePartition } from './validation/schema-validator.js';
 
 export { validateCameraRegionConfiguration } from './validation/schema-validator.js';
@@ -171,6 +183,7 @@ export { healthCertificateExpiry, isWorkerDocumentDate } from './worker-document
 export { resolveEventLocalEpisodeSubject } from './safety-episode-subject.js';
 export type { EventLocalEpisodeSubject } from './safety-episode-subject.js';
 export * from './safety-episode-api.js';
+export * from './safety-identification-api.js';
 export {
   parseMf06AssessmentResponse,
   parseMf06AssessmentPage,
@@ -193,3 +206,10 @@ export { LEAVE_NOTICE_HOURS, leaveNotice } from './leave-notice.js';
 export type { LeaveNoticeType } from './leave-notice.js';
 
 export { scheduledShiftWindow } from './scheduled-shift.js';
+
+export * from './camera-ppe-policy-command.js';
+
+export * from './camera-policy-configuration-bundle.js';
+
+export * from './camera-preview.js';
+export * from './camera-observation-zones.js';

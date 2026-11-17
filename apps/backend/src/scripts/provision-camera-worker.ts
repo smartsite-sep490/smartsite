@@ -4,14 +4,52 @@ import path from 'node:path';
 import { DataSource } from 'typeorm';
 import { resolveCliEnvironment } from '../config/cli-environment.js';
 import { buildTypeOrmOptions } from '../database/typeorm.options.js';
-import { provisionCameraWorkerGeneration } from '../modules/cameras/camera-worker-generations.js';
+import {
+  provisionCameraWorkerGeneration,
+  bootstrapCameraWorkerGeneration,
+  renewCameraWorkerGeneration,
+} from '../modules/cameras/camera-worker-generations.js';
+import { uuid } from '../common/configuration/commands.js';
+
 import {
   deliverWorkerGeneration,
   parseWorkerGenerationArguments,
 } from './worker-generation-delivery.js';
 
-export async function provisionCameraWorker(args: string[], env = process.env): Promise<void> {
+export interface IssuedWorkerGeneration {
+  cameraId: string;
+  workerGenerationId: string;
+  streamSessionId: string;
+  expiresAt: string;
+}
+export async function provisionCameraWorker(
+  args: string[],
+  env = process.env,
+  renewalCommandId?: string,
+): Promise<IssuedWorkerGeneration> {
+  return provision(args, env, renewalCommandId);
+}
+
+/** Trusted supervisor bootstrap; manual CLI provisioning intentionally remains separate. */
+export async function bootstrapUnownedCameraWorker(
+  args: string[],
+  env = process.env,
+): Promise<IssuedWorkerGeneration> {
+  return provision(args, env, undefined, true);
+}
+
+async function provision(
+  args: string[],
+  env: NodeJS.ProcessEnv,
+  renewalCommandId?: string,
+  bootstrap = false,
+): Promise<IssuedWorkerGeneration> {
   const input = parseWorkerGenerationArguments(args);
+  if (bootstrap && (input.expectedCurrentGenerationId || input.transition))
+    throw new Error('Bootstrap cannot carry owner or manual recovery conditions');
+  const renewal = renewalCommandId === undefined ? undefined : uuid(renewalCommandId).toLowerCase();
+  if (renewal && (!input.expectedCurrentGenerationId || input.transition))
+    throw new Error('Automatic renewal requires only the current owner condition');
   if (!env.DATABASE_SCHEMA || !(env.DATABASE_URL || env.DIRECT_URL || env.DATABASE_URL_UNPOOLED))
     throw new Error('Explicit database connection and schema required');
   const schema = env.DATABASE_SCHEMA;
@@ -27,7 +65,7 @@ export async function provisionCameraWorker(args: string[], env = process.env): 
     .map((id) => id.trim().toLowerCase());
   if (!allowed.includes(input.cameraId))
     throw new Error('Camera is outside the operator allowlist');
-  await deliverWorkerGeneration(input.output, input.cameraId, async (deliver) => {
+  return deliverWorkerGeneration(input.output, input.cameraId, async (deliver) => {
     const options = buildTypeOrmOptions(config);
     if (options.type !== 'postgres') throw new Error('PostgreSQL required');
     const source = new DataSource({
@@ -45,13 +83,40 @@ export async function provisionCameraWorker(args: string[], env = process.env): 
         actual?.schema !== schema
       )
         throw new Error('Connected database identity mismatch');
-      await provisionCameraWorkerGeneration(
-        source,
-        input.cameraId,
-        allowed,
-        input.leaseMs,
-        deliver,
-      );
+      const credential = bootstrap
+        ? await bootstrapCameraWorkerGeneration(
+            source,
+            input.cameraId,
+            allowed,
+            input.leaseMs,
+            deliver,
+          )
+        : renewal
+          ? await renewCameraWorkerGeneration(
+              source,
+              input.cameraId,
+              allowed,
+              input.leaseMs,
+              deliver,
+              input.expectedCurrentGenerationId!,
+              renewal,
+            )
+          : await provisionCameraWorkerGeneration(
+              source,
+              input.cameraId,
+              allowed,
+              input.leaseMs,
+              deliver,
+              input.transition,
+              input.expectedCurrentGenerationId,
+            );
+      // Returned only after transaction completion; the child never receives issuer metadata/DB access.
+      return {
+        cameraId: input.cameraId,
+        workerGenerationId: credential.workerGenerationId,
+        streamSessionId: credential.streamSessionId,
+        expiresAt: credential.expiresAt,
+      };
     } finally {
       if (source.isInitialized) await source.destroy();
     }

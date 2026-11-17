@@ -1,8 +1,12 @@
 import { HttpStatus, Injectable } from '@nestjs/common';
-import { IsIn, IsOptional, IsUUID } from 'class-validator';
+import { IsIn, IsOptional, IsUUID, IsString, Length } from 'class-validator';
 import { DataSource, type EntityManager } from 'typeorm';
 import { parseSafetyEpisodeReadCommand } from '@smartsite/contracts/safety-episodes';
 import type { SafetyEpisodeInboxPage, SafetyEpisodeReadResponse } from '@smartsite/contracts';
+import type {
+  SafetyEpisodeInboxSummary,
+  SafetyFrameInboxPage,
+} from '@smartsite/contracts/safety-episodes';
 import {
   command,
   conflict,
@@ -15,8 +19,16 @@ import { PublicHttpException } from '../../../common/http/public-http-exception.
 import type { AuthenticatedRequest } from '../../auth/auth.service.js';
 import { UserAuthGuard } from '../../auth/user-auth.guard.js';
 
+class ExactFrameInboxFilter {
+  @IsOptional() @IsUUID() siteId?: string;
+  @IsOptional() @IsUUID() cameraId?: string;
+  @IsOptional() @IsIn(['ALL', 'UNREAD']) readStatus?: 'ALL' | 'UNREAD';
+  @IsOptional() @IsString() @Length(1, 200) frameKey?: string;
+}
+
 class InboxFilter {
   @IsOptional() @IsUUID() siteId?: string;
+  @IsOptional() @IsUUID() recipientId?: string;
   @IsOptional() @IsIn(['ALL', 'UNREAD']) readStatus?: 'ALL' | 'UNREAD';
 }
 interface InboxRow {
@@ -34,6 +46,26 @@ interface InboxRow {
   last_observed_at: Date;
   first_delivered_at: Date;
   updated_at: Date;
+  subject_metadata: { kind: unknown; segmentId: unknown; scopeSha256: unknown };
+}
+
+function inboxSubject(row: InboxRow): SafetyEpisodeInboxSummary['subject'] {
+  const subject = row.subject_metadata;
+  if (subject.kind === 'EVENT_LOCAL' && subject.segmentId === null && subject.scopeSha256 === null)
+    return {
+      kind: 'EVENT_LOCAL',
+      eventId: row.event_id,
+      personObservationIndex: row.person_observation_index,
+    };
+  if (
+    subject.kind === 'TRACKED' &&
+    typeof subject.segmentId === 'string' &&
+    /^[a-f0-9]{8}(-[a-f0-9]{4}){3}-[a-f0-9]{12}$/.test(subject.segmentId) &&
+    typeof subject.scopeSha256 === 'string' &&
+    /^[a-f0-9]{64}$/.test(subject.scopeSha256)
+  )
+    return { kind: 'TRACKED', segmentId: subject.segmentId, scopeSha256: subject.scopeSha256 };
+  conflict('Episode inbox subject is inconsistent');
 }
 
 @Injectable()
@@ -41,6 +73,7 @@ export class SafetyEpisodeInboxService {
   constructor(
     private readonly db: DataSource,
     private readonly auth: UserAuthGuard,
+    private readonly trackedEvidenceEnabled: () => boolean = () => false,
   ) {}
 
   private schema(): string {
@@ -88,7 +121,7 @@ export class SafetyEpisodeInboxService {
     query: Record<string, unknown> = {},
   ): Promise<SafetyEpisodeInboxPage> {
     const { offset, limit, ...filter } = query;
-    for (const key of ['siteId', 'readStatus'] as const)
+    for (const key of ['siteId', 'recipientId', 'readStatus'] as const)
       if (query[key] !== undefined && typeof query[key] !== 'string') invalid();
     if (
       (offset !== undefined && typeof offset !== 'string') ||
@@ -103,8 +136,9 @@ export class SafetyEpisodeInboxService {
       const actor = await this.scope(manager, request),
         schema = this.schema();
       if (siteId !== null && !actor.siteIds.includes(siteId)) this.forbidden();
-      const params = [actor.userId, actor.siteIds, siteId, unreadOnly];
+      const params = [actor.userId, actor.siteIds, siteId, unreadOnly, options.recipientId ?? null];
       const eligible = `r.recipient_user_id=$1 AND r.site_id=ANY($2::uuid[]) AND ($3::uuid IS NULL OR r.site_id=$3)
+        AND ($5::uuid IS NULL OR r.id=$5)
         AND EXISTS(SELECT 1 FROM ${schema}.safety_alert a WHERE a.episode_id=e.id AND a.site_id=e.site_id)`;
       const [counts]: { total: number; unread_count: number }[] = await manager.query(
         `SELECT
@@ -117,10 +151,12 @@ export class SafetyEpisodeInboxService {
       const rows: InboxRow[] = await manager.query(
         `SELECT r.id,r.episode_id,r.seen_revision,r.first_delivered_at,r.updated_at,
         e.site_id,e.camera_id,e.event_id,e.person_observation_index,e.first_observed_at,e.last_observed_at,
-        e.content_revision,e.collection_state,(SELECT count(*)::int FROM ${schema}.safety_alert a WHERE a.episode_id=e.id AND a.site_id=e.site_id) AS finding_count
+        e.content_revision,e.collection_state,(SELECT count(*)::int FROM ${schema}.safety_alert a WHERE a.episode_id=e.id AND a.site_id=e.site_id) AS finding_count,
+        jsonb_build_object('kind',CASE WHEN to_jsonb(e) ? 'subject_kind' THEN to_jsonb(e)->>'subject_kind' ELSE 'EVENT_LOCAL' END,
+          'segmentId',to_jsonb(e)->>'tracking_segment_id','scopeSha256',to_jsonb(e)->>'tracking_scope_sha256') AS subject_metadata
         FROM ${schema}.safety_episode_recipient r JOIN ${schema}.safety_episode e ON e.id=r.episode_id AND e.site_id=r.site_id
         WHERE ${eligible} AND (NOT $4::boolean OR r.seen_revision<e.content_revision)
-        ORDER BY r.first_delivered_at DESC,r.id DESC OFFSET $5 LIMIT $6`,
+        ORDER BY r.first_delivered_at DESC,r.id DESC OFFSET $6 LIMIT $7`,
         [...params, page.offset, page.limit],
       );
       return {
@@ -130,11 +166,7 @@ export class SafetyEpisodeInboxService {
             id: row.episode_id,
             siteId: row.site_id,
             cameraId: row.camera_id,
-            subject: {
-              kind: 'EVENT_LOCAL' as const,
-              eventId: row.event_id,
-              personObservationIndex: row.person_observation_index,
-            },
+            subject: inboxSubject(row),
             configurationBundleId: null,
             firstObservedAt: row.first_observed_at.toISOString(),
             lastObservedAt: row.last_observed_at.toISOString(),
@@ -150,6 +182,136 @@ export class SafetyEpisodeInboxService {
         total: counts?.total ?? 0,
         unreadCount: counts?.unread_count ?? 0,
       };
+    });
+  }
+
+  async listFrames(
+    request: AuthenticatedRequest,
+    query: Record<string, unknown> = {},
+  ): Promise<SafetyFrameInboxPage> {
+    const { offset, limit, ...filter } = query;
+    for (const key of ['siteId', 'cameraId', 'frameKey', 'readStatus'] as const)
+      if (query[key] !== undefined && typeof query[key] !== 'string') invalid();
+    if (
+      (offset !== undefined && typeof offset !== 'string') ||
+      (limit !== undefined && typeof limit !== 'string')
+    )
+      invalid();
+    const options = command(ExactFrameInboxFilter, filter);
+    const page = pagination(offset, limit);
+    const siteId = options.siteId?.toLowerCase() ?? null;
+    const cameraId = options.cameraId?.toLowerCase() ?? null;
+
+    return this.db.transaction('REPEATABLE READ', async (manager) => {
+      const actor = await this.scope(manager, request);
+      const schema = this.schema();
+      if (siteId !== null && !actor.siteIds.includes(siteId)) this.forbidden();
+      // Episode anchors identify where a case first arose. Tracked partitions share
+      // the frame ID within a generation scope. Older events retain their event ID.
+      const [result]: SafetyFrameInboxPage[] = await manager.query(
+        `WITH recipient_cases AS (
+          SELECT r.id AS recipient_id, e.id AS episode_id, e.site_id, e.camera_id,
+            CASE WHEN to_jsonb(o)->>'tracking_scope_sha256' IS NOT NULL
+                       AND to_jsonb(o)->>'tracking_frame_id' IS NOT NULL
+                 THEN 'tracked:' || (to_jsonb(o)->>'tracking_scope_sha256') || ':' || (to_jsonb(o)->>'tracking_frame_id')
+                 ELSE 'event:' || e.event_id::text END AS frame_key,
+            e.person_observation_index AS person_index, e.first_observed_at AS captured_at, e.content_revision,
+            GREATEST(r.first_delivered_at, (SELECT max(a.created_at) FROM ${schema}.safety_alert a
+              WHERE a.episode_id=e.id AND a.site_id=e.site_id)) AS latest_delivery_at,
+            r.seen_revision < e.content_revision AS unread,
+            (SELECT count(*)::int FROM ${schema}.safety_alert a
+             WHERE a.episode_id=e.id AND a.site_id=e.site_id AND a.alert_type='PPE_VIOLATION') AS finding_count,
+            EXISTS(SELECT 1 FROM ${schema}.safety_alert a
+             WHERE a.episode_id=e.id AND a.site_id=e.site_id
+               AND a.alert_type='RESTRICTED_ZONE_INTRUSION') AS has_zone_finding,
+            (SELECT jsonb_build_object('alertId', a.id, 'eventId', e.event_id,
+              'personObservationIndex', e.person_observation_index,
+              'evidenceIndex', media.ordinality - 1, 'sha256', media.value->>'sha256')
+             FROM ${schema}.safety_alert a
+             JOIN ${schema}.alert_detection_mapping m ON m.alert_id=a.id
+             CROSS JOIN LATERAL jsonb_array_elements(o.raw_payload->'evidence') WITH ORDINALITY media
+             WHERE a.episode_id=e.id AND a.site_id=e.site_id AND m.event_id=e.event_id
+               AND m.person_observation_index=e.person_observation_index
+               AND to_jsonb(e)->>'subject_kind'='TRACKED'
+               AND $8::boolean
+               AND media.value->>'kind'='FRAME'
+             ORDER BY a.id, media.ordinality LIMIT 1) AS source,
+            coalesce((SELECT jsonb_agg(jsonb_build_object(
+              'requestId', q.request_id, 'zoneId', q.zone_id,
+              'status', CASE WHEN a.provenance='SYNTHETIC_TEST' THEN 'UNAVAILABLE'
+                ELSE coalesce(a.outcome, 'PENDING') END,
+              'reasonCode', CASE WHEN a.provenance='SYNTHETIC_TEST' THEN 'AUTHORITY_UNAVAILABLE'
+                ELSE a.reason_code END,
+              'provenance', CASE WHEN a.provenance='SYNTHETIC_TEST' THEN 'UNAVAILABLE'
+                ELSE a.provenance END,
+              'laterFrame', q.event_id<>e.event_id AND NOT coalesce(
+                to_jsonb(qo)->>'tracking_frame_id'=to_jsonb(o)->>'tracking_frame_id'
+                AND to_jsonb(qo)->>'tracking_scope_sha256'=to_jsonb(o)->>'tracking_scope_sha256', false)
+            ) ORDER BY q.captured_at, q.zone_observation_index, q.request_id)
+            FROM ${schema}.zone_entry_assessment_request q
+            JOIN ${schema}.ai_observation_event qo ON qo.event_id=q.event_id
+              AND qo.resolved_camera_id=q.camera_id AND qo.payload_hash=q.payload_hash
+            LEFT JOIN ${schema}.zone_entry_assessment a
+              ON a.request_id=q.request_id AND a.site_id=q.site_id
+                AND a.event_id=q.event_id AND a.binding_hash=q.binding_hash
+            WHERE q.site_id=e.site_id AND q.camera_id=e.camera_id
+              AND ((q.event_id=e.event_id AND q.person_observation_index=e.person_observation_index)
+                OR (a.outcome='DENIED' AND a.provenance='TRUSTED_SERVICE' AND EXISTS(
+                  SELECT 1 FROM ${schema}.safety_alert z
+                  JOIN ${schema}.alert_detection_mapping m ON m.alert_id=z.id
+                  WHERE z.episode_id=e.id AND z.site_id=e.site_id AND z.zone_id=q.zone_id
+                    AND z.alert_type='RESTRICTED_ZONE_INTRUSION'
+                    AND z.candidate_subtype=CASE a.reason_code
+                      WHEN 'POLICY_PROHIBITED' THEN 'ZONE_ENTRY_PROHIBITED'
+                      WHEN 'UNAUTHORIZED' THEN 'ZONE_ENTRY_UNAUTHORIZED' END
+                    AND m.event_id=q.event_id AND m.person_observation_index=q.person_observation_index)))
+              AND q.requested_purpose='INITIAL_OBSERVATION_ASSESSMENT'),
+            '[]'::jsonb) AS zone_entries
+          FROM ${schema}.safety_episode_recipient r
+          JOIN ${schema}.safety_episode e ON e.id=r.episode_id AND e.site_id=r.site_id
+          LEFT JOIN ${schema}.ai_observation_event o
+            ON o.event_id=e.event_id AND o.resolved_camera_id=e.camera_id
+          WHERE r.recipient_user_id=$1 AND r.site_id=ANY($2::uuid[])
+            AND ($3::uuid IS NULL OR r.site_id=$3)
+            AND ($9::uuid IS NULL OR e.camera_id=$9)
+        ), frames AS (
+          SELECT site_id, camera_id, frame_key, min(captured_at) AS captured_at,
+            max(latest_delivery_at) AS delivered_at, bool_or(unread) AS unread,
+            sum(finding_count)::int AS finding_count,
+            jsonb_agg(jsonb_build_object('recipientId', recipient_id, 'episodeId', episode_id,
+              'findingCount', finding_count, 'unread', unread, 'contentRevision', content_revision, 'zoneEntries', zone_entries, 'source', source)
+              ORDER BY person_index, recipient_id) AS cases
+          FROM recipient_cases WHERE finding_count > 0 OR has_zone_finding
+          GROUP BY site_id, camera_id, frame_key
+          HAVING $7::text IS NULL OR frame_key=$7
+        ), visible AS (
+          SELECT * FROM frames WHERE NOT $4::boolean OR unread
+          ORDER BY delivered_at DESC, site_id, camera_id, frame_key OFFSET $5 LIMIT $6
+        )
+        SELECT
+          (SELECT count(*)::int FROM frames WHERE NOT $4::boolean OR unread) AS total,
+          (SELECT count(*)::int FROM frames WHERE unread) AS "unreadCount",
+          coalesce((SELECT jsonb_agg(jsonb_build_object(
+            'siteId', site_id, 'cameraId', camera_id, 'frameKey', frame_key,
+            'siteName', (SELECT name FROM ${schema}.site WHERE id=visible.site_id),
+            'cameraName', (SELECT name FROM ${schema}.camera WHERE id=visible.camera_id),
+            'capturedAt', captured_at, 'unread', unread, 'findingCount', finding_count,
+            'cases', cases) ORDER BY delivered_at DESC, site_id, camera_id, frame_key)
+          FROM visible), '[]'::jsonb) AS items`,
+        [
+          actor.userId,
+          actor.siteIds,
+          siteId,
+          options.readStatus === 'UNREAD',
+          page.offset,
+          page.limit,
+          options.frameKey ?? null,
+          this.trackedEvidenceEnabled(),
+          cameraId,
+        ],
+      );
+      if (!result) throw new Error('SAFETY_FRAME_INBOX_UNAVAILABLE');
+      return result;
     });
   }
 

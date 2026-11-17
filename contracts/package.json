@@ -8,6 +8,9 @@
     "schemas"
   ],
   "exports": {
+    "./camera-preview": "./dist/camera-preview.js",
+    "./camera-policy-configuration-bundle": "./dist/camera-policy-configuration-bundle.js",
+    "./camera-ppe-policy-command": "./dist/camera-ppe-policy-command.js",
     "./leave-notice": "./dist/leave-notice.js",
     "./scheduled-shift": "./dist/scheduled-shift.js",
     "./camera-ppe-policy": "./dist/camera-ppe-policy.js",
@@ -19,7 +22,11 @@
     "./worker-document-dates": "./dist/worker-document-dates.js",
     "./camera-configuration-image": "./dist/camera-configuration-image.js",
     "./camera-application-status": "./dist/camera-application-status.js",
-    "./safety-episodes": "./dist/safety-episode-api.js"
+    "./safety-episodes": "./dist/safety-episode-api.js",
+    "./tracked-episode-frames": "./dist/tracked-episode-frames.js",
+    "./camera-observation-zones": "./dist/camera-observation-zones.js",
+    "./ppe-items": "./dist/ppe-items.js",
+    "./safety-identification": "./dist/safety-identification-api.js"
   },
   "types": "./dist/index.d.ts",
   "scripts": {

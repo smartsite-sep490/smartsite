@@ -1,3 +1,4 @@
+import type { WorkerEventDeliveryContext } from '@smartsite/contracts';
 import { Check, Column, CreateDateColumn, Entity, ForeignKey, Index, PrimaryColumn } from 'typeorm';
 import { CameraEntity } from './camera.entity.js';
 import { EventProcessingStatus } from './enums.js';
@@ -62,6 +63,15 @@ export class AiObservationEventEntity {
 
   @Column({ name: 'raw_payload', type: 'jsonb' })
   rawPayload!: unknown;
+
+  // Read by explicit SQL so default-schema ORM queries also work before the opt-in migration.
+  declare admissionContext?: {
+    schemaVersion: '1.0.0';
+    context: WorkerEventDeliveryContext;
+    bindingHash: string;
+    classification: 'LIVE' | 'REVIEW_ONLY';
+    admittedAt: string;
+  } | null;
 
   @Column({
     name: 'processing_status',

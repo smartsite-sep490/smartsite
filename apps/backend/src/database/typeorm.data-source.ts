@@ -1,12 +1,10 @@
 import { DataSource } from 'typeorm';
 import { resolveCliEnvironment } from '../config/cli-environment.js';
-import { buildTypeOrmOptions } from './typeorm.options.js';
-
-const config = resolveCliEnvironment();
+import { buildMigrationOptions } from './typeorm.migration-profile.js';
 
 export default new DataSource(
-  buildTypeOrmOptions({
-    DATABASE_URL: config.DATABASE_URL,
-    DATABASE_TIMEOUT_MS: config.DATABASE_TIMEOUT_MS,
+  buildMigrationOptions(resolveCliEnvironment(), {
+    profile: process.env.SMARTSITE_DB_MIGRATION_PROFILE,
+    schema: process.env.DATABASE_SCHEMA,
   }),
 );

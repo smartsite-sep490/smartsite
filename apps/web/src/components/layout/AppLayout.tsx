@@ -37,6 +37,7 @@ export type ActiveTab =
   | 'schedule-setup'
   | 'access'
   | 'live-monitoring'
+  | 'camera-setup'
   | 'ppe'
   | 'zones'
   | 'incidents'
@@ -102,7 +103,8 @@ export function AppLayout({ currentTab: propCurrentTab, onSelectTab, children }:
     ].includes(activeTab);
   const allowedTabs = workspaceTabs(currentUser?.roleAssignments ?? []);
   const workerOnly = roles.length === 1 && roles[0] === 'WORKER';
-  const attendanceWorkspace = !roles.includes('ADMIN') &&
+  const attendanceWorkspace =
+    !roles.includes('ADMIN') &&
     roles.some((role) => ['SITE_MANAGER', 'CONTRACTOR_REPRESENTATIVE'].includes(role));
   const navGroups = [
     {
@@ -137,6 +139,7 @@ export function AppLayout({ currentTab: propCurrentTab, onSelectTab, children }:
       label: t('shell.safety'),
       items: [
         { id: 'live-monitoring', label: t('shell.live'), icon: IconCamera },
+        { id: 'camera-setup', label: t('shell.cameraSetup'), icon: IconCamera },
         { id: 'ppe', label: t('shell.ppe'), icon: IconHardHat },
         { id: 'zones', label: t('shell.zones'), icon: IconShield },
         { id: 'incidents', label: t('shell.incidents'), icon: IconAlertTriangle },
@@ -179,13 +182,7 @@ export function AppLayout({ currentTab: propCurrentTab, onSelectTab, children }:
       {/* Left Sidebar: Warm neutral shell */}
       <aside
         className={`${
-          mainSafetyUi
-            ? isCollapsed
-              ? 'w-16 sm:w-20'
-              : 'w-16 sm:w-20 lg:w-64'
-            : isCollapsed
-              ? 'w-20'
-              : 'w-20 lg:w-64'
+          isCollapsed ? 'w-16 sm:w-20' : 'w-16 sm:w-20 lg:w-64'
         } bg-gradient-to-b from-[#071320] via-[#04121D] to-[#020B13] text-white flex flex-col justify-between shrink-0 select-none border-r border-white/10 transition-all duration-300 ease-in-out sticky top-0 h-screen z-30 shadow-2xl`}
       >
         <div>
@@ -335,13 +332,15 @@ export function AppLayout({ currentTab: propCurrentTab, onSelectTab, children }:
         <header
           className={
             mainSafetyUi
-              ? 'h-16 bg-white border-b border-slate-200 px-3 sm:px-6 lg:px-8 flex items-center justify-between gap-3 shrink-0 sticky top-0 z-20 shadow-xs'
-              : 'h-16 bg-white border-b border-[#E2E8F0] px-6 sm:px-8 flex items-center justify-between gap-3 shrink-0 sticky top-0 z-20 shadow-xs'
+              ? 'h-16 bg-white border-b border-slate-200 px-3 sm:px-6 lg:px-8 flex items-center justify-between gap-2 sm:gap-3 shrink-0 sticky top-0 z-20 shadow-xs'
+              : 'h-16 bg-white border-b border-[#E2E8F0] px-3 sm:px-6 lg:px-8 flex items-center justify-between gap-2 sm:gap-3 shrink-0 sticky top-0 z-20 shadow-xs'
           }
         >
           {/* Left: Brand/Context info */}
           {activeTab === 'schedule-setup' ||
-          (activeTab === 'site-setup' && roles.includes('SITE_MANAGER') && !roles.includes('ADMIN')) ||
+          (activeTab === 'site-setup' &&
+            roles.includes('SITE_MANAGER') &&
+            !roles.includes('ADMIN')) ||
           (activeTab === 'workforce' && workforceTabs.showReview && workforceTab === 'review') ||
           (activeTab === 'access' && attendanceWorkspace) ? (
             <div className="flex items-center gap-3 min-w-0">
@@ -392,7 +391,7 @@ export function AppLayout({ currentTab: propCurrentTab, onSelectTab, children }:
           )}
 
           {/* Right: Search, Notification, Profile */}
-          <div className="flex items-center gap-2 sm:gap-4 shrink-0">
+          <div className="flex items-center gap-1.5 sm:gap-4 shrink-0">
             {!mainSafetyUi && <LanguageSwitcher />}
             {mainSafetyUi && <LanguageSwitcher />}
             <NotificationBell
@@ -403,11 +402,14 @@ export function AppLayout({ currentTab: propCurrentTab, onSelectTab, children }:
               key={currentUser?.id ?? 'signed-out'}
               apiUrl={apiUrl}
               userId={currentUser?.id ?? ''}
+              ppeInboxSiteIds={currentUser?.roleAssignments.flatMap(({ role, siteId }) =>
+                role === 'SAFETY_OFFICER' && siteId ? [siteId] : [],
+              )}
               enabled={!!currentUser && !currentUser.mustChangePassword}
             />
 
             {/* User Profile */}
-            <div className="flex items-center gap-2.5 pl-3 border-l border-[#E2E8F0]">
+            <div className="flex items-center gap-2.5 pl-2 sm:pl-3 border-l border-[#E2E8F0]">
               <div className="w-8 h-8 rounded-full bg-[#041D2E] text-white flex items-center justify-center font-bold text-xs tracking-wider">
                 {userInitials}
               </div>
@@ -434,7 +436,7 @@ export function AppLayout({ currentTab: propCurrentTab, onSelectTab, children }:
             <button
               onClick={() => logoutMutation.mutate()}
               disabled={logoutMutation.isPending}
-              className="p-2 ml-1 rounded-lg hover:bg-red-50 text-[#62748E] hover:text-red-500 transition-all active:scale-90 relative cursor-pointer"
+              className="p-2 ml-0 sm:ml-1 rounded-lg hover:bg-red-50 text-[#62748E] hover:text-red-500 transition-all active:scale-90 relative cursor-pointer"
               title={t('shell.logout')}
               aria-label={t('shell.logout')}
             >
