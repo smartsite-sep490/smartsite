@@ -7,7 +7,7 @@ import { DataSource } from 'typeorm';
 import { z } from 'zod';
 import { PublicHttpException } from '../common/http/public-http-exception.js';
 import { validateEnvironment, type BackendEnvironment } from '../config/environment.js';
-import { buildTypeOrmOptions } from '../database/typeorm.options.js';
+import { buildMigrationOptions } from '../database/typeorm.migration-profile.js';
 import { AuthService, type AuthenticatedRequest } from '../modules/auth/auth.service.js';
 import { AuthTokenService } from '../modules/auth/auth-token.service.js';
 import { UserAuthGuard } from '../modules/auth/user-auth.guard.js';
@@ -133,18 +133,27 @@ export function formatSanitizedCutoverError(error: unknown): string {
   return `Authority cutover failed${suffix}; commit may have occurred—inspect authority control and epoch state before retry.`;
 }
 
+export function buildCutoverDataSourceOptions(env: BackendEnvironment) {
+  return buildMigrationOptions(
+    {
+      DATABASE_URL: env.DATABASE_URL,
+      DATABASE_TIMEOUT_MS: env.DATABASE_TIMEOUT_MS,
+    },
+    {
+      profile: env.SMARTSITE_DB_MIGRATION_PROFILE,
+      schema: env.DATABASE_SCHEMA,
+      runtime: true,
+    },
+  );
+}
+
 async function main(): Promise<void> {
   const { env, release } = resolveCutoverOperatorEnvironment(process.env, process.argv.slice(2));
   if (process.stdin.isTTY)
     throw new Error('Pipe private JSON input; do not type credentials in a terminal');
   const payload = await readCutoverStdinPayload(process.stdin);
   assertOperationalCutoverManifest(await verifyMainAuthorityCutoverRelease(release, env.NODE_ENV));
-  const dataSource = new DataSource(
-    buildTypeOrmOptions({
-      DATABASE_URL: env.DATABASE_URL,
-      DATABASE_TIMEOUT_MS: env.DATABASE_TIMEOUT_MS,
-    }),
-  );
+  const dataSource = new DataSource(buildCutoverDataSourceOptions(env));
   try {
     await dataSource.initialize();
     const config = new ConfigService<BackendEnvironment, true>(env);
