@@ -1,8 +1,11 @@
+import { InstallAuthorityJournal1795046400012 } from './migrations/1795046400012-InstallAuthorityJournal.js';
+import { InstallAuthorityCutover1795046400013 } from './migrations/1795046400013-InstallAuthorityCutover.js';
 import type { DataSourceOptions } from 'typeorm';
 import { TrackedCameraPpeWire1795046400011 } from './migrations/1795046400011-TrackedCameraPpeWire.js';
 import { CameraPpePolicyStorage1795046400010 } from './migrations/1795046400010-CameraPpePolicyStorage.js';
 import {
   includesIdentificationProfile,
+  includesCameraPpeWireV17,
   includesCameraPpeProfile,
   TRACKED_MIGRATION_PROFILES,
 } from './migration-profile-names.js';
@@ -55,7 +58,10 @@ export function buildMigrationOptions(
         ? [SafetyIdentificationRequests1795046400009]
         : []),
       ...(includesCameraPpeProfile(profile) ? [CameraPpePolicyStorage1795046400010] : []),
-      ...(profile === 'tracked-v17-identification-ppe' ? [TrackedCameraPpeWire1795046400011] : []),
+      ...(includesCameraPpeWireV17(profile) ? [TrackedCameraPpeWire1795046400011] : []),
+      ...(profile === 'tracked-v17-identification-ppe-authority'
+        ? [InstallAuthorityJournal1795046400012, InstallAuthorityCutover1795046400013]
+        : []),
     ],
   };
 }
