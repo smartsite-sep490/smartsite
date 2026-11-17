@@ -1,3 +1,4 @@
+import { SITE_ENTRY_ASSIGNMENT_RESPONSE_SHA256 } from './site-entry-assignment-authority-profile-v1.js';
 import type { EntityManager } from 'typeorm';
 import { AUTHORIZATION_HISTORY_CUTOVER_FUNCTIONS } from './authorization-history-cutover-bodies-v1.js';
 import { MAIN_AUTHORITY_V2_SOURCES as MAIN_AUTHORITY_SOURCES } from './main-team-authority-sources.js';
@@ -107,7 +108,13 @@ export async function hasMainAuthorityCapture(
               WHEN f.search_path THEN ARRAY['search_path='||current_setting('search_path')]
               ELSE ARRAY[]::text[] END ||
              CASE WHEN f.utc THEN ARRAY['TimeZone=UTC'] ELSE ARRAY[]::text[] END)
-          AND encode(sha256(convert_to(p.prosrc,'UTF8')),'hex')=ANY(f.body_sha256))
+          AND encode(sha256(convert_to(p.prosrc,'UTF8')),'hex')=ANY(
+            CASE WHEN f.name='mf06_assignment_response' AND NOT EXISTS (
+              SELECT 1 FROM pg_attribute a JOIN pg_class assignment ON assignment.oid=a.attrelid
+              JOIN pg_namespace ns ON ns.oid=assignment.relnamespace
+              WHERE ns.nspname=current_schema() AND assignment.relname='worker_site_zone_assignment'
+                AND a.attname='gate_id' AND NOT a.attisdropped
+            ) THEN $3::text[] ELSE f.body_sha256 END))
         =(SELECT count(*) FROM functions) AND
       NOT EXISTS (
         -- Capture reads this registry to construct before/after payloads. A valid
@@ -136,6 +143,7 @@ export async function hasMainAuthorityCapture(
         ...MAIN_AUTHORITY_FUNCTION_PROFILES.map((profile) => ({ ...profile, cutover: false })),
         ...CUTOVER_FUNCTION_PROFILES.map((profile) => ({ ...profile, cutover: true })),
       ]),
+      [...SITE_ENTRY_ASSIGNMENT_RESPONSE_SHA256],
     ],
   );
   return result?.valid === true;
