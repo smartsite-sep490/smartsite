@@ -3,16 +3,15 @@ import { registerFeatureCatalog } from '../../i18n/feature-catalog-registry';
 
 const en = {
   title: 'Camera PPE policy',
-  subtitle:
-    'Review effective PPE per region, distinguish camera default vs custom vs disabled rules, and compare saved vs worker-applied versions.',
+  subtitle: 'Set camera or region PPE rules and compare saved vs applied state.',
   target: 'Policy scope',
   camera: 'Camera default',
   region: 'Region',
   mode: 'Policy mode',
-  choose: 'Choose a policy',
-  EXPLICIT: 'Custom · Require selected PPE',
-  DISABLED: 'Disabled · Turn off PPE checks',
-  INHERIT: 'Use camera default',
+  choose: 'Choose mode',
+  EXPLICIT: 'Custom PPE',
+  DISABLED: 'Disable PPE',
+  INHERIT: 'Camera default',
   reason: 'Reason',
   save: 'Save PPE policy',
   loading: 'Loading saved PPE policy…',
@@ -45,7 +44,7 @@ const en = {
   readinessCoreBadge: 'Core',
   readinessExperimentalBadge: 'Experimental',
   readinessGuidanceNote:
-    'Hard hat and safety vest are baseline checks; gloves, boots, and goggles are experimental. Saved changes take effect only after the camera confirms the updated configuration.',
+    'Hard hat, vest: baseline; gloves, boots, goggles: experimental. Saved changes apply once camera confirms.',
   validationExplicitEmpty: 'Select at least one PPE item before saving this custom policy.',
   validationDisabledReasonRequired: 'Enter a reason for turning off PPE checks before saving.',
   validationDisabledReasonInvalid:
@@ -116,16 +115,15 @@ const en = {
 
 const vi: Record<keyof typeof en, string> = {
   title: 'Chính sách PPE',
-  subtitle:
-    'Xem PPE hiệu lực của từng vùng, phân biệt dùng mặc định camera / tùy chỉnh / tắt và đối chiếu bản đã lưu với trạng thái worker đã áp dụng.',
+  subtitle: 'Cấu hình PPE cho camera hoặc vùng, đối chiếu trạng thái đã áp dụng.',
   target: 'Phạm vi chính sách',
-  camera: 'Mặc định của camera',
+  camera: 'Mặc định camera',
   region: 'Vùng',
   mode: 'Chế độ chính sách',
-  choose: 'Chọn chính sách',
-  EXPLICIT: 'Tùy chỉnh · Yêu cầu PPE đã chọn',
-  DISABLED: 'Tắt · Tắt kiểm tra PPE',
-  INHERIT: 'Dùng mặc định của camera',
+  choose: 'Chọn chế độ',
+  EXPLICIT: 'Tùy chỉnh PPE',
+  DISABLED: 'Tắt kiểm tra',
+  INHERIT: 'Theo mặc định',
   reason: 'Lý do',
   save: 'Lưu chính sách PPE',
   loading: 'Đang tải chính sách PPE…',
@@ -158,7 +156,7 @@ const vi: Record<keyof typeof en, string> = {
   readinessCoreBadge: 'Cơ bản',
   readinessExperimentalBadge: 'Thử nghiệm',
   readinessGuidanceNote:
-    'Mũ bảo hộ và áo phản quang là nhóm kiểm tra cơ bản; găng tay, giày bảo hộ và kính bảo hộ đang ở mức thử nghiệm. Cấu hình đã lưu chỉ bắt đầu giám sát sau khi camera xác nhận áp dụng.',
+    'Mũ, áo: cơ bản; găng, giày, kính: thử nghiệm. Bản đã lưu chỉ áp dụng sau khi camera xác nhận.',
   validationExplicitEmpty: 'Chọn ít nhất một hạng mục PPE trước khi lưu chính sách tùy chỉnh.',
   validationDisabledReasonRequired: 'Nhập lý do tắt kiểm tra PPE trước khi lưu.',
   validationDisabledReasonInvalid:
