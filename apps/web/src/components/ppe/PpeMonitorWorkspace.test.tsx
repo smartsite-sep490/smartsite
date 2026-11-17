@@ -12,8 +12,13 @@ const state = vi.hoisted(() => ({ sites: vi.fn(), cameras: vi.fn() }));
 const client = { listSites: state.sites, listPreviewCameras: state.cameras };
 vi.mock('../../features/auth/auth-session', () => ({ useManagementClient: () => client }));
 vi.mock('./FocusedCameraMedia', () => ({
-  FocusedCameraMedia: (p: { camera: { id: string } }) => (
-    <div data-testid="focus">{p.camera.id}</div>
+  FocusedCameraMedia: (p: { camera: { id: string }; onExitFocus?: () => void }) => (
+    <div data-testid="focus">
+      {p.camera.id}
+      <button data-testid="focused-exit-to-grid" onClick={p.onExitFocus}>
+        Back to grid
+      </button>
+    </div>
   ),
 }));
 vi.mock('./FourSourceWall', () => ({
@@ -248,4 +253,15 @@ it('hides the pending /incidents?tab=ppe-frames link on Main by default while ke
   expect(screen.getByTestId('monitor-frame-inbox-link').getAttribute('href')).toBe(
     `/incidents?tab=ppe-frames&siteId=${encodeURIComponent(site)}`,
   );
+});
+
+it('moving from toolbar into Focus reaches the viewer and returning reaches the grid controls', async () => {
+  render(<PpeMonitorWorkspace apiUrl="https://backend.example" session={session()} />, { wrapper });
+  await screen.findByTestId('wall');
+  fireEvent.click(screen.getByTestId('monitor-focus-btn'));
+  await waitFor(() =>
+    expect(document.activeElement).toBe(screen.getByTestId('focused-exit-to-grid')),
+  );
+  fireEvent.click(screen.getByTestId('focused-exit-to-grid'));
+  await waitFor(() => expect(document.activeElement).toBe(screen.getByTestId('monitor-grid-btn')));
 });

@@ -79,3 +79,19 @@ it('a forbidden selected source shows unavailable without replaying the last AI 
   expect(screen.getByRole('status').textContent).toContain('unavailable');
   expect(screen.queryByRole('button', { name: 'Retry' })).toBeNull();
 });
+
+it('keeps full Camera and Site context available in the expandable details', () => {
+  render(
+    <FocusedCameraMedia
+      {...props}
+      siteCode="SITE-ALPHA"
+      siteName="Long construction site context"
+      camera={{ ...props.camera, name: 'Long camera context' }}
+    />,
+  );
+  const details = screen.getByTestId('focused-technical-details');
+  fireEvent.click(details.querySelector('summary')!);
+  expect((details as HTMLDetailsElement).open).toBe(true);
+  expect(details.textContent).toContain('SITE-ALPHA · Long construction site context');
+  expect(details.textContent).toContain('Long camera context');
+});

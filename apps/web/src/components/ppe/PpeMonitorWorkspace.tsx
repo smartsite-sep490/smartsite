@@ -478,7 +478,12 @@ function CameraScope({
                 type="button"
                 data-testid="monitor-focus-btn"
                 aria-pressed={focus}
-                onClick={() => setFocus(true)}
+                onClick={() => {
+                  if (!focus) {
+                    pendingFocusTargetRef.current = { kind: 'focus-exit' };
+                    setFocus(true);
+                  }
+                }}
                 className="rounded-lg border border-transparent px-2.5 py-1 text-xs font-medium text-slate-700 transition-colors hover:bg-white hover:text-slate-950 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-slate-900 aria-pressed:border-slate-900 aria-pressed:bg-slate-900 aria-pressed:font-semibold aria-pressed:text-white cursor-pointer"
               >
                 {trMonitor('monitor.layout.focus1')}
@@ -662,7 +667,12 @@ function CameraScope({
                 <button
                   type="button"
                   aria-pressed={focus}
-                  onClick={() => setFocus(true)}
+                  onClick={() => {
+                    if (!focus) {
+                      pendingFocusTargetRef.current = { kind: 'focus-exit' };
+                      setFocus(true);
+                    }
+                  }}
                   className="rounded-md px-2.5 py-1 text-xs font-medium text-slate-300 hover:text-white aria-pressed:bg-white aria-pressed:font-semibold aria-pressed:text-slate-950 cursor-pointer"
                 >
                   {trMonitor('monitor.layout.focus1')}
