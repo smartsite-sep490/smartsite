@@ -7,6 +7,7 @@ import {
   IconChevronDown,
   IconChevronRight,
   IconClock,
+  IconCalendar,
   IconCheck,
   IconTrendingUp,
   IconAlertTriangle,
@@ -62,6 +63,34 @@ export function WorkerAttendanceSummary({
     queryFn: () => client.attendanceTimesheets(token, siteId, { fromDate, toDate }),
     refetchInterval: 30000,
   });
+  const daysPresent = useQuery({
+    queryKey: ['attendance-worker-days-present', ...scope, fromDate, toDate, timezone],
+    enabled,
+    queryFn: async () => {
+      let workerId = '';
+      for (let offset = 0; ; offset += 100) {
+        const page = await client.listWorkers(token, siteId, { offset, limit: 100 });
+        const self = page.items.find((worker) => worker.userId === sessionScope);
+        if (self) {
+          workerId = self.id;
+          break;
+        }
+        if (offset + page.items.length >= page.total || page.items.length === 0)
+          throw new Error('WORKER_ATTENDANCE_REPORT_UNAVAILABLE');
+      }
+      const report = await client.attendanceWorkers(token, siteId, {
+        fromDate,
+        toDate,
+        timezone,
+        workerId,
+        limit: 1,
+      });
+      const worker = report.items.find((item) => item.workerId === workerId);
+      if (!worker) throw new Error('WORKER_ATTENDANCE_REPORT_UNAVAILABLE');
+      return worker;
+    },
+    refetchInterval: 30000,
+  });
   const attention = useQuery({
     queryKey: ['attendance-worker-attention', ...scope, fromDate, toDate],
     enabled,
@@ -107,6 +136,17 @@ export function WorkerAttendanceSummary({
     },
     {
       get label() {
+        return tr('worker_attendance_summary.days_present_this_month');
+      },
+      icon: IconCalendar,
+      iconBg: 'bg-emerald-50 text-emerald-600 border border-emerald-100/60',
+      query: daysPresent,
+      value: daysPresent.data
+        ? `${daysPresent.data.presentDays} / ${daysPresent.data.requiredDays}`
+        : tr('common.unavailable'),
+    },
+    {
+      get label() {
         return tr('worker_attendance_summary.days_needing_attention_this_month');
       },
       icon: IconAlertTriangle,
@@ -136,8 +176,8 @@ export function WorkerAttendanceSummary({
 
   return (
     <div className="space-y-4">
-      {/* ── 4 UNIFIED METRIC CARDS (NO SMALL TEXT FOOTNOTES) ──── */}
-      <div className="grid grid-cols-2 gap-3.5 lg:grid-cols-4">
+      {/* ── WORKER METRIC CARDS ──── */}
+      <div className="grid grid-cols-2 gap-3.5 lg:grid-cols-3 xl:grid-cols-5">
         {cards.map((card) => {
           const Icon = card.icon;
           return (

@@ -309,6 +309,9 @@ export function AttendanceView({
       cache.invalidateQueries({
         queryKey: ['attendance-worker-report', apiUrl, sessionScope, siteId],
       }),
+      cache.invalidateQueries({
+        queryKey: ['attendance-worker-days-present', apiUrl, sessionScope, siteId],
+      }),
       cache.invalidateQueries({ queryKey: ['attendance-days', apiUrl, sessionScope, siteId] }),
       cache.invalidateQueries({
         queryKey: ['attendance-day-detail', apiUrl, sessionScope, siteId],
