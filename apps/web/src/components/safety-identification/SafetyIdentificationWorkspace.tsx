@@ -376,6 +376,7 @@ function ScopedIdentificationWorkspace({
                 queries.activeRequest.status === 'CLOSED' &&
                 queries.activeRequest.result?.outcome === 'IDENTIFIED' ? (
                   <SafetyIdentificationRetrospectiveHistory
+                    key={`${scopeNonce}:${scope.siteEpoch}:${scope.selectedSiteId}:${queries.activeRequest.id}:${queries.activeRequest.version}`}
                     client={client}
                     accessToken={session.accessToken}
                     scopeKey={`${scopeNonce}:${scope.siteEpoch}`}

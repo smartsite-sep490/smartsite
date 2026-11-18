@@ -1,84 +1,46 @@
-import { useId, useState } from 'react';
+import { useEffect, useId, useMemo, useRef, useState, useSyncExternalStore } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import type {
-  SafetyIdentificationRetrospectiveAssessment,
-  SmartSiteManagementClient,
-} from '@smartsite/api-client';
-import { Badge, Button, Card } from '../ui';
-import { formatIdentificationDateTime } from './safetyIdentificationDetailShared';
+import type { SmartSiteManagementClient } from '@smartsite/api-client';
+import { IconAlertTriangle, IconCheck, IconClock, IconRefresh, IconShield } from '../icons';
+import { Alert, AlertDescription, Badge, Button, Card } from '../ui';
+import {
+  DETAIL_FIELD_CLASS,
+  formatIdentificationDateTime,
+} from './safetyIdentificationDetailShared';
 import { isHardDenial, type IdentificationQueryPrefix } from './IdentificationWorkspaceScope';
+import {
+  RETROSPECTIVE_LABELS,
+  RETROSPECTIVE_PAGE_SIZE,
+  RETROSPECTIVE_POLL_INTERVAL_MS,
+  isActiveRetrospectiveStatus,
+  resolveRetrospectiveVerdict,
+  retrospectiveBadgeVariant,
+  retrospectiveStateHint,
+  safeRetrospectivePlaceLabel,
+} from './SafetyIdentificationRetrospectiveCopy';
 
-const pageSize = 10;
-const labels = {
-  en: {
-    title: 'Zone reassessments',
-    show: 'View zone reassessments',
-    hide: 'Hide zone reassessments',
-    refresh: 'Refresh',
-    loading: 'Loading reassessments…',
-    failed: 'Could not load zone reassessments.',
-    empty: 'No reassessments have been requested for this case.',
-    original: 'Original assessment',
-    noOriginal: 'Awaiting original result',
-    capture: 'Recorded at',
-    zone: 'Zone',
-    camera: 'Camera',
-    previous: 'Previous',
-    next: 'Next',
-    entry: 'Zone entry to reassess',
-    choose: 'Choose a zone entry',
-    request: 'Request reassessment',
-    queued: 'Reassessment queued.',
-    submitError: 'Could not request reassessment. You can retry.',
-    optionsError: 'Could not load zone entries eligible for reassessment.',
-    noOptions: 'No zone entries in this case are eligible for a new reassessment.',
-    status: {
-      PENDING: 'Queued',
-      CLAIMED: 'In progress',
-      ALLOWED: 'Access authorized',
-      DENIED: 'Access unauthorized',
-      UNAVAILABLE: 'Unable to assess',
-      FAILED: 'Assessment failed',
-      CANCELLED: 'Cancelled',
-    },
-    unrestricted: 'Zone did not require authorization',
-    prohibited: 'Entry prohibited for everyone',
-  },
-  vi: {
-    title: 'Lịch sử đánh giá lại quyền vào vùng',
-    show: 'Xem lịch sử đánh giá lại',
-    hide: 'Ẩn lịch sử đánh giá lại',
-    refresh: 'Làm mới',
-    loading: 'Đang tải lịch sử đánh giá…',
-    failed: 'Chưa tải được lịch sử đánh giá lại.',
-    empty: 'Hồ sơ này chưa có yêu cầu đánh giá lại.',
-    original: 'Đánh giá ban đầu',
-    noOriginal: 'Chưa có kết quả ban đầu',
-    capture: 'Thời điểm ghi hình',
-    zone: 'Khu vực',
-    camera: 'Camera',
-    previous: 'Trang trước',
-    next: 'Trang sau',
-    entry: 'Lượt vào vùng cần đánh giá lại',
-    choose: 'Chọn lượt vào vùng',
-    request: 'Gửi yêu cầu đánh giá lại',
-    queued: 'Đã gửi yêu cầu đánh giá lại.',
-    submitError: 'Chưa gửi được yêu cầu. Bạn có thể thử lại.',
-    optionsError: 'Chưa tải được các lượt vào vùng đủ điều kiện đánh giá lại.',
-    noOptions: 'Hồ sơ này không có lượt vào vùng nào đủ điều kiện đánh giá lại thêm.',
-    status: {
-      PENDING: 'Đang chờ xử lý',
-      CLAIMED: 'Đang đánh giá',
-      ALLOWED: 'Có quyền vào vùng',
-      DENIED: 'Không có quyền vào vùng',
-      UNAVAILABLE: 'Chưa thể đánh giá',
-      FAILED: 'Đánh giá thất bại',
-      CANCELLED: 'Đã hủy',
-    },
-    unrestricted: 'Khu vực không yêu cầu cấp quyền',
-    prohibited: 'Khu vực cấm mọi người',
-  },
-};
+function subscribeDocumentVisibility(onStoreChange: () => void): () => void {
+  if (typeof document === 'undefined') return () => undefined;
+  document.addEventListener('visibilitychange', onStoreChange);
+  return () => document.removeEventListener('visibilitychange', onStoreChange);
+}
+
+function readDocumentVisible(): boolean {
+  return typeof document === 'undefined' || document.visibilityState !== 'hidden';
+}
+
+export interface SafetyIdentificationRetrospectiveHistoryProps {
+  client: SmartSiteManagementClient;
+  accessToken: string;
+  scopeKey: string;
+  queryPrefix: IdentificationQueryPrefix;
+  runGuardedQuery: <T>(work: () => Promise<T>) => Promise<T>;
+  siteId: string;
+  caseId: string;
+  episodeId: string;
+  caseVersion: number;
+  vietnamese: boolean;
+}
 
 export function SafetyIdentificationRetrospectiveHistory({
   client,
@@ -91,28 +53,61 @@ export function SafetyIdentificationRetrospectiveHistory({
   episodeId,
   caseVersion,
   vietnamese,
-}: {
-  client: SmartSiteManagementClient;
-  accessToken: string;
-  scopeKey: string;
-  queryPrefix: IdentificationQueryPrefix;
-  runGuardedQuery: <T>(work: () => Promise<T>) => Promise<T>;
-  siteId: string;
-  caseId: string;
-  episodeId: string;
-  caseVersion: number;
-  vietnamese: boolean;
-}) {
-  const copy = vietnamese ? labels.vi : labels.en;
+}: SafetyIdentificationRetrospectiveHistoryProps) {
+  const copy = vietnamese ? RETROSPECTIVE_LABELS.vi : RETROSPECTIVE_LABELS.en;
   const panelId = useId();
+  const selectId = useId();
+  const isVisible = useSyncExternalStore(
+    subscribeDocumentVisibility,
+    readDocumentVisible,
+    () => true,
+  );
+  const scopeIdentity = `${scopeKey}:${siteId.trim().toLowerCase()}:${caseId.trim().toLowerCase()}:${caseVersion}`;
+
+  const [trackedScopeIdentity, setTrackedScopeIdentity] = useState(scopeIdentity);
   const [expanded, setExpanded] = useState(false);
   const [offset, setOffset] = useState(0);
   const [selection, setSelection] = useState<{
     initialRequestId: string;
     commandId: string;
   } | null>(null);
+  const [showQueuedBanner, setShowQueuedBanner] = useState(false);
+  const [latchedDeniedScope, setLatchedDeniedScope] = useState<string | null>(null);
+
+  const submittingRef = useRef(false);
+  const mountedScopeRef = useRef(scopeIdentity);
+  const wasVisibleRef = useRef(isVisible);
+
+  if (trackedScopeIdentity !== scopeIdentity) {
+    setTrackedScopeIdentity(scopeIdentity);
+    setExpanded(false);
+    setOffset(0);
+    setSelection(null);
+    setShowQueuedBanner(false);
+    setLatchedDeniedScope(null);
+  }
+
   const queryClient = useQueryClient();
-  const historyKey = [...queryPrefix, 'site', siteId, 'zone-reassessments', scopeKey, caseId];
+  const historyKey = useMemo(
+    () => [...queryPrefix, 'site', siteId, 'zone-reassessments', scopeKey, caseId] as const,
+    [caseId, queryPrefix, scopeKey, siteId],
+  );
+  const optionsKey = useMemo(
+    () =>
+      [
+        ...queryPrefix,
+        'site',
+        siteId,
+        'zone-reassessment-options',
+        scopeKey,
+        caseId,
+        caseVersion,
+      ] as const,
+    [caseId, caseVersion, queryPrefix, scopeKey, siteId],
+  );
+
+  const isScopeLatchedDenied = latchedDeniedScope === scopeIdentity;
+
   const query = useQuery({
     queryKey: [...historyKey, offset],
     queryFn: ({ signal }) =>
@@ -121,54 +116,115 @@ export function SafetyIdentificationRetrospectiveHistory({
           accessToken,
           siteId,
           caseId,
-          { offset, limit: pageSize },
+          { offset, limit: RETROSPECTIVE_PAGE_SIZE },
           { signal },
         ),
       ),
-    enabled: expanded,
+    enabled: expanded && !isScopeLatchedDenied,
     gcTime: 0,
     retry: false,
+    refetchOnWindowFocus: false,
+    refetchIntervalInBackground: false,
+    refetchInterval: (currentQuery) => {
+      if (!expanded || isScopeLatchedDenied || !isVisible) return false;
+      if (currentQuery.state.status === 'error') return false;
+      const items = currentQuery.state.data?.items;
+      if (!Array.isArray(items)) return false;
+      return items.some((item) => isActiveRetrospectiveStatus(item.status))
+        ? RETROSPECTIVE_POLL_INTERVAL_MS
+        : false;
+    },
   });
+
   const options = useQuery({
-    queryKey: [
-      ...queryPrefix,
-      'site',
-      siteId,
-      'zone-reassessment-options',
-      scopeKey,
-      caseId,
-      caseVersion,
-    ],
+    queryKey: optionsKey,
     queryFn: ({ signal }) =>
       runGuardedQuery(() =>
         client.listSafetyIdentificationRetrospectiveOptions(accessToken, siteId, caseId, {
           signal,
         }),
       ),
-    enabled: expanded,
+    enabled: expanded && !isScopeLatchedDenied,
     gcTime: 0,
     retry: false,
+    refetchOnWindowFocus: false,
   });
+
   const submit = useMutation({
-    mutationFn: (entry: NonNullable<typeof selection>) =>
-      runGuardedQuery(() =>
-        client.requestSafetyIdentificationRetrospectiveAssessment(accessToken, siteId, caseId, {
-          ...entry,
-          episodeId,
-          identificationVersion: caseVersion,
-        }),
-      ),
-    onSuccess: async () => {
+    mutationFn: async (entry: NonNullable<typeof selection>) => {
+      const capturedScope = scopeIdentity;
+      try {
+        await runGuardedQuery(() =>
+          client.requestSafetyIdentificationRetrospectiveAssessment(accessToken, siteId, caseId, {
+            ...entry,
+            episodeId,
+            identificationVersion: caseVersion,
+          }),
+        );
+        return { capturedScope };
+      } finally {
+        submittingRef.current = false;
+      }
+    },
+    onSuccess: async ({ capturedScope }) => {
+      if (mountedScopeRef.current !== capturedScope) return;
       setSelection(null);
       setOffset(0);
+      setShowQueuedBanner(true);
       await Promise.all([
         options.refetch(),
         queryClient.invalidateQueries({ queryKey: historyKey }),
       ]);
     },
+    onError: () => {
+      if (mountedScopeRef.current !== scopeIdentity) return;
+      setShowQueuedBanner(false);
+    },
   });
-  const denied =
+
+  const hasFreshHardDenial =
     isHardDenial(query.error) || isHardDenial(options.error) || isHardDenial(submit.error);
+
+  if (hasFreshHardDenial && !isScopeLatchedDenied) {
+    setLatchedDeniedScope(scopeIdentity);
+    setSelection(null);
+    setShowQueuedBanner(false);
+  }
+
+  const denied = isScopeLatchedDenied || hasFreshHardDenial;
+
+  useEffect(() => {
+    mountedScopeRef.current = scopeIdentity;
+    submittingRef.current = false;
+    return () => {
+      mountedScopeRef.current = '';
+      submittingRef.current = false;
+    };
+  }, [scopeIdentity]);
+
+  useEffect(() => {
+    if (!denied) return;
+    submittingRef.current = false;
+    void queryClient.cancelQueries({ queryKey: historyKey });
+    queryClient.removeQueries({ queryKey: historyKey });
+    void queryClient.cancelQueries({ queryKey: optionsKey });
+    queryClient.removeQueries({ queryKey: optionsKey });
+  }, [denied, historyKey, optionsKey, queryClient]);
+
+  const page = query.isError || denied ? undefined : query.data;
+  const hasActiveJobs = Boolean(
+    page?.items.some((item) => isActiveRetrospectiveStatus(item.status)),
+  );
+  const refetchHistory = query.refetch;
+
+  useEffect(() => {
+    const becameVisible = !wasVisibleRef.current && isVisible;
+    wasVisibleRef.current = isVisible;
+    if (becameVisible && expanded && !denied && hasActiveJobs) {
+      void refetchHistory();
+    }
+  }, [denied, expanded, hasActiveJobs, isVisible, refetchHistory]);
+
   const candidates =
     !denied &&
     !options.isError &&
@@ -177,61 +233,91 @@ export function SafetyIdentificationRetrospectiveHistory({
       ? options.data.items
       : [];
   const selected = candidates.find((item) => item.initialRequestId === selection?.initialRequestId);
-  const page = query.isError || denied ? undefined : query.data;
 
-  function verdict(item: SafetyIdentificationRetrospectiveAssessment) {
-    if (item.reasonCode === 'POLICY_NONE' && item.status === 'ALLOWED') return copy.unrestricted;
-    if (item.reasonCode === 'POLICY_PROHIBITED' && item.status === 'DENIED') return copy.prohibited;
-    return copy.status[item.status] ?? copy.status.UNAVAILABLE;
+  const displayQueuedBanner =
+    showQueuedBanner &&
+    !denied &&
+    !submit.isError &&
+    (!page || page.items.length === 0 || hasActiveJobs);
+
+  function handleRefresh() {
+    if (denied) {
+      submit.reset();
+      queryClient.removeQueries({ queryKey: historyKey });
+      queryClient.removeQueries({ queryKey: optionsKey });
+      setLatchedDeniedScope(null);
+      return;
+    }
+    void query.refetch();
+    void options.refetch();
   }
 
   return (
-    <div className="min-w-0 space-y-2">
+    <div className="min-w-0 space-y-2.5">
       <Button
         type="button"
         variant="outline"
         size="sm"
+        leftIcon={<IconShield className="w-3.5 h-3.5 text-slate-600" />}
         aria-expanded={expanded}
         aria-controls={expanded ? panelId : undefined}
         onClick={() => setExpanded((open) => !open)}
       >
         {expanded ? copy.hide : copy.show}
       </Button>
+
       {expanded && (
-        <Card id={panelId} role="region" aria-label={copy.title} className="min-w-0 space-y-3">
-          <div className="flex flex-wrap items-center justify-between gap-2">
-            <h3 className="text-sm font-semibold">{copy.title}</h3>
+        <Card id={panelId} role="region" aria-label={copy.title} className="min-w-0 space-y-3.5">
+          <div className="flex flex-wrap items-start justify-between gap-2.5 border-b border-slate-100 pb-3">
+            <div className="min-w-0 space-y-0.5">
+              <h3 className="text-sm font-bold text-[#071A2B]">{copy.title}</h3>
+              <p className="text-xs text-slate-500 leading-relaxed">{copy.subtitle}</p>
+            </div>
             <Button
               type="button"
               size="sm"
               variant="outline"
+              leftIcon={<IconRefresh className="w-3.5 h-3.5" />}
               disabled={query.isFetching || options.isFetching || submit.isPending}
-              onClick={() => {
-                void query.refetch();
-                void options.refetch();
-              }}
+              onClick={handleRefresh}
             >
               {copy.refresh}
             </Button>
           </div>
-          {candidates.length > 0 && (
+
+          {!denied && candidates.length > 0 && (
             <form
-              className="space-y-2 border-b border-slate-200 pb-3"
+              className="space-y-2.5 rounded-xl border border-slate-200/80 bg-slate-50/60 p-3"
               onSubmit={(event) => {
                 event.preventDefault();
-                if (selection && selected && !submit.isPending && !options.isFetching)
-                  submit.mutate(selection);
+                if (
+                  !selection ||
+                  !selected ||
+                  submittingRef.current ||
+                  submit.isPending ||
+                  options.isFetching ||
+                  denied
+                ) {
+                  return;
+                }
+                submittingRef.current = true;
+                setShowQueuedBanner(false);
+                submit.mutate(selection);
               }}
             >
-              <div className="flex flex-wrap items-end gap-2">
-                <label className="grid min-w-0 flex-1 gap-1 text-sm font-medium">
-                  {copy.entry}
+              <div className="flex flex-col gap-2.5 sm:flex-row sm:items-end">
+                <div className="min-w-0 flex-1 space-y-1">
+                  <label htmlFor={selectId} className="block text-xs font-bold text-[#071A2B]">
+                    {copy.entry}
+                  </label>
                   <select
-                    className="min-w-0 w-full rounded-md border border-slate-300 bg-white px-2 py-2"
+                    id={selectId}
+                    className={`${DETAIL_FIELD_CLASS} bg-white py-2 text-xs`}
                     value={selected?.initialRequestId ?? ''}
                     disabled={submit.isPending}
                     onChange={(event) => {
                       submit.reset();
+                      setShowQueuedBanner(false);
                       const initialRequestId = event.target.value;
                       setSelection(
                         initialRequestId
@@ -243,16 +329,19 @@ export function SafetyIdentificationRetrospectiveHistory({
                     <option value="">{copy.choose}</option>
                     {candidates.map((item) => (
                       <option key={item.initialRequestId} value={item.initialRequestId}>
-                        {item.zoneName} · {item.cameraName} ·{' '}
+                        {safeRetrospectivePlaceLabel(item.zoneName, copy.zone)} ·{' '}
+                        {safeRetrospectivePlaceLabel(item.cameraName, copy.camera)} ·{' '}
                         {formatIdentificationDateTime(item.capturedAt)}
                       </option>
                     ))}
                   </select>
-                </label>
+                </div>
                 <Button
                   type="submit"
+                  variant="primary"
                   size="sm"
-                  disabled={!selected || options.isFetching}
+                  className="w-full sm:w-auto shrink-0"
+                  disabled={!selected || options.isFetching || submit.isPending}
                   isLoading={submit.isPending}
                 >
                   {copy.request}
@@ -260,88 +349,150 @@ export function SafetyIdentificationRetrospectiveHistory({
               </div>
             </form>
           )}
-          {options.isError && (
-            <p role="alert" className="text-sm text-rose-700">
-              {copy.optionsError}
-            </p>
+
+          {denied && (
+            <Alert variant="destructive">
+              <IconAlertTriangle className="w-4 h-4" />
+              <AlertDescription className="space-y-1">
+                <p className="font-semibold text-rose-900">{copy.failed}</p>
+                <p>{copy.deniedNotice}</p>
+              </AlertDescription>
+            </Alert>
           )}
-          {options.isSuccess && !candidates.length && (
-            <p className="text-sm text-slate-600">{copy.noOptions}</p>
+
+          {!denied && options.isError && (
+            <Alert variant="destructive">
+              <IconAlertTriangle className="w-4 h-4" />
+              <AlertDescription>{copy.optionsError}</AlertDescription>
+            </Alert>
           )}
-          {submit.isError && (
-            <p role="alert" className="text-sm text-rose-700">
-              {copy.submitError}
-            </p>
+
+          {!denied && options.isSuccess && !candidates.length && (
+            <p className="text-xs text-slate-600">{copy.noOptions}</p>
           )}
-          {submit.isSuccess && (
-            <p role="status" className="text-sm text-emerald-700">
-              {copy.queued}
-            </p>
+
+          {!denied && submit.isError && (
+            <Alert variant="destructive">
+              <IconAlertTriangle className="w-4 h-4" />
+              <AlertDescription>{copy.submitError}</AlertDescription>
+            </Alert>
           )}
-          {query.isPending && (
-            <p role="status" className="text-sm">
+
+          {displayQueuedBanner && (
+            <Alert variant="success">
+              <IconCheck className="w-4 h-4" />
+              <AlertDescription role="status">{copy.queued}</AlertDescription>
+            </Alert>
+          )}
+
+          {!denied && hasActiveJobs && isVisible && (
+            <div
+              role="status"
+              aria-live="polite"
+              className="flex items-center gap-2 rounded-xl border border-blue-200/80 bg-blue-50/60 px-3 py-2 text-xs font-medium text-blue-900"
+            >
+              <IconClock className="w-3.5 h-3.5 shrink-0 text-blue-600" />
+              <span className="min-w-0 break-words">{copy.autoUpdating}</span>
+            </div>
+          )}
+
+          {!denied && query.isPending && (
+            <p role="status" className="text-xs font-medium text-slate-600">
               {copy.loading}
             </p>
           )}
-          {query.isError && (
-            <p role="alert" className="text-sm text-rose-700">
-              {copy.failed}
-            </p>
+
+          {!denied && query.isError && (
+            <Alert variant="destructive">
+              <IconAlertTriangle className="w-4 h-4" />
+              <AlertDescription>{copy.failed}</AlertDescription>
+            </Alert>
           )}
-          {page?.total === 0 && <p className="text-sm text-slate-600">{copy.empty}</p>}
-          {page && page.items.length > 0 && (
-            <ul className="space-y-2">
-              {page.items.map((item) => (
-                <li
-                  key={item.requestId}
-                  className="min-w-0 space-y-2 rounded-lg border border-slate-200 p-3"
-                >
-                  <div className="flex flex-wrap items-start justify-between gap-2">
-                    <p className="min-w-0 break-words text-sm font-medium">
-                      {item.zoneName ?? copy.zone} · {item.cameraName ?? copy.camera}
-                    </p>
-                    <Badge>{verdict(item)}</Badge>
-                  </div>
-                  <dl className="grid gap-2 text-xs text-slate-700 sm:grid-cols-2">
-                    <div>
-                      <dt className="font-medium">{copy.capture}</dt>
-                      <dd>
-                        <time dateTime={item.capturedAt}>
-                          {formatIdentificationDateTime(item.capturedAt)}
-                        </time>
-                      </dd>
+
+          {!denied && page?.total === 0 && <p className="text-xs text-slate-600">{copy.empty}</p>}
+
+          {!denied && page && page.items.length > 0 && (
+            <ul className="space-y-2.5">
+              {page.items.map((item) => {
+                const hint = retrospectiveStateHint(item.status, copy);
+                const zoneLabel = safeRetrospectivePlaceLabel(item.zoneName, copy.zone);
+                const cameraLabel = safeRetrospectivePlaceLabel(item.cameraName, copy.camera);
+                return (
+                  <li
+                    key={item.requestId}
+                    className="min-w-0 space-y-2.5 rounded-xl border border-slate-200/90 bg-slate-50/40 p-3.5"
+                  >
+                    <div className="flex flex-wrap items-start justify-between gap-2">
+                      <p className="min-w-0 break-words text-sm font-bold text-[#071A2B]">
+                        {zoneLabel} · {cameraLabel}
+                      </p>
+                      <div className="flex flex-wrap items-center gap-1.5">
+                        <span className="text-[11px] font-semibold text-slate-500">
+                          {copy.reassessment}:
+                        </span>
+                        <Badge variant={retrospectiveBadgeVariant(item)} dot>
+                          {resolveRetrospectiveVerdict(item, copy)}
+                        </Badge>
+                      </div>
                     </div>
-                    <div>
-                      <dt className="font-medium">{copy.original}</dt>
-                      <dd>
-                        {item.originalOutcome ? copy.status[item.originalOutcome] : copy.noOriginal}
-                      </dd>
-                    </div>
-                  </dl>
-                </li>
-              ))}
+
+                    {hint && (
+                      <p className="text-xs text-slate-600 leading-relaxed break-words">{hint}</p>
+                    )}
+
+                    <dl className="grid grid-cols-1 gap-2 text-xs sm:grid-cols-2">
+                      <div className="min-w-0 rounded-lg border border-slate-200/70 bg-white px-2.5 py-2">
+                        <dt className="font-semibold text-slate-500">{copy.capture}</dt>
+                        <dd className="mt-0.5 font-medium text-slate-800 tabular-nums break-words">
+                          <time dateTime={item.capturedAt}>
+                            {formatIdentificationDateTime(item.capturedAt)}
+                          </time>
+                        </dd>
+                      </div>
+                      <div className="min-w-0 rounded-lg border border-slate-200/70 bg-white px-2.5 py-2">
+                        <dt className="font-semibold text-slate-500">{copy.original}</dt>
+                        <dd className="mt-0.5 font-semibold text-[#071A2B] break-words">
+                          {item.originalOutcome
+                            ? copy.status[item.originalOutcome]
+                            : copy.noOriginal}
+                        </dd>
+                      </div>
+                    </dl>
+                  </li>
+                );
+              })}
             </ul>
           )}
-          {page && (offset > 0 || page.total > pageSize) && (
-            <div className="flex flex-wrap justify-end gap-2">
-              <Button
-                type="button"
-                variant="outline"
-                size="sm"
-                disabled={offset === 0}
-                onClick={() => setOffset(offset - pageSize)}
-              >
-                {copy.previous}
-              </Button>
-              <Button
-                type="button"
-                variant="outline"
-                size="sm"
-                disabled={offset + pageSize >= page.total}
-                onClick={() => setOffset(offset + pageSize)}
-              >
-                {copy.next}
-              </Button>
+
+          {!denied && page && (offset > 0 || page.total > RETROSPECTIVE_PAGE_SIZE) && (
+            <div className="flex flex-wrap items-center justify-between gap-2 pt-1">
+              <span className="text-xs font-medium text-slate-500 tabular-nums">
+                {copy.showingRange(
+                  offset + 1,
+                  Math.min(offset + page.items.length, page.total),
+                  page.total,
+                )}
+              </span>
+              <div className="flex flex-wrap justify-end gap-2">
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  disabled={offset === 0 || query.isFetching}
+                  onClick={() => setOffset(Math.max(0, offset - RETROSPECTIVE_PAGE_SIZE))}
+                >
+                  {copy.previous}
+                </Button>
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  disabled={offset + RETROSPECTIVE_PAGE_SIZE >= page.total || query.isFetching}
+                  onClick={() => setOffset(offset + RETROSPECTIVE_PAGE_SIZE)}
+                >
+                  {copy.next}
+                </Button>
+              </div>
             </div>
           )}
         </Card>
