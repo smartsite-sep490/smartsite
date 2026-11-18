@@ -15,15 +15,15 @@ const en = {
   'cameraSetup.stage1Title': 'Stage 1 · Per-Zone & Region PPE Policy',
   'cameraSetup.stage1Body':
     'Zones define site areas; each camera default and region policy resolves effective PPE (Use camera default, Custom, or Disabled). Locked Zones allow rename only.',
-  'cameraSetup.stage2Title': 'Stage 2 · Camera & Source ID',
+  'cameraSetup.stage2Title': 'Stage 2 · Link Provisioned Source ID',
   'cameraSetup.stage2Body':
-    'Saves the camera code, display name, and source identifier. Registration does not verify a live connection.',
-  'cameraSetup.stage3Title': 'Stage 3 · Reference Image',
+    'Links a human camera name and code to a technical Source ID already configured on the edge worker. Do not paste RTSP URLs or passwords; saving does not connect a stream or start a worker.',
+  'cameraSetup.stage3Title': 'Stage 3 · Verify Reference Image',
   'cameraSetup.stage3Body':
-    'Loads a 5-minute reference snapshot for the saved configuration version before drawing regions.',
-  'cameraSetup.stage4Title': 'Stage 4 · Observation Regions',
+    'Open Edit observation regions and click Get configuration image to confirm the edge source serves a 5-minute reference frame before drawing regions.',
+  'cameraSetup.stage4Title': 'Stage 4 · Regions, PPE & Worker Receipt',
   'cameraSetup.stage4Body':
-    'Links each Zone boundary to the camera view. Saving stores the configuration version only.',
+    'Save Zone boundaries and PPE rules. Saved/Enabled stores configuration version only — check worker status below to confirm applied revision.',
   'cameraSetup.catalogBreakdown': '{{active}} enabled · {{inactive}} disabled',
   'cameraSetup.scopeReadOnlyReason':
     'Read-only catalog scope: only the assigned Site Manager can register cameras, change status, or edit Zone and region policies.',
@@ -45,15 +45,15 @@ const en = {
   'cameraSetup.revisionDistinctionReadOnlyDisclosure':
     'Catalog status (Enabled/Disabled) and vN reflect saved configuration only, not worker application or live video. Check the selected camera status summary for worker receipts and reference-frame validity.',
   'cameraSetup.sourceIdDisclosure':
-    'Source identifier is viewed in Manage; registration does not verify source status or connection.',
+    'Source ID is a fixed technical source key matched to an edge-provisioned camera stream (viewed in Manage; not an editable RTSP URL or credential). Registration does not verify source status or start the edge worker.',
   'cameraSetup.sourceIdReadOnlyDisclosure':
-    'Source identifier and camera settings are managed by the assigned Site Manager; registration does not verify source status or connection.',
+    'Source ID is a technical edge-provisioned source key managed by the assigned Site Manager (not an editable URL or credential); registration does not verify source status or connection.',
   'cameraSetup.metadataDisclosureLabel': 'Configuration & revision details',
   'cameraSetup.selectedHeading': 'Selected camera',
   'cameraSetup.selectedActiveNext':
-    'Edit observation regions for this camera, or open Manage to rename or disable it in configuration.',
+    'Next: open Edit observation regions → Get configuration image to verify the source frame and draw boundaries, then set Camera PPE policy. Enabled in configuration does not mean connected or worker-applied — check worker status below (Source ID must match a running edge-provisioned source).',
   'cameraSetup.selectedInactiveNext':
-    'Region linking requires an enabled camera. Open Manage to enable it without re-registering.',
+    'Disabled in configuration — the edge worker will not apply this camera until enabled. Open Manage to enable it, then verify a configuration image in Regions.',
   'cameraSetup.editSelectedRegions': 'Edit observation regions ({{code}})',
   'cameraSetup.configureSelectedPpe': 'Configure PPE policy ({{code}})',
   'cameraSetup.editSelectedManage': 'Edit camera settings ({{code}})',
@@ -69,15 +69,15 @@ const vi: Record<keyof typeof en, string> = {
   'cameraSetup.stage1Title': 'Bước 1 · Chính sách PPE theo khu vực & vùng',
   'cameraSetup.stage1Body':
     'Khu vực xác định các vùng công trường; mặc định camera và chính sách từng vùng quyết định PPE hiệu lực (Dùng mặc định camera, Tùy chỉnh hoặc Tắt). Khu vực đã khóa chỉ đổi tên.',
-  'cameraSetup.stage2Title': 'Bước 2 · Camera & Mã nguồn',
+  'cameraSetup.stage2Title': 'Bước 2 · Gắn Mã nguồn đã cấp trên edge',
   'cameraSetup.stage2Body':
-    'Lưu mã camera, tên hiển thị và mã định danh nguồn. Việc đăng ký không xác nhận kết nối trực tiếp.',
-  'cameraSetup.stage3Title': 'Bước 3 · Ảnh tham chiếu',
+    'Gắn tên hiển thị và mã camera với Mã nguồn (Source ID) kỹ thuật đã cấu hình sẵn trên edge worker. Không dán URL RTSP hay mật khẩu; thao tác lưu không tự kết nối luồng hay khởi chạy worker.',
+  'cameraSetup.stage3Title': 'Bước 3 · Kiểm tra ảnh tham chiếu',
   'cameraSetup.stage3Body':
-    'Tải ảnh tham chiếu (5 phút) theo phiên bản cấu hình đã lưu trước khi vẽ vùng quan sát.',
-  'cameraSetup.stage4Title': 'Bước 4 · Vùng quan sát',
+    'Mở Sửa vùng quan sát và nhấn Lấy ảnh cấu hình để xác nhận nguồn edge trả về khung hình tham chiếu (5 phút) trước khi vẽ vùng.',
+  'cameraSetup.stage4Title': 'Bước 4 · Vùng quan sát, PPE & Biên nhận worker',
   'cameraSetup.stage4Body':
-    'Gắn ranh giới từng khu vực vào góc nhìn camera. Thao tác lưu chỉ ghi nhận phiên bản cấu hình.',
+    'Lưu ranh giới khu vực và quy tắc PPE. Trạng thái Đã lưu/Đang bật chỉ ghi nhận phiên bản cấu hình — kiểm tra tóm tắt worker bên dưới để xác nhận đã áp dụng.',
   'cameraSetup.catalogBreakdown': '{{active}} đang bật · {{inactive}} đang tắt',
   'cameraSetup.scopeReadOnlyReason':
     'Phạm vi xem danh mục: chỉ Quản lý công trường được phân công mới được đăng ký camera, đổi trạng thái hoặc sửa khu vực và vùng quan sát.',
@@ -99,15 +99,15 @@ const vi: Record<keyof typeof en, string> = {
   'cameraSetup.revisionDistinctionReadOnlyDisclosure':
     'Trạng thái danh mục (Đang bật/Đang tắt) và vN chỉ phản ánh cấu hình đã lưu, không đồng nghĩa worker đã áp dụng hay có video trực tiếp. Xem tóm tắt trạng thái ở camera đang chọn để kiểm tra biên nhận worker và độ hợp lệ của khung tham chiếu.',
   'cameraSetup.sourceIdDisclosure':
-    'Mã định danh nguồn được xem trong Quản lý; đăng ký không xác nhận trạng thái nguồn hay kết nối.',
+    'Mã nguồn (Source ID) là khóa kỹ thuật cố định khớp với nguồn camera đã cấp sẵn trên edge worker (xem trong Quản lý; không phải URL RTSP hay thông tin đăng nhập có thể sửa). Đăng ký không xác nhận kết nối nguồn hay khởi chạy edge worker.',
   'cameraSetup.sourceIdReadOnlyDisclosure':
-    'Mã định danh nguồn và cài đặt camera do Quản lý công trường được phân công quản lý; đăng ký không xác nhận trạng thái nguồn hay kết nối.',
+    'Mã nguồn (Source ID) là khóa kỹ thuật trên edge worker do Quản lý công trường được phân công quản lý (không phải URL hay thông tin xác thực); đăng ký không xác nhận trạng thái nguồn hay kết nối.',
   'cameraSetup.metadataDisclosureLabel': 'Chi tiết cấu hình & phiên bản',
   'cameraSetup.selectedHeading': 'Camera đang chọn',
   'cameraSetup.selectedActiveNext':
-    'Sửa vùng quan sát cho camera này, hoặc mở Quản lý để đổi tên hay tắt trong cấu hình.',
+    'Tiếp theo: mở Sửa vùng quan sát → Lấy ảnh cấu hình để kiểm tra khung hình nguồn và vẽ ranh giới, sau đó đặt Chính sách PPE. Đang bật trong cấu hình không đồng nghĩa đã kết nối hay worker đã áp dụng — hãy xem trạng thái worker bên dưới (Mã nguồn phải khớp nguồn đang chạy trên edge worker).',
   'cameraSetup.selectedInactiveNext':
-    'Cần bật camera trước khi gắn vùng quan sát. Mở Quản lý để bật mà không cần đăng ký lại.',
+    'Đang tắt trong cấu hình — edge worker sẽ không áp dụng camera này cho đến khi bật lại. Mở Quản lý để bật, rồi kiểm tra ảnh cấu hình tại Vùng quan sát.',
   'cameraSetup.editSelectedRegions': 'Sửa vùng quan sát ({{code}})',
   'cameraSetup.configureSelectedPpe': 'Cấu hình chính sách PPE ({{code}})',
   'cameraSetup.editSelectedManage': 'Sửa cài đặt camera ({{code}})',
@@ -322,8 +322,11 @@ export function CameraSetupContextBar({
                   <span className="font-semibold text-slate-900">{selectedCamera.externalId}</span>
                 </span>
               </div>
-              <p className="min-w-0 max-w-full break-words [overflow-wrap:anywhere] text-base font-semibold tracking-tight text-slate-900 tabular-nums">
-                {`${selectedCamera.code} · ${selectedCamera.name}`}
+              <p
+                title={`${selectedCamera.name} · ${selectedCamera.code}`}
+                className="min-w-0 max-w-full break-words [overflow-wrap:anywhere] text-base font-semibold tracking-tight text-slate-900 tabular-nums"
+              >
+                {`${selectedCamera.name} · ${selectedCamera.code}`}
               </p>
               {rows.length > 1 && onSelectCamera && (
                 <div className="flex flex-wrap items-center gap-2 pt-0.5">
@@ -343,7 +346,7 @@ export function CameraSetupContextBar({
                   >
                     {rows.map((row) => (
                       <option key={row.id} value={row.id}>
-                        {row.code} · {row.name}
+                        {row.name} ({row.code})
                       </option>
                     ))}
                   </select>

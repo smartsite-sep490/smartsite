@@ -35,11 +35,16 @@ const clientIds = new WeakMap<SmartSiteManagementClient, number>();
 let nextClientId = 1;
 type CameraInput = Parameters<SmartSiteManagementClient['createCamera']>[2];
 type FieldErrors = Partial<Record<keyof CameraInput, CameraRegistrationCopyKey>>;
-const fields = ['code', 'name', 'externalId'] as const;
+const fields = ['name', 'code', 'externalId'] as const;
 const labelKeys: Record<keyof CameraInput, CameraRegistrationCopyKey> = {
   code: 'cameraSetup.field.code',
   name: 'cameraSetup.field.name',
   externalId: 'cameraSetup.field.externalId',
+};
+const helpKeys: Record<keyof CameraInput, CameraRegistrationCopyKey> = {
+  name: 'cameraSetup.register.nameHelp',
+  code: 'cameraSetup.register.codeHelp',
+  externalId: 'cameraSetup.register.sourceHelp',
 };
 const validationKeys: Record<keyof CameraInput, CameraRegistrationCopyKey> = {
   code: 'cameraSetup.register.validation.code',
@@ -101,12 +106,14 @@ function validate(input: CameraInput): FieldErrors {
       errors[field] = validationKeys[field];
     }
   }
+  const trimmedExternalId = input.externalId.trim();
   if (
-    !input.externalId.trim() ||
+    !trimmedExternalId ||
     Array.from(input.externalId).length > 128 ||
     /[\p{Cs}]/u.test(input.externalId) ||
     input.externalId.includes('\0') ||
-    /^[a-z][a-z0-9+.-]*:\/\//iu.test(input.externalId.trim())
+    /^[a-z][a-z0-9+.-]*:\/\//iu.test(trimmedExternalId) ||
+    /[^/\s:@]+:[^/\s@]+@/u.test(trimmedExternalId)
   ) {
     errors.externalId = validationKeys.externalId;
   }
@@ -287,10 +294,18 @@ function ScopedCameraRegistrationForm(
       }}
       className="min-w-0 space-y-4"
     >
-      <div className="min-w-0 rounded-2xl border border-slate-200/90 bg-slate-50/90 p-3.5 text-xs leading-relaxed text-[#6B6B6B] shadow-xs break-words">
-        {t('cameraSetup.register.introPrefix')}{' '}
-        <strong className="font-semibold text-[#111111] break-words">{props.siteName}</strong>.{' '}
-        {t('cameraSetup.register.introSuffix')}
+      <div
+        data-testid="camera-registration-source-guidance"
+        className="min-w-0 space-y-1.5 rounded-2xl border border-slate-200/90 bg-slate-50/90 p-3.5 text-xs leading-relaxed text-[#6B6B6B] shadow-xs break-words"
+      >
+        <p className="min-w-0 break-words [overflow-wrap:anywhere]">
+          {t('cameraSetup.register.introPrefix')}{' '}
+          <strong className="font-semibold text-[#111111] break-words">{props.siteName}</strong>.{' '}
+          {t('cameraSetup.register.introSuffix')}
+        </p>
+        <p className="min-w-0 break-words [overflow-wrap:anywhere] text-slate-700">
+          {t('cameraSetup.register.nextStepGuide')}
+        </p>
       </div>
       {fields.map((field) => (
         <div key={field} className="min-w-0 space-y-1.5">
@@ -305,10 +320,7 @@ function ScopedCameraRegistrationForm(
             disabled={create.isPending || blocked}
             aria-invalid={Boolean(errors[field])}
             aria-describedby={
-              [
-                field === 'externalId' ? `${id}-source-help` : '',
-                errors[field] ? `${id}-${field}-error` : '',
-              ]
+              [`${id}-${field}-help`, errors[field] ? `${id}-${field}-error` : '']
                 .filter(Boolean)
                 .join(' ') || undefined
             }
@@ -317,13 +329,11 @@ function ScopedCameraRegistrationForm(
               setErrors((previous) => ({ ...previous, [field]: undefined }));
               setFeedback(null);
             }}
-            className={CAMERA_FIELD_STYLES.input}
+            className={`${CAMERA_FIELD_STYLES.input}${field === 'externalId' || field === 'code' ? ' font-mono' : ''}`}
           />
-          {field === 'externalId' && (
-            <p id={`${id}-source-help`} className={CAMERA_FIELD_STYLES.help}>
-              {t('cameraSetup.register.sourceHelp')}
-            </p>
-          )}
+          <p id={`${id}-${field}-help`} className={CAMERA_FIELD_STYLES.help}>
+            {t(helpKeys[field])}
+          </p>
           {errors[field] && (
             <p id={`${id}-${field}-error`} className={CAMERA_FIELD_STYLES.error}>
               {t(errors[field]!)}

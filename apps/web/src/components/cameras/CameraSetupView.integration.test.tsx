@@ -665,7 +665,7 @@ describe('CameraSetupView parent workspace integration', () => {
     fireEvent.click(await screen.findByRole('button', { name: 'Camera PPE policy' }));
 
     const inheritCard = await screen.findByTestId(`camera-ppe-region-card-${REGION_1_ID}`);
-    expect(within(inheritCard).getByText('Z-01 · Excavation Area')).toBeTruthy();
+    expect(within(inheritCard).getByText('Excavation Area')).toBeTruthy();
     expect(within(inheritCard).getByText('Use camera default')).toBeTruthy();
     expect(within(inheritCard).getByText('Hard hat')).toBeTruthy();
     expect(within(inheritCard).getByText('Safety vest')).toBeTruthy();

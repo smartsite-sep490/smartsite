@@ -17,7 +17,7 @@ const en = {
   'cameraSetup.manageAction': 'Manage',
   'cameraSetup.noCameras': 'No cameras registered for this Site yet.',
   'cameraSetup.emptyStepFlowManager':
-    'Start with Step 1 to define site Zones and PPE rules, then Step 2 to register a camera with its provisioned Source ID before loading a reference image and drawing observation regions.',
+    'Step 1: create human-named work areas (Zones). Step 2: register a camera using the technical Source ID already configured on your edge worker (do not paste RTSP URLs or passwords — stream transport is provisioned on the edge worker). Next, open Edit observation regions → Get configuration image to verify the frame, draw regions, and save PPE policy.',
   'cameraSetup.emptyStepFlowReadOnly':
     'Only the assigned Site Manager can register cameras and configure observation regions for this Site.',
   'cameraSetup.emptyStep1Action': 'Step 1 · Set up Zone PPE',
@@ -61,7 +61,7 @@ const vi: Record<keyof typeof en, string> = {
   'cameraSetup.manageAction': 'Quản lý',
   'cameraSetup.noCameras': 'Chưa có camera nào được đăng ký cho công trường này.',
   'cameraSetup.emptyStepFlowManager':
-    'Bắt đầu từ Bước 1 để tạo Khu vực & quy định PPE, sau đó Bước 2 đăng ký camera bằng Mã nguồn (Source ID) đã cấp phát trước khi lấy ảnh tham chiếu và vẽ vùng quan sát.',
+    'Bước 1: tạo các khu vực làm việc có tên rõ ràng (Khu vực). Bước 2: đăng ký camera bằng Mã nguồn (Source ID) kỹ thuật đã cấu hình sẵn trên edge worker (không dán URL RTSP hay mật khẩu — kết nối luồng được cấp phát trên edge worker). Tiếp theo, mở Sửa vùng quan sát → Lấy ảnh cấu hình để kiểm tra khung hình, vẽ vùng và lưu chính sách PPE.',
   'cameraSetup.emptyStepFlowReadOnly':
     'Chỉ Quản lý công trường được phân công mới được đăng ký camera và cấu hình vùng quan sát cho công trường này.',
   'cameraSetup.emptyStep1Action': 'Bước 1 · Thiết lập PPE Khu vực',

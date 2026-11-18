@@ -138,9 +138,10 @@ export function CameraRegionList({
               region.geometryConfirmation,
               currentViewRevision,
             );
+            const regionNumberTitle = t('regionSetup.list.regionNumberTitle', { index: idx + 1 });
             const regionTitle = selectedZone
-              ? `${t('regionSetup.list.regionNumberTitle', { index: idx + 1 })} · ${selectedZone.code} · ${selectedZone.name}`
-              : t('regionSetup.list.regionNumberTitle', { index: idx + 1 });
+              ? `${selectedZone.name} · ${regionNumberTitle}`
+              : regionNumberTitle;
             return (
               <div
                 key={region.id}
@@ -148,7 +149,10 @@ export function CameraRegionList({
               >
                 <div className="min-w-0 flex-1 space-y-1">
                   <div className="flex flex-wrap items-center gap-x-2 gap-y-1 min-w-0">
-                    <span className="font-semibold text-slate-900 break-words [overflow-wrap:anywhere]">
+                    <span
+                      title={regionTitle}
+                      className="font-semibold text-slate-900 break-words [overflow-wrap:anywhere]"
+                    >
                       {regionTitle}
                     </span>
                     <span className="text-slate-400">·</span>
@@ -169,9 +173,12 @@ export function CameraRegionList({
                     <summary className="cursor-pointer select-none font-medium text-slate-500 hover:text-slate-800">
                       {t('regionSetup.list.technicalIdSummary')}
                     </summary>
-                    <p className="mt-0.5 font-mono text-[11px] text-slate-600 break-all select-all">
-                      {region.id}
-                    </p>
+                    <div className="mt-0.5 space-y-0.5 font-mono text-[11px] text-slate-600 break-all">
+                      <p className="select-all">{region.id}</p>
+                      {selectedZone?.code && (
+                        <p className="text-slate-500 select-all">{selectedZone.code}</p>
+                      )}
+                    </div>
                   </details>
                 </div>
                 <div className="flex flex-wrap items-center gap-2 shrink-0">

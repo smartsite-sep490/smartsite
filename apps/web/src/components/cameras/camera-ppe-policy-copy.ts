@@ -90,6 +90,7 @@ const en = {
   regionUnresolvedLabel: 'Observation region #{{index}}',
   zoneMetadataUnavailable: 'Zone metadata unavailable',
   technicalIdsSummary: 'Technical IDs',
+  technicalZoneCode: 'Zone code: {{code}}',
   technicalRegionId: 'Region ID: {{id}}',
   technicalZoneId: 'Zone ID: {{id}}',
   capabilityTruthNote:
@@ -210,6 +211,7 @@ const vi: Record<keyof typeof en, string> = {
   regionUnresolvedLabel: 'Vùng quan sát #{{index}}',
   zoneMetadataUnavailable: 'Chưa có thông tin khu vực',
   technicalIdsSummary: 'Mã định danh kỹ thuật',
+  technicalZoneCode: 'Mã định danh khu vực (Zone code): {{code}}',
   technicalRegionId: 'Mã vùng (Region ID): {{id}}',
   technicalZoneId: 'Mã khu vực (Zone ID): {{id}}',
   capabilityTruthNote:

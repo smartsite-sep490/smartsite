@@ -359,10 +359,11 @@ export function RegionEffectivePolicyList({
         >
           {items.map(
             ({ region, regionIndex, sameZoneCount, zone, saved, effective, isSelected }) => {
+              const regionBadge = t('cameraPpe.regionNumberBadge', { index: regionIndex });
               const targetLabel = zone
                 ? sameZoneCount > 1
-                  ? `${zone.code} · ${zone.name} (${t('cameraPpe.regionNumberBadge', { index: regionIndex })})`
-                  : `${zone.code} · ${zone.name}`
+                  ? `${zone.name} (${regionBadge})`
+                  : zone.name
                 : t('cameraPpe.regionUnresolvedLabel', { index: regionIndex });
               const modeKey =
                 effective.kind === 'resolved' || effective.kind === 'camera-unconfigured'
@@ -384,7 +385,10 @@ export function RegionEffectivePolicyList({
                   <div className="flex flex-wrap items-start justify-between gap-2">
                     <div className="min-w-0 space-y-1">
                       <div className="flex flex-wrap items-center gap-2">
-                        <span className="text-xs font-semibold text-slate-900 break-words">
+                        <span
+                          title={targetLabel}
+                          className="text-xs font-semibold text-slate-900 break-words [overflow-wrap:anywhere]"
+                        >
                           {targetLabel}
                         </span>
                         {!zone && (
@@ -398,6 +402,7 @@ export function RegionEffectivePolicyList({
                           {t(modeBadgeCopyKey(modeKey))}
                         </span>
                         <span className="rounded-md border border-slate-200 bg-slate-50 px-1.5 py-0.5 text-[11px] text-slate-600">
+                          {zone && sameZoneCount === 1 ? `${regionBadge} · ` : ''}
                           {t('cameraPpe.regionVersionMeta', { version: region.version })} ·{' '}
                           {t(
                             region.isActive ? 'cameraPpe.regionActive' : 'cameraPpe.regionInactive',
@@ -412,6 +417,7 @@ export function RegionEffectivePolicyList({
                           {t('cameraPpe.technicalIdsSummary')}
                         </summary>
                         <div className="mt-1 space-y-0.5 font-mono text-[11px] text-slate-600 break-all">
+                          {zone && <p>{t('cameraPpe.technicalZoneCode', { code: zone.code })}</p>}
                           <p>{t('cameraPpe.technicalRegionId', { id: region.id })}</p>
                           <p>{t('cameraPpe.technicalZoneId', { id: region.zoneId })}</p>
                         </div>
@@ -499,8 +505,8 @@ export function CameraDefaultImpactCard({
   const formatName = ({ regionIndex, sameZoneCount, zone }: RegionPolicyItemView): string =>
     zone
       ? sameZoneCount > 1
-        ? `${zone.code} · ${zone.name} (${t('cameraPpe.regionNumberBadge', { index: regionIndex })})`
-        : `${zone.code} · ${zone.name}`
+        ? `${zone.name} (${t('cameraPpe.regionNumberBadge', { index: regionIndex })})`
+        : zone.name
       : t('cameraPpe.regionUnresolvedLabel', { index: regionIndex });
 
   const inheritingNames = activeItems

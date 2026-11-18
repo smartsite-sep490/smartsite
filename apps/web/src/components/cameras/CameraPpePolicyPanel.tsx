@@ -731,11 +731,16 @@ function PolicyEditor({
     [regionRows],
   );
   const formatScopedRegionLabel = (row: (typeof regionRows)[number], indexOneBased: number) => {
-    const zone = zonesById?.get(row.zoneId.trim().toLowerCase());
+    const normZoneId = row.zoneId.trim().toLowerCase();
+    const zone = zonesById?.get(normZoneId);
+    const regionBadge = t('cameraPpe.regionNumberBadge', { index: indexOneBased });
+    const versionMeta = t('cameraPpe.regionVersionMeta', { version: row.version });
     if (zone) {
-      return `${t('cameraPpe.regionNumberBadge', { index: indexOneBased })} · ${zone.code} · ${zone.name}`;
+      return (zoneCounts.get(normZoneId) ?? 1) > 1
+        ? `${zone.name} · ${regionBadge} (${versionMeta})`
+        : `${zone.name} (${regionBadge} · ${versionMeta})`;
     }
-    return `${t('cameraPpe.regionUnresolvedLabel', { index: indexOneBased })} (${t('cameraPpe.regionVersionMeta', { version: row.version })})`;
+    return `${t('cameraPpe.regionUnresolvedLabel', { index: indexOneBased })} (${versionMeta})`;
   };
   const regionOverviewItems: RegionPolicyItemView[] = regionRows.map((row, idx) => {
     const q = regionQueryById.get(row.id);
@@ -923,17 +928,23 @@ function PolicyEditor({
                 </select>
               </label>
             )}
-            {selected && (
-              <details data-testid="camera-ppe-editor-tech" className="text-[11px] text-slate-500">
-                <summary className="cursor-pointer select-none font-medium text-slate-600 hover:text-slate-900">
-                  {t('cameraPpe.technicalIdsSummary')}
-                </summary>
-                <div className="mt-1 space-y-0.5 font-mono text-[11px] text-slate-600 break-all">
-                  <p>{t('cameraPpe.technicalRegionId', { id: selected.id })}</p>
-                  <p>{t('cameraPpe.technicalZoneId', { id: selected.zoneId })}</p>
-                </div>
-              </details>
-            )}
+            {selected && (() => {
+              const selectedZone = zonesById?.get(selected.zoneId.trim().toLowerCase());
+              return (
+                <details data-testid="camera-ppe-editor-tech" className="text-[11px] text-slate-500">
+                  <summary className="cursor-pointer select-none font-medium text-slate-600 hover:text-slate-900">
+                    {t('cameraPpe.technicalIdsSummary')}
+                  </summary>
+                  <div className="mt-1 space-y-0.5 font-mono text-[11px] text-slate-600 break-all">
+                    {selectedZone && (
+                      <p>{t('cameraPpe.technicalZoneCode', { code: selectedZone.code })}</p>
+                    )}
+                    <p>{t('cameraPpe.technicalRegionId', { id: selected.id })}</p>
+                    <p>{t('cameraPpe.technicalZoneId', { id: selected.zoneId })}</p>
+                  </div>
+                </details>
+              );
+            })()}
 
             <fieldset disabled={!canWrite || mutation.isPending} className="grid gap-3 min-w-0">
               <PolicyFields
