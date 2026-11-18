@@ -1,4 +1,8 @@
 import { resolveIssuedPpeLocation } from '../../cameras/camera-ppe-location.js';
+import { AiObservationEventEntity } from '../../../database/entities/ai-observation-event.entity.js';
+import { ZoneEntryAssessmentRequestEntity } from '../../../database/entities/zone-entry-assessment-request.entity.js';
+import { Mf06AssessmentStore } from '../assessments/mf06-assessment-store.service.js';
+import { loadMf06RequestAdmission } from '../assessments/mf06-event-admission.js';
 import { isStoredTrackedPayloadValid } from '../../../integrations/ai/tracked-part-authentication.js';
 import { createHash } from 'node:crypto';
 import type { DataSource, EntityManager } from 'typeorm';
@@ -270,78 +274,129 @@ export class TrackedEpisodeFrameQuery {
       cameraExternalId: raw.cameraExternalId,
     });
     if (!bundle) conflict('Tracked evidence configuration is unavailable');
-    const contexts = new Map<string, ResolvedObservationContext>(),
-      resolver = new ObservationContextResolverService();
-    let cameraPpe: Parameters<AlertCandidateEvaluator['evaluate']>[3];
-    for (const o of raw.observations) {
-      if (o.type !== 'PPE' || o.trackId !== person.trackId) continue;
-      if (o.scope === 'CAMERA') {
-        if (bundle.schemaVersion !== '2.0.0')
-          conflict('Tracked evidence camera policy is unavailable');
-        const location = resolveIssuedPpeLocation(bundle, person.boundingBox);
-        if (location?.policy.scope !== 'CAMERA')
-          conflict('Tracked evidence camera scope is invalid');
-        cameraPpe = { cameraId: e.cameraId, requiredPpe: location.policy.requiredPpe };
-        continue;
-      }
-      const key = `${o.regionId}:${o.geometryVersion}`;
-      if (bundle.schemaVersion === '2.0.0') {
-        const location = resolveIssuedPpeLocation(bundle, person.boundingBox);
-        if (
-          !location?.regions.some(
-            (region) =>
-              region.regionId === o.regionId.toLowerCase() &&
-              region.geometryVersion === o.geometryVersion,
-          )
-        )
-          conflict('Tracked evidence region scope is invalid');
-      }
-      if (!contexts.has(key)) {
-        const context = await resolver.resolveIssuedRegion(
+    let observationIndexes: number[];
+    if (row.subtype === 'ZONE_ENTRY_PROHIBITED' || row.subtype === 'ZONE_ENTRY_UNAUTHORIZED') {
+      const matches = await manager.query<{ assessmentId: string; requestId: string }[]>(
+        `SELECT a.assessment_id AS "assessmentId",q.request_id AS "requestId"
+         FROM zone_entry_assessment_request q JOIN zone_entry_assessment a
+           ON (a.request_id,a.site_id,a.event_id,a.binding_hash)=(q.request_id,q.site_id,q.event_id,q.binding_hash)
+         WHERE q.site_id=$1 AND q.camera_id=$2 AND q.event_id=$3
+           AND q.person_observation_index=$4 AND q.zone_id=$5 AND a.outcome='DENIED'
+           AND q.requested_purpose='INITIAL_OBSERVATION_ASSESSMENT'
+         ORDER BY q.zone_observation_index LIMIT 257`,
+        [e.siteId, e.cameraId, row.eventId, row.personIndex, row.zoneId],
+      );
+      if (matches.length > 256) conflict('Tracked Zone evidence exceeds the supported bound');
+      const event = await manager
+        .getRepository(AiObservationEventEntity)
+        .findOneBy({ eventId: row.eventId });
+      if (!event) conflict('Tracked Zone event is unavailable');
+      const store = new Mf06AssessmentStore(this.db);
+      observationIndexes = [];
+      for (const match of matches) {
+        const denial = await store.readNotificationDenialInTransaction(
           manager,
           e.siteId,
-          bundle,
-          o.regionId,
-          o.geometryVersion,
+          match.assessmentId,
         );
-        if (!context) conflict('Tracked evidence region is unavailable');
-        contexts.set(key, context);
+        if (denial?.candidateSubtype !== row.subtype) continue;
+        const request = await manager
+          .getRepository(ZoneEntryAssessmentRequestEntity)
+          .findOneBy({ requestId: match.requestId, siteId: e.siteId });
+        if (
+          !request ||
+          request.subjectBindingStatus !== 'BOUND' ||
+          request.trackId !== person.trackId
+        )
+          continue;
+        const observed = raw.observations[request.zoneObservationIndex];
+        if (
+          observed?.type !== 'ZONE_ENTRY' ||
+          observed.trackId !== person.trackId ||
+          observed.regionId.toLowerCase() !== request.regionId.toLowerCase() ||
+          observed.geometryVersion !== request.geometryVersion ||
+          !(await loadMf06RequestAdmission(manager, event, request))
+        )
+          continue;
+        observationIndexes.push(request.zoneObservationIndex);
       }
+      observationIndexes = [...new Set(observationIndexes)];
+      if (!observationIndexes.length)
+        conflict('Tracked Zone finding does not match the original observation');
+    } else {
+      const contexts = new Map<string, ResolvedObservationContext>(),
+        resolver = new ObservationContextResolverService();
+      let cameraPpe: Parameters<AlertCandidateEvaluator['evaluate']>[3];
+      for (const o of raw.observations) {
+        if (o.type !== 'PPE' || o.trackId !== person.trackId) continue;
+        if (o.scope === 'CAMERA') {
+          if (bundle.schemaVersion !== '2.0.0')
+            conflict('Tracked evidence camera policy is unavailable');
+          const location = resolveIssuedPpeLocation(bundle, person.boundingBox);
+          if (location?.policy.scope !== 'CAMERA')
+            conflict('Tracked evidence camera scope is invalid');
+          cameraPpe = { cameraId: e.cameraId, requiredPpe: location.policy.requiredPpe };
+          continue;
+        }
+        const key = `${o.regionId}:${o.geometryVersion}`;
+        if (bundle.schemaVersion === '2.0.0') {
+          const location = resolveIssuedPpeLocation(bundle, person.boundingBox);
+          if (
+            !location?.regions.some(
+              (region) =>
+                region.regionId === o.regionId.toLowerCase() &&
+                region.geometryVersion === o.geometryVersion,
+            )
+          )
+            conflict('Tracked evidence region scope is invalid');
+        }
+        if (!contexts.has(key)) {
+          const context = await resolver.resolveIssuedRegion(
+            manager,
+            e.siteId,
+            bundle,
+            o.regionId,
+            o.geometryVersion,
+          );
+          if (!context) conflict('Tracked evidence region is unavailable');
+          contexts.set(key, context);
+        }
+      }
+      const candidate = new AlertCandidateEvaluator()
+        .evaluate(
+          {
+            streamSessionId: raw.streamSessionId,
+            cameraExternalId: raw.cameraExternalId,
+            observations: raw.observations.filter((o) => o.type !== 'ZONE_ENTRY'),
+          },
+          contexts,
+          undefined,
+          cameraPpe,
+        )
+        .find(
+          (c) =>
+            c.trackId === person.trackId &&
+            c.candidateSubtype === row.subtype &&
+            (c.zoneId ?? null) === row.zoneId,
+        );
+      if (!candidate) conflict('Tracked evidence finding does not match the original observation');
+      observationIndexes = raw.observations.flatMap((o, i) => {
+        if (
+          o.type !== 'PPE' ||
+          o.trackId !== person.trackId ||
+          o.status !== 'MISSING' ||
+          o.ppeItem !== candidate.details.ppeItem
+        )
+          return [];
+        if (o.scope === 'CAMERA')
+          return row.zoneId === null && cameraPpe?.requiredPpe.includes(o.ppeItem) ? [i] : [];
+        const regionContext = contexts.get(`${o.regionId}:${o.geometryVersion}`);
+        return regionContext?.zoneId === row.zoneId &&
+          regionContext.zone.requiredPpe.includes(o.ppeItem)
+          ? [i]
+          : [];
+      });
     }
-    const candidate = new AlertCandidateEvaluator()
-      .evaluate(
-        {
-          streamSessionId: raw.streamSessionId,
-          cameraExternalId: raw.cameraExternalId,
-          observations: raw.observations.filter((o) => o.type !== 'ZONE_ENTRY'),
-        },
-        contexts,
-        undefined,
-        cameraPpe,
-      )
-      .find(
-        (c) =>
-          c.trackId === person.trackId &&
-          c.candidateSubtype === row.subtype &&
-          (c.zoneId ?? null) === row.zoneId,
-      );
-    if (!candidate) conflict('Tracked evidence finding does not match the original observation');
-    const observationIndexes = raw.observations.flatMap((o, i) => {
-      if (
-        o.type !== 'PPE' ||
-        o.trackId !== person.trackId ||
-        o.status !== 'MISSING' ||
-        o.ppeItem !== candidate.details.ppeItem
-      )
-        return [];
-      if (o.scope === 'CAMERA')
-        return row.zoneId === null && cameraPpe?.requiredPpe.includes(o.ppeItem) ? [i] : [];
-      const regionContext = contexts.get(`${o.regionId}:${o.geometryVersion}`);
-      return regionContext?.zoneId === row.zoneId &&
-        regionContext.zone.requiredPpe.includes(o.ppeItem)
-        ? [i]
-        : [];
-    });
     const frames = raw.evidence.flatMap((item, i) =>
       item.kind === 'FRAME' ? [{ evidenceIndex: i, sha256: item.sha256 }] : [],
     );

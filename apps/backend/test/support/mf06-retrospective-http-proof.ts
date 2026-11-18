@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import { proveInitialDenialProjection } from './mf06-initial-denial-proof.js';
 import { randomUUID } from 'node:crypto';
 import type { DataSource } from 'typeorm';
 import {
@@ -264,4 +265,5 @@ export async function proveMf06RetrospectiveHttp(input: {
     ),
     [{ unread: 3 }],
   );
+  await proveInitialDenialProjection(db, original, api, officerToken, input.frameSha256);
 }

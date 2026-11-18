@@ -144,6 +144,7 @@ export const MAIN_AUTHORITY_CUTOVER_RELEASE_FILES = [
   'modules/safety/assessments/mf06-zone-entry-assessment-work.port.ts',
   'modules/safety/assessments/mf06-work-preparation.ts',
   'modules/safety/assessments/mf06-assessment-store.service.ts',
+  'modules/safety/alerts/mf06-denied-episode-projection.ts',
   'modules/safety/assessments/mf06-claim-context.reader.ts',
   'modules/safety/assessments/mf06-retrospective-context.ts',
   'modules/safety/identification/c02-accepted-subject.ts',

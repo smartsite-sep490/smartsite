@@ -27,6 +27,7 @@ import {
   type Mf06LeaseOptions,
 } from './mf06-job-lease.service.js';
 import { Mf06ZoneEntryAssessmentWorkPort } from './mf06-zone-entry-assessment-work.port.js';
+import { Mf06DeniedEpisodeProjection } from '../alerts/mf06-denied-episode-projection.js';
 
 const LEASE_OPTIONS: Readonly<Mf06LeaseOptions> = Object.freeze({
   leaseSeconds: 30,
@@ -139,7 +140,18 @@ export class Mf06AssessmentWorkerRuntime implements OnModuleInit, OnModuleDestro
       new SafetyFaceProfileMetadataReader(),
       hasIdentity ? 'TRUSTED_SERVICE' : 'DISABLED',
     );
-    const store = new Mf06AssessmentStore(this.db);
+    const trackedPolicy = this.config.get('AI_TRACKED_FRAME_RUNTIME_ENABLED', { infer: true })
+      ? this.config.get('AI_TRACKED_FRAME_RUNTIME_POLICY', { infer: true })
+      : undefined;
+    const projection = trackedPolicy && new Mf06DeniedEpisodeProjection(this.db, trackedPolicy);
+    const store = new Mf06AssessmentStore(
+      this.db,
+      projection
+        ? async (manager, assessment) => {
+            await projection.project(manager, assessment.siteId, assessment.assessmentId);
+          }
+        : undefined,
+    );
     const workPort = new Mf06ZoneEntryAssessmentWorkPort(
       this.db,
       contexts,

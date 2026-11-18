@@ -108,6 +108,7 @@ for (const path of [
   'apps/backend/src/database/migrations/1795046400016-Mf06RetrospectiveResult.ts',
   'apps/backend/src/modules/safety/assessments/mf06-retrospective-context.ts',
   'apps/backend/src/modules/safety/identification/c02-accepted-subject.ts',
+  'apps/backend/src/modules/safety/alerts/mf06-denied-episode-projection.ts',
   'apps/backend/src/database/migrations/extendAuthorityJournalToTeams.ts',
   'apps/backend/src/database/migrations/installAuthorityJournal.ts',
   'apps/backend/src/modules/auth/auth-token.service.ts',
