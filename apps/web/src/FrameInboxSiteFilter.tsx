@@ -121,13 +121,13 @@ export function FrameInboxSiteFilter({
       }`}
     >
       <div className="flex flex-col gap-3 lg:flex-row lg:items-end lg:justify-between">
-        <div className="grid w-full gap-3 sm:grid-cols-2 lg:max-w-2xl">
-          <label className="block w-full space-y-1.5 text-sm font-semibold text-slate-900">
+        <div className="grid w-full min-w-0 gap-3 sm:grid-cols-2 lg:max-w-2xl">
+          <label className="block w-full min-w-0 space-y-1.5 text-sm font-semibold text-slate-900">
             {t('episodes.site')}
             <select
               value={siteId ?? ''}
               disabled={revoked}
-              className={`block w-full rounded-xl border px-3 py-2.5 text-sm transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-teal-800 focus-visible:ring-2 focus-visible:ring-teal-700/30 disabled:cursor-not-allowed disabled:bg-slate-100 disabled:text-slate-500 ${
+              className={`block w-full min-w-0 max-w-full truncate rounded-xl border px-3 py-2.5 text-sm transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-teal-800 focus-visible:ring-2 focus-visible:ring-teal-700/30 disabled:cursor-not-allowed disabled:bg-slate-100 disabled:text-slate-500 ${
                 siteId && !revoked
                   ? 'border-teal-700 bg-white font-semibold text-teal-950 ring-1 ring-teal-700/20'
                   : 'border-slate-300 bg-white font-medium text-slate-900 hover:border-slate-400'
@@ -142,12 +142,12 @@ export function FrameInboxSiteFilter({
               ))}
             </select>
           </label>
-          <label className="block w-full space-y-1.5 text-sm font-semibold text-slate-900">
+          <label className="block w-full min-w-0 space-y-1.5 text-sm font-semibold text-slate-900">
             {t('episodes.camera')}
             <select
               value={cameraId ?? ''}
               disabled={revoked || (cameraOptions.length === 0 && !cameraId)}
-              className={`block w-full rounded-xl border px-3 py-2.5 text-sm transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-teal-800 focus-visible:ring-2 focus-visible:ring-teal-700/30 disabled:cursor-not-allowed disabled:bg-slate-100 disabled:text-slate-500 ${
+              className={`block w-full min-w-0 max-w-full truncate rounded-xl border px-3 py-2.5 text-sm transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-teal-800 focus-visible:ring-2 focus-visible:ring-teal-700/30 disabled:cursor-not-allowed disabled:bg-slate-100 disabled:text-slate-500 ${
                 cameraId && !revoked
                   ? 'border-teal-700 bg-white font-semibold text-teal-950 ring-1 ring-teal-700/20'
                   : 'border-slate-300 bg-white font-medium text-slate-900 hover:border-slate-400'
@@ -170,10 +170,10 @@ export function FrameInboxSiteFilter({
                 <Badge
                   variant="info"
                   dot
-                  className="normal-case tracking-normal border-teal-700/30 bg-teal-100/80 px-2.5 py-1 text-xs font-semibold text-teal-950"
+                  className="max-w-full normal-case tracking-normal border-teal-700/30 bg-teal-100/80 px-2.5 py-1 text-xs font-semibold text-teal-950"
                 >
                   <IconFilter className="h-3.5 w-3.5 shrink-0" />
-                  <span>
+                  <span className="truncate">
                     {t('frameInbox.activeSiteBadge', {
                       site: names.get(siteId) ?? t('episodes.siteNamePending'),
                     })}
@@ -203,10 +203,10 @@ export function FrameInboxSiteFilter({
                 <Badge
                   variant="info"
                   dot
-                  className="normal-case tracking-normal border-teal-700/30 bg-teal-100/80 px-2.5 py-1 text-xs font-semibold text-teal-950"
+                  className="max-w-full normal-case tracking-normal border-teal-700/30 bg-teal-100/80 px-2.5 py-1 text-xs font-semibold text-teal-950"
                 >
                   <IconCamera className="h-3.5 w-3.5 shrink-0" />
-                  <span>
+                  <span className="truncate">
                     {t('frameInbox.activeCameraBadge', {
                       camera: cameraMap.get(cameraId) ?? t('frameInbox.cameraNamePending'),
                     })}

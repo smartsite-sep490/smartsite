@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import type { SmartSiteManagementClient } from '@smartsite/api-client';
 import type { CameraResponse } from '@smartsite/contracts/management';
@@ -8,10 +8,13 @@ import { useScopedCameraMedia } from '../cameras/useScopedCameraMedia';
 import { useScopedRecordedVideo } from '../cameras/useScopedRecordedVideo';
 import { ScopedRealtimePreviewCanvas } from '../cameras/ScopedRealtimePreviewCanvas';
 import { RawCameraMediaCanvas } from '../cameras/RawCameraMediaCanvas';
+import { IconShield } from '../icons';
 import { registerFeatureCatalog } from '../../i18n/feature-catalog-registry';
 import { SAFETY_NAMESPACE } from '../../i18n/runtime';
 import { useFourSourceWallTranslate } from './four-source-wall-catalog';
+import type { ScopedWallSnapshot } from './FourSourceWall';
 import {
+  isSafeDisplaySourceId,
   resolveMonitorTelemetryState,
   useMonitorReadabilityTranslate,
 } from './monitor-readability';
@@ -59,6 +62,8 @@ interface Props {
   aiPaused: boolean;
   observationMode?: 'ppe' | 'zone';
   onExitFocus?: () => void;
+  onOpenEvidence?: () => void;
+  onAiSnapshotUpdate?: (snapshot: ScopedWallSnapshot, isRawMode: boolean) => void;
 }
 
 /** Mounted with a camera/credential key: only the selected transport can request media. */
@@ -69,6 +74,8 @@ export function FocusedCameraMedia({
   siteCode,
   siteName,
   onExitFocus,
+  onOpenEvidence,
+  onAiSnapshotUpdate,
   ...scope
 }: Props) {
   const { t } = useTranslation(SAFETY_NAMESPACE);
@@ -104,14 +111,60 @@ export function FocusedCameraMedia({
     snapshot.status ??
     (snapshot.isLoading ? 'CONNECTING' : snapshot.preview ? 'LIVE' : 'UNAVAILABLE');
   const detectionsCount = snapshot.preview?.frame?.detections?.length ?? 0;
+  const isRawMode = !aiPaused && mode !== 'ai';
   const telemetry = resolveMonitorTelemetryState({
     isAiPaused: aiPaused,
     hasActiveAiPreview: mode === 'ai' && Boolean(snapshot.preview),
     detectionsCount,
     status: pending ? 'CONNECTING' : aiStatus,
     errorStatus: current.errorStatus ?? null,
-    isRawTransport: mode !== 'ai' && present,
+    isRawTransport: isRawMode,
+    hasActiveRawMedia: present,
   });
+
+  useEffect(() => {
+    if (!onAiSnapshotUpdate) return;
+    onAiSnapshotUpdate(
+      {
+        scope: {
+          apiUrl: scope.apiUrl,
+          credentialId: 1,
+          sessionScope: scope.sessionScope,
+          siteId: scope.siteId,
+          cameraId: camera.id,
+          client: scope.client,
+          token: scope.token,
+        },
+        preview: !aiPaused && mode === 'ai' ? (snapshot.preview ?? null) : null,
+        status: aiPaused ? 'UNAVAILABLE' : pending ? 'CONNECTING' : aiStatus,
+        sourceKind: !aiPaused && mode === 'ai' ? (snapshot.sourceKind ?? null) : null,
+        capturedAt:
+          !aiPaused && mode === 'ai'
+            ? (snapshot.capturedAt ?? snapshot.preview?.frame?.capturedAt ?? null)
+            : null,
+        errorStatus: current.errorStatus ?? null,
+        receivedAt: Date.now(),
+      },
+      isRawMode,
+    );
+  }, [
+    scope.apiUrl,
+    scope.sessionScope,
+    scope.siteId,
+    scope.client,
+    scope.token,
+    camera.id,
+    aiPaused,
+    mode,
+    isRawMode,
+    pending,
+    aiStatus,
+    snapshot.preview,
+    snapshot.sourceKind,
+    snapshot.capturedAt,
+    current.errorStatus,
+    onAiSnapshotUpdate,
+  ]);
 
   const capturedIso =
     mode === 'ai'
@@ -131,12 +184,18 @@ export function FocusedCameraMedia({
       ? 'focus.unavailableAi'
       : 'focus.unavailableSource';
 
+  const cameraActionName = camera.name
+    ? camera.code && camera.code !== camera.name
+      ? `${camera.name} (${camera.code})`
+      : camera.name
+    : camera.code;
+
   return (
     <section className="flex min-w-0 flex-col overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-xs lg:grid lg:grid-cols-[minmax(0,1fr)_auto]">
       <header data-testid="focused-camera-metadata" className="order-1 min-w-0 p-3">
         <div className="flex flex-wrap items-center gap-2 min-w-0">
           {camera.code && camera.code !== camera.name && (
-            <span className="rounded-md border border-slate-200 bg-slate-100 px-2 py-0.5 font-mono text-xs font-semibold text-slate-800">
+            <span className="max-w-[10rem] truncate rounded-md border border-slate-200 bg-slate-100 px-2 py-0.5 font-mono text-xs font-semibold text-slate-800">
               {camera.code}
             </span>
           )}
@@ -215,6 +274,19 @@ export function FocusedCameraMedia({
               </button>
             ))}
           </div>
+          {onOpenEvidence && (
+            <button
+              type="button"
+              data-testid="focused-evidence-btn"
+              aria-label={`${tWall('ppe.common.evidence')}: ${cameraActionName}`}
+              aria-haspopup="dialog"
+              onClick={onOpenEvidence}
+              className="inline-flex items-center gap-1.5 rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-xs font-semibold text-slate-800 hover:bg-slate-50 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-slate-900 cursor-pointer"
+            >
+              <IconShield className="h-3.5 w-3.5 shrink-0" />
+              <span>{tWall('ppe.common.evidence')}</span>
+            </button>
+          )}
           {onExitFocus && (
             <button
               type="button"
@@ -231,11 +303,11 @@ export function FocusedCameraMedia({
         data-testid="focused-telemetry-strip"
         className="order-4 mx-3 mb-3 flex flex-wrap items-center justify-between gap-2 rounded-xl border border-slate-200/80 bg-slate-50/80 px-3 py-1.5 text-xs lg:order-3 lg:col-span-2"
       >
-        <div className="flex flex-wrap items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2 min-w-0">
           <span
             data-testid="focused-source-state"
             className={`rounded-md border px-2 py-0.5 font-semibold ${
-              aiPaused
+              aiPaused || isRawMode
                 ? 'border-amber-300 bg-amber-50 text-amber-900'
                 : present
                   ? 'border-emerald-300 bg-emerald-50 text-emerald-900'
@@ -246,7 +318,7 @@ export function FocusedCameraMedia({
           >
             {aiPaused
               ? tWall('ppe.badge.aiPaused')
-              : mode !== 'ai' && present
+              : isRawMode && present
                 ? trMonitor('monitor.state.rawNoAi')
                 : present
                   ? snapshot.sourceKind === 'REPLAY'
@@ -256,14 +328,14 @@ export function FocusedCameraMedia({
                     ? tWall('ppe.wall.sourceConnecting')
                     : telemetry.failureKind === 'ACCESS_RESTRICTED'
                       ? trMonitor('monitor.state.accessRestricted')
-                      : telemetry.failureKind === 'CAMERA_UNAVAILABLE' || mode !== 'ai'
+                      : telemetry.failureKind === 'CAMERA_UNAVAILABLE' || isRawMode
                         ? trMonitor('monitor.state.cameraUnavailable')
                         : trMonitor('monitor.state.aiUnavailable')}
           </span>
 
           <span
             data-testid="focused-people-state"
-            className={`rounded-md border px-2 py-0.5 font-medium ${
+            className={`rounded-md border px-2 py-0.5 font-medium break-words [overflow-wrap:anywhere] ${
               telemetry.peopleState.kind === 'ACTIVE_COUNT'
                 ? 'border-emerald-300 bg-emerald-50 text-emerald-900'
                 : telemetry.peopleState.kind === 'ZERO_CLEAR_FRAME'
@@ -277,10 +349,10 @@ export function FocusedCameraMedia({
                 ? tWall('ppe.wall.noPersonDetectionsDisclaimer')
                 : telemetry.peopleState.kind === 'PAUSED'
                   ? trMonitor('monitor.people.paused')
-                  : telemetry.peopleState.kind === 'CONNECTING'
-                    ? trMonitor('monitor.people.connecting')
-                    : telemetry.peopleState.kind === 'RAW_SOURCE_NO_AI'
-                      ? trMonitor('monitor.people.rawMode')
+                  : telemetry.peopleState.kind === 'RAW_SOURCE_NO_AI'
+                    ? trMonitor('monitor.people.rawMode')
+                    : telemetry.peopleState.kind === 'CONNECTING'
+                      ? trMonitor('monitor.people.connecting')
                       : trMonitor('monitor.people.unavailable')}
           </span>
 
@@ -289,7 +361,10 @@ export function FocusedCameraMedia({
           )}
         </div>
 
-        <details data-testid="focused-technical-details" className="text-xs text-slate-600">
+        <details
+          data-testid="focused-technical-details"
+          className="min-w-0 text-xs text-slate-600 open:basis-full"
+        >
           <summary className="cursor-pointer font-medium text-slate-700 hover:text-slate-950 select-none">
             {trMonitor('monitor.tech.summary')}
           </summary>
@@ -306,8 +381,8 @@ export function FocusedCameraMedia({
               </>
             )}
           </dl>
-          <div className="mt-1.5 flex flex-wrap items-center gap-3 font-mono text-[11px] text-slate-600">
-            {camera.externalId && (
+          <div className="mt-1.5 flex flex-wrap items-center gap-3 font-mono text-[11px] text-slate-600 break-all">
+            {isSafeDisplaySourceId(camera.externalId) && (
               <span>
                 {trMonitor('monitor.tech.sourceId')} {camera.externalId}
               </span>
@@ -326,7 +401,10 @@ export function FocusedCameraMedia({
         </details>
       </div>
       {mode !== 'ai' && (
-        <p className="order-5 px-3 pb-2 text-xs text-slate-600 lg:order-4 lg:col-span-2">
+        <p
+          data-testid="focused-raw-source-notice"
+          className="order-5 px-3 pb-2 text-xs text-slate-600 lg:order-4 lg:col-span-2"
+        >
           {t('focus.rawHint')}
         </p>
       )}

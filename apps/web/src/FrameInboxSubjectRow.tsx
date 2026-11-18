@@ -34,6 +34,7 @@ function humanizeSnakeCode(code: string): string {
 
 interface SubjectFindingItem {
   alertId: string;
+  alertType?: string;
   candidateSubtype: string;
   status: string;
 }
@@ -52,6 +53,7 @@ export function FrameInboxSubjectRow({
   token,
   scope,
   siteId,
+  frameCameraId,
   cameraId,
   frameKey,
   entry,
@@ -66,6 +68,7 @@ export function FrameInboxSubjectRow({
   token: string;
   scope: string;
   siteId: string;
+  frameCameraId: string;
   cameraId?: string;
   frameKey: string;
   entry: FrameCase;
@@ -91,7 +94,10 @@ export function FrameInboxSubjectRow({
       'frame-subject-findings',
       scope,
       siteId,
+      frameCameraId,
+      frameKey,
       isTrackedFrame ? 'tracked' : 'event',
+      entry.recipientId,
       entry.episodeId,
       entry.contentRevision,
     ],
@@ -99,7 +105,13 @@ export function FrameInboxSubjectRow({
       const detail = isTrackedFrame
         ? await client.getTrackedEpisode(token, siteId, entry.episodeId, { signal })
         : await client.getSafetyEpisode(token, siteId, entry.episodeId, { signal });
-      return Array.isArray(detail?.findings) ? detail.findings : [];
+      const rawFindings: SubjectFindingItem[] = Array.isArray(detail?.findings)
+        ? detail.findings
+        : [];
+      // Frame/case findingCount counts PPE ONLY; Zone assessments are rendered in zoneEntries.
+      return rawFindings.filter(
+        (finding) => !finding.alertType || finding.alertType === 'PPE_VIOLATION',
+      );
     },
     enabled: canLoadFindings,
     retry: false,
@@ -119,7 +131,7 @@ export function FrameInboxSubjectRow({
   const findingsForbidden =
     findingsQuery.error instanceof ApiError &&
     [401, 403, 404].includes(findingsQuery.error.status ?? 0);
-  const findings = findingsQuery.data ?? [];
+  const findings = findingsForbidden || findingsQuery.isError ? [] : (findingsQuery.data ?? []);
   const safeSiteId = sanitizeSafetyQueryId(siteId);
   const safeRecipientId = sanitizeSafetyQueryId(entry.recipientId);
   const safeFrameKey = sanitizeSafetyFrameKey(frameKey);
@@ -134,13 +146,13 @@ export function FrameInboxSubjectRow({
   return (
     <li
       data-testid={`frame-subject-row-${personNumber}`}
-      className={`rounded-xl border p-3 sm:p-3.5 transition-colors ${
+      className={`min-w-0 rounded-xl border p-3 sm:p-3.5 transition-colors ${
         entry.unread
           ? 'border-slate-200 border-l-4 border-l-teal-600 bg-white shadow-2xs'
           : 'border-slate-200/80 bg-slate-50/70'
       }`}
     >
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between min-w-0">
         <div
           data-tour-anchor={isTourTarget ? 'frame-inbox-subject-status' : undefined}
           className="min-w-0 space-y-1.5"
@@ -358,10 +370,13 @@ export function FrameInboxSubjectRow({
       </div>
       {entry.source && personPhotoOpen && (
         <PersonPhoto
+          key={`${siteId}:${frameCameraId}:${frameKey}:${entry.recipientId}:${entry.episodeId}:${entry.source.alertId}:${entry.source.eventId}:${entry.source.personObservationIndex}:${entry.source.evidenceIndex}:${entry.source.sha256}`}
           client={client}
           token={token}
           scope={scope}
           siteId={siteId}
+          frameCameraId={frameCameraId}
+          frameKey={frameKey}
           entry={entry}
           personNumber={personNumber}
         />

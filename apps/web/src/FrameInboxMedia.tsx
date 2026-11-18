@@ -4,8 +4,10 @@ import { useTranslation } from 'react-i18next';
 import { ApiError } from '@smartsite/api-client';
 import { IconAlertTriangle, IconMaximize } from './components/icons';
 import { PpeDialog } from './components/ppe/PpeDialog';
-import { Button } from './components/ui';
+import { Badge, Button } from './components/ui';
 import { useManagementClient } from './features/auth/auth-session';
+import './frame-inbox-catalog';
+import { SAFETY_NAMESPACE } from './i18n/runtime';
 
 export type FrameCase = Awaited<
   ReturnType<ReturnType<typeof useManagementClient>['listSafetyFrameInbox']>
@@ -51,23 +53,36 @@ export function FramePhoto({
   token,
   scope,
   siteId,
+  frameCameraId,
+  frameKey,
   entry,
 }: {
   client: ReturnType<typeof useManagementClient>;
   token: string;
   scope: string;
   siteId: string;
+  frameCameraId: string;
+  frameKey: string;
   entry: FrameCase;
 }) {
   const { t } = useTranslation();
+  const { t: tSafety } = useTranslation(SAFETY_NAMESPACE);
   const [originalOpen, setOriginalOpen] = useState(false);
   const [failedUrl, setFailedUrl] = useState<string>();
   const photo = useQuery({
-    queryKey: ['frame-photo', scope, siteId, entry.episodeId, entry.source],
-    queryFn: ({ signal }) => {
+    queryKey: [
+      'frame-photo',
+      scope,
+      siteId,
+      frameCameraId,
+      frameKey,
+      entry.episodeId,
+      entry.source,
+    ],
+    queryFn: async ({ signal }) => {
       if (!entry.source) throw new Error('Missing source');
       const { sha256, ...source } = entry.source;
-      return client.readTrackedEpisodeMedia(
+      const response = await client.readTrackedEpisodeMedia(
         token,
         siteId,
         entry.episodeId,
@@ -76,12 +91,17 @@ export function FramePhoto({
         sha256,
         { signal },
       );
+      if (response?.representation && response.representation !== 'FRAME') {
+        throw new Error('Mismatched media representation');
+      }
+      return response;
     },
     retry: false,
     gcTime: 0,
     refetchOnWindowFocus: false,
   });
-  const objectUrl = useBlobObjectUrl(photo.data?.blob);
+  const activeBlob = photo.isError ? undefined : photo.data?.blob;
+  const objectUrl = useBlobObjectUrl(activeBlob);
   const decodeFailed = Boolean(objectUrl && failedUrl === objectUrl);
   const unavailableKey = isMediaForbidden(photo.error)
     ? 'frameInbox.photoForbidden'
@@ -111,7 +131,16 @@ export function FramePhoto({
         />
       ) : null}
       <figcaption className="mt-2 flex flex-wrap items-center justify-between gap-2 text-xs text-slate-600">
-        <span>{t('frameInbox.photoCaption')}</span>
+        <div className="flex flex-wrap items-center gap-2 min-w-0">
+          <Badge
+            variant="neutral"
+            data-testid="frame-whole-frame-badge"
+            className="normal-case tracking-normal border-slate-300 bg-white text-[11px] font-semibold text-slate-800"
+          >
+            {tSafety('frameInbox.wholeFrameBadge')}
+          </Badge>
+          <span>{t('frameInbox.photoCaption')}</span>
+        </div>
         {objectUrl && !photo.isError && !decodeFailed && (
           <button
             type="button"
@@ -156,6 +185,8 @@ export function PersonPhoto({
   token,
   scope,
   siteId,
+  frameCameraId,
+  frameKey,
   entry,
   personNumber,
 }: {
@@ -163,17 +194,29 @@ export function PersonPhoto({
   token: string;
   scope: string;
   siteId: string;
+  frameCameraId: string;
+  frameKey: string;
   entry: FrameCase;
   personNumber: number;
 }) {
   const { t } = useTranslation();
+  const { t: tSafety } = useTranslation(SAFETY_NAMESPACE);
   const [failedUrl, setFailedUrl] = useState<string>();
   const photo = useQuery({
-    queryKey: ['frame-person-photo', scope, siteId, entry.episodeId, entry.source],
-    queryFn: ({ signal }) => {
+    queryKey: [
+      'frame-person-photo',
+      scope,
+      siteId,
+      frameCameraId,
+      frameKey,
+      entry.recipientId,
+      entry.episodeId,
+      entry.source,
+    ],
+    queryFn: async ({ signal }) => {
       if (!entry.source) throw new Error('Missing source');
       const { sha256, ...source } = entry.source;
-      return client.readTrackedEpisodeMedia(
+      const response = await client.readTrackedEpisodeMedia(
         token,
         siteId,
         entry.episodeId,
@@ -182,12 +225,17 @@ export function PersonPhoto({
         sha256,
         { signal },
       );
+      if (response?.representation && response.representation !== 'SUBJECT') {
+        throw new Error('Mismatched media representation');
+      }
+      return response;
     },
     retry: false,
     gcTime: 0,
     refetchOnWindowFocus: false,
   });
-  const objectUrl = useBlobObjectUrl(photo.data?.blob);
+  const activeBlob = photo.isError ? undefined : photo.data?.blob;
+  const objectUrl = useBlobObjectUrl(activeBlob);
   const decodeFailed = Boolean(objectUrl && failedUrl === objectUrl);
   const unavailableKey = isMediaForbidden(photo.error)
     ? 'frameInbox.photoForbidden'
@@ -216,8 +264,15 @@ export function PersonPhoto({
           className="max-h-56 w-full sm:w-auto rounded-md bg-slate-900/5 object-contain"
         />
       ) : null}
-      <figcaption className="mt-1.5 text-xs text-slate-600">
-        {t('frameInbox.personPhotoCaption')}
+      <figcaption className="mt-1.5 flex flex-wrap items-center gap-2 text-xs text-slate-600">
+        <Badge
+          variant="info"
+          data-testid={`subject-person-crop-badge-${personNumber}`}
+          className="normal-case tracking-normal text-[11px] font-semibold"
+        >
+          {tSafety('frameInbox.personCropBadge', { number: personNumber })}
+        </Badge>
+        <span>{t('frameInbox.personPhotoCaption')}</span>
       </figcaption>
     </figure>
   );

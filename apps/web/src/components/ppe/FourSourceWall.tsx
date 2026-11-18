@@ -196,23 +196,23 @@ export function FourSourceWallTile(props: FourSourceWallTileProps) {
           : 'border-slate-800 hover:border-slate-700'
       }`}
     >
-      <div className="relative z-10 px-2.5 py-1.5 bg-slate-950/90 border-b border-white/10 flex flex-wrap items-center justify-between text-white gap-1.5 pointer-events-none">
-        <div className="flex items-center gap-1.5 min-w-0 flex-1 pr-1">
+      <div className="relative z-10 px-2.5 py-1.5 bg-slate-950/90 border-b border-white/10 flex flex-wrap items-center justify-between text-white gap-x-2 gap-y-1 pointer-events-none">
+        <div className="flex flex-wrap sm:flex-nowrap items-center gap-1.5 min-w-[10rem] flex-1">
           {camera.code && camera.name && camera.name !== camera.code && (
-            <span className="rounded border border-white/15 bg-white/10 px-1.5 py-0.5 font-mono text-[11px] font-semibold text-slate-200 flex-shrink-0">
+            <span className="max-w-[8.5rem] truncate rounded border border-white/15 bg-white/10 px-1.5 py-0.5 font-mono text-[11px] font-semibold text-slate-200 shrink-0">
               {camera.code}
             </span>
           )}
           <span
             title={`${camera.name || camera.code} (${camera.code})`}
-            className="font-bold text-xs tracking-wide text-white truncate"
+            className="min-w-[3.5rem] flex-1 font-bold text-xs tracking-wide text-white truncate"
           >
             {camera.name || camera.code}
           </span>
           {linkedZoneSummary && (
             <span
               data-testid={`wall-zone-chip-${camera.id}`}
-              className="hidden sm:inline-flex items-center rounded border border-sky-400/30 bg-sky-500/15 px-1.5 py-0.5 text-[11px] font-medium text-sky-200 flex-shrink-0"
+              className="hidden sm:inline-flex items-center rounded border border-sky-400/30 bg-sky-500/15 px-1.5 py-0.5 text-[11px] font-medium text-sky-200 shrink-0"
             >
               {linkedZoneSummary}
             </span>
@@ -220,14 +220,14 @@ export function FourSourceWallTile(props: FourSourceWallTileProps) {
           {isSelected && (
             <span
               data-testid={`focused-badge-${camera.id}`}
-              className="bg-[#111111] text-white border border-white/20 text-[11px] font-bold px-1.5 py-0.5 rounded uppercase flex-shrink-0"
+              className="bg-[#111111] text-white border border-white/20 text-[11px] font-bold px-1.5 py-0.5 rounded uppercase shrink-0"
             >
               {t('ppe.wall.context.focusedBadge')}
             </span>
           )}
         </div>
 
-        <div className="flex items-center gap-1.5 flex-shrink-0">
+        <div className="flex flex-wrap items-center gap-1.5 shrink-0">
           <span
             data-testid={`wall-source-badge-${camera.id}`}
             className={`px-1.5 py-0.5 rounded text-[11px] font-bold tracking-wider uppercase border ${
@@ -265,6 +265,11 @@ export function FourSourceWallTile(props: FourSourceWallTileProps) {
 
       <div
         data-testid={`wall-video-viewport-${camera.id}`}
+        onDoubleClick={(e) => {
+          if (!onEnlarge) return;
+          e.stopPropagation();
+          onEnlarge(camera.id);
+        }}
         className="relative aspect-video w-full lg:aspect-auto lg:h-[clamp(9.25rem,calc((100vh-22rem)/2),13.75rem)] [[data-monitor-fullscreen=true]_&]:lg:h-[clamp(11rem,calc((100vh-10.5rem)/2),24rem)] bg-[#0F141C] overflow-hidden"
       >
         {isAiWorkPaused ? (
@@ -409,7 +414,7 @@ export function FourSourceWallTile(props: FourSourceWallTileProps) {
             </div>
           </details>
 
-          <div className="flex shrink-0 flex-wrap items-center gap-1.5 ml-auto">
+          <div className="flex min-w-0 max-w-full flex-wrap items-center gap-1.5 sm:ml-auto">
             <button
               type="button"
               data-testid={`focus-btn-${camera.id}`}

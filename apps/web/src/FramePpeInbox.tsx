@@ -17,8 +17,10 @@ import {
   FRAME_INBOX_TOUR_VERSION,
 } from './components/safety/safetyTaskTourModel';
 import { useManagementClient } from './features/auth/auth-session';
+import './components/safety-episodes/tracked-episode-workspace-catalog';
 import { FrameInboxCards } from './FrameInboxCards';
 import { FrameInboxSiteFilter, type FrameCameraOption } from './FrameInboxSiteFilter';
+import { SAFETY_NAMESPACE } from './i18n/runtime';
 
 interface Props {
   apiUrl: string;
@@ -106,6 +108,7 @@ function ScopedFramePpeInbox({
   frameKey,
 }: ScopedProps) {
   const { t } = useTranslation();
+  const { t: tSafety } = useTranslation(SAFETY_NAMESPACE);
   const [unreadOnly, setUnreadOnly] = useState(false);
   const [filterScopeKey, setFilterScopeKey] = useState(() =>
     JSON.stringify([siteId, cameraId, frameKey]),
@@ -175,7 +178,11 @@ function ScopedFramePpeInbox({
     }
     for (const frame of siteFrames) {
       const id = frame.cameraId.toLowerCase();
-      cameraMap.set(id, { id, name: frame.cameraName });
+      const name =
+        !siteId && siteIds.length > 1 && frame.siteName
+          ? `${frame.siteName} · ${frame.cameraName}`
+          : frame.cameraName;
+      cameraMap.set(id, { id, name });
     }
   }
   const availableCameras = [...cameraMap.values()];
@@ -229,6 +236,12 @@ function ScopedFramePpeInbox({
             <h1 className="text-2xl sm:text-3xl font-semibold tracking-tight text-slate-950">
               {t('frameInbox.title')}
             </h1>
+            <p
+              data-testid="frame-inbox-header-scope-note"
+              className="text-xs sm:text-sm text-slate-600"
+            >
+              {tSafety('frameInbox.scopeCountNote')}
+            </p>
             <div className="flex flex-wrap items-center gap-2.5">
               {visible && query.data && (
                 <div

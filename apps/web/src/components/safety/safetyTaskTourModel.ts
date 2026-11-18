@@ -266,6 +266,10 @@ export function isElementAvailable(el: HTMLElement | null): el is HTMLElement {
   if (!el || !el.isConnected || el.closest('[hidden], [inert], [aria-hidden="true"], .sr-only')) {
     return false;
   }
+  const details = el.closest('details');
+  if (details && !details.open && details !== el && !el.closest('summary')) {
+    return false;
+  }
   for (let node: HTMLElement | null = el; node; node = node.parentElement) {
     const style = window.getComputedStyle(node);
     if (

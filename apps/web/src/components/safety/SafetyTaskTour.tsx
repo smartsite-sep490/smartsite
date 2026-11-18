@@ -50,6 +50,7 @@ function SafetyTaskTourSession({ taskId, tourVersion, userId, steps }: SafetyTas
   const triggerRef = useRef<HTMLButtonElement | null>(null);
   const nextBtnRef = useRef<HTMLButtonElement | null>(null);
   const highlightRef = useRef<HTMLDivElement | null>(null);
+  const tourSectionRef = useRef<HTMLElement | null>(null);
   const focusPrimaryRef = useRef(false);
   const wasTourVisibleRef = useRef(false);
   const prevStepIdRef = useRef<string | null>(null);
@@ -273,19 +274,43 @@ function SafetyTaskTourSession({ taskId, tourVersion, userId, steps }: SafetyTas
     };
   }, [isOpen, currentStep]);
 
+  const isLastStep = currentIndex + 1 >= availableSteps.length;
+
   useEffect(() => {
-    if (!isTourVisible) return;
+    if (!isTourVisible || !currentStep) return;
     const onKeyDown = (event: KeyboardEvent) => {
       if (hasBlockingDialog(triggerRef.current)) return;
       if (event.key === 'Escape' && !event.defaultPrevented) {
         event.preventDefault();
         event.stopPropagation();
         closeTour(true);
+        return;
+      }
+      const inTour = Boolean(
+        (event.target instanceof Node && tourSectionRef.current?.contains(event.target)) ||
+        (document.activeElement && tourSectionRef.current?.contains(document.activeElement)),
+      );
+      if (!inTour || event.defaultPrevented) return;
+      if (event.key === 'ArrowRight' && !isLastStep) {
+        event.preventDefault();
+        setActiveStepId(availableSteps[currentIndex + 1]?.id ?? null);
+      } else if (event.key === 'ArrowLeft' && currentIndex > 0) {
+        event.preventDefault();
+        const prevSteps = availableSteps
+          .slice(0, currentIndex)
+          .filter(
+            (step) =>
+              (!step.isAllowed || step.isAllowed()) &&
+              isElementAvailable(document.querySelector<HTMLElement>(step.anchorSelector)),
+          );
+        if (prevSteps.length <= 1) focusPrimaryRef.current = true;
+        setDomTick((n) => n + 1);
+        setActiveStepId(prevSteps.at(-1)?.id ?? currentStep.id);
       }
     };
     window.addEventListener('keydown', onKeyDown, true);
     return () => window.removeEventListener('keydown', onKeyDown, true);
-  }, [isTourVisible, closeTour]);
+  }, [isTourVisible, currentStep, currentIndex, isLastStep, availableSteps, closeTour]);
 
   const finishWithStatus = (status: SafetyTourProgressStatus) => {
     writeSafetyTourProgress(userId, taskId, tourVersion, status);
@@ -312,7 +337,6 @@ function SafetyTaskTourSession({ taskId, tourVersion, userId, steps }: SafetyTas
     setIsOpen(true);
   };
 
-  const isLastStep = currentIndex + 1 >= availableSteps.length;
   const showInvitation = isInviteEligible && !isTourVisible && availableSteps.length > 0;
 
   return (
@@ -366,6 +390,7 @@ function SafetyTaskTourSession({ taskId, tourVersion, userId, steps }: SafetyTas
           />
 
           <section
+            ref={tourSectionRef}
             role="region"
             aria-labelledby={titleId}
             aria-describedby={bodyId}
