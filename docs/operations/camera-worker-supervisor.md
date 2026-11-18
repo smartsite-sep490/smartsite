@@ -21,6 +21,55 @@ At most three starts are permitted per prototype run, with bounded backoff. Leas
 
 A failed or ambiguous issue/launch/cleanup latches process-local ownership and requires reconciliation instead of blindly retrying. Keep the private artifact for investigation; file existence does not prove commit. `CANCELLED` and `EXHAUSTED` describe lifecycle only. No return value asserts READY: readiness still requires the actual bound configuration ACK and first frame. A source-gap signal is an optional trusted in-process seam, not a new remote worker-control protocol.
 
+## Explicit test-only operator entry point
+
+After compiling the Backend, an operator can run the existing composition explicitly:
+
+```sh
+node apps/backend/dist/scripts/run-camera-worker-supervisor.js --config /absolute/private/supervisor.json
+```
+
+Use the build's actual output path (the normal production build places scripts under
+`apps/backend/dist/scripts`; a test build may use `dist/src/scripts`). Nothing registers
+this command at application startup. The configuration is a regular, unlinked JSON
+file, at most 64 KiB, with exactly these fields (all values below are synthetic):
+
+```json
+{
+  "cameraId": "11111111-1111-4111-8111-111111111111",
+  "allowedCameraIds": ["11111111-1111-4111-8111-111111111111"],
+  "credentialDirectory": "/absolute/private/credentials",
+  "outboxPath": "/absolute/private/retained.sqlite3",
+  "databaseIdentity": "127.0.0.1:5433/smartsite_test/isolated_supervisor",
+  "leaseMs": 60000,
+  "maximumStarts": 2,
+  "worker": {
+    "pythonExecutable": "/absolute/reviewed/python",
+    "manifestFile": "/absolute/private/reviewed-runtime.json",
+    "workingDirectory": "/absolute/private/worker"
+  }
+}
+```
+
+On Windows use absolute drive paths. Optional `initialExpectedGenerationId` is only
+for an explicitly reconciled prior owner, as described above. Unknown fields,
+inline environment/secrets/argv, relative paths, public/reserved schemas and any
+website/cloud database identity are refused. Keep this file and its directories
+private; this entry point does not provision or certify OS ACLs.
+
+Supply issuer database configuration through the trusted parent runtime environment.
+Only the existing worker environment allowlist is forwarded: the AI Backend service
+token/ingestion URL/source, evidence root and Python bytecode setting. Database and
+admin credentials remain in the parent. Existing adapter validation still checks the
+fixed executable/manifest, dotenv absence and manifest digest before launch.
+
+SIGINT/SIGTERM request cancellation and await the owned worker. Exit 0 means the
+supervisor was cancelled, exit 2 means its finite start budget was exhausted, and
+exit 1 means validation/issuance/launch/reconciliation failed. These are **not**
+camera readiness or model qualification. Error output is generic and never prints
+configuration bytes or driver errors. This entry point does not add source discovery,
+remote enrollment, configuration-change signaling or deployment activation.
+
 ## Remaining release gates
 
 Cross-process/host ownership, host-reboot orphan reconciliation, native-driver deadlines, private Windows ACL verification, packaged-runtime provenance, target runtime activation, real ACK/first-frame readiness, draining retained old-generation rows, physical camera/RTSP smoothness and model quality/shadow/canary/rollback remain separate acceptance work. This prototype is not installed as a service and is not registered in AppModule or website startup.
