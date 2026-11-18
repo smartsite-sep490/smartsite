@@ -23,6 +23,13 @@ const en = {
   'regionSetup.drawer.keepEditing': 'Keep Editing',
   'regionSetup.drawer.confirmDiscard': 'Discard Changes',
   'regionSetup.drawer.pointsCount': 'Points: {count} / 32',
+  'regionSetup.drawer.frameCoverage': 'Region: {percent}% of camera frame',
+  'regionSetup.drawer.largePolygonFrameHint':
+    'This polygon covers {percent}% of the camera view. Draw a compact boundary around the specific work zone—Camera default PPE already covers the full camera.',
+  'regionSetup.drawer.revalidationBanner':
+    'Camera view changed — coordinates are never auto-warped. Inspect or adjust this saved boundary on the current reference image, tick confirmation, and save.',
+  'regionSetup.drawer.editGeometryPpeNote':
+    'Saving here updates polygon geometry only. Edit this region’s Inherited, Custom, or Disabled PPE rule in Camera PPE policy on Camera Setup.',
   'regionSetup.drawer.stalePixelsNotice': 'Snapshot pixels expired · draft points retained',
   'regionSetup.drawer.canvasAria': 'Camera Region Drawing Canvas',
   'regionSetup.drawer.imageContextSummary':
@@ -79,6 +86,13 @@ const vi: Record<keyof typeof en, string> = {
   'regionSetup.drawer.keepEditing': 'Tiếp tục chỉnh sửa',
   'regionSetup.drawer.confirmDiscard': 'Hủy thay đổi',
   'regionSetup.drawer.pointsCount': 'Số điểm: {count} / 32',
+  'regionSetup.drawer.frameCoverage': 'Vùng vẽ: {percent}% khung hình camera',
+  'regionSetup.drawer.largePolygonFrameHint':
+    'Đa giác này đang phủ tới {percent}% góc nhìn camera. Nên vẽ gọn quanh khu vực làm việc mục tiêu—mặc định camera đã áp dụng cho toàn khung hình.',
+  'regionSetup.drawer.revalidationBanner':
+    'Góc nhìn camera đã thay đổi — tọa độ đa giác không tự động biến đổi. Hãy kiểm tra hoặc chỉnh lại ranh giới đã lưu trên ảnh tham chiếu hiện tại, tích xác nhận rồi lưu.',
+  'regionSetup.drawer.editGeometryPpeNote':
+    'Thao tác lưu tại đây chỉ cập nhật hình học đa giác. Chỉnh quy tắc PPE (Kế thừa, Tùy chỉnh hoặc Tắt) của vùng này tại mục Chính sách PPE trên màn Thiết lập Camera.',
   'regionSetup.drawer.stalePixelsNotice':
     'Ảnh chụp đã quá hạn hiển thị · các điểm nháp vẫn được giữ nguyên',
   'regionSetup.drawer.canvasAria': 'Khung vẽ vùng quan sát camera',

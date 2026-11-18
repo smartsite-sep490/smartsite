@@ -83,9 +83,15 @@ function buildPolygonTourSteps(
     isReferenceExpired?: boolean;
     isSaving?: boolean;
     isEditingRegion?: boolean;
+    hasPpePolicyControls?: boolean;
   } = {},
 ): readonly SafetyTourStepSpec[] {
-  const { isReferenceExpired = false, isSaving = false, isEditingRegion = false } = options;
+  const {
+    isReferenceExpired = false,
+    isSaving = false,
+    isEditingRegion = false,
+    hasPpePolicyControls = true,
+  } = options;
   const referencePrefix = isReferenceExpired
     ? 'regionPolygon.tour.reference.expired'
     : 'regionPolygon.tour.reference.active';
@@ -112,7 +118,7 @@ function buildPolygonTourSteps(
       anchorSelector: '[data-tour-anchor="polygon-frozen-reference"] > fieldset',
       titleKey: 'regionPolygon.tour.ppePolicy.title',
       bodyKey: 'regionPolygon.tour.ppePolicy.body',
-      isAllowed: () => !isEditingRegion && !isSaving,
+      isAllowed: () => !isEditingRegion && !isSaving && hasPpePolicyControls,
     },
     {
       id: 'polygon-canvas',
@@ -150,10 +156,14 @@ export interface RegionPolygonTaskTourProps {
   tourUserId?: string | null;
   isReferenceExpired?: boolean;
   isSaving?: boolean;
+  hasPpePolicyControls?: boolean;
 }
 
 function buildPolygonTourScopeKey(
-  props: Omit<RegionPolygonTaskTourProps, 'isReferenceExpired' | 'isSaving' | 'tourUserId'>,
+  props: Omit<
+    RegionPolygonTaskTourProps,
+    'isReferenceExpired' | 'isSaving' | 'tourUserId' | 'hasPpePolicyControls'
+  >,
 ): string {
   const referenceIdentity = getConfigurationReferenceIdentity(props.frozenReference);
   const editingRegionKey = props.editingRegion
@@ -177,12 +187,18 @@ function buildPolygonTourScopeKey(
 export function RegionPolygonTaskTour(props: RegionPolygonTaskTourProps) {
   registerSafetyTaskTourCatalog();
   registerRegionPolygonTourCopy();
-  const { isReferenceExpired = false, isSaving = false } = props;
+  const { isReferenceExpired = false, isSaving = false, hasPpePolicyControls = true } = props;
   const isEditingRegion = Boolean(props.editingRegion);
   const scopeKey = buildPolygonTourScopeKey(props);
   const steps = useMemo(
-    () => buildPolygonTourSteps({ isReferenceExpired, isSaving, isEditingRegion }),
-    [isReferenceExpired, isSaving, isEditingRegion],
+    () =>
+      buildPolygonTourSteps({
+        isReferenceExpired,
+        isSaving,
+        isEditingRegion,
+        hasPpePolicyControls,
+      }),
+    [hasPpePolicyControls, isReferenceExpired, isSaving, isEditingRegion],
   );
   const isAuthorized = Boolean(
     props.apiUrl.trim() &&

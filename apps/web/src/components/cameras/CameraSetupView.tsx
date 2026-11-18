@@ -17,7 +17,8 @@ import { CameraSetupTour } from './CameraSetupTour';
 import { useCameraSetupWorkspace } from './useCameraSetupWorkspace';
 
 const button = CAMERA_BUTTON_STYLES.secondary;
-const surface = 'min-w-0 rounded-2xl border border-slate-200/90 bg-white px-5 py-4 shadow-xs';
+const surface =
+  'min-w-0 rounded-2xl border border-slate-200/90 bg-white px-4 py-3.5 shadow-xs sm:px-5 sm:py-4';
 export type CameraSetupViewProps = { apiUrl: string; sharedSession: SharedSession | null };
 
 export function CameraSetupView({ apiUrl, sharedSession }: CameraSetupViewProps) {
