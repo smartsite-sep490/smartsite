@@ -325,7 +325,9 @@ describe('Camera Setup Queue 1 approved missing UI regressions', () => {
 
     fireEvent.click(screen.getByRole('button', { name: 'Save PPE policy' }));
     const conflictAlert = await screen.findByRole('alert');
-    expect(conflictAlert.textContent).toMatch(/Configuration version conflict/i);
+    expect(conflictAlert.textContent).toMatch(
+      /configuration changed or the camera view needs confirmation/i,
+    );
 
     fireEvent.click(screen.getByRole('button', { name: 'Reset draft' }));
     expect(screen.queryByTestId('camera-ppe-unsaved-draft')).toBeNull();

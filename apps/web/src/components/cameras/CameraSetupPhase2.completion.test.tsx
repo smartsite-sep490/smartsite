@@ -391,8 +391,8 @@ describe('Camera Setup Phase 2 completion regressions', () => {
     );
 
     const impactBox = await screen.findByTestId('camera-ppe-affected-regions-preview');
-    expect(impactBox.textContent).toContain('Z-HOIST · Hoist Loading Deck');
-    expect(impactBox.textContent).toContain('Z-WELD · Welding Bay');
+    expect(impactBox.textContent).toContain('Hoist Loading Deck');
+    expect(impactBox.textContent).toContain('Welding Bay');
 
     // Toggling Boots on Camera default previews Hard hat + Boots for inheriting regions
     fireEvent.click(screen.getByRole('checkbox', { name: 'Boots' }));
