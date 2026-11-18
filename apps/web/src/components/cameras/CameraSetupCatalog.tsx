@@ -155,6 +155,7 @@ export function CameraSetupCatalog({
                 context={policyContext}
                 statusContext={statusContext}
                 canWrite={canManageCameras}
+                onOpenReference={(trigger) => open('regions', selectedCamera.id, trigger)}
                 expandSignal={
                   ppeExpandRequest?.cameraId === selectedCamera.id ? ppeExpandRequest.seq : 0
                 }

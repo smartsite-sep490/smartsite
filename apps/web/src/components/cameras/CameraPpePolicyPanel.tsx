@@ -255,6 +255,7 @@ export function CameraPpePolicyPanel({
   camera,
   statusContext,
   expandSignal = 0,
+  onOpenReference,
 }: {
   context: CameraPpeContext;
   cameraId: string;
@@ -262,6 +263,7 @@ export function CameraPpePolicyPanel({
   camera?: CameraResponse;
   statusContext?: CameraApplicationStatusContext;
   expandSignal?: number;
+  onOpenReference?: (trigger: HTMLButtonElement) => void;
 }) {
   const { t } = useTranslation(SAFETY_NAMESPACE);
   const [manualOpen, setManualOpen] = useState(false);
@@ -311,6 +313,7 @@ export function CameraPpePolicyPanel({
           canWrite={canWrite}
           camera={camera}
           statusContext={statusContext}
+          onOpenReference={onOpenReference}
         />
       )}
     </section>
@@ -323,12 +326,14 @@ function PolicyEditor({
   canWrite,
   camera: cameraRecord,
   statusContext,
+  onOpenReference,
 }: {
   context: CameraPpeContext;
   cameraId: string;
   canWrite: boolean;
   camera?: CameraResponse;
   statusContext?: CameraApplicationStatusContext;
+  onOpenReference?: (trigger: HTMLButtonElement) => void;
 }) {
   const { t } = useTranslation(SAFETY_NAMESPACE);
   const cache = useQueryClient();
@@ -629,9 +634,13 @@ function PolicyEditor({
         });
       }
       setAttempt(undefined);
+      // setupKey already includes the nested policy queries. Refetching key
+      // afterward restarts their loading state after the first refresh settles.
       await cache.invalidateQueries({ queryKey: context.setupKey });
-      await cache.invalidateQueries({ queryKey: key });
-      if (statusContext?.setupKey) {
+      if (
+        statusContext?.setupKey &&
+        JSON.stringify(statusContext.setupKey) !== JSON.stringify(context.setupKey)
+      ) {
         await cache.invalidateQueries({ queryKey: statusContext.setupKey });
       }
     },
@@ -648,8 +657,10 @@ function PolicyEditor({
       if (error instanceof ApiError && error.status === 409) {
         setAttempt(undefined);
         void cache.invalidateQueries({ queryKey: context.setupKey });
-        void cache.invalidateQueries({ queryKey: key });
-        if (statusContext?.setupKey) {
+        if (
+          statusContext?.setupKey &&
+          JSON.stringify(statusContext.setupKey) !== JSON.stringify(context.setupKey)
+        ) {
           void cache.invalidateQueries({ queryKey: statusContext.setupKey });
         }
       }
@@ -804,6 +815,23 @@ function PolicyEditor({
       ) : (
         <>
           <SavedVsAppliedBanner state={savedVsApplied} />
+          {initial && applicationStatus.verifiedPayload?.status.viewValidity === 'UNAVAILABLE' && (
+            <div
+              role="status"
+              className="rounded-xl border border-amber-200 bg-amber-50 p-3 text-sm text-amber-950"
+            >
+              <p>{t('cameraPpe.referenceRequired')}</p>
+              {canWrite && onOpenReference && (
+                <button
+                  type="button"
+                  className={CAMERA_BUTTON_STYLES.compactSecondary}
+                  onClick={(event) => onOpenReference(event.currentTarget)}
+                >
+                  {t('cameraPpe.openReference')}
+                </button>
+              )}
+            </div>
+          )}
 
           <p
             data-testid="camera-ppe-capability-note"
