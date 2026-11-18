@@ -1014,6 +1014,7 @@
   "common.today_s_recorded_hours": "Giờ đã ghi nhận hôm nay",
   "worker_attendance_summary.confirmed_hours_this_month": "Giờ đã xác nhận trong tháng",
   "worker_attendance_summary.confirmed_overtime_this_month": "Giờ tăng ca đã xác nhận trong tháng",
+  "worker_attendance_summary.days_present_this_month": "Số ngày có mặt trong tháng",
   "worker_attendance_summary.days_needing_attention_this_month": "Ngày cần kiểm tra trong tháng",
   "common.work_hours_unavailable": "Không có thông tin giờ làm.",
   "common.retry_summary": "Tải lại tổng hợp",

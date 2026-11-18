@@ -1014,6 +1014,7 @@
   "common.today_s_recorded_hours": "Today's Recorded Hours",
   "worker_attendance_summary.confirmed_hours_this_month": "Confirmed Hours This Month",
   "worker_attendance_summary.confirmed_overtime_this_month": "Confirmed Overtime This Month",
+  "worker_attendance_summary.days_present_this_month": "Days Present This Month",
   "worker_attendance_summary.days_needing_attention_this_month": "Days Needing Attention This Month",
   "common.work_hours_unavailable": "Work hours unavailable.",
   "common.retry_summary": "Retry summary",

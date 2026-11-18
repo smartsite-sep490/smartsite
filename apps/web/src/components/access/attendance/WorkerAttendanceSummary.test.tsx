@@ -7,6 +7,8 @@ import { WorkerAttendanceSummary } from './WorkerAttendanceSummary';
 const api = vi.hoisted(() => ({
   attendanceDays: vi.fn(),
   attendanceTimesheets: vi.fn(),
+  attendanceWorkers: vi.fn(),
+  listWorkers: vi.fn(),
   attendanceDayDetail: vi.fn(),
 }));
 vi.mock('@smartsite/api-client', async (importOriginal) => ({
@@ -56,6 +58,10 @@ beforeEach(() => {
     items: [{ totalMinutes: 760, overtimeMinutes: 90 }],
   });
   api.attendanceDayDetail.mockResolvedValue({ day: today, sessions: [] });
+  api.attendanceWorkers.mockResolvedValue({
+    items: [{ workerId: 'mine', presentDays: 2, requiredDays: 3 }],
+  });
+  api.listWorkers.mockResolvedValue({ items: [{ id: 'mine', userId: 'worker' }], total: 1 });
 });
 afterEach(() => {
   cleanup();
@@ -125,4 +131,46 @@ it('shows no attendance today without importing previous-day sessions', async ()
   fireEvent.click(toggle);
   await screen.findByText('No attendance recorded today.');
   expect(api.attendanceDayDetail).not.toHaveBeenCalled();
+});
+
+it('shows the worker personal days present for the full current month', async () => {
+  mount();
+  expect(await screen.findByText('2 / 3')).toBeTruthy();
+  expect(screen.getByText('Days Present This Month')).toBeTruthy();
+  expect(api.attendanceWorkers).toHaveBeenCalledWith('synthetic', 'site', {
+    fromDate: '2026-10-01',
+    toDate: '2026-10-31',
+    timezone: 'Asia/Ho_Chi_Minh',
+    workerId: 'mine',
+    limit: 1,
+  });
+});
+
+it('does not turn a failed days-present report into zero', async () => {
+  api.attendanceWorkers.mockRejectedValue(new Error('offline'));
+  mount();
+  expect(await screen.findByText('Days Present This Month')).toBeTruthy();
+  await waitFor(() =>
+    expect(screen.getByRole('button', { name: 'Retry Days Present This Month' })).toBeTruthy(),
+  );
+  expect(screen.queryByText('0 / 0')).toBeNull();
+});
+
+it('requests the logged-in worker even when another role can see a wider roster', async () => {
+  api.listWorkers.mockResolvedValue({
+    items: [
+      { id: 'other', userId: 'other-user' },
+      { id: 'mine', userId: 'worker' },
+    ],
+    total: 2,
+  });
+  mount();
+  await screen.findByText('2 / 3');
+  expect(api.attendanceWorkers).toHaveBeenCalledWith('synthetic', 'site', {
+    fromDate: '2026-10-01',
+    toDate: '2026-10-31',
+    timezone: 'Asia/Ho_Chi_Minh',
+    workerId: 'mine',
+    limit: 1,
+  });
 });
