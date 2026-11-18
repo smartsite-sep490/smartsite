@@ -169,15 +169,25 @@ export function CameraRegionList({
                       currentViewRevision={currentViewRevision}
                     />
                   </div>
-                  <details className="text-[11px] text-slate-500">
+                  <details
+                    data-testid={`camera-region-list-tech-${region.id}`}
+                    className="text-[11px] text-slate-500"
+                  >
                     <summary className="cursor-pointer select-none font-medium text-slate-500 hover:text-slate-800">
                       {t('regionSetup.list.technicalIdSummary')}
                     </summary>
                     <div className="mt-0.5 space-y-0.5 font-mono text-[11px] text-slate-600 break-all">
-                      <p className="select-all">{region.id}</p>
+                      <p className="select-all">
+                        {t('regionSetup.list.technicalRegionId', { id: region.id })}
+                      </p>
                       {selectedZone?.code && (
-                        <p className="text-slate-500 select-all">{selectedZone.code}</p>
+                        <p className="text-slate-500 select-all">
+                          {t('regionSetup.list.technicalZoneCode', { code: selectedZone.code })}
+                        </p>
                       )}
+                      <p className="text-slate-500 select-all">
+                        {t('regionSetup.list.technicalZoneId', { id: region.zoneId })}
+                      </p>
                     </div>
                   </details>
                 </div>

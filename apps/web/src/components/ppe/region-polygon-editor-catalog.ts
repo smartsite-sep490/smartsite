@@ -33,7 +33,14 @@ const en = {
   'regionSetup.drawer.stalePixelsNotice': 'Snapshot pixels expired · draft points retained',
   'regionSetup.drawer.canvasAria': 'Camera Region Drawing Canvas',
   'regionSetup.drawer.imageContextSummary':
-    '{zoneCode} · {zoneName} → {cameraCode} ({sourceKind} v{version} · {width}×{height})',
+    '{zoneName} → {cameraLabel} ({sourceKind} v{version} · {width}×{height})',
+  'regionSetup.drawer.imageContextEditingSummary':
+    '{zoneName} · Region v{regionVersion} → {cameraLabel} ({sourceKind} v{version} · {width}×{height})',
+  'regionSetup.drawer.technicalDetailsSummary': 'Technical IDs',
+  'regionSetup.drawer.technicalZoneCode': 'Zone code: {code}',
+  'regionSetup.drawer.technicalZoneId': 'Zone ID: {id}',
+  'regionSetup.drawer.technicalSourceId': 'Source ID: {id}',
+  'regionSetup.drawer.technicalRegionId': 'Region ID: {id} (v{version})',
   'regionSetup.drawer.regionPpePolicyLegend': 'Region PPE policy',
   'regionSetup.drawer.shortcutsLabel': 'Shortcuts:',
   'regionSetup.drawer.shortcutUndo': 'Undo',
@@ -97,7 +104,14 @@ const vi: Record<keyof typeof en, string> = {
     'Ảnh chụp đã quá hạn hiển thị · các điểm nháp vẫn được giữ nguyên',
   'regionSetup.drawer.canvasAria': 'Khung vẽ vùng quan sát camera',
   'regionSetup.drawer.imageContextSummary':
-    '{zoneCode} · {zoneName} → {cameraCode} ({sourceKind} v{version} · {width}×{height})',
+    '{zoneName} → {cameraLabel} ({sourceKind} v{version} · {width}×{height})',
+  'regionSetup.drawer.imageContextEditingSummary':
+    '{zoneName} · Vùng v{regionVersion} → {cameraLabel} ({sourceKind} v{version} · {width}×{height})',
+  'regionSetup.drawer.technicalDetailsSummary': 'Mã định danh kỹ thuật',
+  'regionSetup.drawer.technicalZoneCode': 'Mã định danh khu vực (Zone code): {code}',
+  'regionSetup.drawer.technicalZoneId': 'Mã khu vực (Zone ID): {id}',
+  'regionSetup.drawer.technicalSourceId': 'Mã nguồn (Source ID): {id}',
+  'regionSetup.drawer.technicalRegionId': 'Mã vùng (Region ID): {id} (v{version})',
   'regionSetup.drawer.regionPpePolicyLegend': 'Chính sách PPE của vùng',
   'regionSetup.drawer.shortcutsLabel': 'Phím tắt:',
   'regionSetup.drawer.shortcutUndo': 'Hoàn tác',

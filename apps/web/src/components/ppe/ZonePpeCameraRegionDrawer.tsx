@@ -484,23 +484,68 @@ function ZonePpeCameraRegionDrawerContent(
                 ? t('regionSetup.drawer.readinessPolicy')
                 : t('regionSetup.drawer.readinessReady');
 
+  const cameraDisplayLabel =
+    selectedCamera.name.trim() && selectedCamera.name.trim() !== selectedCamera.code.trim()
+      ? `${selectedCamera.name} · ${selectedCamera.code}`
+      : selectedCamera.code;
+  const authoringContextSummary = editingRegion
+    ? t('regionSetup.drawer.imageContextEditingSummary', {
+        zoneName: selectedZone.name,
+        regionVersion: editingRegion.version,
+        cameraLabel: cameraDisplayLabel,
+        sourceKind: frozenReference.sourceKind,
+        version: frozenReference.configurationVersion,
+        width,
+        height,
+      })
+    : t('regionSetup.drawer.imageContextSummary', {
+        zoneName: selectedZone.name,
+        cameraLabel: cameraDisplayLabel,
+        sourceKind: frozenReference.sourceKind,
+        version: frozenReference.configurationVersion,
+        width,
+        height,
+      });
+
   return (
     <div className="min-w-0 space-y-2.5">
-      <div className="flex flex-wrap items-center justify-between gap-2 min-w-0">
-        <p
-          data-testid="polygon-authoring-context"
-          className="min-w-0 break-words [overflow-wrap:anywhere] text-xs font-medium text-slate-700"
-        >
-          {t('regionSetup.drawer.imageContextSummary', {
-            zoneCode: selectedZone.code,
-            zoneName: selectedZone.name,
-            cameraCode: selectedCamera.code,
-            sourceKind: frozenReference.sourceKind,
-            version: frozenReference.configurationVersion,
-            width,
-            height,
-          })}
-        </p>
+      <div className="flex flex-wrap items-start justify-between gap-2 min-w-0">
+        <div className="min-w-0 flex-1 space-y-1">
+          <p
+            data-testid="polygon-authoring-context"
+            title={authoringContextSummary}
+            className="min-w-0 break-words [overflow-wrap:anywhere] text-xs font-medium text-slate-700"
+          >
+            {authoringContextSummary}
+          </p>
+          <details
+            data-testid="polygon-authoring-tech-details"
+            className="text-[11px] text-slate-500"
+          >
+            <summary className="cursor-pointer select-none font-medium text-slate-500 hover:text-slate-800">
+              {t('regionSetup.drawer.technicalDetailsSummary')}
+            </summary>
+            <div className="mt-0.5 flex flex-wrap items-center gap-x-3 gap-y-0.5 font-mono text-[11px] text-slate-600 break-all">
+              <span className="select-all">
+                {t('regionSetup.drawer.technicalZoneCode', { code: selectedZone.code })}
+              </span>
+              <span className="text-slate-500 select-all">
+                {t('regionSetup.drawer.technicalZoneId', { id: selectedZone.id })}
+              </span>
+              <span className="text-slate-500 select-all">
+                {t('regionSetup.drawer.technicalSourceId', { id: selectedCamera.externalId })}
+              </span>
+              {editingRegion && (
+                <span className="text-slate-500 select-all">
+                  {t('regionSetup.drawer.technicalRegionId', {
+                    id: editingRegion.id,
+                    version: editingRegion.version,
+                  })}
+                </span>
+              )}
+            </div>
+          </details>
+        </div>
         <RegionPolygonTaskTour
           apiUrl={props.apiUrl}
           sessionScope={props.sessionScope}

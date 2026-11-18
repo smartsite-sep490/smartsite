@@ -51,6 +51,19 @@ export function CameraRegionSelectionControls({
 }: CameraRegionSelectionControlsProps) {
   registerCameraRegionPanelCatalog();
   const { t } = useTranslation(SAFETY_NAMESPACE);
+  const zoneNameCounts = new Map<string, number>();
+  for (const zone of zones) {
+    const normalized = zone.name.trim().toLowerCase();
+    zoneNameCounts.set(normalized, (zoneNameCounts.get(normalized) ?? 0) + 1);
+  }
+  const selectedZone = zones.find((zone) => zone.id === selectedZoneId) ?? null;
+  const selectedCamera =
+    visibleActiveCameras.find((camera) => camera.id === selectedCameraId) ?? null;
+  const selectedCameraTitle = selectedCamera
+    ? selectedCamera.name.trim() && selectedCamera.name.trim() !== selectedCamera.code.trim()
+      ? `${selectedCamera.name} (${selectedCamera.code})`
+      : selectedCamera.code
+    : undefined;
 
   return (
     <div className="grid grid-cols-1 md:grid-cols-2 gap-4 min-w-0 w-full max-w-full">
@@ -61,17 +74,39 @@ export function CameraRegionSelectionControls({
         <select
           id="select-zone-link"
           aria-label={t('regionSetup.field.selectZone')}
+          title={selectedZone ? `${selectedZone.name} (${selectedZone.code})` : undefined}
           value={selectedZoneId}
           onChange={(e) => onZoneChange(e.target.value)}
           disabled={zones.length === 0 || isSaving}
           className="w-full min-w-0 max-w-full rounded-xl border border-slate-200 bg-white px-3.5 py-2 text-xs text-slate-800 outline-none focus:border-slate-900 focus:ring-1 focus:ring-slate-900 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-slate-900 disabled:opacity-50 truncate"
         >
-          {zones.map((zone) => (
-            <option key={zone.id} value={zone.id}>
-              {zone.code} · {zone.name}
-            </option>
-          ))}
+          {zones.map((zone) => {
+            const hasDuplicateName =
+              (zoneNameCounts.get(zone.name.trim().toLowerCase()) ?? 0) > 1;
+            const fullTitle = `${zone.name} (${zone.code})`;
+            const optionLabel = hasDuplicateName ? fullTitle : zone.name;
+            return (
+              <option key={zone.id} value={zone.id} title={fullTitle}>
+                {optionLabel}
+              </option>
+            );
+          })}
         </select>
+        {selectedZone && (
+          <details data-testid="region-zone-selection-tech" className="text-[11px] text-slate-500">
+            <summary className="cursor-pointer select-none font-medium text-slate-500 hover:text-slate-800">
+              {t('regionSetup.list.technicalIdSummary')}
+            </summary>
+            <div className="mt-0.5 space-y-0.5 font-mono text-[11px] text-slate-600 break-all">
+              <p className="select-all">
+                {t('regionSetup.list.technicalZoneCode', { code: selectedZone.code })}
+              </p>
+              <p className="text-slate-500 select-all">
+                {t('regionSetup.list.technicalZoneId', { id: selectedZone.id })}
+              </p>
+            </div>
+          </details>
+        )}
       </div>
 
       <div className="min-w-0 w-full space-y-1.5">
@@ -96,17 +131,24 @@ export function CameraRegionSelectionControls({
         <select
           id="select-camera-link"
           aria-label={t('regionSetup.field.selectCamera')}
+          title={selectedCameraTitle}
           value={selectedCameraId}
           onChange={(e) => onCameraChange(e.target.value)}
           disabled={visibleActiveCameras.length === 0 || isSaving}
           className="w-full min-w-0 max-w-full rounded-xl border border-slate-200 bg-white px-3.5 py-2 text-xs text-slate-800 outline-none focus:border-slate-900 focus:ring-1 focus:ring-slate-900 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-slate-900 disabled:opacity-50 truncate"
         >
           {!selectedCameraId && <option value="">{t('regionSetup.field.selectCamera')}</option>}
-          {visibleActiveCameras.map((camera) => (
-            <option key={camera.id} value={camera.id}>
-              {camera.code} · {camera.name}
-            </option>
-          ))}
+          {visibleActiveCameras.map((camera) => {
+            const cameraLabel =
+              camera.name.trim() && camera.name.trim() !== camera.code.trim()
+                ? `${camera.name} (${camera.code})`
+                : camera.code;
+            return (
+              <option key={camera.id} value={camera.id} title={cameraLabel}>
+                {cameraLabel}
+              </option>
+            );
+          })}
         </select>
 
         {isCamerasInitialLoading && (

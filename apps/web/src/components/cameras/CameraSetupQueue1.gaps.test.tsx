@@ -971,9 +971,10 @@ describe('Camera Setup Queue 1 approved missing UI regressions', () => {
       );
 
       const contextBar = await screen.findByTestId('polygon-authoring-context');
-      expect(contextBar.textContent).toContain('ZONE-A');
+      expect(contextBar.textContent).toContain('Crane Lifting Bay');
       expect(contextBar.textContent).toContain('CAM-101');
       expect(contextBar.textContent).toContain('640×360');
+      expect(screen.getByTestId('polygon-authoring-tech-details').textContent).toContain('ZONE-A');
 
       const layoutGrid = screen.getByTestId('polygon-authoring-layout');
       expect(layoutGrid.className).toContain('grid-cols-1');
