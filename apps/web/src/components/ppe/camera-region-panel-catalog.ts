@@ -17,6 +17,7 @@ export interface ZonePpeCameraRegionPanelProps {
   tourUserId?: string | null;
   onSelectCamera?: (cameraId: string) => void;
   onDraftStateChange?: (state: { dirty: boolean; saving: boolean }) => void;
+  onUnauthorized?: () => void;
   onClose?: () => void;
 }
 
@@ -89,7 +90,10 @@ const CAMERA_REGION_PANEL_EN = {
   'regionSetup.list.versionStatus': 'Version {version} · {status}',
   'regionSetup.list.statusActive': 'Active',
   'regionSetup.list.statusInactive': 'Inactive',
+  'regionSetup.list.regionNumberTitle': 'Region #{index}',
+  'regionSetup.list.technicalIdSummary': 'Technical ID',
   'regionSetup.list.editGeometry': 'Edit Geometry',
+  'regionSetup.list.revalidateGeometry': 'Revalidate Geometry',
   'regionSetup.list.retryingMore': 'Retrying more regions…',
   'regionSetup.list.retryNextPage': 'Retry loading more regions',
   'regionSetup.list.loadingMore': 'Loading more regions…',
@@ -153,7 +157,10 @@ const CAMERA_REGION_PANEL_VI: Record<keyof typeof CAMERA_REGION_PANEL_EN, string
   'regionSetup.list.versionStatus': 'Phiên bản {version} · {status}',
   'regionSetup.list.statusActive': 'Đang hoạt động',
   'regionSetup.list.statusInactive': 'Ngừng hoạt động',
+  'regionSetup.list.regionNumberTitle': 'Vùng #{index}',
+  'regionSetup.list.technicalIdSummary': 'Mã kỹ thuật',
   'regionSetup.list.editGeometry': 'Sửa hình học',
+  'regionSetup.list.revalidateGeometry': 'Xác nhận lại hình học',
   'regionSetup.list.retryingMore': 'Đang thử tải thêm vùng quan sát…',
   'regionSetup.list.retryNextPage': 'Thử tải thêm vùng quan sát',
   'regionSetup.list.loadingMore': 'Đang tải thêm vùng quan sát…',

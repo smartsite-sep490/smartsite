@@ -92,7 +92,8 @@ export function CameraSetupCatalog({
     !showLinkedCameraNotice,
   );
   const button = CAMERA_BUTTON_STYLES.secondary;
-  const primarySurface = 'min-w-0 rounded-2xl border border-slate-200 bg-white p-6 shadow-xs';
+  const primarySurface =
+    'min-w-0 rounded-2xl border border-slate-200 bg-white px-4 py-4 shadow-xs sm:p-6';
   return (
     <div>
       <section className={primarySurface} aria-label={t('cameraSetup.cameras')}>

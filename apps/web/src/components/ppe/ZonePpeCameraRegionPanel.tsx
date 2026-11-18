@@ -123,10 +123,12 @@ function ZonePpeCameraRegionPanelContent(
               <IconCamera className="h-4.5 w-4.5" />
             </span>
             <div className="min-w-0">
-              <h3 className="text-base font-bold text-slate-900 truncate">
+              <h3 className="text-base font-bold text-slate-900 break-words [overflow-wrap:anywhere]">
                 {t('regionSetup.title')}
               </h3>
-              <p className="text-xs text-slate-500 truncate mt-0.5">{t('regionSetup.subtitle')}</p>
+              <p className="text-xs text-slate-500 break-words [overflow-wrap:anywhere] mt-0.5">
+                {t('regionSetup.subtitle')}
+              </p>
             </div>
           </div>
           {onClose && (
@@ -304,6 +306,8 @@ function ZonePpeCameraRegionPanelContent(
               editingRegion={panel.drawingScope.editingRegion}
               tourUserId={tourUserId}
               lastSavedDraft={panel.lastSavedDraft}
+              isLoadingReference={panel.configReference.isLoading}
+              onRequestFreshReference={panel.handleRequestReference}
               onAcceptCandidateReference={panel.handleAcceptCandidateReference}
               onScopeRevoked={panel.handleScopeRevoked}
               onCancelCandidateReview={panel.handleCancelCandidateReview}
@@ -321,6 +325,8 @@ function ZonePpeCameraRegionPanelContent(
 
       <CameraRegionList
         selectedCameraId={panel.selectedCameraId}
+        selectedZone={panel.selectedZone}
+        currentViewRevision={panel.statusCardReference?.issuedReference.viewRevision ?? null}
         isCameraBaseError={panel.isCameraBaseError}
         isLoadingCameras={panel.camerasInfiniteQuery.isLoading}
         allFetchedRegions={panel.allFetchedRegions}

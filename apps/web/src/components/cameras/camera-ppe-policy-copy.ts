@@ -74,6 +74,12 @@ const en = {
   previewHeading: 'Effective PPE if saved',
   previewRequiresCameraInit:
     'Select or save a valid camera default policy to preview inherited PPE.',
+  impactHeading: 'Affected regions on this camera',
+  impactInheriting: 'Inherits camera default ({{count}}): {{names}}',
+  impactNoneInheriting:
+    'No active regions currently inherit the camera default (applies outside region overrides).',
+  impactUnaffected: 'Keeps custom or disabled rule ({{count}}): {{names}}',
+  impactPreviewEffective: 'Effective PPE for inheriting regions & unzoned camera area:',
   regionActive: 'Active',
   regionInactive: 'Inactive',
   regionVersionMeta: 'Region v{{version}}',
@@ -185,6 +191,12 @@ const vi: Record<keyof typeof en, string> = {
   previewHeading: 'PPE hiệu lực dự kiến sau khi lưu',
   previewRequiresCameraInit:
     'Cần chọn hoặc lưu chính sách mặc định camera hợp lệ để xem PPE kế thừa.',
+  impactHeading: 'Các vùng bị ảnh hưởng trên camera này',
+  impactInheriting: 'Kế thừa mặc định camera ({{count}}): {{names}}',
+  impactNoneInheriting:
+    'Hiện chưa có vùng đang bật nào kế thừa mặc định camera (áp dụng ngoài các vùng ghi đè).',
+  impactUnaffected: 'Giữ quy tắc tùy chỉnh hoặc tắt riêng ({{count}}): {{names}}',
+  impactPreviewEffective: 'PPE hiệu lực cho vùng kế thừa & phần khung hình ngoài vùng:',
   regionActive: 'Đang bật',
   regionInactive: 'Đang tắt',
   regionVersionMeta: 'Vùng v{{version}}',

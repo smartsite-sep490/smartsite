@@ -60,6 +60,8 @@ export interface ZonePpeCameraRegionDrawerProps {
   editingRegion?: EditingRegionScope | null;
   tourUserId?: string | null;
   lastSavedDraft: string | null;
+  isLoadingReference?: boolean;
+  onRequestFreshReference?: () => void;
   onAcceptCandidateReference: (candidate: CameraConfigurationReference) => void;
   onCancelCandidateReview: () => void;
   onScopeRevoked: (status: number) => void;
@@ -150,6 +152,8 @@ function ZonePpeCameraRegionDrawerContent(
     candidateReference,
     editingRegion,
     lastSavedDraft,
+    isLoadingReference = false,
+    onRequestFreshReference,
     onDraftStateChange,
   } = props;
   const { t } = useTranslation(SAFETY_NAMESPACE);
@@ -447,6 +451,20 @@ function ZonePpeCameraRegionDrawerContent(
   const geometryErrorKey = draftPoints.length >= 3 ? validatePolygonGeometry(draftPoints) : null;
   const isConsentDisabled =
     createRegionMutation.isPending || isReferenceExpired || !isReferenceScopeValid;
+  const isConflictServerError =
+    serverErrorKey === 'regionSetup.error.409' || serverErrorKey === 'regionSetup.error.409Edit';
+  const showReloadConflictReferenceBtn = Boolean(
+    onRequestFreshReference &&
+    !candidateReference &&
+    (isConflictServerError || isReferenceRevisionStale),
+  );
+  const hasPpePolicyControls = Boolean(
+    !editingRegion &&
+    usesV2 &&
+    savedPolicy.isSuccess &&
+    !savedPolicy.isFetching &&
+    savedPolicy.data?.configurationVersion === frozenReference.configurationVersion,
+  );
   const saveReadinessHint = isReferenceExpired
     ? t('regionSetup.drawer.readinessExpired')
     : currentDraftKey === lastSavedDraft
@@ -496,6 +514,7 @@ function ZonePpeCameraRegionDrawerContent(
           tourUserId={props.tourUserId}
           isReferenceExpired={isReferenceExpired}
           isSaving={createRegionMutation.isPending}
+          hasPpePolicyControls={hasPpePolicyControls}
         />
       </div>
       {candidateReference && (
@@ -524,6 +543,18 @@ function ZonePpeCameraRegionDrawerContent(
         saveReadinessHint={saveReadinessHint}
         inspectorSlot={
           <div data-tour-anchor="polygon-frozen-reference" className="min-w-0 space-y-2.5">
+            {editingRegion?.needsViewRevalidation && (
+              <div
+                role="status"
+                data-testid="polygon-revalidation-banner"
+                className="rounded-lg border border-amber-300 bg-amber-50 p-2.5 text-xs text-amber-950 flex items-start gap-2"
+              >
+                <IconAlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-amber-700" />
+                <span className="min-w-0 break-words">
+                  {t('regionSetup.drawer.revalidationBanner')}
+                </span>
+              </div>
+            )}
             {validationError && (
               <div
                 role="alert"
@@ -536,10 +567,30 @@ function ZonePpeCameraRegionDrawerContent(
             {serverError && (
               <div
                 role="alert"
-                className="rounded-lg border border-red-200 bg-red-50 p-2.5 text-xs text-red-800 flex items-center gap-2"
+                className="rounded-lg border border-red-200 bg-red-50 p-2.5 text-xs text-red-800 space-y-2"
               >
-                <IconAlertTriangle className="h-4 w-4 shrink-0 text-red-600" />
-                <span>{serverError}</span>
+                <div className="flex items-start gap-2">
+                  <IconAlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-red-600" />
+                  <span className="min-w-0 break-words">{serverError}</span>
+                </div>
+                {showReloadConflictReferenceBtn && (
+                  <div className="flex justify-end">
+                    <button
+                      type="button"
+                      data-testid="polygon-conflict-reload-reference"
+                      disabled={isLoadingReference || createRegionMutation.isPending}
+                      onClick={onRequestFreshReference}
+                      className="rounded-lg border border-red-300 bg-white px-2.5 py-1 text-xs font-semibold text-red-900 hover:bg-red-100 transition-colors cursor-pointer disabled:opacity-50"
+                    >
+                      {t('regionSetup.error.409ReloadBtn', {
+                        version: Math.max(
+                          targetCameraVersion,
+                          frozenReference.configurationVersion + 1,
+                        ),
+                      })}
+                    </button>
+                  </div>
+                )}
               </div>
             )}
             <RegionReferenceViewConsentCheckbox
@@ -556,6 +607,11 @@ function ZonePpeCameraRegionDrawerContent(
                 setConfirmedConsentKey(nextChecked ? currentConsentBindingKey : null);
               }}
             />
+            {editingRegion && (
+              <p className="rounded-lg border border-slate-200/80 bg-white px-2.5 py-2 text-xs text-slate-600 break-words">
+                {t('regionSetup.drawer.editGeometryPpeNote')}
+              </p>
+            )}
             {!editingRegion &&
               (savedPolicy.isError ? (
                 <div role="alert">

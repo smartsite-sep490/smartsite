@@ -486,3 +486,79 @@ export function EffectivePpePreviewBox({
     </div>
   );
 }
+
+export function CameraDefaultImpactCard({
+  items,
+  draftCameraPolicy,
+}: {
+  items: readonly RegionPolicyItemView[];
+  draftCameraPolicy: CameraPpePolicy | null;
+}) {
+  const { t } = useTranslation(SAFETY_NAMESPACE);
+  const activeItems = items.filter((entry) => entry.region.isActive);
+  const formatName = ({ regionIndex, sameZoneCount, zone }: RegionPolicyItemView): string =>
+    zone
+      ? sameZoneCount > 1
+        ? `${zone.code} · ${zone.name} (${t('cameraPpe.regionNumberBadge', { index: regionIndex })})`
+        : `${zone.code} · ${zone.name}`
+      : t('cameraPpe.regionUnresolvedLabel', { index: regionIndex });
+
+  const inheritingNames = activeItems
+    .filter(
+      (entry) =>
+        (entry.effective.kind === 'resolved' || entry.effective.kind === 'camera-unconfigured') &&
+        entry.effective.mode === 'INHERIT',
+    )
+    .map(formatName);
+  const unaffectedNames = activeItems
+    .filter(
+      (entry) =>
+        (entry.effective.kind === 'resolved' || entry.effective.kind === 'camera-unconfigured') &&
+        entry.effective.mode !== 'INHERIT',
+    )
+    .map(formatName);
+
+  return (
+    <div
+      data-testid="camera-ppe-affected-regions-preview"
+      className="rounded-lg border border-slate-200/80 bg-slate-50/70 px-3 py-2.5 space-y-1.5 text-xs text-slate-700"
+    >
+      <p className="text-[11px] font-semibold text-slate-800">{t('cameraPpe.impactHeading')}</p>
+      <p className="break-words [overflow-wrap:anywhere]">
+        {inheritingNames.length > 0
+          ? t('cameraPpe.impactInheriting', {
+              count: inheritingNames.length,
+              names: inheritingNames.join(', '),
+            })
+          : t('cameraPpe.impactNoneInheriting')}
+      </p>
+      {unaffectedNames.length > 0 && (
+        <p className="text-slate-600 break-words [overflow-wrap:anywhere]">
+          {t('cameraPpe.impactUnaffected', {
+            count: unaffectedNames.length,
+            names: unaffectedNames.join(', '),
+          })}
+        </p>
+      )}
+      {draftCameraPolicy && (
+        <div className="space-y-1 border-t border-slate-200/70 pt-1.5">
+          <p className="text-[11px] font-medium text-slate-600">
+            {t('cameraPpe.impactPreviewEffective')}
+          </p>
+          {draftCameraPolicy.mode === 'DISABLED' ? (
+            <div className="space-y-0.5">
+              <p className="font-medium text-rose-800">{t('cameraPpe.effectiveDisabled')}</p>
+              {draftCameraPolicy.reason && (
+                <p className="text-slate-600 break-words [overflow-wrap:anywhere]">
+                  {t('cameraPpe.effectiveReason', { reason: draftCameraPolicy.reason })}
+                </p>
+              )}
+            </div>
+          ) : (
+            <PpeItemBadges items={draftCameraPolicy.requiredPpe} />
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
