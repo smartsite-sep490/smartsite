@@ -58,6 +58,10 @@ export type Mf06RecordedAssessment = Readonly<{
 export type Mf06AssessmentStoreResult =
   | { state: 'RECORDED' | 'REPLAY'; assessment: Mf06RecordedAssessment }
   | { state: 'STALE' | 'CONFLICT' | 'UNAVAILABLE'; reason: string };
+export interface Mf06NotificationDenial {
+  assessment: Mf06RecordedAssessment;
+  candidateSubtype: 'ZONE_ENTRY_PROHIBITED' | 'ZONE_ENTRY_UNAUTHORIZED';
+}
 
 type Row = Record<string, unknown>;
 const uuidPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -254,7 +258,13 @@ function errorCode(error: unknown): string | null {
 
 /** Private persistence, not an evaluator or public trust boundary. No provider/worker registration. */
 export class Mf06AssessmentStore {
-  constructor(private readonly db: DataSource) {}
+  constructor(
+    private readonly db: DataSource,
+    private readonly projectDenial?: (
+      manager: EntityManager,
+      assessment: Mf06RecordedAssessment,
+    ) => Promise<void>,
+  ) {}
 
   private schema(): string {
     const schema = this.db.driver?.schema;
@@ -295,6 +305,49 @@ export class Mf06AssessmentStore {
    * the caller owns rollback and retries of the entire transaction, not just append.
    * This persistence primitive does not establish identity or evaluate authority.
    */
+  async readNotificationDenialInTransaction(
+    manager: EntityManager,
+    siteId: string,
+    assessmentId: string,
+  ): Promise<Mf06NotificationDenial | null> {
+    const assessment = await this.readRecordedInTransaction(manager, siteId, assessmentId);
+    if (
+      !assessment ||
+      assessment.outcome !== 'DENIED' ||
+      assessment.provenance !== 'TRUSTED_SERVICE' ||
+      assessment.purpose !== 'INITIAL_OBSERVATION_ASSESSMENT' ||
+      !assessment.authorityArtifact
+    )
+      return null;
+    const zones = assessment.authorityArtifact.payload.sources
+      .filter((source) => source.sourceKind === 'ZONE_POLICY')
+      .flatMap((source) => source.rows)
+      .filter(
+        (row) =>
+          typeof row.id === 'string' &&
+          row.id.toLowerCase() === assessment.zoneId &&
+          typeof row.site_id === 'string' &&
+          row.site_id.toLowerCase() === assessment.siteId,
+      );
+    if (zones.length !== 1) return null;
+    if (
+      assessment.reasonCode === 'POLICY_PROHIBITED' &&
+      zones[0]!.restriction_policy === 'PROHIBITED_FOR_ALL'
+    )
+      return Object.freeze({ assessment, candidateSubtype: 'ZONE_ENTRY_PROHIBITED' });
+    if (
+      assessment.reasonCode === 'UNAUTHORIZED' &&
+      zones[0]!.restriction_policy === 'AUTHORIZATION_REQUIRED' &&
+      assessment.workerId &&
+      assessment.profileRevision &&
+      assessment.frameSha256 &&
+      assessment.cropSha256 &&
+      !assessment.c02AcceptanceId
+    )
+      return Object.freeze({ assessment, candidateSubtype: 'ZONE_ENTRY_UNAUTHORIZED' });
+    return null;
+  }
+
   async finalizeInTransaction(
     manager: EntityManager,
     value: Mf06AssessmentAppendInput,
@@ -312,7 +365,15 @@ export class Mf06AssessmentStore {
     }[];
     if (settings[0]?.transaction_isolation !== 'serializable')
       return { state: 'UNAVAILABLE', reason: 'SERIALIZABLE_TRANSACTION_REQUIRED' };
-    return this.append(manager, input, commandHash(input));
+    const result = await this.append(manager, input, commandHash(input));
+    if (
+      (result.state === 'RECORDED' || result.state === 'REPLAY') &&
+      result.assessment.outcome === 'DENIED' &&
+      result.assessment.provenance === 'TRUSTED_SERVICE' &&
+      result.assessment.purpose === 'INITIAL_OBSERVATION_ASSESSMENT'
+    )
+      await this.projectDenial?.(manager, result.assessment);
+    return result;
   }
 
   async finalize(value: Mf06AssessmentAppendInput): Promise<Mf06AssessmentStoreResult> {
