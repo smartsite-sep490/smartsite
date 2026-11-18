@@ -13,6 +13,7 @@ import { userErrorMessage } from '../../../i18n/messages';
 import { DocumentMediaPicker } from './DocumentMediaPicker';
 import { SmartDatePicker } from '../../ui';
 import { DocumentIdentityNotice } from './DocumentIdentityNotice';
+import { WorkerDocumentAnalysisNotice } from './WorkerDocumentAnalysisNotice';
 import {
   WorkerCertificateSubmission,
   WorkerDocumentDateNotice,
@@ -125,7 +126,11 @@ export function WorkerDocumentsPanel(p: Props) {
     queryFn: () => p.client.workerCompliance(p.token, p.siteId, p.workerId),
   });
 
-  const [preview, setPreview] = useState<{ url: string; type: string } | null>(null);
+  const [preview, setPreview] = useState<{
+    url: string;
+    type: string;
+    documentId?: string;
+  } | null>(null);
 
   const allSections = ['IDENTITY', ...documentKinds];
   const [sectionChoices, setSectionChoices] = useState<Record<string, boolean>>({});
@@ -199,6 +204,10 @@ export function WorkerDocumentsPanel(p: Props) {
   }
 
   const data = profile.data;
+  const previewDocument =
+    p.canReview && preview?.documentId
+      ? data.documents.find((doc) => doc.id === preview.documentId)
+      : undefined;
 
   // Check identity mismatch on front or back
   const identityMismatch = data.identityImages.some(
@@ -566,7 +575,11 @@ export function WorkerDocumentsPanel(p: Props) {
                           p.workerId,
                           doc.id,
                         );
-                        setPreview({ url: URL.createObjectURL(blob), type: blob.type });
+                        setPreview({
+                          url: URL.createObjectURL(blob),
+                          type: blob.type,
+                          documentId: doc.id,
+                        });
                       })
                     }
                   >
@@ -574,6 +587,14 @@ export function WorkerDocumentsPanel(p: Props) {
                     <span>{tr('documents.view')}</span>
                   </button>
                 </div>
+
+                {p.canReview && doc.aiAnalysis && (
+                  <WorkerDocumentAnalysisNotice
+                    analysis={doc.aiAnalysis}
+                    reference={data.nationalId}
+                    kind={doc.kind}
+                  />
+                )}
 
                 {/* Pending controls: Expiry editor, OCR hint, Safety review */}
                 {doc.status === 'PENDING' && (
@@ -825,7 +846,12 @@ export function WorkerDocumentsPanel(p: Props) {
           aria-label={tr('documents.view')}
           className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-xs animate-in fade-in duration-150"
         >
-          <div className="relative w-full max-w-4xl max-h-[90vh] flex flex-col rounded-2xl bg-white shadow-2xl border border-slate-200 overflow-hidden">
+          <div
+            className={
+              'relative w-full max-h-[90vh] flex flex-col rounded-2xl bg-white shadow-2xl border border-slate-200 overflow-hidden ' +
+              (previewDocument?.aiAnalysis ? 'max-w-5xl' : 'max-w-4xl')
+            }
+          >
             {/* Modal Header */}
             <div className="flex items-center justify-between px-5 py-4 border-b border-slate-100 bg-slate-50/80">
               <div className="flex items-center gap-2">
@@ -845,19 +871,30 @@ export function WorkerDocumentsPanel(p: Props) {
             </div>
 
             {/* Modal Content */}
-            <div className="p-4 overflow-auto flex items-center justify-center bg-slate-100/50 min-h-[300px]">
-              {preview.type === 'application/pdf' ? (
-                <iframe
-                  src={preview.url}
-                  title={tr('documents.view')}
-                  className="h-[600px] w-full rounded-xl border border-slate-200 bg-white"
-                />
-              ) : (
-                <img
-                  src={preview.url}
-                  alt={tr('documents.view')}
-                  className="max-h-[700px] max-w-full rounded-xl border border-slate-200 object-contain bg-white shadow-xs"
-                />
+            <div className="overflow-auto bg-slate-100/50 p-4 flex flex-col gap-4 lg:flex-row">
+              <div className="flex flex-1 min-w-0 items-center justify-center min-h-[300px]">
+                {preview.type === 'application/pdf' ? (
+                  <iframe
+                    src={preview.url}
+                    title={tr('documents.view')}
+                    className="h-[600px] w-full rounded-xl border border-slate-200 bg-white"
+                  />
+                ) : (
+                  <img
+                    src={preview.url}
+                    alt={tr('documents.view')}
+                    className="max-h-[700px] max-w-full rounded-xl border border-slate-200 object-contain bg-white shadow-xs"
+                  />
+                )}
+              </div>
+              {previewDocument?.aiAnalysis && (
+                <aside className="lg:w-72 lg:shrink-0">
+                  <WorkerDocumentAnalysisNotice
+                    analysis={previewDocument.aiAnalysis}
+                    reference={data.nationalId}
+                    kind={previewDocument.kind}
+                  />
+                </aside>
               )}
             </div>
           </div>

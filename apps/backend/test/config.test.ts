@@ -2,6 +2,16 @@ import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { resolveBootstrapEnvironment } from '../src/config/bootstrap-environment.js';
 import { validateEnvironment } from '../src/config/environment.js';
+
+test('accepts an optional server OpenAI key and rejects whitespace inside it', () => {
+  assert.partialDeepStrictEqual(validateEnvironment({ OPENAI_API_KEY: '  sk-synthetic-key  ' }), {
+    OPENAI_API_KEY: 'sk-synthetic-key',
+  });
+  assert.throws(
+    () => validateEnvironment({ OPENAI_API_KEY: 'sk-synthetic key' }),
+    /OPENAI_API_KEY/,
+  );
+});
 import { runtimeEnvironmentOptions } from '../src/config/runtime-environment.js';
 import path from 'node:path';
 import fs from 'node:fs';

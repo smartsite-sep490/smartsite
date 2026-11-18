@@ -191,6 +191,13 @@ export const backendEnvironmentSchema = z
       .regex(/^[^\p{Cc}]+$/u)
       .optional(),
     WORKER_DOCUMENT_NOTICE_DAYS: integer(30, 1, 365),
+    OPENAI_API_KEY: z
+      .string()
+      .trim()
+      .min(1)
+      .max(512)
+      .regex(/^[!-~]+$/, 'must contain printable ASCII without spaces')
+      .optional(),
     ...databaseFields,
     PORT: integer(3000, 1, 65535),
     RESEND_API_KEY: z

@@ -2717,7 +2717,8 @@ export class SmartSiteManagementClient {
       `/sites/${pathId(siteId)}/workers/${pathId(workerId)}/documents/${pathId(kind)}`,
       token,
       form,
-      { timeoutMs: 60_000 },
+      // Allow time for the 15-second AI call and for saving its advisory result.
+      { timeoutMs: 80_000 },
     );
   }
   updateWorkerDocumentExpiry(

@@ -53,6 +53,7 @@ Preflight accepts an absent date so OCR can suggest one. Final Worker upload req
 declared date; unreadable OCR requires manual input and rechecking. Representative dates
 remain optional for compatibility. Selection and OCR never upload a pending certificate;
 both apps wait for an explicit Send to Safety action. Final upload repeats validation and OCR independently.
+
 `dateCheck` is also an additive field on document responses, computed from proposals and OCR:
 `MATCH`, `MISMATCH`, `UNAVAILABLE` or `NO_REFERENCE`, with compared field and both dates.
 Health compares the examination/issue date; Safety/Insurance compare expiry.
@@ -60,6 +61,20 @@ Only valid dates from a READ OCR result can match. Edited dates require a new pr
 before UI submission. A mismatch or unreadable OCR shows a warning and may still be sent
 for Safety review; matching never approves or extends validity. Pending review screens
 show the latest comparison. No database migration is required.
+
+**Optional AI analysis at submission**
+
+Apply migration `WorkerDocumentAiAnalysis1795132800001` before deploying this backend version.
+Set `OPENAI_API_KEY` on the backend to enable analysis. On Cloud Run, inject it from Secret
+Manager. When enabled, each new safety card, health certificate, or personal insurance submission
+sends the original image or PDF to OpenAI after the pending submission commits. The Responses
+request uses `gpt-4.1-mini`, `store: false`, and a single 15-second deadline.
+
+The worker detail response can include `aiAnalysis` for the assigned Site Safety Officer. An AI
+result of `detectedKind: "PERSONAL_INSURANCE"` and `kindMismatch: true` flags an upload in the
+health certificate slot. Safety can inspect the result and the original together. Null fields
+indicate an uncertain read. If analysis is unavailable, Safety can review the pending submission
+from the original.
 
 Replacement uploads retain the currently approved document until a replacement is
 approved. A rejected/pending replacement never extends the previous expiry. Approval

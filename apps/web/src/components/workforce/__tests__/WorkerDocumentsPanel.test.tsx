@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
-import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import {
@@ -162,6 +162,46 @@ function mount(canReview: boolean, canUpload = false, canSubmitDocuments = false
     </QueryClientProvider>,
   );
 }
+it.each([
+  ['SAFETY_CARD', false, 'AI nhận diện đúng loại giấy đã chọn'],
+  ['PERSONAL_INSURANCE', true, 'Có thể nộp nhầm loại giấy'],
+  [null, false, 'Không đủ thông tin để kết luận'],
+] as const)(
+  'shows advisory AI results for detected kind %s',
+  async (detectedKind, kindMismatch, message) => {
+    const profile = await client.workerCompliance('token', 'site', 'worker');
+    const analyzed = {
+      ...doc,
+      aiAnalysis: {
+        status: 'COMPLETE',
+        detectedKind,
+        kindMismatch,
+        issuedOn: null,
+        expiresOn: kindMismatch ? '2029-10-17' : null,
+        nationalId: kindMismatch ? '000000000099' : null,
+        identityCheck: kindMismatch ? 'MISMATCH' : 'NOT_DETECTED',
+        dateCheck: {
+          field: 'EXPIRES_ON',
+          status: kindMismatch ? 'MISMATCH' : 'UNAVAILABLE',
+          submittedDate: '2028-10-17',
+          detectedDate: kindMismatch ? '2029-10-17' : null,
+        },
+      } as const,
+    };
+    vi.mocked(client.workerCompliance).mockResolvedValue({ ...profile, documents: [analyzed] });
+    mount(true);
+    expect(await screen.findByText(message)).toBeTruthy();
+    await userEvent.setup().click(screen.getByRole('button', { name: tr('documents.view') }));
+    const original = within(await screen.findByRole('dialog'));
+    expect(original.getByRole('img', { name: tr('documents.view') })).toBeTruthy();
+    expect(original.getByText(message)).toBeTruthy();
+    if (kindMismatch) {
+      expect(original.getByText('Ngày AI đọc được khác ngày khai báo.')).toBeTruthy();
+      expect(original.getByText('CCCD AI đọc được khác CCCD trong hồ sơ.')).toBeTruthy();
+    }
+  },
+);
+
 async function chooseCalendarDate(label: string, date: string) {
   const [year, month, day] = date.split('-').map(Number);
   const user = userEvent.setup();

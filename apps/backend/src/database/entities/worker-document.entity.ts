@@ -10,6 +10,7 @@ import {
 } from 'typeorm';
 import type {
   DocumentOcrResult,
+  WorkerDocumentAnalysisResult,
   WorkerDocumentKind,
   WorkerDocumentStatus,
 } from '@smartsite/contracts';
@@ -83,6 +84,8 @@ export class WorkerDocumentEntity {
   @Column({ name: 'original_name', type: 'varchar', length: 255 }) originalName!: string;
   @Column({ type: 'jsonb', select: false }) file!: StoredObject;
   @Column({ type: 'jsonb' }) ocr!: DocumentOcrResult;
+  @Column({ name: 'ai_analysis', type: 'jsonb', nullable: true, select: false })
+  aiAnalysis!: WorkerDocumentAnalysisResult | null;
   @Column({ name: 'issued_on', type: 'date', nullable: true }) issuedOn!: string | null;
   @Column({ name: 'expires_on', type: 'date', nullable: true }) expiresOn!: string | null;
   @Column({ name: 'submitted_issued_on', type: 'date', nullable: true }) submittedIssuedOn!:

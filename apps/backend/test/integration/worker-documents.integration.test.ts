@@ -32,6 +32,7 @@ import { WorkerDocumentsService } from '../../src/modules/workforce/documents/wo
 import { DocumentOcrService } from '../../src/modules/workforce/documents/document-ocr.service.js';
 import { LocalDocumentOcr } from '../../src/modules/workforce/documents/local-document-ocr.js';
 import { DocumentNotificationsService } from '../../src/modules/workforce/documents/document-notifications.service.js';
+import { DocumentAnalysisService } from '../../src/modules/workforce/documents/document-analysis.service.js';
 import {
   complianceDate,
   DOCUMENT_KINDS,
@@ -63,7 +64,8 @@ test('Worker document onboarding, scoped review, expiry and approval-only renewa
     mustChangePassword: false,
     roleAssignments: [{ role: UserRole.SAFETY_OFFICER, siteId }],
   };
-  const config = createTestConfig({ STORAGE_LOCAL_ROOT: root });
+  const settings = { STORAGE_LOCAL_ROOT: root, OPENAI_API_KEY: 'synthetic-openai-key' };
+  const config = createTestConfig(settings);
   const operations = new ContractorOperationsService(source);
   const notifications = new DocumentNotificationsService(source, config);
   const ocr = new DocumentOcrService(new LocalDocumentOcr(config));
@@ -78,6 +80,7 @@ test('Worker document onboarding, scoped review, expiry and approval-only renewa
     new StorageService(config),
     ocr,
     notifications,
+    new DocumentAnalysisService(config),
   );
   const accounts = new ContractorWorkerAccountsService(
     source,
@@ -90,6 +93,34 @@ test('Worker document onboarding, scoped review, expiry and approval-only renewa
   const future = complianceDate(new Date(Date.now() + 10 * 86400000));
   const later = complianceDate(new Date(Date.now() + 365 * 86400000));
   const pdf = Buffer.from('%PDF-1.7\nSynthetic document only\n%%EOF');
+  const pendingCounts: number[] = [];
+  const openAi = t.mock.method(globalThis, 'fetch', async () => {
+    pendingCounts.push(
+      await source.getRepository(WorkerDocumentEntity).countBy({ workerId, status: 'PENDING' }),
+    );
+    const fields = [
+      {
+        detectedKind: 'SAFETY_CARD',
+        issuedOn: today,
+        expiresOn: future,
+        nationalId: '000000000001',
+      },
+      {
+        detectedKind: 'PERSONAL_INSURANCE',
+        issuedOn: today,
+        expiresOn: future,
+        nationalId: '000000000099',
+      },
+      { detectedKind: null, issuedOn: null, expiresOn: null, nationalId: null },
+    ][pendingCounts.length - 1];
+    if (!fields) throw new DOMException('Synthetic timeout', 'TimeoutError');
+    return Response.json({
+      status: 'completed',
+      output: [
+        { type: 'message', content: [{ type: 'output_text', text: JSON.stringify(fields) }] },
+      ],
+    });
+  });
   const file = {
     buffer: pdf,
     size: pdf.length,
@@ -360,20 +391,95 @@ test('Worker document onboarding, scoped review, expiry and approval-only renewa
         ocr.read = originalRead;
       },
     );
+    assert.equal(openAi.mock.callCount(), 0);
     const uploaded: WorkerDocumentResponse[] = [];
-    for (const kind of DOCUMENT_KINDS)
-      uploaded.push(
-        await service.upload(
-          rep,
-          siteId,
-          workerId,
-          kind,
-          file,
-          kind === 'HEALTH_CERTIFICATE'
-            ? { submittedIssuedOn: past }
-            : { submittedExpiresOn: future },
-        ),
-      );
+    for (const kind of DOCUMENT_KINDS) {
+      const dates =
+        kind === 'HEALTH_CERTIFICATE'
+          ? { submittedIssuedOn: past }
+          : { submittedExpiresOn: future };
+      const submission = service.upload(rep, siteId, workerId, kind, file, dates);
+      const replay =
+        kind === 'SAFETY_CARD'
+          ? service.upload(workerActor, siteId, workerId, kind, file, dates)
+          : undefined;
+      const [document, duplicate] = await Promise.all([submission, replay]);
+      if (duplicate) assert.equal(duplicate.id, document.id);
+      uploaded.push(document);
+    }
+    await t.test(
+      'persists analysis after commit and exposes comparisons only to Site Safety',
+      async () => {
+        assert.deepEqual(pendingCounts, [1, 2, 3]);
+        const review = await service.get(safety, siteId, workerId);
+        const [card, health, insurance] = DOCUMENT_KINDS.map(
+          (kind) => review.documents.find((doc) => doc.kind === kind)?.aiAnalysis,
+        );
+        assert.deepEqual(card, {
+          status: 'COMPLETE',
+          detectedKind: 'SAFETY_CARD',
+          kindMismatch: false,
+          issuedOn: today,
+          expiresOn: future,
+          nationalId: '000000000001',
+          identityCheck: 'MATCH',
+          dateCheck: {
+            status: 'MATCH',
+            field: 'EXPIRES_ON',
+            submittedDate: future,
+            detectedDate: future,
+          },
+        });
+        assert.deepEqual(health, {
+          status: 'COMPLETE',
+          detectedKind: 'PERSONAL_INSURANCE',
+          kindMismatch: true,
+          issuedOn: today,
+          expiresOn: future,
+          nationalId: '000000000099',
+          identityCheck: 'MISMATCH',
+          dateCheck: {
+            status: 'MISMATCH',
+            field: 'ISSUED_ON',
+            submittedDate: past,
+            detectedDate: today,
+          },
+        });
+        assert.deepEqual(insurance, {
+          status: 'COMPLETE',
+          detectedKind: null,
+          kindMismatch: false,
+          issuedOn: null,
+          expiresOn: null,
+          nationalId: null,
+          identityCheck: 'NOT_DETECTED',
+          dateCheck: {
+            status: 'UNAVAILABLE',
+            field: 'EXPIRES_ON',
+            submittedDate: future,
+            detectedDate: null,
+          },
+        });
+        for (const { documents } of [
+          { documents: uploaded },
+          await service.get(rep, siteId, workerId),
+          await service.get(workerActor, siteId, workerId),
+          ...(await service.list(safety, siteId, 0, 20)).items,
+        ]) {
+          assert.equal(
+            documents.some((doc) => Object.hasOwn(doc, 'aiAnalysis')),
+            false,
+          );
+        }
+        await assert.rejects(
+          service.get(
+            { ...safety, roleAssignments: [{ role: UserRole.SAFETY_OFFICER, siteId: otherSite }] },
+            siteId,
+            workerId,
+          ),
+        );
+      },
+    );
     await t.test(
       'OCR unavailable preserves files and pending review; replay does not create duplicates',
       async () => {
@@ -403,6 +509,7 @@ test('Worker document onboarding, scoped review, expiry and approval-only renewa
           submittedExpiresOn: future,
         });
         assert.equal(ownRetry.id, uploaded[0]!.id);
+        assert.equal(openAi.mock.callCount(), 3);
         await assert.rejects(service.upload(safety, siteId, workerId, 'SAFETY_CARD', file));
         await assert.rejects(
           service.review(workerActor, siteId, workerId, uploaded[0]!.id, {
@@ -449,6 +556,11 @@ test('Worker document onboarding, scoped review, expiry and approval-only renewa
         );
         const updated = await service.updateSubmittedExpiry(rep, siteId, workerId, doc.id, input);
         assert.equal(updated.version, 2);
+        assert.equal(openAi.mock.callCount(), 3);
+        const analyzed = (await service.get(safety, siteId, workerId)).documents.find(
+          (item) => item.id === doc.id,
+        )?.aiAnalysis;
+        assert.equal(analyzed?.status === 'COMPLETE' && analyzed.dateCheck.status, 'MISMATCH');
         assert.equal(updated.submittedExpiresOn, later);
         assert.equal(updated.expiresOn, null);
         assert.equal(updated.status, 'PENDING');
@@ -543,34 +655,39 @@ test('Worker document onboarding, scoped review, expiry and approval-only renewa
         assert.equal(await workerDocumentsAllowEntry(source.manager, workerId), false);
       },
     );
-    await t.test(
-      'mismatched citizen IDs remain submittable and visible to both Worker and Safety',
-      async () => {
-        const originalRead = ocr.read.bind(ocr);
-        ocr.read = async () => ({
-          status: 'READ',
-          issuedOn: past,
-          expiresOn: future,
-          warnings: [],
-          nationalIds: ['000000000099'],
-        });
-        const bytes = Buffer.from('%PDF-1.7\nSynthetic mismatched citizen ID\n%%EOF');
-        uploaded[0] = await service.upload(rep, siteId, workerId, 'SAFETY_CARD', {
-          ...file,
-          buffer: bytes,
-          size: bytes.length,
-        });
-        assert.equal(uploaded[0]!.status, 'PENDING');
-        for (const actor of [workerActor, safety]) {
-          const document = (await service.get(actor, siteId, workerId)).documents.find(
-            (d) => d.id === uploaded[0]!.id,
-          )!;
-          assert.equal(document.identityCheck?.status, 'MISMATCH');
-          assert.deepEqual(document.identityCheck?.detectedNationalIds, ['000000000099']);
-        }
-        ocr.read = originalRead;
-      },
-    );
+    await t.test('OpenAI timeout preserves the original and advisory OCR warnings', async () => {
+      const originalRead = ocr.read.bind(ocr);
+      ocr.read = async () => ({
+        status: 'READ',
+        issuedOn: past,
+        expiresOn: future,
+        warnings: [],
+        nationalIds: ['000000000099'],
+      });
+      const bytes = Buffer.from('%PDF-1.7\nSynthetic mismatched citizen ID\n%%EOF');
+      uploaded[0] = await service.upload(rep, siteId, workerId, 'SAFETY_CARD', {
+        ...file,
+        buffer: bytes,
+        size: bytes.length,
+      });
+      assert.equal(uploaded[0]!.status, 'PENDING');
+      assert.deepEqual(
+        (await service.file(safety, siteId, workerId, uploaded[0]!.id)).bytes,
+        bytes,
+      );
+      for (const actor of [workerActor, safety]) {
+        const document = (await service.get(actor, siteId, workerId)).documents.find(
+          (d) => d.id === uploaded[0]!.id,
+        )!;
+        assert.equal(document.identityCheck?.status, 'MISMATCH');
+        assert.deepEqual(document.identityCheck?.detectedNationalIds, ['000000000099']);
+        assert.deepEqual(
+          document.aiAnalysis,
+          actor === safety ? { status: 'UNAVAILABLE' } : undefined,
+        );
+      }
+      ocr.read = originalRead;
+    });
     await t.test(
       'all three valid Safety approvals activate entry even with advisory ID mismatches',
       async () => {

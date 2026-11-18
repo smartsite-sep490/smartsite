@@ -81,6 +81,7 @@ export function createHttpLoggerOptions(config: ConfigService<BackendEnvironment
     config.get('R2_ACCESS_KEY_ID', { infer: true }),
     config.get('R2_SECRET_ACCESS_KEY', { infer: true }),
     config.get('RESEND_API_KEY', { infer: true }),
+    config.get('OPENAI_API_KEY', { infer: true }),
   ].filter((value): value is string => !!value);
   const redactText = (text: string): string =>
     secrets
@@ -107,6 +108,7 @@ export function createHttpLoggerOptions(config: ConfigService<BackendEnvironment
         'rawEvent',
         'evidence',
         'DATABASE_URL',
+        'OPENAI_API_KEY',
         'req.body',
         'req.query',
         'req.raw',

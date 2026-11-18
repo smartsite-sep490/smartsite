@@ -1,6 +1,44 @@
 import { afterEach, expect, it, vi } from 'vitest';
 import { SmartSiteManagementClient } from '../src/index';
 afterEach(() => vi.unstubAllGlobals());
+it('lets final upload finish when the analysis extends the response beyond the OCR timeout', async () => {
+  vi.useFakeTimers();
+  try {
+    vi.stubGlobal(
+      'fetch',
+      (_url: string, init: RequestInit) =>
+        new Promise<Response>((resolve, reject) => {
+          const timer = setTimeout(
+            () => resolve(Response.json({ id: 'pending-document' })),
+            77_000,
+          );
+          init.signal?.addEventListener(
+            'abort',
+            () => {
+              clearTimeout(timer);
+              reject(init.signal?.reason);
+            },
+            { once: true },
+          );
+        }),
+    );
+    const client = new SmartSiteManagementClient('https://api.example.test');
+    const outcome = client
+      .uploadWorkerDocument(
+        'token',
+        'site',
+        'worker',
+        'SAFETY_CARD',
+        new File(['synthetic'], 'sample.pdf', { type: 'application/pdf' }),
+      )
+      .catch((error: unknown) => error);
+    await vi.advanceTimersByTimeAsync(77_000);
+    expect(await outcome).toEqual({ id: 'pending-document' });
+  } finally {
+    vi.useRealTimers();
+  }
+});
+
 it('preflights certificate dates through authenticated scoped multipart', async () => {
   const fetch = vi.fn<(url: string, init: RequestInit) => Promise<Response>>(async () =>
     Response.json({}),
