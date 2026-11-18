@@ -102,10 +102,12 @@ export interface SafetyFrameInboxPage {
     cameraName: string;
     capturedAt: string;
     unread: boolean;
+    /** PPE findings only; Zone assessments are presented separately in cases[].zoneEntries. */
     findingCount: number;
     cases: Array<{
       recipientId: string;
       episodeId: string;
+      /** PPE findings only, unlike the all-finding count in an episode detail. */
       findingCount: number;
       unread: boolean;
       contentRevision: number;

@@ -89,6 +89,19 @@ export async function proveInitialDenialProjection(
     'SELECT count(*)::int AS count FROM user_notification WHERE site_id=$1',
     [scope.siteId],
   );
+  const headers = { authorization: 'Bearer ' + token };
+  const inboxPath = api + '/me/safety-episode-inbox/frames?siteId=' + scope.siteId;
+  const beforeInbox = await fetch(inboxPath, { headers });
+  assert.equal(beforeInbox.status, 200);
+  const beforeFrames = await beforeInbox.json();
+  assert.equal(beforeFrames.total, 1);
+  assert.equal(beforeFrames.items[0].cases.length, 3);
+  const siblingCounts = new Map<string, number>(
+    beforeFrames.items[0].cases.map((item: { episodeId: string; findingCount: number }) => [
+      item.episodeId,
+      item.findingCount,
+    ]),
+  );
   // Prove failure after projection rolls back assessment, job and episode writes together.
   await assert.rejects(
     db.transaction('SERIALIZABLE', async (manager) => {
@@ -121,6 +134,34 @@ export async function proveInitialDenialProjection(
   );
   assert.equal(alerts.length, 1);
   const alert = alerts[0]!;
+  // One frame with three affected people stays one inbox card. Only the selected
+  // person's case gains a Zone finding; the frame counter still counts PPE only.
+  const afterInbox = await fetch(inboxPath, { headers });
+  assert.equal(afterInbox.status, 200);
+  const afterFrames = await afterInbox.json();
+  assert.equal(afterFrames.total, 1);
+  assert.equal(afterFrames.items[0].cases.length, 3);
+  assert.equal(afterFrames.items[0].findingCount, beforeFrames.items[0].findingCount);
+  for (const item of afterFrames.items[0].cases) {
+    assert.equal(item.findingCount, siblingCounts.get(item.episodeId));
+    if (item.episodeId === alert.episode_id) {
+      assert.equal(item.source.personObservationIndex, context.subject!.personObservationIndex);
+      assert.equal(item.zoneEntries.length, 1);
+      assert.equal(item.zoneEntries[0].status, 'DENIED');
+      assert.equal(item.zoneEntries[0].reasonCode, 'POLICY_PROHIBITED');
+    } else assert.deepEqual(item.zoneEntries, []);
+  }
+  const detailResponse = await fetch(
+    api + '/sites/' + scope.siteId + '/safety-episodes/' + alert.episode_id + '/tracked',
+    { headers },
+  );
+  assert.equal(detailResponse.status, 200);
+  const detail = await detailResponse.json();
+  assert.equal(detail.findings.length, siblingCounts.get(alert.episode_id)! + 1);
+  assert.equal(
+    detail.findings.filter((item: { alertId: string }) => item.alertId === alert.id).length,
+    1,
+  );
   const mappings = await db.query(
     'SELECT event_id,person_observation_index FROM alert_detection_mapping WHERE alert_id=$1',
     [alert.id],
@@ -148,7 +189,6 @@ export async function proveInitialDenialProjection(
     '/events/' +
     context.request.eventId +
     '/frame?evidenceIndex=0&personObservationIndex=';
-  const headers = { authorization: 'Bearer ' + token };
   const image = await fetch(path + context.subject!.personObservationIndex, { headers });
   assert.equal(image.status, 200, await image.clone().text());
   assert.equal(image.headers.get('x-smartsite-frame-sha256'), frameSha256);
