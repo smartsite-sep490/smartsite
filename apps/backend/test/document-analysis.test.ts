@@ -62,6 +62,20 @@ test('omits optional analysis without a server key', async (t) => {
   assert.equal(request.mock.callCount(), 0);
 });
 
+test('sends the configured model ID in the Responses request', async (t) => {
+  const request = t.mock.method(globalThis, 'fetch', async () =>
+    completion({ type: 'output_text', text: JSON.stringify(fields) }),
+  );
+  const configured = new DocumentAnalysisService(
+    createTestConfig({ OPENAI_API_KEY: key, WORKER_DOCUMENT_OPENAI_MODEL: 'gpt-4.1' }),
+  );
+
+  assert.deepEqual(await configured.analyze(bytes, mediaType), { status: 'COMPLETE', ...fields });
+  assert.equal(request.mock.callCount(), 1);
+  const [, init] = request.mock.calls[0]!.arguments as Parameters<typeof fetch>;
+  assert.equal(JSON.parse(String(init?.body)).model, 'gpt-4.1');
+});
+
 test('returns unavailable on timeout after one attempt with a 15-second deadline', async (t) => {
   const expired = AbortSignal.abort(new DOMException('Synthetic timeout', 'TimeoutError'));
   const deadline = t.mock.method(AbortSignal, 'timeout', () => expired);

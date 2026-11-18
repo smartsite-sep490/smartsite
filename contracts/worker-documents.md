@@ -68,7 +68,13 @@ Apply migration `WorkerDocumentAiAnalysis1795132800001` before deploying this ba
 Set `OPENAI_API_KEY` on the backend to enable analysis. On Cloud Run, inject it from Secret
 Manager. When enabled, each new safety card, health certificate, or personal insurance submission
 sends the original image or PDF to OpenAI after the pending submission commits. The Responses
-request uses `gpt-4.1-mini`, `store: false`, and a single 15-second deadline.
+request uses `store: false` and a single 15-second deadline.
+
+Set the backend environment variable `WORKER_DOCUMENT_OPENAI_MODEL` to override the default
+`gpt-4.1-mini`. On Cloud Run, set it on the service revision. Choose a model that supports
+image and PDF inputs and Structured Outputs with the request's JSON schema. Verify that
+the model can return the result within 15 seconds and the 256-token output budget, which
+also includes reasoning tokens for reasoning models.
 
 The worker detail response can include `aiAnalysis` for the assigned Site Safety Officer. An AI
 result of `detectedKind: "PERSONAL_INSURANCE"` and `kindMismatch: true` flags an upload in the

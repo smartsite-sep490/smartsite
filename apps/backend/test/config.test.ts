@@ -2,6 +2,9 @@ import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { resolveBootstrapEnvironment } from '../src/config/bootstrap-environment.js';
 import { validateEnvironment } from '../src/config/environment.js';
+import { runtimeEnvironmentOptions } from '../src/config/runtime-environment.js';
+import path from 'node:path';
+import fs from 'node:fs';
 
 test('accepts an optional server OpenAI key and rejects whitespace inside it', () => {
   assert.partialDeepStrictEqual(validateEnvironment({ OPENAI_API_KEY: '  sk-synthetic-key  ' }), {
@@ -12,9 +15,22 @@ test('accepts an optional server OpenAI key and rejects whitespace inside it', (
     /OPENAI_API_KEY/,
   );
 });
-import { runtimeEnvironmentOptions } from '../src/config/runtime-environment.js';
-import path from 'node:path';
-import fs from 'node:fs';
+
+test('defaults the worker document OpenAI model and validates an override', () => {
+  assert.partialDeepStrictEqual(validateEnvironment({}), {
+    WORKER_DOCUMENT_OPENAI_MODEL: 'gpt-4.1-mini',
+  });
+  assert.partialDeepStrictEqual(
+    validateEnvironment({ WORKER_DOCUMENT_OPENAI_MODEL: '  gpt-4.1  ' }),
+    { WORKER_DOCUMENT_OPENAI_MODEL: 'gpt-4.1' },
+  );
+  for (const value of ['', 'gpt 4.1']) {
+    assert.throws(
+      () => validateEnvironment({ WORKER_DOCUMENT_OPENAI_MODEL: value }),
+      /WORKER_DOCUMENT_OPENAI_MODEL/,
+    );
+  }
+});
 
 test('identification routes stay off unless their explicit isolated schema/profile is selected', () => {
   assert.equal(validateEnvironment({}).SAFETY_IDENTIFICATION_ENABLED, false);

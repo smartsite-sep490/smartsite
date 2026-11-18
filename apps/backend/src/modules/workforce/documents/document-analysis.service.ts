@@ -69,7 +69,7 @@ export class DocumentAnalysisService {
         redirect: 'error',
         signal,
         body: JSON.stringify({
-          model: 'gpt-4.1-mini',
+          model: this.config.get('WORKER_DOCUMENT_OPENAI_MODEL', { infer: true }),
           store: false,
           max_output_tokens: 256,
           instructions,

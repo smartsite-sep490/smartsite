@@ -191,6 +191,13 @@ export const backendEnvironmentSchema = z
       .regex(/^[^\p{Cc}]+$/u)
       .optional(),
     WORKER_DOCUMENT_NOTICE_DAYS: integer(30, 1, 365),
+    WORKER_DOCUMENT_OPENAI_MODEL: z
+      .string()
+      .trim()
+      .min(1)
+      .max(256)
+      .regex(/^[!-~]+$/, 'must contain printable ASCII without spaces')
+      .default('gpt-4.1-mini'),
     OPENAI_API_KEY: z
       .string()
       .trim()
