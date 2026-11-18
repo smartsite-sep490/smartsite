@@ -1,3 +1,4 @@
+import { AutomaticScheduleVersion1795132800000 } from './migrations/1795132800000-AutomaticScheduleVersion.js';
 import { ZoneSoftDeletion1794355200000 } from './migrations/1794355200000-ZoneSoftDeletion.js';
 import { SafetyEventRoutes1794873600000 } from './migrations/1794873600000-SafetyEventRoutes.js';
 import { SafetyEpisodes1794355200000 } from './migrations/1794355200000-SafetyEpisodes.js';
@@ -97,6 +98,7 @@ export function buildTypeOrmOptions(config: DatabaseConnectionConfig): DataSourc
     connectTimeoutMS: timeoutMs,
     entities: [...ENTITIES],
     migrations: [
+      AutomaticScheduleVersion1795132800000,
       LeaveNotice1795046400000,
       ZonePolicyRevisions1794441600000,
       CameraConfigurationBundles1794528000000,

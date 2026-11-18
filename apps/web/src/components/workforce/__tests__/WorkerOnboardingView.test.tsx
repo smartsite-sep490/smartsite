@@ -174,13 +174,16 @@ async function fillDocuments(user: ReturnType<typeof userEvent.setup>) {
 it('Representative creates a Worker login at its Site/Contractor without Admin account controls', async () => {
   mount();
   const user = await fill();
-  for (const kind of ['SAFETY_CARD', 'HEALTH_CERTIFICATE', 'PERSONAL_INSURANCE'])
-    await user.type(
+  for (const kind of ['SAFETY_CARD', 'HEALTH_CERTIFICATE', 'PERSONAL_INSURANCE']) {
+    await user.click(
       screen.getByLabelText(
         `${tr(`documents.${kind}`)} - ${tr(kind === 'HEALTH_CERTIFICATE' ? 'documents.submittedIssuedOn' : 'documents.submittedExpiresOn')}`,
       ),
-      '2027-10-18',
     );
+    await user.selectOptions(screen.getByRole('combobox', { name: /Year|Năm/i }), '2027');
+    await user.selectOptions(screen.getByRole('combobox', { name: /Month|Tháng/i }), '9');
+    await user.click(screen.getByRole('button', { name: /18.*2027/ }));
+  }
   expect(screen.queryByRole('button', { name: /Use camera|Chụp bằng camera/ })).toBeNull();
   expect(screen.queryByRole('option', { name: 'other-site' })).toBeNull();
   expect(screen.getByText('Biometrics site-a / account management false')).toBeTruthy();

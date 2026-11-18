@@ -1,7 +1,7 @@
 import { uiLocale } from '../../i18n';
 import { translate as tr } from '../../i18n';
 import { useTranslation } from 'react-i18next';
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import '../../i18n';
 import * as Popover from '@radix-ui/react-popover';
 import { useMutation, useInfiniteQuery, useQueryClient } from '@tanstack/react-query';
@@ -21,6 +21,7 @@ import {
   IconLoader,
   IconRefreshCw,
   IconTrash,
+  IconX,
 } from '../../components/icons';
 import {
   notificationHref,
@@ -56,12 +57,14 @@ export function NotificationBell({
   userId,
   enabled = true,
   assignedWork = false,
+  showApprovalToast = false,
   ppeInboxSiteIds = [],
 }: {
   apiUrl: string;
   userId: string;
   enabled?: boolean;
   assignedWork?: boolean;
+  showApprovalToast?: boolean;
   ppeInboxSiteIds?: readonly string[];
 }) {
   useTranslation();
@@ -77,6 +80,8 @@ export function NotificationBell({
     null,
   );
   const [deletedCount, setDeletedCount] = useState<number | 'single' | null>(null);
+  const [approvalToast, setApprovalToast] = useState<UserNotificationResponse | null>(null);
+  const shownApprovalIds = useRef(new Set<string>());
   const deleteMessage =
     deletedCount === null
       ? ''
@@ -123,6 +128,33 @@ export function NotificationBell({
         ],
       }
     : undefined;
+
+  useEffect(() => {
+    if (!showApprovalToast || !enabled || !userId) return;
+    const approvals = query.data?.pages[0]?.items.filter(
+      (item) =>
+        !item.readAt &&
+        item.event === 'REQUEST_APPLIED' &&
+        'requestType' in item.target &&
+        item.target.requestType === 'SWAP',
+    );
+    if (!approvals?.length) return;
+    let newest: UserNotificationResponse | null = null;
+    for (const item of approvals) {
+      const key = `smartsite:swap-approval:${userId}:${item.id}`;
+      if (shownApprovalIds.current.has(key) || window.sessionStorage.getItem(key)) continue;
+      shownApprovalIds.current.add(key);
+      window.sessionStorage.setItem(key, '1');
+      newest ??= item;
+    }
+    if (newest) setApprovalToast(newest);
+  }, [showApprovalToast, enabled, userId, query.data]);
+
+  useEffect(() => {
+    if (!approvalToast) return;
+    const timeout = window.setTimeout(() => setApprovalToast(null), 5000);
+    return () => window.clearTimeout(timeout);
+  }, [approvalToast]);
 
   useEffect(
     () => () => {
@@ -650,6 +682,40 @@ export function NotificationBell({
           <Popover.Close className="sr-only">{tr('common.close_notifications')}</Popover.Close>
         </Popover.Content>
       </Popover.Portal>
+      {approvalToast && (
+        <div
+          role="status"
+          aria-label={tr('common.shift_swap_approved')}
+          className="fixed top-5 right-5 z-50 pointer-events-auto max-w-sm sm:max-w-md w-[calc(100vw-2.5rem)] animate-in slide-in-from-top-4 fade-in duration-300"
+        >
+          <div className="relative overflow-hidden rounded-2xl bg-[#071A2B]/95 backdrop-blur-xl border border-white/15 p-4 shadow-[0_20px_50px_rgba(0,0,0,0.35),0_0_0_1px_rgba(16,185,129,0.25)] text-white">
+            <div className="flex items-start gap-3.5">
+              <div className="w-9 h-9 rounded-xl bg-emerald-500 text-white flex items-center justify-center shrink-0 shadow-sm">
+                <IconCheck className="w-5 h-5 text-white" />
+              </div>
+              <div className="flex-1 min-w-0 space-y-1">
+                <div className="flex items-center justify-between gap-2">
+                  <span className="text-[10px] font-bold uppercase tracking-[0.16em] text-emerald-400">
+                    {tr('common.shift_swap_approved')}
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() => setApprovalToast(null)}
+                    className="text-slate-400 hover:text-white rounded-lg p-1 transition-colors cursor-pointer"
+                    aria-label={tr('common.dismiss_notification')}
+                  >
+                    <IconX className="w-3.5 h-3.5" />
+                  </button>
+                </div>
+                <p className="text-xs font-semibold text-slate-100 leading-snug">
+                  {formatNotificationDisplayMessage(approvalToast)}
+                </p>
+              </div>
+            </div>
+            <div className="absolute bottom-0 left-0 right-0 h-[2px] bg-emerald-400" />
+          </div>
+        </div>
+      )}
     </Popover.Root>
   );
 }

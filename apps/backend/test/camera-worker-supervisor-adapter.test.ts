@@ -9,7 +9,7 @@ import {
 } from '../src/scripts/camera-worker-supervisor-adapter.js';
 
 const cameraId = '11111111-1111-4111-8111-111111111111';
-const root = process.platform === 'win32' ? 'D:/Ky9-FPT/SmartSiteData/runs' : tmpdir();
+const root = tmpdir();
 const input = {
   pythonExecutable: path.join(root, 'python.exe'),
   manifestFile: path.join(root, 'reviewed.json'),

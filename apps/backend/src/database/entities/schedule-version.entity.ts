@@ -1,11 +1,24 @@
-import { Check, Column, CreateDateColumn, Entity, ForeignKey, Index, PrimaryColumn, Unique } from 'typeorm';
+import {
+  Check,
+  Column,
+  CreateDateColumn,
+  Entity,
+  ForeignKey,
+  Index,
+  PrimaryColumn,
+  Unique,
+} from 'typeorm';
 import { SiteEntity } from './site.entity.js';
 
 @Entity({ name: 'schedule_version' })
 @Unique('uq_schedule_version_site_version', ['siteId', 'version'])
 @Index('idx_schedule_version_site_effective', ['siteId', 'effectiveFrom', 'version'])
+@Index('uq_schedule_version_automatic_site', ['siteId'], { unique: true, where: 'is_automatic' })
 @Check('chk_schedule_version_positive', 'version >= 1')
-@Check('chk_schedule_version_effective_interval', 'effective_until IS NULL OR effective_until > effective_from')
+@Check(
+  'chk_schedule_version_effective_interval',
+  'effective_until IS NULL OR effective_until > effective_from',
+)
 export class ScheduleVersionEntity {
   @PrimaryColumn({ type: 'uuid', primaryKeyConstraintName: 'pk_schedule_version_id' })
   id!: string;
@@ -22,6 +35,9 @@ export class ScheduleVersionEntity {
 
   @Column({ name: 'effective_until', type: 'timestamptz', nullable: true })
   effectiveUntil!: Date | null;
+
+  @Column({ name: 'is_automatic', type: 'boolean', default: false })
+  isAutomatic!: boolean;
 
   @CreateDateColumn({ name: 'created_at', type: 'timestamptz' })
   createdAt!: Date;

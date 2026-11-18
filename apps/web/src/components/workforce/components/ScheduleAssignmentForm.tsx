@@ -4,7 +4,7 @@ import { translate as tr } from '../../../i18n';
 import { useTranslation } from 'react-i18next';
 import React, { useEffect, useRef, useState } from 'react';
 import { CalendarBlank, CaretDown, CaretUp, PencilSimple, Plus } from '@phosphor-icons/react';
-import { SmartDatePicker } from '../../ui';
+import { SmartDatePicker, SmartSelect } from '../../ui';
 import { formatShiftRange, formatWorkDate } from '../utils/workforce-format';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { ApiError } from '@smartsite/api-client';
@@ -13,7 +13,6 @@ import type {
   ScheduleAssignmentChangeResponse,
   ScheduleAssignmentBatchResponse,
   ScheduleAssignmentInput,
-  ScheduleVersionResponse,
   ShiftResponse,
 } from '@smartsite/contracts';
 
@@ -61,7 +60,6 @@ export function ScheduleAssignmentForm({
   token,
   siteId,
   shifts,
-  versions,
   onScopeChange,
   managerScope = false,
   initialExpanded = false,
@@ -71,7 +69,6 @@ export function ScheduleAssignmentForm({
   token: string;
   siteId: string;
   shifts: ShiftResponse[];
-  versions: ScheduleVersionResponse[];
   onScopeChange?: (scope: { siteId: string; contractorId: string }) => void;
   initialExpanded?: boolean;
 }) {
@@ -87,7 +84,6 @@ export function ScheduleAssignmentForm({
   const [targetId, setTargetId] = useState(
     () => new URLSearchParams(window.location.search).get('teamId') ?? '',
   );
-  const [versionChoice, setVersion] = useState('');
   const [shiftId, setShift] = useState('');
   const [mode, setMode] = useState<ScheduleAssignmentInput['mode']>('DAY');
   const [fromDate, setFrom] = useState(today());
@@ -121,7 +117,6 @@ export function ScheduleAssignmentForm({
   const contractorId = contractorChoice
     ? (availableScopes.find((scope) => scope.contractorId === contractorChoice)?.contractorId ?? '')
     : (availableScopes[0]?.contractorId ?? '');
-  const versionId = versionChoice || versions[0]?.id || '';
   useEffect(() => {
     onScopeChange?.({ siteId, contractorId });
   }, [siteId, contractorId, onScopeChange]);
@@ -163,7 +158,6 @@ export function ScheduleAssignmentForm({
   const members = workers.data?.filter((worker) => worker.teamId === targetId) ?? [];
   const input: ScheduleAssignmentInput = {
     contractorId,
-    scheduleVersionId: versionId,
     shiftId,
     target,
     ...(target === 'TEAM'
@@ -176,7 +170,10 @@ export function ScheduleAssignmentForm({
   };
   const inputKey = JSON.stringify(input);
   const validStart =
-    Boolean(fromDate) && (mode !== 'WEEK' || new Date(`${fromDate}T00:00:00Z`).getUTCDay() === 1);
+    Boolean(fromDate) &&
+    fromDate >= today() &&
+    (mode !== 'WEEK' || new Date(`${fromDate}T00:00:00Z`).getUTCDay() === 1);
+  const validEnd = mode !== 'REPEAT' || (Boolean(toDate) && toDate >= fromDate);
   const preview = useMutation({
     mutationFn: (value: ScheduleAssignmentInput) =>
       client.previewScheduleAssignment(token, siteId, value),
@@ -316,7 +313,7 @@ export function ScheduleAssignmentForm({
       <form
         onSubmit={(event) => {
           event.preventDefault();
-          if (!validStart) return;
+          if (!validStart || !validEnd) return;
           setMessage('');
           preview.mutate(input);
         }}
@@ -327,10 +324,38 @@ export function ScheduleAssignmentForm({
           className="space-y-3.5"
         >
           {availableScopes.length > 1 && (
-            <label className="block text-xs font-semibold">
-              {tr('common.contractor')}
+            <div className="space-y-1">
+              <label
+                htmlFor="schedule-assignment-contractor"
+                className="block text-[11px] font-bold uppercase tracking-wider text-slate-500"
+              >
+                {tr('common.contractor')}
+              </label>
+              <SmartSelect
+                size="sm"
+                value={contractorId}
+                disabled={save.isPending}
+                onChange={(val) => {
+                  setContractorChoice(val);
+                  setTargetId('');
+                  setMembers(undefined);
+                  setShift('');
+                  setBatchPage(0);
+                  setMessage('');
+                  preview.reset();
+                  save.reset();
+                  request.current = null;
+                }}
+                options={availableScopes.map((scope) => ({
+                  value: scope.contractorId,
+                  label: scope.contractorName,
+                }))}
+              />
               <select
-                className={field}
+                id="schedule-assignment-contractor"
+                aria-label={tr('common.contractor')}
+                className="sr-only"
+                tabIndex={-1}
                 value={contractorId}
                 disabled={save.isPending}
                 onChange={(e) => {
@@ -351,7 +376,7 @@ export function ScheduleAssignmentForm({
                   </option>
                 ))}
               </select>
-            </label>
+            </div>
           )}
           {/* Assignment target Segmented Control */}
           <div className="space-y-1.5">
@@ -407,13 +432,48 @@ export function ScheduleAssignmentForm({
           </div>
 
           {/* Team / Worker Select */}
-          <label className="block">
-            <span className="block text-[11px] font-bold uppercase tracking-wider text-slate-500 mb-1">
+          <div className="space-y-1">
+            <label
+              htmlFor="schedule-assignment-target"
+              className="block text-[11px] font-bold uppercase tracking-wider text-slate-500"
+            >
               {target === 'TEAM' ? tr('common.team') : tr('common.worker')}
-            </span>
+            </label>
+            <SmartSelect
+              size="sm"
+              searchable={target === 'WORKER'}
+              searchPlaceholder={tr('common.search')}
+              placeholder={tr('common.select_value', {
+                value1: target === 'TEAM' ? 'team' : 'worker',
+              })}
+              value={targetId}
+              onChange={(val) => {
+                setTargetId(val);
+                setMembers(undefined);
+              }}
+              options={
+                target === 'TEAM'
+                  ? (teams.data ?? []).map((team) => ({
+                      value: team.id,
+                      label: team.name,
+                      badge: tr('common.value_membervalue', {
+                        value1: team.memberCount,
+                        value2: team.memberCount === 1 ? '' : 's',
+                      }),
+                    }))
+                  : (workers.data ?? []).map((worker) => ({
+                      value: worker.workerId,
+                      label: worker.displayName,
+                      badge: worker.teamName || worker.workerId.slice(0, 6),
+                    }))
+              }
+            />
             <select
+              id="schedule-assignment-target"
+              aria-label={target === 'TEAM' ? tr('common.team') : tr('common.worker')}
+              className="sr-only"
+              tabIndex={-1}
               required
-              className={field}
               value={targetId}
               onChange={(e) => {
                 setTargetId(e.target.value);
@@ -435,7 +495,7 @@ export function ScheduleAssignmentForm({
                     </option>
                   ))}
             </select>
-          </label>
+          </div>
 
           {/* Team Members Exclude List */}
           {target === 'TEAM' && targetId && (
@@ -508,34 +568,32 @@ export function ScheduleAssignmentForm({
             </fieldset>
           )}
 
-          {/* Schedule Version */}
-          <label className="block">
-            <span className="block text-[11px] font-bold uppercase tracking-wider text-slate-500 mb-1">
-              {tr('common.schedule_version')}
-            </span>
-            <select
-              required
-              className={field}
-              value={versionId}
-              onChange={(e) => setVersion(e.target.value)}
-            >
-              <option value="">{tr('common.select_version')}</option>
-              {versions.map((version) => (
-                <option key={version.id} value={version.id}>
-                  {tr('common.version_value', { value1: version.version })}
-                </option>
-              ))}
-            </select>
-          </label>
-
           {/* Shift */}
-          <label className="block">
-            <span className="block text-[11px] font-bold uppercase tracking-wider text-slate-500 mb-1">
+          <div className="space-y-1">
+            <label
+              htmlFor="schedule-assignment-shift"
+              className="block text-[11px] font-bold uppercase tracking-wider text-slate-500"
+            >
               {tr('common.shift')}
-            </span>
+            </label>
+            <SmartSelect
+              size="sm"
+              placeholder={tr('common.select_shift')}
+              value={shiftId}
+              onChange={(val) => setShift(val)}
+              options={availableShifts.map((shift) => ({
+                value: shift.id,
+                label: shift.name,
+                description: `${formatShiftRange(shift.startsAt, shift.endsAt, shift.timezone)} (${shift.timezone})`,
+                badge: `${clock(shift.startsAt, shift.timezone)} – ${clock(shift.endsAt, shift.timezone)}`,
+              }))}
+            />
             <select
+              id="schedule-assignment-shift"
+              aria-label={tr('common.shift')}
+              className="sr-only"
+              tabIndex={-1}
               required
-              className={field}
               value={shiftId}
               onChange={(e) => setShift(e.target.value)}
             >
@@ -547,7 +605,7 @@ export function ScheduleAssignmentForm({
                 </option>
               ))}
             </select>
-          </label>
+          </div>
           {shifts.find((shift) => shift.id === shiftId)?.breakStartsAt && (
             <div className="flex items-center gap-1.5 text-[11px] text-slate-500 bg-slate-50 p-2.5 rounded-xl border border-slate-200/60">
               <span className="w-1.5 h-1.5 rounded-full bg-slate-400" />
@@ -570,18 +628,54 @@ export function ScheduleAssignmentForm({
           )}
 
           {/* Apply schedule */}
-          <label className="block">
-            <span className="block text-[11px] font-bold uppercase tracking-wider text-slate-500 mb-1">
+          <div className="space-y-1">
+            <label
+              htmlFor="schedule-assignment-mode"
+              className="block text-[11px] font-bold uppercase tracking-wider text-slate-500"
+            >
               {tr('common.apply_schedule')}
-            </span>
+            </label>
+            <SmartSelect
+              size="sm"
+              value={mode}
+              onChange={(val) => {
+                const selected = val as ScheduleAssignmentInput['mode'];
+                setMode(selected);
+                if (selected === 'WEEK') {
+                  if (fromDate < today() || new Date(`${fromDate}T00:00:00Z`).getUTCDay() !== 1)
+                    setFrom('');
+                }
+              }}
+              options={[
+                {
+                  value: 'DAY',
+                  label: tr('common.one_day'),
+                  badge: '1 day',
+                },
+                {
+                  value: 'WEEK',
+                  label: tr('common.one_week'),
+                  badge: 'Mon – Sun',
+                },
+                {
+                  value: 'REPEAT',
+                  label: tr('schedule_assignment_form.repeat_weekly_until_an_end_date'),
+                  badge: 'Custom',
+                },
+              ]}
+            />
             <select
-              className={field}
+              id="schedule-assignment-mode"
+              aria-label={tr('common.apply_schedule')}
+              className="sr-only"
+              tabIndex={-1}
               value={mode}
               onChange={(e) => {
                 const selected = e.target.value as ScheduleAssignmentInput['mode'];
                 setMode(selected);
                 if (selected === 'WEEK') {
-                  if (new Date(`${fromDate}T00:00:00Z`).getUTCDay() !== 1) setFrom('');
+                  if (fromDate < today() || new Date(`${fromDate}T00:00:00Z`).getUTCDay() !== 1)
+                    setFrom('');
                 }
               }}
             >
@@ -591,7 +685,7 @@ export function ScheduleAssignmentForm({
                 {tr('schedule_assignment_form.repeat_weekly_until_an_end_date')}
               </option>
             </select>
-          </label>
+          </div>
 
           {/* Date Picker */}
           {mode === 'WEEK' ? (
@@ -601,9 +695,10 @@ export function ScheduleAssignmentForm({
                 fieldRequired
                 value={fromDate}
                 onChange={setFrom}
-                disablePast={false}
+                disablePast
                 disabledWeekdays={[0, 2, 3, 4, 5, 6]}
                 placeholder={tr('common.select_a_monday')}
+                compact
               />
               <p className="mt-1 text-xs text-slate-500">
                 {validStart
@@ -614,34 +709,31 @@ export function ScheduleAssignmentForm({
               </p>
             </div>
           ) : (
-            <label className="block">
-              <span className="block text-[11px] font-bold uppercase tracking-wider text-slate-500 mb-1">
-                {mode === 'DAY' ? tr('common.work_date') : tr('common.start_date')}
-              </span>
-              <input
-                required
-                className={field}
-                type="date"
-                value={fromDate}
-                onChange={(e) => setFrom(e.target.value)}
-              />
-            </label>
+            <SmartDatePicker
+              label={mode === 'DAY' ? tr('common.work_date') : tr('common.start_date')}
+              fieldRequired
+              value={fromDate}
+              onChange={setFrom}
+              disablePast
+              compact
+            />
           )}
 
           {mode === 'REPEAT' && (
-            <label className="block">
-              <span className="block text-[11px] font-bold uppercase tracking-wider text-slate-500 mb-1">
-                {tr('common.end_date')}
-              </span>
-              <input
-                required
-                className={field}
-                type="date"
-                min={fromDate}
-                value={toDate}
-                onChange={(e) => setTo(e.target.value)}
-              />
-            </label>
+            <SmartDatePicker
+              label={tr('common.end_date')}
+              fieldRequired
+              value={toDate}
+              onChange={setTo}
+              disablePast
+              min={fromDate || undefined}
+              error={
+                fromDate && toDate && !validEnd
+                  ? tr('schedule_assignment_form.end_date_before_start')
+                  : undefined
+              }
+              compact
+            />
           )}
 
           {/* Working Days Selector Chips */}
@@ -689,6 +781,7 @@ export function ScheduleAssignmentForm({
             disabled={
               preview.isPending ||
               !validStart ||
+              !validEnd ||
               !shiftId ||
               !targetId ||
               !days.length ||
@@ -1023,17 +1116,13 @@ function BatchEditor({
             </select>
           </label>
           {scope !== 'UNSTARTED' && (
-            <label className="block text-xs">
-              {tr('common.change_date')}
-              <input
-                required
-                className={field}
-                type="date"
-                min={today()}
-                value={date}
-                onChange={(e) => setDate(e.target.value)}
-              />
-            </label>
+            <SmartDatePicker
+              label={tr('common.change_date')}
+              fieldRequired
+              value={date}
+              onChange={setDate}
+              compact
+            />
           )}
           <label className="block text-xs">
             {tr('common.affected_workers')}

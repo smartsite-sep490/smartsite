@@ -23,7 +23,16 @@ import {
   IconClock,
   IconShield,
 } from '../icons';
-import { Button, Badge, Dialog, EmptyState, Alert, AlertTitle, AlertDescription } from '../ui';
+import {
+  Button,
+  Badge,
+  Dialog,
+  EmptyState,
+  Alert,
+  AlertTitle,
+  AlertDescription,
+  SmartSelect,
+} from '../ui';
 import type { ActiveTab } from '../layout/AppLayout';
 
 export interface DashboardNavigateContext {
@@ -659,37 +668,33 @@ export function ContractorDashboardView({
 
         {/* Scope dropdown selector */}
         <div className="w-full md:w-80">
-          <label
-            htmlFor="contractor-scope-select"
-            className="block text-[10px] font-bold uppercase tracking-wider text-slate-500 mb-1"
-          >
-            {tr('common.active_site_scope')}
-          </label>
-          <select
+          <SmartSelect
             id="contractor-scope-select"
-            aria-label={tr('common.active_site_scope')}
+            label={tr('common.active_site_scope')}
             value={
               selectedSiteId && selectedContractorId
                 ? `${selectedSiteId}:${selectedContractorId}`
                 : ''
             }
-            onChange={(e) => handleScopeSelect(e.target.value)}
-            className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 bg-slate-50 text-xs font-bold text-[#071A2B] outline-none transition-all duration-200 hover:border-slate-300 focus:border-[#071A2B] focus:bg-white focus:ring-2 focus:ring-[#071A2B]/10 shadow-xs cursor-pointer"
-          >
-            {availableScopes.length > 1 && (
-              <option value="">
-                {tr('contractor_dashboard_view.select_site_contractor_scope_239619')}
-              </option>
-            )}
-            {availableScopes.map((scope) => (
-              <option
-                key={`${scope.siteId}:${scope.contractorId}`}
-                value={`${scope.siteId}:${scope.contractorId}`}
-              >
-                {scope.siteName} — {scope.contractorName}
-              </option>
-            ))}
-          </select>
+            onChange={handleScopeSelect}
+            placeholder={tr('contractor_dashboard_view.select_site_contractor_scope_239619')}
+            searchable={availableScopes.length > 8}
+            options={[
+              ...(availableScopes.length > 1
+                ? [
+                    {
+                      value: '',
+                      label: tr('contractor_dashboard_view.select_site_contractor_scope_239619'),
+                    },
+                  ]
+                : []),
+              ...availableScopes.map((scope) => ({
+                value: `${scope.siteId}:${scope.contractorId}`,
+                label: `${scope.siteName} — ${scope.contractorName}`,
+              })),
+            ]}
+            className="rounded-xl bg-slate-50 px-3.5 py-2.5 text-xs"
+          />
         </div>
       </div>
 
@@ -941,26 +946,22 @@ export function ContractorDashboardView({
                 </div>
 
                 <div className="flex items-center gap-2 w-full sm:w-auto">
-                  <label
-                    htmlFor="team-status-filter"
-                    className="text-[11px] font-bold text-slate-500 uppercase tracking-wider"
-                  >
-                    {tr('common.status_755c8b')}
-                  </label>
-                  <select
+                  <SmartSelect
                     id="team-status-filter"
-                    aria-label={tr('contractor_dashboard_view.filter_teams_by_status')}
+                    label={tr('contractor_dashboard_view.filter_teams_by_status')}
                     value={teamStatusFilter}
-                    onChange={(e) => {
-                      setTeamStatusFilter(e.target.value as 'ACTIVE' | 'ARCHIVED' | 'ALL');
+                    onChange={(value) => {
+                      setTeamStatusFilter(value as 'ACTIVE' | 'ARCHIVED' | 'ALL');
                       setTeamOffset(0);
                     }}
-                    className="px-3 py-1.5 rounded-xl border border-slate-200 bg-slate-50 text-xs font-bold text-[#071A2B] outline-none cursor-pointer"
-                  >
-                    <option value="ACTIVE">{tr('common.active_teams')}</option>
-                    <option value="ARCHIVED">{tr('common.archived_teams')}</option>
-                    <option value="ALL">{tr('common.all_teams')}</option>
-                  </select>
+                    options={[
+                      { value: 'ACTIVE', label: tr('common.active_teams') },
+                      { value: 'ARCHIVED', label: tr('common.archived_teams') },
+                      { value: 'ALL', label: tr('common.all_teams') },
+                    ]}
+                    size="sm"
+                    className="min-w-36"
+                  />
                 </div>
               </div>
 
@@ -1172,30 +1173,23 @@ export function ContractorDashboardView({
                 </div>
 
                 <div className="flex items-center gap-2 w-full sm:w-auto">
-                  <label
-                    htmlFor="worker-team-filter"
-                    className="text-[11px] font-bold text-slate-500 uppercase tracking-wider"
-                  >
-                    {tr('common.filter_by_team')}
-                  </label>
-                  <select
+                  <SmartSelect
                     id="worker-team-filter"
-                    aria-label={tr('contractor_dashboard_view.filter_workers_by_team')}
+                    label={tr('contractor_dashboard_view.filter_workers_by_team')}
                     value={workerTeamFilter}
-                    onChange={(e) => {
-                      setWorkerTeamFilter(e.target.value);
+                    onChange={(value) => {
+                      setWorkerTeamFilter(value);
                       setWorkerOffset(0);
                     }}
-                    className="px-3 py-1.5 rounded-xl border border-slate-200 bg-slate-50 text-xs font-bold text-[#071A2B] outline-none cursor-pointer"
-                  >
-                    <option value="ALL">{tr('common.all_workers')}</option>
-                    <option value="UNASSIGNED">{tr('common.unassigned_only')}</option>
-                    {activeTeamsList.map((t) => (
-                      <option key={t.id} value={t.id}>
-                        {t.name}
-                      </option>
-                    ))}
-                  </select>
+                    options={[
+                      { value: 'ALL', label: tr('common.all_workers') },
+                      { value: 'UNASSIGNED', label: tr('common.unassigned_only') },
+                      ...activeTeamsList.map((t) => ({ value: t.id, label: t.name })),
+                    ]}
+                    searchable
+                    size="sm"
+                    className="min-w-44"
+                  />
                 </div>
               </div>
 
@@ -1578,20 +1572,22 @@ export function ContractorDashboardView({
             >
               {tr('common.target_team')} <span className="text-rose-500">*</span>
             </label>
-            <select
+            <SmartSelect
               id="assign-team-target"
-              aria-label={tr('common.target_team')}
               value={targetTeamId}
-              onChange={(e) => setTargetTeamId(e.target.value)}
-              className="w-full px-4 py-3 rounded-2xl border border-slate-200 bg-slate-50 text-sm font-semibold text-[#071A2B] outline-none focus:border-[#071A2B] focus:bg-white focus:ring-4 focus:ring-[#071A2B]/5 shadow-xs cursor-pointer"
-            >
-              <option value="UNASSIGN">{tr('contractor_dashboard_view.remove_from_team')}</option>
-              {activeTeamsList.map((t) => (
-                <option key={t.id} value={t.id}>
-                  {tr('common.value_value_members', { value1: t.name, value2: t.memberCount })}
-                </option>
-              ))}
-            </select>
+              onChange={setTargetTeamId}
+              searchable
+              options={[
+                { value: 'UNASSIGN', label: tr('contractor_dashboard_view.remove_from_team') },
+                ...activeTeamsList.map((t) => ({
+                  value: t.id,
+                  label: tr('common.value_value_members', {
+                    value1: t.name,
+                    value2: t.memberCount,
+                  }),
+                })),
+              ]}
+            />
             <p className="text-[11px] text-slate-500">
               {tr(
                 'contractor_dashboard_view.each_worker_can_belong_to_at_most_one_active_team_per_site',

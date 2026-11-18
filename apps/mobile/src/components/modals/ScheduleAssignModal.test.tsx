@@ -45,9 +45,7 @@ const client = {
       },
     ]),
   ),
-  listScheduleVersions: vi.fn(() =>
-    page([{ id: 'version', version: 1, effectiveFrom: '2026-01-01', effectiveUntil: null }]),
-  ),
+  listScheduleVersions: vi.fn(() => page([])),
   listContractorTeams: vi.fn(() => page([{ id: 'team', name: 'Team A' }])),
   listContractorTeamWorkers: vi.fn(() =>
     page([{ workerId: 'worker', displayName: 'An', teamId: 'team' }]),
@@ -55,7 +53,9 @@ const client = {
   listShiftContractorAssignments: vi.fn(() =>
     page([{ contractorId: 'contractor', shiftId: 'shift' }]),
   ),
-  previewScheduleAssignment: vi.fn(async () => previewResult),
+  previewScheduleAssignment: vi.fn<SmartSiteManagementClient['previewScheduleAssignment']>(
+    async () => previewResult,
+  ),
   createScheduleAssignment: vi.fn(),
 };
 const workspace = {
@@ -142,6 +142,10 @@ it('previews team assignments and preserves the request ID after a network failu
       fromDate: '2026-11-16',
       toDate: '2026-11-22',
     }),
+  );
+  expect(client.listScheduleVersions).not.toHaveBeenCalled();
+  expect(client.previewScheduleAssignment.mock.calls[0]?.[2]).not.toHaveProperty(
+    'scheduleVersionId',
   );
   await button('Lưu');
   await button('Lưu');

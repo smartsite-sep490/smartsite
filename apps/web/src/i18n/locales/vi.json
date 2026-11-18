@@ -2324,6 +2324,7 @@
   "common.week_starting_monday": "Tuần bắt đầu từ thứ Hai",
   "common.select_a_monday": "Chọn thứ Hai",
   "schedule_assignment_form.week_ends_on_sunday_value": "Tuần kết thúc vào Chủ nhật, {{value1}}.",
+  "schedule_assignment_form.end_date_before_start": "Ngày kết thúc phải bằng hoặc sau ngày bắt đầu.",
   "schedule_assignment_form.select_a_monday_to_continue": "Chọn thứ Hai để tiếp tục.",
   "common.working_days": "Ngày làm việc",
   "common.preview_assignments": "Xem trước phân công",

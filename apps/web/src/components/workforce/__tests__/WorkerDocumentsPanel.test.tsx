@@ -162,6 +162,20 @@ function mount(canReview: boolean, canUpload = false, canSubmitDocuments = false
     </QueryClientProvider>,
   );
 }
+async function chooseCalendarDate(label: string, date: string) {
+  const [year, month, day] = date.split('-').map(Number);
+  const user = userEvent.setup();
+  await user.click(screen.getByLabelText(label));
+  await user.selectOptions(
+    screen.getByRole('combobox', { name: tr('calendar.year') }),
+    String(year),
+  );
+  await user.selectOptions(
+    screen.getByRole('combobox', { name: tr('calendar.month') }),
+    String((month ?? 1) - 1),
+  );
+  await user.click(screen.getByRole('button', { name: new RegExp(`${day}.*${year}`) }));
+}
 it.each([false, true])(
   'autofills OCR dates and only submits after a click (Representative: %s)',
   async (representative) => {
@@ -189,7 +203,7 @@ it.each([false, true])(
     let file = new File(['synthetic replacement'], 'renewal.jpg', { type: 'image/jpeg' });
     fireEvent.change(input, { target: { files: [file] } });
     await screen.findByText(tr('documents.dateMatch'));
-    expect((date as HTMLInputElement).value).toBe('2030-10-27');
+    expect(date.textContent).toContain('27/10/2030');
     expect(upload).not.toHaveBeenCalled();
     expect(quality).toHaveBeenCalledWith('token', 'site', 'worker', 'SAFETY_CARD', file, {});
     quality.mockResolvedValue({
@@ -206,9 +220,12 @@ it.each([false, true])(
       type: 'application/pdf',
     });
     fireEvent.change(input, { target: { files: [file] } });
-    await waitFor(() => expect((date as HTMLInputElement).value).toBe('2032-10-27'));
+    await waitFor(() => expect(date.textContent).toContain('27/10/2032'));
     expect(upload).not.toHaveBeenCalled();
-    fireEvent.change(date, { target: { value: '2031-10-27' } });
+    await chooseCalendarDate(
+      `${tr('documents.SAFETY_CARD')} - ${tr('documents.declaredExpiresOn')}`,
+      '2031-10-27',
+    );
     expect(
       (screen.getByRole('button', { name: tr('documents.submitForReview') }) as HTMLButtonElement)
         .disabled,
@@ -260,12 +277,10 @@ it('autofills Health examination date and derives a one-year expiry without subm
   });
   await screen.findByText(tr('documents.dateMatch'));
   expect(
-    (
-      screen.getByLabelText(
-        `${tr('documents.HEALTH_CERTIFICATE')} - ${tr('documents.declaredIssuedOn')}`,
-      ) as HTMLInputElement
-    ).value,
-  ).toBe('2026-10-27');
+    screen.getByLabelText(
+      `${tr('documents.HEALTH_CERTIFICATE')} - ${tr('documents.declaredIssuedOn')}`,
+    ).textContent,
+  ).toContain('27/10/2026');
   expect(screen.getByText(/2027-10-27/)).toBeTruthy();
   expect(upload).not.toHaveBeenCalled();
 });
@@ -294,9 +309,12 @@ it('requires a manually entered date when OCR cannot read it and still waits for
   expect(submit.disabled).toBe(true);
   const date = screen.getByLabelText(
     `${tr('documents.SAFETY_CARD')} - ${tr('documents.declaredExpiresOn')}`,
-  ) as HTMLInputElement;
-  expect(date.value).toBe('');
-  fireEvent.change(date, { target: { value: '2030-10-27' } });
+  );
+  expect(date.textContent).not.toContain('27/10/2030');
+  await chooseCalendarDate(
+    `${tr('documents.SAFETY_CARD')} - ${tr('documents.declaredExpiresOn')}`,
+    '2030-10-27',
+  );
   preview.mockResolvedValue({
     quality: { status: 'ACCEPTED', reason: 'IMAGE_ACCEPTED' },
     ocr: { status: 'UNREADABLE', issuedOn: null, expiresOn: null, warnings: [] },
@@ -309,7 +327,7 @@ it('requires a manually entered date when OCR cannot read it and still waits for
   });
   fireEvent.click(screen.getByRole('button', { name: tr('documents.dateRecheck') }));
   await screen.findByText(tr('documents.dateUnavailable'));
-  expect(date.value).toBe('2030-10-27');
+  expect(date.textContent).toContain('27/10/2030');
   expect(upload).not.toHaveBeenCalled();
   fireEvent.click(submit);
   await waitFor(() =>
@@ -327,9 +345,7 @@ it('prefills OCR suggestions but requires explicit original/date confirmation be
     name: tr('documents.approve'),
   }) as HTMLButtonElement;
   expect(approve.disabled).toBe(true);
-  expect((screen.getByLabelText(tr('documents.expiresOn')) as HTMLInputElement).value).toBe(
-    '2028-10-17',
-  );
+  expect(screen.getByLabelText(tr('documents.expiresOn')).textContent).toContain('17/10/2028');
   await user.type(screen.getByLabelText(tr('documents.note')), 'Original checked');
   expect(approve.disabled).toBe(true);
   await user.click(screen.getByRole('button', { name: tr('documents.view') }));
@@ -367,8 +383,8 @@ it('lets Representatives enter a missing expiry on pending documents without rev
     .mockResolvedValue({ ...doc, submittedExpiresOn: '2027-10-18', version: 4 });
   mount(false, true);
   const user = userEvent.setup();
-  const field = await screen.findByLabelText(tr('documents.submittedExpiresOn'));
-  await user.type(field, '2027-10-18');
+  await screen.findByLabelText(tr('documents.submittedExpiresOn'));
+  await chooseCalendarDate(tr('documents.submittedExpiresOn'), '2027-10-18');
   await user.click(screen.getByRole('button', { name: tr('documents.saveSubmittedExpiry') }));
   await waitFor(() =>
     expect(save).toHaveBeenCalledWith('token', 'site', 'worker', 'document', {
@@ -378,6 +394,32 @@ it('lets Representatives enter a missing expiry on pending documents without rev
   );
   expect(client.reviewWorkerDocument).not.toHaveBeenCalled();
 });
+it('uses the shared calendar for submitted expiry and keeps the API date format', async () => {
+  const profile = await client.workerCompliance('token', 'site', 'worker');
+  vi.mocked(client.workerCompliance).mockResolvedValue({
+    ...profile,
+    documents: [{ ...doc, submittedExpiresOn: '2027-10-18' }],
+  });
+  const save = vi.spyOn(client, 'updateWorkerDocumentExpiry').mockResolvedValue({
+    ...doc,
+    submittedExpiresOn: '2027-10-19',
+    version: 4,
+  });
+  mount(false, true);
+  const user = userEvent.setup();
+  const expiry = await screen.findByLabelText(tr('documents.submittedExpiresOn'));
+  expect(expiry.tagName).toBe('BUTTON');
+  expect(expiry.textContent).toContain('18/10/2027');
+  await user.click(expiry);
+  await user.click(screen.getByRole('button', { name: /19.*2027/ }));
+  await user.click(screen.getByRole('button', { name: tr('documents.saveSubmittedExpiry') }));
+  await waitFor(() =>
+    expect(save).toHaveBeenCalledWith('token', 'site', 'worker', 'document', {
+      expectedVersion: 3,
+      submittedExpiresOn: '2027-10-19',
+    }),
+  );
+});
 it('prefills the Representative date when OCR cannot determine expiry and still requires confirmation', async () => {
   const profile = await client.workerCompliance('token', 'site', 'worker');
   vi.mocked(client.workerCompliance).mockResolvedValue({
@@ -385,8 +427,8 @@ it('prefills the Representative date when OCR cannot determine expiry and still 
     documents: [{ ...doc, submittedExpiresOn: '2027-10-18', ocr: { ...doc.ocr, expiresOn: null } }],
   });
   mount(true);
-  const expiry = (await screen.findByLabelText(tr('documents.expiresOn'))) as HTMLInputElement;
-  expect(expiry.value).toBe('2027-10-18');
+  const expiry = await screen.findByLabelText(tr('documents.expiresOn'));
+  expect(expiry.textContent).toContain('18/10/2027');
   expect(
     (screen.getByRole('button', { name: tr('documents.approve') }) as HTMLButtonElement).disabled,
   ).toBe(true);
@@ -406,13 +448,11 @@ it('health review uses only the confirmed issue date, with a read-only one-year 
   });
   mount(true);
   const user = userEvent.setup();
-  const expiry = (await screen.findByLabelText(tr('documents.expiresOn'))) as HTMLInputElement;
-  expect(expiry.readOnly).toBe(true);
-  expect(expiry.value).toBe('2027-10-18');
-  const issued = screen.getByLabelText(tr('documents.issuedOn'));
-  await user.clear(issued);
-  await user.type(issued, '2026-10-17');
-  expect(expiry.value).toBe('2027-10-17');
+  const expiry = await screen.findByLabelText(tr('documents.expiresOn'));
+  expect(expiry.tagName).toBe('OUTPUT');
+  expect(expiry.textContent).toBe('18/10/2027');
+  await chooseCalendarDate(tr('documents.issuedOn'), '2026-10-17');
+  expect(expiry.textContent).toBe('17/10/2027');
   await user.type(screen.getByLabelText(tr('documents.note')), 'Original date checked');
   await user.click(screen.getByLabelText(tr('documents.confirm')));
   await user.click(screen.getByRole('button', { name: tr('documents.approve') }));

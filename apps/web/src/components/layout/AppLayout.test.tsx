@@ -89,6 +89,17 @@ it('renders the complete Schedule Setup heading cluster in the global top header
   await i18n.changeLanguage('en');
 });
 
+it('keeps the Assigned work page title when opened through a notification link', () => {
+  roles = ['CONTRACTOR_REPRESENTATIVE'];
+  render(
+    <MemoryRouter initialEntries={['/assigned-work?siteId=synthetic-site']}>
+      <AppLayout>Assigned work content</AppLayout>
+    </MemoryRouter>,
+  );
+  expect(within(screen.getByRole('banner')).getByText('Assigned work')).toBeTruthy();
+  expect(screen.getByText('Assigned work content')).toBeTruthy();
+});
+
 it('uses the role-appropriate workforce default', () => {
   roles = ['CONTRACTOR_REPRESENTATIVE'];
   render(
@@ -108,6 +119,7 @@ it.each([
   expect(navigation.getByRole('button', { name: 'Attendance' })).toBeTruthy();
   expect(navigation.getByRole('button', { name: 'Workforce' })).toBeTruthy();
   expect(navigation.getByRole('button', { name: 'Schedule Setup' })).toBeTruthy();
+  expect(navigation.queryByRole('button', { name: 'Assigned work' })).toBeNull();
   expect(navigation.getByRole('button', { name: i18n.t('shell.contractorTeams') })).toBeTruthy();
   expect(navigation.getByRole('button', { name: i18n.t('shell.workerOnboarding') })).toBeTruthy();
   if (!userRoles.includes('SITE_MANAGER')) {

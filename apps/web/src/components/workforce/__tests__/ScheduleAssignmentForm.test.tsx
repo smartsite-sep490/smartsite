@@ -20,6 +20,7 @@ const shifts = [
 ];
 let cache: QueryClient;
 beforeEach(() => {
+  vi.setSystemTime(new Date(2030, 9, 3, 12));
   window.history.replaceState({}, '', '/');
   vi.spyOn(SmartSiteManagementClient.prototype, 'contractorDashboardScopes').mockResolvedValue({
     items: [
@@ -80,13 +81,22 @@ afterEach(() => {
   cleanup();
   cache?.clear();
   vi.restoreAllMocks();
+  vi.useRealTimers();
 });
+it('opens the shared calendar when selecting a work date', async () => {
+  mount();
+  await screen.findByRole('option', { name: /^Team A \(2(?: members)?\)$/ });
+  fireEvent.click(screen.getByRole('button', { name: 'Work date' }));
+  expect(await screen.findByRole('grid')).toBeTruthy();
+});
+
 it('allows only Mondays in the weekly calendar and sends Monday through Sunday', async () => {
   const preview = vi
     .spyOn(SmartSiteManagementClient.prototype, 'previewScheduleAssignment')
     .mockResolvedValue(previewData);
   mount();
   await select();
+  expect(screen.queryByLabelText('Schedule Version')).toBeNull();
   fireEvent.change(screen.getByLabelText('Apply schedule'), { target: { value: 'WEEK' } });
   fireEvent.click(screen.getByLabelText(/Week starting Monday/));
   const tuesday = await screen.findByRole('button', { name: /Tuesday, October 8th, 2030/ });
@@ -101,6 +111,33 @@ it('allows only Mondays in the weekly calendar and sends Monday through Sunday',
       expect.objectContaining({ mode: 'WEEK', fromDate: '2030-10-14', toDate: '2030-10-20' }),
     ),
   );
+  expect(preview.mock.calls[0]?.[2]).not.toHaveProperty('scheduleVersionId');
+});
+
+it('disables past work dates and Mondays before the current week', async () => {
+  vi.setSystemTime(new Date(2030, 9, 8, 12));
+  mount();
+  await screen.findByRole('option', { name: /^Team A \(2(?: members)?\)$/ });
+  fireEvent.click(screen.getByRole('button', { name: 'Work date' }));
+  expect(screen.getByRole('button', { name: /Monday, October 7th, 2030/ })).toHaveProperty(
+    'disabled',
+    true,
+  );
+  expect(screen.getByRole('button', { name: /Tuesday, October 8th, 2030/ })).toHaveProperty(
+    'disabled',
+    false,
+  );
+  fireEvent.change(screen.getByLabelText('Apply schedule'), { target: { value: 'WEEK' } });
+  fireEvent.click(screen.getByRole('button', { name: 'Week starting Monday' }));
+  expect(screen.getByRole('button', { name: /Monday, October 7th, 2030/ })).toHaveProperty(
+    'disabled',
+    true,
+  );
+  expect(screen.getByRole('button', { name: /Monday, October 14th, 2030/ })).toHaveProperty(
+    'disabled',
+    false,
+  );
+  expect(screen.getByRole('button', { name: 'Preview assignments' })).toHaveProperty('disabled', true);
 });
 
 it('requires an explicit Monday after switching from a non-Monday without changing the selected date silently', async () => {
@@ -109,7 +146,7 @@ it('requires an explicit Monday after switching from a non-Monday without changi
     .mockResolvedValue(previewData);
   mount();
   await select();
-  fireEvent.change(screen.getByLabelText('Work date'), { target: { value: '2030-10-08' } });
+  await chooseDate('Work date', /Tuesday, October 8th, 2030/);
   fireEvent.change(screen.getByLabelText('Apply schedule'), { target: { value: 'WEEK' } });
   expect(screen.getByText('Select a Monday to continue.')).toBeTruthy();
   expect(screen.getByRole('button', { name: 'Preview assignments' })).toHaveProperty(
@@ -136,16 +173,6 @@ function mount(props?: Partial<React.ComponentProps<typeof ScheduleAssignmentFor
         token="token"
         siteId="site"
         shifts={shifts}
-        versions={[
-          {
-            id: 'version',
-            siteId: 'site',
-            version: 1,
-            effectiveFrom: '2030-01-01',
-            effectiveUntil: null,
-            createdAt: '2030-01-01',
-          },
-        ]}
         initialExpanded={true}
         {...props}
       />
@@ -236,9 +263,14 @@ it('enforces min date in BatchEditor for batches with upcoming dates', async () 
   mount();
   const editButton = await screen.findByRole('button', { name: 'Edit' });
   fireEvent.click(editButton);
-  const changeDateInput = screen.getByLabelText('Change date') as HTMLInputElement;
-  expect(changeDateInput.min).toBeTruthy();
-  expect(changeDateInput.min.length).toBe(10);
+  fireEvent.click(screen.getByRole('button', { name: 'Change date' }));
+  expect(
+    await screen.findByRole('button', { name: /Wednesday, October 2nd, 2030/ }),
+  ).toHaveProperty('disabled', true);
+  expect(screen.getByRole('button', { name: /Thursday, October 3rd, 2030/ })).toHaveProperty(
+    'disabled',
+    false,
+  );
 });
 
 it('starts collapsed when initialExpanded is false and toggles open/close on button click', async () => {
@@ -260,11 +292,16 @@ it('starts collapsed when initialExpanded is false and toggles open/close on but
   expect(screen.queryByLabelText('Team')).toBeNull();
 });
 
+async function chooseDate(fieldName: string, day: RegExp) {
+  fireEvent.click(screen.getByRole('button', { name: fieldName }));
+  fireEvent.click(await screen.findByRole('button', { name: day }));
+}
+
 async function select() {
   await screen.findByRole('option', { name: /^Team A \(2(?: members)?\)$/ });
   fireEvent.change(screen.getByLabelText('Team'), { target: { value: 'team' } });
   fireEvent.change(screen.getByLabelText('Shift'), { target: { value: 'shift' } });
-  fireEvent.change(screen.getByLabelText('Work date'), { target: { value: '2030-10-07' } });
+  await chooseDate('Work date', /Monday, October 7th, 2030/);
 }
 it('previews all members, invalidates preview after edits and saves only after confirmation', async () => {
   const preview = vi
@@ -334,7 +371,16 @@ it('lists conflicts and blocks confirm; submits bounded weekly repetition with c
   mount();
   await select();
   fireEvent.change(screen.getByLabelText('Apply schedule'), { target: { value: 'REPEAT' } });
-  fireEvent.change(screen.getByLabelText('End date'), { target: { value: '2030-11-01' } });
+  expect(screen.getByRole('button', { name: 'Preview assignments' })).toHaveProperty(
+    'disabled',
+    true,
+  );
+  fireEvent.click(screen.getByRole('button', { name: 'End date' }));
+  expect(await screen.findByRole('button', { name: /Sunday, October 6th, 2030/ })).toHaveProperty(
+    'disabled',
+    true,
+  );
+  fireEvent.click(screen.getByRole('button', { name: /Friday, November 1st, 2030/ }));
   fireEvent.click(screen.getByRole('button', { name: 'Preview assignments' }));
   await screen.findByText(/Conflicts found/);
   expect(

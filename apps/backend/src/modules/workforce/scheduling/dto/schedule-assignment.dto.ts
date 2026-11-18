@@ -15,11 +15,14 @@ import {
   Max,
   MaxLength,
   Min,
+  ValidateIf,
 } from 'class-validator';
 
 export class ScheduleAssignmentDto {
   @IsUUID() contractorId!: string;
-  @IsUUID() scheduleVersionId!: string;
+  @ValidateIf((_object, value: unknown) => value !== undefined)
+  @IsUUID()
+  scheduleVersionId?: string;
   @IsUUID() shiftId!: string;
   @IsIn(['TEAM', 'WORKER']) target!: 'TEAM' | 'WORKER';
   @IsOptional() @IsUUID() teamId?: string;

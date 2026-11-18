@@ -287,7 +287,10 @@ describe('ContractorDashboardView Integration & UI Rules', () => {
     const select = screen.getByLabelText(/Active Site Scope/i);
     expect(select.textContent).not.toContain('SKY-A');
     expect(select.textContent).not.toContain('RIV-B');
-    fireEvent.change(select, { target: { value: 'site-beta:contractor-paint' } });
+    await userEvent.setup().click(select);
+    await userEvent
+      .setup()
+      .click(screen.getByRole('button', { name: /Riverside Complex — Apex Painting Ltd/i }));
 
     await waitFor(() => {
       expect(api.contractorDashboard).toHaveBeenCalledWith(
@@ -297,6 +300,33 @@ describe('ContractorDashboardView Integration & UI Rules', () => {
       );
       expect(screen.getByRole('heading', { name: /Riverside Complex/i })).not.toBeNull();
     });
+  });
+
+  it('opens the styled searchable scope and team selectors while preserving scope and team actions', async () => {
+    api.contractorDashboardScopes.mockResolvedValueOnce({ items: syntheticScopes });
+    renderView();
+    const user = userEvent.setup();
+    const scope = await screen.findByLabelText(/Active Site Scope/i);
+    expect(scope.tagName).toBe('BUTTON');
+    await user.click(scope);
+    await user.click(
+      screen.getByRole('button', { name: /Riverside Complex — Apex Painting Ltd/i }),
+    );
+    await screen.findByRole('heading', { name: /Riverside Complex/i });
+
+    await user.click(screen.getByRole('button', { name: /Worker Assignments/i }));
+    const teamFilter = screen.getByLabelText(/Filter Workers by Team/i);
+    expect(teamFilter.tagName).toBe('BUTTON');
+    await user.click(teamFilter);
+    await user.click(screen.getByRole('button', { name: 'Interior Paint Team' }));
+    await waitFor(() =>
+      expect(api.listContractorTeamWorkers).toHaveBeenCalledWith(
+        'synthetic-jwt-token',
+        'site-beta',
+        'contractor-paint',
+        expect.objectContaining({ teamId: 'team-1' }),
+      ),
+    );
   });
 
   it('handles empty scopes gracefully', async () => {
@@ -416,7 +446,8 @@ describe('ContractorDashboardView Integration & UI Rules', () => {
     expect(screen.getByText(/Assign Worker to Team/i)).not.toBeNull();
 
     const targetSelect = screen.getByLabelText(/Target Team/i);
-    fireEvent.change(targetSelect, { target: { value: 'team-1' } });
+    await user.click(targetSelect);
+    await user.click(screen.getByRole('button', { name: /Interior Paint Team.*12/ }));
 
     expect(screen.queryByLabelText(/^Reason/i)).toBeNull();
 
@@ -449,7 +480,8 @@ describe('ContractorDashboardView Integration & UI Rules', () => {
     expect((confirm as HTMLButtonElement).disabled).toBe(false);
     expect(screen.queryByLabelText(/^Reason/i)).toBeNull();
 
-    fireEvent.change(screen.getByLabelText(/Target Team/i), { target: { value: 'team-2' } });
+    await user.click(screen.getByLabelText(/Target Team/i));
+    await user.click(screen.getByRole('button', { name: /Exterior Coating Team.*7/ }));
     await user.click(confirm);
 
     await waitFor(() => {

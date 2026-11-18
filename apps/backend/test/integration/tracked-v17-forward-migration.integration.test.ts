@@ -9,7 +9,7 @@ import { createIsolatedTestDatabase } from '../support/isolated-test-database.js
 import { resolveTestDatabaseUrl } from '../support/test-environment.js';
 import { seedTrackedFrameFixture } from '../support/tracked-frame-fixture.js';
 
-test('explicit v1.7 fresh CLI profile installs and reverses only the unused forward fence', async () => {
+test('explicit v1.7 fresh CLI profile installs and reverses the unused forward fence', async () => {
   const owned = createIsolatedTestDatabase();
   const options = buildMigrationOptions(
     { DATABASE_URL: resolveTestDatabaseUrl() },
@@ -21,14 +21,17 @@ test('explicit v1.7 fresh CLI profile installs and reverses only the unused forw
     await owned.initialize();
     await cli.initialize();
     assert.deepEqual(await cli.runMigrations(), []);
-    const names = await cli.query<Array<{ name: string }>>(
-      'SELECT name FROM migrations ORDER BY timestamp',
-    );
-    assert.equal(names.at(-1)?.name, 'TrackedCameraPpeWire1795046400011');
-    await cli.undoLastMigration();
+    const names = (
+      await cli.query<Array<{ name: string }>>('SELECT name FROM migrations ORDER BY id')
+    ).map(({ name }) => name);
+    const fenceIndex = names.indexOf('TrackedCameraPpeWire1795046400011');
+    assert.ok(fenceIndex >= 0);
+    assert.ok(names.indexOf('AutomaticScheduleVersion1795132800000') > fenceIndex);
+    const reverted = names.slice(fenceIndex);
+    for (let index = 0; index < reverted.length; index++) await cli.undoLastMigration();
     assert.deepEqual(
       (await cli.runMigrations()).map((migration) => migration.name),
-      ['TrackedCameraPpeWire1795046400011'],
+      reverted,
     );
   } finally {
     if (cli.isInitialized) await cli.destroy();

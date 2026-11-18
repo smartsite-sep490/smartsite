@@ -50,7 +50,12 @@ function Location() {
     </output>
   );
 }
-function mount(userId = 'worker-1', onExpired = vi.fn(), ppeInboxSiteIds?: readonly string[]) {
+function mount(
+  userId = 'worker-1',
+  onExpired = vi.fn(),
+  ppeInboxSiteIds?: readonly string[],
+  showApprovalToast = false,
+) {
   queryClient = new QueryClient({
     defaultOptions: { queries: { retry: false }, mutations: { retry: false } },
   });
@@ -69,6 +74,7 @@ function mount(userId = 'worker-1', onExpired = vi.fn(), ppeInboxSiteIds?: reado
           <NotificationBell
             apiUrl="https://api.example.test"
             userId={userId}
+            showApprovalToast={showApprovalToast}
             ppeInboxSiteIds={ppeInboxSiteIds}
           />
           <Location />
@@ -79,6 +85,7 @@ function mount(userId = 'worker-1', onExpired = vi.fn(), ppeInboxSiteIds?: reado
 }
 
 beforeEach(() => {
+  window.sessionStorage.clear();
   focusManager.setFocused(true);
   onlineManager.setOnline(true);
   vi.spyOn(SmartSiteManagementClient.prototype, 'listNotifications').mockResolvedValue(page);
@@ -112,6 +119,69 @@ afterEach(async () => {
 });
 
 describe('durable Web notification bell', () => {
+  it('shows an approved swap to the worker once and keeps it in the inbox', async () => {
+    const list = vi.mocked(SmartSiteManagementClient.prototype.listNotifications);
+    list.mockResolvedValueOnce({ items: [], total: 0, unreadCount: 0 });
+    const approved: UserNotificationResponse = {
+      ...notification,
+      id: 'approved-swap-1',
+      event: 'REQUEST_APPLIED',
+      title: 'Shift request approved',
+      message: 'The contractor approved the swap. The schedule has been updated.',
+      target: {
+        siteId: 'site-2',
+        requestType: 'SWAP',
+        requestId: 'older-request',
+        tab: 'schedule',
+        view: 'requests',
+      },
+    };
+    const mounted = mount('worker-1', vi.fn(), undefined, true);
+    await screen.findByRole('button', { name: 'Notifications, 0 unread' });
+    list.mockResolvedValue({ items: [approved], total: 1, unreadCount: 1 });
+    await act(async () => {
+      await queryClient.invalidateQueries({ queryKey: ['notifications'] });
+    });
+    expect(await screen.findByRole('status', { name: 'Shift Swap Approved' })).toBeTruthy();
+    expect(
+      screen.getByText('The contractor approved the swap. The schedule has been updated.'),
+    ).toBeTruthy();
+    fireEvent.click(screen.getByRole('button', { name: 'Dismiss notification' }));
+    await act(async () => {
+      await queryClient.invalidateQueries({ queryKey: ['notifications'] });
+    });
+    expect(screen.queryByRole('status', { name: 'Shift Swap Approved' })).toBeNull();
+    mounted.unmount();
+    mount('worker-1', vi.fn(), undefined, true);
+    await screen.findByRole('button', { name: 'Notifications, 1 unread' });
+    expect(screen.queryByRole('status', { name: 'Shift Swap Approved' })).toBeNull();
+    fireEvent.click(screen.getByRole('button', { name: 'Notifications, 1 unread' }));
+    expect(screen.getByText('Shift request approved')).toBeTruthy();
+  });
+
+  it('does not show a worker approval toast in a contractor session', async () => {
+    vi.mocked(SmartSiteManagementClient.prototype.listNotifications).mockResolvedValue({
+      items: [
+        {
+          ...notification,
+          event: 'REQUEST_APPLIED',
+          target: {
+            siteId: 'site-2',
+            requestType: 'SWAP',
+            requestId: 'older-request',
+            tab: 'schedule',
+            view: 'requests',
+          },
+        },
+      ],
+      total: 1,
+      unreadCount: 1,
+    });
+    mount('contractor-1');
+    await screen.findByRole('button', { name: 'Notifications, 1 unread' });
+    expect(screen.queryByRole('status', { name: 'Shift Swap Approved' })).toBeNull();
+  });
+
   it('opens one frame containing three people without changing their read state or legacy notices', async () => {
     const siteId = '11111111-1111-4111-8111-111111111111';
     const frameKey = 'event:33333333-3333-4333-8333-333333333333';

@@ -15,7 +15,7 @@ import {
 } from '../../features/shared/data';
 import { Button, Choice, CompactTabs } from '../../features/shared/ui';
 import { CalendarDateField } from '../../features/shared/calendar-date-field';
-import { assignmentEndDate, matchingVersions } from '../../features/scheduling/assignment-input';
+import { assignmentEndDate } from '../../features/scheduling/assignment-input';
 import { shiftDayOffset, shiftRange } from '../../features/scheduling/schedule-calendar';
 import { IconCalendar, IconUsers, IconAlert } from '../common/Icons';
 import { colors } from '../../theme/colors';
@@ -52,7 +52,6 @@ export function ScheduleAssignModal({ visible, onClose, onSuccess }: ScheduleAss
   const [targetId, setTargetId] = useState('');
   const [members, setMembers] = useState<string[]>([]);
   const [shiftId, setShiftId] = useState('');
-  const [versionId, setVersionId] = useState('');
   const [mode, setMode] = useState<ScheduleAssignmentInput['mode']>('DAY');
   const [todayDate] = useState(() => localDate());
   const [tomorrowDate] = useState(() => localDate(new Date(Date.now() + 86400000)));
@@ -76,12 +75,6 @@ export function ScheduleAssignModal({ visible, onClose, onSuccess }: ScheduleAss
     queryKey: [...queryKey, 'assignment-shifts'],
     enabled: visible,
     queryFn: ({ signal }) => allPages((p) => client.listShifts(token, scope.siteId, p), signal),
-  });
-  const versions = useQuery({
-    queryKey: [...queryKey, 'assignment-versions'],
-    enabled: visible,
-    queryFn: ({ signal }) =>
-      allPages((p) => client.listScheduleVersions(token, scope.siteId, p), signal),
   });
   const teams = useQuery({
     queryKey: [...queryKey, 'assignment-teams'],
@@ -118,20 +111,11 @@ export function ScheduleAssignModal({ visible, onClose, onSuccess }: ScheduleAss
       grants.data?.some((g) => g.contractorId === scope.contractorId && g.shiftId === s.id),
   );
   const end = assignmentEndDate(mode, from, to);
-  const availableVersions = matchingVersions(versions.data ?? [], from, end);
-  const chosenVersion =
-    availableVersions.find((v) => v.id === versionId) ??
-    (availableVersions.length === 1 ? availableVersions[0] : undefined);
   const currentMembers = (teamWorkers.data ?? []).filter((w) => w.teamId === targetId);
 
   const loadError =
-    workers.error ||
-    shifts.error ||
-    versions.error ||
-    teams.error ||
-    teamWorkers.error ||
-    grants.error;
-  const loading = [workers, shifts, versions, teams, teamWorkers, grants].some((q) => q.isPending);
+    workers.error || shifts.error || teams.error || teamWorkers.error || grants.error;
+  const loading = [workers, shifts, teams, teamWorkers, grants].some((q) => q.isPending);
 
   const update = (change: () => void) => {
     revision.current++;
@@ -148,17 +132,10 @@ export function ScheduleAssignModal({ visible, onClose, onSuccess }: ScheduleAss
       validDates(from, end);
       if (mode === 'WEEK' && new Date(`${from}T00:00:00Z`).getUTCDay() !== 1)
         throw new Error(t('scheduleAssign.mondayRequired'));
-      if (
-        !targetId ||
-        !shiftId ||
-        !chosenVersion ||
-        (target === 'TEAM' && !members.length) ||
-        !days.length
-      )
+      if (!targetId || !shiftId || (target === 'TEAM' && !members.length) || !days.length)
         throw new Error(t('scheduleAssign.completeFields'));
       const input: ScheduleAssignmentInput = {
         contractorId: scope.contractorId,
-        scheduleVersionId: chosenVersion.id,
         shiftId,
         target,
         ...(target === 'TEAM'
@@ -270,7 +247,6 @@ export function ScheduleAssignModal({ visible, onClose, onSuccess }: ScheduleAss
               onPress={() => {
                 void workers.refetch();
                 void shifts.refetch();
-                void versions.refetch();
                 void teams.refetch();
                 void teamWorkers.refetch();
                 void grants.refetch();
@@ -537,23 +513,6 @@ export function ScheduleAssignModal({ visible, onClose, onSuccess }: ScheduleAss
           )}
         </FormSection>
 
-        {/* SECTION 3: VERSION (if multiple) */}
-        {availableVersions.length > 1 && (
-          <View style={styles.sectionCard}>
-            <Choice
-              label={t('scheduleAssign.version')}
-              value={chosenVersion?.id ?? ''}
-              options={availableVersions.map((v) => ({
-                value: v.id,
-                label: `${v.version} · ${v.effectiveFrom.slice(0, 10)} – ${v.effectiveUntil?.slice(0, 10) ?? '…'}`,
-              }))}
-              onChange={(v) => update(() => setVersionId(v))}
-            />
-          </View>
-        )}
-
-        {!chosenVersion && <Text style={styles.error}>{t('scheduleAssign.noVersion')}</Text>}
-
         {error !== '' && (
           <View style={styles.errorBox}>
             <IconAlert size={18} color={colors.danger} />
@@ -643,14 +602,6 @@ const styles = StyleSheet.create({
     fontSize: 13,
     color: colors.danger,
     fontWeight: '600',
-  },
-  sectionCard: {
-    backgroundColor: colors.surface,
-    borderRadius: 18,
-    padding: 16,
-    gap: 14,
-    borderWidth: 1,
-    borderColor: colors.border,
   },
   membersContainer: {
     marginTop: 4,
@@ -865,11 +816,6 @@ const styles = StyleSheet.create({
   },
   weekdayChipTextSelected: {
     color: '#FFFFFF',
-  },
-  error: {
-    fontSize: 12,
-    color: colors.danger,
-    fontWeight: '600',
   },
   previewCard: {
     backgroundColor: colors.surface,

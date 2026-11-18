@@ -11,6 +11,7 @@ import { AppModule } from '../../src/app.module.js';
 import { configureApplication } from '../../src/configure-app.js';
 import { createLoggerParams } from '../../src/observability/logger.js';
 import { buildMigrationOptions } from '../../src/database/typeorm.migration-profile.js';
+import { CameraPpePolicyStorage1795046400010 } from '../../src/database/migrations/1795046400010-CameraPpePolicyStorage.js';
 import { AuthClientType } from '../../src/database/entities/auth-session.entity.js';
 import { AuthService } from '../../src/modules/auth/auth.service.js';
 import { hashPassword } from '../../src/modules/auth/password.js';
@@ -33,7 +34,14 @@ for (const enabled of ['true', 'false']) {
       );
       await cli.initialize();
       await cli.runMigrations();
-      await cli.undoLastMigration();
+      const applied = await cli.query<Array<{ name: string }>>(
+        'SELECT name FROM migrations ORDER BY id DESC',
+      );
+      const ppeIndex = applied.findIndex(
+        ({ name }) => name === 'CameraPpePolicyStorage1795046400010',
+      );
+      assert.ok(ppeIndex >= 0);
+      for (let index = 0; index <= ppeIndex; index++) await cli.undoLastMigration();
       const config = createTestConfig({
         DATABASE_URL: resolveTestDatabaseUrl(),
         DATABASE_SCHEMA: schema,
@@ -93,10 +101,16 @@ for (const variant of ['fresh', 'upgrade'] as const) {
       );
       assert.deepEqual(await cli.runMigrations(), []);
       // Before adopting any v2 policy, rollback/reapply is lossless.
-      await cli.undoLastMigration();
+      const installed = (
+        await cli.query<Array<{ name: string }>>('SELECT name FROM migrations ORDER BY id')
+      ).map(({ name }) => name);
+      const ppeIndex = installed.indexOf('CameraPpePolicyStorage1795046400010');
+      assert.ok(ppeIndex >= 0);
+      const reverted = installed.slice(ppeIndex);
+      for (let index = 0; index < reverted.length; index++) await cli.undoLastMigration();
       assert.deepEqual(
         (await cli.runMigrations()).map((item) => item.name),
-        ['CameraPpePolicyStorage1795046400010'],
+        reverted,
       );
       fixtureDb = new DataSource(
         buildMigrationOptions(
@@ -211,7 +225,11 @@ for (const variant of ['fresh', 'upgrade'] as const) {
         [fixture.cameraId],
       );
       assert.equal(before.length, 3);
-      await assert.rejects(cli.undoLastMigration(), /PPE policy history must be retained/);
+      const ppeMigration = new CameraPpePolicyStorage1795046400010();
+      await assert.rejects(
+        cli.transaction((manager) => ppeMigration.down(manager.queryRunner!)),
+        /PPE policy history must be retained/,
+      );
       assert.deepEqual(
         await db.query(
           'SELECT configuration_version,bundle_sha256 FROM camera_configuration_bundle WHERE camera_id=$1 ORDER BY configuration_version',

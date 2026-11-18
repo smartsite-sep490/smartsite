@@ -114,7 +114,7 @@ export function ScheduleSetupView({ apiUrl }: ScheduleSetupViewProps) {
   const [selectedSiteId, setSelectedSiteId] = useState<string | null>(() =>
     new URLSearchParams(window.location.search).get('siteId'),
   );
-  const [requestedTab, setActiveTab] = useState<'shifts' | 'version' | 'assignment'>(() =>
+  const [requestedTab, setActiveTab] = useState<'shifts' | 'assignment'>(() =>
     new URLSearchParams(window.location.search).get('tab') === 'assignment'
       ? 'assignment'
       : 'shifts',
@@ -136,7 +136,6 @@ export function ScheduleSetupView({ apiUrl }: ScheduleSetupViewProps) {
   // Modal open states
   const [showCreateShiftModal, setShowCreateShiftModal] = useState(false);
   const [showAssignContractorModal, setShowAssignContractorModal] = useState(false);
-  const [showCreateVersionModal, setShowCreateVersionModal] = useState(false);
   const [shiftToArchive, setShiftToArchive] = useState<{ id: string; name: string } | null>(null);
   const [showArchivedShifts, setShowArchivedShifts] = useState(false);
 
@@ -167,9 +166,8 @@ export function ScheduleSetupView({ apiUrl }: ScheduleSetupViewProps) {
       assignment.role === 'CONTRACTOR_REPRESENTATIVE' && assignment.siteId === activeSiteId,
   );
   const canAccess = isAdmin || isManager || isContractorRep;
-  // MF07: only a Site Manager for the selected Site may create/delete shifts,
-  // manage versions, and assign shifts to contractors. Admin may still view setup.
-  const canManageShiftsAndVersions = isManager;
+  // MF07: only a Site Manager for the selected Site may manage shifts and grant them to contractors.
+  const canManageShifts = isManager;
   const canAssignWorker = isContractorRep;
   const canViewAssignments = isAdmin || isContractorRep;
   const activeTab = requestedTab === 'assignment' && !canViewAssignments ? 'shifts' : requestedTab;
@@ -230,13 +228,6 @@ export function ScheduleSetupView({ apiUrl }: ScheduleSetupViewProps) {
   });
   const shifts = useMemo(() => shiftsQuery.data?.items ?? [], [shiftsQuery.data]);
   const availableShifts = useMemo(() => shifts.filter((shift) => !shift.archivedAt), [shifts]);
-
-  const versionsQuery = useQuery({
-    queryKey: ['schedule-versions', activeSiteId],
-    queryFn: () => client.listScheduleVersions(accessToken!, activeSiteId!),
-    enabled: Boolean(accessToken && activeSiteId),
-  });
-  const versions = useMemo(() => versionsQuery.data?.items ?? [], [versionsQuery.data]);
 
   const workersQuery = useQuery({
     queryKey: ['schedule-workers', apiUrl, accessToken, activeSiteId],
@@ -408,13 +399,6 @@ export function ScheduleSetupView({ apiUrl }: ScheduleSetupViewProps) {
   const [assignContractorError, setAssignContractorError] = useState<string | null>(null);
   const [assignContractorSuccess, setAssignContractorSuccess] = useState<string | null>(null);
 
-  // Schedule Version Form
-  const [versionFrom, setVersionFrom] = useState(currentDateIso());
-  const [versionUntil, setVersionUntil] = useState('');
-  const untilInclusive = true;
-  const [versionError, setVersionError] = useState<string | null>(null);
-  const [versionSuccess, setVersionSuccess] = useState<string | null>(null);
-
   // ── Mutations ─────────────────────────────────────────────────────────────
   const createShiftMutation = useMutation({
     mutationFn: (input: Parameters<typeof client.createShift>[2]) =>
@@ -475,26 +459,6 @@ export function ScheduleSetupView({ apiUrl }: ScheduleSetupViewProps) {
         setAssignContractorError(err.message);
       } else {
         setAssignContractorError(tr('schedule_setup_view.failed_to_assign_shift_to_contractor'));
-      }
-    },
-  });
-
-  const createVersionMutation = useMutation({
-    mutationFn: (input: { effectiveFrom: string; effectiveUntil?: string }) =>
-      client.createScheduleVersion(accessToken!, activeSiteId!, input),
-    onSuccess: (newVersion) => {
-      setVersionSuccess(tr('schedule_setup_view.version_created', { version: newVersion.version }));
-      setVersionError(null);
-      setShowCreateVersionModal(false);
-      queryClient.invalidateQueries({ queryKey: ['schedule-versions', activeSiteId] });
-      setTimeout(() => setVersionSuccess(null), 5000);
-    },
-    onError: (err: unknown) => {
-      setVersionSuccess(null);
-      if (err instanceof ApiError) {
-        setVersionError(err.message);
-      } else {
-        setVersionError(tr('schedule_setup_view.failed_to_create_schedule_version'));
       }
     },
   });
@@ -595,43 +559,6 @@ export function ScheduleSetupView({ apiUrl }: ScheduleSetupViewProps) {
     });
   };
 
-  const handleCreateVersion = (e: React.FormEvent) => {
-    e.preventDefault();
-    setVersionError(null);
-    setVersionSuccess(null);
-
-    if (!activeSiteId) {
-      setVersionError(tr('common.no_site_selected_2b1789'));
-      return;
-    }
-    if (!versionFrom) {
-      setVersionError(tr('schedule_setup_view.effective_from_date_is_required'));
-      return;
-    }
-    if (versionFrom < currentDateIso()) {
-      setVersionError(tr('schedule_setup_view.effective_from_date_cannot_be_in_the_past'));
-      return;
-    }
-
-    const fromDate = new Date(`${versionFrom}T00:00:00.000Z`).toISOString();
-    let untilDate: string | undefined = undefined;
-
-    if (versionUntil) {
-      if (untilInclusive) {
-        const d = new Date(`${versionUntil}T00:00:00.000Z`);
-        d.setUTCDate(d.getUTCDate() + 1);
-        untilDate = d.toISOString();
-      } else {
-        untilDate = new Date(`${versionUntil}T00:00:00.000Z`).toISOString();
-      }
-    }
-
-    createVersionMutation.mutate({
-      effectiveFrom: fromDate,
-      effectiveUntil: untilDate,
-    });
-  };
-
   const openAssignContractorForShift = (shiftId: string) => {
     setAssignContractorShiftId(shiftId);
     setAssignContractorId(contractors[0]?.id || '');
@@ -645,7 +572,7 @@ export function ScheduleSetupView({ apiUrl }: ScheduleSetupViewProps) {
   // Tab items config
   const tabItems = useMemo(() => {
     const items: {
-      id: 'shifts' | 'version' | 'assignment';
+      id: 'shifts' | 'assignment';
       label: string;
       count?: number;
       icon?: React.ReactNode;
@@ -657,14 +584,6 @@ export function ScheduleSetupView({ apiUrl }: ScheduleSetupViewProps) {
         },
         count: shifts.length,
         icon: <IconClock className="w-3.5 h-3.5 text-[#F66B17]" />,
-      },
-      {
-        id: 'version',
-        get label() {
-          return tr('common.schedule_versions');
-        },
-        count: versions.length,
-        icon: <IconCalendar className="w-3.5 h-3.5 text-blue-600" />,
       },
     ];
     if (canViewAssignments) {
@@ -678,16 +597,9 @@ export function ScheduleSetupView({ apiUrl }: ScheduleSetupViewProps) {
       });
     }
     return items;
-  }, [shifts.length, versions.length, schedulesQuery.data?.total, canViewAssignments]);
+  }, [shifts.length, schedulesQuery.data?.total, canViewAssignments]);
 
-  const setupQueries = [
-    currentUserQuery,
-    sitesQuery,
-    shiftsQuery,
-    versionsQuery,
-    readScopes,
-    schedulesQuery,
-  ];
+  const setupQueries = [currentUserQuery, sitesQuery, shiftsQuery, readScopes, schedulesQuery];
   const failedInitialQuery = setupQueries.find(
     (query) =>
       query.isError &&
@@ -708,7 +620,7 @@ export function ScheduleSetupView({ apiUrl }: ScheduleSetupViewProps) {
   if (
     currentUserQuery.isPending ||
     (canDiscoverSites && sitesQuery.isPending) ||
-    (canAccess && activeSiteId && (shiftsQuery.isPending || versionsQuery.isPending))
+    (canAccess && activeSiteId && shiftsQuery.isPending)
   ) {
     return <p role="status">{tr('common.loading')}</p>;
   }
@@ -758,10 +670,9 @@ export function ScheduleSetupView({ apiUrl }: ScheduleSetupViewProps) {
           onClick={() => {
             sitesQuery.refetch();
             shiftsQuery.refetch();
-            versionsQuery.refetch();
             if (canViewAssignments && assignmentScope.contractorId) schedulesQuery.refetch();
           }}
-          isLoading={sitesQuery.isFetching || shiftsQuery.isFetching || versionsQuery.isFetching}
+          isLoading={sitesQuery.isFetching || shiftsQuery.isFetching}
           leftIcon={<IconRefreshCw className="w-3.5 h-3.5 text-slate-500" />}
         >
           {tr('common.refresh')}
@@ -826,35 +737,10 @@ export function ScheduleSetupView({ apiUrl }: ScheduleSetupViewProps) {
             </div>
           </div>
         )}
-
-        {versionSuccess && (
-          <div
-            role="status"
-            className="pointer-events-auto relative overflow-hidden rounded-2xl bg-[#071A2B]/95 backdrop-blur-xl border border-white/15 p-4 shadow-[0_20px_50px_rgba(0,0,0,0.35),0_0_0_1px_rgba(59,130,246,0.25)] text-white transition-all duration-300 ease-[cubic-bezier(0.16,1,0.3,1)] animate-in slide-in-from-top-4 fade-in"
-          >
-            <div className="flex flex-wrap items-center justify-between gap-3 gap-3">
-              <div className="flex items-center gap-3">
-                <div className="w-8 h-8 rounded-lg bg-blue-500 text-white flex items-center justify-center shadow-[0_0_12px_rgba(59,130,246,0.4)] shrink-0">
-                  <IconCheck className="w-4 h-4 text-white" />
-                </div>
-                <span className="text-xs font-semibold text-slate-100">
-                  {localizeMessage(versionSuccess)}
-                </span>
-              </div>
-              <button
-                type="button"
-                onClick={() => setVersionSuccess(null)}
-                className="text-slate-400 hover:text-white rounded-lg p-1 transition-colors cursor-pointer"
-              >
-                <IconX className="w-3.5 h-3.5" />
-              </button>
-            </div>
-          </div>
-        )}
       </div>
 
       {/* 2. Top Summary Metrics */}
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3.5">
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
         <div className="bg-white border border-[#E2E8F0] rounded-2xl p-3.5 shadow-xs flex flex-wrap items-center justify-between gap-3">
           <div className="space-y-0.5">
             <span className="text-xs font-medium text-slate-500">
@@ -864,18 +750,6 @@ export function ScheduleSetupView({ apiUrl }: ScheduleSetupViewProps) {
           </div>
           <div className="w-8 h-8 rounded-xl bg-slate-50 border border-slate-100 flex items-center justify-center text-slate-600">
             <IconClock className="w-4 h-4 text-[#F66B17]" />
-          </div>
-        </div>
-
-        <div className="bg-white border border-[#E2E8F0] rounded-2xl p-3.5 shadow-xs flex flex-wrap items-center justify-between gap-3">
-          <div className="space-y-0.5">
-            <span className="text-xs font-medium text-slate-500">
-              {tr('common.schedule_versions')}
-            </span>
-            <p className="text-xl font-bold tracking-tight text-[#071A2B]">{versions.length}</p>
-          </div>
-          <div className="w-8 h-8 rounded-xl bg-slate-50 border border-slate-100 flex items-center justify-center text-slate-600">
-            <IconCalendar className="w-4 h-4 text-blue-600" />
           </div>
         </div>
 
@@ -908,7 +782,7 @@ export function ScheduleSetupView({ apiUrl }: ScheduleSetupViewProps) {
               {tr('common.show_archived')}
             </label>
           )}
-          {activeTab === 'shifts' && canManageShiftsAndVersions && (
+          {activeTab === 'shifts' && canManageShifts && (
             <>
               <Button
                 variant="outline"
@@ -939,20 +813,6 @@ export function ScheduleSetupView({ apiUrl }: ScheduleSetupViewProps) {
               </Button>
             </>
           )}
-
-          {activeTab === 'version' && canManageShiftsAndVersions && (
-            <Button
-              variant="default"
-              size="md"
-              onClick={() => {
-                setVersionError(null);
-                setShowCreateVersionModal(true);
-              }}
-              leftIcon={<IconPlus className="w-3.5 h-3.5 text-[#F66B17]" />}
-            >
-              {tr('common.new_version')}
-            </Button>
-          )}
         </div>
       </div>
 
@@ -970,7 +830,7 @@ export function ScheduleSetupView({ apiUrl }: ScheduleSetupViewProps) {
                 icon={<IconClock className="w-6 h-6 text-[#F66B17]" />}
                 title={tr('common.no_available_shifts')}
                 description={
-                  canManageShiftsAndVersions
+                  canManageShifts
                     ? tr(
                         'schedule_setup_view.define_operational_shifts_with_specific_hours_and_timezones_for_this_site',
                       )
@@ -978,9 +838,7 @@ export function ScheduleSetupView({ apiUrl }: ScheduleSetupViewProps) {
                         'schedule_setup_view.the_site_manager_has_not_configured_any_shifts_for_this_site_yet',
                       )
                 }
-                actionLabel={
-                  canManageShiftsAndVersions ? tr('common.create_first_shift') : undefined
-                }
+                actionLabel={canManageShifts ? tr('common.create_first_shift') : undefined}
                 actionIcon={<IconPlus className="w-3.5 h-3.5 text-[#F66B17]" />}
                 onAction={() => {
                   setShiftError(null);
@@ -1034,7 +892,7 @@ export function ScheduleSetupView({ apiUrl }: ScheduleSetupViewProps) {
                         </div>
                       </div>
 
-                      {canManageShiftsAndVersions && (
+                      {canManageShifts && (
                         <div className="flex items-center gap-2">
                           {!shift.archivedAt && (
                             <Button
@@ -1060,7 +918,7 @@ export function ScheduleSetupView({ apiUrl }: ScheduleSetupViewProps) {
                             value1: assignedContractorList.length,
                           })}
                         </span>
-                        {canManageShiftsAndVersions && !shift.archivedAt && (
+                        {canManageShifts && !shift.archivedAt && (
                           <button
                             type="button"
                             onClick={() => openAssignContractorForShift(shift.id)}
@@ -1093,72 +951,7 @@ export function ScheduleSetupView({ apiUrl }: ScheduleSetupViewProps) {
         </div>
       )}
 
-      {/* ── TAB 2: SCHEDULE VERSIONS ───────────────────────────────────────── */}
-      {activeTab === 'version' && (
-        <div className="bg-white rounded-2xl border border-[#E2E8F0] shadow-xs overflow-hidden">
-          {versionsQuery.isLoading ? (
-            <div className="py-16 text-center text-xs text-slate-400 flex flex-col items-center justify-center gap-2">
-              <IconLoader className="w-5 h-5 animate-spin text-slate-500" />
-              <span>{tr('common.loading_schedule_versions')}</span>
-            </div>
-          ) : versions.length === 0 ? (
-            <EmptyState
-              icon={<IconCalendar className="w-6 h-6 text-blue-600" />}
-              title={tr('common.no_schedule_versions')}
-              description={
-                canManageShiftsAndVersions
-                  ? tr(
-                      'schedule_setup_view.create_a_schedule_version_defining_effective_date_ranges_before_assigning_worker_s',
-                    )
-                  : tr('schedule_setup_view.no_active_schedule_versions_found_for_this_site')
-              }
-              actionLabel={canManageShiftsAndVersions ? tr('common.create_new_version') : undefined}
-              actionIcon={<IconPlus className="w-3.5 h-3.5 text-[#F66B17]" />}
-              onAction={() => {
-                setVersionError(null);
-                setShowCreateVersionModal(true);
-              }}
-            />
-          ) : (
-            <div className="overflow-x-auto">
-              <table className="w-full text-left text-xs">
-                <thead>
-                  <tr className="border-b border-slate-100 bg-slate-50/60 text-slate-400 font-bold uppercase tracking-wider text-[10px]">
-                    <th className="py-3 px-4">{tr('common.version')}</th>
-                    <th className="py-3 px-4">{tr('common.effective_from')}</th>
-                    <th className="py-3 px-4">{tr('common.effective_until')}</th>
-                    <th className="py-3 px-4">{tr('common.status')}</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-slate-100">
-                  {versions.map((ver) => (
-                    <tr key={ver.id} className="hover:bg-slate-50/70 transition-colors">
-                      <td className="py-3.5 px-4 font-bold text-slate-900">
-                        {tr('common.version_value', { value1: ver.version })}
-                      </td>
-                      <td className="py-3.5 px-4 font-mono text-slate-700">
-                        {new Date(ver.effectiveFrom).toLocaleDateString(uiLocale())}
-                      </td>
-                      <td className="py-3.5 px-4 font-mono text-slate-700">
-                        {ver.effectiveUntil
-                          ? new Date(ver.effectiveUntil).toLocaleDateString(uiLocale())
-                          : tr('schedule_setup_view.ongoing_no_end_date')}
-                      </td>
-                      <td className="py-3.5 px-4">
-                        <Badge variant="success" dot>
-                          {tr('common.active')}
-                        </Badge>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          )}
-        </div>
-      )}
-
-      {/* ── TAB 3: WORKER ASSIGNMENT (CONTRACTOR REPRESENTATIVE ONLY) ─────── */}
+      {/* ── TAB 2: WORKER ASSIGNMENT (CONTRACTOR REPRESENTATIVE ONLY) ─────── */}
       {activeTab === 'assignment' && canViewAssignments && (
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-5 items-start">
           {/* Assignment Form Card (4 cols) - Double-Bezel Architecture */}
@@ -1189,7 +982,6 @@ export function ScheduleSetupView({ apiUrl }: ScheduleSetupViewProps) {
                   token={accessToken!}
                   siteId={activeSiteId!}
                   shifts={availableShifts}
-                  versions={versions}
                   onScopeChange={setAssignmentScope}
                 />
               )}
@@ -1247,30 +1039,28 @@ export function ScheduleSetupView({ apiUrl }: ScheduleSetupViewProps) {
 
                 {assignmentRange === 'CUSTOM' && (
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5 p-3 rounded-xl bg-slate-50/80 border border-slate-200/70">
-                    <label className="text-[10px] font-bold uppercase tracking-wider text-slate-500">
-                      {tr('common.from')}
-                      <input
-                        type="date"
-                        value={assignmentFromDate}
-                        onChange={(event) => {
-                          setAssignmentFromDate(event.target.value);
-                          resetAssignmentPage();
-                        }}
-                        className="mt-1 w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-800 shadow-[inset_0_1px_1px_rgba(0,0,0,0.02)] outline-none focus:border-[#071A2B] focus:ring-2 focus:ring-slate-900/10 transition-all"
-                      />
-                    </label>
-                    <label className="text-[10px] font-bold uppercase tracking-wider text-slate-500">
-                      {tr('common.to')}
-                      <input
-                        type="date"
-                        value={assignmentToDate}
-                        onChange={(event) => {
-                          setAssignmentToDate(event.target.value);
-                          resetAssignmentPage();
-                        }}
-                        className="mt-1 w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-800 shadow-[inset_0_1px_1px_rgba(0,0,0,0.02)] outline-none focus:border-[#071A2B] focus:ring-2 focus:ring-slate-900/10 transition-all"
-                      />
-                    </label>
+                    <SmartDatePicker
+                      label={tr('common.from')}
+                      value={assignmentFromDate}
+                      onChange={(value) => {
+                        setAssignmentFromDate(value);
+                        resetAssignmentPage();
+                      }}
+                      disablePast={false}
+                      clearable
+                      compact
+                    />
+                    <SmartDatePicker
+                      label={tr('common.to')}
+                      value={assignmentToDate}
+                      onChange={(value) => {
+                        setAssignmentToDate(value);
+                        resetAssignmentPage();
+                      }}
+                      disablePast={false}
+                      clearable
+                      compact
+                    />
                   </div>
                 )}
 
@@ -1367,6 +1157,7 @@ export function ScheduleSetupView({ apiUrl }: ScheduleSetupViewProps) {
                   <div>
                     <SmartInput
                       id="search-name-input"
+                      size="sm"
                       label={tr('common.search_name')}
                       placeholder={tr('schedule_setup_view.worker_name_or_id')}
                       value={assignmentSearchName}
@@ -1774,58 +1565,6 @@ export function ScheduleSetupView({ apiUrl }: ScheduleSetupViewProps) {
               leftIcon={<IconCheck className="w-3.5 h-3.5 text-[#F66B17]" />}
             >
               {tr('common.assign_contractor')}
-            </Button>
-          </div>
-        </form>
-      </Dialog>
-
-      {/* ── MODAL 3: Create Schedule Version Dialog ─────────────────────────── */}
-      <Dialog
-        open={showCreateVersionModal}
-        onClose={() => setShowCreateVersionModal(false)}
-        title={tr('common.create_schedule_version')}
-        description={tr('schedule_setup_view.define_a_new_planning_period_on_this_site')}
-        icon={<IconCalendar className="w-4 h-4 text-[#F66B17]" />}
-      >
-        <form onSubmit={handleCreateVersion} className="space-y-4">
-          {versionError && (
-            <div className="p-3 rounded-xl bg-rose-50 border border-rose-200 flex items-center gap-2 text-rose-700 text-xs">
-              <IconAlertCircle className="w-4 h-4 shrink-0" />
-              <span>{localizedError(versionError ?? undefined)}</span>
-            </div>
-          )}
-
-          <div className="space-y-1">
-            <SmartDatePicker
-              id="version-from-input"
-              label={tr('common.effective_from')}
-              fieldRequired
-              value={versionFrom}
-              onChange={setVersionFrom}
-            />
-          </div>
-
-          <div className="space-y-1">
-            <SmartDatePicker
-              id="version-until-input"
-              label={tr('common.effective_until_optional')}
-              value={versionUntil}
-              onChange={setVersionUntil}
-            />
-          </div>
-
-          <div className="flex items-center justify-end gap-2 pt-3 border-t border-slate-100">
-            <Button variant="outline" size="md" onClick={() => setShowCreateVersionModal(false)}>
-              {tr('common.cancel')}
-            </Button>
-            <Button
-              type="submit"
-              variant="default"
-              size="md"
-              isLoading={createVersionMutation.isPending}
-              leftIcon={<IconPlus className="w-3.5 h-3.5 text-[#F66B17]" />}
-            >
-              {tr('common.create_version')}
             </Button>
           </div>
         </form>
