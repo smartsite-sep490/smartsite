@@ -74,8 +74,7 @@ Submission, date correction, and local OCR work independently of AI. The Respons
 Set the backend environment variable `WORKER_DOCUMENT_OPENAI_MODEL` to override the default
 `gpt-4.1-mini`. On Cloud Run, set it on the service revision. Choose a model that supports
 image and PDF inputs and Structured Outputs with the request's JSON schema. Verify that
-the model can return the result within 15 seconds and the 256-token output budget, which
-also includes reasoning tokens for reasoning models.
+the model can return the result within 15 seconds on sample documents.
 
 The worker detail response can include `aiAnalysis` for the assigned Site Safety Officer. An AI
 result of `detectedKind: "PERSONAL_INSURANCE"` and `kindMismatch: true` flags an upload in the

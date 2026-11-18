@@ -73,7 +73,6 @@ export class DocumentAnalysisService {
         body: JSON.stringify({
           model: this.config.get('WORKER_DOCUMENT_OPENAI_MODEL', { infer: true }),
           store: false,
-          max_output_tokens: 256,
           instructions,
           input: [{ role: 'user', content: [file] }],
           text: {
