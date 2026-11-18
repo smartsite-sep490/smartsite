@@ -328,6 +328,16 @@ function formatRegionAppliedLabel(
   };
 }
 
+function buildZoneNameCounts(items: readonly RegionPolicyItemView[]): Map<string, number> {
+  const counts = new Map<string, number>();
+  for (const entry of items) {
+    if (!entry.zone) continue;
+    const key = entry.zone.name.trim().toLowerCase();
+    counts.set(key, (counts.get(key) ?? 0) + 1);
+  }
+  return counts;
+}
+
 export function RegionEffectivePolicyList({
   items,
   savedVsApplied,
@@ -342,6 +352,7 @@ export function RegionEffectivePolicyList({
   onRetryRegion: (regionId: string) => void;
 }) {
   const { t } = useTranslation(SAFETY_NAMESPACE);
+  const zoneNameCounts = buildZoneNameCounts(items);
 
   return (
     <div className="space-y-2">
@@ -360,8 +371,11 @@ export function RegionEffectivePolicyList({
           {items.map(
             ({ region, regionIndex, sameZoneCount, zone, saved, effective, isSelected }) => {
               const regionBadge = t('cameraPpe.regionNumberBadge', { index: regionIndex });
+              const needsRegionDisambiguator =
+                sameZoneCount > 1 ||
+                (zone ? (zoneNameCounts.get(zone.name.trim().toLowerCase()) ?? 0) > 1 : false);
               const targetLabel = zone
-                ? sameZoneCount > 1
+                ? needsRegionDisambiguator
                   ? `${zone.name} (${regionBadge})`
                   : zone.name
                 : t('cameraPpe.regionUnresolvedLabel', { index: regionIndex });
@@ -402,7 +416,7 @@ export function RegionEffectivePolicyList({
                           {t(modeBadgeCopyKey(modeKey))}
                         </span>
                         <span className="rounded-md border border-slate-200 bg-slate-50 px-1.5 py-0.5 text-[11px] text-slate-600">
-                          {zone && sameZoneCount === 1 ? `${regionBadge} · ` : ''}
+                          {zone && !needsRegionDisambiguator ? `${regionBadge} · ` : ''}
                           {t('cameraPpe.regionVersionMeta', { version: region.version })} ·{' '}
                           {t(
                             region.isActive ? 'cameraPpe.regionActive' : 'cameraPpe.regionInactive',
@@ -501,13 +515,18 @@ export function CameraDefaultImpactCard({
   draftCameraPolicy: CameraPpePolicy | null;
 }) {
   const { t } = useTranslation(SAFETY_NAMESPACE);
+  const zoneNameCounts = buildZoneNameCounts(items);
   const activeItems = items.filter((entry) => entry.region.isActive);
-  const formatName = ({ regionIndex, sameZoneCount, zone }: RegionPolicyItemView): string =>
-    zone
-      ? sameZoneCount > 1
-        ? `${zone.name} (${t('cameraPpe.regionNumberBadge', { index: regionIndex })})`
-        : zone.name
-      : t('cameraPpe.regionUnresolvedLabel', { index: regionIndex });
+  const formatName = ({ regionIndex, sameZoneCount, zone }: RegionPolicyItemView): string => {
+    if (!zone) {
+      return t('cameraPpe.regionUnresolvedLabel', { index: regionIndex });
+    }
+    const needsRegionDisambiguator =
+      sameZoneCount > 1 || (zoneNameCounts.get(zone.name.trim().toLowerCase()) ?? 0) > 1;
+    return needsRegionDisambiguator
+      ? `${zone.name} (${t('cameraPpe.regionNumberBadge', { index: regionIndex })})`
+      : zone.name;
+  };
 
   const inheritingNames = activeItems
     .filter(
