@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type ReactNode } from 'react';
+import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react';
 import { Link, useLocation } from 'react-router-dom';
 import { ApiError } from '@smartsite/api-client';
 import { MonitorWorkspaceTour } from './MonitorWorkspaceTour';
@@ -6,8 +6,9 @@ import { useTranslation } from 'react-i18next';
 import type { LoginResponse } from '@smartsite/api-client';
 import type { SmartSiteManagementClient } from '@smartsite/api-client';
 import { useManagementClient } from '../../features/auth/auth-session';
-import { FourSourceWall } from './FourSourceWall';
+import { FourSourceWall, type ScopedWallSnapshot } from './FourSourceWall';
 import { FocusedCameraMedia } from './FocusedCameraMedia';
+import { MonitorEvidenceDrawer } from './MonitorEvidenceDrawer';
 import { useMonitorPages } from './useMonitorPages';
 import { useMonitorReadabilityTranslate } from './monitor-readability';
 import { registerFeatureCatalog } from '../../i18n/feature-catalog-registry';
@@ -175,7 +176,7 @@ function MonitorScope({
       <select
         name="monitorSite"
         data-tour-anchor="monitor-site-scope"
-        className="block h-8 flex-1 min-w-0 rounded-lg border border-slate-300 bg-white px-2.5 py-1 text-xs sm:text-sm text-slate-900 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-slate-900 disabled:bg-slate-50 disabled:text-slate-500"
+        className="block h-8 flex-1 min-w-0 max-w-full truncate rounded-lg border border-slate-300 bg-white px-2.5 py-1 text-xs sm:text-sm text-slate-900 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-slate-900 disabled:bg-slate-50 disabled:text-slate-500"
         value={site?.id ?? ''}
         onChange={(e) => setSite(e.target.value)}
         disabled={sites.isPending || !visibleSites.length}
@@ -279,7 +280,7 @@ function MonitorScope({
       )}
       {site ? (
         <CameraScope
-          {...{ apiUrl, client, session, aiPaused, scope }}
+          {...{ apiUrl, client, session, aiPaused, enableFrameInboxLink, scope }}
           site={site}
           siteSelector={siteSelector}
           siteNotices={siteNotices}
@@ -301,6 +302,7 @@ function CameraScope({
   client,
   session,
   aiPaused,
+  enableFrameInboxLink = false,
   scope,
   site,
   siteSelector,
@@ -324,6 +326,9 @@ function CameraScope({
     chosen: linkedCameraId,
     focus: false,
     fullscreenError: false,
+    evidenceCameraId: null as string | null,
+    focusRawMode: false,
+    snapshotsByCamera: {} as Record<string, ScopedWallSnapshot>,
   }));
   if (scopeState.siteScopeKey !== siteScopeKey) {
     setScopeState({
@@ -331,33 +336,120 @@ function CameraScope({
       chosen: linkedCameraId,
       focus: false,
       fullscreenError: false,
+      evidenceCameraId: null,
+      focusRawMode: false,
+      snapshotsByCamera: {},
     });
   }
-  const chosen = scopeState.siteScopeKey === siteScopeKey ? scopeState.chosen : linkedCameraId;
-  const focus = scopeState.siteScopeKey === siteScopeKey ? scopeState.focus : false;
-  const fullscreenError =
-    scopeState.siteScopeKey === siteScopeKey ? scopeState.fullscreenError : false;
-  const setCamera = (nextCameraId: string) =>
-    setScopeState((prev) => ({
-      ...(prev.siteScopeKey === siteScopeKey
-        ? prev
-        : { siteScopeKey, chosen: linkedCameraId, focus: false, fullscreenError: false }),
-      chosen: nextCameraId,
-    }));
-  const setFocus = (nextFocus: boolean) =>
-    setScopeState((prev) => ({
-      ...(prev.siteScopeKey === siteScopeKey
-        ? prev
-        : { siteScopeKey, chosen: linkedCameraId, focus: false, fullscreenError: false }),
-      focus: nextFocus,
-    }));
-  const setFullscreenError = (nextError: boolean) =>
-    setScopeState((prev) => ({
-      ...(prev.siteScopeKey === siteScopeKey
-        ? prev
-        : { siteScopeKey, chosen: linkedCameraId, focus: false, fullscreenError: false }),
-      fullscreenError: nextError,
-    }));
+  const activeScopeState =
+    scopeState.siteScopeKey === siteScopeKey
+      ? scopeState
+      : {
+          siteScopeKey,
+          chosen: linkedCameraId,
+          focus: false,
+          fullscreenError: false,
+          evidenceCameraId: null,
+          focusRawMode: false,
+          snapshotsByCamera: {} as Record<string, ScopedWallSnapshot>,
+        };
+  const chosen = activeScopeState.chosen;
+  const focus = activeScopeState.focus;
+  const fullscreenError = activeScopeState.fullscreenError;
+  const evidenceCameraId = activeScopeState.evidenceCameraId;
+  const focusRawMode = activeScopeState.focusRawMode;
+  const snapshotsByCamera = activeScopeState.snapshotsByCamera;
+
+  const updateScopeState = useCallback(
+    (updater: (prev: typeof activeScopeState) => typeof activeScopeState) => {
+      setScopeState((prev) =>
+        updater(
+          prev.siteScopeKey === siteScopeKey
+            ? prev
+            : {
+                siteScopeKey,
+                chosen: linkedCameraId,
+                focus: false,
+                fullscreenError: false,
+                evidenceCameraId: null,
+                focusRawMode: false,
+                snapshotsByCamera: {},
+              },
+        ),
+      );
+    },
+    [siteScopeKey, linkedCameraId],
+  );
+
+  const setCamera = useCallback(
+    (nextCameraId: string) =>
+      updateScopeState((prev) => ({ ...prev, chosen: nextCameraId, focusRawMode: false })),
+    [updateScopeState],
+  );
+  const setFocus = useCallback(
+    (nextFocus: boolean) =>
+      updateScopeState((prev) => ({
+        ...prev,
+        focus: nextFocus,
+        focusRawMode: nextFocus ? prev.focusRawMode : false,
+      })),
+    [updateScopeState],
+  );
+  const setFullscreenError = useCallback(
+    (nextError: boolean) => updateScopeState((prev) => ({ ...prev, fullscreenError: nextError })),
+    [updateScopeState],
+  );
+  const setEvidenceCameraId = useCallback(
+    (nextCameraId: string | null) =>
+      updateScopeState((prev) => ({ ...prev, evidenceCameraId: nextCameraId })),
+    [updateScopeState],
+  );
+  const handleTilePreviewUpdate = useCallback(
+    (snapshot: ScopedWallSnapshot) => {
+      if (snapshot.scope.sessionScope !== scope || snapshot.scope.siteId !== site.id) return;
+      const isRestricted =
+        snapshot.errorStatus === 401 ||
+        snapshot.errorStatus === 403 ||
+        snapshot.errorStatus === 404;
+      updateScopeState((prev) => ({
+        ...prev,
+        snapshotsByCamera: {
+          ...prev.snapshotsByCamera,
+          [snapshot.scope.cameraId]: isRestricted ? { ...snapshot, preview: null } : snapshot,
+        },
+      }));
+    },
+    [scope, site.id, updateScopeState],
+  );
+  const handleTileUnmount = useCallback(
+    (cameraId: string) => {
+      updateScopeState((prev) => {
+        if (!(cameraId in prev.snapshotsByCamera)) return prev;
+        const nextSnapshots = { ...prev.snapshotsByCamera };
+        delete nextSnapshots[cameraId];
+        return { ...prev, snapshotsByCamera: nextSnapshots };
+      });
+    },
+    [updateScopeState],
+  );
+  const handleFocusSnapshotUpdate = useCallback(
+    (snapshot: ScopedWallSnapshot, isRawMode: boolean) => {
+      if (snapshot.scope.sessionScope !== scope || snapshot.scope.siteId !== site.id) return;
+      const isRestricted =
+        snapshot.errorStatus === 401 ||
+        snapshot.errorStatus === 403 ||
+        snapshot.errorStatus === 404;
+      updateScopeState((prev) => ({
+        ...prev,
+        focusRawMode: isRawMode,
+        snapshotsByCamera: {
+          ...prev.snapshotsByCamera,
+          [snapshot.scope.cameraId]: isRestricted ? { ...snapshot, preview: null } : snapshot,
+        },
+      }));
+    },
+    [scope, site.id, updateScopeState],
+  );
   const [isFullscreen, setIsFullscreen] = useState(false);
   const container = useRef<HTMLDivElement>(null);
   const fullscreenBtnRef = useRef<HTMLButtonElement>(null);
@@ -418,6 +510,28 @@ function CameraScope({
   const selected =
     active.find((row) => row.id === chosen) ??
     (linkedCameraId && chosen === linkedCameraId ? undefined : active[0]);
+  const evidenceCamera = evidenceCameraId
+    ? active.find((row) => row.id === evidenceCameraId)
+    : undefined;
+
+  useEffect(() => {
+    if (!focus || isFullscreen || evidenceCameraId || !selected) return;
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key !== 'Escape' || event.defaultPrevented) return;
+      if (
+        document.querySelector(
+          '[data-testid="safety-task-tour"], [role="dialog"], [aria-modal="true"]',
+        )
+      ) {
+        return;
+      }
+      event.preventDefault();
+      pendingFocusTargetRef.current = { kind: 'grid-enlarge', cameraId: selected.id };
+      setFocus(false);
+    };
+    window.addEventListener('keydown', onKeyDown);
+    return () => window.removeEventListener('keydown', onKeyDown);
+  }, [focus, isFullscreen, evidenceCameraId, selected, setFocus]);
   const wall = selected
     ? [selected, ...active.filter((row) => row.id !== selected.id)].slice(0, 4)
     : [];
@@ -443,7 +557,7 @@ function CameraScope({
           <select
             name="monitorCamera"
             data-tour-anchor="monitor-camera-select"
-            className="block h-8 flex-1 min-w-0 rounded-lg border border-slate-300 bg-white px-2.5 py-1 text-xs sm:text-sm text-slate-900 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-slate-900 disabled:bg-slate-50 disabled:text-slate-500"
+            className="block h-8 flex-1 min-w-0 max-w-full truncate rounded-lg border border-slate-300 bg-white px-2.5 py-1 text-xs sm:text-sm text-slate-900 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-slate-900 disabled:bg-slate-50 disabled:text-slate-500"
             value={selected?.id ?? ''}
             onChange={(e) => setCamera(e.target.value)}
             disabled={!active.length}
@@ -707,6 +821,8 @@ function CameraScope({
               siteName={site.name}
               camera={selected}
               aiPaused={!!aiPaused}
+              onOpenEvidence={() => setEvidenceCameraId(selected.id)}
+              onAiSnapshotUpdate={handleFocusSnapshotUpdate}
               onExitFocus={() => {
                 pendingFocusTargetRef.current = { kind: 'grid-enlarge', cameraId: selected.id };
                 setFocus(false);
@@ -719,6 +835,9 @@ function CameraScope({
               cameras={wall}
               selectedCameraId={selected.id}
               onSelectCamera={setCamera}
+              onOpenEvidence={(id) => setEvidenceCameraId(id)}
+              onTilePreviewUpdate={handleTilePreviewUpdate}
+              onTileUnmount={handleTileUnmount}
               onEnlargeCamera={(id) => {
                 pendingFocusTargetRef.current = { kind: 'focus-exit' };
                 setCamera(id);
@@ -726,6 +845,19 @@ function CameraScope({
               }}
             />
           ))}
+        <MonitorEvidenceDrawer
+          open={Boolean(evidenceCamera)}
+          onClose={() => setEvidenceCameraId(null)}
+          siteId={site.id}
+          siteCode={site.code}
+          siteName={site.name}
+          camera={evidenceCamera}
+          sessionScope={scope}
+          aiPaused={!!aiPaused}
+          enableFrameInboxLink={Boolean(enableFrameInboxLink)}
+          snapshot={evidenceCamera ? snapshotsByCamera[evidenceCamera.id] : undefined}
+          isRawModeActive={Boolean(focus && evidenceCamera?.id === selected?.id && focusRawMode)}
+        />
       </div>
     </div>
   );
