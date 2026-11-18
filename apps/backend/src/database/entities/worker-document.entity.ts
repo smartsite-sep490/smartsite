@@ -54,6 +54,12 @@ export class WorkerIdentityImageEntity {
   @CreateDateColumn({ name: 'uploaded_at', type: 'timestamptz' }) uploadedAt!: Date;
 }
 
+export type WorkerDocumentAnalysisLease = {
+  status: 'ANALYZING';
+  token: string;
+  expiresAt: number;
+};
+
 @Entity({ name: 'worker_document' })
 @Check('chk_worker_document_version', 'version>=1')
 @Index('idx_worker_document_worker', ['workerId', 'uploadedAt'])
@@ -85,7 +91,7 @@ export class WorkerDocumentEntity {
   @Column({ type: 'jsonb', select: false }) file!: StoredObject;
   @Column({ type: 'jsonb' }) ocr!: DocumentOcrResult;
   @Column({ name: 'ai_analysis', type: 'jsonb', nullable: true, select: false })
-  aiAnalysis!: WorkerDocumentAnalysisResult | null;
+  aiAnalysis!: WorkerDocumentAnalysisResult | WorkerDocumentAnalysisLease | null;
   @Column({ name: 'issued_on', type: 'date', nullable: true }) issuedOn!: string | null;
   @Column({ name: 'expires_on', type: 'date', nullable: true }) expiresOn!: string | null;
   @Column({ name: 'submitted_issued_on', type: 'date', nullable: true }) submittedIssuedOn!:

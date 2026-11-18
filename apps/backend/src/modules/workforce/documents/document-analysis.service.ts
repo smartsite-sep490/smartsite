@@ -5,6 +5,8 @@ import { z } from 'zod';
 import type { BackendEnvironment } from '../../../config/environment.js';
 import { DOCUMENT_KINDS } from './worker-compliance.js';
 
+export const DOCUMENT_ANALYSIS_TIMEOUT_MS = 15_000;
+
 const calendarDate = z
   .string()
   .regex(/^\d{4}-\d{2}-\d{2}$/)
@@ -55,7 +57,7 @@ export class DocumentAnalysisService {
       this.logger.warn({ status: 'UNAVAILABLE', durationMs: durationMs(), code });
       return { status: 'UNAVAILABLE' };
     };
-    const signal = AbortSignal.timeout(15_000);
+    const signal = AbortSignal.timeout(DOCUMENT_ANALYSIS_TIMEOUT_MS);
     const dataUrl = 'data:' + mediaType + ';base64,' + bytes.toString('base64');
     const file =
       mediaType === 'application/pdf'

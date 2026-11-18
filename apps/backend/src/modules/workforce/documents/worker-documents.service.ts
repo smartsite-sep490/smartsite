@@ -29,6 +29,7 @@ import { PublicHttpException } from '../../../common/http/public-http-exception.
 import {
   WorkerComplianceProfileEntity,
   WorkerDocumentEntity,
+  type WorkerDocumentAnalysisLease,
   WorkerIdentityImageEntity,
 } from '../../../database/entities/worker-document.entity.js';
 import { WorkerEntity } from '../../../database/entities/worker.entity.js';
@@ -54,7 +55,12 @@ import {
 } from './worker-documents.commands.js';
 import { DocumentNotificationsService } from './document-notifications.service.js';
 import { compareDocumentDates } from './worker-document-date-check.js';
-import { DocumentAnalysisService } from './document-analysis.service.js';
+import {
+  DOCUMENT_ANALYSIS_TIMEOUT_MS,
+  DocumentAnalysisService,
+} from './document-analysis.service.js';
+
+const ANALYSIS_LEASE_MS = 60_000;
 
 export interface DocumentUpload {
   buffer: Buffer;
@@ -343,13 +349,16 @@ export class WorkerDocumentsService {
             identityImages.length === 2
           ),
       ),
-      documents: documents.map((doc) => ({
-        ...response(doc),
-        identityCheck: compareDocumentIdentity(profile?.nationalId, doc.ocr),
-        ...(canSeeAnalysis && doc.aiAnalysis
-          ? { aiAnalysis: analysisForReview(doc, doc.aiAnalysis, profile?.nationalId) }
-          : {}),
-      })),
+      documents: documents.map((doc) => {
+        const analysis = doc.aiAnalysis;
+        return {
+          ...response(doc),
+          identityCheck: compareDocumentIdentity(profile?.nationalId, doc.ocr),
+          ...(canSeeAnalysis && analysis && analysis.status !== 'ANALYZING'
+            ? { aiAnalysis: analysisForReview(doc, analysis, profile?.nationalId) }
+            : {}),
+        };
+      }),
     };
   }
   async list(
@@ -544,31 +553,71 @@ export class WorkerDocumentsService {
         return { document: response(doc), reused: false };
       });
       committed = !result.reused;
-      if (committed) {
-        await this.analyzeSubmission(result.document.id, file!.buffer, format.mediaType);
-      }
       return result.document;
     } finally {
       if (!committed) await this.storage.remove(stored);
     }
   }
-  private async analyzeSubmission(documentId: string, bytes: Buffer, mediaType: string) {
+
+  async analyzeDocument(
+    actor: WorkforceActor,
+    siteId: string,
+    workerId: string,
+    documentId: string,
+  ) {
+    const claim = await this.source.transaction(async (manager) => {
+      const worker = await this.access(manager, actor, siteId, workerId, 'review', true);
+      const docs = manager.getRepository(WorkerDocumentEntity);
+      const doc = await docs
+        .createQueryBuilder('d')
+        .addSelect(['d.file', 'd.aiAnalysis'])
+        .where('d.id=:id AND d.worker_id=:workerId', { id: uuid(documentId), workerId: worker.id })
+        .getOne();
+      if (!doc) missing();
+      if (doc.status !== 'PENDING') conflict('Only pending documents can be analyzed.');
+      if (doc.aiAnalysis?.status === 'COMPLETE') return null;
+      const now = Date.now();
+      if (doc.aiAnalysis?.status === 'ANALYZING' && doc.aiAnalysis.expiresAt > now)
+        conflict('Document analysis is already running.');
+      // Release the worker lock before reading the file or calling OpenAI.
+      const lease: WorkerDocumentAnalysisLease = {
+        status: 'ANALYZING',
+        token: randomUUID(),
+        expiresAt: now + ANALYSIS_LEASE_MS,
+      };
+      await docs.update(doc.id, { aiAnalysis: lease });
+      return { doc, lease };
+    });
+    if (!claim) return;
+
+    const { doc, lease } = claim;
     const started = performance.now();
+    let aiAnalysis: WorkerDocumentAnalysisResult = { status: 'UNAVAILABLE' };
     try {
-      const aiAnalysis = await this.analysis.analyze(bytes, mediaType);
-      if (aiAnalysis) {
-        await this.source
-          .getRepository(WorkerDocumentEntity)
-          .update({ id: documentId }, { aiAnalysis });
-      }
+      const bytes = await this.storage.read(doc.file);
+      const { mediaType } = validateWorkerDocument({
+        buffer: bytes,
+        size: doc.file.size,
+        mimetype: doc.file.mediaType,
+      });
+      if (Date.now() + DOCUMENT_ANALYSIS_TIMEOUT_MS >= lease.expiresAt)
+        throw new Error('Document analysis lease has insufficient time remaining');
+      aiAnalysis = (await this.analysis.analyze(bytes, mediaType)) ?? aiAnalysis;
     } catch {
-      // The original and review queue entry were already committed.
       this.logger.warn({
         status: 'UNAVAILABLE',
         durationMs: Math.round(performance.now() - started),
-        code: 'DOCUMENT_ANALYSIS_SAVE_FAILED',
+        code: 'DOCUMENT_ANALYSIS_INPUT_UNAVAILABLE',
       });
     }
+    // An expired attempt must never overwrite a retry.
+    const saved = await this.source
+      .createQueryBuilder()
+      .update(WorkerDocumentEntity)
+      .set({ aiAnalysis })
+      .where("id = :id AND ai_analysis->>'token' = :token", { id: doc.id, token: lease.token })
+      .execute();
+    if (!saved.affected) conflict('Document analysis has changed. Refresh before trying again.');
   }
 
   async updateSubmittedExpiry(

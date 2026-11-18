@@ -62,13 +62,14 @@ before UI submission. A mismatch or unreadable OCR shows a warning and may still
 for Safety review; matching never approves or extends validity. Pending review screens
 show the latest comparison. No database migration is required.
 
-**Optional AI analysis at submission**
+**Optional AI analysis during Safety review**
 
 Apply migration `WorkerDocumentAiAnalysis1795132800001` before deploying this backend version.
 Set `OPENAI_API_KEY` on the backend to enable analysis. On Cloud Run, inject it from Secret
-Manager. When enabled, each new safety card, health certificate, or personal insurance submission
-sends the original image or PDF to OpenAI after the pending submission commits. The Responses
-request uses `store: false` and a single 15-second deadline.
+Manager. Safety can request analysis from the pending safety card, health certificate, or personal
+insurance original preview. The backend reads the stored image or PDF and sends it to OpenAI.
+Submission, date correction, and local OCR work independently of AI. The Responses request uses
+`store: false` and a single 15-second deadline.
 
 Set the backend environment variable `WORKER_DOCUMENT_OPENAI_MODEL` to override the default
 `gpt-4.1-mini`. On Cloud Run, set it on the service revision. Choose a model that supports
@@ -79,8 +80,9 @@ also includes reasoning tokens for reasoning models.
 The worker detail response can include `aiAnalysis` for the assigned Site Safety Officer. An AI
 result of `detectedKind: "PERSONAL_INSURANCE"` and `kindMismatch: true` flags an upload in the
 health certificate slot. Safety can inspect the result and the original together. Null fields
-indicate an uncertain read. If analysis is unavailable, Safety can review the pending submission
-from the original.
+indicate an uncertain read. If analysis is unavailable, Safety can retry it on the same document
+or review the original immediately. A successful result is reused. A short server-side lease
+prevents concurrent analysis of the same document and expires after 60 seconds if interrupted.
 
 Replacement uploads retain the currently approved document until a replacement is
 approved. A rejected/pending replacement never extends the previous expiry. Approval
@@ -147,6 +149,10 @@ Endpoints under `/api/v1`:
   re-upload is required. Approved history cannot be edited through this endpoint.
 - `GET /sites/:siteId/workers/:workerId/documents/:id/file`: protected original.
 - `POST /sites/:siteId/workers/:workerId/documents/:id/ocr`: authorized Safety/Representative retry.
+- `POST /sites/:siteId/workers/:workerId/documents/:id/ai-analysis` requires an assigned Site Safety
+  Officer and a pending document. Send an empty request. Returns 204 after persisting the result or reusing
+  a successful result. Returns 409 during an active attempt or after review. Read `aiAnalysis`
+  from worker compliance detail for the advisory result or an unavailable status.
 - `POST /sites/:siteId/workers/:workerId/identity-images/:id/ocr`: authorized Safety/Representative
   retry of citizen ID extraction on the protected original.
 - `POST /sites/:siteId/workers/:workerId/documents/:id/reviews`: Safety Officer,

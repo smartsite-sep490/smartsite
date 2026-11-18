@@ -94,10 +94,12 @@ test('Worker document onboarding, scoped review, expiry and approval-only renewa
   const later = complianceDate(new Date(Date.now() + 365 * 86400000));
   const pdf = Buffer.from('%PDF-1.7\nSynthetic document only\n%%EOF');
   const pendingCounts: number[] = [];
+  let pauseAnalysis: (() => Promise<void>) | undefined;
   const openAi = t.mock.method(globalThis, 'fetch', async () => {
     pendingCounts.push(
       await source.getRepository(WorkerDocumentEntity).countBy({ workerId, status: 'PENDING' }),
     );
+    await pauseAnalysis?.();
     const fields = [
       {
         detectedKind: 'SAFETY_CARD',
@@ -407,10 +409,68 @@ test('Worker document onboarding, scoped review, expiry and approval-only renewa
       if (duplicate) assert.equal(duplicate.id, document.id);
       uploaded.push(document);
     }
+    assert.equal(openAi.mock.callCount(), 0, 'Upload must finish with no OpenAI request');
     await t.test(
-      'persists analysis after commit and exposes comparisons only to Site Safety',
+      'only scoped Safety can request stored evidence analysis, with one provider call per document',
       async () => {
-        assert.deepEqual(pendingCounts, [1, 2, 3]);
+        const cardId = uploaded[0]!.id;
+        const outsideSite = {
+          ...safety,
+          roleAssignments: [{ role: UserRole.SAFETY_OFFICER, siteId: otherSite }],
+        };
+        for (const actor of [rep, workerActor, outsideSite, { ...safety, roleAssignments: [] }]) {
+          await assert.rejects(service.analyzeDocument(actor, siteId, workerId, cardId), {
+            status: 403,
+          });
+        }
+        await assert.rejects(service.analyzeDocument(safety, siteId, workerId, randomUUID()), {
+          status: 404,
+        });
+        assert.equal(openAi.mock.callCount(), 0);
+
+        let markStarted!: () => void;
+        let release!: () => void;
+        const started = new Promise<void>((resolve) => {
+          markStarted = resolve;
+        });
+        const paused = new Promise<void>((resolve) => {
+          release = resolve;
+        });
+        pauseAnalysis = () => {
+          markStarted();
+          return paused;
+        };
+        const first = service.analyzeDocument(safety, siteId, workerId, cardId);
+        try {
+          await Promise.race([started, first]);
+          await assert.rejects(service.analyzeDocument(safety, siteId, workerId, cardId), {
+            status: 409,
+          });
+          const running = (await service.get(safety, siteId, workerId)).documents.find(
+            (doc) => doc.id === cardId,
+          );
+          assert.equal(running?.status, 'PENDING');
+          assert.equal(Object.hasOwn(running!, 'aiAnalysis'), false);
+          assert.equal(openAi.mock.callCount(), 1);
+        } finally {
+          pauseAnalysis = undefined;
+          release();
+          await first;
+        }
+        const [, request] = openAi.mock.calls[0]!.arguments as Parameters<typeof fetch>;
+        assert.partialDeepStrictEqual(JSON.parse(String(request?.body)), {
+          input: [
+            { content: [{ file_data: 'data:application/pdf;base64,' + pdf.toString('base64') }] },
+          ],
+        });
+        await service.analyzeDocument(safety, siteId, workerId, cardId);
+        await source.getRepository(WorkerDocumentEntity).update(uploaded[2]!.id, {
+          aiAnalysis: { status: 'ANALYZING', token: randomUUID(), expiresAt: Date.now() - 1_000 },
+        });
+        for (const doc of uploaded.slice(1)) {
+          await service.analyzeDocument(safety, siteId, workerId, doc.id);
+        }
+        assert.deepEqual(pendingCounts, [3, 3, 3]);
         const review = await service.get(safety, siteId, workerId);
         const [card, health, insurance] = DOCUMENT_KINDS.map(
           (kind) => review.documents.find((doc) => doc.kind === kind)?.aiAnalysis,
@@ -671,6 +731,9 @@ test('Worker document onboarding, scoped review, expiry and approval-only renewa
         size: bytes.length,
       });
       assert.equal(uploaded[0]!.status, 'PENDING');
+      assert.equal(openAi.mock.callCount(), 3);
+      await service.analyzeDocument(safety, siteId, workerId, uploaded[0]!.id);
+      assert.equal(openAi.mock.callCount(), 4);
       assert.deepEqual(
         (await service.file(safety, siteId, workerId, uploaded[0]!.id)).bytes,
         bytes,
@@ -686,6 +749,8 @@ test('Worker document onboarding, scoped review, expiry and approval-only renewa
           actor === safety ? { status: 'UNAVAILABLE' } : undefined,
         );
       }
+      await service.analyzeDocument(safety, siteId, workerId, uploaded[0]!.id);
+      assert.equal(openAi.mock.callCount(), 5);
       ocr.read = originalRead;
     });
     await t.test(
@@ -702,6 +767,10 @@ test('Worker document onboarding, scoped review, expiry and approval-only renewa
           });
           assert.equal(await workerDocumentsAllowEntry(source.manager, workerId), i === 2);
         }
+        await assert.rejects(service.analyzeDocument(safety, siteId, workerId, uploaded[0]!.id), {
+          status: 409,
+        });
+        assert.equal(openAi.mock.callCount(), 5);
         assert.equal((await service.get(rep, siteId, workerId)).status, 'ACTIVE');
         assert.equal((await service.get(rep, siteId, workerId)).submissionStatus, 'REVIEWED');
         assert.equal((await service.get(rep, siteId, workerId)).needsSupplement, false);

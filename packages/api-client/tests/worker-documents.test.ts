@@ -1,7 +1,7 @@
 import { afterEach, expect, it, vi } from 'vitest';
 import { SmartSiteManagementClient } from '../src/index';
 afterEach(() => vi.unstubAllGlobals());
-it('lets final upload finish when the analysis extends the response beyond the OCR timeout', async () => {
+it('allows time for a slow original upload and OCR before returning the submission', async () => {
   vi.useFakeTimers();
   try {
     vi.stubGlobal(
@@ -37,6 +37,22 @@ it('lets final upload finish when the analysis extends the response beyond the O
   } finally {
     vi.useRealTimers();
   }
+});
+
+it('requests AI analysis for the stored document through a scoped command without an upload', async () => {
+  const fetch = vi.fn<(url: string, init: RequestInit) => Promise<Response>>(
+    async () => new Response(null, { status: 204 }),
+  );
+  vi.stubGlobal('fetch', fetch);
+  const client = new SmartSiteManagementClient('https://api.example.test');
+  await client.analyzeWorkerDocument('token', 'site/a', 'worker/a', 'doc/a');
+  const [url, init] = fetch.mock.calls[0]!;
+  expect(url).toBe(
+    'https://api.example.test/api/v1/sites/site%2Fa/workers/worker%2Fa/documents/doc%2Fa/ai-analysis',
+  );
+  expect(init.method).toBe('POST');
+  expect(init.headers).toMatchObject({ Authorization: 'Bearer token' });
+  expect(init.body).toBeUndefined();
 });
 
 it('preflights certificate dates through authenticated scoped multipart', async () => {

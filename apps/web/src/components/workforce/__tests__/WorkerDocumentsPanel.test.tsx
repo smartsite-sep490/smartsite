@@ -4,6 +4,7 @@ import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-li
 import userEvent from '@testing-library/user-event';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import {
+  ApiError,
   SmartSiteManagementClient,
   type WorkerComplianceResponse,
   type WorkerDocumentResponse,
@@ -162,6 +163,121 @@ function mount(canReview: boolean, canUpload = false, canSubmitDocuments = false
     </QueryClientProvider>,
   );
 }
+it('lets Safety request and retry AI analysis while the original stays visible', async () => {
+  const profile = await client.workerCompliance('token', 'site', 'worker');
+  let finish!: () => void;
+  const pending = new Promise<void>((resolve) => {
+    finish = resolve;
+  });
+  const analyze = vi
+    .spyOn(client, 'analyzeWorkerDocument')
+    .mockImplementationOnce(async () => {
+      await pending;
+      vi.mocked(client.workerCompliance).mockResolvedValue({
+        ...profile,
+        documents: [{ ...doc, aiAnalysis: { status: 'UNAVAILABLE' } }],
+      });
+    })
+    .mockImplementationOnce(async () => {
+      vi.mocked(client.workerCompliance).mockResolvedValue({
+        ...profile,
+        documents: [
+          {
+            ...doc,
+            aiAnalysis: {
+              status: 'COMPLETE',
+              detectedKind: 'SAFETY_CARD',
+              kindMismatch: false,
+              issuedOn: null,
+              expiresOn: null,
+              nationalId: null,
+              identityCheck: 'NOT_DETECTED',
+              dateCheck: {
+                field: 'EXPIRES_ON',
+                status: 'NO_REFERENCE',
+                submittedDate: null,
+                detectedDate: null,
+              },
+            },
+          },
+        ],
+      });
+    });
+  mount(true);
+  const user = userEvent.setup();
+  await user.click(await screen.findByRole('button', { name: tr('documents.view') }));
+  const original = within(await screen.findByRole('dialog'));
+  expect(analyze).not.toHaveBeenCalled();
+  await user.click(original.getByRole('button', { name: tr('documents.aiRun') }));
+  const waiting = await original.findByRole('button', { name: tr('documents.aiAnalyzing') });
+  expect((waiting as HTMLButtonElement).disabled).toBe(true);
+  await user.click(waiting);
+  expect(analyze).toHaveBeenCalledExactlyOnceWith('token', 'site', 'worker', doc.id);
+  expect(original.getByRole('img', { name: tr('documents.view') })).toBeTruthy();
+  await user.click(original.getByRole('button', { name: tr('documents.close') }));
+  await user.type(screen.getByLabelText(tr('documents.note')), 'Original reviewed');
+  await user.click(screen.getByLabelText(tr('documents.confirm')));
+  const approve = screen.getByRole('button', { name: tr('documents.approve') });
+  expect((approve as HTMLButtonElement).disabled).toBe(false);
+  await user.click(screen.getByRole('button', { name: tr('documents.view') }));
+  const reopened = within(await screen.findByRole('dialog'));
+  expect(
+    (reopened.getByRole('button', { name: tr('documents.aiAnalyzing') }) as HTMLButtonElement)
+      .disabled,
+  ).toBe(true);
+  finish();
+  await user.click(await reopened.findByRole('button', { name: tr('documents.aiRetry') }));
+  expect(await reopened.findByText(tr('documents.aiKindMatch'))).toBeTruthy();
+  expect(analyze).toHaveBeenCalledTimes(2);
+});
+
+it.each([false, true])(
+  'keeps the AI action private (Representative: %s)',
+  async (representative) => {
+    mount(false, representative, !representative);
+    await userEvent
+      .setup()
+      .click(await screen.findByRole('button', { name: tr('documents.view') }));
+    const original = within(await screen.findByRole('dialog'));
+    expect(original.queryByRole('button', { name: tr('documents.aiRun') })).toBeNull();
+  },
+);
+
+it.each([
+  {
+    failure: 'a network failure',
+    error: new ApiError('network', 'Synthetic network failure'),
+    keepsPreview: true,
+  },
+  {
+    failure: 'revoked permission',
+    error: new ApiError('http', 'Synthetic forbidden response', 403),
+    keepsPreview: false,
+  },
+])('handles $failure during an AI result refresh', async ({ error, keepsPreview }) => {
+  vi.spyOn(client, 'analyzeWorkerDocument').mockImplementationOnce(async () => {
+    vi.mocked(client.workerCompliance).mockRejectedValueOnce(error);
+  });
+  mount(true);
+  const user = userEvent.setup();
+  await screen.findByText(doc.originalName);
+  await user.type(screen.getByLabelText(tr('documents.note')), 'Draft review');
+  await user.click(screen.getByRole('button', { name: tr('documents.view') }));
+  const original = within(await screen.findByRole('dialog'));
+  await user.click(original.getByRole('button', { name: tr('documents.aiRun') }));
+  await screen.findByRole('alert');
+  if (keepsPreview) {
+    expect(screen.getByRole('dialog')).toBeTruthy();
+    expect(original.getByRole('img', { name: tr('documents.view') })).toBeTruthy();
+    await user.click(original.getByRole('button', { name: tr('documents.close') }));
+    expect((screen.getByLabelText(tr('documents.note')) as HTMLTextAreaElement).value).toBe(
+      'Draft review',
+    );
+  } else {
+    expect(screen.queryByRole('dialog')).toBeNull();
+  }
+});
+
 it.each([
   ['SAFETY_CARD', false, 'AI nhận diện đúng loại giấy đã chọn'],
   ['PERSONAL_INSURANCE', true, 'Có thể nộp nhầm loại giấy'],

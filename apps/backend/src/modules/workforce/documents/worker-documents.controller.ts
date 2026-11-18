@@ -3,6 +3,8 @@ import {
   Controller,
   Get,
   Header,
+  HttpCode,
+  HttpStatus,
   Param,
   Patch,
   Post,
@@ -14,7 +16,7 @@ import {
   UseInterceptors,
 } from '@nestjs/common';
 import { FileInterceptor } from '@nestjs/platform-express';
-import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
+import { ApiBearerAuth, ApiNoContentResponse, ApiTags } from '@nestjs/swagger';
 import { invalid } from '../../../common/configuration/commands.js';
 import { pagination } from '../../../common/http/pagination.js';
 import type { AuthenticatedRequest } from '../../auth/auth.service.js';
@@ -200,6 +202,20 @@ export class WorkerDocumentsController {
   ) {
     if (Object.keys(body ?? {}).length) invalid();
     return this.service.retryOcr(r.user!, siteId, workerId, id);
+  }
+  @Post('workers/:workerId/documents/:id/ai-analysis')
+  @HttpCode(HttpStatus.NO_CONTENT)
+  @ApiNoContentResponse()
+  @Header('Cache-Control', 'private, no-store')
+  analyze(
+    @Req() r: AuthenticatedRequest,
+    @Param('siteId') siteId: string,
+    @Param('workerId') workerId: string,
+    @Param('id') id: string,
+    @Body() body: Record<string, unknown>,
+  ) {
+    if (Object.keys(body ?? {}).length) invalid();
+    return this.service.analyzeDocument(r.user!, siteId, workerId, id);
   }
   @Post('workers/:workerId/documents/:id/reviews')
   @Header('Cache-Control', 'private, no-store')
