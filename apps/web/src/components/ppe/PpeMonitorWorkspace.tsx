@@ -69,6 +69,8 @@ registerFeatureCatalog({
 });
 
 type Session = Pick<LoginResponse, 'accessToken' | 'user'>;
+type LayoutPreference = 'auto' | 'focus' | 'grid';
+
 interface Props {
   apiUrl: string;
   session: Session;
@@ -127,7 +129,16 @@ export function PpeMonitorWorkspace({
       (r) =>
         (r.role === 'ADMIN' && r.siteId === null) || (r.role === 'SAFETY_OFFICER' && !!r.siteId),
     );
-  if (!canRead) return <p role="alert">{t('monitor.denied')}</p>;
+  if (!canRead) {
+    return (
+      <p
+        role="alert"
+        className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm font-medium text-amber-950"
+      >
+        {t('monitor.denied')}
+      </p>
+    );
+  }
   return (
     <MonitorScope
       key={JSON.stringify([identity.nonce, linkedSiteId, linkedCameraId])}
@@ -171,12 +182,12 @@ function MonitorScope({
     visibleSites.find((row) => row.id === chosenSite) ??
     (linkedSiteId && chosenSite === linkedSiteId ? undefined : visibleSites[0]);
   const siteSelector = (
-    <label className="flex flex-wrap sm:flex-nowrap items-center gap-2 min-w-0 flex-[1_1_13rem] lg:max-w-xs text-xs font-medium text-slate-800">
+    <label className="flex w-full sm:w-auto sm:flex-[1_1_14rem] lg:max-w-xs flex-wrap sm:flex-nowrap items-center gap-2 min-w-0 text-sm font-semibold text-slate-700">
       <span className="shrink-0">{t('monitor.site')}</span>
       <select
         name="monitorSite"
         data-tour-anchor="monitor-site-scope"
-        className="block h-8 flex-1 min-w-0 max-w-full truncate rounded-lg border border-slate-300 bg-white px-2.5 py-1 text-xs sm:text-sm text-slate-900 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-slate-900 disabled:bg-slate-50 disabled:text-slate-500"
+        className="block h-10 flex-1 min-w-0 max-w-full truncate rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-sm font-normal text-slate-900 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-slate-900 disabled:bg-slate-50 disabled:text-slate-500"
         value={site?.id ?? ''}
         onChange={(e) => setSite(e.target.value)}
         disabled={sites.isPending || !visibleSites.length}
@@ -194,27 +205,27 @@ function MonitorScope({
   const siteNotices = (
     <>
       {sites.isPending ? (
-        <p role="status" className="w-full text-xs text-slate-600">
+        <p role="status" className="w-full text-sm text-slate-600">
           {t('monitor.loading')}
         </p>
       ) : sites.isError && !sites.isFetchNextPageError ? (
-        <div className="flex w-full flex-wrap items-center justify-between gap-2 rounded-lg border border-rose-200 bg-rose-50 px-3 py-1.5 text-xs text-rose-900">
+        <div className="flex w-full flex-wrap items-center justify-between gap-2 rounded-xl border border-rose-200 bg-rose-50 px-3.5 py-2 text-sm text-rose-900">
           <span>{trMonitor('monitor.siteErrorDetail')}</span>
           <button
             type="button"
-            className="rounded-md border border-rose-300 bg-white px-2.5 py-1 font-semibold text-rose-900 hover:bg-rose-100 cursor-pointer"
+            className="inline-flex min-h-8 items-center rounded-lg border border-rose-300 bg-white px-3 py-1.5 text-xs font-semibold text-rose-900 hover:bg-rose-100 cursor-pointer"
             onClick={() => void sites.refetch()}
           >
             {t('monitor.error')}
           </button>
         </div>
       ) : linkedSiteId && !site && !sites.hasNextPage ? (
-        <div className="flex w-full flex-wrap items-center justify-between gap-2 rounded-lg border border-amber-200 bg-amber-50 px-3 py-1.5 text-xs text-amber-950">
+        <div className="flex w-full flex-wrap items-center justify-between gap-2 rounded-xl border border-amber-200 bg-amber-50 px-3.5 py-2 text-sm text-amber-950">
           <p role="status">{t('monitor.linkedSiteUnavailable')}</p>
           {visibleSites.length > 0 && (
             <button
               type="button"
-              className="rounded-md border border-amber-300 bg-white px-2.5 py-1 text-xs font-semibold text-amber-950 hover:bg-amber-100 cursor-pointer"
+              className="inline-flex min-h-8 items-center rounded-lg border border-amber-300 bg-white px-3 py-1.5 text-xs font-semibold text-amber-950 hover:bg-amber-100 cursor-pointer"
               onClick={() => setSite(visibleSites[0]!.id)}
             >
               {t('monitor.choose')}
@@ -224,7 +235,7 @@ function MonitorScope({
       ) : !visibleSites.length && !sites.hasNextPage ? (
         <p
           role="status"
-          className="w-full rounded-lg border border-slate-200 bg-slate-50 px-3 py-1.5 text-xs text-slate-700"
+          className="w-full rounded-xl border border-slate-200 bg-slate-50 px-3.5 py-2 text-sm text-slate-700"
         >
           {t('monitor.emptySite')}
         </p>
@@ -232,7 +243,7 @@ function MonitorScope({
       {sites.hasNextPage && (
         <button
           type="button"
-          className="rounded-lg border border-slate-300 bg-white px-2.5 py-1 text-xs font-semibold text-slate-800 hover:bg-slate-50 disabled:opacity-50 cursor-pointer"
+          className="inline-flex min-h-9 items-center rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-xs font-semibold text-slate-800 hover:bg-slate-50 disabled:opacity-50 cursor-pointer"
           disabled={sites.isFetchingNextPage}
           onClick={() => void sites.fetchNextPage()}
         >
@@ -243,25 +254,25 @@ function MonitorScope({
   );
 
   return (
-    <section className="space-y-2 min-w-0">
-      <header className="flex flex-wrap items-center justify-between gap-2">
-        <div className="flex flex-wrap items-baseline gap-x-3 gap-y-0.5 min-w-0">
-          <h1 className="text-lg font-semibold text-slate-950">{t('monitor.title')}</h1>
-          <p className="text-xs text-slate-600">{t('monitor.hint')}</p>
+    <section className="space-y-3 min-w-0">
+      <header className="flex flex-wrap items-center justify-between gap-3">
+        <div className="min-w-0">
+          <h1 className="text-2xl font-bold tracking-tight text-slate-950">{t('monitor.title')}</h1>
+          <p className="mt-0.5 text-sm text-slate-600">{t('monitor.hint')}</p>
         </div>
         {site && (
           <div className="flex flex-wrap items-center gap-2">
             {enableFrameInboxLink && (
               <Link
                 data-testid="monitor-frame-inbox-link"
-                className="rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-xs font-medium text-slate-800 hover:bg-slate-50"
+                className="inline-flex min-h-10 items-center rounded-lg border border-slate-300 bg-white px-4 py-2 text-sm font-semibold text-slate-800 hover:bg-slate-50 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-slate-900"
                 to={`/incidents?tab=ppe-frames&siteId=${encodeURIComponent(site.id)}`}
               >
                 {trMonitor('monitor.frameInbox')}
               </Link>
             )}
             <Link
-              className="rounded-lg border border-slate-900 bg-slate-900 px-3.5 py-1.5 text-xs font-semibold text-white hover:bg-slate-800"
+              className="inline-flex min-h-10 items-center rounded-lg border border-slate-900 bg-slate-900 px-4 py-2 text-sm font-semibold text-white hover:bg-slate-800 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-slate-900"
               data-tour-anchor="monitor-safety-records"
               to={`/incidents?tab=episodes&siteId=${encodeURIComponent(site.id)}`}
             >
@@ -273,7 +284,7 @@ function MonitorScope({
       {aiPaused && (
         <p
           role="status"
-          className="rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-950"
+          className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-2.5 text-sm text-amber-950"
         >
           {t('monitor.paused')}
         </p>
@@ -288,7 +299,7 @@ function MonitorScope({
           linkedCameraId={site.id === linkedSiteId ? linkedCameraId : ''}
         />
       ) : (
-        <div className="flex min-w-0 flex-wrap items-center gap-2 rounded-xl border border-slate-200 bg-white px-3 py-2">
+        <div className="flex min-w-0 flex-wrap items-center gap-3 rounded-xl border border-slate-200 bg-white p-3">
           {siteSelector}
           {siteNotices}
         </div>
@@ -324,7 +335,7 @@ function CameraScope({
   const [scopeState, setScopeState] = useState(() => ({
     siteScopeKey,
     chosen: linkedCameraId,
-    focus: false,
+    layoutPreference: 'auto' as LayoutPreference,
     fullscreenError: false,
     evidenceCameraId: null as string | null,
     focusRawMode: false,
@@ -334,7 +345,7 @@ function CameraScope({
     setScopeState({
       siteScopeKey,
       chosen: linkedCameraId,
-      focus: false,
+      layoutPreference: 'auto',
       fullscreenError: false,
       evidenceCameraId: null,
       focusRawMode: false,
@@ -347,14 +358,14 @@ function CameraScope({
       : {
           siteScopeKey,
           chosen: linkedCameraId,
-          focus: false,
+          layoutPreference: 'auto' as LayoutPreference,
           fullscreenError: false,
           evidenceCameraId: null,
           focusRawMode: false,
           snapshotsByCamera: {} as Record<string, ScopedWallSnapshot>,
         };
   const chosen = activeScopeState.chosen;
-  const focus = activeScopeState.focus;
+  const layoutPreference = activeScopeState.layoutPreference;
   const fullscreenError = activeScopeState.fullscreenError;
   const evidenceCameraId = activeScopeState.evidenceCameraId;
   const focusRawMode = activeScopeState.focusRawMode;
@@ -369,7 +380,7 @@ function CameraScope({
             : {
                 siteScopeKey,
                 chosen: linkedCameraId,
-                focus: false,
+                layoutPreference: 'auto',
                 fullscreenError: false,
                 evidenceCameraId: null,
                 focusRawMode: false,
@@ -386,12 +397,12 @@ function CameraScope({
       updateScopeState((prev) => ({ ...prev, chosen: nextCameraId, focusRawMode: false })),
     [updateScopeState],
   );
-  const setFocus = useCallback(
-    (nextFocus: boolean) =>
+  const setLayoutMode = useCallback(
+    (nextMode: 'focus' | 'grid') =>
       updateScopeState((prev) => ({
         ...prev,
-        focus: nextFocus,
-        focusRawMode: nextFocus ? prev.focusRawMode : false,
+        layoutPreference: nextMode,
+        focusRawMode: nextMode === 'focus' ? prev.focusRawMode : false,
       })),
     [updateScopeState],
   );
@@ -459,6 +470,23 @@ function CameraScope({
     { kind: 'focus-exit' } | { kind: 'grid-enlarge'; cameraId: string } | null
   >(null);
 
+  const cameras = useMonitorPages(scope, `cameras:${site.id}`, true, (offset, signal) =>
+    client.listPreviewCameras(session.accessToken, site.id, { offset, limit: 20 }, { signal }),
+  );
+  const siteCameras = cameras.rows.filter((row) => row.siteId === site.id);
+  const active = siteCameras.filter((row) => row.status === 'ACTIVE');
+  const inactiveCount = siteCameras.filter((row) => row.status !== 'ACTIVE').length;
+  const selected =
+    active.find((row) => row.id === chosen) ??
+    (linkedCameraId && chosen === linkedCameraId ? undefined : active[0]);
+  const evidenceCamera = evidenceCameraId
+    ? active.find((row) => row.id === evidenceCameraId)
+    : undefined;
+
+  // With 1 available camera, open large single-camera Focus stage by default unless operator explicitly chose Grid.
+  const focus =
+    layoutPreference === 'focus' ? true : layoutPreference === 'grid' ? false : active.length === 1;
+
   useEffect(() => {
     const handleFullscreenChange = () => {
       const nextIsFullscreen = Boolean(
@@ -501,19 +529,6 @@ function CameraScope({
     });
   }, [focus, chosen]);
 
-  const cameras = useMonitorPages(scope, `cameras:${site.id}`, true, (offset, signal) =>
-    client.listPreviewCameras(session.accessToken, site.id, { offset, limit: 20 }, { signal }),
-  );
-  const siteCameras = cameras.rows.filter((row) => row.siteId === site.id);
-  const active = siteCameras.filter((row) => row.status === 'ACTIVE');
-  const inactiveCount = siteCameras.filter((row) => row.status !== 'ACTIVE').length;
-  const selected =
-    active.find((row) => row.id === chosen) ??
-    (linkedCameraId && chosen === linkedCameraId ? undefined : active[0]);
-  const evidenceCamera = evidenceCameraId
-    ? active.find((row) => row.id === evidenceCameraId)
-    : undefined;
-
   useEffect(() => {
     if (!focus || isFullscreen || evidenceCameraId || !selected) return;
     const onKeyDown = (event: KeyboardEvent) => {
@@ -527,14 +542,20 @@ function CameraScope({
       }
       event.preventDefault();
       pendingFocusTargetRef.current = { kind: 'grid-enlarge', cameraId: selected.id };
-      setFocus(false);
+      setLayoutMode('grid');
     };
     window.addEventListener('keydown', onKeyDown);
     return () => window.removeEventListener('keydown', onKeyDown);
-  }, [focus, isFullscreen, evidenceCameraId, selected, setFocus]);
+  }, [focus, isFullscreen, evidenceCameraId, selected, setLayoutMode]);
+
   const wall = selected
     ? [selected, ...active.filter((row) => row.id !== selected.id)].slice(0, 4)
     : [];
+  const gridButtonLabel =
+    wall.length > 0
+      ? trMonitor('monitor.layout.gridCount', { count: wall.length })
+      : trMonitor('monitor.layout.grid4');
+
   const common = {
     apiUrl,
     client,
@@ -548,16 +569,17 @@ function CameraScope({
     isAiWorkPaused: aiPaused,
     showModelObjects: false,
   };
+
   return (
-    <div className="space-y-2">
-      <div className="flex min-w-0 flex-wrap items-center gap-x-3 gap-y-2 rounded-xl border border-slate-200 bg-white px-3 py-2">
+    <div className="space-y-3">
+      <div className="flex min-w-0 flex-wrap items-center gap-3 rounded-xl border border-slate-200 bg-white px-3.5 py-2.5 shadow-2xs">
         {siteSelector}
-        <label className="flex flex-wrap sm:flex-nowrap items-center gap-2 min-w-0 flex-[1_1_13rem] lg:max-w-xs text-xs font-medium text-slate-800">
+        <label className="flex w-full sm:w-auto sm:flex-[1_1_14rem] lg:max-w-xs flex-wrap sm:flex-nowrap items-center gap-2 min-w-0 text-sm font-semibold text-slate-700">
           <span className="shrink-0">{t('monitor.camera')}</span>
           <select
             name="monitorCamera"
             data-tour-anchor="monitor-camera-select"
-            className="block h-8 flex-1 min-w-0 max-w-full truncate rounded-lg border border-slate-300 bg-white px-2.5 py-1 text-xs sm:text-sm text-slate-900 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-slate-900 disabled:bg-slate-50 disabled:text-slate-500"
+            className="block h-10 flex-1 min-w-0 max-w-full truncate rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-sm font-normal text-slate-900 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-slate-900 disabled:bg-slate-50 disabled:text-slate-500"
             value={selected?.id ?? ''}
             onChange={(e) => setCamera(e.target.value)}
             disabled={!active.length}
@@ -571,22 +593,22 @@ function CameraScope({
           </select>
         </label>
         {selected && (
-          <div className="flex flex-wrap items-center gap-1.5">
+          <div className="flex flex-wrap items-center gap-2">
             <div
               role="group"
               aria-label={trMonitor('monitor.layout.groupAria')}
               data-testid="monitor-layout-controls"
               data-tour-anchor="monitor-focus-toggle"
-              className="inline-flex min-h-8 max-w-full flex-wrap items-center gap-1 rounded-xl border border-slate-200 bg-slate-100/80 p-0.5"
+              className="inline-flex min-h-10 max-w-full flex-wrap items-center gap-1 rounded-xl border border-slate-200 bg-slate-100 p-1"
             >
               <button
                 type="button"
                 data-testid="monitor-grid-btn"
                 aria-pressed={!focus}
-                onClick={() => setFocus(false)}
-                className="rounded-lg border border-transparent px-2.5 py-1 text-xs font-medium text-slate-700 transition-colors hover:bg-white hover:text-slate-950 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-slate-900 aria-pressed:border-slate-900 aria-pressed:bg-slate-900 aria-pressed:font-semibold aria-pressed:text-white cursor-pointer"
+                onClick={() => setLayoutMode('grid')}
+                className="inline-flex min-h-8 items-center rounded-lg border border-transparent px-3 py-1 text-sm font-medium text-slate-700 tabular-nums transition-colors hover:bg-white hover:text-slate-950 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-slate-900 aria-pressed:border-slate-900 aria-pressed:bg-slate-900 aria-pressed:font-semibold aria-pressed:text-white cursor-pointer"
               >
-                {trMonitor('monitor.layout.grid4')}
+                {gridButtonLabel}
               </button>
               <button
                 type="button"
@@ -595,10 +617,10 @@ function CameraScope({
                 onClick={() => {
                   if (!focus) {
                     pendingFocusTargetRef.current = { kind: 'focus-exit' };
-                    setFocus(true);
+                    setLayoutMode('focus');
                   }
                 }}
-                className="rounded-lg border border-transparent px-2.5 py-1 text-xs font-medium text-slate-700 transition-colors hover:bg-white hover:text-slate-950 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-slate-900 aria-pressed:border-slate-900 aria-pressed:bg-slate-900 aria-pressed:font-semibold aria-pressed:text-white cursor-pointer"
+                className="inline-flex min-h-8 items-center rounded-lg border border-transparent px-3 py-1 text-sm font-medium text-slate-700 tabular-nums transition-colors hover:bg-white hover:text-slate-950 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-slate-900 aria-pressed:border-slate-900 aria-pressed:bg-slate-900 aria-pressed:font-semibold aria-pressed:text-white cursor-pointer"
               >
                 {trMonitor('monitor.layout.focus1')}
               </button>
@@ -608,7 +630,7 @@ function CameraScope({
               type="button"
               data-testid="monitor-fullscreen-btn"
               aria-pressed={isFullscreen}
-              className="min-h-8 rounded-lg border border-slate-300 bg-white px-2.5 py-1 text-xs font-medium text-slate-800 hover:bg-slate-50 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-slate-900 cursor-pointer"
+              className="inline-flex min-h-10 items-center rounded-lg border border-slate-300 bg-white px-3.5 py-2 text-sm font-medium text-slate-800 hover:bg-slate-50 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-slate-900 cursor-pointer"
               data-tour-anchor="monitor-fullscreen"
               onClick={() => {
                 setFullscreenError(false);
@@ -625,37 +647,39 @@ function CameraScope({
             </button>
           </div>
         )}
-        <MonitorWorkspaceTour
-          userId={session.user.id}
-          scope={scope}
-          observationMode="ppe"
-          siteId={site.id}
-          selectedCameraId={selected?.id}
-          isMetadataReady={
-            !cameras.isPending &&
-            (!cameras.isError ||
-              (cameras.isFetchNextPageError &&
-                !(
-                  cameras.error instanceof ApiError &&
-                  [401, 403, 404].includes(cameras.error.status ?? 0)
-                )))
-          }
-          hasActiveCamera={Boolean(selected)}
-        />
-        <p role="status" className="ml-auto text-xs text-slate-500 whitespace-nowrap">
-          {cameras.isPending
-            ? t('monitor.loading')
-            : cameras.isError && !cameras.isFetchNextPageError
-              ? t('monitor.error')
-              : t('monitor.loaded', { loaded: cameras.rows.length, total: cameras.total ?? '—' })}
-        </p>
+        <div className="flex flex-wrap items-center gap-2.5 sm:ml-auto">
+          <p role="status" className="text-xs font-medium tabular-nums text-slate-500 whitespace-nowrap">
+            {cameras.isPending
+              ? t('monitor.loading')
+              : cameras.isError && !cameras.isFetchNextPageError
+                ? t('monitor.error')
+                : t('monitor.loaded', { loaded: cameras.rows.length, total: cameras.total ?? '—' })}
+          </p>
+          <MonitorWorkspaceTour
+            userId={session.user.id}
+            scope={scope}
+            observationMode="ppe"
+            siteId={site.id}
+            selectedCameraId={selected?.id}
+            isMetadataReady={
+              !cameras.isPending &&
+              (!cameras.isError ||
+                (cameras.isFetchNextPageError &&
+                  !(
+                    cameras.error instanceof ApiError &&
+                    [401, 403, 404].includes(cameras.error.status ?? 0)
+                  )))
+            }
+            hasActiveCamera={Boolean(selected)}
+          />
+        </div>
         {siteNotices}
         {cameras.isError && !cameras.isFetchNextPageError && (
-          <div className="flex w-full flex-wrap items-center justify-between gap-2 rounded-lg border border-rose-200 bg-rose-50 px-3 py-2 text-xs text-rose-900">
+          <div className="flex w-full flex-wrap items-center justify-between gap-2 rounded-xl border border-rose-200 bg-rose-50 px-3.5 py-2.5 text-sm text-rose-900">
             <span>{trMonitor('monitor.cameraErrorDetail')}</span>
             <button
               type="button"
-              className="rounded-md border border-rose-300 bg-white px-3 py-1 font-semibold text-rose-900 hover:bg-rose-100 cursor-pointer"
+              className="inline-flex min-h-8 items-center rounded-lg border border-rose-300 bg-white px-3 py-1.5 text-xs font-semibold text-rose-900 hover:bg-rose-100 cursor-pointer"
               onClick={() => void cameras.refetch()}
             >
               {t('monitor.retry')}
@@ -670,19 +694,21 @@ function CameraScope({
           !cameras.hasNextPage && (
             <div
               data-testid="monitor-linked-camera-empty"
-              className="flex w-full flex-wrap items-center justify-between gap-2 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2.5 text-xs text-amber-950"
+              className="flex w-full flex-wrap items-center justify-between gap-3 rounded-xl border border-amber-200 bg-amber-50 px-3.5 py-2.5 text-sm text-amber-950"
             >
               <div className="space-y-0.5">
                 <p role="status" className="font-semibold">
                   {t('monitor.linkedCameraUnavailable')}
                 </p>
-                <p className="text-amber-900/80">{trMonitor('monitor.linkedCameraHint')}</p>
+                <p className="text-xs sm:text-sm text-amber-900/80">
+                  {trMonitor('monitor.linkedCameraHint')}
+                </p>
               </div>
               {active.length > 0 && (
                 <button
                   type="button"
                   data-testid="monitor-clear-linked-camera"
-                  className="rounded-md border border-amber-300 bg-white px-3 py-1.5 font-semibold text-amber-950 hover:bg-amber-100 cursor-pointer"
+                  className="inline-flex min-h-9 items-center rounded-lg border border-amber-300 bg-white px-3.5 py-1.5 text-xs font-semibold text-amber-950 hover:bg-amber-100 cursor-pointer"
                   onClick={() => setCamera(active[0]!.id)}
                 >
                   {trMonitor('monitor.clearLinkedCamera')}
@@ -693,20 +719,24 @@ function CameraScope({
         {!linkedCameraId && !cameras.isPending && !cameras.isError && !active.length && (
           <div
             data-testid="monitor-no-active-cameras"
-            className="w-full space-y-1.5 rounded-xl border border-slate-200 bg-slate-50 p-3.5 text-xs text-slate-700"
+            className="w-full space-y-2 rounded-xl border border-slate-200 bg-slate-50 p-4 text-sm text-slate-700"
           >
             <p className="font-semibold text-slate-900">
               {t('monitor.emptyCamera')} {cameras.hasNextPage && t('monitor.partial')}
             </p>
             {inactiveCount > 0 && (
-              <p>{trMonitor('monitor.emptyInactiveHint', { inactive: inactiveCount })}</p>
+              <p className="text-xs sm:text-sm">
+                {trMonitor('monitor.emptyInactiveHint', { inactive: inactiveCount })}
+              </p>
             )}
             <div className="flex flex-wrap items-center justify-between gap-2 pt-0.5">
-              <p className="text-slate-600">{trMonitor('monitor.emptyOfficerHint')}</p>
+              <p className="text-xs sm:text-sm text-slate-600">
+                {trMonitor('monitor.emptyOfficerHint')}
+              </p>
               {globalAdmin && (
                 <Link
                   data-testid="monitor-inspect-camera-setup"
-                  className="rounded-md border border-slate-300 bg-white px-3 py-1 font-semibold text-slate-900 hover:bg-slate-100"
+                  className="inline-flex min-h-9 items-center rounded-lg border border-slate-300 bg-white px-3.5 py-1.5 text-xs font-semibold text-slate-900 hover:bg-slate-100"
                   to={`/camera-setup?siteId=${encodeURIComponent(site.id)}`}
                 >
                   {trMonitor('monitor.openCameraSetup')}
@@ -718,7 +748,7 @@ function CameraScope({
         {cameras.hasNextPage && (
           <button
             type="button"
-            className="rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-xs font-semibold text-slate-800 hover:bg-slate-50 disabled:opacity-50 cursor-pointer"
+            className="inline-flex min-h-9 items-center rounded-lg border border-slate-300 bg-white px-3.5 py-1.5 text-xs font-semibold text-slate-800 hover:bg-slate-50 disabled:opacity-50 cursor-pointer"
             disabled={cameras.isFetchingNextPage}
             onClick={() => void cameras.fetchNextPage()}
           >
@@ -729,18 +759,18 @@ function CameraScope({
       {fullscreenError && (
         <div
           role="alert"
-          className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-amber-200 bg-amber-50 px-3.5 py-2.5 text-xs text-amber-950"
+          className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-amber-200 bg-amber-50 px-4 py-2.5 text-sm text-amber-950"
         >
           <span>{t('monitor.fullscreenError')}</span>
           {!focus && selected && (
             <button
               type="button"
               data-testid="monitor-fullscreen-focus-fallback"
-              className="rounded-md border border-amber-300 bg-white px-3 py-1 font-semibold text-amber-950 hover:bg-amber-100 cursor-pointer"
+              className="inline-flex min-h-9 items-center rounded-lg border border-amber-300 bg-white px-3.5 py-1.5 text-xs font-semibold text-amber-950 hover:bg-amber-100 cursor-pointer"
               onClick={() => {
                 setFullscreenError(false);
                 pendingFocusTargetRef.current = { kind: 'focus-exit' };
-                setFocus(true);
+                setLayoutMode('focus');
               }}
             >
               {trMonitor('monitor.layout.useFocusFallback')}
@@ -754,29 +784,29 @@ function CameraScope({
         data-monitor-fullscreen={isFullscreen ? 'true' : undefined}
         className={
           isFullscreen
-            ? 'min-w-0 space-y-2.5 bg-slate-950 p-3 overflow-y-auto'
-            : 'bg-slate-50 min-w-0'
+            ? 'min-w-0 space-y-3 bg-slate-950 p-3 sm:p-4 overflow-y-auto'
+            : 'min-w-0'
         }
       >
         {isFullscreen && selected && (
-          <div className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-slate-800 bg-slate-900 px-3.5 py-2.5 text-white">
-            <span className="text-xs font-semibold truncate">
-              {selected.code ? `${selected.code} · ${selected.name}` : selected.name}
+          <div className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-slate-800 bg-slate-900 px-4 py-2.5 text-white">
+            <span className="text-sm font-semibold truncate">
+              {selected.name || selected.code}
             </span>
             <div className="flex flex-wrap items-center gap-2">
               <div
                 role="group"
                 aria-label={trMonitor('monitor.layout.groupAria')}
                 data-testid="monitor-fullscreen-layout-controls"
-                className="inline-flex items-center gap-1 rounded-lg border border-slate-700 bg-slate-950 p-1"
+                className="inline-flex min-h-10 items-center gap-1 rounded-xl border border-slate-700 bg-slate-950 p-1"
               >
                 <button
                   type="button"
                   aria-pressed={!focus}
-                  onClick={() => setFocus(false)}
-                  className="rounded-md px-2.5 py-1 text-xs font-medium text-slate-300 hover:text-white aria-pressed:bg-white aria-pressed:font-semibold aria-pressed:text-slate-950 cursor-pointer"
+                  onClick={() => setLayoutMode('grid')}
+                  className="inline-flex min-h-8 items-center rounded-lg px-3 py-1 text-sm font-medium text-slate-300 tabular-nums hover:text-white aria-pressed:bg-white aria-pressed:font-semibold aria-pressed:text-slate-950 cursor-pointer"
                 >
-                  {trMonitor('monitor.layout.grid4')}
+                  {gridButtonLabel}
                 </button>
                 <button
                   type="button"
@@ -784,10 +814,10 @@ function CameraScope({
                   onClick={() => {
                     if (!focus) {
                       pendingFocusTargetRef.current = { kind: 'focus-exit' };
-                      setFocus(true);
+                      setLayoutMode('focus');
                     }
                   }}
-                  className="rounded-md px-2.5 py-1 text-xs font-medium text-slate-300 hover:text-white aria-pressed:bg-white aria-pressed:font-semibold aria-pressed:text-slate-950 cursor-pointer"
+                  className="inline-flex min-h-8 items-center rounded-lg px-3 py-1 text-sm font-medium text-slate-300 tabular-nums hover:text-white aria-pressed:bg-white aria-pressed:font-semibold aria-pressed:text-slate-950 cursor-pointer"
                 >
                   {trMonitor('monitor.layout.focus1')}
                 </button>
@@ -801,7 +831,7 @@ function CameraScope({
                     void document.exitFullscreen().catch(() => setFullscreenError(true));
                   }
                 }}
-                className="rounded-lg border border-slate-600 bg-slate-800 px-3 py-1.5 text-xs font-semibold text-white hover:bg-slate-700 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white cursor-pointer"
+                className="inline-flex min-h-10 items-center rounded-lg border border-slate-600 bg-slate-800 px-3.5 py-2 text-sm font-semibold text-white hover:bg-slate-700 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white cursor-pointer"
               >
                 {trMonitor('monitor.layout.exitFullscreen')}
               </button>
@@ -825,7 +855,7 @@ function CameraScope({
               onAiSnapshotUpdate={handleFocusSnapshotUpdate}
               onExitFocus={() => {
                 pendingFocusTargetRef.current = { kind: 'grid-enlarge', cameraId: selected.id };
-                setFocus(false);
+                setLayoutMode('grid');
               }}
             />
           ) : (
@@ -841,7 +871,7 @@ function CameraScope({
               onEnlargeCamera={(id) => {
                 pendingFocusTargetRef.current = { kind: 'focus-exit' };
                 setCamera(id);
-                setFocus(true);
+                setLayoutMode('focus');
               }}
             />
           ))}

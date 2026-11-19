@@ -9,7 +9,8 @@ import type { ScopedPreviewStatus } from '../cameras/useScopedCameraPreview';
 
 export const MONITOR_READABILITY_EN = {
   'monitor.layout.groupAria': 'Camera display layout',
-  'monitor.layout.grid4': 'Camera grid (4)',
+  'monitor.layout.grid4': 'Camera grid',
+  'monitor.layout.gridCount': 'Camera grid ({count})',
   'monitor.layout.focus1': 'Focus (1)',
   'monitor.layout.exitFullscreen': 'Exit fullscreen',
   'monitor.layout.useFocusFallback': 'Switch to Focus (1) view',
@@ -42,7 +43,7 @@ export const MONITOR_READABILITY_EN = {
   'focus.unavailableAi': 'AI snapshot is currently unavailable (camera feed or AI worker offline).',
   'focus.unavailableSource': 'Camera source video is currently unavailable.',
   'focus.unavailableDenied': 'Access to this camera source is restricted or unavailable.',
-  'focus.backToGrid': 'Back to 4-camera grid',
+  'focus.backToGrid': 'Back to camera grid',
   'monitor.drawer.title': 'Camera observation & evidence',
   'monitor.drawer.subtitle':
     'Preliminary AI observations for this camera. Saved violations and identity decisions are reviewed in Safety Records.',
@@ -72,7 +73,8 @@ export type MonitorReadabilityKey = keyof typeof MONITOR_READABILITY_EN;
 
 export const MONITOR_READABILITY_VI: Record<MonitorReadabilityKey, string> = {
   'monitor.layout.groupAria': 'Bố cục hiển thị camera',
-  'monitor.layout.grid4': 'Lưới camera (4)',
+  'monitor.layout.grid4': 'Lưới camera',
+  'monitor.layout.gridCount': 'Lưới camera ({count})',
   'monitor.layout.focus1': 'Tiêu điểm (1)',
   'monitor.layout.exitFullscreen': 'Thoát toàn màn hình',
   'monitor.layout.useFocusFallback': 'Chuyển sang khung Tiêu điểm (1)',
@@ -107,7 +109,7 @@ export const MONITOR_READABILITY_VI: Record<MonitorReadabilityKey, string> = {
     'Ảnh phân tích AI hiện không khả dụng (nguồn camera hoặc worker AI đang gián đoạn).',
   'focus.unavailableSource': 'Video nguồn camera hiện không khả dụng.',
   'focus.unavailableDenied': 'Quyền truy cập nguồn camera này bị hạn chế hoặc không khả dụng.',
-  'focus.backToGrid': 'Quay lại lưới 4 camera',
+  'focus.backToGrid': 'Quay lại lưới camera',
   'monitor.drawer.title': 'Quan sát camera & bằng chứng',
   'monitor.drawer.subtitle':
     'Quan sát AI sơ bộ của camera đang chọn. Việc duyệt vi phạm và xác minh danh tính thực hiện tại Hồ sơ an toàn.',

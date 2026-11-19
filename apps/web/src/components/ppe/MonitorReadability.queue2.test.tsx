@@ -344,10 +344,12 @@ describe('Camera Monitor Queue 2 readability, state distinction, and layout cont
     expect(linkedEmpty.textContent).toContain('The linked camera is unavailable.');
     fireEvent.click(screen.getByTestId('monitor-clear-linked-camera'));
 
-    // Grid(4) active by default; fullscreen error offers Switch to Focus (1) fallback
-    expect(await screen.findByTestId('monitor-grid-btn')).toBeTruthy();
+    // 1-camera site defaults to Focus (1); explicit Grid switch + fullscreen error offers Switch to Focus (1) fallback
+    expect(await screen.findByTestId('monitor-focus-btn')).toBeTruthy();
+    expect(screen.getByTestId('monitor-focus-btn').getAttribute('aria-pressed')).toBe('true');
+    expect(screen.getByTestId('monitor-grid-btn').getAttribute('aria-pressed')).toBe('false');
+    fireEvent.click(screen.getByTestId('monitor-grid-btn'));
     expect(screen.getByTestId('monitor-grid-btn').getAttribute('aria-pressed')).toBe('true');
-    expect(screen.getByTestId('monitor-focus-btn').getAttribute('aria-pressed')).toBe('false');
 
     fireEvent.click(screen.getByTestId('monitor-fullscreen-btn'));
     const focusFallback = await screen.findByTestId('monitor-fullscreen-focus-fallback');

@@ -87,16 +87,16 @@ afterEach(() => {
   query.clear();
 });
 
-it('shows first-use invitation, walks through all 5 accurate monitor steps, persists v2 completion, and replays without extra API calls', async () => {
+it('exposes one unobtrusive Guided help entry, walks through all 5 accurate monitor steps, persists v2 completion, and replays without extra API calls', async () => {
   render(<PpeMonitorWorkspace apiUrl="https://backend.example" session={session()} aiPaused />, {
     wrapper,
   });
 
-  const invite = await screen.findByTestId('safety-task-tour-invitation');
-  expect(invite).toBeTruthy();
-  expect(screen.getByTestId('safety-task-tour-trigger').textContent).toBe('Guided help');
+  const trigger = await screen.findByTestId('safety-task-tour-trigger');
+  expect(trigger.textContent).toBe('Guided help');
+  expect(screen.queryByTestId('safety-task-tour-invitation')).toBeNull();
 
-  fireEvent.click(screen.getByTestId('safety-task-tour-invitation-start'));
+  fireEvent.click(trigger);
 
   const tour = await screen.findByTestId('safety-task-tour');
   expect(tour.getAttribute('data-tour-step')).toBe('monitor-site-scope');
@@ -174,7 +174,7 @@ it('resets and closes an open tour on camera, Site, or credential changes', asyn
     { wrapper },
   );
 
-  await screen.findByTestId('safety-task-tour-invitation');
+  await screen.findByTestId('safety-task-tour-trigger');
   fireEvent.click(screen.getByTestId('safety-task-tour-trigger'));
   expect(await screen.findByTestId('safety-task-tour')).toBeTruthy();
 
@@ -246,8 +246,7 @@ it('withholds the tutorial when access is denied or metadata fails, and skips un
   expect(
     await screen.findByText('More cameras may be on later pages.', { exact: false }),
   ).toBeTruthy();
-  await screen.findByTestId('safety-task-tour-invitation');
-  fireEvent.click(screen.getByTestId('safety-task-tour-invitation-start'));
+  fireEvent.click(await screen.findByTestId('safety-task-tour-trigger'));
 
   const tour = await screen.findByTestId('safety-task-tour');
   expect(tour.getAttribute('data-tour-step')).toBe('monitor-site-scope');
@@ -266,7 +265,7 @@ it.each([403, 500])(
     render(<PpeMonitorWorkspace apiUrl="https://backend.example" session={session()} aiPaused />, {
       wrapper,
     });
-    fireEvent.click(await screen.findByTestId('safety-task-tour-invitation-start'));
+    fireEvent.click(await screen.findByTestId('safety-task-tour-trigger'));
     expect(await screen.findByTestId('safety-task-tour')).toBeTruthy();
     state.cameras.mockRejectedValueOnce(new ApiError('http', 'Metadata unavailable', status));
     await act(async () => {
