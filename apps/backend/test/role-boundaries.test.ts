@@ -75,13 +75,25 @@ test('non-Security actors cannot scan faces/QR, open fallback, or confirm gate p
     UserRole.WORKER,
   ]) {
     const user = actor(role);
-    await assert.rejects(face.verify(user, site, 'gate-north-01', undefined), denied);
     await assert.rejects(
-      qr.previewVisitorQr(user, site, 'gate-north-01', { token: 'ABCD2345' }),
+      face.verify(
+        user,
+        site,
+        'a1000000-0000-4000-8000-000000000001',
+        undefined,
+        'IN',
+        'c1000000-0000-4000-8000-000000000001',
+      ),
       denied,
     );
     await assert.rejects(
-      qr.openFallback(user, site, 'gate-north-01', 'IN', 'AI_UNAVAILABLE'),
+      qr.previewVisitorQr(user, site, 'a1000000-0000-4000-8000-000000000001', {
+        token: 'ABCD2345',
+      }),
+      denied,
+    );
+    await assert.rejects(
+      qr.openFallback(user, site, 'a1000000-0000-4000-8000-000000000001', 'IN', 'AI_UNAVAILABLE'),
       denied,
     );
     await assert.rejects(
@@ -93,7 +105,7 @@ test('non-Security actors cannot scan faces/QR, open fallback, or confirm gate p
     qr.openFallback(
       actor(UserRole.SECURITY_OFFICER, randomUUID()),
       site,
-      'gate-north-01',
+      'a1000000-0000-4000-8000-000000000001',
       'IN',
       'AI_UNAVAILABLE',
     ),

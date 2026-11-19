@@ -262,6 +262,7 @@ async function issueGeneration(
   if (!Number.isSafeInteger(leaseMs) || leaseMs < 1000 || leaseMs > 86400000) invalid();
   return source.transaction(async (manager) => {
     const camera = await lockCamera(manager, cameraId);
+    if (camera.type === 'GATE') conflict('Gate Cameras cannot run monitoring workers');
     if (camera.status !== CameraStatus.ACTIVE) conflict('Camera is inactive');
     if (requireUnowned) {
       const existing = await manager.getRepository(CameraWorkerGenerationEntity).findOne({

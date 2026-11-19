@@ -26,6 +26,12 @@ async function predecessor(run: (source: DataSource, runner: QueryRunner) => Pro
   const control = new DataSource({ ...options, entities: [], migrations: [] });
   const source = new DataSource({
     ...options,
+    // This predecessor rehearsal preserves legacy access data and stops before the clean Gate cutover.
+    migrations: Array.isArray(options.migrations)
+      ? options.migrations.filter(
+          (m) => typeof m === 'function' && m.name !== 'GateRegistry1795046400001',
+        )
+      : options.migrations,
     schema,
     extra: { ...options.extra, options: `-c search_path=${schema}` },
   });

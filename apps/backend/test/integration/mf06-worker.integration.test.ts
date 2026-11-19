@@ -58,6 +58,8 @@ async function fixture() {
     .getRepository(SiteEntity)
     .insert({ id: siteId, code: siteId, name: 'Synthetic worker test Site' });
   await db.getRepository(CameraEntity).insert({
+    type: 'ZONE' as const,
+    gateId: null,
     id: cameraId,
     siteId,
     externalId: cameraId,
@@ -75,6 +77,7 @@ async function fixture() {
     requiredPpe: [],
   });
   await db.getRepository(CameraObservationRegionEntity).insert({
+    siteId: siteId,
     id: regionId,
     cameraId,
     zoneId,

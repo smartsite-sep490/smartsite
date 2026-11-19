@@ -51,6 +51,8 @@ async function seed() {
   const suffix = randomUUID().slice(0, 8);
   const site = await sites.create({ code: `SITE-${suffix}`, name: 'Site A' });
   const camera = await cameras.create(site.id, {
+    type: 'ZONE' as const,
+    gateId: null,
     code: `CAM-${suffix}`,
     externalId: `AI-CAM-${suffix}`,
     name: 'Gate',
@@ -73,6 +75,8 @@ test('creates a Site, Camera, Zone and Region, then builds the AI contract snaps
   const suffix = randomUUID().slice(0, 8);
   const site = await sites.create({ code: `SITE-${suffix}`, name: 'Site A' });
   const camera = await cameras.create(site.id, {
+    type: 'ZONE' as const,
+    gateId: null,
     code: `CAM-${suffix}`,
     externalId: `AI-CAM-${suffix}`,
     name: 'Gate',
@@ -120,7 +124,13 @@ test('metadata operations keep identity and revision stable, and known duplicate
   const { sites, zones, cameras, site, camera, zone } = await seed();
   await assert.rejects(sites.create({ code: site.code, name: 'Duplicate' }), isConflict);
   await assert.rejects(
-    cameras.create(site.id, { code: 'OTHER', externalId: camera.externalId, name: 'Duplicate' }),
+    cameras.create(site.id, {
+      type: 'ZONE' as const,
+      gateId: null,
+      code: 'OTHER',
+      externalId: camera.externalId,
+      name: 'Duplicate',
+    }),
     isConflict,
   );
   await assert.rejects(
@@ -449,6 +459,7 @@ test('the 65th active region is refused without locking the Zone or advancing th
   const { zones, cameras, site, camera, zone } = await seed();
   await dataSource.getRepository(CameraObservationRegionEntity).insert(
     Array.from({ length: 64 }, () => ({
+      siteId: camera.siteId,
       id: randomUUID(),
       cameraId: camera.id,
       zoneId: zone.id,
@@ -474,6 +485,7 @@ test('two concurrent attempts at the 64th slot leave exactly 64 active regions',
   const { cameras, site, camera, zone } = await seed();
   await dataSource.getRepository(CameraObservationRegionEntity).insert(
     Array.from({ length: 63 }, () => ({
+      siteId: camera.siteId,
       id: randomUUID(),
       cameraId: camera.id,
       zoneId: zone.id,

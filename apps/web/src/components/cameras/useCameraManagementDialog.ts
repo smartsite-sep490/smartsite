@@ -174,6 +174,8 @@ export function useCameraManagementDialog(props: UseCameraManagementDialogOption
           siteId: currentCamera.siteId,
           code: currentCamera.code,
           externalId: currentCamera.externalId,
+          type: currentCamera.type,
+          gateId: currentCamera.gateId,
           currentVersion: currentCamera.configurationVersion,
         },
         trimmed,
@@ -233,6 +235,8 @@ export function useCameraManagementDialog(props: UseCameraManagementDialogOption
         siteId: currentCamera.siteId,
         code: currentCamera.code,
         externalId: currentCamera.externalId,
+        type: currentCamera.type,
+        gateId: currentCamera.gateId,
         currentVersion: currentCamera.configurationVersion,
         targetStatus,
       });

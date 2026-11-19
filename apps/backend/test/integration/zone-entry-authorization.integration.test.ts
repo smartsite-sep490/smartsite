@@ -56,6 +56,8 @@ test('MF06 resolves event-time allow, deny, expired and unknown identity and rec
       .getRepository(SiteEntity)
       .insert({ id: siteId, code: `S-${siteId}`, name: 'Site' });
     await source.getRepository(CameraEntity).insert({
+      type: 'ZONE' as const,
+      gateId: null,
       id: cameraId,
       siteId,
       externalId: `CAM-${cameraId}`,
@@ -81,6 +83,7 @@ test('MF06 resolves event-time allow, deny, expired and unknown identity and rec
     assert.equal(createdWorker.siteId, siteId);
     const actualWorkerId = createdWorker.id;
     await source.getRepository(CameraObservationRegionEntity).insert({
+      siteId: siteId,
       id: regionId,
       cameraId,
       zoneId,

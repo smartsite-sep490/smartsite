@@ -91,6 +91,7 @@ export class CameraEventAdmissionService {
     const camera = await manager
       .getRepository(CameraEntity)
       .findOne({ where: { id: context.cameraId }, lock: { mode: 'pessimistic_write' } });
+    if (camera?.type === 'GATE') reject(401);
     if (!camera || camera.externalId !== cameraExternalId) reject(401);
     const generation = await manager
       .getRepository(CameraWorkerGenerationEntity)

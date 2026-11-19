@@ -275,6 +275,8 @@ test('ingestion does not pass a conflicting candidate Worker into Zone decision 
     const store: MockStore = {
       cameras: [
         {
+          type: 'ZONE' as const,
+          gateId: null,
           id: cameraId,
           siteId,
           externalId: 'CAM-01',
@@ -287,6 +289,7 @@ test('ingestion does not pass a conflicting candidate Worker into Zone decision 
       ],
       regions: [
         {
+          siteId,
           id: regionId,
           cameraId,
           zoneId,
@@ -575,6 +578,8 @@ test('AiIngestionService: known camera with no violation candidate results in SK
   const cameraId = '33333333-3333-4333-8333-333333333333';
   const siteId = '44444444-4444-4444-8444-444444444444';
   const camera: CameraEntity = {
+    type: 'ZONE' as const,
+    gateId: null,
     id: cameraId,
     siteId,
     externalId: 'CAM-01',
@@ -641,6 +646,7 @@ test('AiIngestionService: valid violation candidate is PROCESSED, groups alert, 
   };
 
   const region: CameraObservationRegionEntity = {
+    siteId,
     id: regionId,
     cameraId,
     zoneId,
@@ -652,6 +658,8 @@ test('AiIngestionService: valid violation candidate is PROCESSED, groups alert, 
   };
 
   const camera: CameraEntity = {
+    type: 'ZONE' as const,
+    gateId: null,
     id: cameraId,
     siteId,
     externalId: 'CAM-01',
@@ -731,6 +739,8 @@ test('AiIngestionService: clock skew event still records resolvedCameraId when c
   const cameraId = '33333333-3333-4333-8333-333333333333';
   const siteId = '44444444-4444-4444-8444-444444444444';
   const camera: CameraEntity = {
+    type: 'ZONE' as const,
+    gateId: null,
     id: cameraId,
     siteId,
     externalId: 'CAM-01',
@@ -840,6 +850,8 @@ test('parseNormalizedCapturedAt: normalizes RFC 3339 leap second (:60) to :59 of
 test('AiIngestionService: valid timezone offset forms preserve event time and raw payload', async () => {
   const now = new Date('2027-01-01T00:00:30.000Z');
   const camera: CameraEntity = {
+    type: 'ZONE' as const,
+    gateId: null,
     id: '33333333-3333-4333-8333-333333333333',
     siteId: '44444444-4444-4444-8444-444444444444',
     externalId: 'CAM-01',
@@ -922,6 +934,8 @@ test('AiIngestionService: accepts RFC 3339 leap-second capturedAt (:60) near bou
   const cameraId = '33333333-3333-4333-8333-333333333333';
   const siteId = '44444444-4444-4444-8444-444444444444';
   const camera: CameraEntity = {
+    type: 'ZONE' as const,
+    gateId: null,
     id: cameraId,
     siteId,
     externalId: 'CAM-01',
@@ -1283,6 +1297,7 @@ test('AiIngestionService: raw insert occurs before any alert side effects on dup
   };
 
   const region: CameraObservationRegionEntity = {
+    siteId,
     id: regionId,
     cameraId,
     zoneId,
@@ -1294,6 +1309,8 @@ test('AiIngestionService: raw insert occurs before any alert side effects on dup
   };
 
   const camera: CameraEntity = {
+    type: 'ZONE' as const,
+    gateId: null,
     id: cameraId,
     siteId,
     externalId: 'CAM-01',
@@ -1391,6 +1408,7 @@ test('AiIngestionService: handles observations across mixed regions and geometry
   };
 
   const region1: CameraObservationRegionEntity = {
+    siteId,
     id: region1Id,
     cameraId,
     zoneId,
@@ -1402,6 +1420,7 @@ test('AiIngestionService: handles observations across mixed regions and geometry
   };
 
   const region2: CameraObservationRegionEntity = {
+    siteId,
     id: region2Id,
     cameraId,
     zoneId,
@@ -1413,6 +1432,8 @@ test('AiIngestionService: handles observations across mixed regions and geometry
   };
 
   const camera: CameraEntity = {
+    type: 'ZONE' as const,
+    gateId: null,
     id: cameraId,
     siteId,
     externalId: 'CAM-01',
@@ -1493,6 +1514,8 @@ test('ingestion orders grouping locks consistently while preserving payload and 
     const store: MockStore = {
       cameras: [
         {
+          type: 'ZONE' as const,
+          gateId: null,
           id: cameraId,
           siteId,
           externalId: 'CAM-01',
@@ -1505,6 +1528,7 @@ test('ingestion orders grouping locks consistently while preserving payload and 
       ],
       regions: [
         {
+          siteId,
           id: regionId,
           cameraId,
           zoneId,

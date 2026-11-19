@@ -4,7 +4,11 @@ import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
 import { test } from 'node:test';
 import { command } from '../src/common/configuration/commands.js';
-import { requireSiteRole, requireGate, visitResponse } from '../src/modules/workforce/access/qr-access.service.js';
+import {
+  requireSiteRole,
+  requireGate,
+  visitResponse,
+} from '../src/modules/workforce/access/qr-access.service.js';
 import type { VisitorVisitEntity } from '../src/database/entities/qr-access.entity.js';
 import {
   RegisterVisitCommand,
@@ -93,7 +97,7 @@ test('QR commands reject fabricated authorization, subject IDs, invalid counts a
     purpose: 'Synthetic tour',
     targetArea: 'Office',
     groupSize: 2,
-    gateId: 'gate-north-01',
+    gateId: 'a1000000-0000-4000-8000-000000000001',
     validFrom: '2026-10-03T10:00:00Z',
     validUntil: '2026-10-03T11:00:00Z',
   };
@@ -133,7 +137,7 @@ test('visitResponse enforces expiration consistently and preserves canonical sta
     emailAttemptedAt: null,
     emailSentAt: null,
     emailNextAttemptAt: null,
-    gateId: 'gate-north-01',
+    gateId: 'a1000000-0000-4000-8000-000000000001',
     validFrom: new Date(Date.now() - 3600_000),
     validUntil: new Date(Date.now() + 3600_000),
     status: 'PENDING' as const,
@@ -212,7 +216,7 @@ test('visitResponse computes presence states and preserves NEEDS_REVIEW for unce
     emailAttemptedAt: null,
     emailSentAt: null,
     emailNextAttemptAt: null,
-    gateId: 'gate-north-01',
+    gateId: 'a1000000-0000-4000-8000-000000000001',
     validFrom: new Date(),
     validUntil: new Date(Date.now() + 3600_000),
     status: 'APPROVED' as const,
@@ -241,11 +245,26 @@ test('visitResponse computes presence states and preserves NEEDS_REVIEW for unce
 
   // Partial group inside WITH roster -> INSIDE
   const rosterMembers = [
-    { id: 'm1', fullName: 'A', identityNumber: '1', registeredFullName: 'A', registeredIdentityNumber: '1', inside: true },
-    { id: 'm2', fullName: 'B', identityNumber: '2', registeredFullName: 'B', registeredIdentityNumber: '2', inside: false },
+    {
+      id: 'm1',
+      fullName: 'A',
+      identityNumber: '1',
+      registeredFullName: 'A',
+      registeredIdentityNumber: '1',
+      inside: true,
+    },
+    {
+      id: 'm2',
+      fullName: 'B',
+      identityNumber: '2',
+      registeredFullName: 'B',
+      registeredIdentityNumber: '2',
+      inside: false,
+    },
   ];
   assert.equal(
-    visitResponse({ ...baseEntity, members: rosterMembers, enteredCount: 1, exitedCount: 0 }).presence,
+    visitResponse({ ...baseEntity, members: rosterMembers, enteredCount: 1, exitedCount: 0 })
+      .presence,
     'INSIDE',
   );
 

@@ -55,6 +55,8 @@ function TestLocaleBoundary(props: { defaultLocale: UiLanguage; children: ReactN
 
 function makeCamera(overrides: Partial<CameraResponse> = {}): CameraResponse {
   return {
+    type: 'ZONE' as const,
+    gateId: null,
     id: CAM_1_ID,
     siteId: SITE_ALPHA_ID,
     externalId: 'rtsp://admin:supersecret@10.0.0.55:554/stream-07',

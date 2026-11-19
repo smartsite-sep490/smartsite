@@ -1,4 +1,7 @@
 // @vitest-environment jsdom
+import { beforeEach } from 'vitest';
+import { mockGateCatalog } from '../test-gate-catalog';
+beforeEach(mockGateCatalog);
 import React from 'react';
 import { afterEach, expect, it, vi } from 'vitest';
 import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
@@ -33,6 +36,102 @@ vi.mock('../enrollment/gateCameraSession', () => ({
   },
 }));
 let queries: QueryClient;
+
+function renderSourceDesk() {
+  queries = new QueryClient({
+    defaultOptions: { queries: { retry: false }, mutations: { retry: false } },
+  });
+  vi.spyOn(SmartSiteManagementClient.prototype, 'listGateAccessLogs').mockResolvedValue({
+    items: [],
+  });
+  return render(
+    <QueryClientProvider client={queries}>
+      <SecurityGateDeskView
+        apiUrl="https://synthetic.test"
+        token="synthetic-token"
+        sessionScope="test"
+        selectedSiteId="site-1"
+        sites={[{ id: 'site-1', name: 'Synthetic Site' }]}
+        onSelectSite={() => {}}
+        isSecurityOfficer
+      />
+    </QueryClientProvider>,
+  );
+}
+
+it('blocks FACE without a registered source and retains the QR fallback', async () => {
+  cameraMock.active = true;
+  vi.spyOn(SmartSiteManagementClient.prototype, 'listGateSources').mockResolvedValue({ items: [] });
+  const verify = vi.spyOn(SmartSiteManagementClient.prototype, 'verifyFaceGate');
+  renderSourceDesk();
+  expect(await screen.findByText(/No active camera is registered/)).toBeTruthy();
+  expect(screen.getByRole('button', { name: 'Use QR' })).toBeTruthy();
+  await new Promise((resolve) => setTimeout(resolve, 1200));
+  expect(verify).not.toHaveBeenCalled();
+});
+
+it('requires a choice among several registered sources and sends the selected UUID', async () => {
+  cameraMock.active = true;
+  const gateId = 'a1000000-0000-4000-8000-000000000001';
+  vi.spyOn(SmartSiteManagementClient.prototype, 'listGateSources').mockResolvedValue({
+    items: ['source-one', 'source-two'].map((id) => ({
+      id,
+      siteId: 'site-1',
+      gateId,
+      code: id,
+      name: id,
+    })),
+  });
+  vi.spyOn(SmartSiteManagementClient.prototype, 'observeGateFace').mockResolvedValue({
+    state: 'NEW_FACE',
+    reasonCode: 'FACE_PRESENCE_NEW',
+  });
+  const verify = vi
+    .spyOn(SmartSiteManagementClient.prototype, 'verifyFaceGate')
+    .mockRejectedValue(new Error('Synthetic unavailable'));
+  renderSourceDesk();
+  const select = (await screen.findByLabelText('Registered Gate camera')) as HTMLSelectElement;
+  await screen.findByRole('option', { name: /source-two/ });
+  expect(select.value).toBe('');
+  expect(verify).not.toHaveBeenCalled();
+  fireEvent.change(select, { target: { value: 'source-two' } });
+  await waitFor(() => expect(verify).toHaveBeenCalled(), { timeout: 5000 });
+  expect(verify.mock.calls[0]?.[5]).toBe('source-two');
+});
+
+it('ignores pending presence after changing the registered Camera', async () => {
+  cameraMock.active = true;
+  const gateId = 'a1000000-0000-4000-8000-000000000001';
+  vi.spyOn(SmartSiteManagementClient.prototype, 'listGateSources').mockResolvedValue({
+    items: ['source-one', 'source-two'].map((id) => ({
+      id,
+      siteId: 'site-1',
+      gateId,
+      code: id,
+      name: id,
+    })),
+  });
+  const pending = deferred<Awaited<ReturnType<SmartSiteManagementClient['observeGateFace']>>>();
+  const presence = vi
+    .spyOn(SmartSiteManagementClient.prototype, 'observeGateFace')
+    .mockReturnValueOnce(pending.promise)
+    .mockResolvedValue({ state: 'SAME_FACE', reasonCode: 'FACE_PRESENCE_SAME' });
+  const verify = vi.spyOn(SmartSiteManagementClient.prototype, 'verifyFaceGate');
+  renderSourceDesk();
+  await screen.findByRole('option', { name: /source-one/ });
+  fireEvent.change(screen.getByLabelText('Registered Gate camera'), {
+    target: { value: 'source-one' },
+  });
+  await waitFor(() => expect(presence).toHaveBeenCalled(), { timeout: 5000 });
+  fireEvent.change(screen.getByLabelText('Registered Gate camera'), {
+    target: { value: 'source-two' },
+  });
+  await act(async () => pending.resolve({ state: 'NEW_FACE', reasonCode: 'FACE_PRESENCE_NEW' }));
+  expect(verify).not.toHaveBeenCalled();
+  expect((screen.getByLabelText('Registered Gate camera') as HTMLSelectElement).value).toBe(
+    'source-two',
+  );
+});
 
 function deferred<T>() {
   let resolve!: (value: T) => void;
@@ -79,7 +178,7 @@ function changeGateContext(kind: 'gate' | 'direction') {
 const fallbackSession = {
   id: 'session-1',
   siteId: 'site-1',
-  gateId: 'gate-north-01',
+  gateId: 'a1000000-0000-4000-8000-000000000001',
   direction: 'IN' as const,
   expiresAt: '2030-01-01T00:05:00Z',
 };
@@ -104,7 +203,7 @@ const qrAllowed: Awaited<ReturnType<SmartSiteManagementClient['verifyWorkerQr']>
   log: {
     id: 'qr-log',
     createdAt: '2030-01-01T00:00:00Z',
-    gateId: 'gate-north-01',
+    gateId: 'a1000000-0000-4000-8000-000000000001',
     direction: 'IN',
     method: 'QR',
     workerId: 'worker-1',
@@ -139,7 +238,7 @@ it.each(['gate', 'direction'] as const)(
     changeGateContext(kind);
     await act(async () => pending.resolve(fallbackSession));
     expect(screen.queryByLabelText('Worker QR Code or Token')).toBeNull();
-    fireEvent.click(screen.getByRole('button', { name: 'Camera Error · Use Fallback QR' }));
+    fireEvent.click(await screen.findByRole('button', { name: 'Camera Error · Use Fallback QR' }));
     expect(await screen.findByLabelText('Worker QR Code or Token')).toBeTruthy();
     expect(opened).toHaveBeenCalledTimes(2);
     const call = opened.mock.calls[1]!;
@@ -195,7 +294,7 @@ it.each(['success', 'error'] as const)(
           visitId: null,
           direction: 'IN',
           occurredAt: '2030-01-01T00:00:00Z',
-          gateName: 'gate-north-01',
+          gateName: 'a1000000-0000-4000-8000-000000000001',
         });
       else
         pending.reject(
@@ -260,7 +359,7 @@ it('ignores an old QR fallback response after the selected Site changes', async 
     finish({
       id: 'old-site-session',
       siteId: 'site-1',
-      gateId: 'gate-north-01',
+      gateId: 'a1000000-0000-4000-8000-000000000001',
       direction: 'IN',
       expiresAt: '2030-01-01T00:05:00Z',
     });
@@ -282,7 +381,7 @@ it('shows the saved denial reason in gate history', async () => {
       {
         id: 'denied-log',
         createdAt: '2026-10-27T09:57:53Z',
-        gateId: 'gate-north-01',
+        gateId: 'a1000000-0000-4000-8000-000000000001',
         direction: 'IN',
         method: 'QR',
         workerId: 'worker-1',
@@ -324,7 +423,7 @@ it('accepts the Worker short manual code without asking Worker to enter an offic
   vi.spyOn(SmartSiteManagementClient.prototype, 'openCameraQrFallback').mockResolvedValue({
     id: 'internal-session-id',
     siteId: 'site-1',
-    gateId: 'gate-north-01',
+    gateId: 'a1000000-0000-4000-8000-000000000001',
     direction: 'IN',
     expiresAt: '2030-01-01T00:05:00Z',
   });
@@ -359,12 +458,17 @@ it('accepts the Worker short manual code without asking Worker to enter an offic
   fireEvent.change(input, { target: { value: 'ABCD2345' } });
   fireEvent.click(screen.getByRole('button', { name: /Confirm.*QR/ }));
   await waitFor(() =>
-    expect(verify).toHaveBeenCalledWith('synthetic-token', 'site-1', 'gate-north-01', {
-      token: 'ABCD2345',
-      direction: 'IN',
-      fallbackSessionId: 'internal-session-id',
-      requestId: expect.any(String),
-    }),
+    expect(verify).toHaveBeenCalledWith(
+      'synthetic-token',
+      'site-1',
+      'a1000000-0000-4000-8000-000000000001',
+      {
+        token: 'ABCD2345',
+        direction: 'IN',
+        fallbackSessionId: 'internal-session-id',
+        requestId: expect.any(String),
+      },
+    ),
   );
 });
 
@@ -458,7 +562,7 @@ it.each(automaticFaceOutcomes)(
       visitId: null,
       direction: 'IN',
       occurredAt: '2030-01-01T00:00:00Z',
-      gateName: 'gate-north-01',
+      gateName: 'a1000000-0000-4000-8000-000000000001',
     });
     queries = new QueryClient({
       defaultOptions: { queries: { retry: false }, mutations: { retry: false } },
@@ -588,7 +692,7 @@ it('treats a repeated scan as already recorded and requires a separate-passage c
     visitId: null,
     direction: 'IN',
     occurredAt: '2030-01-01T00:00:00Z',
-    gateName: 'gate-north-01',
+    gateName: 'a1000000-0000-4000-8000-000000000001',
   });
   queries = new QueryClient({
     defaultOptions: { queries: { retry: false }, mutations: { retry: false } },

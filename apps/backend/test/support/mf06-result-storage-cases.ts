@@ -19,6 +19,8 @@ export async function checkResults(
     .getRepository(e.SiteEntity)
     .insert({ id: site, code: site, name: 'Synthetic result Site' });
   await db.getRepository(e.CameraEntity).insert({
+    type: 'ZONE' as const,
+    gateId: null,
     id: camera,
     siteId: site,
     externalId: camera,

@@ -1,4 +1,5 @@
 import 'reflect-metadata';
+import { GateRegistry1795046400001 } from '../../src/database/migrations/1795046400001-GateRegistry.js';
 import assert from 'node:assert/strict';
 import { randomUUID, createHash } from 'node:crypto';
 import { test } from 'node:test';
@@ -31,12 +32,14 @@ test('generation lifecycle retains server ownership, transactional replacement a
         await runner.startTransaction();
         try {
           const migration = new CameraWorkerGenerations1794614400000();
+          await new GateRegistry1795046400001().down(runner);
           await migration.down(runner);
           assert.equal(
             (await runner.query("SELECT to_regclass('camera_worker_generation') AS name"))[0].name,
             null,
           );
           await migration.up(runner);
+          await new GateRegistry1795046400001().up(runner);
           await runner.commitTransaction();
         } catch (error) {
           await runner.rollbackTransaction();
@@ -57,7 +60,7 @@ test('generation lifecycle retains server ownership, transactional replacement a
       [site],
     );
     await db.query(
-      "INSERT INTO camera(id,site_id,external_id,code,name)VALUES($1,$2,$1::uuid::text,$1::uuid::text,'Synthetic generation Camera')",
+      "INSERT INTO camera(type,id,site_id,external_id,code,name) VALUES('ZONE',$1,$2,$1::uuid::text,$1::uuid::text,'Synthetic generation Camera')",
       [camera, site],
     );
     const first = await provision(db, camera, [camera], 60000);

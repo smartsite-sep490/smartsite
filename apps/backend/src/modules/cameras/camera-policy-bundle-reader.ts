@@ -139,6 +139,7 @@ export async function readCurrentCameraPolicyBundle(
   cameraId = uuid(cameraId).toLowerCase();
   const camera = await manager.getRepository(CameraEntity).findOneBy({ id: cameraId });
   if (!camera) missing();
+  if (camera.type === 'GATE') conflict('Gate Cameras have no monitoring configuration');
   if (camera.status !== CameraStatus.ACTIVE)
     conflict('Issued camera policy configuration is unavailable');
   const [header] = await manager.query(

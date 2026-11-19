@@ -17,6 +17,8 @@ export function parseRenameCameraResponse(
     siteId: string;
     code: string;
     externalId: string;
+    type: CameraResponse['type'];
+    gateId: CameraResponse['gateId'];
     currentVersion: number;
   },
   requestedName: string,
@@ -30,6 +32,8 @@ export function parseRenameCameraResponse(
     row.siteId !== expected.siteId ||
     row.code !== expected.code ||
     row.externalId !== expected.externalId ||
+    row.type !== expected.type ||
+    row.gateId !== expected.gateId ||
     row.name !== requestedName ||
     (row.status !== 'ACTIVE' && row.status !== 'INACTIVE') ||
     !Number.isSafeInteger(row.configurationVersion) ||
@@ -40,6 +44,8 @@ export function parseRenameCameraResponse(
     throw new ApiError('invalid-response', 'Backend returned mismatched camera metadata.');
   }
   return {
+    type: row.type,
+    gateId: row.gateId,
     id: row.id,
     siteId: row.siteId,
     code: row.code,
@@ -58,6 +64,8 @@ export function parseSetStatusCameraResponse(
     siteId: string;
     code: string;
     externalId: string;
+    type: CameraResponse['type'];
+    gateId: CameraResponse['gateId'];
     currentVersion: number;
     targetStatus: 'ACTIVE' | 'INACTIVE';
   },
@@ -71,6 +79,8 @@ export function parseSetStatusCameraResponse(
     row.siteId !== expected.siteId ||
     row.code !== expected.code ||
     row.externalId !== expected.externalId ||
+    row.type !== expected.type ||
+    row.gateId !== expected.gateId ||
     typeof row.name !== 'string' ||
     !row.name.trim() ||
     row.status !== expected.targetStatus ||
@@ -82,6 +92,8 @@ export function parseSetStatusCameraResponse(
     throw new ApiError('invalid-response', 'Backend returned mismatched camera metadata.');
   }
   return {
+    type: row.type,
+    gateId: row.gateId,
     id: row.id,
     siteId: row.siteId,
     code: row.code,
@@ -106,6 +118,8 @@ export function parseRefreshCameraResponse(
     row.siteId !== expected.siteId ||
     row.code !== expected.code ||
     row.externalId !== expected.externalId ||
+    row.type !== expected.type ||
+    row.gateId !== expected.gateId ||
     typeof row.name !== 'string' ||
     !row.name.trim() ||
     (row.status !== 'ACTIVE' && row.status !== 'INACTIVE') ||
@@ -116,6 +130,8 @@ export function parseRefreshCameraResponse(
     throw new ApiError('invalid-response', 'Backend returned mismatched camera metadata.');
   }
   return {
+    type: row.type,
+    gateId: row.gateId,
     id: row.id,
     siteId: row.siteId,
     code: row.code,

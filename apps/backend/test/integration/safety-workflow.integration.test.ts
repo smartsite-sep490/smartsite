@@ -380,6 +380,8 @@ test('MF08 incident end-to-end: scoping, immutable history, replay, rejection, c
   assert.equal(closed.actions[0]?.status, 'CLOSED');
   const groupingCameraId = randomUUID();
   await dataSource.getRepository(CameraEntity).save({
+    type: 'ZONE' as const,
+    gateId: null,
     id: groupingCameraId,
     siteId: site,
     externalId: groupingCameraId,
@@ -682,6 +684,8 @@ test(
     );
     const cameraId = randomUUID();
     await dataSource.getRepository(CameraEntity).save({
+      type: 'ZONE' as const,
+      gateId: null,
       id: cameraId,
       siteId: site,
       externalId: cameraId,

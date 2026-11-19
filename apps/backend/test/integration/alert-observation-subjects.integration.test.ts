@@ -1,3 +1,4 @@
+import { installGateSchemaForHistoricalFixture } from '../support/historical-gate-schema.js';
 import 'reflect-metadata';
 import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
@@ -53,7 +54,8 @@ test('subject provenance survives upgrade, retry and rollback boundaries in isol
     assert.deepEqual(column, { data_type: 'smallint', is_nullable: 'YES' });
     const [last] = await db.query('SELECT name FROM migrations ORDER BY id DESC LIMIT 1');
     assert.equal(last.name, 'AlertDetectionSubject1793404800000');
-    await db.undoLastMigration(); // Empty provenance: reproduce the populated predecessor below.
+    await db.undoLastMigration();
+    await installGateSchemaForHistoricalFixture(db); // Empty provenance: reproduce the populated predecessor below.
 
     const siteId = randomUUID(),
       cameraId = randomUUID(),
@@ -64,6 +66,8 @@ test('subject provenance survives upgrade, retry and rollback boundaries in isol
       .getRepository(SiteEntity)
       .insert({ id: siteId, code: 'SUBJECT-SITE', name: 'Synthetic Site' });
     await db.getRepository(CameraEntity).insert({
+      type: 'ZONE' as const,
+      gateId: null,
       id: cameraId,
       siteId,
       externalId: cameraExternalId,
@@ -86,8 +90,7 @@ test('subject provenance survives upgrade, retry and rollback boundaries in isol
       ],
     );
     await db.query(
-      `INSERT INTO camera_observation_region(id,camera_id,zone_id,coordinate_space,version,is_active,polygon)
-       VALUES($1,$2,$3,$4,$5,$6,$7::jsonb)`,
+      `INSERT INTO camera_observation_region(site_id,id,camera_id,zone_id,coordinate_space,version,is_active,polygon) VALUES((SELECT site_id FROM camera WHERE id=$2),$1,$2,$3,$4,$5,$6,$7::jsonb)`,
       [
         regionId,
         cameraId,
@@ -185,7 +188,11 @@ test('subject provenance survives upgrade, retry and rollback boundaries in isol
 
     // Current ingestion requires the complete registered schema; the historical upgrade above
     // still proves the predecessor boundary independently of later migrations.
-    db.setOptions({ migrations: registered });
+    db.setOptions({
+      migrations: registered.filter(
+        (m) => typeof m === 'function' && m.name !== 'GateRegistry1795046400001',
+      ),
+    });
     await db.destroy();
     await db.initialize();
     await db.runMigrations();

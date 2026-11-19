@@ -46,7 +46,13 @@ test('internal commands reject extra fields and unsupported PPE before database 
     invalid,
   );
   await assert.rejects(
-    cameras.create(randomUUID(), { code: 'C', name: 'Camera', externalId: 'CAM-\ud800' }),
+    cameras.create(randomUUID(), {
+      type: 'ZONE' as const,
+      gateId: null,
+      code: 'C',
+      name: 'Camera',
+      externalId: 'CAM-\ud800',
+    }),
     invalid,
   );
   for (const polygon of [
@@ -237,12 +243,18 @@ test('TypeORM can generate a camera insert that uses the database revision defau
   );
   // Metadata/query generation only: this test never initializes a database connection.
   await source.prepareMetadata();
-  const query = source.createQueryBuilder().insert().into(CameraEntity).values({
-    id: randomUUID(),
-    siteId: randomUUID(),
-    code: 'CAM',
-    name: 'Camera',
-    externalId: 'CAM',
-  });
+  const query = source
+    .createQueryBuilder()
+    .insert()
+    .into(CameraEntity)
+    .values({
+      type: 'ZONE' as const,
+      gateId: null,
+      id: randomUUID(),
+      siteId: randomUUID(),
+      code: 'CAM',
+      name: 'Camera',
+      externalId: 'CAM',
+    });
   assert.doesNotThrow(() => query.getQueryAndParameters());
 });

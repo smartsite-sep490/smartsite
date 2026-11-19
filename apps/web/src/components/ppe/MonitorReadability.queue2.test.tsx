@@ -81,6 +81,8 @@ vi.mock('../cameras/RawCameraMediaCanvas', () => ({
 
 const SITE_ID = '11111111-1111-4111-8111-111111111111';
 const CAM_01: CameraResponse = {
+  type: 'ZONE' as const,
+  gateId: null,
   id: '22222222-2222-4222-8222-222222222222',
   siteId: SITE_ID,
   code: 'CAM-01',

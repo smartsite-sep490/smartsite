@@ -25,6 +25,8 @@ import {
   SafetyEvidenceEntity,
   SafetyWorkflowAuditEntity,
 } from './safety-workflow.entity.js';
+import { GateEntity } from './gate.entity.js';
+export * from './gate.entity.js';
 import { SiteEntity } from './site.entity.js';
 import { TeamZonePermissionEntity } from './team-zone-permission.entity.js';
 export * from './team-zone-permission.entity.js';
@@ -194,6 +196,7 @@ export const ENTITIES = [
   SafetyEvidenceEntity,
   SafetyWorkflowAuditEntity,
   SiteEntity,
+  GateEntity,
   CameraEntity,
   ZoneEntity,
   CameraObservationRegionEntity,

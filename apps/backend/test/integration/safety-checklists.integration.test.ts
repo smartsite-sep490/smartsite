@@ -515,33 +515,29 @@ test('weekly context normalizes Monday and paginates teams without losing schedu
     teamId: id.oldTeam,
   });
   assert.equal(daily.teams.items[0]!.workWindows!.length, 1);
-  const night = await source
-    .getRepository(ShiftEntity)
-    .save({
-      id: randomUUID(),
-      siteId: id.site,
-      name: 'Overnight',
-      timezone: 'Asia/Ho_Chi_Minh',
-      startsAt: new Date('2026-01-01T15:00:00Z'),
-      endsAt: new Date('2026-01-01T23:00:00Z'),
-      archivedAt: null,
-      breakStartsAt: null,
-      breakEndsAt: null,
-    });
+  const night = await source.getRepository(ShiftEntity).save({
+    id: randomUUID(),
+    siteId: id.site,
+    name: 'Overnight',
+    timezone: 'Asia/Ho_Chi_Minh',
+    startsAt: new Date('2026-01-01T15:00:00Z'),
+    endsAt: new Date('2026-01-01T23:00:00Z'),
+    archivedAt: null,
+    breakStartsAt: null,
+    breakEndsAt: null,
+  });
   const version = await source
     .getRepository(ScheduleVersionEntity)
     .findOneByOrFail({ siteId: id.site, version: 1 });
-  const schedule = await source
-    .getRepository(WorkerScheduleEntity)
-    .save({
-      id: randomUUID(),
-      siteId: id.site,
-      workerId: id.worker,
-      shiftId: night.id,
-      scheduleVersionId: version.id,
-      workDate: '2026-10-15',
-      isActive: true,
-    });
+  const schedule = await source.getRepository(WorkerScheduleEntity).save({
+    id: randomUUID(),
+    siteId: id.site,
+    workerId: id.worker,
+    shiftId: night.id,
+    scheduleVersionId: version.id,
+    workDate: '2026-10-15',
+    isActive: true,
+  });
   try {
     const overnight = await overview.week(await actor(id.safety), id.site, {
       date,
@@ -943,6 +939,8 @@ test('Manager lookup and Overview summaries match drill-down for two contractors
     zones = new ZoneConfigurationService(source, sites),
     cameras = new CameraConfigurationService(source, zones, sites);
   const camera = await source.getRepository(CameraEntity).save({
+    type: 'ZONE' as const,
+    gateId: null,
     id: randomUUID(),
     siteId: id.site,
     externalId: id.site + '-overview',
@@ -952,6 +950,7 @@ test('Manager lookup and Overview summaries match drill-down for two contractors
     configurationVersion: 1,
   });
   await source.getRepository(CameraObservationRegionEntity).save({
+    siteId: camera.siteId,
     id: randomUUID(),
     cameraId: camera.id,
     zoneId: id.zone,

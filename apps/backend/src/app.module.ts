@@ -20,6 +20,7 @@ import { SitesModule } from './modules/sites/sites.module.js';
 import { CamerasModule } from './modules/cameras/cameras.module.js';
 import { AuthModule } from './modules/auth/auth.module.js';
 import { UsersModule } from './modules/users/users.module.js';
+import { GatesModule } from './modules/gates/gates.module.js';
 import { WorkforceModule } from './modules/workforce/workforce.module.js';
 
 function isAiEndpoint(context: ExecutionContext): boolean {
@@ -73,6 +74,7 @@ function configuredRuntimeImports() {
     }),
     HealthModule,
     SitesModule,
+    GatesModule,
     CamerasModule,
     AuthModule,
     UsersModule,

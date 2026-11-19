@@ -1,3 +1,4 @@
+import { requireFaceSource } from '../../gates/gate-registry.js';
 import { createHash, randomUUID } from 'node:crypto';
 import { QrAccessService } from './qr-access.service.js';
 import { HttpStatus, Inject, Injectable } from '@nestjs/common';
@@ -31,7 +32,6 @@ import {
 } from '../identity/face-enrollment.adapter.js';
 
 const MAX_JPEG_BYTES = 5 * 1024 * 1024;
-const GATE_ID = /^[A-Za-z0-9][A-Za-z0-9_-]{0,63}$/;
 
 @Injectable()
 export class FaceGateService {
@@ -47,7 +47,8 @@ export class FaceGateService {
     siteId: string,
     gateId: string,
     frame: UploadedFaceSample | undefined,
-    direction: 'IN' | 'OUT' = 'IN',
+    direction: 'IN' | 'OUT',
+    sourceCameraId: string,
   ): Promise<FaceGateVerificationResponse> {
     await this.requireOperator(actor, siteId, gateId);
     if (direction !== 'IN' && direction !== 'OUT')
@@ -55,6 +56,7 @@ export class FaceGateService {
         code: 'VALIDATION_FAILED',
         message: 'Invalid gate direction',
       });
+    await requireFaceSource(this.dataSource.manager, siteId, gateId, sourceCameraId);
     const { evaluation, ...result } = await this.evaluate(siteId, gateId, frame, direction);
     const attempt = await this.dataSource.transaction(async (manager) =>
       this.qrAccess.recordAttempt(manager, {
@@ -63,6 +65,7 @@ export class FaceGateService {
         gateId,
         direction,
         method: 'FACE',
+        sourceCameraId,
         identityStatus: result.worker
           ? 'MATCHED'
           : result.decision.technicalOutcome === 'MATCHED' ||
@@ -115,16 +118,18 @@ export class FaceGateService {
     gateId: string,
     sessionId: string,
     frame: UploadedFaceSample | undefined,
+    sourceCameraId: string,
   ): Promise<GateFacePresenceResponse> {
     await this.requireOperator(actor, siteId, gateId);
     uuid(sessionId);
+    await requireFaceSource(this.dataSource.manager, siteId, gateId, sourceCameraId);
     this.validateFrame(frame);
     const evidence = await this.adapter.verify({
       verificationId: randomUUID(),
       jpeg: frame.buffer,
       templates: [],
       gatePresenceSession: createHash('sha256')
-        .update(`${actor.id}:${siteId}:${gateId}:${sessionId}`)
+        .update(`${actor.id}:${siteId}:${gateId}:${sourceCameraId}:${sessionId}`)
         .digest('hex'),
     });
     const reason = evidence.reasonCode;
@@ -204,11 +209,7 @@ export class FaceGateService {
         code: 'FORBIDDEN',
         message: 'Gate operator access is required',
       });
-    if (!GATE_ID.test(gateId))
-      throw new PublicHttpException(HttpStatus.BAD_REQUEST, {
-        code: 'VALIDATION_FAILED',
-        message: 'Invalid gate identifier',
-      });
+    uuid(gateId);
     if (!(await this.dataSource.getRepository(SiteEntity).existsBy({ id: siteId })))
       throw new PublicHttpException(HttpStatus.NOT_FOUND, {
         code: 'NOT_FOUND',

@@ -389,7 +389,10 @@ export function RestrictedZoneView({
 
   const cameras = useQuery({
     queryKey: ['zone-admin', apiUrl, sessionScope, selectedSiteId, 'cameras'],
-    queryFn: () => client.listCameras(apiToken, selectedSiteId, { limit: 100 }),
+    queryFn: async () => {
+      const page = await client.listCameras(apiToken, selectedSiteId, { limit: 100 });
+      return { ...page, items: page.items.filter((camera) => camera.type !== 'GATE') };
+    },
     enabled: !!canRead && apiToken.length > 0 && selectedSiteId.length > 0,
   });
 

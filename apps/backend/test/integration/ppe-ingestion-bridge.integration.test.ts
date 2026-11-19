@@ -84,6 +84,8 @@ test('legacy PPE ingestion -> durable grouping -> scoped notifications in real P
       { id: foreignSiteId, code: 'SYNTH-PPE-SITE-2', name: 'Synthetic Foreign Site 2' },
     ]);
     await db.getRepository(CameraEntity).insert({
+      type: 'ZONE' as const,
+      gateId: null,
       id: cameraId,
       siteId,
       externalId: cameraExternalId,
@@ -101,6 +103,7 @@ test('legacy PPE ingestion -> durable grouping -> scoped notifications in real P
       requiredPpe: [...FIVE_PPE_ITEMS],
     });
     await db.getRepository(CameraObservationRegionEntity).insert({
+      siteId: siteId,
       id: regionId,
       cameraId,
       zoneId,

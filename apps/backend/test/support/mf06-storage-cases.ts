@@ -29,25 +29,23 @@ export async function checkPopulated(
   await source
     .getRepository(SiteEntity)
     .insert({ id: site, code: site, name: 'Synthetic storage Site' });
-  await source
-    .getRepository(CameraEntity)
-    .insert({
-      id: camera,
-      siteId: site,
-      externalId: camera,
-      code: camera,
-      name: 'Synthetic storage Camera',
-    });
-  await source
-    .getRepository(ZoneEntity)
-    .insert({
-      id: zone,
-      siteId: site,
-      code: zone,
-      name: 'Synthetic storage Zone',
-      type: ZoneType.STANDARD,
-      restrictionPolicy: ZoneRestrictionPolicy.NONE,
-    });
+  await source.getRepository(CameraEntity).insert({
+    type: 'ZONE' as const,
+    gateId: null,
+    id: camera,
+    siteId: site,
+    externalId: camera,
+    code: camera,
+    name: 'Synthetic storage Camera',
+  });
+  await source.getRepository(ZoneEntity).insert({
+    id: zone,
+    siteId: site,
+    code: zone,
+    name: 'Synthetic storage Zone',
+    type: ZoneType.STANDARD,
+    restrictionPolicy: ZoneRestrictionPolicy.NONE,
+  });
   const raw = {
     eventId: event,
     schemaVersion: '1.0.0',
@@ -65,19 +63,17 @@ export async function checkPopulated(
     ],
     evidence: [],
   };
-  await source
-    .getRepository(AiObservationEventEntity)
-    .insert({
-      eventId: event,
-      payloadHash: hash,
-      cameraExternalId: camera,
-      resolvedCameraId: camera,
-      streamSessionId: session,
-      capturedAt: at,
-      rawPayload: raw,
-      processingStatus: EventProcessingStatus.PROCESSED,
-      processingNote: null,
-    });
+  await source.getRepository(AiObservationEventEntity).insert({
+    eventId: event,
+    payloadHash: hash,
+    cameraExternalId: camera,
+    resolvedCameraId: camera,
+    streamSessionId: session,
+    capturedAt: at,
+    rawPayload: raw,
+    processingStatus: EventProcessingStatus.PROCESSED,
+    processingNote: null,
+  });
   const sql = `INSERT INTO zone_entry_assessment_request(request_id,event_id,payload_hash,person_observation_index,zone_observation_index,subject_binding_status,track_id,site_id,camera_id,camera_external_id,stream_session_id,region_id,geometry_version,zone_id,captured_at,requested_purpose,request_revision,binding_hash) VALUES($1,$2,$3,0,1,'BOUND',7,$4,$5::uuid,$5::uuid::text,$6,$7,$8,$9,$10,'INITIAL_OBSERVATION_ASSESSMENT',1,$11)`;
   const args = [request, event, hash, site, camera, session, region, 3, zone, at, 'b'.repeat(64)];
   const reject = async (fn: () => Promise<unknown>) =>
@@ -195,19 +191,17 @@ export async function checkPopulated(
   ] as const) {
     const nextEvent = randomUUID(),
       nextRequest = randomUUID();
-    await source
-      .getRepository(AiObservationEventEntity)
-      .insert({
-        eventId: nextEvent,
-        payloadHash: hash,
-        cameraExternalId: camera,
-        resolvedCameraId: camera,
-        streamSessionId: session,
-        capturedAt: at,
-        rawPayload: { ...raw, eventId: nextEvent, observations },
-        processingStatus: EventProcessingStatus.PROCESSED,
-        processingNote: null,
-      });
+    await source.getRepository(AiObservationEventEntity).insert({
+      eventId: nextEvent,
+      payloadHash: hash,
+      cameraExternalId: camera,
+      resolvedCameraId: camera,
+      streamSessionId: session,
+      capturedAt: at,
+      rawPayload: { ...raw, eventId: nextEvent, observations },
+      processingStatus: EventProcessingStatus.PROCESSED,
+      processingNote: null,
+    });
     const next = [...args];
     next[0] = nextRequest;
     next[1] = nextEvent;

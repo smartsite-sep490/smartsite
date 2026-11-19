@@ -1,4 +1,7 @@
 // @vitest-environment jsdom
+import { beforeEach } from 'vitest';
+import { mockGateCatalog } from '../test-gate-catalog';
+beforeEach(mockGateCatalog);
 import { cleanup, render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
@@ -30,7 +33,7 @@ it('routes a representative group registration to the selected site and shows QR
     purpose: 'Tour',
     targetArea: 'Office',
     groupSize: 20,
-    gateId: 'gate-north-01',
+    gateId: 'a1000000-0000-4000-8000-000000000001',
     validFrom: new Date().toISOString(),
     validUntil: new Date(Date.now() + 3600_000).toISOString(),
     status: 'PENDING',

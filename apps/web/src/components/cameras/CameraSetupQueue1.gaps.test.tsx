@@ -19,6 +19,8 @@ import { useSetupCatalog } from './useSetupCatalog';
 const SITE_ID = '11111111-1111-4111-8111-111111111111';
 const ZONE_ID = '22222222-2222-4222-8222-222222222222';
 const CAM_101: CameraResponse = {
+  type: 'ZONE' as const,
+  gateId: null,
   id: '00000000-0000-4000-8000-000000000101',
   siteId: SITE_ID,
   externalId: 'rtsp-cam-101',
@@ -29,6 +31,8 @@ const CAM_101: CameraResponse = {
   createdAt: '2026-11-01T00:00:00.000Z',
 };
 const CAM_102: CameraResponse = {
+  type: 'ZONE' as const,
+  gateId: null,
   id: '00000000-0000-4000-8000-000000000102',
   siteId: SITE_ID,
   externalId: 'rtsp-cam-102',

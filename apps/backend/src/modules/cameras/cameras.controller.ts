@@ -60,6 +60,8 @@ import {
 function cameraResponse(camera: CameraEntity) {
   return {
     id: camera.id,
+    type: camera.type,
+    gateId: camera.gateId,
     siteId: camera.siteId,
     externalId: camera.externalId,
     code: camera.code,

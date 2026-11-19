@@ -1,3 +1,4 @@
+import { requireActiveGate, requireFaceSource } from '../../gates/gate-registry.js';
 import type { EntityManager } from 'typeorm';
 import type { WorkforceActor } from '../directory/contractor-operations.service.js';
 import type {
@@ -16,7 +17,6 @@ import type { BackendEnvironment } from '../../../config/environment.js';
 import { newVisitorCode, encryptVisitorCode, decryptVisitorCode } from './visitor-code.js';
 import { VisitorEmailService } from './visitor-email.service.js';
 import { DataSource, In, IsNull } from 'typeorm';
-import { SITE_GATES } from '@smartsite/contracts';
 import {
   command,
   conflict,
@@ -89,7 +89,7 @@ export function requireSiteRole(
     forbidden();
 }
 export function requireGate(gateId: string) {
-  if (!SITE_GATES.some((g) => g.id === gateId)) invalid('Invalid gate identifier');
+  uuid(gateId);
 }
 export function visitResponse(v: VisitorVisitEntity, zoneIds: string[] = []): VisitResponse {
   const isExpired =
@@ -129,16 +129,21 @@ export function visitResponse(v: VisitorVisitEntity, zoneIds: string[] = []): Vi
           : 'NEEDS_REVIEW',
   };
 }
-function visitorEventResponse(
+async function visitorEventResponse(
+  manager: EntityManager,
   event: GateEventEntity,
   visit: VisitResponse,
-): VisitorGateEventResponse {
+): Promise<VisitorGateEventResponse> {
   if (!event.visitId || event.count === null || !event.attendees || !event.visitorEventCreatedAt)
     throw new Error('Incomplete visitor passage');
   return {
     id: event.id,
     visitId: event.visitId,
-    gateId: event.gateName,
+    gateId: (
+      await manager
+        .getRepository(AccessAttemptEntity)
+        .findOneByOrFail({ id: event.accessAttemptId, siteId: event.siteId })
+    ).gateId,
     direction: event.direction,
     count: event.count,
     attendees: event.attendees,
@@ -198,6 +203,7 @@ export class QrAccessService {
       gateId: string;
       direction: 'IN' | 'OUT';
       method: 'FACE' | 'QR' | 'MANUAL';
+      sourceCameraId?: string;
       identityStatus: string;
       authorization: string;
       reasonCode: string;
@@ -210,6 +216,9 @@ export class QrAccessService {
       attemptId?: string;
     },
   ) {
+    await requireActiveGate(manager, input.siteId, input.gateId);
+    if (input.method === 'FACE')
+      await requireFaceSource(manager, input.siteId, input.gateId, input.sourceCameraId!);
     const site = await manager.getRepository(SiteEntity).findOneBy({ id: input.siteId });
     if (!site) missing();
     const attempt = await manager.getRepository(AccessAttemptEntity).save({
@@ -217,6 +226,7 @@ export class QrAccessService {
       siteId: input.siteId,
       gateId: input.gateId,
       operatorId: input.actor.id,
+      sourceCameraId: input.sourceCameraId ?? null,
       direction: input.direction,
       method: input.method,
       credentialId: input.credentialId ?? null,
@@ -336,6 +346,9 @@ export class QrAccessService {
           conflict('Passage has already been confirmed');
         return existing;
       }
+      await requireActiveGate(manager, siteId, attempt.gateId);
+      if (attempt.method === 'FACE')
+        await requireFaceSource(manager, siteId, attempt.gateId, attempt.sourceCameraId!);
       if (attempt.status === 'DENIED' && attempt.reasonCode === 'NO_SCHEDULE')
         return { deniedNoSchedule: true as const };
       if (
@@ -427,7 +440,7 @@ export class QrAccessService {
         visitId: null,
         direction: attempt.direction,
         occurredAt: new Date(),
-        gateName: attempt.gateId,
+        gateName: (await requireActiveGate(manager, siteId, attempt.gateId)).name,
         idempotencyKey: value.idempotencyKey,
         recordedBy: actor.id,
       });
@@ -473,6 +486,7 @@ export class QrAccessService {
   ) {
     requireSiteRole(actor, siteId, [UserRole.SECURITY_OFFICER], false);
     requireGate(gateId);
+    await requireActiveGate(this.source.manager, siteId, gateId);
     const value = command(ManualWorkerVerificationCommand, input);
     return this.source.transaction(async (manager) => {
       await manager.query('SELECT pg_advisory_xact_lock(hashtext($1))', [
@@ -615,7 +629,7 @@ export class QrAccessService {
         workerId: null,
         visitId,
         recordedBy: actor.id,
-        gateName: visit.gateId,
+        gateName: (await requireActiveGate(manager, siteId, visit.gateId)).name,
         direction: 'OUT',
         occurredAt: now,
         visitorEventCreatedAt: now,
@@ -725,6 +739,7 @@ export class QrAccessService {
         forbidden('Visitor zones must belong to the registered site');
       let visit = await manager.getRepository(VisitorVisitEntity).findOneBy({ id: requestId });
       if (!visit) {
+        await requireActiveGate(manager, siteId, value.gateId);
         const activeManager = await manager
           .getRepository(UserRoleAssignmentEntity)
           .existsBy({ userId: assignedManager.userId, siteId, role: UserRole.SITE_MANAGER });
@@ -957,6 +972,7 @@ export class QrAccessService {
       visit.decidedAt = new Date();
       visit.reviewNote = value.reviewNote ?? null;
       if (value.status === 'APPROVED') {
+        await requireActiveGate(manager, siteId, visit.gateId);
         await this.bookingCode(manager, visit);
       }
       if (visit.email) {
@@ -1051,6 +1067,7 @@ export class QrAccessService {
   ) {
     requireSiteRole(actor, siteId, [UserRole.SECURITY_OFFICER], false);
     requireGate(gateId);
+    await requireActiveGate(this.source.manager, siteId, gateId);
     const value = command(CameraFallbackCommand, input);
     if (!(await this.source.getRepository(SiteEntity).existsBy({ id: siteId }))) missing();
     // This records an authorized operator's report of unavailable hardware, not AI evidence.
@@ -1064,14 +1081,17 @@ export class QrAccessService {
     reason: string,
   ): Promise<QrFallbackResponse> {
     requireSiteRole(actor, siteId, [UserRole.SECURITY_OFFICER], false);
-    const session = await this.source.getRepository(QrFallbackSessionEntity).save({
-      id: randomUUID(),
-      siteId,
-      gateId,
-      operatorUserId: actor.id,
-      direction,
-      reason,
-      expiresAt: expiresInFiveMinutes(),
+    const session = await this.source.transaction(async (manager) => {
+      await requireActiveGate(manager, siteId, gateId);
+      return manager.getRepository(QrFallbackSessionEntity).save({
+        id: randomUUID(),
+        siteId,
+        gateId,
+        operatorUserId: actor.id,
+        direction,
+        reason,
+        expiresAt: expiresInFiveMinutes(),
+      });
     });
     return {
       id: session.id,
@@ -1180,6 +1200,7 @@ export class QrAccessService {
   ) {
     requireSiteRole(actor, siteId, [UserRole.SECURITY_OFFICER], false);
     requireGate(gateId);
+    await requireActiveGate(this.source.manager, siteId, gateId);
     const value = command(PreviewVisitorQrCommand, input);
     return this.source.transaction(async (manager) => {
       if (!value.token.startsWith('SSQ-')) {
@@ -1264,8 +1285,14 @@ export class QrAccessService {
           .findBy({ siteId, id: In(events.map((e) => e.visitId)) })
       : [];
     return {
-      items: events.map((e) =>
-        visitorEventResponse(e, visitResponse(visits.find((v) => v.id === e.visitId)!)),
+      items: await Promise.all(
+        events.map((e) =>
+          visitorEventResponse(
+            this.source.manager,
+            e,
+            visitResponse(visits.find((v) => v.id === e.visitId)!),
+          ),
+        ),
       ),
     };
   }
@@ -1277,6 +1304,7 @@ export class QrAccessService {
   ): Promise<VisitorGateEventResponse> {
     requireSiteRole(actor, siteId, [UserRole.SECURITY_OFFICER], false);
     requireGate(gateId);
+    await requireActiveGate(this.source.manager, siteId, gateId);
     const value = command(VerifyVisitorQrCommand, input);
     const fingerprint = hash(
       JSON.stringify([
@@ -1331,7 +1359,7 @@ export class QrAccessService {
           bound.requestHash !== fingerprint
         )
           conflict('Confirmation request was used for a different passage');
-        return visitorEventResponse(bound, visitResponse(visit));
+        return visitorEventResponse(manager, bound, visitResponse(visit));
       }
       if (credential?.result) return credential.result as VisitorGateEventResponse;
       if (credential && (credential.siteId !== siteId || credential.direction !== value.direction))
@@ -1402,7 +1430,7 @@ export class QrAccessService {
         direction: value.direction,
         occurredAt: now,
         visitorEventCreatedAt: now,
-        gateName: gateId,
+        gateName: (await requireActiveGate(manager, siteId, gateId)).name,
         idempotencyKey: value.requestId,
         recordedBy: actor.id,
         count,
@@ -1427,7 +1455,8 @@ export class QrAccessService {
           replacedMemberIds: attendees.filter((a) => a.replacedFrom).map((a) => a.memberId),
         },
       );
-      const result = visitorEventResponse(
+      const result = await visitorEventResponse(
+        manager,
         event,
         visitResponse(
           visit,
@@ -1455,6 +1484,7 @@ export class QrAccessService {
   ): Promise<WorkerQrVerificationResponse> {
     requireSiteRole(actor, siteId, [UserRole.SECURITY_OFFICER], false);
     requireGate(gateId);
+    await requireActiveGate(this.source.manager, siteId, gateId);
     const value = command(VerifyWorkerQrCommand, input);
     const fingerprint = hash(
       JSON.stringify([actor.id, siteId, gateId, value.requestId, value.direction]),

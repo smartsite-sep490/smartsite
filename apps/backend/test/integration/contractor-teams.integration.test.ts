@@ -1,3 +1,9 @@
+import {
+  seedGateFixture,
+  cleanupGateFixture,
+  sourceForGate,
+  testGateId,
+} from '../support/gate-fixture.js';
 import 'reflect-metadata';
 import { approvedWorkerDocuments } from '../support/approved-worker-documents.js';
 import assert from 'node:assert/strict';
@@ -367,6 +373,7 @@ test('contractor teams: scoped dashboard, HTTP contracts, membership history, co
       'same-team opposite shifts apply atomically; overlap and missing team are rejected',
       async (sub) => {
         const { sa, sb, request } = await swap();
+        await seedGateFixture(dataSource, siteId);
         const reconciliation = new AttendanceReconciliationService(
           dataSource,
           new SchedulingNotificationService(dataSource),
@@ -376,7 +383,8 @@ test('contractor teams: scoped dashboard, HTTP contracts, membership history, co
           const attempt = await manager.getRepository(AccessAttemptEntity).save({
             id: randomUUID(),
             siteId,
-            gateId: 'synthetic-gate',
+            gateId: testGateId,
+            sourceCameraId: sourceForGate(testGateId),
             operatorId: repId,
             direction: 'IN',
             method: 'FACE',
@@ -397,7 +405,7 @@ test('contractor teams: scoped dashboard, HTTP contracts, membership history, co
             workerId: aId,
             direction: 'IN',
             occurredAt,
-            gateName: 'synthetic-gate',
+            gateName: 'Gate 1',
             idempotencyKey: randomUUID(),
             recordedBy: repId,
           });
@@ -772,6 +780,7 @@ test('contractor teams: scoped dashboard, HTTP contracts, membership history, co
     await dataSource.query('DELETE FROM auth_session WHERE user_id=ANY($1)', [ids]);
     await dataSource.query('DELETE FROM user_role_assignment WHERE user_id=ANY($1)', [ids]);
     await dataSource.query('DELETE FROM app_user WHERE id=ANY($1)', [ids]);
+    await cleanupGateFixture(dataSource, [siteId, otherSite]);
     await dataSource.query('DELETE FROM site WHERE id=ANY($1)', [[siteId, otherSite]]);
     await dataSource.destroy();
   }

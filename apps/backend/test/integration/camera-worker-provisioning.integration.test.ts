@@ -23,7 +23,7 @@ test('operator provisions only an explicit migrated owned schema with durable ex
       [site],
     );
     await db.query(
-      "INSERT INTO camera(id,site_id,external_id,code,name)VALUES($1,$2,$1::uuid::text,$1::uuid::text,'Synthetic operator Camera')",
+      "INSERT INTO camera(type,id,site_id,external_id,code,name) VALUES('ZONE',$1,$2,$1::uuid::text,$1::uuid::text,'Synthetic operator Camera')",
       [camera, site],
     );
     const url = resolveTestDatabaseUrl();

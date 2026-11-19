@@ -43,6 +43,8 @@ export class SiteResponseDto {
 }
 
 export class CameraResponseDto {
+  @ApiProperty({ enum: ['GATE', 'ZONE'] }) type!: 'GATE' | 'ZONE';
+  @ApiProperty({ nullable: true }) gateId!: string | null;
   @ApiProperty({ format: 'uuid' }) id!: string;
   @ApiProperty({ format: 'uuid' }) siteId!: string;
   @ApiProperty() externalId!: string;

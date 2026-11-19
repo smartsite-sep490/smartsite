@@ -30,7 +30,7 @@ test('tracked part original receipt authentication on isolated PostgreSQL is sep
       [siteId],
     );
     await db.query(
-      "INSERT INTO camera(id,site_id,external_id,code,name) VALUES($1,$2,$1::uuid::text,$1::uuid::text,'Synthetic tracked auth camera')",
+      "INSERT INTO camera(type,id,site_id,external_id,code,name) VALUES('ZONE',$1,$2,$1::uuid::text,$1::uuid::text,'Synthetic tracked auth camera')",
       [cameraId, siteId],
     );
     const generation = await provisionCameraWorkerGeneration(db, cameraId, [cameraId], 120000);

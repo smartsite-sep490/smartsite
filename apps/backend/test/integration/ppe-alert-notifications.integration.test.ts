@@ -89,6 +89,8 @@ async function fixture() {
     { id: otherSiteId, code: otherSiteId, name: 'Other synthetic site' },
   ]);
   await dataSource.getRepository(CameraEntity).save({
+    type: 'ZONE' as const,
+    gateId: null,
     id: cameraId,
     siteId,
     externalId: cameraExternalId,
@@ -106,6 +108,7 @@ async function fixture() {
     requiredPpe: ['HARD_HAT', 'SAFETY_VEST'],
   });
   await dataSource.getRepository(CameraObservationRegionEntity).save({
+    siteId: siteId,
     id: regionId,
     cameraId,
     zoneId,
