@@ -648,7 +648,10 @@ function CameraScope({
           </div>
         )}
         <div className="flex flex-wrap items-center gap-2.5 sm:ml-auto">
-          <p role="status" className="text-xs font-medium tabular-nums text-slate-500 whitespace-nowrap">
+          <p
+            role="status"
+            className="text-xs font-medium tabular-nums text-slate-500 whitespace-nowrap"
+          >
             {cameras.isPending
               ? t('monitor.loading')
               : cameras.isError && !cameras.isFetchNextPageError
@@ -783,16 +786,12 @@ function CameraScope({
         tabIndex={-1}
         data-monitor-fullscreen={isFullscreen ? 'true' : undefined}
         className={
-          isFullscreen
-            ? 'min-w-0 space-y-3 bg-slate-950 p-3 sm:p-4 overflow-y-auto'
-            : 'min-w-0'
+          isFullscreen ? 'min-w-0 space-y-3 bg-slate-950 p-3 sm:p-4 overflow-y-auto' : 'min-w-0'
         }
       >
         {isFullscreen && selected && (
           <div className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-slate-800 bg-slate-900 px-4 py-2.5 text-white">
-            <span className="text-sm font-semibold truncate">
-              {selected.name || selected.code}
-            </span>
+            <span className="text-sm font-semibold truncate">{selected.name || selected.code}</span>
             <div className="flex flex-wrap items-center gap-2">
               <div
                 role="group"
@@ -853,6 +852,7 @@ function CameraScope({
               aiPaused={!!aiPaused}
               onOpenEvidence={() => setEvidenceCameraId(selected.id)}
               onAiSnapshotUpdate={handleFocusSnapshotUpdate}
+              onTransportChoice={() => setLayoutMode('focus')}
               onExitFocus={() => {
                 pendingFocusTargetRef.current = { kind: 'grid-enlarge', cameraId: selected.id };
                 setLayoutMode('grid');

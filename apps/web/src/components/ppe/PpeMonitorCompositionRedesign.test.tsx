@@ -224,6 +224,35 @@ describe('PPE Monitor operational composition redesign (1-camera stage, adaptive
     expect(screen.getByTestId('four-source-wall-grid')).toBeTruthy();
   });
 
+  it.each(['Live source video', 'Recorded source video'])(
+    'keeps the explicitly selected %s open when a camera catalog refresh adds sources',
+    async (transportName) => {
+      render(
+        <QueryClientProvider client={queryClient}>
+          <MemoryRouter initialEntries={['/ppe']}>
+            <PpeMonitorWorkspace apiUrl="http://127.0.0.1:3000" session={officerSession} />
+          </MemoryRouter>
+        </QueryClientProvider>,
+      );
+      await screen.findByTestId('focused-camera-stage');
+      fireEvent.click(screen.getByRole('button', { name: transportName }));
+      mockState.cameras.mockResolvedValue({ items: [CAM_1, CAM_2, CAM_3], total: 3 });
+      await act(async () => {
+        await queryClient.invalidateQueries();
+      });
+      await waitFor(() =>
+        expect(screen.getByTestId('monitor-grid-btn').textContent).toBe('Camera grid (3)'),
+      );
+      expect(screen.getByTestId('focused-camera-stage')).toBeTruthy();
+      expect(
+        screen
+          .getByRole('button', { name: transportName })
+          .getAttribute('aria-pressed'),
+      ).toBe('true');
+      expect(screen.queryByTestId('four-source-wall-grid')).toBeNull();
+    },
+  );
+
   it('opens an adaptive multi-camera grid by default when 3 cameras are available with zero empty dummy slots and preserves Escape return from Focus', async () => {
     mockState.cameras.mockResolvedValue({
       items: [CAM_1, CAM_2, CAM_3],
