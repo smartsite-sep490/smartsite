@@ -26,6 +26,8 @@ const REGION_SHARED_2_ID = 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbb2';
 const REGION_LONG_ID = 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbb3';
 
 const CAMERA_FIXTURE: CameraResponse = {
+  type: 'ZONE',
+  gateId: null,
   id: CAMERA_ID,
   siteId: SITE_ID,
   code: 'SETUP-CLIP',

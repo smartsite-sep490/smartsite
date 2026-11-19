@@ -37,6 +37,8 @@ const CAM_INACTIVE_ID = 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb';
 const ZONE_1_ID = 'cccccccc-cccc-4ccc-8ccc-cccccccccccc';
 
 const CAM_ACTIVE: CameraResponse = {
+  type: 'ZONE',
+  gateId: null,
   id: CAM_ACTIVE_ID,
   siteId: SITE_ID,
   code: 'CAM-01',
@@ -48,6 +50,8 @@ const CAM_ACTIVE: CameraResponse = {
 };
 
 const CAM_INACTIVE: CameraResponse = {
+  type: 'ZONE',
+  gateId: null,
   id: CAM_INACTIVE_ID,
   siteId: SITE_ID,
   code: 'CAM-02',

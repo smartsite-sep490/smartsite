@@ -26,6 +26,8 @@ vi.mock('../cameras/useScopedCameraPreview', () => ({
 
 const SITE_ID = '11111111-1111-4111-8111-111111111111';
 const CAMERA: CameraResponse = {
+  type: 'ZONE',
+  gateId: null,
   id: '22222222-2222-4222-8222-222222222222',
   siteId: SITE_ID,
   code: 'CAM-NORTH-CRANE-01',

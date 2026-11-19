@@ -14,6 +14,8 @@ import { PpeMonitorWorkspace } from './PpeMonitorWorkspace';
 
 const SITE_ID = '11111111-1111-4111-8111-111111111111';
 const CAM_01: CameraResponse = {
+  type: 'ZONE',
+  gateId: null,
   id: '22222222-2222-4222-8222-222222222221',
   siteId: SITE_ID,
   code: 'CAM-01',
@@ -24,6 +26,8 @@ const CAM_01: CameraResponse = {
   createdAt: '2026-11-01T00:00:00.000Z',
 };
 const CAM_02: CameraResponse = {
+  type: 'ZONE',
+  gateId: null,
   id: '22222222-2222-4222-8222-222222222222',
   siteId: SITE_ID,
   code: 'CAM-02',

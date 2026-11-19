@@ -30,6 +30,8 @@ const REG_1_ID = '77777777-7777-4777-8777-777777777701';
 const REG_2_ID = '77777777-7777-4777-8777-777777777702';
 
 const CAM_101: CameraResponse = {
+  type: 'ZONE',
+  gateId: null,
   id: CAM_ID,
   siteId: SITE_ID,
   externalId: 'prov-cam-hoist-north-01',

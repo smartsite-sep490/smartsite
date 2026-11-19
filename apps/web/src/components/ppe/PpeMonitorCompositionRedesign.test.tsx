@@ -14,6 +14,8 @@ import { PpeMonitorWorkspace } from './PpeMonitorWorkspace';
 const SITE_ID = '11111111-1111-4111-8111-111111111111';
 
 const CAM_1: CameraResponse = {
+  type: 'ZONE',
+  gateId: null,
   id: '22222222-2222-4222-8222-222222222201',
   siteId: SITE_ID,
   code: 'LAPTOP',
@@ -25,6 +27,8 @@ const CAM_1: CameraResponse = {
 };
 
 const CAM_2: CameraResponse = {
+  type: 'ZONE',
+  gateId: null,
   id: '22222222-2222-4222-8222-222222222202',
   siteId: SITE_ID,
   code: 'CAM-GATE-02',
@@ -36,6 +40,8 @@ const CAM_2: CameraResponse = {
 };
 
 const CAM_3: CameraResponse = {
+  type: 'ZONE',
+  gateId: null,
   id: '22222222-2222-4222-8222-222222222203',
   siteId: SITE_ID,
   code: 'CAM-EXCAV-03',

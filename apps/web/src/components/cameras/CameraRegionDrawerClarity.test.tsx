@@ -30,6 +30,8 @@ const LONG_ZONE_NAME =
 const REGION_EDIT_ID = 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbb2';
 
 const CAMERA_FIXTURE: CameraResponse = {
+  type: 'ZONE',
+  gateId: null,
   id: CAMERA_ID,
   siteId: SITE_ID,
   code: 'SETUP-CLIP',
