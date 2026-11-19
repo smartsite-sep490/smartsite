@@ -229,7 +229,7 @@ export function FourSourceWallTile(props: FourSourceWallTileProps) {
           )}
           <span
             title={`${camera.name || camera.code} (${camera.code})`}
-            className="min-w-0 flex-1 font-bold text-xs tracking-wide text-white truncate"
+            className="pointer-events-auto min-w-0 flex-1 font-bold text-xs tracking-wide text-white truncate"
           >
             {camera.name || camera.code}
           </span>
@@ -237,7 +237,7 @@ export function FourSourceWallTile(props: FourSourceWallTileProps) {
             <span
               data-testid={`wall-zone-chip-${camera.id}`}
               title={linkedZoneTitle}
-              className="hidden sm:inline-block max-w-[9.5rem] truncate rounded border border-sky-400/30 bg-sky-500/15 px-1.5 py-0.5 text-[11px] font-medium text-sky-200 shrink-0"
+              className="pointer-events-auto hidden sm:inline-block max-w-[9.5rem] truncate rounded border border-sky-400/30 bg-sky-500/15 px-1.5 py-0.5 text-[11px] font-medium text-sky-200 shrink-0"
             >
               {linkedZoneSummary}
             </span>

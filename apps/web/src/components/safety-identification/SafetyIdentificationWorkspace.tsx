@@ -434,7 +434,7 @@ function ScopedIdentificationWorkspace({
                 scope.isOfficer &&
                 sameId(queries.activeRequest.siteId, initialSiteId) &&
                 sameId(queries.activeRequest.episodeId, initialEpisodeId)
-                  ? sanitizeSafetyQueryId(originCameraId)?.toLowerCase()
+                  ? sanitizeSafetyUuid(originCameraId)?.toLowerCase()
                   : undefined
               }
               detailLoading={queries.detailFetching}
