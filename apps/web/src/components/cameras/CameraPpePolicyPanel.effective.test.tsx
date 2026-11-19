@@ -432,6 +432,53 @@ describe('CameraPpePolicyPanel effective PPE, mode distinction, and saved vs app
     expect(within(regionCard).getByText('Worker applied (v4)')).toBeTruthy();
   });
 
+  it('uses configuration Zone metadata for a Manager without requesting the monitoring-only projection', async () => {
+    const getCameraObservationZones = vi.fn().mockRejectedValue({ status: 403 });
+    const listZones = vi.fn().mockResolvedValue({
+      items: [makeZone(ZONE_1_ID, 'Z-01', 'Scaffold Area', ['BOOTS'])],
+      total: 1,
+    });
+    const context: CameraPpeContext = {
+      setupKey: ['manager-zone-metadata'],
+      token: 'manager-token',
+      siteId: SITE_ID,
+      onUnauthorized: vi.fn(),
+      client: {
+        readSavedPpePolicy: vi.fn(async (_token, _siteId, _cameraId, regionId) => ({
+          cameraId: CAMERA_ID,
+          regionId: regionId ?? null,
+          configurationVersion: 4,
+          savedRevision: 2,
+          policy: regionId
+            ? { mode: 'INHERIT' as const }
+            : { mode: 'EXPLICIT' as const, requiredPpe: ['HARD_HAT' as const] },
+        })),
+        listRegions: vi.fn().mockResolvedValue({
+          items: [makeRegion(REGION_INHERIT_ID, ZONE_1_ID)],
+          total: 1,
+        }),
+        getCameraObservationZones,
+        listZones,
+        initializePpePolicy: vi.fn(),
+        updateCameraPpePolicy: vi.fn(),
+        updateRegionPpePolicy: vi.fn(),
+        activateRegionWithPpePolicy: vi.fn(),
+      },
+    };
+    renderPanel({ context, camera: makeCamera(4), canWrite: true });
+    fireEvent.click(screen.getByRole('button', { name: 'Camera PPE policy' }));
+    const region = await screen.findByTestId(`camera-ppe-region-card-${REGION_INHERIT_ID}`);
+    await waitFor(() => expect(within(region).getByText('Scaffold Area')).toBeTruthy());
+    expect(listZones).toHaveBeenCalledWith(
+      'manager-token',
+      SITE_ID,
+      { offset: 0, limit: 100 },
+      expect.objectContaining({ signal: expect.any(AbortSignal) }),
+    );
+    expect(getCameraObservationZones).not.toHaveBeenCalled();
+    expect(context.onUnauthorized).not.toHaveBeenCalled();
+  });
+
   it('resolves human Zone labels from scoped getCameraObservationZones, rejects cross-scope responses, hides UUIDs in details on missing/denied metadata, and explains config vs worker/model capability truthfully without static CORE/HOLD badges', async () => {
     const OTHER_SITE_ID = '99999999-9999-4999-8999-999999999999';
     const OTHER_CAMERA_ID = 'eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee';
@@ -500,7 +547,7 @@ describe('CameraPpePolicyPanel effective PPE, mode distinction, and saved vs app
       },
     };
 
-    const { queryClient } = renderPanel({ context, camera: makeCamera(4), canWrite: true });
+    const { queryClient } = renderPanel({ context, camera: makeCamera(4), canWrite: false });
     fireEvent.click(screen.getByRole('button', { name: 'Camera PPE policy' }));
 
     const resolvedCard = await screen.findByTestId(`camera-ppe-region-card-${REGION_INHERIT_ID}`);
