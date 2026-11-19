@@ -28,6 +28,7 @@ export interface SafetyTaskTourProps {
   scopeKey: string;
   isAuthorized?: boolean;
   steps?: readonly SafetyTourStepSpec[];
+  unobtrusiveEntry?: boolean;
 }
 
 const stepSpec = (id: string, anchor: string, prefix: string): SafetyTourStepSpec => ({

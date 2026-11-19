@@ -12,8 +12,8 @@ const state = vi.hoisted(() => ({ sites: vi.fn(), cameras: vi.fn() }));
 const client = { listSites: state.sites, listPreviewCameras: state.cameras };
 vi.mock('../../features/auth/auth-session', () => ({ useManagementClient: () => client }));
 vi.mock('./FocusedCameraMedia', () => ({
-  FocusedCameraMedia: (p: { camera: { id: string }; onExitFocus?: () => void }) => (
-    <div data-testid="focus">
+  FocusedCameraMedia: (p: { camera: { id: string }; aiPaused?: boolean; onExitFocus?: () => void }) => (
+    <div data-testid="focus" data-paused={String(Boolean(p.aiPaused))}>
       {p.camera.id}
       <button data-testid="focused-exit-to-grid" onClick={p.onExitFocus}>
         Back to grid
@@ -84,17 +84,21 @@ afterEach(() => {
   query.clear();
 });
 
-it('mounts authorized metadata and focus while paused state reaches the preview boundary', async () => {
+it('mounts authorized metadata and single-camera focus default while paused state reaches the preview boundary', async () => {
   render(<PpeMonitorWorkspace apiUrl="https://backend.example" session={session()} aiPaused />, {
     wrapper,
   });
-  expect((await screen.findByTestId('wall')).getAttribute('data-paused')).toBe('true');
+  const focused = await screen.findByTestId('focus');
+  expect(focused.getAttribute('data-paused')).toBe('true');
+  expect(focused.textContent).toContain(camera.id);
   expect(state.cameras).toHaveBeenCalledWith(
     'first',
     site,
     { offset: 0, limit: 20 },
     expect.objectContaining({ signal: expect.any(AbortSignal) }),
   );
+  fireEvent.click(screen.getByTestId('monitor-grid-btn'));
+  expect(screen.getByTestId('wall').getAttribute('data-paused')).toBe('true');
   fireEvent.click(screen.getByTestId('wall'));
   expect(screen.getByTestId('focus').textContent).toContain(camera.id);
 });
@@ -113,7 +117,7 @@ it('advances raw offsets through inactive pages instead of claiming successful e
     await screen.findByText('More cameras may be on later pages.', { exact: false }),
   ).toBeTruthy();
   fireEvent.click(screen.getByRole('button', { name: 'Load more' }));
-  expect((await screen.findByTestId('wall')).textContent).toContain(camera.id);
+  expect((await screen.findByTestId('focus')).textContent).toContain(camera.id);
   expect(state.cameras).toHaveBeenLastCalledWith(
     'first',
     site,
@@ -127,11 +131,12 @@ it('credential replacement removes old camera content while replacement metadata
     <PpeMonitorWorkspace apiUrl="https://backend.example" session={session()} />,
     { wrapper },
   );
-  await screen.findByTestId('wall');
+  await screen.findByTestId('focus');
   state.sites.mockImplementation(() => new Promise(() => {}));
   view.rerender(
     <PpeMonitorWorkspace apiUrl="https://backend.example" session={session('second')} />,
   );
+  expect(screen.queryByTestId('focus')).toBeNull();
   expect(screen.queryByTestId('wall')).toBeNull();
   await waitFor(() =>
     expect(state.sites).toHaveBeenLastCalledWith(
@@ -177,12 +182,12 @@ it('transient next-page failure preserves the camera but a later forbidden page 
     .mockRejectedValueOnce(new ApiError('network', 'offline'))
     .mockRejectedValueOnce(new ApiError('http', 'Forbidden', 403));
   render(<PpeMonitorWorkspace apiUrl="https://backend.example" session={session()} />, { wrapper });
-  await screen.findByTestId('wall');
+  await screen.findByTestId('focus');
   fireEvent.click(screen.getByRole('button', { name: 'Load more' }));
   await screen.findByRole('button', { name: 'Retry' });
-  expect(screen.getByTestId('wall').textContent).toContain(camera.id);
+  expect(screen.getByTestId('focus').textContent).toContain(camera.id);
   fireEvent.click(screen.getByRole('button', { name: 'Retry' }));
-  await waitFor(() => expect(screen.queryByTestId('wall')).toBeNull());
+  await waitFor(() => expect(screen.queryByTestId('focus')).toBeNull());
   expect(state.cameras).toHaveBeenLastCalledWith(
     'first',
     site,
@@ -237,7 +242,7 @@ it('hides the pending /incidents?tab=ppe-frames link on Main by default while ke
     <PpeMonitorWorkspace apiUrl="https://backend.example" session={session()} aiPaused />,
     { wrapper },
   );
-  await screen.findByTestId('wall');
+  await screen.findByTestId('focus');
   expect(screen.queryByTestId('monitor-frame-inbox-link')).toBeNull();
   const episodesLink = screen.getByRole('link', { name: 'Open safety records' });
   expect(episodesLink.getAttribute('href')).toBe(
@@ -258,6 +263,8 @@ it('hides the pending /incidents?tab=ppe-frames link on Main by default while ke
 });
 
 it('moving from toolbar into Focus reaches the viewer and returning reaches the grid controls', async () => {
+  const second = { ...camera, id: '55555555-5555-4555-8555-555555555555', name: 'Second' };
+  state.cameras.mockResolvedValue({ items: [camera, second], total: 2 });
   render(<PpeMonitorWorkspace apiUrl="https://backend.example" session={session()} />, { wrapper });
   await screen.findByTestId('wall');
   fireEvent.click(screen.getByTestId('monitor-focus-btn'));
