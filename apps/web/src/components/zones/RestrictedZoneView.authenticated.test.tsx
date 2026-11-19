@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { cleanup, render, screen } from '@testing-library/react';
+import { cleanup, render, screen, waitFor } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 import { afterEach, expect, it, vi } from 'vitest';
 import { RestrictedZoneView } from './RestrictedZoneView';
@@ -81,6 +81,89 @@ it('uses authenticated scoped media when opening /zones from the menu without de
     expect(
       container.querySelector('video[src="/assets/hazard_restricted_zone_test.mp4"]'),
     ).toBeNull();
+  } finally {
+    unmount();
+    client.clear();
+  }
+});
+
+it('renders full-width authenticated workspace without fake Admin banner or duplicate Sign-out, with 40px controls and role-aware camera-setup handoff', async () => {
+  const client = new QueryClient({ defaultOptions: { queries: { retry: false, gcTime: 0 } } });
+  const onNavigate = vi.fn();
+  const officerSession = {
+    accessToken: 'local-officer',
+    user: {
+      id: 'officer-1',
+      username: 'demo.safety',
+      displayName: 'Cán bộ an toàn demo',
+      isActive: true,
+      mustChangePassword: false,
+      roleAssignments: [{ role: 'SAFETY_OFFICER', siteId }],
+    },
+  } as Pick<LoginResponse, 'accessToken' | 'user'>;
+
+  const { rerender, unmount } = render(
+    <QueryClientProvider client={client}>
+      <MemoryRouter>
+        <RestrictedZoneView
+          apiUrl="http://api.invalid"
+          authenticatedSession={officerSession}
+          onNavigate={onNavigate}
+        />
+      </MemoryRouter>
+    </QueryClientProvider>,
+  );
+
+  try {
+    await screen.findByTestId('authenticated-zone-camera');
+    const root = screen.getByTestId('restricted-zone-fullwidth-workspace');
+    expect(root.className).toContain('w-full');
+    expect(root.className).not.toContain('max-w-[1202px]');
+    expect(root.className).not.toContain('mx-auto');
+
+    // Never claim Global Admin session or render duplicate inline Sign-out button
+    expect(screen.queryByText(/Admin Session Active|PHIÊN QUẢN TRỊ VIÊN/i)).toBeNull();
+    expect(screen.queryByText(/Global Admin role verified|quyền quản trị viên hệ thống/i)).toBeNull();
+    expect(screen.queryByRole('button', { name: /Sign out|Đăng xuất/i })).toBeNull();
+
+    // Real 24px h1 + 40px selects + fullscreen toggle + role-gated /camera-setup link
+    expect(screen.getByRole('heading', { level: 1 })).toBeTruthy();
+    for (const select of document.querySelectorAll('select')) {
+      expect(select.className).toContain('h-10');
+      expect(select.className).toContain('text-sm');
+    }
+    expect(screen.getByTestId('zones-fullscreen-toggle')).toBeTruthy();
+    expect(screen.queryByRole('link', { name: /Camera setup|Thiết lập camera/i })).toBeNull();
+
+    // Site Manager sees scoped /camera-setup handoff link
+    const managerSession = {
+      accessToken: 'local-manager',
+      user: {
+        id: 'manager-1',
+        username: 'demo.manager',
+        displayName: 'Quản lý công trường demo',
+        isActive: true,
+        mustChangePassword: false,
+        roleAssignments: [{ role: 'SITE_MANAGER', siteId }],
+      },
+    } as Pick<LoginResponse, 'accessToken' | 'user'>;
+
+    rerender(
+      <QueryClientProvider client={client}>
+        <MemoryRouter>
+          <RestrictedZoneView
+            apiUrl="http://api.invalid"
+            authenticatedSession={managerSession}
+            onNavigate={onNavigate}
+          />
+        </MemoryRouter>
+      </QueryClientProvider>,
+    );
+
+    await waitFor(() => {
+      const setupLink = screen.getByRole('link', { name: /Camera setup|Thiết lập camera/i });
+      expect(setupLink.getAttribute('href')).toContain(`/camera-setup?siteId=${siteId}`);
+    });
   } finally {
     unmount();
     client.clear();
