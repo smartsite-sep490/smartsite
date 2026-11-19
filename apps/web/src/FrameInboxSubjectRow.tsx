@@ -167,9 +167,21 @@ export function FrameInboxSubjectRow({
             </span>
             <span className="text-sm font-semibold text-slate-950">
               {t('frameInbox.person', { number: personNumber })}
-              {entry.findingCount > 0 &&
-                ` · ${t('frameInbox.findings', { count: entry.findingCount })}`}
             </span>
+            {entry.findingCount > 0 && (
+              <>
+                <span aria-hidden="true" className="text-xs text-slate-300">
+                  ·
+                </span>
+                <span
+                  data-testid={`frame-subject-ppe-count-${personNumber}`}
+                  className="inline-flex items-center gap-1 rounded-md border border-amber-300 bg-amber-50 px-2 py-0.5 text-[11px] font-semibold text-amber-950"
+                >
+                  <IconHardHat className="h-3 w-3 shrink-0 text-amber-800" />
+                  <span>{t('frameInbox.findings', { count: entry.findingCount })}</span>
+                </span>
+              </>
+            )}
             <Badge
               variant={entry.unread ? 'warning' : 'neutral'}
               dot={entry.unread}
