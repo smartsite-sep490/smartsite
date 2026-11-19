@@ -4,6 +4,28 @@ import { fileURLToPath } from 'node:url';
 import { z } from 'zod';
 import { operatorSupervisorPorts } from './camera-worker-supervisor-adapter.js';
 import { superviseCameraWorker } from './camera-worker-supervisor.js';
+import type { EventEmitter } from 'node:events';
+
+const normalizePath = (value: string) =>
+  process.platform === 'win32' ? path.resolve(value).toLowerCase() : path.resolve(value);
+
+export function isSupervisorEntry(argument: string | undefined, modulePath: string): boolean {
+  return argument !== undefined && normalizePath(argument) === normalizePath(modulePath);
+}
+
+export function bindSupervisorSignals(
+  emitter: Pick<EventEmitter, 'on' | 'removeListener'>,
+  controller: AbortController,
+) {
+  const stop = () => controller.abort();
+  // Keep handlers installed during asynchronous owned-child cleanup, including repeated Ctrl+C.
+  emitter.on('SIGINT', stop);
+  emitter.on('SIGTERM', stop);
+  return () => {
+    emitter.removeListener('SIGINT', stop);
+    emitter.removeListener('SIGTERM', stop);
+  };
+}
 
 const absolutePath = z
   .string()
@@ -55,21 +77,28 @@ export async function runOperatorSupervisor(
   const configPath = args[1]!;
   const metadata = await lstat(configPath);
   const resolved = await realpath(configPath);
-  const normalize = (value: string) =>
-    process.platform === 'win32' ? path.resolve(value).toLowerCase() : path.resolve(value);
   if (
     !metadata.isFile() ||
     metadata.isSymbolicLink() ||
-    normalize(configPath) !== normalize(resolved)
+    normalizePath(configPath) !== normalizePath(resolved)
   )
     throw new Error('A regular reviewed configuration file is required');
   const handle = await open(configPath, 'r');
   let input: unknown;
   try {
+    const opened = await handle.stat();
+    if (!opened.isFile() || opened.dev !== metadata.dev || opened.ino !== metadata.ino)
+      throw new Error('Reviewed configuration file changed during opening');
+    if (opened.size > 65536) throw new Error('Supervisor configuration exceeds size limit');
     const buffer = Buffer.alloc(65537);
-    const { bytesRead } = await handle.read(buffer, 0, buffer.length, 0);
-    if (bytesRead > 65536) throw new Error('Supervisor configuration exceeds size limit');
-    input = JSON.parse(buffer.subarray(0, bytesRead).toString('utf8'));
+    let total = 0;
+    while (total < buffer.length) {
+      const { bytesRead } = await handle.read(buffer, total, buffer.length - total, total);
+      if (bytesRead === 0) break;
+      total += bytesRead;
+    }
+    if (total > 65536) throw new Error('Supervisor configuration exceeds size limit');
+    input = JSON.parse(buffer.subarray(0, total).toString('utf8'));
   } finally {
     await handle.close();
   }
@@ -88,11 +117,9 @@ export async function runOperatorSupervisor(
   return superviseCameraWorker(options, ports, signal);
 }
 
-if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
+if (isSupervisorEntry(process.argv[1], fileURLToPath(import.meta.url))) {
   const controller = new AbortController();
-  const stop = () => controller.abort();
-  process.once('SIGINT', stop);
-  process.once('SIGTERM', stop);
+  const releaseSignals = bindSupervisorSignals(process, controller);
   void runOperatorSupervisor(process.argv.slice(2), process.env, controller.signal)
     .then(
       (result) => {
@@ -105,8 +132,5 @@ if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.me
         process.exitCode = 1;
       },
     )
-    .finally(() => {
-      process.removeListener('SIGINT', stop);
-      process.removeListener('SIGTERM', stop);
-    });
+    .finally(releaseSignals);
 }
