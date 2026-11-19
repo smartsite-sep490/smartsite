@@ -122,7 +122,18 @@ export function IdentificationCreateForm({
               </Badge>
             )}
           </div>
-          <p className="text-xs text-slate-500">{copy.create.evidenceNotice}</p>
+          <p
+            data-testid="c02-create-evidence-delivery-status"
+            className={`text-xs ${
+              approval ? 'font-medium text-emerald-800' : 'text-slate-500'
+            }`}
+          >
+            {approval
+              ? copy.create.evidenceApprovedNotice
+              : renderEvidence
+                ? copy.create.evidenceOptionalNotice
+                : copy.create.evidenceNotice}
+          </p>
           {visibleAssigneeError && (
             <p role="alert" className="text-xs font-medium text-rose-600">
               {visibleAssigneeError}
