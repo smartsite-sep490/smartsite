@@ -1,10 +1,12 @@
 # Gate registry and registered FACE sources
 
-Site Managers configure physical Gates within their assigned Site through the scoped
-Gate API. Gate Desk and visitor workflows load this Site catalog instead of a fixed
-list. Name-only creation generates a code such as `GATE-12ABCDEF3456`; explicit valid
-codes remain supported for older clients. The Site Setup creation panel is delivered
-in the dependent Web UI PR.
+Site Managers configure physical Gates within their assigned Site in **Site Setup**
+(`/site-setup`): select a Site, then use the **Site gates** panel directly below the Site
+details. The create form asks only for a Gate name; Backend generates a code such as
+`GATE-12ABCDEF3456` and the Web shows the returned code after saving. Cards show each
+Gate's name, code and status, with rename and activate/deactivate actions. Admin can view the selected Site's catalog
+without configuration actions. Switching Sites clears the unfinished form and loads that
+Site's catalog. The participation-only contractor panel does not control Gate visibility.
 Each Gate has a UUID, a Site-scoped immutable code, a name and ACTIVE/INACTIVE status.
 Names and status can change; Site/code cannot. There is no delete API.
 Admin observes configuration. Site Manager, Safety Officer and Security Officer read their Site's
