@@ -5,12 +5,17 @@ import type { DataSource, EntityManager } from 'typeorm';
 import type {
   TrackedEpisodeDetail,
   TrackedObservationIdentity,
+  TrackedObservationIdentityCard,
   TrackedEpisodeObservationOptions,
   TrackedEpisodeObservationPage,
   TrackedEpisodeMediaSource,
   TrackedEpisodeMediaRepresentation,
 } from '@smartsite/contracts/tracked-episode-frames';
-import { parseTrackedEpisodeDetail } from '@smartsite/contracts/tracked-episode-frames';
+import {
+  parseTrackedEpisodeDetail,
+  parseTrackedObservationIdentityCard,
+} from '@smartsite/contracts/tracked-episode-frames';
+import type { WorkerReferenceReader } from '../identity/worker-reference.port.js';
 import {
   computeCanonicalPayloadHash,
   computeWorkerEventBindingHash,
@@ -108,6 +113,7 @@ export class TrackedEpisodeFrameQuery {
     private readonly frameReader: typeof readMf06FrameMedia = readMf06FrameMedia,
     private readonly subjectReader: typeof readMf06SubjectMedia = readMf06SubjectMedia,
     private readonly enabled: () => boolean = () => true,
+    private readonly workers?: WorkerReferenceReader,
   ) {}
 
   private async authorize(manager: EntityManager, request: AuthenticatedRequest, siteId: string) {
@@ -545,6 +551,52 @@ export class TrackedEpisodeFrameQuery {
         revision: head?.revision ?? 0,
         latestDecision,
       };
+    });
+  }
+  async identityCard(
+    request: AuthenticatedRequest,
+    rawSite: string,
+    rawEpisode: string,
+    input: Source,
+  ): Promise<TrackedObservationIdentityCard> {
+    const identity = await this.identity(request, rawSite, rawEpisode, input);
+    if (identity.latestDecision?.action !== 'RESOLVE') return { ...identity, worker: null };
+    const decision = identity.latestDecision;
+    return this.db.transaction('REPEATABLE READ', async (manager) => {
+      const actor = await this.authorize(manager, request, identity.siteId);
+      if (!actor.canReadIdentity) denied();
+      // The directory read must not label a decision superseded after the first snapshot.
+      const head = await manager.getRepository(ObservationIdentityResolutionEntity).findOneBy({
+        siteId: identity.siteId,
+        eventId: identity.source.eventId,
+        personObservationIndex: identity.source.personObservationIndex,
+      });
+      if (
+        !head ||
+        head.revision !== identity.revision ||
+        head.currentDecisionId !== decision.id ||
+        head.payloadHash !== identity.subjectRef.payloadHash ||
+        computeCanonicalPayloadHash(head.subjectRef) !==
+          computeCanonicalPayloadHash(identity.subjectRef)
+      )
+        conflict('Identity changed; refresh the original observation');
+      if (!this.workers)
+        throw new PublicHttpException(503, {
+          code: 'SERVICE_UNAVAILABLE',
+          message: 'Worker reference reader is unavailable',
+        });
+      const worker = decision.workerId
+        ? await this.workers.findForReview(manager, identity.siteId, decision.workerId, false)
+        : null;
+      const result = parseTrackedObservationIdentityCard(
+        { ...identity, worker },
+        identity.siteId,
+        identity.episodeId,
+        identity.source,
+        identity.subjectRef.payloadHash,
+      );
+      if (!result) conflict('Worker directory metadata is inconsistent');
+      return result;
     });
   }
   async read(

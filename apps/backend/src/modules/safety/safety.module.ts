@@ -92,11 +92,12 @@ import { ZoneAccessManagementService } from '../zones/zone-access-management.ser
     },
     {
       provide: TrackedEpisodeFrameQuery,
-      inject: [DataSource, UserAuthGuard, ConfigService],
+      inject: [DataSource, UserAuthGuard, ConfigService, WORKER_REFERENCE_READER],
       useFactory: (
         db: DataSource,
         auth: UserAuthGuard,
         config: ConfigService<BackendEnvironment, true>,
+        workers: WorkerReferenceReader,
       ) =>
         new TrackedEpisodeFrameQuery(
           db,
@@ -107,6 +108,7 @@ import { ZoneAccessManagementService } from '../zones/zone-access-management.ser
           () =>
             config.get('AI_TRACKED_FRAME_RUNTIME_ENABLED', { infer: true }) === true ||
             config.get('SAFETY_TRACKED_HISTORY_READ_ENABLED', { infer: true }) === true,
+          workers,
         ),
     },
     Mf06IngestionEnqueueService,
