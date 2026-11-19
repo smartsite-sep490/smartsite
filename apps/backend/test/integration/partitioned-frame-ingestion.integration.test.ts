@@ -49,8 +49,18 @@ test('partitioned frames preserve counters, evidence mappings and eligible recip
       { id: otherSiteId, code: 'FRAME-OTHER', name: 'Other frame test' },
     ]);
     await source.getRepository(CameraEntity).save([
-      { id: cameraId, siteId, externalId: 'FRAME-CAM', code: 'FRAME-CAM', name: 'Frame camera' },
       {
+        type: 'ZONE' as const,
+        gateId: null,
+        id: cameraId,
+        siteId,
+        externalId: 'FRAME-CAM',
+        code: 'FRAME-CAM',
+        name: 'Frame camera',
+      },
+      {
+        type: 'ZONE' as const,
+        gateId: null,
         id: otherCameraId,
         siteId: otherSiteId,
         externalId: 'FRAME-OTHER',
@@ -80,6 +90,7 @@ test('partitioned frames preserve counters, evidence mappings and eligible recip
     ]);
     for (const [index, id] of [...regions, otherRegion].entries()) {
       await source.getRepository(CameraObservationRegionEntity).save({
+        siteId: index < 3 ? siteId : otherSiteId,
         id,
         cameraId: index < 3 ? cameraId : otherCameraId,
         zoneId: index < 3 ? zoneId : otherZoneId,
@@ -275,6 +286,7 @@ test('partitioned frames preserve counters, evidence mappings and eligible recip
     const manyRegions = [...regions, ...Array.from({ length: 61 }, () => randomUUID())];
     for (const id of manyRegions.slice(regions.length)) {
       await source.getRepository(CameraObservationRegionEntity).save({
+        siteId: siteId,
         id,
         cameraId,
         zoneId,

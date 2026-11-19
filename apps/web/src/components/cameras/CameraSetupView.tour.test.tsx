@@ -58,6 +58,8 @@ const SECRET_TOKEN = 'secret-jwt-camera-setup-tour-token';
 
 function makeCamera(overrides: Partial<CameraResponse> = {}): CameraResponse {
   return {
+    type: 'ZONE' as const,
+    gateId: null,
     id: CAM_ACTIVE_ID,
     siteId: SITE_A_ID,
     code: 'CAM-01',

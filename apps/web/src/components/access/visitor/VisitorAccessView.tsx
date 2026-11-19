@@ -8,7 +8,8 @@ import type {
   VisitorQrPreviewResponse,
   VisitorGateEventResponse,
 } from '@smartsite/contracts';
-import { SITE_GATES } from '@smartsite/contracts/gates';
+import { useGateCatalog } from '../useGateCatalog';
+import { GateCatalogNotice } from '../GateCatalogNotice';
 import { useTranslation } from 'react-i18next';
 import { uiLocale } from '../../../i18n';
 import { QrScannerView } from '../gate/QrScannerView';
@@ -158,7 +159,14 @@ export function VisitorAccessView({
 
   // State
   const [qrToken, setQrToken] = useState('');
-  const [gateId, setGateId] = useState<string>(SITE_GATES[0].id);
+  const catalog = useGateCatalog(client, apiUrl, sessionScope, token, siteId);
+  const gates = catalog.error ? [] : (catalog.data?.items ?? []);
+  const activeGates = gates.filter((g) => g.status === 'ACTIVE');
+  const [requestedGate, setGateId] = useState('');
+  const gateId = activeGates.some((g) => g.id === requestedGate)
+    ? requestedGate
+    : (activeGates[0]?.id ?? '');
+  const gateName = (id: string) => gates.find((g) => g.id === id)?.name ?? '—';
   const [statusFilter, setStatusFilter] = useState<StatusFilter>('ALL');
   const [onSiteOnly, setOnSiteOnly] = useState(false);
   const [search, setSearch] = useState('');
@@ -321,6 +329,7 @@ export function VisitorAccessView({
   };
 
   const startLoad = (value = qrToken.trim(), gate = gateId) => {
+    if (!gate || catalog.error) return;
     if (!value) return;
     setPreview(null);
     setSelection([]);
@@ -656,10 +665,7 @@ export function VisitorAccessView({
                       <div>
                         <span className="text-slate-400 font-medium">{t('visitor.area')}: </span>
                         <span className="font-semibold text-slate-700">
-                          {v.targetArea} ·{' '}
-                          {t('visitor.gateName', {
-                            number: SITE_GATES.findIndex((g) => g.id === v.gateId) + 1,
-                          })}
+                          {v.targetArea} · {gateName(v.gateId)}
                         </span>
                       </div>
                       <div>
@@ -978,10 +984,7 @@ export function VisitorAccessView({
                         <td className="py-3 px-3.5">
                           <p className="font-semibold text-slate-800">{v.hostName}</p>
                           <p className="text-xs text-slate-500 mt-0.5">
-                            {v.targetArea} ·{' '}
-                            {t('visitor.gateNumber', {
-                              number: SITE_GATES.findIndex((g) => g.id === v.gateId) + 1,
-                            })}
+                            {v.targetArea} · {gateName(v.gateId)}
                           </p>
                         </td>
 
@@ -1173,10 +1176,7 @@ export function VisitorAccessView({
                         <div>
                           <span className="text-slate-400 font-medium">{t('visitor.area')}: </span>
                           <span className="font-semibold text-slate-800">
-                            {v.targetArea} ·{' '}
-                            {t('visitor.gateName', {
-                              number: SITE_GATES.findIndex((g) => g.id === v.gateId) + 1,
-                            })}
+                            {v.targetArea} · {gateName(v.gateId)}
                           </span>
                         </div>
                         <div>
@@ -1328,17 +1328,18 @@ export function VisitorAccessView({
                     load.reset();
                   }}
                 >
-                  {SITE_GATES.map((g, i) => (
+                  {activeGates.map((g) => (
                     <option key={g.id} value={g.id}>
-                      {t('visitor.gateName', { number: i + 1 })}
+                      {g.name}
                     </option>
                   ))}
                 </select>
               </label>
 
               <div className="rounded-xl border border-slate-200 bg-slate-50/50 p-3">
+                <GateCatalogNotice query={catalog} />
                 <QrScannerView
-                  disabled={verify.isPending || load.isPending}
+                  disabled={!gateId || verify.isPending || load.isPending}
                   onScan={(value) => {
                     setQrToken(value);
                     startLoad(value);
@@ -1875,10 +1876,7 @@ export function VisitorAccessView({
                 <div>
                   <span className="text-slate-400 font-medium">{t('visitor.areaGateLabel')}</span>
                   <p className="font-bold text-slate-800 text-xs mt-0.5">
-                    {detailVisit.targetArea} ·{' '}
-                    {t('visitor.gateNumber', {
-                      number: SITE_GATES.findIndex((g) => g.id === detailVisit.gateId) + 1,
-                    })}
+                    {detailVisit.targetArea} · {gateName(detailVisit.gateId)}
                   </p>
                 </div>
                 <div className="col-span-2">

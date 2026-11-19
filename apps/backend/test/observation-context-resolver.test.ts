@@ -69,6 +69,8 @@ const regionId = '44444444-4444-4444-8444-444444444444';
 const geometryVersion = 2;
 
 const baseCamera: CameraEntity = {
+  type: 'ZONE' as const,
+  gateId: null,
   id: cameraId,
   siteId,
   externalId: cameraExternalId,
@@ -92,6 +94,7 @@ const baseZone: ZoneEntity = {
 };
 
 const baseRegion: CameraObservationRegionEntity = {
+  siteId,
   id: regionId,
   cameraId,
   zoneId,

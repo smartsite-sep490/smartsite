@@ -205,6 +205,8 @@ describe('RestrictedZoneView Backend Polygon Persistence & Scope Integration', (
   const mockCamerasPage: Page<CameraResponse> = {
     items: [
       {
+        type: 'ZONE' as const,
+        gateId: null,
         id: 'cam-1',
         siteId: 'site-alpha',
         externalId: 'CAM-01',
@@ -215,6 +217,8 @@ describe('RestrictedZoneView Backend Polygon Persistence & Scope Integration', (
         createdAt: '2026-09-30T00:00:00Z',
       },
       {
+        type: 'ZONE' as const,
+        gateId: null,
         id: 'cam-2',
         siteId: 'site-alpha',
         externalId: 'CAM-02',
@@ -477,6 +481,8 @@ describe('RestrictedZoneView Backend Polygon Persistence & Scope Integration', (
     const updatedCamerasPage: Page<CameraResponse> = {
       items: [
         {
+          type: 'ZONE' as const,
+          gateId: null,
           id: 'cam-1',
           siteId: 'site-alpha',
           externalId: 'CAM-01',

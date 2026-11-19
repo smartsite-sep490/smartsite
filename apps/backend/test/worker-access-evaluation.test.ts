@@ -2,7 +2,6 @@ import './support/config.js';
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import type { EntityManager } from 'typeorm';
-import { SITE_GATES } from '@smartsite/contracts';
 import {
   WorkerEntity,
   WorkerScheduleEntity,
@@ -162,8 +161,11 @@ test('missing shift data, cross-site and unavailable persistence never allow ent
 });
 
 test('eligible workers can enter every site gate without gate grants or legacy gate restrictions', async () => {
-  for (const options of [{}, { legacyGateId: 'gate-north-01' }]) {
-    for (const gate of SITE_GATES) {
+  for (const options of [{}, { legacyGateId: 'a1000000-0000-4000-8000-000000000001' }]) {
+    for (const gate of [
+      { id: 'a1000000-0000-4000-8000-000000000001' },
+      { id: 'a1000000-0000-4000-8000-000000000002' },
+    ]) {
       const result = await evaluateWorkerAccess(
         fixture('2026-10-11', options),
         worker,
@@ -185,7 +187,7 @@ test('site-wide gate access still denies an inactive worker', async () => {
     fixture('2026-10-11'),
     { ...worker, isActive: false },
     'site',
-    'gate-west-02',
+    'a1000000-0000-4000-8000-000000000002',
     'IN',
     at,
   );

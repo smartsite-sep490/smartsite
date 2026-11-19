@@ -36,7 +36,7 @@ before(async () => {
     [site, otherSite],
   );
   await db.query(
-    "INSERT INTO camera(id,site_id,external_id,code,name) VALUES($1,$2,'camera-a','SYNTHETIC','Synthetic camera')",
+    "INSERT INTO camera(type,id,site_id,external_id,code,name) VALUES('ZONE',$1,$2,'camera-a','SYNTHETIC','Synthetic camera')",
     [camera, site],
   );
   const config = createTestConfig({

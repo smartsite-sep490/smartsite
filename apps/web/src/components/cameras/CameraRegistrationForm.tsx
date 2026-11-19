@@ -33,7 +33,9 @@ export interface CameraRegistrationFormProps {
 
 const clientIds = new WeakMap<SmartSiteManagementClient, number>();
 let nextClientId = 1;
-type CameraInput = Parameters<SmartSiteManagementClient['createCamera']>[2];
+type CameraInput = Required<
+  Pick<Parameters<SmartSiteManagementClient['createCamera']>[2], 'code' | 'name' | 'externalId'>
+>;
 type FieldErrors = Partial<Record<keyof CameraInput, CameraRegistrationCopyKey>>;
 const fields = ['code', 'name', 'externalId'] as const;
 const labelKeys: Record<keyof CameraInput, CameraRegistrationCopyKey> = {
@@ -124,6 +126,8 @@ function parseCreatedCamera(value: unknown, siteId: string, input: CameraInput):
     row.code !== input.code ||
     row.name !== input.name ||
     row.externalId !== input.externalId ||
+    row.type !== 'ZONE' ||
+    row.gateId !== null ||
     (row.status !== 'ACTIVE' && row.status !== 'INACTIVE') ||
     !Number.isSafeInteger(row.configurationVersion) ||
     (row.configurationVersion ?? 0) < 1 ||
@@ -134,6 +138,8 @@ function parseCreatedCamera(value: unknown, siteId: string, input: CameraInput):
     throw new ApiError('invalid-response', 'Invalid camera response.');
   }
   return {
+    type: 'ZONE',
+    gateId: null,
     id: row.id,
     siteId,
     code: input.code,
@@ -202,7 +208,11 @@ function ScopedCameraRegistrationForm(
     retry: false,
     gcTime: 0,
     mutationFn: async (input: CameraInput) => {
-      const camera = await props.client.createCamera(props.token, props.siteId, input);
+      const camera = await props.client.createCamera(props.token, props.siteId, {
+        ...input,
+        type: 'ZONE',
+        gateId: null,
+      });
       return parseCreatedCamera(camera, props.siteId, input);
     },
     onSuccess: (camera) => {

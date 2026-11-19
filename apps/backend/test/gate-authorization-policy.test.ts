@@ -5,15 +5,19 @@ import { authorizeGateEntry } from '../src/modules/workforce/access/gate-authori
 const evaluatedAt = new Date('2026-09-29T08:00:00.000Z');
 
 test('site authorization permits every gate, including assignments with a legacy gate restriction', () => {
-  const assignment = { ...subject().assignment, gateId: 'gate-north-01' };
+  const assignment = { ...subject().assignment, gateId: 'a1000000-0000-4000-8000-000000000001' };
   assert.equal(
-    authorizeGateEntry(subject({ assignment, gateId: 'gate-north-01' })).authorization,
+    authorizeGateEntry(subject({ assignment, gateId: 'a1000000-0000-4000-8000-000000000001' }))
+      .authorization,
     'ALLOWED',
   );
-  assert.deepEqual(authorizeGateEntry(subject({ assignment, gateId: 'gate-west-02' })), {
-    authorization: 'ALLOWED',
-    reasonCode: 'VALID_ASSIGNMENT',
-  });
+  assert.deepEqual(
+    authorizeGateEntry(subject({ assignment, gateId: 'a1000000-0000-4000-8000-000000000002' })),
+    {
+      authorization: 'ALLOWED',
+      reasonCode: 'VALID_ASSIGNMENT',
+    },
+  );
   assert.equal(authorizeGateEntry(subject({ assignment })).authorization, 'ALLOWED');
 });
 

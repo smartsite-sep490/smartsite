@@ -289,6 +289,8 @@ test('Admin Site setup and scoped Manager Zone setup feed an allowlisted AI snap
     const cameraResponse = await post(
       `/sites/${site.id}/cameras`,
       {
+        type: 'ZONE' as const,
+        gateId: null,
         code: `CAM-${suffix}`,
         externalId: `AI-CAM-${suffix}`,
         name: 'Gate',

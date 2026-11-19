@@ -83,7 +83,10 @@ export function useZonePpeCameraRegionPanel({
   );
 
   const activeCameras = useMemo(
-    () => allFetchedCameras.filter((cam) => cam.siteId === siteId && cam.status === 'ACTIVE'),
+    () =>
+      allFetchedCameras.filter(
+        (cam) => cam.siteId === siteId && cam.type === 'ZONE' && cam.status === 'ACTIVE',
+      ),
     [allFetchedCameras, siteId],
   );
 

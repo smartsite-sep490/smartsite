@@ -1,3 +1,4 @@
+import { installGateSchemaForHistoricalFixture } from '../support/historical-gate-schema.js';
 import 'reflect-metadata';
 import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
@@ -59,6 +60,7 @@ test('Region history preserves active state, cutover truth and atomic legacy mut
     await t.test('fresh schema has history and permits empty rollback', async () => {
       assert.deepEqual(await history(), []);
       await db.undoLastMigration();
+      await installGateSchemaForHistoricalFixture(db);
       assert.equal(
         (await db.query("SELECT to_regclass('camera_region_geometry_revision') AS name"))[0].name,
         null,
@@ -68,6 +70,8 @@ test('Region history preserves active state, cutover truth and atomic legacy mut
       .getRepository(SiteEntity)
       .insert({ id: siteId, code: siteId, name: 'Synthetic history Site' });
     await db.getRepository(CameraEntity).insert({
+      type: 'ZONE' as const,
+      gateId: null,
       id: cameraId,
       siteId,
       externalId: cameraId,
@@ -82,6 +86,7 @@ test('Region history preserves active state, cutover truth and atomic legacy mut
       [zoneId, siteId],
     );
     await db.getRepository(CameraObservationRegionEntity).insert({
+      siteId,
       id: oldId,
       cameraId,
       zoneId,
@@ -108,7 +113,11 @@ test('Region history preserves active state, cutover truth and atomic legacy mut
     // Current services require the full current schema, including later Zone soft deletion.
     // Reinitialize to rebuild TypeORM's migration instances from the restored options.
     await db.destroy();
-    db.setOptions({ migrations });
+    db.setOptions({
+      migrations: migrations.filter(
+        (m) => typeof m === 'function' && m.name !== 'GateRegistry1795046400001',
+      ),
+    });
     await db.initialize();
     await db.runMigrations();
     const sites = new SiteConfigurationService(db);
@@ -197,6 +206,8 @@ test('Region history preserves active state, cutover truth and atomic legacy mut
       async () => {
         const otherCamera = randomUUID();
         await db.getRepository(CameraEntity).insert({
+          type: 'ZONE' as const,
+          gateId: null,
           id: otherCamera,
           siteId,
           externalId: otherCamera,

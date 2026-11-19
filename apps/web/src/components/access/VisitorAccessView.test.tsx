@@ -1,4 +1,7 @@
 // @vitest-environment jsdom
+import { beforeEach } from 'vitest';
+import { mockGateCatalog } from './test-gate-catalog';
+beforeEach(mockGateCatalog);
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
@@ -17,7 +20,7 @@ const visit: VisitResponse = {
   purpose: 'Tour',
   targetArea: 'Office',
   groupSize: 2,
-  gateId: 'gate-north-01',
+  gateId: 'a1000000-0000-4000-8000-000000000001',
   validFrom: new Date().toISOString(),
   validUntil: new Date(Date.now() + 3600000).toISOString(),
   status: 'APPROVED',
@@ -196,7 +199,7 @@ it('loads a QR, records a replacement and clears stale arrival feedback after ma
     expect(verify).toHaveBeenCalledWith(
       'test',
       'site-a',
-      'gate-north-01',
+      'a1000000-0000-4000-8000-000000000001',
       expect.objectContaining({
         expectedVersion: 2,
         attendees: [

@@ -55,6 +55,7 @@ export class CameraConfigurationReferenceService {
           missing();
         if (
           signal?.aborted ||
+          camera.type === 'GATE' ||
           camera.status !== CameraStatus.ACTIVE ||
           camera.externalId !== image.frame.cameraExternalId
         )

@@ -5,7 +5,13 @@ const requestTimeoutMs = 8_000;
 
 export const demoConfiguration = Object.freeze({
   site: { code: 'DEMO-SITE', name: 'SmartSite MF05/MF06 Demo' },
-  camera: { code: 'CAM-DEMO-01', externalId: 'CAM-DEMO-01', name: 'Demo Safety Camera' },
+  camera: {
+    type: 'ZONE',
+    gateId: null,
+    code: 'CAM-DEMO-01',
+    externalId: 'CAM-DEMO-01',
+    name: 'Demo Safety Camera',
+  },
   ppeZone: {
     code: 'PPE-DEMO',
     name: 'PPE Monitoring Area',

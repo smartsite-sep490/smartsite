@@ -1,3 +1,4 @@
+import { seedGateFixture, cleanupGateFixture, sourceForGate } from '../support/gate-fixture.js';
 import assert from 'node:assert/strict';
 import { createHash, randomUUID } from 'node:crypto';
 import { after, test } from 'node:test';
@@ -88,6 +89,8 @@ test('account linking, encrypted DB enrollment, scoped matching and revocation',
   try {
     for (const id of [siteId, otherSiteId])
       await dataSource.getRepository(SiteEntity).save({ id, code: id, name: 'Synthetic site' });
+    await seedGateFixture(dataSource, siteId);
+    await seedGateFixture(dataSource, otherSiteId, true);
     for (const id of [accountId, actorId])
       await dataSource.getRepository(UserEntity).save({
         id,
@@ -243,11 +246,20 @@ test('account linking, encrypted DB enrollment, scoped matching and revocation',
       gate.verify(
         { ...actor, roleAssignments: [{ role: UserRole.SECURITY_OFFICER, siteId: otherSiteId }] },
         siteId,
-        'gate1',
+        'a1000000-0000-4000-8000-000000000001',
         frame,
+        'IN',
+        sourceForGate('a1000000-0000-4000-8000-000000000001'),
       ),
     );
-    const matched = await gate.verify(actor, siteId, 'gate1', frame);
+    const matched = await gate.verify(
+      actor,
+      siteId,
+      'a1000000-0000-4000-8000-000000000001',
+      frame,
+      'IN',
+      sourceForGate('a1000000-0000-4000-8000-000000000001'),
+    );
     assert.equal(verification?.templates?.length, 1);
     assert.equal(matched.worker?.userId, accountId);
     assert.notEqual(matched.decision.authorization, 'ALLOWED'); // account is not permission
@@ -264,13 +276,27 @@ test('account linking, encrypted DB enrollment, scoped matching and revocation',
       requestedByUserId: actorId,
     });
     await approvedWorkerDocuments(dataSource, [workerId], actorId);
-    const deniedNoShift = await gate.verify(actor, siteId, 'gate1', frame, 'IN');
+    const deniedNoShift = await gate.verify(
+      actor,
+      siteId,
+      'a1000000-0000-4000-8000-000000000001',
+      frame,
+      'IN',
+      sourceForGate('a1000000-0000-4000-8000-000000000001'),
+    );
     assert.equal(deniedNoShift.decision.authorization, 'DENIED');
     assert.equal(deniedNoShift.decision.reasonCode, 'NO_SCHEDULE');
     assert.equal(deniedNoShift.decision.qrFallbackAllowed, false);
     assert.equal(deniedNoShift.attempt?.status, 'DENIED');
     await assignTestShift(dataSource, siteId, workerId);
-    const allowed = await gate.verify(actor, siteId, 'gate1', frame, 'OUT');
+    const allowed = await gate.verify(
+      actor,
+      siteId,
+      'a1000000-0000-4000-8000-000000000001',
+      frame,
+      'OUT',
+      sourceForGate('a1000000-0000-4000-8000-000000000001'),
+    );
     assert.equal(allowed.decision.authorization, 'ALLOWED');
     assert.equal(allowed.log?.direction, 'OUT');
     assert.equal(allowed.log?.userId, accountId);
@@ -281,27 +307,42 @@ test('account linking, encrypted DB enrollment, scoped matching and revocation',
     const afterRestart = await new FaceGateService(dataSource, adapter).listLogs(
       actor,
       siteId,
-      'gate1',
+      'a1000000-0000-4000-8000-000000000001',
     );
     assert.ok(afterRestart.items.some((log) => log.id === allowed.log?.id));
     const countBeforeUnknown = await dataSource
       .getRepository(GateAccessLogEntity)
       .countBy({ siteId });
     const presenceSessionId = randomUUID();
-    const presence = await gate.observe(actor, siteId, 'gate1', presenceSessionId, frame);
+    const presence = await gate.observe(
+      actor,
+      siteId,
+      'a1000000-0000-4000-8000-000000000001',
+      presenceSessionId,
+      frame,
+      sourceForGate('a1000000-0000-4000-8000-000000000001'),
+    );
     assert.equal(presence.state, 'NEW_FACE');
     assert.deepEqual(verification?.templates, []);
     assert.match(verification?.gatePresenceSession ?? '', /^[a-f0-9]{64}$/);
     const presenceScope = verification?.gatePresenceSession;
-    await gate.observe(actor, siteId, 'gate2', presenceSessionId, frame);
+    await gate.observe(
+      actor,
+      siteId,
+      'a1000000-0000-4000-8000-000000000002',
+      presenceSessionId,
+      frame,
+      sourceForGate('a1000000-0000-4000-8000-000000000002'),
+    );
     assert.notEqual(verification?.gatePresenceSession, presenceScope);
     await assert.rejects(
       gate.observe(
         { ...actor, roleAssignments: [{ role: UserRole.WORKER, siteId }] },
         siteId,
-        'gate1',
+        'a1000000-0000-4000-8000-000000000001',
         presenceSessionId,
         frame,
+        sourceForGate('a1000000-0000-4000-8000-000000000001'),
       ),
     );
     assert.equal(
@@ -315,7 +356,14 @@ test('account linking, encrypted DB enrollment, scoped matching and revocation',
       'AI_UNAVAILABLE',
     ] as const) {
       technicalStatus = status;
-      const unknown = await gate.verify(actor, siteId, 'gate1', frame);
+      const unknown = await gate.verify(
+        actor,
+        siteId,
+        'a1000000-0000-4000-8000-000000000001',
+        frame,
+        'IN',
+        sourceForGate('a1000000-0000-4000-8000-000000000001'),
+      );
       assert.equal(unknown.worker, undefined);
       assert.equal(unknown.log, undefined);
       assert.equal(
@@ -324,42 +372,83 @@ test('account linking, encrypted DB enrollment, scoped matching and revocation',
       );
     }
     technicalStatus = 'MATCHED';
-    await assert.rejects(gate.verify({ ...actor, id: randomUUID() }, siteId, 'gate1', frame)); // cannot acknowledge ALLOWED when audit persistence fails
+    await assert.rejects(
+      gate.verify(
+        { ...actor, id: randomUUID() },
+        siteId,
+        'a1000000-0000-4000-8000-000000000001',
+        frame,
+        'IN',
+        sourceForGate('a1000000-0000-4000-8000-000000000001'),
+      ),
+    ); // cannot acknowledge ALLOWED when audit persistence fails
     assert.equal(
-      (await gate.verify(actor, siteId, 'gate2', frame)).decision.authorization,
+      (
+        await gate.verify(
+          actor,
+          siteId,
+          'a1000000-0000-4000-8000-000000000002',
+          frame,
+          'IN',
+          sourceForGate('a1000000-0000-4000-8000-000000000002'),
+        )
+      ).decision.authorization,
       'ALLOWED',
     );
     await assert.rejects(
       gate.listLogs(
         { ...actor, roleAssignments: [{ role: UserRole.WORKER, siteId }] },
         siteId,
-        'gate1',
+        'a1000000-0000-4000-8000-000000000001',
       ),
     );
     await assert.rejects(
       gate.listLogs(
         { ...actor, roleAssignments: [{ role: UserRole.SECURITY_OFFICER, siteId: otherSiteId }] },
         siteId,
-        'gate1',
+        'a1000000-0000-4000-8000-000000000001',
       ),
     );
-    await assert.rejects(gate.verify(actor, siteId, 'gate1', frame, 'INVALID' as 'IN'));
-    for (const gateId of ['gate-north-01', 'gate-west-02', 'gate-logistics-03']) {
+    await assert.rejects(
+      gate.verify(
+        actor,
+        siteId,
+        'a1000000-0000-4000-8000-000000000001',
+        frame,
+        'INVALID' as 'IN',
+        sourceForGate('a1000000-0000-4000-8000-000000000001'),
+      ),
+    );
+    for (const gateId of [
+      'a1000000-0000-4000-8000-000000000001',
+      'a1000000-0000-4000-8000-000000000002',
+      'a1000000-0000-4000-8000-000000000003',
+    ]) {
       assert.equal(
-        (await gate.verify(actor, siteId, gateId, frame)).decision.authorization,
+        (await gate.verify(actor, siteId, gateId, frame, 'IN', sourceForGate(gateId))).decision
+          .authorization,
         'ALLOWED',
       );
     }
     await gate.verify(
       { ...actor, roleAssignments: [{ role: UserRole.SECURITY_OFFICER, siteId: otherSiteId }] },
       otherSiteId,
-      'gate1',
+      'a2000000-0000-4000-8000-000000000001',
       frame,
+      'IN',
+      sourceForGate('a2000000-0000-4000-8000-000000000001'),
     );
     assert.equal(verification?.templates?.length, 0);
     await dataSource.getRepository(UserEntity).update(accountId, { isActive: false });
     await assert.rejects(workforce.forAccount(siteId, { userId: accountId }));
-    const disabled = await gate.verify(actor, siteId, 'gate1', frame);
+    const disabled = await gate.verify(
+      actor,
+      siteId,
+      'a1000000-0000-4000-8000-000000000001',
+      frame,
+      'IN',
+      sourceForGate('a1000000-0000-4000-8000-000000000001'),
+    );
     assert.equal(verification?.templates?.length, 1);
     assert.equal(disabled.worker?.id, workerId); // Worker identity is independent of the login account
     await dataSource.getRepository(UserEntity).update(accountId, { isActive: true });
@@ -371,7 +460,14 @@ test('account linking, encrypted DB enrollment, scoped matching and revocation',
       .where('profile.id = :id', { id: profile.id })
       .getOneOrFail();
     assert.equal(revoked.encryptedTemplate, null);
-    await gate.verify(actor, siteId, 'gate1', frame);
+    await gate.verify(
+      actor,
+      siteId,
+      'a1000000-0000-4000-8000-000000000001',
+      frame,
+      'IN',
+      sourceForGate('a1000000-0000-4000-8000-000000000001'),
+    );
     assert.equal(verification?.templates?.length, 0);
   } finally {
     await cleanupSiteAccess(dataSource, [siteId, otherSiteId]);
@@ -400,6 +496,8 @@ test('account linking, encrypted DB enrollment, scoped matching and revocation',
     await dataSource.getRepository(ContractorRepresentativeGrantEntity).delete({ contractorId });
     await dataSource.query('DELETE FROM contractor WHERE id = $1', [contractorId]);
     await dataSource.query('DELETE FROM app_user WHERE id = ANY($1)', [[accountId, actorId]]);
+
+    await cleanupGateFixture(dataSource, [siteId, otherSiteId]);
     await dataSource.query('DELETE FROM site WHERE id = ANY($1)', [[siteId, otherSiteId]]);
   }
 });

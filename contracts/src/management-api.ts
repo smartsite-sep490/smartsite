@@ -62,6 +62,8 @@ export interface SiteResponse {
 }
 
 export interface CameraResponse {
+  type: 'GATE' | 'ZONE';
+  gateId: string | null;
   id: string;
   siteId: string;
   externalId: string;

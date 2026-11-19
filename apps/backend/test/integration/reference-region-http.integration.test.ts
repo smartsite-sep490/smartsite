@@ -38,7 +38,7 @@ before(async () => {
     [site, otherSite],
   );
   await db.query(
-    "INSERT INTO camera(id,site_id,external_id,code,name) VALUES($1,$2,'camera-a','SYNTHETIC','Synthetic camera')",
+    "INSERT INTO camera(type,id,site_id,external_id,code,name) VALUES('ZONE',$1,$2,'camera-a','SYNTHETIC','Synthetic camera')",
     [camera, site],
   );
   const config = createTestConfig({
@@ -480,7 +480,7 @@ test('authoring reference expiry does not erase saved historical confirmation', 
     [referenceId, new Date(now - 120000), new Date(now - 119000), new Date(now - 1000), camera],
   );
   await db.query(
-    `INSERT INTO camera_observation_region(id,camera_id,zone_id,polygon,coordinate_space,version,is_active,created_at) VALUES($1,$2,$3,$4::jsonb,'NORMALIZED_0_1',1,true,$5)`,
+    `INSERT INTO camera_observation_region(site_id,id,camera_id,zone_id,polygon,coordinate_space,version,is_active,created_at) VALUES((SELECT site_id FROM camera WHERE id=$2),$1,$2,$3,$4::jsonb,'NORMALIZED_0_1',1,true,$5)`,
     [regionId, camera, zoneId, JSON.stringify(polygon), new Date(now - 90000)],
   );
   await db.query(

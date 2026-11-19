@@ -1,3 +1,12 @@
+import { validGate, parseGateSources, parsePublicGates } from './gate-response';
+import type {
+  GatePageResponse,
+  GateResponse,
+  CreateGateCommand,
+  UpdateGateCommand,
+  GateSourceResponse,
+  PublicGateResponse,
+} from '@smartsite/contracts';
 import { parseCameraObservationZones } from '@smartsite/contracts/camera-observation-zones';
 import {
   parseTrackedEpisodeObservationQuery,
@@ -2887,8 +2896,10 @@ export class SmartSiteManagementClient {
     gateId: string,
     frame: Blob,
     direction: 'IN' | 'OUT',
+    sourceCameraId: string,
   ) {
     const form = new FormData();
+    form.append('sourceCameraId', sourceCameraId);
     form.append('frame', frame, 'scan-frame.jpg');
     form.append('direction', direction);
     return this.requestFormData<FaceGateVerificationResponse>(
@@ -2905,9 +2916,17 @@ export class SmartSiteManagementClient {
       token,
     );
   }
-  observeGateFace(token: string, siteId: string, gateId: string, sessionId: string, frame: Blob) {
+  observeGateFace(
+    token: string,
+    siteId: string,
+    gateId: string,
+    sessionId: string,
+    frame: Blob,
+    sourceCameraId: string,
+  ) {
     const form = new FormData();
     form.append('frame', frame, 'presence.jpg');
+    form.append('sourceCameraId', sourceCameraId);
     form.append('sessionId', sessionId);
     return this.requestFormData<GateFacePresenceResponse>(
       'POST',
@@ -3014,10 +3033,80 @@ export class SmartSiteManagementClient {
     );
   }
 
+  listSiteGates(
+    token: string,
+    siteId: string,
+    options?: PageOptions & { status?: 'ACTIVE' | 'INACTIVE' },
+  ) {
+    const query = new URLSearchParams();
+    if (options?.offset !== undefined) query.set('offset', String(options.offset));
+    if (options?.limit !== undefined) query.set('limit', String(options.limit));
+    if (options?.status) query.set('status', options.status);
+    return this.request<GatePageResponse>(
+      'GET',
+      '/sites/' + pathId(siteId) + '/gates' + (query.size ? '?' + query : ''),
+      token,
+    );
+  }
+  async listAllSiteGates(token: string, siteId: string, status?: 'ACTIVE' | 'INACTIVE') {
+    const items: GateResponse[] = [];
+    let total: number;
+    do {
+      const result = await this.listSiteGates(token, siteId, {
+        offset: items.length,
+        limit: 100,
+        status,
+      });
+      if (
+        !result ||
+        !Array.isArray(result.items) ||
+        !Number.isSafeInteger(result.total) ||
+        result.total < 0 ||
+        result.items.some(
+          (g) => !validGate(g, siteId) || (status !== undefined && g.status !== status),
+        )
+      )
+        throw new ApiError('invalid-response', 'Invalid gate catalog');
+      total = result.total;
+      if (!result.items.length && items.length < total)
+        throw new ApiError('invalid-response', 'Incomplete gate catalog');
+      items.push(...result.items);
+    } while (items.length < total);
+    return { items, total };
+  }
+  createSiteGate(token: string, siteId: string, input: CreateGateCommand) {
+    return this.request<GateResponse>('POST', '/sites/' + pathId(siteId) + '/gates', token, input);
+  }
+  updateSiteGate(token: string, siteId: string, gateId: string, input: UpdateGateCommand) {
+    return this.request<GateResponse>(
+      'PATCH',
+      '/sites/' + pathId(siteId) + '/gates/' + pathId(gateId),
+      token,
+      input,
+    );
+  }
+  async listGateSources(token: string, siteId: string, gateId: string) {
+    const result = await this.request<{ items: GateSourceResponse[] }>(
+      'GET',
+      '/sites/' + pathId(siteId) + '/gates/' + pathId(gateId) + '/sources',
+      token,
+    );
+    return parseGateSources(result, siteId, gateId);
+  }
+  async listVisitorGates(siteId: string) {
+    const result = await this.request<{ items: PublicGateResponse[] }>(
+      'GET',
+      '/visitor-registration/sites/' + pathId(siteId) + '/gates',
+    );
+    return parsePublicGates(result);
+  }
   createCamera(
     token: string,
     siteId: string,
-    input: { code: string; externalId: string; name: string },
+    input: { code: string; name: string } & (
+      | { type: 'ZONE'; gateId?: null; externalId: string }
+      | { type: 'GATE'; gateId: string; externalId?: never }
+    ),
   ) {
     return this.request<CameraResponse>('POST', `/sites/${pathId(siteId)}/cameras`, token, input);
   }

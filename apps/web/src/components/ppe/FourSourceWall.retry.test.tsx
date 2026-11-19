@@ -27,6 +27,8 @@ vi.mock('../cameras/useScopedCameraPreview', () => ({
   }),
 }));
 const camera: CameraResponse = {
+  type: 'ZONE' as const,
+  gateId: null,
   id: 'camera-one',
   siteId: 'site-one',
   code: 'CAM-01',

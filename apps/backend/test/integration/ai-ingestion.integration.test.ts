@@ -75,6 +75,8 @@ test('conflicting identity candidates preserve raw evidence without selecting a 
       name: 'Synthetic conflicting identity site',
     });
     await source.getRepository(CameraEntity).save({
+      type: 'ZONE' as const,
+      gateId: null,
       id: cameraId,
       siteId,
       externalId: cameraExternalId,
@@ -92,6 +94,7 @@ test('conflicting identity candidates preserve raw evidence without selecting a 
       requiredPpe: ['HARD_HAT'],
     });
     await source.getRepository(CameraObservationRegionEntity).save({
+      siteId: siteId,
       id: regionId,
       cameraId,
       zoneId,
@@ -198,6 +201,8 @@ test('AiIngestionService: 5 concurrent identical retries in real PostgreSQL resu
     });
 
     await cameraRepo.save({
+      type: 'ZONE' as const,
+      gateId: null,
       id: cameraId,
       siteId,
       externalId: cameraExternalId,
@@ -217,6 +222,7 @@ test('AiIngestionService: 5 concurrent identical retries in real PostgreSQL resu
     });
 
     await regionRepo.save({
+      siteId: siteId,
       id: regionId,
       cameraId,
       zoneId,
@@ -317,6 +323,8 @@ test('AiIngestionService: retry with same eventId but changed payload returns pu
     });
 
     await cameraRepo.save({
+      type: 'ZONE' as const,
+      gateId: null,
       id: cameraId,
       siteId,
       externalId: cameraExternalId,
@@ -477,6 +485,8 @@ test('AiIngestionService: actionable event creates AlertDetectionMapping and per
     });
 
     await cameraRepo.save({
+      type: 'ZONE' as const,
+      gateId: null,
       id: cameraId,
       siteId,
       externalId: cameraExternalId,
@@ -496,6 +506,7 @@ test('AiIngestionService: actionable event creates AlertDetectionMapping and per
     });
 
     await regionRepo.save({
+      siteId: siteId,
       id: regionId,
       cameraId,
       zoneId,
@@ -641,6 +652,8 @@ test('AiIngestionService: inactive camera preserves raw PPE event without creati
       name: 'Inactive Camera Site',
     });
     await source.getRepository(CameraEntity).save({
+      type: 'ZONE' as const,
+      gateId: null,
       id: cameraId,
       siteId,
       externalId: cameraExternalId,
@@ -658,6 +671,7 @@ test('AiIngestionService: inactive camera preserves raw PPE event without creati
       requiredPpe: ['HARD_HAT'],
     });
     await source.getRepository(CameraObservationRegionEntity).save({
+      siteId: siteId,
       id: regionId,
       cameraId,
       zoneId,
@@ -725,6 +739,8 @@ test('AiIngestionService: mixed observation regions and geometry versions in rea
     });
 
     await cameraRepo.save({
+      type: 'ZONE' as const,
+      gateId: null,
       id: cameraId,
       siteId,
       externalId: cameraExternalId,
@@ -744,6 +760,7 @@ test('AiIngestionService: mixed observation regions and geometry versions in rea
     });
 
     await regionRepo.save({
+      siteId: siteId,
       id: region1Id,
       cameraId,
       zoneId,
@@ -754,6 +771,7 @@ test('AiIngestionService: mixed observation regions and geometry versions in rea
     });
 
     await regionRepo.save({
+      siteId: siteId,
       id: region2Id,
       cameraId,
       zoneId,

@@ -326,7 +326,7 @@ describe('Site Access ERD integration', () => {
           purpose: 'Visit',
           targetArea: 'Office',
           groupSize: 1,
-          gateId: 'gate-north-01',
+          gateId: 'a1000000-0000-4000-8000-000000000001',
           validFrom: new Date().toISOString(),
           validUntil: new Date(Date.now() + 3600000).toISOString(),
           status: 'PENDING',

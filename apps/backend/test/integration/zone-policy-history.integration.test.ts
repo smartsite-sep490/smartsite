@@ -1,3 +1,4 @@
+import { installGateSchemaForHistoricalFixture } from '../support/historical-gate-schema.js';
 import 'reflect-metadata';
 import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
@@ -54,6 +55,7 @@ test('Zone PPE policy history is immutable, truthful at cutover and atomic with 
         const [last] = await db.query('SELECT name FROM migrations ORDER BY id DESC LIMIT 1');
         assert.equal(last.name, 'ZonePolicyRevisions1794441600000');
         await db.undoLastMigration();
+        await installGateSchemaForHistoricalFixture(db);
         assert.equal(
           (await db.query("SELECT to_regclass('zone_policy_revision') AS name"))[0].name,
           null,
@@ -82,6 +84,8 @@ test('Zone PPE policy history is immutable, truthful at cutover and atomic with 
       ],
     };
     await db.getRepository(CameraEntity).insert({
+      type: 'ZONE' as const,
+      gateId: null,
       id: cameraId,
       siteId,
       externalId: cameraId,
@@ -89,6 +93,7 @@ test('Zone PPE policy history is immutable, truthful at cutover and atomic with 
       name: 'Historical camera',
     });
     await db.getRepository(CameraObservationRegionEntity).insert({
+      siteId,
       id: regionId,
       cameraId,
       zoneId: oldZoneId,

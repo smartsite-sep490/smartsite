@@ -1,5 +1,4 @@
 import i18n, { translate } from './index';
-import { SITE_GATES } from '@smartsite/contracts/gates';
 /** Translate presentation metadata only. API values and authored names/reasons stay unchanged. */
 export function localizedLabel(value: string | null | undefined): string {
   if (!value) return '—';
@@ -11,8 +10,4 @@ export function localizedLabel(value: string | null | undefined): string {
 export function localizedDetectionLabel(value: string): string {
   const replay = /^(MF04|MF05) (.+)$/.exec(value);
   return replay ? `${replay[1]} ${localizedLabel(replay[2])}` : localizedLabel(value);
-}
-
-export function localizedGateName(gateId: string): string {
-  return SITE_GATES.some((gate) => gate.id === gateId) ? translate(`gates.${gateId}`) : gateId;
 }

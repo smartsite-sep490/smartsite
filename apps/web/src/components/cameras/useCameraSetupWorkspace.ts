@@ -68,7 +68,7 @@ export function useCameraSetupWorkspace(apiUrl: string, session: SharedSession) 
     (offset, signal) =>
       client.listCameras(session.accessToken, site!.id, { offset, limit: 20 }, { signal }),
   );
-  const rows = cameras.rows.filter((row) => row.siteId === site?.id);
+  const rows = cameras.rows.filter((row) => row.siteId === site?.id && row.type === 'ZONE');
   const canManageCameras = capabilities.canManageRegions && !cameras.baseError;
   const canAccessTourZones = canManageCameras || capabilities.canManageZones || canReadZones;
   const hasTourCameraContext = Boolean(
@@ -146,6 +146,7 @@ export function useCameraSetupWorkspace(apiUrl: string, session: SharedSession) 
           !camera ||
           camera.id !== explicitDialogCameraId ||
           camera.siteId !== site!.id ||
+          camera.type !== 'ZONE' ||
           camera.status !== 'ACTIVE'
         ) {
           throw new Error('Invalid selected camera metadata');

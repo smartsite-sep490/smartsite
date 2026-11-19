@@ -1,3 +1,4 @@
+import { installGateSchemaForHistoricalFixture } from '../support/historical-gate-schema.js';
 import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
 import test from 'node:test';
@@ -12,6 +13,7 @@ test('MF06 storage matches registered metadata and preserves populated immutable
   let runner;
   try {
     await owned.initialize();
+    await installGateSchemaForHistoricalFixture(owned.dataSource);
     const drift = await owned.dataSource.driver.createSchemaBuilder().log();
     assert.deepEqual(drift.upQueries, []);
     runner = owned.dataSource.createQueryRunner();
@@ -42,6 +44,7 @@ test('MF06 migration rejects shadow schemas and collisions without losing existi
   const migration = new CanonicalMf06Requests1794096000000();
   try {
     await owned.initialize();
+    await installGateSchemaForHistoricalFixture(owned.dataSource);
     runner = owned.dataSource.createQueryRunner();
     await runner.connect();
     const [{ name }] = await runner.query('SELECT current_schema() AS name');
@@ -120,6 +123,10 @@ test('MF06 migration rejects shadow schemas and collisions without losing existi
     );
     await runner.release();
     runner = undefined;
+    // The historical fixture projection is replaced by the actual clean Gate migration.
+    await owned.dataSource.query(
+      'ALTER TABLE camera DROP COLUMN type, DROP COLUMN gate_id; ALTER TABLE camera_observation_region DROP COLUMN site_id',
+    );
     await owned.dataSource.destroy();
     owned.dataSource.setOptions({ migrations });
     await owned.dataSource.initialize();

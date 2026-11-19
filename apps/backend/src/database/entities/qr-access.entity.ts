@@ -1,3 +1,4 @@
+import { GateEntity } from './gate.entity.js';
 import type {
   VisitorMemberResponse,
   VisitorGateEventResponse,
@@ -46,6 +47,10 @@ export class VisitorEntity {
   where: 'booking_code_hash IS NOT NULL',
 })
 @Index('idx_visitor_visit_site_status', ['siteId', 'status', 'createdAt'])
+@ForeignKey(() => GateEntity, ['gateId', 'siteId'], ['id', 'siteId'], {
+  name: 'fk_visit_gate_site',
+  onDelete: 'RESTRICT',
+})
 export class VisitorVisitEntity {
   @PrimaryColumn({ type: 'uuid' })
   id!: string;
@@ -92,7 +97,7 @@ export class VisitorVisitEntity {
   @Column({ name: 'email_sent_at', type: 'timestamptz', nullable: true }) emailSentAt!: Date | null;
   @Column({ name: 'email_next_attempt_at', type: 'timestamptz', nullable: true })
   emailNextAttemptAt!: Date | null;
-  @Column({ name: 'gate_id', type: 'varchar', length: 64 })
+  @Column({ name: 'gate_id', type: 'uuid' })
   gateId!: string;
   @Column({ name: 'valid_from', type: 'timestamptz' })
   validFrom!: Date;
@@ -135,13 +140,17 @@ export class VisitZoneEntity {
   'chk_fallback_reason',
   "reason IN ('CAMERA_UNAVAILABLE','UNKNOWN','LOW_CONFIDENCE','QUALITY_FAILED','AI_UNAVAILABLE')",
 )
+@ForeignKey(() => GateEntity, ['gateId', 'siteId'], ['id', 'siteId'], {
+  name: 'fk_fallback_gate_site',
+  onDelete: 'RESTRICT',
+})
 export class QrFallbackSessionEntity {
   @PrimaryColumn({ type: 'uuid' })
   id!: string;
   @Column({ name: 'site_id', type: 'uuid' })
   @ForeignKey(() => SiteEntity, { name: 'fk_fallback_site', onDelete: 'RESTRICT' })
   siteId!: string;
-  @Column({ name: 'gate_id', type: 'varchar', length: 64 })
+  @Column({ name: 'gate_id', type: 'uuid' })
   gateId!: string;
   @Column({ name: 'operator_user_id', type: 'uuid' })
   @ForeignKey(() => UserEntity, { name: 'fk_fallback_operator', onDelete: 'RESTRICT' })

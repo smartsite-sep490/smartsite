@@ -5,16 +5,24 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import { SmartSiteManagementClient, type AccountResponse } from '@smartsite/api-client';
 import { SiteSetupView } from './components/SiteSetupView';
+import { gateFixture, mockGateCatalog } from '../access/test-gate-catalog';
+
+const session = vi.hoisted(() => ({
+  user: {
+    id: 'admin',
+    roleAssignments: [{ role: 'ADMIN', siteId: null }],
+  } as Pick<AccountResponse, 'id' | 'roleAssignments'>,
+}));
 
 vi.mock('../../features/auth/auth-session', async (importOriginal) => ({
   ...(await importOriginal<typeof import('../../features/auth/auth-session')>()),
-  useAuth: () => ({ accessToken: 'admin-token' }),
-  useCurrentUser: () => ({
-    data: { id: 'admin', roleAssignments: [{ role: 'ADMIN', siteId: null }] },
-  }),
+  useAuth: () => ({ accessToken: `${session.user.id}-token` }),
+  useCurrentUser: () => ({ data: session.user }),
 }));
 
 beforeEach(() => {
+  session.user = { id: 'admin', roleAssignments: [{ role: 'ADMIN', siteId: null }] };
+  mockGateCatalog();
   vi.spyOn(SmartSiteManagementClient.prototype, 'listGlobalContractors').mockResolvedValue({
     items: [],
     total: 0,
@@ -37,10 +45,12 @@ function manager(id: string, isActive = true, mustChangePassword = false): Accou
   };
 }
 
-function setup() {
+function setup(
+  sites = [{ id: 'site-a', code: 'A', name: 'Alpha', createdAt: new Date().toISOString() }],
+) {
   vi.spyOn(SmartSiteManagementClient.prototype, 'listSites').mockResolvedValue({
-    items: [{ id: 'site-a', code: 'A', name: 'Alpha', createdAt: new Date().toISOString() }],
-    total: 1,
+    items: sites,
+    total: sites.length,
   });
   vi.spyOn(SmartSiteManagementClient.prototype, 'listContractors').mockResolvedValue({
     items: [],
@@ -50,6 +60,29 @@ function setup() {
     SmartSiteManagementClient.prototype,
     'listContractorRepresentativeAssignments',
   ).mockResolvedValue({ items: [], total: 0 });
+  vi.spyOn(SmartSiteManagementClient.prototype, 'listSiteRepresentatives').mockResolvedValue({
+    items: [],
+    total: 0,
+  });
+  vi.spyOn(SmartSiteManagementClient.prototype, 'listZones').mockResolvedValue({
+    items: [],
+    total: 0,
+  });
+  vi.spyOn(SmartSiteManagementClient.prototype, 'listCameras').mockResolvedValue({
+    items: [],
+    total: 0,
+  });
+  vi.spyOn(SmartSiteManagementClient.prototype, 'accessSetup').mockResolvedValue({
+    canReviewAssignments: true,
+    canGrantContractorZones: true,
+    canGrantWorkerZones: false,
+    participations: [],
+    zones: [],
+    workers: [],
+    assignments: [],
+    contractorPermissions: [],
+    workerPermissions: [],
+  });
   const cache = new QueryClient({
     defaultOptions: { queries: { retry: false }, mutations: { retry: false } },
   });
@@ -60,6 +93,75 @@ function setup() {
   );
   return { cache, user: userEvent.setup() };
 }
+
+it('lets the assigned manager create a gate from the actual Site setup page', async () => {
+  session.user = manager('manager');
+  const gate = { ...gateFixture('site-a')[0]!, code: 'MAIN', name: 'Main entrance' };
+  const catalog = vi
+    .spyOn(SmartSiteManagementClient.prototype, 'listAllSiteGates')
+    .mockResolvedValue({ items: [], total: 0 });
+  const create = vi
+    .spyOn(SmartSiteManagementClient.prototype, 'createSiteGate')
+    .mockImplementation(async () => {
+      catalog.mockResolvedValue({ items: [gate], total: 1 });
+      return gate;
+    });
+  const { user, cache } = setup();
+  await screen.findByRole('heading', { name: 'Site gates' });
+  expect(screen.queryByLabelText('Gate code')).toBeNull();
+  await user.type(screen.getByLabelText('Gate name'), 'Main entrance');
+  await user.click(screen.getByRole('button', { name: 'Create gate' }));
+  await screen.findByText('Main entrance');
+  expect(create).toHaveBeenCalledWith('manager-token', 'site-a', {
+    name: 'Main entrance',
+  });
+  expect(screen.queryByRole('button', { name: 'Create camera' })).toBeNull();
+  cache.clear();
+});
+
+it('shows the gate catalog to Admin without configuration actions', async () => {
+  vi.spyOn(SmartSiteManagementClient.prototype, 'listUsers').mockResolvedValue({
+    items: [],
+    total: 0,
+  });
+  const { cache } = setup();
+  await screen.findByText(gateFixture('site-a')[0]!.name);
+  expect(screen.queryByRole('button', { name: 'Create gate' })).toBeNull();
+  expect(screen.queryByRole('button', { name: 'Deactivate' })).toBeNull();
+  cache.clear();
+});
+
+it('reloads the gate catalog and clears the draft when the selected site changes', async () => {
+  session.user = {
+    ...manager('manager'),
+    roleAssignments: [
+      { role: 'SITE_MANAGER', siteId: 'site-a' },
+      { role: 'SITE_MANAGER', siteId: 'site-b' },
+    ],
+  };
+  const catalog = vi.spyOn(SmartSiteManagementClient.prototype, 'listAllSiteGates');
+  const { user, cache } = setup([
+    { id: 'site-a', code: 'A', name: 'Alpha', createdAt: '2026-01-01T00:00:00Z' },
+    { id: 'site-b', code: 'B', name: 'Beta', createdAt: '2026-01-01T00:00:00Z' },
+  ]);
+  await screen.findByLabelText('Gate name');
+  await user.type(screen.getByLabelText('Gate name'), 'UNSAVED');
+  await user.click(screen.getByRole('button', { name: /Beta/ }));
+  await waitFor(() =>
+    expect(catalog).toHaveBeenLastCalledWith('manager-token', 'site-b', undefined),
+  );
+  expect((screen.getByLabelText('Gate name') as HTMLInputElement).value).toBe('');
+  cache.clear();
+});
+
+it('does not expose gate setup to a Worker', async () => {
+  session.user = { id: 'worker', roleAssignments: [{ role: 'WORKER', siteId: 'site-a' }] };
+  const catalog = vi.spyOn(SmartSiteManagementClient.prototype, 'listAllSiteGates');
+  const { cache } = setup();
+  expect(screen.queryByRole('button', { name: 'Create gate' })).toBeNull();
+  expect(catalog).not.toHaveBeenCalled();
+  cache.clear();
+});
 
 it('confirms and revokes the selected Site Manager, then allows a new assignment', async () => {
   const users = vi

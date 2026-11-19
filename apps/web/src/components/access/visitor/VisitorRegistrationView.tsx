@@ -3,7 +3,7 @@ import { useMemo, useRef, useState, type FormEvent } from 'react';
 import { useMutation, useQuery } from '@tanstack/react-query';
 import { SmartSiteManagementClient } from '@smartsite/api-client';
 import type { CreateVisitCommand, VisitorMemberInput } from '@smartsite/contracts';
-import { SITE_GATES } from '@smartsite/contracts/gates';
+import { GateCatalogNotice } from '../GateCatalogNotice';
 import { useTranslation } from 'react-i18next';
 import { uiLocale, uiLanguage } from '../../../i18n';
 import { LanguageSwitcher } from '../../../i18n/LanguageSwitcher';
@@ -55,6 +55,11 @@ export function VisitorRegistrationView({
     queryFn: () => client.listVisitorSites(),
   });
   const selectedSiteId = siteId || sites.data?.items[0]?.id || '';
+  const gates = useQuery({
+    queryKey: ['visitor-registration', apiUrl, selectedSiteId, 'gates'],
+    enabled: !!selectedSiteId && !reference,
+    queryFn: () => client.listVisitorGates(selectedSiteId),
+  });
   const zones = useQuery({
     queryKey: ['visitor-registration', apiUrl, selectedSiteId, 'zones'],
     enabled: !!selectedSiteId && !reference,
@@ -101,6 +106,10 @@ export function VisitorRegistrationView({
     );
     if (!selectedManager) {
       setFormError('visitor.managerRequired');
+      return;
+    }
+    if (gates.error || !gates.data?.items.some((g) => g.id === f.get('gateId'))) {
+      setFormError('gateSetup.select');
       return;
     }
     const size = Number(groupSize);
@@ -742,10 +751,17 @@ export function VisitorRegistrationView({
 
                 <label className="block text-xs font-bold text-slate-700">
                   {t('visitor.gate')}
-                  <select className={field} name="gateId">
-                    {SITE_GATES.map((g, i) => (
+                  <GateCatalogNotice query={gates} />
+                  <select
+                    key={selectedSiteId}
+                    className={field}
+                    name="gateId"
+                    required
+                    disabled={gates.isPending || !!gates.error || !gates.data?.items.length}
+                  >
+                    {(gates.error ? [] : (gates.data?.items ?? [])).map((g) => (
                       <option key={g.id} value={g.id}>
-                        {t('visitor.gateName', { number: i + 1 })}
+                        {g.name}
                       </option>
                     ))}
                   </select>
@@ -915,7 +931,14 @@ export function VisitorRegistrationView({
 
             <button
               type="submit"
-              disabled={register.isPending || importing || !sites.data?.items.length}
+              disabled={
+                register.isPending ||
+                importing ||
+                !sites.data?.items.length ||
+                gates.isPending ||
+                !!gates.error ||
+                !gates.data?.items.length
+              }
               className="w-full rounded-2xl bg-gradient-to-r from-orange-600 to-amber-600 px-6 py-4 font-black text-sm text-white shadow-md hover:from-orange-700 hover:to-amber-700 active:scale-[0.99] transition-all disabled:opacity-50 disabled:pointer-events-none flex items-center justify-center gap-2"
             >
               {register.isPending && (

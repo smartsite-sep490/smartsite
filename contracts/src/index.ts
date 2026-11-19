@@ -66,7 +66,6 @@ export type { ObservationFramePartition } from './validation/schema-validator.js
 export { validateCameraRegionConfiguration } from './validation/schema-validator.js';
 
 export type { ValidationResult } from './validation/schema-validator.js';
-export { SITE_GATES } from './gate-catalog.js';
 export { isPastWorkDate, isShiftEnded } from './scheduling-date.js';
 
 export {
@@ -213,3 +212,5 @@ export * from './camera-policy-configuration-bundle.js';
 
 export * from './camera-preview.js';
 export * from './camera-observation-zones.js';
+
+export * from './gates-api.js';

@@ -1,3 +1,4 @@
+import { installGateSchemaForHistoricalFixture } from '../support/historical-gate-schema.js';
 import 'reflect-metadata';
 import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
@@ -57,6 +58,7 @@ test('five-kind notification migration profile, upgrade history, scope, deduplic
     const [latest] = await db.query('SELECT name FROM migrations ORDER BY timestamp DESC LIMIT 1');
     assert.equal(latest.name, 'ExpandedPpeNotificationKinds1793145600000');
     await db.undoLastMigration();
+    await installGateSchemaForHistoricalFixture(db);
     const siteId = randomUUID(),
       otherSite = randomUUID(),
       cameraId = randomUUID();
@@ -65,6 +67,8 @@ test('five-kind notification migration profile, upgrade history, scope, deduplic
       { id: otherSite, code: otherSite, name: 'Other synthetic PPE site' },
     ]);
     await db.getRepository(CameraEntity).save({
+      type: 'ZONE' as const,
+      gateId: null,
       id: cameraId,
       siteId,
       externalId: cameraId,

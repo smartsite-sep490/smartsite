@@ -1,3 +1,4 @@
+import { GateRegistry1795046400001 } from './migrations/1795046400001-GateRegistry.js';
 import { AutomaticScheduleVersion1795132800000 } from './migrations/1795132800000-AutomaticScheduleVersion.js';
 import { WorkerDocumentAiAnalysis1795132800001 } from './migrations/1795132800001-WorkerDocumentAiAnalysis.js';
 import { ZoneSoftDeletion1794355200000 } from './migrations/1794355200000-ZoneSoftDeletion.js';
@@ -99,6 +100,7 @@ export function buildTypeOrmOptions(config: DatabaseConnectionConfig): DataSourc
     connectTimeoutMS: timeoutMs,
     entities: [...ENTITIES],
     migrations: [
+      GateRegistry1795046400001,
       WorkerDocumentAiAnalysis1795132800001,
       AutomaticScheduleVersion1795132800000,
       LeaveNotice1795046400000,

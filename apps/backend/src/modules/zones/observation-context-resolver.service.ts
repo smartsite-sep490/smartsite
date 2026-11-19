@@ -75,7 +75,7 @@ export class ObservationContextResolverService {
     const camera = lockForAssessment
       ? await repository.findOne({ where, lock: { mode: 'pessimistic_read' } })
       : await repository.findOneBy(where);
-    return camera ?? undefined;
+    return camera?.type === 'GATE' ? undefined : (camera ?? undefined);
   }
 
   async resolve(

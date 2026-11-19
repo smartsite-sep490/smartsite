@@ -16,6 +16,8 @@ import {
 const SITE_ID = '11111111-1111-4111-8111-111111111111';
 
 const ACTIVE_CAMERA: CameraResponse = {
+  type: 'ZONE' as const,
+  gateId: null,
   id: '00000000-0000-4000-8000-000000000101',
   siteId: SITE_ID,
   externalId: 'rtsp-cam-101',
@@ -27,6 +29,8 @@ const ACTIVE_CAMERA: CameraResponse = {
 };
 
 const INACTIVE_CAMERA: CameraResponse = {
+  type: 'ZONE' as const,
+  gateId: null,
   id: '00000000-0000-4000-8000-000000000102',
   siteId: SITE_ID,
   externalId: 'rtsp-cam-102',

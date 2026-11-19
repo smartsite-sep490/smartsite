@@ -1,3 +1,4 @@
+import { seedGateFixture, cleanupGateFixture, sourceForGate } from '../support/gate-fixture.js';
 import 'reflect-metadata';
 import { approvedWorkerDocuments } from '../support/approved-worker-documents.js';
 import assert from 'node:assert/strict';
@@ -70,6 +71,7 @@ test('MF03: interval totals, missing checkout, notifications, approvals, scope a
     await dataSource
       .getRepository(SiteEntity)
       .save({ id: siteId, code: siteId, name: 'Synthetic MF03 site' });
+    await seedGateFixture(dataSource, siteId);
     for (const id of ids)
       await dataSource.getRepository(UserEntity).save({
         id,
@@ -241,7 +243,9 @@ test('MF03: interval totals, missing checkout, notifications, approvals, scope a
         const attempt = await manager.getRepository(AccessAttemptEntity).save({
           id: randomUUID(),
           siteId,
-          gateId: 'gate-north-01',
+          gateId: 'a1000000-0000-4000-8000-000000000001',
+          sourceCameraId:
+            method === 'FACE' ? sourceForGate('a1000000-0000-4000-8000-000000000001') : null,
           operatorId: securityId,
           direction,
           method,
@@ -266,7 +270,7 @@ test('MF03: interval totals, missing checkout, notifications, approvals, scope a
           visitId: null,
           direction,
           occurredAt: at(time),
-          gateName: 'gate-north-01',
+          gateName: 'a1000000-0000-4000-8000-000000000001',
           idempotencyKey: randomUUID(),
           recordedBy: securityId,
         });
@@ -1334,6 +1338,8 @@ test('MF03: interval totals, missing checkout, notifications, approvals, scope a
     await dataSource.query('DELETE FROM contractor WHERE id=$1', [contractorId]);
     await dataSource.query('DELETE FROM user_role_assignment WHERE user_id=ANY($1)', [ids]);
     await dataSource.query('DELETE FROM app_user WHERE id=ANY($1)', [ids]);
+
+    await cleanupGateFixture(dataSource, [siteId]);
     await dataSource.query('DELETE FROM site WHERE id=$1', [siteId]);
     await dataSource.destroy();
   }

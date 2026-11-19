@@ -61,11 +61,10 @@ test('Main tracked profile upgrades and rolls back a populated event-local schem
       siteId,
       'tracked-profile-test',
     ]);
-    await db.query('INSERT INTO camera(id,site_id,external_id,code,name) VALUES($1,$2,$3,$3,$3)', [
-      cameraId,
-      siteId,
-      'tracked-profile-camera',
-    ]);
+    await db.query(
+      `INSERT INTO camera(type,id,site_id,external_id,code,name) VALUES('ZONE',$1,$2,$3,$3,$3)`,
+      [cameraId, siteId, 'tracked-profile-camera'],
+    );
     await db.query(
       `INSERT INTO ai_observation_event(event_id,payload_hash,camera_external_id,resolved_camera_id,
          stream_session_id,captured_at,raw_payload,processing_status)
