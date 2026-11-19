@@ -62,6 +62,13 @@ const en = {
   'cameraSetup.openSelectedMonitorZones': 'Open Zone monitoring ({{code}})',
   'cameraSetup.selectCameraBtn': 'Select {{code}}',
   'cameraSetup.selectedCameraBtn': 'Selected {{code}}',
+  'cameraSetup.technicalSourceDetails': 'Technical source details',
+  'cameraSetup.disabledStageHeading': 'Reference image & region stage unavailable while camera is disabled',
+  'cameraSetup.disabledStageBody':
+    '{{name}} ({{code}}) is saved as Disabled (v{{version}}). No live or 5-minute reference frame is requested while disabled. Enable the camera in Manage first, then open Edit observation regions.',
+  'cameraSetup.disabledStageReadOnlyBody':
+    '{{name}} ({{code}}) is saved as Disabled (v{{version}}). Only the assigned Site Manager can enable this camera before reference frames or observation regions can be verified.',
+  'cameraSetup.disabledStageAction': 'Enable camera in settings ({{code}})',
 };
 
 const vi: Record<keyof typeof en, string> = {
@@ -116,6 +123,13 @@ const vi: Record<keyof typeof en, string> = {
   'cameraSetup.openSelectedMonitorZones': 'Mở giám sát khu vực ({{code}})',
   'cameraSetup.selectCameraBtn': 'Chọn {{code}}',
   'cameraSetup.selectedCameraBtn': 'Đang chọn {{code}}',
+  'cameraSetup.technicalSourceDetails': 'Chi tiết nguồn kỹ thuật',
+  'cameraSetup.disabledStageHeading': 'Khung tham chiếu & vùng quan sát tạm ngưng khi camera đang tắt',
+  'cameraSetup.disabledStageBody':
+    '{{name}} ({{code}}) đang lưu ở trạng thái Tắt (v{{version}}). Hệ thống không lấy khung hình trực tiếp hay ảnh tham chiếu 5 phút khi đang tắt. Hãy bật camera trong Quản lý trước rồi mở Sửa vùng quan sát.',
+  'cameraSetup.disabledStageReadOnlyBody':
+    '{{name}} ({{code}}) đang lưu ở trạng thái Tắt (v{{version}}). Chỉ Quản lý công trường được phân công mới có thể bật camera trước khi kiểm tra ảnh tham chiếu hoặc vùng quan sát.',
+  'cameraSetup.disabledStageAction': 'Bật camera trong cài đặt ({{code}})',
 };
 
 registerFeatureCatalog({ en, vi });
@@ -161,49 +175,58 @@ export function CameraSetupRowMetadata(props: { row: CameraResponse; isEnabled: 
   const { row, isEnabled } = props;
   const { t } = useTranslation(SAFETY_NAMESPACE);
   return (
-    <dl className="min-w-0 flex flex-wrap items-center gap-2 text-xs text-slate-600">
-      <div className="min-w-0 inline-flex items-center">
-        <dt className="sr-only">{t('cameraSetup.statusLabel')}</dt>
-        <dd className="min-w-0">
-          <span
-            className={`inline-flex max-w-full items-center gap-1.5 rounded-md border px-2.5 py-1 text-xs font-medium break-words [overflow-wrap:anywhere] ${
-              isEnabled
-                ? 'border-emerald-200 bg-emerald-50/70 text-slate-800'
-                : 'border-slate-200 bg-slate-100 text-slate-600'
-            }`}
-          >
+    <div className="min-w-0 space-y-1.5 text-xs text-slate-600">
+      <dl className="min-w-0 flex flex-wrap items-center gap-2">
+        <div className="min-w-0 inline-flex items-center">
+          <dt className="sr-only">{t('cameraSetup.statusLabel')}</dt>
+          <dd className="min-w-0">
             <span
-              aria-hidden="true"
-              className={`h-1.5 w-1.5 shrink-0 rounded-full ${
-                isEnabled ? 'bg-emerald-600' : 'bg-slate-400'
+              className={`inline-flex max-w-full items-center gap-1.5 rounded-md border px-2.5 py-1 text-xs font-medium break-words [overflow-wrap:anywhere] ${
+                isEnabled
+                  ? 'border-emerald-200 bg-emerald-50/70 text-slate-800'
+                  : 'border-slate-200 bg-slate-100 text-slate-600'
               }`}
-            />
-            {t(isEnabled ? 'cameraSetup.enabled' : 'cameraSetup.disabled')}
-          </span>
-        </dd>
-      </div>
-      <div className="min-w-0 max-w-full inline-flex items-center gap-1.5 rounded-md border border-slate-200/80 bg-slate-50 px-2.5 py-1">
-        <dt className="text-slate-500">{t('cameraSetup.codeLabel')}</dt>
-        <dd className="min-w-0 max-w-full break-all font-mono text-xs font-semibold tabular-nums text-slate-800">
-          {row.code}
-        </dd>
-      </div>
-      <div
-        data-testid="camera-row-source-id"
-        className="min-w-0 max-w-full inline-flex items-center gap-1.5 rounded-md border border-slate-200/80 bg-slate-50 px-2.5 py-1 text-slate-500"
-      >
-        <dt>{t('cameraSetup.field.externalId')}</dt>
-        <dd className="min-w-0 max-w-full break-all font-mono text-xs font-semibold text-slate-700">
-          {row.externalId}
-        </dd>
-      </div>
-      <div className="min-w-0 inline-flex items-center gap-1.5 rounded-md border border-slate-200/80 bg-slate-50 px-2.5 py-1 text-slate-500">
-        <dt>{t('cameraSetup.revisionLabel')}</dt>
-        <dd className="font-mono text-xs font-semibold tabular-nums text-slate-700">
-          v{row.configurationVersion}
-        </dd>
-      </div>
-    </dl>
+            >
+              <span
+                aria-hidden="true"
+                className={`h-1.5 w-1.5 shrink-0 rounded-full ${
+                  isEnabled ? 'bg-emerald-600' : 'bg-slate-400'
+                }`}
+              />
+              {t(isEnabled ? 'cameraSetup.enabled' : 'cameraSetup.disabled')}
+            </span>
+          </dd>
+        </div>
+        <div className="min-w-0 max-w-full inline-flex items-center gap-1.5 rounded-md border border-slate-200/80 bg-slate-50 px-2.5 py-1">
+          <dt className="text-slate-500">{t('cameraSetup.codeLabel')}</dt>
+          <dd className="min-w-0 max-w-full break-all font-mono text-xs font-semibold tabular-nums text-slate-800">
+            {row.code}
+          </dd>
+        </div>
+        <div className="min-w-0 inline-flex items-center gap-1.5 rounded-md border border-slate-200/80 bg-slate-50 px-2.5 py-1 text-slate-500">
+          <dt>{t('cameraSetup.revisionLabel')}</dt>
+          <dd className="font-mono text-xs font-semibold tabular-nums text-slate-700">
+            v{row.configurationVersion}
+          </dd>
+        </div>
+      </dl>
+      <details className="min-w-0 text-xs text-slate-500">
+        <summary className="inline-flex min-h-7 cursor-pointer select-none items-center gap-1 rounded-md px-1.5 py-0.5 text-xs font-medium text-slate-600 hover:bg-slate-100 hover:text-slate-900 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-slate-900">
+          <span>{t('cameraSetup.technicalSourceDetails')}</span>
+        </summary>
+        <dl className="mt-1 min-w-0">
+          <div
+            data-testid="camera-row-source-id"
+            className="min-w-0 max-w-full inline-flex items-center gap-1.5 rounded-md border border-slate-200/80 bg-slate-50 px-2.5 py-1 text-slate-500"
+          >
+            <dt>{t('cameraSetup.field.externalId')}</dt>
+            <dd className="min-w-0 max-w-full break-all font-mono text-xs font-semibold text-slate-700">
+              {row.externalId}
+            </dd>
+          </div>
+        </dl>
+      </details>
+    </div>
   );
 }
 
@@ -245,7 +268,7 @@ export function CameraSetupContextBar({
       : '';
 
   return (
-    <div className="mt-4 min-w-0 space-y-3 rounded-xl border border-slate-200/90 bg-slate-50/70 p-3.5 text-xs text-slate-700">
+    <div className="min-w-0 space-y-3 rounded-2xl border border-slate-200/90 bg-slate-50/70 p-4 text-xs text-slate-700">
       <div className="min-w-0 flex flex-wrap items-center justify-between gap-2.5">
         <div className="min-w-0 flex flex-wrap items-center gap-2">
           {siteBadge && (
@@ -304,32 +327,29 @@ export function CameraSetupContextBar({
           role="region"
           aria-label={t('cameraSetup.selectedHeading')}
           data-tour-anchor="camera-setup-save"
-          className={`min-w-0 flex flex-col justify-between gap-3.5 rounded-xl border border-slate-200 bg-white p-4 shadow-2xs border-l-4 ${
+          className={`min-w-0 flex flex-col justify-between gap-3 rounded-xl border border-slate-200 bg-white p-4 shadow-2xs border-l-4 ${
             isSelectedActive ? 'border-l-slate-900' : 'border-l-slate-400'
           }`}
         >
-          <div className="min-w-0 flex flex-col justify-between gap-3.5 lg:flex-row lg:items-start">
-            <div className="min-w-0 flex-1 space-y-1.5">
-              <div className="flex flex-wrap items-center gap-2">
-                <p className="text-xs font-medium text-slate-500">
+          <div className="min-w-0 space-y-2.5">
+            <div className="flex flex-wrap items-center justify-between gap-2.5">
+              <div className="flex min-w-0 flex-wrap items-center gap-2">
+                <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">
                   {t('cameraSetup.selectedHeading')}
                 </p>
                 <span
-                  data-testid="selected-camera-source-id"
-                  className="inline-flex max-w-full items-center gap-1 rounded-md border border-slate-200/90 bg-slate-50 px-2 py-0.5 font-mono text-[11px] font-medium text-slate-700 break-all"
+                  className={`inline-flex items-center gap-1.5 rounded-md border px-2 py-0.5 text-xs font-semibold tabular-nums ${
+                    isSelectedActive
+                      ? 'border-emerald-200 bg-emerald-50 text-emerald-900'
+                      : 'border-slate-200 bg-slate-100 text-slate-700'
+                  }`}
                 >
-                  <span>{t('cameraSetup.field.externalId')}:</span>
-                  <span className="font-semibold text-slate-900">{selectedCamera.externalId}</span>
+                  {t(isSelectedActive ? 'cameraSetup.enabled' : 'cameraSetup.disabled')} · v
+                  {selectedCamera.configurationVersion}
                 </span>
               </div>
-              <p
-                title={`${selectedCamera.name} · ${selectedCamera.code}`}
-                className="min-w-0 max-w-full break-words [overflow-wrap:anywhere] text-base font-semibold tracking-tight text-slate-900 tabular-nums"
-              >
-                {`${selectedCamera.name} · ${selectedCamera.code}`}
-              </p>
               {rows.length > 1 && onSelectCamera && (
-                <div className="flex flex-wrap items-center gap-2 pt-0.5">
+                <div className="flex min-w-0 max-w-full flex-wrap items-center gap-2">
                   <label
                     htmlFor="camera-setup-quick-select"
                     className="text-xs font-medium text-slate-600"
@@ -342,7 +362,7 @@ export function CameraSetupContextBar({
                     aria-label={t('cameraSetup.chooseCamera')}
                     value={selectedCamera.id}
                     onChange={(event) => onSelectCamera(event.target.value)}
-                    className="min-w-0 max-w-full rounded-lg border border-slate-300 bg-white px-2.5 py-1 text-xs font-medium text-slate-900 shadow-2xs hover:border-slate-400 focus-visible:border-slate-900 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-slate-900"
+                    className="min-h-10 min-w-0 max-w-full rounded-xl border border-slate-300 bg-white px-3 py-1.5 text-sm font-medium text-slate-900 shadow-2xs hover:border-slate-400 focus-visible:border-slate-900 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-slate-900"
                   >
                     {rows.map((row) => (
                       <option key={row.id} value={row.id}>
@@ -352,28 +372,71 @@ export function CameraSetupContextBar({
                   </select>
                 </div>
               )}
-              {canManageCameras && (
-                <p className="min-w-0 max-w-2xl break-words [overflow-wrap:anywhere] text-sm leading-5 text-slate-700">
+            </div>
+
+            <div className="min-w-0 flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1">
+              <p
+                title={`${selectedCamera.name} · ${selectedCamera.code}`}
+                className="min-w-0 max-w-full break-words [overflow-wrap:anywhere] text-lg font-bold tracking-tight text-slate-950 tabular-nums"
+              >
+                {`${selectedCamera.name} · ${selectedCamera.code}`}
+              </p>
+              <details className="min-w-0 text-xs text-slate-600">
+                <summary className="inline-flex min-h-7 cursor-pointer select-none items-center gap-1 rounded-md px-1.5 py-0.5 text-xs font-medium text-slate-600 hover:bg-slate-100 hover:text-slate-900 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-slate-900">
+                  <span>{t('cameraSetup.technicalSourceDetails')}</span>
+                </summary>
+                <div className="mt-1">
+                  <span
+                    data-testid="selected-camera-source-id"
+                    className="inline-flex max-w-full items-center gap-1 rounded-md border border-slate-200/90 bg-slate-50 px-2.5 py-1 font-mono text-xs font-medium text-slate-700 break-all"
+                  >
+                    <span>{t('cameraSetup.field.externalId')}:</span>
+                    <span className="font-semibold text-slate-900">
+                      {selectedCamera.externalId}
+                    </span>
+                  </span>
+                </div>
+              </details>
+            </div>
+
+            {statusContext ? (
+              <CameraApplicationStatusSummary camera={selectedCamera} context={statusContext} />
+            ) : (
+              <div
+                data-testid="camera-saved-config-summary"
+                data-application-state="SAVED_METADATA_ONLY"
+                className="min-w-0 space-y-1 rounded-lg border border-slate-200/80 bg-slate-50/80 px-3 py-2 text-xs text-slate-600"
+              >
+                <p className="min-w-0 break-words [overflow-wrap:anywhere] font-medium text-slate-800">
+                  {t('cameraSetup.savedConfigVersionStatus', {
+                    version: selectedCamera.configurationVersion,
+                  })}
+                </p>
+                <p className="min-w-0 break-words [overflow-wrap:anywhere] text-slate-600">
                   {t(
-                    isSelectedActive
-                      ? 'cameraSetup.selectedActiveNext'
-                      : 'cameraSetup.selectedInactiveNext',
+                    canManageCameras
+                      ? isSelectedActive
+                        ? 'cameraSetup.savedMetadataOnlyActiveHint'
+                        : 'cameraSetup.savedMetadataOnlyInactiveHint'
+                      : isSelectedActive
+                        ? 'cameraSetup.savedMetadataOnlyReadOnlyActiveHint'
+                        : 'cameraSetup.savedMetadataOnlyReadOnlyInactiveHint',
                   )}
                 </p>
-              )}
-            </div>
+              </div>
+            )}
 
             {(canManageCameras || Boolean(canOpenMonitoring && selectedMonitorQuery)) && (
               <div
                 data-tour-anchor="camera-setup-regions"
-                className="flex min-w-0 max-w-full flex-wrap items-center gap-2 lg:max-w-[55%] lg:justify-end"
+                className="flex min-w-0 max-w-full flex-wrap items-center gap-2 pt-0.5"
               >
                 {canManageCameras &&
                   (isSelectedActive ? (
                     <>
                       <button
                         type="button"
-                        className={`${CAMERA_BUTTON_STYLES.primary} min-h-9 min-w-0 max-w-full break-words [overflow-wrap:anywhere] whitespace-normal text-left`}
+                        className={`${CAMERA_BUTTON_STYLES.primary} min-w-0 max-w-full break-words [overflow-wrap:anywhere] whitespace-normal text-left`}
                         onClick={(event) => open('regions', selectedCamera.id, event.currentTarget)}
                       >
                         {t('cameraSetup.editSelectedRegions', { code: selectedCamera.code })}
@@ -382,7 +445,7 @@ export function CameraSetupContextBar({
                         <button
                           type="button"
                           data-testid="selected-camera-open-ppe"
-                          className={`${CAMERA_BUTTON_STYLES.compactSecondary} min-h-9 min-w-0 max-w-full break-words [overflow-wrap:anywhere] whitespace-normal text-left`}
+                          className={`${CAMERA_BUTTON_STYLES.secondary} min-w-0 max-w-full break-words [overflow-wrap:anywhere] whitespace-normal text-left`}
                           onClick={onOpenPpePolicy}
                         >
                           {t('cameraSetup.configureSelectedPpe', { code: selectedCamera.code })}
@@ -390,7 +453,7 @@ export function CameraSetupContextBar({
                       )}
                       <button
                         type="button"
-                        className={`${CAMERA_BUTTON_STYLES.compactSecondary} min-h-9 min-w-0 max-w-full break-words [overflow-wrap:anywhere] whitespace-normal text-left`}
+                        className={`${CAMERA_BUTTON_STYLES.secondary} min-w-0 max-w-full break-words [overflow-wrap:anywhere] whitespace-normal text-left`}
                         onClick={(event) => open('manage', selectedCamera.id, event.currentTarget)}
                       >
                         {t('cameraSetup.editSelectedManage', { code: selectedCamera.code })}
@@ -399,7 +462,7 @@ export function CameraSetupContextBar({
                   ) : (
                     <button
                       type="button"
-                      className={`${CAMERA_BUTTON_STYLES.secondary} min-h-9 min-w-0 max-w-full break-words [overflow-wrap:anywhere] whitespace-normal text-left`}
+                      className={`${CAMERA_BUTTON_STYLES.primary} min-w-0 max-w-full break-words [overflow-wrap:anywhere] whitespace-normal text-left`}
                       onClick={(event) => open('manage', selectedCamera.id, event.currentTarget)}
                     >
                       {t('cameraSetup.enableSelectedManage', { code: selectedCamera.code })}
@@ -409,14 +472,14 @@ export function CameraSetupContextBar({
                   <>
                     <Link
                       data-testid="selected-camera-monitor-ppe"
-                      className={`${CAMERA_BUTTON_STYLES.compactSecondary} min-h-9 min-w-0 max-w-full break-words [overflow-wrap:anywhere] whitespace-normal text-left`}
+                      className={`${CAMERA_BUTTON_STYLES.secondary} min-w-0 max-w-full break-words [overflow-wrap:anywhere] whitespace-normal text-left`}
                       to={`/ppe?${selectedMonitorQuery}`}
                     >
                       {t('cameraSetup.openSelectedMonitorPpe', { code: selectedCamera.code })}
                     </Link>
                     <Link
                       data-testid="selected-camera-monitor-zones"
-                      className={`${CAMERA_BUTTON_STYLES.compactSecondary} min-h-9 min-w-0 max-w-full break-words [overflow-wrap:anywhere] whitespace-normal text-left`}
+                      className={`${CAMERA_BUTTON_STYLES.secondary} min-w-0 max-w-full break-words [overflow-wrap:anywhere] whitespace-normal text-left`}
                       to={`/zones?${selectedMonitorQuery}`}
                     >
                       {t('cameraSetup.openSelectedMonitorZones', { code: selectedCamera.code })}
@@ -425,34 +488,17 @@ export function CameraSetupContextBar({
                 )}
               </div>
             )}
-          </div>
 
-          {statusContext ? (
-            <CameraApplicationStatusSummary camera={selectedCamera} context={statusContext} />
-          ) : (
-            <div
-              data-testid="camera-saved-config-summary"
-              data-application-state="SAVED_METADATA_ONLY"
-              className="mt-2 min-w-0 space-y-1 rounded-lg border border-slate-200/80 bg-slate-50/80 px-3 py-2 text-xs text-slate-600"
-            >
-              <p className="min-w-0 break-words [overflow-wrap:anywhere] font-medium text-slate-800">
-                {t('cameraSetup.savedConfigVersionStatus', {
-                  version: selectedCamera.configurationVersion,
-                })}
-              </p>
-              <p className="min-w-0 break-words [overflow-wrap:anywhere] text-slate-600">
+            {canManageCameras && (
+              <p className="min-w-0 max-w-3xl break-words [overflow-wrap:anywhere] text-xs leading-5 text-slate-600">
                 {t(
-                  canManageCameras
-                    ? isSelectedActive
-                      ? 'cameraSetup.savedMetadataOnlyActiveHint'
-                      : 'cameraSetup.savedMetadataOnlyInactiveHint'
-                    : isSelectedActive
-                      ? 'cameraSetup.savedMetadataOnlyReadOnlyActiveHint'
-                      : 'cameraSetup.savedMetadataOnlyReadOnlyInactiveHint',
+                  isSelectedActive
+                    ? 'cameraSetup.selectedActiveNext'
+                    : 'cameraSetup.selectedInactiveNext',
                 )}
               </p>
-            </div>
-          )}
+            )}
+          </div>
         </div>
       )}
     </div>

@@ -231,10 +231,10 @@ export function CameraSetupChecklist({
       data-setup-complete={checklist.isSetupComplete ? 'true' : 'false'}
       data-config-saved={checklist.isConfigSaved ? 'true' : 'false'}
       data-worker-applied={checklist.isWorkerApplied ? 'true' : 'false'}
-      className="mt-4 min-w-0 rounded-xl border border-slate-200/90 bg-white p-3.5 shadow-2xs"
+      className="min-w-0 rounded-2xl border border-slate-200/90 bg-white p-4 shadow-2xs"
     >
       <div className="flex flex-wrap items-center justify-between gap-2">
-        <p className="text-xs font-semibold text-slate-800">{t('cameraSetup.checklist.heading')}</p>
+        <p className="text-sm font-semibold text-slate-900">{t('cameraSetup.checklist.heading')}</p>
         <div className="flex flex-wrap items-center gap-2">
           <span
             data-testid="camera-setup-checklist-overall"

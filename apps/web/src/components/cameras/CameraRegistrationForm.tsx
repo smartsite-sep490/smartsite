@@ -77,7 +77,7 @@ export function CameraRegistrationForm(props: CameraRegistrationFormProps) {
   });
   if (!props.canManageCamera || !props.token || !props.sessionScope || !props.siteId) {
     return (
-      <p className="min-w-0 rounded-2xl border border-slate-200/90 bg-slate-50/90 px-3.5 py-2.5 text-xs leading-relaxed text-[#6B6B6B] break-words">
+      <p className="min-w-0 rounded-2xl border border-slate-200/90 bg-slate-50/90 px-3.5 py-2.5 text-sm leading-relaxed text-slate-600 break-words">
         {t('cameraSetup.register.authRequired')}
       </p>
     );
@@ -296,14 +296,14 @@ function ScopedCameraRegistrationForm(
     >
       <div
         data-testid="camera-registration-source-guidance"
-        className="min-w-0 space-y-1.5 rounded-2xl border border-slate-200/90 bg-slate-50/90 p-3.5 text-xs leading-relaxed text-[#6B6B6B] shadow-xs break-words"
+        className="min-w-0 space-y-1.5 rounded-2xl border border-slate-200/90 bg-slate-50/90 p-3.5 text-sm leading-relaxed text-slate-600 shadow-xs break-words"
       >
         <p className="min-w-0 break-words [overflow-wrap:anywhere]">
           {t('cameraSetup.register.introPrefix')}{' '}
-          <strong className="font-semibold text-[#111111] break-words">{props.siteName}</strong>.{' '}
+          <strong className="font-semibold text-slate-950 break-words">{props.siteName}</strong>.{' '}
           {t('cameraSetup.register.introSuffix')}
         </p>
-        <p className="min-w-0 break-words [overflow-wrap:anywhere] text-slate-700">
+        <p className="min-w-0 break-words [overflow-wrap:anywhere] text-xs text-slate-600">
           {t('cameraSetup.register.nextStepGuide')}
         </p>
       </div>

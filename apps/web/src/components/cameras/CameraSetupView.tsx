@@ -1,12 +1,16 @@
-import { useState } from 'react';
+import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Link } from 'react-router-dom';
 import { useQueryClient } from '@tanstack/react-query';
 import type { CameraResponse } from '@smartsite/contracts/management';
 import type { SharedSession } from '../../types/shared-session';
 import { SAFETY_NAMESPACE } from '../../i18n/runtime';
-import { getOpaqueTokenNonce } from '../ppe/zone-ppe-scope';
+import { IconShield, IconX } from '../icons';
+import { getOpaqueTokenNonce, getZonePpeScopeKey } from '../ppe/zone-ppe-scope';
+import { registerZonePpeDialogCopy } from '../ppe/zone-ppe-dialog-copy';
 import { ZonePpeSetupDialog } from '../ppe/ZonePpeSetupDialog';
+import { ZonePpeSetupPanel, type ZonePpeSetupPanelProps } from '../ppe/ZonePpeSetupPanel';
+import { CameraDiscardBanner } from './CameraDialogPrimitives';
 import { CAMERA_BUTTON_STYLES } from './camera-dialog-styles';
 import './camera-setup-catalog-copy';
 import './camera-setup-workspace-copy';
@@ -15,6 +19,8 @@ import { CameraRegistrationDialog } from './CameraRegistrationDialog';
 import { CameraSetupCatalog } from './CameraSetupCatalog';
 import { CameraSetupTour } from './CameraSetupTour';
 import { useCameraSetupWorkspace } from './useCameraSetupWorkspace';
+
+registerZonePpeDialogCopy();
 
 const button = CAMERA_BUTTON_STYLES.secondary;
 const surface =
@@ -87,6 +93,63 @@ function SetupWorkspace({ apiUrl, session }: { apiUrl: string; session: SharedSe
     requestedId: string | null;
     cameraId: string;
   } | null>(null);
+  const [inlineRegionDraft, setInlineRegionDraft] = useState({ dirty: false, saving: false });
+  const [pendingInlineExit, setPendingInlineExit] = useState<
+    { kind: 'close' } | { kind: 'focus'; cameraId: string } | null
+  >(null);
+  const isInlineRegionsOpen = Boolean(site && activeDialog?.kind === 'regions' && canManageCameras);
+  const effectiveRegionDraft = isInlineRegionsOpen
+    ? inlineRegionDraft
+    : { dirty: false, saving: false };
+  const effectivePendingInlineExit = isInlineRegionsOpen ? pendingInlineExit : null;
+
+  const invalidateRegionSetupCaches = (targetSiteId: string) => {
+    void cache.invalidateQueries({ queryKey: [...key, 'ppe-policy'] });
+    void cache.invalidateQueries({ queryKey: [...key, targetSiteId] });
+  };
+
+  const applyCameraFocusSwitch = (cameraId: string) => {
+    if (!site) return;
+    setPendingInlineExit(null);
+    setFocusSelection({
+      siteId: site.id,
+      requestedId: requestedCameraId,
+      cameraId,
+    });
+    if (activeDialog?.kind === 'regions') {
+      const nextCam = rows.find((row) => row.id === cameraId);
+      if (nextCam?.status === 'INACTIVE') {
+        invalidateRegionSetupCaches(site.id);
+        close();
+      } else if (nextCam?.status === 'ACTIVE' && cameraId !== activeDialog.cameraId) {
+        open('regions', cameraId);
+      }
+    }
+  };
+
+  const requestCloseInlineRegions = () => {
+    if (!isCurrentDialog() || !site || effectiveRegionDraft.saving) return;
+    if (effectiveRegionDraft.dirty) {
+      setPendingInlineExit({ kind: 'close' });
+      return;
+    }
+    setPendingInlineExit(null);
+    invalidateRegionSetupCaches(site.id);
+    close();
+  };
+
+  const confirmDiscardInlineRegions = () => {
+    if (!site || effectiveRegionDraft.saving) return;
+    const pending = effectivePendingInlineExit;
+    setInlineRegionDraft({ dirty: false, saving: false });
+    setPendingInlineExit(null);
+    if (pending?.kind === 'focus') {
+      applyCameraFocusSwitch(pending.cameraId);
+      return;
+    }
+    invalidateRegionSetupCaches(site.id);
+    close();
+  };
   const focusedCameraId =
     site && focusSelection?.siteId === site.id && focusSelection.requestedId === requestedCameraId
       ? focusSelection.cameraId
@@ -145,14 +208,33 @@ function SetupWorkspace({ apiUrl, session }: { apiUrl: string; session: SharedSe
 
   if (isSessionRevoked) return <p role="alert">{t('cameraSetup.session')}</p>;
 
+  const inlineRegionPanelProps: ZonePpeSetupPanelProps | null =
+    site && activeDialog?.kind === 'regions' && canManageCameras
+      ? {
+          ...common,
+          section: 'regions',
+          initialCameraId: activeDialog.cameraId,
+          onSelectCamera: (cameraId) => {
+            if (isCurrentDialog()) syncActiveRegionCameraParam(cameraId, true);
+          },
+          canReadZones,
+          canManageZones: capabilities.canManageZones,
+          canManageRegions: canManageCameras,
+          onClose: requestCloseInlineRegions,
+          onDraftStateChange: setInlineRegionDraft,
+        }
+      : null;
+
   return (
     <div className="mx-auto max-w-7xl space-y-5 pb-10">
       <header className="flex flex-wrap items-center justify-between gap-4 border-b border-slate-200/80 pb-4">
         <div className="min-w-0 space-y-1">
-          <h1 className="text-2xl font-semibold tracking-tight text-slate-900">
+          <h1 className="text-2xl sm:text-[26px] font-bold tracking-tight text-slate-950">
             {t('cameraSetup.title')}
           </h1>
-          <p className="max-w-xl text-xs leading-5 text-slate-500">{t('cameraSetup.intro')}</p>
+          <p className="max-w-2xl text-sm leading-relaxed text-slate-600">
+            {t('cameraSetup.intro')}
+          </p>
         </div>
         <div className="flex flex-wrap items-center gap-2">
           <CameraSetupTour
@@ -187,7 +269,7 @@ function SetupWorkspace({ apiUrl, session }: { apiUrl: string; session: SharedSe
         <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
           <div className="flex min-w-0 flex-1 flex-wrap items-center gap-3">
             <label
-              className="shrink-0 text-xs font-semibold tracking-wide text-slate-700"
+              className="shrink-0 text-sm font-semibold text-slate-800"
               htmlFor="camera-setup-site"
             >
               {t('cameraSetup.site')}
@@ -196,7 +278,7 @@ function SetupWorkspace({ apiUrl, session }: { apiUrl: string; session: SharedSe
               id="camera-setup-site"
               value={site?.id ?? ''}
               disabled={sites.baseError || sites.isPending}
-              className="w-full min-w-0 max-w-md rounded-xl border border-slate-300 bg-white px-3.5 py-2 text-sm text-slate-900 shadow-2xs transition-colors hover:border-slate-400 focus-visible:border-slate-900 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-slate-900 disabled:cursor-not-allowed disabled:bg-slate-100 disabled:text-slate-500"
+              className="min-h-10 w-full min-w-0 max-w-md rounded-xl border border-slate-300 bg-white px-3.5 py-2 text-sm font-medium text-slate-900 shadow-2xs transition-colors hover:border-slate-400 focus-visible:border-slate-900 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-slate-900 disabled:cursor-not-allowed disabled:bg-slate-100 disabled:text-slate-500"
               onChange={(event) => {
                 selectSite(event.target.value);
               }}
@@ -257,14 +339,29 @@ function SetupWorkspace({ apiUrl, session }: { apiUrl: string; session: SharedSe
           focusedCameraId={focusedCameraId}
           onFocusCamera={(cameraId) => {
             if (!site) return;
-            setFocusSelection({
-              siteId: site.id,
-              requestedId: requestedCameraId,
-              cameraId,
-            });
+            if (isInlineRegionsOpen) {
+              if (effectiveRegionDraft.saving) return;
+              if (effectiveRegionDraft.dirty && cameraId !== activeDialog?.cameraId) {
+                setPendingInlineExit({ kind: 'focus', cameraId });
+                return;
+              }
+            }
+            applyCameraFocusSwitch(cameraId);
           }}
           cameraError={errorNotice(cameras)}
           open={open}
+          inlineRegionStage={
+            inlineRegionPanelProps ? (
+              <InlineRegionSetupStage
+                key={`regions:${activeDialog?.cameraId ?? ''}:${getZonePpeScopeKey(cache, inlineRegionPanelProps)}`}
+                panelProps={inlineRegionPanelProps}
+                confirmDiscard={Boolean(effectivePendingInlineExit)}
+                saving={effectiveRegionDraft.saving}
+                onKeepEditing={() => setPendingInlineExit(null)}
+                onDiscardChanges={confirmDiscardInlineRegions}
+              />
+            ) : undefined
+          }
           policyContext={
             canReadCameras && !revoked && !sites.baseError && !cameras.baseError
               ? {
@@ -331,32 +428,89 @@ function SetupWorkspace({ apiUrl, session }: { apiUrl: string; session: SharedSe
           }}
         />
       )}
-      {site && (activeDialog?.kind === 'zones' || activeDialog?.kind === 'regions') && (
+      {site && activeDialog?.kind === 'zones' && (
         <ZonePpeSetupDialog
-          key={`${activeDialog.kind}:${activeDialog.cameraId ?? ''}`}
+          key={`zones:${activeDialog.cameraId ?? ''}`}
           {...common}
           onClose={() => {
             if (!isCurrentDialog()) return;
-            if (activeDialog.kind === 'regions') {
-              void cache.invalidateQueries({ queryKey: [...key, 'ppe-policy'] });
-              void cache.invalidateQueries({ queryKey: [...key, site.id] });
-            }
             close();
           }}
-          section={activeDialog.kind === 'regions' ? 'regions' : 'zones'}
-          initialCameraId={activeDialog.kind === 'regions' ? activeDialog.cameraId : undefined}
-          onSelectCamera={
-            activeDialog.kind === 'regions'
-              ? (cameraId) => {
-                  if (isCurrentDialog()) syncActiveRegionCameraParam(cameraId, true);
-                }
-              : undefined
-          }
+          section="zones"
           canReadZones={canReadZones}
           canManageZones={capabilities.canManageZones}
           canManageRegions={canManageCameras}
         />
       )}
     </div>
+  );
+}
+
+function InlineRegionSetupStage({
+  panelProps,
+  confirmDiscard,
+  saving,
+  onKeepEditing,
+  onDiscardChanges,
+}: {
+  panelProps: ZonePpeSetupPanelProps;
+  confirmDiscard: boolean;
+  saving: boolean;
+  onKeepEditing: () => void;
+  onDiscardChanges: () => void;
+}) {
+  const { t } = useTranslation(SAFETY_NAMESPACE);
+  const stageRef = useRef<HTMLElement>(null);
+  const onDraftStateChange = panelProps.onDraftStateChange;
+  useLayoutEffect(() => {
+    return () => {
+      onDraftStateChange?.({ dirty: false, saving: false });
+    };
+  }, [onDraftStateChange]);
+
+  useEffect(() => {
+    stageRef.current?.scrollIntoView?.({ behavior: 'smooth', block: 'nearest' });
+  }, []);
+
+  return (
+    <section
+      ref={stageRef}
+      data-testid="camera-setup-inline-region-stage"
+      aria-label={t('regionSetup.title')}
+      className="min-w-0 rounded-2xl border border-slate-300 bg-white p-3 sm:p-5 shadow-xs space-y-4"
+    >
+      <div className="flex items-start justify-between gap-3 border-b border-slate-200/80 pb-3.5 min-w-0">
+        <div className="flex items-start gap-2.5 min-w-0">
+          <span className="flex h-9 w-9 items-center justify-center rounded-xl bg-slate-900 text-white shrink-0">
+            <IconShield className="h-4.5 w-4.5" />
+          </span>
+          <div className="min-w-0">
+            <h3 className="text-base font-bold tracking-tight text-slate-950 break-words [overflow-wrap:anywhere]">
+              {t('regionSetup.title')}
+            </h3>
+            <p className="mt-0.5 text-sm leading-relaxed text-slate-600 break-words [overflow-wrap:anywhere]">
+              {t('regionSetup.subtitle')}
+            </p>
+          </div>
+        </div>
+        <button
+          type="button"
+          onClick={panelProps.onClose}
+          disabled={saving}
+          aria-label={t('zoneSetup.closeAria')}
+          className="inline-flex min-h-10 min-w-10 items-center justify-center rounded-xl border border-slate-200 bg-white p-2 text-slate-600 hover:border-slate-300 hover:bg-slate-50 hover:text-slate-900 transition-colors cursor-pointer shrink-0 disabled:cursor-not-allowed disabled:opacity-50"
+        >
+          <IconX className="h-4 w-4" />
+        </button>
+      </div>
+      {confirmDiscard && (
+        <CameraDiscardBanner
+          disabled={saving}
+          onKeepEditing={onKeepEditing}
+          onDiscardChanges={onDiscardChanges}
+        />
+      )}
+      <ZonePpeSetupPanel {...panelProps} embedded />
+    </section>
   );
 }
