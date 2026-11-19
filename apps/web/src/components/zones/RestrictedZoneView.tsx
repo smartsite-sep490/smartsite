@@ -108,7 +108,9 @@ export function RestrictedZoneView({
   const [localSession, setSession] = useState<LoginResponse | null>(null);
   const session = authenticatedSession ?? localSession;
   const externalSession = authenticatedSession !== undefined;
-  const linkedMonitoring = !!(externalSession && linkedSiteId && linkedCameraId);
+  // Authenticated application navigation always uses scoped Backend media.
+  // Deep-link parameters select context; their absence must never select demo footage.
+  const linkedMonitoring = externalSession;
   const canRead =
     !externalSession ||
     session?.user.roleAssignments.some(
@@ -120,9 +122,9 @@ export function RestrictedZoneView({
   const [password, setPassword] = useState('');
   const [loginError, setLoginError] = useState<string | null>(null);
 
-  const [requestedSiteId, setRequestedSiteId] = useState(linkedMonitoring ? linkedSiteId : '');
+  const [requestedSiteId, setRequestedSiteId] = useState(linkedMonitoring ? (linkedSiteId ?? '') : '');
   const [requestedCameraId, setRequestedCameraId] = useState(
-    linkedMonitoring ? linkedCameraId : '',
+    linkedMonitoring ? (linkedCameraId ?? '') : '',
   );
   const [requestedRegionId, setRequestedRegionId] = useState('');
   const [conflictMessage, setConflictMessage] = useState<string | null>(null);
@@ -378,7 +380,7 @@ export function RestrictedZoneView({
     (!linkedMonitoring || sites.isSuccess) &&
     sites.data?.items.some((site) => site.id === requestedSiteId)
       ? requestedSiteId
-      : linkedMonitoring && requestedSiteId === linkedSiteId
+      : linkedMonitoring && linkedSiteId && requestedSiteId === linkedSiteId
         ? ''
         : (sites.data?.items[0]?.id ?? '');
   const canConfigure =
@@ -403,7 +405,7 @@ export function RestrictedZoneView({
     : (cameras.data?.items ?? []);
   const selectedCameraId = scopedCameras.some((cam) => cam.id === requestedCameraId)
     ? requestedCameraId
-    : linkedMonitoring && requestedCameraId === linkedCameraId
+    : linkedMonitoring && linkedCameraId && requestedCameraId === linkedCameraId
       ? ''
       : (scopedCameras[0]?.id ?? '');
 
