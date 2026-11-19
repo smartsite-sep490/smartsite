@@ -9,6 +9,7 @@ import {
   IconCheck,
   IconChevronDown,
   IconClock,
+  IconHardHat,
   IconUsers,
 } from './components/icons';
 import { Badge } from './components/ui';
@@ -182,7 +183,7 @@ export function FrameInboxCards({
                 </Badge>
               </div>
               <div className="mt-3 flex flex-col gap-2.5 sm:flex-row sm:items-center sm:justify-between min-w-0">
-                <div className="flex min-w-0 items-center gap-3">
+                <div className="flex min-w-0 items-start sm:items-center gap-3">
                   <span
                     aria-hidden="true"
                     className={`inline-flex h-10 min-w-11 shrink-0 items-center justify-center gap-1 rounded-xl border px-2.5 text-sm font-bold ${
@@ -194,33 +195,61 @@ export function FrameInboxCards({
                     <IconUsers className="h-4 w-4 shrink-0" />
                     {frame.cases.length}
                   </span>
-                  <div className="min-w-0">
-                    <span className="block text-sm sm:text-base font-semibold text-slate-950 break-words [overflow-wrap:anywhere]">
+                  <div className="flex min-w-0 flex-wrap items-center gap-1.5 text-xs text-slate-400">
+                    <span
+                      data-testid="frame-summary-subjects-pill"
+                      className="inline-flex items-center rounded-lg border border-slate-200 bg-slate-100/90 px-2.5 py-1 text-xs sm:text-sm font-semibold text-slate-900"
+                    >
                       {t('frameInbox.people', { count: frame.cases.length })}
-                      {frame.findingCount > 0
-                        ? ` · ${t('frameInbox.findings', { count: frame.findingCount })}`
-                        : ` · ${t('frameInbox.noPpeFindings')}`}
-                      {deniedCount > 0 &&
-                        ` · ${t('episodes.frameZoneDenials', { count: deniedCount })}`}
                     </span>
+                    {' · '}
+                    <span
+                      data-testid="frame-summary-ppe-pill"
+                      className={`inline-flex items-center gap-1.5 rounded-lg border px-2.5 py-1 text-xs sm:text-sm font-semibold ${
+                        frame.findingCount > 0
+                          ? 'border-amber-300 bg-amber-50 text-amber-950'
+                          : 'border-slate-200 bg-white text-slate-600 font-medium'
+                      }`}
+                    >
+                      {frame.findingCount > 0 && (
+                        <IconHardHat className="h-3.5 w-3.5 shrink-0 text-amber-800" />
+                      )}
+                      <span>
+                        {frame.findingCount > 0
+                          ? t('frameInbox.findings', { count: frame.findingCount })
+                          : t('frameInbox.noPpeFindings')}
+                      </span>
+                    </span>
+                    {deniedCount > 0 && (
+                      <>
+                        {' · '}
+                        <span
+                          data-testid="frame-summary-zone-denied-pill"
+                          className="inline-flex items-center gap-1.5 rounded-lg border border-rose-300 bg-rose-50 px-2.5 py-1 text-xs sm:text-sm font-semibold text-rose-950"
+                        >
+                          <IconAlertTriangle className="h-3.5 w-3.5 shrink-0 text-rose-700" />
+                          <span>{t('episodes.frameZoneDenials', { count: deniedCount })}</span>
+                        </span>
+                      </>
+                    )}
                     {laterDenials > 0 && (
-                      <span className="mt-0.5 block text-xs sm:text-sm font-medium text-rose-900">
+                      <span className="inline-flex items-center rounded-lg border border-rose-200 bg-rose-50/70 px-2.5 py-1 text-xs font-medium text-rose-900">
                         {t('episodes.laterFrameZoneDenials', { count: laterDenials })}
                       </span>
                     )}
                     {pendingZoneCount > 0 && (
                       <span
                         data-testid="frame-pending-zone-summary"
-                        className="mt-0.5 mr-3 inline-flex items-center gap-1 text-xs sm:text-sm font-medium text-amber-800"
+                        className="inline-flex items-center gap-1 rounded-lg border border-dashed border-amber-400 bg-amber-50/80 px-2.5 py-1 text-xs font-medium text-amber-900"
                       >
-                        <IconClock className="h-3.5 w-3.5 shrink-0" />
+                        <IconClock className="h-3.5 w-3.5 shrink-0 text-amber-700" />
                         <span>{t('frameInbox.zonePendingCount', { count: pendingZoneCount })}</span>
                       </span>
                     )}
                     {unavailableZoneCount > 0 && (
                       <span
                         data-testid="frame-unavailable-zone-summary"
-                        className="mt-0.5 inline-flex items-center gap-1 text-xs sm:text-sm font-medium text-slate-700"
+                        className="inline-flex items-center gap-1 rounded-lg border border-slate-200 bg-slate-100/80 px-2.5 py-1 text-xs font-medium text-slate-700"
                       >
                         <IconAlertTriangle className="h-3.5 w-3.5 shrink-0 text-slate-500" />
                         <span>
@@ -243,14 +272,14 @@ export function FrameInboxCards({
               </div>
             </button>
             {frame.unread && (
-              <div className="mt-3 border-t border-slate-100 pt-3">
+              <div className="mt-2.5 flex items-center justify-end border-t border-slate-100 pt-2.5">
                 <button
                   type="button"
                   disabled={read.isPending}
                   onClick={() => read.mutate(frame.cases)}
-                  className="inline-flex w-full sm:w-auto items-center justify-center gap-1.5 rounded-xl border border-teal-700/40 bg-teal-50/70 px-3.5 py-2 text-xs sm:text-sm font-semibold text-teal-950 transition-colors hover:bg-teal-100/70 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-teal-800 focus-visible:ring-2 focus-visible:ring-teal-700/30 disabled:cursor-not-allowed disabled:opacity-50"
+                  className="inline-flex w-full sm:w-auto items-center justify-center gap-1.5 rounded-xl border border-teal-700/40 bg-teal-50/70 px-3 py-1.5 text-xs font-semibold text-teal-950 transition-colors hover:bg-teal-100/70 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-teal-800 focus-visible:ring-2 focus-visible:ring-teal-700/30 disabled:cursor-not-allowed disabled:opacity-50"
                 >
-                  <IconCheck className="h-4 w-4 shrink-0" />
+                  <IconCheck className="h-3.5 w-3.5 shrink-0" />
                   <span>
                     {read.isPending ? t('frameInbox.markingRead') : t('frameInbox.markRead')}
                   </span>
@@ -280,11 +309,11 @@ export function FrameInboxCards({
                   )}
                 </div>
                 <div className="space-y-2 min-w-0">
-                  <div className="space-y-0.5">
-                    <p className="text-xs font-bold uppercase tracking-wider text-slate-600">
+                  <div className="flex flex-wrap items-baseline justify-between gap-x-3 gap-y-0.5">
+                    <p className="text-xs font-bold uppercase tracking-wider text-slate-700">
                       {t('frameInbox.personBreakdown')}
                     </p>
-                    <p data-testid="frame-check-scope-note" className="text-xs text-slate-600">
+                    <p data-testid="frame-check-scope-note" className="text-[11px] text-slate-500">
                       {tSafety(FRAME_INBOX_SCOPE_KEY)}
                     </p>
                   </div>

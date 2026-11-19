@@ -35,6 +35,26 @@ export interface ScopedWallSnapshot {
   receivedAt: number;
 }
 
+const UUID_SUBSTRING_RE = /[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/i;
+
+function formatSingleLinkedZoneChip(zone: { code: string; name: string } | undefined): {
+  label: string | null;
+  title: string | undefined;
+} {
+  if (!zone) {
+    return { label: null, title: undefined };
+  }
+  const trimmedName = zone.name.trim();
+  const trimmedCode = zone.code.trim();
+  const label =
+    UUID_SUBSTRING_RE.test(trimmedCode) && trimmedName ? trimmedName : trimmedCode || trimmedName;
+  const title =
+    trimmedName && trimmedCode && trimmedName !== trimmedCode
+      ? `${trimmedName} (${trimmedCode})`
+      : label;
+  return { label: label || null, title: title || undefined };
+}
+
 export interface FourSourceWallTileProps {
   apiUrl: string;
   client: SmartSiteManagementClient;
@@ -173,14 +193,18 @@ export function FourSourceWallTile(props: FourSourceWallTileProps) {
     status,
     errorStatus: effectiveErrorStatus,
   });
+  const singleZoneDisplay =
+    zonesState.zones.length === 1 ? formatSingleLinkedZoneChip(zonesState.zones[0]) : null;
   const linkedZoneSummary =
     zonesState.zones.length === 1
-      ? zonesState.zones[0]?.code
+      ? singleZoneDisplay?.label ?? null
       : zonesState.zones.length > 1
         ? trMonitor('monitor.zones.linkedCount', {
             count: Math.max(zonesState.total, zonesState.zones.length),
           })
         : null;
+  const linkedZoneTitle =
+    zonesState.zones.length === 1 ? singleZoneDisplay?.title : (linkedZoneSummary ?? undefined);
 
   return (
     <div
@@ -192,27 +216,28 @@ export function FourSourceWallTile(props: FourSourceWallTileProps) {
       onClick={() => onSelect(camera.id)}
       className={`relative min-w-0 rounded-xl border transition-all flex flex-col overflow-hidden cursor-pointer select-none bg-[#0F141C] ${
         isSelected
-          ? 'border-[#0F172A] ring-2 ring-[#0F172A]/40 shadow-sm'
+          ? 'border-amber-400/90 ring-2 ring-amber-400/35 shadow-sm'
           : 'border-slate-800 hover:border-slate-700'
       }`}
     >
       <div className="relative z-10 px-2.5 py-1.5 bg-slate-950/90 border-b border-white/10 flex flex-wrap items-center justify-between text-white gap-x-2 gap-y-1 pointer-events-none">
-        <div className="flex flex-wrap sm:flex-nowrap items-center gap-1.5 min-w-[10rem] flex-1">
+        <div className="flex min-w-0 flex-[1_1_12rem] items-center gap-1.5 overflow-hidden">
           {camera.code && camera.name && camera.name !== camera.code && (
-            <span className="max-w-[8.5rem] truncate rounded border border-white/15 bg-white/10 px-1.5 py-0.5 font-mono text-[11px] font-semibold text-slate-200 shrink-0">
+            <span className="max-w-[6.5rem] truncate rounded border border-white/15 bg-white/10 px-1.5 py-0.5 font-mono text-[11px] font-semibold text-slate-200 shrink-0">
               {camera.code}
             </span>
           )}
           <span
             title={`${camera.name || camera.code} (${camera.code})`}
-            className="min-w-[3.5rem] flex-1 font-bold text-xs tracking-wide text-white truncate"
+            className="min-w-0 flex-1 font-bold text-xs tracking-wide text-white truncate"
           >
             {camera.name || camera.code}
           </span>
           {linkedZoneSummary && (
             <span
               data-testid={`wall-zone-chip-${camera.id}`}
-              className="hidden sm:inline-flex items-center rounded border border-sky-400/30 bg-sky-500/15 px-1.5 py-0.5 text-[11px] font-medium text-sky-200 shrink-0"
+              title={linkedZoneTitle}
+              className="hidden sm:inline-block max-w-[9.5rem] truncate rounded border border-sky-400/30 bg-sky-500/15 px-1.5 py-0.5 text-[11px] font-medium text-sky-200 shrink-0"
             >
               {linkedZoneSummary}
             </span>
@@ -220,14 +245,14 @@ export function FourSourceWallTile(props: FourSourceWallTileProps) {
           {isSelected && (
             <span
               data-testid={`focused-badge-${camera.id}`}
-              className="bg-[#111111] text-white border border-white/20 text-[11px] font-bold px-1.5 py-0.5 rounded uppercase shrink-0"
+              className="bg-amber-400/20 text-amber-200 border border-amber-400/40 text-[11px] font-bold px-1.5 py-0.5 rounded uppercase shrink-0"
             >
               {t('ppe.wall.context.focusedBadge')}
             </span>
           )}
         </div>
 
-        <div className="flex flex-wrap items-center gap-1.5 shrink-0">
+        <div className="flex flex-wrap items-center gap-1.5 shrink-0 ml-auto">
           <span
             data-testid={`wall-source-badge-${camera.id}`}
             className={`px-1.5 py-0.5 rounded text-[11px] font-bold tracking-wider uppercase border ${
