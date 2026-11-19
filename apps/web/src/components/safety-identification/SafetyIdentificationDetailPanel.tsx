@@ -1,11 +1,14 @@
 import { useMemo, useState, type JSX, type ReactNode } from 'react';
-import { Alert, AlertDescription } from '../ui';
+import { Link, useInRouterContext } from 'react-router-dom';
+import { IconArrowRight, IconShield } from '../icons';
+import { Alert, AlertDescription, Card } from '../ui';
 import { IdentificationResponseForm, type NamedCandidate } from './SafetyIdentificationForms';
 import { SafetyIdentificationAdminCard } from './SafetyIdentificationAdminCard';
 import { SafetyIdentificationDetailOverview } from './SafetyIdentificationDetailOverview';
 import { SafetyIdentificationHistorySection } from './SafetyIdentificationHistorySection';
 import { SafetyIdentificationReviewCard } from './SafetyIdentificationReviewCard';
 import {
+  buildIdentificationOriginLinks,
   sameId,
   type DetailActionSlot,
   type DetailPendingAction,
@@ -65,6 +68,7 @@ export function SafetyIdentificationDetailPanel({
   retrospectiveHistory?: ReactNode;
 }): JSX.Element {
   const [responseContractorId, setResponseContractorId] = useState<string | null>(null);
+  const inRouter = useInRouterContext();
 
   const isAnyPending = pendingAction !== null;
 
@@ -142,8 +146,45 @@ export function SafetyIdentificationDetailPanel({
   const reassignError = actionError?.slot === 'reassign' ? actionError.message : null;
   const cancelError = actionError?.slot === 'cancel' ? actionError.message : null;
 
+  const originLinks = buildIdentificationOriginLinks({
+    siteId: request.siteId,
+    originRecipientId,
+    originFrameKey,
+    originCameraId,
+  });
+
+  const hasApprovedEvidence = Array.isArray(approvedEvidence)
+    ? approvedEvidence.length > 0
+    : Boolean(approvedEvidence);
+
   return (
     <div className="space-y-4" aria-label={copy.detail.title}>
+      {isOfficer && originLinks.hasValidOrigin && originLinks.inboxReturnHref && (
+        <div
+          data-testid="c02-origin-return-bar"
+          className="flex flex-wrap items-center justify-between gap-2.5 rounded-2xl border border-[#071A2B]/15 bg-[#071A2B]/[0.03] px-4 py-2.5 shadow-2xs"
+        >
+          <p className="text-xs font-medium text-slate-700">{copy.detail.originCaseContextNotice}</p>
+          {inRouter ? (
+            <Link
+              to={originLinks.inboxReturnHref}
+              className="inline-flex items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-2.5 py-1.5 text-xs font-bold text-[#071A2B] shadow-2xs transition-colors hover:border-[#F66B17]/50 hover:text-[#F66B17]"
+            >
+              <span>{copy.detail.returnToInboxLink}</span>
+              <IconArrowRight className="w-3.5 h-3.5" />
+            </Link>
+          ) : (
+            <a
+              href={originLinks.inboxReturnHref}
+              className="inline-flex items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-2.5 py-1.5 text-xs font-bold text-[#071A2B] shadow-2xs transition-colors hover:border-[#F66B17]/50 hover:text-[#F66B17]"
+            >
+              <span>{copy.detail.returnToInboxLink}</span>
+              <IconArrowRight className="w-3.5 h-3.5" />
+            </a>
+          )}
+        </div>
+      )}
+
       <SafetyIdentificationDetailOverview
         request={request}
         detailLoading={detailLoading}
@@ -158,7 +199,21 @@ export function SafetyIdentificationDetailPanel({
         resolveContractorLabel={resolveContractorLabel}
       />
 
-      {approvedEvidence}
+      {hasApprovedEvidence && (
+        <Card data-testid="c02-approved-evidence-card" className="space-y-3">
+          <div className="flex flex-wrap items-start justify-between gap-2 border-b border-slate-100 pb-2.5">
+            <div className="space-y-0.5">
+              <h3 className="flex items-center gap-1.5 text-sm font-bold text-[#071A2B]">
+                <IconShield className="h-4 w-4 text-emerald-600" />
+                <span>{copy.detail.approvedEvidenceCardTitle}</span>
+              </h3>
+              <p className="text-xs text-slate-600">{copy.detail.approvedEvidenceCardHint}</p>
+            </div>
+          </div>
+          <div className="space-y-2.5">{approvedEvidence}</div>
+        </Card>
+      )}
+
       {retrospectiveHistory}
 
       {canManagerRespond && (
