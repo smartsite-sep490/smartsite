@@ -46,7 +46,7 @@ test('conditional issuance serializes current ownership and revocation without b
         [site],
       );
       await db.query(
-        "INSERT INTO camera(id,site_id,external_id,code,name) VALUES($1,$2,$1::uuid::text,$1::uuid::text,'Synthetic conditional camera')",
+        "INSERT INTO camera(id,site_id,external_id,code,name,type) VALUES($1,$2,$1::uuid::text,$1::uuid::text,'Synthetic conditional camera','ZONE')",
         [camera, site],
       );
       return camera;
