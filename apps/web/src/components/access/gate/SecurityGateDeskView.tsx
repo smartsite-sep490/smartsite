@@ -1,6 +1,6 @@
 import { useManagementClient } from '../../../features/auth/auth-session';
 import { localizedError, localizeMessage, userErrorMessage } from '../../../i18n/messages';
-import { localizedLabel, localizedGateName } from '../../../i18n/labels';
+import { localizedLabel } from '../../../i18n/labels';
 import { uiLocale } from '../../../i18n';
 import { translate as tr } from '../../../i18n';
 import { useTranslation } from 'react-i18next';
@@ -8,7 +8,8 @@ import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { ApiError } from '@smartsite/api-client';
 import type { FaceGateDecisionResponse, FaceGateVerificationResponse } from '@smartsite/contracts';
-import { SITE_GATES } from '@smartsite/contracts/gates';
+import { useGateCatalog } from '../useGateCatalog';
+import { GateCatalogNotice } from '../GateCatalogNotice';
 import type {
   QrFallbackResponse,
   WorkerQrVerificationCommand,
@@ -61,8 +62,6 @@ export interface SecurityGateDeskViewProps {
   onSelectSite: (siteId: string) => void;
 }
 
-const gates = SITE_GATES;
-
 function getGateFaceMessage(reasonCode: string): string {
   const map: Record<string, string> = {
     FACE_QUALITY_ACCEPTED: tr('common.face_quality_accepted'),
@@ -95,6 +94,39 @@ function getGateFaceMessage(reasonCode: string): string {
 }
 
 export function SecurityGateDeskView(props: SecurityGateDeskViewProps) {
+  const client = useManagementClient(props.apiUrl);
+  const gateCatalog = useGateCatalog(
+    client,
+    props.apiUrl,
+    props.sessionScope,
+    props.token,
+    props.selectedSiteId,
+    true,
+  );
+  const gates = gateCatalog.error ? [] : (gateCatalog.data?.items ?? []);
+  const [requestedGate, setSelectedGateId] = useState('');
+  const selectedGateId = gates.some((g) => g.id === requestedGate)
+    ? requestedGate
+    : (gates[0]?.id ?? '');
+  const sources = useQuery({
+    queryKey: [
+      'gate-sources',
+      props.apiUrl,
+      props.sessionScope,
+      props.selectedSiteId,
+      selectedGateId,
+    ],
+    enabled: !!props.token && !!props.selectedSiteId && !!selectedGateId,
+    queryFn: () => client.listGateSources(props.token!, props.selectedSiteId, selectedGateId),
+    refetchInterval: 15_000,
+  });
+  const registeredSources = sources.error ? [] : (sources.data?.items ?? []);
+  const [requestedSource, setSource] = useState('');
+  const selectedSourceId =
+    registeredSources.find((c) => c.id === requestedSource)?.id ??
+    (registeredSources.length === 1 ? registeredSources[0]!.id : '');
+
+  const [direction, setDirection] = useState<'IN' | 'OUT'>('IN');
   // A new operator workspace must not retain another Site's pending attempts or QR sessions.
   return (
     <ScopedSecurityGateDeskView
@@ -103,8 +135,22 @@ export function SecurityGateDeskView(props: SecurityGateDeskViewProps) {
         props.sessionScope,
         props.selectedSiteId,
         props.isSecurityOfficer,
+        selectedGateId,
+        selectedSourceId,
       ])}
       {...props}
+      {...{
+        gateCatalog,
+        gates,
+        selectedGateId,
+        setSelectedGateId,
+        sources,
+        registeredSources,
+        selectedSourceId,
+        setSource,
+        direction,
+        setDirection,
+      }}
     />
   );
 }
@@ -117,14 +163,33 @@ function ScopedSecurityGateDeskView({
   selectedSiteId,
   sites,
   onSelectSite,
-}: SecurityGateDeskViewProps) {
+  gateCatalog,
+  gates,
+  selectedGateId,
+  setSelectedGateId,
+  sources,
+  registeredSources,
+  selectedSourceId,
+  setSource,
+  direction,
+  setDirection,
+}: SecurityGateDeskViewProps & {
+  gateCatalog: ReturnType<typeof useGateCatalog>;
+  gates: import('@smartsite/contracts').GateResponse[];
+  selectedGateId: string;
+  setSelectedGateId: (id: string) => void;
+  sources: { isPending: boolean; error: Error | null; refetch: () => unknown };
+  registeredSources: import('@smartsite/contracts').GateSourceResponse[];
+  direction: 'IN' | 'OUT';
+  setDirection: (direction: 'IN' | 'OUT') => void;
+  selectedSourceId: string;
+  setSource: (id: string) => void;
+}) {
   useTranslation();
 
   const client = useManagementClient(apiUrl);
   const queryClient = useQueryClient();
   // Gate selection & direction
-  const [selectedGateId, setSelectedGateId] = useState<string>(gates[0]?.id ?? '');
-  const [direction, setDirection] = useState<'IN' | 'OUT'>('IN');
 
   // Camera state
   const videoRef = useRef<HTMLVideoElement | null>(null);
@@ -140,7 +205,7 @@ function ScopedSecurityGateDeskView({
     () => () => {
       scanGeneration.current += 1;
     },
-    [apiUrl, sessionScope, selectedSiteId, selectedGateId, direction, token],
+    [apiUrl, sessionScope, selectedSiteId, selectedGateId, selectedSourceId, direction, token],
   );
   const scanBusy = useRef(false);
   const presenceSession = useRef('');
@@ -266,7 +331,7 @@ function ScopedSecurityGateDeskView({
   const logQueryKey = ['gate-access-logs', apiUrl, sessionScope, selectedSiteId, selectedGateId];
   const accessLogs = useQuery({
     queryKey: logQueryKey,
-    enabled: !!token && !!selectedSiteId,
+    enabled: !!token && !!selectedSiteId && !!selectedGateId,
     queryFn: () => client.listGateAccessLogs(token!, selectedSiteId, selectedGateId),
   });
   const recentEvents: GateDeskEventRecord[] = (accessLogs.data?.items ?? []).map((log) => ({
@@ -279,7 +344,7 @@ function ScopedSecurityGateDeskView({
     method: log.method ?? 'FACE',
     outcome: log.decision.authorization,
     reasonCode: log.decision.reasonCode,
-    gateName: localizedGateName(log.gateId),
+    gateName: gates.find((g) => g.id === log.gateId)?.name ?? '—',
   }));
 
   // Safe preview URL update helper
@@ -349,7 +414,8 @@ function ScopedSecurityGateDeskView({
 
   // Presence checks do not create gate events; only a confirmed new face is verified.
   const handleScanFace = useCallback(async () => {
-    if (scanBusy.current || !token || !selectedSiteId) return;
+    if (scanBusy.current || !token || !selectedSiteId || !selectedGateId || !selectedSourceId)
+      return;
     const video = videoRef.current;
     if (!video || !cameraActive) {
       setCameraError(tr('security_gate_desk_view.webcam_feed_is_not_running'));
@@ -374,6 +440,7 @@ function ScopedSecurityGateDeskView({
         selectedGateId,
         presenceSession.current,
         frameBlob,
+        selectedSourceId,
       );
       if (generation !== scanGeneration.current || !cameraMountedRef.current) return;
       if (presence.state !== 'NEW_FACE' && presence.state !== 'AI_UNAVAILABLE') {
@@ -403,6 +470,7 @@ function ScopedSecurityGateDeskView({
           selectedGateId,
           frameBlob,
           direction,
+          selectedSourceId,
         );
         if (generation !== scanGeneration.current || !cameraMountedRef.current) return;
         setLastDecision(data.decision);
@@ -458,7 +526,7 @@ function ScopedSecurityGateDeskView({
       if (generation !== scanGeneration.current || !cameraMountedRef.current) return;
       setNetworkError(true);
     } finally {
-      scanBusy.current = false;
+      if (generation === scanGeneration.current) scanBusy.current = false;
       if (generation === scanGeneration.current && cameraMountedRef.current) setIsScanning(false);
     }
   }, [
@@ -469,6 +537,7 @@ function ScopedSecurityGateDeskView({
     cameraActive,
     direction,
     selectedGateId,
+    selectedSourceId,
     selectedSiteId,
     token,
     updateCapturedPreview,
@@ -476,7 +545,15 @@ function ScopedSecurityGateDeskView({
   ]);
 
   useEffect(() => {
-    if (!cameraActive || networkError || !selectedSiteId || !token || qrModalOpen || fallback)
+    if (
+      !cameraActive ||
+      networkError ||
+      !selectedSiteId ||
+      !selectedSourceId ||
+      !token ||
+      qrModalOpen ||
+      fallback
+    )
       return;
     if (currentAttempt && candidateWorker) return;
     let cancelled = false;
@@ -496,6 +573,7 @@ function ScopedSecurityGateDeskView({
     handleScanFace,
     networkError,
     selectedSiteId,
+    selectedSourceId,
     token,
     qrModalOpen,
     fallback,
@@ -610,7 +688,7 @@ function ScopedSecurityGateDeskView({
               <select
                 id="gate-selector"
                 value={selectedGateId}
-                disabled={isScanning}
+                disabled={isScanning || !gates.length}
                 onChange={(e) => {
                   handleResetScan();
                   setSelectedGateId(e.target.value);
@@ -619,7 +697,7 @@ function ScopedSecurityGateDeskView({
               >
                 {gates.map((gate) => (
                   <option key={gate.id} value={gate.id}>
-                    {localizedGateName(gate.id)} ({gate.id})
+                    {gate.name} ({gate.code})
                   </option>
                 ))}
               </select>
@@ -627,6 +705,56 @@ function ScopedSecurityGateDeskView({
           </div>
         </div>
 
+        <GateCatalogNotice query={gateCatalog} />
+        {!!selectedGateId && (
+          <div className="space-y-2">
+            <label className="block text-sm font-bold">
+              {tr('gateSetup.source')}
+              <select
+                className="ml-2 rounded-lg border p-2"
+                value={selectedSourceId}
+                disabled={sources.isPending || !!sources.error}
+                onChange={(e) => {
+                  handleResetScan();
+                  setSource(e.target.value);
+                }}
+              >
+                <option value="">{tr('gateSetup.selectSource')}</option>
+                {registeredSources.map((c) => (
+                  <option key={c.id} value={c.id}>
+                    {c.name} ({c.code})
+                  </option>
+                ))}
+              </select>
+            </label>
+            {sources.isPending && <p role="status">{tr('gateSetup.loadingSources')}</p>}
+            {sources.error && (
+              <p role="alert">
+                {userErrorMessage(sources.error)}{' '}
+                <button type="button" onClick={() => void sources.refetch()}>
+                  {tr('gateSetup.retry')}
+                </button>
+              </p>
+            )}
+            {!sources.isPending && !selectedSourceId && (
+              <>
+                <p role="status">
+                  {tr(registeredSources.length ? 'gateSetup.selectSource' : 'gateSetup.noSources')}
+                </p>
+                <button
+                  type="button"
+                  disabled={fallbackMutation.isPending}
+                  onClick={() => {
+                    stopCamera();
+                    fallbackMutation.mutate(scanGeneration.current);
+                  }}
+                >
+                  {tr('gateSetup.useQr')}
+                </button>
+              </>
+            )}
+          </div>
+        )}
         {/* Direction Switcher (IN vs OUT) */}
         <div className="flex items-center gap-3">
           <span className="text-xs font-bold uppercase tracking-wider text-slate-500">
@@ -739,7 +867,7 @@ function ScopedSecurityGateDeskView({
                 <p className="text-sm font-semibold text-slate-300">
                   {tr('common.webcam_not_active')}
                 </p>
-                {cameraError && (
+                {cameraError && !sources.isPending && !!selectedGateId && (
                   <div className="mt-2 max-w-sm space-y-2">
                     <p className="text-xs text-red-400">{localizeMessage(cameraError)}</p>
                     {lastDecision?.authorization !== 'DENIED' && (

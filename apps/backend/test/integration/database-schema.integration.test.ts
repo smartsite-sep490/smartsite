@@ -122,6 +122,8 @@ camera|name|varchar|NO|255|||
 camera|status|camera_status|NO||||'ACTIVE'::camera_status
 camera|created_at|timestamptz|NO||||now()
 camera|configuration_version|int8|NO||64|0|1
+camera|type|varchar|NO|4|||
+camera|gate_id|uuid|YES||||
 camera_observation_region|id|uuid|NO||||
 camera_observation_region|camera_id|uuid|NO||||
 camera_observation_region|zone_id|uuid|NO||||
@@ -130,6 +132,7 @@ camera_observation_region|coordinate_space|varchar|NO|32|||'NORMALIZED_0_1'::cha
 camera_observation_region|version|int4|NO||32|0|1
 camera_observation_region|is_active|bool|NO||||true
 camera_observation_region|created_at|timestamptz|NO||||now()
+camera_observation_region|site_id|uuid|NO||||
 safety_alert|id|uuid|NO||||
 safety_alert|site_id|uuid|NO||||
 safety_alert|zone_id|uuid|YES||||

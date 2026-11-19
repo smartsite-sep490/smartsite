@@ -1,3 +1,5 @@
+import { SiteGatesPanel } from './SiteGatesPanel';
+import { useGateCatalog } from '../../access/useGateCatalog';
 import { localizedLabel } from '../../../i18n/labels';
 import { userErrorMessage } from '../../../i18n/messages';
 import { translate as tr } from '../../../i18n';
@@ -82,7 +84,10 @@ function formatParticipationDate(iso: string, locale: string): string {
 }
 
 /** Real-time participation status */
-function getParticipationStatus(validFrom: string, validUntil: string | null): 'ACTIVE' | 'UPCOMING' | 'EXPIRED' {
+function getParticipationStatus(
+  validFrom: string,
+  validUntil: string | null,
+): 'ACTIVE' | 'UPCOMING' | 'EXPIRED' {
   const now = Date.now();
   const start = new Date(validFrom).getTime();
   const end = validUntil ? new Date(validUntil).getTime() : null;
@@ -224,6 +229,8 @@ export function SiteOperationsSetupView({
   const [cameraCode, setCameraCode] = useState('');
   const [cameraName, setCameraName] = useState('');
   const [externalId, setExternalId] = useState('');
+  const [cameraType, setCameraType] = useState<'ZONE' | 'GATE'>('ZONE');
+  const [cameraGate, setCameraGate] = useState('');
 
   // Collapsible add-form panels
   const [showZoneForm, setShowZoneForm] = useState(false);
@@ -254,6 +261,16 @@ export function SiteOperationsSetupView({
   const canManage =
     !!siteId && user?.roleAssignments.some((r) => r.role === 'SITE_MANAGER' && r.siteId === siteId);
 
+  const gateCatalog = useGateCatalog(
+    client,
+    apiUrl,
+    user?.id ?? '',
+    participationOnly ? undefined : (accessToken ?? undefined),
+    siteId,
+  );
+  const allGates = gateCatalog.error ? [] : (gateCatalog.data?.items ?? []);
+  const activeGates = allGates.filter((g) => g.status === 'ACTIVE');
+  const selectedCameraGate = activeGates.some((g) => g.id === cameraGate) ? cameraGate : '';
   const zones = useQuery({
     queryKey: [...key, siteId, 'zones'],
     queryFn: () => client.listZones(accessToken!, siteId, { limit: 100 }),
@@ -304,7 +321,13 @@ export function SiteOperationsSetupView({
 
   const createCamera = useMutation({
     mutationFn: () =>
-      client.createCamera(accessToken!, siteId, { code: cameraCode, name: cameraName, externalId }),
+      client.createCamera(accessToken!, siteId, {
+        code: cameraCode,
+        name: cameraName,
+        ...(cameraType === 'GATE'
+          ? { type: 'GATE' as const, gateId: selectedCameraGate }
+          : { type: 'ZONE' as const, gateId: null, externalId }),
+      }),
     onSuccess: async () => {
       setCameraCode('');
       setCameraName('');
@@ -314,6 +337,17 @@ export function SiteOperationsSetupView({
     },
   });
 
+  const sourceStatus = useMutation({
+    mutationFn: (camera: import('@smartsite/contracts').CameraResponse) =>
+      client.setCameraStatus(accessToken!, siteId, camera.id, {
+        expectedConfigurationVersion: camera.configurationVersion,
+        status: camera.status === 'ACTIVE' ? 'INACTIVE' : 'ACTIVE',
+      }),
+    onSuccess: async () => {
+      await invalidate();
+      await cache.invalidateQueries({ queryKey: ['gate-sources', apiUrl] });
+    },
+  });
   const submit = (e: FormEvent, mutation: { mutate(): void }) => {
     e.preventDefault();
     if (canManage) mutation.mutate();
@@ -390,6 +424,18 @@ export function SiteOperationsSetupView({
             </label>
           </div>
         </div>
+      )}
+
+      {!participationOnly && (
+        <SiteGatesPanel
+          key={siteId}
+          client={client}
+          apiUrl={apiUrl}
+          token={accessToken!}
+          siteId={siteId}
+          sessionScope={user?.id ?? ''}
+          canManage={!!canManage}
+        />
       )}
 
       {/* ── Participating Contractors ───────────────────────── */}
@@ -553,7 +599,9 @@ export function SiteOperationsSetupView({
                           title={`${assignedZonesCount} ${t('siteOps.assignedZones')}`}
                         >
                           <IconShield className="w-3.5 h-3.5 text-[#F66B17]" />
-                          <span className="font-bold text-slate-800 font-mono">{assignedZonesCount}</span>
+                          <span className="font-bold text-slate-800 font-mono">
+                            {assignedZonesCount}
+                          </span>
                           <span className="text-slate-500">{t('siteOps.assignedZones')}</span>
                         </span>
 
@@ -565,7 +613,9 @@ export function SiteOperationsSetupView({
                           title={`${assignedWorkersCount} ${t('siteOps.assignedWorkers')}`}
                         >
                           <IconHardHat className="w-3.5 h-3.5 text-slate-400" />
-                          <span className="font-bold text-slate-800 font-mono">{assignedWorkersCount}</span>
+                          <span className="font-bold text-slate-800 font-mono">
+                            {assignedWorkersCount}
+                          </span>
                           <span className="text-slate-500">{t('siteOps.assignedWorkers')}</span>
                         </span>
                       </div>
@@ -798,6 +848,7 @@ export function SiteOperationsSetupView({
 
               {cameras.isPending && <CardSkeleton cols={3} />}
               {cameras.error && <ErrorBanner error={cameras.error} />}
+              {sourceStatus.error && <ErrorBanner error={sourceStatus.error} />}
 
               {cameras.data?.items && cameras.data.items.length > 0 && (
                 <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
@@ -819,6 +870,23 @@ export function SiteOperationsSetupView({
                           </span>
                         </div>
                         <p className="text-sm font-semibold text-slate-900">{c.name}</p>
+                        <p className="text-xs text-slate-600">
+                          {t(c.type === 'GATE' ? 'gateSetup.gate' : 'gateSetup.zone')}
+                          {c.type === 'GATE'
+                            ? ' / ' + (allGates.find((g) => g.id === c.gateId)?.name ?? '-')
+                            : ''}
+                        </p>
+                        {canManage && c.type === 'GATE' && (
+                          <button
+                            type="button"
+                            disabled={sourceStatus.isPending}
+                            onClick={() => sourceStatus.mutate(c)}
+                          >
+                            {t(
+                              c.status === 'ACTIVE' ? 'gateSetup.deactivate' : 'gateSetup.activate',
+                            )}
+                          </button>
+                        )}
                       </div>
                     </div>
                   ))}
@@ -850,6 +918,33 @@ export function SiteOperationsSetupView({
                   <p className="text-xs font-bold text-[#F66B17] uppercase tracking-widest mb-2">
                     {t('siteOps.createCamera')}
                   </p>
+                  <label>
+                    {t('gateSetup.type')}{' '}
+                    <select
+                      value={cameraType}
+                      onChange={(e) => setCameraType(e.target.value as 'ZONE' | 'GATE')}
+                    >
+                      <option value="ZONE">{t('gateSetup.zone')}</option>
+                      <option value="GATE">{t('gateSetup.gate')}</option>
+                    </select>
+                  </label>
+                  {cameraType === 'GATE' && (
+                    <label>
+                      {t('gateSetup.title')}
+                      <select
+                        required
+                        value={selectedCameraGate}
+                        onChange={(e) => setCameraGate(e.target.value)}
+                      >
+                        <option value="">{t('gateSetup.select')}</option>
+                        {activeGates.map((g) => (
+                          <option key={g.id} value={g.id}>
+                            {g.name}
+                          </option>
+                        ))}
+                      </select>
+                    </label>
+                  )}
                   <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                     <div className="space-y-1">
                       <label className="text-xs font-bold text-slate-700">
@@ -879,23 +974,30 @@ export function SiteOperationsSetupView({
                         onChange={(e) => setCameraName(e.target.value)}
                       />
                     </div>
-                    <div className="space-y-1">
-                      <label className="text-xs font-bold text-slate-700">
-                        {t('siteOps.externalIdPlaceholder')}
-                      </label>
-                      <input
-                        aria-label={t('siteOps.externalIdPlaceholder')}
-                        placeholder={t('siteOps.externalIdPlaceholder')}
-                        className={fieldInput}
-                        required
-                        maxLength={128}
-                        value={externalId}
-                        onChange={(e) => setExternalId(e.target.value)}
-                      />
-                    </div>
+                    {cameraType === 'ZONE' && (
+                      <div className="space-y-1">
+                        <label className="text-xs font-bold text-slate-700">
+                          {t('siteOps.externalIdPlaceholder')}
+                        </label>
+                        <input
+                          aria-label={t('siteOps.externalIdPlaceholder')}
+                          placeholder={t('siteOps.externalIdPlaceholder')}
+                          className={fieldInput}
+                          required
+                          maxLength={128}
+                          value={externalId}
+                          onChange={(e) => setExternalId(e.target.value)}
+                        />
+                      </div>
+                    )}
                   </div>
                   <div className="flex justify-end pt-1">
-                    <button className={primaryBtn} disabled={createCamera.isPending}>
+                    <button
+                      className={primaryBtn}
+                      disabled={
+                        createCamera.isPending || (cameraType === 'GATE' && !selectedCameraGate)
+                      }
+                    >
                       <IconPlus className="w-3.5 h-3.5" />
                       <span>{t('siteOps.createCamera')}</span>
                       <span className="w-5 h-5 rounded-full bg-white/20 flex items-center justify-center group-hover:translate-x-0.5 transition-transform">

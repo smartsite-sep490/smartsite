@@ -1,3 +1,4 @@
+import { installGateSchemaForHistoricalFixture } from '../support/historical-gate-schema.js';
 import 'reflect-metadata';
 import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
@@ -50,7 +51,8 @@ test('reference issuance retains unconfirmed history and refuses stale context i
     );
     const [last] = await db.query('SELECT name FROM migrations ORDER BY id DESC LIMIT 1');
     assert.equal(last.name, 'CameraConfigurationReferences1793491200000');
-    await db.undoLastMigration(); // Empty rollback, then upgrade with existing baseline rows.
+    await db.undoLastMigration();
+    await installGateSchemaForHistoricalFixture(db); // Empty rollback, then upgrade with existing baseline rows.
     const siteId = randomUUID(),
       cameraId = randomUUID(),
       actorId = randomUUID();
@@ -65,6 +67,8 @@ test('reference issuance retains unconfirmed history and refuses stale context i
       passwordHash: 'synthetic-unused-hash',
     });
     await db.getRepository(CameraEntity).insert({
+      type: 'ZONE' as const,
+      gateId: null,
       id: cameraId,
       siteId,
       externalId,
@@ -260,6 +264,8 @@ test('delayed older source image cannot replace a newer committed current view',
       passwordHash: 'SYNTHETIC_NOT_USABLE',
     });
     await db.getRepository(CameraEntity).insert({
+      type: 'ZONE' as const,
+      gateId: null,
       id: cameraId,
       siteId,
       externalId: cameraId,

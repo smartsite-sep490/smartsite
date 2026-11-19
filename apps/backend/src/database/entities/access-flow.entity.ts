@@ -1,3 +1,5 @@
+import { CameraEntity } from './camera.entity.js';
+import { GateEntity } from './gate.entity.js';
 import { Check, Column, CreateDateColumn, Entity, ForeignKey, Index, PrimaryColumn } from 'typeorm';
 import { SiteEntity } from './site.entity.js';
 import { WorkerEntity } from './worker.entity.js';
@@ -34,12 +36,25 @@ import type { VisitorAttendanceResponse } from '@smartsite/contracts';
   "direction IN ('IN','OUT') AND method IN ('FACE','QR','MANUAL') AND identity_status IN ('MATCHED','UNKNOWN','LOW_CONFIDENCE','QUALITY_FAILED','UNAVAILABLE') AND authorization_status IN ('ALLOWED','DENIED','REVIEW_REQUIRED','UNAVAILABLE') AND schedule_status IN ('SCHEDULED','OUTSIDE_SHIFT','NO_SCHEDULE','NOT_APPLICABLE') AND status IN ('PENDING','READY','DENIED','USED','EXPIRED')",
 )
 @Index('idx_attempt_site_created', ['siteId', 'createdAt'])
+@ForeignKey(() => GateEntity, ['gateId', 'siteId'], ['id', 'siteId'], {
+  name: 'fk_attempt_gate_site',
+  onDelete: 'RESTRICT',
+})
+@ForeignKey(
+  () => CameraEntity,
+  ['sourceCameraId', 'gateId', 'siteId'],
+  ['id', 'gateId', 'siteId'],
+  { name: 'fk_attempt_source_camera', onDelete: 'RESTRICT' },
+)
+@Check('ck_attempt_face_source', "method <> 'FACE' OR source_camera_id IS NOT NULL")
 export class AccessAttemptEntity {
+  @Column({ name: 'source_camera_id', type: 'uuid', nullable: true }) sourceCameraId!:
+    string | null;
   @PrimaryColumn({ type: 'uuid', primaryKeyConstraintName: 'pk_access_attempt_id' }) id!: string;
   @Column({ name: 'site_id', type: 'uuid' })
   @ForeignKey(() => SiteEntity, { name: 'fk_attempt_site', onDelete: 'RESTRICT' })
   siteId!: string;
-  @Column({ name: 'gate_id', type: 'varchar', length: 64 }) gateId!: string;
+  @Column({ name: 'gate_id', type: 'uuid' }) gateId!: string;
   @Column({ name: 'operator_id', type: 'uuid' })
   @ForeignKey(() => UserEntity, { name: 'fk_attempt_operator', onDelete: 'RESTRICT' })
   operatorId!: string;

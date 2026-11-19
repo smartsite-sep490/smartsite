@@ -41,6 +41,8 @@ vi.mock('./FourSourceWall', () => ({
 }));
 const site = '11111111-1111-4111-8111-111111111111';
 const camera = {
+  type: 'ZONE' as const,
+  gateId: null,
   id: '22222222-2222-4222-8222-222222222222',
   siteId: site,
   status: 'ACTIVE',

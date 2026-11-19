@@ -75,6 +75,8 @@ function makeOpenRequest(
 
 function makeCamera(overrides: Partial<CameraResponse> = {}): CameraResponse {
   return {
+    type: 'ZONE' as const,
+    gateId: null,
     id: 'cam-1',
     siteId: 'site-a',
     externalId: 'rtsp-cam-01',

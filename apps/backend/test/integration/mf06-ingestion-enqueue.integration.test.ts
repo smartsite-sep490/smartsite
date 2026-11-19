@@ -97,6 +97,8 @@ async function setupInfrastructure(manager: EntityManager): Promise<Infrastructu
   ]);
 
   await manager.getRepository(CameraEntity).insert({
+    type: 'ZONE' as const,
+    gateId: null,
     id: cameraId,
     siteId,
     externalId,
@@ -135,6 +137,7 @@ async function setupInfrastructure(manager: EntityManager): Promise<Infrastructu
 
   await manager.getRepository(CameraObservationRegionEntity).insert([
     {
+      siteId: siteId,
       id: region1Id,
       cameraId,
       zoneId: zone1Id,
@@ -144,6 +147,7 @@ async function setupInfrastructure(manager: EntityManager): Promise<Infrastructu
       isActive: true,
     },
     {
+      siteId: siteId,
       id: region2Id,
       cameraId,
       zoneId: zone2Id,
@@ -1000,7 +1004,7 @@ describe('MF06 Ingestion Enqueue Service Integration Tests', () => {
     assert.equal(totalJobs, 1, 'Total jobs in database must never exceed cap 1');
   });
 
-  it('Case 13: Camera reassignment while paused after locked first resolve waits, then initial context/request old Site preserved', async () => {
+  it('Case 13: cross-Site Camera rebinding waits for ingestion and is rejected while the original context is preserved', async () => {
     const config = createTestConfig({
       MF06_ENQUEUE_ENABLED: 'true',
       MF06_ENQUEUE_MAX_OUTSTANDING: '100',
@@ -1059,8 +1063,14 @@ describe('MF06 Ingestion Enqueue Service Integration Tests', () => {
     await updateRunner.connect();
 
     let updateCompleted = false;
-    const updatePromise = updateRunner
-      .query('UPDATE camera SET site_id = $1 WHERE id = $2', [infra.site2Id, infra.cameraId])
+    const updatePromise = assert
+      .rejects(
+        updateRunner.query('UPDATE camera SET site_id = $1 WHERE id = $2', [
+          infra.site2Id,
+          infra.cameraId,
+        ]),
+        { code: '23503' },
+      )
       .then(() => {
         updateCompleted = true;
       });

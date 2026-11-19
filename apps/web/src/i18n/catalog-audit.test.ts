@@ -5,7 +5,6 @@ import { pathToFileURL } from 'node:url';
 import ts from 'typescript';
 import en from './locales/en.json';
 import { hasRegisteredFeatureKey, registerFeatureCatalog } from './feature-catalog-registry';
-import { SITE_GATES } from '@smartsite/contracts/gates';
 
 function readStringMap(
   node: ts.Expression,
@@ -138,8 +137,14 @@ function registerStaticCatalogFromAst(filename: string, raw: string): boolean {
   return true;
 }
 
-it('includes the shared gate catalog in the UI translations', () => {
-  for (const gate of SITE_GATES) expect(`gates.${gate.id}` in en, gate.id).toBe(true);
+it('includes Gate management labels while Gate names come from Backend', () => {
+  for (const key of [
+    'gateSetup.title',
+    'gateSetup.empty',
+    'gateSetup.source',
+    'gateSetup.noSources',
+  ])
+    expect(key in en).toBe(true);
 });
 
 it('falls back to the dynamic loader unless all registerFeatureCatalog calls in a module resolve statically', async () => {

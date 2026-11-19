@@ -36,6 +36,8 @@ export async function storeVersionFixture(
     .getRepository(SiteEntity)
     .insert({ id: siteId, code: siteId, name: 'Synthetic format site' });
   await db.getRepository(CameraEntity).insert({
+    type: 'ZONE' as const,
+    gateId: null,
     id: cameraId,
     siteId,
     externalId: cameraId,

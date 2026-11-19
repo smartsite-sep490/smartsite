@@ -39,7 +39,7 @@ test('application status separates desired config, worker receipts, lease and ca
       siteId,
     ]);
     await db.query(
-      "INSERT INTO camera(id,site_id,external_id,code,name) VALUES($1,$2,$1::uuid::text,$1::uuid::text,'Status camera')",
+      "INSERT INTO camera(type,id,site_id,external_id,code,name) VALUES('ZONE',$1,$2,$1::uuid::text,$1::uuid::text,'Status camera')",
       [cameraId, siteId],
     );
     await t.test('no enrolled worker or receipt is unconfirmed and scope is exact', async () => {

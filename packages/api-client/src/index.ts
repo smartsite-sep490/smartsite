@@ -191,6 +191,15 @@ export { LEAVE_NOTICE_HOURS } from '@smartsite/contracts/leave-notice';
 export { scheduledShiftWindow } from '@smartsite/contracts/scheduled-shift';
 export type { LeaveNoticeType } from '@smartsite/contracts/leave-notice';
 
+export type {
+  GateResponse,
+  GatePageResponse,
+  GateSourceResponse,
+  GateStatus,
+  CreateGateCommand,
+  UpdateGateCommand,
+  PublicGateResponse,
+} from '@smartsite/contracts';
 export type { TrackedEpisodeMediaResult } from './tracked-episode-media-response';
 export { readRecordedCameraVideo, MAX_RECORDED_VIDEO_BYTES } from './management';
 export type { RecordedCameraVideoOptions } from './management';

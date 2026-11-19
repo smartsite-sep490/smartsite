@@ -21,6 +21,8 @@ const ZONE_3_ID = 'cccccccc-cccc-4ccc-8ccc-ccccccccccc3';
 
 function makeCamera(configurationVersion = 4): CameraResponse {
   return {
+    type: 'ZONE' as const,
+    gateId: null,
     id: CAMERA_ID,
     siteId: SITE_ID,
     code: 'CAM-01',

@@ -269,7 +269,7 @@ async function fixture(personCount = 1) {
       recipient = randomUUID();
     await db.query('INSERT INTO site(id,code,name) VALUES($1::uuid,$1::text,$1::text)', [site]);
     await db.query(
-      'INSERT INTO camera(id,site_id,external_id,code,name) VALUES($1::uuid,$2,$1::text,$1::text,$1::text)',
+      `INSERT INTO camera(type,id,site_id,external_id,code,name) VALUES('ZONE',$1::uuid,$2,$1::text,$1::text,$1::text)`,
       [camera, site],
     );
     await db.query(
@@ -377,7 +377,7 @@ test('frame inbox groups three flagged people among ten and six PPE findings, wi
     otherEvent = randomUUID(),
     otherEpisode = randomUUID();
   await db.query(
-    'INSERT INTO camera(id,site_id,external_id,code,name) VALUES($1::uuid,$2,$1::text,$1::text,$1::text)',
+    "INSERT INTO camera(id,site_id,external_id,code,name,type) VALUES($1::uuid,$2,$1::text,$1::text,$1::text,'ZONE')",
     [otherCamera, f.sites[0]],
   );
   await db.query(

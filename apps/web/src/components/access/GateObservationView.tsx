@@ -1,11 +1,12 @@
 import { useManagementClient } from '../../features/auth/auth-session';
 import { userErrorMessage } from '../../i18n/messages';
-import { localizedLabel, localizedGateName } from '../../i18n/labels';
+import { localizedLabel } from '../../i18n/labels';
 import { translate as tr } from '../../i18n';
 import { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { useTranslation } from 'react-i18next';
-import { SITE_GATES } from '@smartsite/contracts/gates';
+import { useGateCatalog } from './useGateCatalog';
+import { GateCatalogNotice } from './GateCatalogNotice';
 import { uiLocale } from '../../i18n';
 import { IconAlertTriangle } from '../icons';
 
@@ -23,11 +24,15 @@ export function GateObservationView({
   const { t } = useTranslation();
   const locale = uiLocale();
   const client = useManagementClient(apiUrl);
-  const [gateId, setGateId] = useState<string>(SITE_GATES[0].id);
+  const catalog = useGateCatalog(client, apiUrl, sessionScope, token, siteId);
+  const gates = catalog.error ? [] : (catalog.data?.items ?? []);
+  const [requestedGate, setGateId] = useState('');
+  const gateId = gates.some((g) => g.id === requestedGate) ? requestedGate : (gates[0]?.id ?? '');
 
   const logs = useQuery({
     queryKey: ['gate-access-logs', apiUrl, sessionScope, siteId, gateId],
     queryFn: () => client.listGateAccessLogs(token, siteId, gateId),
+    enabled: !!gateId,
     refetchInterval: 15_000,
   });
 
@@ -55,9 +60,9 @@ export function GateObservationView({
               value={gateId}
               onChange={(e) => setGateId(e.target.value)}
             >
-              {SITE_GATES.map((g) => (
+              {gates.map((g) => (
                 <option key={g.id} value={g.id}>
-                  {localizedGateName(g.id)}
+                  {g.name}
                 </option>
               ))}
             </select>
@@ -65,7 +70,8 @@ export function GateObservationView({
         </div>
       </div>
 
-      {logs.isPending && (
+      <GateCatalogNotice query={catalog} />
+      {!!gateId && logs.isPending && (
         <div className="flex items-center gap-2 p-6 text-xs text-slate-500">
           <div className="h-3.5 w-3.5 border-2 border-[#F66B17] border-t-transparent rounded-full animate-spin" />
           <p role="status">{t('gateObservation.loading')}</p>

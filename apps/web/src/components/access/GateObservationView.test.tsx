@@ -1,4 +1,7 @@
 // @vitest-environment jsdom
+import { beforeEach } from 'vitest';
+import { mockGateCatalog } from './test-gate-catalog';
+beforeEach(mockGateCatalog);
 import { afterEach, expect, it, vi } from 'vitest';
 import { act, cleanup, render, screen } from '@testing-library/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
@@ -20,7 +23,7 @@ it('switches populated gate logs both ways without refetching or translating aut
         {
           id: 'qa-log',
           createdAt: '2026-10-16T08:00:00Z',
-          gateId: 'gate-north-01',
+          gateId: 'a1000000-0000-4000-8000-000000000001',
           direction: 'IN',
           workerId: 'worker',
           userId: 'user',
@@ -49,12 +52,12 @@ it('switches populated gate logs both ways without refetching or translating aut
   await act(async () => {
     await i18n.changeLanguage('vi');
   });
-  expect(screen.getByRole('option', { name: /Cổng 1 —/ })).toBeTruthy();
+  expect(screen.getByRole('option', { name: /Gate 1 —/ })).toBeTruthy();
   expect(screen.queryByText('ALLOWED')).toBeNull();
   expect(screen.queryByText('VALID_ASSIGNMENT')).toBeNull();
   expect(screen.getByText('Safety overview')).toBeTruthy();
   expect(screen.getByRole('combobox')).toBe(gate);
-  expect(gate.value).toBe('gate-north-01');
+  expect(gate.value).toBe('a1000000-0000-4000-8000-000000000001');
   expect(list).toHaveBeenCalledTimes(1);
   await act(async () => {
     await i18n.changeLanguage('en');

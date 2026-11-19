@@ -132,6 +132,8 @@ describe('zonePolygonAdapter', () => {
   describe('handleSaveSuccess', () => {
     it('updates local revision and configuration version on successful mutation', () => {
       const currentCamera = {
+        type: 'ZONE' as const,
+        gateId: null,
         id: 'cam-1',
         siteId: 'site-1',
         externalId: 'CAM-04',

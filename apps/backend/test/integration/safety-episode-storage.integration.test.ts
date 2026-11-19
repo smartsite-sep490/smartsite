@@ -46,7 +46,7 @@ test('same-site exact subject storage and revision acknowledgement preserve hist
       [site, other],
     );
     await runner.query(
-      'INSERT INTO camera(id,site_id,external_id,code,name) VALUES($1::uuid,$2::uuid,$1::text,$1::text,$1::text)',
+      `INSERT INTO camera(type,id,site_id,external_id,code,name) VALUES('ZONE',$1::uuid,$2::uuid,$1::text,$1::text,$1::text)`,
       [camera, site],
     );
     await runner.query(

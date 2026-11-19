@@ -48,6 +48,7 @@ export async function readIssuedCameraBundleInTransaction(
   try {
     const camera = await manager.getRepository(CameraEntity).findOneBy({ id: cameraId });
     if (!camera) missing();
+    if (camera.type === 'GATE') conflict('Gate Cameras have no monitoring configuration');
     if (camera.status !== CameraStatus.ACTIVE)
       conflict('Issued camera configuration is unavailable');
     const header = await manager.getRepository(CameraConfigurationBundleEntity).findOneBy({

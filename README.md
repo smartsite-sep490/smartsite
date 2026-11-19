@@ -74,6 +74,8 @@ infra/              Dockerfiles and local Compose configuration
 
 The current foundation contains shared infrastructure and the existing MF05/MF06 observation ingestion, Zone context and Safety evaluation modules. Further business modules are introduced together with reviewed domain workflows rather than as empty placeholders. See the [Backend guide](apps/backend/README.md) for module ownership and HTTP boundaries.
 
+Gate configuration and registered FACE sources for Site Manager/Security are documented in [Gate registry](docs/operations/gate-registry.md). The schema cutover accepts a clean target or validated legacy Zone cameras without Gate-flow history; ambiguous legacy data requires an explicit migration plan.
+
 ## Getting Started
 
 Shift template archival, data retention and manual checks are documented in [Shift archival (MF03/MF07)](docs/operations/shift-archival.md).

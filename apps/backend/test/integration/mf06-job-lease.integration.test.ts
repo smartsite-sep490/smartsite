@@ -85,6 +85,8 @@ async function createTestFixture(
     name: 'Synthetic Assessment Site',
   });
   await db.getRepository(CameraEntity).insert({
+    type: 'ZONE' as const,
+    gateId: null,
     id: cameraId,
     siteId,
     externalId,

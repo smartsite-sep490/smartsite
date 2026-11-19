@@ -36,6 +36,8 @@ async function fixture(ambiguous = false, invalidCanonicalHash = false) {
   const externalId = randomUUID();
   await db.getRepository(SiteEntity).insert({ id: siteId, code: siteId, name: 'Context Site' });
   await db.getRepository(CameraEntity).insert({
+    type: 'ZONE' as const,
+    gateId: null,
     id: cameraId,
     siteId,
     externalId,

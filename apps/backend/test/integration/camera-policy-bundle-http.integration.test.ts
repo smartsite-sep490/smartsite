@@ -1,3 +1,4 @@
+import { installGateSchemaForHistoricalFixture } from '../support/historical-gate-schema.js';
 import 'reflect-metadata';
 import { readIssuedCameraBundleInTransaction } from '../../src/modules/cameras/camera-configuration-bundle-reader.js';
 import assert from 'node:assert/strict';
@@ -38,13 +39,14 @@ const password = 'Synthetic_camera_password_123';
 let sourceSession = randomUUID();
 before(async () => {
   await owned.initialize();
+  await installGateSchemaForHistoricalFixture(db);
   hash = await hashPassword(password);
   await db.query(
     'INSERT INTO site(id,code,name) VALUES($1::uuid,$1::text,$1::text),($2::uuid,$2::text,$2::text)',
     [site, otherSite],
   );
   await db.query(
-    "INSERT INTO camera(id,site_id,external_id,code,name) VALUES($1,$2,'camera-a','SYNTHETIC','Synthetic camera')",
+    "INSERT INTO camera(type,id,site_id,external_id,code,name) VALUES('ZONE',$1,$2,'camera-a','SYNTHETIC','Synthetic camera')",
     [camera, site],
   );
   const config = createTestConfig({

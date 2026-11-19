@@ -15,6 +15,8 @@ const CAM_INACTIVE_ID = 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb';
 
 const CAMERA_ROWS: [CameraResponse, CameraResponse] = [
   {
+    type: 'ZONE' as const,
+    gateId: null,
     id: CAM_ACTIVE_ID,
     siteId: SITE_ID,
     code: 'CAM-01',
@@ -25,6 +27,8 @@ const CAMERA_ROWS: [CameraResponse, CameraResponse] = [
     createdAt: '2026-03-01T00:00:00.000Z',
   },
   {
+    type: 'ZONE' as const,
+    gateId: null,
     id: CAM_INACTIVE_ID,
     siteId: SITE_ID,
     code: 'CAM-02',

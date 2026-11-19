@@ -31,7 +31,7 @@ test('bootstrap never displaces current/expired/revoked owners and concurrent co
     );
     for (const camera of cameras)
       await db.query(
-        "INSERT INTO camera(id,site_id,external_id,code,name) VALUES($1,$2,$1::uuid::text,$1::uuid::text,'Synthetic bootstrap camera')",
+        "INSERT INTO camera(id,site_id,external_id,code,name,type) VALUES($1,$2,$1::uuid::text,$1::uuid::text,'Synthetic bootstrap camera','ZONE')",
         [camera, site],
       );
     const [camera, racing, rollback, inactive] = cameras as [string, string, string, string];

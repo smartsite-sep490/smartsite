@@ -126,6 +126,7 @@ export class CameraPpePolicyService {
             .getRepository(CameraEntity)
             .findOne({ where: { id: cameraId, siteId }, lock: { mode: 'pessimistic_write' } });
           if (!camera) missing();
+          if (camera.type === 'GATE') conflict('PPE policy is only available for ZONE Cameras');
           const [storage] = await tx.query(
             `SELECT EXISTS (SELECT 1 FROM pg_attribute
               WHERE attrelid = to_regclass('camera_configuration_bundle')

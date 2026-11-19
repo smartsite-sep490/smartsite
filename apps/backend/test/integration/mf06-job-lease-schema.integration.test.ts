@@ -46,6 +46,8 @@ test('claim targets the owned permanent schema instead of a same-session pg_temp
     name: 'Lease Schema Site',
   });
   await db.getRepository(CameraEntity).insert({
+    type: 'ZONE' as const,
+    gateId: null,
     id: cameraId,
     siteId,
     externalId: cameraId,

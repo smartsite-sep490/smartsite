@@ -65,6 +65,8 @@ test('identity FRAME digest retains historical Site scope and rejects contradict
       { id: otherSiteId, code: `S-${otherSiteId}`, name: 'Other Site' },
     ]);
     await dataSource.getRepository(CameraEntity).insert({
+      type: 'ZONE' as const,
+      gateId: null,
       id: cameraId,
       siteId,
       externalId: raw.cameraExternalId,

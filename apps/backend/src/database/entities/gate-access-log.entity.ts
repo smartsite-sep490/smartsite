@@ -1,3 +1,4 @@
+import { GateEntity } from './gate.entity.js';
 import { Check, Column, CreateDateColumn, Entity, ForeignKey, Index, PrimaryColumn } from 'typeorm';
 import { SiteEntity } from './site.entity.js';
 import { UserEntity } from './user.entity.js';
@@ -8,12 +9,16 @@ import type { GateAccessLogResponse } from '@smartsite/contracts';
 @Index('idx_gate_access_log_site_gate_time', ['siteId', 'gateId', 'createdAt', 'id'])
 @Check('chk_gate_access_log_direction', "direction IN ('IN', 'OUT')")
 @Check('chk_gate_access_log_method', "method IN ('FACE','QR')")
+@ForeignKey(() => GateEntity, ['gateId', 'siteId'], ['id', 'siteId'], {
+  name: 'fk_gate_log_gate_site',
+  onDelete: 'RESTRICT',
+})
 export class GateAccessLogEntity {
   @PrimaryColumn({ type: 'uuid' }) id!: string;
   @Column({ name: 'site_id', type: 'uuid' })
   @ForeignKey(() => SiteEntity, { name: 'fk_gate_access_log_site', onDelete: 'RESTRICT' })
   siteId!: string;
-  @Column({ name: 'gate_id', type: 'varchar', length: 64 }) gateId!: string;
+  @Column({ name: 'gate_id', type: 'uuid' }) gateId!: string;
   @Column({ name: 'operator_user_id', type: 'uuid' })
   @ForeignKey(() => UserEntity, { name: 'fk_gate_access_log_operator', onDelete: 'RESTRICT' })
   operatorUserId!: string;

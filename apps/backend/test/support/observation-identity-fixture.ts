@@ -53,6 +53,8 @@ export async function observationIdentityFixture() {
     .getRepository(SiteEntity)
     .insert([siteId, otherSiteId].map((id) => ({ id, code: `S-${id}`, name: 'Synthetic Site' })));
   await dataSource.getRepository(CameraEntity).insert({
+    type: 'ZONE' as const,
+    gateId: null,
     id: cameraId,
     siteId,
     externalId: raw.cameraExternalId,

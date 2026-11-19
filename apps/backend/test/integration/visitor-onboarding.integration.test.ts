@@ -1,3 +1,4 @@
+import { seedGateFixture, cleanupGateFixture } from '../support/gate-fixture.js';
 import 'reflect-metadata';
 import assert from 'node:assert/strict';
 import { randomBytes, randomUUID } from 'node:crypto';
@@ -39,7 +40,7 @@ test('new Site Manager can use the supplied password for visitor workflows and v
       fullName: `Synthetic visitor ${i}`,
       identityNumber: String(i + 1).padStart(12, '0'),
     })),
-    gateId: 'gate-north-01',
+    gateId: 'a1000000-0000-4000-8000-000000000001',
     validFrom: new Date(Date.now() - 60_000).toISOString(),
     validUntil: new Date(Date.now() + 3600_000).toISOString(),
   };
@@ -49,6 +50,7 @@ test('new Site Manager can use the supplied password for visitor workflows and v
       siteId,
       'Synthetic onboarding site',
     ]);
+    await seedGateFixture(dataSource, siteId);
     const account = await users.create({
       username: `manager-${randomUUID()}`,
       displayName: 'Synthetic Site Manager',
@@ -164,6 +166,8 @@ test('new Site Manager can use the supplied password for visitor workflows and v
       );
       await dataSource.query('DELETE FROM visitor_visit WHERE site_id=$1', [siteId]);
       await dataSource.query('DELETE FROM app_user WHERE id=ANY($1)', [userIds]);
+
+      await cleanupGateFixture(dataSource, [siteId]);
       await dataSource.query('DELETE FROM site WHERE id=$1', [siteId]);
     } finally {
       await dataSource.destroy();

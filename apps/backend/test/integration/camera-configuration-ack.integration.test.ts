@@ -43,7 +43,7 @@ test('configuration ACK requires a live server-issued generation and exact immut
       siteId,
     ]);
     await db.query(
-      "INSERT INTO camera(id,site_id,external_id,code,name) VALUES($1,$2,$1::uuid::text,$1::uuid::text,'ACK test camera')",
+      "INSERT INTO camera(type,id,site_id,external_id,code,name) VALUES('ZONE',$1,$2,$1::uuid::text,$1::uuid::text,'ACK test camera')",
       [cameraId, siteId],
     );
     const generation = await provisionCameraWorkerGeneration(db, cameraId, [cameraId], 60000);
@@ -232,7 +232,7 @@ test('configuration ACK requires a live server-issued generation and exact immut
       // Separate camera keeps the future-dated fixture's immutable history intact.
       const otherCamera = randomUUID();
       await db.query(
-        "INSERT INTO camera(id,site_id,external_id,code,name) VALUES($1,$2,$1::uuid::text,$1::uuid::text,'Retired view camera')",
+        "INSERT INTO camera(type,id,site_id,external_id,code,name) VALUES('ZONE',$1,$2,$1::uuid::text,$1::uuid::text,'Retired view camera')",
         [otherCamera, siteId],
       );
       const current = await provisionCameraWorkerGeneration(db, otherCamera, [otherCamera], 60000);

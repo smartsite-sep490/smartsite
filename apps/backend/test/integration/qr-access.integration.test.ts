@@ -1,3 +1,4 @@
+import { seedGateFixture, cleanupGateFixture, sourceForGate } from '../support/gate-fixture.js';
 import { VisitorEmailService } from '../../src/modules/workforce/access/visitor-email.service.js';
 import type {
   VerifyVisitorQrCommand,
@@ -37,6 +38,7 @@ import { createTestConfig } from '../support/config.js';
 import { cleanupSiteAccess } from '../support/cleanup-site-access.js';
 import { assignTestShift } from '../support/assigned-shift.js';
 import { approvedWorkerDocuments } from '../support/approved-worker-documents.js';
+
 test('real PostgreSQL visitor approval, group counts, expiring QR, replay and worker fallback authorization', async () => {
   await dataSource.initialize();
   const sites: [string, string, string] = [randomUUID(), randomUUID(), randomUUID()];
@@ -61,7 +63,7 @@ test('real PostgreSQL visitor approval, group counts, expiring QR, replay and wo
   const participationId = randomUUID(),
     assignmentId = randomUUID();
   const service = new QrAccessService(dataSource, undefined, undefined, createTestConfig());
-  const gateId = 'gate-north-01';
+  const gateId = 'a1000000-0000-4000-8000-000000000001';
   const registration = {
     requestId: randomUUID(),
     accessKey: 'b'.repeat(64),
@@ -84,6 +86,7 @@ test('real PostgreSQL visitor approval, group counts, expiring QR, replay and wo
   try {
     for (const id of sites)
       await dataSource.getRepository(SiteEntity).save({ id, code: id, name: 'Synthetic QR site' });
+    await seedGateFixture(dataSource, siteId);
     for (const id of users)
       await dataSource.getRepository(UserEntity).save({
         id,
@@ -159,7 +162,9 @@ test('real PostgreSQL visitor approval, group counts, expiring QR, replay and wo
       service.previewVisitorQr(security, otherSiteId, gateId, { token: pass.token }),
     );
     await assert.rejects(
-      service.previewVisitorQr(security, siteId, 'gate-west-02', { token: pass.token }),
+      service.previewVisitorQr(security, siteId, 'a1000000-0000-4000-8000-000000000002', {
+        token: pass.token,
+      }),
     );
     const attendees = preview.visit
       .members!.slice(0, 18)
@@ -198,6 +203,12 @@ test('real PostgreSQL visitor approval, group counts, expiring QR, replay and wo
       service.visitorGate(security, siteId, gateId, entry),
     ]);
     assert.equal(results[0].id, results[1].id);
+    assert.equal(results[0].gateId, gateId);
+    assert.equal(
+      (await dataSource.getRepository(GateEventEntity).findOneByOrFail({ id: results[0].id }))
+        .gateName,
+      'Gate 1',
+    );
     assert.equal(results[0].count, 18);
     assert.equal(results[0].visit.enteredCount, 18);
     assert.equal(results[0].visit.presence, 'INSIDE');
@@ -559,7 +570,11 @@ test('real PostgreSQL visitor approval, group counts, expiring QR, replay and wo
     );
     const assigned = await assignTestShift(dataSource, siteId, workerId);
     // Each gate accepts its own QR fallback without any per-gate Worker grant.
-    for (const entryGate of ['gate-north-01', 'gate-west-02', 'gate-logistics-03']) {
+    for (const entryGate of [
+      'a1000000-0000-4000-8000-000000000001',
+      'a1000000-0000-4000-8000-000000000002',
+      'a1000000-0000-4000-8000-000000000003',
+    ]) {
       const session = await service.cameraFallback(security, siteId, entryGate, {
         direction: 'IN',
         reason: 'CAMERA_UNAVAILABLE',
@@ -681,7 +696,7 @@ test('real PostgreSQL visitor approval, group counts, expiring QR, replay and wo
       /does not belong/,
     );
     await assert.rejects(
-      service.workerGate(security, siteId, 'gate-west-02', scan),
+      service.workerGate(security, siteId, 'a1000000-0000-4000-8000-000000000002', scan),
       /does not belong/,
     );
     await assert.rejects(service.workerGate(security, otherSiteId, gateId, scan));
@@ -725,6 +740,7 @@ test('real PostgreSQL visitor approval, group counts, expiring QR, replay and wo
           actor: operator,
           siteId,
           gateId,
+          sourceCameraId: method === 'FACE' ? sourceForGate(gateId) : undefined,
           direction,
           method,
           workerId,
@@ -907,6 +923,8 @@ test('real PostgreSQL visitor approval, group counts, expiring QR, replay and wo
     ]);
     await dataSource.query('DELETE FROM contractor WHERE id = $1', [contractorId]);
     await dataSource.query('DELETE FROM app_user WHERE id = ANY($1)', [users]);
+
+    await cleanupGateFixture(dataSource, sites);
     await dataSource.query('DELETE FROM site WHERE id = ANY($1)', [sites]);
     await dataSource.destroy();
   }

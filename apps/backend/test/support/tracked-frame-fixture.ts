@@ -21,7 +21,7 @@ export async function seedTrackedFrameFixture(
     [siteId],
   );
   await db.query(
-    "INSERT INTO camera(id,site_id,external_id,code,name) VALUES($1,$2,$1::uuid::text,$1::uuid::text,'Synthetic staging camera')",
+    "INSERT INTO camera(type,id,site_id,external_id,code,name) VALUES('ZONE',$1,$2,$1::uuid::text,$1::uuid::text,'Synthetic staging camera')",
     [cameraId, siteId],
   );
   const generation = await provisionCameraWorkerGeneration(db, cameraId, [cameraId], 120000);
@@ -63,7 +63,7 @@ export async function seedTrackedFrameFixture(
     );
     for (const issuedRegionId of [regionId, randomUUID()]) {
       await db.query(
-        'INSERT INTO camera_observation_region(id,camera_id,zone_id,polygon) VALUES($1,$2,$3,$4::jsonb)',
+        'INSERT INTO camera_observation_region(site_id,id,camera_id,zone_id,polygon) VALUES((SELECT site_id FROM camera WHERE id=$2),$1,$2,$3,$4::jsonb)',
         [issuedRegionId, cameraId, zone.id, JSON.stringify(polygon)],
       );
       await db.query(

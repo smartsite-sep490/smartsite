@@ -1,3 +1,4 @@
+import { seedGateFixture, cleanupGateFixture, sourceForGate } from '../support/gate-fixture.js';
 import 'reflect-metadata';
 import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
@@ -61,10 +62,11 @@ test('ERD: bounded permissions, gate confirmation, temporary passage and attenda
     setup = new SiteAccessSetupService(dataSource),
     access = new QrAccessService(dataSource),
     attendance = new AttendanceService(dataSource);
-  const gateId = 'gate-north-01';
+  const gateId = 'a1000000-0000-4000-8000-000000000001';
   try {
     for (const id of [siteId, otherSiteId])
       await dataSource.getRepository(SiteEntity).save({ id, code: id, name: 'Synthetic ERD site' });
+    await seedGateFixture(dataSource, siteId);
     for (const id of users)
       await dataSource.getRepository(UserEntity).save({
         id,
@@ -240,6 +242,7 @@ test('ERD: bounded permissions, gate confirmation, temporary passage and attenda
     );
     const unknown = await dataSource.transaction((m) =>
       access.recordAttempt(m, {
+        sourceCameraId: sourceForGate(gateId),
         actor: security,
         siteId,
         gateId,
@@ -464,6 +467,8 @@ test('ERD: bounded permissions, gate confirmation, temporary passage and attenda
     await dataSource.getRepository(ZoneEntity).delete(zoneId);
     await dataSource.getRepository(UserRoleAssignmentEntity).delete({ siteId });
     await dataSource.getRepository(UserEntity).delete(users);
+
+    await cleanupGateFixture(dataSource, [siteId, otherSiteId]);
     await dataSource.getRepository(SiteEntity).delete([siteId, otherSiteId]);
     await dataSource.destroy();
   }

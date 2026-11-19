@@ -60,6 +60,8 @@ async function fixture(configOverrides: Record<string, unknown> = {}) {
     .getRepository(SiteEntity)
     .insert({ id: siteId, code: siteId, name: 'Synthetic projection Site' });
   await db.getRepository(CameraEntity).insert({
+    type: 'ZONE' as const,
+    gateId: null,
     id: cameraId,
     siteId,
     externalId: cameraId,
@@ -76,6 +78,7 @@ async function fixture(configOverrides: Record<string, unknown> = {}) {
     requiredPpe: ['HARD_HAT', 'SAFETY_VEST'],
   });
   await db.getRepository(CameraObservationRegionEntity).insert({
+    siteId: siteId,
     id: regionId,
     cameraId,
     zoneId,

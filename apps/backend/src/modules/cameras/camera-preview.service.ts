@@ -87,6 +87,7 @@ export class CameraPreviewService implements OnModuleDestroy {
   private async camera(siteId: string, cameraId: string) {
     const camera = await this.cameras.get(siteId, cameraId);
     if (camera.siteId.toLowerCase() !== siteId || camera.id.toLowerCase() !== cameraId) missing();
+    if (camera.type === 'GATE') unavailable();
     if (camera.status !== CameraStatus.ACTIVE) unavailable();
     return camera;
   }

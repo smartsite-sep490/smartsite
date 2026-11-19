@@ -57,7 +57,7 @@ test('manual RESOLVE/CLEAR revise only the exact episode; retries and failed dec
     [worker, site],
   );
   await db.query(
-    'INSERT INTO camera(id,site_id,external_id,code,name) VALUES($1::uuid,$2,$1::text,$1::text,$1::text)',
+    `INSERT INTO camera(type,id,site_id,external_id,code,name) VALUES('ZONE',$1::uuid,$2,$1::text,$1::text,$1::text)`,
     [camera, site],
   );
   await db.query(

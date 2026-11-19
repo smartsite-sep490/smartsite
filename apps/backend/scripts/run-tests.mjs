@@ -10,6 +10,7 @@ for (const key of [
   ...Object.keys(validateEnvironment({ NODE_ENV: 'test' })),
   'DIRECT_URL',
   'DATABASE_URL_UNPOOLED',
+  'OPENAI_API_KEY',
   ...Object.keys(process.env).filter((key) => key.startsWith('PG')),
 ]) {
   if (key !== 'NODE_ENV') delete process.env[key];

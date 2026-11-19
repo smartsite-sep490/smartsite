@@ -26,7 +26,6 @@ import type {
   WorkerQrVerificationCommand,
   VisitorGateCommand,
 } from '@smartsite/contracts';
-import { SITE_GATES } from '@smartsite/contracts';
 const trim = ({ value }: { value: unknown }) => (typeof value === 'string' ? value.trim() : value);
 const visitorToken = ({ value }: { value: unknown }) =>
   typeof value === 'string'
@@ -79,7 +78,7 @@ export class RegisterVisitCommand implements CreateVisitCommand {
   @ValidateNested({ each: true })
   @Type(() => VisitorMemberCommand)
   members?: VisitorMemberCommand[];
-  @IsIn(SITE_GATES.map((g) => g.id)) gateId!: string;
+  @IsUUID() gateId!: string;
   @IsDateString({ strict: true }) @Matches(/(Z|[+-]\d{2}:\d{2})$/) validFrom!: string;
   @IsDateString({ strict: true }) @Matches(/(Z|[+-]\d{2}:\d{2})$/) validUntil!: string;
   @IsOptional()

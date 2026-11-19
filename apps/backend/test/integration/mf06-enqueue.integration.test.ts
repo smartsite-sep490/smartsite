@@ -33,7 +33,7 @@ before(async () => {
   await isolated.initialize();
 });
 
-it('committed raw event without requests cannot be backfilled from a reassigned current Camera', async () => {
+it('committed raw event cannot be backfilled after Camera deactivation and cross-Site rebinding is rejected', async () => {
   const service = new Mf06EnqueueService(db);
   let infra!: InfrastructureFixture;
   let event!: AiObservationEventEntity;
@@ -48,7 +48,13 @@ it('committed raw event without requests cannot be backfilled from a reassigned 
   await db
     .getRepository(SiteEntity)
     .insert({ id: replacementSite, code: replacementSite, name: 'Synthetic reassignment' });
-  await db.getRepository(CameraEntity).update(infra.cameraId, { siteId: replacementSite });
+  await assert.rejects(
+    db.getRepository(CameraEntity).update(infra.cameraId, { siteId: replacementSite }),
+    { code: '23503' },
+  );
+  await db.getRepository(CameraEntity).update(infra.cameraId, {
+    status: 'INACTIVE' as import('../../src/database/entities/enums.js').CameraStatus,
+  });
   const ids = await db.transaction((manager) => service.enqueueFresh(manager, event));
   assert.deepEqual(ids, []);
   assert.equal(
@@ -276,6 +282,8 @@ async function setupInfrastructure(manager: EntityManager): Promise<Infrastructu
   });
 
   await manager.getRepository(CameraEntity).insert({
+    type: 'ZONE' as const,
+    gateId: null,
     id: cameraId,
     siteId,
     externalId,
@@ -314,6 +322,7 @@ async function setupInfrastructure(manager: EntityManager): Promise<Infrastructu
 
   await manager.getRepository(CameraObservationRegionEntity).insert([
     {
+      siteId: siteId,
       id: region1Id,
       cameraId,
       zoneId: zone1Id,
@@ -323,6 +332,7 @@ async function setupInfrastructure(manager: EntityManager): Promise<Infrastructu
       isActive: true,
     },
     {
+      siteId: siteId,
       id: region2Id,
       cameraId,
       zoneId: zone2Id,
