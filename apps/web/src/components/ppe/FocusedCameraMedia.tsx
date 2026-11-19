@@ -63,6 +63,7 @@ interface Props {
   observationMode?: 'ppe' | 'zone';
   onExitFocus?: () => void;
   onOpenEvidence?: () => void;
+  onTransportChoice?: () => void;
   onAiSnapshotUpdate?: (snapshot: ScopedWallSnapshot, isRawMode: boolean) => void;
 }
 
@@ -75,6 +76,7 @@ export function FocusedCameraMedia({
   siteName,
   onExitFocus,
   onOpenEvidence,
+  onTransportChoice,
   onAiSnapshotUpdate,
   ...scope
 }: Props) {
@@ -266,7 +268,10 @@ export function FocusedCameraMedia({
                 type="button"
                 aria-pressed={mode === view}
                 className="inline-flex min-h-9 items-center rounded-lg border border-transparent px-3 py-1.5 text-xs sm:text-sm font-medium text-slate-300 transition-colors hover:bg-white/10 hover:text-white focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white aria-pressed:border-white aria-pressed:bg-white aria-pressed:font-semibold aria-pressed:text-slate-950 cursor-pointer"
-                onClick={() => setMode(view)}
+                onClick={() => {
+                  onTransportChoice?.();
+                  setMode(view);
+                }}
               >
                 {t(`focus.${view}`)}
               </button>
