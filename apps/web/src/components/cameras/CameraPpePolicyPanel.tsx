@@ -414,7 +414,13 @@ function PolicyEditor({
       const expectedCamera = cameraId.trim().toLowerCase();
       const isCurrentScope = () => !signal.aborted && activeZoneScopeRef.current === requestScope;
 
-      if (typeof obsZonesFn === 'function' && isCurrentScope()) {
+      // Configuration writers are Site Managers; their Zone metadata API is listZones.
+      // The monitoring projection intentionally requires Officer/Admin access.
+      if (
+        typeof obsZonesFn === 'function' &&
+        (!canWrite || typeof listZonesFn !== 'function') &&
+        isCurrentScope()
+      ) {
         try {
           const firstRaw = await obsZonesFn.call(
             client,
