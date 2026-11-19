@@ -5,8 +5,10 @@ import {
   parseTrackedEpisodeDetail,
   parseTrackedEpisodeMediaSource,
   parseTrackedObservationIdentity,
+  parseTrackedObservationIdentityCard,
   type TrackedEpisodeDetail,
   type TrackedObservationIdentity,
+  type TrackedObservationIdentityCard,
   type TrackedEpisodeObservationOptions,
   type TrackedEpisodeObservationPage,
   type TrackedEpisodeMediaSource,
@@ -1930,6 +1932,48 @@ export class SmartSiteManagementClient {
     );
     if (!result)
       throw new ApiError('invalid-response', 'Backend returned inconsistent original identity.');
+    return result;
+  }
+
+  /** Exact-observation identity plus current scoped Worker directory metadata. */
+  async getTrackedObservationIdentityCard(
+    token: string,
+    siteId: string,
+    episodeId: string,
+    input: TrackedEpisodeMediaSource,
+    expectedPayloadHash: string,
+    options?: RequestOptions,
+  ): Promise<TrackedObservationIdentityCard> {
+    const source = parseTrackedEpisodeMediaSource(input);
+    if (
+      !source ||
+      typeof expectedPayloadHash !== 'string' ||
+      !/^[a-f0-9]{64}$/.test(expectedPayloadHash)
+    )
+      throw new ApiError('invalid-response', 'Invalid original identity source.');
+    const query = new URLSearchParams({
+      personObservationIndex: String(source.personObservationIndex),
+      evidenceIndex: String(source.evidenceIndex),
+    });
+    const payload = await this.request<unknown>(
+      'GET',
+      `/sites/${pathId(siteId)}/safety-episodes/${pathId(episodeId)}/findings/${source.alertId}/events/${source.eventId}/identity-card?${query}`,
+      token,
+      undefined,
+      undefined,
+      options,
+      { cache: 'no-store', redirect: 'error' },
+      16384,
+    );
+    const result = parseTrackedObservationIdentityCard(
+      payload,
+      siteId.toLowerCase(),
+      episodeId.toLowerCase(),
+      source,
+      expectedPayloadHash,
+    );
+    if (!result)
+      throw new ApiError('invalid-response', 'Backend returned inconsistent identity card.');
     return result;
   }
 

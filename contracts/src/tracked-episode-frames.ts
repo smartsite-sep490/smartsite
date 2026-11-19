@@ -2,6 +2,8 @@ import type { SafetyAlertStatus, SafetyAlertType } from './management-api.js';
 import {
   parseObservationIdentitySubjectRef,
   parseObservationIdentityDecisionResponse,
+  parseObservationIdentityWorkerPage,
+  type ObservationIdentityWorkerResponse,
   type ObservationIdentitySubjectRef,
   type ObservationIdentityDecisionResponse,
 } from './observation-identity-management.js';
@@ -13,6 +15,11 @@ export interface TrackedObservationIdentity {
   subjectRef: ObservationIdentitySubjectRef;
   revision: number;
   latestDecision: ObservationIdentityDecisionResponse | null;
+}
+
+/** Current scoped directory metadata; never a new identity or permission decision. */
+export interface TrackedObservationIdentityCard extends TrackedObservationIdentity {
+  worker: ObservationIdentityWorkerResponse | null;
 }
 
 /** TRACKED metadata only: identity and original media belong to each original observation. */
@@ -303,6 +310,48 @@ export function parseTrackedObservationIdentity(
       latestDecision = d;
     } else if (p.revision !== 0) return null;
     return { episodeId, siteId, source: s, subjectRef: ref, revision: p.revision, latestDecision };
+  } catch {
+    return null;
+  }
+}
+
+export function parseTrackedObservationIdentityCard(
+  input: unknown,
+  siteId: string,
+  episodeId: string,
+  source: TrackedEpisodeMediaSource,
+  expectedPayloadHash: string,
+): TrackedObservationIdentityCard | null {
+  try {
+    const p = objectFields(input, [
+      'episodeId',
+      'siteId',
+      'source',
+      'subjectRef',
+      'revision',
+      'latestDecision',
+      'worker',
+    ]);
+    if (!p || !Object.hasOwn(p, 'worker')) return null;
+    const { worker: rawWorker, ...original } = p;
+    const identity = parseTrackedObservationIdentity(
+      original,
+      siteId,
+      episodeId,
+      source,
+      expectedPayloadHash,
+    );
+    if (!identity) return null;
+    if (rawWorker === null) return { ...identity, worker: null };
+    const workers = parseObservationIdentityWorkerPage({ items: [rawWorker], total: 1 }, siteId);
+    const worker = workers?.items[0];
+    if (
+      !worker ||
+      identity.latestDecision?.action !== 'RESOLVE' ||
+      worker.id !== identity.latestDecision.workerId
+    )
+      return null;
+    return { ...identity, worker };
   } catch {
     return null;
   }
