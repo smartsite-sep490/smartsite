@@ -123,9 +123,37 @@ export function FrameInboxCards({
         const unavailableZoneCount = allZones.filter(
           (zone) => zone.status === 'UNAVAILABLE',
         ).length;
+        const updatedCaseCount = frame.cases.filter(
+          (entry) => entry.unread && entry.contentRevision > 1,
+        ).length;
         const hasZoneQualifiers =
           laterDenials > 0 || pendingZoneCount > 0 || unavailableZoneCount > 0;
         const sharedEvidenceEntry = frame.cases.find((entry) => entry.source);
+        const displayTimestamp = new Date(frame.capturedAt).toLocaleString(uiLocale());
+        const summaryAriaLabel = [
+          frame.cameraName,
+          frame.siteName,
+          displayTimestamp,
+          t(frame.unread ? 'episodes.unread' : 'episodes.read'),
+          ...(updatedCaseCount > 0
+            ? [tSafety('frameInbox.updatedCasesPill', { count: updatedCaseCount })]
+            : []),
+          t('frameInbox.people', { count: frame.cases.length }),
+          frame.findingCount > 0
+            ? t('frameInbox.findings', { count: frame.findingCount })
+            : t('frameInbox.noPpeFindings'),
+          ...(deniedCount > 0 ? [t('episodes.frameZoneDenials', { count: deniedCount })] : []),
+          ...(laterDenials > 0
+            ? [t('episodes.laterFrameZoneDenials', { count: laterDenials })]
+            : []),
+          ...(pendingZoneCount > 0
+            ? [t('frameInbox.zonePendingCount', { count: pendingZoneCount })]
+            : []),
+          ...(unavailableZoneCount > 0
+            ? [tSafety('frameInbox.zoneUnavailableCount', { count: unavailableZoneCount })]
+            : []),
+          t(expanded ? 'frameInbox.hideBreakdown' : 'frameInbox.showBreakdown'),
+        ].join(' · ');
 
         return (
           <article
@@ -136,73 +164,77 @@ export function FrameInboxCards({
                 : 'border-slate-200 bg-white/90 hover:bg-white'
             }`}
           >
-            <div className="flex flex-col gap-3 p-4 sm:p-5 lg:flex-row lg:items-center lg:justify-between">
+            <div className="flex flex-col gap-2.5 px-4 py-3 sm:px-5 lg:flex-row lg:items-center lg:justify-between">
               <button
                 type="button"
+                aria-label={summaryAriaLabel}
+                data-testid="frame-triage-columns"
                 data-tour-anchor={
                   frameIndex === tourCardIndex ? 'frame-inbox-card-summary' : undefined
                 }
                 aria-expanded={expanded}
                 aria-controls={panelId}
                 onClick={() => setOpen(expanded ? '' : key)}
-                className="group flex flex-1 min-w-0 flex-col gap-2 rounded-xl p-1 -m-1 text-left transition-colors hover:bg-slate-50/80 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-teal-800 focus-visible:ring-4 focus-visible:ring-teal-700/20 sm:flex-row sm:items-center sm:justify-between"
+                className="group flex flex-1 min-w-0 flex-col gap-2 rounded-xl p-1 -m-1 text-left transition-colors hover:bg-slate-50/80 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-teal-800 focus-visible:ring-4 focus-visible:ring-teal-700/20 xl:grid xl:grid-cols-[minmax(220px,1.15fr)_minmax(190px,0.85fr)_minmax(260px,1.35fr)_auto] xl:items-center xl:gap-4"
               >
-                <div className="min-w-0 space-y-1.5">
-                  <div className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1 text-xs sm:text-sm">
-                    <span
-                      title={frame.cameraName}
-                      className="inline-flex min-w-0 max-w-full items-center gap-1.5 font-semibold text-slate-950"
-                    >
-                      <IconCamera className="h-4 w-4 shrink-0 text-slate-500" />
-                      <span className="truncate">{frame.cameraName}</span>
-                    </span>
-                    <span aria-hidden="true" className="text-slate-300">
-                      ·
-                    </span>
-                    <span
-                      title={frame.siteName}
-                      className="inline-flex min-w-0 max-w-full items-center gap-1.5 font-medium text-slate-700"
-                    >
-                      <IconBuilding className="h-3.5 w-3.5 shrink-0 text-slate-400" />
-                      <span className="truncate">{frame.siteName}</span>
-                    </span>
-                    <span aria-hidden="true" className="text-slate-300">
-                      ·
-                    </span>
-                    <span className="inline-flex items-center gap-1.5 tabular-nums text-slate-600">
-                      <IconClock className="h-3.5 w-3.5 shrink-0 text-slate-400" />
-                      <time dateTime={frame.capturedAt}>
-                        {new Date(frame.capturedAt).toLocaleString(uiLocale())}
-                      </time>
-                    </span>
-                    <span
-                      className={`inline-flex items-center gap-1.5 rounded-md border px-2 py-0.5 text-xs font-semibold ${
-                        frame.unread
-                          ? 'border-teal-700/35 bg-teal-50 text-teal-950'
-                          : 'border-slate-200 bg-slate-100 text-slate-600'
-                      }`}
-                    >
-                      {frame.unread && (
-                        <span aria-hidden="true" className="h-1.5 w-1.5 rounded-full bg-teal-700" />
-                      )}
-                      {t(frame.unread ? 'episodes.unread' : 'episodes.read')}
-                    </span>
+                <div className="min-w-0 space-y-0.5">
+                  <div
+                    title={frame.cameraName}
+                    className="flex min-w-0 items-center gap-1.5 text-sm sm:text-[15px] font-semibold text-slate-950"
+                  >
+                    <IconCamera className="h-4 w-4 shrink-0 text-slate-500" />
+                    <span className="truncate">{frame.cameraName}</span>
                   </div>
+                  <div
+                    title={frame.siteName}
+                    className="flex min-w-0 items-center gap-1.5 text-xs sm:text-[13px] font-medium text-slate-600"
+                  >
+                    <IconBuilding className="h-3.5 w-3.5 shrink-0 text-slate-400" />
+                    <span className="truncate">{frame.siteName}</span>
+                  </div>
+                </div>
 
-                  <div className="flex min-w-0 flex-wrap items-center gap-1.5 text-sm tabular-nums text-slate-400">
-                    <span className="inline-flex items-center gap-1.5 font-semibold text-slate-950">
+                <div className="flex min-w-0 flex-wrap items-center gap-2 text-xs sm:text-[13px] tabular-nums text-slate-700">
+                  <span className="inline-flex items-center gap-1.5 font-medium">
+                    <IconClock className="h-3.5 w-3.5 shrink-0 text-slate-400" />
+                    <time dateTime={frame.capturedAt}>{displayTimestamp}</time>
+                  </span>
+                  <span
+                    className={`inline-flex items-center gap-1.5 rounded-md border px-2 py-0.5 text-xs font-semibold ${
+                      frame.unread
+                        ? 'border-teal-700/35 bg-teal-50 text-teal-950'
+                        : 'border-slate-200 bg-slate-100 text-slate-600'
+                    }`}
+                  >
+                    {frame.unread && (
+                      <span aria-hidden="true" className="h-1.5 w-1.5 rounded-full bg-teal-700" />
+                    )}
+                    {t(frame.unread ? 'episodes.unread' : 'episodes.read')}
+                  </span>
+                </div>
+
+                <div className="min-w-0 space-y-1">
+                  <div className="flex min-w-0 flex-wrap items-center gap-2 text-sm tabular-nums">
+                    {updatedCaseCount > 0 && (
+                      <span
+                        data-testid="frame-updated-cases-pill"
+                        className="inline-flex items-center gap-1.5 rounded-md border border-indigo-200 bg-indigo-50 px-2.5 py-0.5 text-xs sm:text-sm font-semibold text-indigo-950"
+                      >
+                        {tSafety('frameInbox.updatedCasesPill', { count: updatedCaseCount })}
+                      </span>
+                    )}
+                    <span className="inline-flex items-center gap-1.5 rounded-md border border-slate-200 bg-slate-50 px-2.5 py-0.5 text-xs sm:text-sm font-semibold text-slate-900">
                       <IconUsers className="h-4 w-4 shrink-0 text-slate-500" />
                       <span data-testid="frame-summary-subjects-pill">
                         {t('frameInbox.people', { count: frame.cases.length })}
                       </span>
                     </span>
-                    {' · '}
                     <span
                       data-testid="frame-summary-ppe-pill"
                       className={`inline-flex items-center gap-1.5 ${
                         frame.findingCount > 0
-                          ? 'rounded-md border border-amber-300/90 bg-amber-50/90 px-2 py-0.5 font-semibold text-amber-950'
-                          : 'font-medium text-slate-600'
+                          ? 'rounded-md border border-amber-300/90 bg-amber-50/90 px-2.5 py-0.5 text-xs sm:text-sm font-semibold text-amber-950'
+                          : 'rounded-md border border-slate-200 bg-white px-2.5 py-0.5 text-xs sm:text-sm font-medium text-slate-600'
                       }`}
                     >
                       {frame.findingCount > 0 && (
@@ -215,16 +247,13 @@ export function FrameInboxCards({
                       </span>
                     </span>
                     {deniedCount > 0 && (
-                      <>
-                        {' · '}
-                        <span
-                          data-testid="frame-summary-zone-denied-pill"
-                          className="inline-flex items-center gap-1.5 rounded-md border border-rose-300/90 bg-rose-50/90 px-2 py-0.5 font-semibold text-rose-950"
-                        >
-                          <IconAlertTriangle className="h-3.5 w-3.5 shrink-0 text-rose-700" />
-                          <span>{t('episodes.frameZoneDenials', { count: deniedCount })}</span>
-                        </span>
-                      </>
+                      <span
+                        data-testid="frame-summary-zone-denied-pill"
+                        className="inline-flex items-center gap-1.5 rounded-md border border-rose-300/90 bg-rose-50/90 px-2.5 py-0.5 text-xs sm:text-sm font-semibold text-rose-950"
+                      >
+                        <IconAlertTriangle className="h-3.5 w-3.5 shrink-0 text-rose-700" />
+                        <span>{t('episodes.frameZoneDenials', { count: deniedCount })}</span>
+                      </span>
                     )}
                   </div>
 
@@ -263,7 +292,7 @@ export function FrameInboxCards({
                   )}
                 </div>
 
-                <span className="inline-flex min-h-9 w-fit shrink-0 items-center gap-1.5 rounded-lg border border-slate-200 bg-slate-50 px-3 py-1.5 text-xs sm:text-sm font-semibold text-slate-800 transition-colors group-hover:border-slate-300 group-hover:bg-white group-focus-visible:border-teal-700 group-focus-visible:bg-teal-50 group-focus-visible:text-teal-950">
+                <span className="inline-flex min-h-9 w-fit shrink-0 items-center gap-1.5 rounded-xl border border-slate-200 bg-slate-50 px-3.5 py-1.5 text-xs sm:text-sm font-semibold text-slate-800 transition-colors group-hover:border-slate-300 group-hover:bg-white group-focus-visible:border-teal-700 group-focus-visible:bg-teal-50 group-focus-visible:text-teal-950">
                   <span>
                     {t(expanded ? 'frameInbox.hideBreakdown' : 'frameInbox.showBreakdown')}
                   </span>
@@ -278,12 +307,10 @@ export function FrameInboxCards({
                   type="button"
                   disabled={read.isPending}
                   onClick={() => read.mutate(frame.cases)}
-                  className="inline-flex min-h-10 w-full sm:w-auto lg:shrink-0 items-center justify-center gap-1.5 rounded-xl border border-teal-700/40 bg-teal-50/70 px-3.5 py-2 text-xs sm:text-sm font-semibold text-teal-950 transition-colors hover:bg-teal-100/70 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-teal-800 focus-visible:ring-2 focus-visible:ring-teal-700/30 disabled:cursor-not-allowed disabled:opacity-50"
+                  className="inline-flex min-h-9 w-full sm:w-auto lg:shrink-0 items-center justify-center gap-1.5 rounded-xl border border-teal-700/40 bg-teal-50/70 px-3.5 py-1.5 text-xs sm:text-sm font-semibold text-teal-950 transition-colors hover:bg-teal-100/70 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-teal-800 focus-visible:ring-2 focus-visible:ring-teal-700/30 disabled:cursor-not-allowed disabled:opacity-50"
                 >
                   <IconCheck className="h-3.5 w-3.5 shrink-0" />
-                  <span>
-                    {read.isPending ? t('frameInbox.markingRead') : t('frameInbox.markRead')}
-                  </span>
+                  <span>{read.isPending ? t('frameInbox.markingRead') : t('frameInbox.markRead')}</span>
                 </button>
               )}
             </div>
@@ -292,7 +319,7 @@ export function FrameInboxCards({
               <div
                 id={panelId}
                 data-testid="frame-expanded-workspace"
-                className="min-w-0 border-t border-slate-200 bg-slate-50/55 p-4 sm:p-5"
+                className="min-w-0 border-t border-slate-200 bg-slate-50/55 p-4 sm:p-5 space-y-4"
               >
                 <div className="grid min-w-0 grid-cols-1 gap-5 lg:grid-cols-12 lg:items-start">
                   <div className="min-w-0 space-y-3 lg:col-span-5 lg:sticky lg:top-4">

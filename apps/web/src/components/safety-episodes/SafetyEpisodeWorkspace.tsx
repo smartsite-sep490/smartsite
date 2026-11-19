@@ -157,13 +157,14 @@ export function SafetyEpisodeWorkspace({
   }
 
   return (
-    <div className="space-y-4">
+    <div className="w-full min-w-0 space-y-4">
       {(allowed || identificationAllowed) && (
         <nav
           aria-label={t('episodes.views')}
-          className="flex flex-wrap items-center justify-between gap-3"
+          data-testid="safety-workspace-mode-bar"
+          className="flex flex-col gap-3 rounded-2xl border border-slate-200/90 bg-white px-4 py-3 shadow-2xs sm:px-5 lg:flex-row lg:items-center lg:justify-between"
         >
-          <p className="text-sm text-slate-600">
+          <p className="min-w-0 text-sm leading-relaxed text-slate-600">
             {identification
               ? tSafety('episodes.identificationWorkspaceIntro')
               : frameGrouped
@@ -172,32 +173,37 @@ export function SafetyEpisodeWorkspace({
                   ? t('episodes.intro')
                   : t('episodes.entryHint')}
           </p>
-          {allowed && !frameGrouped && !identification && (
-            <Link
-              className="rounded-lg bg-teal-800 px-4 py-2 text-sm font-semibold text-white focus-visible:outline-2"
-              to={`/incidents?${frameTarget}`}
-            >
-              {t(returnToFrame ? 'frameInbox.backToFrame' : 'episodes.frameTitle')}
-            </Link>
-          )}
-          {(allowed || identification) && (
-            <Link
-              className="rounded-lg border border-slate-200 bg-white px-4 py-2 text-sm font-semibold focus-visible:outline-2"
-              to={identification ? identificationBackHref : targetHref}
-            >
-              {identification
-                ? identificationBackLabel
-                : t(grouped ? 'episodes.back' : 'episodes.title')}
-            </Link>
-          )}
-          {identificationAllowed && !identification && (
-            <Link
-              className="rounded-lg border border-slate-200 bg-white px-4 py-2 text-sm font-semibold focus-visible:outline-2"
-              to={`/incidents?${identificationTarget}`}
-            >
-              {tSafety('episodes.identificationWorkspaceNav')}
-            </Link>
-          )}
+          <div
+            data-testid="safety-workspace-mode-actions"
+            className="flex flex-wrap items-center gap-1.5 rounded-xl border border-slate-200/80 bg-slate-100/80 p-1 lg:shrink-0"
+          >
+            {allowed && !frameGrouped && !identification && (
+              <Link
+                className="inline-flex min-h-9 items-center justify-center rounded-lg bg-[#0F172A] px-3.5 py-1.5 text-sm font-semibold text-white shadow-2xs transition-colors hover:bg-slate-800 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-slate-900"
+                to={`/incidents?${frameTarget}`}
+              >
+                {t(returnToFrame ? 'frameInbox.backToFrame' : 'episodes.frameTitle')}
+              </Link>
+            )}
+            {(allowed || identification) && (
+              <Link
+                className="inline-flex min-h-9 items-center justify-center rounded-lg border border-slate-200/90 bg-white px-3.5 py-1.5 text-sm font-semibold text-slate-800 shadow-2xs transition-colors hover:bg-slate-50 hover:text-slate-950 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-slate-900"
+                to={identification ? identificationBackHref : targetHref}
+              >
+                {identification
+                  ? identificationBackLabel
+                  : t(grouped ? 'episodes.back' : 'episodes.title')}
+              </Link>
+            )}
+            {identificationAllowed && !identification && (
+              <Link
+                className="inline-flex min-h-9 items-center justify-center rounded-lg border border-slate-200/90 bg-white px-3.5 py-1.5 text-sm font-semibold text-slate-800 shadow-2xs transition-colors hover:bg-slate-50 hover:text-slate-950 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-slate-900"
+                to={`/incidents?${identificationTarget}`}
+              >
+                {tSafety('episodes.identificationWorkspaceNav')}
+              </Link>
+            )}
+          </div>
         </nav>
       )}
       {identification && identificationAllowed && session ? (

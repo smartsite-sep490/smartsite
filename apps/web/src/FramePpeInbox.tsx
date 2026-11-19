@@ -18,6 +18,7 @@ import {
 } from './components/safety/safetyTaskTourModel';
 import { useManagementClient } from './features/auth/auth-session';
 import './components/safety-episodes/tracked-episode-workspace-catalog';
+import './frame-inbox-catalog';
 import { FrameInboxCards } from './FrameInboxCards';
 import { FrameInboxSiteFilter, type FrameCameraOption } from './FrameInboxSiteFilter';
 import { SAFETY_NAMESPACE } from './i18n/runtime';
@@ -218,11 +219,11 @@ function ScopedFramePpeInbox({
   });
 
   return (
-    <section className="min-w-0 space-y-4" aria-label={t('frameInbox.title')}>
-      <header className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
-        <div className="min-w-0 space-y-1.5">
-          <div className="flex flex-wrap items-center gap-2.5">
-            <h1 className="text-2xl sm:text-[1.75rem] sm:leading-9 font-semibold tracking-tight text-slate-950">
+    <section className="w-full min-w-0 space-y-4" aria-label={t('frameInbox.title')}>
+      <header className="space-y-2.5 rounded-2xl border border-slate-200/90 bg-white px-4 py-3.5 shadow-2xs sm:px-5">
+        <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+          <div className="flex min-w-0 flex-wrap items-center gap-2.5">
+            <h1 className="text-2xl sm:text-[26px] font-bold tracking-tight text-slate-950">
               {t('frameInbox.title')}
             </h1>
             {visible && query.data && (
@@ -249,45 +250,51 @@ function ScopedFramePpeInbox({
               </Link>
             )}
           </div>
+
+          <div className="flex flex-wrap items-center gap-2 lg:justify-end">
+            <label
+              className={`inline-flex min-h-10 cursor-pointer select-none items-center gap-2 rounded-xl border px-3.5 py-2 text-sm font-semibold transition-colors has-[:focus-visible]:outline-2 has-[:focus-visible]:outline-offset-2 has-[:focus-visible]:outline-teal-800 has-[:focus-visible]:ring-2 has-[:focus-visible]:ring-teal-700/30 ${
+                unreadOnly
+                  ? 'border-teal-700 bg-teal-50 text-teal-950 ring-1 ring-teal-700/20'
+                  : 'border-slate-300 bg-white text-slate-800 hover:bg-slate-50'
+              }`}
+            >
+              <input
+                type="checkbox"
+                checked={unreadOnly}
+                className="h-4 w-4 rounded border-slate-400 accent-teal-800 focus-visible:outline-none"
+                onChange={(event) => setUnreadOnly(event.target.checked)}
+              />
+              {t('frameInbox.unreadOnly')}
+            </label>
+            <button
+              type="button"
+              disabled={query.isFetching || revoked}
+              onClick={() => void query.refetch()}
+              className="inline-flex min-h-10 items-center justify-center rounded-xl border border-slate-300 bg-white px-3.5 py-2 text-sm font-semibold text-slate-900 shadow-2xs transition-colors hover:bg-slate-50 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-teal-800 focus-visible:ring-2 focus-visible:ring-teal-700/30 disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              {query.isFetching ? t('frameInbox.refreshing') : t('common.refresh')}
+            </button>
+          </div>
+        </div>
+
+        <div className="flex flex-col gap-2 border-t border-slate-100 pt-2.5 lg:flex-row lg:items-center lg:justify-between">
           <p
             data-testid="frame-inbox-header-scope-note"
-            className="max-w-3xl text-xs sm:text-sm leading-relaxed text-slate-600"
+            className="min-w-0 max-w-3xl text-xs sm:text-sm leading-relaxed text-slate-600"
           >
             {tSafety('frameInbox.scopeCountNote')}
           </p>
-        </div>
-        <div className="flex flex-wrap items-center gap-2 lg:justify-end">
-          <label
-            className={`inline-flex min-h-10 cursor-pointer select-none items-center gap-2 rounded-xl border px-3.5 py-2 text-sm font-semibold transition-colors has-[:focus-visible]:outline-2 has-[:focus-visible]:outline-offset-2 has-[:focus-visible]:outline-teal-800 has-[:focus-visible]:ring-2 has-[:focus-visible]:ring-teal-700/30 ${
-              unreadOnly
-                ? 'border-teal-700 bg-teal-50 text-teal-950 ring-1 ring-teal-700/20'
-                : 'border-slate-300 bg-white text-slate-800 hover:bg-slate-50'
-            }`}
-          >
-            <input
-              type="checkbox"
-              checked={unreadOnly}
-              className="h-4 w-4 rounded border-slate-400 accent-teal-800 focus-visible:outline-none"
-              onChange={(event) => setUnreadOnly(event.target.checked)}
+          <div className="flex flex-wrap items-center gap-2 lg:shrink-0 lg:justify-end">
+            <SafetyTaskTour
+              taskId="frame-inbox"
+              tourVersion={FRAME_INBOX_TOUR_VERSION}
+              userId={userId}
+              scopeKey={tourScopeKey}
+              isAuthorized={isTourReady}
+              steps={tourSteps}
             />
-            {t('frameInbox.unreadOnly')}
-          </label>
-          <button
-            type="button"
-            disabled={query.isFetching || revoked}
-            onClick={() => void query.refetch()}
-            className="inline-flex min-h-10 items-center justify-center rounded-xl border border-slate-300 bg-white px-3.5 py-2 text-sm font-semibold text-slate-900 shadow-2xs transition-colors hover:bg-slate-50 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-teal-800 focus-visible:ring-2 focus-visible:ring-teal-700/30 disabled:cursor-not-allowed disabled:opacity-50"
-          >
-            {query.isFetching ? t('frameInbox.refreshing') : t('common.refresh')}
-          </button>
-          <SafetyTaskTour
-            taskId="frame-inbox"
-            tourVersion={FRAME_INBOX_TOUR_VERSION}
-            userId={userId}
-            scopeKey={tourScopeKey}
-            isAuthorized={isTourReady}
-            steps={tourSteps}
-          />
+          </div>
         </div>
       </header>
 
@@ -336,7 +343,7 @@ function ScopedFramePpeInbox({
         </p>
       )}
 
-      <div className="space-y-3">
+      <div className="space-y-2.5">
         <FrameInboxCards
           key={JSON.stringify([siteId, cameraId, frameKey, unreadOnly])}
           client={client}

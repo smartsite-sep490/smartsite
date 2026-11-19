@@ -179,6 +179,21 @@ export function FrameInboxSubjectRow({
           </div>
 
           <div className="flex flex-wrap items-center gap-1.5 text-xs">
+            {entry.contentRevision > 1 && (
+              <span
+                data-testid={`frame-subject-revision-${personNumber}`}
+                className={`inline-flex items-center rounded-md border px-2 py-0.5 text-xs font-semibold tabular-nums ${
+                  entry.unread
+                    ? 'border-indigo-200 bg-indigo-50 text-indigo-950'
+                    : 'border-slate-200 bg-slate-100 text-slate-600'
+                }`}
+              >
+                {tSafety(
+                  entry.unread ? 'frameInbox.caseUpdatedRevision' : 'frameInbox.caseSeenRevision',
+                  { revision: entry.contentRevision },
+                )}
+              </span>
+            )}
             <span
               data-testid={`frame-subject-identity-${personNumber}`}
               className="inline-flex items-center rounded-md border border-slate-200 bg-slate-100 px-2 py-0.5 text-xs font-medium text-slate-700"
