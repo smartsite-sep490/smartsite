@@ -593,20 +593,20 @@ function CameraScope({
           </select>
         </label>
         {selected && (
-          <div className="flex flex-wrap items-center gap-2">
+          <div className="flex min-w-0 max-w-full flex-wrap items-center gap-2">
             <div
               role="group"
               aria-label={trMonitor('monitor.layout.groupAria')}
               data-testid="monitor-layout-controls"
               data-tour-anchor="monitor-focus-toggle"
-              className="inline-flex min-h-10 max-w-full flex-wrap items-center gap-1 rounded-xl border border-slate-200 bg-slate-100 p-1"
+              className="inline-flex min-w-0 max-w-full flex-wrap items-center gap-1 rounded-xl border border-slate-200 bg-slate-100 p-0.5"
             >
               <button
                 type="button"
                 data-testid="monitor-grid-btn"
                 aria-pressed={!focus}
                 onClick={() => setLayoutMode('grid')}
-                className="inline-flex min-h-8 items-center rounded-lg border border-transparent px-3 py-1 text-sm font-medium text-slate-700 tabular-nums transition-colors hover:bg-white hover:text-slate-950 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-slate-900 aria-pressed:border-slate-900 aria-pressed:bg-slate-900 aria-pressed:font-semibold aria-pressed:text-white cursor-pointer"
+                className="inline-flex min-h-10 min-w-0 max-w-full items-center rounded-lg border border-transparent px-3 py-2 text-sm font-medium text-slate-700 tabular-nums whitespace-normal text-left break-words [overflow-wrap:anywhere] transition-colors hover:bg-white hover:text-slate-950 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-slate-900 aria-pressed:border-slate-900 aria-pressed:bg-slate-900 aria-pressed:font-semibold aria-pressed:text-white cursor-pointer"
               >
                 {gridButtonLabel}
               </button>
@@ -620,7 +620,7 @@ function CameraScope({
                     setLayoutMode('focus');
                   }
                 }}
-                className="inline-flex min-h-8 items-center rounded-lg border border-transparent px-3 py-1 text-sm font-medium text-slate-700 tabular-nums transition-colors hover:bg-white hover:text-slate-950 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-slate-900 aria-pressed:border-slate-900 aria-pressed:bg-slate-900 aria-pressed:font-semibold aria-pressed:text-white cursor-pointer"
+                className="inline-flex min-h-10 min-w-0 max-w-full items-center rounded-lg border border-transparent px-3 py-2 text-sm font-medium text-slate-700 tabular-nums whitespace-normal text-left break-words [overflow-wrap:anywhere] transition-colors hover:bg-white hover:text-slate-950 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-slate-900 aria-pressed:border-slate-900 aria-pressed:bg-slate-900 aria-pressed:font-semibold aria-pressed:text-white cursor-pointer"
               >
                 {trMonitor('monitor.layout.focus1')}
               </button>
@@ -630,7 +630,7 @@ function CameraScope({
               type="button"
               data-testid="monitor-fullscreen-btn"
               aria-pressed={isFullscreen}
-              className="inline-flex min-h-10 items-center rounded-lg border border-slate-300 bg-white px-3.5 py-2 text-sm font-medium text-slate-800 hover:bg-slate-50 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-slate-900 cursor-pointer"
+              className="inline-flex min-h-10 min-w-0 max-w-full items-center rounded-lg border border-slate-300 bg-white px-3.5 py-2 text-sm font-medium text-slate-800 whitespace-normal text-left break-words [overflow-wrap:anywhere] hover:bg-slate-50 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-slate-900 cursor-pointer"
               data-tour-anchor="monitor-fullscreen"
               onClick={() => {
                 setFullscreenError(false);
@@ -647,10 +647,11 @@ function CameraScope({
             </button>
           </div>
         )}
-        <div className="flex flex-wrap items-center gap-2.5 sm:ml-auto">
+        <div className="flex min-w-0 max-w-full flex-wrap items-center gap-2.5 sm:ml-auto">
           <p
             role="status"
-            className="text-xs font-medium tabular-nums text-slate-500 whitespace-nowrap"
+            data-testid="monitor-catalog-status"
+            className="min-w-0 max-w-full text-xs font-medium tabular-nums text-slate-500 break-words [overflow-wrap:anywhere]"
           >
             {cameras.isPending
               ? t('monitor.loading')
@@ -790,20 +791,22 @@ function CameraScope({
         }
       >
         {isFullscreen && selected && (
-          <div className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-slate-800 bg-slate-900 px-4 py-2.5 text-white">
-            <span className="text-sm font-semibold truncate">{selected.name || selected.code}</span>
-            <div className="flex flex-wrap items-center gap-2">
+          <div className="flex min-w-0 flex-wrap items-center justify-between gap-2 rounded-xl border border-slate-800 bg-slate-900 px-4 py-2.5 text-white">
+            <span className="min-w-0 max-w-full text-sm font-semibold break-words [overflow-wrap:anywhere]">
+              {selected.name || selected.code}
+            </span>
+            <div className="flex min-w-0 max-w-full flex-wrap items-center gap-2">
               <div
                 role="group"
                 aria-label={trMonitor('monitor.layout.groupAria')}
                 data-testid="monitor-fullscreen-layout-controls"
-                className="inline-flex min-h-10 items-center gap-1 rounded-xl border border-slate-700 bg-slate-950 p-1"
+                className="inline-flex min-w-0 max-w-full flex-wrap items-center gap-1 rounded-xl border border-slate-700 bg-slate-950 p-0.5"
               >
                 <button
                   type="button"
                   aria-pressed={!focus}
                   onClick={() => setLayoutMode('grid')}
-                  className="inline-flex min-h-8 items-center rounded-lg px-3 py-1 text-sm font-medium text-slate-300 tabular-nums hover:text-white aria-pressed:bg-white aria-pressed:font-semibold aria-pressed:text-slate-950 cursor-pointer"
+                  className="inline-flex min-h-10 max-w-full items-center rounded-lg px-3 py-2 text-sm font-medium text-slate-300 tabular-nums whitespace-normal text-left break-words hover:text-white aria-pressed:bg-white aria-pressed:font-semibold aria-pressed:text-slate-950 cursor-pointer"
                 >
                   {gridButtonLabel}
                 </button>
@@ -816,7 +819,7 @@ function CameraScope({
                       setLayoutMode('focus');
                     }
                   }}
-                  className="inline-flex min-h-8 items-center rounded-lg px-3 py-1 text-sm font-medium text-slate-300 tabular-nums hover:text-white aria-pressed:bg-white aria-pressed:font-semibold aria-pressed:text-slate-950 cursor-pointer"
+                  className="inline-flex min-h-10 max-w-full items-center rounded-lg px-3 py-2 text-sm font-medium text-slate-300 tabular-nums whitespace-normal text-left break-words hover:text-white aria-pressed:bg-white aria-pressed:font-semibold aria-pressed:text-slate-950 cursor-pointer"
                 >
                   {trMonitor('monitor.layout.focus1')}
                 </button>
@@ -830,7 +833,7 @@ function CameraScope({
                     void document.exitFullscreen().catch(() => setFullscreenError(true));
                   }
                 }}
-                className="inline-flex min-h-10 items-center rounded-lg border border-slate-600 bg-slate-800 px-3.5 py-2 text-sm font-semibold text-white hover:bg-slate-700 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white cursor-pointer"
+                className="inline-flex min-h-10 max-w-full items-center rounded-lg border border-slate-600 bg-slate-800 px-3.5 py-2 text-sm font-semibold text-white whitespace-normal text-left break-words hover:bg-slate-700 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white cursor-pointer"
               >
                 {trMonitor('monitor.layout.exitFullscreen')}
               </button>
