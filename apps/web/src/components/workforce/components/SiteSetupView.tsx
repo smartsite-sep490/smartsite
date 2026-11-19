@@ -37,6 +37,7 @@ import {
   getReadySiteManagers,
 } from '../utils/site-setup-helpers';
 import { SiteOperationsSetupView } from './SiteOperationsSetupView';
+import { SiteGatesPanel } from './SiteGatesPanel';
 import { loadAllPages } from '../load-all-pages';
 
 interface SiteSetupViewProps {
@@ -1162,6 +1163,18 @@ export function SiteSetupView({ apiUrl }: SiteSetupViewProps) {
                   </div>
                 )}
               </div>
+
+              {activeSiteId && accessToken && currentUser && (
+                <SiteGatesPanel
+                  key={activeSiteId}
+                  client={client}
+                  apiUrl={apiUrl}
+                  token={accessToken}
+                  siteId={activeSiteId}
+                  sessionScope={currentUser.id}
+                  canManage={isManager}
+                />
+              )}
 
               {isManager && activeSiteId && accessToken && currentUser && activeTab === 'zones' && (
                 <SiteZoneSetup

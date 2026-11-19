@@ -4148,5 +4148,14 @@
   "gateSetup.selectSource": "Select a registered camera",
   "gateSetup.noSources": "No active camera is registered for this gate. Ask the Site Manager to configure one. QR remains available.",
   "gateSetup.useQr": "Use QR",
-  "gateSetup.loadingSources": "Loading registered cameras…"
+  "gateSetup.loadingSources": "Loading registered cameras…",
+  "gateSetup.description": "Manage the entrances and exits of this Site.",
+  "gateSetup.autoCode": "The gate code is generated automatically. Just enter an easy-to-recognize name.",
+  "gateSetup.namePlaceholder": "For example: Main gate, East entrance",
+  "gateSetup.creating": "Creating…",
+  "gateSetup.created": "Created gate “{{name}}” · Code: {{code}}",
+  "gateSetup.emptyTitle": "No gates yet",
+  "gateSetup.emptyManager": "Create your first gate using the form above.",
+  "gateSetup.editName": "New gate name",
+  "gateSetup.saving": "Saving…"
 }

@@ -17,7 +17,7 @@ afterEach(() => {
   cleanup();
   vi.restoreAllMocks();
 });
-it('creates a GATE camera without a source address', async () => {
+it('mounts Gate management in Site setup and creates a GATE camera without a source address', async () => {
   mockGateCatalog();
   vi.spyOn(SmartSiteManagementClient.prototype, 'listSites').mockResolvedValue({
     items: [{ id: 'site', code: 'SITE', name: 'Site', createdAt: '2026-01-01T00:00:00Z' }],
@@ -51,6 +51,7 @@ it('creates a GATE camera without a source address', async () => {
       <SiteOperationsSetupView apiUrl="https://api.example.test" />
     </QueryClientProvider>,
   );
+  expect(await screen.findByRole('button', { name: 'Create gate' })).toBeTruthy();
   await screen.findAllByRole('button', { name: 'Create camera' });
   fireEvent.click(screen.getAllByRole('button', { name: 'Create camera' })[0]!);
   fireEvent.change(screen.getByLabelText('Camera purpose'), { target: { value: 'GATE' } });

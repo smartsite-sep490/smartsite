@@ -4148,5 +4148,14 @@
   "gateSetup.selectSource": "Chọn Camera đã đăng ký",
   "gateSetup.noSources": "Cổng chưa có Camera hoạt động được đăng ký. Vui lòng liên hệ Quản lý công trường. Vẫn có thể dùng QR.",
   "gateSetup.useQr": "Dùng QR",
-  "gateSetup.loadingSources": "Đang tải Camera đã đăng ký…"
+  "gateSetup.loadingSources": "Đang tải Camera đã đăng ký…",
+  "gateSetup.description": "Quản lý các lối ra vào của công trường.",
+  "gateSetup.autoCode": "Mã cổng được tạo tự động. Bạn chỉ cần đặt tên dễ nhận biết.",
+  "gateSetup.namePlaceholder": "Ví dụ: Cổng chính, Cổng phía Đông",
+  "gateSetup.creating": "Đang tạo…",
+  "gateSetup.created": "Đã tạo cổng “{{name}}” · Mã: {{code}}",
+  "gateSetup.emptyTitle": "Chưa có cổng nào",
+  "gateSetup.emptyManager": "Tạo cổng đầu tiên bằng biểu mẫu phía trên.",
+  "gateSetup.editName": "Tên cổng mới",
+  "gateSetup.saving": "Đang lưu…"
 }

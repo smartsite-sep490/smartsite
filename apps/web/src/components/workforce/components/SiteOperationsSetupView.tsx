@@ -1,3 +1,4 @@
+import { SiteGatesPanel } from './SiteGatesPanel';
 import { useGateCatalog } from '../../access/useGateCatalog';
 import { localizedLabel } from '../../../i18n/labels';
 import { userErrorMessage } from '../../../i18n/messages';
@@ -423,6 +424,18 @@ export function SiteOperationsSetupView({
             </label>
           </div>
         </div>
+      )}
+
+      {!participationOnly && (
+        <SiteGatesPanel
+          key={siteId}
+          client={client}
+          apiUrl={apiUrl}
+          token={accessToken!}
+          siteId={siteId}
+          sessionScope={user?.id ?? ''}
+          canManage={!!canManage}
+        />
       )}
 
       {/* ── Participating Contractors ───────────────────────── */}
