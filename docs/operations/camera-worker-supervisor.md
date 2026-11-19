@@ -58,6 +58,9 @@ website/cloud database identity are refused. Keep this file and its directories
 private; this entry point does not provision or certify OS ACLs.
 
 Supply issuer database configuration through the trusted parent runtime environment.
+Set `DATABASE_SCHEMA` to the same private test schema, `DATABASE_URL` (or the existing
+direct URL alternative) to that exact test database, and `AI_CONFIGURATION_CAMERA_IDS`
+to include the camera. The JSON allowlist does not replace this issuer allowlist.
 Only the existing worker environment allowlist is forwarded: the AI Backend service
 token/ingestion URL/source, evidence root and Python bytecode setting. Database and
 admin credentials remain in the parent. Existing adapter validation still checks the

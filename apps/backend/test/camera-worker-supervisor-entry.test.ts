@@ -4,13 +4,40 @@ import path from 'node:path';
 import { mkdtemp, writeFile, readdir, unlink, rmdir } from 'node:fs/promises';
 import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
+import { EventEmitter } from 'node:events';
 import {
   parseSupervisorConfiguration,
   runOperatorSupervisor,
+  bindSupervisorSignals,
+  isSupervisorEntry,
 } from '../src/scripts/run-camera-worker-supervisor.js';
 
 const camera = '11111111-1111-4111-8111-111111111111';
 const root = path.resolve(process.platform === 'win32' ? 'D:/Ky9-FPT/SmartSiteData/runs' : '/tmp');
+
+test('repeated termination signals remain handled until owned shutdown completes', () => {
+  const emitter = new EventEmitter();
+  const controller = new AbortController();
+  const cleanup = bindSupervisorSignals(emitter, controller);
+  emitter.emit('SIGINT');
+  assert.equal(controller.signal.aborted, true);
+  assert.equal(emitter.listenerCount('SIGINT'), 1);
+  emitter.emit('SIGINT');
+  emitter.emit('SIGTERM');
+  assert.equal(emitter.listenerCount('SIGTERM'), 1);
+  cleanup();
+  assert.equal(emitter.listenerCount('SIGINT'), 0);
+  assert.equal(emitter.listenerCount('SIGTERM'), 0);
+});
+
+test('entry guard handles Windows drive/path casing without claiming an imported module ran', () => {
+  const entry = path.join(root, 'Operator.js');
+  assert.equal(isSupervisorEntry(entry, entry), true);
+  assert.equal(isSupervisorEntry(undefined, entry), false);
+  assert.equal(isSupervisorEntry(path.join(root, 'other.js'), entry), false);
+  if (process.platform === 'win32')
+    assert.equal(isSupervisorEntry(entry.toLowerCase(), entry), true);
+});
 function fixture() {
   return {
     cameraId: camera,
