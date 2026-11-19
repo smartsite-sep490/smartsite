@@ -52,6 +52,7 @@ it('mounts Gate management in Site setup and creates a GATE camera without a sou
     </QueryClientProvider>,
   );
   expect(await screen.findByRole('button', { name: 'Create gate' })).toBeTruthy();
+  await screen.findAllByRole('button', { name: 'Create camera' });
   fireEvent.click(screen.getAllByRole('button', { name: 'Create camera' })[0]!);
   fireEvent.change(screen.getByLabelText('Camera purpose'), { target: { value: 'GATE' } });
   const gate = gateFixture('site')[0]!;
