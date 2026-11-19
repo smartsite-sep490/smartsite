@@ -827,7 +827,7 @@ export function RestrictedZoneView({
         className={
           isZoneFullscreen
             ? 'min-h-screen w-full min-w-0 space-y-3 bg-slate-950 p-3 sm:p-4 text-white'
-            : 'w-full min-w-0 space-y-4 pb-8 text-slate-900'
+            : 'w-full min-w-0 space-y-3 pb-0 text-slate-900'
         }
       >
         {!canRead ? (
@@ -837,7 +837,7 @@ export function RestrictedZoneView({
         ) : (
           <>
             <header
-              className={`flex flex-col gap-3 rounded-2xl border px-4 py-3.5 shadow-2xs sm:px-5 lg:flex-row lg:items-center lg:justify-between ${
+              className={`flex flex-col gap-2.5 rounded-2xl border px-4 py-2.5 shadow-2xs sm:px-5 lg:flex-row lg:items-center lg:justify-between ${
                 isZoneFullscreen
                   ? 'border-white/15 bg-slate-900 text-white'
                   : 'border-slate-200/90 bg-white text-slate-950'
@@ -937,10 +937,16 @@ export function RestrictedZoneView({
             {/* 2-column VMS console: live video + inspector rail on xl, stacked below */}
             <div className={isZoneFullscreen
               ? 'space-y-3'
-              : 'grid grid-cols-1 gap-4 xl:grid-cols-[minmax(0,1fr)_340px]'
+              : 'grid grid-cols-1 gap-3.5 xl:grid-cols-[minmax(0,1fr)_340px] xl:items-start'
             }>
-              {/* Left: Live video stage */}
-              <div className="min-w-0">
+              {/* Left: Live video stage — bounded to fit 1440×1000 & 1920×1080 viewport without vertical scroll */}
+              <div
+                className={
+                  isZoneFullscreen
+                    ? 'min-w-0'
+                    : 'min-w-0 [&_[data-testid=focused-camera-stage]]:lg:h-[clamp(18rem,calc(100dvh-25.5rem),40rem)]'
+                }
+              >
                 {session && selectedCamera ? (
                   <FocusedCameraMedia
                     key={JSON.stringify([sessionScope, selectedSiteId, selectedCameraId])}

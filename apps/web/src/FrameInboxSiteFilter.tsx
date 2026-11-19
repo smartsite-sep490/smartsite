@@ -121,7 +121,7 @@ export function FrameInboxSiteFilter({
       }`}
     >
       <div className="flex flex-col gap-2.5 xl:flex-row xl:items-center xl:justify-between">
-        <div className="grid w-full min-w-0 gap-2.5 sm:grid-cols-2 xl:max-w-2xl">
+        <div className="grid w-full min-w-0 gap-2.5 sm:grid-cols-2 xl:max-w-xl">
           <label className="flex min-w-0 flex-col gap-1 sm:flex-row sm:items-center sm:gap-2 text-xs sm:text-sm font-semibold text-slate-800">
             <span className="shrink-0 text-slate-600">{t('episodes.site')}</span>
             <select
@@ -164,13 +164,13 @@ export function FrameInboxSiteFilter({
           </label>
         </div>
         {!revoked && (
-          <div className="flex flex-wrap items-center gap-2">
+          <div className="flex min-w-0 flex-wrap items-center gap-2 xl:justify-end">
             {siteId ? (
               <>
                 <Badge
                   variant="info"
                   dot
-                  className="max-w-full normal-case tracking-normal border-teal-700/30 bg-teal-100/80 px-2.5 py-1 text-xs font-semibold text-teal-950"
+                  className="max-w-[min(100%,18rem)] normal-case tracking-normal border-teal-700/30 bg-teal-100/80 px-2.5 py-1 text-xs font-semibold text-teal-950"
                 >
                   <IconFilter className="h-3.5 w-3.5 shrink-0" />
                   <span className="truncate">
@@ -182,7 +182,7 @@ export function FrameInboxSiteFilter({
                 <button
                   type="button"
                   onClick={() => applySiteFilter('')}
-                  className="inline-flex items-center gap-1.5 rounded-lg border border-teal-700/40 bg-white px-2.5 py-1.5 text-xs font-semibold text-teal-950 shadow-2xs transition-colors hover:bg-teal-50 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-teal-800 focus-visible:ring-2 focus-visible:ring-teal-700/30"
+                  className="inline-flex shrink-0 items-center gap-1.5 rounded-lg border border-teal-700/40 bg-white px-2.5 py-1.5 text-xs font-semibold whitespace-nowrap text-teal-950 shadow-2xs transition-colors hover:bg-teal-50 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-teal-800 focus-visible:ring-2 focus-visible:ring-teal-700/30"
                 >
                   <IconX className="h-3.5 w-3.5 shrink-0" />
                   <span>{t('frameInbox.clearSiteFilter')}</span>
@@ -192,7 +192,7 @@ export function FrameInboxSiteFilter({
               <Badge
                 variant="neutral"
                 dot
-                className="normal-case tracking-normal px-2.5 py-1 text-xs font-medium"
+                className="normal-case tracking-normal px-2.5 py-1 text-xs font-medium whitespace-nowrap"
               >
                 <IconBuilding className="h-3.5 w-3.5 shrink-0" />
                 <span>{t('frameInbox.allAssignedSitesBadge', { count: siteIds.length })}</span>
@@ -203,7 +203,7 @@ export function FrameInboxSiteFilter({
                 <Badge
                   variant="info"
                   dot
-                  className="max-w-full normal-case tracking-normal border-teal-700/30 bg-teal-100/80 px-2.5 py-1 text-xs font-semibold text-teal-950"
+                  className="max-w-[min(100%,16rem)] normal-case tracking-normal border-teal-700/30 bg-teal-100/80 px-2.5 py-1 text-xs font-semibold text-teal-950"
                 >
                   <IconCamera className="h-3.5 w-3.5 shrink-0" />
                   <span className="truncate">
@@ -215,7 +215,7 @@ export function FrameInboxSiteFilter({
                 <button
                   type="button"
                   onClick={() => applyCameraFilter('')}
-                  className="inline-flex items-center gap-1.5 rounded-lg border border-teal-700/40 bg-white px-2.5 py-1.5 text-xs font-semibold text-teal-950 shadow-2xs transition-colors hover:bg-teal-50 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-teal-800 focus-visible:ring-2 focus-visible:ring-teal-700/30"
+                  className="inline-flex shrink-0 items-center gap-1.5 rounded-lg border border-teal-700/40 bg-white px-2.5 py-1.5 text-xs font-semibold whitespace-nowrap text-teal-950 shadow-2xs transition-colors hover:bg-teal-50 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-teal-800 focus-visible:ring-2 focus-visible:ring-teal-700/30"
                 >
                   <IconX className="h-3.5 w-3.5 shrink-0" />
                   <span>{t('frameInbox.clearCameraFilter')}</span>

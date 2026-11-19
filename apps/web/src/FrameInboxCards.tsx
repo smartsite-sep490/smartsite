@@ -170,7 +170,7 @@ export function FrameInboxCards({
                 </button>
               </div>
             ) : (
-              <span className="hidden xl:inline text-xs text-slate-500">
+              <span className="hidden 2xl:inline text-xs text-slate-500">
                 {tSafety('frameInbox.batchAckScopeHint')}
               </span>
             )}
@@ -180,7 +180,7 @@ export function FrameInboxCards({
             data-testid="frame-inbox-mark-visible-read"
             disabled={read.isPending || batchTargetCases.length === 0}
             onClick={() => read.mutate(batchTargetCases)}
-            className="inline-flex min-h-9 shrink-0 items-center justify-center gap-1.5 rounded-xl border border-teal-700/45 bg-white px-3.5 py-1.5 text-xs sm:text-sm font-semibold text-teal-950 shadow-2xs transition-colors hover:bg-teal-50 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-teal-800 disabled:cursor-not-allowed disabled:opacity-50"
+            className="inline-flex min-h-9 shrink-0 items-center justify-center gap-1.5 rounded-xl border border-teal-700/45 bg-white px-3.5 py-1.5 text-xs sm:text-sm font-semibold whitespace-nowrap text-teal-950 shadow-2xs transition-colors hover:bg-teal-50 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-teal-800 disabled:cursor-not-allowed disabled:opacity-50"
           >
             <IconCheck className="h-3.5 w-3.5 shrink-0 text-teal-800" />
             <span>
@@ -280,26 +280,26 @@ export function FrameInboxCards({
                   aria-expanded={expanded}
                   aria-controls={panelId}
                   onClick={() => setOpen(expanded ? '' : key)}
-                  className="group flex flex-1 min-w-0 flex-col gap-2 rounded-xl p-1 -m-1 text-left transition-colors hover:bg-slate-50/80 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-teal-800 focus-visible:ring-4 focus-visible:ring-teal-700/20 xl:grid xl:grid-cols-[minmax(220px,1.15fr)_minmax(190px,0.85fr)_minmax(260px,1.35fr)_auto] xl:items-center xl:gap-4"
+                  className="group flex flex-1 min-w-0 flex-col gap-2 rounded-xl p-1 -m-1 text-left transition-colors hover:bg-slate-50/80 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-teal-800 focus-visible:ring-4 focus-visible:ring-teal-700/20 xl:grid xl:grid-cols-[minmax(150px,1fr)_minmax(140px,auto)_minmax(170px,1.2fr)_auto] xl:items-center xl:gap-3 2xl:grid-cols-[minmax(220px,1.15fr)_minmax(195px,0.85fr)_minmax(260px,1.35fr)_auto] 2xl:gap-4"
                 >
-                <div className="min-w-0 space-y-0.5">
-                  <div
-                    title={frame.cameraName}
-                    className="flex min-w-0 items-center gap-1.5 text-sm sm:text-[15px] font-semibold text-slate-950"
-                  >
-                    <IconCamera className="h-4 w-4 shrink-0 text-slate-500" />
-                    <span className="truncate">{frame.cameraName}</span>
+                  <div className="min-w-0 space-y-0.5">
+                    <div
+                      title={frame.cameraName}
+                      className="flex min-w-0 items-center gap-1.5 text-sm sm:text-[15px] font-semibold text-slate-950"
+                    >
+                      <IconCamera className="h-4 w-4 shrink-0 text-slate-500" />
+                      <span className="truncate">{frame.cameraName}</span>
+                    </div>
+                    <div
+                      title={frame.siteName}
+                      className="flex min-w-0 items-center gap-1.5 text-xs sm:text-[13px] font-medium text-slate-600"
+                    >
+                      <IconBuilding className="h-3.5 w-3.5 shrink-0 text-slate-400" />
+                      <span className="truncate">{frame.siteName}</span>
+                    </div>
                   </div>
-                  <div
-                    title={frame.siteName}
-                    className="flex min-w-0 items-center gap-1.5 text-xs sm:text-[13px] font-medium text-slate-600"
-                  >
-                    <IconBuilding className="h-3.5 w-3.5 shrink-0 text-slate-400" />
-                    <span className="truncate">{frame.siteName}</span>
-                  </div>
-                </div>
 
-                <div className="flex min-w-0 flex-wrap items-center gap-2 text-xs sm:text-[13px] tabular-nums text-slate-700">
+                  <div className="flex min-w-0 flex-wrap items-center gap-1.5 xl:flex-col xl:items-start 2xl:flex-row 2xl:items-center 2xl:gap-2 text-xs sm:text-[13px] tabular-nums text-slate-700">
                   <span className="inline-flex items-center gap-1.5 font-medium">
                     <IconClock className="h-3.5 w-3.5 shrink-0 text-slate-400" />
                     <time dateTime={frame.capturedAt}>{displayTimestamp}</time>
@@ -397,7 +397,7 @@ export function FrameInboxCards({
                   )}
                 </div>
 
-                <span className="inline-flex min-h-9 w-fit shrink-0 items-center gap-1.5 rounded-xl border border-slate-200 bg-slate-50 px-3.5 py-1.5 text-xs sm:text-sm font-semibold text-slate-800 transition-colors group-hover:border-slate-300 group-hover:bg-white group-focus-visible:border-teal-700 group-focus-visible:bg-teal-50 group-focus-visible:text-teal-950">
+                <span className="inline-flex min-h-9 w-fit shrink-0 items-center gap-1.5 rounded-xl border border-slate-200 bg-slate-50 px-3 py-1.5 text-xs sm:text-sm font-semibold whitespace-nowrap text-slate-800 transition-colors group-hover:border-slate-300 group-hover:bg-white group-focus-visible:border-teal-700 group-focus-visible:bg-teal-50 group-focus-visible:text-teal-950">
                   <span>
                     {t(expanded ? 'frameInbox.hideBreakdown' : 'frameInbox.showBreakdown')}
                   </span>
@@ -413,7 +413,7 @@ export function FrameInboxCards({
                   type="button"
                   disabled={read.isPending}
                   onClick={() => read.mutate(frame.cases)}
-                  className="inline-flex min-h-9 w-full sm:w-auto lg:shrink-0 items-center justify-center gap-1.5 rounded-xl border border-teal-700/40 bg-teal-50/70 px-3.5 py-1.5 text-xs sm:text-sm font-semibold text-teal-950 transition-colors hover:bg-teal-100/70 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-teal-800 focus-visible:ring-2 focus-visible:ring-teal-700/30 disabled:cursor-not-allowed disabled:opacity-50"
+                  className="inline-flex min-h-9 w-full sm:w-auto lg:shrink-0 items-center justify-center gap-1.5 rounded-xl border border-teal-700/40 bg-teal-50/70 px-3 py-1.5 text-xs sm:text-sm font-semibold whitespace-nowrap text-teal-950 transition-colors hover:bg-teal-100/70 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-teal-800 focus-visible:ring-2 focus-visible:ring-teal-700/30 disabled:cursor-not-allowed disabled:opacity-50"
                 >
                   <IconCheck className="h-3.5 w-3.5 shrink-0" />
                   <span>{read.isPending ? t('frameInbox.markingRead') : t('frameInbox.markRead')}</span>

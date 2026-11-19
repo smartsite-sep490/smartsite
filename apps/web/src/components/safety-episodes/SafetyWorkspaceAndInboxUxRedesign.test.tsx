@@ -293,6 +293,13 @@ describe('Safety Operations & Frame Inbox full-width workspace, grouped segmente
         .getAttribute('aria-current'),
     ).toBeNull();
 
+    // Header title row and scope note must never be shrink-starved by the Tour invitation banner at 1440px
+    const titleRow = screen.getByTestId('frame-inbox-title-row');
+    expect(titleRow.className).toContain('min-w-[min(100%,20rem)]');
+    expect(titleRow.className).toContain('flex-1');
+    const scopeNote = screen.getByTestId('frame-inbox-header-scope-note');
+    expect(scopeNote.className).toContain('w-full');
+
     // Select Frame 1 & Frame 2 checkboxes -> Batch Mark-Read acknowledges ONLY those 2 selected frames with their exact displayed revisions (4 and 2)
     const articles = screen.getAllByRole('article');
     fireEvent.click(within(articles[0]!).getByRole('checkbox'));

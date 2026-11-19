@@ -181,9 +181,9 @@ export function SafetyEpisodeWorkspace({
         <nav
           aria-label={t('episodes.views')}
           data-testid="safety-workspace-mode-bar"
-          className="flex flex-col gap-2.5 rounded-2xl border border-slate-200/90 bg-white px-4 py-2.5 shadow-2xs sm:px-5 xl:flex-row xl:items-center xl:justify-between"
+          className="flex flex-wrap items-center justify-between gap-2.5 rounded-2xl border border-slate-200/90 bg-white px-4 py-2.5 shadow-2xs sm:px-5"
         >
-          <p className="min-w-0 text-xs sm:text-sm leading-relaxed text-slate-600">
+          <p className="min-w-[min(100%,20rem)] flex-1 text-xs sm:text-sm leading-snug text-slate-600">
             {identification
               ? tSafety('episodes.identificationWorkspaceIntro')
               : frameGrouped
@@ -194,7 +194,7 @@ export function SafetyEpisodeWorkspace({
           </p>
           <div
             data-testid="safety-workspace-mode-actions"
-            className="flex flex-wrap items-center gap-1 rounded-xl border border-slate-200/80 bg-slate-100/90 p-1 xl:shrink-0"
+            className="flex flex-wrap items-center gap-1 rounded-xl border border-slate-200/80 bg-slate-100/90 p-1"
           >
             <Link
               aria-current={isOperationsActive ? 'page' : undefined}

@@ -219,49 +219,47 @@ function ScopedFramePpeInbox({
   });
 
   return (
-    <section className="w-full min-w-0 space-y-3.5" aria-label={t('frameInbox.title')}>
-      <header className="space-y-3 rounded-2xl border border-slate-200/90 bg-white p-4 shadow-2xs sm:px-5">
-        <div className="flex flex-col gap-2.5 xl:flex-row xl:items-start xl:justify-between">
-          <div className="min-w-0 space-y-1">
-            <div className="flex min-w-0 flex-wrap items-center gap-2.5">
-              <h1 className="text-2xl sm:text-[1.75rem] font-bold tracking-tight text-slate-950">
-                {t('frameInbox.title')}
-              </h1>
-              {visible && query.data && (
-                <div
-                  className={`inline-flex items-center gap-2 rounded-lg border px-2.5 py-1 text-xs sm:text-sm font-semibold tabular-nums ${
-                    unreadCount > 0
-                      ? 'border-teal-700/35 bg-teal-50 text-teal-950'
-                      : 'border-slate-200 bg-slate-100 text-slate-700'
-                  }`}
-                >
-                  <span
-                    aria-hidden="true"
-                    className={`h-2 w-2 rounded-full ${unreadCount > 0 ? 'bg-teal-700' : 'bg-slate-400'}`}
-                  />
-                  <p role="status">{t('frameInbox.unreadCount', { count: unreadCount })}</p>
-                </div>
-              )}
-              {frameKey && (
-                <Link
-                  className="inline-flex min-h-8 items-center rounded-lg border border-slate-300 bg-white px-2.5 py-1 text-xs sm:text-sm font-semibold text-teal-900 underline decoration-teal-700/60 underline-offset-2 transition-colors hover:bg-slate-50 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-teal-800 focus-visible:ring-2 focus-visible:ring-teal-700/30"
-                  to={`/incidents?${allFramesParams}`}
-                >
-                  {t('frameInbox.allFrames')}
-                </Link>
-              )}
-            </div>
-            <p
-              data-testid="frame-inbox-header-scope-note"
-              className="min-w-0 text-xs sm:text-[13px] leading-relaxed text-slate-600"
-            >
-              {tSafety('frameInbox.scopeCountNote')}
-            </p>
+    <section className="w-full min-w-0 space-y-3" aria-label={t('frameInbox.title')}>
+      <header
+        data-testid="frame-inbox-header"
+        className="space-y-2.5 rounded-2xl border border-slate-200/90 bg-white p-3.5 shadow-2xs sm:px-5 sm:py-4"
+      >
+        <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-2">
+          <div
+            data-testid="frame-inbox-title-row"
+            className="flex min-w-[min(100%,20rem)] flex-1 flex-wrap items-center gap-2.5"
+          >
+            <h1 className="text-2xl sm:text-[1.75rem] font-bold tracking-tight text-slate-950">
+              {t('frameInbox.title')}
+            </h1>
+            {visible && query.data && (
+              <div
+                className={`inline-flex shrink-0 items-center gap-2 rounded-lg border px-2.5 py-1 text-xs sm:text-sm font-semibold whitespace-nowrap tabular-nums ${
+                  unreadCount > 0
+                    ? 'border-teal-700/35 bg-teal-50 text-teal-950'
+                    : 'border-slate-200 bg-slate-100 text-slate-700'
+                }`}
+              >
+                <span
+                  aria-hidden="true"
+                  className={`h-2 w-2 shrink-0 rounded-full ${unreadCount > 0 ? 'bg-teal-700' : 'bg-slate-400'}`}
+                />
+                <p role="status">{t('frameInbox.unreadCount', { count: unreadCount })}</p>
+              </div>
+            )}
+            {frameKey && (
+              <Link
+                className="inline-flex min-h-8 shrink-0 items-center rounded-lg border border-slate-300 bg-white px-2.5 py-1 text-xs sm:text-sm font-semibold whitespace-nowrap text-teal-900 underline decoration-teal-700/60 underline-offset-2 transition-colors hover:bg-slate-50 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-teal-800 focus-visible:ring-2 focus-visible:ring-teal-700/30"
+                to={`/incidents?${allFramesParams}`}
+              >
+                {t('frameInbox.allFrames')}
+              </Link>
+            )}
           </div>
 
-          <div className="flex flex-wrap items-center gap-2 xl:shrink-0 xl:justify-end">
+          <div className="flex flex-wrap items-center gap-2">
             <label
-              className={`inline-flex h-10 cursor-pointer select-none items-center gap-2 rounded-xl border px-3.5 text-sm font-semibold transition-colors has-[:focus-visible]:outline-2 has-[:focus-visible]:outline-offset-2 has-[:focus-visible]:outline-teal-800 has-[:focus-visible]:ring-2 has-[:focus-visible]:ring-teal-700/30 ${
+              className={`inline-flex h-10 cursor-pointer select-none items-center gap-2 rounded-xl border px-3.5 text-sm font-semibold whitespace-nowrap transition-colors has-[:focus-visible]:outline-2 has-[:focus-visible]:outline-offset-2 has-[:focus-visible]:outline-teal-800 has-[:focus-visible]:ring-2 has-[:focus-visible]:ring-teal-700/30 ${
                 unreadOnly
                   ? 'border-teal-700 bg-teal-50 text-teal-950 ring-1 ring-teal-700/20'
                   : 'border-slate-300 bg-white text-slate-800 hover:bg-slate-50'
@@ -270,7 +268,7 @@ function ScopedFramePpeInbox({
               <input
                 type="checkbox"
                 checked={unreadOnly}
-                className="h-4 w-4 rounded border-slate-400 accent-teal-800 focus-visible:outline-none"
+                className="h-4 w-4 shrink-0 rounded border-slate-400 accent-teal-800 focus-visible:outline-none"
                 onChange={(event) => setUnreadOnly(event.target.checked)}
               />
               {t('frameInbox.unreadOnly')}
@@ -279,19 +277,29 @@ function ScopedFramePpeInbox({
               type="button"
               disabled={query.isFetching || revoked}
               onClick={() => void query.refetch()}
-              className="inline-flex h-10 items-center justify-center rounded-xl border border-slate-300 bg-white px-3.5 text-sm font-semibold text-slate-900 shadow-2xs transition-colors hover:bg-slate-50 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-teal-800 focus-visible:ring-2 focus-visible:ring-teal-700/30 disabled:cursor-not-allowed disabled:opacity-50"
+              className="inline-flex h-10 items-center justify-center rounded-xl border border-slate-300 bg-white px-3.5 text-sm font-semibold whitespace-nowrap text-slate-900 shadow-2xs transition-colors hover:bg-slate-50 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-teal-800 focus-visible:ring-2 focus-visible:ring-teal-700/30 disabled:cursor-not-allowed disabled:opacity-50"
             >
               {query.isFetching ? t('frameInbox.refreshing') : t('common.refresh')}
             </button>
-            <SafetyTaskTour
-              taskId="frame-inbox"
-              tourVersion={FRAME_INBOX_TOUR_VERSION}
-              userId={userId}
-              scopeKey={tourScopeKey}
-              isAuthorized={isTourReady}
-              steps={tourSteps}
-            />
           </div>
+        </div>
+
+        <p
+          data-testid="frame-inbox-header-scope-note"
+          className="w-full min-w-0 text-xs sm:text-[13px] leading-snug text-slate-600"
+        >
+          {tSafety('frameInbox.scopeCountNote')}
+        </p>
+
+        <div className="flex flex-wrap items-center gap-2">
+          <SafetyTaskTour
+            taskId="frame-inbox"
+            tourVersion={FRAME_INBOX_TOUR_VERSION}
+            userId={userId}
+            scopeKey={tourScopeKey}
+            isAuthorized={isTourReady}
+            steps={tourSteps}
+          />
         </div>
 
         <div data-tour-anchor="frame-inbox-filters">
