@@ -218,7 +218,79 @@ function ScopedFramePpeInbox({
   });
 
   return (
-    <div className="space-y-4">
+    <section className="min-w-0 space-y-4" aria-label={t('frameInbox.title')}>
+      <header className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
+        <div className="min-w-0 space-y-1.5">
+          <div className="flex flex-wrap items-center gap-2.5">
+            <h1 className="text-2xl sm:text-[1.75rem] sm:leading-9 font-semibold tracking-tight text-slate-950">
+              {t('frameInbox.title')}
+            </h1>
+            {visible && query.data && (
+              <div
+                className={`inline-flex items-center gap-2 rounded-lg border px-2.5 py-1 text-xs sm:text-sm font-semibold tabular-nums ${
+                  unreadCount > 0
+                    ? 'border-teal-700/35 bg-teal-50 text-teal-950'
+                    : 'border-slate-200 bg-slate-100 text-slate-700'
+                }`}
+              >
+                <span
+                  aria-hidden="true"
+                  className={`h-2 w-2 rounded-full ${unreadCount > 0 ? 'bg-teal-700' : 'bg-slate-400'}`}
+                />
+                <p role="status">{t('frameInbox.unreadCount', { count: unreadCount })}</p>
+              </div>
+            )}
+            {frameKey && (
+              <Link
+                className="inline-flex min-h-8 items-center rounded-lg border border-slate-300 bg-white px-2.5 py-1 text-xs sm:text-sm font-semibold text-teal-900 underline decoration-teal-700/60 underline-offset-2 transition-colors hover:bg-slate-50 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-teal-800 focus-visible:ring-2 focus-visible:ring-teal-700/30"
+                to={`/incidents?${allFramesParams}`}
+              >
+                {t('frameInbox.allFrames')}
+              </Link>
+            )}
+          </div>
+          <p
+            data-testid="frame-inbox-header-scope-note"
+            className="max-w-3xl text-xs sm:text-sm leading-relaxed text-slate-600"
+          >
+            {tSafety('frameInbox.scopeCountNote')}
+          </p>
+        </div>
+        <div className="flex flex-wrap items-center gap-2 lg:justify-end">
+          <label
+            className={`inline-flex min-h-10 cursor-pointer select-none items-center gap-2 rounded-xl border px-3.5 py-2 text-sm font-semibold transition-colors has-[:focus-visible]:outline-2 has-[:focus-visible]:outline-offset-2 has-[:focus-visible]:outline-teal-800 has-[:focus-visible]:ring-2 has-[:focus-visible]:ring-teal-700/30 ${
+              unreadOnly
+                ? 'border-teal-700 bg-teal-50 text-teal-950 ring-1 ring-teal-700/20'
+                : 'border-slate-300 bg-white text-slate-800 hover:bg-slate-50'
+            }`}
+          >
+            <input
+              type="checkbox"
+              checked={unreadOnly}
+              className="h-4 w-4 rounded border-slate-400 accent-teal-800 focus-visible:outline-none"
+              onChange={(event) => setUnreadOnly(event.target.checked)}
+            />
+            {t('frameInbox.unreadOnly')}
+          </label>
+          <button
+            type="button"
+            disabled={query.isFetching || revoked}
+            onClick={() => void query.refetch()}
+            className="inline-flex min-h-10 items-center justify-center rounded-xl border border-slate-300 bg-white px-3.5 py-2 text-sm font-semibold text-slate-900 shadow-2xs transition-colors hover:bg-slate-50 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-teal-800 focus-visible:ring-2 focus-visible:ring-teal-700/30 disabled:cursor-not-allowed disabled:opacity-50"
+          >
+            {query.isFetching ? t('frameInbox.refreshing') : t('common.refresh')}
+          </button>
+          <SafetyTaskTour
+            taskId="frame-inbox"
+            tourVersion={FRAME_INBOX_TOUR_VERSION}
+            userId={userId}
+            scopeKey={tourScopeKey}
+            isAuthorized={isTourReady}
+            steps={tourSteps}
+          />
+        </div>
+      </header>
+
       <div data-tour-anchor="frame-inbox-filters">
         <FrameInboxSiteFilter
           client={client}
@@ -230,110 +302,41 @@ function ScopedFramePpeInbox({
           availableCameras={availableCameras}
         />
       </div>
-      <section className="space-y-4" aria-label={t('frameInbox.title')}>
-        <header className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
-          <div className="min-w-0 space-y-1.5">
-            <h1 className="text-2xl sm:text-3xl font-semibold tracking-tight text-slate-950">
-              {t('frameInbox.title')}
-            </h1>
-            <p
-              data-testid="frame-inbox-header-scope-note"
-              className="text-xs sm:text-sm text-slate-600"
-            >
-              {tSafety('frameInbox.scopeCountNote')}
-            </p>
-            <div className="flex flex-wrap items-center gap-2.5">
-              {visible && query.data && (
-                <div
-                  className={`inline-flex items-center gap-2 rounded-full border px-3 py-1 text-xs sm:text-sm font-semibold ${
-                    unreadCount > 0
-                      ? 'border-teal-700/35 bg-teal-50 text-teal-950'
-                      : 'border-slate-200 bg-slate-100 text-slate-700'
-                  }`}
-                >
-                  <span
-                    aria-hidden="true"
-                    className={`h-2 w-2 rounded-full ${unreadCount > 0 ? 'bg-teal-700' : 'bg-slate-400'}`}
-                  />
-                  <p role="status">{t('frameInbox.unreadCount', { count: unreadCount })}</p>
-                </div>
-              )}
-              {frameKey && (
-                <Link
-                  className="inline-flex items-center rounded-lg border border-slate-300 bg-white px-2.5 py-1 text-xs sm:text-sm font-semibold text-teal-900 underline decoration-teal-700/60 underline-offset-2 transition-colors hover:bg-slate-50 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-teal-800 focus-visible:ring-2 focus-visible:ring-teal-700/30"
-                  to={`/incidents?${allFramesParams}`}
-                >
-                  {t('frameInbox.allFrames')}
-                </Link>
-              )}
-            </div>
-          </div>
-          <div className="flex flex-wrap items-center gap-2.5">
-            <SafetyTaskTour
-              taskId="frame-inbox"
-              tourVersion={FRAME_INBOX_TOUR_VERSION}
-              userId={userId}
-              scopeKey={tourScopeKey}
-              isAuthorized={isTourReady}
-              steps={tourSteps}
-            />
+
+      {query.isPending && (
+        <p role="status" className="text-sm text-slate-600">
+          {t('frameInbox.loading')}
+        </p>
+      )}
+      {query.isError && (
+        <div
+          role="alert"
+          className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-amber-300 bg-amber-50 px-4 py-3 text-sm font-medium text-amber-950"
+        >
+          <span>{revoked ? t('frameInbox.unavailable') : t('frameInbox.loadError')}</span>
+          {!revoked && (
             <button
               type="button"
-              disabled={query.isFetching || revoked}
-              onClick={() => void query.refetch()}
-              className="inline-flex items-center justify-center rounded-xl border border-slate-300 bg-white px-3.5 py-2 text-sm font-semibold text-slate-900 shadow-2xs transition-colors hover:bg-slate-50 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-teal-800 focus-visible:ring-2 focus-visible:ring-teal-700/30 disabled:cursor-not-allowed disabled:opacity-50"
+              className="inline-flex min-h-8 items-center rounded-lg border border-amber-400/80 bg-white px-3 py-1 text-sm font-semibold text-amber-950 transition-colors hover:bg-amber-100/70 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-teal-800"
+              onClick={() =>
+                void (query.isFetchNextPageError ? query.fetchNextPage() : query.refetch())
+              }
             >
-              {query.isFetching ? t('frameInbox.refreshing') : t('common.refresh')}
+              {t('common.retry')}
             </button>
-            <label
-              className={`inline-flex cursor-pointer select-none items-center gap-2 rounded-xl border px-3.5 py-2 text-sm font-semibold transition-colors has-[:focus-visible]:outline-2 has-[:focus-visible]:outline-offset-2 has-[:focus-visible]:outline-teal-800 has-[:focus-visible]:ring-2 has-[:focus-visible]:ring-teal-700/30 ${
-                unreadOnly
-                  ? 'border-teal-700 bg-teal-50 text-teal-950 ring-1 ring-teal-700/20'
-                  : 'border-slate-300 bg-white text-slate-800 hover:bg-slate-50'
-              }`}
-            >
-              <input
-                type="checkbox"
-                checked={unreadOnly}
-                className="h-4 w-4 rounded border-slate-400 accent-teal-800 focus-visible:outline-none"
-                onChange={(event) => setUnreadOnly(event.target.checked)}
-              />
-              {t('frameInbox.unreadOnly')}
-            </label>
-          </div>
-        </header>
-        {query.isPending && (
-          <p role="status" className="text-sm text-slate-600">
-            {t('frameInbox.loading')}
-          </p>
-        )}
-        {query.isError && (
-          <div
-            role="alert"
-            className="rounded-xl border border-amber-300 bg-amber-50 p-3.5 text-sm font-medium text-amber-950"
-          >
-            {revoked ? t('frameInbox.unavailable') : t('frameInbox.loadError')}
-            {!revoked && (
-              <button
-                type="button"
-                className="ml-2 rounded px-1.5 py-0.5 font-semibold underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-teal-800"
-                onClick={() =>
-                  void (query.isFetchNextPageError ? query.fetchNextPage() : query.refetch())
-                }
-              >
-                {t('common.retry')}
-              </button>
-            )}
-          </div>
-        )}
-        {query.isSuccess && !frames.length && (
-          <p
-            role="status"
-            className="rounded-2xl border border-slate-200 bg-white p-6 text-center text-sm text-slate-600"
-          >
-            {t('frameInbox.empty')}
-          </p>
-        )}
+          )}
+        </div>
+      )}
+      {query.isSuccess && !frames.length && (
+        <p
+          role="status"
+          className="rounded-2xl border border-slate-200 bg-white px-6 py-8 text-center text-sm text-slate-600"
+        >
+          {t('frameInbox.empty')}
+        </p>
+      )}
+
+      <div className="space-y-3">
         <FrameInboxCards
           key={JSON.stringify([siteId, cameraId, frameKey, unreadOnly])}
           client={client}
@@ -344,17 +347,18 @@ function ScopedFramePpeInbox({
           frameKey={frameKey}
           onRefetch={() => query.refetch()}
         />
-        {visible && query.hasNextPage && !query.isFetchNextPageError && (
-          <button
-            type="button"
-            disabled={query.isFetchingNextPage}
-            onClick={() => void query.fetchNextPage()}
-            className="inline-flex w-full sm:w-auto items-center justify-center rounded-xl border border-slate-300 bg-white px-4 py-2 text-sm font-semibold text-slate-900 shadow-2xs transition-colors hover:bg-slate-50 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-teal-800 focus-visible:ring-2 focus-visible:ring-teal-700/30 disabled:opacity-50"
-          >
-            {t('common.load_more')}
-          </button>
-        )}
-      </section>
-    </div>
+      </div>
+
+      {visible && query.hasNextPage && !query.isFetchNextPageError && (
+        <button
+          type="button"
+          disabled={query.isFetchingNextPage}
+          onClick={() => void query.fetchNextPage()}
+          className="inline-flex min-h-10 w-full sm:w-auto items-center justify-center rounded-xl border border-slate-300 bg-white px-4 py-2 text-sm font-semibold text-slate-900 shadow-2xs transition-colors hover:bg-slate-50 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-teal-800 focus-visible:ring-2 focus-visible:ring-teal-700/30 disabled:opacity-50"
+        >
+          {t('common.load_more')}
+        </button>
+      )}
+    </section>
   );
 }
