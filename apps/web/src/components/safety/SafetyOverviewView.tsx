@@ -183,118 +183,142 @@ export function SafetyOverviewView(
         day,
     });
   const current = detail.data;
+  const overviewFieldClass =
+    'mt-1 block h-10 w-full min-w-0 rounded-xl border border-slate-300 bg-white px-3 text-sm font-medium text-slate-900 shadow-2xs transition-colors hover:border-slate-400 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-slate-900';
   return (
-    <div className="space-y-3 min-w-0">
-      <div className="flex flex-wrap items-center justify-between gap-2">
-        <div>
-          <h2 className="text-lg font-bold">{tr('safety_workspace.safety_overview')}</h2>
-          <p className="text-xs text-[var(--text-secondary)]">
-            {tr('safety_workspace.planned_teams_work_preparation_and_related_alerts')}
-          </p>
-        </div>
-        <button
-          className={buttonClass}
-          onClick={() => {
-            void query.refetch();
-            if (mode === 'week') void week.refetch();
-            void detail.refetch();
-            void jobs.refetch();
-            void options.refetch();
-            void contractors.refetch();
-          }}
-        >
-          {tr('safety_workspace.refresh_overview')}
-        </button>
-      </div>
-      <div className="flex flex-wrap items-end gap-3 rounded-xl border border-[var(--border)] bg-white p-3">
-        <div className="flex gap-1" aria-label={tr('safety_workspace.overview_period')}>
+    <div className="space-y-3.5 min-w-0">
+      <div className="space-y-3 rounded-2xl border border-slate-200/90 bg-white p-4 shadow-2xs sm:px-5">
+        <div className="flex flex-wrap items-center justify-between gap-2.5">
+          <div>
+            <h2 className="text-lg font-bold tracking-tight text-slate-950">
+              {tr('safety_workspace.safety_overview')}
+            </h2>
+            <p className="text-xs sm:text-[13px] text-slate-600">
+              {tr('safety_workspace.planned_teams_work_preparation_and_related_alerts')}
+            </p>
+          </div>
           <button
-            className={buttonClass}
-            aria-pressed={mode === 'day'}
+            className="inline-flex h-10 items-center justify-center rounded-xl border border-slate-300 bg-white px-3.5 text-sm font-semibold text-slate-900 shadow-2xs transition-colors hover:bg-slate-50"
             onClick={() => {
-              setMode('day');
-              reset();
+              void query.refetch();
+              if (mode === 'week') void week.refetch();
+              void detail.refetch();
+              void jobs.refetch();
+              void options.refetch();
+              void contractors.refetch();
             }}
           >
-            {tr('labels.DAY')}
-          </button>
-          <button
-            className={buttonClass}
-            aria-pressed={mode === 'week'}
-            onClick={() => {
-              setMode('week');
-              reset();
-            }}
-          >
-            {tr('labels.WEEK')}
+            {tr('safety_workspace.refresh_overview')}
           </button>
         </div>
-        <label className="text-xs font-semibold">
-          {tr('common.work_date')}
-          <input
-            className={fieldClass}
-            type="date"
-            required
-            value={day}
-            onChange={(e) => {
-              if (e.target.value) changeDay(e.target.value);
-            }}
-          />
-        </label>
-        <button className={buttonClass} onClick={() => changeDay(localDay())}>
-          {tr('calendar.today')}
-        </button>
-        <label className="min-w-0 w-full sm:w-44 text-xs font-semibold">
-          {tr('common.contractor')}
-          <select
-            className={fieldClass}
-            value={contractorId}
-            onChange={(e) => {
-              setContractor(e.target.value);
-              setTeamFilter('');
-              reset();
-            }}
+
+        <div className="flex flex-wrap items-end gap-3 border-t border-slate-100 pt-3">
+          <div
+            className="flex items-center gap-1 rounded-xl border border-slate-200/90 bg-slate-100/90 p-1"
+            aria-label={tr('safety_workspace.overview_period')}
           >
-            <option value="">{tr('safety_workspace.all_contractors')}</option>
-            {contractors.data?.map((c) => (
-              <option key={c.id} value={c.id}>
-                {c.name}
-              </option>
-            ))}
-          </select>
-        </label>
-        <label className="min-w-0 w-full sm:w-44 text-xs font-semibold">
-          {tr('labels.TEAM')}
-          <select
-            className={fieldClass}
-            value={teamFilter}
-            onChange={(e) => {
-              setTeamFilter(e.target.value);
-              reset();
-            }}
+            <button
+              className={
+                'inline-flex h-8 items-center justify-center rounded-lg px-3 text-sm font-semibold transition-colors ' +
+                (mode === 'day'
+                  ? 'bg-[#0F172A] text-white shadow-2xs'
+                  : 'text-slate-700 hover:bg-white hover:text-slate-950')
+              }
+              aria-pressed={mode === 'day'}
+              onClick={() => {
+                setMode('day');
+                reset();
+              }}
+            >
+              {tr('labels.DAY')}
+            </button>
+            <button
+              className={
+                'inline-flex h-8 items-center justify-center rounded-lg px-3 text-sm font-semibold transition-colors ' +
+                (mode === 'week'
+                  ? 'bg-[#0F172A] text-white shadow-2xs'
+                  : 'text-slate-700 hover:bg-white hover:text-slate-950')
+              }
+              aria-pressed={mode === 'week'}
+              onClick={() => {
+                setMode('week');
+                reset();
+              }}
+            >
+              {tr('labels.WEEK')}
+            </button>
+          </div>
+          <label className="text-xs font-semibold text-slate-700">
+            {tr('common.work_date')}
+            <input
+              className={overviewFieldClass}
+              type="date"
+              required
+              value={day}
+              onChange={(e) => {
+                if (e.target.value) changeDay(e.target.value);
+              }}
+            />
+          </label>
+          <button
+            className="inline-flex h-10 items-center justify-center rounded-xl border border-slate-300 bg-white px-3.5 text-sm font-semibold text-slate-800 transition-colors hover:bg-slate-50"
+            onClick={() => changeDay(localDay())}
           >
-            <option value="">{tr('common.all_teams_bf65fc')}</option>
-            {options.data?.map((t) => (
-              <option key={t.id} value={t.id}>
-                {t.name}
-              </option>
-            ))}
-          </select>
-        </label>
-      </div>
-      <div className="flex flex-wrap justify-between gap-2 text-xs text-[var(--text-secondary)]">
-        <span>
-          {tr('safety_workspace.timezone_value1_scheduled_does_not_mean_present', {
-            value1: timezone,
-          })}
-        </span>
-        <span>
-          {tr('safety_workspace.value1_refreshes_every_30_seconds_while_visible', {
-            value1: query.data?.updatedAt
-              ? tr('safety_workspace.updated_value1', { value1: date(query.data.updatedAt) })
-              : tr('safety_workspace.update_time_unavailable'),
-          })}
-        </span>
+            {tr('calendar.today')}
+          </button>
+          <label className="min-w-0 w-full sm:w-52 text-xs font-semibold text-slate-700">
+            {tr('common.contractor')}
+            <select
+              className={overviewFieldClass}
+              value={contractorId}
+              onChange={(e) => {
+                setContractor(e.target.value);
+                setTeamFilter('');
+                reset();
+              }}
+            >
+              <option value="">{tr('safety_workspace.all_contractors')}</option>
+              {contractors.data?.map((c) => (
+                <option key={c.id} value={c.id}>
+                  {c.name}
+                </option>
+              ))}
+            </select>
+          </label>
+          <label className="min-w-0 w-full sm:w-52 text-xs font-semibold text-slate-700">
+            {tr('labels.TEAM')}
+            <select
+              className={overviewFieldClass}
+              value={teamFilter}
+              onChange={(e) => {
+                setTeamFilter(e.target.value);
+                reset();
+              }}
+            >
+              <option value="">{tr('common.all_teams_bf65fc')}</option>
+              {options.data?.map((t) => (
+                <option key={t.id} value={t.id}>
+                  {t.name}
+                </option>
+              ))}
+            </select>
+          </label>
+        </div>
+
+        <div className="flex flex-wrap items-center justify-between gap-2 border-t border-slate-100 pt-2.5 text-xs text-slate-500">
+          <span>
+            {tr('safety_workspace.timezone_value1_scheduled_does_not_mean_present', {
+              value1: timezone,
+            })}
+          </span>
+          <span className="tabular-nums">
+            {tr('safety_workspace.value1_refreshes_every_30_seconds_while_visible', {
+              value1: query.data?.updatedAt
+                ? tr('safety_workspace.updated_value1', { value1: date(query.data.updatedAt) })
+                : tr('safety_workspace.update_time_unavailable'),
+            })}
+          </span>
+        </div>
       </div>
       <RequestError error={query.error} retry={() => void query.refetch()} />
       <RequestError error={contractors.error} retry={() => void contractors.refetch()} />
@@ -395,7 +419,37 @@ export function SafetyOverviewView(
             <p className={cardClass}>{tr('safety_workspace.loading_teams')}</p>
           )}
           {page && !page.items.length && (
-            <p className={cardClass}>{tr('safety_workspace.no_teams_found_for_this_selection')}</p>
+            <div className="rounded-2xl border border-dashed border-slate-300 bg-white p-5 text-sm text-slate-600 space-y-2.5">
+              <p className="font-medium text-slate-800">
+                {tr('safety_workspace.no_teams_found_for_this_selection')}
+              </p>
+              {(contractorId || teamFilter || day !== localDay()) && (
+                <div className="flex flex-wrap gap-2 pt-0.5">
+                  {day !== localDay() && (
+                    <button
+                      type="button"
+                      className="inline-flex h-8 items-center rounded-lg border border-slate-300 bg-slate-50 px-3 text-xs font-semibold text-slate-800 hover:bg-slate-100"
+                      onClick={() => changeDay(localDay())}
+                    >
+                      {tr('calendar.today')}
+                    </button>
+                  )}
+                  {(contractorId || teamFilter) && (
+                    <button
+                      type="button"
+                      className="inline-flex h-8 items-center rounded-lg border border-slate-300 bg-slate-50 px-3 text-xs font-semibold text-slate-800 hover:bg-slate-100"
+                      onClick={() => {
+                        setContractor('');
+                        setTeamFilter('');
+                        reset();
+                      }}
+                    >
+                      {tr('safety_workspace.clear_context_filter')}
+                    </button>
+                  )}
+                </div>
+              )}
+            </div>
           )}
           {page?.items.map((t, i) => (
             <div key={t.id}>
@@ -472,7 +526,7 @@ export function SafetyOverviewView(
               </button>
             </div>
           ))}
-          {page && (
+          {page && page.total > 0 && (
             <Pager
               offset={offset}
               total={page.total}
@@ -632,9 +686,9 @@ export function SafetyOverviewView(
             </>
           )}
           {!selectedId && (
-            <p className={cardClass}>
-              {tr('safety_workspace.select_a_team_to_see_its_work_context')}
-            </p>
+            <div className="rounded-2xl border border-dashed border-slate-200 bg-slate-50/70 p-6 text-sm text-slate-600">
+              <p>{tr('safety_workspace.select_a_team_to_see_its_work_context')}</p>
+            </div>
           )}
         </section>
       </div>

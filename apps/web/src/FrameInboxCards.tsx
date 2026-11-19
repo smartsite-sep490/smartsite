@@ -64,6 +64,7 @@ export function FrameInboxCards({
   const isMountedRef = useRef(true);
   const [open, setOpen] = useState<string>();
   const [openPersonCropIds, setOpenPersonCropIds] = useState<Record<string, boolean>>({});
+  const [selectedFrameKeys, setSelectedFrameKeys] = useState<Record<string, boolean>>({});
   const c02Enabled = isSafetyIdentificationRouteEnabled();
 
   useEffect(() => {
@@ -92,8 +93,24 @@ export function FrameInboxCards({
       ]);
       const failed = results.find((result) => result.status === 'rejected');
       if (failed?.status === 'rejected') throw failed.reason;
+      if (isMountedRef.current) setSelectedFrameKeys({});
     },
   });
+
+  const unreadFramesWithKeys = frames
+    .map((frame) => ({
+      frame,
+      key: JSON.stringify([frame.siteId, frame.cameraId, frame.frameKey]),
+    }))
+    .filter(({ frame }) => frame.unread);
+  const selectedUnreadFrames = unreadFramesWithKeys.filter(({ key }) => selectedFrameKeys[key]);
+  const allPageUnreadSelected =
+    unreadFramesWithKeys.length > 0 && selectedUnreadFrames.length === unreadFramesWithKeys.length;
+  const batchTargetFrames =
+    selectedUnreadFrames.length > 0 ? selectedUnreadFrames : unreadFramesWithKeys;
+  const batchTargetCases = batchTargetFrames.flatMap(({ frame }) =>
+    frame.cases.filter((entry) => entry.unread),
+  );
 
   const firstExpandedIndex = frames.findIndex((frame) => {
     const key = JSON.stringify([frame.siteId, frame.cameraId, frame.frameKey]);
@@ -110,6 +127,73 @@ export function FrameInboxCards({
         >
           {t('frameInbox.readError')}
         </p>
+      )}
+      {unreadFramesWithKeys.length > 1 && (
+        <div
+          data-testid="frame-inbox-batch-bar"
+          className="flex flex-col gap-2 rounded-xl border border-slate-200/90 bg-slate-50/90 px-4 py-2.5 sm:flex-row sm:items-center sm:justify-between"
+        >
+          <div className="flex flex-wrap items-center gap-3 text-xs sm:text-sm">
+            <label className="inline-flex cursor-pointer select-none items-center gap-2 font-semibold text-slate-800">
+              <input
+                type="checkbox"
+                checked={allPageUnreadSelected}
+                disabled={read.isPending}
+                className="h-4 w-4 rounded border-slate-400 accent-teal-800 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-teal-800"
+                onChange={(event) => {
+                  if (event.target.checked) {
+                    const next: Record<string, boolean> = {};
+                    for (const item of unreadFramesWithKeys) next[item.key] = true;
+                    setSelectedFrameKeys(next);
+                  } else {
+                    setSelectedFrameKeys({});
+                  }
+                }}
+              />
+              <span>
+                {tSafety('frameInbox.selectAllUnreadPage', { count: unreadFramesWithKeys.length })}
+              </span>
+            </label>
+            {selectedUnreadFrames.length > 0 ? (
+              <div className="inline-flex items-center gap-2">
+                <span className="rounded-md bg-teal-100/80 px-2 py-0.5 text-xs font-semibold text-teal-950 tabular-nums">
+                  {tSafety('frameInbox.selectedFramesCount', {
+                    count: selectedUnreadFrames.length,
+                  })}
+                </span>
+                <button
+                  type="button"
+                  onClick={() => setSelectedFrameKeys({})}
+                  className="text-xs font-semibold text-slate-600 underline decoration-slate-400 underline-offset-2 hover:text-slate-950"
+                >
+                  {tSafety('frameInbox.clearFrameSelection')}
+                </button>
+              </div>
+            ) : (
+              <span className="hidden xl:inline text-xs text-slate-500">
+                {tSafety('frameInbox.batchAckScopeHint')}
+              </span>
+            )}
+          </div>
+          <button
+            type="button"
+            data-testid="frame-inbox-mark-visible-read"
+            disabled={read.isPending || batchTargetCases.length === 0}
+            onClick={() => read.mutate(batchTargetCases)}
+            className="inline-flex min-h-9 shrink-0 items-center justify-center gap-1.5 rounded-xl border border-teal-700/45 bg-white px-3.5 py-1.5 text-xs sm:text-sm font-semibold text-teal-950 shadow-2xs transition-colors hover:bg-teal-50 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-teal-800 disabled:cursor-not-allowed disabled:opacity-50"
+          >
+            <IconCheck className="h-3.5 w-3.5 shrink-0 text-teal-800" />
+            <span>
+              {read.isPending
+                ? t('frameInbox.markingRead')
+                : selectedUnreadFrames.length > 0
+                  ? tSafety('frameInbox.markSelectedRead', { count: selectedUnreadFrames.length })
+                  : tSafety('frameInbox.markVisiblePageRead', {
+                      count: unreadFramesWithKeys.length,
+                    })}
+            </span>
+          </button>
+        </div>
       )}
       {frames.map((frame, frameIndex) => {
         const key = JSON.stringify([frame.siteId, frame.cameraId, frame.frameKey]);
@@ -159,24 +243,45 @@ export function FrameInboxCards({
           <article
             key={key}
             className={`min-w-0 overflow-hidden rounded-2xl border transition-colors ${
-              frame.unread
-                ? 'border-slate-300 border-l-4 border-l-teal-700 bg-white shadow-2xs'
-                : 'border-slate-200 bg-white/90 hover:bg-white'
+              selectedFrameKeys[key] && frame.unread
+                ? 'border-teal-700/70 border-l-4 border-l-teal-700 bg-teal-50/25 shadow-2xs'
+                : frame.unread
+                  ? 'border-slate-300 border-l-4 border-l-teal-700 bg-white shadow-2xs'
+                  : 'border-slate-200 bg-white/90 hover:bg-white'
             }`}
           >
-            <div className="flex flex-col gap-2.5 px-4 py-3 sm:px-5 lg:flex-row lg:items-center lg:justify-between">
-              <button
-                type="button"
-                aria-label={summaryAriaLabel}
-                data-testid="frame-triage-columns"
-                data-tour-anchor={
-                  frameIndex === tourCardIndex ? 'frame-inbox-card-summary' : undefined
-                }
-                aria-expanded={expanded}
-                aria-controls={panelId}
-                onClick={() => setOpen(expanded ? '' : key)}
-                className="group flex flex-1 min-w-0 flex-col gap-2 rounded-xl p-1 -m-1 text-left transition-colors hover:bg-slate-50/80 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-teal-800 focus-visible:ring-4 focus-visible:ring-teal-700/20 xl:grid xl:grid-cols-[minmax(220px,1.15fr)_minmax(190px,0.85fr)_minmax(260px,1.35fr)_auto] xl:items-center xl:gap-4"
-              >
+            <div className="flex flex-col gap-2.5 px-4 py-2.5 sm:px-5 lg:flex-row lg:items-center lg:justify-between">
+              <div className="flex flex-1 min-w-0 items-start gap-3 lg:items-center">
+                {frame.unread && unreadFramesWithKeys.length > 1 && (
+                  <input
+                    type="checkbox"
+                    checked={Boolean(selectedFrameKeys[key])}
+                    disabled={read.isPending}
+                    aria-label={tSafety('frameInbox.selectFrameAria', {
+                      camera: frame.cameraName,
+                      time: displayTimestamp,
+                    })}
+                    className="mt-1 lg:mt-0 h-4 w-4 shrink-0 cursor-pointer rounded border-slate-400 accent-teal-800 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-teal-800"
+                    onChange={(event) =>
+                      setSelectedFrameKeys((prev) => ({
+                        ...prev,
+                        [key]: event.target.checked,
+                      }))
+                    }
+                  />
+                )}
+                <button
+                  type="button"
+                  aria-label={summaryAriaLabel}
+                  data-testid="frame-triage-columns"
+                  data-tour-anchor={
+                    frameIndex === tourCardIndex ? 'frame-inbox-card-summary' : undefined
+                  }
+                  aria-expanded={expanded}
+                  aria-controls={panelId}
+                  onClick={() => setOpen(expanded ? '' : key)}
+                  className="group flex flex-1 min-w-0 flex-col gap-2 rounded-xl p-1 -m-1 text-left transition-colors hover:bg-slate-50/80 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-teal-800 focus-visible:ring-4 focus-visible:ring-teal-700/20 xl:grid xl:grid-cols-[minmax(220px,1.15fr)_minmax(190px,0.85fr)_minmax(260px,1.35fr)_auto] xl:items-center xl:gap-4"
+                >
                 <div className="min-w-0 space-y-0.5">
                   <div
                     title={frame.cameraName}
@@ -300,7 +405,8 @@ export function FrameInboxCards({
                     className={`h-3.5 w-3.5 shrink-0 transition-transform ${expanded ? 'rotate-180' : ''}`}
                   />
                 </span>
-              </button>
+                </button>
+              </div>
 
               {frame.unread && (
                 <button

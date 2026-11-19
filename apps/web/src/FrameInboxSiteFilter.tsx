@@ -114,20 +114,20 @@ export function FrameInboxSiteFilter({
 
   return (
     <div
-      className={`space-y-2.5 rounded-2xl border p-3.5 sm:p-4 transition-colors ${
+      className={`space-y-2 rounded-xl border px-3 py-2.5 sm:px-3.5 transition-colors ${
         hasActiveFilter && !revoked
-          ? 'border-teal-700/45 bg-teal-50/60 shadow-xs ring-1 ring-teal-700/15'
-          : 'border-slate-200/90 bg-white shadow-xs'
+          ? 'border-teal-700/35 bg-teal-50/45 ring-1 ring-teal-700/10'
+          : 'border-slate-200/80 bg-slate-50/70'
       }`}
     >
-      <div className="flex flex-col gap-3 lg:flex-row lg:items-end lg:justify-between">
-        <div className="grid w-full min-w-0 gap-3 sm:grid-cols-2 lg:max-w-2xl">
-          <label className="block w-full min-w-0 space-y-1.5 text-sm font-semibold text-slate-900">
-            {t('episodes.site')}
+      <div className="flex flex-col gap-2.5 xl:flex-row xl:items-center xl:justify-between">
+        <div className="grid w-full min-w-0 gap-2.5 sm:grid-cols-2 xl:max-w-2xl">
+          <label className="flex min-w-0 flex-col gap-1 sm:flex-row sm:items-center sm:gap-2 text-xs sm:text-sm font-semibold text-slate-800">
+            <span className="shrink-0 text-slate-600">{t('episodes.site')}</span>
             <select
               value={siteId ?? ''}
               disabled={revoked}
-              className={`block w-full min-w-0 max-w-full truncate rounded-xl border px-3 py-2.5 text-sm transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-teal-800 focus-visible:ring-2 focus-visible:ring-teal-700/30 disabled:cursor-not-allowed disabled:bg-slate-100 disabled:text-slate-500 ${
+              className={`block h-10 w-full min-w-0 max-w-full truncate rounded-xl border px-3 text-sm transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-teal-800 focus-visible:ring-2 focus-visible:ring-teal-700/30 disabled:cursor-not-allowed disabled:bg-slate-100 disabled:text-slate-500 ${
                 siteId && !revoked
                   ? 'border-teal-700 bg-white font-semibold text-teal-950 ring-1 ring-teal-700/20'
                   : 'border-slate-300 bg-white font-medium text-slate-900 hover:border-slate-400'
@@ -142,12 +142,12 @@ export function FrameInboxSiteFilter({
               ))}
             </select>
           </label>
-          <label className="block w-full min-w-0 space-y-1.5 text-sm font-semibold text-slate-900">
-            {t('episodes.camera')}
+          <label className="flex min-w-0 flex-col gap-1 sm:flex-row sm:items-center sm:gap-2 text-xs sm:text-sm font-semibold text-slate-800">
+            <span className="shrink-0 text-slate-600">{t('episodes.camera')}</span>
             <select
               value={cameraId ?? ''}
               disabled={revoked || (cameraOptions.length === 0 && !cameraId)}
-              className={`block w-full min-w-0 max-w-full truncate rounded-xl border px-3 py-2.5 text-sm transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-teal-800 focus-visible:ring-2 focus-visible:ring-teal-700/30 disabled:cursor-not-allowed disabled:bg-slate-100 disabled:text-slate-500 ${
+              className={`block h-10 w-full min-w-0 max-w-full truncate rounded-xl border px-3 text-sm transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-teal-800 focus-visible:ring-2 focus-visible:ring-teal-700/30 disabled:cursor-not-allowed disabled:bg-slate-100 disabled:text-slate-500 ${
                 cameraId && !revoked
                   ? 'border-teal-700 bg-white font-semibold text-teal-950 ring-1 ring-teal-700/20'
                   : 'border-slate-300 bg-white font-medium text-slate-900 hover:border-slate-400'

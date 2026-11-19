@@ -19,10 +19,16 @@ if (typeof globalThis.ResizeObserver !== 'function') {
 const mockClient = vi.hoisted(() => ({
   listSites: vi.fn(),
   listCameras: vi.fn(),
+  listPreviewCameras: vi.fn(),
   listSafetyAlerts: vi.fn(),
   listSafetyFrameInbox: vi.fn(),
   readSafetyEpisodeInbox: vi.fn(),
+  getSafetyOverview: vi.fn(),
   listSafetyOverviewTeams: vi.fn(),
+  listSafetyOverviewContractors: vi.fn(),
+  listSafetyContractors: vi.fn(),
+  getSafetyTeamOptions: vi.fn(),
+  listSafetyChecklists: vi.fn(),
   listContractors: vi.fn(),
   listTeams: vi.fn(),
 }));
@@ -112,8 +118,20 @@ describe('Safety Operations & Frame Inbox full-width workspace, grouped segmente
       total: 1,
     });
     mockClient.listCameras.mockResolvedValue({ items: [], total: 0 });
+    mockClient.listPreviewCameras.mockResolvedValue({ items: [], total: 0 });
     mockClient.listSafetyAlerts.mockResolvedValue({ items: [], total: 0 });
+    mockClient.getSafetyOverview.mockResolvedValue({
+      site: { id: SITE_ID, code: 'LOCAL-DEMO', name: 'Công trường demo local' },
+      date: '2026-11-19',
+      timezone: 'Asia/Saigon',
+      teams: { items: [], total: 0 },
+      unassignedWorkers: { items: [], total: 0 },
+    });
     mockClient.listSafetyOverviewTeams.mockResolvedValue({ items: [], total: 0 });
+    mockClient.listSafetyOverviewContractors.mockResolvedValue({ items: [], total: 0 });
+    mockClient.listSafetyContractors.mockResolvedValue({ items: [], total: 0 });
+    mockClient.getSafetyTeamOptions.mockResolvedValue({ items: [], total: 0 });
+    mockClient.listSafetyChecklists.mockResolvedValue({ items: [], total: 0 });
     mockClient.listContractors.mockResolvedValue({ items: [], total: 0 });
     mockClient.listTeams.mockResolvedValue({ items: [], total: 0 });
     mockClient.readSafetyEpisodeInbox.mockResolvedValue({
@@ -213,6 +231,88 @@ describe('Safety Operations & Frame Inbox full-width workspace, grouped segmente
       'token-officer-1',
       '00000000-0000-4000-8000-000000000201',
       { seenRevision: 3 },
+    );
+  });
+
+  it('keeps all permitted SafetyEpisodeWorkspace mode tabs in a stable segmented bar with aria-current="page" only on the active mode, and supports selective/page-scoped batch Mark-Read', async () => {
+    const pageFrames = [
+      makeFrameItem(1, '2026-11-19T10:40:10.000Z', { contentRevision: 4 }),
+      makeFrameItem(2, '2026-11-19T10:40:05.000Z', { contentRevision: 2 }),
+      makeFrameItem(3, '2026-11-19T10:40:00.000Z', { contentRevision: 1 }),
+    ];
+    mockClient.listSafetyFrameInbox.mockResolvedValue({
+      items: pageFrames,
+      total: 3,
+      unreadCount: 3,
+    } satisfies SafetyFrameInboxPage);
+
+    const queryClient = new QueryClient({
+      defaultOptions: { queries: { retry: false }, mutations: { retry: false } },
+    });
+    render(
+      <QueryClientProvider client={queryClient}>
+        <MemoryRouter initialEntries={[`/incidents?siteId=${SITE_ID}`]}>
+          <SafetyEpisodeWorkspace apiUrl="http://api.invalid" session={officerSession}>
+            <SafetyAlertsView
+              apiUrl="http://api.invalid"
+              authenticatedSession={officerSession}
+              onSignOut={vi.fn()}
+            />
+          </SafetyEpisodeWorkspace>
+        </MemoryRouter>
+      </QueryClientProvider>,
+    );
+
+    const actionCluster = within(await screen.findByTestId('safety-workspace-mode-bar')).getByTestId(
+      'safety-workspace-mode-actions',
+    );
+    const opsLink = within(actionCluster).getByRole('link', { name: 'Xử lý an toàn' });
+    const frameLink = within(actionCluster).getByRole('link', { name: 'Thông báo theo khung hình' });
+    const episodeLink = within(actionCluster).getByRole('link', { name: 'Hồ sơ theo người' });
+    expect(opsLink.getAttribute('aria-current')).toBe('page');
+    expect(frameLink.getAttribute('aria-current')).toBeNull();
+    expect(episodeLink.getAttribute('aria-current')).toBeNull();
+
+    // Dead 0-0 pager must not render when Overview has 0 teams, and natural Vietnamese copy is rendered
+    await screen.findByText(/Chưa có tổ đội nào được xếp lịch/i);
+    expect(screen.queryByText(/0–0 trên 0|0-0 trên 0/)).toBeNull();
+
+    // Switch to Frame Inbox -> Frame tab becomes active while Episode & Operations tabs stay visible in place!
+    fireEvent.click(frameLink);
+    await waitFor(() => {
+      expect(screen.getAllByRole('article')).toHaveLength(3);
+    });
+    expect(
+      within(screen.getByTestId('safety-workspace-mode-actions'))
+        .getByRole('link', { name: 'Thông báo theo khung hình' })
+        .getAttribute('aria-current'),
+    ).toBe('page');
+    expect(
+      within(screen.getByTestId('safety-workspace-mode-actions'))
+        .getByRole('link', { name: 'Hồ sơ theo người' })
+        .getAttribute('aria-current'),
+    ).toBeNull();
+
+    // Select Frame 1 & Frame 2 checkboxes -> Batch Mark-Read acknowledges ONLY those 2 selected frames with their exact displayed revisions (4 and 2)
+    const articles = screen.getAllByRole('article');
+    fireEvent.click(within(articles[0]!).getByRole('checkbox'));
+    fireEvent.click(within(articles[1]!).getByRole('checkbox'));
+    const batchBtn = screen.getByTestId('frame-inbox-mark-visible-read');
+    expect(batchBtn.textContent).toMatch(/2/);
+    fireEvent.click(batchBtn);
+
+    await waitFor(() => {
+      expect(mockClient.readSafetyEpisodeInbox).toHaveBeenCalledTimes(2);
+    });
+    expect(mockClient.readSafetyEpisodeInbox).toHaveBeenCalledWith(
+      'token-officer-1',
+      '00000000-0000-4000-8000-000000000201',
+      { seenRevision: 4 },
+    );
+    expect(mockClient.readSafetyEpisodeInbox).toHaveBeenCalledWith(
+      'token-officer-1',
+      '00000000-0000-4000-8000-000000000202',
+      { seenRevision: 2 },
     );
   });
 });
