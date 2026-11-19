@@ -51,6 +51,7 @@ it('creates a GATE camera without a source address', async () => {
       <SiteOperationsSetupView apiUrl="https://api.example.test" />
     </QueryClientProvider>,
   );
+  await screen.findAllByRole('button', { name: 'Create camera' });
   fireEvent.click(screen.getAllByRole('button', { name: 'Create camera' })[0]!);
   fireEvent.change(screen.getByLabelText('Camera purpose'), { target: { value: 'GATE' } });
   const gate = gateFixture('site')[0]!;
