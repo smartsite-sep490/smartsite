@@ -168,14 +168,18 @@ export function SafetyIdentificationQueueCard({
                       {item.result && (
                         <Badge
                           variant={
-                            item.status === 'RESPONDED'
-                              ? 'warning'
-                              : outcomeBadgeVariant(item.result.outcome)
+                            item.status === 'CLOSED'
+                              ? outcomeBadgeVariant(item.result.outcome)
+                              : item.status === 'RESPONDED'
+                                ? 'warning'
+                                : 'neutral'
                           }
                         >
-                          {item.status === 'RESPONDED'
-                            ? `${copy.queue.proposalPrefix}: ${copy.outcomes[item.result.outcome]}`
-                            : copy.outcomes[item.result.outcome]}
+                          {item.status === 'CLOSED'
+                            ? copy.outcomes[item.result.outcome]
+                            : item.status === 'RESPONDED'
+                              ? `${copy.queue.proposalPrefix}: ${copy.outcomes[item.result.outcome]}`
+                              : `${copy.detail.proposalCancelledPrefix}: ${copy.outcomes[item.result.outcome]}`}
                         </Badge>
                       )}
                     </div>

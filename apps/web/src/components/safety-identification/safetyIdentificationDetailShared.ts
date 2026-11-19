@@ -95,7 +95,7 @@ export function formatHumanSubjectSummary(
   if (subject.kind === 'TRACKED') {
     return copy.detail.subjectSummaryTracked;
   }
-  return copy.detail.subjectSummaryEventLocal(subject.personObservationIndex);
+  return copy.detail.subjectSummaryEventLocal(subject.personObservationIndex + 1);
 }
 
 export interface IdentificationOriginLinks {
@@ -113,7 +113,7 @@ export function buildIdentificationOriginLinks(params: {
   const safeSiteId = sanitizeSafetyQueryId(params.siteId);
   const validOriginRecipientId = sanitizeSafetyUuid(params.originRecipientId);
   const validOriginFrameKey = sanitizeSafetyFrameKey(params.originFrameKey);
-  const validOriginCameraId = sanitizeSafetyQueryId(params.originCameraId)?.toLowerCase();
+  const validOriginCameraId = sanitizeSafetyUuid(params.originCameraId)?.toLowerCase();
 
   const incidentsParams = new URLSearchParams();
   if (safeSiteId) {

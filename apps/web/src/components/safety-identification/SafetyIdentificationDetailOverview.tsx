@@ -65,17 +65,21 @@ export function SafetyIdentificationDetailOverview({
   const isResponded = request.status === 'RESPONDED';
   const isCancelled = request.status === 'CANCELLED';
 
-  const stage1Status = request.result
-    ? copy.detail.lifecycleStage1Submitted
-    : isCancelled
-      ? copy.detail.lifecycleStage1Cancelled
+  const stage1Status = isCancelled
+    ? request.result
+      ? copy.detail.lifecycleStage1CancelledWithProposal
+      : copy.detail.lifecycleStage1Cancelled
+    : request.result
+      ? copy.detail.lifecycleStage1Submitted
       : copy.detail.lifecycleStage1Awaiting;
 
   const stage2Status = isClosed
     ? request.result?.outcome === 'UNRESOLVED'
       ? copy.detail.lifecycleStage2UnknownNote
       : copy.detail.lifecycleStage2Accepted
-    : copy.detail.lifecycleStage2Pending;
+    : isCancelled
+      ? copy.detail.lifecycleStage2Cancelled
+      : copy.detail.lifecycleStage2Pending;
 
   return (
     <>
@@ -293,7 +297,13 @@ export function SafetyIdentificationDetailOverview({
 
       <Card className="space-y-3">
         <CardHeader
-          title={isClosed ? copy.detail.proposalAcceptedTitle : copy.detail.proposalTitle}
+          title={
+            isClosed
+              ? copy.detail.proposalAcceptedTitle
+              : isCancelled && request.result
+                ? copy.detail.proposalCancelledTitle
+                : copy.detail.proposalTitle
+          }
           icon={<IconUser className="w-4 h-4" />}
           action={
             request.result ? (
@@ -303,12 +313,17 @@ export function SafetyIdentificationDetailOverview({
                     {copy.detail.proposalPendingBadge}
                   </Badge>
                 )}
+                {isCancelled && (
+                  <Badge variant="neutral" dot>
+                    {copy.detail.proposalCancelledBadge}
+                  </Badge>
+                )}
                 {isClosed && (
                   <Badge variant="success" dot>
                     {copy.detail.proposalAcceptedBadge}
                   </Badge>
                 )}
-                <Badge variant={outcomeBadgeVariant(request.result.outcome)}>
+                <Badge variant={isClosed ? outcomeBadgeVariant(request.result.outcome) : 'neutral'}>
                   {copy.outcomes[request.result.outcome]}
                 </Badge>
               </div>

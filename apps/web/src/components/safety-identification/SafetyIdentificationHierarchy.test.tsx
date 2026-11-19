@@ -11,6 +11,7 @@ import {
   MANAGER_A_ID,
   REQUEST_1_ID,
   REQUEST_2_ID,
+  REQUEST_3_ID,
   SEGMENT_1_ID,
   SITE_A_ID,
   WORKER_1_ID,
@@ -166,12 +167,12 @@ describe('SafetyIdentificationWorkspace — operator hierarchy, subject summary,
     const evidenceCard = within(detailPanel).getByTestId('c02-approved-evidence-card');
     expect(within(evidenceCard).getByRole('button', { name: 'Evidence image 1' })).toBeTruthy();
 
-    // 5) Switching to a CLOSED + UNRESOLVED event-local request shows human person #2 summary,
+    // 5) Switching to a CLOSED + UNRESOLVED event-local request (personObservationIndex=2 -> 1-based #3)
     //    marks C02 conclusion as accepted while explicitly keeping identity unknown & MF08 separate.
     await openRequestRow(closedUnresolvedLocal);
     const closedPanel = await screen.findByLabelText(WORKSPACE_EN.detail.title);
     expect(within(closedPanel).getByTestId('c02-subject-status-strip').textContent).toContain(
-      'Observed person #2 (single frame)',
+      'Observed person #3 (single frame)',
     );
     const closedClone = closedPanel.cloneNode(true) as HTMLElement;
     closedClone.querySelectorAll('details').forEach((node) => node.remove());
@@ -184,7 +185,7 @@ describe('SafetyIdentificationWorkspace — operator hierarchy, subject summary,
 
     unmount();
 
-    // 6) Vietnamese locale renders localized subject & lifecycle separation copy cleanly.
+    // 6) Vietnamese locale renders localized 1-based subject & lifecycle separation copy cleanly.
     await act(async () => {
       await i18n.changeLanguage('vi');
     });
@@ -196,10 +197,123 @@ describe('SafetyIdentificationWorkspace — operator hierarchy, subject summary,
     await openRequestRow(closedUnresolvedLocal);
     const viPanel = await screen.findByLabelText(WORKSPACE_VI.detail.title);
     expect(within(viPanel).getByTestId('c02-subject-status-strip').textContent).toContain(
-      'Người quan sát #2 (khung hình đơn)',
+      'Người quan sát #3 (khung hình đơn)',
     );
     expect(within(viPanel).getByTestId('c02-lifecycle-separation-strip').textContent).toContain(
       'Không tự động gán nhà thầu từ UNKNOWN hoặc khi đóng C02',
     );
+  });
+
+  it('distinguishes CANCELLED + IDENTIFIED retained proposal from CLOSED + IDENTIFIED accepted conclusion in both Queue and Detail, and drops non-UUID originCameraId', async () => {
+    const spies = getSpies();
+    const recipientId = '11111111-2222-4333-8444-555555555555';
+
+    const cancelledIdentified = makeRequest({
+      id: REQUEST_2_ID,
+      siteId: SITE_A_ID,
+      episodeId: EPISODE_1_ID,
+      status: 'CANCELLED',
+      version: 3,
+      subject: {
+        kind: 'EVENT_LOCAL',
+        eventId: EVENT_2_ID,
+        personObservationIndex: 0,
+      },
+      reason: 'Cancelled after duplicate frame check despite prior Manager proposal',
+      result: {
+        outcome: 'IDENTIFIED',
+        workerId: WORKER_1_ID,
+        contractorId: CONTRACTOR_1_ID,
+        reason: 'Prior Manager proposal retained on record when Officer cancelled',
+        evidenceRefs: [],
+        respondedBy: MANAGER_A_ID,
+        respondedAt: '2026-11-19T04:10:00.000Z',
+      },
+    });
+
+    const closedIdentified = makeRequest({
+      id: REQUEST_3_ID,
+      siteId: SITE_A_ID,
+      episodeId: EPISODE_1_ID,
+      status: 'CLOSED',
+      version: 4,
+      reason: 'Officer accepted verified worker proposal',
+      result: {
+        outcome: 'IDENTIFIED',
+        workerId: WORKER_1_ID,
+        contractorId: CONTRACTOR_1_ID,
+        reason: 'Accepted shift sign-in verification',
+        evidenceRefs: [],
+        respondedBy: MANAGER_A_ID,
+        respondedAt: '2026-11-19T04:20:00.000Z',
+      },
+    });
+
+    spies.listRequests.mockResolvedValue({
+      items: [cancelledIdentified, closedIdentified],
+      total: 2,
+    });
+    spies.getRequest.mockImplementation(async (_token, _siteId, id) =>
+      id === REQUEST_3_ID ? closedIdentified : cancelledIdentified,
+    );
+
+    renderWorkspace({
+      apiUrl: API_URL,
+      session: officerSession(),
+      initialSiteId: SITE_A_ID,
+      initialEpisodeId: EPISODE_1_ID,
+      originRecipientId: recipientId,
+      originFrameKey: 'event:frame-north-02',
+      originCameraId: 'legacy-non-uuid-camera-slug',
+    });
+
+    const closeCreateBtn = screen.queryByRole('button', { name: WORKSPACE_EN.header.closeCreate });
+    if (closeCreateBtn) {
+      fireEvent.click(closeCreateBtn);
+    }
+
+    const queueList = await screen.findByRole('list', { name: WORKSPACE_EN.queue.listAriaLabel });
+    const queueButtons = within(queueList).getAllByRole('button');
+    const cancelledRowBtn = queueButtons.find((b) =>
+      b.textContent?.includes(cancelledIdentified.reason),
+    )!;
+    const closedRowBtn = queueButtons.find((b) =>
+      b.textContent?.includes(closedIdentified.reason),
+    )!;
+
+    // Queue: CANCELLED + IDENTIFIED never uses green emerald success badge and explicitly prefixes as unaccepted proposal
+    expect(cancelledRowBtn.textContent).toContain('Unaccepted proposal: Worker identified');
+    expect(cancelledRowBtn.innerHTML).not.toContain('bg-emerald-50');
+    expect(cancelledRowBtn.textContent).toContain('Observed person #1 (single frame)');
+
+    // Queue: CLOSED + IDENTIFIED renders accepted emerald badge
+    expect(closedRowBtn.textContent).toContain('Worker identified');
+    expect(closedRowBtn.textContent).not.toContain('Unaccepted proposal');
+    expect(closedRowBtn.innerHTML).toContain('bg-emerald-50');
+
+    // Detail for CANCELLED + IDENTIFIED: shows Not accepted (cancelled), never green badge, and stage 2 Cancelled — no accepted conclusion
+    await openRequestRow(cancelledIdentified);
+    const cancelledDetail = await screen.findByLabelText(WORKSPACE_EN.detail.title);
+    const returnHref = within(cancelledDetail)
+      .getByRole('link', { name: WORKSPACE_EN.detail.returnToInboxLink })
+      .getAttribute('href')!;
+    expect(returnHref).not.toContain('cameraId=');
+
+    expect(
+      within(cancelledDetail).getByText('Unaccepted Site Manager proposal (request cancelled)'),
+    ).toBeTruthy();
+    expect(within(cancelledDetail).getByText('Not accepted (cancelled)')).toBeTruthy();
+    expect(
+      within(cancelledDetail).getByTestId('c02-lifecycle-separation-strip').textContent,
+    ).toContain('Cancelled — no accepted conclusion');
+    expect(
+      within(cancelledDetail).getByTestId('c02-lifecycle-separation-strip').textContent,
+    ).not.toContain('Not yet accepted');
+
+    // Detail for CLOSED + IDENTIFIED: shows Accepted request conclusion + Accepted conclusion
+    await openRequestRow(closedIdentified);
+    const closedDetail = await screen.findByLabelText(WORKSPACE_EN.detail.title);
+    expect(within(closedDetail).getByText('Accepted request conclusion')).toBeTruthy();
+    expect(within(closedDetail).getByText('Accepted conclusion')).toBeTruthy();
   });
 });
