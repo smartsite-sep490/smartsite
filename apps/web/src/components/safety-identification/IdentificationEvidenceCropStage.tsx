@@ -20,6 +20,7 @@ export interface IdentificationEvidenceCropStageProps {
   cropError: boolean;
   masks: readonly MaskRectBp[];
   onLoadCrop: () => void;
+  onCropDecodeError: () => void;
   onAddMask: (mask: MaskRectBp) => void;
   onRemoveMaskAt: (index: number) => void;
   onClearMasks: () => void;
@@ -33,6 +34,7 @@ export function IdentificationEvidenceCropStage({
   cropError,
   masks,
   onLoadCrop,
+  onCropDecodeError,
   onAddMask,
   onRemoveMaskAt,
   onClearMasks,
@@ -57,8 +59,16 @@ export function IdentificationEvidenceCropStage({
   function resolvePointerBasis(e: PointerEvent<HTMLDivElement>): BasisPoint | null {
     const stageEl = stageRef.current;
     if (!stageEl || !naturalDims) return null;
+    const rawRect = stageEl.getBoundingClientRect();
+    const hasInnerLayout = stageEl.clientWidth > 0 && stageEl.clientHeight > 0;
+    const innerRect = {
+      left: rawRect.left + (hasInnerLayout ? stageEl.clientLeft : 0),
+      top: rawRect.top + (hasInnerLayout ? stageEl.clientTop : 0),
+      width: hasInnerLayout ? stageEl.clientWidth : rawRect.width,
+      height: hasInnerLayout ? stageEl.clientHeight : rawRect.height,
+    };
     const contained = computeContainedImageRect(
-      stageEl.getBoundingClientRect(),
+      innerRect,
       naturalDims.naturalWidth,
       naturalDims.naturalHeight,
     );
@@ -67,7 +77,7 @@ export function IdentificationEvidenceCropStage({
   }
 
   const activeDraftMask =
-    dragState ? normalizeMaskFromPoints(dragState.start, dragState.current, 25) : null;
+    !disabled && dragState ? normalizeMaskFromPoints(dragState.start, dragState.current, 25) : null;
 
   return (
     <div className="space-y-2.5 rounded-xl border border-slate-200/90 bg-white p-3">
@@ -150,8 +160,11 @@ export function IdentificationEvidenceCropStage({
                       naturalWidth: el.naturalWidth,
                       naturalHeight: el.naturalHeight,
                     });
+                  } else {
+                    onCropDecodeError();
                   }
                 }}
+                onError={() => onCropDecodeError()}
               />
             </>
           )}
@@ -170,6 +183,10 @@ export function IdentificationEvidenceCropStage({
                 }}
                 onPointerMove={(e) => {
                   if (!dragState || dragState.pointerId !== e.pointerId) return;
+                  if (!canDraw) {
+                    setDragState(null);
+                    return;
+                  }
                   const pt = resolvePointerBasis(e);
                   if (!pt) return;
                   setDragState((prev) => (prev ? { ...prev, current: pt } : null));
@@ -179,11 +196,12 @@ export function IdentificationEvidenceCropStage({
                   const pt = resolvePointerBasis(e) ?? dragState.current;
                   const completed = normalizeMaskFromPoints(dragState.start, pt);
                   setDragState(null);
-                  if (completed && masks.length < C02_MAX_MASKS) {
+                  if (completed && canDraw) {
                     onAddMask(completed);
                   }
                 }}
                 onPointerCancel={() => setDragState(null)}
+                onLostPointerCapture={() => setDragState(null)}
                 className={`relative flex max-h-80 w-full items-center justify-center overflow-hidden rounded-xl border border-slate-800 bg-slate-950 select-none touch-none ${
                   canDraw ? 'cursor-crosshair' : 'cursor-default'
                 }`}
@@ -202,6 +220,7 @@ export function IdentificationEvidenceCropStage({
                       'Ảnh cắt đối tượng để vẽ vùng che',
                       'Protected subject crop for masking',
                     )}
+                    onError={() => onCropDecodeError()}
                     className="block max-h-80 w-auto max-w-full object-contain pointer-events-none select-none"
                   />
                   <div className="pointer-events-none absolute inset-0">
@@ -223,6 +242,7 @@ export function IdentificationEvidenceCropStage({
                     ))}
                     {activeDraftMask && (
                       <div
+                        data-testid="c02-draft-mask-rect"
                         style={{
                           left: `${(activeDraftMask.left / C02_MASK_GRID_SIZE) * 100}%`,
                           top: `${(activeDraftMask.top / C02_MASK_GRID_SIZE) * 100}%`,

@@ -1,6 +1,6 @@
 import { useInfiniteQuery } from '@tanstack/react-query';
 import { ApiError } from '@smartsite/api-client';
-import { useCallback, useEffect, useId, useState } from 'react';
+import { useCallback, useEffect, useId, useRef, useState } from 'react';
 import { IconCheck, IconShield } from '../icons';
 import { Badge, Button } from '../ui';
 import { IdentificationEvidenceCropStage } from './IdentificationEvidenceCropStage';
@@ -46,6 +46,7 @@ export function IdentificationEvidenceApproval({
   const [index, setIndex] = useState('');
   const [masks, setMasks] = useState<MaskRectBp[]>([]);
   const [draft, setDraft] = useState({ left: '0', top: '0', right: '50', bottom: '50' });
+  const [numericError, setNumericError] = useState<string | null>(null);
   const [cropInput, setCropInput] = useState<{ preview: Preview; frameSha256: string }>();
   const [cropUrl, setCropUrl] = useState<string>();
   const [cropError, setCropError] = useState(false);
@@ -53,6 +54,41 @@ export function IdentificationEvidenceApproval({
   const [image, setImage] = useState<{ url: string; approval: EvidenceApproval }>();
   const [previewError, setPreviewError] = useState(false);
   const [approved, setApproved] = useState(false);
+
+  const onApproveRef = useRef(onApprove);
+  useEffect(() => {
+    onApproveRef.current = onApprove;
+  }, [onApprove]);
+
+  // Rotate a monotonic credential epoch when token changes so queryKey never stores raw JWT strings.
+  const [tokenTracker, setTokenTracker] = useState(() => ({ token, epoch: 0 }));
+  if (tokenTracker.token !== token) {
+    setTokenTracker({ token, epoch: tokenTracker.epoch + 1 });
+  }
+
+  const scopeIdentity = `${tokenTracker.epoch}:${siteId}:${episodeId}`;
+  const [prevScopeIdentity, setPrevScopeIdentity] = useState(scopeIdentity);
+  if (prevScopeIdentity !== scopeIdentity) {
+    setPrevScopeIdentity(scopeIdentity);
+    setIndex('');
+    setMasks([]);
+    setNumericError(null);
+    setCropInput(undefined);
+    setCropUrl(undefined);
+    setCropError(false);
+    setInput(undefined);
+    setImage(undefined);
+    setPreviewError(false);
+    setApproved(false);
+  }
+
+  const initialScopeRef = useRef(scopeIdentity);
+  useEffect(() => {
+    if (initialScopeRef.current === scopeIdentity) return;
+    initialScopeRef.current = scopeIdentity;
+    onApproveRef.current(undefined);
+  }, [scopeIdentity]);
+
   const pickCopy = (vi: string, en: string) => (vietnamese ? vi : en);
 
   const clearPreview = useCallback(() => {
@@ -60,8 +96,8 @@ export function IdentificationEvidenceApproval({
     setImage(undefined);
     setPreviewError(false);
     setApproved(false);
-    onApprove(undefined);
-  }, [onApprove]);
+    onApproveRef.current(undefined);
+  }, []);
 
   const clearAllMedia = useCallback(() => {
     setCropInput(undefined);
@@ -71,7 +107,7 @@ export function IdentificationEvidenceApproval({
   }, [clearPreview]);
 
   const sources = useInfiniteQuery({
-    queryKey: ['c02-evidence-sources', instance, siteId, episodeId],
+    queryKey: ['c02-evidence-sources', instance, tokenTracker.epoch, siteId, episodeId],
     enabled: open,
     retry: false,
     gcTime: 0,
@@ -150,6 +186,8 @@ export function IdentificationEvidenceApproval({
       })
       .catch((error) => {
         if (controller.signal.aborted) return;
+        setCropInput(undefined);
+        setCropUrl(undefined);
         if (error instanceof ApiError && [401, 403, 404].includes(error.status ?? 0)) {
           clearAllMedia();
         }
@@ -163,6 +201,9 @@ export function IdentificationEvidenceApproval({
 
   useEffect(() => {
     if (!input) return;
+    setImage(undefined);
+    setApproved(false);
+    onApproveRef.current(undefined);
     const controller = new AbortController();
     let url: string | undefined;
     void client
@@ -176,10 +217,11 @@ export function IdentificationEvidenceApproval({
       })
       .catch((error) => {
         if (controller.signal.aborted) return;
+        setImage(undefined);
+        setApproved(false);
+        onApproveRef.current(undefined);
         if (error instanceof ApiError && [401, 403, 404].includes(error.status ?? 0)) {
-          setCropInput(undefined);
-          setCropUrl(undefined);
-          onApprove(undefined);
+          clearAllMedia();
         }
         setPreviewError(true);
       });
@@ -187,11 +229,26 @@ export function IdentificationEvidenceApproval({
       controller.abort();
       if (url) URL.revokeObjectURL(url);
     };
-  }, [client, input, onApprove, siteId, token]);
+  }, [clearAllMedia, client, input, siteId, token]);
 
   function addNumericMask() {
+    if (masks.length >= C02_MAX_MASKS) {
+      setNumericError(
+        pickCopy('Đã đạt tối đa 32 vùng che.', 'Maximum of 32 masks reached.'),
+      );
+      return;
+    }
     const parsed = parsePercentMaskDraft(draft);
-    if (!parsed || masks.length >= C02_MAX_MASKS) return;
+    if (!parsed) {
+      setNumericError(
+        pickCopy(
+          'Nhập số nguyên từ 0 đến 100 với Trái < Phải và Trên < Dưới.',
+          'Enter whole numbers from 0 to 100 with Left < Right and Top < Bottom.',
+        ),
+      );
+      return;
+    }
+    setNumericError(null);
     clearPreview();
     setMasks([...masks, parsed]);
   }
@@ -232,6 +289,7 @@ export function IdentificationEvidenceApproval({
           aria-expanded={open}
           onClick={() => {
             clearAllMedia();
+            setNumericError(null);
             setMasks([]);
             setIndex('');
             setOpen(!open);
@@ -270,6 +328,7 @@ export function IdentificationEvidenceApproval({
                 value={index}
                 onChange={(event) => {
                   clearAllMedia();
+                  setNumericError(null);
                   setMasks([]);
                   setIndex(event.target.value);
                 }}
@@ -319,15 +378,23 @@ export function IdentificationEvidenceApproval({
                     frameSha256: sha256,
                   });
                 }}
+                onCropDecodeError={() => {
+                  setCropInput(undefined);
+                  setCropUrl(undefined);
+                  setCropError(true);
+                }}
                 onAddMask={(mask) => {
+                  setNumericError(null);
                   clearPreview();
                   setMasks((prev) => (prev.length >= C02_MAX_MASKS ? prev : [...prev, mask]));
                 }}
                 onRemoveMaskAt={(removeIdx) => {
+                  setNumericError(null);
                   clearPreview();
                   setMasks((prev) => prev.filter((_, idx) => idx !== removeIdx));
                 }}
                 onClearMasks={() => {
+                  setNumericError(null);
                   clearPreview();
                   setMasks([]);
                 }}
@@ -369,11 +436,26 @@ export function IdentificationEvidenceApproval({
                           min={0}
                           max={100}
                           value={draft[key]}
-                          onChange={(event) => setDraft({ ...draft, [key]: event.target.value })}
+                          onChange={(event) => {
+                            const nextDraft = { ...draft, [key]: event.target.value };
+                            setDraft(nextDraft);
+                            if (numericError && parsePercentMaskDraft(nextDraft)) {
+                              setNumericError(null);
+                            }
+                          }}
                         />
                       </label>
                     ))}
                   </div>
+                  {numericError && (
+                    <p
+                      role="alert"
+                      data-testid="c02-numeric-mask-error"
+                      className="text-xs font-medium text-rose-700"
+                    >
+                      {numericError}
+                    </p>
+                  )}
                   <div className="flex flex-wrap items-center gap-2">
                     <Button
                       type="button"
@@ -390,6 +472,7 @@ export function IdentificationEvidenceApproval({
                         variant="outline"
                         size="sm"
                         onClick={() => {
+                          setNumericError(null);
                           clearPreview();
                           setMasks(masks.slice(0, -1));
                         }}
