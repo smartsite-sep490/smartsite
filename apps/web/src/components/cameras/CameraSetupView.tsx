@@ -1,6 +1,6 @@
 import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { Link } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import { useQueryClient } from '@tanstack/react-query';
 import type { CameraResponse } from '@smartsite/contracts/management';
 import type { SharedSession } from '../../types/shared-session';
@@ -18,6 +18,7 @@ import { CameraManagementDialog } from './CameraManagementDialog';
 import { CameraRegistrationDialog } from './CameraRegistrationDialog';
 import { CameraSetupCatalog } from './CameraSetupCatalog';
 import { CameraSetupTour } from './CameraSetupTour';
+import type { CameraSetupOpenHandler, CameraSetupOpenKind } from './CameraSetupWorkflow';
 import { useCameraSetupWorkspace } from './useCameraSetupWorkspace';
 
 registerZonePpeDialogCopy();
@@ -54,6 +55,7 @@ export function CameraSetupView({ apiUrl, sharedSession }: CameraSetupViewProps)
 function SetupWorkspace({ apiUrl, session }: { apiUrl: string; session: SharedSession }) {
   const { t } = useTranslation(SAFETY_NAMESPACE);
   const cache = useQueryClient();
+  const navigate = useNavigate();
   const {
     client,
     key,
@@ -95,7 +97,17 @@ function SetupWorkspace({ apiUrl, session }: { apiUrl: string; session: SharedSe
   } | null>(null);
   const [inlineRegionDraft, setInlineRegionDraft] = useState({ dirty: false, saving: false });
   const [pendingInlineExit, setPendingInlineExit] = useState<
-    { kind: 'close' } | { kind: 'focus'; cameraId: string } | null
+    | { kind: 'close' }
+    | { kind: 'focus'; cameraId: string }
+    | { kind: 'site'; siteId: string }
+    | { kind: 'navigate'; to: string }
+    | {
+        kind: 'open';
+        openKind: CameraSetupOpenKind;
+        cameraId?: string;
+        trigger?: HTMLButtonElement | null;
+      }
+    | null
   >(null);
   const isInlineRegionsOpen = Boolean(site && activeDialog?.kind === 'regions' && canManageCameras);
   const effectiveRegionDraft = isInlineRegionsOpen
@@ -127,6 +139,39 @@ function SetupWorkspace({ apiUrl, session }: { apiUrl: string; session: SharedSe
     }
   };
 
+  const guardedSelectSite = (nextSiteId: string) => {
+    if (!nextSiteId || nextSiteId === site?.id) return;
+    if (isInlineRegionsOpen) {
+      if (effectiveRegionDraft.saving) return;
+      if (effectiveRegionDraft.dirty) {
+        setPendingInlineExit({ kind: 'site', siteId: nextSiteId });
+        return;
+      }
+      if (site) invalidateRegionSetupCaches(site.id);
+    }
+    setPendingInlineExit(null);
+    selectSite(nextSiteId);
+  };
+
+  const guardedOpen: CameraSetupOpenHandler = (openKind, cameraId, trigger) => {
+    if (!site) return;
+    if (isInlineRegionsOpen) {
+      if (effectiveRegionDraft.saving) return;
+      if (openKind === 'regions' && cameraId === activeDialog?.cameraId) {
+        return;
+      }
+      if (effectiveRegionDraft.dirty) {
+        setPendingInlineExit({ kind: 'open', openKind, cameraId, trigger });
+        return;
+      }
+      if (openKind !== 'regions') {
+        invalidateRegionSetupCaches(site.id);
+      }
+    }
+    setPendingInlineExit(null);
+    open(openKind, cameraId, trigger);
+  };
+
   const requestCloseInlineRegions = () => {
     if (!isCurrentDialog() || !site || effectiveRegionDraft.saving) return;
     if (effectiveRegionDraft.dirty) {
@@ -143,6 +188,31 @@ function SetupWorkspace({ apiUrl, session }: { apiUrl: string; session: SharedSe
     const pending = effectivePendingInlineExit;
     setInlineRegionDraft({ dirty: false, saving: false });
     setPendingInlineExit(null);
+    if (pending?.kind === 'site') {
+      invalidateRegionSetupCaches(site.id);
+      selectSite(pending.siteId);
+      return;
+    }
+    if (pending?.kind === 'navigate') {
+      invalidateRegionSetupCaches(site.id);
+      close();
+      void navigate(pending.to);
+      return;
+    }
+    if (pending?.kind === 'open') {
+      if (pending.cameraId) {
+        setFocusSelection({
+          siteId: site.id,
+          requestedId: requestedCameraId,
+          cameraId: pending.cameraId,
+        });
+      }
+      if (pending.openKind !== 'regions') {
+        invalidateRegionSetupCaches(site.id);
+      }
+      open(pending.openKind, pending.cameraId, pending.trigger ?? undefined);
+      return;
+    }
     if (pending?.kind === 'focus') {
       applyCameraFocusSwitch(pending.cameraId);
       return;
@@ -226,7 +296,33 @@ function SetupWorkspace({ apiUrl, session }: { apiUrl: string; session: SharedSe
       : null;
 
   return (
-    <div className="mx-auto max-w-7xl space-y-5 pb-10">
+    <div
+      className="mx-auto max-w-7xl space-y-5 pb-10"
+      onClickCapture={(event) => {
+        if (!isInlineRegionsOpen || (!effectiveRegionDraft.dirty && !effectiveRegionDraft.saving)) {
+          return;
+        }
+        if (
+          event.defaultPrevented ||
+          event.button !== 0 ||
+          event.metaKey ||
+          event.ctrlKey ||
+          event.shiftKey ||
+          event.altKey ||
+          !(event.target instanceof Element)
+        ) {
+          return;
+        }
+        const anchor = event.target.closest('a[href]');
+        if (!anchor || anchor.getAttribute('target') === '_blank') return;
+        const href = anchor.getAttribute('href');
+        if (!href || !href.startsWith('/')) return;
+        event.preventDefault();
+        event.stopPropagation();
+        if (effectiveRegionDraft.saving) return;
+        setPendingInlineExit({ kind: 'navigate', to: href });
+      }}
+    >
       <header className="flex flex-wrap items-center justify-between gap-4 border-b border-slate-200/80 pb-4">
         <div className="min-w-0 space-y-1">
           <h1 className="text-2xl sm:text-[26px] font-bold tracking-tight text-slate-950">
@@ -277,10 +373,10 @@ function SetupWorkspace({ apiUrl, session }: { apiUrl: string; session: SharedSe
             <select
               id="camera-setup-site"
               value={site?.id ?? ''}
-              disabled={sites.baseError || sites.isPending}
+              disabled={sites.baseError || sites.isPending || effectiveRegionDraft.saving}
               className="min-h-10 w-full min-w-0 max-w-md rounded-xl border border-slate-300 bg-white px-3.5 py-2 text-sm font-medium text-slate-900 shadow-2xs transition-colors hover:border-slate-400 focus-visible:border-slate-900 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-slate-900 disabled:cursor-not-allowed disabled:bg-slate-100 disabled:text-slate-500"
               onChange={(event) => {
-                selectSite(event.target.value);
+                guardedSelectSite(event.target.value);
               }}
             >
               <option value="" disabled>
@@ -349,7 +445,7 @@ function SetupWorkspace({ apiUrl, session }: { apiUrl: string; session: SharedSe
             applyCameraFocusSwitch(cameraId);
           }}
           cameraError={errorNotice(cameras)}
-          open={open}
+          open={guardedOpen}
           inlineRegionStage={
             inlineRegionPanelProps ? (
               <InlineRegionSetupStage
@@ -470,7 +566,7 @@ function InlineRegionSetupStage({
 
   useEffect(() => {
     stageRef.current?.scrollIntoView?.({ behavior: 'smooth', block: 'nearest' });
-  }, []);
+  }, [confirmDiscard]);
 
   return (
     <section
