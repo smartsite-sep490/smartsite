@@ -8,6 +8,7 @@ import { WorkerDocumentsService } from './worker-documents.service.js';
 import { DocumentOcrService } from './document-ocr.service.js';
 import { LocalDocumentOcr } from './local-document-ocr.js';
 import { DocumentNotificationsService } from './document-notifications.service.js';
+import { DocumentAnalysisService } from './document-analysis.service.js';
 @Module({
   imports: [DatabaseModule, StorageModule, AuthModule, WorkforceDirectoryModule],
   controllers: [WorkerDocumentsController],
@@ -16,6 +17,7 @@ import { DocumentNotificationsService } from './document-notifications.service.j
     LocalDocumentOcr,
     DocumentOcrService,
     DocumentNotificationsService,
+    DocumentAnalysisService,
   ],
 })
 export class WorkerDocumentsModule {}

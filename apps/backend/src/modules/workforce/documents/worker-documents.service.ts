@@ -1,5 +1,5 @@
 import { randomUUID } from 'node:crypto';
-import { Injectable } from '@nestjs/common';
+import { Injectable, Logger } from '@nestjs/common';
 import { DataSource, type EntityManager } from 'typeorm';
 import { healthCertificateExpiry } from '@smartsite/contracts';
 import type {
@@ -14,6 +14,8 @@ import type {
   UploadWorkerDocumentCommand,
   UpdateWorkerDocumentExpiryCommand,
   WorkerDocumentCheckResponse,
+  WorkerDocumentAnalysisResult,
+  WorkerDocumentAiAnalysis,
 } from '@smartsite/contracts';
 import {
   command,
@@ -27,6 +29,7 @@ import { PublicHttpException } from '../../../common/http/public-http-exception.
 import {
   WorkerComplianceProfileEntity,
   WorkerDocumentEntity,
+  type WorkerDocumentAnalysisLease,
   WorkerIdentityImageEntity,
 } from '../../../database/entities/worker-document.entity.js';
 import { WorkerEntity } from '../../../database/entities/worker.entity.js';
@@ -52,6 +55,12 @@ import {
 } from './worker-documents.commands.js';
 import { DocumentNotificationsService } from './document-notifications.service.js';
 import { compareDocumentDates } from './worker-document-date-check.js';
+import {
+  DOCUMENT_ANALYSIS_TIMEOUT_MS,
+  DocumentAnalysisService,
+} from './document-analysis.service.js';
+
+const ANALYSIS_LEASE_MS = 60_000;
 
 export interface DocumentUpload {
   buffer: Buffer;
@@ -160,14 +169,38 @@ export function compareDocumentIdentity(
   return { status, detectedNationalIds: ids };
 }
 
+function analysisForReview(
+  doc: WorkerDocumentEntity,
+  analysis: WorkerDocumentAnalysisResult,
+  nationalId: string | null | undefined,
+): WorkerDocumentAiAnalysis {
+  if (analysis.status !== 'COMPLETE') return analysis;
+  const evidence: DocumentOcrResult = {
+    status: 'READ',
+    issuedOn: analysis.issuedOn,
+    expiresOn: analysis.expiresOn,
+    nationalIds: analysis.nationalId ? [analysis.nationalId] : [],
+    warnings: [],
+  };
+  return {
+    ...analysis,
+    kindMismatch: analysis.detectedKind !== null && analysis.detectedKind !== doc.kind,
+    dateCheck: compareDocumentDates(doc.kind, doc, evidence),
+    identityCheck: compareDocumentIdentity(nationalId, evidence).status,
+  };
+}
+
 @Injectable()
 export class WorkerDocumentsService {
+  private readonly logger = new Logger(WorkerDocumentsService.name);
+
   constructor(
     private readonly source: DataSource,
     private readonly operations: ContractorOperationsService,
     private readonly storage: StorageService,
     private readonly ocr: DocumentOcrService,
     private readonly notifications: DocumentNotificationsService,
+    private readonly analysis: DocumentAnalysisService,
   ) {}
 
   private async access(
@@ -250,8 +283,14 @@ export class WorkerDocumentsService {
     actor: WorkforceActor,
     siteId: string,
     workerId: string,
+    includeAnalysis = true,
   ): Promise<WorkerComplianceResponse> {
     const worker = await this.access(this.source.manager, actor, siteId, workerId);
+    const canSeeAnalysis =
+      includeAnalysis &&
+      actor.roleAssignments.some(
+        (assignment) => assignment.role === UserRole.SAFETY_OFFICER && assignment.siteId === siteId,
+      );
     const profile = await this.source
       .getRepository(WorkerComplianceProfileEntity)
       .findOneBy({ workerId: worker.id });
@@ -261,14 +300,15 @@ export class WorkerDocumentsService {
       .addSelect('i.file')
       .where('i.worker_id=:workerId', { workerId })
       .getMany();
-    const documents = await this.source
+    const documentQuery = this.source
       .getRepository(WorkerDocumentEntity)
       .createQueryBuilder('d')
       .addSelect('d.file')
       .where('d.worker_id=:workerId', { workerId: worker.id })
       .orderBy('d.uploaded_at', 'DESC')
-      .addOrderBy('d.id', 'DESC')
-      .getMany();
+      .addOrderBy('d.id', 'DESC');
+    if (canSeeAnalysis) documentQuery.addSelect('d.aiAnalysis');
+    const documents = await documentQuery.getMany();
     const state = complianceState(true, documents, new Date(), this.notifications.noticeDays);
     if (
       profile?.identityRequired &&
@@ -309,10 +349,16 @@ export class WorkerDocumentsService {
             identityImages.length === 2
           ),
       ),
-      documents: documents.map((doc) => ({
-        ...response(doc),
-        identityCheck: compareDocumentIdentity(profile?.nationalId, doc.ocr),
-      })),
+      documents: documents.map((doc) => {
+        const analysis = doc.aiAnalysis;
+        return {
+          ...response(doc),
+          identityCheck: compareDocumentIdentity(profile?.nationalId, doc.ocr),
+          ...(canSeeAnalysis && analysis && analysis.status !== 'ANALYZING'
+            ? { aiAnalysis: analysisForReview(doc, analysis, profile?.nationalId) }
+            : {}),
+        };
+      }),
     };
   }
   async list(
@@ -404,7 +450,7 @@ export class WorkerDocumentsService {
       .take(paging.limit)
       .getManyAndCount();
     const items: WorkerComplianceResponse[] = [];
-    for (const worker of workers) items.push(await this.get(actor, siteId, worker.id));
+    for (const worker of workers) items.push(await this.get(actor, siteId, worker.id, false));
     return { items, total };
   }
   async upload(
@@ -512,6 +558,68 @@ export class WorkerDocumentsService {
       if (!committed) await this.storage.remove(stored);
     }
   }
+
+  async analyzeDocument(
+    actor: WorkforceActor,
+    siteId: string,
+    workerId: string,
+    documentId: string,
+  ) {
+    const claim = await this.source.transaction(async (manager) => {
+      const worker = await this.access(manager, actor, siteId, workerId, 'review', true);
+      const docs = manager.getRepository(WorkerDocumentEntity);
+      const doc = await docs
+        .createQueryBuilder('d')
+        .addSelect(['d.file', 'd.aiAnalysis'])
+        .where('d.id=:id AND d.worker_id=:workerId', { id: uuid(documentId), workerId: worker.id })
+        .getOne();
+      if (!doc) missing();
+      if (doc.status !== 'PENDING') conflict('Only pending documents can be analyzed.');
+      if (doc.aiAnalysis?.status === 'COMPLETE') return null;
+      const now = Date.now();
+      if (doc.aiAnalysis?.status === 'ANALYZING' && doc.aiAnalysis.expiresAt > now)
+        conflict('Document analysis is already running.');
+      // Release the worker lock before reading the file or calling OpenAI.
+      const lease: WorkerDocumentAnalysisLease = {
+        status: 'ANALYZING',
+        token: randomUUID(),
+        expiresAt: now + ANALYSIS_LEASE_MS,
+      };
+      await docs.update(doc.id, { aiAnalysis: lease });
+      return { doc, lease };
+    });
+    if (!claim) return;
+
+    const { doc, lease } = claim;
+    const started = performance.now();
+    let aiAnalysis: WorkerDocumentAnalysisResult = { status: 'UNAVAILABLE' };
+    try {
+      const bytes = await this.storage.read(doc.file);
+      const { mediaType } = validateWorkerDocument({
+        buffer: bytes,
+        size: doc.file.size,
+        mimetype: doc.file.mediaType,
+      });
+      if (Date.now() + DOCUMENT_ANALYSIS_TIMEOUT_MS >= lease.expiresAt)
+        throw new Error('Document analysis lease has insufficient time remaining');
+      aiAnalysis = (await this.analysis.analyze(bytes, mediaType)) ?? aiAnalysis;
+    } catch {
+      this.logger.warn({
+        status: 'UNAVAILABLE',
+        durationMs: Math.round(performance.now() - started),
+        code: 'DOCUMENT_ANALYSIS_INPUT_UNAVAILABLE',
+      });
+    }
+    // An expired attempt must never overwrite a retry.
+    const saved = await this.source
+      .createQueryBuilder()
+      .update(WorkerDocumentEntity)
+      .set({ aiAnalysis })
+      .where("id = :id AND ai_analysis->>'token' = :token", { id: doc.id, token: lease.token })
+      .execute();
+    if (!saved.affected) conflict('Document analysis has changed. Refresh before trying again.');
+  }
+
   async updateSubmittedExpiry(
     actor: WorkforceActor,
     siteId: string,

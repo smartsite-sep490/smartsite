@@ -50,6 +50,24 @@ export interface WorkerDocumentCheckResponse {
   ocr: DocumentOcrResult | null;
   dateCheck: WorkerDocumentDateCheck;
 }
+export type WorkerDocumentAnalysisResult =
+  | {
+      status: 'COMPLETE';
+      detectedKind: WorkerDocumentKind | 'OTHER' | null;
+      issuedOn: string | null;
+      expiresOn: string | null;
+      nationalId: string | null;
+    }
+  | { status: 'UNAVAILABLE' };
+
+export type WorkerDocumentAiAnalysis =
+  | (Extract<WorkerDocumentAnalysisResult, { status: 'COMPLETE' }> & {
+      kindMismatch: boolean;
+      dateCheck: WorkerDocumentDateCheck;
+      identityCheck: WorkerDocumentIdentityCheck['status'];
+    })
+  | { status: 'UNAVAILABLE' };
+
 export interface WorkerDocumentResponse {
   id: string;
   workerId: string;
@@ -73,6 +91,8 @@ export interface WorkerDocumentResponse {
   identityCheck?: WorkerDocumentIdentityCheck;
   /** Technical comparison only; Safety still confirms the original and approved dates. */
   dateCheck?: WorkerDocumentDateCheck;
+  /** Advisory AI output exposed only to Safety Officers assigned to the Site. */
+  aiAnalysis?: WorkerDocumentAiAnalysis;
 }
 export type WorkerComplianceStatus = 'NOT_REQUIRED' | 'PENDING' | 'ACTIVE' | 'EXPIRED';
 export type WorkerDocumentSubmissionStatus = 'NOT_SUBMITTED' | 'PENDING_REVIEW' | 'REVIEWED';
