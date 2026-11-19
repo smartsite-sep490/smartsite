@@ -10,12 +10,10 @@ import {
   outcomeBadgeVariant,
   type IdentificationWorkspaceCopy,
 } from './IdentificationWorkspaceCopy';
-import { formatIdentificationDateTime } from './safetyIdentificationDetailShared';
 import {
-  sanitizeSafetyFrameKey,
-  sanitizeSafetyQueryId,
-  sanitizeSafetyUuid,
-} from '../safety-episodes/safetyUrlParams';
+  buildIdentificationOriginLinks,
+  formatIdentificationDateTime,
+} from './safetyIdentificationDetailShared';
 
 export interface SafetyIdentificationHistorySectionProps {
   isOfficer: boolean;
@@ -70,55 +68,34 @@ export function SafetyIdentificationHistorySection({
   const hasPreviousHistory = historyOffset > 0;
   const hasNextHistory = historyOffset + historyPageSize < historyTotal;
 
-  const safeSiteId = sanitizeSafetyQueryId(siteId);
-  const validOriginRecipientId = sanitizeSafetyUuid(originRecipientId);
-  const validOriginFrameKey = sanitizeSafetyFrameKey(originFrameKey);
-  const validOriginCameraId = sanitizeSafetyQueryId(originCameraId)?.toLowerCase();
+  const originLinks = buildIdentificationOriginLinks({
+    siteId,
+    originRecipientId,
+    originFrameKey,
+    originCameraId,
+  });
 
-  const destination = new URLSearchParams();
-  if (safeSiteId) {
-    if (validOriginRecipientId) {
-      destination.set('tab', 'episodes');
-      destination.set('siteId', safeSiteId);
-      destination.set('recipientId', validOriginRecipientId);
-      if (validOriginFrameKey) destination.set('frameKey', validOriginFrameKey);
-      if (validOriginCameraId) destination.set('cameraId', validOriginCameraId);
-    } else {
-      destination.set('siteId', safeSiteId);
-    }
-  }
-  const incidentsHref = destination.size > 0 ? `/incidents?${destination}` : '/incidents';
-  const hasValidOrigin = Boolean(safeSiteId && validOriginRecipientId);
-  const linkLabel = hasValidOrigin ? copy.detail.returnToInboxLink : copy.detail.openIncidentsLink;
-
-  const renderIncidentsAnchor = (label: string) =>
+  const renderIncidentsWorkspaceAnchor = () =>
     inRouter ? (
       <Link
-        to={incidentsHref}
+        to={originLinks.incidentsWorkspaceHref}
         className="inline-flex items-center gap-1.5 text-xs font-bold text-[#071A2B] underline hover:text-[#F66B17]"
       >
-        <span>{label}</span>
+        <span>{copy.detail.openIncidentsLink}</span>
         <IconArrowRight className="w-3.5 h-3.5" />
       </Link>
     ) : (
       <a
-        href={incidentsHref}
+        href={originLinks.incidentsWorkspaceHref}
         className="inline-flex items-center gap-1.5 text-xs font-bold text-[#071A2B] underline hover:text-[#F66B17]"
       >
-        <span>{label}</span>
+        <span>{copy.detail.openIncidentsLink}</span>
         <IconArrowRight className="w-3.5 h-3.5" />
       </a>
     );
 
   return (
     <>
-      {status !== 'CLOSED' && hasValidOrigin && (
-        <Card className="flex flex-wrap items-center justify-between gap-2 bg-slate-50/80 py-3">
-          <p className="text-xs text-slate-700">{copy.detail.originCaseContextNotice}</p>
-          {renderIncidentsAnchor(copy.detail.returnToInboxLink)}
-        </Card>
-      )}
-
       {status === 'CLOSED' && (
         <Alert variant="success">
           <IconCheck className="w-4 h-4" />
@@ -126,7 +103,7 @@ export function SafetyIdentificationHistorySection({
             <AlertTitle>{copy.detail.closedFollowUpTitle}</AlertTitle>
             <AlertDescription className="mt-1 space-y-2">
               <p>{copy.detail.closedFollowUpBody}</p>
-              {renderIncidentsAnchor(linkLabel)}
+              {renderIncidentsWorkspaceAnchor()}
             </AlertDescription>
           </div>
         </Alert>
@@ -155,8 +132,8 @@ export function SafetyIdentificationHistorySection({
         </Card>
       )}
 
-      <Card className="space-y-4" aria-labelledby={`${baseId}-history-heading`}>
-        <div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-100 pb-3">
+      <Card className="space-y-3.5" aria-labelledby={`${baseId}-history-heading`}>
+        <div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-100 pb-2.5">
           <div>
             <h3 id={`${baseId}-history-heading`} className="text-sm font-bold text-[#071A2B]">
               {copy.detail.historyTitle}
@@ -196,11 +173,11 @@ export function SafetyIdentificationHistorySection({
         )}
 
         {historyItems.length > 0 && (
-          <ol className="space-y-3">
+          <ol className="space-y-2.5">
             {historyItems.map((entry) => (
               <li
                 key={`${entry.version}-${entry.kind}-${entry.recordedAt}`}
-                className="rounded-xl border border-slate-200/80 bg-slate-50/60 p-3.5 space-y-2"
+                className="rounded-xl border border-slate-200/80 bg-slate-50/55 p-3 space-y-2"
               >
                 <div className="flex flex-wrap items-center justify-between gap-2">
                   <Badge
@@ -226,7 +203,7 @@ export function SafetyIdentificationHistorySection({
                 </p>
 
                 {entry.proposal && (
-                  <div className="rounded-lg border border-slate-200 bg-white p-2.5 text-xs space-y-1">
+                  <div className="rounded-lg border border-slate-200/90 bg-white px-2.5 py-2 text-xs space-y-1">
                     <div className="flex flex-wrap items-center gap-2">
                       <span className="font-semibold text-slate-700">
                         {copy.detail.historyProposalLabel}:

@@ -14,6 +14,7 @@ import {
   statusBadgeVariant,
   type IdentificationWorkspaceCopy,
 } from './IdentificationWorkspaceCopy';
+import { formatHumanSubjectSummary } from './safetyIdentificationDetailShared';
 import {
   formatShortTimestamp,
   isIdentificationAccessDenied,
@@ -165,8 +166,16 @@ export function SafetyIdentificationQueueCard({
                         {copy.filters.statuses[item.status]}
                       </Badge>
                       {item.result && (
-                        <Badge variant={outcomeBadgeVariant(item.result.outcome)}>
-                          {copy.outcomes[item.result.outcome]}
+                        <Badge
+                          variant={
+                            item.status === 'RESPONDED'
+                              ? 'warning'
+                              : outcomeBadgeVariant(item.result.outcome)
+                          }
+                        >
+                          {item.status === 'RESPONDED'
+                            ? `${copy.queue.proposalPrefix}: ${copy.outcomes[item.result.outcome]}`
+                            : copy.outcomes[item.result.outcome]}
                         </Badge>
                       )}
                     </div>
@@ -175,7 +184,11 @@ export function SafetyIdentificationQueueCard({
                     </span>
                   </div>
 
-                  <p className="mt-2 text-xs font-bold text-[#071A2B] line-clamp-2 break-words">
+                  <p className="mt-1.5 text-[11px] font-medium text-slate-500">
+                    {formatHumanSubjectSummary(item.subject, copy)}
+                  </p>
+
+                  <p className="mt-1 text-xs font-bold text-[#071A2B] line-clamp-2 break-words">
                     {item.reason}
                   </p>
 

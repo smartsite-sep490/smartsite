@@ -48,9 +48,31 @@ function ApprovedImage({
     };
   }, [load]);
 
-  if (failed) return <p role="alert">{unavailable}</p>;
-  if (!url) return <p role="status">{loading}</p>;
-  return <img className="max-h-96 max-w-full rounded-lg object-contain" src={url} alt={label} />;
+  if (failed) {
+    return (
+      <p
+        role="alert"
+        className="rounded-xl border border-amber-200 bg-amber-50/80 px-3 py-2 text-xs font-medium text-amber-900"
+      >
+        {unavailable}
+      </p>
+    );
+  }
+  if (!url) {
+    return (
+      <p
+        role="status"
+        className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-xs font-medium text-slate-600"
+      >
+        {loading}
+      </p>
+    );
+  }
+  return (
+    <div className="flex justify-center rounded-xl border border-slate-200 bg-slate-950/95 p-2.5">
+      <img className="max-h-96 max-w-full rounded-lg object-contain" src={url} alt={label} />
+    </div>
+  );
 }
 
 export function SafetyIdentificationEvidenceImage({
@@ -67,15 +89,18 @@ export function SafetyIdentificationEvidenceImage({
   const label = vietnamese ? `Ảnh bằng chứng ${number}` : `Evidence image ${number}`;
   const toggleLabel = open ? (vietnamese ? 'Đóng ảnh' : 'Close image') : label;
   return (
-    <div className="space-y-2">
-      <Button
-        type="button"
-        variant="outline"
-        aria-expanded={open}
-        onClick={() => setRequestedLoad(open ? undefined : () => load)}
-      >
-        {toggleLabel}
-      </Button>
+    <div className="space-y-2.5">
+      <div>
+        <Button
+          type="button"
+          variant="outline"
+          size="sm"
+          aria-expanded={open}
+          onClick={() => setRequestedLoad(open ? undefined : () => load)}
+        >
+          {toggleLabel}
+        </Button>
+      </div>
       {requestedLoad && (
         <ApprovedImage
           load={requestedLoad}

@@ -77,16 +77,27 @@ export function SafetyIdentificationAdminCard({
     onCancelRequest(cancelReason.trim());
   }
 
+  const isExpanded = adminMode !== null || reassignError !== null || cancelError !== null;
+
   return (
-    <Card aria-labelledby={`${baseId}-admin-heading`} className="space-y-4">
-      <div className="flex flex-wrap items-start justify-between gap-3 border-b border-slate-100 pb-3">
-        <div className="space-y-1">
-          <h3 id={`${baseId}-admin-heading`} className="text-sm font-bold text-[#071A2B]">
+    <Card
+      aria-labelledby={`${baseId}-admin-heading`}
+      className={isExpanded ? 'space-y-4' : 'py-3.5'}
+    >
+      <div
+        className={`flex flex-wrap items-center justify-between gap-3 ${
+          isExpanded ? 'border-b border-slate-100 pb-3' : ''
+        }`}
+      >
+        <div className="space-y-0.5 min-w-0">
+          <h3 id={`${baseId}-admin-heading`} className="text-xs font-bold uppercase tracking-wider text-slate-700">
             {copy.detail.adminActionsTitle}
           </h3>
-          <p className="text-xs text-slate-600 leading-relaxed">
-            {copy.detail.adminActionsSubtitle}
-          </p>
+          {isExpanded && (
+            <p className="text-xs text-slate-600 leading-relaxed">
+              {copy.detail.adminActionsSubtitle}
+            </p>
+          )}
         </div>
         <div className="flex flex-wrap items-center gap-2">
           <Button
