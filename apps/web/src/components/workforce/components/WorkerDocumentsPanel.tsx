@@ -1,18 +1,19 @@
 import { WorkerDocumentStatusTags } from './WorkerDocumentStatusTags';
 import { useEffect, useState } from 'react';
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { useMutation, useMutationState, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useTranslation } from 'react-i18next';
 import type {
   SmartSiteManagementClient,
   WorkerDocumentKind,
   WorkerDocumentResponse,
 } from '@smartsite/api-client';
-import { healthCertificateExpiry } from '@smartsite/api-client';
+import { ApiError, healthCertificateExpiry } from '@smartsite/api-client';
 import { translate as tr } from '../../../i18n';
 import { userErrorMessage } from '../../../i18n/messages';
 import { DocumentMediaPicker } from './DocumentMediaPicker';
 import { SmartDatePicker } from '../../ui';
 import { DocumentIdentityNotice } from './DocumentIdentityNotice';
+import { WorkerDocumentAnalysisNotice } from './WorkerDocumentAnalysisNotice';
 import {
   WorkerCertificateSubmission,
   WorkerDocumentDateNotice,
@@ -122,10 +123,15 @@ export function WorkerDocumentsPanel(p: Props) {
 
   const profile = useQuery({
     queryKey: key,
-    queryFn: () => p.client.workerCompliance(p.token, p.siteId, p.workerId),
+    queryFn: ({ signal }) =>
+      p.client.workerCompliance(p.token, p.siteId, p.workerId, { signal, timeoutMs: 15_000 }),
   });
 
-  const [preview, setPreview] = useState<{ url: string; type: string } | null>(null);
+  const [preview, setPreview] = useState<{
+    url: string;
+    type: string;
+    documentId?: string;
+  } | null>(null);
 
   const allSections = ['IDENTITY', ...documentKinds];
   const [sectionChoices, setSectionChoices] = useState<Record<string, boolean>>({});
@@ -167,6 +173,17 @@ export function WorkerDocumentsPanel(p: Props) {
       void cache.invalidateQueries({ queryKey: ['worker-document-queue'] });
     },
   });
+  const analysisKey = [...key, 'ai-analysis'];
+  const analyze = useMutation({
+    mutationKey: analysisKey,
+    mutationFn: (id: string) => p.client.analyzeWorkerDocument(p.token, p.siteId, p.workerId, id),
+    retry: false,
+    onSettled: () => cache.invalidateQueries({ queryKey: key, exact: true }),
+  });
+  const analyzingDocuments = useMutationState({
+    filters: { mutationKey: analysisKey, exact: true, status: 'pending' },
+    select: (mutation) => mutation.state.variables,
+  });
 
   if (profile.isPending) {
     return (
@@ -177,7 +194,11 @@ export function WorkerDocumentsPanel(p: Props) {
     );
   }
 
-  if (profile.isError) {
+  const connectionRefreshFailed =
+    profile.isRefetchError &&
+    profile.error instanceof ApiError &&
+    (profile.error.code === 'network' || profile.error.code === 'timeout');
+  if (!profile.data || (profile.isError && !connectionRefreshFailed)) {
     return (
       <div
         role="alert"
@@ -199,6 +220,31 @@ export function WorkerDocumentsPanel(p: Props) {
   }
 
   const data = profile.data;
+  const previewDocument =
+    p.canReview && preview?.documentId
+      ? data.documents.find((doc) => doc.id === preview.documentId)
+      : undefined;
+  const previewAnalysis = previewDocument?.aiAnalysis;
+  const isAnalyzingPreview = analyzingDocuments.includes(previewDocument?.id);
+  const canAnalyzePreview =
+    previewDocument?.status === 'PENDING' && previewAnalysis?.status !== 'COMPLETE';
+  const previewAnalysisFailed = analyze.isError && analyze.variables === previewDocument?.id;
+  const refreshNotice = connectionRefreshFailed && (
+    <div
+      role="alert"
+      className="flex flex-wrap items-center justify-between gap-2 rounded-lg bg-amber-50 p-3 text-xs text-amber-900"
+    >
+      <span>{userErrorMessage(profile.error)}</span>
+      <button
+        type="button"
+        className={secondaryButtonClass}
+        disabled={profile.isFetching}
+        onClick={() => void profile.refetch()}
+      >
+        {tr('documents.refresh')}
+      </button>
+    </div>
+  );
 
   // Check identity mismatch on front or back
   const identityMismatch = data.identityImages.some(
@@ -208,6 +254,7 @@ export function WorkerDocumentsPanel(p: Props) {
 
   return (
     <section className="space-y-4 rounded-2xl border border-slate-200/90 bg-white p-4 sm:p-6 shadow-xs">
+      {!preview && refreshNotice}
       {/* Compact Worker Profile Summary */}
       <div className="rounded-2xl border border-slate-200/80 bg-gradient-to-br from-slate-50/90 to-slate-100/40 p-4 sm:p-5 space-y-3">
         <div className="flex flex-wrap items-center justify-between gap-3">
@@ -566,7 +613,11 @@ export function WorkerDocumentsPanel(p: Props) {
                           p.workerId,
                           doc.id,
                         );
-                        setPreview({ url: URL.createObjectURL(blob), type: blob.type });
+                        setPreview({
+                          url: URL.createObjectURL(blob),
+                          type: blob.type,
+                          documentId: doc.id,
+                        });
                       })
                     }
                   >
@@ -574,6 +625,14 @@ export function WorkerDocumentsPanel(p: Props) {
                     <span>{tr('documents.view')}</span>
                   </button>
                 </div>
+
+                {p.canReview && doc.aiAnalysis && (
+                  <WorkerDocumentAnalysisNotice
+                    analysis={doc.aiAnalysis}
+                    reference={data.nationalId}
+                    kind={doc.kind}
+                  />
+                )}
 
                 {/* Pending controls: Expiry editor, OCR hint, Safety review */}
                 {doc.status === 'PENDING' && (
@@ -825,7 +884,12 @@ export function WorkerDocumentsPanel(p: Props) {
           aria-label={tr('documents.view')}
           className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-xs animate-in fade-in duration-150"
         >
-          <div className="relative w-full max-w-4xl max-h-[90vh] flex flex-col rounded-2xl bg-white shadow-2xl border border-slate-200 overflow-hidden">
+          <div
+            className={
+              'relative w-full max-h-[90vh] flex flex-col rounded-2xl bg-white shadow-2xl border border-slate-200 overflow-hidden ' +
+              (previewAnalysis || canAnalyzePreview ? 'max-w-5xl' : 'max-w-4xl')
+            }
+          >
             {/* Modal Header */}
             <div className="flex items-center justify-between px-5 py-4 border-b border-slate-100 bg-slate-50/80">
               <div className="flex items-center gap-2">
@@ -844,20 +908,57 @@ export function WorkerDocumentsPanel(p: Props) {
               </button>
             </div>
 
+            {refreshNotice}
             {/* Modal Content */}
-            <div className="p-4 overflow-auto flex items-center justify-center bg-slate-100/50 min-h-[300px]">
-              {preview.type === 'application/pdf' ? (
-                <iframe
-                  src={preview.url}
-                  title={tr('documents.view')}
-                  className="h-[600px] w-full rounded-xl border border-slate-200 bg-white"
-                />
-              ) : (
-                <img
-                  src={preview.url}
-                  alt={tr('documents.view')}
-                  className="max-h-[700px] max-w-full rounded-xl border border-slate-200 object-contain bg-white shadow-xs"
-                />
+            <div className="overflow-auto bg-slate-100/50 p-4 flex flex-col gap-4 lg:flex-row">
+              <div className="flex flex-1 min-w-0 items-center justify-center min-h-[300px]">
+                {preview.type === 'application/pdf' ? (
+                  <iframe
+                    src={preview.url}
+                    title={tr('documents.view')}
+                    className="h-[600px] w-full rounded-xl border border-slate-200 bg-white"
+                  />
+                ) : (
+                  <img
+                    src={preview.url}
+                    alt={tr('documents.view')}
+                    className="max-h-[700px] max-w-full rounded-xl border border-slate-200 object-contain bg-white shadow-xs"
+                  />
+                )}
+              </div>
+              {previewDocument && (previewAnalysis || canAnalyzePreview) && (
+                <aside className="space-y-2 lg:w-72 lg:shrink-0" aria-live="polite">
+                  {previewAnalysis && (
+                    <WorkerDocumentAnalysisNotice
+                      analysis={previewAnalysis}
+                      reference={data.nationalId}
+                      kind={previewDocument.kind}
+                    />
+                  )}
+                  {canAnalyzePreview && (
+                    <>
+                      {previewAnalysisFailed && !previewAnalysis && (
+                        <p role="alert" className="text-xs text-slate-700">
+                          {tr('documents.aiUnavailable')}
+                        </p>
+                      )}
+                      <button
+                        type="button"
+                        className={secondaryButtonClass}
+                        disabled={isAnalyzingPreview}
+                        onClick={() => analyze.mutate(previewDocument.id)}
+                      >
+                        {tr(
+                          isAnalyzingPreview
+                            ? 'documents.aiAnalyzing'
+                            : previewAnalysis || previewAnalysisFailed
+                              ? 'documents.aiRetry'
+                              : 'documents.aiRun',
+                        )}
+                      </button>
+                    </>
+                  )}
+                </aside>
               )}
             </div>
           </div>

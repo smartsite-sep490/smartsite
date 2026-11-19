@@ -117,6 +117,17 @@ it('shows a safe request error and retries document prerequisites', async () => 
   await screen.findByText(/Nguyễn Văn An/);
 });
 
+it('refreshes the selected document detail for analysis that finished during review', async () => {
+  mount('/worker-documents?siteId=site-a&workerId=worker-1&tab=documents');
+  await screen.findByText('card.jpg');
+  vi.mocked(SmartSiteManagementClient.prototype.workerCompliance).mockResolvedValue({
+    ...compliance,
+    documents: [{ ...compliance.documents[0]!, aiAnalysis: { status: 'UNAVAILABLE' } }],
+  });
+  fireEvent.click(screen.getByRole('button', { name: tr('documents.refresh') }));
+  await screen.findByText(tr('documents.aiUnavailable'));
+});
+
 it('searches and filters the whole queue through the API and resets pagination', async () => {
   const list = vi.mocked(SmartSiteManagementClient.prototype.listWorkerCompliance);
   list.mockResolvedValue({ items: [compliance], total: 42 });

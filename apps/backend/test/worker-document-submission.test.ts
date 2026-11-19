@@ -1,4 +1,4 @@
-import './support/config.js';
+import { createTestConfig } from './support/config.js';
 import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
 import { test } from 'node:test';
@@ -16,6 +16,7 @@ import type { ContractorOperationsService } from '../src/modules/workforce/direc
 import type { StorageService } from '../src/integrations/storage/storage.service.js';
 import type { DocumentOcrService } from '../src/modules/workforce/documents/document-ocr.service.js';
 import type { DocumentNotificationsService } from '../src/modules/workforce/documents/document-notifications.service.js';
+import { DocumentAnalysisService } from '../src/modules/workforce/documents/document-analysis.service.js';
 
 const siteId = randomUUID(),
   workerId = randomUUID(),
@@ -77,6 +78,7 @@ function fixture(
       }),
     } as unknown as DocumentOcrService,
     {} as DocumentNotificationsService,
+    new DocumentAnalysisService(createTestConfig()),
   );
   return { service, qualityCalls: () => qualityCalls };
 }

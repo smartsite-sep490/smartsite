@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useTranslation } from 'react-i18next';
 import type {
   SmartSiteManagementClient,
@@ -30,6 +30,7 @@ export function WorkerDocumentReviewView(p: {
   canUpload?: boolean;
 }) {
   useTranslation();
+  const cache = useQueryClient();
   const [offset, setOffset] = useState(0);
   const [selected, setSelected] = useState(p.initialWorkerId ?? '');
   const [submissionStatus, setSubmissionStatus] = useState<WorkerDocumentSubmissionStatus | ''>('');
@@ -58,6 +59,12 @@ export function WorkerDocumentReviewView(p: {
   const total = workers.data?.total ?? 0;
   const currentPage = Math.floor(offset / 20) + 1;
   const totalPages = Math.max(1, Math.ceil(total / 20));
+  const refresh = () => {
+    void workers.refetch();
+    if (selected) {
+      void cache.invalidateQueries({ queryKey: ['worker-documents', p.scope, p.siteId, selected] });
+    }
+  };
 
   return (
     <section className="space-y-6 rounded-2xl border border-slate-200/90 bg-white p-5 sm:p-7 shadow-xs">
@@ -82,7 +89,7 @@ export function WorkerDocumentReviewView(p: {
         {/* Refresh button */}
         <button
           type="button"
-          onClick={() => void workers.refetch()}
+          onClick={refresh}
           disabled={workers.isFetching}
           className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl border border-slate-200 bg-slate-50/80 text-xs font-bold text-slate-700 hover:bg-slate-100 transition-all shadow-2xs self-start sm:self-auto cursor-pointer"
         >

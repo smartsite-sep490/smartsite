@@ -2717,7 +2717,8 @@ export class SmartSiteManagementClient {
       `/sites/${pathId(siteId)}/workers/${pathId(workerId)}/documents/${pathId(kind)}`,
       token,
       form,
-      { timeoutMs: 60_000 },
+      // Allow time for PDF quality checks, storage, and OCR.
+      { timeoutMs: 80_000 },
     );
   }
   updateWorkerDocumentExpiry(
@@ -2750,6 +2751,16 @@ export class SmartSiteManagementClient {
       {},
       undefined,
       { timeoutMs: 60_000 },
+    );
+  }
+  analyzeWorkerDocument(token: string, siteId: string, workerId: string, id: string) {
+    return this.request<void>(
+      'POST',
+      `/sites/${pathId(siteId)}/workers/${pathId(workerId)}/documents/${pathId(id)}/ai-analysis`,
+      token,
+      undefined,
+      undefined,
+      { timeoutMs: 50_000 },
     );
   }
   reviewWorkerDocument(

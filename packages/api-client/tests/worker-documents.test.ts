@@ -1,6 +1,60 @@
 import { afterEach, expect, it, vi } from 'vitest';
 import { SmartSiteManagementClient } from '../src/index';
 afterEach(() => vi.unstubAllGlobals());
+it('allows time for a slow original upload and OCR before returning the submission', async () => {
+  vi.useFakeTimers();
+  try {
+    vi.stubGlobal(
+      'fetch',
+      (_url: string, init: RequestInit) =>
+        new Promise<Response>((resolve, reject) => {
+          const timer = setTimeout(
+            () => resolve(Response.json({ id: 'pending-document' })),
+            77_000,
+          );
+          init.signal?.addEventListener(
+            'abort',
+            () => {
+              clearTimeout(timer);
+              reject(init.signal?.reason);
+            },
+            { once: true },
+          );
+        }),
+    );
+    const client = new SmartSiteManagementClient('https://api.example.test');
+    const outcome = client
+      .uploadWorkerDocument(
+        'token',
+        'site',
+        'worker',
+        'SAFETY_CARD',
+        new File(['synthetic'], 'sample.pdf', { type: 'application/pdf' }),
+      )
+      .catch((error: unknown) => error);
+    await vi.advanceTimersByTimeAsync(77_000);
+    expect(await outcome).toEqual({ id: 'pending-document' });
+  } finally {
+    vi.useRealTimers();
+  }
+});
+
+it('requests AI analysis for the stored document through a scoped command without an upload', async () => {
+  const fetch = vi.fn<(url: string, init: RequestInit) => Promise<Response>>(
+    async () => new Response(null, { status: 204 }),
+  );
+  vi.stubGlobal('fetch', fetch);
+  const client = new SmartSiteManagementClient('https://api.example.test');
+  await client.analyzeWorkerDocument('token', 'site/a', 'worker/a', 'doc/a');
+  const [url, init] = fetch.mock.calls[0]!;
+  expect(url).toBe(
+    'https://api.example.test/api/v1/sites/site%2Fa/workers/worker%2Fa/documents/doc%2Fa/ai-analysis',
+  );
+  expect(init.method).toBe('POST');
+  expect(init.headers).toMatchObject({ Authorization: 'Bearer token' });
+  expect(init.body).toBeUndefined();
+});
+
 it('preflights certificate dates through authenticated scoped multipart', async () => {
   const fetch = vi.fn<(url: string, init: RequestInit) => Promise<Response>>(async () =>
     Response.json({}),
