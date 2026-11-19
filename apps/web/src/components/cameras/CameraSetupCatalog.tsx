@@ -30,6 +30,7 @@ export function CameraSetupCatalog({
   open,
   statusContext,
   policyContext,
+  inlineRegionStage,
 }: {
   siteId?: string;
   siteCode?: string;
@@ -47,6 +48,7 @@ export function CameraSetupCatalog({
   open: CameraSetupOpenHandler;
   statusContext?: CameraApplicationStatusContext;
   policyContext?: CameraPpeContext;
+  inlineRegionStage?: ReactNode;
 }) {
   const { t } = useTranslation(SAFETY_NAMESPACE);
   const catalogId = useId();
@@ -92,6 +94,7 @@ export function CameraSetupCatalog({
     !showLinkedCameraNotice,
   );
   const button = CAMERA_BUTTON_STYLES.secondary;
+  const showMasterDetail = canReadCameras && !cameras.baseError && rows.length > 0;
   const primarySurface =
     'min-w-0 rounded-2xl border border-slate-200 bg-white px-4 py-4 shadow-xs sm:p-6';
   return (
@@ -99,10 +102,10 @@ export function CameraSetupCatalog({
       <section className={primarySurface} aria-label={t('cameraSetup.cameras')}>
         <div className="grid grid-cols-1 items-start gap-x-4 gap-y-3 border-b border-slate-100 pb-4 sm:grid-cols-[minmax(0,1fr)_auto]">
           <div className="min-w-0 space-y-1">
-            <h2 className="text-lg font-semibold tracking-tight text-slate-900">
+            <h2 className="text-lg font-bold tracking-tight text-slate-950">
               {t('cameraSetup.cameras')}
             </h2>
-            <p className="max-w-xl text-xs leading-5 text-slate-500">
+            <p className="max-w-2xl text-sm leading-relaxed text-slate-600">
               {t(capabilities.canManageRegions ? 'cameraSetup.metadata' : 'cameraSetup.adminHint')}
             </p>
           </div>
@@ -113,65 +116,21 @@ export function CameraSetupCatalog({
             open={open}
           />
         </div>
-        {canReadCameras && (
-          <>
-            {!cameras.baseError && !cameras.isPending && (
-              <CameraSetupChecklist
-                siteId={siteId}
-                selectedCamera={selectedCamera}
-                policyContext={policyContext}
-                statusContext={statusContext}
-              />
-            )}
-            {!cameras.baseError && (rows.length > 0 || !canManageCameras) && (
-              <CameraSetupContextBar
-                siteId={siteId}
-                siteCode={siteCode}
-                siteName={siteName}
-                rows={rows}
-                selectedCamera={selectedCamera}
-                canManageCameras={canManageCameras}
-                canOpenMonitoring={canOpenMonitoring}
-                open={open}
-                onSelectCamera={rows.length > 1 ? setFocusedCameraId : undefined}
-                onOpenPpePolicy={
-                  policyContext && selectedCamera
-                    ? () => {
-                        setPpeExpandRequest((prev) => ({
-                          cameraId: selectedCamera.id,
-                          seq: (prev?.seq ?? 0) + 1,
-                        }));
-                      }
-                    : undefined
-                }
-                statusContext={statusContext}
-              />
-            )}
-            {selectedCamera && policyContext && !cameras.baseError && (
-              <CameraPpePolicyPanel
-                key={selectedCamera.id}
-                cameraId={selectedCamera.id}
-                camera={selectedCamera}
-                context={policyContext}
-                statusContext={statusContext}
-                canWrite={canManageCameras}
-                onOpenReference={(trigger) => open('regions', selectedCamera.id, trigger)}
-                expandSignal={
-                  ppeExpandRequest?.cameraId === selectedCamera.id ? ppeExpandRequest.seq : 0
-                }
-              />
-            )}
-            {cameras.isPending && (
-              <p
-                role="status"
-                className="mt-4 rounded-xl border border-slate-200/70 bg-slate-50/60 px-4 py-3 text-sm text-slate-500"
-              >
-                {t('cameraSetup.loading')}
-              </p>
-            )}
-            {cameraError}
-            {rows.length > 0 && (
-              <ul className="mt-4 space-y-3">
+        {canReadCameras && showMasterDetail && (
+          <div
+            data-testid="camera-setup-workspace-grid"
+            className="mt-5 grid grid-cols-1 items-start gap-5 lg:grid-cols-[18.5rem_minmax(0,1fr)] xl:grid-cols-[20rem_minmax(0,1fr)]"
+          >
+            <div data-testid="camera-setup-source-rail" className="min-w-0 space-y-3">
+              {hasLoadedCameraPages && (
+                <div className="flex flex-wrap items-center justify-between gap-2 px-0.5">
+                  <p className="text-xs font-semibold uppercase tracking-wide text-slate-600 tabular-nums">
+                    {t('cameraSetup.count', { loaded: rows.length, total: cameras.total })}
+                  </p>
+                </div>
+              )}
+              {cameraError}
+              <ul className="space-y-3">
                 {rows.map((row) => {
                   const isEnabled = row.status === 'ACTIVE';
                   const isSelectedCamera = selectedCamera?.id === row.id;
@@ -192,13 +151,13 @@ export function CameraSetupCatalog({
                       key={row.id}
                       aria-labelledby={nameId}
                       aria-current={isSelectedCamera ? 'true' : undefined}
-                      className={`min-w-0 space-y-3 rounded-xl border p-4 transition-colors xl:flex xl:items-start xl:justify-between xl:gap-5 xl:space-y-0 ${
+                      className={`min-w-0 space-y-3 rounded-xl border p-3.5 transition-colors ${
                         isSelectedCamera
                           ? 'border-slate-300 border-l-4 border-l-slate-900 bg-slate-50/90 shadow-2xs ring-1 ring-slate-900/10'
                           : 'border-slate-200/90 bg-white hover:border-slate-300 hover:bg-slate-50/50'
                       }`}
                     >
-                      <div className="min-w-0 flex-1 space-y-2">
+                      <div className="min-w-0 space-y-2">
                         <h3
                           id={nameId}
                           className="min-w-0 max-w-full break-words [overflow-wrap:anywhere] text-base leading-snug font-semibold tracking-tight text-slate-950"
@@ -206,7 +165,7 @@ export function CameraSetupCatalog({
                           {canManageCameras ? (
                             <button
                               type="button"
-                              aria-haspopup="dialog"
+                              aria-haspopup={!isEnabled ? 'dialog' : undefined}
                               className="cursor-pointer rounded-md text-left underline decoration-slate-300 underline-offset-4 hover:decoration-slate-900 focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-slate-900"
                               onClick={(event) => {
                                 setFocusedCameraId(row.id);
@@ -232,7 +191,7 @@ export function CameraSetupCatalog({
                         )}
                       </div>
                       {(canManageCameras || canMonitorRow || rows.length > 1) && (
-                        <div className="flex min-w-0 flex-wrap items-center gap-2.5 border-t border-slate-200/70 pt-3 xl:shrink-0 xl:self-center xl:border-t-0 xl:pt-0">
+                        <div className="flex min-w-0 flex-wrap items-center gap-2 border-t border-slate-200/70 pt-2.5">
                           {rows.length > 1 && (
                             <button
                               type="button"
@@ -253,15 +212,11 @@ export function CameraSetupCatalog({
                             </button>
                           )}
                           {canManageCameras && (
-                            <div
-                              className={`flex flex-wrap items-center gap-2 ${
-                                rows.length > 1 ? 'sm:border-l sm:border-slate-200 sm:pl-2' : ''
-                              }`}
-                            >
+                            <div className="flex flex-wrap items-center gap-2">
                               {isEnabled && (
                                 <button
                                   type="button"
-                                  className={button}
+                                  className={CAMERA_BUTTON_STYLES.compactSecondary}
                                   aria-describedby={nameId}
                                   onClick={(event) => {
                                     setFocusedCameraId(row.id);
@@ -311,12 +266,155 @@ export function CameraSetupCatalog({
                   );
                 })}
               </ul>
+              {showLinkedCameraNotice && (
+                <p
+                  role="status"
+                  className="rounded-xl border border-slate-200 bg-slate-50 px-3.5 py-2.5 text-xs text-slate-600"
+                >
+                  {t(
+                    cameras.hasNextPage
+                      ? 'cameraSetup.linkedCameraMore'
+                      : 'cameraSetup.linkedCameraUnavailable',
+                  )}
+                </p>
+              )}
+              {!cameras.baseError && cameras.hasNextPage && (
+                <div className="pt-1">
+                  <button
+                    type="button"
+                    className={`${button} w-full`}
+                    disabled={cameras.isFetching}
+                    onClick={cameras.loadMore}
+                  >
+                    {t('cameraSetup.camerasMore')}
+                  </button>
+                </div>
+              )}
+            </div>
+
+            <div data-testid="camera-setup-detail-pane" className="min-w-0 space-y-4">
+              {!cameras.isPending && (
+                <CameraSetupChecklist
+                  siteId={siteId}
+                  selectedCamera={selectedCamera}
+                  policyContext={policyContext}
+                  statusContext={statusContext}
+                />
+              )}
+              <CameraSetupContextBar
+                siteId={siteId}
+                siteCode={siteCode}
+                siteName={siteName}
+                rows={rows}
+                selectedCamera={selectedCamera}
+                canManageCameras={canManageCameras}
+                canOpenMonitoring={canOpenMonitoring}
+                open={open}
+                onSelectCamera={rows.length > 1 ? setFocusedCameraId : undefined}
+                onOpenPpePolicy={
+                  policyContext && selectedCamera
+                    ? () => {
+                        setPpeExpandRequest((prev) => ({
+                          cameraId: selectedCamera.id,
+                          seq: (prev?.seq ?? 0) + 1,
+                        }));
+                      }
+                    : undefined
+                }
+                statusContext={statusContext}
+              />
+              {inlineRegionStage}
+              {!inlineRegionStage && selectedCamera && selectedCamera.status !== 'ACTIVE' && (
+                <div
+                  data-testid="camera-setup-disabled-stage"
+                  className="min-w-0 rounded-2xl border border-dashed border-slate-300 bg-slate-50/80 p-5 space-y-3"
+                >
+                  <div className="space-y-1">
+                    <h3 className="text-base font-bold tracking-tight text-slate-900">
+                      {t('cameraSetup.disabledStageHeading')}
+                    </h3>
+                    <p className="text-sm leading-relaxed text-slate-600 break-words [overflow-wrap:anywhere]">
+                      {t(
+                        canManageCameras
+                          ? 'cameraSetup.disabledStageBody'
+                          : 'cameraSetup.disabledStageReadOnlyBody',
+                        {
+                          name: selectedCamera.name,
+                          code: selectedCamera.code,
+                          version: selectedCamera.configurationVersion,
+                        },
+                      )}
+                    </p>
+                  </div>
+                  {canManageCameras && (
+                    <div>
+                      <button
+                        type="button"
+                        className={CAMERA_BUTTON_STYLES.secondary}
+                        onClick={(event) =>
+                          open('manage', selectedCamera.id, event.currentTarget)
+                        }
+                      >
+                        {t('cameraSetup.disabledStageAction', { code: selectedCamera.code })}
+                      </button>
+                    </div>
+                  )}
+                </div>
+              )}
+              {selectedCamera && policyContext && (
+                <CameraPpePolicyPanel
+                  key={selectedCamera.id}
+                  cameraId={selectedCamera.id}
+                  camera={selectedCamera}
+                  context={policyContext}
+                  statusContext={statusContext}
+                  canWrite={canManageCameras}
+                  onOpenReference={(trigger) => open('regions', selectedCamera.id, trigger)}
+                  expandSignal={
+                    ppeExpandRequest?.cameraId === selectedCamera.id ? ppeExpandRequest.seq : 0
+                  }
+                />
+              )}
+            </div>
+          </div>
+        )}
+        {canReadCameras && !showMasterDetail && (
+          <div className="mt-4 space-y-4">
+            {!cameras.baseError && !cameras.isPending && (
+              <CameraSetupChecklist
+                siteId={siteId}
+                selectedCamera={selectedCamera}
+                policyContext={policyContext}
+                statusContext={statusContext}
+              />
             )}
+            {!cameras.baseError && !canManageCameras && (
+              <CameraSetupContextBar
+                siteId={siteId}
+                siteCode={siteCode}
+                siteName={siteName}
+                rows={rows}
+                selectedCamera={selectedCamera}
+                canManageCameras={canManageCameras}
+                canOpenMonitoring={canOpenMonitoring}
+                open={open}
+                statusContext={statusContext}
+              />
+            )}
+            {cameras.isPending && (
+              <p
+                role="status"
+                className="rounded-xl border border-slate-200/70 bg-slate-50/60 px-4 py-3 text-sm text-slate-500"
+              >
+                {t('cameraSetup.loading')}
+              </p>
+            )}
+            {cameraError}
             {cameras.settledEmpty && (
               <div
                 role="status"
                 data-testid="camera-setup-empty-catalog"
-                className="mt-4 space-y-3 rounded-xl border border-dashed border-slate-200 bg-slate-50/50 px-5 py-6 text-center"
+                className="space-y-3 rounded-xl border border-dashed border-slate-200 bg-slate-50/50 px-5 py-6 text-center"
               >
                 <p className="text-sm font-semibold text-slate-800">{t('cameraSetup.noCameras')}</p>
                 <p className="mx-auto max-w-xl text-xs leading-5 text-slate-600">
@@ -351,7 +449,7 @@ export function CameraSetupCatalog({
             {showLinkedCameraNotice && (
               <p
                 role="status"
-                className="mt-4 rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-xs text-slate-600"
+                className="rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-xs text-slate-600"
               >
                 {t(
                   cameras.hasNextPage
@@ -361,33 +459,23 @@ export function CameraSetupCatalog({
               </p>
             )}
             {showPartialPageNotice && (
-              <p role="status" className="mt-3 text-sm text-slate-600">
+              <p role="status" className="text-sm text-slate-600">
                 {t('cameraSetup.partial')}
               </p>
             )}
-            {((hasLoadedCameraPages && !cameras.settledEmpty) ||
-              (!cameras.baseError && cameras.hasNextPage)) && (
-              <div className="mt-5 flex flex-wrap items-center justify-between gap-3 border-t border-slate-100 pt-4">
-                {hasLoadedCameraPages && !cameras.settledEmpty ? (
-                  <p className="text-xs font-medium tabular-nums text-slate-500">
-                    {t('cameraSetup.count', { loaded: rows.length, total: cameras.total })}
-                  </p>
-                ) : (
-                  <span />
-                )}
-                {!cameras.baseError && cameras.hasNextPage && (
-                  <button
-                    type="button"
-                    className={button}
-                    disabled={cameras.isFetching}
-                    onClick={cameras.loadMore}
-                  >
-                    {t('cameraSetup.camerasMore')}
-                  </button>
-                )}
+            {!cameras.baseError && cameras.hasNextPage && (
+              <div className="flex flex-wrap items-center justify-end gap-3 border-t border-slate-100 pt-4">
+                <button
+                  type="button"
+                  className={button}
+                  disabled={cameras.isFetching}
+                  onClick={cameras.loadMore}
+                >
+                  {t('cameraSetup.camerasMore')}
+                </button>
               </div>
             )}
-          </>
+          </div>
         )}
       </section>
     </div>

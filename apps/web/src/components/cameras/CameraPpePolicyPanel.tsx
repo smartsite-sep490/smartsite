@@ -162,43 +162,44 @@ export function PolicyFields({
                 .filter(Boolean)
                 .join(' ');
               return (
-                <div
-                  key={item}
-                  data-readiness-tier={isCore ? 'core' : 'experimental'}
-                  className="inline-flex flex-wrap items-center gap-2 rounded-lg border border-slate-200 bg-white px-2.5 py-1.5 min-w-0"
-                >
-                  <label className="inline-flex items-center gap-2 text-xs font-medium text-slate-800 cursor-pointer">
-                    <input
-                      type="checkbox"
-                      checked={value.requiredPpe?.includes(item) ?? false}
-                      aria-invalid={isExplicitEmpty ? 'true' : undefined}
-                      aria-describedby={itemDescribedBy}
-                      onChange={(event) =>
-                        onChange({
-                          mode: 'EXPLICIT',
-                          requiredPpe: event.target.checked
-                            ? [...(value.requiredPpe ?? []), item]
-                            : (value.requiredPpe ?? []).filter((entry) => entry !== item),
-                        })
-                      }
-                    />
-                    <span>{t(PPE_ITEM_LABEL_KEY[item])}</span>
-                  </label>
-                  <span
-                    id={itemBadgeId}
-                    className={
-                      isCore
-                        ? 'inline-flex items-center rounded border border-emerald-200 bg-emerald-50 px-1.5 py-0.5 text-[10px] font-semibold text-emerald-800'
-                        : 'inline-flex items-center rounded border border-sky-200 bg-sky-50 px-1.5 py-0.5 text-[10px] font-semibold text-sky-800'
-                    }
+                  <div
+                    key={item}
+                    data-readiness-tier={isCore ? 'core' : 'experimental'}
+                    className="inline-flex min-h-9 flex-wrap items-center gap-2 rounded-xl border border-slate-200 bg-white px-3 py-1.5 min-w-0"
                   >
-                    {t(
-                      isCore
-                        ? 'cameraPpe.readinessCoreBadge'
-                        : 'cameraPpe.readinessExperimentalBadge',
-                    )}
-                  </span>
-                </div>
+                    <label className="inline-flex items-center gap-2 text-sm font-medium text-slate-800 cursor-pointer">
+                      <input
+                        type="checkbox"
+                        className="h-4 w-4 rounded border-slate-300"
+                        checked={value.requiredPpe?.includes(item) ?? false}
+                        aria-invalid={isExplicitEmpty ? 'true' : undefined}
+                        aria-describedby={itemDescribedBy}
+                        onChange={(event) =>
+                          onChange({
+                            mode: 'EXPLICIT',
+                            requiredPpe: event.target.checked
+                              ? [...(value.requiredPpe ?? []), item]
+                              : (value.requiredPpe ?? []).filter((entry) => entry !== item),
+                          })
+                        }
+                      />
+                      <span>{t(PPE_ITEM_LABEL_KEY[item])}</span>
+                    </label>
+                    <span
+                      id={itemBadgeId}
+                      className={
+                        isCore
+                          ? 'inline-flex items-center rounded-md border border-emerald-200 bg-emerald-50 px-2 py-0.5 text-xs font-semibold text-emerald-800'
+                          : 'inline-flex items-center rounded-md border border-sky-200 bg-sky-50 px-2 py-0.5 text-xs font-semibold text-sky-800'
+                      }
+                    >
+                      {t(
+                        isCore
+                          ? 'cameraPpe.readinessCoreBadge'
+                          : 'cameraPpe.readinessExperimentalBadge',
+                      )}
+                    </span>
+                  </div>
               );
             })}
           </div>
@@ -290,22 +291,25 @@ export function CameraPpePolicyPanel({
     <section
       ref={sectionRef}
       data-testid="camera-ppe-policy-panel"
-      className="mt-4 rounded-2xl border border-slate-200/90 bg-white p-4 shadow-xs min-w-0"
+      data-tour-anchor="camera-setup-ppe-policy"
+      className="rounded-2xl border border-slate-200 bg-white p-4 sm:p-5 shadow-xs min-w-0"
     >
-      <div className="flex flex-wrap items-center justify-between gap-2">
-        <button
-          type="button"
-          aria-expanded={open}
-          className="inline-flex items-center gap-2 rounded-lg text-left text-sm font-semibold text-slate-900 hover:text-slate-700 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-slate-900 cursor-pointer"
-          onClick={toggleOpen}
-        >
-          {t('cameraPpe.title')}
-        </button>
-        <span aria-hidden="true" className="text-xs text-slate-500">
-          {open ? '▾' : '▸'}
-        </span>
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <div className="min-w-0 space-y-0.5">
+          <button
+            type="button"
+            aria-expanded={open}
+            className="inline-flex min-h-10 items-center gap-2 rounded-lg text-left text-base font-bold tracking-tight text-slate-950 hover:text-slate-700 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-slate-900 cursor-pointer"
+            onClick={toggleOpen}
+          >
+            <span>{t('cameraPpe.title')}</span>
+            <span aria-hidden="true" className="text-xs font-medium text-slate-500">
+              {open ? '▾' : '▸'}
+            </span>
+          </button>
+          <p className="text-sm text-slate-600 leading-relaxed">{t('cameraPpe.subtitle')}</p>
+        </div>
       </div>
-      <p className="mt-1 text-xs text-slate-600 leading-relaxed">{t('cameraPpe.subtitle')}</p>
       {open && (
         <PolicyEditor
           context={context}
@@ -851,201 +855,205 @@ function PolicyEditor({
             {t('cameraPpe.capabilityTruthNote')}
           </p>
 
-          {camera.data && (
-            <CameraDefaultSummaryCard
-              cameraSaved={camera.data}
-              cameraPolicy={cameraPolicyParsed}
-              canEdit={canWrite}
-              isEditingCamera={regionId === ''}
-              onSelectCameraDefault={() => {
-                selectTarget('');
-                selectRef.current?.focus();
-              }}
-            />
-          )}
-
-          <RegionEffectivePolicyList
-            items={regionOverviewItems}
-            savedVsApplied={savedVsApplied}
-            canEdit={canWrite}
-            onSelectRegion={(targetRegionId) => {
-              selectTarget(targetRegionId);
-              selectRef.current?.focus();
-            }}
-            onRetryRegion={(targetRegionId) => {
-              void regionQueryById.get(targetRegionId)?.refetch();
-            }}
-          />
-
-          <div className="rounded-xl border border-slate-200 bg-white px-3.5 py-3 space-y-3">
-            <div className="flex flex-wrap items-center justify-between gap-2">
-              <div className="flex flex-wrap items-center gap-2">
-                <h4 className="text-xs font-semibold text-slate-900">
-                  {t('cameraPpe.editorHeading')}
-                </h4>
-                {canWrite && (draft !== undefined || Object.keys(bindings).length > 0) && (
-                  <span
-                    data-testid="camera-ppe-unsaved-draft"
-                    className="rounded-md border border-amber-200 bg-amber-50 px-2 py-0.5 text-[11px] font-semibold text-amber-900"
-                  >
-                    {t('cameraPpe.unsavedDraftBadge')}
-                  </span>
-                )}
-              </div>
-              <p className="text-xs font-mono text-slate-600 tabular-nums">
-                {saved?.savedRevision
-                  ? t('cameraPpe.current', { revision: saved.savedRevision })
-                  : t('cameraPpe.absent')}
-              </p>
-            </div>
-
-            {!canWrite && (
-              <p className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-xs text-slate-700">
-                {t('cameraPpe.readOnlyNotice')}
-              </p>
-            )}
-
-            {!initial && canWrite && Object.keys(bindings).length > 0 && (
-              <p
-                role="status"
-                data-testid="camera-ppe-preserved-region-drafts"
-                className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs font-medium text-amber-950"
-              >
-                {t('cameraPpe.preservedRegionDrafts', { count: Object.keys(bindings).length })}
-              </p>
-            )}
-
-            {!initial && (
-              <label className="grid gap-1 text-xs font-medium text-slate-700">
-                <span>{t('cameraPpe.target')}</span>
-                <select
-                  ref={selectRef}
-                  className={CAMERA_FIELD_STYLES.input}
-                  value={regionId}
-                  disabled={mutation.isPending}
-                  onChange={(event) => selectTarget(event.target.value)}
-                >
-                  <option value="">{t('cameraPpe.camera')}</option>
-                  {regionRows.map((row, idx) => (
-                    <option key={row.id} value={row.id}>
-                      {formatScopedRegionLabel(row, idx + 1)}
-                    </option>
-                  ))}
-                </select>
-              </label>
-            )}
-            {selected && (() => {
-              const selectedZone = zonesById?.get(selected.zoneId.trim().toLowerCase());
-              return (
-                <details data-testid="camera-ppe-editor-tech" className="text-[11px] text-slate-500">
-                  <summary className="cursor-pointer select-none font-medium text-slate-600 hover:text-slate-900">
-                    {t('cameraPpe.technicalIdsSummary')}
-                  </summary>
-                  <div className="mt-1 space-y-0.5 font-mono text-[11px] text-slate-600 break-all">
-                    {selectedZone && (
-                      <p>{t('cameraPpe.technicalZoneCode', { code: selectedZone.code })}</p>
-                    )}
-                    <p>{t('cameraPpe.technicalRegionId', { id: selected.id })}</p>
-                    <p>{t('cameraPpe.technicalZoneId', { id: selected.zoneId })}</p>
-                  </div>
-                </details>
-              );
-            })()}
-
-            <fieldset disabled={!canWrite || mutation.isPending} className="grid gap-3 min-w-0">
-              <PolicyFields
-                label={
-                  selected
-                    ? formatScopedRegionLabel(selected, regionIndexById.get(selected.id) ?? 1)
-                    : regionId
-                      ? t('cameraPpe.region')
-                      : t('cameraPpe.camera')
-                }
-                value={value}
-                onChange={changeDraft}
-                allowInherit={Boolean(regionId)}
-                readOnly={!canWrite}
-              />
-              {!initial && !regionId && regionOverviewItems.length > 0 && (
-                <CameraDefaultImpactCard
-                  items={regionOverviewItems}
-                  draftCameraPolicy={editingCameraDraftPolicy}
+          <div className="grid grid-cols-1 gap-4 xl:grid-cols-[minmax(0,1fr)_minmax(21rem,1fr)] items-start">
+            <div className="space-y-4 min-w-0">
+              {camera.data && (
+                <CameraDefaultSummaryCard
+                  cameraSaved={camera.data}
+                  cameraPolicy={cameraPolicyParsed}
+                  canEdit={canWrite}
+                  isEditingCamera={regionId === ''}
+                  onSelectCameraDefault={() => {
+                    selectTarget('');
+                    selectRef.current?.focus();
+                  }}
                 />
               )}
-              {!initial && regionId && value.mode && (
-                <EffectivePpePreviewBox effective={editingRegionPreview} />
-              )}
-              {initial &&
-                canWrite &&
-                active.map((row) => {
-                  const draftEntry = bindings[row.id] ?? empty;
-                  const parsedEntry = parsePolicyDraft(draftEntry);
-                  const preview = draftEntry.mode
-                    ? resolveDraftEffectivePreview(initialCameraDraftPolicy, parsedEntry)
-                    : null;
-                  return (
-                    <div key={row.id} className="grid gap-2">
-                      <PolicyFields
-                        label={formatScopedRegionLabel(row, regionIndexById.get(row.id) ?? 1)}
-                        allowInherit
-                        value={draftEntry}
-                        onChange={(next) => {
-                          setBindings({ ...bindings, [row.id]: next });
-                          setAttempt(undefined);
-                        }}
-                      />
-                      {draftEntry.mode && <EffectivePpePreviewBox effective={preview} />}
-                    </div>
-                  );
-                })}
-              {canWrite && (
+
+              <RegionEffectivePolicyList
+                items={regionOverviewItems}
+                savedVsApplied={savedVsApplied}
+                canEdit={canWrite}
+                onSelectRegion={(targetRegionId) => {
+                  selectTarget(targetRegionId);
+                  selectRef.current?.focus();
+                }}
+                onRetryRegion={(targetRegionId) => {
+                  void regionQueryById.get(targetRegionId)?.refetch();
+                }}
+              />
+            </div>
+
+            <div className="rounded-xl border border-slate-200 bg-slate-50/40 p-4 space-y-3.5 min-w-0">
+              <div className="flex flex-wrap items-center justify-between gap-2">
                 <div className="flex flex-wrap items-center gap-2">
-                  <button
-                    type="button"
-                    className={`${CAMERA_BUTTON_STYLES.primary} justify-self-start`}
-                    disabled={
-                      !policy ||
-                      (initial && choices.some((choice) => !choice.policy)) ||
-                      (Boolean(regionId) && !selected)
-                    }
-                    onClick={() => {
-                      if (!saved || submittingRef.current || mutation.isPending) return;
-                      submittingRef.current = true;
-                      submittedModeRef.current = { initial, regionId, scope: currentZoneScope };
-                      const payload = {
-                        commandId: crypto.randomUUID(),
-                        expectedConfigurationVersion: saved.configurationVersion,
-                      };
-                      const send = attempt ?? (() => submit(payload));
-                      setAttempt(() => send);
-                      mutation.mutate(send);
-                    }}
-                  >
-                    {t(
-                      initial
-                        ? 'cameraPpe.initialize'
-                        : regionId && !selected?.isActive
-                          ? 'cameraPpe.activation'
-                          : 'cameraPpe.save',
-                    )}
-                  </button>
-                  {(draft !== undefined || Object.keys(bindings).length > 0) && (
-                    <button
-                      type="button"
-                      className={CAMERA_BUTTON_STYLES.compactSecondary}
-                      onClick={() => {
-                        setDraft(undefined);
-                        setBindings({});
-                        setAttempt(undefined);
-                        mutation.reset();
-                      }}
+                  <h4 className="text-sm font-semibold text-slate-950">
+                    {t('cameraPpe.editorHeading')}
+                  </h4>
+                  {canWrite && (draft !== undefined || Object.keys(bindings).length > 0) && (
+                    <span
+                      data-testid="camera-ppe-unsaved-draft"
+                      className="rounded-md border border-amber-200 bg-amber-50 px-2 py-0.5 text-xs font-semibold text-amber-900"
                     >
-                      {t('cameraPpe.resetDraft')}
-                    </button>
+                      {t('cameraPpe.unsavedDraftBadge')}
+                    </span>
                   )}
                 </div>
+                <p className="text-xs font-mono text-slate-600 tabular-nums">
+                  {saved?.savedRevision
+                    ? t('cameraPpe.current', { revision: saved.savedRevision })
+                    : t('cameraPpe.absent')}
+                </p>
+              </div>
+
+              {!canWrite && (
+                <p className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs text-slate-700">
+                  {t('cameraPpe.readOnlyNotice')}
+                </p>
               )}
-            </fieldset>
+
+              {!initial && canWrite && Object.keys(bindings).length > 0 && (
+                <p
+                  role="status"
+                  data-testid="camera-ppe-preserved-region-drafts"
+                  className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs font-medium text-amber-950"
+                >
+                  {t('cameraPpe.preservedRegionDrafts', { count: Object.keys(bindings).length })}
+                </p>
+              )}
+
+              {!initial && (
+                <label className="grid gap-1.5 text-sm font-semibold text-slate-800">
+                  <span>{t('cameraPpe.target')}</span>
+                  <select
+                    ref={selectRef}
+                    className={CAMERA_FIELD_STYLES.input}
+                    value={regionId}
+                    disabled={mutation.isPending}
+                    onChange={(event) => selectTarget(event.target.value)}
+                  >
+                    <option value="">{t('cameraPpe.camera')}</option>
+                    {regionRows.map((row, idx) => (
+                      <option key={row.id} value={row.id}>
+                        {formatScopedRegionLabel(row, idx + 1)}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+              )}
+              {selected && (() => {
+                const selectedZone = zonesById?.get(selected.zoneId.trim().toLowerCase());
+                return (
+                  <details data-testid="camera-ppe-editor-tech" className="text-xs text-slate-500">
+                    <summary className="inline-flex min-h-8 cursor-pointer items-center select-none font-medium text-slate-600 hover:text-slate-900">
+                      {t('cameraPpe.technicalIdsSummary')}
+                    </summary>
+                    <div className="mt-1 space-y-0.5 font-mono text-xs text-slate-600 break-all">
+                      {selectedZone && (
+                        <p>{t('cameraPpe.technicalZoneCode', { code: selectedZone.code })}</p>
+                      )}
+                      <p>{t('cameraPpe.technicalRegionId', { id: selected.id })}</p>
+                      <p>{t('cameraPpe.technicalZoneId', { id: selected.zoneId })}</p>
+                    </div>
+                  </details>
+                );
+              })()}
+
+              <fieldset disabled={!canWrite || mutation.isPending} className="grid gap-3 min-w-0">
+                <PolicyFields
+                  label={
+                    selected
+                      ? formatScopedRegionLabel(selected, regionIndexById.get(selected.id) ?? 1)
+                      : regionId
+                        ? t('cameraPpe.region')
+                        : t('cameraPpe.camera')
+                  }
+                  value={value}
+                  onChange={changeDraft}
+                  allowInherit={Boolean(regionId)}
+                  readOnly={!canWrite}
+                />
+                {!initial && !regionId && regionOverviewItems.length > 0 && (
+                  <CameraDefaultImpactCard
+                    items={regionOverviewItems}
+                    draftCameraPolicy={editingCameraDraftPolicy}
+                  />
+                )}
+                {!initial && regionId && value.mode && (
+                  <EffectivePpePreviewBox effective={editingRegionPreview} />
+                )}
+                {initial &&
+                  canWrite &&
+                  active.map((row) => {
+                    const draftEntry = bindings[row.id] ?? empty;
+                    const parsedEntry = parsePolicyDraft(draftEntry);
+                    const preview = draftEntry.mode
+                      ? resolveDraftEffectivePreview(initialCameraDraftPolicy, parsedEntry)
+                      : null;
+                    return (
+                      <div key={row.id} className="grid gap-2">
+                        <PolicyFields
+                          label={formatScopedRegionLabel(row, regionIndexById.get(row.id) ?? 1)}
+                          allowInherit
+                          value={draftEntry}
+                          onChange={(next) => {
+                            setBindings({ ...bindings, [row.id]: next });
+                            setAttempt(undefined);
+                          }}
+                        />
+                        {draftEntry.mode && <EffectivePpePreviewBox effective={preview} />}
+                      </div>
+                    );
+                  })}
+                {canWrite && (
+                  <div className="flex flex-wrap items-center gap-2.5 pt-1">
+                    <button
+                      type="button"
+                      className={`${CAMERA_BUTTON_STYLES.primary} justify-self-start`}
+                      disabled={
+                        !policy ||
+                        (initial && choices.some((choice) => !choice.policy)) ||
+                        (Boolean(regionId) && !selected)
+                      }
+                      onClick={() => {
+                        if (!saved || submittingRef.current || mutation.isPending) return;
+                        submittingRef.current = true;
+                        submittedModeRef.current = { initial, regionId, scope: currentZoneScope };
+                        const payload = {
+                          commandId: crypto.randomUUID(),
+                          expectedConfigurationVersion: saved.configurationVersion,
+                        };
+                        const send = attempt ?? (() => submit(payload));
+                        setAttempt(() => send);
+                        mutation.mutate(send);
+                      }}
+                    >
+                      {t(
+                        initial
+                          ? 'cameraPpe.initialize'
+                          : regionId && !selected?.isActive
+                            ? 'cameraPpe.activation'
+                            : 'cameraPpe.save',
+                      )}
+                    </button>
+                    {(draft !== undefined || Object.keys(bindings).length > 0) && (
+                      <button
+                        type="button"
+                        className={CAMERA_BUTTON_STYLES.secondary}
+                        onClick={() => {
+                          setDraft(undefined);
+                          setBindings({});
+                          setAttempt(undefined);
+                          mutation.reset();
+                        }}
+                      >
+                        {t('cameraPpe.resetDraft')}
+                      </button>
+                    )}
+                  </div>
+                )}
+              </fieldset>
+            </div>
           </div>
         </>
       )}
