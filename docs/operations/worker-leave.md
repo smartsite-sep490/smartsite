@@ -86,6 +86,29 @@ and short-notice columns, preserving historical unknown values. Downgrade refuse
 new request metadata. Runtime database migration is an explicit deployment operation; tests
 apply it only to the dedicated local `smartsite_test` database.
 
+### Attendance returns HTTP 500 after pulling main
+
+If `attendance-summary` and `attendance-days` both fail with PostgreSQL code `42703`
+(undefined column) while reading `AbsenceRequestEntity`, check that the database has
+`absence_request.notice_type` and `absence_request.short_notice`. Both endpoints read
+leave requests, so an unapplied leave migration can break the attendance board even
+when there are no leave requests.
+
+From the repository root, stop the local Backend and run:
+
+```sh
+pnpm --filter @smartsite/backend db:migrate:show
+pnpm --filter @smartsite/backend db:migrate:run
+pnpm dev:api
+```
+
+`LeaveNotice1795046400000` must be marked as applied (`[X]`). Run migrations against
+the same database used by the Backend. The migration CLI prioritizes `DIRECT_URL`,
+then `DATABASE_URL_UNPOOLED`, then `DATABASE_URL`; for Neon, the direct connection
+must point to the same database and branch as the pooled runtime connection.
+If a different pending migration fails, resolve that reported failure before retrying;
+do not delete data or mark migrations as applied manually.
+
 Regression coverage includes the 24-hour boundary and overnight dates, late/emergency
 creation, both review APIs, forbidden and revoked scopes, self-review, delegated audit
 metadata, zero fabricated hours, preservation of a partial day's work, migration rollback,
