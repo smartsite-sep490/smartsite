@@ -62,7 +62,6 @@ test('document review rechecks original Officer session and keeps document, noti
         {} as never,
         {} as never,
         notify,
-        {} as never,
       );
     const service = make(),
       auth = new AuthService(db, new AuthTokenService(new JwtService(), config)),
