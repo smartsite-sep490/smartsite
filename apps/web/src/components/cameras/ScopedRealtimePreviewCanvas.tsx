@@ -99,6 +99,16 @@ export function ScopedRealtimePreviewCanvas({
         context.lineWidth = 3;
         context.stroke();
       }
+      // The pipeline tests the bottom-center of the Person box, not torso overlap.
+      // Draw all current persons, including those with no zone-entry event yet.
+      context.fillStyle = '#38bdf8';
+      for (const person of frame.detections) {
+        const box = person.boundingBox;
+        if (!box) continue;
+        const x = Math.round(((box.x1 + box.x2) / 2) * frame.width);
+        const y = Math.round(box.y2 * frame.height);
+        context.fillRect(x - 3, y - 3, 6, 6);
+      }
     }
 
     // 5. Compute deterministic collision-avoiding label placements on exact-frame coordinates
@@ -206,7 +216,8 @@ export function ScopedRealtimePreviewCanvas({
     <div className="absolute inset-0 w-full h-full pointer-events-none">
       {mode === 'zone' && preview.frame.zonePolygons.length > 0 && (
         <span className="absolute bottom-2 left-2 z-10 rounded bg-slate-950/80 px-2 py-1 text-xs text-slate-200">
-          {t('ppe.previewCanvas.observationBoundaries')}
+          <span className="block">{t('ppe.previewCanvas.observationBoundaries')}</span>
+          <span className="block max-w-sm">{t('ppe.previewCanvas.zoneAnchorHelp')}</span>
         </span>
       )}
       <canvas
