@@ -4,6 +4,8 @@ import { ApiError } from '@smartsite/api-client';
 /** Keep user-facing messages English and never render arbitrary server/driver text. */
 export function schedulingError(error: unknown): string {
   if (error instanceof ApiError) {
+    if (error.backendError?.code === 'SHIFT_ALREADY_STARTED')
+      return tr('workforce_schedule_tab.this_shift_has_started_changes_are_no_longer_allowed');
     if (error.backendError?.code === 'SHIFT_WORK_DATE_PASSED')
       return tr('workforce_schedule_tab.this_shift_has_ended_changes_are_no_longer_allowed');
     if (error.status === 401)

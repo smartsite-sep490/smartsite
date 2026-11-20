@@ -299,6 +299,7 @@
     "time": "Thời gian",
     "worker": "Công nhân",
     "requestAction": "Đổi ca / hoán đổi / xin nghỉ",
+    "shiftStartedLocked": "Ca đã bắt đầu. Không còn được đổi hoặc hoán đổi ca.",
     "requestTitle": "Tạo yêu cầu ca làm",
     "requestType": "Loại yêu cầu",
     "swap": "Hoán đổi ca",

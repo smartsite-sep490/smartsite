@@ -1,3 +1,7 @@
+import {
+  shiftRequestLocked,
+  useShiftRequestLocked,
+} from '../../features/scheduling/shift-request-deadline';
 import { translate as tr } from '../../i18n';
 import React, { useState } from 'react';
 import {
@@ -90,6 +94,16 @@ function WorkerRequestForm({
     : undefined;
   const selectedTargetShift = shifts.data?.find((s) => s.id === targetShiftId);
 
+  const sourceLocked = useShiftRequestLocked(selectedSchedule?.workDate ?? '', selectedShift);
+  const target =
+    activeTab === 'swap'
+      ? swapCandidates.data?.items.find((c) => c.candidateWorkerScheduleId === targetCoworkerId)
+          ?.currentShift
+      : selectedTargetShift;
+  const targetLocked = useShiftRequestLocked(selectedSchedule?.workDate ?? '', target);
+  const hasTarget = activeTab === 'swap' ? !!targetCoworkerId : !!targetShiftId;
+  const locked = activeTab !== 'leave' && (sourceLocked || (hasTarget && targetLocked));
+
   const switchTab = (tab: 'leave' | 'swap' | 'change') => {
     setActiveTab(tab);
     setSelectedScheduleId('');
@@ -116,6 +130,12 @@ function WorkerRequestForm({
       if (!selectedSchedule || selectedSchedule.workerId !== workerId || !selectedSchedule.isActive)
         throw new Error(tr('requests.outOfScope'));
 
+      if (
+        activeTab !== 'leave' &&
+        (shiftRequestLocked(selectedSchedule.workDate, selectedShift) ||
+          shiftRequestLocked(selectedSchedule.workDate, target))
+      )
+        throw new Error(t('schedule.shiftStartedLocked'));
       await command.mutateAsync(async () => {
         if (activeTab === 'leave') {
           if (!selectedScheduleId)
@@ -170,6 +190,9 @@ function WorkerRequestForm({
       subtitle={t('attendanceUi.scheduleRequestHint')}
       footer={
         <View>
+          {locked && selectedSchedule && (
+            <Text accessibilityRole="alert">{t('schedule.shiftStartedLocked')}</Text>
+          )}
           <ErrorNotice error={localError ? new Error(localError) : command.error} />
           <View style={styles.actionsRow}>
             <Pressable
@@ -189,6 +212,7 @@ function WorkerRequestForm({
               onPress={handleSubmit}
               disabled={
                 command.isPending ||
+                locked ||
                 !selectedScheduleId ||
                 reason.trim().length < 5 ||
                 (activeTab === 'swap' && !targetCoworkerId) ||

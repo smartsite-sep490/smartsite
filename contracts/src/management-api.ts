@@ -19,7 +19,8 @@ export type ProvisionableUserRole =
 export type AuthClientType = 'WEB' | 'MOBILE';
 
 export * from './observation-identity-management.js';
-export { isPastWorkDate, isShiftEnded } from './scheduling-date.js';
+export { isPastWorkDate, isShiftEnded, isShiftStarted } from './scheduling-date.js';
+export { scheduledShiftWindow } from './scheduled-shift.js';
 
 export interface ProvisionableRoleAssignment {
   role: ProvisionableUserRole;

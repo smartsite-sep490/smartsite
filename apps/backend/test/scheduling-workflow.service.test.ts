@@ -41,7 +41,34 @@ function publicCode(code: string) {
     error instanceof PublicHttpException && error.publicPayload.code === code;
 }
 
-test('shift-change creation rejects an ended shift but reaches pending-request validation during work', async (t) => {
+test('deadline checks both shifts at one instant after asynchronous reads', async (t) => {
+  t.mock.timers.enable({ apis: ['Date'], now: new Date('2030-01-01T00:59:59.999Z') });
+  const manager = {
+    getRepository: () => ({
+      findOneBy: async ({ id }: { id: string }) => {
+        if (id === 'later') t.mock.timers.tick(1);
+        return {
+          startsAt: new Date(id === 'earlier' ? '2026-01-01T01:00:00Z' : '2026-01-01T13:00:00Z'),
+          endsAt: new Date('2026-01-01T17:00:00Z'),
+          timezone: 'UTC',
+        };
+      },
+    }),
+  };
+  const service = new SchedulingWorkflowService(undefined as unknown as DataSource);
+  const schedules = ['earlier', 'later'].map(
+    (shiftId) => ({ siteId: 'site', shiftId, workDate: '2030-01-01' }) as WorkerScheduleEntity,
+  );
+  await assert.rejects(
+    service['assertWorkDatesAvailable'](
+      manager as unknown as import('typeorm').EntityManager,
+      schedules,
+    ),
+    publicCode('SHIFT_ALREADY_STARTED'),
+  );
+});
+
+test('shift-change creation rejects a started shift but reaches pending-request validation before work', async (t) => {
   const siteId = randomUUID(),
     actorId = randomUUID(),
     workerId = randomUUID();
@@ -103,7 +130,7 @@ test('shift-change creation rejects an ended shift but reaches pending-request v
   const service = new SchedulingWorkflowService({
     transaction: async (callback: (value: typeof manager) => Promise<unknown>) => callback(manager),
   } as unknown as DataSource);
-  t.mock.timers.enable({ apis: ['Date'], now: new Date('2030-01-01T09:59:59.999Z') });
+  t.mock.timers.enable({ apis: ['Date'], now: new Date('2030-01-01T00:59:59.999Z') });
   const request = () =>
     service.createShiftChange(actor(actorId, [{ role: UserRole.WORKER, siteId }]), siteId, {
       workerScheduleId: scheduleId,
@@ -115,9 +142,9 @@ test('shift-change creation rejects an ended shift but reaches pending-request v
   documentsValid = true;
   await assert.rejects(request(), publicCode('CONFLICT'));
   t.mock.timers.tick(1);
-  await assert.rejects(request(), publicCode('SHIFT_WORK_DATE_PASSED'));
+  await assert.rejects(request(), publicCode('SHIFT_ALREADY_STARTED'));
   t.mock.timers.tick(3600000);
-  await assert.rejects(request(), publicCode('SHIFT_WORK_DATE_PASSED'));
+  await assert.rejects(request(), publicCode('SHIFT_ALREADY_STARTED'));
 });
 
 test('SchedulingWorkflowService validates shift-change input before database access', async () => {

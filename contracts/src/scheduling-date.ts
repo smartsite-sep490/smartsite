@@ -1,3 +1,37 @@
+import { scheduledShiftWindow } from './scheduled-shift.js';
+
+/** Request deadlines include the start instant, independently of attendance/check-in. */
+export function isShiftStarted(
+  workDate: string,
+  shift: { startsAt: string | Date; endsAt: string | Date; timezone: string },
+  now = new Date(),
+): boolean {
+  if (
+    !shift ||
+    typeof shift.timezone !== 'string' ||
+    !shift.timezone.trim() ||
+    !(typeof shift.startsAt === 'string' || shift.startsAt instanceof Date) ||
+    !(typeof shift.endsAt === 'string' || shift.endsAt instanceof Date)
+  )
+    throw new RangeError('Invalid shift clock');
+  const base = new Date(`${workDate}T00:00:00Z`);
+  if (
+    !Number.isFinite(+base) ||
+    base.toISOString().slice(0, 10) !== workDate ||
+    !Number.isFinite(+now)
+  )
+    throw new RangeError('Invalid shift date');
+  const window = scheduledShiftWindow(
+    {
+      startsAt: new Date(shift.startsAt),
+      endsAt: new Date(shift.endsAt),
+      timezone: shift.timezone,
+    },
+    workDate,
+  );
+  return +now >= +window.startsAt;
+}
+
 /** A work date is a calendar date in the shift's timezone, not its UTC start time. */
 export function isPastWorkDate(workDate: string, timezone: string, now = new Date()): boolean {
   const parts = new Intl.DateTimeFormat('en-US', {

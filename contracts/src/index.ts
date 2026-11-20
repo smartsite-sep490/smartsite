@@ -66,7 +66,7 @@ export type { ObservationFramePartition } from './validation/schema-validator.js
 export { validateCameraRegionConfiguration } from './validation/schema-validator.js';
 
 export type { ValidationResult } from './validation/schema-validator.js';
-export { isPastWorkDate, isShiftEnded } from './scheduling-date.js';
+export { isPastWorkDate, isShiftEnded, isShiftStarted } from './scheduling-date.js';
 
 export {
   MAX_CAMERA_REGION_PAYLOAD_BYTES,

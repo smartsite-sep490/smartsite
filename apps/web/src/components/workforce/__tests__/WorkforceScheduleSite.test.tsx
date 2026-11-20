@@ -233,7 +233,7 @@ it('does not label a shift with metadata for a different Site', async () => {
 });
 
 it.each(['timetable', 'list'])(
-  'locks ended shifts in %s view while allowing an ongoing shift',
+  'locks started shifts in %s view while allowing a future shift',
   async (mode) => {
     vi.setSystemTime(new Date('2030-01-01T10:00:00Z'));
     vi.mocked(SmartSiteManagementClient.prototype.listShifts).mockResolvedValue({
@@ -241,7 +241,7 @@ it.each(['timetable', 'list'])(
         id,
         siteId: 'site-1',
         name: id,
-        startsAt: id === 'morning' ? '2026-01-01T08:00:00Z' : '2026-01-01T09:00:00Z',
+        startsAt: id === 'morning' ? '2026-01-01T08:00:00Z' : '2026-01-01T13:00:00Z',
         endsAt: id === 'morning' ? '2026-01-01T10:00:00Z' : '2026-01-01T17:00:00Z',
         timezone: 'UTC',
         createdAt: '2026-01-01T00:00:00Z',
@@ -254,15 +254,15 @@ it.each(['timetable', 'list'])(
       expect(screen.getAllByRole('button', { name: 'Request change' })).toHaveLength(1),
     );
     expect(screen.getAllByRole('button', { name: 'Swap shift' })).toHaveLength(1);
-    expect(screen.getByText(/Shift ended/)).toBeTruthy();
+    expect(screen.getByText(/Shift started/)).toBeTruthy();
   },
 );
 
 it.each(['Request change', 'Swap shift'])(
-  'locks the open %s form when the shift ends',
+  'locks the open %s form when the shift starts',
   async (action) => {
     vi.useFakeTimers({ toFake: ['Date', 'setInterval', 'clearInterval'] });
-    vi.setSystemTime(new Date('2030-01-01T09:59:59Z'));
+    vi.setSystemTime(new Date('2030-01-01T07:59:59.999Z'));
     vi.mocked(SmartSiteManagementClient.prototype.listShifts).mockResolvedValue({
       items: ['morning', 'evening'].map((id) => ({
         id,
@@ -285,12 +285,15 @@ it.each(['Request change', 'Swap shift'])(
     });
     mount();
     fireEvent.click((await screen.findAllByRole('button', { name: action }))[0]!);
-    expect(screen.queryByText('This shift has ended. Changes are no longer allowed.')).toBeNull();
+    expect(
+      screen.queryByText('This shift has already started. Changes are no longer allowed.'),
+    ).toBeNull();
     await act(async () => {
-      vi.advanceTimersByTime(15_000);
+      vi.advanceTimersByTime(1);
+      await new Promise((resolve) => setTimeout(resolve, 10));
     });
     expect(screen.getByRole('alert').textContent).toBe(
-      'This shift has ended. Changes are no longer allowed.',
+      'This shift has already started. Changes are no longer allowed.',
     );
     const name = action === 'Request change' ? 'Submit Change Request' : 'Submit Swap Request';
     expect(screen.getByRole('button', { name }).hasAttribute('disabled')).toBe(true);
@@ -336,7 +339,7 @@ it('displays unassigned status and disables swap submission when worker is not i
       id,
       siteId: 'site-1',
       name: id,
-      startsAt: '2030-01-01T08:00:00Z',
+      startsAt: '2030-01-01T13:00:00Z',
       endsAt: '2030-01-01T17:00:00Z',
       timezone: 'UTC',
       createdAt: '2026-01-01T00:00:00Z',
@@ -398,7 +401,7 @@ it('gates swap submission when worker team query fails', async () => {
       id,
       siteId: 'site-1',
       name: id,
-      startsAt: '2030-01-01T08:00:00Z',
+      startsAt: '2030-01-01T13:00:00Z',
       endsAt: '2030-01-01T17:00:00Z',
       timezone: 'UTC',
       createdAt: '2026-01-01T00:00:00Z',

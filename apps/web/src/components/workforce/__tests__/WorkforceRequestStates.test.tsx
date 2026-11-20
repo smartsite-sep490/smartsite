@@ -112,7 +112,7 @@ it('shows discovery failure with Retry and does not substitute the full shift ca
       id,
       siteId: 'site-1',
       name: id,
-      startsAt: '2030-01-01T08:00:00Z',
+      startsAt: '2030-01-01T13:00:00Z',
       endsAt: '2030-01-01T16:00:00Z',
       timezone: 'UTC',
       createdAt: '2030-01-01T00:00:00Z',
@@ -159,7 +159,7 @@ it.each(['Change', 'Swap'])(
           id: 'morning',
           siteId: 'site-1',
           name: 'morning',
-          startsAt: '2030-01-01T08:00:00Z',
+          startsAt: '2030-01-01T13:00:00Z',
           endsAt: '2030-01-01T16:00:00Z',
           timezone: 'UTC',
           createdAt: '2030-01-01T00:00:00Z',
@@ -308,18 +308,21 @@ it('keeps requests in a loading state rather than announcing an empty result', a
   expect(screen.queryByText('No Requests Filed')).toBeNull();
 });
 
-it('maps the stable past-date code to English and never renders arbitrary server text', () => {
+it.each([
+  ['SHIFT_WORK_DATE_PASSED', 'This shift has ended. Changes are no longer allowed.'],
+  ['SHIFT_ALREADY_STARTED', 'This shift has already started. Changes are no longer allowed.'],
+] as const)('maps %s to English and never renders arbitrary server text', (code, message) => {
   expect(
     schedulingError(
       new ApiError('http', 'Thông báo riêng', 409, {
         success: false,
         statusCode: 409,
-        code: 'SHIFT_WORK_DATE_PASSED',
+        code,
         message: 'Thông báo riêng',
         requestId: 'test',
         timestamp: '2030-01-01T00:00:00Z',
         path: '/test',
       }),
     ),
-  ).toBe('This shift has ended. Changes are no longer allowed.');
+  ).toBe(message);
 });

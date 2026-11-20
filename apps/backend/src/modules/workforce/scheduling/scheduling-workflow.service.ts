@@ -17,7 +17,7 @@ import type { AuthenticatedUser } from '../../auth/auth.service.js';
 import { SchedulingNotificationService } from '../notifications/scheduling-notification.service.js';
 import { requireWorkerDocuments } from '../documents/worker-compliance.js';
 import { hasActiveContractorParticipation } from '../shared/contractor-participation.js';
-import { isShiftEnded, leaveNotice } from '@smartsite/contracts';
+import { isShiftStarted, leaveNotice } from '@smartsite/contracts';
 import { AttendanceReconciliationService } from '../attendance/attendance-reconciliation.service.js';
 import { AttendanceDaysService } from '../attendance/attendance-days.service.js';
 import { auditAccess } from '../shared/access-audit.js';
@@ -317,10 +317,25 @@ export class SchedulingWorkflowService {
   }
 
   private async assertWorkDateAvailable(manager: EntityManager, schedule: WorkerScheduleEntity) {
-    const shift = await this.assertTargetShift(manager, schedule.siteId, schedule.shiftId);
+    return this.assertWorkDatesAvailable(manager, [schedule]);
+  }
+
+  private async assertWorkDatesAvailable(
+    manager: EntityManager,
+    schedules: WorkerScheduleEntity[],
+  ) {
+    const shifts = await Promise.all(
+      schedules.map((schedule) =>
+        this.assertTargetShift(manager, schedule.siteId, schedule.shiftId),
+      ),
+    );
+    // Sample after all reads: a slow second read must not preserve an earlier cutoff check.
+    const now = new Date();
     let past: boolean;
     try {
-      past = isShiftEnded(schedule.workDate, shift);
+      past = schedules.some((schedule, index) =>
+        isShiftStarted(schedule.workDate, shifts[index]!, now),
+      );
     } catch {
       throw new PublicHttpException(HttpStatus.SERVICE_UNAVAILABLE, {
         code: 'SHIFT_DATE_UNAVAILABLE',
@@ -329,8 +344,8 @@ export class SchedulingWorkflowService {
     }
     if (past)
       throw new PublicHttpException(HttpStatus.CONFLICT, {
-        code: 'SHIFT_WORK_DATE_PASSED',
-        message: 'This shift has ended. Changes are no longer allowed.',
+        code: 'SHIFT_ALREADY_STARTED',
+        message: 'This shift has already started. Changes are no longer allowed.',
       });
   }
 
@@ -412,6 +427,10 @@ export class SchedulingWorkflowService {
         conflict('Shift change must select a different shift');
       await this.assertWorkDateAvailable(manager, { ...schedule, shiftId: value.toShiftId });
       await this.assertShiftAvailable(manager, schedule, value.toShiftId);
+      await this.assertWorkDatesAvailable(manager, [
+        schedule,
+        { ...schedule, shiftId: value.toShiftId },
+      ]);
       return this.notifyChange(
         manager,
         actor,
@@ -491,6 +510,10 @@ export class SchedulingWorkflowService {
         worker?.contractorId ?? null,
       );
       await this.assertShiftAvailable(manager, schedule, request.toShiftId);
+      await this.assertWorkDatesAvailable(manager, [
+        schedule,
+        { ...schedule, shiftId: request.toShiftId },
+      ]);
       schedule.shiftId = request.toShiftId;
       await manager.getRepository(WorkerScheduleEntity).save(schedule);
       const now = new Date();
@@ -596,8 +619,7 @@ export class SchedulingWorkflowService {
       await this.assertWorkerParticipation(manager, coworker);
       await requireWorkerDocuments(manager, requester);
       await requireWorkerDocuments(manager, coworker);
-      await this.assertWorkDateAvailable(manager, requesterSchedule);
-      await this.assertWorkDateAvailable(manager, coworkerSchedule);
+      await this.assertWorkDatesAvailable(manager, [requesterSchedule, coworkerSchedule]);
       const teamBinding = await teamSwapEligibility(
         manager,
         requesterSchedule,
@@ -628,6 +650,7 @@ export class SchedulingWorkflowService {
       ]);
       await this.assertShiftAvailable(manager, requesterSchedule, coworkerSchedule.shiftId);
       await this.assertShiftAvailable(manager, coworkerSchedule, requesterSchedule.shiftId);
+      await this.assertWorkDatesAvailable(manager, [requesterSchedule, coworkerSchedule]);
       return this.notifySwap(
         manager,
         actor,
@@ -709,8 +732,7 @@ export class SchedulingWorkflowService {
         coworkerSchedule.siteId !== scopedSiteId
       )
         missing();
-      await this.assertWorkDateAvailable(manager, requesterSchedule);
-      await this.assertWorkDateAvailable(manager, coworkerSchedule);
+      await this.assertWorkDatesAvailable(manager, [requesterSchedule, coworkerSchedule]);
       const binding = await teamSwapEligibility(manager, requesterSchedule, coworkerSchedule, true);
       if (
         !this.swapSchedulesStillMatch(requesterSchedule, coworkerSchedule, request) ||
@@ -728,6 +750,7 @@ export class SchedulingWorkflowService {
           await manager.getRepository(ShiftSwapRequestEntity).save(request),
         );
       }
+      await this.assertWorkDatesAvailable(manager, [requesterSchedule, coworkerSchedule]);
       request.status = ShiftRequestStatus.PENDING_MANAGER;
       request.coworkerConfirmedAt = new Date();
       return this.notifySwap(
@@ -888,8 +911,7 @@ export class SchedulingWorkflowService {
           await manager.getRepository(ShiftSwapRequestEntity).save(request),
         );
       }
-      await this.assertWorkDateAvailable(manager, requesterSchedule);
-      await this.assertWorkDateAvailable(manager, coworkerSchedule);
+      await this.assertWorkDatesAvailable(manager, [requesterSchedule, coworkerSchedule]);
       await Promise.all([
         this.assertContractorShiftAssignment(
           manager,
@@ -924,6 +946,7 @@ export class SchedulingWorkflowService {
         );
       }
       await this.assertShiftAvailable(manager, coworkerSchedule, request.requesterShiftId);
+      await this.assertWorkDatesAvailable(manager, [requesterSchedule, coworkerSchedule]);
       requesterSchedule.shiftId = request.coworkerShiftId;
       coworkerSchedule.shiftId = request.requesterShiftId;
       await manager.getRepository(WorkerScheduleEntity).save([requesterSchedule, coworkerSchedule]);

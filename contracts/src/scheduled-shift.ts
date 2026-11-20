@@ -53,6 +53,8 @@ export function scheduledShiftWindow(
       throw new Error('Shift local time does not exist on this work date');
     const valid = [
       candidate,
+      candidate - 1800000,
+      candidate + 1800000,
       candidate - 3600000,
       candidate + 3600000,
       candidate - 7200000,

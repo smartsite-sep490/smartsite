@@ -395,12 +395,12 @@ test('MF07 scheduling queries enforce role and scope boundaries', async (t) => {
   });
   assert.equal(duplicateSwapRequest.status, 409);
 
-  // Requests filed earlier must also be blocked when their actual shift has ended.
+  // Requests filed earlier must also be blocked when their actual shift has started, even before it ends.
   const shiftRepository = dataSource.getRepository(ShiftEntity);
   const scheduleRepository = dataSource.getRepository(WorkerScheduleEntity);
   const originalShift = await shiftRepository.findOneByOrFail({ id: shiftId });
-  const endedAt = new Date(Date.now() - 60_000);
-  const startedAt = new Date(+endedAt - 8 * 3600000);
+  const startedAt = new Date(Date.now() - 60_000);
+  const endedAt = new Date(+startedAt + 8 * 3600000);
   const endedWorkDate = startedAt.toISOString().slice(0, 10);
   const changeRequest = await dataSource.getRepository(ShiftChangeRequestEntity).findOneByOrFail({
     workerScheduleId: workerASchedule.id,
@@ -427,12 +427,12 @@ test('MF07 scheduling queries enforce role and scope boundaries', async (t) => {
       await postJson(`/sites/${siteA}/shift-change-requests`, workerTokenA, {
         workerScheduleId: workerASchedule.id,
         toShiftId: secondShiftId,
-        reason: 'Shift already ended',
+        reason: 'Shift already started',
       }),
       await postJson(`/sites/${siteA}/shift-swap-requests`, workerTokenA, {
         requesterWorkerScheduleId: workerASchedule.id,
         coworkerWorkerScheduleId: workerBSchedule.id,
-        reason: 'Shift already ended',
+        reason: 'Shift already started',
       }),
       await patchJson(
         `/sites/${siteA}/shift-change-requests/${changeRequest.id}/approve`,
@@ -442,7 +442,7 @@ test('MF07 scheduling queries enforce role and scope boundaries', async (t) => {
     ];
     for (const result of results) {
       assert.equal(result.status, 409);
-      assert.equal(result.json.code, 'SHIFT_WORK_DATE_PASSED');
+      assert.equal(result.json.code, 'SHIFT_ALREADY_STARTED');
     }
     assert.equal(
       (await scheduleRepository.findOneByOrFail({ id: workerASchedule.id })).shiftId,
