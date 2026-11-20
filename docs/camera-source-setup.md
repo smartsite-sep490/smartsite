@@ -60,4 +60,3 @@ is distinct from configuration ACK, fresh frames and model quality. Only applica
 status queries are refreshed; refreshing configuration-reference would change the
 view. Runtime opt-in, canonical paired contract provenance and camera acceptance
 remain release gates; source-only tests do not activate a host or camera.
-
