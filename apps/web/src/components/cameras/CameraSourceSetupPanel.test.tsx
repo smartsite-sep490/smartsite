@@ -5,7 +5,7 @@ import userEvent from '@testing-library/user-event';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { afterEach, describe, it, expect, vi } from 'vitest';
 import { CameraSourceSetupPanel } from './CameraSourceSetupPanel';
-import type { CameraSourceClient } from '@smartsite/api-client';
+import { SourceSetupError, type CameraSourceClient } from '@smartsite/api-client';
 
 afterEach(cleanup);
 const host = {
@@ -40,6 +40,49 @@ function setup(client: CameraSourceClient) {
   return { ...view, setCameraVersion: (version: number) => view.rerender(atVersion(version)) };
 }
 describe('source-specific camera setup', () => {
+  it('manually retries an uncertain result with the exact original command, never a new request', async () => {
+    const resume = vi
+      .fn()
+      .mockRejectedValueOnce(new SourceSetupError(503))
+      .mockResolvedValue({
+        state: 'STARTED',
+        sourceRevision: 2,
+        configurationVersion: 12,
+        currentGenerationId: 'new-owner',
+        viewRevision: 7,
+        bundleSha256: 'a'.repeat(64),
+      });
+    setup({
+      hosts: async () => [
+        {
+          ...host,
+          capabilities: {
+            ...host.capabilities,
+            configurationResumeSupported: true,
+            sourceRevision: 2,
+          },
+        },
+      ],
+      probe: vi.fn(),
+      resume,
+    } as CameraSourceClient);
+    const user = userEvent.setup();
+    await screen.findByRole('option', { name: 'AI at Site A' });
+    await user.selectOptions(screen.getByRole('combobox', { name: /^(AI host|Máy AI)$/ }), 'edge');
+    await user.click(
+      await screen.findByRole('button', {
+        name: /Apply saved configuration|Áp dụng cấu hình đã lưu/,
+      }),
+    );
+    const retry = await screen.findByRole('button', {
+      name: /Retry the same request|Thử lại cùng yêu cầu/,
+    });
+    expect(resume).toHaveBeenCalledTimes(1);
+    await user.click(retry);
+    await screen.findByText(/Check configuration status|Kiểm tra trạng thái cấu hình/);
+    expect(resume).toHaveBeenCalledTimes(2);
+    expect(resume.mock.calls[1]?.[5]).toEqual(resume.mock.calls[0]?.[5]);
+  });
   it('resumes saved configuration without testing or replacing the source', async () => {
     const resume = vi.fn().mockResolvedValue({
       state: 'STARTED',

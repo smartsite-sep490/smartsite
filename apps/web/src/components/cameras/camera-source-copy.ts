@@ -3,6 +3,9 @@ const en = {
   'cameraSource.savedConfiguration': 'Saved monitoring configuration',
   'cameraSource.resume': 'Apply saved configuration',
   'cameraSource.resuming': 'Applying saved configuration…',
+  'cameraSource.retryResume': 'Retry the same request',
+  'cameraSource.resumeError':
+    'The result was not confirmed. Retry the same request to check its saved result; an uncertain or superseded operation requires reconciliation.',
   'cameraSource.resumeHelp':
     'Start a new monitoring session using the saved PPE and regions. This keeps the saved video source and view; edits in the connection form are not applied.',
   'cameraSource.resumeStarted':
@@ -71,6 +74,9 @@ const vi: Record<keyof typeof en, string> = {
   'cameraSource.savedConfiguration': 'Cấu hình giám sát đã lưu',
   'cameraSource.resume': 'Áp dụng cấu hình đã lưu',
   'cameraSource.resuming': 'Đang áp dụng cấu hình đã lưu…',
+  'cameraSource.retryResume': 'Thử lại cùng yêu cầu',
+  'cameraSource.resumeError':
+    'Chưa xác nhận được kết quả. Thử lại cùng yêu cầu để kiểm tra kết quả đã lưu; thao tác chưa rõ trạng thái hoặc đã bị thay thế cần được đối chiếu.',
   'cameraSource.resumeHelp':
     'Bắt đầu phiên giám sát mới với PPE và vùng đã lưu. Giữ nguồn hình và góc nhìn hiện tại; không áp dụng các chỉnh sửa trong mẫu kết nối.',
   'cameraSource.resumeStarted':

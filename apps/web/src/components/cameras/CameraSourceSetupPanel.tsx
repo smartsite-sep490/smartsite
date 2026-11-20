@@ -12,6 +12,7 @@ import {
   type SourceTestResult,
 } from '@smartsite/api-client';
 import './camera-source-copy';
+import type { SourceConfigurationResumeCommand } from '@smartsite/contracts';
 
 export interface CameraSourceSetupProps {
   apiUrl: string;
@@ -58,6 +59,7 @@ function SourceWorkspace({
     [now, setNow] = useState(() => Date.now());
   const operation = useRef<{ version: number; abort?: AbortController }>({ version: 0 });
   const cache = useQueryClient();
+  const resumeCommand = useRef<SourceConfigurationResumeCommand | undefined>(undefined);
   const applying = useMutation({
     mutationFn: async () => {
       if (
@@ -108,17 +110,19 @@ function SourceWorkspace({
         pending
       )
         throw new SourceSetupError(409);
+      const command = resumeCommand.current ?? {
+        commandId: crypto.randomUUID(),
+        expectedRevision: caps.sourceRevision ?? 0,
+        expectedConfigurationVersion: camera.configurationVersion,
+      };
+      resumeCommand.current = command;
       return client.resume(
         apiUrl,
         token,
         siteId,
         camera.id,
         hostId,
-        {
-          commandId: crypto.randomUUID(),
-          expectedRevision: caps.sourceRevision ?? 0,
-          expectedConfigurationVersion: camera.configurationVersion,
-        },
+        command,
         new AbortController().signal,
       );
     },
@@ -144,6 +148,7 @@ function SourceWorkspace({
       resumeScope.current.version !== camera.configurationVersion
     ) {
       resetResume();
+      resumeCommand.current = undefined;
       resumeScope.current = { hostId, version: camera.configurationVersion };
     }
   }, [hostId, camera.configurationVersion, resumePending, resetResume]);
@@ -536,10 +541,16 @@ function SourceWorkspace({
               <button
                 type="button"
                 className={CAMERA_BUTTON_STYLES.secondary}
-                disabled={blocked || pending || resuming.isError || resuming.isSuccess}
+                disabled={blocked || pending || resuming.isSuccess}
                 onClick={() => resuming.mutate()}
               >
-                {t(resuming.isPending ? 'cameraSource.resuming' : 'cameraSource.resume')}
+                {t(
+                  resuming.isPending
+                    ? 'cameraSource.resuming'
+                    : resuming.isError
+                      ? 'cameraSource.retryResume'
+                      : 'cameraSource.resume',
+                )}
               </button>
               {resuming.isSuccess && (
                 <p role="status" className="text-sm text-slate-700">
@@ -548,7 +559,7 @@ function SourceWorkspace({
               )}
               {resuming.isError && (
                 <p role="alert" className="text-sm text-rose-900">
-                  {t('cameraSource.applyError')}
+                  {t('cameraSource.resumeError')}
                 </p>
               )}
             </aside>
