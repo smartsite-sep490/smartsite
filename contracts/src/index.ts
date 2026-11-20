@@ -214,3 +214,10 @@ export * from './camera-preview.js';
 export * from './camera-observation-zones.js';
 
 export * from './gates-api.js';
+
+export type {
+  CameraSourceKind,
+  CameraSourceDraft,
+  SourceHost,
+  SourceTestResult,
+} from './camera-source-setup.js';

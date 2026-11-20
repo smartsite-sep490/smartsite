@@ -1,4 +1,6 @@
 import { Module } from '@nestjs/common';
+import { CameraSourceController } from './camera-source.controller.js';
+import { CameraSourceService } from './camera-source.service.js';
 import { CameraPreviewController } from './camera-preview.controller.js';
 import { CameraPreviewService } from './camera-preview.service.js';
 import { DatabaseModule } from '../../database/database.module.js';
@@ -23,6 +25,7 @@ import { CameraApplicationStatusService } from './camera-application-status.serv
 @Module({
   imports: [DatabaseModule, SitesModule, ZonesModule, AuthModule],
   controllers: [
+    CameraSourceController,
     CameraPreviewController,
     CameraApplicationStatusController,
     CamerasController,
@@ -31,6 +34,7 @@ import { CameraApplicationStatusService } from './camera-application-status.serv
     CameraConfigurationReferenceController,
   ],
   providers: [
+    CameraSourceService,
     CameraPpePolicyRuntime,
     CameraPreviewService,
     CameraApplicationStatusService,
