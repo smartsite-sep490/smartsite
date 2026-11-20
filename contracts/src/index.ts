@@ -213,3 +213,5 @@ export * from './camera-policy-configuration-bundle.js';
 
 export * from './camera-preview.js';
 export * from './camera-observation-zones.js';
+
+export type { CameraSourceKind, CameraSourceDraft, SourceHost, SourceTestResult } from './camera-source-setup.js';

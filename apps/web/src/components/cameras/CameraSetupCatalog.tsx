@@ -31,6 +31,7 @@ export function CameraSetupCatalog({
   statusContext,
   policyContext,
   inlineRegionStage,
+  sourceSetupStage,
 }: {
   siteId?: string;
   siteCode?: string;
@@ -49,6 +50,7 @@ export function CameraSetupCatalog({
   statusContext?: CameraApplicationStatusContext;
   policyContext?: CameraPpeContext;
   inlineRegionStage?: ReactNode;
+  sourceSetupStage?: ReactNode;
 }) {
   const { t } = useTranslation(SAFETY_NAMESPACE);
   const catalogId = useId();
@@ -293,6 +295,7 @@ export function CameraSetupCatalog({
             </div>
 
             <div data-testid="camera-setup-detail-pane" className="min-w-0 space-y-4">
+              {sourceSetupStage}
               {!cameras.isPending && (
                 <CameraSetupChecklist
                   siteId={siteId}
@@ -323,6 +326,7 @@ export function CameraSetupCatalog({
                 }
                 statusContext={statusContext}
               />
+
               {inlineRegionStage}
               {!inlineRegionStage && selectedCamera && selectedCamera.status !== 'ACTIVE' && (
                 <div

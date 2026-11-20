@@ -197,3 +197,6 @@ export { readRecordedCameraVideo, MAX_RECORDED_VIDEO_BYTES } from './management'
 export type { RecordedCameraVideoOptions } from './management';
 export type { CameraMediaFrame } from '@smartsite/contracts/camera-preview';
 export type { CameraVideoStreamOptions } from './camera-media-stream';
+
+export { cameraSourceClient, SourceSetupError } from './camera-source';
+export type { CameraSourceClient, CameraSourceKind, CameraSourceDraft, SourceHost, SourceTestResult } from './camera-source';

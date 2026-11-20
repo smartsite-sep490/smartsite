@@ -1,3 +1,4 @@
+import { CameraSourceSetupPanel } from './CameraSourceSetupPanel';
 import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Link, useNavigate } from 'react-router-dom';
@@ -422,6 +423,15 @@ function SetupWorkspace({ apiUrl, session }: { apiUrl: string; session: SharedSe
       {site && (
         <CameraSetupCatalog
           key={site.id}
+          sourceSetupStage={
+            import.meta.env.VITE_SMARTSITE_ENABLE_SOURCE_SETUP === 'true' &&
+            catalogSelectedCamera && !sites.baseError && !cameras.baseError && !revoked ? (
+              <CameraSourceSetupPanel apiUrl={apiUrl} token={session.accessToken}
+                siteId={site.id} camera={catalogSelectedCamera} setupKey={key}
+                canWrite={canManageCameras}
+                onUnauthorized={() => handleStatusUnauthorized(site.id)} />
+            ) : undefined
+          }
           siteId={site.id}
           siteCode={site.code}
           siteName={site.name}
