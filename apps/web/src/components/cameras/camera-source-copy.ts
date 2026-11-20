@@ -40,6 +40,7 @@ const en = {
   'cameraSource.video': 'Video',
   'cameraSource.chooseVideo': 'Choose an approved video',
   'cameraSource.endpoint': 'RTSP URL',
+  'cameraSource.endpointExample': 'rtsp://192.168.1.50:554/stream1',
   'cameraSource.username': 'Camera username',
   'cameraSource.password': 'Camera password',
   'cameraSource.credentialHelp':
@@ -71,6 +72,7 @@ const en = {
     'After connecting the source, use a fresh configuration image to draw its observation regions and choose PPE requirements.',
 };
 const vi: Record<keyof typeof en, string> = {
+  'cameraSource.endpointExample': 'rtsp://192.168.1.50:554/stream1',
   'cameraSource.savedConfiguration': 'Cấu hình giám sát đã lưu',
   'cameraSource.resume': 'Áp dụng cấu hình đã lưu',
   'cameraSource.resuming': 'Đang áp dụng cấu hình đã lưu…',

@@ -462,7 +462,7 @@ function SourceWorkspace({
                         id={`${id}-endpoint`}
                         value={endpoint}
                         autoComplete="off"
-                        placeholder="rtsp://192.168.1.50:554/stream1"
+                        placeholder={t('cameraSource.endpointExample')}
                         className={CAMERA_FIELD_STYLES.input}
                         onChange={(e) => change(() => setEndpoint(e.target.value))}
                       />

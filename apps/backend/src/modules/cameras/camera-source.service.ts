@@ -1,7 +1,7 @@
 import { HttpException, Inject, Injectable, Optional } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { PublicHttpException } from '../../common/http/public-http-exception.js';
-import { invalid, missing, uuid } from '../../common/configuration/commands.js';
+import { conflict, invalid, missing, uuid } from '../../common/configuration/commands.js';
 import type { BackendEnvironment } from '../../config/environment.js';
 import { AuthService } from '../auth/auth.service.js';
 import { UserRole } from '../../database/entities/user.entity.js';
@@ -263,6 +263,10 @@ export class CameraSourceService {
       host = this.hosts(siteId).find((h) => h.id === hostId);
     const allowed = this.config.get('AI_CONFIGURATION_CAMERA_IDS', { infer: true }) ?? [];
     if (!host || camera.siteId !== siteId || !allowed.includes(cameraId)) missing();
+    // Use the Camera-owned DTO rather than coupling the resume query to a later
+    // camera-type migration. Typed releases also recheck this in the issuer lock.
+    if ('type' in camera && camera.type === 'GATE')
+      conflict('Gate Cameras cannot run monitoring workers');
     if (
       this.config.get('SMARTSITE_AI_SOURCE_APPLY_ENABLED', { infer: true }) !== true ||
       !this.database
@@ -308,7 +312,7 @@ export class CameraSourceService {
          FROM camera c JOIN camera_worker_generation g ON g.camera_id=c.id AND g.site_id=c.site_id AND g.is_current AND g.revoked_at IS NULL AND g.superseded_at IS NULL
          JOIN camera_view_revision v ON v.camera_id=c.id AND v.site_id=c.site_id AND v.is_current AND v.source_kind='LIVE'
          JOIN camera_configuration_bundle b ON b.camera_id=c.id AND b.site_id=c.site_id AND b.configuration_version=c.configuration_version AND b.view_revision=v.revision
-         WHERE c.id=$1 AND c.site_id=$2 AND c.status='ACTIVE' AND c.type<>'GATE'`,
+         WHERE c.id=$1 AND c.site_id=$2 AND c.status='ACTIVE'`,
         [cameraId, siteId],
       );
       const expected = rows[0];

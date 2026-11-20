@@ -24,6 +24,7 @@ test('source resume coordinates an accepted configuration without replacing sour
         | 'changed'
         | 'lost'
         | 'legacy404'
+        | 'gate'
         | 'scope404' = 'success',
     ) {
       const f = await seedTrackedFrameFixture(db, ['HARD_HAT']);
@@ -67,7 +68,12 @@ test('source resume coordinates an accepted configuration without replacing sour
         get: async (siteId: string, cameraId: string) => {
           assert.equal(siteId, f.siteId);
           assert.equal(cameraId, f.cameraId);
-          return { id: f.cameraId, siteId: f.siteId, externalId: f.cameraId };
+          return {
+            id: f.cameraId,
+            siteId: f.siteId,
+            externalId: f.cameraId,
+            type: mode === 'gate' ? 'GATE' : 'ZONE',
+          };
         },
       } as unknown as CameraConfigurationService;
       const command = {
@@ -265,6 +271,7 @@ test('source resume coordinates an accepted configuration without replacing sour
     );
     for (const [mode, status] of [
       ['unsupported', 503],
+      ['gate', 409],
       ['revoked', 403],
       ['changed', 409],
       ['legacy404', 503],
