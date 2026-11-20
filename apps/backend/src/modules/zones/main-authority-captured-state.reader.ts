@@ -178,9 +178,11 @@ export class MainAuthorityCapturedStateReader {
       },
       sources: base.sources,
     };
-    // Validate baseline shape/scope before traversing unbounded or untrusted data.
+    // Validate shape first; the requested Site/Zone/Worker may be created by later facts.
+    // Full scope validation remains mandatory on the reconstructed final archive below.
     const initial = sealMainAuthorityArchive(payload, context);
-    if (initial.status !== 'VALID') return unavailable(initial.reason);
+    if (initial.status !== 'VALID' && initial.reason !== 'SOURCE_SCOPE_MISMATCH')
+      return unavailable(initial.reason);
     if (base.sources.reduce((sum, s) => sum + s.rows.length, 0) !== baseline.row_count)
       return unavailable('BASELINE_INTEGRITY_UNAVAILABLE');
     const gaps = await manager.query(
