@@ -208,6 +208,10 @@ test('assignment requests select a renewed participation that contains the entir
   };
   const saved: Array<Record<string, unknown>> = [];
   const manager = {
+    query: async (sql: string) => {
+      assert.match(sql, /FROM pg_class c JOIN pg_namespace/);
+      return [{ n: 0, legacy: 0, baseline: 0 }];
+    },
     getRepository(target: unknown) {
       if (target === WorkerEntity)
         return {
@@ -219,9 +223,12 @@ test('assignment requests select a renewed participation that contains the entir
           }),
         };
       if (target === ContractorRepresentativeGrantEntity)
-        return { findOneBy: async () => ({ id: 'grant' }) };
+        return { findOneBy: async () => ({ id: 'grant' }), findOne: async () => ({ id: 'grant' }) };
       if (target === ContractorEntity)
-        return { findOneBy: async () => ({ id: IDs.contractor, isActive: true }) };
+        return {
+          findOneBy: async () => ({ id: IDs.contractor, isActive: true }),
+          findOne: async () => ({ id: IDs.contractor, isActive: true }),
+        };
       if (target === ContractorSiteParticipationEntity)
         return {
           findBy: async () => [historical, renewed],
