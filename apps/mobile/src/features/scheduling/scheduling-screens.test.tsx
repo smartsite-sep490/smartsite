@@ -14,6 +14,7 @@ let workspace: ReturnType<typeof useWorkspace>;
 vi.mock('../workspace/workspace-context', () => ({ useWorkspace: () => workspace }));
 let root: ReactTestRenderer;
 let cache: QueryClient;
+let controlledTimers = false;
 const schedule: WorkerScheduleResponse = {
   id: 'own-schedule',
   siteId: 'site-a',
@@ -45,7 +46,8 @@ async function text(label: string, value: string) {
 }
 async function settle() {
   await act(async () => {
-    await new Promise((r) => setTimeout(r, 20));
+    if (controlledTimers) await vi.advanceTimersByTimeAsync(20);
+    else await new Promise((r) => setTimeout(r, 20));
   });
 }
 async function mount(component: React.ReactNode) {
@@ -57,6 +59,7 @@ async function mount(component: React.ReactNode) {
   await settle();
 }
 beforeEach(() => {
+  controlledTimers = false;
   vi.useFakeTimers({ toFake: ['Date'] });
   vi.setSystemTime(new Date('2026-11-19T00:00:00Z'));
   cache = new QueryClient({
@@ -136,16 +139,27 @@ afterEach(async () => {
 });
 
 it('locks an open change/swap form at the start, while keeping leave requests available', async () => {
-  vi.useFakeTimers({ toFake: ['Date'] });
-  vi.setSystemTime(new Date('2026-11-20T00:59:59.999Z'));
+  controlledTimers = true;
+  vi.useFakeTimers({
+    toFake: ['Date', 'setTimeout', 'clearTimeout', 'setInterval', 'clearInterval'],
+  });
+  vi.setSystemTime(new Date('2026-11-20T00:59:00Z'));
   const change = vi.spyOn(workspace.client, 'createShiftChangeRequest');
   const swap = vi.spyOn(workspace.client, 'createShiftSwapRequest');
   vi.spyOn(workspace.client, 'listEligibleShifts').mockResolvedValue({ items: [], total: 0 });
   await mount(createElement(ScheduleScreen, { initialDate: '2026-11-20' }));
   await click('Chi tiết');
   await click('Đổi ca / hoán đổi / xin nghỉ');
-  vi.setSystemTime(new Date('2026-11-20T01:00:00Z'));
-  await settle();
+  // Advance the same clock that drives the deadline timer, without real-time sleeps.
+  await act(async () => {
+    await vi.advanceTimersByTimeAsync(+new Date('2026-11-20T01:00:00Z') - Date.now() - 1);
+  });
+  expect(JSON.stringify(root.toJSON())).not.toContain(
+    'Ca đã bắt đầu. Không còn được đổi hoặc hoán đổi ca.',
+  );
+  await act(async () => {
+    await vi.advanceTimersByTimeAsync(1);
+  });
   expect(JSON.stringify(root.toJSON())).toContain(
     'Ca đã bắt đầu. Không còn được đổi hoặc hoán đổi ca.',
   );
