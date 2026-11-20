@@ -686,6 +686,7 @@ export class CameraConfigurationService {
         if (!change(region))
           return Object.assign(region, { configurationVersion: camera.configurationVersion });
         if (!wasActive && region.isActive) {
+          await this.zones.lockForRegion(manager, siteId, region.zoneId);
           const [policy] = await manager.query(
             `SELECT
             EXISTS(SELECT 1 FROM camera_configuration_bundle h WHERE camera_id=$1

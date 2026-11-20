@@ -94,7 +94,7 @@ test('reactivating a region refuses to exceed 64 active regions', async () => {
   const cameraId = randomUUID();
   const regionId = randomUUID();
   const camera = { id: cameraId, siteId, status: CameraStatus.ACTIVE, configurationVersion: 2 };
-  const region = { id: regionId, cameraId, isActive: false, version: 2 };
+  const region = { id: regionId, cameraId, zoneId: randomUUID(), isActive: false, version: 2 };
   const cameraRepository = {
     createQueryBuilder: () => ({
       setLock() {
@@ -135,7 +135,10 @@ test('reactivating a region refuses to exceed 64 active regions', async () => {
   const db = {
     transaction: async (run: (value: typeof manager) => Promise<unknown>) => await run(manager),
   } as unknown as DataSource;
-  const service = new CameraConfigurationService(db, undefined as never, undefined as never);
+  const zones = { lockForRegion: async (_manager: unknown, site: string, zone: string) => {
+    assert.equal(site, siteId); assert.equal(zone, region.zoneId);
+  } };
+  const service = new CameraConfigurationService(db, zones as never, undefined as never);
   await assert.rejects(
     service.setRegionActive(siteId, cameraId, regionId, {
       expectedConfigurationVersion: 2,
