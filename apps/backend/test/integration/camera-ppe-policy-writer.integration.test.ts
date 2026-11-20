@@ -1,3 +1,4 @@
+import { installGateSchemaForHistoricalFixture } from '../support/historical-gate-schema.js';
 import 'reflect-metadata';
 import { CameraPpePolicyService } from '../../src/modules/cameras/camera-ppe-policy.service.js';
 import { ZoneConfigurationService } from '../../src/modules/zones/zone-configuration.service.js';
@@ -46,13 +47,14 @@ const password = 'Synthetic_camera_password_123';
 let sourceSession = randomUUID();
 before(async () => {
   await owned.initialize();
+  await installGateSchemaForHistoricalFixture(db);
   hash = await hashPassword(password);
   await db.query(
     'INSERT INTO site(id,code,name) VALUES($1::uuid,$1::text,$1::text),($2::uuid,$2::text,$2::text)',
     [site, otherSite],
   );
   await db.query(
-    "INSERT INTO camera(id,site_id,external_id,code,name) VALUES($1,$2,'camera-a','SYNTHETIC','Synthetic camera')",
+    "INSERT INTO camera(type,id,site_id,external_id,code,name) VALUES('ZONE',$1,$2,'camera-a','SYNTHETIC','Synthetic camera')",
     [camera, site],
   );
   const config = createTestConfig({
@@ -429,7 +431,7 @@ test('authorized PPE commands initialize, revise and replay one immutable camera
   await t.test('same command cannot commit for two different cameras concurrently', async () => {
     const second = randomUUID();
     await db.query(
-      "INSERT INTO camera(id,site_id,external_id,code,name) VALUES($1,$2,'second-camera','SECOND','Second')",
+      "INSERT INTO camera(type,id,site_id,external_id,code,name) VALUES('ZONE',$1,$2,'second-camera','SECOND','Second')",
       [second, site],
     );
     await db.query(
@@ -812,6 +814,36 @@ test('authorized PPE commands initialize, revise and replay one immutable camera
         (await current()).regions.find((region) => region.regionId === dormantId)!.ppePolicy,
         input.policy,
       );
+    },
+  );
+  await t.test(
+    'explicit camera PPE save rebinds a new source view with no active polygons',
+    async () => {
+      let before = await current();
+      for (const region of before.regions) {
+        await mutate(`regions/${region.regionId}/status`, {
+          expectedConfigurationVersion: before.configurationVersion,
+          isActive: false,
+        });
+        before = await current();
+      }
+      sourceSession = randomUUID();
+      await reference();
+      await assert.rejects(current(), /unavailable/);
+      await writer.setCameraPolicy(
+        site,
+        camera,
+        {
+          commandId: randomUUID(),
+          expectedConfigurationVersion: before.configurationVersion,
+          policy: before.cameraPpePolicy,
+        },
+        context(manager),
+      );
+      const after = await current();
+      assert.equal(after.viewRevision, before.viewRevision + 1);
+      assert.deepEqual(after.cameraPpePolicy, before.cameraPpePolicy);
+      assert.equal(after.regions.length, 0);
     },
   );
   await t.test('revocation prevents even an otherwise valid replay', async () => {

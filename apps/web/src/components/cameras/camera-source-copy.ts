@@ -1,6 +1,12 @@
 import { registerFeatureCatalog } from '../../i18n/feature-catalog-registry';
 const en = {
   'cameraSource.title': 'Connect a video source',
+  'cameraSource.apply': 'Save and activate source',
+  'cameraSource.applying': 'Stopping previous source and activating…',
+  'cameraSource.running':
+    'Source is running in a new session. Take a fresh reference image and confirm regions/PPE before monitoring.',
+  'cameraSource.applyError':
+    'Activation was not confirmed. Inspect the current camera/worker status before retrying; the previous source may have stopped.',
   'cameraSource.intro':
     'Choose where this camera is connected. Saving a camera name does not connect its video.',
   'cameraSource.host': 'AI host',
@@ -56,6 +62,12 @@ const en = {
 };
 const vi: Record<keyof typeof en, string> = {
   'cameraSource.title': 'Kết nối nguồn hình',
+  'cameraSource.apply': 'Lưu và kích hoạt nguồn',
+  'cameraSource.applying': 'Đang dừng nguồn cũ và kích hoạt…',
+  'cameraSource.running':
+    'Nguồn đang chạy trong phiên mới. Lấy ảnh tham chiếu mới và xác nhận vùng/PPE trước khi giám sát.',
+  'cameraSource.applyError':
+    'Chưa xác nhận được kích hoạt. Kiểm tra trạng thái camera/worker trước khi thử lại; nguồn cũ có thể đã dừng.',
   'cameraSource.intro': 'Chọn nơi camera được kết nối. Lưu tên camera chưa đồng nghĩa đã có hình.',
   'cameraSource.host': 'Máy AI',
   'cameraSource.offline': 'ngoại tuyến',

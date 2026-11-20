@@ -22,8 +22,12 @@ separate credentials, an approved recorded video (REPLAY), and this browser's
 camera. The latter is explicitly unavailable until media ingestion is implemented.
 Changing draft, site, camera or session invalidates the prior test result.
 
-A successful test shows a real image but does not save source changes or start
-AI. Host capabilities advertise `applySupported=false`. Encrypted durable source
-settings, generation-bound apply/rollback, reference-image invalidation and the
-browser transport are unfinished. Do not use this feature flag as evidence of a
-complete deployed camera onboarding flow. See companion AI `docs/source-control.md`.
+A successful test shows a real image but does not save changes. Operator-configured
+LIVE activation is a separate opt-in: prepare stops the known owner, Backend
+renews its generation and retires the prior view, then commit starts the new source.
+Settings are encrypted at the host. A fresh source image and explicit PPE/region
+confirmation are required; failed transitions stay visible for reconciliation.
+The current local composition supports this single owned webcam; the stock AI
+control command remains test-only. Browser transport, replay activation, general
+remote deployment, and physical RTSP validation are unfinished. MF06 notification
+acceptance additionally requires a qualified authority release/current epoch.

@@ -3,6 +3,7 @@ import type {
   CameraSourceDraft,
   SourceHost,
   SourceTestResult,
+  SourceActivationResult,
 } from '@smartsite/contracts';
 export type {
   CameraSourceKind,
@@ -61,6 +62,10 @@ export function parseSourceHosts(value: unknown): SourceHost[] {
         videos: items(c.videos),
         browserCameraSupported: c.browserCameraSupported,
         applySupported: c.applySupported,
+        sourceRevision:
+          Number.isSafeInteger(c.sourceRevision) && Number(c.sourceRevision) >= 0
+            ? Number(c.sourceRevision)
+            : 0,
       },
     };
   });
@@ -104,7 +109,7 @@ async function request(
   token: string,
   path: string,
   signal: AbortSignal,
-  body?: CameraSourceDraft,
+  body?: CameraSourceDraft | { commandId: string; receiptId: string; expectedRevision: number },
 ) {
   const response = await fetch(`${apiUrl.replace(/\/+$/, '')}/api/v1${path}`, {
     method: body ? 'POST' : 'GET',
@@ -150,6 +155,15 @@ async function request(
   }
 }
 export interface CameraSourceClient {
+  apply?(
+    apiUrl: string,
+    token: string,
+    siteId: string,
+    cameraId: string,
+    hostId: string,
+    command: { commandId: string; receiptId: string; expectedRevision: number },
+    signal: AbortSignal,
+  ): Promise<SourceActivationResult>;
   hosts(
     apiUrl: string,
     token: string,
@@ -168,6 +182,31 @@ export interface CameraSourceClient {
   ): Promise<SourceTestResult>;
 }
 export const cameraSourceClient: CameraSourceClient = {
+  apply: async (api, token, site, camera, host, command, signal) => {
+    const r = record(
+      await request(
+        api,
+        token,
+        `/sites/${encodeURIComponent(site)}/cameras/${encodeURIComponent(camera)}/source-hosts/${encodeURIComponent(host)}/apply`,
+        signal,
+        command,
+      ),
+    );
+    if (
+      r.state !== 'RUNNING' ||
+      r.commandId !== command.commandId ||
+      r.sourceKind !== 'LIVE' ||
+      r.sourceRevision !== command.expectedRevision + 1
+    )
+      throw new SourceSetupError(502);
+    return {
+      state: 'RUNNING',
+      commandId: command.commandId,
+      sourceKind: 'LIVE',
+      sourceRevision: Number(r.sourceRevision),
+      currentGenerationId: text(r.currentGenerationId),
+    };
+  },
   hosts: async (api, token, site, camera, signal) =>
     parseSourceHosts(
       await request(

@@ -190,7 +190,31 @@ export class CameraPpePolicyService {
               [cameraId],
             );
             if (!adopted.present) conflict('Initialize camera PPE policies first');
-            const retained = await readCurrentCameraPolicyBundle(tx, cameraId);
+            // An explicit camera-policy save can rebind a freshly reviewed source view.
+            // The bundle builder below still rejects every stale/unconfirmed active polygon.
+            const retained =
+              change.kind === 'CAMERA'
+                ? await (async () => {
+                    const [header] = await tx.query(
+                      `SELECT configuration_version,view_revision,bundle_sha256 FROM camera_configuration_bundle
+                     WHERE camera_id=$1 AND site_id=$2 AND camera_external_id=$3
+                       AND configuration_version <= $4 AND schema_version='2.0.0'
+                     ORDER BY configuration_version DESC LIMIT 1`,
+                      [camera.id, camera.siteId, camera.externalId, camera.configurationVersion],
+                    );
+                    if (!header) conflict('Saved camera PPE policy is unavailable');
+                    const saved = await readStoredCameraPolicyBundle(tx, {
+                      cameraId,
+                      siteId,
+                      cameraExternalId: camera.externalId,
+                      configurationVersion: Number(header.configuration_version),
+                      viewRevision: Number(header.view_revision),
+                      bundleSha256: header.bundle_sha256,
+                    });
+                    if (!saved) conflict('Saved camera PPE policy is unavailable');
+                    return saved;
+                  })()
+                : await readCurrentCameraPolicyBundle(tx, cameraId);
             cameraPolicy =
               change.kind === 'CAMERA' ? change.input.policy : retained.cameraPpePolicy;
             regionPolicies = new Map(
