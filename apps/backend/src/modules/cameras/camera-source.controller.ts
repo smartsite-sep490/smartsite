@@ -70,4 +70,23 @@ export class CameraSourceController {
       input,
     );
   }
+
+  @Post(':hostId/resume')
+  @Header('Cache-Control', 'no-store')
+  resume(
+    @Req() request: Request,
+    @Param('siteId') siteId: string,
+    @Param('cameraId') cameraId: string,
+    @Param('hostId') hostId: string,
+    @Body() input: unknown,
+  ) {
+    // A disconnect cannot undo an already committed generation transition.
+    return this.sources.resume(
+      request.headers.authorization!.slice(7),
+      siteId,
+      cameraId,
+      hostId,
+      input,
+    );
+  }
 }

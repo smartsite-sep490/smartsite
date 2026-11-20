@@ -17,7 +17,7 @@ export interface CameraSourceSetupProps {
   apiUrl: string;
   token: string;
   siteId: string;
-  camera: { id: string; name: string };
+  camera: { id: string; name: string; configurationVersion?: number };
   setupKey: readonly unknown[];
   canWrite: boolean;
   onUnauthorized: () => void;
@@ -96,6 +96,75 @@ function SourceWorkspace({
       }
     },
   });
+  const resuming = useMutation({
+    mutationFn: async () => {
+      if (
+        !client.resume ||
+        caps?.configurationResumeSupported !== true ||
+        camera.configurationVersion === undefined ||
+        !canWrite ||
+        revoked ||
+        applying.isPending ||
+        pending
+      )
+        throw new SourceSetupError(409);
+      return client.resume(
+        apiUrl,
+        token,
+        siteId,
+        camera.id,
+        hostId,
+        {
+          commandId: crypto.randomUUID(),
+          expectedRevision: caps.sourceRevision ?? 0,
+          expectedConfigurationVersion: camera.configurationVersion,
+        },
+        new AbortController().signal,
+      );
+    },
+    retry: false,
+    onSuccess: () => {
+      setPassword('');
+      void hosts.refetch();
+    },
+    onError: (e) => {
+      if (e instanceof SourceSetupError && [401, 403].includes(e.status)) {
+        setRevoked(true);
+        setPassword('');
+        onUnauthorized();
+      }
+    },
+  });
+  const resumeScope = useRef({ hostId, version: camera.configurationVersion });
+  const { isPending: resumePending, reset: resetResume } = resuming;
+  useEffect(() => {
+    if (resumePending) return;
+    if (
+      resumeScope.current.hostId !== hostId ||
+      resumeScope.current.version !== camera.configurationVersion
+    ) {
+      resetResume();
+      resumeScope.current = { hostId, version: camera.configurationVersion };
+    }
+  }, [hostId, camera.configurationVersion, resumePending, resetResume]);
+  useEffect(() => {
+    if (!resuming.isSuccess) return;
+    // Only application receipts: refetching a reference image could retire the view.
+    const refresh = () =>
+      void cache.invalidateQueries({
+        predicate: (q) =>
+          q.queryKey.includes('application-status') &&
+          q.queryKey.includes(siteId) &&
+          q.queryKey.includes(camera.id),
+      });
+    refresh();
+    const timer = setInterval(refresh, 2000);
+    const deadline = setTimeout(() => clearInterval(timer), 30000);
+    return () => {
+      clearInterval(timer);
+      clearTimeout(deadline);
+    };
+  }, [resuming.isSuccess, cache, siteId, camera.id]);
   useEffect(
     () => () => {
       operation.current.version++;
@@ -135,7 +204,7 @@ function SourceWorkspace({
     setError('');
   };
   const change = (update: () => void) => {
-    if (applying.isPending) return;
+    if (applying.isPending || resuming.isPending) return;
     reset();
     applying.reset();
     update();
@@ -153,7 +222,14 @@ function SourceWorkspace({
             }
           : null;
   const canTest = Boolean(
-    canWrite && !revoked && !hosts.isError && supported && draft && !pending && !applying.isPending,
+    canWrite &&
+    !revoked &&
+    !hosts.isError &&
+    supported &&
+    draft &&
+    !pending &&
+    !applying.isPending &&
+    !resuming.isPending,
   );
   async function test() {
     if (!canTest || !draft) return;
@@ -189,7 +265,7 @@ function SourceWorkspace({
       if (operation.current.version === version) setPending(false);
     }
   }
-  const blocked = revoked || !canWrite || applying.isPending;
+  const blocked = revoked || !canWrite || applying.isPending || resuming.isPending;
   if (hostAccessDenied) {
     return (
       <section
@@ -447,6 +523,36 @@ function SourceWorkspace({
             {t(error)}
           </p>
         )}
+        {caps?.configurationResumeSupported === true &&
+          client.resume &&
+          camera.configurationVersion !== undefined && (
+            <aside className="space-y-3 rounded-xl border border-sky-200 bg-sky-50 p-4">
+              <h3 className="text-sm font-semibold text-slate-950">
+                {t('cameraSource.savedConfiguration')}
+              </h3>
+              <p className="text-sm leading-relaxed text-slate-700">
+                {t('cameraSource.resumeHelp')}
+              </p>
+              <button
+                type="button"
+                className={CAMERA_BUTTON_STYLES.secondary}
+                disabled={blocked || pending || resuming.isError || resuming.isSuccess}
+                onClick={() => resuming.mutate()}
+              >
+                {t(resuming.isPending ? 'cameraSource.resuming' : 'cameraSource.resume')}
+              </button>
+              {resuming.isSuccess && (
+                <p role="status" className="text-sm text-slate-700">
+                  {t('cameraSource.resumeStarted')}
+                </p>
+              )}
+              {resuming.isError && (
+                <p role="alert" className="text-sm text-rose-900">
+                  {t('cameraSource.applyError')}
+                </p>
+              )}
+            </aside>
+          )}
         {applying.isError && (
           <p
             role="alert"

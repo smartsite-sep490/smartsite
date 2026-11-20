@@ -13,6 +13,7 @@ export interface SourceHost {
     videos: { id: string; label: string }[];
     browserCameraSupported: boolean;
     applySupported: boolean;
+    configurationResumeSupported?: boolean;
     sourceRevision?: number;
   };
 }
@@ -22,6 +23,20 @@ export interface SourceActivationResult {
   sourceRevision: number;
   sourceKind: 'LIVE';
   currentGenerationId: string;
+}
+export interface SourceConfigurationResumeCommand {
+  commandId: string;
+  expectedRevision: number;
+  expectedConfigurationVersion: number;
+}
+export interface SourceConfigurationResumeResult {
+  state: 'STARTED';
+  commandId: string;
+  sourceRevision: number;
+  currentGenerationId: string;
+  configurationVersion: number;
+  viewRevision: number;
+  bundleSha256: string;
 }
 export interface SourceTestResult {
   state: 'TESTED';

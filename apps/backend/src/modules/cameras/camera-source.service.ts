@@ -9,6 +9,8 @@ import { CameraConfigurationService } from './camera-configuration.service.js';
 import { DataSource } from 'typeorm';
 import { renewCameraWorkerGeneration } from './camera-worker-generations.js';
 import { activateTestedCameraSource } from './camera-source-activation.js';
+import { resumeAcceptedCameraSource } from './camera-source-resume.js';
+import type { SourceConfigurationResumeResult } from '@smartsite/contracts';
 import {
   sourceCapabilitiesSchema,
   sourceDraftSchema,
@@ -16,6 +18,8 @@ import {
   sourceProbeSchema,
   sourceActivationCommandSchema,
   sourceActivationStateSchema,
+  sourceConfigurationResumeSchema,
+  sourceResumeStatusSchema,
 } from './camera-source-contract.js';
 
 export const CAMERA_SOURCE_FETCH = Symbol('CAMERA_SOURCE_FETCH');
@@ -118,7 +122,13 @@ export class CameraSourceService {
     }
   }
 
-  private async call(origin: string, path: string, body: unknown, signal: AbortSignal) {
+  private async call(
+    origin: string,
+    path: string,
+    body: unknown,
+    signal: AbortSignal,
+    optionalMissing = false,
+  ) {
     if (signal.aborted) unavailable();
     const token = this.config.get('SMARTSITE_AI_SERVICE_TOKEN', { infer: true });
     if (!token) unavailable();
@@ -130,6 +140,19 @@ export class CameraSourceService {
       ...(body === undefined ? {} : { body: JSON.stringify(body) }),
     });
     if (!response.ok) {
+      if (optionalMissing && response.status === 404) {
+        const value = await boundedBody(response, signal);
+        if (
+          value &&
+          typeof value === 'object' &&
+          !Array.isArray(value) &&
+          Object.keys(value).length === 1 &&
+          Object.hasOwn(value, 'code') &&
+          (value as { code: unknown }).code === 'SOURCE_RESUME_NOT_FOUND'
+        )
+          return undefined;
+        unavailable();
+      }
       void response.body?.cancel().catch(() => {});
       if ([400, 409, 504].includes(response.status))
         throw new PublicHttpException(response.status, {
@@ -139,7 +162,7 @@ export class CameraSourceService {
               : response.status === 409
                 ? 'CONFLICT'
                 : 'SERVICE_UNAVAILABLE',
-          message: 'Camera source could not be tested',
+          message: 'Camera source operation failed',
         });
       unavailable();
     }
@@ -221,6 +244,185 @@ export class CameraSourceService {
     } catch (error) {
       if (error instanceof HttpException) throw error;
       return unavailable();
+    }
+  }
+
+  async resume(
+    token: string,
+    siteValue: string,
+    cameraValue: string,
+    hostId: string,
+    input: unknown,
+  ): Promise<SourceConfigurationResumeResult> {
+    const siteId = uuid(siteValue),
+      cameraId = uuid(cameraValue);
+    await this.authorize(token, siteId, true);
+    const command = sourceConfigurationResumeSchema.safeParse(input);
+    if (!command.success) invalid('Invalid camera configuration resume');
+    const camera = await this.cameras.get(siteId, cameraId),
+      host = this.hosts(siteId).find((h) => h.id === hostId);
+    const allowed = this.config.get('AI_CONFIGURATION_CAMERA_IDS', { infer: true }) ?? [];
+    if (!host || camera.siteId !== siteId || !allowed.includes(cameraId)) missing();
+    if (
+      this.config.get('SMARTSITE_AI_SOURCE_APPLY_ENABLED', { infer: true }) !== true ||
+      !this.database
+    )
+      unavailable();
+    const database = this.database!,
+      runner = database.createQueryRunner();
+    await runner.connect();
+    let locked = false;
+    try {
+      const [lock] = await runner.query(
+        "SELECT pg_try_advisory_lock(hashtext(current_schema() || ':source-apply'),hashtext($1)) AS acquired",
+        [cameraId],
+      );
+      locked = lock?.acquired === true;
+      if (!locked)
+        throw new PublicHttpException(409, {
+          code: 'CONFLICT',
+          message: 'Camera source operation in progress',
+        });
+      const path = `/v1/source-control/${siteId}/${encodeURIComponent(camera.externalId)}`;
+      const capabilities = sourceCapabilitiesSchema.parse(
+        await this.call(host!.origin, path + '/capabilities', undefined, AbortSignal.timeout(5000)),
+      );
+      if (capabilities.hostId !== hostId || capabilities.configurationResumeSupported !== true)
+        unavailable();
+      if (capabilities.sourceRevision !== command.data.expectedRevision)
+        throw new PublicHttpException(409, {
+          code: 'CONFLICT',
+          message: 'Camera source revision changed',
+        });
+      const rows = await database.query<
+        Array<{
+          configuration_version: string;
+          view_revision: string;
+          bundle_sha256: string;
+          generation_id: string;
+          stream_session_id: string;
+          external_id: string;
+        }>
+      >(
+        `SELECT c.configuration_version,v.revision AS view_revision,b.bundle_sha256,g.id AS generation_id,g.stream_session_id,c.external_id
+         FROM camera c JOIN camera_worker_generation g ON g.camera_id=c.id AND g.site_id=c.site_id AND g.is_current AND g.revoked_at IS NULL AND g.superseded_at IS NULL
+         JOIN camera_view_revision v ON v.camera_id=c.id AND v.site_id=c.site_id AND v.is_current AND v.source_kind='LIVE'
+         JOIN camera_configuration_bundle b ON b.camera_id=c.id AND b.site_id=c.site_id AND b.configuration_version=c.configuration_version AND b.view_revision=v.revision
+         WHERE c.id=$1 AND c.site_id=$2 AND c.status='ACTIVE' AND c.type<>'GATE'`,
+        [cameraId, siteId],
+      );
+      const expected = rows[0];
+      if (
+        rows.length !== 1 ||
+        !expected ||
+        expected.external_id !== camera.externalId ||
+        Number(expected.configuration_version) !== command.data.expectedConfigurationVersion ||
+        !Number.isSafeInteger(Number(expected.view_revision))
+      )
+        throw new PublicHttpException(409, {
+          code: 'CONFLICT',
+          message: 'Accepted camera configuration or source owner changed',
+        });
+      const configuration = {
+        configurationVersion: command.data.expectedConfigurationVersion,
+        viewRevision: Number(expected.view_revision),
+        bundleSha256: expected.bundle_sha256,
+      };
+      const known = await this.call(
+        host!.origin,
+        path + '/resume-status',
+        { commandId: command.data.commandId },
+        AbortSignal.timeout(5000),
+        true,
+      );
+      if (known !== undefined) {
+        const status = sourceResumeStatusSchema.parse(known);
+        if (
+          status.commandId !== command.data.commandId ||
+          status.sourceRevision !== command.data.expectedRevision ||
+          status.generationBinding.cameraId !== cameraId ||
+          status.configuration.configurationVersion !== configuration.configurationVersion ||
+          status.configuration.viewRevision !== configuration.viewRevision ||
+          status.configuration.bundleSha256 !== configuration.bundleSha256
+        )
+          throw new PublicHttpException(409, {
+            code: 'CONFLICT',
+            message: 'Configuration resume command changed',
+          });
+        if (status.state === 'RUNNING') {
+          const resumed = status.newGenerationBinding;
+          if (
+            !resumed ||
+            resumed.workerGenerationId !== expected.generation_id ||
+            resumed.streamSessionId !== expected.stream_session_id
+          )
+            throw new PublicHttpException(409, {
+              code: 'CONFLICT',
+              message: 'Configuration resume owner changed',
+            });
+          await this.authorize(token, siteId, true);
+          return {
+            state: 'STARTED',
+            commandId: status.commandId,
+            sourceRevision: status.sourceRevision,
+            currentGenerationId: expected.generation_id,
+            ...configuration,
+          };
+        }
+        if (
+          status.state !== 'PREPARED' ||
+          status.generationBinding.workerGenerationId !== expected.generation_id ||
+          status.generationBinding.streamSessionId !== expected.stream_session_id
+        )
+          throw new PublicHttpException(409, {
+            code: 'CONFLICT',
+            message: 'Configuration resume requires reconciliation',
+          });
+      }
+      const remote = async (suffix: string, body: unknown) =>
+        sourceActivationStateSchema.parse(
+          await this.call(host!.origin, path + suffix, body, AbortSignal.timeout(45000)),
+        );
+      const running = await resumeAcceptedCameraSource(command.data, expected.generation_id, {
+        authorize: () => this.authorize(token, siteId, true),
+        prepare: () =>
+          remote('/prepare-resume', {
+            commandId: command.data.commandId,
+            expectedRevision: command.data.expectedRevision,
+            generationBinding: {
+              cameraId,
+              workerGenerationId: expected.generation_id,
+              streamSessionId: expected.stream_session_id,
+            },
+            configuration,
+          }),
+        issue: (owner, id) =>
+          renewCameraWorkerGeneration(database, cameraId, allowed, 43200000, undefined, owner, id, {
+            ...configuration,
+            streamSessionId: expected.stream_session_id,
+          }),
+        commit: (commandId, generation) => remote('/commit-resume', { commandId, generation }),
+      });
+      return {
+        state: 'STARTED',
+        commandId: running.commandId,
+        sourceRevision: running.sourceRevision,
+        currentGenerationId: running.currentGenerationId,
+        ...configuration,
+      };
+    } catch (error) {
+      if (error instanceof HttpException) throw error;
+      return unavailable();
+    } finally {
+      try {
+        if (locked)
+          await runner.query(
+            "SELECT pg_advisory_unlock(hashtext(current_schema() || ':source-apply'),hashtext($1))",
+            [cameraId],
+          );
+      } finally {
+        await runner.release();
+      }
     }
   }
 

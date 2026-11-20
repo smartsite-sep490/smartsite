@@ -217,6 +217,8 @@ export * from './camera-observation-zones.js';
 export type {
   CameraSourceKind,
   CameraSourceDraft,
+  SourceConfigurationResumeCommand,
+  SourceConfigurationResumeResult,
   SourceHost,
   SourceTestResult,
 } from './camera-source-setup.js';

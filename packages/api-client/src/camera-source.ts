@@ -4,6 +4,8 @@ import type {
   SourceHost,
   SourceTestResult,
   SourceActivationResult,
+  SourceConfigurationResumeCommand,
+  SourceConfigurationResumeResult,
 } from '@smartsite/contracts';
 export type {
   CameraSourceKind,
@@ -62,6 +64,7 @@ export function parseSourceHosts(value: unknown): SourceHost[] {
         videos: items(c.videos),
         browserCameraSupported: c.browserCameraSupported,
         applySupported: c.applySupported,
+        configurationResumeSupported: c.configurationResumeSupported === true,
         sourceRevision:
           Number.isSafeInteger(c.sourceRevision) && Number(c.sourceRevision) >= 0
             ? Number(c.sourceRevision)
@@ -109,7 +112,10 @@ async function request(
   token: string,
   path: string,
   signal: AbortSignal,
-  body?: CameraSourceDraft | { commandId: string; receiptId: string; expectedRevision: number },
+  body?:
+    | CameraSourceDraft
+    | SourceConfigurationResumeCommand
+    | { commandId: string; receiptId: string; expectedRevision: number },
 ) {
   const response = await fetch(`${apiUrl.replace(/\/+$/, '')}/api/v1${path}`, {
     method: body ? 'POST' : 'GET',
@@ -155,6 +161,15 @@ async function request(
   }
 }
 export interface CameraSourceClient {
+  resume?(
+    apiUrl: string,
+    token: string,
+    siteId: string,
+    cameraId: string,
+    hostId: string,
+    command: SourceConfigurationResumeCommand,
+    signal: AbortSignal,
+  ): Promise<SourceConfigurationResumeResult>;
   apply?(
     apiUrl: string,
     token: string,
@@ -182,6 +197,41 @@ export interface CameraSourceClient {
   ): Promise<SourceTestResult>;
 }
 export const cameraSourceClient: CameraSourceClient = {
+  resume: async (api, token, site, camera, host, command, signal) => {
+    const r = record(
+      await request(
+        api,
+        token,
+        `/sites/${encodeURIComponent(site)}/cameras/${encodeURIComponent(camera)}/source-hosts/${encodeURIComponent(host)}/resume`,
+        signal,
+        command,
+      ),
+    );
+    if (
+      r.state !== 'STARTED' ||
+      r.commandId !== command.commandId ||
+      r.sourceRevision !== command.expectedRevision ||
+      r.configurationVersion !== command.expectedConfigurationVersion ||
+      !Number.isSafeInteger(r.viewRevision) ||
+      Number(r.viewRevision) < 1 ||
+      typeof r.bundleSha256 !== 'string' ||
+      !/^[a-f0-9]{64}$/.test(r.bundleSha256) ||
+      typeof r.currentGenerationId !== 'string' ||
+      !/^([a-f0-9]{8}-[a-f0-9]{4}-[1-8][a-f0-9]{3}-[89ab][a-f0-9]{3}-[a-f0-9]{12})$/i.test(
+        r.currentGenerationId,
+      )
+    )
+      throw new SourceSetupError(502);
+    return {
+      state: 'STARTED',
+      commandId: command.commandId,
+      sourceRevision: command.expectedRevision,
+      currentGenerationId: r.currentGenerationId,
+      configurationVersion: command.expectedConfigurationVersion,
+      viewRevision: Number(r.viewRevision),
+      bundleSha256: r.bundleSha256,
+    };
+  },
   apply: async (api, token, site, camera, host, command, signal) => {
     const r = record(
       await request(

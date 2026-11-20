@@ -21,24 +21,76 @@ const host = {
   },
 };
 function setup(client: CameraSourceClient) {
-  return render(
-    <QueryClientProvider
-      client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}
-    >
+  const cache = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+  const atVersion = (version: number) => (
+    <QueryClientProvider client={cache}>
       <CameraSourceSetupPanel
         apiUrl="http://localhost"
         token="private-token"
         siteId="site-a"
-        camera={{ id: 'cam-a', name: 'Gate camera' }}
+        camera={{ id: 'cam-a', name: 'Gate camera', configurationVersion: version }}
         setupKey={['scope-a']}
         canWrite
         onUnauthorized={vi.fn()}
         client={client}
       />
-    </QueryClientProvider>,
+    </QueryClientProvider>
   );
+  const view = render(atVersion(12));
+  return { ...view, setCameraVersion: (version: number) => view.rerender(atVersion(version)) };
 }
 describe('source-specific camera setup', () => {
+  it('resumes saved configuration without testing or replacing the source', async () => {
+    const resume = vi.fn().mockResolvedValue({
+      state: 'STARTED',
+      commandId: 'resume',
+      sourceRevision: 2,
+      currentGenerationId: 'new-owner',
+      configurationVersion: 12,
+      viewRevision: 7,
+      bundleSha256: 'a'.repeat(64),
+    });
+    const probe = vi.fn();
+    const view = setup({
+      hosts: async () => [
+        {
+          ...host,
+          capabilities: {
+            ...host.capabilities,
+            configurationResumeSupported: true,
+            sourceRevision: 2,
+          },
+        },
+      ],
+      probe,
+      resume,
+    } as CameraSourceClient);
+    const user = userEvent.setup();
+    await screen.findByRole('option', { name: 'AI at Site A' });
+    await user.selectOptions(screen.getByRole('combobox', { name: /^(AI host|Máy AI)$/ }), 'edge');
+    await user.click(
+      await screen.findByRole('button', {
+        name: /Apply saved configuration|Áp dụng cấu hình đã lưu/,
+      }),
+    );
+    await waitFor(() => expect(resume).toHaveBeenCalledTimes(1));
+    expect(probe).not.toHaveBeenCalled();
+    expect(resume.mock.calls[0]?.[5]).toMatchObject({
+      expectedRevision: 2,
+      expectedConfigurationVersion: 12,
+    });
+    expect(
+      await screen.findByText(/Check configuration status|Kiểm tra trạng thái cấu hình/),
+    ).toBeTruthy();
+    view.setCameraVersion(13);
+    const applyAgain = screen.getByRole('button', {
+      name: /Apply saved configuration|Áp dụng cấu hình đã lưu/,
+    });
+    await waitFor(() => expect((applyAgain as HTMLButtonElement).disabled).toBe(false));
+    await user.click(applyAgain);
+    await waitFor(() => expect(resume).toHaveBeenCalledTimes(2));
+    expect(resume.mock.calls[1]?.[5]).toMatchObject({ expectedConfigurationVersion: 13 });
+  });
   it('applies only a successful live receipt and reports running separately from geometry/PPE setup', async () => {
     const user = userEvent.setup();
     const apply = vi.fn().mockResolvedValue({

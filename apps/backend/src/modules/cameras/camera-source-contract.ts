@@ -28,6 +28,7 @@ export const sourceCapabilitiesSchema = z
     videos: z.array(z.object({ id, label: z.string().min(1).max(255) }).strict()).max(128),
     browserCameraSupported: z.literal(false),
     applySupported: z.boolean(),
+    configurationResumeSupported: z.boolean().optional(),
     sourceRevision: z.number().int().min(0).max(Number.MAX_SAFE_INTEGER).optional(),
   })
   .strict();
@@ -86,3 +87,43 @@ export const sourceActivationStateSchema = z
     currentGenerationId: z.uuid(),
   })
   .strict();
+
+export const sourceConfigurationResumeSchema = z
+  .object({
+    commandId: z.uuid(),
+    expectedRevision: z.number().int().min(0).max(Number.MAX_SAFE_INTEGER),
+    expectedConfigurationVersion: z.number().int().min(1).max(Number.MAX_SAFE_INTEGER),
+  })
+  .strict();
+
+const resumeBindingSchema = z
+  .object({ cameraId: z.uuid(), workerGenerationId: z.uuid(), streamSessionId: z.uuid() })
+  .strict();
+export const sourceResumeStatusSchema = z
+  .object({
+    schemaVersion: z.literal('1.0.0'),
+    commandId: z.uuid(),
+    sourceRevision: z.number().int().min(0).max(Number.MAX_SAFE_INTEGER),
+    sourceKind: z.literal('LIVE'),
+    state: z.enum(['PREPARED', 'RUNNING', 'STOPPING', 'STARTING']),
+    generationBinding: resumeBindingSchema,
+    configuration: z
+      .object({
+        configurationVersion: z.number().int().min(1).max(Number.MAX_SAFE_INTEGER),
+        viewRevision: z.number().int().min(1).max(Number.MAX_SAFE_INTEGER),
+        bundleSha256: z.string().regex(/^[a-f0-9]{64}$/),
+      })
+      .strict(),
+    newGenerationBinding: resumeBindingSchema.optional(),
+  })
+  .strict()
+  .refine(
+    (v) =>
+      v.state !== 'RUNNING' ||
+      Boolean(
+        v.newGenerationBinding &&
+        v.newGenerationBinding.cameraId === v.generationBinding.cameraId &&
+        v.newGenerationBinding.workerGenerationId !== v.generationBinding.workerGenerationId &&
+        v.newGenerationBinding.streamSessionId !== v.generationBinding.streamSessionId,
+      ),
+  );

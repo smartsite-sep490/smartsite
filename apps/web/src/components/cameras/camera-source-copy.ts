@@ -1,5 +1,12 @@
 import { registerFeatureCatalog } from '../../i18n/feature-catalog-registry';
 const en = {
+  'cameraSource.savedConfiguration': 'Saved monitoring configuration',
+  'cameraSource.resume': 'Apply saved configuration',
+  'cameraSource.resuming': 'Applying saved configuration…',
+  'cameraSource.resumeHelp':
+    'Start a new monitoring session using the saved PPE and regions. This keeps the saved video source and view; edits in the connection form are not applied.',
+  'cameraSource.resumeStarted':
+    'Check configuration status and live frames in the camera panel. A started session alone does not confirm monitoring is ready.',
   'cameraSource.title': 'Connect a video source',
   'cameraSource.apply': 'Save and activate source',
   'cameraSource.applying': 'Stopping previous source and activating…',
@@ -61,6 +68,13 @@ const en = {
     'After connecting the source, use a fresh configuration image to draw its observation regions and choose PPE requirements.',
 };
 const vi: Record<keyof typeof en, string> = {
+  'cameraSource.savedConfiguration': 'Cấu hình giám sát đã lưu',
+  'cameraSource.resume': 'Áp dụng cấu hình đã lưu',
+  'cameraSource.resuming': 'Đang áp dụng cấu hình đã lưu…',
+  'cameraSource.resumeHelp':
+    'Bắt đầu phiên giám sát mới với PPE và vùng đã lưu. Giữ nguồn hình và góc nhìn hiện tại; không áp dụng các chỉnh sửa trong mẫu kết nối.',
+  'cameraSource.resumeStarted':
+    'Kiểm tra trạng thái cấu hình và ảnh trực tiếp tại bảng camera. Phiên đã bắt đầu chưa có nghĩa giám sát đã sẵn sàng.',
   'cameraSource.title': 'Kết nối nguồn hình',
   'cameraSource.apply': 'Lưu và kích hoạt nguồn',
   'cameraSource.applying': 'Đang dừng nguồn cũ và kích hoạt…',
