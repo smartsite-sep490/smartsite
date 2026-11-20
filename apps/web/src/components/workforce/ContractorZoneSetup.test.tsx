@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { cleanup, render, screen, waitFor } from '@testing-library/react';
+import { within, cleanup, render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { afterEach, expect, it, vi } from 'vitest';
@@ -79,8 +79,10 @@ it('retains the request ID when a failed permission assignment is retried', asyn
     .mockResolvedValue({ id: 'permission' });
   const user = mount();
   await screen.findByLabelText('Contractor');
-  await user.selectOptions(screen.getByLabelText('Contractor'), 'participation');
-  await user.selectOptions(screen.getByLabelText('Zone'), 'zone');
+  await user.click(screen.getByLabelText('Contractor'));
+  await user.click(within(screen.getByRole('dialog')).getByRole('button', { name: 'Contractor' }));
+  await user.click(screen.getByLabelText('Zone'));
+  await user.click(within(screen.getByRole('dialog')).getByRole('button', { name: 'Work area' }));
   await user.click(screen.getByRole('button', { name: 'Assign Contractor Zone' }));
   await screen.findByText('Something went wrong. Please try again.');
   await user.click(screen.getByRole('button', { name: 'Assign Contractor Zone' }));
@@ -98,8 +100,10 @@ it('only accepts calendar dates, includes the entire selected end day and permit
   await screen.findByLabelText('Start date');
   expect(screen.getByLabelText('Start date').textContent).toMatch(/\d{2}\/\d{2}\/\d{4}/);
   expect(screen.getByLabelText('End date').textContent).toMatch(/\d{2}\/\d{2}\/\d{4}/);
-  await user.selectOptions(screen.getByLabelText('Contractor'), 'participation');
-  await user.selectOptions(screen.getByLabelText('Zone'), 'zone');
+  await user.click(screen.getByLabelText('Contractor'));
+  await user.click(within(screen.getByRole('dialog')).getByRole('button', { name: 'Contractor' }));
+  await user.click(screen.getByLabelText('Zone'));
+  await user.click(within(screen.getByRole('dialog')).getByRole('button', { name: 'Work area' }));
   const today = new Date();
   const iso = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`;
   await user.click(screen.getByRole('button', { name: 'Assign Contractor Zone' }));

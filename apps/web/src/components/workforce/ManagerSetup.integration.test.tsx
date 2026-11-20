@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { cleanup, render, screen, waitFor } from '@testing-library/react';
+import { within, cleanup, render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { afterEach, expect, it, vi } from 'vitest';
@@ -219,8 +219,12 @@ it('manager creates contractors and configures scoped Zones', async () => {
   expect(screen.queryByText('Daily Work Hours')).toBeNull();
   expect(screen.queryByText('Recent attendance')).toBeNull();
   expect(screen.queryByText('Site assignments')).toBeNull();
-  await user.selectOptions(screen.getByLabelText('Contractor'), 'participation-a');
-  await user.selectOptions(screen.getByLabelText('Zone'), 'zone-a');
+  await user.click(screen.getByLabelText('Contractor'));
+  await user.click(
+    within(screen.getByRole('dialog')).getByRole('button', { name: 'Contractor A' }),
+  );
+  await user.click(screen.getByLabelText('Zone'));
+  await user.click(within(screen.getByRole('dialog')).getByRole('button', { name: 'Zone A' }));
   await user.click(screen.getByRole('button', { name: 'Assign Contractor Zone' }));
   await waitFor(() =>
     expect(grantZone).toHaveBeenCalledWith(

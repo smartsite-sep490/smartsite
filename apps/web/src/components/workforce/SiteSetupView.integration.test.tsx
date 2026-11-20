@@ -109,6 +109,7 @@ it('lets the assigned manager create a gate from the actual Site setup page', as
   const { user, cache } = setup();
   await screen.findByRole('heading', { name: 'Site gates' });
   expect(screen.queryByLabelText('Gate code')).toBeNull();
+  await user.click(screen.getByRole('button', { name: 'Create gate' }));
   await user.type(screen.getByLabelText('Gate name'), 'Main entrance');
   await user.click(screen.getByRole('button', { name: 'Create gate' }));
   await screen.findByText('Main entrance');
@@ -144,12 +145,14 @@ it('reloads the gate catalog and clears the draft when the selected site changes
     { id: 'site-a', code: 'A', name: 'Alpha', createdAt: '2026-01-01T00:00:00Z' },
     { id: 'site-b', code: 'B', name: 'Beta', createdAt: '2026-01-01T00:00:00Z' },
   ]);
-  await screen.findByLabelText('Gate name');
+  await user.click(await screen.findByRole('button', { name: 'Create gate' }));
   await user.type(screen.getByLabelText('Gate name'), 'UNSAVED');
   await user.click(screen.getByRole('button', { name: /Beta/ }));
   await waitFor(() =>
     expect(catalog).toHaveBeenLastCalledWith('manager-token', 'site-b', undefined),
   );
+  expect(screen.queryByLabelText('Gate name')).toBeNull();
+  await user.click(screen.getByRole('button', { name: 'Create gate' }));
   expect((screen.getByLabelText('Gate name') as HTMLInputElement).value).toBe('');
   cache.clear();
 });

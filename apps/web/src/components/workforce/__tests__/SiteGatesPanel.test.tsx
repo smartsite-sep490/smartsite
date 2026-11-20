@@ -40,6 +40,7 @@ it('lets a scoped manager create a Gate and change status without editing its co
   show();
   await screen.findByText(gate.name);
   expect(screen.queryByLabelText('Gate code')).toBeNull();
+  fireEvent.click(screen.getByRole('button', { name: 'Create gate' }));
   fireEvent.change(screen.getByLabelText('Gate name'), { target: { value: 'New gate' } });
   fireEvent.click(screen.getByRole('button', { name: 'Create gate' }));
   await waitFor(() =>
@@ -77,6 +78,7 @@ it('preserves the name when creation fails and lets the manager retry', async ()
     .mockResolvedValueOnce({ ...gateFixture('site-1')[0]!, name: 'Main entrance' });
   show();
   await screen.findByText(gateFixture('site-1')[0]!.name);
+  fireEvent.click(screen.getByRole('button', { name: 'Create gate' }));
   fireEvent.change(screen.getByLabelText('Gate name'), { target: { value: 'Main entrance' } });
   fireEvent.click(screen.getByRole('button', { name: 'Create gate' }));
   await screen.findByRole('alert');
@@ -93,6 +95,7 @@ it('does not submit a whitespace-only name', async () => {
   const create = vi.spyOn(SmartSiteManagementClient.prototype, 'createSiteGate');
   show();
   await screen.findByText(gateFixture('site-1')[0]!.name);
+  fireEvent.click(screen.getByRole('button', { name: 'Create gate' }));
   fireEvent.change(screen.getByLabelText('Gate name'), { target: { value: '   ' } });
   expect((screen.getByRole('button', { name: 'Create gate' }) as HTMLButtonElement).disabled).toBe(
     true,

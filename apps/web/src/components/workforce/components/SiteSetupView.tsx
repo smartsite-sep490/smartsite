@@ -26,7 +26,14 @@ import {
   IconChevronRight,
   IconUsers,
 } from '../../icons';
-import { SmartSelect, Toast, ToastContainer, useToast } from '../../ui';
+import {
+  SmartDatePicker,
+  SmartInput,
+  SmartSelect,
+  Toast,
+  ToastContainer,
+  useToast,
+} from '../../ui';
 import { participationDates } from './participation-dates';
 import {
   addSiteManagerAssignment,
@@ -2123,43 +2130,35 @@ export function SiteSetupView({ apiUrl }: SiteSetupViewProps) {
               {repContractorId === '__new__' && (
                 <fieldset
                   disabled={createRepresentativeMutation.isPending}
-                  className="rounded-xl border bg-slate-50 p-3 space-y-3"
+                  className="rounded-2xl border border-slate-200 bg-slate-50/60 p-4 space-y-4"
                 >
                   <legend className="text-xs font-bold">
                     {tr('contractor_profile.new_contractor')}
                   </legend>
-                  <label className="grid gap-1 text-xs font-semibold">
-                    {tr('contractor_profile.contractor_name')}
-                    <input
-                      required
-                      maxLength={255}
-                      className="rounded-lg border bg-white p-2"
-                      value={repNewContractorName}
-                      onChange={(event) => setRepNewContractorName(event.target.value)}
+                  <SmartInput
+                    label={tr('contractor_profile.contractor_name')}
+                    required
+                    maxLength={255}
+                    value={repNewContractorName}
+                    onChange={(event) => setRepNewContractorName(event.target.value)}
+                  />
+                  <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                    <SmartDatePicker
+                      label={tr('contractor_profile.start_date')}
+                      fieldRequired
+                      disablePast={false}
+                      max={new Date().toLocaleDateString('en-CA')}
+                      value={repStartDate}
+                      onChange={setRepStartDate}
                     />
-                  </label>
-                  <div className="grid grid-cols-2 gap-3">
-                    <label className="grid gap-1 text-xs font-semibold">
-                      {tr('contractor_profile.start_date')}
-                      <input
-                        required
-                        type="date"
-                        max={new Date().toLocaleDateString('en-CA')}
-                        className="rounded-lg border bg-white p-2"
-                        value={repStartDate}
-                        onChange={(event) => setRepStartDate(event.target.value)}
-                      />
-                    </label>
-                    <label className="grid gap-1 text-xs font-semibold">
-                      {tr('contractor_profile.end_date')}
-                      <input
-                        type="date"
-                        min={repStartDate}
-                        className="rounded-lg border bg-white p-2"
-                        value={repEndDate}
-                        onChange={(event) => setRepEndDate(event.target.value)}
-                      />
-                    </label>
+                    <SmartDatePicker
+                      label={tr('contractor_profile.end_date')}
+                      disablePast={false}
+                      min={repStartDate}
+                      clearable
+                      value={repEndDate}
+                      onChange={setRepEndDate}
+                    />
                   </div>
                   <p className="text-xs text-slate-600">
                     {tr('contractor_profile.active_interval')}
