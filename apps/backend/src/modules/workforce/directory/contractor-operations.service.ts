@@ -39,6 +39,10 @@ import {
 import { WorkerEntity } from '../../../database/entities/worker.entity.js';
 import { ZoneEntity } from '../../../database/entities/zone.entity.js';
 import { auditAccess } from '../shared/access-audit.js';
+import {
+  executeMainConfigurationCommand,
+  type MainConfigurationCommandContext,
+} from '../../../common/configuration/main-configuration-authority.js';
 
 export interface WorkforceActor {
   id: string;
@@ -151,6 +155,31 @@ function timeRange(
 @Injectable()
 export class ContractorOperationsService {
   constructor(private readonly dataSource: DataSource) {}
+  private assignmentCommandAuthorization(
+    context: MainConfigurationCommandContext | undefined,
+    actor: WorkforceActor,
+    role: UserRole,
+    scope: { siteId: string } | { requestId: string },
+  ) {
+    if (!context) return undefined;
+    return async (manager: EntityManager) => {
+      if (context.actorUserId !== actor.id) this.forbidden();
+      const siteId =
+        'siteId' in scope
+          ? scope.siteId
+          : (
+              await manager
+                .getRepository(WorkerSiteZoneAssignmentEntity)
+                .findOneBy({ id: scope.requestId })
+            )?.siteId;
+      if (!siteId) missing();
+      const roles = await manager.query(
+        'SELECT id FROM user_role_assignment WHERE user_id=$1 AND site_id=$2 AND role=$3 FOR SHARE',
+        [actor.id, siteId, role],
+      );
+      if (!roles.length) this.forbidden();
+    };
+  }
 
   private forbidden(): never {
     throw new PublicHttpException(HttpStatus.FORBIDDEN, {
@@ -375,6 +404,7 @@ export class ContractorOperationsService {
     actor: WorkforceActor,
     workerIdValue: string,
     input: CreateWorkerSiteZoneAssignmentCommand,
+    context?: MainConfigurationCommandContext,
   ) {
     const workerId = uuid(workerIdValue);
     const value = command(CreateWorkerSiteZoneAssignmentCommand, input);
@@ -383,192 +413,244 @@ export class ContractorOperationsService {
     if (zoneIds.length !== value.zoneIds.length) conflict('Zone IDs must be unique');
     const range = timeRange(value.validFrom, value.validUntil);
     if (!range.until) conflict('Worker assignment requires an expiry');
-    return this.dataSource.transaction(async (manager) => {
-      const worker = await manager.getRepository(WorkerEntity).findOneBy({ id: workerId, siteId });
-      if (!worker?.contractorId || !worker.isActive) this.forbidden();
-      await this.requireContractorRepresentative(manager, actor, worker.contractorId, siteId);
-      await this.requireActiveParticipation(manager, worker.contractorId, siteId, range.from);
-      // A contractor may renew participation while its historical row stays active.
-      // Bind the request to one participation that contains the entire interval.
-      const participations = await manager.getRepository(ContractorSiteParticipationEntity).find({
-        where: { contractorId: worker.contractorId, siteId, isActive: true },
-        order: { validFrom: 'DESC', id: 'ASC' },
-      });
-      const participation = participations.find(
-        (candidate) =>
-          candidate.validFrom <= range.from &&
-          (!candidate.validUntil || candidate.validUntil >= range.until!),
-      );
-      if (!participation) conflict('Assignment must fit the contractor participation interval');
-      const zones = await manager.getRepository(ZoneEntity).findBy({ id: In(zoneIds), siteId });
-      if (zones.length !== zoneIds.length) this.forbidden();
-      const assignment = await manager.getRepository(WorkerSiteZoneAssignmentEntity).save({
-        id: randomUUID(),
-        workerId,
+    return executeMainConfigurationCommand(
+      this.dataSource,
+      context,
+      'ASSIGNMENT_REQUEST',
+      { workerId, ...value },
+      async (manager) => {
+        const worker = await manager
+          .getRepository(WorkerEntity)
+          .findOneBy({ id: workerId, siteId });
+        if (!worker?.contractorId || !worker.isActive) this.forbidden();
+        await this.requireContractorRepresentative(
+          manager,
+          actor,
+          worker.contractorId,
+          siteId,
+          true,
+        );
+        await this.requireActiveParticipation(
+          manager,
+          worker.contractorId,
+          siteId,
+          range.from,
+          true,
+        );
+        // A contractor may renew participation while its historical row stays active.
+        // Bind the request to one participation that contains the entire interval.
+        const participations = await manager.getRepository(ContractorSiteParticipationEntity).find({
+          where: { contractorId: worker.contractorId, siteId, isActive: true },
+          order: { validFrom: 'DESC', id: 'ASC' },
+        });
+        const participation = participations.find(
+          (candidate) =>
+            candidate.validFrom <= range.from &&
+            (!candidate.validUntil || candidate.validUntil >= range.until!),
+        );
+        if (!participation) conflict('Assignment must fit the contractor participation interval');
+        const zones = await manager.getRepository(ZoneEntity).findBy({ id: In(zoneIds), siteId });
+        if (zones.length !== zoneIds.length) this.forbidden();
+        const assignment = await manager.getRepository(WorkerSiteZoneAssignmentEntity).save({
+          id: randomUUID(),
+          workerId,
+          siteId,
+          zoneIds,
+          siteContractorId: participation.id,
+          version: 1,
+          status: WorkerSiteZoneAssignmentStatus.PENDING,
+          validFrom: range.from,
+          validUntil: range.until,
+          requestedByUserId: actor.id,
+          safetyReviewedByUserId: null,
+          siteManagerDecidedByUserId: null,
+        });
+        await auditAccess(
+          manager,
+          actor.id,
+          siteId,
+          'WORKER_ASSIGNMENT_REQUESTED',
+          'worker_assignment',
+          assignment.id,
+          null,
+          { workerId, siteContractorId: participation.id },
+        );
+        return assignment;
+      },
+      this.assignmentCommandAuthorization(context, actor, UserRole.CONTRACTOR_REPRESENTATIVE, {
         siteId,
-        zoneIds,
-        siteContractorId: participation.id,
-        version: 1,
-        status: WorkerSiteZoneAssignmentStatus.PENDING,
-        validFrom: range.from,
-        validUntil: range.until,
-        requestedByUserId: actor.id,
-        safetyReviewedByUserId: null,
-        siteManagerDecidedByUserId: null,
-      });
-      await auditAccess(
-        manager,
-        actor.id,
-        siteId,
-        'WORKER_ASSIGNMENT_REQUESTED',
-        'worker_assignment',
-        assignment.id,
-        null,
-        { workerId, siteContractorId: participation.id },
-      );
-      return assignment;
-    });
+      }),
+    );
   }
 
-  async safetyReview(actor: WorkforceActor, requestIdValue: string) {
+  async safetyReview(
+    actor: WorkforceActor,
+    requestIdValue: string,
+    context?: MainConfigurationCommandContext,
+  ) {
     const requestId = uuid(requestIdValue);
-    return this.dataSource.transaction(async (manager) => {
-      const request = await manager
-        .getRepository(WorkerSiteZoneAssignmentEntity)
-        .createQueryBuilder('assignment')
-        .setLock('pessimistic_write')
-        .where('assignment.id = :requestId', { requestId })
-        .getOne();
-      if (!request) missing();
-      await this.requireSiteRole(actor, request.siteId, UserRole.SAFETY_OFFICER);
-      if (request.requestedByUserId === actor.id) this.forbidden();
-      if (request.status !== WorkerSiteZoneAssignmentStatus.PENDING)
-        conflict('Assignment is not pending');
-      request.status = WorkerSiteZoneAssignmentStatus.SAFETY_REVIEWED;
-      request.safetyReviewedByUserId = actor.id;
-      request.version += 1;
-      await auditAccess(
-        manager,
-        actor.id,
-        request.siteId,
-        'WORKER_ASSIGNMENT_SAFETY_REVIEWED',
-        'worker_assignment',
-        request.id,
-        null,
-        { version: request.version },
-      );
-      return manager.getRepository(WorkerSiteZoneAssignmentEntity).save(request);
-    });
+    return executeMainConfigurationCommand(
+      this.dataSource,
+      context,
+      'ASSIGNMENT_SAFETY_REVIEW',
+      { requestId },
+      async (manager) => {
+        const request = await manager
+          .getRepository(WorkerSiteZoneAssignmentEntity)
+          .createQueryBuilder('assignment')
+          .setLock('pessimistic_write')
+          .where('assignment.id = :requestId', { requestId })
+          .getOne();
+        if (!request) missing();
+        await this.requireSiteRole(actor, request.siteId, UserRole.SAFETY_OFFICER);
+        if (request.requestedByUserId === actor.id) this.forbidden();
+        if (request.status !== WorkerSiteZoneAssignmentStatus.PENDING)
+          conflict('Assignment is not pending');
+        request.status = WorkerSiteZoneAssignmentStatus.SAFETY_REVIEWED;
+        request.safetyReviewedByUserId = actor.id;
+        request.version += 1;
+        await auditAccess(
+          manager,
+          actor.id,
+          request.siteId,
+          'WORKER_ASSIGNMENT_SAFETY_REVIEWED',
+          'worker_assignment',
+          request.id,
+          null,
+          { version: request.version },
+        );
+        return manager.getRepository(WorkerSiteZoneAssignmentEntity).save(request);
+      },
+      this.assignmentCommandAuthorization(context, actor, UserRole.SAFETY_OFFICER, { requestId }),
+    );
   }
 
   async siteManagerDecision(
     actor: WorkforceActor,
     requestIdValue: string,
     input: SiteManagerDecisionCommand,
+    context?: MainConfigurationCommandContext,
   ) {
     const requestId = uuid(requestIdValue);
     const value = command(SiteManagerDecisionCommand, input);
-    return this.dataSource.transaction(async (manager) => {
-      const request = await manager
-        .getRepository(WorkerSiteZoneAssignmentEntity)
-        .createQueryBuilder('assignment')
-        .setLock('pessimistic_write')
-        .where('assignment.id = :requestId', { requestId })
-        .getOne();
-      if (!request) missing();
-      await this.requireSiteRole(actor, request.siteId, UserRole.SITE_MANAGER);
-      if (request.requestedByUserId === actor.id) this.forbidden();
-      if (
-        ![
-          WorkerSiteZoneAssignmentStatus.PENDING,
-          WorkerSiteZoneAssignmentStatus.SAFETY_REVIEWED,
-        ].includes(request.status)
-      )
-        conflict('Assignment has already been reviewed');
-      if (value.expectedVersion !== undefined && request.version !== value.expectedVersion)
-        conflict('Assignment changed. Reload before reviewing');
-      if (value.approve) {
-        const worker = await manager
-          .getRepository(WorkerEntity)
-          .findOneBy({ id: request.workerId, isActive: true });
-        const participation = request.siteContractorId
-          ? await manager
-              .getRepository(ContractorSiteParticipationEntity)
-              .findOneBy({ id: request.siteContractorId, siteId: request.siteId, isActive: true })
-          : null;
+    return executeMainConfigurationCommand(
+      this.dataSource,
+      context,
+      'ASSIGNMENT_DECISION',
+      { requestId, ...value },
+      async (manager) => {
+        const request = await manager
+          .getRepository(WorkerSiteZoneAssignmentEntity)
+          .createQueryBuilder('assignment')
+          .setLock('pessimistic_write')
+          .where('assignment.id = :requestId', { requestId })
+          .getOne();
+        if (!request) missing();
+        await this.requireSiteRole(actor, request.siteId, UserRole.SITE_MANAGER);
+        if (request.requestedByUserId === actor.id) this.forbidden();
         if (
-          !worker ||
-          worker.contractorId !== participation?.contractorId ||
-          !request.validUntil ||
-          request.validUntil <= new Date() ||
-          !participation ||
-          participation.validFrom > request.validFrom ||
-          (participation.validUntil && participation.validUntil < request.validUntil)
+          ![
+            WorkerSiteZoneAssignmentStatus.PENDING,
+            WorkerSiteZoneAssignmentStatus.SAFETY_REVIEWED,
+          ].includes(request.status)
         )
-          conflict('Assignment participation or validity is unavailable');
-      }
-      request.status = value.approve
-        ? WorkerSiteZoneAssignmentStatus.APPROVED
-        : WorkerSiteZoneAssignmentStatus.REJECTED;
-      request.siteManagerDecidedByUserId = actor.id;
-      request.reviewedAt = new Date();
-      request.reviewNote = value.reviewNote?.trim() || null;
-      request.version += 1;
-      await auditAccess(
-        manager,
-        actor.id,
-        request.siteId,
-        'WORKER_ASSIGNMENT_REVIEWED',
-        'worker_assignment',
-        request.id,
-        request.reviewNote,
-        { status: request.status, version: request.version },
-      );
-      return manager.getRepository(WorkerSiteZoneAssignmentEntity).save(request);
-    });
+          conflict('Assignment has already been reviewed');
+        if (value.expectedVersion !== undefined && request.version !== value.expectedVersion)
+          conflict('Assignment changed. Reload before reviewing');
+        if (value.approve) {
+          const worker = await manager
+            .getRepository(WorkerEntity)
+            .findOneBy({ id: request.workerId, isActive: true });
+          const participation = request.siteContractorId
+            ? await manager
+                .getRepository(ContractorSiteParticipationEntity)
+                .findOneBy({ id: request.siteContractorId, siteId: request.siteId, isActive: true })
+            : null;
+          if (
+            !worker ||
+            worker.contractorId !== participation?.contractorId ||
+            !request.validUntil ||
+            request.validUntil <= new Date() ||
+            !participation ||
+            participation.validFrom > request.validFrom ||
+            (participation.validUntil && participation.validUntil < request.validUntil)
+          )
+            conflict('Assignment participation or validity is unavailable');
+        }
+        request.status = value.approve
+          ? WorkerSiteZoneAssignmentStatus.APPROVED
+          : WorkerSiteZoneAssignmentStatus.REJECTED;
+        request.siteManagerDecidedByUserId = actor.id;
+        request.reviewedAt = new Date();
+        request.reviewNote = value.reviewNote?.trim() || null;
+        request.version += 1;
+        await auditAccess(
+          manager,
+          actor.id,
+          request.siteId,
+          'WORKER_ASSIGNMENT_REVIEWED',
+          'worker_assignment',
+          request.id,
+          request.reviewNote,
+          { status: request.status, version: request.version },
+        );
+        return manager.getRepository(WorkerSiteZoneAssignmentEntity).save(request);
+      },
+      this.assignmentCommandAuthorization(context, actor, UserRole.SITE_MANAGER, { requestId }),
+    );
   }
 
   async revokeAssignment(
     actor: WorkforceActor,
     requestIdValue: string,
     input: RevokeWorkerAssignmentCommand,
+    context?: MainConfigurationCommandContext,
   ) {
     const value = command(RevokeWorkerAssignmentCommand, input);
-    return this.dataSource.transaction(async (manager) => {
-      const assignment = await manager
-        .getRepository(WorkerSiteZoneAssignmentEntity)
-        .findOne({ where: { id: uuid(requestIdValue) }, lock: { mode: 'pessimistic_write' } });
-      if (!assignment) missing();
-      await this.requireSiteRole(actor, assignment.siteId, UserRole.SITE_MANAGER);
-      if (
-        assignment.status === WorkerSiteZoneAssignmentStatus.REVOKED &&
-        assignment.siteManagerDecidedByUserId === actor.id &&
-        assignment.reviewNote === value.reviewNote &&
-        assignment.version === value.expectedVersion + 1
-      )
+    return executeMainConfigurationCommand(
+      this.dataSource,
+      context,
+      'ASSIGNMENT_REVOKE',
+      { requestId: uuid(requestIdValue), ...value },
+      async (manager) => {
+        const assignment = await manager
+          .getRepository(WorkerSiteZoneAssignmentEntity)
+          .findOne({ where: { id: uuid(requestIdValue) }, lock: { mode: 'pessimistic_write' } });
+        if (!assignment) missing();
+        await this.requireSiteRole(actor, assignment.siteId, UserRole.SITE_MANAGER);
+        if (
+          assignment.status === WorkerSiteZoneAssignmentStatus.REVOKED &&
+          assignment.siteManagerDecidedByUserId === actor.id &&
+          assignment.reviewNote === value.reviewNote &&
+          assignment.version === value.expectedVersion + 1
+        )
+          return assignment;
+        if (
+          assignment.version !== value.expectedVersion ||
+          assignment.status !== WorkerSiteZoneAssignmentStatus.APPROVED
+        )
+          conflict('Assignment changed or is not approved');
+        assignment.status = WorkerSiteZoneAssignmentStatus.REVOKED;
+        assignment.version += 1;
+        assignment.reviewedAt = new Date();
+        assignment.reviewNote = value.reviewNote;
+        assignment.siteManagerDecidedByUserId = actor.id;
+        await manager.getRepository(WorkerSiteZoneAssignmentEntity).save(assignment);
+        await auditAccess(
+          manager,
+          actor.id,
+          assignment.siteId,
+          'WORKER_ASSIGNMENT_REVOKED',
+          'worker_assignment',
+          assignment.id,
+          value.reviewNote,
+          { version: assignment.version },
+        );
         return assignment;
-      if (
-        assignment.version !== value.expectedVersion ||
-        assignment.status !== WorkerSiteZoneAssignmentStatus.APPROVED
-      )
-        conflict('Assignment changed or is not approved');
-      assignment.status = WorkerSiteZoneAssignmentStatus.REVOKED;
-      assignment.version += 1;
-      assignment.reviewedAt = new Date();
-      assignment.reviewNote = value.reviewNote;
-      assignment.siteManagerDecidedByUserId = actor.id;
-      await manager.getRepository(WorkerSiteZoneAssignmentEntity).save(assignment);
-      await auditAccess(
-        manager,
-        actor.id,
-        assignment.siteId,
-        'WORKER_ASSIGNMENT_REVOKED',
-        'worker_assignment',
-        assignment.id,
-        value.reviewNote,
-        { version: assignment.version },
-      );
-      return assignment;
-    });
+      },
+      this.assignmentCommandAuthorization(context, actor, UserRole.SITE_MANAGER, {
+        requestId: uuid(requestIdValue),
+      }),
+    );
   }
 }

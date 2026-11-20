@@ -15,6 +15,7 @@ import {
 import { ErrorResponseDto } from '../../../common/http/error-response.dto.js';
 import type { AuthenticatedRequest } from '../../auth/auth.service.js';
 import { UserAuthGuard } from '../../auth/user-auth.guard.js';
+import { configurationCommandContext } from '../../auth/configuration-command-context.js';
 import {
   ContractorOperationsService,
   CreateWorkerSiteZoneAssignmentCommand,
@@ -36,7 +37,10 @@ import {
 export class WorkerAssignmentController {
   private readonly logger = new Logger(WorkerAssignmentController.name);
 
-  constructor(private readonly contractors: ContractorOperationsService) {}
+  constructor(
+    private readonly contractors: ContractorOperationsService,
+    private readonly userAuth: UserAuthGuard,
+  ) {}
 
   @Post('site-zone-assignment-requests/:requestId/revoke')
   revoke(
@@ -44,7 +48,12 @@ export class WorkerAssignmentController {
     @Param('requestId') requestId: string,
     @Body() input: RevokeWorkerAssignmentCommand,
   ) {
-    return this.contractors.revokeAssignment(request.user!, requestId, input);
+    return this.contractors.revokeAssignment(
+      request.user!,
+      requestId,
+      input,
+      configurationCommandContext(request, this.userAuth),
+    );
   }
 
   @Post('workers/:workerId/site-zone-assignment-requests')
@@ -54,7 +63,12 @@ export class WorkerAssignmentController {
     @Param('workerId') workerId: string,
     @Body() input: CreateWorkerSiteZoneAssignmentCommand,
   ) {
-    const assignment = await this.contractors.requestAssignment(request.user!, workerId, input);
+    const assignment = await this.contractors.requestAssignment(
+      request.user!,
+      workerId,
+      input,
+      configurationCommandContext(request, this.userAuth),
+    );
     this.logger.log({
       actorId: request.user!.id,
       action: 'worker.assignment.request',
@@ -68,7 +82,11 @@ export class WorkerAssignmentController {
   @Post('site-zone-assignment-requests/:requestId/safety-review')
   @ApiOkResponse()
   async safetyReview(@Req() request: AuthenticatedRequest, @Param('requestId') requestId: string) {
-    const assignment = await this.contractors.safetyReview(request.user!, requestId);
+    const assignment = await this.contractors.safetyReview(
+      request.user!,
+      requestId,
+      configurationCommandContext(request, this.userAuth),
+    );
     this.logger.log({
       actorId: request.user!.id,
       action: 'worker.assignment.safety-review',
@@ -86,7 +104,12 @@ export class WorkerAssignmentController {
     @Param('requestId') requestId: string,
     @Body() input: SiteManagerDecisionCommand,
   ) {
-    const assignment = await this.contractors.siteManagerDecision(request.user!, requestId, input);
+    const assignment = await this.contractors.siteManagerDecision(
+      request.user!,
+      requestId,
+      input,
+      configurationCommandContext(request, this.userAuth),
+    );
     this.logger.log({
       actorId: request.user!.id,
       action: 'worker.assignment.site-manager-decision',
