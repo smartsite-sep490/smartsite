@@ -7,6 +7,43 @@ import { CameraStatus } from '../../database/entities/enums.js';
 import { CameraWorkerGenerationEntity } from '../../database/entities/camera-worker-generation.entity.js';
 import { sealRetiredTrackedEpisodes } from '../safety/alerts/tracked-ppe-episode-projection.js';
 
+export interface AcceptedWorkerConfiguration {
+  readonly configurationVersion: number;
+  readonly viewRevision: number;
+  readonly bundleSha256: string;
+  readonly streamSessionId: string;
+}
+
+function acceptedConfiguration(value: unknown): AcceptedWorkerConfiguration {
+  if (!value || typeof value !== 'object' || Array.isArray(value))
+    invalid('Invalid accepted camera configuration');
+  const fields = Object.getOwnPropertyDescriptors(value);
+  const keys = ['configurationVersion', 'viewRevision', 'bundleSha256', 'streamSessionId'];
+  if (
+    Reflect.ownKeys(value).length !== keys.length ||
+    keys.some((key) => !fields[key] || !Object.hasOwn(fields[key], 'value'))
+  )
+    invalid('Invalid accepted camera configuration');
+  const configurationVersion = fields.configurationVersion!.value;
+  const viewRevision = fields.viewRevision!.value;
+  const bundleSha256 = fields.bundleSha256!.value;
+  if (
+    !Number.isSafeInteger(configurationVersion) ||
+    configurationVersion < 1 ||
+    !Number.isSafeInteger(viewRevision) ||
+    viewRevision < 1 ||
+    typeof bundleSha256 !== 'string' ||
+    !/^[a-f0-9]{64}$/.test(bundleSha256)
+  )
+    invalid('Invalid accepted camera configuration');
+  return Object.freeze({
+    configurationVersion,
+    viewRevision,
+    bundleSha256,
+    streamSessionId: uuid(fields.streamSessionId!.value).toLowerCase(),
+  });
+}
+
 function allowedCamera(cameraId: string, allowedCameraIds: readonly string[]): string {
   const normalized = uuid(cameraId).toLowerCase();
   if (!allowedCameraIds.some((id) => id.toLowerCase() === normalized)) missing();
@@ -223,10 +260,15 @@ export async function renewCameraWorkerGeneration(
   deliver: GenerationDelivery | undefined,
   expectedGenerationId: string,
   commandId: string,
+  configuration?: AcceptedWorkerConfiguration,
 ) {
+  // Snapshot caller-owned conditions before transaction/lock acquisition awaits I/O.
+  const expectedConfiguration =
+    configuration === undefined ? undefined : acceptedConfiguration(configuration);
   return issueGeneration(source, cameraId, allowedCameraIds, leaseMs, deliver, {
     expectedCurrent: uuid(expectedGenerationId).toLowerCase(),
     renewalCommandId: uuid(commandId).toLowerCase(),
+    expectedConfiguration,
   });
 }
 
@@ -254,15 +296,35 @@ async function issueGeneration(
     expectedCurrent?: string;
     renewalCommandId?: string;
     requireUnowned?: true;
+    expectedConfiguration?: AcceptedWorkerConfiguration;
   },
 ) {
   let { transition } = condition;
-  const { expectedCurrent, renewalCommandId, requireUnowned } = condition;
+  const { expectedCurrent, renewalCommandId, requireUnowned, expectedConfiguration } = condition;
   cameraId = allowedCamera(cameraId, allowedCameraIds);
   if (!Number.isSafeInteger(leaseMs) || leaseMs < 1000 || leaseMs > 86400000) invalid();
   return source.transaction(async (manager) => {
     const camera = await lockCamera(manager, cameraId);
     if (camera.status !== CameraStatus.ACTIVE) conflict('Camera is inactive');
+    if (expectedConfiguration) {
+      if (camera.configurationVersion !== expectedConfiguration.configurationVersion)
+        conflict('Accepted camera configuration changed');
+      const [bundle] = await manager.query<Array<{ matches: boolean }>>(
+        `SELECT EXISTS(SELECT 1 FROM camera_configuration_bundle b
+         JOIN camera_view_revision v ON v.camera_id=b.camera_id AND v.site_id=b.site_id
+           AND v.revision=b.view_revision AND v.is_current
+         WHERE b.camera_id=$1 AND b.site_id=$2 AND b.configuration_version=$3
+           AND b.view_revision=$4 AND b.bundle_sha256=$5) AS matches`,
+        [
+          camera.id,
+          camera.siteId,
+          expectedConfiguration.configurationVersion,
+          expectedConfiguration.viewRevision,
+          expectedConfiguration.bundleSha256,
+        ],
+      );
+      if (bundle?.matches !== true) conflict('Accepted camera configuration changed');
+    }
     if (requireUnowned) {
       const existing = await manager.getRepository(CameraWorkerGenerationEntity).findOne({
         where: [
@@ -280,6 +342,11 @@ async function issueGeneration(
       });
       if (!current?.isCurrent || current.revokedAt || current.supersededAt)
         conflict('Worker generation is no longer current');
+      if (
+        expectedConfiguration &&
+        current.streamSessionId !== expectedConfiguration.streamSessionId
+      )
+        conflict('Worker session changed');
     }
     if (renewalCommandId) {
       const [owner] = await manager.query<Array<{ route: string | null }>>(
@@ -292,7 +359,7 @@ async function issueGeneration(
         transition = {
           commandId: renewalCommandId,
           expectedGenerationId: expectedCurrent!,
-          reason: 'SOURCE_RESTART',
+          reason: expectedConfiguration ? 'CONFIGURATION_CHANGED' : 'SOURCE_RESTART',
         };
     }
     if (!transition) await requireOrdinaryIssuance(manager, camera);
