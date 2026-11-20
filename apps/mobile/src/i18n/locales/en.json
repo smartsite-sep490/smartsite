@@ -299,6 +299,7 @@
     "time": "Time",
     "worker": "Worker",
     "requestAction": "Shift change / swap / leave",
+    "shiftStartedLocked": "This shift has already started. Changes are no longer allowed.",
     "requestTitle": "Create Shift Request",
     "requestType": "Request type",
     "swap": "Shift swap",

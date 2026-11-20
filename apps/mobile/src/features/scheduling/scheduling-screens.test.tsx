@@ -14,6 +14,7 @@ let workspace: ReturnType<typeof useWorkspace>;
 vi.mock('../workspace/workspace-context', () => ({ useWorkspace: () => workspace }));
 let root: ReactTestRenderer;
 let cache: QueryClient;
+let controlledTimers = false;
 const schedule: WorkerScheduleResponse = {
   id: 'own-schedule',
   siteId: 'site-a',
@@ -45,7 +46,8 @@ async function text(label: string, value: string) {
 }
 async function settle() {
   await act(async () => {
-    await new Promise((r) => setTimeout(r, 20));
+    if (controlledTimers) await vi.advanceTimersByTimeAsync(20);
+    else await new Promise((r) => setTimeout(r, 20));
   });
 }
 async function mount(component: React.ReactNode) {
@@ -57,6 +59,9 @@ async function mount(component: React.ReactNode) {
   await settle();
 }
 beforeEach(() => {
+  controlledTimers = false;
+  vi.useFakeTimers({ toFake: ['Date'] });
+  vi.setSystemTime(new Date('2026-11-19T00:00:00Z'));
   cache = new QueryClient({
     defaultOptions: { queries: { retry: false, gcTime: 0 }, mutations: { retry: false } },
   });
@@ -130,6 +135,47 @@ afterEach(async () => {
   if (root) await act(async () => root.unmount());
   cache.clear();
   vi.restoreAllMocks();
+  vi.useRealTimers();
+});
+
+it('locks an open change/swap form at the start, while keeping leave requests available', async () => {
+  controlledTimers = true;
+  vi.useFakeTimers({
+    toFake: ['Date', 'setTimeout', 'clearTimeout', 'setInterval', 'clearInterval'],
+  });
+  vi.setSystemTime(new Date('2026-11-20T00:59:00Z'));
+  const change = vi.spyOn(workspace.client, 'createShiftChangeRequest');
+  const swap = vi.spyOn(workspace.client, 'createShiftSwapRequest');
+  vi.spyOn(workspace.client, 'listEligibleShifts').mockResolvedValue({ items: [], total: 0 });
+  await mount(createElement(ScheduleScreen, { initialDate: '2026-11-20' }));
+  await click('Chi tiết');
+  await click('Đổi ca / hoán đổi / xin nghỉ');
+  // Advance the same clock that drives the deadline timer, without real-time sleeps.
+  await act(async () => {
+    await vi.advanceTimersByTimeAsync(+new Date('2026-11-20T01:00:00Z') - Date.now() - 1);
+  });
+  expect(JSON.stringify(root.toJSON())).not.toContain(
+    'Ca đã bắt đầu. Không còn được đổi hoặc hoán đổi ca.',
+  );
+  await act(async () => {
+    await vi.advanceTimersByTimeAsync(1);
+  });
+  expect(JSON.stringify(root.toJSON())).toContain(
+    'Ca đã bắt đầu. Không còn được đổi hoặc hoán đổi ca.',
+  );
+  expect(buttons('Gửi yêu cầu')[0]!.props.disabled).toBe(true);
+  await click('Gửi yêu cầu');
+  expect(change).not.toHaveBeenCalled();
+  expect(swap).not.toHaveBeenCalled();
+  await click('Đổi sang ca khác ▾');
+  await act(async () => {
+    root.root
+      .findAll((n) => String(n.type) === 'Pressable' && n.props.accessibilityRole === 'radio')[2]!
+      .props.onPress();
+  });
+  expect(JSON.stringify(root.toJSON())).not.toContain(
+    'Ca đã bắt đầu. Không còn được đổi hoặc hoán đổi ca.',
+  );
 });
 it('opens a real swap form for the selected schedule and submits its coworker schedule, rather than a leave request', async () => {
   vi.spyOn(workspace.client, 'listEligibleShifts').mockResolvedValue({ items: [], total: 0 });
@@ -143,8 +189,8 @@ it('opens a real swap form for the selected schedule and submits its coworker sc
         currentShift: {
           id: 'shift-b',
           name: 'Afternoon',
-          startsAt: '',
-          endsAt: '',
+          startsAt: '2026-11-20T10:00:00Z',
+          endsAt: '2026-11-20T14:00:00Z',
           timezone: 'Asia/Ho_Chi_Minh',
         },
       },

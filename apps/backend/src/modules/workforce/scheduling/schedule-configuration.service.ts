@@ -1,6 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import { teamSwapEligibility } from '../teams/team-swap-eligibility.js';
-import { isShiftEnded } from '@smartsite/contracts';
+import { isShiftStarted } from '@smartsite/contracts';
 import { HttpStatus, Injectable } from '@nestjs/common';
 import { DataSource, type EntityManager } from 'typeorm';
 import {
@@ -754,14 +754,14 @@ export class ScheduleConfigurationService {
       .findOneBy({ id: schedule.shiftId, siteId: scopedSiteId });
     if (!sourceShift) return { items: [], total: 0 };
     try {
-      if (isShiftEnded(schedule.workDate, sourceShift)) return { items: [], total: 0 };
+      if (isShiftStarted(schedule.workDate, sourceShift)) return { items: [], total: 0 };
     } catch {
       return { items: [], total: 0 };
     }
     for (const row of rows) {
       try {
         if (
-          isShiftEnded(row.workDate, {
+          isShiftStarted(row.workDate, {
             startsAt: row.currentShiftStartsAt,
             endsAt: row.currentShiftEndsAt,
             timezone: row.currentShiftTimezone,

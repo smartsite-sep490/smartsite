@@ -17,7 +17,7 @@ import {
 } from '../utils/workforce-format';
 import { WORKFORCE_POLL_INTERVAL_MS } from '../constants/workforce.constants';
 import { useEffect } from 'react';
-import { isShiftEnded } from '@smartsite/contracts/management';
+import { isShiftStarted, scheduledShiftWindow } from '@smartsite/contracts/management';
 import { loadAllPages } from '../load-all-pages';
 import { WorkerAbsenceSummary } from './WorkerAbsenceSummary';
 import { useShiftRequests } from '../hooks/useShiftRequests';
@@ -454,6 +454,59 @@ export function WorkforceScheduleTab({
   };
 
   const scheduleList = useMemo(() => schedules?.items || [], [schedules?.items]);
+  const scheduledStarts = useMemo(() => {
+    const pairs: Array<{
+      workDate: string;
+      shift?: { startsAt: string; endsAt: string; timezone: string };
+    }> = scheduleList.map((schedule) => ({
+      workDate: schedule.workDate,
+      shift: shifts?.items.find((shift) => shift.id === schedule.shiftId),
+    }));
+    if (selectedSchedule) {
+      pairs.push({
+        workDate: selectedSchedule.workDate,
+        shift: shifts?.items.find((shift) => shift.id === selectedSchedule.shiftId),
+      });
+      const target =
+        modalType === 'change'
+          ? eligibleShifts?.items.find((shift) => shift.id === changeTargetShiftId)
+          : swapCandidates?.items.find(
+              (candidate) => candidate.candidateWorkerScheduleId === swapTargetScheduleId,
+            )?.currentShift;
+      pairs.push({ workDate: selectedSchedule.workDate, shift: target });
+    }
+    return pairs.flatMap(({ workDate, shift }) => {
+      if (!shift) return [];
+      try {
+        return [
+          +scheduledShiftWindow(
+            { ...shift, startsAt: new Date(shift.startsAt), endsAt: new Date(shift.endsAt) },
+            workDate,
+          ).startsAt,
+        ];
+      } catch {
+        return [];
+      }
+    });
+  }, [
+    scheduleList,
+    shifts,
+    selectedSchedule,
+    modalType,
+    eligibleShifts,
+    swapCandidates,
+    changeTargetShiftId,
+    swapTargetScheduleId,
+  ]);
+  useEffect(() => {
+    const pending = scheduledStarts.filter((start) => start > +now);
+    if (!pending.length) return;
+    const timer = setTimeout(
+      () => setNow(new Date()),
+      Math.max(0, Math.min(Math.min(...pending) - Date.now(), 2147483647)),
+    );
+    return () => clearTimeout(timer);
+  }, [scheduledStarts, now]);
   const scheduleTotal = schedules?.total ?? 0;
   const schedulePageCount = Math.max(1, Math.ceil(scheduleTotal / 25));
   const groupedScheduleList = useMemo(() => {
@@ -487,18 +540,33 @@ export function WorkforceScheduleTab({
     ...incomingItems.filter((r) => r.requestType === 'SWAP'),
   ];
   const pendingScheduleIds = new Set(requestsQuery.data?.pendingScheduleIds ?? []);
-  const isPastSchedule = (schedule: WorkerScheduleResponse) => {
+  const isLockedSchedule = (schedule: WorkerScheduleResponse, at = now) => {
     const shift = getShiftObj(schedule.shiftId);
     if (!shift) return true;
     try {
-      return isShiftEnded(schedule.workDate, shift, now);
+      return isShiftStarted(schedule.workDate, shift, at);
+    } catch {
+      return true;
+    }
+  };
+
+  const isTargetLocked = (kind: 'change' | 'swap', at = now) => {
+    const id = kind === 'change' ? changeTargetShiftId : swapTargetScheduleId;
+    if (!id) return false;
+    const shift =
+      kind === 'change'
+        ? eligibleShifts?.items.find((item) => item.id === id)
+        : swapCandidates?.items.find((item) => item.candidateWorkerScheduleId === id)?.currentShift;
+    if (!selectedSchedule || !shift) return true;
+    try {
+      return isShiftStarted(selectedSchedule.workDate, shift, at);
     } catch {
       return true;
     }
   };
 
   const openChangeModal = (sched: WorkerScheduleResponse) => {
-    if (isPastSchedule(sched)) return;
+    if (isLockedSchedule(sched, new Date())) return;
     setSelectedSchedule(sched);
     setChangeReason('');
     setChangeTargetShiftId('');
@@ -506,7 +574,7 @@ export function WorkforceScheduleTab({
   };
 
   const openSwapModal = (sched: WorkerScheduleResponse) => {
-    if (isPastSchedule(sched)) return;
+    if (isLockedSchedule(sched, new Date())) return;
     setSelectedSchedule(sched);
     setSwapReason('');
     setSwapTargetScheduleId('');
@@ -1124,7 +1192,7 @@ export function WorkforceScheduleTab({
                         <div className="space-y-2 flex-1 flex flex-col">
                           {daySchedules.map((sched) => {
                             const shiftObj = getShiftObj(sched.shiftId);
-                            const isPast = isPastSchedule(sched);
+                            const isPast = isLockedSchedule(sched);
                             const hasPendingRequest = pendingScheduleIds.has(sched.id);
 
                             return (
@@ -1198,7 +1266,7 @@ export function WorkforceScheduleTab({
                                 <div className="pt-2 border-t border-slate-100">
                                   {isPast ? (
                                     <div className="text-[10px] text-slate-400 italic text-center py-1 bg-slate-50/80 rounded-md border border-slate-100">
-                                      {tr('common.shift_ended_locked')}
+                                      {tr('common.shift_started_locked')}
                                     </div>
                                   ) : (
                                     <div className="flex flex-col gap-1.5">
@@ -1296,7 +1364,7 @@ export function WorkforceScheduleTab({
                             {dateSchedules.map((sched) => {
                               const shiftObj = getShiftObj(sched.shiftId);
                               const hasPendingRequest = pendingScheduleIds.has(sched.id);
-                              const isPast = isPastSchedule(sched);
+                              const isPast = isLockedSchedule(sched);
 
                               return (
                                 <Card key={sched.id} doubleBezel className="space-y-3.5">
@@ -1357,7 +1425,7 @@ export function WorkforceScheduleTab({
                                     {isPast ? (
                                       <div className="text-xs text-slate-400 italic text-center py-1.5 bg-slate-50 rounded-lg border border-slate-100">
                                         {tr(
-                                          'workforce_schedule_tab.shift_ended_change_swap_unavailable',
+                                          'workforce_schedule_tab.shift_started_change_swap_unavailable',
                                         )}
                                       </div>
                                     ) : (
@@ -1807,7 +1875,8 @@ export function WorkforceScheduleTab({
             e.preventDefault();
             if (
               !selectedSchedule ||
-              isPastSchedule(selectedSchedule) ||
+              isLockedSchedule(selectedSchedule, new Date()) ||
+              isTargetLocked('change', new Date()) ||
               !changeTargetShiftId ||
               createChange.isPending ||
               !eligibleQuery.isSuccess ||
@@ -1822,9 +1891,9 @@ export function WorkforceScheduleTab({
           }}
           className="space-y-4"
         >
-          {selectedSchedule && isPastSchedule(selectedSchedule) && (
+          {selectedSchedule && (isLockedSchedule(selectedSchedule) || isTargetLocked('change')) && (
             <p role="alert">
-              {tr('workforce_schedule_tab.this_shift_has_ended_changes_are_no_longer_allowed')}
+              {tr('workforce_schedule_tab.this_shift_has_started_changes_are_no_longer_allowed')}
             </p>
           )}
           {eligibleQuery.isLoading && <p role="status">{tr('common.loading_eligible_shifts')}</p>}
@@ -1913,7 +1982,8 @@ export function WorkforceScheduleTab({
               size="md"
               disabled={
                 !selectedSchedule ||
-                isPastSchedule(selectedSchedule) ||
+                isLockedSchedule(selectedSchedule) ||
+                isTargetLocked('change') ||
                 !changeTargetShiftId ||
                 changeReason.trim().length < 5 ||
                 createChange.isPending ||
@@ -1953,7 +2023,8 @@ export function WorkforceScheduleTab({
             if (
               !isSwapEligible ||
               !selectedSchedule ||
-              isPastSchedule(selectedSchedule) ||
+              isLockedSchedule(selectedSchedule, new Date()) ||
+              isTargetLocked('swap', new Date()) ||
               !swapTargetScheduleId ||
               createSwap.isPending ||
               !candidateQuery.isSuccess ||
@@ -2001,9 +2072,9 @@ export function WorkforceScheduleTab({
               </div>
             </div>
           )}
-          {selectedSchedule && isPastSchedule(selectedSchedule) && (
+          {selectedSchedule && (isLockedSchedule(selectedSchedule) || isTargetLocked('swap')) && (
             <p role="alert">
-              {tr('workforce_schedule_tab.this_shift_has_ended_changes_are_no_longer_allowed')}
+              {tr('workforce_schedule_tab.this_shift_has_started_changes_are_no_longer_allowed')}
             </p>
           )}
           {candidateQuery.isLoading && <p role="status">{tr('common.loading_coworker_shifts')}</p>}
@@ -2097,7 +2168,8 @@ export function WorkforceScheduleTab({
               disabled={
                 !isSwapEligible ||
                 !selectedSchedule ||
-                isPastSchedule(selectedSchedule) ||
+                isLockedSchedule(selectedSchedule) ||
+                isTargetLocked('swap') ||
                 !swapTargetScheduleId ||
                 swapReason.trim().length < 5 ||
                 createSwap.isPending ||

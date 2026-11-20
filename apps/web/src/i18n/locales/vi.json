@@ -4174,5 +4174,8 @@
   "gateSetup.emptyTitle": "Chưa có cổng nào",
   "gateSetup.emptyManager": "Tạo cổng đầu tiên bằng biểu mẫu phía trên.",
   "gateSetup.editName": "Tên cổng mới",
-  "gateSetup.saving": "Đang lưu…"
+  "gateSetup.saving": "Đang lưu…",
+  "common.shift_started_locked": "Ca đã bắt đầu",
+  "workforce_schedule_tab.shift_started_change_swap_unavailable": "Ca đã bắt đầu (không thể đổi / hoán đổi)",
+  "workforce_schedule_tab.this_shift_has_started_changes_are_no_longer_allowed": "Ca đã bắt đầu. Không còn được thay đổi."
 }

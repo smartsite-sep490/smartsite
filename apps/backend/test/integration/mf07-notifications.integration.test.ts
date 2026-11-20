@@ -626,9 +626,9 @@ test('MF07 durable notifications: delivery, scope, transactions, history and rea
   );
 
   await t.test(
-    'ended shifts cannot create, confirm or apply, while ongoing shifts remain editable',
+    'started shifts cannot create, confirm or apply; only future shifts remain editable',
     async (dateTest) => {
-      dateTest.mock.timers.enable({ apis: ['Date'], now: new Date('2090-01-01T15:30:00Z') });
+      dateTest.mock.timers.enable({ apis: ['Date'], now: new Date('2090-01-01T07:59:59.999Z') });
       const [a, b] = await schedules();
       await dataSource
         .getRepository(WorkerScheduleEntity)
@@ -639,7 +639,7 @@ test('MF07 durable notifications: delivery, scope, transactions, history and rea
           toShiftId: evening,
           reason: 'Past date synthetic request',
         }),
-        code('SHIFT_WORK_DATE_PASSED'),
+        code('SHIFT_ALREADY_STARTED'),
       );
       await assert.rejects(
         workflow.createShiftSwap(workerA, siteId, {
@@ -647,32 +647,51 @@ test('MF07 durable notifications: delivery, scope, transactions, history and rea
           coworkerWorkerScheduleId: b!.id,
           reason: 'Past swap synthetic request',
         }),
-        code('SHIFT_WORK_DATE_PASSED'),
+        code('SHIFT_ALREADY_STARTED'),
       );
       await dataSource
         .getRepository(WorkerScheduleEntity)
         .update([a!.id, b!.id], { workDate: '2090-01-01' });
-      const swap = await workflow.createShiftSwap(workerA, siteId, {
-        requesterWorkerScheduleId: a!.id,
-        coworkerWorkerScheduleId: b!.id,
-        reason: 'Today even after start time',
+      const configuration = new ScheduleConfigurationService(dataSource);
+      assert.equal((await configuration.listSwapCandidates(workerA, siteId, a!.id)).total, 1);
+      assert.equal((await configuration.listSwapCandidates(workerB, siteId, b!.id)).total, 1);
+      const swap = await workflow.createShiftSwap(workerB, siteId, {
+        requesterWorkerScheduleId: b!.id,
+        coworkerWorkerScheduleId: a!.id,
+        reason: 'Before either shift starts',
       });
-      dateTest.mock.timers.setTime(new Date('2090-01-01T16:00:00Z').getTime());
+      dateTest.mock.timers.setTime(new Date('2090-01-01T08:00:00Z').getTime());
+      assert.deepEqual(await configuration.listSwapCandidates(workerA, siteId, a!.id), {
+        items: [],
+        total: 0,
+      });
+      assert.deepEqual(await configuration.listSwapCandidates(workerB, siteId, b!.id), {
+        items: [],
+        total: 0,
+      });
       await assert.rejects(
-        workflow.confirmShiftSwap(workerB, siteId, swap.id),
-        code('SHIFT_WORK_DATE_PASSED'),
+        workflow.createShiftSwap(workerB, siteId, {
+          requesterWorkerScheduleId: b!.id,
+          coworkerWorkerScheduleId: a!.id,
+          reason: 'Coworker already started',
+        }),
+        code('SHIFT_ALREADY_STARTED'),
+      );
+      await assert.rejects(
+        workflow.confirmShiftSwap(workerA, siteId, swap.id),
+        code('SHIFT_ALREADY_STARTED'),
       );
       assert.equal(
         (await dataSource.getRepository(ShiftSwapRequestEntity).findOneByOrFail({ id: swap.id }))
           .status,
         ShiftRequestStatus.PENDING_COWORKER,
       );
-      dateTest.mock.timers.setTime(new Date('2090-01-01T15:30:00Z').getTime());
-      await workflow.confirmShiftSwap(workerB, siteId, swap.id);
-      dateTest.mock.timers.setTime(new Date('2090-01-01T16:00:00Z').getTime());
+      dateTest.mock.timers.setTime(new Date('2090-01-01T07:59:59.999Z').getTime());
+      await workflow.confirmShiftSwap(workerA, siteId, swap.id);
+      dateTest.mock.timers.setTime(new Date('2090-01-01T08:00:00Z').getTime());
       await assert.rejects(
         workflow.approveShiftSwap(repA, siteId, swap.id),
-        code('SHIFT_WORK_DATE_PASSED'),
+        code('SHIFT_ALREADY_STARTED'),
       );
       assert.equal(
         (await dataSource.getRepository(WorkerScheduleEntity).findOneByOrFail({ id: a!.id }))
@@ -689,18 +708,18 @@ test('MF07 durable notifications: delivery, scope, transactions, history and rea
       await dataSource
         .getRepository(WorkerScheduleEntity)
         .update(c!.id, { workDate: '2090-01-03' });
-      dateTest.mock.timers.setTime(new Date('2090-01-03T15:30:00Z').getTime());
+      dateTest.mock.timers.setTime(new Date('2090-01-03T07:59:59.999Z').getTime());
       const change = await workflow.createShiftChange(workerA, siteId, {
         workerScheduleId: c!.id,
         toShiftId: evening,
         reason: 'Today direct synthetic change',
       });
-      dateTest.mock.timers.setTime(new Date('2090-01-03T16:00:00Z').getTime());
+      dateTest.mock.timers.setTime(new Date('2090-01-03T08:00:00Z').getTime());
       await assert.rejects(
         workflow.approveShiftChange(repA, siteId, change.id),
-        code('SHIFT_WORK_DATE_PASSED'),
+        code('SHIFT_ALREADY_STARTED'),
       );
-      dateTest.mock.timers.setTime(new Date('2090-01-03T15:30:00Z').getTime());
+      dateTest.mock.timers.setTime(new Date('2090-01-03T07:59:59.999Z').getTime());
       assert.equal(
         (await workflow.approveShiftChange(repA, siteId, change.id)).status,
         ShiftRequestStatus.APPLIED,

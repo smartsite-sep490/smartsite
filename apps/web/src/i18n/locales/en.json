@@ -4174,5 +4174,8 @@
   "gateSetup.emptyTitle": "No gates yet",
   "gateSetup.emptyManager": "Create your first gate using the form above.",
   "gateSetup.editName": "New gate name",
-  "gateSetup.saving": "Saving…"
+  "gateSetup.saving": "Saving…",
+  "common.shift_started_locked": "Shift started",
+  "workforce_schedule_tab.shift_started_change_swap_unavailable": "Shift started (change/swap unavailable)",
+  "workforce_schedule_tab.this_shift_has_started_changes_are_no_longer_allowed": "This shift has already started. Changes are no longer allowed."
 }

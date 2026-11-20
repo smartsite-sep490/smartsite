@@ -1,3 +1,4 @@
+import { shiftRequestLocked, useShiftRequestLocked } from './shift-request-deadline';
 import { ContractorSchedule } from '../contractor/contractor-schedule';
 import { localizedLabel } from '../../i18n/messages';
 import { translate as tr } from '../../i18n';
@@ -93,6 +94,13 @@ function ScheduleRequest({
     queryFn: () => client.listSwapCandidates(token, scope.siteId, schedule.id),
     enabled: kind === 'SWAP',
   });
+  const sourceLocked = useShiftRequestLocked(schedule.workDate, shift);
+  const targetShift =
+    kind === 'CHANGE'
+      ? eligible.data?.items.find((s) => s.id === target)
+      : candidates.data?.items.find((c) => c.candidateWorkerScheduleId === target)?.currentShift;
+  const targetLocked = useShiftRequestLocked(schedule.workDate, targetShift);
+  const locked = kind !== 'ABSENCE' && (sourceLocked || (!!target && targetLocked));
   return (
     <Page title={t('schedule.requestTitle')} onBack={onBack}>
       <Card>
@@ -151,15 +159,26 @@ function ScheduleRequest({
               ? tr('requests.changeReviewHint')
               : tr('requests.absenceReviewHint')}
         </Hint>
+        {locked && <Hint>{t('schedule.shiftStartedLocked')}</Hint>}
         <ErrorNotice error={command.error} />
         {kind === 'ABSENCE' && <LeaveNoticeFields value={noticeType} onChange={setNoticeType} />}
         <Button
           label={command.isPending ? t('requests.sending') : t('requests.submitRequest')}
           disabled={
-            command.isPending || !reason.trim() || !shift || (kind !== 'ABSENCE' && !target)
+            command.isPending ||
+            locked ||
+            !reason.trim() ||
+            !shift ||
+            (kind !== 'ABSENCE' && !target)
           }
           onPress={() =>
             command.mutate(async () => {
+              if (
+                kind !== 'ABSENCE' &&
+                (shiftRequestLocked(schedule.workDate, shift) ||
+                  shiftRequestLocked(schedule.workDate, targetShift))
+              )
+                return;
               const why = required(reason, t('schedule.reason'));
               if (kind === 'CHANGE')
                 await client.createShiftChangeRequest(token, scope.siteId, {
