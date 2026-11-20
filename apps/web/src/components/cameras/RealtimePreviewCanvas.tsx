@@ -3,6 +3,10 @@ import { translate as tr, uiLanguage } from '../../i18n';
 import { useTranslation } from 'react-i18next';
 import { useLayoutEffect, useRef } from 'react';
 import type { DecodedPreview } from './useRealtimePreview';
+import { registerScopedPreviewCanvasCatalog } from './scoped-preview-canvas-catalog';
+import { SAFETY_NAMESPACE } from '../../i18n/runtime';
+
+registerScopedPreviewCanvasCatalog();
 
 export function RealtimePreviewCanvas({
   preview,
@@ -11,7 +15,7 @@ export function RealtimePreviewCanvas({
   preview: DecodedPreview;
   mode: 'ppe' | 'zone';
 }) {
-  useTranslation();
+  const { t } = useTranslation(SAFETY_NAMESPACE);
 
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const language = uiLanguage();
@@ -38,6 +42,14 @@ export function RealtimePreviewCanvas({
         context.fill();
         context.stroke();
       }
+      context.fillStyle = '#38bdf8';
+      for (const person of frame.detections) {
+        const box = person.boundingBox;
+        if (!box) continue;
+        const x = Math.round(((box.x1 + box.x2) / 2) * frame.width);
+        const y = Math.round(box.y2 * frame.height);
+        context.fillRect(x - 3, y - 3, 6, 6);
+      }
     }
     context.lineWidth = 2;
     context.font = 'bold 14px sans-serif';
@@ -56,11 +68,18 @@ export function RealtimePreviewCanvas({
     }
   }, [preview, mode, language]);
   return (
-    <canvas
-      ref={canvasRef}
-      aria-label={tr('realtime_preview_canvas.synchronized_ai_camera_frame')}
-      data-frame-id={`${preview.frame.sessionId}:${preview.frame.sequenceNumber}`}
-      className="absolute inset-0 w-full h-full object-cover"
-    />
+    <>
+      {mode === 'zone' && preview.frame.zonePolygons.length > 0 && (
+        <span className="absolute bottom-2 left-2 z-10 max-w-sm rounded bg-slate-950/80 px-2 py-1 text-xs text-slate-200 pointer-events-none">
+          {t('ppe.previewCanvas.zoneAnchorHelp')}
+        </span>
+      )}
+      <canvas
+        ref={canvasRef}
+        aria-label={tr('realtime_preview_canvas.synchronized_ai_camera_frame')}
+        data-frame-id={`${preview.frame.sessionId}:${preview.frame.sequenceNumber}`}
+        className="absolute inset-0 w-full h-full object-cover"
+      />
+    </>
   );
 }
