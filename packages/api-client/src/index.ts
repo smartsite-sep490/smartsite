@@ -209,6 +209,7 @@ export type { CameraVideoStreamOptions } from './camera-media-stream';
 export { isShiftStarted } from '@smartsite/contracts/management';
 
 export { cameraSourceClient, SourceSetupError } from './camera-source';
+export type { SourceActivationResult } from '@smartsite/contracts';
 export type {
   CameraSourceClient,
   CameraSourceKind,

@@ -50,4 +50,24 @@ export class CameraSourceController {
       response.off('close', abort);
     }
   }
+
+  @Post(':hostId/apply')
+  @Header('Cache-Control', 'no-store')
+  apply(
+    @Req() request: Request,
+    @Param('siteId') siteId: string,
+    @Param('cameraId') cameraId: string,
+    @Param('hostId') hostId: string,
+    @Body() input: unknown,
+  ) {
+    // Once a source transition begins it must finish or persist an explicit failure;
+    // browser disconnect cannot silently roll back a committed generation.
+    return this.sources.apply(
+      request.headers.authorization!.slice(7),
+      siteId,
+      cameraId,
+      hostId,
+      input,
+    );
+  }
 }

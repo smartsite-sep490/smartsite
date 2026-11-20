@@ -816,6 +816,36 @@ test('authorized PPE commands initialize, revise and replay one immutable camera
       );
     },
   );
+  await t.test(
+    'explicit camera PPE save rebinds a new source view with no active polygons',
+    async () => {
+      let before = await current();
+      for (const region of before.regions) {
+        await mutate(`regions/${region.regionId}/status`, {
+          expectedConfigurationVersion: before.configurationVersion,
+          isActive: false,
+        });
+        before = await current();
+      }
+      sourceSession = randomUUID();
+      await reference();
+      await assert.rejects(current(), /unavailable/);
+      await writer.setCameraPolicy(
+        site,
+        camera,
+        {
+          commandId: randomUUID(),
+          expectedConfigurationVersion: before.configurationVersion,
+          policy: before.cameraPpePolicy,
+        },
+        context(manager),
+      );
+      const after = await current();
+      assert.equal(after.viewRevision, before.viewRevision + 1);
+      assert.deepEqual(after.cameraPpePolicy, before.cameraPpePolicy);
+      assert.equal(after.regions.length, 0);
+    },
+  );
   await t.test('revocation prevents even an otherwise valid replay', async () => {
     await db.query("DELETE FROM user_role_assignment WHERE user_id=$1 AND role='SITE_MANAGER'", [
       manager.id,

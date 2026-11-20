@@ -39,6 +39,47 @@ function setup(client: CameraSourceClient) {
   );
 }
 describe('source-specific camera setup', () => {
+  it('applies only a successful live receipt and reports running separately from geometry/PPE setup', async () => {
+    const user = userEvent.setup();
+    const apply = vi.fn().mockResolvedValue({
+      state: 'RUNNING',
+      commandId: 'command',
+      sourceRevision: 1,
+      sourceKind: 'LIVE',
+      currentGenerationId: 'generation',
+    });
+    setup({
+      hosts: async () => [
+        {
+          ...host,
+          capabilities: { ...host.capabilities, applySupported: true, sourceRevision: 0 },
+        },
+      ],
+      probe: async () => ({
+        state: 'TESTED',
+        receiptId: 'receipt',
+        expiresAt: new Date(Date.now() + 60000).toISOString(),
+        sourceKind: 'LIVE',
+        frame: {
+          width: 640,
+          height: 480,
+          capturedAt: new Date().toISOString(),
+          imageDataUrl: 'data:image/jpeg;base64,/9j/2Q==',
+        },
+      }),
+      apply,
+    });
+    await screen.findByRole('option', { name: 'AI at Site A' });
+    await user.selectOptions(screen.getByRole('combobox', { name: /^(AI host|Máy AI)$/ }), 'edge');
+    await user.selectOptions(screen.getByLabelText(/Device|Thiết bị/), 'usb0');
+    expect(screen.queryByRole('button', { name: /Save and activate|Lưu và kích hoạt/ })).toBeNull();
+    await user.click(screen.getByRole('button', { name: /Test connection|Kiểm tra kết nối/ }));
+    await user.click(
+      await screen.findByRole('button', { name: /Save and activate|Lưu và kích hoạt/ }),
+    );
+    await screen.findByText(/Source is running|Nguồn đang chạy/);
+    expect(apply.mock.calls[0]?.[5]).toMatchObject({ receiptId: 'receipt', expectedRevision: 0 });
+  });
   it('selects host webcam without RTSP and displays a real test result separately from applying AI', async () => {
     const user = userEvent.setup(),
       probe = vi.fn().mockResolvedValue({

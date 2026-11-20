@@ -38,8 +38,16 @@ USB webcams belong to the selected AI host; approved recorded videos are REPLAY;
 IP/RTSP cameras use a separate URL and credentials. This browser's camera is
 explicitly unsupported until media ingestion is implemented. Successful tests
 show a real image but do not persist source changes or start AI:
-`applySupported=false`. Durable source activation with trusted generation
-renewal, geometry invalidation and browser media transport remain unfinished.
+`applySupported=false` on a test-only host. An operator-configured source driver
+and `SMARTSITE_AI_SOURCE_APPLY_ENABLED=true` enable receipt-bound LIVE source
+activation for the Backend's explicit camera allowlist. The old owner stops
+before trusted generation renewal; the new source starts only after prior views
+are retired. Settings are encrypted on the host. Failure leaves an explicit
+reconciliation state; browser disconnect cannot undo a committed transition.
+No generation secret is returned to the browser. Apply does not claim inference
+or business alert readiness; a fresh view and PPE configuration are still required.
+Browser media transport, replay activation and general remote-host rollout remain
+unfinished. Native RTSP redirect/SDP egress still needs deployment-level enforcement.
 
 ## Architecture
 

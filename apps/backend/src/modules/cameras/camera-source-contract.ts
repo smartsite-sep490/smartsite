@@ -27,7 +27,8 @@ export const sourceCapabilitiesSchema = z
     webcams: z.array(z.object({ id, label: z.string().min(1).max(128) }).strict()).max(32),
     videos: z.array(z.object({ id, label: z.string().min(1).max(255) }).strict()).max(128),
     browserCameraSupported: z.literal(false),
-    applySupported: z.literal(false),
+    applySupported: z.boolean(),
+    sourceRevision: z.number().int().min(0).max(Number.MAX_SAFE_INTEGER).optional(),
   })
   .strict();
 export const sourceProbeSchema = z
@@ -63,3 +64,25 @@ export const sourceHostsSchema = z
       .strict(),
   )
   .max(16);
+
+export const sourceActivationCommandSchema = z
+  .object({
+    commandId: z.uuid(),
+    receiptId: z.uuid(),
+    expectedRevision: z
+      .number()
+      .int()
+      .min(0)
+      .max(Number.MAX_SAFE_INTEGER - 1),
+  })
+  .strict();
+export const sourceActivationStateSchema = z
+  .object({
+    schemaVersion: z.literal('1.0.0'),
+    state: z.enum(['PREPARED', 'RUNNING']),
+    commandId: z.uuid(),
+    sourceRevision: z.number().int().min(0).max(Number.MAX_SAFE_INTEGER),
+    sourceKind: z.literal('LIVE'),
+    currentGenerationId: z.uuid(),
+  })
+  .strict();

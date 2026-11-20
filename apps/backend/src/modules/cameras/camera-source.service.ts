@@ -6,11 +6,16 @@ import type { BackendEnvironment } from '../../config/environment.js';
 import { AuthService } from '../auth/auth.service.js';
 import { UserRole } from '../../database/entities/user.entity.js';
 import { CameraConfigurationService } from './camera-configuration.service.js';
+import { DataSource } from 'typeorm';
+import { renewCameraWorkerGeneration } from './camera-worker-generations.js';
+import { activateTestedCameraSource } from './camera-source-activation.js';
 import {
   sourceCapabilitiesSchema,
   sourceDraftSchema,
   sourceHostsSchema,
   sourceProbeSchema,
+  sourceActivationCommandSchema,
+  sourceActivationStateSchema,
 } from './camera-source-contract.js';
 
 export const CAMERA_SOURCE_FETCH = Symbol('CAMERA_SOURCE_FETCH');
@@ -67,6 +72,7 @@ export class CameraSourceService {
     @Optional()
     @Inject(CAMERA_SOURCE_FETCH)
     private readonly fetcher: typeof fetch = globalThis.fetch,
+    @Optional() private readonly database?: DataSource,
   ) {}
 
   private async authorize(token: string, siteId: string, write: boolean) {
@@ -215,6 +221,92 @@ export class CameraSourceService {
     } catch (error) {
       if (error instanceof HttpException) throw error;
       return unavailable();
+    }
+  }
+
+  async apply(
+    token: string,
+    siteValue: string,
+    cameraValue: string,
+    hostId: string,
+    input: unknown,
+  ) {
+    const siteId = uuid(siteValue),
+      cameraId = uuid(cameraValue);
+    await this.authorize(token, siteId, true);
+    const parsed = sourceActivationCommandSchema.safeParse(input);
+    if (!parsed.success) invalid('Invalid source activation');
+    const camera = await this.cameras.get(siteId, cameraId);
+    const host = this.hosts(siteId).find((h) => h.id === hostId);
+    const allowed = this.config.get('AI_CONFIGURATION_CAMERA_IDS', { infer: true }) ?? [];
+    if (!host || camera.siteId !== siteId || !allowed.includes(cameraId)) missing();
+    // Source activation is separately opt-in; connection testing alone grants no issuance.
+    if (
+      this.config.get('SMARTSITE_AI_SOURCE_APPLY_ENABLED', { infer: true }) !== true ||
+      !this.database
+    )
+      unavailable();
+    const runner = this.database!.createQueryRunner();
+    await runner.connect();
+    let locked = false;
+    try {
+      const [lock] = await runner.query(
+        "SELECT pg_try_advisory_lock(hashtext(current_schema() || ':source-apply'),hashtext($1)) AS acquired",
+        [cameraId],
+      );
+      locked = lock?.acquired === true;
+      if (!locked)
+        throw new PublicHttpException(409, {
+          code: 'CONFLICT',
+          message: 'Camera source operation in progress',
+        });
+      const path = `/v1/source-control/${siteId}/${encodeURIComponent(camera.externalId)}`;
+      const remote = async (suffix: string, body: unknown) =>
+        sourceActivationStateSchema.parse(
+          await this.call(host!.origin, path + suffix, body, AbortSignal.timeout(45000)),
+        );
+      return await activateTestedCameraSource(parsed.data, {
+        authorize: () => this.authorize(token, siteId, true),
+        prepare: (command) => remote('/prepare', command),
+        issue: async (expected, command) => {
+          const generation = await renewCameraWorkerGeneration(
+            this.database!,
+            cameraId,
+            allowed,
+            43200000,
+            undefined,
+            expected,
+            command,
+          );
+          // The old process has stopped and no new process may start before old geometry is retired.
+          await this.database!.transaction(async (manager) => {
+            const rows = await manager.query(
+              'SELECT id FROM camera WHERE id=$1 AND site_id=$2 FOR UPDATE',
+              [cameraId, siteId],
+            );
+            if (rows.length !== 1) missing();
+            await manager.query(
+              'UPDATE camera_view_revision SET is_current=false,retired_at=clock_timestamp() WHERE camera_id=$1 AND site_id=$2 AND is_current=true',
+              [cameraId, siteId],
+            );
+          });
+          return generation;
+        },
+        commit: (commandId, generation) => remote('/commit', { commandId, generation }),
+      });
+    } catch (error) {
+      if (error instanceof HttpException) throw error;
+      return unavailable();
+    } finally {
+      try {
+        if (locked)
+          await runner.query(
+            "SELECT pg_advisory_unlock(hashtext(current_schema() || ':source-apply'),hashtext($1))",
+            [cameraId],
+          );
+      } finally {
+        await runner.release();
+      }
     }
   }
 }

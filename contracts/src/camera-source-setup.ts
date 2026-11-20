@@ -13,7 +13,15 @@ export interface SourceHost {
     videos: { id: string; label: string }[];
     browserCameraSupported: boolean;
     applySupported: boolean;
+    sourceRevision?: number;
   };
+}
+export interface SourceActivationResult {
+  state: 'RUNNING';
+  commandId: string;
+  sourceRevision: number;
+  sourceKind: 'LIVE';
+  currentGenerationId: string;
 }
 export interface SourceTestResult {
   state: 'TESTED';

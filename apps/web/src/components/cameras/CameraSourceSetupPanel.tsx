@@ -1,5 +1,5 @@
 import { useEffect, useId, useRef, useState } from 'react';
-import { useQuery } from '@tanstack/react-query';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useTranslation } from 'react-i18next';
 import { SAFETY_NAMESPACE } from '../../i18n/runtime';
 import { CAMERA_BUTTON_STYLES, CAMERA_FIELD_STYLES } from './camera-dialog-styles';
@@ -57,6 +57,45 @@ function SourceWorkspace({
     [revoked, setRevoked] = useState(false),
     [now, setNow] = useState(() => Date.now());
   const operation = useRef<{ version: number; abort?: AbortController }>({ version: 0 });
+  const cache = useQueryClient();
+  const applying = useMutation({
+    mutationFn: async () => {
+      if (
+        !result ||
+        result.sourceKind !== 'LIVE' ||
+        !caps?.applySupported ||
+        !client.apply ||
+        now >= Date.parse(result.expiresAt)
+      )
+        throw new SourceSetupError(409);
+      return client.apply(
+        apiUrl,
+        token,
+        siteId,
+        camera.id,
+        hostId,
+        {
+          commandId: crypto.randomUUID(),
+          receiptId: result.receiptId,
+          expectedRevision: caps.sourceRevision ?? 0,
+        },
+        new AbortController().signal,
+      );
+    },
+    retry: false,
+    onSuccess: () => {
+      setPassword('');
+      void hosts.refetch();
+      void cache.invalidateQueries({ predicate: (q) => q.queryKey.includes(siteId) });
+    },
+    onError: (e) => {
+      if (e instanceof SourceSetupError && [401, 403].includes(e.status)) {
+        setRevoked(true);
+        setPassword('');
+        onUnauthorized();
+      }
+    },
+  });
   useEffect(
     () => () => {
       operation.current.version++;
@@ -96,7 +135,9 @@ function SourceWorkspace({
     setError('');
   };
   const change = (update: () => void) => {
+    if (applying.isPending) return;
     reset();
+    applying.reset();
     update();
   };
   const draft: CameraSourceDraft | null =
@@ -111,9 +152,12 @@ function SourceWorkspace({
               ...(username || password ? { username, password } : {}),
             }
           : null;
-  const canTest = Boolean(canWrite && !revoked && !hosts.isError && supported && draft && !pending);
+  const canTest = Boolean(
+    canWrite && !revoked && !hosts.isError && supported && draft && !pending && !applying.isPending,
+  );
   async function test() {
     if (!canTest || !draft) return;
+    applying.reset();
     reset();
     const version = operation.current.version,
       abort = new AbortController();
@@ -145,7 +189,7 @@ function SourceWorkspace({
       if (operation.current.version === version) setPending(false);
     }
   }
-  const blocked = revoked || !canWrite;
+  const blocked = revoked || !canWrite || applying.isPending;
   if (hostAccessDenied) {
     return (
       <section
@@ -247,7 +291,7 @@ function SourceWorkspace({
               <button
                 type="button"
                 className={CAMERA_BUTTON_STYLES.secondary}
-                disabled={hosts.isFetching || pending}
+                disabled={hosts.isFetching || pending || applying.isPending}
                 onClick={() => {
                   reset();
                   void hosts.refetch();
@@ -403,6 +447,22 @@ function SourceWorkspace({
             {t(error)}
           </p>
         )}
+        {applying.isError && (
+          <p
+            role="alert"
+            className="rounded-lg border border-rose-200 bg-rose-50 p-3 text-sm text-rose-900"
+          >
+            {t('cameraSource.applyError')}
+          </p>
+        )}
+        {applying.isSuccess && (
+          <p
+            role="status"
+            className="rounded-lg border border-emerald-200 bg-emerald-50 p-3 text-sm text-emerald-950"
+          >
+            {t('cameraSource.running')}
+          </p>
+        )}
         {result && host?.available && !hosts.isError && (
           <figure className="max-w-3xl space-y-3 overflow-hidden rounded-xl border border-slate-200 bg-slate-50 p-3">
             <figcaption className="flex flex-wrap items-center justify-between gap-2 text-sm font-semibold text-slate-900">
@@ -425,6 +485,19 @@ function SourceWorkspace({
                   : 'cameraSource.notApplied',
               )}
             </p>
+            {caps?.applySupported &&
+              canWrite &&
+              result.sourceKind === 'LIVE' &&
+              !applying.isSuccess && (
+                <button
+                  type="button"
+                  className={CAMERA_BUTTON_STYLES.primary}
+                  disabled={blocked || applying.isError || now >= Date.parse(result.expiresAt)}
+                  onClick={() => applying.mutate()}
+                >
+                  {t(applying.isPending ? 'cameraSource.applying' : 'cameraSource.apply')}
+                </button>
+              )}
           </figure>
         )}
         <p className="border-t border-slate-100 pt-3 text-xs leading-relaxed text-slate-600">
