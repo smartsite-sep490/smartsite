@@ -291,12 +291,12 @@ export class ContractorOperationsService {
     this.assertAdmin(actor);
     const value = command(CreateContractorCommand, input);
     try {
-      return await this.dataSource.getRepository(ContractorEntity).save({
+      return await executeMainConfigurationCommand(this.dataSource, undefined, 'CONTRACTOR_CREATE', value, manager => manager.getRepository(ContractorEntity).save({
         id: randomUUID(),
         code: value.code,
         name: value.name,
         isActive: true,
-      });
+      }));
     } catch (error) {
       knownUnique(error, ['uq_contractor_code']);
     }
