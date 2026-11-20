@@ -6,7 +6,14 @@ import { useTranslation } from 'react-i18next';
 import { useGateCatalog } from '../../access/useGateCatalog';
 import { GateCatalogNotice } from '../../access/GateCatalogNotice';
 import { userErrorMessage } from '../../../i18n/messages';
-import { IconBuilding2, IconCheckCircle2, IconLoader, IconPlus } from '../../icons';
+import {
+  IconBuilding2,
+  IconCheckCircle2,
+  IconChevronDown,
+  IconLoader,
+  IconPlus,
+} from '../../icons';
+import { Button } from '../../ui';
 
 export function SiteGatesPanel({
   client,
@@ -25,6 +32,8 @@ export function SiteGatesPanel({
 }) {
   const { t } = useTranslation();
   const nameInputId = useId();
+  const createFormId = useId();
+  const [isCreateOpen, setCreateOpen] = useState(false);
   const query = useGateCatalog(client, apiUrl, sessionScope, token, siteId);
   const cache = useQueryClient();
   const [editing, setEditing] = useState<GateResponse | null>(null);
@@ -64,7 +73,7 @@ export function SiteGatesPanel({
       aria-label={t('gateSetup.title')}
       className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-xs"
     >
-      <div className="flex items-start justify-between gap-3 border-b border-slate-100 p-5">
+      <div className="flex flex-col gap-3 border-b border-slate-100 p-5 sm:flex-row sm:items-start sm:justify-between">
         <div className="flex min-w-0 items-start gap-3">
           <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-orange-50 text-[#F66B17]">
             <IconBuilding2 className="h-5 w-5" />
@@ -74,14 +83,38 @@ export function SiteGatesPanel({
             <p className="mt-1 text-xs leading-5 text-slate-500">{t('gateSetup.description')}</p>
           </div>
         </div>
-        {query.data && (
-          <span className="rounded-lg bg-slate-100 px-2.5 py-1 text-xs font-semibold tabular-nums text-slate-600">
-            {query.data.total}
-          </span>
-        )}
+        <div className="flex shrink-0 flex-wrap items-center justify-end gap-2 self-end sm:self-auto">
+          {query.data && (
+            <span className="rounded-lg bg-slate-100 px-2.5 py-1 text-xs font-semibold tabular-nums text-slate-600">
+              {query.data.total}
+            </span>
+          )}
+          {canManage && (
+            <Button
+              variant="outline"
+              className="min-h-11"
+              aria-expanded={isCreateOpen}
+              aria-controls={createFormId}
+              disabled={create.isPending}
+              onClick={() => setCreateOpen((open) => !open)}
+              leftIcon={!isCreateOpen ? <IconPlus className="h-4 w-4" /> : undefined}
+              rightIcon={
+                <IconChevronDown
+                  className={`h-4 w-4 transition-transform ${isCreateOpen ? 'rotate-180' : ''}`}
+                />
+              }
+            >
+              {t(isCreateOpen ? 'gateSetup.hideCreate' : 'gateSetup.create')}
+            </Button>
+          )}
+        </div>
       </div>
-      {canManage && (
-        <form onSubmit={submit} className="space-y-3 border-b border-slate-100 bg-slate-50/70 p-5">
+      {canManage && isCreateOpen && (
+        <form
+          id={createFormId}
+          onSubmit={submit}
+          className="space-y-3 border-b border-slate-100 bg-slate-50/70 p-5"
+        >
           <div>
             <label htmlFor={nameInputId} className="text-sm font-semibold text-slate-800">
               {t('gateSetup.name')}

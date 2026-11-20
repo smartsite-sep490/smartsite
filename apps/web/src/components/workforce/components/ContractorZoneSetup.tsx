@@ -5,7 +5,7 @@ import { translate as tr } from '../../../i18n';
 import { useTranslation } from 'react-i18next';
 import { useRef, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { SmartDatePicker, Toast, ToastContainer, useToast } from '../../ui';
+import { SmartDatePicker, SmartSelect, Toast, ToastContainer, useToast } from '../../ui';
 import {
   IconAlertTriangle,
   IconCalendar,
@@ -150,42 +150,29 @@ export function ContractorZoneSetup({
           className="grid gap-4 sm:grid-cols-2"
           onSubmit={(e) => {
             e.preventDefault();
-            grant.mutate();
+            if (participationId && zoneId && !grant.isPending) grant.mutate();
           }}
         >
-          <label className="grid gap-1.5 text-xs font-semibold text-slate-700">
-            {tr('common.contractor')}
-            <select
-              className="w-full rounded-xl border border-slate-200 bg-slate-50/60 px-3.5 py-2.5 text-sm text-slate-900 focus:border-[#F66B17] focus:bg-white focus:outline-none focus:ring-2 focus:ring-orange-500/10 transition-colors cursor-pointer"
-              required
-              value={participationId}
-              onChange={(e) => setParticipationId(e.target.value)}
-            >
-              <option value="">{tr('common.select_contractor')}</option>
-              {data.participations.map((p) => (
-                <option key={p.id} value={p.id}>
-                  {p.name}
-                </option>
-              ))}
-            </select>
-          </label>
+          <SmartSelect
+            label={tr('common.contractor')}
+            placeholder={tr('common.select_contractor')}
+            value={participationId}
+            onChange={setParticipationId}
+            disabled={grant.isPending}
+            options={data.participations.map((participation) => ({
+              value: participation.id,
+              label: participation.name,
+            }))}
+          />
 
-          <label className="grid gap-1.5 text-xs font-semibold text-slate-700">
-            {tr('common.zone')}
-            <select
-              className="w-full rounded-xl border border-slate-200 bg-slate-50/60 px-3.5 py-2.5 text-sm text-slate-900 focus:border-[#F66B17] focus:bg-white focus:outline-none focus:ring-2 focus:ring-orange-500/10 transition-colors cursor-pointer"
-              required
-              value={zoneId}
-              onChange={(e) => setZoneId(e.target.value)}
-            >
-              <option value="">{tr('common.select_zone')}</option>
-              {data.zones.map((z) => (
-                <option key={z.id} value={z.id}>
-                  {z.name}
-                </option>
-              ))}
-            </select>
-          </label>
+          <SmartSelect
+            label={tr('common.zone')}
+            placeholder={tr('common.select_zone')}
+            value={zoneId}
+            onChange={setZoneId}
+            disabled={grant.isPending}
+            options={data.zones.map((zone) => ({ value: zone.id, label: zone.name }))}
+          />
 
           <SmartDatePicker
             label={tr('common.start_date')}
