@@ -914,7 +914,7 @@ export class ContractorTeamsService {
               leftAt: IsNull(),
             });
           const result = (
-            membership: ContractorTeamMembershipEntity | null,
+            membership: Pick<ContractorTeamMembershipEntity, 'id'> | null,
             team: ContractorTeamEntity | null,
           ): ContractorTeamWorkerResponse => ({
             workerId,
@@ -978,7 +978,6 @@ export class ContractorTeamsService {
             : null;
           if (value.teamId && !target) missing();
           if (current?.teamId === value.teamId) return result(current, target ?? null);
-          const now = new Date();
           if (current) {
             const oldTeam = teams.find((t) => t.id === current.teamId);
             if (oldTeam?.leaderWorkerId === workerId) {
@@ -996,26 +995,41 @@ export class ContractorTeamsService {
                 { previousWorkerId: workerId, workerId: null },
               );
             }
-            current.leftAt = now;
-            current.endedBy = actor.id;
-            current.endReason = reason;
-            await repo.save(current);
+            // Use the database clock and preserve PostgreSQL's full timestamp precision.
+            // An application clock behind joined_at must not violate the interval check.
+            const ended = await repo.update(
+              { id: current.id, siteId, contractorId, workerId, leftAt: IsNull() },
+              {
+                leftAt: () => 'GREATEST(clock_timestamp(), joined_at)',
+                endedBy: actor.id,
+                endReason: reason,
+              },
+            );
+            if (ended.affected !== 1) conflict('Worker team changed; reload before assigning');
           }
-          const membership = target
-            ? await repo.save({
+          if (target)
+            await repo
+              .createQueryBuilder()
+              .insert()
+              .values({
                 id: value.requestId,
                 siteId,
                 contractorId,
                 workerId,
                 teamId: target.id,
-                joinedAt: now,
+                joinedAt: () =>
+                  current
+                    ? 'GREATEST(clock_timestamp(), (SELECT left_at FROM contractor_team_membership WHERE id = :previousMembershipId))'
+                    : 'clock_timestamp()',
                 leftAt: null,
                 assignedBy: actor.id,
                 reason,
                 endedBy: null,
                 endReason: null,
               })
-            : null;
+              .setParameters(current ? { previousMembershipId: current.id } : {})
+              .execute();
+          const membership = target ? { id: value.requestId } : null;
           await auditAccess(
             m,
             actor.id,
