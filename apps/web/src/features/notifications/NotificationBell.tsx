@@ -544,7 +544,7 @@ export function NotificationBell({
                 {query.isLoading && (
                   <div
                     role="status"
-                    className="p-10 text-center flex flex-col items-center justify-center gap-2.5 text-xs text-slate-600"
+                    className="p-10 text-center flex flex-col items-center justify-center gap-2.5 text-sm text-slate-600"
                   >
                     <IconLoader className="w-5 h-5 text-slate-500 animate-spin" />
                     <span>{tr('common.loading_notifications')}</span>
@@ -553,10 +553,10 @@ export function NotificationBell({
 
                 {unavailable ? (
                   <div role="alert" className="p-8 text-center space-y-3">
-                    <div className="w-10 h-10 rounded-xl bg-amber-50 border border-amber-200 text-amber-600 mx-auto flex items-center justify-center">
+                    <div className="w-10 h-10 rounded-xl bg-amber-50 border border-amber-200 text-amber-700 mx-auto flex items-center justify-center">
                       <IconAlertCircle className="w-5 h-5" />
                     </div>
-                    <p className="text-xs font-medium text-slate-600">
+                    <p className="text-sm font-medium text-slate-700">
                       {enabled
                         ? tr('notification_bell.notifications_are_currently_unavailable')
                         : tr('notification_bell.notifications_are_unavailable_for_this_account')}
@@ -564,10 +564,10 @@ export function NotificationBell({
                     {enabled && (
                       <button
                         type="button"
-                        className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-slate-100 hover:bg-slate-200 text-xs font-semibold text-slate-700 transition-colors cursor-pointer"
+                        className="inline-flex min-h-9 items-center gap-1.5 px-3.5 py-1.5 rounded-lg border border-slate-200 bg-white hover:bg-slate-50 text-sm font-semibold text-slate-800 transition-colors cursor-pointer"
                         onClick={() => void query.refetch()}
                       >
-                        <IconRefreshCw className="w-3 h-3 text-slate-500" />
+                        <IconRefreshCw className="w-4 h-4 text-slate-600" />
                         <span>{tr('common.retry')}</span>
                       </button>
                     )}
@@ -580,7 +580,7 @@ export function NotificationBell({
                           <div className="w-10 h-10 rounded-xl bg-slate-50 border border-slate-200/80 text-slate-500 mx-auto flex items-center justify-center">
                             <IconBell className="w-5 h-5" />
                           </div>
-                          <p className="text-xs font-semibold text-slate-600">
+                          <p className="text-sm font-semibold text-slate-800">
                             {readStatus === 'UNREAD'
                               ? tr(
                                   showPpeInbox

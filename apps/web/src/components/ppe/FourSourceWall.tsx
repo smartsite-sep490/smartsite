@@ -251,22 +251,22 @@ export function FourSourceWallTile(props: FourSourceWallTileProps) {
           )}
         </div>
 
-        <div className="flex flex-wrap items-center gap-2 shrink-0 ml-auto">
+        <div className="flex flex-wrap items-center gap-2.5 shrink-0 ml-auto">
           <span
             data-testid={`wall-source-badge-${camera.id}`}
-            className={`inline-flex items-center gap-1.5 px-2 py-0.5 rounded-md text-xs font-semibold tracking-wide border ${
+            className={`inline-flex items-center gap-1.5 text-sm font-semibold ${
               isAiWorkPaused
-                ? 'bg-amber-500/15 text-amber-200 border-amber-500/35'
+                ? 'text-amber-200'
                 : isLive
-                  ? 'bg-emerald-500/15 text-emerald-200 border-emerald-500/35'
+                  ? 'text-emerald-300'
                   : isReplay
-                    ? 'bg-amber-500/15 text-amber-200 border-amber-500/35'
-                    : 'bg-slate-800 text-slate-300 border-slate-700'
+                    ? 'text-amber-200'
+                    : 'text-slate-300'
             }`}
           >
             <span
               className={`w-2 h-2 rounded-full ${
-                isLive ? 'bg-emerald-400' : isReplay ? 'bg-amber-400' : 'bg-slate-400'
+                isLive ? 'bg-emerald-400' : isReplay || isAiWorkPaused ? 'bg-amber-400' : 'bg-slate-400'
               }`}
             />
             {isAiWorkPaused
