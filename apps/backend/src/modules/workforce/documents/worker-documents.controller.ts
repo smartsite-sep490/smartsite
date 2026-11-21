@@ -6,16 +6,16 @@ import {
   HttpCode,
   HttpStatus,
   Param,
-  Patch,
   Post,
   Query,
   Req,
   StreamableFile,
   UploadedFile,
+  UploadedFiles,
   UseGuards,
   UseInterceptors,
 } from '@nestjs/common';
-import { FileInterceptor } from '@nestjs/platform-express';
+import { FileInterceptor, FileFieldsInterceptor } from '@nestjs/platform-express';
 import { ApiBearerAuth, ApiNoContentResponse, ApiTags } from '@nestjs/swagger';
 import { invalid } from '../../../common/configuration/commands.js';
 import { pagination } from '../../../common/http/pagination.js';
@@ -27,7 +27,6 @@ import {
   ReviewWorkerDocumentDto,
   WorkerComplianceQueryDto,
   UploadWorkerDocumentDto,
-  UpdateWorkerDocumentExpiryDto,
 } from './worker-documents.commands.js';
 
 @ApiTags('worker-documents')
@@ -68,22 +67,6 @@ export class WorkerDocumentsController {
     @UploadedFile() file: DocumentUpload,
   ) {
     return this.service.checkWorkerQuality(r.user!, siteId, workerId, file);
-  }
-  @Post('workers/:workerId/identity-images/:side')
-  @Header('Cache-Control', 'private, no-store')
-  @UseInterceptors(
-    FileInterceptor('file', {
-      limits: { fileSize: 5 * 1024 * 1024, files: 1, fields: 0, parts: 1 },
-    }),
-  )
-  identity(
-    @Req() r: AuthenticatedRequest,
-    @Param('siteId') siteId: string,
-    @Param('workerId') workerId: string,
-    @Param('side') side: string,
-    @UploadedFile() file: DocumentUpload,
-  ) {
-    return this.service.uploadIdentity(r.user!, siteId, workerId, side, file);
   }
   @Get('workers/:workerId/identity-images/:id/file')
   @Header('Cache-Control', 'private, no-store')
@@ -134,6 +117,41 @@ export class WorkerDocumentsController {
   ) {
     return this.service.get(r.user!, siteId, workerId);
   }
+  @Post('workers/:workerId/document-submissions')
+  @Header('Cache-Control', 'private, no-store')
+  @UseInterceptors(
+    FileFieldsInterceptor(
+      ['FRONT', 'BACK', 'SAFETY_CARD', 'HEALTH_CERTIFICATE', 'PERSONAL_INSURANCE'].map((name) => ({
+        name,
+        maxCount: 1,
+      })),
+      { limits: { fileSize: 5 * 1024 * 1024, files: 5, fields: 1, parts: 6, fieldSize: 16384 } },
+    ),
+  )
+  submit(
+    @Req() r: AuthenticatedRequest,
+    @Param('siteId') siteId: string,
+    @Param('workerId') workerId: string,
+    @Body() body: { metadata?: string },
+    @UploadedFiles() files: Record<string, DocumentUpload[]> = {},
+  ) {
+    if (Object.keys(body).some((key) => key !== 'metadata') || typeof body.metadata !== 'string')
+      invalid('Invalid document submission');
+    let input: unknown;
+    try {
+      input = JSON.parse(body.metadata);
+    } catch {
+      invalid('Invalid document submission');
+    }
+    return this.service.submit(
+      r.user!,
+      siteId,
+      workerId,
+      input as import('@smartsite/contracts').SubmitWorkerDocumentsCommand,
+      Object.fromEntries(Object.entries(files).map(([key, values]) => [key, values[0]])),
+      configurationCommandContext(r, this.userAuth),
+    );
+  }
   @Post('workers/:workerId/documents/:kind/check')
   @Header('Cache-Control', 'private, no-store')
   @UseInterceptors(
@@ -150,34 +168,6 @@ export class WorkerDocumentsController {
     @Body() body: UploadWorkerDocumentDto,
   ) {
     return this.service.checkSubmission(r.user!, siteId, workerId, kind, file, body);
-  }
-  @Post('workers/:workerId/documents/:kind')
-  @Header('Cache-Control', 'private, no-store')
-  @UseInterceptors(
-    FileInterceptor('file', {
-      limits: { fileSize: 5 * 1024 * 1024, files: 1, fields: 2, parts: 3 },
-    }),
-  )
-  upload(
-    @Req() r: AuthenticatedRequest,
-    @Param('siteId') siteId: string,
-    @Param('workerId') workerId: string,
-    @Param('kind') kind: string,
-    @UploadedFile() file: DocumentUpload,
-    @Body() body: UploadWorkerDocumentDto,
-  ) {
-    return this.service.upload(r.user!, siteId, workerId, kind, file, body);
-  }
-  @Patch('workers/:workerId/documents/:id/submitted-expiry')
-  @Header('Cache-Control', 'private, no-store')
-  updateSubmittedExpiry(
-    @Req() r: AuthenticatedRequest,
-    @Param('siteId') siteId: string,
-    @Param('workerId') workerId: string,
-    @Param('id') id: string,
-    @Body() body: UpdateWorkerDocumentExpiryDto,
-  ) {
-    return this.service.updateSubmittedExpiry(r.user!, siteId, workerId, id, body);
   }
   @Get('workers/:workerId/documents/:id/file')
   @Header('Cache-Control', 'private, no-store')

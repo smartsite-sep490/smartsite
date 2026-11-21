@@ -1,11 +1,13 @@
 /** Dates are ISO calendar dates; expiry is inclusive in Asia/Ho_Chi_Minh. */
 export type WorkerDocumentKind = 'SAFETY_CARD' | 'HEALTH_CERTIFICATE' | 'PERSONAL_INSURANCE';
 export interface DocumentImageQuality {
+  ocr?: DocumentOcrResult;
   status: 'ACCEPTED' | 'RETAKE' | 'UNAVAILABLE';
   reason:
     | 'IMAGE_ACCEPTED'
     | 'IMAGE_BLURRY'
     | 'IMAGE_TOO_SMALL'
+    | 'IMAGE_TOO_LARGE'
     | 'IMAGE_EXPOSURE'
     | 'IMAGE_INVALID'
     | 'PDF_TOO_MANY_PAGES'
@@ -65,8 +67,36 @@ export type WorkerDocumentAiAnalysis =
       kindMismatch: boolean;
       dateCheck: WorkerDocumentDateCheck;
       identityCheck: WorkerDocumentIdentityCheck['status'];
+      validity?: 'CURRENT' | 'EXPIRED' | 'NOT_YET_VALID' | 'UNKNOWN';
     })
-  | { status: 'UNAVAILABLE' };
+  | { status: 'UNAVAILABLE' }
+  | { status: 'ANALYZING' };
+
+export interface WorkerDocumentAiSummary {
+  status: 'NOT_SCANNED' | 'ANALYZING' | 'ATTENTION' | 'NO_DISCREPANCY' | 'INSUFFICIENT';
+  pending: number;
+  complete: number;
+  unresolved: number;
+}
+
+export interface SubmitWorkerDocumentsCommand {
+  requestId: string;
+  expectedVersion: number;
+  safetyCardRequired: boolean;
+  documents: Partial<Record<WorkerDocumentKind, UploadWorkerDocumentCommand>>;
+  identity?: {
+    nationalId: string;
+    phoneNumber: string;
+    gender: 'MALE' | 'FEMALE' | 'OTHER';
+    address: string;
+  };
+}
+
+export interface WorkerDocumentSubmissionResponse {
+  requestId: string;
+  version: number;
+  documentIds: string[];
+}
 
 export interface WorkerDocumentResponse {
   id: string;
@@ -105,6 +135,9 @@ export interface WorkerComplianceListQuery {
   needsSupplement?: boolean;
 }
 export interface WorkerComplianceResponse {
+  version?: number;
+  safetyCardRequired?: boolean;
+  aiSummary?: WorkerDocumentAiSummary;
   workerId: string;
   contractorId: string | null;
   displayName: string;
@@ -131,9 +164,4 @@ export interface ReviewWorkerDocumentCommand {
 export interface UploadWorkerDocumentCommand {
   submittedExpiresOn?: string;
   submittedIssuedOn?: string;
-}
-export interface UpdateWorkerDocumentExpiryCommand {
-  expectedVersion: number;
-  submittedExpiresOn?: string | null;
-  submittedIssuedOn?: string | null;
 }

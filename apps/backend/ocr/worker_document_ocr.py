@@ -12,7 +12,7 @@ from pathlib import Path
 from tempfile import TemporaryDirectory
 from typing import Literal
 
-from PIL import Image, ImageFilter, ImageOps, ImageStat, UnidentifiedImageError
+from PIL import Image, ImageFilter, ImageOps, ImageStat
 
 MAX_FILE = 5 * 1024 * 1024
 
@@ -48,7 +48,7 @@ def image_quality(data: bytes) -> ImageQuality:
     try:
         with Image.open(io.BytesIO(data)) as source:
             if source.width * source.height > 20_000_000:
-                return ImageQuality(status="RETAKE", reason="IMAGE_TOO_SMALL")
+                return ImageQuality(status="RETAKE", reason="IMAGE_TOO_LARGE")
             image = ImageOps.exif_transpose(source).convert("L")
             if min(image.size) < 360 or max(image.size) < 640:
                 return ImageQuality(status="RETAKE", reason="IMAGE_TOO_SMALL")
@@ -160,14 +160,20 @@ class LocalDocumentOcr:
         self.tesseract = tesseract
         self.pdftoppm = pdftoppm
 
-    def quality(self, data: bytes, media_type: str) -> ImageQuality:
-        if media_type != "application/pdf":
-            return image_quality(data)
-        if not self.pdftoppm:
-            return ImageQuality(status="UNAVAILABLE", reason="OCR_ENGINE_UNAVAILABLE")
-        try:
-            with TemporaryDirectory(prefix="smartsite-quality-") as folder:
-                root = Path(folder)
+    def inspect(self, data: bytes, media_type: str) -> dict:
+        unavailable = OcrDates(
+            status="UNAVAILABLE", warnings=["OCR_UNAVAILABLE_REVIEW_ORIGINAL"]
+        )
+        with TemporaryDirectory(prefix="smartsite-inspect-") as folder:
+            root = Path(folder)
+            text_pages: list[str] = []
+            if media_type == "application/pdf":
+                if not self.pdftoppm:
+                    return {
+                        "quality": ImageQuality("UNAVAILABLE", "OCR_ENGINE_UNAVAILABLE").response(),
+                        "ocr": unavailable.response(),
+                        "valid": None,
+                    }
                 source = root / "document.pdf"
                 source.write_bytes(data)
                 binary = Path(self.pdftoppm)
@@ -176,120 +182,124 @@ class LocalDocumentOcr:
                 )
                 info = subprocess.run(
                     [str(info_binary), str(source)],
-                    check=True,
-                    timeout=5,
-                    capture_output=True,
+                    check=True, timeout=5, capture_output=True,
                 )
                 pages = re.search(rb"(?m)^Pages:\s*(\d+)", info.stdout)
-                if pages is None:
-                    return ImageQuality(status="RETAKE", reason="IMAGE_INVALID")
-                if not 1 <= int(pages[1]) <= 4:
-                    return ImageQuality(status="RETAKE", reason="PDF_TOO_MANY_PAGES")
-                subprocess.run(
-                    [
-                        self.pdftoppm,
-                        "-r",
-                        "150",
-                        "-scale-to",
-                        "2200",
-                        "-png",
-                        str(source),
-                        str(root / "page"),
-                    ],
-                    check=True,
-                    timeout=15,
-                    capture_output=True,
+                if pages is None or not 1 <= int(pages[1]) <= 4:
+                    return {
+                        "quality": ImageQuality("RETAKE", "PDF_TOO_MANY_PAGES").response(),
+                        "ocr": unavailable.response(),
+                        "valid": False,
+                    }
+                text_binary = binary.with_name(
+                    "pdftotext.exe" if binary.suffix == ".exe" else "pdftotext"
                 )
+                try:
+                    extracted = subprocess.run(
+                        [str(text_binary), "-layout", str(source), "-"],
+                        check=True, timeout=5, capture_output=True,
+                    )
+                    text_pages = extracted.stdout[:100_000].decode(
+                        "utf-8", errors="replace"
+                    ).split("\f")
+                except (OSError, subprocess.SubprocessError):
+                    pass
+                try:
+                    subprocess.run(
+                        [self.pdftoppm, "-r", "150", "-scale-to", "2200",
+                         "-png", str(source), str(root / "page")],
+                        check=True, timeout=15, capture_output=True,
+                    )
+                except subprocess.CalledProcessError:
+                    return {
+                        "quality": ImageQuality("RETAKE", "IMAGE_INVALID").response(),
+                        "ocr": unavailable.response(),
+                        "valid": False,
+                    }
                 images = sorted(root.glob("page-*.png"))
                 if len(images) != int(pages[1]):
-                    return ImageQuality(status="RETAKE", reason="IMAGE_INVALID")
-                for path in images:
-                    result = image_quality(path.read_bytes())
-                    if result.status != "ACCEPTED":
-                        return result
-                return ImageQuality(status="ACCEPTED", reason="IMAGE_ACCEPTED")
-        except (OSError, subprocess.SubprocessError):
-            return ImageQuality(status="UNAVAILABLE", reason="OCR_ENGINE_UNAVAILABLE")
+                    return {
+                        "quality": ImageQuality("RETAKE", "IMAGE_INVALID").response(),
+                        "ocr": unavailable.response(),
+                        "valid": False,
+                    }
+            else:
+                source = root / "page.png"
+                with Image.open(io.BytesIO(data)) as raw:
+                    if raw.width * raw.height > 20_000_000:
+                        return {
+                            "quality": ImageQuality("RETAKE", "IMAGE_TOO_LARGE").response(),
+                            "ocr": unavailable.response(),
+                        "valid": False,
+                        }
+                    image = ImageOps.exif_transpose(raw).convert("RGB")
+                    image.thumbnail((2500, 2500))
+                    image.save(source)
+                images = [source]
+            quality = ImageQuality("ACCEPTED", "IMAGE_ACCEPTED")
+            texts: list[str] = []
+            partial = False
+            for index, image_path in enumerate(images):
+                checked = image_quality(image_path.read_bytes())
+                if checked.status != "ACCEPTED":
+                    quality = checked
+                native = text_pages[index] if index < len(text_pages) else ""
+                if len(re.sub(r"\s", "", native)) >= 40:
+                    texts.append(native)
+                elif self.tesseract:
+                    try:
+                        # Four OCR pages and PDF decoding must fit the parent 60-second limit.
+                        result = subprocess.run(
+                            [self.tesseract, str(image_path), "stdout",
+                             "-l", "vie+eng", "--psm", "3"],
+                            check=True, timeout=7, capture_output=True,
+                        )
+                        texts.append(result.stdout[:100_000].decode(
+                            "utf-8", errors="replace"
+                        ))
+                    except (OSError, subprocess.SubprocessError):
+                        partial = True
+                else:
+                    partial = True
+            evidence = date_suggestions("\n".join(texts)) if texts else unavailable
+            if partial and texts:
+                evidence.warnings.append("OCR_PARTIAL_REVIEW_ORIGINAL")
+            return {"quality": quality.response(), "ocr": evidence.response(), "valid": True}
+
+    def validate_pdf(self, data: bytes) -> dict:
+        if not self.pdftoppm:
+            return {"valid": None}
+        try:
+            result = LocalDocumentOcr(None, self.pdftoppm).inspect(
+                data, "application/pdf"
+            )
+            return {"valid": result.get("valid")}
+        except subprocess.CalledProcessError:
+            return {"valid": False}
+        except (OSError, ValueError, subprocess.SubprocessError):
+            return {"valid": None}
 
     def read(self, data: bytes, media_type: str) -> OcrDates:
-        if not self.tesseract:
-            return OcrDates(
-                status="UNAVAILABLE", warnings=["OCR_ENGINE_NOT_CONFIGURED"]
-            )
+        if not self.tesseract and not (
+            media_type == "application/pdf" and self.pdftoppm
+        ):
+            return OcrDates(status="UNAVAILABLE", warnings=["OCR_ENGINE_NOT_CONFIGURED"])
         try:
-            with TemporaryDirectory(prefix="smartsite-ocr-") as folder:
-                root = Path(folder)
-                images: list[Path]
-                if media_type == "application/pdf":
-                    if not self.pdftoppm:
-                        return OcrDates(
-                            status="UNAVAILABLE", warnings=["PDF_OCR_NOT_CONFIGURED"]
-                        )
-                    source = root / "document.pdf"
-                    source.write_bytes(data)
-                    subprocess.run(
-                        [
-                            self.pdftoppm,
-                            "-f",
-                            "1",
-                            "-l",
-                            "4",
-                            "-r",
-                            "150",
-                            "-scale-to",
-                            "2200",
-                            "-png",
-                            str(source),
-                            str(root / "page"),
-                        ],
-                        check=True,
-                        timeout=15,
-                        capture_output=True,
-                    )
-                    images = sorted(root.glob("page-*.png"))
-                else:
-                    with Image.open(io.BytesIO(data)) as image:
-                        if image.width * image.height > 20_000_000:
-                            return OcrDates(
-                                status="UNREADABLE", warnings=["IMAGE_TOO_LARGE"]
-                            )
-                        image.thumbnail((2500, 2500))
-                        path = root / "image.png"
-                        image.convert("RGB").save(path)
-                    images = [path]
-                texts: list[str] = []
-                # One subprocess at a time; no GPU, model download or image retention.
-                for path in images:
-                    result = subprocess.run(
-                        [
-                            self.tesseract,
-                            str(path),
-                            "stdout",
-                            "-l",
-                            "vie+eng",
-                            "--psm",
-                            "3",
-                        ],
-                        check=True,
-                        timeout=7,
-                        capture_output=True,
-                    )
-                    texts.append(
-                        result.stdout[:100_000].decode("utf-8", errors="replace")
-                    )
-                response = date_suggestions("\n".join(texts))
-                if media_type == "application/pdf":
-                    response.warnings.append("PDF_FIRST_FOUR_PAGES_REVIEW_ORIGINAL")
-                return response
-        except (OSError, subprocess.SubprocessError):
+            result = self.inspect(data, media_type)["ocr"]
+            return OcrDates(
+                status=result["status"],
+                issued_on=result["issuedOn"],
+                expires_on=result["expiresOn"],
+                national_ids=result["nationalIds"],
+                warnings=result["warnings"],
+            )
+        except (OSError, ValueError, subprocess.SubprocessError):
             return OcrDates(status="UNAVAILABLE", warnings=["OCR_ENGINE_UNAVAILABLE"])
-        except (UnidentifiedImageError, ValueError, Image.DecompressionBombError):
-            return OcrDates(status="UNREADABLE", warnings=["INVALID_DOCUMENT_IMAGE"])
 
 
 def main() -> None:
     """Private stdin/stdout adapter; no HTTP server, database access or raw-text logs."""
-    if len(sys.argv) != 5 or sys.argv[1] not in {"ocr", "image-quality"}:
+    if len(sys.argv) != 5 or sys.argv[1] not in {"ocr", "inspect", "validate"}:
         raise SystemExit(2)
     operation, media_type, tesseract, pdftoppm = sys.argv[1:]
     if media_type not in {"image/jpeg", "image/png", "application/pdf"}:
@@ -303,13 +313,16 @@ def main() -> None:
     if not data or len(data) > MAX_FILE or not data.startswith(signatures[media_type]):
         raise SystemExit(2)
     engine = LocalDocumentOcr(tesseract or None, pdftoppm or None)
-    result = (
-        engine.quality(data, media_type)
-        if operation == "image-quality"
-        else engine.read(data, media_type)
-    )
-    print(json.dumps(result.response(), ensure_ascii=True))
-
+    try:
+        if operation == "inspect":
+            result = engine.inspect(data, media_type)
+        elif operation == "validate":
+            result = engine.validate_pdf(data)
+        else:
+            result = engine.read(data, media_type).response()
+        print(json.dumps(result))
+    except (OSError, ValueError, subprocess.SubprocessError):
+        print(json.dumps({"quality": {"status": "UNAVAILABLE", "reason": "OCR_ENGINE_UNAVAILABLE"}}))
 
 if __name__ == "__main__":
     main()

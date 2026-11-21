@@ -1,3 +1,4 @@
+import { isWorkerDocumentDate } from '@smartsite/api-client';
 import { userErrorMessage } from '../../../i18n/messages';
 import { translate as tr } from '../../../i18n';
 import { useTranslation } from 'react-i18next';
@@ -227,9 +228,12 @@ function WorkerAccountForm({
   const [phoneNumber, setPhoneNumber] = useState('');
   const [gender, setGender] = useState<'MALE' | 'FEMALE' | 'OTHER' | ''>('');
   const [address, setAddress] = useState('');
+  const [safetyCardRequired, setSafetyCardRequired] = useState<'' | 'true' | 'false'>('');
+  const [submissionId, setSubmissionId] = useState(() => crypto.randomUUID());
   const [identityFiles, setIdentityFiles] = useState<Partial<Record<'FRONT' | 'BACK', File>>>({});
   const [files, setFiles] = useState<Partial<Record<WorkerDocumentKind, File>>>({});
   const [expiries, setExpiries] = useState<Partial<Record<WorkerDocumentKind, string>>>({});
+  const [pendingVersion, setPendingVersion] = useState<number | null>(null);
   const [pendingAccount, setPendingAccount] = useState<ContractorWorkerAccountResponse | null>(
     null,
   );
@@ -240,7 +244,7 @@ function WorkerAccountForm({
     : (contractors[0]?.id ?? '');
   const validateImage = async (file: File) => {
     const result = await client.checkDocumentImageQuality(token, siteId, selected, file);
-    if (result.status !== 'ACCEPTED') throw new Error(tr(`documents.${result.reason}`));
+    return result;
   };
 
   const create = useMutation({
@@ -252,9 +256,15 @@ function WorkerAccountForm({
         !address.trim() ||
         !identityFiles.FRONT ||
         !identityFiles.BACK ||
-        documentKinds.some((kind) => !files[kind])
+        !safetyCardRequired ||
+        documentKinds.some(
+          (kind) => (kind !== 'SAFETY_CARD' || safetyCardRequired === 'true') && !files[kind],
+        )
       )
         throw new Error(tr('documents.required'));
+      for (const kind of documentKinds)
+        if (files[kind] && !isWorkerDocumentDate(expiries[kind]))
+          throw new Error(tr('documents.dateRequiredHint'));
       for (const file of Object.values(files))
         if (file && !validDocumentFile(file)) throw new Error(tr('documents.invalidFile'));
       const account =
@@ -269,27 +279,29 @@ function WorkerAccountForm({
           address: address.trim(),
         }));
       setPendingAccount(account);
-      for (const side of ['FRONT', 'BACK'] as const)
-        await client.uploadWorkerIdentityImage(
-          token,
-          siteId,
-          account.worker.id,
-          side,
-          identityFiles[side]!,
-        );
+      const current = await client.workerCompliance(token, siteId, account.worker.id);
+      const expectedVersion = pendingVersion ?? current.version ?? 0;
+      setPendingVersion(expectedVersion);
+      const documents: import('@smartsite/api-client').SubmitWorkerDocumentsCommand['documents'] =
+        {};
       for (const kind of documentKinds)
-        await client.uploadWorkerDocument(
-          token,
-          siteId,
-          account.worker.id,
-          kind,
-          files[kind]!,
-          expiries[kind]
-            ? kind === 'HEALTH_CERTIFICATE'
-              ? { submittedIssuedOn: expiries[kind] }
-              : { submittedExpiresOn: expiries[kind] }
-            : {},
-        );
+        if (files[kind])
+          documents[kind] =
+            kind === 'HEALTH_CERTIFICATE'
+              ? { submittedIssuedOn: expiries[kind]! }
+              : { submittedExpiresOn: expiries[kind]! };
+      await client.submitWorkerDocuments(
+        token,
+        siteId,
+        account.worker.id,
+        {
+          requestId: submissionId,
+          expectedVersion,
+          safetyCardRequired: safetyCardRequired === 'true',
+          documents,
+        },
+        { ...files, ...identityFiles },
+      );
       return account;
     },
     onSuccess: () => {
@@ -300,7 +312,10 @@ function WorkerAccountForm({
       setFiles({});
       setExpiries({});
       setPendingAccount(null);
+      setPendingVersion(null);
       setFileVersion((v) => v + 1);
+      setSafetyCardRequired('');
+      setSubmissionId(crypto.randomUUID());
       setGender('');
       setAddress('');
       setIdentityFiles({});
@@ -578,6 +593,7 @@ function WorkerAccountForm({
                       key={`${fileVersion}:${side}`}
                       label={tr(`documents.${side}`)}
                       allowPdf={false}
+                      referenceNationalId={nationalId}
                       file={identityFiles[side]}
                       disabled={!!pendingAccount}
                       validate={validateImage}
@@ -591,15 +607,41 @@ function WorkerAccountForm({
 
               {/* 3 Safety & Health Documents */}
               <div className="pt-3 border-t border-slate-200/70">
+                <label className="block space-y-2 text-sm font-semibold text-slate-700">
+                  <span>{tr('documents.safetyCardRequired')}</span>
+                  <select
+                    required
+                    className={field}
+                    value={safetyCardRequired}
+                    disabled={create.isPending}
+                    onChange={(event) => {
+                      setSafetyCardRequired(event.target.value as typeof safetyCardRequired);
+                      setSubmissionId(crypto.randomUUID());
+                    }}
+                  >
+                    <option value="">—</option>
+                    <option value="true">{tr('documents.cardRequired')}</option>
+                    <option value="false">{tr('documents.cardNotRequired')}</option>
+                  </select>
+                </label>
                 <DocumentFileInputs
                   key={fileVersion}
+                  nationalId={nationalId}
+                  safetyCardRequired={safetyCardRequired !== 'false'}
                   files={files}
                   expiries={expiries}
-                  onExpiryChange={(kind, value) =>
-                    setExpiries((previous) => ({ ...previous, [kind]: value }))
-                  }
+                  onExpiryChange={(kind, value, preserveExisting) => {
+                    setExpiries((previous) => ({
+                      ...previous,
+                      [kind]: preserveExisting ? previous[kind] || value : value,
+                    }));
+                    setSubmissionId(crypto.randomUUID());
+                  }}
                   validate={validateImage}
-                  onChange={(kind, file) => setFiles((previous) => ({ ...previous, [kind]: file }))}
+                  onChange={(kind, file) => {
+                    setFiles((previous) => ({ ...previous, [kind]: file }));
+                    setSubmissionId(crypto.randomUUID());
+                  }}
                 />
               </div>
             </div>
@@ -637,12 +679,14 @@ function WorkerAccountForm({
                     className={`w-2 h-2 rounded-full ${
                       identityFiles.FRONT &&
                       identityFiles.BACK &&
-                      documentKinds.every((k) => !!files[k])
+                      documentKinds
+                        .filter((kind) => kind !== 'SAFETY_CARD' || safetyCardRequired === 'true')
+                        .every((kind) => !!files[kind])
                         ? 'bg-emerald-500'
                         : 'bg-slate-300'
                     }`}
                   />
-                  <span>{tr('documents.title')} (5/5)</span>
+                  <span>{tr('documents.title')}</span>
                 </div>
               </div>
 
@@ -659,7 +703,14 @@ function WorkerAccountForm({
                   !address.trim() ||
                   !identityFiles.FRONT ||
                   !identityFiles.BACK ||
-                  documentKinds.some((kind) => !files[kind]) ||
+                  !safetyCardRequired ||
+                  documentKinds.some(
+                    (kind) =>
+                      (kind !== 'SAFETY_CARD' || safetyCardRequired === 'true') && !files[kind],
+                  ) ||
+                  documentKinds.some(
+                    (kind) => !!files[kind] && !isWorkerDocumentDate(expiries[kind]),
+                  ) ||
                   create.isPending
                 }
               >
@@ -671,7 +722,7 @@ function WorkerAccountForm({
                 ) : (
                   <>
                     <IconCheck className="w-4 h-4" />
-                    <span>{tr('common.create_worker_account')}</span>
+                    <span>{tr('documents.sendBundle')}</span>
                   </>
                 )}
               </button>

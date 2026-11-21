@@ -19,6 +19,7 @@ import { WorkerEntity } from './worker.entity.js';
 import { UserEntity } from './user.entity.js';
 
 @Entity({ name: 'worker_compliance_profile' })
+@Check('chk_compliance_version', 'version>=1')
 @Check('chk_compliance_national_id', "national_id IS NULL OR national_id ~ '^[0-9]{12}$'")
 @Check('chk_compliance_phone', "phone_number IS NULL OR phone_number ~ '^\\+?[0-9]{9,15}$'")
 @Check('chk_compliance_gender', "gender IS NULL OR gender IN ('MALE','FEMALE','OTHER')")
@@ -35,6 +36,10 @@ export class WorkerComplianceProfileEntity {
   @Column({ type: 'varchar', length: 1000, nullable: true }) address!: string | null;
   @Column({ name: 'identity_required', type: 'boolean', default: false })
   identityRequired!: boolean;
+  @Column({ name: 'safety_card_required', type: 'boolean', default: true })
+  safetyCardRequired!: boolean;
+  @Column({ type: 'integer', default: 1 })
+  version!: number;
   @CreateDateColumn({ name: 'created_at', type: 'timestamptz' })
   createdAt!: Date;
 }

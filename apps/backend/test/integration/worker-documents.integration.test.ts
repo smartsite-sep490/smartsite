@@ -6,8 +6,6 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { after, test } from 'node:test';
 import source from '../support/test-data-source.js';
-import type { WorkerDocumentResponse } from '@smartsite/contracts';
-import { healthCertificateExpiry } from '@smartsite/contracts';
 import { createTestConfig } from '../support/config.js';
 import { cleanupSiteAccess } from '../support/cleanup-site-access.js';
 import {
@@ -20,7 +18,6 @@ import {
   UserRole,
   WorkerEntity,
   WorkerDocumentEntity,
-  WorkerComplianceProfileEntity,
   UserNotificationEntity,
 } from '../../src/database/entities/index.js';
 import { StorageService } from '../../src/integrations/storage/storage.service.js';
@@ -35,12 +32,8 @@ import { DocumentNotificationsService } from '../../src/modules/workforce/docume
 import { DocumentAnalysisService } from '../../src/modules/workforce/documents/document-analysis.service.js';
 import {
   complianceDate,
-  DOCUMENT_KINDS,
   workerDocumentsAllowEntry,
-  requireWorkerDocuments,
 } from '../../src/modules/workforce/documents/worker-compliance.js';
-import { evaluateWorkerAccess } from '../../src/modules/workforce/access/worker-access-evaluation.js';
-import { SchedulingNotificationService } from '../../src/modules/workforce/notifications/scheduling-notification.service.js';
 after(async () => {
   if (source.isInitialized) await source.destroy();
 });
@@ -70,10 +63,6 @@ test('Worker document onboarding, scoped review, expiry and approval-only renewa
   const notifications = new DocumentNotificationsService(source, config);
   const ocr = new DocumentOcrService(new LocalDocumentOcr(config));
   let blurry = false;
-  ocr.quality = async () =>
-    blurry
-      ? { status: 'RETAKE', reason: 'IMAGE_BLURRY' }
-      : { status: 'ACCEPTED', reason: 'IMAGE_ACCEPTED' };
   const service = new WorkerDocumentsService(
     source,
     operations,
@@ -89,40 +78,30 @@ test('Worker document onboarding, scoped review, expiry and approval-only renewa
   );
   let workerId = '';
   const today = complianceDate();
-  const past = complianceDate(new Date(Date.now() - 86400000));
   const future = complianceDate(new Date(Date.now() + 10 * 86400000));
   const later = complianceDate(new Date(Date.now() + 365 * 86400000));
   const pdf = Buffer.from('%PDF-1.7\nSynthetic document only\n%%EOF');
-  const pendingCounts: number[] = [];
-  let pauseAnalysis: (() => Promise<void>) | undefined;
-  const openAi = t.mock.method(globalThis, 'fetch', async () => {
-    pendingCounts.push(
-      await source.getRepository(WorkerDocumentEntity).countBy({ workerId, status: 'PENDING' }),
-    );
-    await pauseAnalysis?.();
-    const fields = [
-      {
-        detectedKind: 'SAFETY_CARD',
-        issuedOn: today,
-        expiresOn: future,
-        nationalId: '000000000001',
-      },
-      {
-        detectedKind: 'PERSONAL_INSURANCE',
-        issuedOn: today,
-        expiresOn: future,
-        nationalId: '000000000099',
-      },
-      { detectedKind: null, issuedOn: null, expiresOn: null, nationalId: null },
-    ][pendingCounts.length - 1];
-    if (!fields) throw new DOMException('Synthetic timeout', 'TimeoutError');
-    return Response.json({
+  const openAi = t.mock.method(globalThis, 'fetch', async () =>
+    Response.json({
       status: 'completed',
       output: [
-        { type: 'message', content: [{ type: 'output_text', text: JSON.stringify(fields) }] },
+        {
+          type: 'message',
+          content: [
+            {
+              type: 'output_text',
+              text: JSON.stringify({
+                detectedKind: 'HEALTH_CERTIFICATE',
+                issuedOn: today,
+                expiresOn: null,
+                nationalId: '000000000001',
+              }),
+            },
+          ],
+        },
       ],
-    });
-  });
+    }),
+  );
   const file = {
     buffer: pdf,
     size: pdf.length,
@@ -175,822 +154,484 @@ test('Worker document onboarding, scoped review, expiry and approval-only renewa
     });
     ids.push(result.account.id);
     workerId = result.worker.id;
-    const worker = await source.getRepository(WorkerEntity).findOneByOrFail({ id: workerId });
     const workerActor = {
       id: result.account.id,
       mustChangePassword: false,
       roleAssignments: [{ role: UserRole.WORKER, siteId }],
     };
-    await t.test(
-      'preflight is private evidence only and never saves or grants eligibility',
-      async () => {
-        const originalRead = ocr.read;
-        try {
-          ocr.read = async () => ({
-            status: 'READ',
-            issuedOn: today,
-            expiresOn: future,
-            warnings: [],
-          });
-          const scan = await service.checkSubmission(
-            workerActor,
-            siteId,
-            workerId,
-            'SAFETY_CARD',
-            file,
-          );
-          assert.equal(scan.dateCheck.status, 'NO_REFERENCE');
-          assert.equal(scan.dateCheck.detectedDate, future);
-          const checked = await service.checkSubmission(
-            workerActor,
-            siteId,
-            workerId,
-            'SAFETY_CARD',
-            file,
-            { submittedExpiresOn: future },
-          );
-          assert.equal(checked.dateCheck.status, 'MATCH');
-          const mismatch = await service.checkSubmission(
-            workerActor,
-            siteId,
-            workerId,
-            'PERSONAL_INSURANCE',
-            file,
-            { submittedExpiresOn: later },
-          );
-          assert.equal(mismatch.dateCheck.status, 'MISMATCH');
-          const health = await service.checkSubmission(
-            workerActor,
-            siteId,
-            workerId,
-            'HEALTH_CERTIFICATE',
-            file,
-            { submittedIssuedOn: today },
-          );
-          assert.equal(health.dateCheck.status, 'MATCH');
-          ocr.read = async () => ({
-            status: 'UNAVAILABLE',
-            issuedOn: null,
-            expiresOn: null,
-            warnings: [],
-          });
-          assert.equal(
-            (
-              await service.checkSubmission(workerActor, siteId, workerId, 'SAFETY_CARD', file, {
-                submittedExpiresOn: future,
-              })
-            ).dateCheck.status,
-            'UNAVAILABLE',
-          );
-          blurry = true;
-          ocr.read = async () => {
-            throw new Error('Rejected image must not reach OCR');
-          };
-          const rejected = await service.checkSubmission(
-            workerActor,
-            siteId,
-            workerId,
-            'SAFETY_CARD',
-            file,
-            { submittedExpiresOn: future },
-          );
-          assert.equal(rejected.quality.status, 'RETAKE');
-          assert.equal(rejected.ocr, null);
-          assert.equal(await source.getRepository(WorkerDocumentEntity).countBy({ workerId }), 0);
-          assert.deepEqual(await readdir(root), []);
-          assert.equal(await workerDocumentsAllowEntry(source.manager, workerId), false);
-        } finally {
-          blurry = false;
-          ocr.read = originalRead;
-        }
+
+    let submitted: import('@smartsite/contracts').WorkerDocumentSubmissionResponse;
+    const base = {
+      requestId: randomUUID(),
+      expectedVersion: 1,
+      safetyCardRequired: false,
+      documents: {
+        HEALTH_CERTIFICATE: { submittedIssuedOn: today },
+        PERSONAL_INSURANCE: { submittedExpiresOn: future },
       },
-    );
+    };
+    const identity = {
+      buffer: Buffer.from([255, 216, 255, 1, 255, 217]),
+      size: 6,
+      mimetype: 'image/jpeg',
+      originalname: 'synthetic-id.jpg',
+    };
+    const files = {
+      FRONT: identity,
+      BACK: identity,
+      HEALTH_CERTIFICATE: file,
+      PERSONAL_INSURANCE: file,
+    };
+    let inspectCalls = 0;
+    ocr.inspect = async () => {
+      inspectCalls++;
+      return {
+        quality: blurry
+          ? { status: 'RETAKE', reason: 'IMAGE_BLURRY' }
+          : { status: 'ACCEPTED', reason: 'IMAGE_ACCEPTED' },
+        ocr: {
+          status: 'READ',
+          issuedOn: today,
+          expiresOn: future,
+          nationalIds: ['000000000001'],
+          warnings: [],
+        },
+      };
+    };
+
     await t.test(
-      'Workers submit only their own certificates with a current account and Site role',
-      async () => {
-        assert.equal(
-          (await service.checkWorkerQuality(workerActor, siteId, workerId, file)).status,
-          'ACCEPTED',
-        );
-        const otherWorker = await source.getRepository(WorkerEntity).save({
-          id: randomUUID(),
-          siteId,
-          contractorId,
-          userId: workerUserId,
-          externalId: `other-${randomUUID()}`,
-          displayName: 'Synthetic other Worker',
-          isActive: true,
-        });
-        await assert.rejects(service.checkWorkerQuality(workerActor, siteId, otherWorker.id, file));
-        await assert.rejects(
-          service.upload(workerActor, siteId, otherWorker.id, 'SAFETY_CARD', file),
-        );
-        await assert.rejects(service.checkWorkerQuality(workerActor, otherSite, workerId, file));
-        await assert.rejects(
-          service.checkWorkerQuality(
-            { ...workerActor, roleAssignments: [] },
-            siteId,
-            workerId,
-            file,
-          ),
-        );
-        await assert.rejects(service.uploadIdentity(workerActor, siteId, workerId, 'FRONT', file));
-        await assert.rejects(service.checkQuality(workerActor, siteId, contractorId, file));
-        const role = await source
-          .getRepository(UserRoleAssignmentEntity)
-          .findOneByOrFail({ userId: workerActor.id, siteId, role: UserRole.WORKER });
-        try {
-          await source.getRepository(UserRoleAssignmentEntity).delete(role.id);
-          await assert.rejects(service.checkWorkerQuality(workerActor, siteId, workerId, file));
-        } finally {
-          await source.getRepository(UserRoleAssignmentEntity).save(role);
-        }
-        try {
-          await source.getRepository(UserEntity).update(workerActor.id, { isActive: false });
-          await assert.rejects(service.upload(workerActor, siteId, workerId, 'SAFETY_CARD', file));
-        } finally {
-          await source.getRepository(UserEntity).update(workerActor.id, { isActive: true });
-        }
-        await source.getRepository(WorkerEntity).delete(otherWorker.id);
-      },
-    );
-    await t.test(
-      'new account saves private contact fields and stays pending with no entry',
+      'migration preserves existing requirements and exposes a profile version',
       async () => {
         const profile = await service.get(rep, siteId, workerId);
-        assert.equal(profile.nationalId, '000000000001');
-        assert.equal(profile.phoneNumber, '0900000001');
-        assert.equal(profile.status, 'PENDING');
+        assert.equal(profile.safetyCardRequired, true);
+        assert.equal(profile.version, 1);
         assert.equal(profile.submissionStatus, 'NOT_SUBMITTED');
-        assert.equal(profile.needsSupplement, true);
-        assert.equal(await workerDocumentsAllowEntry(source.manager, workerId), false);
-        await assert.rejects(
-          requireWorkerDocuments(source.manager, worker),
-          /Worker documents must be approved/,
-        );
-        assert.equal(
-          (await evaluateWorkerAccess(source.manager, worker, siteId, 'synthetic-gate', 'IN'))
-            .decision.reasonCode,
-          'WORKER_DOCUMENTS_INVALID',
-        );
-        assert.equal(
-          (await evaluateWorkerAccess(source.manager, worker, siteId, 'synthetic-gate', 'OUT'))
-            .decision.authorization,
-          'ALLOWED',
-        );
-        await assert.rejects(
-          service.get(
-            { ...safety, roleAssignments: [{ role: UserRole.SAFETY_OFFICER, siteId: otherSite }] },
-            siteId,
-            workerId,
-          ),
-        );
-        await assert.rejects(service.get({ ...workerActor, id: workerUserId }, siteId, workerId));
-        assert.equal((await service.get(workerActor, siteId, workerId)).status, 'PENDING');
-        const profileRow = await source
-          .getRepository(WorkerComplianceProfileEntity)
-          .findOneByOrFail({ workerId });
-        assert.equal(profileRow.nationalId, '000000000001');
       },
     );
-    await t.test(
-      'blurred files are rejected before storage; both validated citizen ID sides are required',
-      async () => {
-        blurry = true;
-        await assert.rejects(
-          service.upload(rep, siteId, workerId, 'SAFETY_CARD', file),
-          /IMAGE_BLURRY/,
-        );
-        assert.equal(await source.getRepository(WorkerDocumentEntity).countBy({ workerId }), 0);
-        blurry = false;
-        const originalRead = ocr.read.bind(ocr);
-        ocr.read = async () => ({
-          status: 'READ',
-          issuedOn: null,
-          expiresOn: null,
-          warnings: [],
-          nationalIds: ['000000000099'],
-        });
-        const bytes = Buffer.from([255, 216, 255, 1, 2, 3, 255, 217]);
-        for (const side of ['FRONT', 'BACK'])
-          await service.uploadIdentity(rep, siteId, workerId, side, {
-            buffer: bytes,
-            size: bytes.length,
-            mimetype: 'image/jpeg',
-            originalname: 'synthetic-id.jpg',
-          });
-        assert.equal((await service.get(safety, siteId, workerId)).identityImages.length, 2);
-        const identity = (await service.get(safety, siteId, workerId)).identityImages[0]!;
-        await assert.rejects(service.retryIdentityOcr(workerActor, siteId, workerId, identity.id));
-        await service.retryIdentityOcr(safety, siteId, workerId, identity.id);
-        for (const actor of [safety, workerActor])
-          assert.equal(
-            (await service.get(actor, siteId, workerId)).identityImages.every(
-              (i) => i.identityCheck?.status === 'MISMATCH',
-            ),
-            true,
-          );
-        ocr.read = originalRead;
-      },
-    );
-    assert.equal(openAi.mock.callCount(), 0);
-    const uploaded: WorkerDocumentResponse[] = [];
-    for (const kind of DOCUMENT_KINDS) {
-      const dates =
-        kind === 'HEALTH_CERTIFICATE'
-          ? { submittedIssuedOn: past }
-          : { submittedExpiresOn: future };
-      const submission = service.upload(rep, siteId, workerId, kind, file, dates);
-      const replay =
-        kind === 'SAFETY_CARD'
-          ? service.upload(workerActor, siteId, workerId, kind, file, dates)
-          : undefined;
-      const [document, duplicate] = await Promise.all([submission, replay]);
-      if (duplicate) assert.equal(duplicate.id, document.id);
-      uploaded.push(document);
-    }
-    assert.equal(openAi.mock.callCount(), 0, 'Upload must finish with no OpenAI request');
-    await t.test(
-      'only scoped Safety can request stored evidence analysis, with one provider call per document',
-      async () => {
-        const cardId = uploaded[0]!.id;
-        const outsideSite = {
-          ...safety,
-          roleAssignments: [{ role: UserRole.SAFETY_OFFICER, siteId: otherSite }],
-        };
-        for (const actor of [rep, workerActor, outsideSite, { ...safety, roleAssignments: [] }]) {
-          await assert.rejects(service.analyzeDocument(actor, siteId, workerId, cardId), {
-            status: 403,
-          });
-        }
-        await assert.rejects(service.analyzeDocument(safety, siteId, workerId, randomUUID()), {
-          status: 404,
-        });
-        assert.equal(openAi.mock.callCount(), 0);
-
-        let markStarted!: () => void;
-        let release!: () => void;
-        const started = new Promise<void>((resolve) => {
-          markStarted = resolve;
-        });
-        const paused = new Promise<void>((resolve) => {
-          release = resolve;
-        });
-        pauseAnalysis = () => {
-          markStarted();
-          return paused;
-        };
-        const first = service.analyzeDocument(safety, siteId, workerId, cardId);
-        try {
-          await Promise.race([started, first]);
-          await assert.rejects(service.analyzeDocument(safety, siteId, workerId, cardId), {
-            status: 409,
-          });
-          const running = (await service.get(safety, siteId, workerId)).documents.find(
-            (doc) => doc.id === cardId,
-          );
-          assert.equal(running?.status, 'PENDING');
-          assert.equal(Object.hasOwn(running!, 'aiAnalysis'), false);
-          assert.equal(openAi.mock.callCount(), 1);
-        } finally {
-          pauseAnalysis = undefined;
-          release();
-          await first;
-        }
-        const [, request] = openAi.mock.calls[0]!.arguments as Parameters<typeof fetch>;
-        assert.partialDeepStrictEqual(JSON.parse(String(request?.body)), {
-          input: [
-            { content: [{ file_data: 'data:application/pdf;base64,' + pdf.toString('base64') }] },
-          ],
-        });
-        await service.analyzeDocument(safety, siteId, workerId, cardId);
-        await source.getRepository(WorkerDocumentEntity).update(uploaded[2]!.id, {
-          aiAnalysis: { status: 'ANALYZING', token: randomUUID(), expiresAt: Date.now() - 1_000 },
-        });
-        for (const doc of uploaded.slice(1)) {
-          await service.analyzeDocument(safety, siteId, workerId, doc.id);
-        }
-        assert.deepEqual(pendingCounts, [3, 3, 3]);
-        const review = await service.get(safety, siteId, workerId);
-        const [card, health, insurance] = DOCUMENT_KINDS.map(
-          (kind) => review.documents.find((doc) => doc.kind === kind)?.aiAnalysis,
-        );
-        assert.deepEqual(card, {
-          status: 'COMPLETE',
-          detectedKind: 'SAFETY_CARD',
-          kindMismatch: false,
-          issuedOn: today,
-          expiresOn: future,
-          nationalId: '000000000001',
-          identityCheck: 'MATCH',
-          dateCheck: {
-            status: 'MATCH',
-            field: 'EXPIRES_ON',
-            submittedDate: future,
-            detectedDate: future,
-          },
-        });
-        assert.deepEqual(health, {
-          status: 'COMPLETE',
-          detectedKind: 'PERSONAL_INSURANCE',
-          kindMismatch: true,
-          issuedOn: today,
-          expiresOn: future,
-          nationalId: '000000000099',
-          identityCheck: 'MISMATCH',
-          dateCheck: {
-            status: 'MISMATCH',
-            field: 'ISSUED_ON',
-            submittedDate: past,
-            detectedDate: today,
-          },
-        });
-        assert.deepEqual(insurance, {
-          status: 'COMPLETE',
-          detectedKind: null,
-          kindMismatch: false,
-          issuedOn: null,
-          expiresOn: null,
-          nationalId: null,
-          identityCheck: 'NOT_DETECTED',
-          dateCheck: {
-            status: 'UNAVAILABLE',
-            field: 'EXPIRES_ON',
-            submittedDate: future,
-            detectedDate: null,
-          },
-        });
-        for (const { documents } of [
-          { documents: uploaded },
-          await service.get(rep, siteId, workerId),
-          await service.get(workerActor, siteId, workerId),
-          ...(await service.list(safety, siteId, 0, 20)).items,
-        ]) {
-          assert.equal(
-            documents.some((doc) => Object.hasOwn(doc, 'aiAnalysis')),
-            false,
-          );
-        }
-        await assert.rejects(
-          service.get(
-            { ...safety, roleAssignments: [{ role: UserRole.SAFETY_OFFICER, siteId: otherSite }] },
-            siteId,
-            workerId,
-          ),
-        );
-      },
-    );
-    await t.test(
-      'OCR unavailable preserves files and pending review; replay does not create duplicates',
-      async () => {
-        assert.equal(uploaded[0]!.ocr.status, 'UNAVAILABLE');
-        const submitted = await service.get(rep, siteId, workerId);
-        assert.equal(submitted.submissionStatus, 'PENDING_REVIEW');
-        assert.equal(submitted.needsSupplement, false);
-        assert.equal(
-          (
-            await service.list(safety, siteId, 0, 20, {
-              submissionStatus: 'PENDING_REVIEW',
-              needsSupplement: false,
-            })
-          ).total,
-          1,
-        );
-        const retry = await service.upload(rep, siteId, workerId, 'SAFETY_CARD', file);
-        assert.equal(retry.id, uploaded[0]!.id);
-        assert.equal(retry.submittedExpiresOn, future);
-        assert.equal(retry.expiresOn, null);
-        assert.equal(await source.getRepository(WorkerDocumentEntity).countBy({ workerId }), 3);
-        assert.deepEqual(
-          (await service.file(safety, siteId, workerId, uploaded[0]!.id)).bytes,
-          pdf,
-        );
-        const ownRetry = await service.upload(workerActor, siteId, workerId, 'SAFETY_CARD', file, {
-          submittedExpiresOn: future,
-        });
-        assert.equal(ownRetry.id, uploaded[0]!.id);
-        assert.equal(openAi.mock.callCount(), 3);
-        await assert.rejects(service.upload(safety, siteId, workerId, 'SAFETY_CARD', file));
-        await assert.rejects(
-          service.review(workerActor, siteId, workerId, uploaded[0]!.id, {
-            expectedVersion: 1,
-            approve: true,
-            issuedOn: past,
-            expiresOn: future,
-            reviewNote: 'Workers cannot approve their own certificate',
-          }),
-        );
-        await assert.rejects(
-          service.review(rep, siteId, workerId, uploaded[0]!.id, {
-            expectedVersion: 1,
-            approve: true,
-            issuedOn: past,
-            expiresOn: future,
-            reviewNote: 'Synthetic review',
-          }),
-        );
-      },
-    );
-    await t.test(
-      'manual expiry remains an unapproved suggestion, is scoped/versioned and survives OCR retry',
-      async () => {
-        const doc = uploaded[0]!;
-        const input = { expectedVersion: doc.version, submittedExpiresOn: later };
-        for (const actor of [{ ...workerActor, id: workerUserId }, safety])
-          await assert.rejects(
-            service.updateSubmittedExpiry(actor, siteId, workerId, doc.id, input),
-          );
-        await assert.rejects(
-          service.updateSubmittedExpiry(rep, otherSite, workerId, doc.id, input),
-        );
-        await assert.rejects(
-          service.updateSubmittedExpiry(rep, siteId, workerId, doc.id, {
-            ...input,
-            submittedExpiresOn: '2026-02-30',
-          }),
-        );
-        await assert.rejects(
-          service.upload(rep, siteId, workerId, 'HEALTH_CERTIFICATE', file, {
-            submittedExpiresOn: '2026-02-30',
-          }),
-        );
-        const updated = await service.updateSubmittedExpiry(rep, siteId, workerId, doc.id, input);
-        assert.equal(updated.version, 2);
-        assert.equal(openAi.mock.callCount(), 3);
-        const analyzed = (await service.get(safety, siteId, workerId)).documents.find(
-          (item) => item.id === doc.id,
-        )?.aiAnalysis;
-        assert.equal(analyzed?.status === 'COMPLETE' && analyzed.dateCheck.status, 'MISMATCH');
-        assert.equal(updated.submittedExpiresOn, later);
-        assert.equal(updated.expiresOn, null);
-        assert.equal(updated.status, 'PENDING');
-        await assert.rejects(
-          service.updateSubmittedExpiry(rep, siteId, workerId, doc.id, input),
-          /Document changed/,
-        );
-        await assert.rejects(
-          service.review(safety, siteId, workerId, doc.id, {
-            expectedVersion: 1,
-            approve: true,
-            issuedOn: past,
-            expiresOn: later,
-            reviewNote: 'Stale manual date',
-          }),
-          /Document changed/,
-        );
-        await service.retryOcr(safety, siteId, workerId, doc.id);
-        const profile = await service.get(workerActor, siteId, workerId);
-        assert.equal(profile.documents.find((d) => d.id === doc.id)!.submittedExpiresOn, later);
-        assert.equal(await workerDocumentsAllowEntry(source.manager, workerId), false);
-        const cleared = await service.updateSubmittedExpiry(rep, siteId, workerId, doc.id, {
-          expectedVersion: updated.version,
-          submittedExpiresOn: null,
-        });
-        assert.equal(cleared.submittedExpiresOn, null);
-        const changed = await service.upload(rep, siteId, workerId, 'SAFETY_CARD', file, {
-          submittedExpiresOn: future,
-        });
-        assert.equal(changed.id, doc.id);
-        assert.equal(changed.version, cleared.version + 1);
-        const retried = await service.upload(rep, siteId, workerId, 'SAFETY_CARD', file, {
-          submittedExpiresOn: future,
-        });
-        assert.equal(retried.version, changed.version);
-        uploaded[0] = retried;
-      },
-    );
-    await t.test(
-      'health dates derive one year from examination and cannot be overridden or activate before review',
-      async () => {
-        const health = uploaded.find((doc) => doc.kind === 'HEALTH_CERTIFICATE')!;
-        assert.equal(health.submittedIssuedOn, past);
-        assert.equal(health.submittedExpiresOn, healthCertificateExpiry(past));
-        assert.equal(health.expiresOn, null);
-        await assert.rejects(
-          service.upload(rep, siteId, workerId, 'HEALTH_CERTIFICATE', file, {
-            submittedExpiresOn: later,
-          }),
-          /examination date/,
-        );
-        await assert.rejects(
-          service.updateSubmittedExpiry(rep, siteId, workerId, health.id, {
-            expectedVersion: health.version,
-            submittedExpiresOn: later,
-          }),
-          /examination date/,
-        );
-        await assert.rejects(
-          service.review(safety, siteId, workerId, health.id, {
-            expectedVersion: health.version,
-            approve: true,
-            issuedOn: past,
-            expiresOn: future,
-            reviewNote: 'Forged expiry',
-          }),
-          /one year/,
-        );
-        await assert.rejects(
-          service.review(safety, siteId, workerId, health.id, {
-            expectedVersion: health.version,
-            approve: true,
-            issuedOn: '2020-01-01',
-            reviewNote: 'Expired health certificate',
-          }),
-        );
-        const changed = await service.updateSubmittedExpiry(rep, siteId, workerId, health.id, {
-          expectedVersion: health.version,
-          submittedIssuedOn: today,
-        });
-        assert.equal(changed.submittedExpiresOn, healthCertificateExpiry(today));
-        await service.retryOcr(safety, siteId, workerId, health.id);
-        const retained = (await service.get(workerActor, siteId, workerId)).documents.find(
-          (doc) => doc.id === health.id,
-        )!;
-        assert.equal(retained.submittedIssuedOn, today);
-        assert.equal(retained.submittedExpiresOn, healthCertificateExpiry(today));
-        uploaded[1] = await service.updateSubmittedExpiry(rep, siteId, workerId, health.id, {
-          expectedVersion: changed.version,
-          submittedIssuedOn: past,
-        });
-        assert.equal(await workerDocumentsAllowEntry(source.manager, workerId), false);
-      },
-    );
-    await t.test('OpenAI timeout preserves the original and advisory OCR warnings', async () => {
-      const originalRead = ocr.read.bind(ocr);
-      ocr.read = async () => ({
-        status: 'READ',
-        issuedOn: past,
-        expiresOn: future,
-        warnings: [],
-        nationalIds: ['000000000099'],
+    await t.test('Worker writes and cross-scope reads fail before OCR', async () => {
+      const calls = inspectCalls;
+      await assert.rejects(service.submit(workerActor, siteId, workerId, base, files), {
+        status: 403,
       });
-      const bytes = Buffer.from('%PDF-1.7\nSynthetic mismatched citizen ID\n%%EOF');
-      uploaded[0] = await service.upload(rep, siteId, workerId, 'SAFETY_CARD', {
-        ...file,
-        buffer: bytes,
-        size: bytes.length,
-      });
-      assert.equal(uploaded[0]!.status, 'PENDING');
-      assert.equal(openAi.mock.callCount(), 3);
-      await service.analyzeDocument(safety, siteId, workerId, uploaded[0]!.id);
-      assert.equal(openAi.mock.callCount(), 4);
-      assert.deepEqual(
-        (await service.file(safety, siteId, workerId, uploaded[0]!.id)).bytes,
-        bytes,
+      await assert.rejects(
+        service.checkSubmission(workerActor, siteId, workerId, 'SAFETY_CARD', file),
+        { status: 403 },
       );
-      for (const actor of [workerActor, safety]) {
-        const document = (await service.get(actor, siteId, workerId)).documents.find(
-          (d) => d.id === uploaded[0]!.id,
-        )!;
-        assert.equal(document.identityCheck?.status, 'MISMATCH');
-        assert.deepEqual(document.identityCheck?.detectedNationalIds, ['000000000099']);
-        assert.deepEqual(
-          document.aiAnalysis,
-          actor === safety ? { status: 'UNAVAILABLE' } : undefined,
-        );
-      }
-      await service.analyzeDocument(safety, siteId, workerId, uploaded[0]!.id);
-      assert.equal(openAi.mock.callCount(), 5);
-      ocr.read = originalRead;
+      await assert.rejects(service.submit(rep, otherSite, workerId, base, files));
+      await assert.rejects(
+        service.submit({ ...rep, roleAssignments: [] }, siteId, workerId, base, files),
+        { status: 403 },
+      );
+      await assert.rejects(
+        service.get(
+          { ...safety, roleAssignments: [{ role: UserRole.SAFETY_OFFICER, siteId: otherSite }] },
+          siteId,
+          workerId,
+        ),
+        { status: 403 },
+      );
+      assert.equal(inspectCalls, calls);
+    });
+    await t.test('preflight is advisory and never creates a submission', async () => {
+      blurry = true;
+      const checked = await service.checkSubmission(
+        rep,
+        siteId,
+        workerId,
+        'PERSONAL_INSURANCE',
+        file,
+        { submittedExpiresOn: future },
+      );
+      assert.equal(checked.quality.status, 'RETAKE');
+      assert.equal(checked.dateCheck.status, 'MATCH');
+      assert.equal(await source.getRepository(WorkerDocumentEntity).countBy({ workerId }), 0);
+      assert.equal(await workerDocumentsAllowEntry(source.manager, workerId), false);
     });
     await t.test(
-      'all three valid Safety approvals activate entry even with advisory ID mismatches',
+      'invalid dates, metadata/file mismatch and missing required documents leave no partial state',
       async () => {
-        for (let i = 0; i < uploaded.length; i++) {
-          const doc = uploaded[i]!;
+        for (const bad of [
+          { ...base, documents: { HEALTH_CERTIFICATE: { submittedIssuedOn: '2026-02-30' } } },
+          { ...base, documents: { HEALTH_CERTIFICATE: { submittedIssuedOn: today } } },
+          { ...base, safetyCardRequired: true },
+        ])
+          await assert.rejects(service.submit(rep, siteId, workerId, bad, files));
+        assert.equal(await source.getRepository(WorkerDocumentEntity).countBy({ workerId }), 0);
+        assert.equal((await service.get(rep, siteId, workerId)).version, 1);
+        assert.deepEqual(await readdir(root), []);
+      },
+    );
+    await t.test(
+      'transaction failure rolls back the whole bundle and removes new files',
+      async () => {
+        const record = t.mock.method(notifications, 'record', async () => {
+          throw new Error('Synthetic notification failure');
+        });
+        await assert.rejects(
+          service.submit(rep, siteId, workerId, base, files),
+          /Synthetic notification failure/,
+        );
+        record.mock.restore();
+        assert.equal(await source.getRepository(WorkerDocumentEntity).countBy({ workerId }), 0);
+        assert.equal((await service.get(rep, siteId, workerId)).version, 1);
+        assert.deepEqual(await readdir(root), []);
+      },
+    );
+    await t.test(
+      'one bundle stores optional-card requirement, two certificates and both ID sides',
+      async () => {
+        submitted = await service.submit(rep, siteId, workerId, base, files);
+        assert.equal(submitted.version, 2);
+        assert.equal(submitted.documentIds.length, 2);
+        const profile = await service.get(rep, siteId, workerId);
+        assert.equal(profile.safetyCardRequired, false);
+        assert.equal(profile.needsSupplement, false);
+        assert.equal(profile.identityImages.length, 2);
+        assert.equal(profile.submissionStatus, 'PENDING_REVIEW');
+        assert.equal(openAi.mock.callCount(), 0);
+        assert.equal((await readdir(root)).length, 4);
+        assert.equal(
+          (await service.list(safety, siteId, 0, 20, { needsSupplement: false })).total,
+          1,
+        );
+        assert.equal(
+          (await service.list(safety, siteId, 0, 20, { needsSupplement: true })).total,
+          0,
+        );
+      },
+    );
+    await t.test(
+      'identical retry returns the original receipt without OCR or files; changed payload conflicts',
+      async () => {
+        const calls = inspectCalls;
+        assert.deepEqual(await service.submit(rep, siteId, workerId, base, files), submitted);
+        assert.equal(inspectCalls, calls);
+        await assert.rejects(
+          service.submit(rep, siteId, workerId, { ...base, safetyCardRequired: true }, files),
+          { status: 409 },
+        );
+        await assert.rejects(
+          service.submit(rep, siteId, workerId, { ...base, requestId: randomUUID() }, files),
+          { status: 409 },
+        );
+        assert.equal((await readdir(root)).length, 4);
+      },
+    );
+    await t.test('concurrent versioned commands have one winner', async () => {
+      const input = { expectedVersion: 2, safetyCardRequired: false, documents: {} };
+      const results = await Promise.allSettled([
+        service.submit(rep, siteId, workerId, { ...input, requestId: randomUUID() }, {}),
+        service.submit(rep, siteId, workerId, { ...input, requestId: randomUUID() }, {}),
+      ]);
+      assert.equal(results.filter((result) => result.status === 'fulfilled').length, 1);
+      assert.equal((await service.get(rep, siteId, workerId)).version, 3);
+    });
+
+    await t.test(
+      'AI claims reject concurrent scans and an expired attempt cannot overwrite a retry',
+      async () => {
+        const health = (await service.get(safety, siteId, workerId)).documents.find(
+          (doc) => doc.kind === 'HEALTH_CERTIFICATE',
+        )!;
+        let release!: () => void, started!: () => void;
+        const begun = new Promise<void>((resolve) => {
+          started = resolve;
+        });
+        const held = new Promise<void>((resolve) => {
+          release = resolve;
+        });
+        const analyze = t.mock.method(service['analysis'], 'analyze', async () => {
+          started();
+          await held;
+          return {
+            status: 'COMPLETE' as const,
+            detectedKind: 'OTHER' as const,
+            issuedOn: today,
+            expiresOn: future,
+            nationalId: null,
+          };
+        });
+        const first = service.analyzeDocument(safety, siteId, workerId, health.id);
+        await begun;
+        await assert.rejects(service.analyzeDocument(safety, siteId, workerId, health.id), {
+          status: 409,
+        });
+        await source.query(
+          "UPDATE worker_document SET ai_analysis=jsonb_set(ai_analysis,'{expiresAt}','0') WHERE id=$1",
+          [health.id],
+        );
+        const expired = await service.get(safety, siteId, workerId);
+        assert.equal(
+          expired.documents.find((doc) => doc.id === health.id)?.aiAnalysis?.status,
+          'UNAVAILABLE',
+        );
+        analyze.mock.restore();
+        await service.analyzeDocument(safety, siteId, workerId, health.id);
+        release();
+        await assert.rejects(first, { status: 409 });
+        const result = (await service.get(safety, siteId, workerId)).documents.find(
+          (doc) => doc.id === health.id,
+        )?.aiAnalysis;
+        assert.equal(result?.status, 'COMPLETE');
+        assert.equal(
+          result?.status === 'COMPLETE' ? result.detectedKind : null,
+          'HEALTH_CERTIFICATE',
+        );
+      },
+    );
+    await t.test(
+      'only scoped Safety can analyze, completed output is reused and remains advisory',
+      async () => {
+        const profile = await service.get(safety, siteId, workerId);
+        const health = profile.documents.find((doc) => doc.kind === 'HEALTH_CERTIFICATE')!;
+        for (const actor of [rep, workerActor])
+          await assert.rejects(service.analyzeDocument(actor, siteId, workerId, health.id), {
+            status: 403,
+          });
+        await service.analyzeDocument(safety, siteId, workerId, health.id);
+        const count = openAi.mock.callCount();
+        await service.analyzeDocument(safety, siteId, workerId, health.id);
+        assert.equal(openAi.mock.callCount(), count);
+        const analyzed = (await service.get(safety, siteId, workerId)).documents.find(
+          (doc) => doc.id === health.id,
+        )!;
+        assert.equal(analyzed.status, 'PENDING');
+        assert.equal(analyzed.aiAnalysis?.status, 'COMPLETE');
+        assert.equal(
+          Object.hasOwn((await service.get(rep, siteId, workerId)).documents[0]!, 'aiAnalysis'),
+          false,
+        );
+        assert.equal((await service.list(safety, siteId, 0, 20)).items[0]!.aiSummary?.complete, 1);
+        assert.equal(await workerDocumentsAllowEntry(source.manager, workerId), false);
+      },
+    );
+    await t.test(
+      'Safety rejection returns one document to the Representative with a reason',
+      async () => {
+        const doc = (await service.get(safety, siteId, workerId)).documents.find(
+          (doc) => doc.kind === 'PERSONAL_INSURANCE',
+        )!;
+        await service.review(safety, siteId, workerId, doc.id, {
+          expectedVersion: doc.version,
+          approve: false,
+          reviewNote: 'Synthetic replacement required',
+        });
+        const profile = await service.get(rep, siteId, workerId);
+        assert.equal(profile.needsSupplement, true);
+        assert.equal(
+          profile.documents.find((item) => item.id === doc.id)?.reviewNote,
+          'Synthetic replacement required',
+        );
+        assert.ok(
+          await source
+            .getRepository(UserNotificationEntity)
+            .existsBy({ siteId, recipientUserId: repId, event: 'DOCUMENT_REJECTED' }),
+        );
+      },
+    );
+    await t.test('replacement preserves the rejected record and is visible to Safety', async () => {
+      const profile = await service.get(rep, siteId, workerId);
+      const result = await service.submit(
+        rep,
+        siteId,
+        workerId,
+        {
+          requestId: randomUUID(),
+          expectedVersion: profile.version!,
+          safetyCardRequired: false,
+          documents: { PERSONAL_INSURANCE: { submittedExpiresOn: later } },
+        },
+        { PERSONAL_INSURANCE: file },
+      );
+      assert.equal(result.documentIds.length, 1);
+      const after = await service.get(safety, siteId, workerId);
+      assert.equal(after.documents.filter((doc) => doc.kind === 'PERSONAL_INSURANCE').length, 2);
+      assert.equal(after.documents.filter((doc) => doc.status === 'REJECTED').length, 1);
+    });
+    await t.test(
+      'Safety can approve valid originals without AI; two required approvals allow entry',
+      async () => {
+        for (const doc of (await service.get(safety, siteId, workerId)).documents.filter(
+          (doc) => doc.status === 'PENDING',
+        )) {
           await service.review(safety, siteId, workerId, doc.id, {
             expectedVersion: doc.version,
             approve: true,
-            issuedOn: past,
-            ...(doc.kind === 'HEALTH_CERTIFICATE' ? {} : { expiresOn: future }),
-            reviewNote: 'Original checked',
+            issuedOn: today,
+            ...(doc.kind === 'HEALTH_CERTIFICATE' ? {} : { expiresOn: later }),
+            reviewNote: 'Synthetic original checked',
           });
-          assert.equal(await workerDocumentsAllowEntry(source.manager, workerId), i === 2);
         }
-        await assert.rejects(service.analyzeDocument(safety, siteId, workerId, uploaded[0]!.id), {
-          status: 409,
-        });
-        assert.equal(openAi.mock.callCount(), 5);
-        assert.equal((await service.get(rep, siteId, workerId)).status, 'ACTIVE');
-        assert.equal((await service.get(rep, siteId, workerId)).submissionStatus, 'REVIEWED');
-        assert.equal((await service.get(rep, siteId, workerId)).needsSupplement, false);
-        await assert.rejects(
-          service.updateSubmittedExpiry(rep, siteId, workerId, uploaded[1]!.id, {
-            expectedVersion: 2,
-            submittedExpiresOn: later,
-          }),
-          /Document changed/,
-        );
-        assert.equal(
-          (await service.get(rep, siteId, workerId)).documents.find(
-            (d) => d.id === uploaded[1]!.id,
-          )!.expiresOn,
-          healthCertificateExpiry(past),
-        );
-        await requireWorkerDocuments(source.manager, worker);
-        await assert.rejects(
-          service.review(safety, siteId, workerId, uploaded[0]!.id, {
-            expectedVersion: 1,
-            approve: true,
-            issuedOn: past,
-            expiresOn: later,
-            reviewNote: 'Stale review',
-          }),
-          /Document changed/,
-        );
+        assert.equal(await workerDocumentsAllowEntry(source.manager, workerId), true);
+        const profile = await service.get(rep, siteId, workerId);
+        assert.equal(profile.status, 'ACTIVE');
+        assert.equal(profile.needsSupplement, false);
       },
     );
+    await t.test('renewal never replaces the approved original until Safety approval', async () => {
+      const profile = await service.get(rep, siteId, workerId);
+      const old = profile.documents.find(
+        (doc) => doc.kind === 'PERSONAL_INSURANCE' && doc.status === 'APPROVED',
+      )!;
+      const next = await service.submit(
+        rep,
+        siteId,
+        workerId,
+        {
+          requestId: randomUUID(),
+          expectedVersion: profile.version!,
+          safetyCardRequired: false,
+          documents: { PERSONAL_INSURANCE: { submittedExpiresOn: future } },
+        },
+        { PERSONAL_INSURANCE: file },
+      );
+      assert.equal(
+        (await source.getRepository(WorkerDocumentEntity).findOneByOrFail({ id: old.id })).status,
+        'APPROVED',
+      );
+      assert.equal(await workerDocumentsAllowEntry(source.manager, workerId), true);
+      const doc = (await service.get(safety, siteId, workerId)).documents.find(
+        (item) => item.id === next.documentIds[0],
+      )!;
+      await service.review(safety, siteId, workerId, doc.id, {
+        expectedVersion: doc.version,
+        approve: false,
+        reviewNote: 'Synthetic rejected renewal',
+      });
+      assert.equal(await workerDocumentsAllowEntry(source.manager, workerId), true);
+    });
     await t.test(
-      'queue search and pending filters apply globally before pagination, including legacy Workers',
+      'declaring the safety card required updates all eligibility and supplement reads',
       async () => {
-        const extra = Array.from({ length: 25 }, (_, i) => ({
-          id: randomUUID(),
-          siteId,
-          contractorId,
-          userId: null,
-          externalId: `QUEUE-${i}`,
-          displayName: i === 24 ? 'OUTSIDE-PAGE' : 'Synthetic queued Worker',
-          isActive: true,
-          createdAt: new Date(i === 24 ? '2020-01-01' : '2026-01-01'),
-        }));
-        await source.getRepository(WorkerEntity).save(extra);
-        const target = extra[24]!;
-        assert.equal(
-          (await service.list(safety, siteId, 0, 20)).items.some((w) => w.workerId === target.id),
-          false,
-        );
-        const found = await service.list(safety, siteId, 0, 20, {
-          search: 'OUTSIDE-PAGE',
-          pendingOnly: true,
-        });
-        assert.equal(found.total, 1);
-        assert.equal(found.items[0]!.workerId, target.id);
-        assert.equal(found.items[0]!.status, 'PENDING');
-        assert.equal(found.items[0]!.submissionStatus, 'NOT_SUBMITTED');
-        assert.equal(found.items[0]!.needsSupplement, true);
-        const unsubmitted = await service.list(safety, siteId, 0, 20, {
-          submissionStatus: 'NOT_SUBMITTED',
-          needsSupplement: true,
-        });
-        assert.equal(unsubmitted.total, 25);
-        assert.equal(unsubmitted.items.length, 20);
-        assert.ok(
-          unsubmitted.items.every(
-            (row) => row.submissionStatus === 'NOT_SUBMITTED' && row.needsSupplement,
-          ),
-        );
-        const reviewed = await service.list(safety, siteId, 0, 20, {
-          submissionStatus: 'REVIEWED',
-          needsSupplement: false,
-        });
-        assert.equal(reviewed.total, 1);
-        assert.equal(reviewed.items[0]!.workerId, workerId);
-        assert.equal(
-          (await service.list(safety, siteId, 0, 20, { submissionStatus: 'PENDING_REVIEW' })).total,
-          0,
-        );
-        assert.equal(await workerDocumentsAllowEntry(source.manager, target.id), false);
-        const pending = await service.list(rep, siteId, 0, 100, { pendingOnly: true });
-        assert.equal(pending.total, 25);
-        assert.equal(
-          pending.items.some((w) => w.workerId === workerId),
-          false,
-        );
-        await assert.rejects(
-          service.list(
-            { ...safety, roleAssignments: [{ role: UserRole.SAFETY_OFFICER, siteId: otherSite }] },
-            siteId,
-            0,
-            20,
-          ),
-        );
+        const profile = await service.get(rep, siteId, workerId);
+        const request = {
+          requestId: randomUUID(),
+          expectedVersion: profile.version!,
+          safetyCardRequired: true,
+          documents: { SAFETY_CARD: { submittedExpiresOn: later } },
+        };
+        await service.submit(rep, siteId, workerId, request, { SAFETY_CARD: file });
+        assert.equal(await workerDocumentsAllowEntry(source.manager, workerId), false);
+        assert.ok((await service.get(rep, siteId, workerId)).missingKinds.includes('SAFETY_CARD'));
+        assert.equal((await service.list(safety, siteId, 0, 20, { pendingOnly: true })).total, 1);
       },
     );
+
     await t.test(
-      'expiry notices are durable and idempotent, visible to the scoped Worker and Representative',
+      'concurrent Safety decisions have one winner and one notification per recipient',
       async () => {
-        await notifications.sweep();
-        await notifications.sweep();
+        const doc = (await service.get(safety, siteId, workerId)).documents.find(
+          (doc) => doc.kind === 'SAFETY_CARD' && doc.status === 'PENDING',
+        )!;
+        const input = {
+          expectedVersion: doc.version,
+          approve: true,
+          issuedOn: today,
+          expiresOn: later,
+          reviewNote: 'Synthetic reviewed card',
+        };
+        const results = await Promise.allSettled([
+          service.review(safety, siteId, workerId, doc.id, input),
+          service.review(safety, siteId, workerId, doc.id, input),
+        ]);
+        assert.equal(results.filter((item) => item.status === 'fulfilled').length, 1);
+        assert.equal(
+          results.filter((item) => item.status === 'rejected' && item.reason?.status === 409)
+            .length,
+          1,
+        );
         assert.equal(
           await source
             .getRepository(UserNotificationEntity)
-            .countBy({ recipientUserId: result.account.id, event: 'DOCUMENT_EXPIRING' }),
-          2,
-        );
-        const inbox = new SchedulingNotificationService(source);
-        const list = await inbox.list(
-          { ...result.account, roleAssignments: [{ role: UserRole.WORKER, siteId }] },
-          'ALL',
-          0,
-          100,
-        );
-        assert.equal(
-          list.items.some((n) => n.event === 'DOCUMENT_EXPIRING' && n.target.tab === 'documents'),
-          true,
+            .countBy({ requestId: doc.id, recipientUserId: repId, event: 'DOCUMENT_APPROVED' }),
+          1,
         );
       },
     );
     await t.test(
-      'pending and rejected replacement never grant renewal; expiry blocks until replacement is approved',
+      'expiry reminders are durable, scoped and skip an optional safety card',
       async () => {
-        const replacement = await service.upload(
-          workerActor,
+        const current = await service.get(rep, siteId, workerId);
+        await service.submit(
+          rep,
           siteId,
           workerId,
-          'SAFETY_CARD',
           {
-            ...file,
-            buffer: Buffer.from('%PDF-1.7\nSynthetic replacement\n%%EOF'),
-            size: Buffer.byteLength('%PDF-1.7\nSynthetic replacement\n%%EOF'),
+            requestId: randomUUID(),
+            expectedVersion: current.version!,
+            safetyCardRequired: false,
+            documents: {},
           },
-          { submittedExpiresOn: later },
+          {},
         );
-        assert.equal((await service.get(rep, siteId, workerId)).status, 'ACTIVE');
-        assert.equal(replacement.status, 'PENDING');
+        const health = current.documents.find(
+          (doc) => doc.kind === 'HEALTH_CERTIFICATE' && doc.status === 'APPROVED',
+        )!;
+        const at = new Date(health.expiresOn! + 'T00:00:00Z');
+        await notifications.sweep(at);
+        await notifications.sweep(at);
+        const repository = source.getRepository(UserNotificationEntity);
         assert.equal(
-          (await source.getRepository(WorkerDocumentEntity).findOneByOrFail({ id: replacement.id }))
-            .uploadedBy,
-          workerActor.id,
-        );
-        const current = uploaded.find((d) => d.kind === 'SAFETY_CARD')!;
-        await source
-          .getRepository(WorkerDocumentEntity)
-          .update(current.id, { issuedOn: past, expiresOn: past });
-        assert.equal((await service.get(rep, siteId, workerId)).status, 'EXPIRED');
-        assert.equal(await workerDocumentsAllowEntry(source.manager, workerId), false);
-        await assert.rejects(
-          requireWorkerDocuments(source.manager, worker),
-          /Worker documents must be approved/,
-        );
-        await assert.rejects(
-          service.review(safety, siteId, workerId, replacement.id, {
-            expectedVersion: 1,
-            approve: true,
-            issuedOn: past,
-            expiresOn: past,
-            reviewNote: 'Expired upload',
+          await repository.countBy({
+            requestId: health.id,
+            recipientUserId: repId,
+            event: 'DOCUMENT_EXPIRING',
           }),
-        );
-        await service.review(safety, siteId, workerId, replacement.id, {
-          expectedVersion: 1,
-          approve: false,
-          reviewNote: 'Unreadable document',
-        });
-        const rejectedProfile = await service.get(rep, siteId, workerId);
-        assert.equal(rejectedProfile.submissionStatus, 'REVIEWED');
-        assert.equal(rejectedProfile.needsSupplement, true);
-        assert.equal(
-          (
-            await service.list(safety, siteId, 0, 20, {
-              search: worker.externalId,
-              needsSupplement: true,
-            })
-          ).total,
           1,
         );
-        assert.equal(await workerDocumentsAllowEntry(source.manager, workerId), false);
-        await source.getRepository(WorkerEntity).update(workerId, { isActive: false });
-        const next = await service.upload(workerActor, siteId, workerId, 'SAFETY_CARD', file, {
-          submittedExpiresOn: future,
-        });
-        const suggested = await service.updateSubmittedExpiry(
-          workerActor,
+        const card = current.documents.find(
+          (doc) => doc.kind === 'SAFETY_CARD' && doc.status === 'APPROVED',
+        )!;
+        assert.equal(
+          await repository.countBy({ requestId: card.id, event: 'DOCUMENT_EXPIRING' }),
+          0,
+        );
+        const expired = new Date(at.getTime() + 86400000);
+        await notifications.sweep(expired);
+        await notifications.sweep(expired);
+        assert.equal(
+          await repository.countBy({
+            requestId: health.id,
+            recipientUserId: repId,
+            event: 'DOCUMENT_EXPIRED',
+          }),
+          1,
+        );
+        assert.equal(await repository.countBy({ siteId: otherSite }), 0);
+        assert.equal(await workerDocumentsAllowEntry(source.manager, workerId, expired), false);
+      },
+    );
+    await t.test(
+      'versioned identity corrections are audited and preserve approved certificate history',
+      async () => {
+        const profile = await service.get(rep, siteId, workerId);
+        const before = profile.documents
+          .filter((doc) => doc.status === 'APPROVED')
+          .map((doc) => doc.id);
+        const receipt = await service.submit(
+          rep,
           siteId,
           workerId,
-          next.id,
           {
-            expectedVersion: next.version,
-            submittedExpiresOn: later,
+            requestId: randomUUID(),
+            expectedVersion: profile.version!,
+            safetyCardRequired: false,
+            identity: {
+              nationalId: '000000000099',
+              phoneNumber: '0900000009',
+              gender: 'FEMALE',
+              address: 'Synthetic corrected address',
+            },
+            documents: {},
           },
+          {},
         );
-        assert.equal(await workerDocumentsAllowEntry(source.manager, workerId), false);
-        assert.equal((await service.get(rep, siteId, workerId)).submissionStatus, 'PENDING_REVIEW');
-        assert.equal((await service.get(rep, siteId, workerId)).needsSupplement, false);
-        const outcomes = await Promise.allSettled(
-          [1, 2].map(() =>
-            service.review(safety, siteId, workerId, next.id, {
-              expectedVersion: suggested.version,
-              approve: true,
-              issuedOn: today,
-              expiresOn: later,
-              reviewNote: 'Renewal checked',
-            }),
-          ),
-        );
-        assert.equal(outcomes.filter((o) => o.status === 'fulfilled').length, 1);
-        assert.equal(outcomes.filter((o) => o.status === 'rejected').length, 1);
-        assert.equal(await workerDocumentsAllowEntry(source.manager, workerId), true);
-        assert.equal(
-          (await source.getRepository(WorkerDocumentEntity).findOneByOrFail({ id: current.id }))
-            .status,
-          'SUPERSEDED',
-        );
-        const inactive = await source.getRepository(WorkerEntity).findOneByOrFail({ id: workerId });
-        assert.equal(inactive.isActive, false);
-        assert.equal(
-          (await evaluateWorkerAccess(source.manager, inactive, siteId, 'synthetic-gate', 'IN'))
-            .decision.reasonCode,
-          'WORKER_INACTIVE',
+        assert.equal(receipt.version, profile.version! + 1);
+        const updated = await service.get(rep, siteId, workerId);
+        assert.equal(updated.nationalId, '000000000099');
+        assert.deepEqual(
+          updated.documents.filter((doc) => doc.status === 'APPROVED').map((doc) => doc.id),
+          before,
         );
       },
     );

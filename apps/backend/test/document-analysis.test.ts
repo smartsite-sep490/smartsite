@@ -78,7 +78,7 @@ test('uses the configured model and leaves the output budget to OpenAI', async (
   assert.equal(Object.hasOwn(body, 'max_output_tokens'), false);
 });
 
-test('returns unavailable on timeout after one attempt with a 15-second deadline', async (t) => {
+test('returns unavailable on timeout after one attempt with a configured 30-second default deadline', async (t) => {
   const expired = AbortSignal.abort(new DOMException('Synthetic timeout', 'TimeoutError'));
   const deadline = t.mock.method(AbortSignal, 'timeout', () => expired);
   const request = t.mock.method(
@@ -92,7 +92,13 @@ test('returns unavailable on timeout after one attempt with a 15-second deadline
   assert.deepEqual(await service.analyze(bytes, mediaType), { status: 'UNAVAILABLE' });
   assert.equal(request.mock.callCount(), 1);
   assert.equal(request.mock.calls[0]!.arguments[1]?.signal, expired);
-  assert.deepEqual(deadline.mock.calls[0]!.arguments, [15_000]);
+  assert.deepEqual(deadline.mock.calls[0]!.arguments, [30_000]);
+  const configured = new DocumentAnalysisService(
+    createTestConfig({ OPENAI_API_KEY: key, WORKER_DOCUMENT_OPENAI_TIMEOUT_MS: '7500' }),
+  );
+  assert.deepEqual(await configured.analyze(bytes, mediaType), { status: 'UNAVAILABLE' });
+  assert.deepEqual(deadline.mock.calls[1]!.arguments, [7500]);
+  assert.equal(request.mock.callCount(), 2);
 });
 
 test('refusals, incomplete responses, invalid fields and provider failures remain advisory', async (t) => {

@@ -24,7 +24,6 @@ export class WorkerComplianceQueryDto {
 import type {
   ReviewWorkerDocumentCommand,
   UploadWorkerDocumentCommand,
-  UpdateWorkerDocumentExpiryCommand,
 } from '@smartsite/contracts';
 export class UploadWorkerDocumentDto implements UploadWorkerDocumentCommand {
   @ValidateIf((_object, value: unknown) => value !== undefined)
@@ -33,21 +32,6 @@ export class UploadWorkerDocumentDto implements UploadWorkerDocumentCommand {
   @ValidateIf((_object, value: unknown) => value !== undefined)
   @Matches(/^\d{4}-\d{2}-\d{2}$/)
   submittedIssuedOn?: string;
-}
-export class UpdateWorkerDocumentExpiryDto implements UpdateWorkerDocumentExpiryCommand {
-  @IsInt() @Min(1) expectedVersion!: number;
-  @ValidateIf(
-    (object: UpdateWorkerDocumentExpiryDto, value: unknown) =>
-      value !== null && (value !== undefined || object.submittedIssuedOn === undefined),
-  )
-  @Matches(/^\d{4}-\d{2}-\d{2}$/)
-  submittedExpiresOn?: string | null;
-  @ValidateIf(
-    (object: UpdateWorkerDocumentExpiryDto, value: unknown) =>
-      value !== null && (value !== undefined || object.submittedExpiresOn === undefined),
-  )
-  @Matches(/^\d{4}-\d{2}-\d{2}$/)
-  submittedIssuedOn?: string | null;
 }
 export class ReviewWorkerDocumentDto implements ReviewWorkerDocumentCommand {
   @IsInt() @Min(1) expectedVersion!: number;

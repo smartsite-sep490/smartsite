@@ -232,3 +232,9 @@ export type {
   SourceTestResult,
 } from './camera-source-setup.js';
 export type { SourceActivationResult } from './camera-source-setup.js';
+
+export type {
+  SubmitWorkerDocumentsCommand,
+  WorkerDocumentSubmissionResponse,
+  WorkerDocumentAiSummary,
+} from './worker-documents-api.js';
