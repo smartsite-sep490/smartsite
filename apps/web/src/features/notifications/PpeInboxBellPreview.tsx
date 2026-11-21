@@ -7,9 +7,7 @@ import {
 } from '../../components/safety-episodes/safetyUrlParams';
 import { uiLocale } from '../../i18n';
 import { translate as tr } from '../../i18n';
-import { SAFETY_NAMESPACE } from '../../i18n/runtime';
 import type { usePpeFrameInboxPreview } from './usePpeFrameInboxPreview';
-import './notification-center-catalog';
 
 const inboxHref = '/incidents?tab=ppe-frames';
 
@@ -42,7 +40,6 @@ export function PpeInboxBellPreview({
   onNavigate: () => void;
 }) {
   const { t } = useTranslation();
-  const { t: tSafety } = useTranslation(SAFETY_NAMESPACE);
   const sites = siteIds.map((id) => id.toLowerCase());
   const allowed = new Set(sites);
   const rows = query.isSuccess
@@ -50,33 +47,34 @@ export function PpeInboxBellPreview({
     : [];
 
   return (
-    <section
-      aria-label={t('episodes.frameTitle')}
-      className="space-y-2 border-b border-slate-100 px-4 py-3"
-    >
-      <div className="flex items-center justify-between gap-2 text-xs">
-        <h3 className="font-bold">{t('episodes.frameTitle')}</h3>
-        <Link to={inboxHref} onClick={onNavigate} className="font-semibold underline">
+    <section aria-label={t('episodes.frameTitle')} className="border-b border-slate-200/80">
+      <div className="flex items-center justify-between gap-2 px-4 py-2.5 text-xs">
+        <h3 className="font-semibold text-slate-700">{t('episodes.frameTitle')}</h3>
+        <Link
+          to={inboxHref}
+          onClick={onNavigate}
+          className="font-semibold text-teal-800 underline underline-offset-2 hover:text-teal-950 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-teal-800 rounded"
+        >
           {t('episodes.all')}
         </Link>
       </div>
       {query.isPending && (
-        <p role="status" className="text-xs">
+        <p role="status" className="px-4 pb-3 text-xs text-slate-600">
           {t('episodes.loading')}
         </p>
       )}
       {query.isError && (
-        <p role="alert" className="text-xs">
+        <p role="alert" className="px-4 pb-3 text-xs text-rose-700">
           {t('episodes.unavailable')}
         </p>
       )}
       {query.isSuccess && rows.length === 0 && (
-        <p role="status" className="text-xs">
+        <p role="status" className="px-4 pb-3 text-xs text-slate-600">
           {t('episodes.empty')}
         </p>
       )}
       {rows.length > 0 && (
-        <ul className="space-y-1.5">
+        <ul className="divide-y divide-slate-100 border-t border-slate-100">
           {rows.map(
             ({
               frameKey,
@@ -107,72 +105,67 @@ export function PpeInboxBellPreview({
                     to={`/incidents?${itemParams}`}
                     onClick={onNavigate}
                     data-testid="notification-bell-ppe-frame"
-                    className="group relative flex items-start gap-3 rounded-xl border border-slate-200/80 bg-white p-2.5 text-xs transition-all hover:border-slate-300 hover:bg-slate-50/80 hover:shadow-2xs focus-visible:outline-2 focus-visible:outline-[#F66B17]"
+                    className={`group flex min-h-11 items-start gap-2.5 border-l-[3px] px-4 py-3 text-xs transition-colors focus-visible:outline-2 focus-visible:outline-offset-[-2px] focus-visible:outline-teal-800 ${
+                      unread
+                        ? 'border-l-teal-700 bg-teal-50/20 hover:bg-teal-50/40'
+                        : 'border-l-transparent bg-white hover:bg-slate-50'
+                    }`}
                   >
-                    {/* Unread dot */}
-                    {unread && (
-                      <span
-                        className="absolute top-2.5 left-2 w-2 h-2 rounded-full bg-[#F66B17] shrink-0"
-                        aria-label={t('episodes.unread')}
-                      />
-                    )}
+                    <span
+                      className={`mt-1.5 h-2 w-2 shrink-0 rounded-full ${
+                        unread ? 'bg-teal-700' : 'bg-transparent'
+                      }`}
+                      aria-label={unread ? t('episodes.unread') : undefined}
+                      aria-hidden={!unread}
+                    />
 
-                    {/* Card content */}
-                    <div className={`min-w-0 flex-1 space-y-1 ${unread ? 'pl-3' : ''}`}>
-                      {/* Camera name + relative time */}
+                    <div className="min-w-0 flex-1 space-y-1">
                       <div className="flex items-center justify-between gap-2">
                         <span
-                          className={`truncate text-xs leading-tight ${unread ? 'font-bold text-[#071A2B]' : 'font-semibold text-slate-700'}`}
+                          className={`truncate text-sm leading-snug ${
+                            unread ? 'font-semibold text-slate-950' : 'font-medium text-slate-800'
+                          }`}
                         >
                           {cameraName}
                         </span>
                         <time
                           dateTime={capturedAt}
-                          className="text-[10px] font-medium text-slate-400 shrink-0 tabular-nums"
+                          className="shrink-0 text-xs font-medium text-slate-600 tabular-nums"
                         >
                           {formatRelativeTime(capturedAt)}
                         </time>
                       </div>
 
-                      {/* Badges row */}
-                      <div className="flex flex-wrap items-center gap-1">
-                        <span className="inline-flex items-center gap-0.5 rounded bg-blue-50 border border-blue-100 px-1.5 py-0.5 text-[10px] font-semibold text-blue-800">
+                      <span className="block truncate text-xs text-slate-600">{siteName}</span>
+
+                      <div className="flex flex-wrap items-center gap-1.5 pt-0.5">
+                        <span className="text-xs font-medium text-slate-700 tabular-nums">
                           {t('episodes.framePeople', { count: cases.length })}
                         </span>
                         {findingCount > 0 && (
-                          <span className="inline-flex items-center gap-0.5 rounded bg-amber-50 border border-amber-100 px-1.5 py-0.5 text-[10px] font-semibold text-amber-800">
+                          <span className="inline-flex items-center rounded-md border border-amber-200/90 bg-amber-50/90 px-2 py-0.5 text-xs font-medium text-amber-950 tabular-nums">
                             {t('episodes.findings', { count: findingCount })}
                           </span>
                         )}
                         {deniedCount > 0 && (
-                          <span className="inline-flex items-center gap-0.5 rounded bg-rose-50 border border-rose-100 px-1.5 py-0.5 text-[10px] font-semibold text-rose-800">
+                          <span className="inline-flex items-center rounded-md border border-rose-200/90 bg-rose-50/90 px-2 py-0.5 text-xs font-medium text-rose-950 tabular-nums">
                             {t('episodes.frameZoneDenials', { count: deniedCount })}
                           </span>
                         )}
                         {laterDenials > 0 && (
-                          <span className="inline-flex items-center gap-0.5 rounded bg-rose-100 border border-rose-200 px-1.5 py-0.5 text-[10px] font-bold text-rose-900">
+                          <span className="inline-flex items-center rounded-md border border-rose-300 bg-rose-100 px-2 py-0.5 text-xs font-semibold text-rose-950 tabular-nums">
                             {t('episodes.laterFrameZoneDenials', { count: laterDenials })}
                           </span>
                         )}
                         {pendingZoneCount > 0 && (
                           <span
                             data-testid="bell-frame-zone-pending"
-                            className="inline-flex items-center gap-0.5 rounded bg-amber-100 border border-amber-200 px-1.5 py-0.5 text-[10px] font-semibold text-amber-900"
+                            className="inline-flex items-center rounded-md border border-amber-200/90 bg-amber-50/90 px-2 py-0.5 text-xs font-medium text-amber-950 tabular-nums"
                           >
                             {t('episodes.frameZonePending', { count: pendingZoneCount })}
                           </span>
                         )}
-                        {unread && (
-                          <span className="inline-flex items-center rounded bg-[#FFF2E8] border border-[#F66B17]/20 px-1.5 py-0.5 text-[10px] font-bold text-[#F66B17]">
-                            {tSafety('notificationCenter.ppeFrameCard.newAlert')}
-                          </span>
-                        )}
                       </div>
-
-                      {/* Site context */}
-                      <span className="block text-[10px] text-slate-500 truncate">
-                        {siteName} · {cameraName}
-                      </span>
                     </div>
                   </Link>
                 </li>

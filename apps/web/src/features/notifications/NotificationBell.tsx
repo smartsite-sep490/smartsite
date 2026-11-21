@@ -256,12 +256,12 @@ export function NotificationBell({
               ? tr('common.notifications')
               : tr('common.notifications_value_unread', { value1: count })
           }
-          className="relative flex items-center justify-center w-9 h-9 rounded-xl border border-slate-200/90 bg-white hover:bg-slate-50 hover:border-slate-300 text-slate-600 hover:text-[#071A2B] shadow-2xs transition-all duration-200 active:scale-95 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#F66B17] cursor-pointer"
+          className="relative flex items-center justify-center w-9 h-9 rounded-xl border border-slate-200 bg-white hover:bg-slate-50 hover:border-slate-300 text-slate-700 hover:text-slate-950 shadow-2xs transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-slate-900 cursor-pointer"
         >
-          <IconBell className="w-4 h-4 text-slate-600 group-hover:text-[#071A2B]" />
+          <IconBell className="w-4 h-4 text-slate-700 group-hover:text-slate-950" />
           {count !== undefined && count > 0 && (
             <span
-              className="absolute -top-1 -right-1 min-w-[18px] h-[18px] rounded-full bg-[#F66B17] text-white font-bold text-[9px] flex items-center justify-center px-1 shadow-[0_2px_6px_rgba(246,107,23,0.4)] border-2 border-white animate-in zoom-in duration-200"
+              className="absolute -top-1.5 -right-1.5 min-w-[20px] h-5 rounded-full bg-[#B94708] text-white font-semibold text-xs tabular-nums flex items-center justify-center px-1.5 border-2 border-white"
               aria-hidden="true"
             >
               {count > 99 ? '99+' : count}
@@ -282,19 +282,17 @@ export function NotificationBell({
           align="end"
           role="dialog"
           aria-label={tr('common.notifications')}
-          className="z-50 w-[min(440px,calc(100vw-24px))] overflow-hidden rounded-2xl border border-slate-200/90 bg-white/95 backdrop-blur-2xl shadow-[0_24px_60px_-12px_rgba(7,26,43,0.18)] text-slate-900 animate-in fade-in-0 zoom-in-95 duration-200"
+          className="z-50 w-[min(440px,calc(100vw-24px))] overflow-hidden rounded-xl border border-slate-200 bg-white shadow-lg text-slate-900"
         >
           {/* Header */}
-          <div className="flex items-center justify-between border-b border-slate-100 bg-slate-50/80 px-4 py-3">
-            <div className="flex items-center gap-2">
-              <div className="w-7 h-7 rounded-lg bg-[#071A2B] text-white flex items-center justify-center shadow-2xs">
-                <IconBell className="w-3.5 h-3.5 text-[#F66B17]" />
-              </div>
-              <h2 className="text-xs font-bold tracking-wider text-[#071A2B]">
+          <div className="flex items-center justify-between gap-2 border-b border-slate-200/80 bg-slate-50/80 px-4 py-3">
+            <div className="flex items-center gap-2 min-w-0">
+              <IconBell className="w-4 h-4 text-slate-700 shrink-0" />
+              <h2 className="text-sm font-semibold text-slate-950 truncate">
                 {tr('common.notifications')}
               </h2>
               {count !== undefined && count > 0 && (
-                <span className="px-1.5 py-0.5 rounded-full bg-amber-100/90 text-amber-800 text-[10px] font-bold border border-amber-200/70">
+                <span className="rounded-md border border-slate-200 bg-white px-2 py-0.5 text-xs font-semibold tabular-nums text-slate-700 shrink-0">
                   {tr('common.value_new', { value1: count })}
                 </span>
               )}
@@ -302,11 +300,11 @@ export function NotificationBell({
 
             <button
               type="button"
-              className="inline-flex items-center gap-1 rounded-lg px-2.5 py-1 text-xs font-semibold text-slate-600 hover:text-[#071A2B] hover:bg-slate-200/70 focus-visible:outline-2 disabled:opacity-40 disabled:pointer-events-none transition-colors cursor-pointer"
+              className="inline-flex min-h-8 items-center gap-1.5 rounded-lg px-2.5 py-1 text-xs font-semibold text-slate-700 hover:text-slate-950 hover:bg-slate-200/60 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-slate-900 disabled:opacity-40 disabled:pointer-events-none transition-colors cursor-pointer shrink-0"
               disabled={unavailable || !legacyCount || actionPending}
               onClick={() => markAll.mutate()}
             >
-              <IconCheck className="w-3 h-3 text-[#F66B17]" />
+              <IconCheck className="w-3.5 h-3.5 text-slate-600" />
               <span>
                 {tr(
                   showPpeInbox
@@ -319,23 +317,23 @@ export function NotificationBell({
 
           {/* Tab Selector — only when PPE inbox is active */}
           {showPpeInbox && (
-            <div className="px-4 pt-2 pb-1 border-b border-slate-100/80 bg-white">
-              <div className="inline-flex p-0.5 bg-slate-100/90 rounded-xl border border-slate-200/60 text-xs gap-0.5 w-full">
+            <div className="px-4 py-2 border-b border-slate-200/80 bg-white">
+              <div className="inline-flex p-0.5 bg-slate-100 rounded-lg border border-slate-200/80 text-xs gap-0.5 w-full">
                 <button
                   type="button"
                   aria-pressed={activeTab === 'camera'}
                   onClick={() => setActiveTab('camera')}
-                  className={`flex-1 px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+                  className={`flex-1 inline-flex min-h-8 items-center justify-center px-3 py-1 rounded-md text-xs font-semibold transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-slate-900 cursor-pointer ${
                     activeTab === 'camera'
-                      ? 'bg-white text-[#071A2B] shadow-2xs'
-                      : 'text-slate-500 hover:text-slate-900 hover:bg-white/50'
+                      ? 'bg-white text-slate-950 shadow-2xs'
+                      : 'text-slate-600 hover:text-slate-950'
                   }`}
                 >
-                  {tSafety('notificationCenter.cameraAlerts')}
+                  <span>{tSafety('notificationCenter.cameraAlerts')}</span>
                   {showPpeInbox &&
                     ppeFrames.isSuccess &&
                     (ppeFrames.data?.unreadCount ?? 0) > 0 && (
-                      <span className="ml-1.5 inline-flex min-w-[16px] h-4 items-center justify-center rounded-full bg-[#F66B17] text-white text-[9px] font-bold px-1">
+                      <span className="ml-1.5 inline-flex min-w-[20px] h-5 items-center justify-center rounded-md border border-amber-200 bg-amber-100 px-1.5 text-xs font-semibold text-amber-950 tabular-nums">
                         {ppeFrames.data?.unreadCount ?? 0}
                       </span>
                     )}
@@ -344,15 +342,15 @@ export function NotificationBell({
                   type="button"
                   aria-pressed={activeTab === 'system'}
                   onClick={() => setActiveTab('system')}
-                  className={`flex-1 px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+                  className={`flex-1 inline-flex min-h-8 items-center justify-center px-3 py-1 rounded-md text-xs font-semibold transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-slate-900 cursor-pointer ${
                     activeTab === 'system'
-                      ? 'bg-white text-[#071A2B] shadow-2xs'
-                      : 'text-slate-500 hover:text-slate-900 hover:bg-white/50'
+                      ? 'bg-white text-slate-950 shadow-2xs'
+                      : 'text-slate-600 hover:text-slate-950'
                   }`}
                 >
-                  {tSafety('notificationCenter.scheduleSystem')}
+                  <span>{tSafety('notificationCenter.scheduleSystem')}</span>
                   {legacyCount !== undefined && legacyCount > 0 && (
-                    <span className="ml-1.5 inline-flex min-w-[16px] h-4 items-center justify-center rounded-full bg-slate-500 text-white text-[9px] font-bold px-1">
+                    <span className="ml-1.5 inline-flex min-w-[20px] h-5 items-center justify-center rounded-md bg-slate-200 px-1.5 text-xs font-semibold text-slate-800 tabular-nums">
                       {legacyCount}
                     </span>
                   )}
@@ -372,12 +370,12 @@ export function NotificationBell({
                 />
               </div>
               {!unavailable && data && !data.items.length && (
-                <div className="flex items-center justify-between gap-2 bg-slate-50/80 px-4 py-2 text-[11px] text-slate-500">
+                <div className="flex items-center justify-between gap-2 bg-slate-50/80 px-4 py-2.5 text-xs text-slate-600">
                   <span>{tr('notification_bell.no_other_notifications_yet')}</span>
                   <button
                     type="button"
                     onClick={() => setActiveTab('system')}
-                    className="font-semibold text-slate-700 underline decoration-slate-300 underline-offset-2 hover:text-slate-950 cursor-pointer"
+                    className="font-semibold text-slate-800 underline decoration-slate-300 underline-offset-2 hover:text-slate-950 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-slate-900 rounded cursor-pointer"
                   >
                     {tSafety('notificationCenter.scheduleSystem')}
                   </button>
@@ -546,7 +544,7 @@ export function NotificationBell({
                 {query.isLoading && (
                   <div
                     role="status"
-                    className="p-10 text-center flex flex-col items-center justify-center gap-2.5 text-xs text-slate-400"
+                    className="p-10 text-center flex flex-col items-center justify-center gap-2.5 text-xs text-slate-600"
                   >
                     <IconLoader className="w-5 h-5 text-slate-500 animate-spin" />
                     <span>{tr('common.loading_notifications')}</span>
@@ -579,7 +577,7 @@ export function NotificationBell({
                     <>
                       {!data.items.length && (
                         <div className="p-10 text-center space-y-2">
-                          <div className="w-10 h-10 rounded-xl bg-slate-50 border border-slate-100 text-slate-400 mx-auto flex items-center justify-center">
+                          <div className="w-10 h-10 rounded-xl bg-slate-50 border border-slate-200/80 text-slate-500 mx-auto flex items-center justify-center">
                             <IconBell className="w-5 h-5" />
                           </div>
                           <p className="text-xs font-semibold text-slate-600">
@@ -596,7 +594,7 @@ export function NotificationBell({
                                 )}
                           </p>
                           {!showPpeInbox && (
-                            <p className="text-[11px] text-slate-400">
+                            <p className="text-xs text-slate-600">
                               {readStatus === 'UNREAD'
                                 ? tr(
                                     'notification_bell.all_recent_notifications_have_been_reviewed',
@@ -609,7 +607,7 @@ export function NotificationBell({
                         </div>
                       )}
 
-                      <ul className="p-2.5 space-y-2">
+                      <ul className="divide-y divide-slate-100">
                         {data.items.map((item) => {
                           const isUnread = !item.readAt;
                           const isApplied = item.event === 'REQUEST_APPLIED';
@@ -630,22 +628,22 @@ export function NotificationBell({
                                     markRead.mutate(item);
                                   }
                                 }}
-                                className={`relative flex w-full items-start gap-3 p-3 rounded-xl border transition-all duration-200 focus-visible:outline-2 focus-visible:outline-inset focus-visible:outline-[#F66B17] cursor-pointer ${
+                                className={`relative flex w-full items-start gap-3 border-l-[3px] px-4 py-3 transition-colors focus-visible:outline-2 focus-visible:outline-inset focus-visible:outline-teal-800 cursor-pointer ${
                                   isUnread
-                                    ? 'bg-amber-50/60 border-amber-200/80 hover:bg-amber-50/90 hover:border-amber-300 shadow-2xs'
-                                    : 'bg-white border-slate-200/70 hover:bg-slate-50 hover:border-slate-300'
+                                    ? 'border-l-teal-700 bg-teal-50/20 hover:bg-teal-50/40'
+                                    : 'border-l-transparent bg-white hover:bg-slate-50'
                                 }`}
                               >
                                 {/* Event Icon Badge */}
                                 <div
-                                  className={`w-8 h-8 rounded-xl flex items-center justify-center shrink-0 border mt-0.5 ${
+                                  className={`w-8 h-8 rounded-lg flex items-center justify-center shrink-0 border mt-0.5 ${
                                     isApplied
-                                      ? 'bg-emerald-50 border-emerald-200 text-emerald-600'
+                                      ? 'bg-emerald-50 border-emerald-200 text-emerald-700'
                                       : isRejected
-                                        ? 'bg-rose-50 border-rose-200 text-rose-600'
+                                        ? 'bg-rose-50 border-rose-200 text-rose-700'
                                         : isSwap
-                                          ? 'bg-amber-50 border-amber-200 text-amber-600'
-                                          : 'bg-blue-50 border-blue-200 text-blue-600'
+                                          ? 'bg-amber-50 border-amber-200 text-amber-800'
+                                          : 'bg-slate-100 border-slate-200 text-slate-700'
                                   }`}
                                 >
                                   {isApplied ? (
@@ -665,13 +663,15 @@ export function NotificationBell({
                                     <div className="flex items-center gap-1.5 min-w-0">
                                       {isUnread && (
                                         <span
-                                          className="w-2 h-2 rounded-full bg-[#F66B17] shrink-0"
+                                          className="w-2 h-2 rounded-full bg-teal-700 shrink-0"
                                           aria-label={tr('common.unread')}
                                         />
                                       )}
                                       <span
-                                        className={`text-xs font-bold leading-tight break-words ${
-                                          isUnread ? 'text-[#071A2B]' : 'text-slate-800'
+                                        className={`text-sm leading-snug break-words ${
+                                          isUnread
+                                            ? 'font-semibold text-slate-950'
+                                            : 'font-medium text-slate-800'
                                         }`}
                                       >
                                         {formatNotificationTitle(item)}
@@ -679,7 +679,7 @@ export function NotificationBell({
                                     </div>
                                     <time
                                       dateTime={item.createdAt}
-                                      className="text-[10px] font-medium text-slate-400 shrink-0 font-mono"
+                                      className="text-xs font-medium text-slate-600 shrink-0 tabular-nums"
                                     >
                                       {formatNotificationTime(item.createdAt)}
                                     </time>
@@ -692,26 +692,24 @@ export function NotificationBell({
                                     {formatNotificationDisplayMessage(item)}
                                   </p>
 
-                                  {/* Shift details badge strip */}
-                                  <div className="flex flex-wrap items-center gap-1.5 pt-0.5 text-[10px] text-slate-500 font-mono">
-                                    {item.siteName && (
-                                      <span className="inline-flex items-center gap-1 bg-slate-100 border border-slate-200/60 px-1.5 py-0.5 rounded text-slate-600">
-                                        {item.siteName}
-                                      </span>
-                                    )}
-                                    {item.workDate && (
-                                      <span className="inline-flex items-center gap-1 bg-white border border-slate-200/80 px-1.5 py-0.5 rounded text-slate-700 shadow-2xs">
-                                        <IconCalendar className="w-2.5 h-2.5 text-[#F66B17]" />
-                                        {item.workDate}
-                                      </span>
-                                    )}
-                                    {(item.fromShiftName || item.toShiftName) && (
-                                      <span className="inline-flex items-center gap-1 bg-white border border-slate-200/80 px-1.5 py-0.5 rounded text-slate-700 shadow-2xs">
-                                        <IconClock className="w-2.5 h-2.5 text-blue-600" />
-                                        {item.fromShiftName} → {item.toShiftName}
-                                      </span>
-                                    )}
-                                  </div>
+                                  {/* Compact metadata strip */}
+                                  {(item.siteName || item.workDate || item.fromShiftName || item.toShiftName) && (
+                                    <div className="flex flex-wrap items-center gap-x-2.5 gap-y-1 pt-0.5 text-xs text-slate-600 tabular-nums">
+                                      {item.siteName && <span>{item.siteName}</span>}
+                                      {item.workDate && (
+                                        <span className="inline-flex items-center gap-1">
+                                          <IconCalendar className="w-3.5 h-3.5 text-slate-600 shrink-0" />
+                                          {item.workDate}
+                                        </span>
+                                      )}
+                                      {(item.fromShiftName || item.toShiftName) && (
+                                        <span className="inline-flex items-center gap-1">
+                                          <IconClock className="w-3.5 h-3.5 text-slate-600 shrink-0" />
+                                          {item.fromShiftName} → {item.toShiftName}
+                                        </span>
+                                      )}
+                                    </div>
+                                  )}
                                 </div>
 
                                 {/* Actions (Delete single notification & Arrow) */}
@@ -731,11 +729,11 @@ export function NotificationBell({
                                       deleteSingle.reset();
                                       deleteRead.reset();
                                     }}
-                                    className="p-1.5 rounded-lg text-slate-300 hover:text-rose-600 hover:bg-rose-50 opacity-0 group-hover:opacity-100 focus-visible:opacity-100 transition-all cursor-pointer disabled:opacity-40"
+                                    className="p-2 rounded-lg text-slate-500 hover:text-rose-700 hover:bg-rose-50 opacity-0 group-hover:opacity-100 focus-visible:opacity-100 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-slate-900 transition-colors cursor-pointer disabled:opacity-40"
                                   >
                                     <IconTrash className="w-3.5 h-3.5" />
                                   </button>
-                                  <div className="text-slate-300 group-hover:text-[#F66B17] group-hover:translate-x-0.5 transition-all">
+                                  <div className="text-slate-500 group-hover:text-slate-800 group-hover:translate-x-0.5 transition-all">
                                     <IconArrowRight className="w-3.5 h-3.5" />
                                   </div>
                                 </div>
@@ -785,13 +783,13 @@ export function NotificationBell({
               </div>
               <div className="flex-1 min-w-0 space-y-1">
                 <div className="flex items-center justify-between gap-2">
-                  <span className="text-[10px] font-bold uppercase tracking-[0.16em] text-emerald-400">
+                  <span className="text-xs font-semibold uppercase tracking-wider text-emerald-300">
                     {tr('common.shift_swap_approved')}
                   </span>
                   <button
                     type="button"
                     onClick={() => setApprovalToast(null)}
-                    className="text-slate-400 hover:text-white rounded-lg p-1 transition-colors cursor-pointer"
+                    className="text-slate-300 hover:text-white rounded-lg p-1 transition-colors cursor-pointer"
                     aria-label={tr('common.dismiss_notification')}
                   >
                     <IconX className="w-3.5 h-3.5" />

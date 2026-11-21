@@ -262,7 +262,7 @@ export function FocusedCameraMedia({
     <section className="flex min-w-0 flex-col overflow-hidden rounded-xl border border-slate-800 bg-[#0B0F17] text-white shadow-2xs">
       <header
         data-testid="focused-camera-metadata"
-        className="flex min-w-0 flex-wrap items-center justify-between gap-2.5 border-b border-white/10 bg-slate-950/95 px-3.5 sm:px-4 py-2.5"
+        className="flex min-w-0 flex-wrap items-center justify-between gap-2 border-b border-white/10 bg-slate-950/95 px-3.5 sm:px-4 py-2"
       >
         <div className="flex min-w-0 max-w-full flex-wrap items-center gap-2.5">
           <h2
@@ -372,8 +372,8 @@ export function FocusedCameraMedia({
         data-testid="focused-camera-stage"
         className={
           present
-            ? 'relative aspect-video w-full lg:aspect-auto lg:h-[clamp(17.5rem,calc(100dvh-23.5rem),38rem)] [[data-monitor-fullscreen=true]_&]:lg:h-[clamp(22rem,calc(100dvh-10rem),52rem)] bg-[#070A10] text-white overflow-hidden'
-            : 'relative flex min-h-[13rem] w-full items-center justify-center lg:h-[clamp(17.5rem,calc(100dvh-23.5rem),38rem)] [[data-monitor-fullscreen=true]_&]:lg:h-[clamp(22rem,calc(100dvh-10rem),52rem)] bg-[#070A10] text-white'
+            ? 'relative aspect-video w-full lg:aspect-auto lg:h-[clamp(15rem,calc(100dvh-29.5rem),33rem)] [[data-monitor-fullscreen=true]_&]:lg:h-[clamp(22rem,calc(100dvh-10rem),52rem)] bg-[#070A10] text-white overflow-hidden'
+            : 'relative flex min-h-[13rem] w-full items-center justify-center lg:h-[clamp(15rem,calc(100dvh-29.5rem),33rem)] [[data-monitor-fullscreen=true]_&]:lg:h-[clamp(22rem,calc(100dvh-10rem),52rem)] bg-[#070A10] text-white'
         }
       >
         {!aiPaused && mode === 'ai' && snapshot.preview && (
