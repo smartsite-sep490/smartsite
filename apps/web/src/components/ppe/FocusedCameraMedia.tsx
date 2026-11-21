@@ -259,10 +259,10 @@ export function FocusedCameraMedia({
   const isReplayBadge = !aiPaused && !isRawMode && present && snapshot.sourceKind === 'REPLAY';
 
   return (
-    <section className="flex min-w-0 flex-col overflow-hidden rounded-2xl border border-slate-800 bg-[#0B0F17] text-white shadow-sm">
+    <section className="flex min-w-0 flex-col overflow-hidden rounded-xl border border-slate-800 bg-[#0B0F17] text-white shadow-2xs">
       <header
         data-testid="focused-camera-metadata"
-        className="flex min-w-0 flex-wrap items-center justify-between gap-3 border-b border-white/10 bg-slate-950/95 px-3.5 sm:px-4 py-3"
+        className="flex min-w-0 flex-wrap items-center justify-between gap-2.5 border-b border-white/10 bg-slate-950/95 px-3.5 sm:px-4 py-2.5"
       >
         <div className="flex min-w-0 max-w-full flex-wrap items-center gap-2.5">
           <h2
@@ -298,7 +298,7 @@ export function FocusedCameraMedia({
             />
             <span>
               {aiPaused
-                ? tWall('ppe.badge.aiPaused')
+                ? trMonitor('monitor.state.aiPaused')
                 : isRawMode && present
                   ? trMonitor('monitor.state.rawNoAi')
                   : present
@@ -325,14 +325,14 @@ export function FocusedCameraMedia({
           <div
             role="group"
             aria-label={t('focus.views')}
-            className="inline-flex min-w-0 max-w-full flex-wrap items-center gap-1 rounded-xl border border-white/15 bg-slate-900 p-0.5"
+            className="inline-flex min-w-0 max-w-full flex-wrap items-center gap-1 rounded-lg border border-white/15 bg-slate-900 p-0.5"
           >
             {(['ai', 'live', 'recorded'] as const).map((view) => (
               <button
                 key={view}
                 type="button"
                 aria-pressed={mode === view}
-                className="inline-flex min-h-10 min-w-0 max-w-full items-center rounded-lg border border-transparent px-3 py-2 text-sm font-medium text-slate-300 whitespace-normal text-left break-words [overflow-wrap:anywhere] transition-colors hover:bg-white/10 hover:text-white focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white aria-pressed:border-white aria-pressed:bg-white aria-pressed:font-semibold aria-pressed:text-slate-950 cursor-pointer"
+                className="inline-flex min-h-9 min-w-0 max-w-full items-center rounded-md border border-transparent px-3 py-1.5 text-sm font-medium text-slate-300 whitespace-normal sm:whitespace-nowrap text-left break-words [overflow-wrap:anywhere] transition-colors hover:bg-white/10 hover:text-white focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white aria-pressed:border-white aria-pressed:bg-white aria-pressed:font-semibold aria-pressed:text-slate-950 cursor-pointer"
                 onClick={() => {
                   onTransportChoice?.();
                   setMode(view);
@@ -349,7 +349,7 @@ export function FocusedCameraMedia({
               aria-label={`${tWall('ppe.common.evidence')}: ${cameraActionName}`}
               aria-haspopup="dialog"
               onClick={onOpenEvidence}
-              className="inline-flex min-h-10 min-w-0 max-w-full items-center gap-1.5 rounded-lg border border-white/20 bg-white/10 px-3.5 py-2 text-sm font-semibold text-white whitespace-normal text-left break-words [overflow-wrap:anywhere] hover:bg-white/20 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white cursor-pointer"
+              className="inline-flex min-h-9 min-w-0 max-w-full items-center gap-1.5 rounded-lg border border-white/20 bg-white/10 px-3 py-1.5 text-sm font-semibold text-white whitespace-normal sm:whitespace-nowrap text-left break-words [overflow-wrap:anywhere] hover:bg-white/20 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white cursor-pointer"
             >
               <IconShield className="h-4 w-4 shrink-0" />
               <span>{tWall('ppe.common.evidence')}</span>
@@ -360,7 +360,7 @@ export function FocusedCameraMedia({
               type="button"
               data-testid="focused-exit-to-grid"
               onClick={onExitFocus}
-              className="inline-flex min-h-10 min-w-0 max-w-full items-center rounded-lg border border-white/20 bg-transparent px-3.5 py-2 text-sm font-medium text-slate-200 whitespace-normal text-left break-words [overflow-wrap:anywhere] hover:bg-white/10 hover:text-white focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white cursor-pointer"
+              className="inline-flex min-h-9 min-w-0 max-w-full items-center rounded-lg border border-white/20 bg-transparent px-3 py-1.5 text-sm font-medium text-slate-200 whitespace-normal sm:whitespace-nowrap text-left break-words [overflow-wrap:anywhere] hover:bg-white/10 hover:text-white focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white cursor-pointer"
             >
               {trMonitor('focus.backToGrid')}
             </button>
@@ -372,8 +372,8 @@ export function FocusedCameraMedia({
         data-testid="focused-camera-stage"
         className={
           present
-            ? 'relative aspect-video w-full lg:aspect-auto lg:h-[clamp(22rem,calc(100vh-19.5rem),42rem)] [[data-monitor-fullscreen=true]_&]:lg:h-[clamp(26rem,calc(100vh-9.5rem),54rem)] bg-[#070A10] text-white overflow-hidden'
-            : 'relative flex min-h-[13rem] w-full items-center justify-center lg:h-[clamp(22rem,calc(100vh-19.5rem),42rem)] [[data-monitor-fullscreen=true]_&]:lg:h-[clamp(26rem,calc(100vh-9.5rem),54rem)] bg-[#070A10] text-white'
+            ? 'relative aspect-video w-full lg:aspect-auto lg:h-[clamp(17.5rem,calc(100dvh-23.5rem),38rem)] [[data-monitor-fullscreen=true]_&]:lg:h-[clamp(22rem,calc(100dvh-10rem),52rem)] bg-[#070A10] text-white overflow-hidden'
+            : 'relative flex min-h-[13rem] w-full items-center justify-center lg:h-[clamp(17.5rem,calc(100dvh-23.5rem),38rem)] [[data-monitor-fullscreen=true]_&]:lg:h-[clamp(22rem,calc(100dvh-10rem),52rem)] bg-[#070A10] text-white'
         }
       >
         {!aiPaused && mode === 'ai' && snapshot.preview && (
@@ -451,7 +451,7 @@ export function FocusedCameraMedia({
             {mode !== 'ai' && (
               <span
                 data-testid="focused-raw-source-notice"
-                className="min-w-0 max-w-full text-xs leading-relaxed text-slate-400 whitespace-normal break-words [overflow-wrap:anywhere]"
+                className="min-w-0 max-w-full text-xs leading-relaxed text-slate-300 whitespace-normal break-words [overflow-wrap:anywhere]"
               >
                 {t('focus.rawHint')}
               </span>
@@ -481,7 +481,7 @@ export function FocusedCameraMedia({
           </summary>
 
           <dl className="mt-2.5 grid grid-cols-[auto_minmax(0,1fr)] gap-x-3 gap-y-1 border-t border-white/10 pt-2.5 text-xs text-slate-300">
-            <dt className="font-semibold text-slate-400">{t('focus.context.camera')}</dt>
+            <dt className="font-semibold text-slate-300">{t('focus.context.camera')}</dt>
             <dd className="min-w-0 break-words [overflow-wrap:anywhere]">
               {camera.code && camera.code !== camera.name
                 ? `${camera.code} · ${camera.name}`
@@ -489,14 +489,14 @@ export function FocusedCameraMedia({
             </dd>
             {(siteCode || siteName) && (
               <>
-                <dt className="font-semibold text-slate-400">{t('focus.context.site')}</dt>
+                <dt className="font-semibold text-slate-300">{t('focus.context.site')}</dt>
                 <dd className="min-w-0 break-words [overflow-wrap:anywhere]">
                   {siteCode && siteName ? `${siteCode} · ${siteName}` : siteCode || siteName}
                 </dd>
               </>
             )}
           </dl>
-          <div className="mt-2 flex flex-wrap items-center gap-3 font-mono text-xs tabular-nums text-slate-400 break-all">
+          <div className="mt-2 flex flex-wrap items-center gap-3 font-mono text-xs tabular-nums text-slate-300 break-all">
             {isSafeDisplaySourceId(camera.externalId) && (
               <span>
                 {trMonitor('monitor.tech.sourceId')} {camera.externalId}

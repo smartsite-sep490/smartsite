@@ -277,11 +277,11 @@ export function MonitorEvidenceDrawer({
                 {trMonitor('monitor.drawer.noDetections')}
               </p>
             ) : (
-              <ul className="space-y-2.5">
+              <ul className="divide-y divide-slate-200/80 rounded-xl border border-slate-200 bg-white overflow-hidden">
                 {detections.map((detection, index) => (
                   <li
                     key={`${detection.eventId}-${detection.trackId ?? index}`}
-                    className="rounded-xl border border-slate-200 bg-white p-3.5 space-y-2 shadow-2xs"
+                    className="p-3.5 space-y-2"
                   >
                     <div className="flex flex-wrap items-center justify-between gap-1.5">
                       <span className="inline-flex items-center gap-1.5 text-sm font-semibold text-slate-950">
@@ -292,7 +292,7 @@ export function MonitorEvidenceDrawer({
                       </span>
                     </div>
                     {detection.trackId !== null && detection.trackId !== undefined && (
-                      <p className="text-xs text-slate-500 tabular-nums">
+                      <p className="text-xs text-slate-600 tabular-nums">
                         {trMonitor('monitor.drawer.trackDisclaimer', {
                           trackId: detection.trackId,
                         })}
@@ -333,7 +333,7 @@ export function MonitorEvidenceDrawer({
               <Link
                 data-testid="monitor-drawer-frame-inbox-link"
                 to={`/incidents?${frameInboxParams}`}
-                className="flex min-h-10 w-full items-center justify-between gap-2 rounded-xl bg-slate-900 px-4 py-2.5 text-sm font-semibold text-white hover:bg-slate-800 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-slate-900"
+                className="flex min-h-10 w-full items-center justify-between gap-2 rounded-xl bg-[#0F172A] px-4 py-2.5 text-sm font-semibold text-white hover:bg-slate-800 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-slate-900"
               >
                 <span>{trMonitor('monitor.drawer.openFrameInbox')}</span>
                 <IconChevronRight className="h-4 w-4 shrink-0" />
