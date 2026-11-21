@@ -170,7 +170,7 @@ export function SafetyIdentificationDetailPanel({
           {inRouter ? (
             <Link
               to={originLinks.inboxReturnHref}
-              className="inline-flex items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-2.5 py-1.5 text-xs font-bold text-[#071A2B] shadow-2xs transition-colors hover:border-[#F66B17]/50 hover:text-[#F66B17]"
+              className="inline-flex h-8 items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-2.5 text-xs font-semibold text-slate-900 transition-colors hover:border-slate-300 hover:bg-slate-50"
             >
               <span>{copy.detail.returnToInboxLink}</span>
               <IconArrowRight className="w-3.5 h-3.5" />
@@ -178,7 +178,7 @@ export function SafetyIdentificationDetailPanel({
           ) : (
             <a
               href={originLinks.inboxReturnHref}
-              className="inline-flex items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-2.5 py-1.5 text-xs font-bold text-[#071A2B] shadow-2xs transition-colors hover:border-[#F66B17]/50 hover:text-[#F66B17]"
+              className="inline-flex h-8 items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-2.5 text-xs font-semibold text-slate-900 transition-colors hover:border-slate-300 hover:bg-slate-50"
             >
               <span>{copy.detail.returnToInboxLink}</span>
               <IconArrowRight className="w-3.5 h-3.5" />

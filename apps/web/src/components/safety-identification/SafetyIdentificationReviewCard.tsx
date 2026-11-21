@@ -83,7 +83,7 @@ export function SafetyIdentificationReviewCard({
           >
             {copy.detail.reviewReasonLabel}
           </label>
-          <span className="font-mono text-[11px] text-slate-500" aria-hidden="true">
+          <span className="font-mono text-xs text-slate-500 tabular-nums" aria-hidden="true">
             {reviewReason.length}/{IDENTIFICATION_MAX_REASON_LENGTH}
           </span>
         </div>
@@ -107,7 +107,7 @@ export function SafetyIdentificationReviewCard({
             reviewValidationError ? DETAIL_FIELD_ERROR_CLASS : ''
           }`}
         />
-        <p className="text-[11px] text-slate-500">{copy.detail.reviewReasonHint}</p>
+        <p className="text-xs text-slate-600">{copy.detail.reviewReasonHint}</p>
         {reviewValidationError && (
           <p role="alert" className="text-xs font-medium text-rose-600">
             {reviewValidationError}

@@ -283,7 +283,7 @@ function ScopedIdentificationWorkspace({
         }
       />
 
-      <div className="grid grid-cols-1 gap-5 lg:grid-cols-12 items-start [&>*]:min-w-0">
+      <div className="grid grid-cols-1 gap-4 lg:grid-cols-12 items-start [&>*]:min-w-0">
         <SafetyIdentificationQueueCard
           queueItems={queries.queueItems}
           queueTotal={queries.queueTotal}
@@ -305,21 +305,25 @@ function ScopedIdentificationWorkspace({
 
         <div className="min-w-0 lg:col-span-7">
           {queries.siteQueueUnavailable ? (
-            <Card>
+            <div className="rounded-xl border border-slate-200 bg-white p-5">
               <EmptyState
                 icon={<IconAlertTriangle className="w-5 h-5 text-amber-600" />}
                 title={copy.unavailable.detailTitle}
                 description={copy.unavailable.detailDescription}
               />
-            </Card>
+            </div>
           ) : !scope.selectedRequestId || queries.queueHasError ? (
-            <Card>
-              <EmptyState
-                icon={<IconEye className="w-5 h-5" />}
-                title={copy.detail.emptyTitle}
-                description={copy.detail.emptyDescription}
-              />
-            </Card>
+            <div className="rounded-xl border border-slate-200 bg-white p-5">
+              <div className="max-w-lg space-y-2 py-1 text-left">
+                <div className="flex items-center gap-2 text-slate-950">
+                  <IconEye className="w-4 h-4 shrink-0 text-slate-500" />
+                  <h3 className="text-sm font-semibold">{copy.detail.emptyTitle}</h3>
+                </div>
+                <p className="text-xs leading-relaxed text-slate-600">
+                  {copy.detail.emptyDescription}
+                </p>
+              </div>
+            </div>
           ) : revocation.activeRevocation ? (
             <Card>
               <Alert variant="destructive">
