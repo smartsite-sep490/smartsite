@@ -356,15 +356,22 @@ export class WorkforceConfigurationService {
     if (value.contractorId && value.userId)
       await this.assertWorkerAssignment(scopedSiteId, value.contractorId, value.userId);
     try {
-      return await this.dataSource.getRepository(WorkerEntity).save({
-        id: randomUUID(),
-        siteId: scopedSiteId,
-        contractorId: value.contractorId ?? null,
-        userId: value.userId ?? null,
-        externalId: value.externalId,
-        displayName: value.displayName,
-        isActive: true,
-      });
+      return await executeMainConfigurationCommand(
+        this.dataSource,
+        undefined,
+        'WORKER_ROSTER_CREATE',
+        { siteId: scopedSiteId, ...value },
+        (manager) =>
+          manager.getRepository(WorkerEntity).save({
+            id: randomUUID(),
+            siteId: scopedSiteId,
+            contractorId: value.contractorId ?? null,
+            userId: value.userId ?? null,
+            externalId: value.externalId,
+            displayName: value.displayName,
+            isActive: true,
+          }),
+      );
     } catch (error) {
       knownUnique(error, ['uq_worker_site_external_id', 'uq_worker_site_user']);
     }
