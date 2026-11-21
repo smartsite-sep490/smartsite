@@ -223,21 +223,25 @@ function SetupWorkspace({ apiUrl, session }: { apiUrl: string; session: SharedSe
     site && focusSelection?.siteId === site.id && focusSelection.requestedId === requestedCameraId
       ? focusSelection.cameraId
       : null;
+  const matchedRequestedCamera = requestedCameraId
+    ? (rows.find((row) => row.id === requestedCameraId) ?? null)
+    : null;
   const catalogSelectedCamera =
     (focusedCameraId ? rows.find((row) => row.id === focusedCameraId) : undefined) ??
-    (requestedCameraId ? rows.find((row) => row.id === requestedCameraId) : undefined) ??
+    matchedRequestedCamera ??
     rows[0] ??
     null;
   const deepLinkActionScope =
-    site && catalogSelectedCamera && requestedAction
-      ? `${site.id}:${catalogSelectedCamera.id}:${requestedAction}:${requestedRegionId ?? ''}`
+    site && matchedRequestedCamera && requestedAction
+      ? `${site.id}:${matchedRequestedCamera.id}:${requestedAction}:${requestedRegionId ?? ''}`
       : null;
   useEffect(() => {
     if (
       !deepLinkActionScope ||
       autoOpenedActionRef.current === deepLinkActionScope ||
       !site ||
-      !catalogSelectedCamera ||
+      !matchedRequestedCamera ||
+      (focusedCameraId && focusedCameraId !== matchedRequestedCamera.id) ||
       !canManageCameras ||
       revoked ||
       sites.baseError ||
@@ -245,14 +249,15 @@ function SetupWorkspace({ apiUrl, session }: { apiUrl: string; session: SharedSe
     ) {
       return;
     }
-    if (requestedAction === 'regions' && catalogSelectedCamera.status === 'ACTIVE') {
+    if (requestedAction === 'regions' && matchedRequestedCamera.status === 'ACTIVE') {
       autoOpenedActionRef.current = deepLinkActionScope;
-      open('regions', catalogSelectedCamera.id);
+      open('regions', matchedRequestedCamera.id);
     }
   }, [
     deepLinkActionScope,
     site,
-    catalogSelectedCamera,
+    matchedRequestedCamera,
+    focusedCameraId,
     canManageCameras,
     revoked,
     sites.baseError,
@@ -333,7 +338,9 @@ function SetupWorkspace({ apiUrl, session }: { apiUrl: string; session: SharedSe
           section: 'regions',
           initialCameraId: activeDialog.cameraId,
           initialRegionId:
-            requestedAction === 'regions' && activeDialog.cameraId === catalogSelectedCamera?.id
+            requestedAction === 'regions' &&
+            matchedRequestedCamera &&
+            activeDialog.cameraId === matchedRequestedCamera.id
               ? requestedRegionId
               : undefined,
           onSelectCamera: (cameraId) => {
@@ -476,7 +483,7 @@ function SetupWorkspace({ apiUrl, session }: { apiUrl: string; session: SharedSe
         <CameraSetupCatalog
           key={site.id}
           autoExpandPpeCameraId={
-            requestedAction === 'ppe' && catalogSelectedCamera ? catalogSelectedCamera.id : null
+            requestedAction === 'ppe' && matchedRequestedCamera ? matchedRequestedCamera.id : null
           }
           onOpenApply={handleJumpToApplyWorker}
           sourceSetupStage={

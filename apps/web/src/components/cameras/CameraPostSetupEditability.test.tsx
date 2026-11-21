@@ -757,6 +757,103 @@ describe('Post-setup Camera PPE and Restricted Zone polygon editability', () => 
     });
   });
 
+  it('gates URL-driven action=regions and action=ppe strictly on an exact requestedCameraId match without auto-opening fallback Camera A', async () => {
+    const missingCameraId = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaa999';
+    const baseClient = {
+      listSites: vi.fn().mockResolvedValue({ items: [SITE_FIXTURE], total: 1 }),
+      listCameras: vi.fn().mockResolvedValue({ items: [CAM_A], total: 1 }),
+      getCamera: vi.fn().mockResolvedValue(CAM_A),
+      listZones: vi.fn().mockResolvedValue({ items: [ZONE_STD, ZONE_RESTRICTED], total: 2 }),
+      listRegions: vi.fn().mockResolvedValue({ items: [SAVED_RESTRICTED_REGION], total: 1 }),
+      getCameraApplicationStatus: vi.fn().mockResolvedValue({
+        siteId: SITE_ID,
+        cameraId: CAM_A_ID,
+        desiredRevision: 4,
+        reportedRevision: 4,
+        applicationState: 'LOADED',
+        viewValidity: 'UNCONFIRMED',
+        reasonCode: null,
+        lastReceiptAt: new Date().toISOString(),
+        observedAt: new Date().toISOString(),
+      }),
+      getCameraConfigurationReference: vi.fn().mockRejectedValue({ status: 404 }),
+      readSavedPpePolicy: vi.fn().mockImplementation(async (_tok, _site, cameraId) => ({
+        cameraId,
+        regionId: null,
+        configurationVersion: cameraId === CAM_B_ID ? 2 : 4,
+        savedRevision: cameraId === CAM_B_ID ? 2 : 4,
+        policy: { mode: 'EXPLICIT', requiredPpe: ['HARD_HAT'] },
+      })),
+    };
+    mockUseManagementClient.mockReturnValue(baseClient);
+
+    // 1. Unavailable / unloaded cameraId with action=regions must NOT auto-open Camera A's region editor
+    render(
+      <QueryClientProvider
+        client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}
+      >
+        <MemoryRouter
+          initialEntries={[
+            `/camera-setup?siteId=${SITE_ID}&cameraId=${missingCameraId}&action=regions&regionId=${REG_RESTRICTED_ID}`,
+          ]}
+        >
+          <CameraSetupView apiUrl={API_URL} sharedSession={makeManagerSession()} />
+        </MemoryRouter>
+      </QueryClientProvider>,
+    );
+    await screen.findByRole('listitem', { name: CAM_A.name });
+    expect(screen.queryByTestId('camera-setup-inline-region-stage')).toBeNull();
+
+    // 2. Unavailable / unloaded cameraId with action=ppe must NOT auto-expand Camera A's PPE panel
+    cleanup();
+    render(
+      <QueryClientProvider
+        client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}
+      >
+        <MemoryRouter
+          initialEntries={[
+            `/camera-setup?siteId=${SITE_ID}&cameraId=${missingCameraId}&action=ppe`,
+          ]}
+        >
+          <CameraSetupView apiUrl={API_URL} sharedSession={makeManagerSession()} />
+        </MemoryRouter>
+      </QueryClientProvider>,
+    );
+    const fallbackPpePanel = await screen.findByTestId('camera-ppe-policy-panel');
+    expect(
+      within(fallbackPpePanel)
+        .getByRole('button', { name: 'Camera PPE policy' })
+        .getAttribute('aria-expanded'),
+    ).toBe('false');
+
+    // 3. Exact requestedCameraId match (CAM_B while CAM_A is first row) DOES auto-expand CAM_B's PPE panel
+    cleanup();
+    mockUseManagementClient.mockReturnValue({
+      ...baseClient,
+      listCameras: vi.fn().mockResolvedValue({ items: [CAM_A, CAM_B], total: 2 }),
+    });
+    render(
+      <QueryClientProvider
+        client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}
+      >
+        <MemoryRouter
+          initialEntries={[`/camera-setup?siteId=${SITE_ID}&cameraId=${CAM_B_ID}&action=ppe`]}
+        >
+          <CameraSetupView apiUrl={API_URL} sharedSession={makeManagerSession()} />
+        </MemoryRouter>
+      </QueryClientProvider>,
+    );
+    const matchedPpePanel = await screen.findByTestId('camera-ppe-policy-panel');
+    await waitFor(() => {
+      expect(
+        within(matchedPpePanel)
+          .getByRole('button', { name: 'Camera PPE policy' })
+          .getAttribute('aria-expanded'),
+      ).toBe('true');
+    });
+    expect(screen.getByTestId('selected-camera-source-id').textContent).toContain(CAM_B.externalId);
+  });
+
   it('explains in ZonePpeList where to edit active PPE after a zone locks (EN/VI)', async () => {
     const t = (key: string, params?: Record<string, string | number>) =>
       i18n.t(key, { ns: 'safety', ...params });
