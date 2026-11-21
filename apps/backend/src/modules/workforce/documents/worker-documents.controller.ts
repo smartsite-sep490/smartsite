@@ -21,6 +21,7 @@ import { invalid } from '../../../common/configuration/commands.js';
 import { pagination } from '../../../common/http/pagination.js';
 import type { AuthenticatedRequest } from '../../auth/auth.service.js';
 import { UserAuthGuard } from '../../auth/user-auth.guard.js';
+import { configurationCommandContext } from '../../auth/configuration-command-context.js';
 import { WorkerDocumentsService, type DocumentUpload } from './worker-documents.service.js';
 import {
   ReviewWorkerDocumentDto,
@@ -34,7 +35,10 @@ import {
 @UseGuards(UserAuthGuard)
 @Controller('sites/:siteId')
 export class WorkerDocumentsController {
-  constructor(private readonly service: WorkerDocumentsService) {}
+  constructor(
+    private readonly service: WorkerDocumentsService,
+    private readonly userAuth: UserAuthGuard,
+  ) {}
   @Post('contractors/:contractorId/document-image-quality')
   @Header('Cache-Control', 'private, no-store')
   @UseInterceptors(
@@ -226,6 +230,13 @@ export class WorkerDocumentsController {
     @Param('id') id: string,
     @Body() body: ReviewWorkerDocumentDto,
   ) {
-    return this.service.review(r.user!, siteId, workerId, id, body);
+    return this.service.review(
+      r.user!,
+      siteId,
+      workerId,
+      id,
+      body,
+      configurationCommandContext(r, this.userAuth),
+    );
   }
 }
