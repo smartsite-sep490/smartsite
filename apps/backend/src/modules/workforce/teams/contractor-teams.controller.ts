@@ -12,6 +12,7 @@ import {
 } from '@nestjs/common';
 import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
 import { UserAuthGuard } from '../../auth/user-auth.guard.js';
+import { configurationCommandContext } from '../../auth/configuration-command-context.js';
 import type { AuthenticatedRequest } from '../../auth/auth.service.js';
 import { ContractorTeamsService } from './contractor-teams.service.js';
 import { SetTeamLeaderDto } from './dto/team-attendance.dto.js';
@@ -56,7 +57,15 @@ export class ContractorTeamsController {
     @Param('permissionId') permissionId: string,
     @Body() input: GrantTeamZoneDto,
   ) {
-    return this.teams.grantZone(req.user!, siteId, contractorId, id, input, permissionId);
+    return this.teams.grantZone(
+      req.user!,
+      siteId,
+      contractorId,
+      id,
+      input,
+      permissionId,
+      configurationCommandContext(req, this.userAuth),
+    );
   }
   @Get('sites/:siteId/contractors/:contractorId/teams/:id/zones') zones(
     @Req() req: AuthenticatedRequest,
@@ -73,7 +82,15 @@ export class ContractorTeamsController {
     @Param('id') id: string,
     @Body() input: GrantTeamZoneDto,
   ) {
-    return this.teams.grantZone(req.user!, siteId, contractorId, id, input);
+    return this.teams.grantZone(
+      req.user!,
+      siteId,
+      contractorId,
+      id,
+      input,
+      undefined,
+      configurationCommandContext(req, this.userAuth),
+    );
   }
   @Post('sites/:siteId/contractors/:contractorId/teams/:id/zones/:permissionId/revoke') revokeZone(
     @Req() req: AuthenticatedRequest,
@@ -82,9 +99,19 @@ export class ContractorTeamsController {
     @Param('id') id: string,
     @Param('permissionId') permissionId: string,
   ) {
-    return this.teams.revokeZone(req.user!, siteId, contractorId, id, permissionId);
+    return this.teams.revokeZone(
+      req.user!,
+      siteId,
+      contractorId,
+      id,
+      permissionId,
+      configurationCommandContext(req, this.userAuth),
+    );
   }
-  constructor(private readonly teams: ContractorTeamsService) {}
+  constructor(
+    private readonly teams: ContractorTeamsService,
+    private readonly userAuth: UserAuthGuard,
+  ) {}
   @Get('sites/:siteId/my-team') myTeam(
     @Req() req: AuthenticatedRequest,
     @Param('siteId') siteId: string,
@@ -123,7 +150,13 @@ export class ContractorTeamsController {
     @Param('contractorId') contractorId: string,
     @Body() input: CreateContractorTeamDto,
   ) {
-    return this.teams.create(req.user!, siteId, contractorId, input);
+    return this.teams.create(
+      req.user!,
+      siteId,
+      contractorId,
+      input,
+      configurationCommandContext(req, this.userAuth),
+    );
   }
   @Patch('sites/:siteId/contractors/:contractorId/teams/:id') update(
     @Req() req: AuthenticatedRequest,
@@ -132,7 +165,14 @@ export class ContractorTeamsController {
     @Param('id') id: string,
     @Body() input: UpdateContractorTeamDto,
   ) {
-    return this.teams.update(req.user!, siteId, contractorId, id, input);
+    return this.teams.update(
+      req.user!,
+      siteId,
+      contractorId,
+      id,
+      input,
+      configurationCommandContext(req, this.userAuth),
+    );
   }
   @Post('sites/:siteId/contractors/:contractorId/teams/:id/archive') archive(
     @Req() req: AuthenticatedRequest,
@@ -141,7 +181,14 @@ export class ContractorTeamsController {
     @Param('id') id: string,
     @Body() input: ArchiveContractorTeamDto,
   ) {
-    return this.teams.archive(req.user!, siteId, contractorId, id, input);
+    return this.teams.archive(
+      req.user!,
+      siteId,
+      contractorId,
+      id,
+      input,
+      configurationCommandContext(req, this.userAuth),
+    );
   }
   @Get('sites/:siteId/contractors/:contractorId/team-workers') workers(
     @Req() req: AuthenticatedRequest,
@@ -158,6 +205,13 @@ export class ContractorTeamsController {
     @Param('workerId') workerId: string,
     @Body() input: AssignContractorTeamDto,
   ) {
-    return this.teams.assign(req.user!, siteId, contractorId, workerId, input);
+    return this.teams.assign(
+      req.user!,
+      siteId,
+      contractorId,
+      workerId,
+      input,
+      configurationCommandContext(req, this.userAuth),
+    );
   }
 }
