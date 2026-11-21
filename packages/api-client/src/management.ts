@@ -109,6 +109,8 @@ import type {
   AttendanceExportResponse,
   AttendanceTimeRequestsQuery,
   AttendanceTimeRequestsResponse,
+  WorkerRequestsQuery,
+  WorkerRequestsResponse,
   AttendanceDayDetailResponse,
   AttendanceTimesheetResponse,
   AttendanceDaysQuery,
@@ -639,6 +641,16 @@ export class SmartSiteManagementClient {
     return this.request<AttendanceTimeRequestsResponse>(
       'GET',
       `/sites/${pathId(siteId)}/attendance-time-requests?${query}`,
+      token,
+    );
+  }
+  myWorkerRequests(token: string, siteId: string, options: WorkerRequestsQuery = {}) {
+    const query = new URLSearchParams();
+    for (const [key, value] of Object.entries(options))
+      if (value !== undefined) query.set(key, String(value));
+    return this.request<WorkerRequestsResponse>(
+      'GET',
+      `/sites/${pathId(siteId)}/my-requests?${query}`,
       token,
     );
   }

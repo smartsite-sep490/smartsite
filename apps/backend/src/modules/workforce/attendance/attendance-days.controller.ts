@@ -10,6 +10,7 @@ import {
   ReviewAttendanceDayDto,
   IgnoreDuplicateAttendanceDto,
   ReviewAttendanceTimeDto,
+  WorkerRequestsDto,
 } from './dto/attendance.dto.js';
 @ApiTags('attendance')
 @ApiBearerAuth('user-token')
@@ -17,6 +18,13 @@ import {
 @Controller('sites/:siteId')
 export class AttendanceDaysController {
   constructor(private readonly days: AttendanceDaysService) {}
+  @Get('my-requests') myRequests(
+    @Req() req: AuthenticatedRequest,
+    @Param('siteId') siteId: string,
+    @Query() query: WorkerRequestsDto,
+  ) {
+    return this.days.myRequests(req.user!, siteId, query);
+  }
   @Get('attendance-time-requests') timeRequests(
     @Req() req: AuthenticatedRequest,
     @Param('siteId') siteId: string,

@@ -199,9 +199,13 @@ export { registerSessionCredential, unregisterSessionCredential } from './sessio
 export { MAX_CAMERA_APPLICATION_STATUS_RESPONSE_BYTES } from './camera-configuration-response';
 export type { CameraApplicationStatus } from '@smartsite/contracts/camera-application-status';
 
-export { LEAVE_NOTICE_HOURS } from '@smartsite/contracts/leave-notice';
+export {
+  LEAVE_NOTICE_HOURS,
+  timeRequestTimingIssue,
+  TIME_REQUEST_TIMING_MESSAGES,
+} from '@smartsite/contracts/leave-notice';
 export { scheduledShiftWindow } from '@smartsite/contracts/scheduled-shift';
-export type { LeaveNoticeType } from '@smartsite/contracts/leave-notice';
+export type { LeaveNoticeType, TimeRequestTimingIssue } from '@smartsite/contracts/leave-notice';
 
 export type {
   GateResponse,

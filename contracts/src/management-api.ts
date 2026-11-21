@@ -520,7 +520,13 @@ export interface UserNotificationResponse {
     | SafetyNotificationTarget
     | SafetyAlertNotificationTarget
     | { siteId: string; workDate: string; tab: 'schedule' }
-    | { siteId: string; dayId: string; tab: 'attendance' };
+    | {
+        siteId: string;
+        dayId: string;
+        tab: 'attendance';
+        requestId?: string;
+        requestType?: 'TIME';
+      };
 }
 
 export interface UserNotificationListResponse {
