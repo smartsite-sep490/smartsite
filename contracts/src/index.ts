@@ -222,3 +222,13 @@ export type {
   ContractorTeamCalendarQuery,
 } from './schedule-assignment-api.js';
 export type { ContractorTeamCalendarResponse } from './schedule-assignment-api.js';
+
+export type {
+  CameraSourceKind,
+  CameraSourceDraft,
+  SourceConfigurationResumeCommand,
+  SourceConfigurationResumeResult,
+  SourceHost,
+  SourceTestResult,
+} from './camera-source-setup.js';
+export type { SourceActivationResult } from './camera-source-setup.js';
