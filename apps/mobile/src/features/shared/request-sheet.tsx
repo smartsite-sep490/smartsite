@@ -33,7 +33,7 @@ export function RequestSheet({
   busy?: boolean;
   footer: ReactNode;
   icon?: ReactNode;
-  variant?: 'default' | 'form';
+  variant?: 'default' | 'form' | 'compact';
 }>) {
   const { t } = useTranslation();
   const insets = useSafeAreaInsets();
@@ -48,7 +48,7 @@ export function RequestSheet({
   return (
     <Modal visible={visible} transparent animationType="slide" onRequestClose={close}>
       <KeyboardAvoidingView
-        style={styles.overlay}
+        style={[styles.overlay, variant === 'compact' && styles.compactOverlay]}
         behavior={Platform.OS === 'ios' ? 'padding' : undefined}
       >
         <Pressable
@@ -57,7 +57,14 @@ export function RequestSheet({
           disabled={busy}
           accessibilityLabel={t('common.cancel')}
         />
-        <View style={[styles.sheet, variant === 'form' && styles.formSheet]}>
+        <View
+          style={[
+            styles.sheet,
+            variant === 'form' && styles.formSheet,
+            variant === 'compact' && styles.compactSheet,
+          ]}
+          accessibilityViewIsModal
+        >
           <View style={styles.handle} />
           <View style={styles.header}>
             {icon && <View style={styles.headerIcon}>{icon}</View>}
@@ -108,6 +115,8 @@ export function RequestSheet({
 }
 
 const styles = StyleSheet.create({
+  compactOverlay: { paddingHorizontal: 12, paddingBottom: 12 },
+  compactSheet: { maxWidth: 440, maxHeight: '82%', borderRadius: 24 },
   overlay: { flex: 1, justifyContent: 'flex-end', backgroundColor: 'rgba(15,23,42,0.5)' },
   backdrop: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0 },
   sheet: {
