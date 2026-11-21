@@ -35,6 +35,7 @@ for (const variant of [
   'ppe-only',
   'ppe-c02',
   'camera-v17',
+  'camera-upload-v17',
   'region-v17',
   'camera-region-mismatch-v17',
   'region-disabled-v17',
@@ -47,7 +48,10 @@ for (const variant of [
   test(`registered tracked worker HTTP intake preserves ${variant} handling`, async () => {
     const wire17 = variant.endsWith('-v17');
     const uppercaseZone = variant === 'zone-uppercase' || variant === 'zone-uppercase-v17';
-    const cameraScope = variant === 'camera-v17' || variant === 'camera-region-mismatch-v17';
+    const cameraScope =
+      variant === 'camera-v17' ||
+      variant === 'camera-upload-v17' ||
+      variant === 'camera-region-mismatch-v17';
     const invalidScope = variant === 'camera-region-mismatch-v17' || variant === 'region-stale-v17';
     const withC02 = variant === 'ppe-c02' || wire17;
     const findingCount = variant === 'region-v17' ? 1 : 2;
@@ -131,7 +135,8 @@ for (const variant of [
             ? 'tracked-v16-identification'
             : 'tracked-v16',
         AI_TRACKED_FRAME_RUNTIME_ENABLED: 'true',
-        AI_EVIDENCE_OBJECT_STORAGE_ENABLED: variant === 'camera-v17' ? 'true' : 'false',
+        AI_EVIDENCE_OBJECT_STORAGE_ENABLED:
+          variant === 'camera-v17' || variant === 'camera-upload-v17' ? 'true' : 'false',
         MF06_ENQUEUE_ENABLED: uppercaseZone || variant === 'zone-unissued' ? 'true' : 'false',
         ...(uppercaseZone || variant === 'zone-unissued'
           ? { MF06_ENQUEUE_MAX_OUTSTANDING: '8' }
@@ -262,11 +267,13 @@ for (const variant of [
         .jpeg()
         .toBuffer();
       const digest = createHash('sha256').update(bytes).digest('hex');
-      await writeFile(
-        join(evidenceRoot, base.streamSessionId + '_0_' + base.eventId + '.jpg'),
-        bytes,
-        { flag: 'wx' },
-      );
+      // The upload-enabled journey must succeed without a legacy local worker file.
+      if (variant !== 'camera-v17' && variant !== 'camera-upload-v17')
+        await writeFile(
+          join(evidenceRoot, base.streamSessionId + '_0_' + base.eventId + '.jpg'),
+          bytes,
+          { flag: 'wx' },
+        );
       const event = {
         ...base,
         schemaVersion: wire17 ? '1.7.0' : '1.6.0',
@@ -407,7 +414,7 @@ for (const variant of [
           },
           body: makeEvidenceForm(),
         });
-      if (variant === 'camera-v17') {
+      if (variant === 'camera-v17' || variant === 'camera-upload-v17') {
         const uploaded = await uploadEvidence();
         assert.equal(uploaded.status, 200, await uploaded.clone().text());
         const stored = await uploaded.json();
@@ -427,6 +434,30 @@ for (const variant of [
           ),
           [{ count: 0 }],
         );
+      }
+      if (variant === 'camera-upload-v17') {
+        const storage = module.get(StorageService);
+        const originalSave = storage.saveAiFrame.bind(storage);
+        let savedDuringTransition = false;
+        storage.saveAiFrame = async (content, expectedHash, scope) => {
+          await originalSave(content, expectedHash, scope);
+          savedDuringTransition = true;
+          await provisionCameraWorkerGeneration(
+            runtimeDb,
+            fixture.cameraId,
+            [fixture.cameraId],
+            120000,
+          );
+        };
+        try {
+          const stale = await uploadEvidence();
+          assert.equal(stale.status, 409, await stale.clone().text());
+          assert.equal((await stale.json()).code, 'CONFLICT');
+          assert.equal(savedDuringTransition, true, 'must reach storage before generation changes');
+        } finally {
+          storage.saveAiFrame = originalSave;
+        }
+        return;
       }
       const post = () =>
         fetch(prefix + '/tracked-parts', {
@@ -785,26 +816,6 @@ for (const variant of [
           ),
           [{ unread: 3 }],
         );
-      }
-      if (variant === 'camera-v17') {
-        const storage = module.get(StorageService);
-        const originalSave = storage.saveAiFrame.bind(storage);
-        storage.saveAiFrame = async (content, expectedHash, scope) => {
-          await originalSave(content, expectedHash, scope);
-          await provisionCameraWorkerGeneration(
-            runtimeDb,
-            fixture.cameraId,
-            [fixture.cameraId],
-            120000,
-          );
-        };
-        try {
-          const stale = await uploadEvidence();
-          assert.equal(stale.status, 409, await stale.clone().text());
-          assert.equal((await stale.json()).code, 'CONFLICT');
-        } finally {
-          storage.saveAiFrame = originalSave;
-        }
       }
     } finally {
       if (app) await app.close();
