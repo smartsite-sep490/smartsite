@@ -131,7 +131,17 @@ export function EffectivePpeDetails({
   );
 }
 
-export function SavedVsAppliedBanner({ state }: { state: SavedVsAppliedState }) {
+export function SavedVsAppliedBanner({
+  state,
+  onRefreshStatus,
+  isRefreshingStatus = false,
+  onOpenApply,
+}: {
+  state: SavedVsAppliedState;
+  onRefreshStatus?: () => void;
+  isRefreshingStatus?: boolean;
+  onOpenApply?: () => void;
+}) {
   const { t } = useTranslation(SAFETY_NAMESPACE);
   const savedLabel =
     state.savedConfigurationVersion !== undefined
@@ -184,15 +194,45 @@ export function SavedVsAppliedBanner({ state }: { state: SavedVsAppliedState }) 
       break;
   }
 
+  const showApplyShortcut =
+    Boolean(onOpenApply) &&
+    (state.kind === 'not-yet-applied' ||
+      state.kind === 'unconfirmed' ||
+      state.kind === 'stale' ||
+      state.kind === 'rejected');
+
   return (
     <div
       data-testid="camera-ppe-sync-status"
       data-sync-state={state.kind}
-      className="rounded-xl border border-slate-200 bg-slate-50/50 px-3.5 py-2.5 space-y-1.5"
+      className="rounded-xl border border-slate-200 bg-slate-50/50 px-3.5 py-2.5 space-y-2"
     >
       <div className="flex flex-wrap items-center justify-between gap-2">
         <span className="text-sm font-semibold text-slate-900">{t('cameraPpe.syncHeading')}</span>
-        <span className="text-xs font-mono text-slate-700 tabular-nums">{savedLabel}</span>
+        <div className="flex flex-wrap items-center gap-2">
+          <span className="text-xs font-mono text-slate-700 tabular-nums">{savedLabel}</span>
+          {onRefreshStatus && (
+            <button
+              type="button"
+              data-testid="camera-ppe-refresh-worker-status"
+              disabled={isRefreshingStatus}
+              className={CAMERA_BUTTON_STYLES.compactSecondary}
+              onClick={onRefreshStatus}
+            >
+              {t('cameraPpe.refreshWorkerStatus')}
+            </button>
+          )}
+          {showApplyShortcut && onOpenApply && (
+            <button
+              type="button"
+              data-testid="camera-ppe-jump-to-apply"
+              className={CAMERA_BUTTON_STYLES.compactSecondary}
+              onClick={onOpenApply}
+            >
+              {t('cameraPpe.jumpToApplyWorker')}
+            </button>
+          )}
+        </div>
       </div>
       <p
         className={`rounded-lg border px-3 py-1.5 text-sm font-medium break-words [overflow-wrap:anywhere] ${workerTone}`}

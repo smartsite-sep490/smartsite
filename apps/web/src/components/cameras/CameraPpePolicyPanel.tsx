@@ -9,7 +9,7 @@ import {
 import { parseCameraObservationZones } from '@smartsite/contracts/camera-observation-zones';
 import { parseCameraPpePolicy } from '@smartsite/contracts/camera-ppe-policy';
 import type { CameraResponse } from '@smartsite/contracts/management';
-import { PPE_ITEMS } from '@smartsite/contracts/ppe-items';
+import { PPE_ITEMS, type PpeItem } from '@smartsite/contracts/ppe-items';
 import { SAFETY_NAMESPACE } from '../../i18n/runtime';
 import { CAMERA_BUTTON_STYLES, CAMERA_FIELD_STYLES } from './camera-dialog-styles';
 import {
@@ -88,18 +88,33 @@ export function PolicyFields({
   allowInherit,
   label,
   readOnly = false,
+  scopeKey,
 }: {
   value: PpePolicyDraft;
   onChange: (draft: PpePolicyDraft) => void;
   allowInherit: boolean;
   label: string;
   readOnly?: boolean;
+  scopeKey?: string;
 }) {
   const { t } = useTranslation(SAFETY_NAMESPACE);
   const fieldId = useId();
   const readinessGuidanceId = `${fieldId}-readiness-guidance`;
   const explicitErrorId = `${fieldId}-explicit-error`;
   const disabledErrorId = `${fieldId}-disabled-error`;
+  const [remembered, setRemembered] = useState<{
+    scopeKey: string | undefined;
+    requiredPpe: readonly PpeItem[];
+    reason: string;
+  }>(() => ({
+    scopeKey,
+    requiredPpe: value.requiredPpe ?? [],
+    reason: value.reason ?? '',
+  }));
+  const activeRememberedPpe =
+    remembered.scopeKey === scopeKey ? remembered.requiredPpe : (value.requiredPpe ?? []);
+  const activeRememberedReason =
+    remembered.scopeKey === scopeKey ? remembered.reason : (value.reason ?? '');
 
   const isExplicitEmpty =
     !readOnly && value.mode === 'EXPLICIT' && (value.requiredPpe?.length ?? 0) === 0;
@@ -135,7 +150,31 @@ export function PolicyFields({
         <select
           className={CAMERA_FIELD_STYLES.input}
           value={value.mode}
-          onChange={(event) => onChange({ mode: event.target.value })}
+          onChange={(event) => {
+            const nextMode = event.target.value;
+            const currentPpe =
+              value.mode === 'EXPLICIT' && value.requiredPpe?.length
+                ? value.requiredPpe
+                : activeRememberedPpe;
+            const currentReason =
+              value.mode === 'DISABLED' && value.reason ? value.reason : activeRememberedReason;
+            setRemembered({ scopeKey, requiredPpe: currentPpe, reason: currentReason });
+            if (nextMode === 'EXPLICIT') {
+              onChange({
+                mode: 'EXPLICIT',
+                ...(currentPpe.length > 0 ? { requiredPpe: [...currentPpe] } : {}),
+              });
+              return;
+            }
+            if (nextMode === 'DISABLED') {
+              onChange({
+                mode: 'DISABLED',
+                ...(currentReason ? { reason: currentReason } : {}),
+              });
+              return;
+            }
+            onChange({ mode: nextMode });
+          }}
         >
           <option value="">{t('cameraPpe.choose')}</option>
           <option value="EXPLICIT">{t('cameraPpe.EXPLICIT')}</option>
@@ -260,7 +299,9 @@ export function CameraPpePolicyPanel({
   camera,
   statusContext,
   expandSignal = 0,
+  defaultOpen = false,
   onOpenReference,
+  onOpenApply,
 }: {
   context: CameraPpeContext;
   cameraId: string;
@@ -268,10 +309,12 @@ export function CameraPpePolicyPanel({
   camera?: CameraResponse;
   statusContext?: CameraApplicationStatusContext;
   expandSignal?: number;
+  defaultOpen?: boolean;
   onOpenReference?: (trigger: HTMLButtonElement) => void;
+  onOpenApply?: () => void;
 }) {
   const { t } = useTranslation(SAFETY_NAMESPACE);
-  const [manualOpen, setManualOpen] = useState(false);
+  const [manualOpen, setManualOpen] = useState(defaultOpen);
   const [dismissedSignal, setDismissedSignal] = useState(0);
   const sectionRef = useRef<HTMLElement>(null);
   const open = manualOpen || (expandSignal > 0 && expandSignal !== dismissedSignal);
@@ -322,6 +365,7 @@ export function CameraPpePolicyPanel({
           camera={camera}
           statusContext={statusContext}
           onOpenReference={onOpenReference}
+          onOpenApply={onOpenApply}
         />
       )}
     </section>
@@ -335,6 +379,7 @@ function PolicyEditor({
   camera: cameraRecord,
   statusContext,
   onOpenReference,
+  onOpenApply,
 }: {
   context: CameraPpeContext;
   cameraId: string;
@@ -342,6 +387,7 @@ function PolicyEditor({
   camera?: CameraResponse;
   statusContext?: CameraApplicationStatusContext;
   onOpenReference?: (trigger: HTMLButtonElement) => void;
+  onOpenApply?: () => void;
 }) {
   const { t } = useTranslation(SAFETY_NAMESPACE);
   const cache = useQueryClient();
@@ -833,13 +879,33 @@ function PolicyEditor({
         </p>
       ) : (
         <>
-          <SavedVsAppliedBanner state={savedVsApplied} />
-          {initial && applicationStatus.verifiedPayload?.status.viewValidity === 'UNAVAILABLE' && (
+          <SavedVsAppliedBanner
+            state={savedVsApplied}
+            onRefreshStatus={
+              applicationStatus.canQuery
+                ? () => {
+                    void applicationStatus.query.refetch();
+                  }
+                : undefined
+            }
+            isRefreshingStatus={applicationStatus.query.isFetching}
+            onOpenApply={onOpenApply}
+          />
+          {((initial && applicationStatus.verifiedPayload?.status.viewValidity === 'UNAVAILABLE') ||
+            applicationStatus.verifiedPayload?.status.viewValidity === 'NEEDS_REVALIDATION') && (
             <div
               role="status"
-              className="rounded-xl border border-amber-200 bg-amber-50 p-3 text-sm text-amber-950"
+              data-testid="camera-ppe-reference-guidance"
+              className="rounded-xl border border-amber-200 bg-amber-50 p-3 text-sm text-amber-950 space-y-2"
             >
-              <p>{t('cameraPpe.referenceRequired')}</p>
+              <p>
+                {t(
+                  initial &&
+                    applicationStatus.verifiedPayload?.status.viewValidity === 'UNAVAILABLE'
+                    ? 'cameraPpe.referenceRequired'
+                    : 'cameraPpe.referenceRevalidationRequired',
+                )}
+              </p>
               {canWrite && onOpenReference && (
                 <button
                   type="button"
@@ -852,12 +918,13 @@ function PolicyEditor({
             </div>
           )}
 
-          <p
+          <div
             data-testid="camera-ppe-capability-note"
-            className="rounded-xl border border-slate-200 bg-slate-50/50 px-3.5 py-2.5 text-sm leading-relaxed text-slate-600"
+            className="rounded-xl border border-slate-200 bg-slate-50/50 px-3.5 py-2.5 text-sm leading-relaxed text-slate-600 space-y-1"
           >
-            {t('cameraPpe.capabilityTruthNote')}
-          </p>
+            <p>{t('cameraPpe.capabilityTruthNote')}</p>
+            <p className="text-xs text-slate-600">{t('cameraPpe.modelCapabilityDistinction')}</p>
+          </div>
 
           <div className="grid grid-cols-1 gap-4 xl:grid-cols-[minmax(0,1fr)_minmax(21rem,1fr)] items-start">
             <div className="space-y-4 min-w-0">
@@ -969,6 +1036,8 @@ function PolicyEditor({
 
               <fieldset disabled={!canWrite || mutation.isPending} className="grid gap-3 min-w-0">
                 <PolicyFields
+                  key={`${cameraId}:${regionId || 'camera'}:${saved?.configurationVersion ?? 0}:${saved?.savedRevision ?? 'none'}`}
+                  scopeKey={`${cameraId}:${regionId || 'camera'}:${saved?.configurationVersion ?? 0}:${saved?.savedRevision ?? 'none'}`}
                   label={
                     selected
                       ? formatScopedRegionLabel(selected, regionIndexById.get(selected.id) ?? 1)
@@ -1074,12 +1143,41 @@ function PolicyEditor({
         </p>
       )}
       {mutation.isError && activeDenialStatus === null && (
-        <p
+        <div
           role="alert"
-          className="rounded-xl border border-rose-200 bg-rose-50 px-3.5 py-2.5 text-sm font-medium text-rose-900"
+          className="rounded-xl border border-rose-200 bg-rose-50 px-3.5 py-2.5 text-sm font-medium text-rose-900 space-y-2"
         >
-          {t(resolvePpeMutationErrorKey(mutation.error))}
-        </p>
+          <p>{t(resolvePpeMutationErrorKey(mutation.error))}</p>
+          {mutation.error instanceof ApiError && mutation.error.status === 409 && (
+            <div className="flex flex-wrap items-center gap-2">
+              <button
+                type="button"
+                data-testid="camera-ppe-409-reload-policy"
+                className={CAMERA_BUTTON_STYLES.compactSecondary}
+                onClick={() => {
+                  mutation.reset();
+                  void cache.invalidateQueries({ queryKey: context.setupKey });
+                }}
+              >
+                {t('cameraPpe.retry')}
+              </button>
+              {canWrite &&
+                onOpenReference &&
+                (applicationStatus.verifiedPayload?.status.viewValidity === 'UNAVAILABLE' ||
+                  applicationStatus.verifiedPayload?.status.viewValidity ===
+                    'NEEDS_REVALIDATION') && (
+                  <button
+                    type="button"
+                    data-testid="camera-ppe-409-open-reference"
+                    className={CAMERA_BUTTON_STYLES.compactSecondary}
+                    onClick={(event) => onOpenReference(event.currentTarget)}
+                  >
+                    {t('cameraPpe.openReference')}
+                  </button>
+                )}
+            </div>
+          )}
+        </div>
       )}
     </div>
   );

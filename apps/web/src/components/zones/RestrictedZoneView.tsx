@@ -818,6 +818,10 @@ export function RestrictedZoneView({
   if (selectedCameraId) cameraSetupParams.set('cameraId', selectedCameraId);
   const cameraSetupHref =
     cameraSetupParams.size > 0 ? `/camera-setup?${cameraSetupParams}` : '/camera-setup';
+  const editPolygonParams = new URLSearchParams(cameraSetupParams);
+  editPolygonParams.set('action', 'regions');
+  if (selectedRegionId) editPolygonParams.set('regionId', selectedRegionId);
+  const editPolygonHref = `/camera-setup?${editPolygonParams}`;
 
   if (linkedMonitoring) {
     const setupButtonClass = isZoneFullscreen
@@ -898,6 +902,25 @@ export function RestrictedZoneView({
               </div>
 
               <div className="flex min-w-0 max-w-full flex-wrap items-center gap-2">
+                {canAccessCameraSetup &&
+                  selectedCameraId &&
+                  (inRouter ? (
+                    <Link
+                      to={editPolygonHref}
+                      data-testid="zones-edit-polygon-link"
+                      className={setupButtonClass}
+                    >
+                      {tSafety('zoneMonitor.toolbar.editPolygon')}
+                    </Link>
+                  ) : (
+                    <a
+                      href={editPolygonHref}
+                      data-testid="zones-edit-polygon-link"
+                      className={setupButtonClass}
+                    >
+                      {tSafety('zoneMonitor.toolbar.editPolygon')}
+                    </a>
+                  ))}
                 {canAccessCameraSetup &&
                   (inRouter ? (
                     <Link to={cameraSetupHref} className={setupButtonClass}>

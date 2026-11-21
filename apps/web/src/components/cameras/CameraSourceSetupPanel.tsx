@@ -45,7 +45,7 @@ function SourceWorkspace({
 }: CameraSourceSetupProps) {
   const { t } = useTranslation(SAFETY_NAMESPACE),
     id = useId();
-  const [hostId, setHostId] = useState(''),
+  const [selectedHostId, setSelectedHostId] = useState<string | null>(null),
     [kind, setKind] = useState<CameraSourceKind | 'BROWSER'>('WEBCAM');
   const [device, setDevice] = useState(''),
     [asset, setAsset] = useState(''),
@@ -139,8 +139,20 @@ function SourceWorkspace({
       }
     },
   });
-  const resumeScope = useRef({ hostId, version: camera.configurationVersion });
+  const resumeScope = useRef({ hostId: '', version: camera.configurationVersion });
   const { isPending: resumePending, reset: resetResume } = resuming;
+  const hosts = useQuery({
+    queryKey: [...setupKey, 'camera-source-hosts', siteId, camera.id],
+    retry: false,
+    queryFn: ({ signal }) => client.hosts(apiUrl, token, siteId, camera.id, signal),
+  });
+  const availableHosts = hosts.data?.filter((h) => h.available) ?? [];
+  const hostId =
+    selectedHostId !== null
+      ? selectedHostId
+      : availableHosts.length === 1
+        ? availableHosts[0]!.id
+        : '';
   useEffect(() => {
     if (resumePending) return;
     if (
@@ -182,11 +194,6 @@ function SourceWorkspace({
     const timer = setInterval(() => setNow(Date.now()), 1000);
     return () => clearInterval(timer);
   }, [result]);
-  const hosts = useQuery({
-    queryKey: [...setupKey, 'camera-source-hosts', siteId, camera.id],
-    retry: false,
-    queryFn: ({ signal }) => client.hosts(apiUrl, token, siteId, camera.id, signal),
-  });
   const hostAccessDenied =
     hosts.error instanceof SourceSetupError && [401, 403].includes(hosts.error.status);
   const authFailureReported = useRef(false);
@@ -462,7 +469,7 @@ function SourceWorkspace({
                   disabled={blocked || hosts.isPending}
                   onChange={(e) =>
                     change(() => {
-                      setHostId(e.target.value);
+                      setSelectedHostId(e.target.value);
                       setDevice('');
                       setAsset('');
                       setPassword('');
@@ -642,7 +649,11 @@ function SourceWorkspace({
         {caps?.configurationResumeSupported === true &&
           client.resume &&
           camera.configurationVersion !== undefined && (
-            <aside className="space-y-3 rounded-xl border border-slate-200 border-l-[3px] border-l-teal-700 bg-slate-50/50 p-4">
+            <aside
+              id="camera-source-resume-section"
+              data-testid="camera-source-resume-card"
+              className="space-y-3 rounded-xl border border-slate-200 border-l-[3px] border-l-teal-700 bg-slate-50/50 p-4"
+            >
               <div className="flex flex-wrap items-center justify-between gap-2">
                 <h3 className="text-sm font-semibold text-slate-950">
                   {t('cameraSource.savedConfiguration')}

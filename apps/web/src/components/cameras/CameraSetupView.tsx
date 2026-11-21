@@ -86,6 +86,9 @@ function SetupWorkspace({ apiUrl, session }: { apiUrl: string; session: SharedSe
   } = useCameraSetupWorkspace(apiUrl, session);
 
   const requestedCameraId = params.get('cameraId');
+  const requestedAction = params.get('action');
+  const requestedRegionId = params.get('regionId') ?? undefined;
+  const autoOpenedActionRef = useRef<string | null>(null);
   const [focusSelection, setFocusSelection] = useState<{
     siteId: string;
     requestedId: string | null;
@@ -220,11 +223,65 @@ function SetupWorkspace({ apiUrl, session }: { apiUrl: string; session: SharedSe
     site && focusSelection?.siteId === site.id && focusSelection.requestedId === requestedCameraId
       ? focusSelection.cameraId
       : null;
+  const matchedRequestedCamera = requestedCameraId
+    ? (rows.find((row) => row.id === requestedCameraId) ?? null)
+    : null;
   const catalogSelectedCamera =
     (focusedCameraId ? rows.find((row) => row.id === focusedCameraId) : undefined) ??
-    (requestedCameraId ? rows.find((row) => row.id === requestedCameraId) : undefined) ??
+    matchedRequestedCamera ??
     rows[0] ??
     null;
+  const deepLinkActionScope =
+    site && matchedRequestedCamera && requestedAction
+      ? `${site.id}:${matchedRequestedCamera.id}:${requestedAction}:${requestedRegionId ?? ''}`
+      : null;
+  useEffect(() => {
+    if (
+      !deepLinkActionScope ||
+      autoOpenedActionRef.current === deepLinkActionScope ||
+      !site ||
+      !matchedRequestedCamera ||
+      (focusedCameraId && focusedCameraId !== matchedRequestedCamera.id) ||
+      !canManageCameras ||
+      revoked ||
+      sites.baseError ||
+      cameras.baseError
+    ) {
+      return;
+    }
+    if (requestedAction === 'regions' && matchedRequestedCamera.status === 'ACTIVE') {
+      autoOpenedActionRef.current = deepLinkActionScope;
+      open('regions', matchedRequestedCamera.id);
+    }
+  }, [
+    deepLinkActionScope,
+    site,
+    matchedRequestedCamera,
+    focusedCameraId,
+    canManageCameras,
+    revoked,
+    sites.baseError,
+    cameras.baseError,
+    requestedAction,
+    open,
+  ]);
+  const isSourceSetupVisible = Boolean(
+    import.meta.env.VITE_SMARTSITE_ENABLE_SOURCE_SETUP === 'true' &&
+    catalogSelectedCamera &&
+    !sites.baseError &&
+    !cameras.baseError &&
+    !revoked,
+  );
+  const handleJumpToApplyWorker = isSourceSetupVisible
+    ? () => {
+        const target = document.getElementById('camera-source-resume-section');
+        target?.scrollIntoView?.({ behavior: 'smooth', block: 'center' });
+        const applyBtn = target?.querySelector('button');
+        if (applyBtn instanceof HTMLButtonElement && !applyBtn.disabled) {
+          applyBtn.focus();
+        }
+      }
+    : undefined;
   const headerReturnParams = new URLSearchParams(returnParams);
   if (
     site &&
@@ -280,9 +337,16 @@ function SetupWorkspace({ apiUrl, session }: { apiUrl: string; session: SharedSe
           ...common,
           section: 'regions',
           initialCameraId: activeDialog.cameraId,
+          initialRegionId:
+            requestedAction === 'regions' &&
+            matchedRequestedCamera &&
+            activeDialog.cameraId === matchedRequestedCamera.id
+              ? requestedRegionId
+              : undefined,
           onSelectCamera: (cameraId) => {
             if (isCurrentDialog()) syncActiveRegionCameraParam(cameraId, true);
           },
+          onOpenApply: handleJumpToApplyWorker,
           canReadZones,
           canManageZones: capabilities.canManageZones,
           canManageRegions: canManageCameras,
@@ -418,12 +482,12 @@ function SetupWorkspace({ apiUrl, session }: { apiUrl: string; session: SharedSe
       {site && (
         <CameraSetupCatalog
           key={site.id}
+          autoExpandPpeCameraId={
+            requestedAction === 'ppe' && matchedRequestedCamera ? matchedRequestedCamera.id : null
+          }
+          onOpenApply={handleJumpToApplyWorker}
           sourceSetupStage={
-            import.meta.env.VITE_SMARTSITE_ENABLE_SOURCE_SETUP === 'true' &&
-            catalogSelectedCamera &&
-            !sites.baseError &&
-            !cameras.baseError &&
-            !revoked ? (
+            isSourceSetupVisible && catalogSelectedCamera ? (
               <CameraSourceSetupPanel
                 apiUrl={apiUrl}
                 token={session.accessToken}

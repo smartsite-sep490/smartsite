@@ -27,7 +27,9 @@ function ZonePpeSetupPanelInternal(props: ZonePpeSetupPanelInternalProps) {
     canManageZones,
     section = 'all',
     initialCameraId,
+    initialRegionId,
     onSelectCamera,
+    onOpenApply,
     onClose,
     embedded = false,
     tourUserId = null,
@@ -188,6 +190,8 @@ function ZonePpeSetupPanelInternal(props: ZonePpeSetupPanelInternalProps) {
               credentialId={credentialId}
               siteId={siteId}
               initialCameraId={initialCameraId}
+              initialRegionId={initialRegionId}
+              onOpenApply={onOpenApply}
               zones={scopedZones}
               tourUserId={tourUserId}
             />

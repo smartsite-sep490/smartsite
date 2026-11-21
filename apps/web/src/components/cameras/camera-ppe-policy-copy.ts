@@ -6,7 +6,13 @@ const en = {
   subtitle: 'Set camera or region PPE rules and compare saved vs applied state.',
   referenceRequired:
     'First get a reference image in observation-region setup. Then return here to save PPE rules. Your draft stays here.',
+  referenceRevalidationRequired:
+    'Camera view or active regions need confirmation on a fresh reference image before saving PPE changes. Open observation-region setup, confirm the reference view, then return here — your draft stays preserved.',
   openReference: 'Set up reference image',
+  refreshWorkerStatus: 'Refresh worker status',
+  jumpToApplyWorker: 'Go to apply on worker',
+  modelCapabilityDistinction:
+    'Required PPE vs model support: editing checkboxes saves the desired PPE policy revision on Backend only; actual detection depends on the classes supported by the active worker model artifact (no per-camera model weights are changed here).',
   target: 'Policy scope',
   camera: 'Camera default',
   region: 'Region',
@@ -128,7 +134,13 @@ const vi: Record<keyof typeof en, string> = {
   subtitle: 'Cấu hình PPE cho camera hoặc vùng, đối chiếu trạng thái đã áp dụng.',
   referenceRequired:
     'Trước tiên, lấy ảnh tham chiếu trong phần vùng quan sát. Sau đó quay lại đây để lưu yêu cầu PPE. Bản nháp được giữ nguyên.',
+  referenceRevalidationRequired:
+    'Góc nhìn camera hoặc vùng quan sát đang bật cần xác nhận lại trên ảnh tham chiếu mới trước khi lưu thay đổi PPE. Mở phần vùng quan sát để xác nhận rồi quay lại đây — bản nháp vẫn được giữ nguyên.',
   openReference: 'Thiết lập ảnh tham chiếu',
+  refreshWorkerStatus: 'Làm mới trạng thái worker',
+  jumpToApplyWorker: 'Đi tới áp dụng cho worker',
+  modelCapabilityDistinction:
+    'Phân biệt PPE bắt buộc và năng lực mô hình: thay đổi ở đây chỉ lưu phiên bản chính sách PPE mong muốn trên máy chủ; khả năng nhận diện thực tế vẫn phụ thuộc các lớp PPE mà tệp mô hình của worker đang nạp hỗ trợ (không thay đổi trọng số mô hình theo từng camera).',
   target: 'Phạm vi chính sách',
   camera: 'Mặc định camera',
   region: 'Vùng',

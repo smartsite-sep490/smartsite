@@ -7,6 +7,7 @@ export const ZONE_MONITOR_EN = {
   'zoneMonitor.header.subtitle':
     'Monitor restricted area boundaries and camera status for the selected site.',
   'zoneMonitor.toolbar.boundarySummary': 'AI boundary info',
+  'zoneMonitor.toolbar.editPolygon': 'Edit zone polygon',
   'zoneMonitor.inspectorRail.regionLabel': 'Region #{{index}} ({{status}})',
   'zoneMonitor.inspectorRail.regionActive': 'Active',
   'zoneMonitor.inspectorRail.regionInactive': 'Inactive',
@@ -22,6 +23,7 @@ export const ZONE_MONITOR_VI: Record<ZoneMonitorKey, string> = {
   'zoneMonitor.header.subtitle':
     'Theo dõi ranh giới khu vực hạn chế và trạng thái camera theo công trường đang chọn.',
   'zoneMonitor.toolbar.boundarySummary': 'Thông tin vùng AI',
+  'zoneMonitor.toolbar.editPolygon': 'Sửa đa giác vùng',
   'zoneMonitor.inspectorRail.regionLabel': 'Vùng #{{index}} ({{status}})',
   'zoneMonitor.inspectorRail.regionActive': 'Đang bật',
   'zoneMonitor.inspectorRail.regionInactive': 'Đang tắt',
