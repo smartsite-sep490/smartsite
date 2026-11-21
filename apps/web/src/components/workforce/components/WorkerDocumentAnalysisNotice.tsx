@@ -15,7 +15,9 @@ export function WorkerDocumentAnalysisNotice({
   return (
     <div className="space-y-2 rounded-xl border border-slate-200 bg-white p-3 text-xs text-slate-700">
       <h4 className="font-bold">{tr('documents.aiAnalysis')}</h4>
-      {analysis.status === 'UNAVAILABLE' ? (
+      {analysis.status === 'ANALYZING' ? (
+        <p>{tr('documents.aiAnalyzing')}</p>
+      ) : analysis.status === 'UNAVAILABLE' ? (
         <p>{tr('documents.aiUnavailable')}</p>
       ) : (
         <>
@@ -28,7 +30,7 @@ export function WorkerDocumentAnalysisNotice({
                   : 'documents.aiInsufficient',
             )}
           </p>
-          <dl className="grid grid-cols-[1fr_auto] gap-x-3 gap-y-1">
+          <dl className="grid grid-cols-1 sm:grid-cols-[minmax(0,1fr)_minmax(0,1fr)] gap-x-3 gap-y-1 [&_dd]:break-words [&_dd]:min-w-0 [&_dt]:text-slate-500">
             <dt>{tr('documents.aiSelectedKind')}</dt>
             <dd>{tr('documents.' + kind)}</dd>
             <dt>{tr('documents.aiDetectedKind')}</dt>
@@ -50,6 +52,13 @@ export function WorkerDocumentAnalysisNotice({
             <dt>{tr('documents.aiReferenceId')}</dt>
             <dd>{reference ?? unknown}</dd>
           </dl>
+          {(analysis.validity === 'EXPIRED' || analysis.validity === 'NOT_YET_VALID') && (
+            <p className="font-semibold text-amber-900">
+              {tr(
+                analysis.validity === 'EXPIRED' ? 'documents.aiExpired' : 'documents.aiNotYetValid',
+              )}
+            </p>
+          )}
           {analysis.dateCheck.status === 'MISMATCH' && (
             <p className="font-semibold text-amber-900">{tr('documents.aiDateMismatch')}</p>
           )}

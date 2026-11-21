@@ -159,3 +159,111 @@ def test_private_cli_validates_bytes_and_emits_only_bounded_suggestions():
         "nationalIds",
         "warnings",
     }
+
+
+def test_combined_inspection_shares_rendered_pages_and_uses_native_pdf_text_first():
+    from unittest.mock import patch
+    from types import SimpleNamespace
+
+    calls = []
+    native = "SYNTHETIC HEALTH CERTIFICATE. Date of issue: 17/10/2026. " * 2
+
+    def run(args, **kwargs):
+        calls.append(Path(args[0]).stem)
+        command = Path(args[0]).stem
+        if command == "pdfinfo":
+            return SimpleNamespace(stdout=b"Pages: 2\n", returncode=0)
+        if command == "pdftotext":
+            return SimpleNamespace(stdout=(native + "\f\f").encode(), returncode=0)
+        if command == "pdftoppm":
+            root = Path(args[-1]).parent
+            for index in (1, 2):
+                Image.new("RGB", (800, 600), "white").save(root / f"page-{index}.png")
+            return SimpleNamespace(stdout=b"", returncode=0)
+        assert command == "tesseract"
+        return SimpleNamespace(stdout=b"Expiry date: 17/10/2028", returncode=0)
+
+    with patch("worker_document_ocr.subprocess.run", side_effect=run):
+        result = LocalDocumentOcr("tesseract", "pdftoppm").inspect(
+            b"%PDF-synthetic", "application/pdf"
+        )
+    assert result["ocr"]["issuedOn"] == "2026-10-17"
+    assert result["ocr"]["expiresOn"] == "2028-10-17"
+    assert result["quality"]["status"] == "RETAKE"
+    assert calls.count("pdftoppm") == 1
+    assert calls.count("tesseract") == 1
+
+
+def test_partial_pdf_ocr_preserves_native_evidence_when_scan_engine_fails():
+    from unittest.mock import patch
+    from types import SimpleNamespace
+
+    def run(args, **kwargs):
+        command = Path(args[0]).stem
+        if command == "pdfinfo":
+            return SimpleNamespace(stdout=b"Pages: 2\n", returncode=0)
+        if command == "pdftotext":
+            return SimpleNamespace(
+                stdout=b"SYNTHETIC DOCUMENT. Date of issue: 17/10/2026. Native text.\f\f"
+            )
+        if command == "pdftoppm":
+            root = Path(args[-1]).parent
+            for index in (1, 2):
+                Image.new("RGB", (800, 600), "white").save(root / f"page-{index}.png")
+            return SimpleNamespace(stdout=b"")
+        raise subprocess.TimeoutExpired(args, 10)
+
+    with patch("worker_document_ocr.subprocess.run", side_effect=run):
+        result = LocalDocumentOcr("tesseract", "pdftoppm").inspect(
+            b"%PDF-synthetic", "application/pdf"
+        )
+    assert result["ocr"]["issuedOn"] == "2026-10-17"
+    assert "OCR_PARTIAL_REVIEW_ORIGINAL" in result["ocr"]["warnings"]
+
+
+def test_pdf_validation_enforces_actual_page_limit_and_reports_missing_tools():
+    from unittest.mock import patch
+    from types import SimpleNamespace
+
+    engine = LocalDocumentOcr(None, "pdftoppm")
+    for pages, expected in [(0, False), (1, True), (4, True), (5, False)]:
+        def run(args, **kwargs):
+            command = Path(args[0]).stem
+            if command == "pdfinfo":
+                return SimpleNamespace(stdout=f"Pages: {pages}\n".encode())
+            if command == "pdftoppm":
+                root = Path(args[-1]).parent
+                for index in range(1, pages + 1):
+                    Image.new("RGB", (800, 600), "white").save(
+                        root / f"page-{index}.png"
+                    )
+            return SimpleNamespace(stdout=b"")
+        with patch("worker_document_ocr.subprocess.run", side_effect=run):
+            assert engine.validate_pdf(b"%PDF-synthetic")["valid"] is expected
+    with patch("worker_document_ocr.subprocess.run",
+               side_effect=subprocess.CalledProcessError(1, "pdfinfo")):
+        assert engine.validate_pdf(b"%PDF-corrupt")["valid"] is False
+    assert LocalDocumentOcr(None, None).validate_pdf(b"%PDF")["valid"] is None
+
+
+def test_pdf_with_readable_metadata_but_broken_page_content_is_rejected():
+    from unittest.mock import patch
+    from types import SimpleNamespace
+
+    def run(args, **kwargs):
+        command = Path(args[0]).stem
+        if command == "pdfinfo":
+            return SimpleNamespace(stdout=b"Pages: 1\n")
+        if command == "pdftotext":
+            return SimpleNamespace(stdout=b"")
+        raise subprocess.CalledProcessError(1, args)
+    with patch("worker_document_ocr.subprocess.run", side_effect=run):
+        engine = LocalDocumentOcr(None, "pdftoppm")
+        assert engine.validate_pdf(b"%PDF-corrupt")["valid"] is False
+        assert engine.inspect(b"%PDF-corrupt", "application/pdf")["quality"]["reason"] == "IMAGE_INVALID"
+
+
+def test_large_image_reason_is_not_confused_with_tiny_image():
+    output = io.BytesIO()
+    Image.new("RGB", (5000, 4001), "white").save(output, format="PNG")
+    assert image_quality(output.getvalue()).reason == "IMAGE_TOO_LARGE"

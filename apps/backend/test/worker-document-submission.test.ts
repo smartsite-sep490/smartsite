@@ -3,7 +3,6 @@ import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
 import { test } from 'node:test';
 import type { DataSource } from 'typeorm';
-import type { UploadWorkerDocumentCommand } from '@smartsite/contracts';
 import { PublicHttpException } from '../src/common/http/public-http-exception.js';
 import {
   WorkerEntity,
@@ -82,110 +81,31 @@ function fixture(
   );
   return { service, qualityCalls: () => qualityCalls };
 }
-test('an authenticated Worker can check a renewal image even while their Worker is suspended', async () => {
+test('Workers cannot submit, preflight or edit documents, including their own profile', async () => {
   const { service, qualityCalls } = fixture();
-  assert.deepEqual(await service.checkWorkerQuality(actor, siteId, workerId, file), {
-    status: 'ACCEPTED',
-    reason: 'IMAGE_ACCEPTED',
-  });
-  assert.equal(qualityCalls(), 1);
-});
-test('Worker submission denies other owners, revoked accounts/roles, cross-site and missing scope before OCR', async () => {
-  for (const options of [{ owner: randomUUID() }, { active: false }, { role: false }]) {
-    const { service, qualityCalls } = fixture(options);
-    await assert.rejects(
-      service.checkWorkerQuality(actor, siteId, workerId, file),
-      (e: unknown) => e instanceof PublicHttpException && e.publicPayload.code === 'FORBIDDEN',
-    );
-    assert.equal(qualityCalls(), 0);
-  }
-  const { service, qualityCalls } = fixture();
-  await assert.rejects(service.checkWorkerQuality(actor, randomUUID(), workerId, file));
-  await assert.rejects(
-    service.checkWorkerQuality({ ...actor, roleAssignments: [] }, siteId, workerId, file),
-  );
-  assert.equal(qualityCalls(), 0);
-});
-test('unavailable authorization and malformed renewal images never reach OCR', async () => {
-  const unavailable = fixture({ unavailable: true });
-  await assert.rejects(
-    unavailable.service.checkWorkerQuality(actor, siteId, workerId, file),
-    /Synthetic authorization unavailable/,
-  );
-  assert.equal(unavailable.qualityCalls(), 0);
-  const valid = fixture();
-  await assert.rejects(
-    valid.service.checkWorkerQuality(actor, siteId, workerId, { ...file, size: 0 }),
-  );
-  assert.equal(valid.qualityCalls(), 0);
-});
-
-test('Workers must declare a real date before final upload, while OCR preflight accepts no date', async () => {
-  const { service, qualityCalls } = fixture();
-  for (const input of [{}, { submittedExpiresOn: null }, { submittedExpiresOn: '2030-02-30' }]) {
-    await assert.rejects(
-      service.upload(
+  for (const operation of [
+    () => service.checkWorkerQuality(actor, siteId, workerId, file),
+    () => service.checkSubmission(actor, siteId, workerId, 'SAFETY_CARD', file),
+    () =>
+      service.submit(
         actor,
         siteId,
         workerId,
-        'SAFETY_CARD',
-        file,
-        input as UploadWorkerDocumentCommand,
+        { requestId: randomUUID(), expectedVersion: 0, safetyCardRequired: true, documents: {} },
+        {},
       ),
-    );
-  }
-  assert.equal(qualityCalls(), 0);
-  const preview = await service.checkSubmission(actor, siteId, workerId, 'SAFETY_CARD', file);
-  assert.equal(preview.dateCheck.status, 'NO_REFERENCE');
-  assert.equal(preview.dateCheck.detectedDate, '2030-10-27');
-  await assert.rejects(
-    service.checkSubmission(actor, siteId, workerId, 'SAFETY_CARD', file, {
-      submittedExpiresOn: '2030-02-30',
-    }),
-  );
-});
-
-test('preflight checks dates without storage or persistence and enforces current owner/account/scope', async () => {
-  const { service } = fixture();
-  const result = await service.checkSubmission(actor, siteId, workerId, 'SAFETY_CARD', file, {
-    submittedExpiresOn: '2030-10-27',
-  });
-  assert.equal(result.dateCheck.status, 'MATCH');
-  assert.equal(
-    (
-      await service.checkSubmission(actor, siteId, workerId, 'HEALTH_CERTIFICATE', file, {
-        submittedIssuedOn: '2026-10-28',
-      })
-    ).dateCheck.status,
-    'MISMATCH',
-  );
-  for (const options of [
-    { owner: randomUUID() },
-    { active: false },
-    { role: false },
-    { unavailable: true },
-  ]) {
-    const denied = fixture(options);
+  ])
     await assert.rejects(
-      denied.service.checkSubmission(actor, siteId, workerId, 'SAFETY_CARD', file, {
-        submittedExpiresOn: '2030-10-27',
-      }),
+      operation,
+      (e) => e instanceof PublicHttpException && e.publicPayload.code === 'FORBIDDEN',
     );
-    assert.equal(denied.qualityCalls(), 0);
-  }
+  assert.equal(qualityCalls(), 0);
+});
+test('unavailable authorization fails before OCR or storage', async () => {
+  const { service, qualityCalls } = fixture({ unavailable: true });
   await assert.rejects(
-    service.checkSubmission(actor, randomUUID(), workerId, 'SAFETY_CARD', file, {
-      submittedExpiresOn: '2030-10-27',
-    }),
+    service.checkWorkerQuality(actor, siteId, workerId, file),
+    /Synthetic authorization unavailable/,
   );
-  await assert.rejects(
-    service.checkSubmission(
-      { ...actor, roleAssignments: [] },
-      siteId,
-      workerId,
-      'SAFETY_CARD',
-      file,
-      { submittedExpiresOn: '2030-10-27' },
-    ),
-  );
+  assert.equal(qualityCalls(), 0);
 });

@@ -3,11 +3,18 @@ import React, { useState } from 'react';
 import { View, Text, TextInput, Pressable, StyleSheet, ActivityIndicator } from 'react-native';
 import { colors } from '../../theme/colors';
 import { useWorkspace } from '../../features/workspace/workspace-context';
-import { useCommand, required, validDates } from '../../features/shared/data';
+import {
+  useCommand,
+  useRequestId,
+  required,
+  validDates,
+  localDate,
+} from '../../features/shared/data';
 import { useTranslation, uiLanguage } from '../../i18n';
 import { IconUserPlus } from '../common/Icons';
 import type {
   NativeUploadFile,
+  DocumentImageQuality,
   WorkerDocumentKind,
   ContractorWorkerAccountResponse,
 } from '@smartsite/api-client';
@@ -41,11 +48,20 @@ export function CreateWorkerModal({ visible, onClose, onSuccess }: CreateWorkerM
   >({});
   const [files, setFiles] = useState<Partial<Record<WorkerDocumentKind, NativeUploadFile[]>>>({});
   const [expiries, setExpiries] = useState<Partial<Record<WorkerDocumentKind, string>>>({});
+  const [identityChecks, setIdentityChecks] = useState<
+    Partial<Record<'FRONT' | 'BACK', DocumentImageQuality>>
+  >({});
+  const [checks, setChecks] = useState<Partial<Record<WorkerDocumentKind, DocumentImageQuality>>>(
+    {},
+  );
+  const [pendingVersion, setPendingVersion] = useState<number | null>(null);
   const [pendingAccount, setPendingAccount] = useState<ContractorWorkerAccountResponse | null>(
     null,
   );
   const [localError, setLocalError] = useState<string | null>(null);
   const command = useCommand();
+  const requestId = useRequestId();
+  const [safetyCardRequired, setSafetyCardRequired] = useState('');
   const validateImage = async (file: NativeUploadFile) => {
     const result = await client.checkDocumentImageQuality(
       token,
@@ -53,13 +69,14 @@ export function CreateWorkerModal({ visible, onClose, onSuccess }: CreateWorkerM
       scope.contractorId,
       file,
     );
-    if (result.status !== 'ACCEPTED') throw new Error(t(`documents.${result.reason}`));
+    return result;
   };
 
   const handleCreate = async () => {
     try {
       setLocalError(null);
-      for (const value of Object.values(expiries)) if (value) validDates(value, value);
+      for (const kind of documentKinds)
+        if (files[kind]?.[0]) validDates(expiries[kind] ?? '', expiries[kind] ?? '');
       const name = required(displayName, t('workforce.fullName'));
       const user = required(username, t('workforce.username'));
       const recipient = required(email, t('accountEmail.email')).toLowerCase();
@@ -72,7 +89,10 @@ export function CreateWorkerModal({ visible, onClose, onSuccess }: CreateWorkerM
         !address.trim() ||
         !identityFiles.FRONT?.[0] ||
         !identityFiles.BACK?.[0] ||
-        documentKinds.some((kind) => !files[kind]?.[0])
+        !safetyCardRequired ||
+        documentKinds.some(
+          (kind) => (kind !== 'SAFETY_CARD' || safetyCardRequired === 'true') && !files[kind]?.[0],
+        )
       )
         throw new Error(t('documents.required'));
       await command.mutateAsync(async () => {
@@ -90,27 +110,34 @@ export function CreateWorkerModal({ visible, onClose, onSuccess }: CreateWorkerM
             address: address.trim(),
           }));
         setPendingAccount(account);
-        for (const side of ['FRONT', 'BACK'] as const)
-          await client.uploadWorkerIdentityImage(
-            token,
-            scope.siteId,
-            account.worker.id,
-            side,
-            identityFiles[side]![0]!,
-          );
+        const current = await client.workerCompliance(token, scope.siteId, account.worker.id);
+        const expectedVersion = pendingVersion ?? current.version ?? 0;
+        setPendingVersion(expectedVersion);
+        const documents: import('@smartsite/api-client').SubmitWorkerDocumentsCommand['documents'] =
+          {};
+        const selected: Partial<Record<WorkerDocumentKind | 'FRONT' | 'BACK', NativeUploadFile>> =
+          {};
         for (const kind of documentKinds)
-          await client.uploadWorkerDocument(
-            token,
-            scope.siteId,
-            account.worker.id,
-            kind,
-            files[kind]![0]!,
-            expiries[kind]
-              ? kind === 'HEALTH_CERTIFICATE'
-                ? { submittedIssuedOn: expiries[kind] }
-                : { submittedExpiresOn: expiries[kind] }
-              : {},
-          );
+          if (files[kind]?.[0]) {
+            selected[kind] = files[kind]![0];
+            documents[kind] =
+              kind === 'HEALTH_CERTIFICATE'
+                ? { submittedIssuedOn: expiries[kind]! }
+                : { submittedExpiresOn: expiries[kind]! };
+          }
+        for (const side of ['FRONT', 'BACK'] as const) selected[side] = identityFiles[side]![0];
+        const input = {
+          expectedVersion,
+          safetyCardRequired: safetyCardRequired === 'true',
+          documents,
+        };
+        await client.submitWorkerDocuments(
+          token,
+          scope.siteId,
+          account.worker.id,
+          { ...input, requestId: requestId({ input, selected }) },
+          selected,
+        );
       });
       setDisplayName('');
       setUsername('');
@@ -118,11 +145,15 @@ export function CreateWorkerModal({ visible, onClose, onSuccess }: CreateWorkerM
       setNationalId('');
       setPhoneNumber('');
       setFiles({});
+      setChecks({});
       setExpiries({});
       setPendingAccount(null);
+      setPendingVersion(null);
+      setSafetyCardRequired('');
       setGender('');
       setAddress('');
       setIdentityFiles({});
+      setIdentityChecks({});
       onSuccess?.();
       onClose();
     } catch (err) {
@@ -153,16 +184,16 @@ export function CreateWorkerModal({ visible, onClose, onSuccess }: CreateWorkerM
           )}
           <Pressable
             accessibilityRole="button"
-            accessibilityLabel={t('workforce.createAccount')}
+            accessibilityLabel={t('documents.sendBundle')}
             accessibilityState={{ disabled: command.isPending, busy: command.isPending }}
             style={[styles.submitBtn, command.isPending && { opacity: 0.7 }]}
             onPress={handleCreate}
             disabled={command.isPending}
           >
             {command.isPending ? (
-              <ActivityIndicator size="small" color="#FFFFFF" />
+              <ActivityIndicator size="small" color={colors.textWhite} />
             ) : (
-              <Text style={styles.submitBtnText}>{t('workforce.createAccount')}</Text>
+              <Text style={styles.submitBtnText}>{t('documents.sendBundle')}</Text>
             )}
           </Pressable>
         </View>
@@ -278,16 +309,38 @@ export function CreateWorkerModal({ visible, onClose, onSuccess }: CreateWorkerM
                 files={identityFiles[side] ?? []}
                 maxFiles={1}
                 allowPdf={false}
-                validateFile={validateImage}
+                validateFile={async (file) => {
+                  const result = await validateImage(file);
+                  setIdentityChecks((previous) => ({ ...previous, [side]: result }));
+                }}
                 onChange={(selected) =>
                   setIdentityFiles((previous) => ({ ...previous, [side]: selected }))
                 }
               />
+              {identityChecks[side] && (
+                <Hint>
+                  {identityChecks[side]?.status !== 'ACCEPTED'
+                    ? t('documents.' + identityChecks[side]?.reason)
+                    : ''}
+                  {identityChecks[side]?.ocr?.nationalIds?.some((id) => id !== nationalId)
+                    ? ' · ' + t('documents.identityMismatch')
+                    : ''}
+                </Hint>
+              )}
             </Disclosure>
           ))}
         </View>
       </FormSection>
       <FormSection number="03" title={t('documents.title')}>
+        <Choice
+          label={t('documents.safetyCardRequired')}
+          value={safetyCardRequired}
+          onChange={setSafetyCardRequired}
+          options={[
+            { value: 'true', label: t('documents.cardRequired') },
+            { value: 'false', label: t('documents.cardNotRequired') },
+          ]}
+        />
         <Text style={styles.hintText}>{t('documents.hint')}</Text>
         <View pointerEvents={command.isPending ? 'none' : 'auto'}>
           {documentKinds.map((kind) => (
@@ -318,9 +371,52 @@ export function CreateWorkerModal({ visible, onClose, onSuccess }: CreateWorkerM
               <Attachments
                 files={files[kind] ?? []}
                 maxFiles={1}
-                validateFile={validateImage}
+                validateFile={async (file) => {
+                  const result = await validateImage(file);
+                  setChecks((previous) => ({ ...previous, [kind]: result }));
+                  const detected =
+                    kind === 'HEALTH_CERTIFICATE' ? result.ocr?.issuedOn : result.ocr?.expiresOn;
+                  if (detected)
+                    setExpiries((previous) => ({
+                      ...previous,
+                      [kind]: previous[kind] || detected,
+                    }));
+                }}
                 onChange={(selected) => setFiles((previous) => ({ ...previous, [kind]: selected }))}
               />
+              {kind === 'SAFETY_CARD' && safetyCardRequired === 'false' && (
+                <Hint>{t('documents.optional')}</Hint>
+              )}
+              {expiries[kind] &&
+                (kind === 'HEALTH_CERTIFICATE'
+                  ? (healthCertificateExpiry(expiries[kind]) ?? '')
+                  : expiries[kind]!) < localDate(new Date(), 'Asia/Ho_Chi_Minh') && (
+                  <Hint>{t('documents.expiredWarning')}</Hint>
+                )}
+              {checks[kind] && (
+                <Hint>
+                  {t('documents.dateDetected')}:{' '}
+                  {(kind === 'HEALTH_CERTIFICATE'
+                    ? checks[kind]?.ocr?.issuedOn
+                    : checks[kind]?.ocr?.expiresOn) ?? t('documents.notDetermined')}
+                  {checks[kind]?.status !== 'ACCEPTED'
+                    ? ' · ' + t('documents.' + checks[kind]?.reason)
+                    : ''}
+                  {checks[kind]?.ocr?.nationalIds?.some((id) => id !== nationalId)
+                    ? ' · ' + t('documents.identityMismatch')
+                    : ''}
+                  {expiries[kind] &&
+                  (kind === 'HEALTH_CERTIFICATE'
+                    ? checks[kind]?.ocr?.issuedOn
+                    : checks[kind]?.ocr?.expiresOn) &&
+                  expiries[kind] !==
+                    (kind === 'HEALTH_CERTIFICATE'
+                      ? checks[kind]?.ocr?.issuedOn
+                      : checks[kind]?.ocr?.expiresOn)
+                    ? ' · ' + t('documents.dateMismatch')
+                    : ''}
+                </Hint>
+              )}
             </Disclosure>
           ))}
         </View>
@@ -346,9 +442,9 @@ const styles = StyleSheet.create({
     marginBottom: 6,
   },
   input: {
-    backgroundColor: '#F8F9FB',
+    backgroundColor: colors.surfaceSubtle,
     borderWidth: 1,
-    borderColor: '#E2E8F0',
+    borderColor: colors.border,
     borderRadius: 14,
     paddingHorizontal: 14,
     paddingVertical: 12,
@@ -357,9 +453,9 @@ const styles = StyleSheet.create({
     minHeight: 48,
   },
   hintBox: {
-    backgroundColor: '#FEF9ED',
+    backgroundColor: colors.warningLightBg,
     borderWidth: 1,
-    borderColor: '#FDECC8',
+    borderColor: colors.warningBg,
     borderRadius: 12,
     padding: 12,
     marginBottom: 16,
@@ -370,16 +466,16 @@ const styles = StyleSheet.create({
     lineHeight: 18,
   },
   errorBox: {
-    backgroundColor: '#FEF2F2',
+    backgroundColor: colors.dangerBg,
     borderWidth: 1,
-    borderColor: '#FEE2E2',
+    borderColor: colors.dangerBg,
     borderRadius: 12,
     padding: 12,
     marginBottom: 16,
   },
   errorText: {
     fontSize: 12,
-    color: '#B91C1C',
+    color: colors.dangerText,
     lineHeight: 18,
   },
   submitBtn: {
@@ -395,7 +491,7 @@ const styles = StyleSheet.create({
   submitBtnText: {
     fontSize: 15,
     fontWeight: '700',
-    color: '#FFFFFF',
+    color: colors.textWhite,
     textAlign: 'center',
     lineHeight: 22,
     flexShrink: 1,

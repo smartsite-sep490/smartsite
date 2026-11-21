@@ -191,6 +191,7 @@ export const backendEnvironmentSchema = z
       .max(4096)
       .regex(/^[^\p{Cc}]+$/u)
       .optional(),
+    WORKER_DOCUMENT_OPENAI_TIMEOUT_MS: integer(30000, 1000, 120000),
     WORKER_DOCUMENT_NOTICE_DAYS: integer(30, 1, 365),
     WORKER_DOCUMENT_OPENAI_MODEL: z
       .string()

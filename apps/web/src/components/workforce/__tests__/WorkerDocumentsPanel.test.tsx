@@ -1,10 +1,9 @@
 // @vitest-environment jsdom
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
-import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
+import { cleanup, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import {
-  ApiError,
   SmartSiteManagementClient,
   type WorkerComplianceResponse,
   type WorkerDocumentResponse,
@@ -115,6 +114,7 @@ it('shows the citizen ID warning to Safety without blocking explicit approval', 
     ),
   ).toBeTruthy();
   await user.click(screen.getByRole('button', { name: tr('documents.view') }));
+  await user.click(await screen.findByRole('button', { name: tr('common.close_dialog') }));
   await user.type(screen.getByLabelText(tr('documents.note')), 'Original checked despite warning');
   await user.click(screen.getByLabelText(tr('documents.confirm')));
   const approve = screen.getByRole('button', {
@@ -147,7 +147,7 @@ it('shows mismatched ID warnings on originals to the read-only Worker too', asyn
   expect(screen.getAllByText(tr('documents.identityMismatch')).length).toBe(2);
   expect(screen.queryByRole('button', { name: tr('documents.approve') })).toBeNull();
 });
-function mount(canReview: boolean, canUpload = false, canSubmitDocuments = false) {
+function mount(canReview: boolean, canUpload = false) {
   render(
     <QueryClientProvider client={cache}>
       <WorkerDocumentsPanel
@@ -158,341 +158,10 @@ function mount(canReview: boolean, canUpload = false, canSubmitDocuments = false
         scope="synthetic-reviewer"
         canReview={canReview}
         canUpload={canUpload}
-        canSubmitDocuments={canSubmitDocuments}
       />
     </QueryClientProvider>,
   );
 }
-it('lets Safety request and retry AI analysis while the original stays visible', async () => {
-  const profile = await client.workerCompliance('token', 'site', 'worker');
-  let finish!: () => void;
-  const pending = new Promise<void>((resolve) => {
-    finish = resolve;
-  });
-  const analyze = vi
-    .spyOn(client, 'analyzeWorkerDocument')
-    .mockImplementationOnce(async () => {
-      await pending;
-      vi.mocked(client.workerCompliance).mockResolvedValue({
-        ...profile,
-        documents: [{ ...doc, aiAnalysis: { status: 'UNAVAILABLE' } }],
-      });
-    })
-    .mockImplementationOnce(async () => {
-      vi.mocked(client.workerCompliance).mockResolvedValue({
-        ...profile,
-        documents: [
-          {
-            ...doc,
-            aiAnalysis: {
-              status: 'COMPLETE',
-              detectedKind: 'SAFETY_CARD',
-              kindMismatch: false,
-              issuedOn: null,
-              expiresOn: null,
-              nationalId: null,
-              identityCheck: 'NOT_DETECTED',
-              dateCheck: {
-                field: 'EXPIRES_ON',
-                status: 'NO_REFERENCE',
-                submittedDate: null,
-                detectedDate: null,
-              },
-            },
-          },
-        ],
-      });
-    });
-  mount(true);
-  const user = userEvent.setup();
-  await user.click(await screen.findByRole('button', { name: tr('documents.view') }));
-  const original = within(await screen.findByRole('dialog'));
-  expect(analyze).not.toHaveBeenCalled();
-  await user.click(original.getByRole('button', { name: tr('documents.aiRun') }));
-  const waiting = await original.findByRole('button', { name: tr('documents.aiAnalyzing') });
-  expect((waiting as HTMLButtonElement).disabled).toBe(true);
-  await user.click(waiting);
-  expect(analyze).toHaveBeenCalledExactlyOnceWith('token', 'site', 'worker', doc.id);
-  expect(original.getByRole('img', { name: tr('documents.view') })).toBeTruthy();
-  await user.click(original.getByRole('button', { name: tr('documents.close') }));
-  await user.type(screen.getByLabelText(tr('documents.note')), 'Original reviewed');
-  await user.click(screen.getByLabelText(tr('documents.confirm')));
-  const approve = screen.getByRole('button', { name: tr('documents.approve') });
-  expect((approve as HTMLButtonElement).disabled).toBe(false);
-  await user.click(screen.getByRole('button', { name: tr('documents.view') }));
-  const reopened = within(await screen.findByRole('dialog'));
-  expect(
-    (reopened.getByRole('button', { name: tr('documents.aiAnalyzing') }) as HTMLButtonElement)
-      .disabled,
-  ).toBe(true);
-  finish();
-  await user.click(await reopened.findByRole('button', { name: tr('documents.aiRetry') }));
-  expect(await reopened.findByText(tr('documents.aiKindMatch'))).toBeTruthy();
-  expect(analyze).toHaveBeenCalledTimes(2);
-});
-
-it.each([false, true])(
-  'keeps the AI action private (Representative: %s)',
-  async (representative) => {
-    mount(false, representative, !representative);
-    await userEvent
-      .setup()
-      .click(await screen.findByRole('button', { name: tr('documents.view') }));
-    const original = within(await screen.findByRole('dialog'));
-    expect(original.queryByRole('button', { name: tr('documents.aiRun') })).toBeNull();
-  },
-);
-
-it.each([
-  {
-    failure: 'a network failure',
-    error: new ApiError('network', 'Synthetic network failure'),
-    keepsPreview: true,
-  },
-  {
-    failure: 'revoked permission',
-    error: new ApiError('http', 'Synthetic forbidden response', 403),
-    keepsPreview: false,
-  },
-])('handles $failure during an AI result refresh', async ({ error, keepsPreview }) => {
-  vi.spyOn(client, 'analyzeWorkerDocument').mockImplementationOnce(async () => {
-    vi.mocked(client.workerCompliance).mockRejectedValueOnce(error);
-  });
-  mount(true);
-  const user = userEvent.setup();
-  await screen.findByText(doc.originalName);
-  await user.type(screen.getByLabelText(tr('documents.note')), 'Draft review');
-  await user.click(screen.getByRole('button', { name: tr('documents.view') }));
-  const original = within(await screen.findByRole('dialog'));
-  await user.click(original.getByRole('button', { name: tr('documents.aiRun') }));
-  await screen.findByRole('alert');
-  if (keepsPreview) {
-    expect(screen.getByRole('dialog')).toBeTruthy();
-    expect(original.getByRole('img', { name: tr('documents.view') })).toBeTruthy();
-    await user.click(original.getByRole('button', { name: tr('documents.close') }));
-    expect((screen.getByLabelText(tr('documents.note')) as HTMLTextAreaElement).value).toBe(
-      'Draft review',
-    );
-  } else {
-    expect(screen.queryByRole('dialog')).toBeNull();
-  }
-});
-
-it.each([
-  ['SAFETY_CARD', false, 'AI nhận diện đúng loại giấy đã chọn'],
-  ['PERSONAL_INSURANCE', true, 'Có thể nộp nhầm loại giấy'],
-  [null, false, 'Không đủ thông tin để kết luận'],
-] as const)(
-  'shows advisory AI results for detected kind %s',
-  async (detectedKind, kindMismatch, message) => {
-    const profile = await client.workerCompliance('token', 'site', 'worker');
-    const analyzed = {
-      ...doc,
-      aiAnalysis: {
-        status: 'COMPLETE',
-        detectedKind,
-        kindMismatch,
-        issuedOn: null,
-        expiresOn: kindMismatch ? '2029-10-17' : null,
-        nationalId: kindMismatch ? '000000000099' : null,
-        identityCheck: kindMismatch ? 'MISMATCH' : 'NOT_DETECTED',
-        dateCheck: {
-          field: 'EXPIRES_ON',
-          status: kindMismatch ? 'MISMATCH' : 'UNAVAILABLE',
-          submittedDate: '2028-10-17',
-          detectedDate: kindMismatch ? '2029-10-17' : null,
-        },
-      } as const,
-    };
-    vi.mocked(client.workerCompliance).mockResolvedValue({ ...profile, documents: [analyzed] });
-    mount(true);
-    expect(await screen.findByText(message)).toBeTruthy();
-    await userEvent.setup().click(screen.getByRole('button', { name: tr('documents.view') }));
-    const original = within(await screen.findByRole('dialog'));
-    expect(original.getByRole('img', { name: tr('documents.view') })).toBeTruthy();
-    expect(original.getByText(message)).toBeTruthy();
-    if (kindMismatch) {
-      expect(original.getByText('Ngày AI đọc được khác ngày khai báo.')).toBeTruthy();
-      expect(original.getByText('CCCD AI đọc được khác CCCD trong hồ sơ.')).toBeTruthy();
-    }
-  },
-);
-
-async function chooseCalendarDate(label: string, date: string) {
-  const [year, month, day] = date.split('-').map(Number);
-  const user = userEvent.setup();
-  await user.click(screen.getByLabelText(label));
-  await user.selectOptions(
-    screen.getByRole('combobox', { name: tr('calendar.year') }),
-    String(year),
-  );
-  await user.selectOptions(
-    screen.getByRole('combobox', { name: tr('calendar.month') }),
-    String((month ?? 1) - 1),
-  );
-  await user.click(screen.getByRole('button', { name: new RegExp(`${day}.*${year}`) }));
-}
-it.each([false, true])(
-  'autofills OCR dates and only submits after a click (Representative: %s)',
-  async (representative) => {
-    const quality = vi.spyOn(client, 'checkWorkerDocumentDates').mockResolvedValue({
-      quality: { status: 'ACCEPTED', reason: 'IMAGE_ACCEPTED' },
-      ocr: doc.ocr,
-      dateCheck: {
-        status: 'NO_REFERENCE',
-        field: 'EXPIRES_ON',
-        submittedDate: null,
-        detectedDate: '2030-10-27',
-      },
-    });
-    const upload = vi
-      .spyOn(client, 'uploadWorkerDocument')
-      .mockResolvedValue({ ...doc, id: 'replacement' });
-    const identity = vi.spyOn(client, 'uploadWorkerIdentityImage');
-    mount(false, representative, !representative);
-    const label = `${tr('documents.upload')} — ${tr('documents.SAFETY_CARD')}`;
-    const input = await screen.findByLabelText(label);
-    expect((input as HTMLInputElement).disabled).toBe(false);
-    const date = screen.getByLabelText(
-      `${tr('documents.SAFETY_CARD')} - ${tr('documents.declaredExpiresOn')}`,
-    );
-    let file = new File(['synthetic replacement'], 'renewal.jpg', { type: 'image/jpeg' });
-    fireEvent.change(input, { target: { files: [file] } });
-    await screen.findByText(tr('documents.dateMatch'));
-    expect(date.textContent).toContain('27/10/2030');
-    expect(upload).not.toHaveBeenCalled();
-    expect(quality).toHaveBeenCalledWith('token', 'site', 'worker', 'SAFETY_CARD', file, {});
-    quality.mockResolvedValue({
-      quality: { status: 'ACCEPTED', reason: 'IMAGE_ACCEPTED' },
-      ocr: doc.ocr,
-      dateCheck: {
-        status: 'NO_REFERENCE',
-        field: 'EXPIRES_ON',
-        submittedDate: null,
-        detectedDate: '2032-10-27',
-      },
-    });
-    file = new File(['different synthetic certificate'], 'replacement.pdf', {
-      type: 'application/pdf',
-    });
-    fireEvent.change(input, { target: { files: [file] } });
-    await waitFor(() => expect(date.textContent).toContain('27/10/2032'));
-    expect(upload).not.toHaveBeenCalled();
-    await chooseCalendarDate(
-      `${tr('documents.SAFETY_CARD')} - ${tr('documents.declaredExpiresOn')}`,
-      '2031-10-27',
-    );
-    expect(
-      (screen.getByRole('button', { name: tr('documents.submitForReview') }) as HTMLButtonElement)
-        .disabled,
-    ).toBe(true);
-    quality.mockResolvedValue({
-      quality: { status: 'ACCEPTED', reason: 'IMAGE_ACCEPTED' },
-      ocr: doc.ocr,
-      dateCheck: {
-        status: 'MISMATCH',
-        field: 'EXPIRES_ON',
-        submittedDate: '2031-10-27',
-        detectedDate: '2032-10-27',
-      },
-    });
-    fireEvent.click(screen.getByRole('button', { name: tr('documents.dateRecheck') }));
-    await screen.findByText(tr('documents.dateMismatch'));
-    fireEvent.click(screen.getByRole('button', { name: tr('documents.submitForReview') }));
-    await waitFor(() =>
-      expect(upload).toHaveBeenCalledWith('token', 'site', 'worker', 'SAFETY_CARD', file, {
-        submittedExpiresOn: '2031-10-27',
-      }),
-    );
-    expect(identity).not.toHaveBeenCalled();
-    expect(screen.queryByRole('button', { name: tr('documents.approve') })).toBeNull();
-  },
-);
-
-it('autofills Health examination date and derives a one-year expiry without submitting', async () => {
-  vi.spyOn(client, 'checkWorkerDocumentDates').mockResolvedValue({
-    quality: { status: 'ACCEPTED', reason: 'IMAGE_ACCEPTED' },
-    ocr: { status: 'READ', issuedOn: '2026-10-27', expiresOn: '2030-10-27', warnings: [] },
-    dateCheck: {
-      status: 'NO_REFERENCE',
-      field: 'ISSUED_ON',
-      submittedDate: null,
-      detectedDate: '2026-10-27',
-    },
-  });
-  const upload = vi.spyOn(client, 'uploadWorkerDocument').mockResolvedValue(doc);
-  mount(false, false, true);
-  fireEvent.click(
-    await screen.findByRole('button', { name: new RegExp(tr('documents.HEALTH_CERTIFICATE')) }),
-  );
-  const input = await screen.findByLabelText(
-    `${tr('documents.upload')} — ${tr('documents.HEALTH_CERTIFICATE')}`,
-  );
-  fireEvent.change(input, {
-    target: { files: [new File(['synthetic'], 'health.pdf', { type: 'application/pdf' })] },
-  });
-  await screen.findByText(tr('documents.dateMatch'));
-  expect(
-    screen.getByLabelText(
-      `${tr('documents.HEALTH_CERTIFICATE')} - ${tr('documents.declaredIssuedOn')}`,
-    ).textContent,
-  ).toContain('27/10/2026');
-  expect(screen.getByText(/2027-10-27/)).toBeTruthy();
-  expect(upload).not.toHaveBeenCalled();
-});
-it('requires a manually entered date when OCR cannot read it and still waits for explicit submission', async () => {
-  const preview = vi.spyOn(client, 'checkWorkerDocumentDates').mockResolvedValue({
-    quality: { status: 'ACCEPTED', reason: 'IMAGE_ACCEPTED' },
-    ocr: { status: 'UNREADABLE', issuedOn: null, expiresOn: null, warnings: [] },
-    dateCheck: {
-      status: 'NO_REFERENCE',
-      field: 'EXPIRES_ON',
-      submittedDate: null,
-      detectedDate: null,
-    },
-  });
-  const upload = vi.spyOn(client, 'uploadWorkerDocument').mockResolvedValue(doc);
-  mount(false, false, true);
-  const input = await screen.findByLabelText(
-    `${tr('documents.upload')} — ${tr('documents.SAFETY_CARD')}`,
-  );
-  const file = new File(['synthetic'], 'unreadable.pdf', { type: 'application/pdf' });
-  fireEvent.change(input, { target: { files: [file] } });
-  await screen.findByText(tr('documents.dateNoReference'));
-  const submit = screen.getByRole('button', {
-    name: tr('documents.submitForReview'),
-  }) as HTMLButtonElement;
-  expect(submit.disabled).toBe(true);
-  const date = screen.getByLabelText(
-    `${tr('documents.SAFETY_CARD')} - ${tr('documents.declaredExpiresOn')}`,
-  );
-  expect(date.textContent).not.toContain('27/10/2030');
-  await chooseCalendarDate(
-    `${tr('documents.SAFETY_CARD')} - ${tr('documents.declaredExpiresOn')}`,
-    '2030-10-27',
-  );
-  preview.mockResolvedValue({
-    quality: { status: 'ACCEPTED', reason: 'IMAGE_ACCEPTED' },
-    ocr: { status: 'UNREADABLE', issuedOn: null, expiresOn: null, warnings: [] },
-    dateCheck: {
-      status: 'UNAVAILABLE',
-      field: 'EXPIRES_ON',
-      submittedDate: '2030-10-27',
-      detectedDate: null,
-    },
-  });
-  fireEvent.click(screen.getByRole('button', { name: tr('documents.dateRecheck') }));
-  await screen.findByText(tr('documents.dateUnavailable'));
-  expect(date.textContent).toContain('27/10/2030');
-  expect(upload).not.toHaveBeenCalled();
-  fireEvent.click(submit);
-  await waitFor(() =>
-    expect(upload).toHaveBeenCalledWith('token', 'site', 'worker', 'SAFETY_CARD', file, {
-      submittedExpiresOn: '2030-10-27',
-    }),
-  );
-});
-
 it('prefills OCR suggestions but requires explicit original/date confirmation before Safety approval', async () => {
   mount(true);
   const user = userEvent.setup();
@@ -506,6 +175,7 @@ it('prefills OCR suggestions but requires explicit original/date confirmation be
   expect(approve.disabled).toBe(true);
   await user.click(screen.getByRole('button', { name: tr('documents.view') }));
   await screen.findByRole('dialog', { name: tr('documents.view') });
+  await user.keyboard('{Escape}');
   expect(client.workerDocumentFile).toHaveBeenCalledWith('token', 'site', 'worker', 'document');
   await user.click(screen.getByLabelText(tr('documents.confirm')));
   await user.click(approve);
@@ -532,49 +202,6 @@ it('read-only Worker documents expose originals and status without review or upl
   expect(screen.queryByLabelText(tr('documents.note'))).toBeNull();
   expect(screen.queryByText(tr('documents.upload'))).toBeNull();
   expect(screen.getByRole('button', { name: tr('documents.view') })).toBeTruthy();
-});
-it('lets Representatives enter a missing expiry on pending documents without review permission', async () => {
-  const save = vi
-    .spyOn(client, 'updateWorkerDocumentExpiry')
-    .mockResolvedValue({ ...doc, submittedExpiresOn: '2027-10-18', version: 4 });
-  mount(false, true);
-  const user = userEvent.setup();
-  await screen.findByLabelText(tr('documents.submittedExpiresOn'));
-  await chooseCalendarDate(tr('documents.submittedExpiresOn'), '2027-10-18');
-  await user.click(screen.getByRole('button', { name: tr('documents.saveSubmittedExpiry') }));
-  await waitFor(() =>
-    expect(save).toHaveBeenCalledWith('token', 'site', 'worker', 'document', {
-      expectedVersion: 3,
-      submittedExpiresOn: '2027-10-18',
-    }),
-  );
-  expect(client.reviewWorkerDocument).not.toHaveBeenCalled();
-});
-it('uses the shared calendar for submitted expiry and keeps the API date format', async () => {
-  const profile = await client.workerCompliance('token', 'site', 'worker');
-  vi.mocked(client.workerCompliance).mockResolvedValue({
-    ...profile,
-    documents: [{ ...doc, submittedExpiresOn: '2027-10-18' }],
-  });
-  const save = vi.spyOn(client, 'updateWorkerDocumentExpiry').mockResolvedValue({
-    ...doc,
-    submittedExpiresOn: '2027-10-19',
-    version: 4,
-  });
-  mount(false, true);
-  const user = userEvent.setup();
-  const expiry = await screen.findByLabelText(tr('documents.submittedExpiresOn'));
-  expect(expiry.tagName).toBe('BUTTON');
-  expect(expiry.textContent).toContain('18/10/2027');
-  await user.click(expiry);
-  await user.click(screen.getByRole('button', { name: /19.*2027/ }));
-  await user.click(screen.getByRole('button', { name: tr('documents.saveSubmittedExpiry') }));
-  await waitFor(() =>
-    expect(save).toHaveBeenCalledWith('token', 'site', 'worker', 'document', {
-      expectedVersion: 3,
-      submittedExpiresOn: '2027-10-19',
-    }),
-  );
 });
 it('prefills the Representative date when OCR cannot determine expiry and still requires confirmation', async () => {
   const profile = await client.workerCompliance('token', 'site', 'worker');
@@ -647,4 +274,52 @@ it('Safety hides citizen ID OCR controls and keeps the mismatch warning concise'
   expect(screen.queryByText(tr('documents.identityAdvisory'))).toBeNull();
   expect(screen.getAllByRole('button', { name: tr('documents.ocr') })).toHaveLength(1);
   expect(screen.getAllByRole('button', { name: tr('documents.view') })).toHaveLength(2);
+});
+
+it('Representative has one bundle submission form and Workers have no write controls', async () => {
+  mount(false, true);
+  await screen.findByRole('button', { name: tr('documents.sendBundle') });
+  expect(screen.getByLabelText(tr('documents.safetyCardRequired'))).toBeTruthy();
+  expect(screen.queryByRole('button', { name: tr('documents.submitForReview') })).toBeNull();
+});
+it('opening an original never calls OpenAI or displays an AI trigger inside the preview', async () => {
+  const analyze = vi.spyOn(client, 'analyzeWorkerDocument');
+  mount(true);
+  await screen.findByText(doc.originalName);
+  await userEvent.setup().click(screen.getByRole('button', { name: tr('documents.view') }));
+  const dialog = await screen.findByRole('dialog');
+  expect(within(dialog).queryByRole('button', { name: tr('documents.aiRun') })).toBeNull();
+  expect(analyze).not.toHaveBeenCalled();
+});
+async function chooseCalendarDate(label: string, date: string) {
+  const [year, month, day] = date.split('-').map(Number);
+  const user = userEvent.setup();
+  await user.click(screen.getByLabelText(label));
+  await user.selectOptions(
+    screen.getByRole('combobox', { name: tr('calendar.year') }),
+    String(year),
+  );
+  await user.selectOptions(
+    screen.getByRole('combobox', { name: tr('calendar.month') }),
+    String((month ?? 1) - 1),
+  );
+  await user.click(screen.getByRole('button', { name: new RegExp(`${day}.*${year}`) }));
+}
+
+it('never invents gender when a Representative corrects a legacy identity profile', async () => {
+  const current = await client.workerCompliance('token', 'site', 'worker');
+  vi.mocked(client.workerCompliance).mockResolvedValue({ ...current, gender: null });
+  const submit = vi
+    .spyOn(client, 'submitWorkerDocuments')
+    .mockResolvedValue({ requestId: 'test', version: 2, documentIds: [] });
+  mount(false, true);
+  await screen.findByRole('button', { name: tr('documents.sendBundle') });
+  const user = userEvent.setup();
+  await user.click(document.querySelector('form summary')!);
+  expect((screen.getByLabelText(tr('documents.gender')) as HTMLSelectElement).value).toBe('');
+  await user.clear(screen.getByLabelText(tr('documents.phoneNumber')));
+  await user.type(screen.getByLabelText(tr('documents.phoneNumber')), '0900000009');
+  await user.click(screen.getByRole('button', { name: tr('documents.sendBundle') }));
+  await screen.findByText(tr('documents.required'));
+  expect(submit).not.toHaveBeenCalled();
 });
