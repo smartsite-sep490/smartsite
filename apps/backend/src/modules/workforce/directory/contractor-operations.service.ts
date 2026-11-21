@@ -43,6 +43,7 @@ import {
   executeMainConfigurationCommand,
   type MainConfigurationCommandContext,
 } from '../../../common/configuration/main-configuration-authority.js';
+import { siteManagerCommandAuthorization } from '../../auth/site-manager.guard.js';
 
 export interface WorkforceActor {
   id: string;
@@ -299,28 +300,37 @@ export class ContractorOperationsService {
     actor: WorkforceActor,
     contractorIdValue: string,
     input: CreateContractorParticipationCommand,
+    context?: MainConfigurationCommandContext,
   ) {
     const contractorId = uuid(contractorIdValue);
     const value = command(CreateContractorParticipationCommand, input);
     await this.requireSiteRole(actor, uuid(value.siteId), UserRole.SITE_MANAGER);
     const range = timeRange(value.validFrom, value.validUntil);
-    return this.dataSource.transaction(async (manager) => {
-      const contractor = await manager
-        .getRepository(ContractorEntity)
-        .findOneBy({ id: contractorId });
-      if (!contractor) missing();
-      const siteId = uuid(value.siteId);
-      const site = await manager.getRepository(SiteEntity).findOneBy({ id: siteId });
-      if (!site) missing();
-      return manager.getRepository(ContractorSiteParticipationEntity).save({
-        id: randomUUID(),
-        contractorId,
-        siteId,
-        validFrom: range.from,
-        validUntil: range.until,
-        isActive: true,
-      });
-    });
+    if (context && context.actorUserId !== actor.id) this.forbidden();
+    return executeMainConfigurationCommand(
+      this.dataSource,
+      context,
+      'MAIN_PARTICIPATION_CREATE',
+      { contractorId, ...value },
+      async (manager) => {
+        const contractor = await manager
+          .getRepository(ContractorEntity)
+          .findOneBy({ id: contractorId });
+        if (!contractor) missing();
+        const siteId = uuid(value.siteId);
+        const site = await manager.getRepository(SiteEntity).findOneBy({ id: siteId });
+        if (!site) missing();
+        return manager.getRepository(ContractorSiteParticipationEntity).save({
+          id: randomUUID(),
+          contractorId,
+          siteId,
+          validFrom: range.from,
+          validUntil: range.until,
+          isActive: true,
+        });
+      },
+      siteManagerCommandAuthorization(value.siteId, context?.actorUserId),
+    );
   }
 
   async grantRepresentative(
@@ -362,25 +372,48 @@ export class ContractorOperationsService {
     actor: WorkforceActor,
     contractorIdValue: string,
     input: CreateContractorWorkerCommand,
+    context?: MainConfigurationCommandContext,
   ) {
     const contractorId = uuid(contractorIdValue);
     const value = command(CreateContractorWorkerCommand, input);
     const siteId = uuid(value.siteId);
-    return this.dataSource.transaction(async (manager) => {
-      await this.requireWorkerCreationAccess(manager, actor, contractorId, siteId);
-      try {
-        return await manager.getRepository(WorkerEntity).save({
-          id: randomUUID(),
+    if (context && context.actorUserId !== actor.id) this.forbidden();
+    return executeMainConfigurationCommand(
+      this.dataSource,
+      context,
+      'CONTRACTOR_WORKER_CREATE',
+      { contractorId, ...value },
+      async (manager) => {
+        await this.requireWorkerCreationAccess(
+          manager,
+          actor,
           contractorId,
           siteId,
-          externalId: value.externalId,
-          displayName: value.displayName,
-          isActive: true,
-        });
-      } catch (error) {
-        knownUnique(error, ['uq_worker_site_external_id']);
-      }
-    });
+          Boolean(context),
+        );
+        try {
+          return await manager.getRepository(WorkerEntity).save({
+            id: randomUUID(),
+            contractorId,
+            siteId,
+            externalId: value.externalId,
+            displayName: value.displayName,
+            isActive: true,
+          });
+        } catch (error) {
+          knownUnique(error, ['uq_worker_site_external_id']);
+        }
+      },
+      context
+        ? async (manager) => {
+            const roles = await manager.query(
+              "SELECT id FROM user_role_assignment WHERE user_id=$1 AND site_id=$2 AND role='CONTRACTOR_REPRESENTATIVE' FOR SHARE",
+              [actor.id, siteId],
+            );
+            if (!roles.length) this.forbidden();
+          }
+        : undefined,
+    );
   }
 
   async requireWorkerCreationAccess(
