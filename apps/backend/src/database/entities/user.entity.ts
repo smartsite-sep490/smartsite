@@ -12,6 +12,9 @@ export enum UserRole {
 @Entity({ name: 'app_user' })
 @Unique('uq_app_user_username', ['username'])
 export class UserEntity {
+  @Column({ type: 'varchar', length: 254, nullable: true }) email?: string | null;
+  @Column({ name: 'email_verified_at', type: 'timestamptz', nullable: true })
+  emailVerifiedAt?: Date | null;
   @PrimaryColumn({ type: 'uuid', primaryKeyConstraintName: 'pk_app_user_id' })
   id!: string;
 

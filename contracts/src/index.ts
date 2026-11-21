@@ -214,3 +214,4 @@ export * from './camera-preview.js';
 export * from './camera-observation-zones.js';
 
 export * from './gates-api.js';
+export * from './account-email-api.js';

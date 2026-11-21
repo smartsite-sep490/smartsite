@@ -319,6 +319,53 @@ function retryAfter(response: Response): number | undefined {
 }
 
 export class SmartSiteManagementClient {
+  requestPasswordReset(input: import('@smartsite/contracts').RequestPasswordResetCommand) {
+    return this.request<import('@smartsite/contracts').AccountEmailChallengeResponse>(
+      'POST',
+      '/auth/password-reset/request',
+      undefined,
+      input,
+      undefined,
+      { timeoutMs: 15000 },
+    );
+  }
+  confirmPasswordReset(input: import('@smartsite/contracts').ConfirmPasswordResetCommand) {
+    return this.request<import('@smartsite/contracts').AccountEmailChallengeResponse>(
+      'POST',
+      '/auth/password-reset/confirm',
+      undefined,
+      input,
+      undefined,
+      { timeoutMs: 15000 },
+    );
+  }
+  setAccountEmail(token: string, input: import('@smartsite/contracts').SetAccountEmailCommand) {
+    return this.request<import('@smartsite/contracts').AccountEmailChallengeResponse>(
+      'PUT',
+      '/auth/email',
+      token,
+      input,
+    );
+  }
+  resendEmailVerification(token: string, language: 'vi' | 'en') {
+    return this.request<import('@smartsite/contracts').AccountEmailChallengeResponse>(
+      'POST',
+      '/auth/email/verification',
+      token,
+      { language },
+    );
+  }
+  verifyAccountEmail(
+    token: string,
+    input: import('@smartsite/contracts').VerifyAccountEmailCommand,
+  ) {
+    return this.request<import('@smartsite/contracts').AccountEmailChallengeResponse>(
+      'POST',
+      '/auth/email/verify',
+      token,
+      input,
+    );
+  }
   updateTeamZone(
     token: string,
     siteId: string,

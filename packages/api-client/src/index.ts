@@ -5,6 +5,13 @@ import {
   type RequestOptions,
 } from './errors';
 export * from './errors';
+export type {
+  RequestPasswordResetCommand,
+  ConfirmPasswordResetCommand,
+  SetAccountEmailCommand,
+  VerifyAccountEmailCommand,
+  AccountEmailChallengeResponse,
+} from '@smartsite/contracts';
 export type BackendHealth = { status: 'ok'; service: 'smartsite-backend' };
 export type {
   AttendanceReportQuery,

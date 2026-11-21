@@ -468,7 +468,7 @@ export const backendEnvironmentSchema = z
       context.addIssue({
         code: 'custom',
         path: ['RESEND_FROM_EMAIL'],
-        message: 'configure both RESEND_API_KEY and RESEND_FROM_EMAIL to enable visitor email',
+        message: 'configure both RESEND_API_KEY and RESEND_FROM_EMAIL to enable email delivery',
       });
     }
     if (config.LOG_FORMAT === 'pretty' && config.NODE_ENV !== 'development') {

@@ -7,11 +7,14 @@ import { AuthService } from './auth.service.js';
 import { UserAuthGuard, AdminGuard, ChangePasswordThrottleGuard } from './user-auth.guard.js';
 import { AuthController } from './auth.controller.js';
 import { AuthTokenService } from './auth-token.service.js';
+import { AccountEmailService } from './account-email.service.js';
+import { AccountEmailController } from './account-email.controller.js';
 
 @Module({
   imports: [DatabaseModule, JwtModule.register({})],
-  controllers: [AuthController],
+  controllers: [AuthController, AccountEmailController],
   providers: [
+    AccountEmailService,
     ServiceAuthGuard,
     AuthService,
     AuthTokenService,
@@ -22,6 +25,7 @@ import { AuthTokenService } from './auth-token.service.js';
     ChangePasswordThrottleGuard,
   ],
   exports: [
+    AccountEmailService,
     ServiceAuthGuard,
     AuthService,
     UserAuthGuard,

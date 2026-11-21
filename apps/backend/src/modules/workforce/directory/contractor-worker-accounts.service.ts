@@ -1,8 +1,10 @@
-import { randomUUID } from 'node:crypto';
-import { Injectable } from '@nestjs/common';
+import { randomUUID, randomBytes } from 'node:crypto';
+import { Injectable, Optional } from '@nestjs/common';
 import { Transform, Type } from 'class-transformer';
 import {
   IsBoolean,
+  IsEmail,
+  IsOptional,
   IsIn,
   IsDefined,
   IsNotEmpty,
@@ -38,12 +40,15 @@ import {
   PASSWORD_POLICY_PATTERN,
 } from '../../../common/configuration/password-policy.js';
 import { WorkerEntity } from '../../../database/entities/worker.entity.js';
+import { UserEntity } from '../../../database/entities/user.entity.js';
 import { WorkerComplianceProfileEntity } from '../../../database/entities/worker-document.entity.js';
 import { ContractorEntity } from '../../../database/entities/contractor.entity.js';
 import { ContractorRepresentativeGrantEntity } from '../../../database/entities/contractor-representative-grant.entity.js';
 import { ContractorSiteParticipationEntity } from '../../../database/entities/contractor-site-participation.entity.js';
 import { UserRole } from '../../../database/entities/user.entity.js';
 import { UsersService } from '../../users/users.service.js';
+import { AccountEmailService } from '../../auth/account-email.service.js';
+import { PublicHttpException } from '../../../common/http/public-http-exception.js';
 import {
   ContractorOperationsService,
   type WorkforceActor,
@@ -52,6 +57,14 @@ import { auditAccess } from '../shared/access-audit.js';
 import { requireSiteRole } from '../access/qr-access.service.js';
 
 export class CreateContractorWorkerAccountCommand implements WorkerAccountCommand {
+  @IsOptional()
+  @Transform(({ value }: { value: unknown }) =>
+    typeof value === 'string' ? value.trim().toLowerCase() : value,
+  )
+  @IsEmail()
+  @MaxLength(254)
+  email?: string;
+  @IsOptional() @IsIn(['vi', 'en']) language?: 'vi' | 'en';
   @IsIn(['MALE', 'FEMALE', 'OTHER']) gender!: 'MALE' | 'FEMALE' | 'OTHER';
   @Transform(({ value }: { value: unknown }) => (typeof value === 'string' ? value.trim() : value))
   @IsString()
@@ -150,6 +163,7 @@ export class ContractorWorkerAccountsService {
     private readonly source: DataSource,
     private readonly operations: ContractorOperationsService,
     private readonly users: UsersService,
+    @Optional() private readonly accountEmail?: AccountEmailService,
   ) {}
 
   async update(
@@ -252,7 +266,23 @@ export class ContractorWorkerAccountsService {
     await this.source.transaction((manager) =>
       this.operations.requireWorkerCreationAccess(manager, actor, contractorId, siteId),
     );
-    const prepared = await this.users.prepareWorkerAccount(value);
+    if (value.email) {
+      if (!this.accountEmail)
+        throw new PublicHttpException(503, {
+          code: 'ACCOUNT_EMAIL_UNAVAILABLE',
+          message: 'Account email delivery is not configured',
+        });
+      this.accountEmail.assertConfigured();
+    }
+    const initialPassword =
+      value.temporaryPassword ??
+      (value.email
+        ? `aA7!${randomBytes(15).toString('base64url')}`
+        : WORKER_DEFAULT_TEMPORARY_PASSWORD);
+    const prepared = await this.users.prepareWorkerAccount({
+      ...value,
+      temporaryPassword: initialPassword,
+    });
     try {
       return await this.source.transaction(async (manager) => {
         // Recheck current scope and participation after hashing.
@@ -264,6 +294,24 @@ export class ContractorWorkerAccountsService {
           true,
         );
         const account = await this.users.createWorkerAccount(manager, prepared);
+        if (value.email) {
+          await manager
+            .getRepository(UserEntity)
+            .update(account.id, { email: value.email, emailVerifiedAt: null });
+          account.email = value.email;
+          account.emailVerifiedAt = null;
+          await this.accountEmail!.queueWelcome(
+            manager,
+            {
+              id: account.id,
+              username: account.username,
+              email: value.email,
+              passwordHash: prepared.passwordHash,
+            },
+            initialPassword,
+            value.language,
+          );
+        }
         const workers = manager.getRepository(WorkerEntity);
         let externalId = value.externalId;
         if (externalId === undefined) {
@@ -303,12 +351,17 @@ export class ContractorWorkerAccountsService {
           null,
           { contractorId, userId: account.id },
         );
-        return { account, worker: { ...worker, createdAt: worker.createdAt.toISOString() } };
+        return {
+          account,
+          worker: { ...worker, createdAt: worker.createdAt.toISOString() },
+          ...(value.email ? { emailDelivery: 'QUEUED' as const } : {}),
+        };
       });
     } catch (error) {
       // Retrying the same username/code returns CONFLICT without partial accounts or a reset.
       knownUnique(error, [
         'uq_app_user_username',
+        'uq_user_email',
         'uq_worker_site_external_id',
         'uq_worker_site_user',
       ]);
