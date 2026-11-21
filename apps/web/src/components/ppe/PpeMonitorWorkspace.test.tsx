@@ -88,13 +88,14 @@ afterEach(() => {
   query.clear();
 });
 
-it('mounts authorized metadata and single-camera focus default while paused state reaches the preview boundary', async () => {
+it('mounts authorized metadata and single-camera focus default while paused state reaches the preview boundary without duplicating the top banner', async () => {
   render(<PpeMonitorWorkspace apiUrl="https://backend.example" session={session()} aiPaused />, {
     wrapper,
   });
   const focused = await screen.findByTestId('focus');
   expect(focused.getAttribute('data-paused')).toBe('true');
   expect(focused.textContent).toContain(camera.id);
+  expect(screen.queryByText('AI processing is paused. Camera previews are disabled.')).toBeNull();
   expect(state.cameras).toHaveBeenCalledWith(
     'first',
     site,

@@ -53,17 +53,17 @@ export function CameraSetupWorkflow({
           )}
         </div>
       )}
-      <details className="group col-span-full w-full text-xs text-slate-600">
-        <summary className="inline-flex min-h-8 cursor-pointer list-none items-center gap-1.5 rounded-lg border border-transparent px-2.5 py-1 text-xs font-medium text-slate-600 transition-colors hover:border-slate-200 hover:bg-slate-50 hover:text-slate-900 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-slate-900">
+      <details className="group col-span-full w-full text-sm text-slate-600">
+        <summary className="inline-flex min-h-8 cursor-pointer list-none items-center gap-1.5 rounded-lg border border-transparent px-2 py-1 text-xs font-medium text-slate-600 transition-colors hover:border-slate-200 hover:bg-slate-50 hover:text-slate-900 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-slate-900">
           <span>{t('cameraSetup.help')}</span>
           <span
             aria-hidden="true"
-            className="text-xs text-slate-400 transition-transform duration-150 group-open:rotate-180"
+            className="text-xs text-slate-500 transition-transform duration-150 group-open:rotate-180"
           >
             ▾
           </span>
         </summary>
-        <div className="mt-2 rounded-xl border border-slate-200/90 bg-slate-50/70 p-3.5 text-left text-xs text-slate-600">
+        <div className="mt-2 rounded-xl border border-slate-200 bg-slate-50/40 p-3.5 text-left text-sm text-slate-700">
           <CameraSetupStageCards />
         </div>
       </details>

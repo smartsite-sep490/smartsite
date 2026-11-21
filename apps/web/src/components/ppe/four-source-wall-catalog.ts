@@ -47,7 +47,7 @@ export const FOUR_SOURCE_WALL_VI_CATALOG: Record<FourSourceWallTranslationKey, s
   'ppe.wall.tileAriaFocused': 'Camera {camera} (đang chọn tiêu điểm)',
   'ppe.wall.tileAriaAvailable': 'Camera {camera} (khả dụng)',
   'ppe.wall.context.focusedBadge': 'Tiêu điểm',
-  'ppe.badge.aiPaused': 'TẠM DỪNG XỬ LÝ AI',
+  'ppe.badge.aiPaused': 'Tạm dừng AI',
   'ppe.wall.sourceReplay': 'PHÁT LẠI',
   'ppe.wall.sourceLive': 'TRỰC TIẾP',
   'ppe.wall.sourceConnecting': 'ĐANG KẾT NỐI',

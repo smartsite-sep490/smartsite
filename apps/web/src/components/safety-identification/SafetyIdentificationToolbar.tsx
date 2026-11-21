@@ -104,31 +104,37 @@ export function SafetyIdentificationToolbar({
 
   return (
     <>
-      <Card className="min-w-0 space-y-4">
-        <div className="flex flex-wrap items-start justify-between gap-4 min-w-0">
-          <div className="min-w-0 space-y-1.5">
+      <div className="min-w-0 space-y-3 rounded-xl border border-slate-200 bg-white px-4 py-3.5 sm:px-5">
+        <div className="flex flex-wrap items-start justify-between gap-3 min-w-0">
+          <div className="min-w-[min(100%,18rem)] flex-1 space-y-1">
             <div className="flex flex-wrap items-center gap-2">
-              <span className="text-[11px] font-bold uppercase tracking-wider text-[#F66B17]">
-                {copy.header.eyebrow}
-              </span>
+              <span className="text-xs font-medium text-slate-500">{copy.header.eyebrow}</span>
               {isOfficer && (
-                <Badge variant="default" dot>
+                <Badge
+                  variant="neutral"
+                  dot
+                  className="text-xs! font-medium! normal-case! tracking-normal!"
+                >
                   {copy.header.officerBadge}
                 </Badge>
               )}
               {isManager && (
-                <Badge variant="info" dot>
+                <Badge
+                  variant="info"
+                  dot
+                  className="text-xs! font-medium! normal-case! tracking-normal!"
+                >
                   {copy.header.managerBadge}
                 </Badge>
               )}
             </div>
             <h2
               id={`${baseId}-workspace-heading`}
-              className="text-lg font-extrabold text-[#071A2B] tracking-tight"
+              className="text-xl sm:text-2xl font-bold text-slate-950 tracking-tight"
             >
               {copy.header.title}
             </h2>
-            <p className="text-xs text-slate-600 max-w-3xl leading-relaxed">
+            <p className="text-sm text-slate-600 max-w-3xl leading-snug">
               {isOfficer ? copy.header.officerSubtitle : copy.header.managerSubtitle}
             </p>
           </div>
@@ -138,8 +144,9 @@ export function SafetyIdentificationToolbar({
               type="button"
               variant="outline"
               size="md"
+              className="h-9 text-sm font-semibold"
               isLoading={queueFetching}
-              leftIcon={<IconRefresh className="w-3.5 h-3.5" />}
+              leftIcon={<IconRefresh className="w-4 h-4" />}
               onClick={onRefreshQueue}
             >
               {copy.header.refreshQueue}
@@ -147,14 +154,11 @@ export function SafetyIdentificationToolbar({
             {isOfficer && !siteQueueDenied && (
               <Button
                 type="button"
-                variant={isCreateOpen ? 'outline' : 'primary'}
+                variant={isCreateOpen ? 'outline' : 'default'}
                 size="md"
+                className="h-9 text-sm font-semibold"
                 leftIcon={
-                  isCreateOpen ? (
-                    <IconX className="w-3.5 h-3.5" />
-                  ) : (
-                    <IconPlus className="w-3.5 h-3.5" />
-                  )
+                  isCreateOpen ? <IconX className="w-4 h-4" /> : <IconPlus className="w-4 h-4" />
                 }
                 onClick={onToggleCreate}
               >
@@ -164,13 +168,13 @@ export function SafetyIdentificationToolbar({
           </div>
         </div>
 
-        <div className="flex flex-wrap items-end gap-3 border-t border-slate-100 pt-3.5 min-w-0">
+        <div className="flex flex-wrap items-end gap-3.5 border-t border-slate-100 pt-3 min-w-0">
           <div className="min-w-0 w-full sm:w-auto sm:max-w-md space-y-1">
             <label
               htmlFor={`${baseId}-site-select`}
-              className="flex items-center gap-1.5 text-[11px] font-bold uppercase tracking-wider text-slate-600"
+              className="flex items-center gap-1.5 text-sm font-medium text-slate-700"
             >
-              <IconBuilding className="w-3.5 h-3.5 shrink-0 text-slate-500" />
+              <IconBuilding className="w-4 h-4 shrink-0 text-slate-400" />
               <span>{copy.filters.siteLabel}</span>
             </label>
             <select
@@ -193,9 +197,9 @@ export function SafetyIdentificationToolbar({
           <div className="min-w-0 w-full sm:w-auto sm:max-w-xs space-y-1">
             <label
               htmlFor={`${baseId}-status-select`}
-              className="flex items-center gap-1.5 text-[11px] font-bold uppercase tracking-wider text-slate-600"
+              className="flex items-center gap-1.5 text-sm font-medium text-slate-700"
             >
-              <IconFilter className="w-3.5 h-3.5 shrink-0 text-slate-500" />
+              <IconFilter className="w-4 h-4 shrink-0 text-slate-400" />
               <span>{copy.filters.statusLabel}</span>
             </label>
             <select
@@ -213,7 +217,7 @@ export function SafetyIdentificationToolbar({
             </select>
           </div>
         </div>
-      </Card>
+      </div>
 
       {isOfficer && isCreateOpen && !siteQueueDenied && (
         <div className="min-w-0 space-y-3">

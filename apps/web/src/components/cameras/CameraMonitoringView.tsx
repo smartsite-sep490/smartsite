@@ -31,20 +31,20 @@ export function CameraMonitoringView({
   };
 
   return (
-    <div className="space-y-6 max-w-[1280px] mx-auto text-[#071A2B]">
+    <div className="space-y-5 max-w-[1280px] mx-auto text-slate-900">
       {/* Top Header & Sub-Navigation Bar */}
-      <div className="rounded-2xl border border-slate-200/90 bg-white p-6 shadow-xs flex flex-col md:flex-row md:items-center justify-between gap-4">
+      <div className="rounded-xl border border-slate-200 bg-white px-5 py-4 flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div>
           <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-xl bg-[#071A2B] text-[#F66B17] flex items-center justify-center shrink-0 shadow-2xs">
+            <div className="w-10 h-10 rounded-xl bg-[#0F172A] text-white flex items-center justify-center shrink-0">
               <IconCamera className="w-5 h-5" />
             </div>
             <div>
-              <div className="flex items-center gap-2">
-                <h1 className="text-xl font-bold text-[#111111]">
+              <div className="flex flex-wrap items-center gap-2.5">
+                <h1 className="text-xl font-bold text-slate-950">
                   {tr('common.camera_monitoring')}
                 </h1>
-                <span className="px-2 py-0.5 rounded-md text-[10px] font-semibold bg-[#F7F6F3] text-[#6B6B6B] border border-[#EAEAEA]">
+                <span className="text-xs font-medium text-slate-500">
                   {tr('common.vision_workspace')}
                 </span>
               </div>
@@ -53,18 +53,18 @@ export function CameraMonitoringView({
         </div>
 
         {/* Sub-navbar Segmented Switcher */}
-        <div className="inline-flex p-1 bg-slate-100/90 rounded-xl border border-slate-200/70 text-xs gap-1 self-start md:self-auto shrink-0 shadow-2xs">
+        <div className="inline-flex p-1 bg-slate-100 rounded-xl border border-slate-200 text-sm gap-1 self-start md:self-auto shrink-0">
           <button
             type="button"
             onClick={() => handleTabChange('ppe')}
-            className={`flex items-center gap-2 px-4 py-2 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+            className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-semibold transition-colors cursor-pointer ${
               activeTab === 'ppe'
-                ? 'bg-white text-[#071A2B] shadow-2xs border border-slate-200/60'
-                : 'text-slate-500 hover:text-slate-900 hover:bg-white/50'
+                ? 'bg-white text-[#0F172A] border border-slate-200'
+                : 'text-slate-600 hover:text-slate-900 hover:bg-white/60'
             }`}
           >
             <IconHardHat
-              className={`w-4 h-4 ${activeTab === 'ppe' ? 'text-[#F66B17]' : 'text-slate-400'}`}
+              className={`w-4 h-4 ${activeTab === 'ppe' ? 'text-teal-700' : 'text-slate-500'}`}
             />
             <span>{tr('common.ppe_monitoring')}</span>
           </button>
@@ -72,14 +72,14 @@ export function CameraMonitoringView({
           <button
             type="button"
             onClick={() => handleTabChange('zones')}
-            className={`flex items-center gap-2 px-4 py-2 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+            className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-semibold transition-colors cursor-pointer ${
               activeTab === 'zones'
-                ? 'bg-white text-[#071A2B] shadow-2xs border border-slate-200/60'
-                : 'text-slate-500 hover:text-slate-900 hover:bg-white/50'
+                ? 'bg-white text-[#0F172A] border border-slate-200'
+                : 'text-slate-600 hover:text-slate-900 hover:bg-white/60'
             }`}
           >
             <IconShield
-              className={`w-4 h-4 ${activeTab === 'zones' ? 'text-[#F66B17]' : 'text-slate-400'}`}
+              className={`w-4 h-4 ${activeTab === 'zones' ? 'text-teal-700' : 'text-slate-500'}`}
             />
             <span>{tr('common.restricted_zones')}</span>
           </button>
