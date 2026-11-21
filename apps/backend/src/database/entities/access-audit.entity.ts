@@ -1,7 +1,11 @@
-import { Column, CreateDateColumn, Entity, ForeignKey, PrimaryColumn } from 'typeorm';
+import { Column, CreateDateColumn, Entity, ForeignKey, Index, PrimaryColumn } from 'typeorm';
 import { SiteEntity } from './site.entity.js';
 import { UserEntity } from './user.entity.js';
 @Entity({ name: 'audit_log' })
+@Index('uq_team_attendance_request', ['entityId'], {
+  unique: true,
+  where: "action = 'TEAM_ATTENDANCE_SUBMITTED'",
+})
 export class AccessAuditEntity {
   @PrimaryColumn({ type: 'uuid', primaryKeyConstraintName: 'pk_audit_log_id' }) id!: string;
   @Column({ name: 'actor_account_id', type: 'uuid', nullable: true })

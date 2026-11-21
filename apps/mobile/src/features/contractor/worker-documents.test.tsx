@@ -5,7 +5,8 @@ import { SmartSiteManagementClient, type WorkerComplianceResponse } from '@smart
 import type { useWorkspace } from '../workspace/workspace-context';
 import { WorkerDocuments } from './worker-documents';
 import { translate as t, setLanguage } from '../../i18n';
-import { Field, Button } from '../shared/ui';
+import { Button } from '../shared/ui';
+import { CalendarDateField } from '../shared/calendar-date-field';
 import { Attachments } from '../shared/uploads';
 
 vi.mock('../workspace/workspace-context', () => ({ useWorkspace: () => workspace }));
@@ -112,11 +113,16 @@ it('keeps Worker originals read-only and allows Representative expiry suggestion
     await act(async () => {
       await new Promise((r) => setTimeout(r, 10));
     });
-  const text = JSON.stringify(root.toJSON());
-  expect(text.split(t('documents.identityMismatch')).length - 1).toBe(2);
-  expect(text).toContain('000000000099');
-  expect(text).not.toContain(t('documents.identityAdvisory'));
-  expect(text).toContain(t('documents.identityMismatch'));
+  expect(root.root.findAllByType(Attachments)).toHaveLength(0);
+  const click = async (label: string) =>
+    act(async () => {
+      root.root
+        .findAll((n) => String(n.type) === 'Pressable' && n.props.accessibilityLabel === label)[0]!
+        .props.onPress();
+    });
+  await click(t('documents.SAFETY_CARD'));
+  expect(JSON.stringify(root.toJSON())).toContain(t('documents.identityMismatch'));
+  expect(root.root.findAllByType(Attachments)).toHaveLength(0);
   expect(upload).not.toHaveBeenCalled();
   const quality = vi.spyOn(client, 'checkWorkerDocumentDates').mockResolvedValue({
     quality: { status: 'ACCEPTED', reason: 'IMAGE_ACCEPTED' },
@@ -137,12 +143,13 @@ it('keeps Worker originals read-only and allows Representative expiry suggestion
       </QueryClientProvider>,
     ),
   );
+  await click(t('documentUi.submitNew'));
   const pickers = root.root.findAllByType(Attachments);
-  expect(pickers).toHaveLength(3);
+  expect(pickers).toHaveLength(1);
   expect(pickers[0]!.props.disabled).toBe(false);
   const declaredDate = root.root
-    .findAllByType(Field)
-    .find((node) => node.props.label.startsWith(`${t('documents.SAFETY_CARD')} -`))!;
+    .findAllByType(CalendarDateField)
+    .find((node) => node.props.label === t('documents.declaredExpiresOn'))!;
   const file = { uri: 'file:///synthetic-renewal.jpg', name: 'renewal.jpg', type: 'image/jpeg' };
   await act(async () => {
     await pickers[0]!.props.validateFile(file);
@@ -162,7 +169,7 @@ it('keeps Worker originals read-only and allows Representative expiry suggestion
     .find((node) => node.props.label === t('documents.submitForReview') && !node.props.disabled)!;
   expect(JSON.stringify(root.toJSON())).toContain(t('documents.dateMatch'));
   expect(upload).not.toHaveBeenCalled();
-  await act(async () => declaredDate.props.onChangeText('2031-10-27'));
+  await act(async () => declaredDate.props.onChange('2031-10-27'));
   expect(submit.props.disabled).toBe(true);
   quality.mockResolvedValue({
     quality: { status: 'ACCEPTED', reason: 'IMAGE_ACCEPTED' },
@@ -202,16 +209,17 @@ it('keeps Worker originals read-only and allows Representative expiry suggestion
       </QueryClientProvider>,
     ),
   );
+  await click(t('documentUi.editDeclaredDate'));
   const field = root.root
-    .findAllByType(Field)
-    .find((node) => node.props.label === `${t('documents.submittedExpiresOn')} (YYYY-MM-DD)`)!;
-  await act(async () => field.props.onChangeText('2027-10-18'));
+    .findAllByType(CalendarDateField)
+    .find((node) => node.props.label === t('documents.submittedExpiresOn'))!;
+  await act(async () => field.props.onChange('2027-10-18'));
   await act(async () => {
     await setLanguage('en');
   });
   const translatedField = root.root
-    .findAllByType(Field)
-    .find((node) => node.props.label === `${t('documents.submittedExpiresOn')} (YYYY-MM-DD)`)!;
+    .findAllByType(CalendarDateField)
+    .find((node) => node.props.label === t('documents.submittedExpiresOn'))!;
   expect(translatedField.props.value).toBe('2027-10-18');
   expect(JSON.stringify(root.toJSON())).toContain('Synthetic Worker');
   const button = root.root

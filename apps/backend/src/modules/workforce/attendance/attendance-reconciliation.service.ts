@@ -1,4 +1,5 @@
 import { createHash, randomUUID } from 'node:crypto';
+import { attendanceZoneIssue } from './attendance-zone-policy.js';
 import { Injectable, Logger, type OnModuleInit, type OnModuleDestroy } from '@nestjs/common';
 import { DataSource, In, LessThanOrEqual, MoreThan, type EntityManager } from 'typeorm';
 import type { AttendanceDayResponse, AttendanceNotificationEvent } from '@smartsite/contracts';
@@ -585,6 +586,10 @@ export class AttendanceReconciliationService implements OnModuleInit, OnModuleDe
       anomalies.push('PENDING_REQUEST');
     if (violations.includes('EXIT_DURATION_EXCEEDED')) anomalies.push('EXIT_DURATION_EXCEEDED');
     if (violations.includes('MAX_EXITS_EXCEEDED')) anomalies.push('MAX_EXITS_EXCEEDED');
+    const zoneIssue = await attendanceZoneIssue(manager, day, now);
+    // Approved full-shift leave is not a worked shift; consistent absence earns no confirmed hours.
+    if (!fullLeave && zoneIssue && !(absent && zoneIssue === 'ZONE_ATTENDANCE_ABSENT'))
+      anomalies.push(zoneIssue);
     day.anomalies = anomalies;
     // Exit violations already have a deterministic deduction and notification.
     // Preserve review requirements for missing evidence and final early departure.

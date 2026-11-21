@@ -18,6 +18,8 @@ import { WorkerAvatar } from '../../components/common/WorkerAvatar';
 import { WorkerQrModal } from '../../components/worker/WorkerQrModal';
 import { WorkerRequestModal } from '../../components/modals/WorkerRequestModal';
 import { WorkerDocuments } from '../contractor/worker-documents';
+import { AccountEmailCard } from '../auth/account-email-card';
+import { MobilePushCard } from './mobile-push';
 import {
   IconDocument,
   IconPlus,
@@ -507,6 +509,8 @@ export function ProfileScreen({
 
         {/* 2. Section "General" (Cài đặt chung) */}
         <View style={profileStyles.generalSection}>
+          <AccountEmailCard />
+          <MobilePushCard />
           <Text style={profileStyles.sectionTitle}>{t('profile.generalSection')}</Text>
 
           <View style={profileStyles.menuGroupCard}>

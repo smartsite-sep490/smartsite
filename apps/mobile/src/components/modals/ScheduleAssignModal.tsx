@@ -27,6 +27,7 @@ interface ScheduleAssignModalProps {
   visible: boolean;
   onClose: () => void;
   onSuccess?: () => void;
+  teamOnly?: boolean;
 }
 
 type ScheduleAssignmentInput = Parameters<
@@ -45,10 +46,15 @@ function errorMessage(error: unknown, fallback: string): string {
   return error instanceof Error ? localizeMessage(error.message) : fallback;
 }
 
-export function ScheduleAssignModal({ visible, onClose, onSuccess }: ScheduleAssignModalProps) {
+export function ScheduleAssignModal({
+  visible,
+  onClose,
+  onSuccess,
+  teamOnly = false,
+}: ScheduleAssignModalProps) {
   const { t } = useTranslation();
   const { scope, client, token, queryKey } = useWorkspace();
-  const [target, setTarget] = useState<'WORKER' | 'TEAM'>('WORKER');
+  const [target, setTarget] = useState<'WORKER' | 'TEAM'>(teamOnly ? 'TEAM' : 'WORKER');
   const [targetId, setTargetId] = useState('');
   const [members, setMembers] = useState<string[]>([]);
   const [shiftId, setShiftId] = useState('');
@@ -257,20 +263,22 @@ export function ScheduleAssignModal({ visible, onClose, onSuccess }: ScheduleAss
 
         {/* SECTION 1: TARGET */}
         <FormSection number="01" title={t('scheduleAssign.target')}>
-          <CompactTabs
-            value={target}
-            options={[
-              { value: 'WORKER', label: t('schedule.worker') },
-              { value: 'TEAM', label: t('scheduleAssign.team') },
-            ]}
-            onChange={(value) =>
-              update(() => {
-                setTarget(value as 'WORKER' | 'TEAM');
-                setTargetId('');
-                setMembers([]);
-              })
-            }
-          />
+          {!teamOnly && (
+            <CompactTabs
+              value={target}
+              options={[
+                { value: 'WORKER', label: t('schedule.worker') },
+                { value: 'TEAM', label: t('scheduleAssign.team') },
+              ]}
+              onChange={(value) =>
+                update(() => {
+                  setTarget(value as 'WORKER' | 'TEAM');
+                  setTargetId('');
+                  setMembers([]);
+                })
+              }
+            />
+          )}
 
           <Choice
             label={target === 'TEAM' ? t('scheduleAssign.team') : t('schedule.worker')}

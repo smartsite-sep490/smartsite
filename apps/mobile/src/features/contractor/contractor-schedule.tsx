@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { useQuery } from '@tanstack/react-query';
+import type { ContractorTeamCalendarItem } from '@smartsite/api-client';
 import {
   IconCalendar,
   IconChevronDown,
@@ -8,525 +9,488 @@ import {
   IconChevronRight,
   IconClock,
   IconFilter,
+  IconUsers,
 } from '../../components/common/Icons';
 import { ScheduleAssignModal } from '../../components/modals/ScheduleAssignModal';
 import { useTranslation, uiLocale } from '../../i18n';
-import { localizedLabel } from '../../i18n/messages';
 import { colors } from '../../theme/colors';
-import { allPages, localDate, minutes, validDates } from '../shared/data';
-import { DateRangeFilter } from '../shared/date-range-filter';
+import { allPages, localDate, validDates } from '../shared/data';
+import { Choice, Page, QueryState } from '../shared/ui';
+import { ManagementBadge, ManagementLink, ManagementTabs } from '../shared/management-ui';
 import { MonthYearPicker } from '../shared/month-year-picker';
-import { Button, Card, Choice, CompactTabs, Page, Pager, QueryState } from '../shared/ui';
+import { RequestSheet } from '../shared/request-sheet';
 import {
   addCalendarDays,
   calendarDate,
   calendarWeek,
   changeCalendarMonth,
   shiftClock,
+  shiftRange,
 } from '../scheduling/schedule-calendar';
 import { useWorkspace } from '../workspace/workspace-context';
-import { useScopedWorkers } from '../workspace/use-scoped-workers';
-import { EmptyState, ListHeading } from './contractor-presentation';
-import { WorkerAttendanceSummary } from '../attendance/worker-attendance-board';
+import { EmptyState } from './contractor-presentation';
+import { ContractorAttendancePanel } from './contractor-attendance-panel';
+import { ScheduleDaySummary } from '../scheduling/schedule-day-summary';
+import { ContractorTeamAttendancePanel } from './team-attendance-panel';
 import { AttendanceDetail } from '../attendance/attendance-day-detail';
+import { ScheduleBatchSheet } from './schedule-batch-sheet';
 
-const PAGE_SIZE = 8;
-
+function startDay(value?: string) {
+  if (value) {
+    try {
+      validDates(value, value);
+      return value;
+    } catch {
+      /* Obsolete notification dates fall back to today. */
+    }
+  }
+  return localDate();
+}
 export function ContractorSchedule({ initialDate }: { initialDate?: string }) {
   const { t } = useTranslation();
-  const { scope, client, token, queryKey } = useWorkspace();
-  const [activeTab, setActiveTab] = useState('ASSIGNMENT');
-  const [selectedDate, setSelectedDate] = useState(() => initialDate ?? localDate());
-  const [assignmentRange, setAssignmentRange] = useState(() => ({
-    fromDate: initialDate ?? localDate(),
-    toDate: initialDate ?? localDate(),
-  }));
-  const [attendanceRange, setAttendanceRange] = useState(() => ({
-    fromDate: initialDate ?? `${localDate().slice(0, 8)}01`,
-    toDate: initialDate ?? localDate(),
-  }));
-  const [workerId, setWorkerId] = useState('');
-  const [offset, setOffset] = useState(0);
+  const { client, token, scope, queryKey } = useWorkspace();
+  const [tab, setTab] = useState('ASSIGNMENT');
+  const [day, setDay] = useState(() => startDay(initialDate));
   const [months, setMonths] = useState(false);
+  const [filters, setFilters] = useState(false);
+  const [teamId, setTeamId] = useState('');
+  const [selected, setSelected] = useState<ContractorTeamCalendarItem | null>(null);
   const [assigning, setAssigning] = useState(false);
-  const [showFilters, setShowFilters] = useState(false);
-  const [dayId, setDayId] = useState('');
-  const range = activeTab === 'ASSIGNMENT' ? assignmentRange : attendanceRange;
-  const workers = useScopedWorkers();
+  const [attendanceDayId, setAttendanceDayId] = useState('');
+  const [managingBatches, setManagingBatches] = useState(false);
+  const week = calendarWeek(day),
+    fromDate = week[0]!,
+    toDate = week[6]!;
+  const calendar = useQuery({
+    queryKey: [...queryKey, 'contractor-team-calendar', fromDate, toDate, teamId],
+    enabled: tab === 'ASSIGNMENT',
+    refetchInterval: 15000,
+    queryFn: () =>
+      client.contractorTeamCalendar(token, scope.siteId, {
+        contractorId: scope.contractorId,
+        fromDate,
+        toDate,
+        ...(teamId ? { teamId } : {}),
+      }),
+  });
   const shifts = useQuery({
     queryKey: [...queryKey, 'shifts'],
+    enabled: tab === 'ASSIGNMENT',
     queryFn: ({ signal }) =>
       allPages((page) => client.listShifts(token, scope.siteId, page), signal),
   });
-  const schedules = useQuery({
-    queryKey: [...queryKey, 'contractor-schedules', range, workerId, offset],
-    enabled: workers.isSuccess && activeTab === 'ASSIGNMENT',
-    queryFn: () =>
-      client.listWorkerSchedules(token, scope.siteId, {
-        ...range,
-        contractorId: scope.contractorId,
-        ...(workerId ? { workerId } : {}),
-        offset,
-        limit: PAGE_SIZE,
-        status: 'ALL',
-      }),
+  const teams = useQuery({
+    queryKey: [...queryKey, 'calendar-teams'],
+    enabled: filters,
+    queryFn: ({ signal }) =>
+      allPages(
+        (page) =>
+          client.listContractorTeams(token, scope.siteId, scope.contractorId, {
+            ...page,
+            status: 'ALL',
+          }),
+        signal,
+      ),
   });
-  const summary = useQuery({
-    queryKey: [...queryKey, 'contractor-attendance-summary', range, workerId],
-    enabled: workers.isSuccess && activeTab === 'ATTENDANCE',
-    queryFn: () =>
-      client.attendanceSummary(token, scope.siteId, {
-        ...range,
-        ...(workerId ? { workerId } : {}),
-        timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
-        contractorId: scope.contractorId,
-      }),
-  });
-  const attendanceDays = useQuery({
-    queryKey: [...queryKey, 'contractor-attendance-days', range, workerId, offset],
-    enabled: workers.isSuccess && activeTab === 'ATTENDANCE',
-    queryFn: async ({ signal }) => {
-      const ids = new Set(workers.data?.map((worker) => worker.id));
-      const rows = (
-        await allPages(
-          (page) =>
-            client.attendanceDays(token, scope.siteId, {
-              ...range,
-              ...page,
-              ...(workerId ? { workerId } : {}),
-            }),
-          signal,
-        )
-      ).filter((day) => ids.has(day.workerId));
-      return { items: rows.slice(offset, offset + PAGE_SIZE), total: rows.length };
-    },
-  });
-  const changeRange = (value: { fromDate: string; toDate: string }) => {
-    if (activeTab === 'ASSIGNMENT') {
-      setAssignmentRange(value);
-      setSelectedDate(value.fromDate);
-    } else setAttendanceRange(value);
-    setOffset(0);
-  };
-  const date = (value: string, options: Intl.DateTimeFormatOptions) =>
+  const format = (value: string, options: Intl.DateTimeFormatOptions) =>
     new Intl.DateTimeFormat(uiLocale(), { ...options, timeZone: 'UTC' }).format(
-      new Date(`${value}T00:00:00Z`),
+      calendarDate(value),
     );
-  const move = (direction: number) => {
-    if (activeTab === 'ASSIGNMENT') {
-      const next = addCalendarDays(selectedDate, direction * 7);
-      changeRange({ fromDate: next, toDate: next });
-    } else {
-      const first =
-        changeCalendarMonth(
-          range.fromDate,
-          Number(range.fromDate.slice(0, 4)),
-          Number(range.fromDate.slice(5, 7)) - 1 + direction,
-        ).slice(0, 8) + '01';
-      const last = new Date(Date.UTC(Number(first.slice(0, 4)), Number(first.slice(5, 7)), 0))
-        .toISOString()
-        .slice(0, 10);
-      changeRange({ fromDate: first, toDate: last });
-    }
-  };
-  if (dayId) return <AttendanceDetail dayId={dayId} onBack={() => setDayId('')} />;
+  const dates = new Set(calendar.data?.items.map((item) => item.workDate));
+  const templates = new Map(shifts.data?.map((shift) => [shift.id, shift]));
+  const rows = (calendar.data?.items ?? [])
+    .filter((item) => item.workDate === day)
+    .sort((a, b) => {
+      const first = templates.get(a.shiftId),
+        second = templates.get(b.shiftId);
+      return (
+        (first ? shiftClock(first, 'start') : '').localeCompare(
+          second ? shiftClock(second, 'start') : '',
+        ) || a.teamName.localeCompare(b.teamName)
+      );
+    });
+  const selectedShift = selected ? templates.get(selected.shiftId) : undefined;
+  if (attendanceDayId)
+    return <AttendanceDetail dayId={attendanceDayId} onBack={() => setAttendanceDayId('')} />;
   return (
-    <Page title={t('schedule.contractorTitle')}>
-      <Text style={styles.subtitle}>
-        {scope.contractorName} · {scope.siteName}
-      </Text>
-      <CompactTabs
-        value={activeTab}
-        options={[
-          { value: 'ASSIGNMENT', label: t('schedule.tabAssignment') },
-          { value: 'ATTENDANCE', label: t('schedule.tabAttendance') },
-        ]}
-        onChange={(value) => {
-          setActiveTab(value);
-          setOffset(0);
-        }}
-      />
-      <View style={styles.toolbar}>
-        <Pressable
-          accessibilityRole="button"
-          accessibilityLabel={t('schedule.chooseMonth')}
-          accessibilityState={{ expanded: months }}
-          onPress={() => setMonths(true)}
-          style={styles.month}
-        >
-          <IconCalendar size={17} color={colors.textSecondary} />
-          <Text style={styles.monthText}>
-            {date(activeTab === 'ASSIGNMENT' ? selectedDate : range.fromDate, {
-              month: 'long',
-              year: 'numeric',
-            })}
+    <Page>
+      <View style={styles.header}>
+        <View style={styles.copy}>
+          <Text style={styles.eyebrow}>{t('teamCalendar.eyebrow')}</Text>
+          <Text accessibilityRole="header" style={styles.title}>
+            {t('teamCalendar.title')}
           </Text>
-          <IconChevronDown size={16} color={colors.textSecondary} />
-        </Pressable>
+          <Text style={styles.hint}>{scope.siteName}</Text>
+        </View>
         <Pressable
           accessibilityRole="button"
-          accessibilityLabel={t(
-            activeTab === 'ASSIGNMENT' ? 'schedule.previousWeek' : 'attendance.previousMonth',
-          )}
-          onPress={() => move(-1)}
-          style={styles.iconButton}
+          accessibilityLabel={t('attendance.today')}
+          style={styles.today}
+          onPress={() => setDay(localDate())}
         >
-          <IconChevronLeft size={20} color={colors.textPrimary} />
-        </Pressable>
-        <Pressable
-          accessibilityRole="button"
-          accessibilityLabel={t(
-            activeTab === 'ASSIGNMENT' ? 'schedule.nextWeek' : 'attendance.nextMonth',
-          )}
-          onPress={() => move(1)}
-          style={styles.iconButton}
-        >
-          <IconChevronRight size={20} color={colors.textPrimary} />
-        </Pressable>
-        <Pressable
-          accessibilityRole="button"
-          accessibilityLabel={t('requests.filter')}
-          accessibilityState={{ expanded: showFilters }}
-          onPress={() => setShowFilters(!showFilters)}
-          style={[styles.iconButton, styles.filterButton, showFilters && styles.activeFilter]}
-        >
-          <IconFilter size={19} color={colors.textSecondary} />
+          <Text style={styles.todayText}>{t('attendance.today')}</Text>
         </Pressable>
       </View>
-      {activeTab === 'ASSIGNMENT' && (
-        <ScrollView
-          horizontal
-          showsHorizontalScrollIndicator={false}
-          contentContainerStyle={styles.week}
-          style={styles.weekScroll}
-        >
-          {calendarWeek(selectedDate).map((day) => (
-            <Pressable
-              key={day}
-              accessibilityRole="tab"
-              accessibilityLabel={date(day, { weekday: 'long', day: '2-digit', month: '2-digit' })}
-              accessibilityState={{ selected: day === selectedDate }}
-              onPress={() => changeRange({ fromDate: day, toDate: day })}
-              style={[styles.weekDay, day === selectedDate && styles.selectedDay]}
-            >
-              <Text style={[styles.weekday, day === selectedDate && styles.selectedText]}>
-                {t(`schedule.weekday${calendarDate(day).getUTCDay()}`)}
-              </Text>
-              <Text style={[styles.dayNumber, day === selectedDate && styles.selectedText]}>
-                {day.slice(8)}
-              </Text>
-            </Pressable>
-          ))}
-        </ScrollView>
-      )}
-      <Text style={styles.caption}>
-        {date(range.fromDate, { day: '2-digit', month: '2-digit', year: 'numeric' })}
-        {range.fromDate !== range.toDate
-          ? ` – ${date(range.toDate, { day: '2-digit', month: '2-digit', year: 'numeric' })}`
-          : ''}
-      </Text>
-      {showFilters && (
-        <Card>
-          <DateRangeFilter
-            range={range}
-            onChange={changeRange}
-            onValidate={(value) => validDates(value.fromDate, value.toDate)}
-          />
-          <QueryState query={workers}>
-            {(people) => (
-              <Choice
-                label={t('schedule.worker')}
-                value={workerId}
-                onChange={(id) => {
-                  setWorkerId(id);
-                  setOffset(0);
-                }}
-                options={[
-                  { value: '', label: t('common.all') },
-                  ...people.map((worker) => ({
-                    value: worker.id,
-                    label: `${worker.displayName} · ${worker.externalId}`,
-                  })),
-                ]}
-              />
-            )}
-          </QueryState>
-        </Card>
-      )}
-      {activeTab === 'ASSIGNMENT' ? (
+      <ManagementTabs
+        value={tab}
+        onChange={setTab}
+        items={[
+          {
+            value: 'ASSIGNMENT',
+            label: t('teamCalendar.scheduleTab'),
+            accessibilityLabel: t('schedule.tabAssignment'),
+          },
+          { value: 'ATTENDANCE', label: t('schedule.tabAttendance') },
+        ]}
+      />
+      {tab === 'ATTENDANCE' ? (
+        <ContractorAttendancePanel initialDate={initialDate} />
+      ) : (
         <>
-          <Button label={t('contractorHome.assignSchedule')} onPress={() => setAssigning(true)} />
-          <QueryState query={workers}>
-            {(people) => (
-              <QueryState query={shifts}>
-                {(templates) => (
-                  <QueryState query={schedules}>
-                    {(data) => (
-                      <>
-                        <ListHeading
-                          title={t('schedule.rosterForDate')}
-                          count={t('contractorUi.assignmentCount', { count: data.total })}
-                        />
-                        {!data.items.length && (
-                          <EmptyState
-                            icon={<IconCalendar size={27} color={colors.primary} />}
-                            title={t('schedule.noSchedulesForDate')}
-                            hint={t('contractorUi.assignEmptyHint')}
-                          />
-                        )}
-                        {data.items
-                          .filter((schedule) =>
-                            people.some((person) => person.id === schedule.workerId),
-                          )
-                          .map((schedule) => {
-                            const worker = people.find(
-                              (person) => person.id === schedule.workerId,
-                            )!;
-                            const shift = templates.find(
-                              (template) => template.id === schedule.shiftId,
-                            );
-                            return (
-                              <Card key={schedule.id}>
-                                <View style={styles.cardHeading}>
-                                  <View style={styles.copy}>
-                                    <Text style={styles.name}>{worker.displayName}</Text>
-                                    <Text style={styles.caption}>{worker.externalId}</Text>
-                                  </View>
-                                  <Text style={styles.status}>
-                                    {t(
-                                      schedule.isActive
-                                        ? 'schedule.filterACTIVE'
-                                        : 'schedule.filterINACTIVE',
-                                    )}
-                                  </Text>
-                                </View>
-                                <Text style={styles.shift}>
-                                  {shift?.name ?? t('schedule.shiftUnavailable')}
-                                </Text>
-                                <View style={styles.cardFooter}>
-                                  <Text style={styles.caption}>
-                                    {date(schedule.workDate, {
-                                      weekday: 'short',
-                                      day: '2-digit',
-                                      month: '2-digit',
-                                    })}
-                                  </Text>
-                                  <Text style={styles.clock}>
-                                    {shift
-                                      ? `${shiftClock(shift, 'start')} – ${shiftClock(shift, 'end')}`
-                                      : '—'}
-                                  </Text>
-                                </View>
-                              </Card>
-                            );
-                          })}
-                        {data.total > PAGE_SIZE && (
-                          <Pager
-                            offset={offset}
-                            total={data.total}
-                            size={PAGE_SIZE}
-                            onChange={setOffset}
-                          />
-                        )}
-                      </>
+          <View style={styles.toolbar}>
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel={t('schedule.chooseMonth')}
+              onPress={() => setMonths(true)}
+              style={styles.month}
+            >
+              <IconCalendar size={17} color={colors.textMuted} />
+              <Text style={styles.monthText}>
+                {format(day, { month: 'long', year: 'numeric' })}
+              </Text>
+              <IconChevronDown size={15} color={colors.textMuted} />
+            </Pressable>
+            <View style={styles.arrows}>
+              <Pressable
+                accessibilityRole="button"
+                accessibilityLabel={t('schedule.previousWeek')}
+                onPress={() => setDay(addCalendarDays(day, -7))}
+                style={styles.iconButton}
+              >
+                <IconChevronLeft size={20} color={colors.textPrimary} />
+              </Pressable>
+              <Pressable
+                accessibilityRole="button"
+                accessibilityLabel={t('schedule.nextWeek')}
+                onPress={() => setDay(addCalendarDays(day, 7))}
+                style={styles.iconButton}
+              >
+                <IconChevronRight size={20} color={colors.textPrimary} />
+              </Pressable>
+              <Pressable
+                accessibilityRole="button"
+                accessibilityLabel={t('requests.filter')}
+                accessibilityState={{ expanded: filters }}
+                onPress={() => setFilters(!filters)}
+                style={[styles.iconButton, (filters || !!teamId) && styles.filterActive]}
+              >
+                <IconFilter size={19} color={colors.textSecondary} />
+              </Pressable>
+            </View>
+          </View>
+          {filters && (
+            <View style={styles.filters}>
+              <QueryState query={teams}>
+                {(items) => (
+                  <Choice
+                    label={t('scheduleAssign.team')}
+                    value={teamId}
+                    onChange={setTeamId}
+                    options={[
+                      { value: '', label: t('teamCalendar.allTeams') },
+                      ...items.map((item) => ({ value: item.id, label: item.name })),
+                    ]}
+                  />
+                )}
+              </QueryState>
+            </View>
+          )}
+          <ScrollView
+            horizontal
+            showsHorizontalScrollIndicator={false}
+            contentContainerStyle={styles.week}
+          >
+            {week.map((value) => (
+              <Pressable
+                key={value}
+                accessibilityRole="tab"
+                accessibilityLabel={format(value, {
+                  weekday: 'long',
+                  day: '2-digit',
+                  month: '2-digit',
+                })}
+                accessibilityState={{ selected: value === day }}
+                onPress={() => setDay(value)}
+                style={[styles.day, value === day && styles.selectedDay]}
+              >
+                <Text style={[styles.weekday, value === day && styles.selectedText]}>
+                  {t(`schedule.weekday${calendarDate(value).getUTCDay()}`)}
+                </Text>
+                <Text style={[styles.dayNumber, value === day && styles.selectedText]}>
+                  {value.slice(8)}
+                </Text>
+                <View
+                  style={[
+                    styles.dot,
+                    value === day && styles.selectedDot,
+                    !dates.has(value) && styles.hiddenDot,
+                  ]}
+                />
+              </Pressable>
+            ))}
+          </ScrollView>
+          <View style={styles.dayHeading}>
+            <View style={styles.copy}>
+              <Text style={styles.dayTitle}>
+                {day === localDate() ? t('attendance.today') : format(day, { weekday: 'long' })}
+              </Text>
+              <Text style={styles.hint}>
+                {format(day, { day: '2-digit', month: 'long', year: 'numeric' })}
+              </Text>
+            </View>
+            <ManagementLink
+              label={t('contractorHome.assignSchedule')}
+              onPress={() => setAssigning(true)}
+            />
+            <ManagementLink
+              label={t('scheduleManage.open')}
+              onPress={() => setManagingBatches(true)}
+            />
+          </View>
+          <QueryState query={shifts}>
+            {() => (
+              <QueryState query={calendar}>
+                {() => (
+                  <>
+                    {!!calendar.data?.unassignedScheduleCount && (
+                      <Text style={styles.hint}>
+                        {t('teamCalendar.unassignedHint', {
+                          count: calendar.data.unassignedScheduleCount,
+                        })}
+                      </Text>
                     )}
-                  </QueryState>
+                    {!rows.length && (
+                      <EmptyState
+                        icon={<IconCalendar size={29} color={colors.textMuted} />}
+                        title={t('teamCalendar.empty')}
+                        hint={t('teamCalendar.emptyHint')}
+                      />
+                    )}
+                    {rows.map((item) => {
+                      const shift = templates.get(item.shiftId);
+                      return (
+                        <View
+                          key={`${item.teamId}:${item.shiftId}:${item.scheduleVersionId}:${item.workDate}`}
+                          style={styles.timeline}
+                        >
+                          <View style={styles.timeColumn}>
+                            <Text style={styles.start}>
+                              {shift ? shiftClock(shift, 'start') : '—'}
+                            </Text>
+                            <View style={styles.line} />
+                          </View>
+                          <Pressable
+                            accessibilityRole="button"
+                            accessibilityLabel={t('teamCalendar.open', { name: item.teamName })}
+                            onPress={() => setSelected(item)}
+                            style={({ pressed }) => [styles.shiftCard, pressed && { opacity: 0.7 }]}
+                          >
+                            <View style={styles.cardHeading}>
+                              <View style={styles.teamIcon}>
+                                <IconUsers size={18} color={colors.primary} />
+                              </View>
+                              <Text style={styles.teamName}>{item.teamName}</Text>
+                              <IconChevronRight size={16} color={colors.textTertiary} />
+                            </View>
+                            <Text style={styles.shiftName}>
+                              {shift?.name ?? t('schedule.shiftUnavailable')}
+                            </Text>
+                            <View style={styles.cardFooter}>
+                              <View style={styles.clockRow}>
+                                <IconClock size={14} color={colors.textMuted} />
+                                <Text style={styles.hint}>
+                                  {shift ? shiftRange(shift) : t('schedule.timeUnavailable')}
+                                </Text>
+                              </View>
+                              <ManagementBadge
+                                label={t('teamUi.memberCount', { count: item.workerCount })}
+                              />
+                            </View>
+                          </Pressable>
+                        </View>
+                      );
+                    })}
+                  </>
                 )}
               </QueryState>
             )}
           </QueryState>
-        </>
-      ) : (
-        <>
-          <QueryState query={summary}>
-            {(value) => <WorkerAttendanceSummary summary={value} siteName={scope.siteName} />}
-          </QueryState>
-          <QueryState query={attendanceDays}>
-            {(data) => (
-              <>
-                <ListHeading
-                  title={t('attendance.attendanceHistory')}
-                  count={t('attendance.recordCount', { count: data.total })}
+          <MonthYearPicker
+            visible={months}
+            value={day}
+            onClose={() => setMonths(false)}
+            onChange={(year, month) => setDay(changeCalendarMonth(day, year, month))}
+          />
+          {selected && (
+            <RequestSheet
+              visible
+              variant="compact"
+              title={t('scheduleDay.title')}
+              subtitle={scope.siteName}
+              onClose={() => setSelected(null)}
+              footer={null}
+            >
+              <ScheduleDaySummary workDate={selected.workDate} shift={selectedShift} />
+              <View style={styles.dayTeamCard}>
+                <View style={styles.clockRow}>
+                  <IconUsers size={17} color={colors.primary} />
+                  <Text style={styles.hint}>{t('scheduleDay.group')}</Text>
+                </View>
+                <Text style={[styles.teamName, { flex: 0 }]}>{selected.teamName}</Text>
+                <ManagementBadge
+                  label={t('teamCalendar.assignedCount', { count: selected.workerCount })}
                 />
-                {!data.items.length && (
-                  <EmptyState
-                    icon={<IconClock size={27} color={colors.primary} />}
-                    title={t('attendance.noDaysInRange')}
-                    hint={t('attendance.emptyHistoryHint')}
-                  />
-                )}
-                {data.items.map((day) => (
-                  <Pressable
-                    key={day.id}
-                    accessibilityRole="button"
-                    accessibilityLabel={`${day.workDate} ${day.workerName}`}
-                    accessibilityHint={t('attendance.dayDetail')}
-                    onPress={() => setDayId(day.id)}
-                    style={({ pressed }) => [styles.dayCard, pressed && { opacity: 0.65 }]}
-                  >
-                    <View style={styles.cardHeading}>
-                      <View style={styles.copy}>
-                        <Text style={styles.name}>{day.workerName}</Text>
-                        <Text style={styles.caption}>
-                          {date(day.workDate, {
-                            weekday: 'short',
-                            day: '2-digit',
-                            month: '2-digit',
-                          })}
-                        </Text>
-                      </View>
-                      <IconChevronRight size={18} color={colors.textMuted} />
-                    </View>
-                    <Text style={styles.shift}>
-                      {day.shiftName ?? t('attendance.shiftNotAssigned')}
-                    </Text>
-                    <View style={styles.cardFooter}>
-                      <View style={styles.copy}>
-                        <Text style={styles.caption}>
-                          {t(
-                            day.confirmedMinutes === null
-                              ? 'attendance.provisionalHours'
-                              : 'attendance.confirmedHours',
-                          )}
-                        </Text>
-                        <Text style={styles.hours}>
-                          {minutes(day.confirmedMinutes ?? day.provisionalMinutes)}
-                        </Text>
-                      </View>
-                      <Text style={[styles.status, day.status === 'NEEDS_REVIEW' && styles.review]}>
-                        {localizedLabel(day.status)}
-                      </Text>
-                    </View>
-                  </Pressable>
-                ))}
-                {data.total > PAGE_SIZE && (
-                  <Pager offset={offset} total={data.total} size={PAGE_SIZE} onChange={setOffset} />
-                )}
-              </>
-            )}
-          </QueryState>
+                <Text style={styles.hint}>{t('scheduleDay.groupHint')}</Text>
+              </View>
+              <ContractorTeamAttendancePanel
+                key={`${selected.teamId}:${selected.workDate}:${selected.shiftId}:${selected.scheduleVersionId}`}
+                item={selected}
+                onDay={(id) => {
+                  setSelected(null);
+                  setAttendanceDayId(id);
+                }}
+              />
+            </RequestSheet>
+          )}
+          {assigning && (
+            <ScheduleAssignModal
+              visible
+              teamOnly
+              onClose={() => setAssigning(false)}
+              onSuccess={() => void calendar.refetch()}
+            />
+          )}
+          {managingBatches && <ScheduleBatchSheet onClose={() => setManagingBatches(false)} />}
         </>
-      )}
-      <MonthYearPicker
-        visible={months}
-        value={activeTab === 'ASSIGNMENT' ? selectedDate : range.fromDate}
-        onClose={() => setMonths(false)}
-        onChange={(year, month) => {
-          const first = new Date(Date.UTC(year, month, 1)).toISOString().slice(0, 10);
-          const last = new Date(Date.UTC(year, month + 1, 0)).toISOString().slice(0, 10);
-          changeRange({ fromDate: first, toDate: activeTab === 'ASSIGNMENT' ? first : last });
-        }}
-      />
-      {assigning && (
-        <ScheduleAssignModal
-          visible
-          onClose={() => setAssigning(false)}
-          onSuccess={() => void schedules.refetch()}
-        />
       )}
     </Page>
   );
 }
-
 const styles = StyleSheet.create({
-  subtitle: { fontSize: 12, lineHeight: 20, color: colors.textMuted, marginTop: -8 },
-  toolbar: { flexDirection: 'row', alignItems: 'center', gap: 2 },
+  dayTeamCard: {
+    padding: 14,
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: colors.borderLight,
+    backgroundColor: colors.surfaceSubtle,
+    gap: 8,
+  },
+  header: { flexDirection: 'row', alignItems: 'center', gap: 12 },
+  copy: { flex: 1, minWidth: 0, gap: 4 },
+  eyebrow: {
+    fontSize: 10,
+    color: colors.primary,
+    fontWeight: '700',
+    letterSpacing: 1.2,
+    textTransform: 'uppercase',
+  },
+  title: { fontSize: 25, lineHeight: 33, fontWeight: '800', color: colors.textPrimary },
+  hint: { fontSize: 12, lineHeight: 19, color: colors.textMuted },
+  today: {
+    minHeight: 44,
+    paddingHorizontal: 12,
+    justifyContent: 'center',
+    borderRadius: 12,
+    backgroundColor: colors.surface,
+  },
+  todayText: { color: colors.textPrimary, fontSize: 12, fontWeight: '600' },
+  toolbar: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 6 },
   month: {
-    flex: 1,
-    minWidth: 0,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 7,
     minHeight: 44,
     paddingHorizontal: 10,
-    paddingVertical: 8,
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-    borderWidth: 1,
-    borderColor: colors.border,
+    borderRadius: 12,
     backgroundColor: colors.surface,
-    borderRadius: 14,
+    flexShrink: 1,
   },
   monthText: {
-    flexShrink: 1,
-    fontSize: 12,
-    lineHeight: 19,
+    fontSize: 13,
+    lineHeight: 20,
     fontWeight: '600',
     color: colors.textPrimary,
-    textTransform: 'capitalize',
+    flexShrink: 1,
   },
-  iconButton: { width: 44, height: 44, alignItems: 'center', justifyContent: 'center' },
-  filterButton: {
-    borderWidth: 1,
-    borderColor: colors.border,
-    borderRadius: 14,
-    backgroundColor: colors.surface,
-  },
-  activeFilter: { backgroundColor: colors.primaryLight, borderColor: colors.primaryBorder },
-  week: {
-    flexDirection: 'row',
-    gap: 4,
-    padding: 6,
-    borderRadius: 18,
-    backgroundColor: colors.surface,
-    borderWidth: 1,
-    borderColor: colors.border,
-  },
-  weekScroll: { flexGrow: 0 },
-  weekDay: {
-    minWidth: 44,
-    paddingHorizontal: 7,
-    minHeight: 62,
+  arrows: { flexDirection: 'row', gap: 4 },
+  iconButton: {
+    width: 38,
+    minHeight: 44,
     alignItems: 'center',
     justifyContent: 'center',
-    paddingVertical: 10,
-    gap: 6,
-    borderRadius: 12,
+    borderRadius: 11,
+    backgroundColor: colors.surface,
   },
-  selectedDay: { backgroundColor: colors.primary },
-  weekday: { fontSize: 10, lineHeight: 15, color: colors.textMuted },
-  dayNumber: { fontSize: 16, lineHeight: 22, fontWeight: '700', color: colors.textPrimary },
-  selectedText: { color: colors.textWhite },
-  caption: { fontSize: 12, lineHeight: 19, color: colors.textMuted },
-  cardHeading: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
+  filterActive: { backgroundColor: colors.primaryLight },
+  filters: {
+    borderWidth: 1,
+    borderColor: colors.border,
+    backgroundColor: colors.surface,
+    borderRadius: 16,
+    padding: 14,
+  },
+  week: { flexGrow: 1, gap: 7, justifyContent: 'space-between', paddingVertical: 4 },
+  day: {
+    width: 43,
+    minHeight: 80,
+    borderRadius: 20,
+    paddingVertical: 12,
     alignItems: 'center',
-    gap: 10,
-    justifyContent: 'space-between',
+    gap: 6,
+    borderWidth: 1,
+    borderColor: colors.borderLight,
+    backgroundColor: colors.surface,
   },
-  copy: { flex: 1, minWidth: 100, gap: 4 },
-  name: { fontSize: 15, lineHeight: 23, fontWeight: '700', color: colors.textPrimary },
-  status: {
-    fontSize: 12,
-    lineHeight: 18,
-    fontWeight: '600',
-    color: colors.textSecondary,
-    backgroundColor: colors.surfaceSubtle,
-    paddingVertical: 5,
-    paddingHorizontal: 8,
-    borderRadius: 8,
-    overflow: 'hidden',
-    maxWidth: '100%',
+  selectedDay: { backgroundColor: colors.primary, borderColor: colors.primary },
+  weekday: { fontSize: 11, fontWeight: '600', color: colors.textMuted },
+  dayNumber: { fontSize: 19, fontWeight: '700', color: colors.textPrimary },
+  selectedText: { color: '#FFFFFF' },
+  dot: { width: 4, height: 4, borderRadius: 2, backgroundColor: colors.primary },
+  selectedDot: { backgroundColor: '#FFFFFF' },
+  hiddenDot: { opacity: 0 },
+  dayHeading: { flexDirection: 'row', alignItems: 'center', gap: 12 },
+  dayTitle: { color: colors.textPrimary, fontSize: 16, lineHeight: 24, fontWeight: '700' },
+  timeline: { flexDirection: 'row', gap: 10 },
+  timeColumn: { width: 43, alignItems: 'center', gap: 10 },
+  start: { fontSize: 11, fontWeight: '600', color: colors.textMuted, paddingTop: 6 },
+  line: { width: 1, backgroundColor: colors.border, flex: 1, minHeight: 65 },
+  shiftCard: {
+    flex: 1,
+    minWidth: 0,
+    borderRadius: 18,
+    padding: 14,
+    backgroundColor: colors.surface,
+    borderWidth: 1,
+    borderColor: colors.borderLight,
+    gap: 11,
   },
-  shift: { fontSize: 13, lineHeight: 21, color: colors.textSecondary },
+  cardHeading: { flexDirection: 'row', alignItems: 'center', gap: 9 },
+  teamIcon: {
+    width: 32,
+    height: 32,
+    borderRadius: 11,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: colors.primaryLight,
+  },
+  teamName: { flex: 1, color: colors.textPrimary, fontSize: 14, lineHeight: 22, fontWeight: '700' },
+  shiftName: { color: colors.textSecondary, fontSize: 13, lineHeight: 21 },
   cardFooter: {
     flexDirection: 'row',
     flexWrap: 'wrap',
-    gap: 10,
     alignItems: 'center',
+    gap: 10,
     justifyContent: 'space-between',
-    borderTopWidth: 1,
-    borderTopColor: colors.borderLight,
-    paddingTop: 12,
   },
-  clock: { fontSize: 14, lineHeight: 21, fontWeight: '600', color: colors.textPrimary },
-  dayCard: {
-    padding: 16,
-    gap: 14,
-    borderWidth: 1,
-    borderColor: colors.border,
-    borderRadius: 18,
-    backgroundColor: colors.surface,
-  },
-  hours: { fontSize: 20, lineHeight: 28, fontWeight: '700', color: colors.textPrimary },
-  review: { color: colors.warningText, backgroundColor: colors.warningLightBg },
+  clockRow: { flexDirection: 'row', alignItems: 'center', gap: 6 },
 });

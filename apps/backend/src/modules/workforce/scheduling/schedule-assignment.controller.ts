@@ -8,6 +8,7 @@ import {
   ChangeScheduleAssignmentDto,
   CreateScheduleAssignmentDto,
   ScheduleAssignmentDto,
+  ContractorTeamCalendarQueryDto,
 } from './dto/schedule-assignment.dto.js';
 
 @ApiTags('schedule assignments')
@@ -15,6 +16,13 @@ import {
 @UseGuards(UserAuthGuard)
 @Controller('sites/:siteId/schedule-assignments')
 export class ScheduleAssignmentController {
+  @Get('calendar') calendar(
+    @Req() request: AuthenticatedRequest,
+    @Param('siteId') siteId: string,
+    @Query() input: ContractorTeamCalendarQueryDto,
+  ) {
+    return this.assignments.teamCalendar(request.user!, siteId, input);
+  }
   constructor(private readonly assignments: ScheduleAssignmentService) {}
   @Post('preview') preview(
     @Req() request: AuthenticatedRequest,

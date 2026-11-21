@@ -75,6 +75,8 @@ type Recipient = Pick<
   'recipientUserId' | 'recipientRole' | 'workerId' | 'contractorId'
 >;
 
+export const notificationVisibilityScope = scope;
+
 @Injectable()
 export class SchedulingNotificationService {
   private readonly logger = new Logger(SchedulingNotificationService.name);

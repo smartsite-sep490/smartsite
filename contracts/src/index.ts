@@ -214,3 +214,11 @@ export * from './camera-preview.js';
 export * from './camera-observation-zones.js';
 
 export * from './gates-api.js';
+export * from './team-attendance-api.js';
+export * from './account-email-api.js';
+export * from './mobile-push-api.js';
+export type {
+  ContractorTeamCalendarItem,
+  ContractorTeamCalendarQuery,
+} from './schedule-assignment-api.js';
+export type { ContractorTeamCalendarResponse } from './schedule-assignment-api.js';

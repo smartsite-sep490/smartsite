@@ -26,6 +26,14 @@ setting both values. For Compose, export these two variables in the shell or pas
 environment file containing only the email settings. `infra/compose.yaml` forwards them to the Backend;
 do not reuse a host-only PostgreSQL URL inside the Backend container.
 
+Mobile worker onboarding and account recovery reuse these same two settings and sender. No second
+Resend account or key is required. The development backend does not read the repository-root `.env`;
+keep the mail values in `apps/backend/.env` or exported environment variables. Account email has its
+own encrypted outbox and one-time challenges, independent of visitor approval/persistence. Apply
+`AccountEmailRecovery1795392000000` before deploying that workflow. Codes expire after ten minutes;
+reset is available only for verified account email. Preserve `AUTH_JWT_SECRET` to decrypt queued mail.
+See [the Mobile API audit](mobile-api-audit.vi.md) for UI entry points and verification limits.
+
 ## Behavior
 
 After the assigned Site Manager approves, the Backend sends a localized email containing the
@@ -69,12 +77,13 @@ reconciliation. Old count-only registrations keep their existing whole-group con
 ## Registration Status and Physical Presence
 
 Visitor tracking strictly separates registration lifecycle status from physical presence:
+
 - **Canonical statuses:** `PENDING`, `APPROVED`, `REJECTED`, `CANCELLED`, `EXPIRED`. No synthetic statuses such as `COMPLETED` or `INSIDE` replace registration authority.
 - **Physical presence:** Tracked independently across table, cards, and detail modal as:
-  - *Not yet entered:* No gate entry has been recorded (`enteredCount === 0`).
-  - *Currently on-site:* One or more attendees are physically inside (`enteredCount > exitedCount`), displaying both headcount inside and group size (`inside/groupSize`).
-  - *Everyone checked out:* Entry occurred previously and all attendees have departed (`enteredCount > 0 && enteredCount === exitedCount`).
-  - *Needs review:* Legacy partial-arrival records without an individual roster that require manual reconciliation.
+  - _Not yet entered:_ No gate entry has been recorded (`enteredCount === 0`).
+  - _Currently on-site:_ One or more attendees are physically inside (`enteredCount > exitedCount`), displaying both headcount inside and group size (`inside/groupSize`).
+  - _Everyone checked out:_ Entry occurred previously and all attendees have departed (`enteredCount > 0 && enteredCount === exitedCount`).
+  - _Needs review:_ Legacy partial-arrival records without an individual roster that require manual reconciliation.
 - **Combined filtering:** The UI provides primary filtering across all canonical statuses (`All`, `Pending`, `Approved`, `Rejected`, `Cancelled`, `Expired`) plus a separate quick toggle for `On-Site only`. This ensures cancelled or expired visits with individuals still inside remain immediately discoverable.
 - **Automatic expiration:** Overdue `PENDING` and `APPROVED` visits automatically transition to `EXPIRED` once `validUntil` passes, evaluated consistently across backend reads, management listings, and gate decision endpoints, without requiring the visitor to open the public tracking pass.
 - **Departures after expiration/cancellation:** Once expired or cancelled, new entries (`direction === 'IN'`) are rejected fail-closed, while departures (`direction === 'OUT'`) for attendees already on-site remain permitted until everyone has departed. Checked out does not end an otherwise valid approved visit.
