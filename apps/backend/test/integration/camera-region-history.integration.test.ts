@@ -1,4 +1,7 @@
-import { installGateSchemaForHistoricalFixture } from '../support/historical-gate-schema.js';
+import {
+  installGateSchemaForHistoricalFixture,
+  removeAccountEmailProjectionForHistoricalFixture,
+} from '../support/historical-gate-schema.js';
 import 'reflect-metadata';
 import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
@@ -112,6 +115,7 @@ test('Region history preserves active state, cutover truth and atomic legacy mut
     });
     // Current services require the full current schema, including later Zone soft deletion.
     // Reinitialize to rebuild TypeORM's migration instances from the restored options.
+    await removeAccountEmailProjectionForHistoricalFixture(db);
     await db.destroy();
     db.setOptions({
       migrations: migrations.filter(

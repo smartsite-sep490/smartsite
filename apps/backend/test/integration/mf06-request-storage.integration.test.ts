@@ -1,4 +1,7 @@
-import { installGateSchemaForHistoricalFixture } from '../support/historical-gate-schema.js';
+import {
+  installGateSchemaForHistoricalFixture,
+  removeAccountEmailProjectionForHistoricalFixture,
+} from '../support/historical-gate-schema.js';
 import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
 import test from 'node:test';
@@ -124,6 +127,7 @@ test('MF06 migration rejects shadow schemas and collisions without losing existi
     await runner.release();
     runner = undefined;
     // The historical fixture projection is replaced by the actual clean Gate migration.
+    await removeAccountEmailProjectionForHistoricalFixture(owned.dataSource);
     await owned.dataSource.query(
       'ALTER TABLE camera DROP COLUMN type, DROP COLUMN gate_id; ALTER TABLE camera_observation_region DROP COLUMN site_id',
     );

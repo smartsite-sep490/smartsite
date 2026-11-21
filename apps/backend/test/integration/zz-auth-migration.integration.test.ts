@@ -6,6 +6,7 @@ import { ScopedJwtAuthentication1790553600000 } from '../../src/database/migrati
 import { UsersService } from '../../src/modules/users/users.service.js';
 import { SiteConfigurationService } from '../../src/modules/sites/site-configuration.service.js';
 import { SingleSiteManager1791936000000 } from '../../src/database/migrations/1791936000000-SingleSiteManager.js';
+import { MobilePushDelivery1795478400000 } from '../../src/database/migrations/1795478400000-MobilePushDelivery.js';
 
 after(async () => {
   if (dataSource.isInitialized) await dataSource.destroy();
@@ -17,7 +18,10 @@ test('scoped auth migration backfills Admin, deactivates Worker, and invalidates
   const runner = dataSource.createQueryRunner();
   await runner.connect();
   const migration = new ScopedJwtAuthentication1790553600000();
+  const pushMigration = new MobilePushDelivery1795478400000();
   try {
+    // Rehearse the historical auth boundary after removing its later session dependent.
+    await pushMigration.down(runner);
     await migration.down(runner);
     const adminId = randomUUID();
     const workerId = randomUUID();
@@ -34,6 +38,7 @@ test('scoped auth migration backfills Admin, deactivates Worker, and invalidates
       ['a'.repeat(64), adminId],
     );
     await migration.up(runner);
+    await pushMigration.up(runner);
     // The legacy migration recreates user_role_assignment; restore later schema additions.
     await new SingleSiteManager1791936000000().up(runner);
 
