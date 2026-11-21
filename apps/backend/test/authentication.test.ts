@@ -154,11 +154,14 @@ for (const { environment, sameSite, secure } of [
         mustChangePassword: false,
       },
     };
+    const passwordCalls: unknown[][] = [];
     const auth = {
       login: async () => result,
       refresh: async () => result,
       logout: async () => undefined,
-      changePassword: async () => undefined,
+      changePassword: async (...args: unknown[]) => {
+        passwordCalls.push(args);
+      },
     };
     const config = new ConfigService<BackendEnvironment, true>(
       validateEnvironment({
@@ -170,7 +173,7 @@ for (const { environment, sameSite, secure } of [
         SMARTSITE_AI_SERVICE_TOKEN: 'cookie-test-service-token-at-least-32-characters',
       }),
     );
-    const controller = new AuthController(auth as never, config);
+    const controller = new AuthController(auth as never, config, new UserAuthGuard(auth as never));
     const cookies: Array<{ name: string; value: string; options: Record<string, unknown> }> = [];
     const cleared: Array<{ name: string; options: Record<string, unknown> }> = [];
     const response = {
@@ -337,6 +340,10 @@ for (const { environment, sameSite, secure } of [
       response as never,
       { currentPassword: 'password', newPassword: 'NewPassword123!' },
     );
+    assert.equal(passwordCalls[0]?.[0], result.user.id);
+    const context = passwordCalls[0]?.[3] as { actorUserId: string; reauthorize: unknown };
+    assert.equal(context.actorUserId, result.user.id);
+    assert.equal(typeof context.reauthorize, 'function');
     assert.deepEqual(cleared, [
       { name: 'smartsite_refresh', options: cookieOptions },
       { name: 'smartsite_refresh', options: cookieOptions },

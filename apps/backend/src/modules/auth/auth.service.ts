@@ -8,6 +8,10 @@ import { UserRoleAssignmentEntity } from '../../database/entities/user-role-assi
 import { AuthTokenService, REFRESH_SESSION_MS } from './auth-token.service.js';
 import { hashPassword, validPassword, verifyPassword } from './password.js';
 import { PASSWORD_POLICY_MESSAGE } from '../../common/configuration/password-policy.js';
+import {
+  executeMainConfigurationCommand,
+  type MainConfigurationCommandContext,
+} from '../../common/configuration/main-configuration-authority.js';
 
 const DUMMY_PASSWORD_HASH = hashPassword('nonexistent-account-password');
 
@@ -235,6 +239,7 @@ export class AuthService {
     userId: string,
     currentPassword: string,
     newPassword: string,
+    context?: MainConfigurationCommandContext,
   ): Promise<void> {
     if (!validPassword(newPassword))
       throw new PublicHttpException(HttpStatus.BAD_REQUEST, {
@@ -245,29 +250,42 @@ export class AuthService {
     if (!user || !(await verifyPassword(currentPassword, user.passwordHash)))
       throw new UnauthorizedException();
     const replacement = await hashPassword(newPassword);
-    await this.dataSource.transaction(async (manager) => {
-      const current = await manager
-        .getRepository(UserEntity)
-        .createQueryBuilder('user')
-        .setLock('pessimistic_write')
-        .where('user.id = :id', { id: userId })
-        .getOne();
-      if (!current?.isActive || current.passwordHash !== user.passwordHash)
-        throw new UnauthorizedException();
-      await manager.getRepository(UserEntity).update(
-        { id: userId },
-        {
-          passwordHash: replacement,
-          mustChangePassword: false,
-        },
-      );
-      await manager
-        .getRepository(AuthSessionEntity)
-        .createQueryBuilder()
-        .update()
-        .set({ revokedAt: new Date() })
-        .where('user_id = :userId AND revoked_at IS NULL', { userId })
-        .execute();
-    });
+    await executeMainConfigurationCommand(
+      this.dataSource,
+      context,
+      'USER_PASSWORD_CHANGE',
+      { userId },
+      async (manager) => {
+        const current = await manager
+          .getRepository(UserEntity)
+          .createQueryBuilder('user')
+          .setLock('pessimistic_write')
+          .where('user.id = :id', { id: userId })
+          .getOne();
+        if (!current?.isActive || current.passwordHash !== user.passwordHash)
+          throw new UnauthorizedException();
+        await manager.getRepository(UserEntity).update(
+          { id: userId },
+          {
+            passwordHash: replacement,
+            mustChangePassword: false,
+          },
+        );
+        await manager
+          .getRepository(AuthSessionEntity)
+          .createQueryBuilder()
+          .update()
+          .set({ revokedAt: new Date() })
+          .where('user_id = :userId AND revoked_at IS NULL', { userId })
+          .execute();
+      },
+      async () => {
+        if (context?.actorUserId !== userId)
+          throw new PublicHttpException(HttpStatus.FORBIDDEN, {
+            code: 'FORBIDDEN',
+            message: 'Forbidden',
+          });
+      },
+    );
   }
 }
