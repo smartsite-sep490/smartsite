@@ -58,6 +58,7 @@ function CameraApplySavedBarView({
   const isWorkerLoadedCurrent = appStatus.effectiveState === 'LOADED';
 
   const {
+    hosts,
     hostAccessDenied,
     availableHosts,
     hostId,
@@ -67,6 +68,7 @@ function CameraApplySavedBarView({
     resuming,
     revoked,
     sourceBusy,
+    refreshingCaps,
     triggerResume,
   } = controller;
 
@@ -96,7 +98,7 @@ function CameraApplySavedBarView({
     return null;
   }
 
-  const blocked = sourceBusy || resuming.isPending || revoked;
+  const blocked = sourceBusy || refreshingCaps || hosts.isError || resuming.isPending || revoked;
 
   return (
     <div

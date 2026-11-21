@@ -33,6 +33,9 @@ export interface CameraSourceResumeController {
   markRevoked: () => void;
   sourceBusy: boolean;
   setSourceBusy: (busy: boolean) => void;
+  refreshingCaps: boolean;
+  refreshHosts: () => Promise<void>;
+  onSourceApplied: () => void;
   canResume: boolean;
   triggerResume: () => void;
 }
@@ -62,12 +65,19 @@ export function useCameraSourceResumeController({
     scope: scopeKey,
     busy: false,
   });
+  const [capsRefreshState, setCapsRefreshState] = useState<{
+    scope: string;
+    status: 'idle' | 'refreshing' | 'failed';
+  }>({ scope: scopeKey, status: 'idle' });
 
   const selectedHostId = hostState.scope === scopeKey ? hostState.id : null;
   const revoked = revokedScope === scopeKey;
   const sourceBusy = sourceBusyState.scope === scopeKey ? sourceBusyState.busy : false;
+  const refreshingCaps = capsRefreshState.scope === scopeKey && capsRefreshState.status !== 'idle';
 
   const sourceBusyRef = useRef(false);
+  const refreshingCapsRef = useRef(false);
+  const capsRefreshSeqRef = useRef(0);
   const activeScopeRef = useRef(scopeKey);
   const resumeAbortRef = useRef<AbortController | null>(null);
   const resumeCommand = useRef<SourceConfigurationResumeCommand | undefined>(undefined);
@@ -117,7 +127,9 @@ export function useCameraSourceResumeController({
         !canWrite ||
         revoked ||
         !hostId ||
-        sourceBusyRef.current
+        hosts.isError ||
+        sourceBusyRef.current ||
+        refreshingCapsRef.current
       ) {
         throw new SourceSetupError(409);
       }
@@ -146,11 +158,13 @@ export function useCameraSourceResumeController({
   });
 
   const { isPending: resumePending, reset: resetResume } = resuming;
+  const { refetch: refetchHosts } = hosts;
 
   useEffect(() => {
     activeScopeRef.current = scopeKey;
     sourceBusyRef.current = sourceBusy;
-  }, [scopeKey, sourceBusy]);
+    refreshingCapsRef.current = refreshingCaps;
+  }, [scopeKey, sourceBusy, refreshingCaps]);
 
   useEffect(() => {
     return () => {
@@ -212,12 +226,43 @@ export function useCameraSourceResumeController({
     [scopeKey],
   );
 
+  const refreshHosts = useCallback(async () => {
+    const seq = ++capsRefreshSeqRef.current;
+    refreshingCapsRef.current = true;
+    setCapsRefreshState({ scope: scopeKey, status: 'refreshing' });
+    try {
+      const next = await refetchHosts({ cancelRefetch: true });
+      if (capsRefreshSeqRef.current !== seq || activeScopeRef.current !== scopeKey) return;
+      if (next.isError) {
+        refreshingCapsRef.current = true;
+        setCapsRefreshState({ scope: scopeKey, status: 'failed' });
+        return;
+      }
+      refreshingCapsRef.current = false;
+      setCapsRefreshState({ scope: scopeKey, status: 'idle' });
+    } catch {
+      if (capsRefreshSeqRef.current !== seq || activeScopeRef.current !== scopeKey) return;
+      refreshingCapsRef.current = true;
+      setCapsRefreshState({ scope: scopeKey, status: 'failed' });
+    }
+  }, [scopeKey, refetchHosts]);
+
+  const onSourceApplied = useCallback(() => {
+    resumeAbortRef.current?.abort();
+    resumeCommand.current = undefined;
+    resetResume();
+    resumeScope.current = { scope: scopeKey, hostId, version: configVersion };
+    void refreshHosts();
+  }, [scopeKey, hostId, configVersion, resetResume, refreshHosts]);
+
   const canResume = Boolean(
     enabled &&
     canWrite &&
     !revoked &&
     !hostAccessDenied &&
+    !hosts.isError &&
     !sourceBusy &&
+    !refreshingCaps &&
     !resuming.isPending &&
     !resuming.isSuccess &&
     client.resume &&
@@ -227,9 +272,17 @@ export function useCameraSourceResumeController({
   );
 
   const triggerResume = useCallback(() => {
-    if (sourceBusyRef.current || resuming.isPending || resuming.isSuccess) return;
+    if (
+      sourceBusyRef.current ||
+      refreshingCapsRef.current ||
+      hosts.isError ||
+      resuming.isPending ||
+      resuming.isSuccess
+    ) {
+      return;
+    }
     resuming.mutate();
-  }, [resuming]);
+  }, [hosts.isError, resuming]);
 
   return {
     hosts,
@@ -244,6 +297,9 @@ export function useCameraSourceResumeController({
     markRevoked,
     sourceBusy,
     setSourceBusy,
+    refreshingCaps,
+    refreshHosts,
+    onSourceApplied,
     canResume,
     triggerResume,
   };

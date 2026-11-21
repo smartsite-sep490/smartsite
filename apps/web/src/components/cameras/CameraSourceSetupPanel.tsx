@@ -88,6 +88,9 @@ function SourceWorkspace({
     revoked,
     markRevoked,
     setSourceBusy,
+    refreshingCaps,
+    refreshHosts,
+    onSourceApplied,
     triggerResume,
   } = controller;
 
@@ -119,8 +122,11 @@ function SourceWorkspace({
     retry: false,
     onSuccess: () => {
       setPassword('');
-      void hosts.refetch();
-      void cache.invalidateQueries({ predicate: (q) => q.queryKey.includes(siteId) });
+      onSourceApplied();
+      void cache.invalidateQueries({
+        predicate: (q) =>
+          q.queryKey.includes(siteId) && !q.queryKey.includes('camera-source-hosts'),
+      });
     },
     onError: (e) => {
       if (e instanceof SourceSetupError && [401, 403].includes(e.status)) {
@@ -472,7 +478,7 @@ function SourceWorkspace({
                 disabled={hosts.isFetching || pending || applying.isPending}
                 onClick={() => {
                   reset();
-                  void hosts.refetch();
+                  void refreshHosts();
                 }}
               >
                 {t('cameraSource.refresh')}
@@ -650,7 +656,9 @@ function SourceWorkspace({
               <button
                 type="button"
                 className={CAMERA_BUTTON_STYLES.secondary}
-                disabled={blocked || pending || resuming.isSuccess}
+                disabled={
+                  blocked || pending || refreshingCaps || hosts.isError || resuming.isSuccess
+                }
                 onClick={triggerResume}
               >
                 {t(

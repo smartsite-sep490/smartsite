@@ -393,6 +393,27 @@ function SetupWorkspace({ apiUrl, session }: { apiUrl: string; session: SharedSe
     }
   };
 
+  const [applyFocusRequestSeq, setApplyFocusRequestSeq] = useState(0);
+  const handledApplyFocusSeqRef = useRef(0);
+
+  useEffect(() => {
+    if (
+      applyFocusRequestSeq === 0 ||
+      applyFocusRequestSeq === handledApplyFocusSeqRef.current ||
+      activeTask !== 'source'
+    ) {
+      return;
+    }
+    const stickyBar = document.getElementById('camera-sticky-apply-bar');
+    if (!stickyBar) return;
+    handledApplyFocusSeqRef.current = applyFocusRequestSeq;
+    stickyBar.scrollIntoView?.({ behavior: 'smooth', block: 'center' });
+    const applyBtn = stickyBar.querySelector('button');
+    if (applyBtn instanceof HTMLButtonElement && !applyBtn.disabled) {
+      applyBtn.focus();
+    }
+  }, [applyFocusRequestSeq, activeTask, sharedResumeController.hosts.data]);
+
   const handleJumpToApplyWorker = isSourceSetupVisible
     ? () => {
         const stickyBar = document.getElementById('camera-sticky-apply-bar');
@@ -404,13 +425,8 @@ function SetupWorkspace({ apiUrl, session }: { apiUrl: string; session: SharedSe
           }
           return;
         }
+        setApplyFocusRequestSeq((seq) => seq + 1);
         handleSelectWorkspaceTask('source');
-        const target = document.getElementById('camera-source-resume-section');
-        target?.scrollIntoView?.({ behavior: 'smooth', block: 'center' });
-        const applyBtn = target?.querySelector('button');
-        if (applyBtn instanceof HTMLButtonElement && !applyBtn.disabled) {
-          applyBtn.focus();
-        }
       }
     : undefined;
   const headerReturnParams = new URLSearchParams(returnParams);

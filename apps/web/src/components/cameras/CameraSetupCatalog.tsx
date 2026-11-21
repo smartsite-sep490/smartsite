@@ -163,6 +163,9 @@ export function CameraSetupCatalog({
   );
   const button = CAMERA_BUTTON_STYLES.secondary;
   const showMasterDetail = canReadCameras && !cameras.baseError && rows.length > 0;
+  const hasMobileCatalogControls = Boolean(
+    cameraError || showLinkedCameraNotice || (!cameras.baseError && cameras.hasNextPage),
+  );
   const primarySurface = 'min-w-0 rounded-xl border border-slate-200 bg-white px-3 py-3 sm:p-4';
   const railInlineAction =
     'inline-flex min-h-8 items-center rounded-md px-1.5 py-1 text-sm font-medium text-slate-700 underline decoration-slate-300 underline-offset-4 transition-colors hover:text-[#0F172A] hover:decoration-[#0F172A] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#0F172A] cursor-pointer';
@@ -192,17 +195,28 @@ export function CameraSetupCatalog({
           >
             <div
               data-testid="camera-setup-source-rail"
-              className="hidden min-w-0 space-y-2.5 lg:block lg:sticky lg:top-20"
+              className={`${
+                hasMobileCatalogControls
+                  ? 'min-w-0 space-y-2 lg:space-y-2.5'
+                  : 'hidden min-w-0 space-y-2.5 lg:block'
+              } lg:sticky lg:top-20`}
             >
               {hasLoadedCameraPages && (
-                <div className="flex flex-wrap items-center justify-between gap-2 px-0.5">
+                <div
+                  className={`${
+                    !cameras.baseError && cameras.hasNextPage ? 'flex' : 'hidden lg:flex'
+                  } flex-wrap items-center justify-between gap-2 px-0.5`}
+                >
                   <p className="text-xs font-medium text-slate-600 tabular-nums">
                     {t('cameraSetup.count', { loaded: rows.length, total: cameras.total })}
                   </p>
                 </div>
               )}
               {cameraError}
-              <ul className="divide-y divide-slate-200 overflow-hidden rounded-xl border border-slate-200 bg-white">
+              <ul
+                data-testid="camera-setup-source-list"
+                className="hidden lg:block divide-y divide-slate-200 overflow-hidden rounded-xl border border-slate-200 bg-white"
+              >
                 {rows.map((row) => {
                   const isEnabled = row.status === 'ACTIVE';
                   const isSelectedCamera = selectedCamera?.id === row.id;
@@ -353,6 +367,7 @@ export function CameraSetupCatalog({
               {showLinkedCameraNotice && (
                 <p
                   role="status"
+                  data-testid="camera-setup-linked-notice"
                   className="rounded-xl border border-slate-200 bg-slate-50 px-3.5 py-2.5 text-sm text-slate-600"
                 >
                   {t(
@@ -363,9 +378,10 @@ export function CameraSetupCatalog({
                 </p>
               )}
               {!cameras.baseError && cameras.hasNextPage && (
-                <div className="pt-1">
+                <div className="pt-0.5 lg:pt-1">
                   <button
                     type="button"
+                    data-testid="camera-setup-load-more"
                     className={`${button} w-full`}
                     disabled={cameras.isFetching}
                     onClick={cameras.loadMore}
