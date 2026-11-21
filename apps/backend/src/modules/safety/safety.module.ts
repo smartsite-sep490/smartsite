@@ -8,6 +8,8 @@ import { SafetyOverviewService } from './safety-overview.service.js';
 import { SafetyOverviewController } from './safety-overview.controller.js';
 import { CamerasModule } from '../cameras/cameras.module.js';
 import { StorageModule } from '../../integrations/storage/storage.module.js';
+import { StorageService } from '../../integrations/storage/storage.service.js';
+import { readMf06FrameMedia, readMf06SubjectMedia } from './assessments/mf06-frame-media.reader.js';
 import { UsersModule } from '../users/users.module.js';
 import { SafetyWorkflowService } from './safety-workflow.service.js';
 import { SafetyWorkflowController } from './safety-workflow.controller.js';
@@ -92,19 +94,26 @@ import { ZoneAccessManagementService } from '../zones/zone-access-management.ser
     },
     {
       provide: TrackedEpisodeFrameQuery,
-      inject: [DataSource, UserAuthGuard, ConfigService, WORKER_REFERENCE_READER],
+      inject: [DataSource, UserAuthGuard, ConfigService, WORKER_REFERENCE_READER, StorageService],
       useFactory: (
         db: DataSource,
         auth: UserAuthGuard,
         config: ConfigService<BackendEnvironment, true>,
         workers: WorkerReferenceReader,
+        storage: StorageService,
       ) =>
         new TrackedEpisodeFrameQuery(
           db,
           auth,
           config.get('EVIDENCE_LOCAL_ROOT', { infer: true }) ?? '',
-          undefined,
-          undefined,
+          config.get('AI_EVIDENCE_OBJECT_STORAGE_ENABLED', { infer: true }) === true
+            ? (root, ref, signal) =>
+                readMf06FrameMedia(root, ref, signal, storage.readAiFrame.bind(storage))
+            : undefined,
+          config.get('AI_EVIDENCE_OBJECT_STORAGE_ENABLED', { infer: true }) === true
+            ? (root, ref, subject, signal) =>
+                readMf06SubjectMedia(root, ref, subject, signal, storage.readAiFrame.bind(storage))
+            : undefined,
           () =>
             config.get('AI_TRACKED_FRAME_RUNTIME_ENABLED', { infer: true }) === true ||
             config.get('SAFETY_TRACKED_HISTORY_READ_ENABLED', { infer: true }) === true,

@@ -5,7 +5,10 @@ import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import { test, type TestContext } from 'node:test';
 import sharp from 'sharp';
-import { readMf06SubjectMedia } from '../src/modules/safety/assessments/mf06-frame-media.reader.js';
+import {
+  readMf06FrameMedia,
+  readMf06SubjectMedia,
+} from '../src/modules/safety/assessments/mf06-frame-media.reader.js';
 import type { Mf06FrameReference } from '../src/modules/safety/assessments/mf06-frame-reference.js';
 import type { ObservationSubjectRef } from '../src/modules/safety/identity/observation-identity.types.js';
 import { cropSafetySubjectFrame } from '../src/modules/safety/identity/safety-subject-cropper.js';
@@ -83,6 +86,53 @@ function makeReference(
 function flatFileName(session = SESSION_ID, seq: number | string = SEQUENCE, event = EVENT_ID) {
   return `${session}_${seq}_${event}.jpg`;
 }
+
+test('private object media uses exact event scope and retains frame/crop verification without local disk', async () => {
+  const frame = await makeSyntheticJpeg();
+  const reference = makeReference(frame.sha256);
+  let reads = 0;
+  const reader = async (digest: string, scope: { eventId: string; payloadHash: string }) => {
+    reads++;
+    assert.equal(digest, frame.sha256);
+    assert.deepEqual(scope, { eventId: EVENT_ID, payloadHash: PAYLOAD_HASH });
+    return frame.bytes;
+  };
+  const whole = await readMf06FrameMedia('', reference, undefined, reader);
+  assert(whole);
+  assert.deepEqual(whole.bytes, frame.bytes);
+  const crop = await readMf06SubjectMedia('', reference, makeSubject(), undefined, reader);
+  assert(crop);
+  assert.equal(crop.frameSha256, frame.sha256);
+  assert.equal(reads, 2);
+  assert.equal(
+    await readMf06FrameMedia(
+      '',
+      { ...reference, uri: 'https://untrusted.invalid/frame' },
+      undefined,
+      reader,
+    ),
+    null,
+  );
+  assert.equal(reads, 2);
+  assert.equal(
+    await readMf06SubjectMedia(
+      '',
+      reference,
+      makeSubject({ eventId: OTHER_EVENT_ID }),
+      undefined,
+      reader,
+    ),
+    null,
+  );
+  assert.equal(reads, 2);
+  assert.equal(
+    await readMf06FrameMedia('', reference, undefined, async () => Buffer.from('corrupt')),
+    null,
+  );
+  const abort = AbortSignal.abort();
+  assert.equal(await readMf06FrameMedia('', reference, abort, reader), null);
+  assert.equal(reads, 2);
+});
 
 test('v1.4 reads exact uint64 frame filenames and rejects rounded references', async (t) => {
   const root = await makeDTempDir(t);

@@ -64,10 +64,22 @@ review/merge must precede vendoring exact bytes and main-SHA provenance into the
 AI repository. Do not hand-edit an AI vendored contract or claim paired delivery
 before both producer and consumer checks pass.
 
+## Scoped retrieval
+
+When the same flag is enabled, tracked episode FRAME/SUBJECT requests use the
+private object reader after the existing Site/role/event/finding checks. It
+derives the event ID, original payload hash and image hash from the validated
+stored evidence, verifies the original URI and JPEG dimensions again, and
+mechanically crops only the selected stored PERSON box. Authorization is
+rechecked after storage I/O by the existing query service. It never exposes
+object keys or public URLs. With the flag off, existing LOCAL readers remain
+unchanged. This does not yet rewire the separate C02 preview/Face preparation
+readers; do not claim those workflows accept private cloud images.
+
 ## Activation checklist
 
-- Complete real PostgreSQL generation/revocation integration checks.
-- Connect the private object reader after existing scoped raw-evidence validation.
+- Preserve real PostgreSQL generation/revocation and scoped FRAME/SUBJECT checks.
+- Qualify the separate C02 preview/Face preparation path before claiming identity integration.
 - Implement AI receipt-bound upload/retry and classify permanent versus retryable errors.
 - Bound orphan retention/capacity; qualify real private storage without exposing public URLs.
 - Keep legacy LOCAL behavior and flags off until a reviewed deployment verifies the pair.
