@@ -7,6 +7,8 @@ const SCOPED_PREVIEW_CANVAS_EN = {
     'Experimental object: {className} ({confidence}%).',
   'ppe.previewCanvas.currentFrameObservationsAria': 'Current frame observations',
   'ppe.previewCanvas.observationBoundaries': 'Observation boundaries · access policy is not shown',
+  'ppe.previewCanvas.zoneAnchorHelp':
+    'Bottom-center marker: zone entry uses this point, not head or torso overlap. Keep the full body in view.',
   'ppe.previewCanvas.frameDetailsAria': 'Frame observation details',
   'ppe.previewCanvas.frameObservationsCount': 'Frame ({count} observation(s))',
   'ppe.previewCanvas.regionParen': '(Region: {regionId})',
@@ -22,6 +24,8 @@ const SCOPED_PREVIEW_CANVAS_VI: Record<ScopedPreviewCanvasCopyKey, string> = {
   'ppe.previewCanvas.currentFrameObservationsAria': 'Các quan sát trong khung hình hiện tại',
   'ppe.previewCanvas.observationBoundaries':
     'Ranh giới quan sát · không thể hiện chính sách ra vào',
+  'ppe.previewCanvas.zoneAnchorHelp':
+    'Điểm xanh giữa đáy khung: dùng để kiểm tra vào vùng, không dùng phần đầu hay thân giao nhau. Nên thấy toàn thân trong ảnh.',
   'ppe.previewCanvas.frameDetailsAria': 'Chi tiết quan sát trong khung hình',
   'ppe.previewCanvas.frameObservationsCount': 'Khung hình ({count} quan sát)',
   'ppe.previewCanvas.regionParen': '(Khu vực: {regionId})',
