@@ -1,31 +1,22 @@
 import { useState } from 'react';
-import { StyleSheet, Text, View } from 'react-native';
+import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { useQuery } from '@tanstack/react-query';
 import { useTranslation } from '../../i18n';
 import { localizedLabel } from '../../i18n/messages';
 import { useWorkspace } from '../workspace/workspace-context';
 import { useScopedWorkers } from '../workspace/use-scoped-workers';
 import { allPages, displayTime, useCommand } from '../shared/data';
-import {
-  Button,
-  Card,
-  Choice,
-  CompactTabs,
-  ErrorNotice,
-  Field,
-  Hint,
-  Pager,
-  QueryState,
-} from '../shared/ui';
+import { Button, Card, Choice, ErrorNotice, Field, Hint, Pager, QueryState } from '../shared/ui';
+import { RequestListFilters } from '../shared/request-list-filters';
 import { RequestSheet } from '../shared/request-sheet';
 import { FormSection } from '../shared/form-section';
 import { TimeRequestModal } from './time-request-modal';
-import { IconDocument, IconUser } from '../../components/common/Icons';
+import { IconDocument, IconPlus, IconUser } from '../../components/common/Icons';
 import { colors } from '../../theme/colors';
 import { DetailLink, EmptyState, ListHeading } from '../contractor/contractor-presentation';
 
 /** Leave and overtime share the same scoped review queue. */
-export function TimeRequestsPanel() {
+export function TimeRequestsPanel({ initialId }: { initialId?: string } = {}) {
   const { t } = useTranslation();
   const { client, token, scope, queryKey, user } = useWorkspace();
   const workers = useScopedWorkers();
@@ -33,7 +24,7 @@ export function TimeRequestsPanel() {
   const [status, setStatus] = useState<'PENDING' | 'APPROVED' | 'REJECTED'>('PENDING');
   const [offset, setOffset] = useState(0);
   const [note, setNote] = useState('');
-  const [selected, setSelected] = useState('');
+  const [selected, setSelected] = useState(initialId ?? '');
   const [workerId, setWorkerId] = useState('');
   const [choosingWorker, setChoosingWorker] = useState(false);
   const [recordOpen, setRecordOpen] = useState(false);
@@ -53,7 +44,25 @@ export function TimeRequestsPanel() {
     },
     refetchInterval: 15000,
   });
-  const detail = query.data?.items.find((row) => row.id === selected);
+  const detailQuery = useQuery({
+    queryKey: [...queryKey, 'time-review-detail', selected],
+    enabled: !!selected && workers.isSuccess && scope.role === 'contractor',
+    refetchInterval: 15000,
+    queryFn: async () => {
+      const ids = new Set(workers.data?.map((worker) => worker.id));
+      for (const requestKind of ['LEAVE', 'OVERTIME'] as const) {
+        const result = await client.attendanceTimeRequests(token, scope.siteId, {
+          kind: requestKind,
+          requestId: selected,
+          limit: 1,
+        });
+        const row = result.items.find((item) => item.id === selected && ids.has(item.workerId));
+        if (row) return row;
+      }
+      return null;
+    },
+  });
+  const detail = selected ? detailQuery.data : null;
   const canReview =
     detail &&
     ['PENDING_MANAGER', 'PENDING'].includes(detail.status) &&
@@ -72,36 +81,36 @@ export function TimeRequestsPanel() {
   if (scope.role !== 'contractor') return null;
   return (
     <>
-      <CompactTabs
-        value={kind}
-        options={[
+      <RequestListFilters
+        kind={kind}
+        status={status}
+        kinds={[
           { value: 'LEAVE', label: t('attendance.leave') },
           { value: 'OVERTIME', label: t('attendance.overtime') },
         ]}
-        onChange={(value) => {
-          setKind(value as typeof kind);
-          setOffset(0);
-          setSelected('');
-          command.reset();
-        }}
-      />
-      <CompactTabs
-        value={status}
-        options={['PENDING', 'APPROVED', 'REJECTED'].map((value) => ({
+        statuses={['PENDING', 'APPROVED', 'REJECTED'].map((value) => ({
           value,
           label: localizedLabel(value),
         }))}
-        onChange={(value) => {
-          setStatus(value as typeof status);
+        onApply={(nextKind, nextStatus) => {
+          setKind(nextKind as typeof kind);
+          setStatus(nextStatus as typeof status);
           setOffset(0);
           setSelected('');
+          setNote('');
           command.reset();
         }}
-      />
-      <Button
-        secondary
-        label={t('leavePolicy.recordOnBehalf')}
-        onPress={() => setChoosingWorker(true)}
+        action={
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel={t('leavePolicy.recordOnBehalf')}
+            onPress={() => setChoosingWorker(true)}
+            style={({ pressed }) => [styles.recordAction, pressed && { opacity: 0.65 }]}
+          >
+            <IconPlus size={16} color={colors.primary} />
+            <Text style={styles.recordText}>{t('contractorUi.recordLeaveShort')}</Text>
+          </Pressable>
+        }
       />
       <QueryState query={query}>
         {(data) => (
@@ -166,12 +175,17 @@ export function TimeRequestsPanel() {
                 )}
               </Card>
             ))}
-            {data.total > 8 && (
+            {(data.total > 8 || offset > 0) && (
               <Pager offset={offset} total={data.total} size={8} onChange={setOffset} />
             )}
           </>
         )}
       </QueryState>
+      {!!selected && (
+        <QueryState query={detailQuery}>
+          {(data) => (data ? null : <Hint>{t('requests.outOfScope')}</Hint>)}
+        </QueryState>
+      )}
       {detail && (
         <RequestSheet
           visible
@@ -193,13 +207,13 @@ export function TimeRequestsPanel() {
                 <>
                   <Button
                     label={t('leavePolicy.approve')}
-                    disabled={command.isPending || query.isRefetchError}
+                    disabled={command.isPending || detailQuery.isRefetchError}
                     onPress={() => review(true)}
                   />
                   <Button
                     secondary
                     label={t('leavePolicy.reject')}
-                    disabled={command.isPending || !note.trim() || query.isRefetchError}
+                    disabled={command.isPending || !note.trim() || detailQuery.isRefetchError}
                     onPress={() => review(false)}
                   />
                 </>
@@ -310,6 +324,16 @@ export function TimeRequestsPanel() {
 }
 
 const styles = StyleSheet.create({
+  recordAction: {
+    minHeight: 48,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    paddingHorizontal: 12,
+    borderRadius: 12,
+    backgroundColor: colors.primaryLight,
+  },
+  recordText: { color: colors.primary, fontSize: 12, fontWeight: '600' },
   heading: {
     flexDirection: 'row',
     flexWrap: 'wrap',

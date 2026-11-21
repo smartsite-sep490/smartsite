@@ -4,6 +4,7 @@ import { DataSource, type EntityManager } from 'typeorm';
 import { command, conflict, missing, page, uuid } from '../../../common/configuration/commands.js';
 import { PublicHttpException } from '../../../common/http/public-http-exception.js';
 import { AbsenceRequestEntity } from '../../../database/entities/absence-request.entity.js';
+import { assertWorkerLeaveAvailable } from '../attendance/worker-requests.js';
 import { ContractorRepresentativeAssignmentEntity } from '../../../database/entities/contractor-representative-assignment.entity.js';
 import { ContractorShiftAssignmentEntity } from '../../../database/entities/contractor-shift-assignment.entity.js';
 import { AbsenceRequestStatus, ShiftRequestStatus } from '../../../database/entities/enums.js';
@@ -17,7 +18,12 @@ import type { AuthenticatedUser } from '../../auth/auth.service.js';
 import { SchedulingNotificationService } from '../notifications/scheduling-notification.service.js';
 import { requireWorkerDocuments } from '../documents/worker-compliance.js';
 import { hasActiveContractorParticipation } from '../shared/contractor-participation.js';
-import { isShiftStarted, leaveNotice } from '@smartsite/contracts';
+import {
+  isShiftStarted,
+  leaveNotice,
+  timeRequestTimingIssue,
+  TIME_REQUEST_TIMING_MESSAGES,
+} from '@smartsite/contracts';
 import { AttendanceReconciliationService } from '../attendance/attendance-reconciliation.service.js';
 import { AttendanceDaysService } from '../attendance/attendance-days.service.js';
 import { auditAccess } from '../shared/access-audit.js';
@@ -1036,6 +1042,15 @@ export class SchedulingWorkflowService {
         siteId: scopedSiteId,
       });
       const shift = scheduledShiftWindow(template, schedule.workDate);
+      const submittedAt = new Date();
+      const timingIssue = timeRequestTimingIssue(
+        { ...template, ...shift },
+        'LEAVE',
+        value.noticeType,
+        submittedAt,
+      );
+      if (timingIssue) conflict(TIME_REQUEST_TIMING_MESSAGES[timingIssue]);
+      if (authority === 'WORKER') await assertWorkerLeaveAvailable(manager, worker, actor.id);
       let replacementWorkerId: string | null = null;
       if (value.replacementWorkerId) {
         if (authority !== 'CONTRACTOR_REPRESENTATIVE') this.forbidden();
@@ -1062,7 +1077,7 @@ export class SchedulingWorkflowService {
         manager,
         actor,
         await manager.getRepository(AbsenceRequestEntity).save({
-          ...leaveNotice(shift.startsAt, value.noticeType),
+          ...leaveNotice(shift.startsAt, value.noticeType, submittedAt),
           id: randomUUID(),
           siteId: scopedSiteId,
           workerId: worker.id,

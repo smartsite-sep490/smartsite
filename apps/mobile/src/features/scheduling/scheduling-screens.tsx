@@ -34,11 +34,21 @@ import { colors } from '../../theme/colors';
 import { WorkerScheduleScreen } from './worker-schedule-screen';
 import { LeaveNoticeFields } from './leave-notice-fields';
 import { TimeRequestsPanel } from '../attendance/time-requests-panel';
+import { RequestListFilters } from '../shared/request-list-filters';
+import { WorkerRequestHistory } from './worker-request-history';
+import { WorkerRequestsScreen } from './worker-incoming-requests';
+import { useWorkerLeaveAvailability } from './worker-leave-availability';
+import { useRequestFeedback } from '../shared/request-feedback';
 import { RequestSheet } from '../shared/request-sheet';
 import { FormSection } from '../shared/form-section';
 import { DetailLink, EmptyState, ListHeading } from '../contractor/contractor-presentation';
 import { IconDocument } from '../../components/common/Icons';
 import type { LeaveNoticeType } from '@smartsite/api-client';
+import {
+  requestScheduleIssue,
+  requestTimingMessage,
+  useEligibleTimeSchedules,
+} from './time-request-eligibility';
 
 export function ScheduleScreen({ initialDate }: { initialDate?: string }) {
   const { scope } = useWorkspace();
@@ -84,6 +94,8 @@ function ScheduleRequest({
     [target, setTarget] = useState(''),
     [reason, setReason] = useState('');
   const command = useCommand();
+  const reportSubmitted = useRequestFeedback();
+  const leaveAvailability = useWorkerLeaveAvailability(kind === 'ABSENCE');
   const eligible = useQuery({
     queryKey: [...queryKey, 'eligible', schedule.id],
     queryFn: () => client.listEligibleShifts(token, scope.siteId, schedule.id),
@@ -100,7 +112,12 @@ function ScheduleRequest({
       ? eligible.data?.items.find((s) => s.id === target)
       : candidates.data?.items.find((c) => c.candidateWorkerScheduleId === target)?.currentShift;
   const targetLocked = useShiftRequestLocked(schedule.workDate, targetShift);
-  const locked = kind !== 'ABSENCE' && (sourceLocked || (!!target && targetLocked));
+  const { now } = useEligibleTimeSchedules([schedule], shift ? [shift] : [], 'LEAVE', noticeType);
+  const leaveIssue = requestScheduleIssue(schedule.workDate, shift, 'LEAVE', noticeType, now);
+  const locked =
+    kind === 'ABSENCE'
+      ? !!leaveIssue || !leaveAvailability.ready || leaveAvailability.locked
+      : sourceLocked || (!!target && targetLocked);
   return (
     <Page title={t('schedule.requestTitle')} onBack={onBack}>
       <Card>
@@ -159,9 +176,19 @@ function ScheduleRequest({
               ? tr('requests.changeReviewHint')
               : tr('requests.absenceReviewHint')}
         </Hint>
-        {locked && <Hint>{t('schedule.shiftStartedLocked')}</Hint>}
+        {locked && (kind !== 'ABSENCE' || leaveIssue) && (
+          <Hint>
+            {kind === 'ABSENCE' && leaveIssue
+              ? requestTimingMessage(leaveIssue)
+              : t('schedule.shiftStartedLocked')}
+          </Hint>
+        )}
         <ErrorNotice error={command.error} />
         {kind === 'ABSENCE' && <LeaveNoticeFields value={noticeType} onChange={setNoticeType} />}
+        {kind === 'ABSENCE' && leaveAvailability.message && (
+          <Hint>{leaveAvailability.message}</Hint>
+        )}
+        <ErrorNotice error={leaveAvailability.error} />
         <Button
           label={command.isPending ? t('requests.sending') : t('requests.submitRequest')}
           disabled={
@@ -179,6 +206,12 @@ function ScheduleRequest({
                   shiftRequestLocked(schedule.workDate, targetShift))
               )
                 return;
+              if (kind === 'ABSENCE') {
+                if (!leaveAvailability.ready || leaveAvailability.locked)
+                  throw new Error(leaveAvailability.message || t('common.retry'));
+                const issue = requestScheduleIssue(schedule.workDate, shift, 'LEAVE', noticeType);
+                if (issue) throw new Error(requestTimingMessage(issue));
+              }
               const why = required(reason, t('schedule.reason'));
               if (kind === 'CHANGE')
                 await client.createShiftChangeRequest(token, scope.siteId, {
@@ -198,6 +231,7 @@ function ScheduleRequest({
                   reason: why,
                   noticeType,
                 });
+              reportSubmitted();
               onBack();
             })
           }
@@ -206,22 +240,37 @@ function ScheduleRequest({
     </Page>
   );
 }
-export function ShiftRequestsScreen({
-  initialId,
-  initialKind,
-  onBack,
-}: {
+type ShiftRequestsScreenProps = {
   initialId?: string;
   initialKind?: string;
+  initialView?: 'INCOMING';
   onBack?: () => void;
-}) {
+};
+export function ShiftRequestsScreen(props: ShiftRequestsScreenProps) {
+  const { scope } = useWorkspace();
+  return scope.role === 'worker' ? (
+    <WorkerRequestsScreen {...props} />
+  ) : (
+    <ContractorRequestsScreen {...props} />
+  );
+}
+function ContractorRequestsScreen({
+  initialId,
+  initialKind,
+  initialView,
+  onBack,
+}: ShiftRequestsScreenProps) {
   const { t } = useTranslation();
   const { scope, client, token, user, queryKey } = useWorkspace();
   const rep = scope.role === 'contractor';
   const pageSize = rep ? 8 : 20;
-  const [category, setCategory] = useState<'SHIFTS' | 'TIME'>('SHIFTS');
+  const timeTarget =
+    initialKind === 'TIME' || initialKind === 'LEAVE' || initialKind === 'OVERTIME';
+  const [category, setCategory] = useState<'SHIFTS' | 'TIME'>(timeTarget ? 'TIME' : 'SHIFTS');
   const [notificationDismissed, setNotificationDismissed] = useState(false);
-  const [view, setView] = useState<ShiftRequestListOptions['view']>(rep ? 'REVIEW' : 'WORKER'),
+  const [view, setView] = useState<ShiftRequestListOptions['view']>(
+      rep ? 'REVIEW' : (initialView ?? 'WORKER'),
+    ),
     [type, setType] = useState<'ALL' | 'CHANGE' | 'SWAP'>('ALL'),
     [offset, setOffset] = useState(0);
   const [selected, setSelected] = useState<ShiftRequestResponse | null>(null),
@@ -232,6 +281,7 @@ export function ShiftRequestsScreen({
   const shifts = useQuery({
     queryKey: [...queryKey, 'shifts'],
     queryFn: ({ signal }) => allPages((p) => client.listShifts(token, scope.siteId, p), signal),
+    enabled: category === 'SHIFTS' && (rep || view === 'INCOMING'),
   });
   const getWorkerName = (id?: string | null) => {
     if (!id) return t('schedule.worker');
@@ -247,7 +297,7 @@ export function ShiftRequestsScreen({
   };
   const query = useQuery({
     queryKey: [...queryKey, 'shift-requests', view, type, offset],
-    enabled: workers.isSuccess,
+    enabled: workers.isSuccess && category === 'SHIFTS' && (rep || view === 'INCOMING'),
     queryFn: async ({ signal }) => {
       const rows = (
         await allPages(
@@ -264,7 +314,9 @@ export function ShiftRequestsScreen({
     },
     refetchInterval: 15000,
   });
-  const detailId = selected?.id ?? (notificationDismissed ? undefined : initialId);
+  const detailId =
+    selected?.id ??
+    (notificationDismissed || timeTarget || (!rep && view === 'WORKER') ? undefined : initialId);
   const detailKind = selected?.requestType ?? initialKind;
   const incoming = useQuery({
     queryKey: [...queryKey, 'shift-request-detail', detailId, detailKind],
@@ -285,13 +337,7 @@ export function ShiftRequestsScreen({
   const team = useQuery({
     queryKey: [...queryKey, 'my-team'],
     queryFn: () => client.myContractorTeam(token, scope.siteId),
-    enabled: !rep,
-  });
-  const absence = useQuery({
-    queryKey: [...queryKey, 'absence-requests'],
-    queryFn: ({ signal }) =>
-      allPages((p) => client.listAbsenceRequests(token, scope.siteId, p), signal),
-    enabled: !rep,
+    enabled: !rep && view === 'INCOMING',
   });
   const detail = detailId ? incoming.data : undefined;
   const renderDetail = (r: ShiftRequestResponse, part?: 'footer') => {
@@ -525,6 +571,20 @@ export function ShiftRequestsScreen({
       </View>
     );
   };
+  if (!rep && view === 'WORKER')
+    return (
+      <Page title={t('workerRequests.sentTitle')} onBack={onBack}>
+        <CompactTabs
+          value="WORKER"
+          options={[
+            { value: 'WORKER', label: t('workerRequests.sentTab') },
+            { value: 'INCOMING', label: t('workerRequests.incomingTab') },
+          ]}
+          onChange={() => setView('INCOMING')}
+        />
+        <WorkerRequestHistory initialId={initialId} />
+      </Page>
+    );
   if (!workers.isSuccess)
     return (
       <Page title={tr('attendance.workerScope')} onBack={onBack}>
@@ -541,45 +601,49 @@ export function ShiftRequestsScreen({
           <CompactTabs
             value={category}
             options={[
-              { value: 'SHIFTS', label: t('contractorUi.shiftRequests') },
-              { value: 'TIME', label: t('leavePolicy.title') },
+              { value: 'SHIFTS', label: t('contractorUi.requestShiftGroup') },
+              { value: 'TIME', label: t('contractorUi.requestTimeGroup') },
             ]}
-            onChange={(value) => setCategory(value as typeof category)}
+            onChange={(value) => {
+              setCategory(value as typeof category);
+              setNotificationDismissed(true);
+              setSelected(null);
+              setReason('');
+              command.reset();
+            }}
           />
         </>
       )}
 
       {rep && category === 'TIME' ? (
-        <TimeRequestsPanel />
+        <TimeRequestsPanel
+          initialId={timeTarget && !notificationDismissed ? initialId : undefined}
+        />
       ) : (
         <>
           {rep ? (
-            <View style={schedStyles.repActions}>
-              <CompactTabs
-                value={view ?? 'REVIEW'}
-                options={[
-                  { value: 'REVIEW', label: tr('requests.awaitingMyReview') },
-                  { value: 'HISTORY', label: tr('requests.history') },
-                ]}
-                onChange={(value) => {
-                  setView(value as ShiftRequestListOptions['view']);
-                  setOffset(0);
-                  command.reset();
-                }}
-              />
-              <CompactTabs
-                value={type}
-                options={[
-                  { value: 'ALL', label: t('common.all') },
-                  { value: 'CHANGE', label: t('requests.typeChange') },
-                  { value: 'SWAP', label: t('requests.typeSwap') },
-                ]}
-                onChange={(value) => {
-                  setType(value as typeof type);
-                  setOffset(0);
-                }}
-              />
-            </View>
+            <RequestListFilters
+              kind={type}
+              status={view ?? 'REVIEW'}
+              kinds={[
+                { value: 'ALL', label: t('common.all') },
+                { value: 'CHANGE', label: t('requests.typeChange') },
+                { value: 'SWAP', label: t('requests.typeSwap') },
+              ]}
+              statuses={[
+                { value: 'REVIEW', label: t('requests.awaitingMyReview') },
+                { value: 'HISTORY', label: t('requests.history') },
+              ]}
+              onApply={(nextKind, nextStatus) => {
+                setType(nextKind as typeof type);
+                setView(nextStatus as ShiftRequestListOptions['view']);
+                setOffset(0);
+                setSelected(null);
+                setNotificationDismissed(true);
+                setReason('');
+                command.reset();
+              }}
+            />
           ) : (
             <Disclosure title={t('contractorUi.filters')} collapsible={rep}>
               <Choice
@@ -852,21 +916,6 @@ export function ShiftRequestsScreen({
         >
           <QueryState query={incoming}>{(data) => renderDetail(data)}</QueryState>
         </RequestSheet>
-      )}
-      {!rep && (
-        <QueryState query={absence}>
-          {(data) => (
-            <Card>
-              <Body>{t('requests.leaveRequest')}</Body>
-              {!data.length && <Hint>{t('requests.noRequests')}</Hint>}
-              {data.map((r) => (
-                <Body key={r.id}>
-                  {r.reason} · {localizedLabel(r.status)}
-                </Body>
-              ))}
-            </Card>
-          )}
-        </QueryState>
       )}
     </Page>
   );

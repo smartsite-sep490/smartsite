@@ -1,20 +1,14 @@
 import { WorkerQrPanel } from './worker-qr-panel';
-import React, { useState, useMemo } from 'react';
-import {
-  View,
-  Text,
-  StyleSheet,
-  Pressable,
-  Modal,
-  Platform,
-  ScrollView,
-  PanResponder,
-  Animated,
-} from 'react-native';
+import React, { useMemo, useState } from 'react';
+import { Animated, PanResponder, Pressable, StyleSheet, Text, View } from 'react-native';
 import { useQuery } from '@tanstack/react-query';
 import type { UserNotificationResponse } from '@smartsite/api-client';
 import { useWorkspace } from './workspace-context';
-import { ErrorNotice, Page, Pager, QueryState } from '../shared/ui';
+import { Button, CompactTabs, ErrorNotice, Hint, Page, Pager, QueryState } from '../shared/ui';
+import { RequestSheet } from '../shared/request-sheet';
+import { ManagementAction } from '../shared/management-ui';
+import { EmptyState } from '../contractor/contractor-presentation';
+import { colors } from '../../theme/colors';
 import { displayTime, useCommand } from '../shared/data';
 import type { NavigationTarget } from '../../SmartSiteMobileApp';
 import { notificationTarget } from './notification-target';
@@ -27,6 +21,7 @@ import {
   IconAlert,
   IconCheck,
   IconTrash,
+  IconChevronDown,
   IconChevronRight,
 } from '../../components/common/Icons';
 
@@ -38,7 +33,6 @@ export function QrScreen({ onBack }: { onBack: () => void }) {
     </Page>
   );
 }
-
 function getNotificationCategory(event: string, t: (key: string) => string) {
   if (event.includes('SCHEDULE') || event.includes('SWAP')) {
     return { label: t('notifications.categorySchedule'), color: '#2563EB', bg: '#EFF6FF' };
@@ -65,180 +59,112 @@ function getNotificationIcon(event: string) {
   return <IconBell size={18} color="#F66B17" hasUnread={false} />;
 }
 
-interface SwipeableNotificationCardProps {
+type NotificationRowProps = {
   notification: UserNotificationResponse;
-  isUnread: boolean;
-  target: NavigationTarget | null;
+  divider: boolean;
   onPress: () => void;
   onDelete: () => void;
-  onMarkRead?: () => void;
+  onMarkRead: () => void;
   isPending: boolean;
   t: (key: string) => string;
-}
-
-function SwipeableNotificationCard({
-  notification: n,
-  isUnread,
-  target,
+};
+function NotificationRow({
+  notification,
+  divider,
   onPress,
   onDelete,
   onMarkRead,
   isPending,
   t,
-}: SwipeableNotificationCardProps) {
+}: NotificationRowProps) {
   const [translateX] = useState(() => new Animated.Value(0));
-
+  const unread = !notification.readAt;
+  const category = getNotificationCategory(notification.event, t);
   const panResponder = useMemo(
     () =>
       PanResponder.create({
         onStartShouldSetPanResponder: () => false,
-        onMoveShouldSetPanResponder: (_, gestureState) => {
-          return gestureState.dx > 10 && Math.abs(gestureState.dx) > Math.abs(gestureState.dy);
-        },
-        onPanResponderMove: (_, gestureState) => {
-          if (gestureState.dx > 0) {
-            translateX.setValue(gestureState.dx);
-          } else {
-            translateX.setValue(0);
-          }
-        },
-        onPanResponderRelease: (_, gestureState) => {
-          if (gestureState.dx > 90) {
+        onMoveShouldSetPanResponder: (_, gesture) =>
+          !isPending && gesture.dx > 10 && Math.abs(gesture.dx) > Math.abs(gesture.dy),
+        onPanResponderMove: (_, gesture) => translateX.setValue(Math.max(0, gesture.dx)),
+        onPanResponderRelease: (_, gesture) => {
+          if (!isPending && gesture.dx > 90) {
             Animated.timing(translateX, {
               toValue: 500,
               duration: 220,
               useNativeDriver: false,
             }).start(() => {
               onDelete();
+              translateX.setValue(0);
             });
-          } else {
+          } else
             Animated.spring(translateX, {
               toValue: 0,
               friction: 8,
               tension: 50,
               useNativeDriver: false,
             }).start();
-          }
         },
-        onPanResponderTerminate: () => {
-          Animated.spring(translateX, {
-            toValue: 0,
-            friction: 8,
-            tension: 50,
-            useNativeDriver: false,
-          }).start();
-        },
+        onPanResponderTerminate: () =>
+          Animated.spring(translateX, { toValue: 0, useNativeDriver: false }).start(),
       }),
-    [onDelete, translateX],
+    [isPending, onDelete, translateX],
   );
-
   return (
-    <View style={notifStyles.swipeContainer}>
-      {/* Background delete action revealed when swiped right */}
-      <View style={notifStyles.swipeBackground}>
+    <View style={[styles.swipeContainer, divider && styles.divider]}>
+      <View style={styles.swipeBackground}>
         <Pressable
           accessibilityRole="button"
           accessibilityLabel={t('notifications.deleteNotification')}
-          style={notifStyles.swipeDeleteAction}
+          disabled={isPending}
           onPress={onDelete}
+          style={styles.swipeDelete}
         >
-          <View style={notifStyles.swipeDeleteContent}>
-            <IconTrash size={22} color="#FFFFFF" />
-            <Text style={notifStyles.swipeDeleteText}>{t('notifications.deleteNotification')}</Text>
-          </View>
+          <IconTrash size={20} color={colors.textWhite} />
+          <Text style={styles.swipeDeleteText}>{t('notifications.deleteNotification')}</Text>
         </Pressable>
       </View>
-
-      {/* Foreground notification card */}
       <Animated.View
-        style={[
-          notifStyles.swipeForeground,
-          {
-            transform: [{ translateX }],
-          },
-        ]}
         {...panResponder.panHandlers}
+        style={[styles.foreground, unread && styles.unread, { transform: [{ translateX }] }]}
       >
         <Pressable
           accessibilityRole="button"
-          accessibilityLabel={notificationTitle(n)}
+          accessibilityLabel={notificationTitle(notification)}
+          accessibilityHint={t('notifications.openDetails')}
           onPress={onPress}
-          style={({ pressed }) => [
-            notifStyles.card,
-            isUnread && notifStyles.unreadCard,
-            pressed && { opacity: 0.94 },
-          ]}
+          style={({ pressed }) => [styles.row, pressed && styles.pressed]}
         >
-          {isUnread && <View style={notifStyles.unreadIndicator} />}
-
-          <View style={notifStyles.cardContent}>
-            {/* Header Row: Icon, Title, and Time */}
-            <View style={notifStyles.cardHeader}>
-              <View style={notifStyles.headerLeft}>
-                <View style={notifStyles.iconBox}>{getNotificationIcon(n.event)}</View>
-                <View style={notifStyles.titleCol}>
-                  <View style={notifStyles.titleRow}>
-                    {isUnread && <View style={notifStyles.unreadDot} />}
-                    <Text
-                      numberOfLines={2}
-                      style={[notifStyles.cardTitle, isUnread && notifStyles.unreadTitle]}
-                    >
-                      {notificationTitle(n)}
-                    </Text>
-                  </View>
-                  <Text style={notifStyles.siteText}>
-                    {n.siteName} · {displayTime(n.createdAt)}
-                  </Text>
-                </View>
-              </View>
-            </View>
-
-            {/* Notification Body */}
-            <Text numberOfLines={3} style={notifStyles.cardBody}>
-              {notificationMessage(n)}
-            </Text>
-
-            {/* Unmatched scope notice if needed */}
-            {!target && (
-              <Text style={notifStyles.noticeText}>{t('notifications.unmatchedScopeNotice')}</Text>
-            )}
-
-            {/* Card Actions Row */}
-            <View style={notifStyles.cardFooter}>
-              <Pressable
-                accessibilityRole="button"
-                accessibilityLabel={t('notifications.openDetails')}
-                style={notifStyles.openDetailsLink}
-                onPress={onPress}
-              >
-                <Text style={notifStyles.openDetailsText}>{t('notifications.openDetails')}</Text>
-                <IconChevronRight size={16} color="#F66B17" />
-              </Pressable>
-
-              <View style={notifStyles.footerActions}>
-                <Text style={notifStyles.swipeHintText}>
-                  {t('notifications.swipeToDeleteHint')}
-                </Text>
-                {isUnread && onMarkRead && (
-                  <Pressable
-                    accessibilityRole="button"
-                    accessibilityLabel={t('notifications.markRead')}
-                    disabled={isPending}
-                    style={({ pressed }) => [
-                      notifStyles.pillActionBtn,
-                      notifStyles.readActionBtn,
-                      pressed && { opacity: 0.7 },
-                    ]}
-                    onPress={onMarkRead}
-                  >
-                    <IconCheck size={14} color="#065F46" />
-                    <Text style={notifStyles.readActionText}>{t('notifications.markRead')}</Text>
-                  </Pressable>
-                )}
-              </View>
-            </View>
+          <View style={[styles.icon, { backgroundColor: category.bg }]}>
+            {getNotificationIcon(notification.event)}
           </View>
+          <View style={styles.copy}>
+            <View style={styles.titleRow}>
+              <Text numberOfLines={2} style={[styles.title, unread && styles.unreadTitle]}>
+                {notificationTitle(notification)}
+              </Text>
+              {unread && <View style={styles.unreadDot} />}
+            </View>
+            <Text numberOfLines={2} style={styles.message}>
+              {notificationMessage(notification)}
+            </Text>
+            <Text numberOfLines={1} style={styles.meta}>
+              {notification.siteName} {'\u00b7'} {displayTime(notification.createdAt)}
+            </Text>
+          </View>
+          {!unread && <IconChevronRight size={15} color={colors.textTertiary} />}
         </Pressable>
+        {unread && (
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel={t('notifications.markRead')}
+            disabled={isPending}
+            onPress={onMarkRead}
+            style={[styles.readAction, isPending && styles.pressed]}
+          >
+            <IconCheck size={18} color={colors.primary} />
+          </Pressable>
+        )}
       </Animated.View>
     </View>
   );
@@ -252,757 +178,259 @@ export function NotificationsScreen({
 }) {
   const { t } = useTranslation();
   const { client, token, scope, queryKey } = useWorkspace();
-  const pageSize = scope.role === 'contractor' ? 8 : 20;
+  const size = 10;
   const [offset, setOffset] = useState(0);
   const [filter, setFilter] = useState<'ALL' | 'UNREAD'>('ALL');
-  const [selectedNotification, setSelectedNotification] = useState<UserNotificationResponse | null>(
-    null,
-  );
+  const [selected, setSelected] = useState<UserNotificationResponse | null>(null);
+  const [actionsOpen, setActionsOpen] = useState(false);
   const command = useCommand();
-
   const query = useQuery({
     queryKey: [...queryKey, 'notifications', offset, filter],
-    queryFn: () => client.listNotifications(token, { offset, limit: pageSize, readStatus: filter }),
+    queryFn: () => client.listNotifications(token, { offset, limit: size, readStatus: filter }),
     refetchInterval: 30000,
   });
-
-  const handleOpenDetail = (n: UserNotificationResponse) => {
-    if (!n.readAt) {
-      command.mutate(() => client.readNotification(token, n.id));
-    }
-    setSelectedNotification(n);
+  const target = selected ? notificationTarget(selected, scope.siteId, scope.role) : null;
+  const open = (row: UserNotificationResponse) => {
+    setSelected(row);
+    if (!row.readAt && !command.isPending)
+      command.mutate(() => client.readNotification(token, row.id));
   };
-
-  const selectedTarget = selectedNotification
-    ? notificationTarget(selectedNotification, scope.siteId, scope.role)
-    : null;
-
+  const remove = (id: string) =>
+    command.mutate(async () => {
+      await client.deleteNotification(token, id);
+      if (query.data?.items.length === 1 && offset > 0) setOffset(Math.max(0, offset - size));
+      setSelected(null);
+    });
   return (
-    <Page title={t('notifications.title')}>
-      {/* Top Filter and Actions Section */}
-      <View style={notifStyles.headerControls}>
-        {/* Filter Segmented Pills */}
-        <View style={notifStyles.filterPillBar}>
-          <Pressable
-            accessibilityRole="button"
-            accessibilityLabel={t('notifications.all')}
-            style={[notifStyles.filterPill, filter === 'ALL' && notifStyles.filterPillActive]}
-            onPress={() => {
-              setFilter('ALL');
-              setOffset(0);
-            }}
-          >
-            <Text
-              style={[
-                notifStyles.filterPillText,
-                filter === 'ALL' && notifStyles.filterPillTextActive,
-              ]}
-            >
-              {t('notifications.all')}
+    <Page>
+      <CompactTabs
+        value={filter}
+        options={[
+          { value: 'ALL', label: t('notifications.all') },
+          { value: 'UNREAD', label: t('notifications.unread') },
+        ]}
+        onChange={(value) => {
+          setFilter(value as typeof filter);
+          setOffset(0);
+        }}
+      />
+      <View style={styles.toolbar}>
+        <Text style={styles.count}>
+          {query.data ? t('notifications.unreadCount', { count: query.data.unreadCount }) : ''}
+        </Text>
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel={t('notifications.actions')}
+          onPress={() => {
+            command.reset();
+            setActionsOpen(true);
+          }}
+          style={({ pressed }) => [styles.moreAction, pressed && styles.pressed]}
+        >
+          <Text style={styles.moreText}>{t('notifications.actions')}</Text>
+          <IconChevronDown size={15} color={colors.textMuted} />
+        </Pressable>
+      </View>
+      {!selected && !actionsOpen && <ErrorNotice error={command.error} />}
+      <QueryState query={query}>
+        {(data) => (
+          <>
+            {!data.items.length ? (
+              <EmptyState
+                icon={<IconBell size={25} color={colors.textMuted} hasUnread={false} />}
+                title={t('notifications.noNotifications')}
+                hint={t('notifications.emptyHint')}
+              />
+            ) : (
+              <View style={styles.list}>
+                {data.items.map((row, index) => (
+                  <NotificationRow
+                    key={row.id}
+                    notification={row}
+                    divider={index > 0}
+                    onPress={() => open(row)}
+                    onDelete={() => remove(row.id)}
+                    onMarkRead={() => command.mutate(() => client.readNotification(token, row.id))}
+                    isPending={command.isPending}
+                    t={t}
+                  />
+                ))}
+              </View>
+            )}
+            {(data.total > size || offset > 0) && (
+              <Pager offset={offset} total={data.total} size={size} onChange={setOffset} />
+            )}
+          </>
+        )}
+      </QueryState>
+      {selected && (
+        <RequestSheet
+          visible
+          variant="compact"
+          title={t('notifications.detailTitle')}
+          subtitle={getNotificationCategory(selected.event, t).label}
+          icon={getNotificationIcon(selected.event)}
+          onClose={() => setSelected(null)}
+          busy={command.isPending}
+          footer={
+            <View style={styles.footer}>
+              <ErrorNotice error={command.error} />
+              {target && (
+                <Button
+                  label={t('notifications.viewTarget')}
+                  onPress={() => {
+                    setSelected(null);
+                    navigate(target);
+                  }}
+                />
+              )}
+              <View style={styles.secondaryActions}>
+                <Pressable
+                  accessibilityRole="button"
+                  accessibilityLabel={t('notifications.deleteNotification')}
+                  disabled={command.isPending}
+                  onPress={() => remove(selected.id)}
+                  style={({ pressed }) => [
+                    styles.textAction,
+                    (pressed || command.isPending) && styles.pressed,
+                  ]}
+                >
+                  <IconTrash size={16} color={colors.dangerText} />
+                  <Text style={styles.deleteText}>{t('notifications.deleteNotification')}</Text>
+                </Pressable>
+                <Pressable
+                  accessibilityRole="button"
+                  accessibilityLabel={t('common.close')}
+                  disabled={command.isPending}
+                  onPress={() => setSelected(null)}
+                  style={styles.textAction}
+                >
+                  <Text style={styles.moreText}>{t('common.close')}</Text>
+                </Pressable>
+              </View>
+            </View>
+          }
+        >
+          <Text style={styles.detailTitle}>{notificationTitle(selected)}</Text>
+          <View style={styles.detailMeta}>
+            <Text style={styles.site}>{selected.siteName}</Text>
+            <Text style={styles.meta}>
+              {t('notifications.receivedAt')}: {displayTime(selected.createdAt)}
             </Text>
-          </Pressable>
-
-          <Pressable
-            accessibilityRole="button"
-            accessibilityLabel={t('notifications.unread')}
-            style={[notifStyles.filterPill, filter === 'UNREAD' && notifStyles.filterPillActive]}
-            onPress={() => {
-              setFilter('UNREAD');
-              setOffset(0);
-            }}
-          >
-            <Text
-              style={[
-                notifStyles.filterPillText,
-                filter === 'UNREAD' && notifStyles.filterPillTextActive,
-              ]}
-            >
-              {t('notifications.unread')}
-            </Text>
-          </Pressable>
-        </View>
-
-        {/* Compact Utility Buttons */}
-        <View style={notifStyles.actionsRow}>
-          <Pressable
-            accessibilityRole="button"
-            accessibilityLabel={t('notifications.markAllRead')}
+          </View>
+          <Text selectable style={styles.detailMessage}>
+            {notificationMessage(selected)}
+          </Text>
+          {!target && <Hint>{t('notifications.unmatchedScopeNotice')}</Hint>}
+        </RequestSheet>
+      )}
+      {actionsOpen && (
+        <RequestSheet
+          visible
+          variant="compact"
+          title={t('notifications.actions')}
+          onClose={() => setActionsOpen(false)}
+          busy={command.isPending}
+          footer={<ErrorNotice error={command.error} />}
+        >
+          <ManagementAction
+            label={t('notifications.markAllRead')}
+            icon={<IconCheck size={19} color={colors.primary} />}
+            disabled={command.isPending || query.data?.unreadCount === 0}
+            onPress={() =>
+              command.mutate(async () => {
+                await client.readAllNotifications(token);
+                setActionsOpen(false);
+              })
+            }
+          />
+          <ManagementAction
+            label={t('notifications.clearRead')}
+            danger
+            icon={<IconTrash size={19} color={colors.dangerText} />}
             disabled={command.isPending}
-            style={({ pressed }) => [
-              notifStyles.compactUtilBtn,
-              (pressed || command.isPending) && { opacity: 0.6 },
-            ]}
-            onPress={() => command.mutate(() => client.readAllNotifications(token))}
-          >
-            <IconCheck size={16} color="#059669" />
-            <Text style={notifStyles.compactUtilBtnText}>{t('notifications.markAllRead')}</Text>
-          </Pressable>
-
-          <Pressable
-            accessibilityRole="button"
-            accessibilityLabel={t('notifications.clearRead')}
-            disabled={command.isPending}
-            style={({ pressed }) => [
-              notifStyles.compactUtilBtn,
-              (pressed || command.isPending) && { opacity: 0.6 },
-            ]}
             onPress={() =>
               command.mutate(async () => {
                 await client.deleteReadNotifications(token);
                 setOffset(0);
+                setActionsOpen(false);
               })
             }
-          >
-            <IconTrash size={16} color="#DC2626" />
-            <Text style={notifStyles.compactUtilBtnTextDanger}>{t('notifications.clearRead')}</Text>
-          </Pressable>
-        </View>
-      </View>
-
-      <ErrorNotice error={command.error} />
-
-      <QueryState query={query}>
-        {(data) => (
-          <View style={notifStyles.listContainer}>
-            {!data.items.length && (
-              <View style={notifStyles.emptyCard}>
-                <View style={notifStyles.emptyIconCircle}>
-                  <IconBell size={32} color="#94A3B8" hasUnread={false} />
-                </View>
-                <Text style={notifStyles.emptyText}>{t('notifications.noNotifications')}</Text>
-              </View>
-            )}
-
-            {data.items.map((n) => {
-              const target = notificationTarget(n, scope.siteId, scope.role);
-              const isUnread = !n.readAt;
-
-              return (
-                <SwipeableNotificationCard
-                  key={n.id}
-                  notification={n}
-                  isUnread={isUnread}
-                  target={target}
-                  onPress={() => handleOpenDetail(n)}
-                  onDelete={() => command.mutate(() => client.deleteNotification(token, n.id))}
-                  onMarkRead={
-                    isUnread
-                      ? () => command.mutate(() => client.readNotification(token, n.id))
-                      : undefined
-                  }
-                  isPending={command.isPending}
-                  t={t}
-                />
-              );
-            })}
-
-            <Pager offset={offset} total={data.total} size={pageSize} onChange={setOffset} />
-          </View>
-        )}
-      </QueryState>
-
-      {/* Visual, Intuitive Notification Detail Modal */}
-      {selectedNotification && (
-        <Modal
-          transparent
-          animationType="slide"
-          visible={!!selectedNotification}
-          onRequestClose={() => setSelectedNotification(null)}
-        >
-          <View style={notifStyles.modalOverlay}>
-            <Pressable
-              style={notifStyles.modalBackdrop}
-              onPress={() => setSelectedNotification(null)}
-            />
-            <View style={notifStyles.modalSheet}>
-              <ScrollView style={{ flexShrink: 1 }}>
-                {/* Drag handle */}
-                <View style={notifStyles.modalDragHandle} />
-
-                {/* Modal Top Bar */}
-                <View style={notifStyles.modalHeaderRow}>
-                  {(() => {
-                    const cat = getNotificationCategory(selectedNotification.event, t);
-                    return (
-                      <View style={[notifStyles.categoryBadge, { backgroundColor: cat.bg }]}>
-                        {getNotificationIcon(selectedNotification.event)}
-                        <Text style={[notifStyles.categoryBadgeText, { color: cat.color }]}>
-                          {cat.label}
-                        </Text>
-                      </View>
-                    );
-                  })()}
-
-                  <Pressable
-                    accessibilityRole="button"
-                    accessibilityLabel={t('common.close')}
-                    style={notifStyles.modalCloseBtn}
-                    onPress={() => setSelectedNotification(null)}
-                  >
-                    <Text style={notifStyles.modalCloseText}>✕</Text>
-                  </Pressable>
-                </View>
-
-                {/* Notification Large Title */}
-                <Text style={notifStyles.modalTitle}>
-                  {notificationTitle(selectedNotification)}
-                </Text>
-
-                {/* Metadata Info Row */}
-                <View style={notifStyles.modalMetaBox}>
-                  <View style={notifStyles.metaRow}>
-                    <Text style={notifStyles.metaIconText}>📍</Text>
-                    <Text style={notifStyles.metaValueText}>{selectedNotification.siteName}</Text>
-                  </View>
-                  <View style={notifStyles.metaRow}>
-                    <Text style={notifStyles.metaIconText}>🕒</Text>
-                    <Text style={notifStyles.metaValueText}>
-                      {t('notifications.receivedAt')}: {displayTime(selectedNotification.createdAt)}
-                    </Text>
-                  </View>
-                </View>
-
-                {/* Detailed Message Box */}
-                <View style={notifStyles.messageCard}>
-                  <Text style={notifStyles.messageText}>
-                    {notificationMessage(selectedNotification)}
-                  </Text>
-                </View>
-
-                {/* Modal Action Buttons */}
-                <View style={notifStyles.modalActionsContainer}>
-                  {selectedTarget ? (
-                    <Pressable
-                      accessibilityRole="button"
-                      accessibilityLabel={t('notifications.viewTarget')}
-                      style={({ pressed }) => [
-                        notifStyles.primaryTargetBtn,
-                        pressed && { opacity: 0.88 },
-                      ]}
-                      onPress={() => {
-                        const tgt = selectedTarget;
-                        setSelectedNotification(null);
-                        navigate(tgt);
-                      }}
-                    >
-                      <Text style={notifStyles.primaryTargetBtnText}>
-                        {t('notifications.viewTarget')}
-                      </Text>
-                      <IconChevronRight size={18} color="#FFFFFF" />
-                    </Pressable>
-                  ) : (
-                    <Text style={notifStyles.noTargetNotice}>
-                      {t('notifications.unmatchedScopeNotice')}
-                    </Text>
-                  )}
-
-                  <View style={notifStyles.modalSecondaryRow}>
-                    <Pressable
-                      accessibilityRole="button"
-                      accessibilityLabel={t('notifications.deleteNotification')}
-                      style={({ pressed }) => [
-                        notifStyles.modalDeleteBtn,
-                        pressed && { opacity: 0.7 },
-                      ]}
-                      onPress={() => {
-                        const id = selectedNotification.id;
-                        setSelectedNotification(null);
-                        command.mutate(() => client.deleteNotification(token, id));
-                      }}
-                    >
-                      <IconTrash size={16} color="#DC2626" />
-                      <Text style={notifStyles.modalDeleteBtnText}>
-                        {t('notifications.deleteNotification')}
-                      </Text>
-                    </Pressable>
-
-                    <Pressable
-                      accessibilityRole="button"
-                      accessibilityLabel={t('common.close')}
-                      style={({ pressed }) => [
-                        notifStyles.modalDismissBtn,
-                        pressed && { opacity: 0.7 },
-                      ]}
-                      onPress={() => setSelectedNotification(null)}
-                    >
-                      <Text style={notifStyles.modalDismissBtnText}>{t('common.close')}</Text>
-                    </Pressable>
-                  </View>
-                </View>
-              </ScrollView>
-            </View>
-          </View>
-        </Modal>
+          />
+        </RequestSheet>
       )}
     </Page>
   );
 }
-
-const notifStyles = StyleSheet.create({
-  headerControls: {
-    gap: 12,
-    marginBottom: 8,
-  },
-  filterPillBar: {
-    flexDirection: 'row',
-    backgroundColor: '#F1F5F9',
-    borderRadius: 14,
-    padding: 4,
-    gap: 4,
-  },
-  filterPill: {
-    flex: 1,
-    paddingVertical: 10,
-    alignItems: 'center',
-    justifyContent: 'center',
-    borderRadius: 10,
-  },
-  filterPillActive: {
-    backgroundColor: '#FFFFFF',
-    shadowColor: '#0F1E36',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.08,
-    shadowRadius: 4,
-    elevation: 2,
-  },
-  filterPillText: {
-    fontSize: 15,
-    fontWeight: '700',
-    color: '#64748B',
-  },
-  filterPillTextActive: {
-    color: '#0F1E36',
-    fontWeight: '800',
-  },
-  actionsRow: {
-    flexDirection: 'row',
-    gap: 8,
-    flexWrap: 'wrap',
-  },
-  compactUtilBtn: {
-    flex: 1,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 6,
-    backgroundColor: '#FFFFFF',
-    borderWidth: 1,
-    borderColor: '#E2E8F0',
-    borderRadius: 12,
-    paddingVertical: 10,
-    paddingHorizontal: 8,
+const styles = StyleSheet.create({
+  toolbar: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 12 },
+  count: { flex: 1, color: colors.textMuted, fontSize: 12, lineHeight: 19 },
+  moreAction: {
     minHeight: 44,
-    minWidth: 150,
-    flexBasis: 160,
-  },
-  compactUtilBtnText: {
-    fontSize: 14,
-    fontWeight: '700',
-    color: '#0F1E36',
-    flexShrink: 1,
-    textAlign: 'center',
-    lineHeight: 21,
-  },
-  compactUtilBtnTextDanger: {
-    fontSize: 14,
-    fontWeight: '700',
-    color: '#DC2626',
-    flexShrink: 1,
-    textAlign: 'center',
-    lineHeight: 21,
-  },
-  listContainer: {
-    gap: 12,
-  },
-  emptyCard: {
-    backgroundColor: '#FFFFFF',
-    borderRadius: 20,
-    padding: 36,
+    flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'center',
+    gap: 7,
+    paddingHorizontal: 10,
+  },
+  moreText: { color: colors.textSecondary, fontSize: 12, fontWeight: '600' },
+  list: {
     borderWidth: 1,
-    borderColor: '#E2E8F0',
-    gap: 12,
-  },
-  emptyIconCircle: {
-    width: 64,
-    height: 64,
-    borderRadius: 32,
-    backgroundColor: '#F8FAFC',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  emptyText: {
-    fontSize: 16,
-    fontWeight: '600',
-    color: '#64748B',
-    textAlign: 'center',
-  },
-  card: {
-    backgroundColor: '#FFFFFF',
+    borderColor: colors.border,
     borderRadius: 18,
-    borderWidth: 1,
-    borderColor: '#E2E8F0',
+    backgroundColor: colors.surface,
     overflow: 'hidden',
-    shadowColor: '#0F1E36',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.04,
-    shadowRadius: 6,
-    elevation: 1,
-    position: 'relative',
   },
-  unreadCard: {
-    backgroundColor: '#FFFCF9',
-    borderColor: '#FED7AA',
-  },
-  unreadIndicator: {
+  swipeContainer: { overflow: 'hidden' },
+  divider: { borderTopWidth: 1, borderTopColor: colors.borderLight },
+  swipeBackground: {
     position: 'absolute',
-    left: 0,
     top: 0,
     bottom: 0,
-    width: 5,
-    backgroundColor: '#F66B17',
-  },
-  cardContent: {
-    padding: 16,
-    gap: 10,
-  },
-  cardHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'flex-start',
-  },
-  headerLeft: {
-    flexDirection: 'row',
-    alignItems: 'flex-start',
-    gap: 12,
-    flex: 1,
-    minWidth: 0,
-  },
-  iconBox: {
-    width: 38,
-    height: 38,
-    borderRadius: 12,
-    backgroundColor: '#F8FAFC',
-    alignItems: 'center',
-    justifyContent: 'center',
-    borderWidth: 1,
-    borderColor: '#EFF2F6',
-    marginTop: 2,
-  },
-  titleCol: {
-    flex: 1,
-    gap: 3,
-    minWidth: 0,
-  },
-  titleRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-  },
-  unreadDot: {
-    width: 8,
-    height: 8,
-    borderRadius: 4,
-    backgroundColor: '#F66B17',
-  },
-  cardTitle: {
-    fontSize: 16,
-    fontWeight: '700',
-    color: '#0F1E36',
-    flex: 1,
-    lineHeight: 23,
-  },
-  unreadTitle: {
-    fontWeight: '800',
-    color: '#0F1E36',
-  },
-  siteText: {
-    fontSize: 13.5,
-    color: '#64748B',
-    fontWeight: '500',
-  },
-  cardBody: {
-    fontSize: 15,
-    lineHeight: 22,
-    color: '#334155',
-  },
-  noticeText: {
-    fontSize: 13,
-    color: '#94A3B8',
-    fontStyle: 'italic',
-  },
-  cardFooter: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginTop: 6,
-    paddingTop: 10,
-    borderTopWidth: StyleSheet.hairlineWidth,
-    borderTopColor: '#F1F5F9',
-    gap: 8,
-    flexWrap: 'wrap',
-  },
-  openDetailsLink: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 4,
-    paddingVertical: 4,
-    flexShrink: 1,
-  },
-  openDetailsText: {
-    fontSize: 14,
-    fontWeight: '700',
-    color: '#F66B17',
-    flexShrink: 1,
-    lineHeight: 21,
-  },
-  footerActions: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-    flexShrink: 0,
-  },
-  pillActionBtn: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 4,
-    paddingHorizontal: 10,
-    paddingVertical: 6,
-    borderRadius: 10,
-    minHeight: 34,
-  },
-  readActionBtn: {
-    backgroundColor: '#EDFAF2',
-  },
-  readActionText: {
-    fontSize: 13,
-    fontWeight: '700',
-    color: '#065F46',
-  },
-  swipeContainer: {
-    position: 'relative',
-    borderRadius: 18,
-    overflow: 'hidden',
-    backgroundColor: '#DC2626',
-  },
-  swipeBackground: {
-    ...StyleSheet.absoluteFill,
-    backgroundColor: '#DC2626',
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'flex-start',
-    paddingLeft: 18,
-    borderRadius: 18,
-  },
-  swipeDeleteAction: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    height: '100%',
-    paddingRight: 24,
-  },
-  swipeDeleteContent: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-  },
-  swipeDeleteText: {
-    fontSize: 15,
-    fontWeight: '800',
-    color: '#FFFFFF',
-    letterSpacing: 0.3,
-  },
-  swipeForeground: {
-    backgroundColor: '#FFFFFF',
-    borderRadius: 18,
-  },
-  swipeHintText: {
-    fontSize: 12.5,
-    color: '#94A3B8',
-    fontWeight: '500',
-    fontStyle: 'italic',
-  },
-
-  /* Notification Detail Modal Styles */
-  modalOverlay: {
-    flex: 1,
-    justifyContent: 'flex-end',
-    backgroundColor: 'rgba(0, 0, 0, 0.45)',
-  },
-  modalBackdrop: {
-    position: 'absolute',
-    top: 0,
     left: 0,
     right: 0,
-    bottom: 0,
+    backgroundColor: colors.danger,
   },
-  modalSheet: {
-    backgroundColor: '#FFFFFF',
-    borderTopLeftRadius: 28,
-    borderTopRightRadius: 28,
-    paddingHorizontal: 20,
-    paddingBottom: Platform.OS === 'ios' ? 38 : 24,
-    paddingTop: 12,
-    maxHeight: '90%',
-    gap: 14,
-  },
-  modalDragHandle: {
-    width: 44,
-    height: 5,
-    borderRadius: 2.5,
-    backgroundColor: '#CBD5E1',
-    alignSelf: 'center',
-    marginBottom: 6,
-  },
-  modalHeaderRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-  },
-  categoryBadge: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-    paddingHorizontal: 10,
-    paddingVertical: 5,
-    borderRadius: 12,
-  },
-  categoryBadgeText: {
-    fontSize: 13,
-    fontWeight: '700',
-  },
-  modalCloseBtn: {
-    width: 32,
-    height: 32,
-    borderRadius: 16,
-    backgroundColor: '#F1F5F9',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  modalCloseText: {
-    fontSize: 15,
-    fontWeight: '700',
-    color: '#64748B',
-  },
-  modalTitle: {
-    fontSize: 20,
-    fontWeight: '800',
-    color: '#0F1E36',
-    letterSpacing: -0.3,
-    lineHeight: 28,
-  },
-  modalMetaBox: {
-    backgroundColor: '#F8FAFC',
-    borderRadius: 14,
-    padding: 12,
-    gap: 6,
-    borderWidth: 1,
-    borderColor: '#EFF2F6',
-  },
-  metaRow: {
+  swipeDelete: {
+    flex: 1,
+    minHeight: 44,
     flexDirection: 'row',
     alignItems: 'center',
     gap: 8,
+    paddingHorizontal: 20,
   },
-  metaIconText: {
-    fontSize: 14,
-  },
-  metaValueText: {
-    fontSize: 14,
-    fontWeight: '600',
-    color: '#475569',
+  swipeDeleteText: { color: colors.textWhite, fontSize: 12, fontWeight: '600' },
+  foreground: { flexDirection: 'row', alignItems: 'center', backgroundColor: colors.surface },
+  unread: { backgroundColor: '#FFFAF7' },
+  row: {
     flex: 1,
     minWidth: 0,
-    lineHeight: 22,
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    padding: 14,
+    gap: 12,
   },
-  messageCard: {
-    backgroundColor: '#FFFFFF',
-    borderRadius: 16,
-    padding: 16,
-    borderWidth: 1,
-    borderColor: '#E2E8F0',
-    minHeight: 80,
-  },
-  messageText: {
-    fontSize: 16,
-    lineHeight: 25,
-    color: '#1E293B',
-    fontWeight: '500',
-  },
-  modalActionsContainer: {
-    gap: 10,
-    marginTop: 4,
-  },
-  primaryTargetBtn: {
-    backgroundColor: '#F66B17',
-    borderRadius: 14,
-    paddingVertical: 14,
-    paddingHorizontal: 16,
+  icon: { width: 36, height: 36, borderRadius: 12, alignItems: 'center', justifyContent: 'center' },
+  copy: { flex: 1, minWidth: 0, gap: 6 },
+  titleRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+  title: { flex: 1, color: colors.textPrimary, fontSize: 13, lineHeight: 20, fontWeight: '500' },
+  unreadTitle: { fontWeight: '700' },
+  unreadDot: { width: 6, height: 6, borderRadius: 3, backgroundColor: colors.primary },
+  message: { color: colors.textSecondary, fontSize: 12, lineHeight: 19 },
+  meta: { color: colors.textMuted, fontSize: 11, lineHeight: 18 },
+  readAction: { width: 44, minHeight: 48, alignItems: 'center', justifyContent: 'center' },
+  pressed: { opacity: 0.6 },
+  footer: { gap: 8 },
+  secondaryActions: { flexDirection: 'row', justifyContent: 'space-between', gap: 12 },
+  textAction: {
+    minHeight: 44,
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'center',
-    gap: 8,
-    shadowColor: '#F66B17',
-    shadowOffset: { width: 0, height: 3 },
-    shadowOpacity: 0.25,
-    shadowRadius: 5,
-    elevation: 3,
-    minHeight: 50,
+    gap: 7,
+    paddingHorizontal: 8,
   },
-  primaryTargetBtnText: {
-    color: '#FFFFFF',
-    fontSize: 16,
-    fontWeight: '700',
-    flexShrink: 1,
-    textAlign: 'center',
-    lineHeight: 22,
-  },
-  noTargetNotice: {
-    fontSize: 13,
-    color: '#94A3B8',
-    textAlign: 'center',
-    fontStyle: 'italic',
-  },
-  modalSecondaryRow: {
-    flexDirection: 'row',
-    gap: 10,
-  },
-  modalDeleteBtn: {
-    flex: 1,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 6,
-    backgroundColor: '#FEF2F2',
-    borderRadius: 12,
-    paddingVertical: 12,
-    minHeight: 46,
-    borderWidth: 1,
-    borderColor: '#FECACA',
-  },
-  modalDeleteBtnText: {
-    color: '#DC2626',
-    fontSize: 14,
-    fontWeight: '700',
-    flexShrink: 1,
-    textAlign: 'center',
-    lineHeight: 21,
-  },
-  modalDismissBtn: {
-    flex: 1,
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: '#F1F5F9',
-    borderRadius: 12,
-    paddingVertical: 12,
-    minHeight: 46,
-  },
-  modalDismissBtnText: {
-    color: '#475569',
-    fontSize: 14,
-    fontWeight: '700',
-    flexShrink: 1,
-    textAlign: 'center',
-    lineHeight: 21,
-  },
+  deleteText: { color: colors.dangerText, fontSize: 12, fontWeight: '600' },
+  detailTitle: { color: colors.textPrimary, fontSize: 17, lineHeight: 25, fontWeight: '700' },
+  detailMeta: { padding: 14, gap: 5, borderRadius: 14, backgroundColor: colors.surfaceSubtle },
+  site: { color: colors.textPrimary, fontSize: 13, lineHeight: 20, fontWeight: '500' },
+  detailMessage: { color: colors.textPrimary, fontSize: 14, lineHeight: 23 },
 });

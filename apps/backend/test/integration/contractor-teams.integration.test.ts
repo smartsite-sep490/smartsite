@@ -605,6 +605,31 @@ test('contractor teams: scoped dashboard, HTTP contracts, membership history, co
         const root = await app.getUrl();
         const prefix = `${root}/api/v1/sites/${siteId}/contractors/${contractorId}`;
         const headers = { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' };
+        const historyWorkerToken = (await module.get(AuthService).login(aUser, 'Synthetic123!'))
+          .accessToken;
+        const workerHeaders = { Authorization: `Bearer ${historyWorkerToken}` };
+        const historyUrl = `${root}/api/v1/sites/${siteId}/my-requests`;
+        const ownHistory = await fetch(`${historyUrl}?limit=1`, { headers: workerHeaders });
+        assert.equal(ownHistory.status, 200);
+        const historyBody = await ownHistory.json();
+        assert.ok(Array.isArray(historyBody.items));
+        assert.equal(typeof historyBody.total, 'number');
+        assert.equal(typeof historyBody.serverTime, 'string');
+        assert.equal((await fetch(historyUrl)).status, 401);
+        assert.equal((await fetch(historyUrl, { headers })).status, 403);
+        assert.equal(
+          (await fetch(`${root}/api/v1/sites/${otherSite}/my-requests`, { headers: workerHeaders }))
+            .status,
+          403,
+        );
+        assert.equal(
+          (await fetch(`${historyUrl}?workerId=${bId}`, { headers: workerHeaders })).status,
+          400,
+        );
+        assert.equal(
+          (await fetch(`${historyUrl}?limit=101`, { headers: workerHeaders })).status,
+          400,
+        );
         const scopes = await fetch(`${root}/api/v1/contractor-dashboard/scopes`, { headers });
         assert.equal(scopes.status, 200);
         assert.equal((await scopes.json()).items.length, 2);

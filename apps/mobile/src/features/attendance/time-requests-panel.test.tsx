@@ -11,8 +11,10 @@ import { TimeRequestModal } from './time-request-modal';
 import { WorkerRequestModal } from '../../components/modals/WorkerRequestModal';
 import type { useWorkspace } from '../workspace/workspace-context';
 import { translate as tr } from '../../i18n';
-import { localDate, minutes } from '../shared/data';
+import { localDate, minutes, displayTime } from '../shared/data';
 import { ScrollDateTimePicker } from '../shared/scroll-date-time-picker';
+import { RequestFeedbackProvider } from '../shared/request-feedback';
+import { ShiftRequestsScreen } from '../scheduling/scheduling-screens';
 
 vi.mock('../workspace/workspace-context', () => ({ useWorkspace: () => workspace }));
 let workspace: ReturnType<typeof useWorkspace>, cache: QueryClient, root: ReactTestRenderer;
@@ -80,6 +82,8 @@ async function text(label: string, value: string) {
   });
 }
 beforeEach(() => {
+  vi.useFakeTimers({ toFake: ['Date'] });
+  vi.setSystemTime(new Date('2026-11-11T00:00:00Z'));
   cache = new QueryClient({
     defaultOptions: { queries: { retry: false, gcTime: 0 }, mutations: { retry: false } },
   });
@@ -160,6 +164,12 @@ beforeEach(() => {
     total: 1,
   });
   vi.spyOn(client, 'attendanceTimeRequests').mockResolvedValue({ items: [], total: 0 });
+  vi.spyOn(client, 'myWorkerRequests').mockImplementation(async () => ({
+    items: [],
+    total: 0,
+    serverTime: new Date().toISOString(),
+    leaveAvailableAt: null,
+  }));
   vi.spyOn(client, 'requestAttendanceTime').mockResolvedValue({ id: 'new' });
   vi.spyOn(client, 'reviewAttendanceTime').mockResolvedValue({ id: 'leave' });
 });
@@ -167,9 +177,11 @@ afterEach(async () => {
   if (root) await act(async () => root.unmount());
   cache.clear();
   vi.restoreAllMocks();
+  vi.useRealTimers();
 });
 
-it('submits retrospective emergency leave with assigned date and keeps overtime out of a delegated form', async () => {
+it('submits same-day emergency leave with assigned date and keeps overtime out of a delegated form', async () => {
+  vi.setSystemTime(new Date('2026-11-13T00:00:00Z'));
   await mount(
     createElement(TimeRequestModal, {
       visible: true,
@@ -228,6 +240,50 @@ it('keeps worker overtime on its API with no leave-only notice field', async () 
   expect(vi.mocked(workspace.client.requestAttendanceTime).mock.calls[0]![2]).not.toHaveProperty(
     'noticeType',
   );
+});
+
+it('filters planned and emergency schedules separately and clears a selection when classification changes', async () => {
+  vi.setSystemTime(new Date('2026-11-13T00:00:00Z'));
+  workspace.scope.role = 'worker';
+  workspace.workerId = 'worker';
+  const base = (await workspace.client.listWorkerSchedules('token', 'site', {})).items[0]!;
+  vi.mocked(workspace.client.listWorkerSchedules).mockResolvedValue({
+    items: [
+      base,
+      { ...base, id: 'past', workDate: '2026-11-12' },
+      { ...base, id: 'future', workDate: '2026-11-14' },
+    ],
+    total: 3,
+  });
+  await mount(createElement(TimeRequestModal, { visible: true, onClose: vi.fn() }));
+  await choose('Chọn… ▾', '2026-11-14');
+  await text('Lý do', 'Medical appointment');
+  expect(buttons(tr('leavePolicy.submit'))[0]!.props.disabled).toBe(false);
+  await click(tr('leavePolicy.emergency'));
+  expect(buttons(tr('leavePolicy.submit'))[0]!.props.disabled).toBe(true);
+  await click('Chọn… ▾');
+  const content = JSON.stringify(root.toJSON());
+  expect(content).toContain('2026-11-13');
+  expect(content).not.toContain('2026-11-12');
+  expect(content).not.toContain('2026-11-14');
+});
+
+it('excludes an already ended shift even when it ended earlier today from overtime', async () => {
+  vi.setSystemTime(new Date('2026-11-13T11:00:00Z'));
+  workspace.scope.role = 'worker';
+  workspace.workerId = 'worker';
+  const base = (await workspace.client.listWorkerSchedules('token', 'site', {})).items[0]!;
+  vi.mocked(workspace.client.listWorkerSchedules).mockResolvedValue({
+    items: [base, { ...base, id: 'future', workDate: '2026-11-14' }],
+    total: 2,
+  });
+  await mount(
+    createElement(TimeRequestModal, { visible: true, initialKind: 'OVERTIME', onClose: vi.fn() }),
+  );
+  await click('Chọn… ▾');
+  const content = JSON.stringify(root.toJSON());
+  expect(content).not.toContain('2026-11-13');
+  expect(content).toContain('2026-11-14');
 });
 
 it('clears a cancelled draft and selects the requested type when reopening the form', async () => {
@@ -300,12 +356,19 @@ it('retains a failed submission for retry and reuses the same request id before 
   vi.mocked(workspace.client.requestAttendanceTime).mockRejectedValueOnce(
     new Error('Temporary failure'),
   );
-  await mount(createElement(TimeRequestModal, { visible: true, onClose, onSubmitted }));
+  await mount(
+    createElement(
+      RequestFeedbackProvider,
+      { onViewRequests: vi.fn() },
+      createElement(TimeRequestModal, { visible: true, onClose, onSubmitted }),
+    ),
+  );
   await choose('Chọn… ▾', '2026-11-13');
   await text('Lý do', 'Medical appointment');
   await click(tr('leavePolicy.submit'));
   expect(onClose).not.toHaveBeenCalled();
   expect(onSubmitted).not.toHaveBeenCalled();
+  expect(JSON.stringify(root.toJSON())).not.toContain(tr('workerRequests.sentSuccess'));
   const reason = root.root.findAll(
     (n) => String(n.type) === 'TextInput' && n.props.accessibilityLabel === 'Lý do',
   )[0]!;
@@ -316,9 +379,57 @@ it('retains a failed submission for retry and reuses the same request id before 
   expect(calls[1]![2].requestId).toBe(calls[0]![2].requestId);
   expect(onSubmitted).toHaveBeenCalledTimes(1);
   expect(onClose).toHaveBeenCalledTimes(1);
+  expect(JSON.stringify(root.toJSON())).toContain(tr('workerRequests.sentSuccess'));
 });
 
-it('connects the home full-shift shortcut to emergency leave, including historical active shifts', async () => {
+it('blocks another leave with server availability and unlocks only after the 24 hour window', async () => {
+  workspace.scope.role = 'worker';
+  workspace.workerId = 'worker';
+  vi.mocked(workspace.client.myWorkerRequests).mockImplementation(async () => ({
+    items: [],
+    total: 0,
+    serverTime: new Date().toISOString(),
+    leaveAvailableAt: '2026-11-12T00:00:00Z',
+  }));
+  await mount(createElement(TimeRequestModal, { visible: true, onClose: vi.fn() }));
+  await choose('Chọn… ▾', '2026-11-13');
+  await text('Lý do', 'Medical appointment');
+  expect(buttons(tr('leavePolicy.submit'))[0]!.props.disabled).toBe(true);
+  expect(JSON.stringify(root.toJSON())).toContain(
+    tr('workerRequests.leaveCooldown', { time: displayTime('2026-11-12T00:00:00Z') }),
+  );
+  expect(workspace.client.requestAttendanceTime).not.toHaveBeenCalled();
+  vi.setSystemTime(new Date('2026-11-12T00:00:00Z'));
+  await act(async () => {
+    await cache.invalidateQueries({ queryKey: workspace.queryKey });
+  });
+  await settle();
+  expect(buttons(tr('leavePolicy.submit'))[0]!.props.disabled).toBe(false);
+});
+
+it('opens a notified overtime outside the current leave queue without fetching a shift-change detail', async () => {
+  const overtime = { ...row, id: 'overtime-outside-page', kind: 'OVERTIME' as const };
+  vi.mocked(workspace.client.attendanceTimeRequests).mockImplementation(
+    async (_token, _site, options) => ({
+      items: options.requestId === overtime.id && options.kind === 'OVERTIME' ? [overtime] : [],
+      total: options.requestId === overtime.id && options.kind === 'OVERTIME' ? 1 : 0,
+    }),
+  );
+  const change = vi.spyOn(workspace.client, 'getShiftChangeRequest');
+  await mount(createElement(ShiftRequestsScreen, { initialId: overtime.id, initialKind: 'TIME' }));
+  await click(tr('leavePolicy.approve'));
+  expect(workspace.client.reviewAttendanceTime).toHaveBeenCalledWith(
+    'token',
+    'site',
+    overtime.id,
+    'OVERTIME',
+    { approve: true },
+  );
+  expect(change).not.toHaveBeenCalled();
+});
+
+it('connects the home full-shift shortcut to same-day emergency leave', async () => {
+  vi.setSystemTime(new Date('2026-11-13T00:00:00Z'));
   workspace.scope.role = 'worker';
   workspace.workerId = 'worker';
   vi.spyOn(workspace.client, 'createAbsenceRequest').mockResolvedValue({} as never);

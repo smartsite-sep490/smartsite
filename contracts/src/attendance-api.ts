@@ -85,6 +85,7 @@ export interface AttendanceTimeRequestResponse {
   submittedOnBehalf?: boolean;
 }
 export interface AttendanceTimeRequestsQuery {
+  requestId?: string;
   kind: 'OVERTIME' | 'LEAVE';
   workerId?: string;
   status?: 'PENDING' | 'APPROVED' | 'REJECTED';
@@ -94,6 +95,34 @@ export interface AttendanceTimeRequestsQuery {
 export interface AttendanceTimeRequestsResponse {
   items: AttendanceTimeRequestResponse[];
   total: number;
+}
+
+export type WorkerRequestKind = 'LEAVE' | 'OVERTIME' | 'CHANGE' | 'SWAP' | 'CORRECTION';
+export interface WorkerRequestsQuery {
+  kind?: WorkerRequestKind;
+  status?: 'PENDING' | 'APPROVED' | 'REJECTED' | 'CANCELLED' | 'CONFLICTED';
+  requestId?: string;
+  offset?: number;
+  limit?: number;
+}
+export interface WorkerRequestResponse {
+  id: string;
+  kind: WorkerRequestKind;
+  status: string;
+  reason: string;
+  createdAt: string;
+  reviewNote: string | null;
+  workDate: string | null;
+  startsAt: string | null;
+  endsAt: string | null;
+  dayId: string | null;
+}
+export interface WorkerRequestsResponse {
+  items: WorkerRequestResponse[];
+  total: number;
+  serverTime: string;
+  /** Unfiltered, based on the latest successful self-submitted leave of any status. */
+  leaveAvailableAt: string | null;
 }
 export interface AttendanceDaysResponse {
   items: AttendanceDayResponse[];

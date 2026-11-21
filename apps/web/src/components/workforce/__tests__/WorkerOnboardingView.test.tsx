@@ -129,6 +129,7 @@ beforeEach(() => {
     account: {
       id: 'account-1',
       username: 'worker001',
+      email: 'worker@example.test',
       displayName: 'New Worker',
       roleAssignments: [{ role: 'WORKER', siteId: 'site-a' }],
       isActive: true,
@@ -154,6 +155,8 @@ async function fill() {
   await screen.findByRole('heading', { name: 'Create Worker account' });
   await user.type(screen.getByLabelText('Full name'), 'New Worker');
   await user.type(screen.getByLabelText('Username'), 'Worker001');
+  await user.click(screen.getByLabelText(tr('worker_onboarding_view.email')));
+  await user.paste('Worker@Example.Test');
   await fillDocuments(user);
   return user;
 }
@@ -210,6 +213,8 @@ it('Representative creates a Worker login at its Site/Contractor without Admin a
       siteId: 'site-a',
       displayName: 'New Worker',
       username: 'worker001',
+      email: 'worker@example.test',
+      language: 'en',
       nationalId: '000000000001',
       phoneNumber: '0900000001',
       gender: 'MALE',
@@ -217,8 +222,9 @@ it('Representative creates a Worker login at its Site/Contractor without Admin a
     },
   );
   expect(screen.getByText(/Account worker001 and Worker profile created/).textContent).toMatch(
-    /temporary password 12345678/,
+    /queued for worker@example.test/,
   );
+  expect(screen.queryByText(/12345678/)).toBeNull();
   expect(screen.getByText('W000001')).toBeTruthy();
 });
 
@@ -243,6 +249,21 @@ it('keeps a blurred image out of the draft and requires a clear replacement', as
       screen.getByRole('button', { name: 'Create Worker account' }).hasAttribute('disabled'),
     ).toBe(false),
   );
+});
+
+it('requires a valid worker email before creating the account', async () => {
+  mount();
+  const user = await fill();
+  const field = screen.getByLabelText(tr('worker_onboarding_view.email'));
+  await user.clear(field);
+  expect(
+    screen.getByRole('button', { name: 'Create Worker account' }).hasAttribute('disabled'),
+  ).toBe(true);
+  await user.type(field, 'not-an-email');
+  expect(
+    screen.getByRole('button', { name: 'Create Worker account' }).hasAttribute('disabled'),
+  ).toBe(true);
+  expect(SmartSiteManagementClient.prototype.createContractorWorkerAccount).not.toHaveBeenCalled();
 });
 
 it('retries incomplete document uploads without creating a second account', async () => {
@@ -270,6 +291,8 @@ it.each(['en', 'vi'] as const)(
     await screen.findByRole('heading', { name: tr('common.create_worker_account') });
     await user.type(screen.getByLabelText(tr('common.full_name')), 'Nguyễn Văn QA');
     await user.type(screen.getByLabelText(tr('common.username')), 'workerqa');
+    await user.click(screen.getByLabelText(tr('worker_onboarding_view.email')));
+    await user.paste('worker@example.test');
     await fillDocuments(user);
     const calls = vi.mocked(SmartSiteManagementClient.prototype.listSites).mock.calls.length;
     await user.click(screen.getByRole('button', { name: tr('language.choose') }));
@@ -291,6 +314,8 @@ it.each(['en', 'vi'] as const)(
         siteId: 'site-a',
         displayName: 'Nguyễn Văn QA',
         username: 'workerqa',
+        email: 'worker@example.test',
+        language: language === 'en' ? 'vi' : 'en',
         nationalId: '000000000001',
         phoneNumber: '0900000001',
         gender: 'MALE',

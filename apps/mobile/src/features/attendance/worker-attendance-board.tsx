@@ -23,16 +23,18 @@ export function WorkerAttendanceSummary({
         </Text>
         <Text style={styles.caption}>{siteName}</Text>
       </View>
-      <View style={styles.copy}>
-        <Text style={styles.label}>{t('attendance.confirmedHours')}</Text>
-        <Text style={styles.total}>{minutes(summary.totalMinutes)}</Text>
-        <Text style={styles.caption}>
-          {t('attendance.includesOvertime', { hours: minutes(summary.overtimeMinutes) })}
-        </Text>
-      </View>
-      <View style={styles.estimate}>
-        <Text style={styles.label}>{t('attendance.provisionalHours')}</Text>
-        <Text style={styles.estimateValue}>{minutes(summary.provisionalMinutes)}</Text>
+      <View style={styles.totals}>
+        <View style={styles.metric}>
+          <Text style={styles.label}>{t('attendance.confirmedHours')}</Text>
+          <Text style={styles.total}>{minutes(summary.totalMinutes)}</Text>
+          <Text style={styles.caption}>
+            {t('attendance.includesOvertime', { hours: minutes(summary.overtimeMinutes) })}
+          </Text>
+        </View>
+        <View style={styles.metric}>
+          <Text style={styles.label}>{t('attendance.provisionalHours')}</Text>
+          <Text style={styles.estimateValue}>{minutes(summary.provisionalMinutes)}</Text>
+        </View>
       </View>
       <View style={styles.dayCounts}>
         {[
@@ -90,42 +92,42 @@ export function WorkerAttendanceDay({
       style={({ pressed }) => [styles.day, pressed && styles.pressed]}
     >
       <View style={styles.dayHeading}>
-        <Text style={styles.date}>
-          {new Intl.DateTimeFormat(uiLocale(), {
-            weekday: 'short',
-            day: '2-digit',
-            month: '2-digit',
-            timeZone: 'UTC',
-          }).format(new Date(`${day.workDate}T00:00:00Z`))}
-        </Text>
-        <IconChevronRight size={18} color={colors.textMuted} />
-      </View>
-      <Text style={styles.shift}>{shift}</Text>
-      {day.startsAt && day.endsAt && (
-        <Text style={styles.caption}>
-          {t('attendanceUi.scheduleHours')} {clock(day.startsAt)} – {clock(day.endsAt)}
-        </Text>
-      )}
-      <View style={styles.dayTotal}>
-        <View style={styles.copy}>
-          <Text style={styles.label}>
-            {t(confirmed ? 'attendance.confirmedHours' : 'attendance.provisionalHours')}
+        <View style={styles.dayCopy}>
+          <Text style={styles.date}>
+            {new Intl.DateTimeFormat(uiLocale(), {
+              weekday: 'short',
+              day: '2-digit',
+              month: '2-digit',
+              timeZone: 'UTC',
+            }).format(new Date(`${day.workDate}T00:00:00Z`))}
           </Text>
+          <Text style={styles.shift}>{shift}</Text>
+          {day.startsAt && day.endsAt && (
+            <Text style={styles.caption}>
+              {clock(day.startsAt)} – {clock(day.endsAt)}
+            </Text>
+          )}
+        </View>
+        <View style={styles.dayTotal}>
           <Text style={styles.hours}>
             {minutes(day.confirmedMinutes ?? day.provisionalMinutes)}
           </Text>
-        </View>
-        <View style={[styles.status, needsReview && styles.reviewStatus]}>
-          <Text style={[styles.statusText, needsReview && styles.reviewText]}>
-            {localizedLabel(day.status)}
+          <Text style={styles.label}>
+            {t(confirmed ? 'attendance.confirmedHours' : 'attendance.provisionalHours')}
           </Text>
+          <View style={[styles.status, needsReview && styles.reviewStatus]}>
+            <Text style={[styles.statusText, needsReview && styles.reviewText]}>
+              {localizedLabel(day.status)}
+            </Text>
+          </View>
         </View>
+        <IconChevronRight size={16} color={colors.textMuted} />
       </View>
       {anomalies.length > 0 && (
-        <View style={styles.notice}>
-          {anomalies.map((anomaly) => (
-            <Text key={anomaly} style={styles.noticeText}>
-              {anomaly === 'PENDING_LEAVE'
+        <Text numberOfLines={2} style={styles.noticeText}>
+          {anomalies
+            .map((anomaly) =>
+              anomaly === 'PENDING_LEAVE'
                 ? t(
                     day.presence === 'OUTSIDE' &&
                       day.provisionalMinutes === 0 &&
@@ -134,10 +136,10 @@ export function WorkerAttendanceDay({
                       ? 'leavePolicy.absentPendingLeave'
                       : 'leavePolicy.pendingLeave',
                   )
-                : localizedLabel(anomaly)}
-            </Text>
-          ))}
-        </View>
+                : localizedLabel(anomaly),
+            )
+            .join(' · ')}
+        </Text>
       )}
     </Pressable>
   );
@@ -146,78 +148,55 @@ export function WorkerAttendanceDay({
 const styles = StyleSheet.create({
   summary: {
     backgroundColor: colors.surface,
-    borderRadius: 18,
-    padding: 18,
-    gap: 20,
+    borderRadius: 16,
+    padding: 14,
+    gap: 12,
     borderWidth: 1,
     borderColor: colors.border,
   },
-  copy: { gap: 4, flexShrink: 1 },
-  title: { fontSize: 16, lineHeight: 24, fontWeight: '700', color: colors.textPrimary },
-  caption: { fontSize: 12, lineHeight: 19, color: colors.textMuted },
-  label: { fontSize: 12, lineHeight: 19, color: colors.textSecondary },
-  total: { fontSize: 34, lineHeight: 44, fontWeight: '800', color: colors.textPrimary },
-  estimate: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    gap: 8,
-    padding: 12,
-    borderRadius: 10,
-    backgroundColor: colors.surfaceSubtle,
-  },
-  estimateValue: { fontSize: 15, lineHeight: 22, fontWeight: '600', color: colors.textSecondary },
+  copy: { gap: 2, flexShrink: 1 },
+  totals: { flexDirection: 'row', gap: 12 },
+  metric: { flex: 1, minWidth: 0, gap: 3 },
+  title: { fontSize: 14, lineHeight: 21, fontWeight: '700', color: colors.textPrimary },
+  caption: { fontSize: 11, lineHeight: 17, color: colors.textMuted },
+  label: { fontSize: 11, lineHeight: 17, color: colors.textSecondary },
+  total: { fontSize: 26, lineHeight: 34, fontWeight: '700', color: colors.textPrimary },
+  estimateValue: { fontSize: 23, lineHeight: 34, fontWeight: '600', color: colors.textSecondary },
   dayCounts: {
     flexDirection: 'row',
     borderTopWidth: 1,
     borderTopColor: colors.borderLight,
-    paddingTop: 16,
+    paddingTop: 10,
   },
-  count: { flex: 1, minWidth: 0, alignItems: 'center', gap: 4, paddingHorizontal: 6 },
+  count: { flex: 1, minWidth: 0, alignItems: 'center', gap: 2, paddingHorizontal: 4 },
   countDivider: { borderLeftWidth: 1, borderLeftColor: colors.border },
-  countValue: { fontSize: 21, lineHeight: 28, fontWeight: '700', color: colors.textPrimary },
-  countLabel: { fontSize: 12, lineHeight: 18, color: colors.textMuted, textAlign: 'center' },
+  countValue: { fontSize: 17, lineHeight: 23, fontWeight: '700', color: colors.textPrimary },
+  countLabel: { fontSize: 11, lineHeight: 17, color: colors.textMuted, textAlign: 'center' },
   day: {
     backgroundColor: colors.surface,
-    borderRadius: 16,
-    borderWidth: 1,
-    borderColor: colors.border,
-    padding: 16,
-    gap: 6,
+    minHeight: 88,
+    borderBottomWidth: 1,
+    borderBottomColor: colors.borderLight,
+    paddingHorizontal: 12,
+    paddingVertical: 12,
+    gap: 5,
   },
   pressed: { opacity: 0.65 },
-  dayHeading: { flexDirection: 'row', alignItems: 'center', gap: 12, marginBottom: 4 },
-  date: { flex: 1, fontSize: 14, lineHeight: 22, fontWeight: '700', color: colors.textPrimary },
-  shift: { fontSize: 13, lineHeight: 21, color: colors.textSecondary },
-  dayTotal: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    gap: 12,
-    borderTopWidth: 1,
-    borderTopColor: colors.borderLight,
-    marginTop: 6,
-    paddingTop: 12,
-  },
-  hours: { fontSize: 20, lineHeight: 28, fontWeight: '700', color: colors.textPrimary },
+  dayHeading: { flexDirection: 'row', alignItems: 'center', gap: 10 },
+  dayCopy: { flex: 1, minWidth: 0, gap: 2 },
+  date: { fontSize: 13, lineHeight: 20, fontWeight: '700', color: colors.textPrimary },
+  shift: { fontSize: 12, lineHeight: 18, color: colors.textSecondary },
+  dayTotal: { maxWidth: '48%', alignItems: 'flex-end', gap: 2 },
+  hours: { fontSize: 17, lineHeight: 23, fontWeight: '700', color: colors.textPrimary },
   status: {
     maxWidth: '100%',
     borderRadius: 8,
-    paddingHorizontal: 9,
-    paddingVertical: 5,
+    paddingHorizontal: 7,
+    paddingVertical: 3,
     backgroundColor: colors.surfaceSubtle,
   },
-  statusText: { fontSize: 12, lineHeight: 18, fontWeight: '600', color: colors.textSecondary },
+  statusText: { fontSize: 11, lineHeight: 16, fontWeight: '600', color: colors.textSecondary },
   reviewStatus: { backgroundColor: colors.warningLightBg },
   reviewText: { color: colors.warningText },
-  notice: {
-    borderRadius: 8,
-    padding: 10,
-    gap: 4,
-    marginTop: 6,
-    backgroundColor: colors.warningLightBg,
-  },
-  noticeText: { fontSize: 12, lineHeight: 19, color: colors.warningText },
+  noticeText: { fontSize: 11, lineHeight: 17, color: colors.warningText },
 });

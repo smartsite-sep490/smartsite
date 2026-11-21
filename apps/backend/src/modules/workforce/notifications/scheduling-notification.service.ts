@@ -601,7 +601,14 @@ export class SchedulingNotificationService {
         target:
           n.event === 'ENTRY_DENIED_NO_SCHEDULE'
             ? { siteId: n.siteId, workDate: n.content.workDate ?? '', tab: 'schedule' }
-            : { siteId: n.siteId, dayId: n.content.dayId ?? n.requestId, tab: 'attendance' },
+            : {
+                siteId: n.siteId,
+                dayId: n.content.dayId ?? n.requestId,
+                tab: 'attendance',
+                ...(['TIME_REQUESTED', 'TIME_APPROVED', 'TIME_REJECTED'].includes(n.event)
+                  ? { requestId: n.requestId, requestType: 'TIME' as const }
+                  : {}),
+              },
       };
     }
     if (n.requestType === 'SAFETY')
