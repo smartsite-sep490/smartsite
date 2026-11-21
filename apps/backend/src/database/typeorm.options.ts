@@ -106,6 +106,7 @@ export function buildTypeOrmOptions(config: DatabaseConnectionConfig): DataSourc
       TeamAttendance1795219200000,
       MobileAttendanceCompletion1795305600000,
       AccountEmailRecovery1795392000000,
+      MobilePushDelivery1795478400000,
       LeaveNotice1795046400000,
       ZonePolicyRevisions1794441600000,
       CameraConfigurationBundles1794528000000,
@@ -211,3 +212,4 @@ import { WorkerDocuments1792540800000 } from './migrations/1792540800000-WorkerD
 import { TeamAttendance1795219200000 } from './migrations/1795219200000-TeamAttendance.js';
 import { MobileAttendanceCompletion1795305600000 } from './migrations/1795305600000-MobileAttendanceCompletion.js';
 import { AccountEmailRecovery1795392000000 } from './migrations/1795392000000-AccountEmailRecovery.js';
+import { MobilePushDelivery1795478400000 } from './migrations/1795478400000-MobilePushDelivery.js';

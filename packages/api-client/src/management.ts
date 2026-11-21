@@ -319,6 +319,27 @@ function retryAfter(response: Response): number | undefined {
 }
 
 export class SmartSiteManagementClient {
+  mobilePushSettings(token: string) {
+    return this.request<import('@smartsite/contracts').MobilePushSettingsResponse>(
+      'GET',
+      '/me/push-devices',
+      token,
+    );
+  }
+  registerMobilePush(
+    token: string,
+    id: string,
+    input: import('@smartsite/contracts').RegisterMobilePushCommand,
+  ) {
+    return this.request<{ id: string }>('PUT', `/me/push-devices/${pathId(id)}`, token, input);
+  }
+  removeMobilePush(
+    token: string,
+    id: string,
+    input: import('@smartsite/contracts').RemoveMobilePushCommand,
+  ) {
+    return this.request<{ id: string }>('DELETE', `/me/push-devices/${pathId(id)}`, token, input);
+  }
   requestPasswordReset(input: import('@smartsite/contracts').RequestPasswordResetCommand) {
     return this.request<import('@smartsite/contracts').AccountEmailChallengeResponse>(
       'POST',

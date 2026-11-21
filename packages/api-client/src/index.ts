@@ -6,6 +6,11 @@ import {
 } from './errors';
 export * from './errors';
 export type {
+  RegisterMobilePushCommand,
+  RemoveMobilePushCommand,
+  MobilePushSettingsResponse,
+} from '@smartsite/contracts';
+export type {
   RequestPasswordResetCommand,
   ConfirmPasswordResetCommand,
   SetAccountEmailCommand,
