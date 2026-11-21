@@ -32,6 +32,7 @@ function representative(): WorkforceActor {
 function serviceFor({ hasGrant }: { hasGrant: boolean }) {
   const savedWorkers: Array<Record<string, unknown>> = [];
   const manager = {
+    query: async () => [{ n: 0, legacy: 0, baseline: 0 }],
     getRepository(target: unknown) {
       if (target === ContractorRepresentativeGrantEntity)
         return { findOneBy: async () => (hasGrant ? { id: 'grant' } : null) };
