@@ -892,11 +892,7 @@ export function RestrictedZoneView({
                       );
                     })()}
                 </div>
-                <p
-                  className={`text-sm ${
-                    isZoneFullscreen ? 'text-slate-300' : 'text-slate-600'
-                  }`}
-                >
+                <p className={`text-sm ${isZoneFullscreen ? 'text-slate-300' : 'text-slate-600'}`}>
                   {tSafety('zoneMonitor.header.subtitle')}
                 </p>
               </div>
@@ -1003,9 +999,7 @@ export function RestrictedZoneView({
                   disabled={cameras.isPending || !scopedCameras.length}
                   className={selectControlClass}
                 >
-                  {!selectedCameraId && (
-                    <option value="">{tr('common.select_camera')}</option>
-                  )}
+                  {!selectedCameraId && <option value="">{tr('common.select_camera')}</option>}
                   {scopedCameras.map((camera) => (
                     <option key={camera.id} value={camera.id}>
                       {camera.code ? `${camera.code} · ${camera.name}` : camera.name}

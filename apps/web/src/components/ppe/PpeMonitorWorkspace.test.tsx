@@ -95,9 +95,7 @@ it('mounts authorized metadata and single-camera focus default while paused stat
   const focused = await screen.findByTestId('focus');
   expect(focused.getAttribute('data-paused')).toBe('true');
   expect(focused.textContent).toContain(camera.id);
-  expect(
-    screen.queryByText('AI processing is paused. Camera previews are disabled.'),
-  ).toBeNull();
+  expect(screen.queryByText('AI processing is paused. Camera previews are disabled.')).toBeNull();
   expect(state.cameras).toHaveBeenCalledWith(
     'first',
     site,
