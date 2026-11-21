@@ -33,6 +33,8 @@ export interface RoleAssignmentResponse {
 }
 
 export interface AccountResponse {
+  email?: string | null;
+  emailVerifiedAt?: string | null;
   id: string;
   username: string;
   displayName: string;
@@ -185,6 +187,9 @@ export interface WorkerResponse {
 export const WORKER_DEFAULT_TEMPORARY_PASSWORD = '12345678';
 
 export interface CreateContractorWorkerAccountCommand {
+  /** Mobile requires an email; omitted only by legacy clients. */
+  email?: string;
+  language?: 'vi' | 'en';
   siteId: string;
   nationalId: string;
   phoneNumber: string;
@@ -199,6 +204,7 @@ export interface CreateContractorWorkerAccountCommand {
 }
 
 export interface ContractorWorkerAccountResponse {
+  emailDelivery?: 'QUEUED';
   worker: WorkerResponse;
   account: AccountResponse;
 }

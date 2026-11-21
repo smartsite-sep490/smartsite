@@ -103,6 +103,7 @@ export function buildTypeOrmOptions(config: DatabaseConnectionConfig): DataSourc
       GateRegistry1795046400001,
       WorkerDocumentAiAnalysis1795132800001,
       AutomaticScheduleVersion1795132800000,
+      AccountEmailRecovery1795392000000,
       LeaveNotice1795046400000,
       ZonePolicyRevisions1794441600000,
       CameraConfigurationBundles1794528000000,
@@ -205,3 +206,4 @@ export function createTypeOrmOptions(databaseUrl: string, timeoutMs = 2000): Dat
   });
 }
 import { WorkerDocuments1792540800000 } from './migrations/1792540800000-WorkerDocuments.js';
+import { AccountEmailRecovery1795392000000 } from './migrations/1795392000000-AccountEmailRecovery.js';
