@@ -534,12 +534,12 @@ function SetupWorkspace({ apiUrl, session }: { apiUrl: string; session: SharedSe
         data-tour-anchor="camera-setup-scope"
         className="rounded-xl border border-slate-200 bg-white px-3 py-2 sm:px-4 sm:py-2.5"
       >
-        <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-1.5">
-          <div className="flex min-w-0 flex-1 flex-wrap items-center gap-x-2.5 gap-y-1.5">
+        <div className="flex flex-col gap-2 lg:flex-row lg:flex-wrap lg:items-center lg:justify-between">
+          <div className="flex min-w-0 flex-col gap-1.5 sm:flex-row sm:flex-wrap sm:items-center sm:gap-x-2.5 lg:flex-1">
             <h1 className="text-base sm:text-xl font-bold tracking-tight text-slate-950 shrink-0">
               {t('cameraSetup.title')}
             </h1>
-            <div className="flex min-w-[10rem] flex-1 items-center gap-1.5 sm:max-w-sm">
+            <div className="flex min-w-0 w-full items-center gap-1.5 sm:w-auto sm:min-w-[12rem] sm:flex-1 sm:max-w-sm">
               <label
                 className="shrink-0 text-xs font-semibold text-slate-700"
                 htmlFor="camera-setup-site"
@@ -550,7 +550,7 @@ function SetupWorkspace({ apiUrl, session }: { apiUrl: string; session: SharedSe
                 id="camera-setup-site"
                 value={site?.id ?? ''}
                 disabled={sites.baseError || sites.isPending || effectiveRegionDraft.saving}
-                className="min-h-8 sm:min-h-9 w-full min-w-[8rem] rounded-lg border border-slate-300 bg-white px-2.5 py-1 text-xs sm:text-sm font-medium text-slate-900 shadow-2xs transition-colors hover:border-slate-400 focus-visible:border-slate-900 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-slate-900 disabled:cursor-not-allowed disabled:bg-slate-100 disabled:text-slate-500"
+                className="min-h-8 sm:min-h-9 min-w-0 flex-1 rounded-lg border border-slate-300 bg-white px-2.5 py-1 text-xs sm:text-sm font-medium text-slate-900 shadow-2xs transition-colors hover:border-slate-400 focus-visible:border-slate-900 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-slate-900 disabled:cursor-not-allowed disabled:bg-slate-100 disabled:text-slate-500"
                 onChange={(event) => {
                   guardedSelectSite(event.target.value);
                 }}
@@ -576,7 +576,7 @@ function SetupWorkspace({ apiUrl, session }: { apiUrl: string; session: SharedSe
               )}
             </div>
           </div>
-          <div className="flex flex-wrap items-center gap-1.5 [&_[data-testid=safety-task-tour-invitation]]:hidden sm:[&_[data-testid=safety-task-tour-invitation]]:flex">
+          <div className="flex min-w-0 flex-wrap items-center gap-1.5 lg:shrink-0 [&_[data-testid=safety-task-tour-invitation]]:hidden sm:[&_[data-testid=safety-task-tour-invitation]]:flex">
             <CameraSetupTour
               userId={session.user.id}
               tourScopeKey={`${tourScopeKey}:${catalogSelectedCamera?.id ?? 'none'}`}
