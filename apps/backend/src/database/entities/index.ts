@@ -29,6 +29,8 @@ import { GateEntity } from './gate.entity.js';
 export * from './gate.entity.js';
 import { SiteEntity } from './site.entity.js';
 import { TeamZonePermissionEntity } from './team-zone-permission.entity.js';
+import { TeamAttendanceEntity } from './team-attendance.entity.js';
+export * from './team-attendance.entity.js';
 export * from './team-zone-permission.entity.js';
 import { ScheduleAssignmentBatchEntity } from './schedule-assignment-batch.entity.js';
 export * from './schedule-assignment-batch.entity.js';
@@ -148,6 +150,7 @@ import {
 } from './camera-worker-generation.entity.js';
 export * from './camera-worker-generation.entity.js';
 export const ENTITIES = [
+  TeamAttendanceEntity,
   CameraWorkerGenerationEntity,
   CameraConfigurationApplicationReceiptEntity,
   ZonePolicyRevisionEntity,

@@ -103,6 +103,8 @@ export function buildTypeOrmOptions(config: DatabaseConnectionConfig): DataSourc
       GateRegistry1795046400001,
       WorkerDocumentAiAnalysis1795132800001,
       AutomaticScheduleVersion1795132800000,
+      TeamAttendance1795219200000,
+      MobileAttendanceCompletion1795305600000,
       AccountEmailRecovery1795392000000,
       LeaveNotice1795046400000,
       ZonePolicyRevisions1794441600000,
@@ -206,4 +208,6 @@ export function createTypeOrmOptions(databaseUrl: string, timeoutMs = 2000): Dat
   });
 }
 import { WorkerDocuments1792540800000 } from './migrations/1792540800000-WorkerDocuments.js';
+import { TeamAttendance1795219200000 } from './migrations/1795219200000-TeamAttendance.js';
+import { MobileAttendanceCompletion1795305600000 } from './migrations/1795305600000-MobileAttendanceCompletion.js';
 import { AccountEmailRecovery1795392000000 } from './migrations/1795392000000-AccountEmailRecovery.js';

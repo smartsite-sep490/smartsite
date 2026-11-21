@@ -23,6 +23,9 @@ import { WorkerEntity } from './worker.entity.js';
 @Check('ck_team_name', 'char_length(trim(name)) BETWEEN 1 AND 160')
 @Check('ck_team_version', 'version > 0')
 export class ContractorTeamEntity {
+  @Column({ name: 'leader_worker_id', type: 'uuid', nullable: true })
+  @ForeignKey(() => WorkerEntity, { name: 'fk_team_leader', onDelete: 'RESTRICT' })
+  leaderWorkerId!: string | null;
   @PrimaryColumn({ type: 'uuid', primaryKeyConstraintName: 'pk_team_id' }) id!: string;
   @Column({ name: 'site_id', type: 'uuid' })
   @ForeignKey(() => SiteEntity, { name: 'fk_team_site', onDelete: 'RESTRICT' })

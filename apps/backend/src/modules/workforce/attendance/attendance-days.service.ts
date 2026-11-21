@@ -32,6 +32,7 @@ import {
 } from '../../../common/configuration/commands.js';
 import type { WorkforceActor } from '../directory/contractor-operations.service.js';
 import { attendanceAccess } from './attendance-access.js';
+import { canAcknowledgeEarlyCheckout } from './attendance-review-policy.js';
 import { AttendanceReconciliationService } from './attendance-reconciliation.service.js';
 import {
   AttendanceDaysDto,
@@ -442,6 +443,11 @@ export class AttendanceDaysService {
       : [];
     return {
       currentSchedule,
+      canAcknowledgeEarlyCheckout:
+        canReview &&
+        worker.userId !== actor.id &&
+        day.status === 'NEEDS_REVIEW' &&
+        canAcknowledgeEarlyCheckout(day.anomalies),
       day: this.reconciliation.response(
         day,
         worker,
@@ -844,10 +850,7 @@ export class AttendanceDaysService {
       if (day.reviewedBy === actor.id && day.reviewNote === value.reviewNote) return { id };
       if (day.version !== value.expectedVersion)
         conflict('Attendance changed; reload before reviewing');
-      const blocking = day.anomalies.filter(
-        (a) => a !== 'EXIT_DURATION_EXCEEDED' && a !== 'MAX_EXITS_EXCEEDED',
-      );
-      if (blocking.some((a) => a !== 'EARLY_CHECKOUT') || !blocking.includes('EARLY_CHECKOUT'))
+      if (!canAcknowledgeEarlyCheckout(day.anomalies))
         conflict('Resolve missing events, schedules and pending requests before confirming hours');
       day.reviewedBy = actor.id;
       day.reviewedAt = new Date();

@@ -344,6 +344,7 @@ export class AttendanceService {
         reason: c.reason,
         status: c.status,
         reviewNote: c.reviewNote,
+        canReview: canReviewCorrection && c.status === 'PENDING' && c.requestedBy !== actor.id,
       })),
     };
   }

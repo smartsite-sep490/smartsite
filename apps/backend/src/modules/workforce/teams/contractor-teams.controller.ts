@@ -14,6 +14,8 @@ import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
 import { UserAuthGuard } from '../../auth/user-auth.guard.js';
 import type { AuthenticatedRequest } from '../../auth/auth.service.js';
 import { ContractorTeamsService } from './contractor-teams.service.js';
+import { SetTeamLeaderDto } from './dto/team-attendance.dto.js';
+import { ContractorTeamAttendanceQueryDto } from './dto/contractor-team-attendance.dto.js';
 import {
   ArchiveContractorTeamDto,
   AssignContractorTeamDto,
@@ -28,6 +30,24 @@ import {
 @UseGuards(UserAuthGuard)
 @Controller()
 export class ContractorTeamsController {
+  @Get('sites/:siteId/contractors/:contractorId/teams/:id/attendance') attendance(
+    @Req() req: AuthenticatedRequest,
+    @Param('siteId') siteId: string,
+    @Param('contractorId') contractorId: string,
+    @Param('id') id: string,
+    @Query() query: ContractorTeamAttendanceQueryDto,
+  ) {
+    return this.teams.attendance(req.user!, siteId, contractorId, id, query);
+  }
+  @Put('sites/:siteId/contractors/:contractorId/teams/:id/leader') setLeader(
+    @Req() req: AuthenticatedRequest,
+    @Param('siteId') siteId: string,
+    @Param('contractorId') contractorId: string,
+    @Param('id') id: string,
+    @Body() input: SetTeamLeaderDto,
+  ) {
+    return this.teams.setLeader(req.user!, siteId, contractorId, id, input);
+  }
   @Patch('sites/:siteId/contractors/:contractorId/teams/:id/zones/:permissionId') updateZone(
     @Req() req: AuthenticatedRequest,
     @Param('siteId') siteId: string,

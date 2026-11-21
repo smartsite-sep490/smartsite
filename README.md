@@ -93,6 +93,8 @@ Planned and emergency Worker leave, retrospective reporting, contractor represen
 
 The read-only attendance summary and worker reports, rate definitions and shared client usage are documented in [Attendance reporting API](docs/operations/attendance-reports.md).
 
+Mobile team leader roll call, compact day-calendar sheets and document viewing/submission are documented in [Team Zone attendance](docs/operations/team-zone-attendance.md). Apply the additive team-attendance migration before updating Backend and Mobile.
+
 ### Prerequisites
 
 - Node.js **24.x**

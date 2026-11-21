@@ -5,6 +5,7 @@ import type {
   ScheduleAssignmentInput,
   ScheduleAssignmentPreview,
   ScheduleAssignmentBatchResponse,
+  ContractorTeamCalendarResponse,
 } from '@smartsite/contracts';
 import {
   command,
@@ -40,11 +41,17 @@ import {
   allocateScheduleVersion,
   automaticScheduleVersionStart,
 } from './schedule-version-allocation.js';
+import {
+  groupTeamCalendar,
+  type TeamCalendarMembership,
+  type TeamCalendarSchedule,
+} from './team-calendar.js';
 import { SchedulingNotificationService } from '../notifications/scheduling-notification.service.js';
 import {
   ChangeScheduleAssignmentDto,
   CreateScheduleAssignmentDto,
   ScheduleAssignmentDto,
+  ContractorTeamCalendarQueryDto,
 } from './dto/schedule-assignment.dto.js';
 
 // JSONB reorders object keys; canonicalize both command and persisted replay data.
@@ -75,6 +82,52 @@ function normalized(input: ScheduleAssignmentInput): ScheduleAssignmentInput {
 }
 @Injectable()
 export class ScheduleAssignmentService {
+  async teamCalendar(
+    actor: AuthenticatedUser,
+    siteValue: string,
+    input: ContractorTeamCalendarQueryDto,
+  ): Promise<ContractorTeamCalendarResponse> {
+    const siteId = uuid(siteValue).toLowerCase(),
+      value = command(ContractorTeamCalendarQueryDto, input);
+    const from = Date.parse(value.fromDate),
+      to = Date.parse(value.toDate);
+    if (!Number.isFinite(from) || !Number.isFinite(to) || to < from || to - from > 365 * 86400000)
+      invalid('Invalid calendar date range');
+    return this.source.transaction('REPEATABLE READ', async (m) => {
+      await this.scope(m, actor, siteId, value.contractorId, true);
+      const rows = (await m.query(
+        `WITH recorded AS (
+          SELECT DISTINCT ids.id::uuid AS schedule_id,t.id AS team_id,t.name AS team_name
+          FROM schedule_assignment_batch b
+          JOIN contractor_team t ON t.id::text=b.input->>'teamId' AND t.site_id=b.site_id AND t.contractor_id=b.contractor_id
+          JOIN LATERAL jsonb_array_elements_text(b.schedule_ids) AS ids(id) ON true
+          WHERE b.site_id=$1 AND b.contractor_id=$2 AND b.input->>'target'='TEAM'
+        )
+        SELECT s.id AS "scheduleId",s.worker_id AS "workerId",s.work_date::text AS "workDate",s.shift_id AS "shiftId",s.schedule_version_id AS "scheduleVersionId",r.team_id AS "recordedTeamId",r.team_name AS "recordedTeamName"
+        FROM worker_schedule s JOIN worker w ON w.id=s.worker_id AND w.site_id=s.site_id
+        LEFT JOIN recorded r ON r.schedule_id=s.id
+        WHERE s.site_id=$1 AND w.contractor_id=$2 AND s.is_active AND s.work_date BETWEEN $3::date AND $4::date
+        ORDER BY s.work_date,s.id,r.team_id`,
+        [siteId, value.contractorId, value.fromDate, value.toDate],
+      )) as TeamCalendarSchedule[];
+      if (!rows.length) return { items: [], unassignedScheduleCount: 0 };
+      const legacy = rows.filter((row) => !row.recordedTeamId);
+      const history = legacy.length
+        ? ((await m.query(
+            `SELECT tm.worker_id AS "workerId",tm.team_id AS "teamId",t.name AS "teamName",tm.joined_at AS "joinedAt",tm.left_at AS "leftAt"
+        FROM contractor_team_membership tm JOIN contractor_team t ON t.id=tm.team_id AND t.site_id=tm.site_id AND t.contractor_id=tm.contractor_id
+        WHERE tm.site_id=$1 AND tm.contractor_id=$2 AND tm.worker_id=ANY($3::uuid[])`,
+            [siteId, value.contractorId, [...new Set(legacy.map((row) => row.workerId))]],
+          )) as TeamCalendarMembership[])
+        : [];
+      const shifts = legacy.length
+        ? await m
+            .getRepository(ShiftEntity)
+            .findBy({ siteId, id: In([...new Set(legacy.map((row) => row.shiftId))]) })
+        : [];
+      return groupTeamCalendar(rows, history, shifts, value.teamId);
+    });
+  }
   constructor(
     private readonly source: DataSource,
     private readonly notifications: SchedulingNotificationService,
