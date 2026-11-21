@@ -281,16 +281,61 @@ function SourceWorkspace({
       </section>
     );
   }
+  const activeResult = result && host?.available && !hosts.isError ? result : null;
+  const isExpired = Boolean(activeResult && now >= Date.parse(activeResult.expiresAt));
+  const remainingSeconds =
+    activeResult && !isExpired
+      ? Math.max(1, Math.ceil((Date.parse(activeResult.expiresAt) - now) / 1000))
+      : 0;
+  const stage2Tone = pending
+    ? { dot: 'bg-teal-600', text: 'text-teal-900', key: 'cameraSource.stage2Pending' as const }
+    : activeResult
+      ? isExpired
+        ? {
+            dot: 'bg-rose-600',
+            text: 'text-rose-800',
+            key: 'cameraSource.stage2Expired' as const,
+          }
+        : activeResult.sourceKind === 'REPLAY'
+          ? {
+              dot: 'bg-amber-600',
+              text: 'text-amber-900',
+              key: 'cameraSource.stage2Replay' as const,
+            }
+          : {
+              dot: 'bg-emerald-600',
+              text: 'text-emerald-800',
+              key: 'cameraSource.stage2Live' as const,
+            }
+      : error
+        ? { dot: 'bg-rose-600', text: 'text-rose-800', key: 'cameraSource.stage2Error' as const }
+        : { dot: 'bg-slate-400', text: 'text-slate-700', key: 'cameraSource.stage2Idle' as const };
+  const stage4Status = applying.isSuccess
+    ? { dot: 'bg-emerald-600', text: 'text-emerald-800', key: 'cameraSource.stage4Running' as const }
+    : resuming.isSuccess
+      ? { dot: 'bg-teal-600', text: 'text-teal-900', key: 'cameraSource.stage4Resumed' as const }
+      : activeResult?.sourceKind === 'REPLAY' && !isExpired
+        ? {
+            dot: 'bg-amber-600',
+            text: 'text-amber-900',
+            key: 'cameraSource.stage4ReplayLocked' as const,
+          }
+        : {
+            dot: 'bg-slate-400',
+            text: 'text-slate-700',
+            key: 'cameraSource.stage4CheckBelow' as const,
+          };
+
   return (
     <section
-      className="mt-5 min-w-0 overflow-hidden rounded-2xl border border-slate-200 bg-white"
+      className="min-w-0 overflow-hidden rounded-xl border border-slate-200 bg-white"
       aria-labelledby={`${id}-heading`}
     >
-      <header className="border-b border-slate-100 px-4 py-4 sm:px-5">
-        <p className="text-xs font-semibold text-slate-500">{camera.name}</p>
+      <header className="border-b border-slate-200 px-4 py-4 sm:px-5">
+        <p className="text-sm font-semibold text-slate-700 tabular-nums">{camera.name}</p>
         <h2
           id={`${id}-heading`}
-          className="mt-1 text-lg font-semibold tracking-tight text-slate-950"
+          className="mt-1 text-lg font-bold tracking-tight text-slate-950"
         >
           {t('cameraSource.title')}
         </h2>
@@ -299,19 +344,77 @@ function SourceWorkspace({
         </p>
       </header>
       <div className="space-y-5 p-4 sm:p-5">
+        <dl
+          data-testid="camera-source-stage-summary"
+          aria-label={t('cameraSource.stagesLabel')}
+          className="grid grid-cols-1 divide-y divide-slate-200 rounded-xl border border-slate-200 bg-slate-50/40 sm:grid-cols-2 sm:divide-x [&>*:nth-child(odd)]:sm:divide-y-0 [&>*:nth-child(n+3)]:sm:border-t [&>*:nth-child(n+3)]:sm:border-slate-200"
+        >
+          <div className="min-w-0 px-3.5 py-2.5 space-y-1">
+            <dt className="text-xs font-medium text-slate-600">{t('cameraSource.stage1Label')}</dt>
+            <dd className="flex items-start gap-2 text-sm font-semibold text-slate-900 tabular-nums">
+              <span aria-hidden="true" className="mt-1.5 h-2 w-2 shrink-0 rounded-full bg-[#0F172A]" />
+              <span className="min-w-0 break-words [overflow-wrap:anywhere]">
+                {t('cameraSource.stage1Done', {
+                  name: camera.name,
+                  version: camera.configurationVersion ?? 0,
+                })}
+              </span>
+            </dd>
+            <p className="text-xs leading-5 text-slate-600">{t('cameraSource.stage1MetaOnly')}</p>
+          </div>
+          <div className="min-w-0 px-3.5 py-2.5 space-y-1">
+            <dt className="text-xs font-medium text-slate-600">{t('cameraSource.stage2Label')}</dt>
+            <dd className={`flex items-start gap-2 text-sm font-semibold ${stage2Tone.text}`}>
+              <span
+                aria-hidden="true"
+                className={`mt-1.5 h-2 w-2 shrink-0 rounded-full ${stage2Tone.dot}`}
+              />
+              <span className="min-w-0 break-words [overflow-wrap:anywhere]">{t(stage2Tone.key)}</span>
+            </dd>
+          </div>
+          <div className="min-w-0 px-3.5 py-2.5 space-y-1">
+            <dt className="text-xs font-medium text-slate-600">{t('cameraSource.stage3Label')}</dt>
+            <dd className="flex items-start gap-2 text-sm font-semibold text-slate-900 tabular-nums">
+              <span aria-hidden="true" className="mt-1.5 h-2 w-2 shrink-0 rounded-full bg-slate-600" />
+              <span>
+                {t('cameraSource.stage3Value', { version: camera.configurationVersion ?? 0 })}
+              </span>
+            </dd>
+            <p className="text-xs leading-5 text-slate-600">{t('cameraSource.stage3Note')}</p>
+          </div>
+          <div className="min-w-0 px-3.5 py-2.5 space-y-1">
+            <dt className="text-xs font-medium text-slate-600">{t('cameraSource.stage4Label')}</dt>
+            <dd
+              className={`flex items-start gap-2 text-sm font-semibold tabular-nums ${stage4Status.text}`}
+            >
+              <span
+                aria-hidden="true"
+                className={`mt-1.5 h-2 w-2 shrink-0 rounded-full ${stage4Status.dot}`}
+              />
+              <span className="min-w-0 break-words [overflow-wrap:anywhere]">
+                {t(stage4Status.key, { version: camera.configurationVersion ?? 0 })}
+              </span>
+            </dd>
+          </div>
+        </dl>
+
         <fieldset
-          className="grid min-w-0 grid-cols-1 gap-2 sm:grid-cols-2 xl:grid-cols-4"
+          className="grid min-w-0 grid-cols-1 gap-2.5 sm:grid-cols-2"
           disabled={blocked}
         >
           <legend className="sr-only">{t('cameraSource.title')}</legend>
           {(['WEBCAM', 'RTSP', 'VIDEO', 'BROWSER'] as const).map((option) => (
             <label
               key={option}
-              className={`min-w-0 cursor-pointer rounded-xl border p-3 transition-colors focus-within:ring-2 focus-within:ring-slate-700 ${kind === option ? 'border-slate-900 bg-slate-50' : 'border-slate-200 hover:border-slate-400'}`}
+              className={`min-w-0 cursor-pointer rounded-xl border p-3.5 transition-colors focus-within:ring-2 focus-within:ring-[#0F172A] ${
+                kind === option
+                  ? 'border-[#0F172A] bg-slate-50 ring-1 ring-[#0F172A]/10'
+                  : 'border-slate-200 bg-white hover:border-slate-400'
+              }`}
             >
-              <span className="flex items-start gap-2">
+              <span className="flex items-start gap-2.5">
                 <input
-                  className="mt-1 shrink-0 accent-slate-900"
+                  className="mt-1 shrink-0 accent-[#0F172A]"
                   type="radio"
                   name={`${id}-kind`}
                   checked={kind === option}
@@ -326,7 +429,7 @@ function SourceWorkspace({
                   {t(`cameraSource.${option}`)}
                 </span>
               </span>
-              <span className="mt-2 block text-xs leading-relaxed text-slate-600">
+              <span className="mt-2 block text-sm leading-relaxed text-slate-600">
                 {t(`cameraSource.${option}Help`)}
               </span>
             </label>
@@ -381,7 +484,7 @@ function SourceWorkspace({
                 {t('cameraSource.refresh')}
               </button>
             </div>
-            <p className="text-xs leading-relaxed text-slate-600">{t('cameraSource.hostHelp')}</p>
+            <p className="text-sm leading-relaxed text-slate-600">{t('cameraSource.hostHelp')}</p>
             {hosts.isPending ? (
               <p role="status" className="text-sm text-slate-600">
                 {t('cameraSource.loading')}
@@ -494,7 +597,9 @@ function SourceWorkspace({
                         />
                       </div>
                     </div>
-                    <p className="text-xs text-slate-600">{t('cameraSource.credentialHelp')}</p>
+                    <p className="text-sm leading-relaxed text-slate-600">
+                      {t('cameraSource.credentialHelp')}
+                    </p>
                   </fieldset>
                 )}
                 <div className="flex flex-wrap gap-2">
@@ -523,7 +628,7 @@ function SourceWorkspace({
         {error && (
           <p
             role="alert"
-            className="rounded-lg border border-rose-200 bg-rose-50 p-3 text-sm text-rose-900"
+            className="rounded-xl border border-rose-200 bg-rose-50/80 p-3 text-sm text-rose-900"
           >
             {t(error)}
           </p>
@@ -531,10 +636,15 @@ function SourceWorkspace({
         {caps?.configurationResumeSupported === true &&
           client.resume &&
           camera.configurationVersion !== undefined && (
-            <aside className="space-y-3 rounded-xl border border-sky-200 bg-sky-50 p-4">
-              <h3 className="text-sm font-semibold text-slate-950">
-                {t('cameraSource.savedConfiguration')}
-              </h3>
+            <aside className="space-y-3 rounded-xl border border-slate-200 border-l-[3px] border-l-teal-700 bg-slate-50/50 p-4">
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <h3 className="text-sm font-semibold text-slate-950">
+                  {t('cameraSource.savedConfiguration')}
+                </h3>
+                <span className="font-mono text-xs font-semibold tabular-nums text-slate-600">
+                  {t('cameraSource.stage3Value', { version: camera.configurationVersion })}
+                </span>
+              </div>
               <p className="text-sm leading-relaxed text-slate-700">
                 {t('cameraSource.resumeHelp')}
               </p>
@@ -553,12 +663,12 @@ function SourceWorkspace({
                 )}
               </button>
               {resuming.isSuccess && (
-                <p role="status" className="text-sm text-slate-700">
+                <p role="status" className="text-sm font-medium text-teal-900">
                   {t('cameraSource.resumeStarted')}
                 </p>
               )}
               {resuming.isError && (
-                <p role="alert" className="text-sm text-rose-900">
+                <p role="alert" className="text-sm font-medium text-rose-900">
                   {t('cameraSource.resumeError')}
                 </p>
               )}
@@ -567,7 +677,7 @@ function SourceWorkspace({
         {applying.isError && (
           <p
             role="alert"
-            className="rounded-lg border border-rose-200 bg-rose-50 p-3 text-sm text-rose-900"
+            className="rounded-xl border border-rose-200 bg-rose-50/80 p-3 text-sm text-rose-900"
           >
             {t('cameraSource.applyError')}
           </p>
@@ -575,41 +685,69 @@ function SourceWorkspace({
         {applying.isSuccess && (
           <p
             role="status"
-            className="rounded-lg border border-emerald-200 bg-emerald-50 p-3 text-sm text-emerald-950"
+            className="rounded-xl border border-emerald-200 bg-emerald-50/80 p-3 text-sm font-medium text-emerald-950"
           >
             {t('cameraSource.running')}
           </p>
         )}
-        {result && host?.available && !hosts.isError && (
-          <figure className="max-w-3xl space-y-3 overflow-hidden rounded-xl border border-slate-200 bg-slate-50 p-3">
-            <figcaption className="flex flex-wrap items-center justify-between gap-2 text-sm font-semibold text-slate-900">
-              <span>{t('cameraSource.tested')}</span>
-              <span className="text-xs">
-                {t(result.sourceKind === 'REPLAY' ? 'cameraSource.replay' : 'cameraSource.live')}
+        {activeResult && (
+          <figure className="max-w-3xl space-y-3 overflow-hidden rounded-xl border border-slate-200 bg-slate-50/50 p-4">
+            <figcaption className="flex flex-wrap items-center justify-between gap-2">
+              <span className="text-sm font-semibold text-slate-950">
+                {t('cameraSource.tested')}
+              </span>
+              <span className="flex flex-wrap items-center gap-3">
+                {!isExpired && (
+                  <span className="text-xs font-medium tabular-nums text-slate-600">
+                    {t('cameraSource.liveExpiresIn', { seconds: remainingSeconds })}
+                  </span>
+                )}
+                <span
+                  className={`inline-flex items-center gap-1.5 text-sm font-semibold ${
+                    isExpired
+                      ? 'text-rose-800'
+                      : activeResult.sourceKind === 'REPLAY'
+                        ? 'text-amber-900'
+                        : 'text-emerald-800'
+                  }`}
+                >
+                  <span
+                    aria-hidden="true"
+                    className={`h-2 w-2 rounded-full ${
+                      isExpired
+                        ? 'bg-rose-600'
+                        : activeResult.sourceKind === 'REPLAY'
+                          ? 'bg-amber-600'
+                          : 'bg-emerald-600'
+                    }`}
+                  />
+                  {t(activeResult.sourceKind === 'REPLAY' ? 'cameraSource.replay' : 'cameraSource.live')}
+                </span>
               </span>
             </figcaption>
             <img
-              src={result.frame.imageDataUrl}
+              src={activeResult.frame.imageDataUrl}
               alt={t('cameraSource.preview', { camera: camera.name })}
-              width={result.frame.width}
-              height={result.frame.height}
+              width={activeResult.frame.width}
+              height={activeResult.frame.height}
               className="max-h-96 w-full rounded-lg bg-slate-950 object-contain"
             />
-            <p className="text-sm text-slate-700">
-              {t(
-                now >= Date.parse(result.expiresAt)
-                  ? 'cameraSource.expired'
-                  : 'cameraSource.notApplied',
-              )}
+            <p className="text-sm leading-relaxed text-slate-700">
+              {t(isExpired ? 'cameraSource.expired' : 'cameraSource.notApplied')}
             </p>
+            {activeResult.sourceKind === 'REPLAY' && (
+              <p className="rounded-xl border border-amber-200 bg-amber-50/70 px-3 py-2 text-sm text-amber-950">
+                {t('cameraSource.replayNoLiveApply')}
+              </p>
+            )}
             {caps?.applySupported &&
               canWrite &&
-              result.sourceKind === 'LIVE' &&
+              activeResult.sourceKind === 'LIVE' &&
               !applying.isSuccess && (
                 <button
                   type="button"
                   className={CAMERA_BUTTON_STYLES.primary}
-                  disabled={blocked || applying.isError || now >= Date.parse(result.expiresAt)}
+                  disabled={blocked || applying.isError || isExpired}
                   onClick={() => applying.mutate()}
                 >
                   {t(applying.isPending ? 'cameraSource.applying' : 'cameraSource.apply')}
@@ -617,7 +755,7 @@ function SourceWorkspace({
               )}
           </figure>
         )}
-        <p className="border-t border-slate-100 pt-3 text-xs leading-relaxed text-slate-600">
+        <p className="border-t border-slate-200 pt-3 text-sm leading-relaxed text-slate-600">
           {t('cameraSource.next')}
         </p>
       </div>

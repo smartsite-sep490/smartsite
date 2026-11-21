@@ -25,8 +25,7 @@ import { useCameraSetupWorkspace } from './useCameraSetupWorkspace';
 registerZonePpeDialogCopy();
 
 const button = CAMERA_BUTTON_STYLES.secondary;
-const surface =
-  'min-w-0 rounded-2xl border border-slate-200/90 bg-white px-4 py-3.5 shadow-xs sm:px-5 sm:py-4';
+const surface = 'min-w-0 rounded-xl border border-slate-200 bg-white px-4 py-3 sm:px-5';
 export type CameraSetupViewProps = { apiUrl: string; sharedSession: SharedSession | null };
 
 export function CameraSetupView({ apiUrl, sharedSession }: CameraSetupViewProps) {
@@ -320,7 +319,7 @@ function SetupWorkspace({ apiUrl, session }: { apiUrl: string; session: SharedSe
         setPendingInlineExit({ kind: 'navigate', to: href });
       }}
     >
-      <header className="flex flex-wrap items-center justify-between gap-4 border-b border-slate-200/80 pb-4">
+      <header className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-200/80 pb-3">
         <div className="min-w-0 space-y-1">
           <h1 className="text-2xl sm:text-[26px] font-bold tracking-tight text-slate-950">
             {t('cameraSetup.title')}
@@ -398,20 +397,20 @@ function SetupWorkspace({ apiUrl, session }: { apiUrl: string; session: SharedSe
           )}
         </div>
         {sites.isPending && (
-          <p role="status" className="mt-3 text-xs text-slate-500">
+          <p role="status" className="mt-3 text-sm text-slate-600">
             {t('cameraSetup.loading')}
           </p>
         )}
         {errorNotice(sites)}
         {sites.settledEmpty && (
-          <p role="status" className="mt-3 text-xs text-slate-500">
+          <p role="status" className="mt-3 text-sm text-slate-600">
             {t('cameraSetup.noSites')}
           </p>
         )}
         {Boolean(
           requestedSite && !site && !sites.isPending && !sites.baseError && sites.rows.length > 0,
         ) && (
-          <p role="status" className="mt-3 text-xs text-slate-600">
+          <p role="status" className="mt-3 text-sm text-slate-700">
             {t('cameraSetup.linkedSelection')}
           </p>
         )}
@@ -587,7 +586,7 @@ function InlineRegionSetupStage({
       ref={stageRef}
       data-testid="camera-setup-inline-region-stage"
       aria-label={t('regionSetup.title')}
-      className="min-w-0 rounded-2xl border border-slate-300 bg-white p-3 sm:p-5 shadow-xs space-y-4"
+      className="min-w-0 rounded-xl border border-slate-200 bg-white p-4 sm:p-5 space-y-4"
     >
       <div className="flex items-start justify-between gap-3 border-b border-slate-200/80 pb-3.5 min-w-0">
         <div className="flex items-start gap-2.5 min-w-0">
