@@ -190,15 +190,16 @@ export function SafetyIdentificationHistorySection({
                             ? 'info'
                             : 'warning'
                     }
+                    className="text-xs! font-medium! normal-case! tracking-normal!"
                   >
                     {copy.detail.historyKinds[entry.kind]}
                   </Badge>
-                  <span className="text-[11px] text-slate-500">
+                  <span className="text-xs text-slate-500 tabular-nums">
                     {formatIdentificationDateTime(entry.recordedAt)}
                   </span>
                 </div>
 
-                <p className="text-xs text-[#071A2B] whitespace-pre-wrap break-words leading-relaxed">
+                <p className="text-xs text-slate-900 whitespace-pre-wrap break-words leading-relaxed">
                   {entry.reason}
                 </p>
 
@@ -208,12 +209,15 @@ export function SafetyIdentificationHistorySection({
                       <span className="font-semibold text-slate-700">
                         {copy.detail.historyProposalLabel}:
                       </span>
-                      <Badge variant={outcomeBadgeVariant(entry.proposal.outcome)}>
+                      <Badge
+                        variant={outcomeBadgeVariant(entry.proposal.outcome)}
+                        className="text-xs! font-medium! normal-case! tracking-normal!"
+                      >
                         {copy.outcomes[entry.proposal.outcome]}
                       </Badge>
                     </div>
                     {(entry.proposal.workerId || entry.proposal.contractorId) && (
-                      <p className="text-[11px] text-slate-600 break-words">
+                      <p className="text-xs text-slate-600 break-words">
                         {entry.proposal.workerId
                           ? `${copy.detail.proposalWorkerLabel}: ${resolveWorkerLabel(entry.proposal.workerId)}`
                           : ''}
@@ -226,7 +230,7 @@ export function SafetyIdentificationHistorySection({
                   </div>
                 )}
 
-                <details className="text-[11px] text-slate-500">
+                <details className="text-xs text-slate-600">
                   <summary className="cursor-pointer font-semibold text-slate-600 select-none">
                     {copy.detail.technicalDetailsLabel}
                   </summary>

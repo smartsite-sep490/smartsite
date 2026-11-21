@@ -177,21 +177,21 @@ export function SafetyOverviewView(
     });
   const current = detail.data;
   const overviewFieldClass =
-    'mt-1 block h-10 w-full min-w-0 rounded-xl border border-slate-300 bg-white px-3 text-sm font-medium text-slate-900 shadow-2xs transition-colors hover:border-slate-400 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-slate-900';
+    'mt-1 block h-9 w-full min-w-0 rounded-lg border border-slate-200 bg-white px-2.5 text-sm font-medium text-slate-900 transition-colors hover:border-slate-300 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-slate-900';
   return (
-    <div className="space-y-3.5 min-w-0">
-      <div className="space-y-3 rounded-2xl border border-slate-200/90 bg-white p-4 shadow-2xs sm:px-5">
+    <div className="space-y-3 min-w-0">
+      <div className="space-y-2.5 rounded-xl border border-slate-200 bg-white p-4 sm:px-5">
         <div className="flex flex-wrap items-center justify-between gap-2.5">
-          <div>
-            <h2 className="text-lg font-bold tracking-tight text-slate-950">
+          <div className="min-w-[min(100%,18rem)] flex-1">
+            <h2 className="text-base sm:text-lg font-semibold tracking-tight text-slate-950">
               {tr('safety_workspace.safety_overview')}
             </h2>
-            <p className="text-xs sm:text-[13px] text-slate-600">
+            <p className="text-xs text-slate-600">
               {tr('safety_workspace.planned_teams_work_preparation_and_related_alerts')}
             </p>
           </div>
           <button
-            className="inline-flex h-10 items-center justify-center rounded-xl border border-slate-300 bg-white px-3.5 text-sm font-semibold text-slate-900 shadow-2xs transition-colors hover:bg-slate-50"
+            className="inline-flex h-9 items-center justify-center rounded-lg border border-slate-200 bg-white px-3 text-xs sm:text-sm font-semibold text-slate-800 transition-colors hover:border-slate-300 hover:bg-slate-50 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-slate-900"
             onClick={() => {
               void query.refetch();
               if (mode === 'week') void week.refetch();
@@ -205,16 +205,16 @@ export function SafetyOverviewView(
           </button>
         </div>
 
-        <div className="flex flex-wrap items-end gap-3 border-t border-slate-100 pt-3">
+        <div className="flex flex-wrap items-end gap-2.5 border-t border-slate-100 pt-2.5">
           <div
-            className="flex items-center gap-1 rounded-xl border border-slate-200/90 bg-slate-100/90 p-1"
+            className="flex items-center gap-0.5 rounded-lg border border-slate-200/80 bg-slate-100/80 p-0.5"
             aria-label={tr('safety_workspace.overview_period')}
           >
             <button
               className={
-                'inline-flex h-8 items-center justify-center rounded-lg px-3 text-sm font-semibold transition-colors ' +
+                'inline-flex h-8 items-center justify-center rounded-md px-3 text-xs sm:text-sm font-semibold transition-colors ' +
                 (mode === 'day'
-                  ? 'bg-[#0F172A] text-white shadow-2xs'
+                  ? 'bg-[#0F172A] text-white'
                   : 'text-slate-700 hover:bg-white hover:text-slate-950')
               }
               aria-pressed={mode === 'day'}
@@ -227,9 +227,9 @@ export function SafetyOverviewView(
             </button>
             <button
               className={
-                'inline-flex h-8 items-center justify-center rounded-lg px-3 text-sm font-semibold transition-colors ' +
+                'inline-flex h-8 items-center justify-center rounded-md px-3 text-xs sm:text-sm font-semibold transition-colors ' +
                 (mode === 'week'
-                  ? 'bg-[#0F172A] text-white shadow-2xs'
+                  ? 'bg-[#0F172A] text-white'
                   : 'text-slate-700 hover:bg-white hover:text-slate-950')
               }
               aria-pressed={mode === 'week'}
@@ -241,7 +241,7 @@ export function SafetyOverviewView(
               {tr('labels.WEEK')}
             </button>
           </div>
-          <label className="text-xs font-semibold text-slate-700">
+          <label className="text-xs font-medium text-slate-600">
             {tr('common.work_date')}
             <input
               className={overviewFieldClass}
@@ -254,12 +254,12 @@ export function SafetyOverviewView(
             />
           </label>
           <button
-            className="inline-flex h-10 items-center justify-center rounded-xl border border-slate-300 bg-white px-3.5 text-sm font-semibold text-slate-800 transition-colors hover:bg-slate-50"
+            className="inline-flex h-9 items-center justify-center rounded-lg border border-slate-200 bg-white px-3 text-xs sm:text-sm font-semibold text-slate-800 transition-colors hover:border-slate-300 hover:bg-slate-50"
             onClick={() => changeDay(localDay())}
           >
             {tr('calendar.today')}
           </button>
-          <label className="min-w-0 w-full sm:w-52 text-xs font-semibold text-slate-700">
+          <label className="min-w-0 w-full sm:w-52 text-xs font-medium text-slate-600">
             {tr('common.contractor')}
             <select
               className={overviewFieldClass}
@@ -278,7 +278,7 @@ export function SafetyOverviewView(
               ))}
             </select>
           </label>
-          <label className="min-w-0 w-full sm:w-52 text-xs font-semibold text-slate-700">
+          <label className="min-w-0 w-full sm:w-52 text-xs font-medium text-slate-600">
             {tr('labels.TEAM')}
             <select
               className={overviewFieldClass}
@@ -298,13 +298,13 @@ export function SafetyOverviewView(
           </label>
         </div>
 
-        <div className="flex flex-wrap items-center justify-between gap-2 border-t border-slate-100 pt-2.5 text-xs text-slate-500">
+        <div className="flex flex-wrap items-center justify-between gap-2 border-t border-slate-100 pt-2 text-xs text-slate-600">
           <span>
             {tr('safety_workspace.timezone_value1_scheduled_does_not_mean_present', {
               value1: timezone,
             })}
           </span>
-          <span className="tabular-nums">
+          <span className="tabular-nums text-slate-500">
             {tr('safety_workspace.value1_refreshes_every_30_seconds_while_visible', {
               value1: query.data?.updatedAt
                 ? tr('safety_workspace.updated_value1', { value1: date(query.data.updatedAt) })
@@ -389,7 +389,7 @@ export function SafetyOverviewView(
                             })}
                           </span>
                           {d.workWindows.map((w, i) => (
-                            <span className="block text-[10px]" key={i}>
+                            <span className="block text-xs tabular-nums text-slate-600" key={i}>
                               {windowLabel(w.startsAt, w.endsAt)}
                             </span>
                           ))}
@@ -482,8 +482,8 @@ export function SafetyOverviewView(
                     <p
                       className={
                         t.attentionAlertCount
-                          ? 'text-sm font-semibold text-[var(--accent)]'
-                          : 'text-xs'
+                          ? 'text-xs font-semibold text-amber-800 tabular-nums'
+                          : 'text-xs text-slate-600 tabular-nums'
                       }
                     >
                       {tr('safety_workspace.related_alerts_value1', {
@@ -679,8 +679,10 @@ export function SafetyOverviewView(
             </>
           )}
           {!selectedId && (
-            <div className="rounded-2xl border border-dashed border-slate-200 bg-slate-50/70 p-6 text-sm text-slate-600">
-              <p>{tr('safety_workspace.select_a_team_to_see_its_work_context')}</p>
+            <div className="rounded-xl border border-slate-200 bg-white p-5 text-sm text-slate-600">
+              <p className="text-xs leading-relaxed text-slate-600">
+                {tr('safety_workspace.select_a_team_to_see_its_work_context')}
+              </p>
             </div>
           )}
         </section>
@@ -719,7 +721,7 @@ function ChecklistSummary({
   return (
     <div className="mt-2 space-y-1 text-xs" aria-label={tr('safety_workspace.checklist_summary')}>
       {value.noChecklistAssigned && (
-        <p className="font-semibold text-[var(--accent)]">
+        <p className="font-semibold text-amber-800">
           {tr('safety_workspace.no_checklist_assigned')}
         </p>
       )}
@@ -730,7 +732,7 @@ function ChecklistSummary({
         <p>{tr('safety_workspace.not_submitted_value1', { value1: value.notSubmitted })}</p>
       )}
       {value.needsUpdate > 0 && (
-        <p className="font-semibold text-[var(--accent)]">
+        <p className="font-semibold text-amber-800">
           {tr('safety_workspace.needs_update_value1', { value1: value.needsUpdate })}
         </p>
       )}
@@ -738,7 +740,7 @@ function ChecklistSummary({
         <p>{tr('safety_workspace.awaiting_review_value1', { value1: value.awaitingReview })}</p>
       )}
       {value.recordedWithFindings > 0 && (
-        <p className="font-semibold text-[var(--accent)]">
+        <p className="font-semibold text-amber-800">
           {tr('safety_workspace.recorded_with_findings_value1', {
             value1: value.recordedWithFindings,
           })}
@@ -752,7 +754,7 @@ function ChecklistSummary({
         </p>
       )}
       {!!value.pastStartWithoutReport && (
-        <p className="text-[var(--accent)]">
+        <p className="font-medium text-amber-800">
           {tr('safety_workspace.past_planned_start_no_report_value1', {
             value1: value.pastStartWithoutReport,
           })}
@@ -794,7 +796,7 @@ function ChecklistSummary({
         </p>
       )}
       {value.pastStartWithoutReport === undefined && value.pastPlannedStart > 0 && (
-        <p className="font-semibold text-[var(--accent)]">
+        <p className="font-semibold text-amber-800">
           {tr('safety_workspace.past_planned_start_needs_attention_value1', {
             value1: value.pastPlannedStart,
           })}
