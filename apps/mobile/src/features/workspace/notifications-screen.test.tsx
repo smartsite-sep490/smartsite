@@ -4,6 +4,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { SmartSiteManagementClient } from '@smartsite/api-client';
 import type { useWorkspace } from './workspace-context';
 import { NotificationsScreen } from './qr-notifications';
+import { translate as t } from '../../i18n';
 
 vi.mock('./workspace-context', () => ({ useWorkspace: () => workspace }));
 let workspace: ReturnType<typeof useWorkspace>;
@@ -18,6 +19,7 @@ afterEach(async () => {
 
 describe('NotificationsScreen', () => {
   it('renders modern notification items with unread indicators and compact actions', async () => {
+    const navigate = vi.fn();
     const client = new SmartSiteManagementClient('https://api.example.test');
     vi.spyOn(client, 'listNotifications').mockResolvedValue({
       items: [
@@ -80,7 +82,7 @@ describe('NotificationsScreen', () => {
     await act(async () => {
       root = create(
         <QueryClientProvider client={cache}>
-          <NotificationsScreen navigate={() => {}} onBack={() => {}} />
+          <NotificationsScreen navigate={navigate} onBack={() => {}} />
         </QueryClientProvider>,
       );
     });
@@ -116,6 +118,19 @@ describe('NotificationsScreen', () => {
     });
 
     expect(markReadSpy).toHaveBeenCalledWith('token', 'n-1');
+    const notification = root.root.findAll(
+      (node) =>
+        String(node.type) === 'Pressable' &&
+        node.props.accessibilityLabel === t('notifications.SCHEDULE_CHANGED'),
+    )[0]!;
+    await act(async () => notification.props.onPress());
+    const openTarget = root.root.findAll(
+      (node) =>
+        String(node.type) === 'Pressable' &&
+        node.props.accessibilityLabel === t('notifications.viewTarget'),
+    )[0]!;
+    await act(async () => openTarget.props.onPress());
+    expect(navigate).toHaveBeenCalledWith({ route: 'schedule', workDate: '2026-11-20' });
 
     const deleteBtn = buttons.find(
       (b) =>
@@ -153,9 +168,7 @@ describe('NotificationsScreen', () => {
       unreadCount: 1,
     });
 
-    const deleteSpy = vi
-      .spyOn(client, 'deleteNotification')
-      .mockResolvedValue({ id: 'n-swipe-1' });
+    const deleteSpy = vi.spyOn(client, 'deleteNotification').mockResolvedValue({ id: 'n-swipe-1' });
 
     workspace = {
       client,
@@ -207,10 +220,7 @@ describe('NotificationsScreen', () => {
     const gestureHandler = animatedViews[0]!;
 
     // Verify it claims rightward drag (dx > 10 and |dx| > |dy|)
-    const shouldClaim = gestureHandler.props.onMoveShouldSetPanResponder(
-      {},
-      { dx: 45, dy: 5 },
-    );
+    const shouldClaim = gestureHandler.props.onMoveShouldSetPanResponder({}, { dx: 45, dy: 5 });
     expect(shouldClaim).toBe(true);
 
     // Verify it ignores vertical scrolling (|dy| > |dx|)

@@ -1,5 +1,6 @@
 import { useState } from 'react';
-import { StyleSheet, Text, View } from 'react-native';
+import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { IconChevronRight } from '../../components/common/Icons';
 import { useTranslation, uiLanguage } from '../../i18n';
 import { colors } from '../../theme/colors';
 import { useWorkspace } from '../workspace/workspace-context';
@@ -8,9 +9,21 @@ import { RequestSheet } from '../shared/request-sheet';
 import { useCommand } from '../shared/data';
 import { useEmailCooldown } from './use-email-cooldown';
 
-export function AccountEmailCard() {
+export function AccountEmailCard({ settingsRow = false }: { settingsRow?: boolean }) {
   const { t } = useTranslation();
   const { client, token, user } = useWorkspace();
+  const compact = settingsRow;
+  const verified = !!user.email && !!user.emailVerifiedAt;
+  const statusKey = verified
+    ? 'accountEmail.verified'
+    : user.email
+      ? 'accountEmail.notVerified'
+      : 'accountEmail.notAddedShort';
+  const actionKey = !user.email
+    ? 'accountEmail.addEmail'
+    : verified
+      ? 'accountEmail.changeEmail'
+      : 'accountEmail.verifyAction';
   const [mode, setMode] = useState<'VERIFY' | 'CHANGE' | null>(null);
   const [email, setEmail] = useState(''),
     [currentPassword, setCurrentPassword] = useState(''),
@@ -27,28 +40,65 @@ export function AccountEmailCard() {
     setMode(next);
   };
   return (
-    <View style={styles.card}>
-      <Text style={styles.title}>{t('accountEmail.title')}</Text>
-      <Text style={styles.value}>{user.email ?? t('accountEmail.notAdded')}</Text>
-      {user.email && (
-        <Text style={[styles.caption, user.emailVerifiedAt ? styles.verified : styles.pending]}>
-          {t(user.emailVerifiedAt ? 'accountEmail.verified' : 'accountEmail.notVerified')}
-        </Text>
+    <View style={settingsRow ? undefined : styles.card}>
+      {compact ? (
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel={t(actionKey)}
+          accessibilityHint={`${user.email ?? t('accountEmail.notAdded')}, ${t(statusKey)}`}
+          onPress={() => open(user.email && !verified ? 'VERIFY' : 'CHANGE')}
+          style={({ pressed }) => [styles.settingsRow, pressed && { opacity: 0.7 }]}
+        >
+          <View style={styles.emailIcon}>
+            <Text style={styles.atSign}>@</Text>
+          </View>
+          <View style={styles.rowCopy}>
+            <Text numberOfLines={1} style={styles.rowTitle}>
+              {t('accountEmail.title')}
+            </Text>
+            <Text numberOfLines={1} style={styles.rowSubtitle}>
+              {user.email ?? t('accountEmail.addEmail')}
+            </Text>
+          </View>
+          <View style={[styles.statusBadge, verified ? styles.verifiedBadge : styles.pendingBadge]}>
+            <Text
+              numberOfLines={1}
+              style={[styles.statusLabel, { color: verified ? '#065F46' : '#C2410C' }]}
+            >
+              {t(statusKey)}
+            </Text>
+          </View>
+          <IconChevronRight size={16} color="#CBD5E1" />
+        </Pressable>
+      ) : (
+        <View style={styles.body}>
+          <Text style={styles.title}>{t('accountEmail.title')}</Text>
+          <Text style={styles.value}>{user.email ?? t('accountEmail.notAdded')}</Text>
+          {user.email && (
+            <Text style={[styles.caption, user.emailVerifiedAt ? styles.verified : styles.pending]}>
+              {t(user.emailVerifiedAt ? 'accountEmail.verified' : 'accountEmail.notVerified')}
+            </Text>
+          )}
+          <Text style={styles.caption}>{t('accountEmail.profileHint')}</Text>
+          {!!notice && !mode && (
+            <Text accessibilityLiveRegion="polite" style={styles.verified}>
+              {notice}
+            </Text>
+          )}
+          {user.email && !user.emailVerifiedAt && (
+            <Button
+              secondary
+              label={t('accountEmail.verifyAction')}
+              onPress={() => open('VERIFY')}
+            />
+          )}
+          <Button
+            secondary
+            label={t(user.email ? 'accountEmail.changeEmail' : 'accountEmail.addEmail')}
+            onPress={() => open('CHANGE')}
+          />
+        </View>
       )}
-      <Text style={styles.caption}>{t('accountEmail.profileHint')}</Text>
-      {!!notice && !mode && (
-        <Text accessibilityLiveRegion="polite" style={styles.verified}>
-          {notice}
-        </Text>
-      )}
-      {user.email && !user.emailVerifiedAt && (
-        <Button secondary label={t('accountEmail.verifyAction')} onPress={() => open('VERIFY')} />
-      )}
-      <Button
-        secondary
-        label={t(user.email ? 'accountEmail.changeEmail' : 'accountEmail.addEmail')}
-        onPress={() => open('CHANGE')}
-      />
       {mode && (
         <RequestSheet
           visible
@@ -157,6 +207,12 @@ export function AccountEmailCard() {
                   })
                 }
               />
+              <Button
+                secondary
+                label={t('accountEmail.changeEmail')}
+                disabled={command.isPending}
+                onPress={() => open('CHANGE')}
+              />
             </>
           )}
         </RequestSheet>
@@ -165,6 +221,36 @@ export function AccountEmailCard() {
   );
 }
 const styles = StyleSheet.create({
+  settingsRow: {
+    minHeight: 64,
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 16,
+    paddingVertical: 13,
+  },
+  emailIcon: {
+    width: 36,
+    height: 36,
+    borderRadius: 12,
+    backgroundColor: '#EFF6FF',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginRight: 14,
+  },
+  atSign: { color: '#2563EB', fontSize: 20, fontWeight: '600' },
+  rowCopy: { flex: 1, minWidth: 0, gap: 3, marginRight: 8 },
+  rowTitle: { fontSize: 14.5, fontWeight: '600', color: '#0F1E36' },
+  rowSubtitle: { fontSize: 12, color: colors.textMuted },
+  statusBadge: {
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 8,
+    marginRight: 8,
+  },
+  verifiedBadge: { backgroundColor: '#EDFAF2' },
+  pendingBadge: { backgroundColor: '#FFF7ED' },
+  statusLabel: { fontSize: 11, fontWeight: '700' },
+  body: { gap: 10 },
   card: {
     padding: 16,
     borderRadius: 18,
