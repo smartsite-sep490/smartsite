@@ -36,6 +36,7 @@ export interface ZonePpeSetupPanelProps {
   embedded?: boolean;
   tourUserId?: string | null;
   onDraftStateChange?: (state: { dirty: boolean; saving: boolean }) => void;
+  onUnauthorized?: () => void;
 }
 
 export interface ZonePpeSetupPanelInternalProps extends ZonePpeSetupPanelProps {

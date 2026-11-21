@@ -9,6 +9,7 @@ import { SAFETY_NAMESPACE } from '../../i18n/runtime';
 const CONFIRMATION_KEYS = {
   unconfirmed: 'regionSetup.list.confirmation.unconfirmed',
   manuallyConfirmed: 'regionSetup.list.confirmation.manuallyConfirmed',
+  viewMismatch: 'regionSetup.list.confirmation.viewMismatch',
   needsRevalidation: 'regionSetup.list.confirmation.needsRevalidation',
   unavailable: 'regionSetup.list.confirmation.unavailable',
   detailsSummary: 'regionSetup.list.confirmation.detailsSummary',
@@ -23,6 +24,8 @@ type ConfirmationCatalogKey = (typeof CONFIRMATION_KEYS)[keyof typeof CONFIRMATI
 const en: Record<ConfirmationCatalogKey, string> = {
   [CONFIRMATION_KEYS.unconfirmed]: 'no confirmation recorded',
   [CONFIRMATION_KEYS.manuallyConfirmed]: 'Region confirmed on image',
+  [CONFIRMATION_KEYS.viewMismatch]:
+    'Confirmed on view v{confirmedView} · revalidate on v{currentView}',
   [CONFIRMATION_KEYS.needsRevalidation]: 'review required after view changed',
   [CONFIRMATION_KEYS.unavailable]: 'confirmation status unavailable',
   [CONFIRMATION_KEYS.detailsSummary]: 'Confirmation details',
@@ -36,6 +39,8 @@ const en: Record<ConfirmationCatalogKey, string> = {
 const vi: Record<ConfirmationCatalogKey, string> = {
   [CONFIRMATION_KEYS.unconfirmed]: 'chưa ghi nhận xác nhận',
   [CONFIRMATION_KEYS.manuallyConfirmed]: 'Đã xác nhận vùng trên ảnh',
+  [CONFIRMATION_KEYS.viewMismatch]:
+    'Đã xác nhận ở v{confirmedView} · cần xác nhận lại trên v{currentView}',
   [CONFIRMATION_KEYS.needsRevalidation]: 'cần kiểm tra lại sau khi khung nhìn thay đổi',
   [CONFIRMATION_KEYS.unavailable]: 'trạng thái xác nhận không khả dụng',
   [CONFIRMATION_KEYS.detailsSummary]: 'Chi tiết xác nhận',
@@ -77,10 +82,12 @@ function evaluateGeometryConfirmation(raw: unknown): EvaluatedConfirmation {
 
 export interface RegionGeometryConfirmationStatusProps {
   readonly geometryConfirmation?: unknown;
+  readonly currentViewRevision?: number | null;
 }
 
 export function RegionGeometryConfirmationStatus({
   geometryConfirmation,
+  currentViewRevision = null,
 }: RegionGeometryConfirmationStatusProps) {
   ensureRegionGeometryConfirmationCatalog();
   const { t } = useTranslation(SAFETY_NAMESPACE);
@@ -91,41 +98,53 @@ export function RegionGeometryConfirmationStatus({
   ): string => t(key, params);
 
   const evaluated = evaluateGeometryConfirmation(geometryConfirmation);
+  const isViewMismatch =
+    evaluated.kind === 'MANUALLY_CONFIRMED' &&
+    typeof currentViewRevision === 'number' &&
+    evaluated.provenance.viewRevision !== currentViewRevision;
+  const confirmationState = isViewMismatch ? 'VIEW_MISMATCH' : evaluated.kind;
 
   const badgeConfig: {
-    readonly labelKey: ConfirmationCatalogKey;
+    readonly label: string;
     readonly className: string;
-  } =
-    evaluated.kind === 'MANUALLY_CONFIRMED'
+  } = isViewMismatch
+    ? {
+        label: tConfirmation(CONFIRMATION_KEYS.viewMismatch, {
+          confirmedView: evaluated.provenance.viewRevision,
+          currentView: currentViewRevision,
+        }),
+        className: 'border-amber-300 bg-amber-50 text-amber-900',
+      }
+    : evaluated.kind === 'MANUALLY_CONFIRMED'
       ? {
-          labelKey: CONFIRMATION_KEYS.manuallyConfirmed,
+          label: tConfirmation(CONFIRMATION_KEYS.manuallyConfirmed),
           className: 'border-emerald-200 bg-emerald-50 text-emerald-800',
         }
       : evaluated.kind === 'NEEDS_REVALIDATION'
         ? {
-            labelKey: CONFIRMATION_KEYS.needsRevalidation,
+            label: tConfirmation(CONFIRMATION_KEYS.needsRevalidation),
             className: 'border-amber-300 bg-amber-50 text-amber-900',
           }
         : evaluated.kind === 'INVALID'
           ? {
-              labelKey: CONFIRMATION_KEYS.unavailable,
+              label: tConfirmation(CONFIRMATION_KEYS.unavailable),
               className: 'border-rose-200 bg-rose-50 text-rose-800',
             }
           : {
-              labelKey: CONFIRMATION_KEYS.unconfirmed,
+              label: tConfirmation(CONFIRMATION_KEYS.unconfirmed),
               className: 'border-slate-200 bg-slate-100 text-slate-700',
             };
 
   return (
     <div
       data-testid="region-geometry-confirmation-status"
-      data-confirmation-state={evaluated.kind}
+      data-confirmation-state={confirmationState}
       className="min-w-0 inline-flex flex-wrap items-center gap-1.5"
     >
       <span
         className={`inline-flex max-w-full items-center rounded-full border px-2.5 py-0.5 text-[11px] font-semibold leading-snug break-words [overflow-wrap:anywhere] whitespace-normal ${badgeConfig.className}`}
       >
-        {tConfirmation(badgeConfig.labelKey)}
+        {badgeConfig.label}
       </span>
 
       {evaluated.provenance && (

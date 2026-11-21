@@ -1,6 +1,7 @@
 import { useLayoutEffect, useMemo, useState } from 'react';
 import { ApiError } from '@smartsite/api-client';
 import type { CameraResponse } from '@smartsite/contracts';
+import { parseRegionGeometryConfirmation } from '@smartsite/contracts/camera-region-geometry-confirmation';
 import {
   registerCameraRegionReferenceCatalog,
   type CameraRegionReferenceCatalogKey,
@@ -30,6 +31,28 @@ export interface EditingRegionScope {
   version: number;
   expectedConfigurationVersion: number;
   initialPoints: NormalizedPoint[];
+  needsViewRevalidation?: boolean;
+}
+
+export function doesRegionNeedViewRevalidation(
+  geometryConfirmation: unknown,
+  currentViewRevision?: number | null,
+): boolean {
+  if (geometryConfirmation === undefined) return false;
+  try {
+    const parsed = parseRegionGeometryConfirmation(geometryConfirmation);
+    if (parsed.status === 'NEEDS_REVALIDATION') return true;
+    if (
+      parsed.status === 'MANUALLY_CONFIRMED' &&
+      typeof currentViewRevision === 'number' &&
+      parsed.viewRevision !== currentViewRevision
+    ) {
+      return true;
+    }
+    return false;
+  } catch {
+    return false;
+  }
 }
 
 const CANONICAL_UUID_RE = /^[0-9a-f]{8}(-[0-9a-f]{4}){3}-[0-9a-f]{12}$/i;

@@ -4,11 +4,14 @@ import { useManagementClient } from '../../features/auth/auth-session';
 import { authErrorMessage } from '../../features/auth/auth-errors';
 import { localizedError, localizeMessage, userErrorMessage } from '../../i18n/messages';
 import { translate as tr } from '../../i18n';
+import { SAFETY_NAMESPACE } from '../../i18n/runtime';
 import { localizedLabel, localizedDetectionLabel } from '../../i18n/labels';
 import { useTranslation } from 'react-i18next';
 import { useRealtimePreview } from '../cameras/useRealtimePreview';
 import { RealtimePreviewCanvas } from '../cameras/RealtimePreviewCanvas';
 import React, { useCallback, useEffect, useMemo, useRef, useState, type FormEvent } from 'react';
+import './zone-monitor-catalog';
+import { Link, useInRouterContext } from 'react-router-dom';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { ApiError, type LoginResponse } from '@smartsite/api-client';
 import {
@@ -100,6 +103,7 @@ export function RestrictedZoneView({
   onSignOut,
 }: RestrictedZoneViewProps) {
   const { t } = useTranslation();
+  const { t: tSafety } = useTranslation(SAFETY_NAMESPACE);
 
   const client = useManagementClient(apiUrl);
   const queryClient = useQueryClient();
@@ -139,6 +143,37 @@ export function RestrictedZoneView({
   });
 
   const containerRef = useRef<HTMLDivElement>(null);
+  const zoneWorkspaceRef = useRef<HTMLDivElement>(null);
+  const inRouter = useInRouterContext();
+  const [isZoneFullscreen, setIsZoneFullscreen] = useState(false);
+
+  useEffect(() => {
+    const syncFullscreen = () => {
+      if (typeof document !== 'undefined' && zoneWorkspaceRef.current) {
+        setIsZoneFullscreen(document.fullscreenElement === zoneWorkspaceRef.current);
+      }
+    };
+    document.addEventListener('fullscreenchange', syncFullscreen);
+    return () => document.removeEventListener('fullscreenchange', syncFullscreen);
+  }, []);
+
+  const toggleZoneFullscreen = async () => {
+    const el = zoneWorkspaceRef.current;
+    if (!el) return;
+    try {
+      if (document.fullscreenElement === el && typeof document.exitFullscreen === 'function') {
+        await document.exitFullscreen();
+        setIsZoneFullscreen(false);
+      } else if (!document.fullscreenElement && typeof el.requestFullscreen === 'function') {
+        await el.requestFullscreen();
+        setIsZoneFullscreen(true);
+      } else {
+        setIsZoneFullscreen((prev) => !prev);
+      }
+    } catch {
+      setIsZoneFullscreen((prev) => !prev);
+    }
+  };
   const videoRef = useRef<HTMLVideoElement>(null);
   const [isPlaying, setIsPlaying] = useState(true);
   const [isMuted, setIsMuted] = useState(true);
@@ -764,6 +799,483 @@ export function RestrictedZoneView({
       time: isLive ? clockTime : testDetection.timecode,
     });
   };
+
+  const selectedSite = sites.data?.items.find((s) => s.id === selectedSiteId);
+  const canAccessCameraSetup = Boolean(
+    session?.user.roleAssignments.some(
+      ({ role, siteId: rSiteId }) =>
+        role === 'SITE_MANAGER' && (selectedSiteId ? rSiteId === selectedSiteId : rSiteId !== null),
+    ),
+  );
+  const activeRoleLabelKey = session?.user.roleAssignments.some(
+    ({ role, siteId: rSiteId }) =>
+      role === 'SITE_MANAGER' && (!selectedSiteId || rSiteId === selectedSiteId),
+  )
+    ? 'accounts.role.SITE_MANAGER'
+    : 'accounts.role.SAFETY_OFFICER';
+  const cameraSetupParams = new URLSearchParams();
+  if (selectedSiteId) cameraSetupParams.set('siteId', selectedSiteId);
+  if (selectedCameraId) cameraSetupParams.set('cameraId', selectedCameraId);
+  const cameraSetupHref =
+    cameraSetupParams.size > 0 ? `/camera-setup?${cameraSetupParams}` : '/camera-setup';
+
+  if (linkedMonitoring) {
+    return (
+      <div
+        ref={zoneWorkspaceRef}
+        data-testid="restricted-zone-fullwidth-workspace"
+        data-monitor-fullscreen={isZoneFullscreen ? 'true' : undefined}
+        className={
+          isZoneFullscreen
+            ? 'min-h-screen w-full min-w-0 space-y-3 bg-slate-950 p-3 sm:p-4 text-white'
+            : 'w-full min-w-0 space-y-3 pb-0 text-slate-900'
+        }
+      >
+        {!canRead ? (
+          <p
+            role="alert"
+            className="rounded-2xl border border-amber-300 bg-amber-50 p-4 text-sm font-medium text-amber-950"
+          >
+            {tr('auth.error.forbidden')}
+          </p>
+        ) : (
+          <>
+            <header
+              className={`flex flex-col gap-2.5 rounded-2xl border px-4 py-2.5 shadow-2xs sm:px-5 lg:flex-row lg:items-center lg:justify-between ${
+                isZoneFullscreen
+                  ? 'border-white/15 bg-slate-900 text-white'
+                  : 'border-slate-200/90 bg-white text-slate-950'
+              }`}
+            >
+              <div className="min-w-0 space-y-1">
+                <div className="flex flex-wrap items-center gap-2.5">
+                  <h1 className="text-2xl sm:text-[26px] font-bold tracking-tight">
+                    {tr('common.restricted_zone_monitoring')}
+                  </h1>
+                  {session &&
+                    (() => {
+                      const roleLabel = tr(activeRoleLabelKey);
+                      const displayName = session.user.displayName;
+                      const nameIncludesRole = displayName
+                        .toLowerCase()
+                        .includes(roleLabel.toLowerCase());
+                      return (
+                        <span
+                          className={`inline-flex items-center gap-1.5 rounded-lg border px-2.5 py-1 text-xs font-semibold ${
+                            isZoneFullscreen
+                              ? 'border-white/20 bg-white/10 text-slate-200'
+                              : 'border-slate-200 bg-slate-100 text-slate-700'
+                          }`}
+                        >
+                          <span>{displayName}</span>
+                          {!nameIncludesRole && (
+                            <>
+                              <span aria-hidden="true">·</span>
+                              <span>{roleLabel}</span>
+                            </>
+                          )}
+                        </span>
+                      );
+                    })()}
+                </div>
+                <p
+                  className={`text-xs sm:text-sm ${
+                    isZoneFullscreen ? 'text-slate-300' : 'text-slate-600'
+                  }`}
+                >
+                  {tr('common.identity')}: {tr('common.unknown')} ·{' '}
+                  {tr('common.backend_evaluation_required')}
+                </p>
+              </div>
+
+              <div className="flex flex-wrap items-center gap-2 lg:shrink-0 lg:justify-end">
+                {/* Camera setup and incidents in header only when fullscreen (inspector rail handles normal view) */}
+                {isZoneFullscreen &&
+                  canAccessCameraSetup &&
+                  (inRouter ? (
+                    <Link
+                      to={cameraSetupHref}
+                      className="inline-flex min-h-10 items-center justify-center rounded-xl border px-3.5 py-2 text-sm font-semibold transition-colors border-white/20 bg-white/10 text-white hover:bg-white/20"
+                    >
+                      {tr('shell.cameraSetup')}
+                    </Link>
+                  ) : (
+                    <a
+                      href={cameraSetupHref}
+                      className="inline-flex min-h-10 items-center justify-center rounded-xl border border-slate-300 bg-white px-3.5 py-2 text-sm font-semibold text-slate-800 shadow-2xs hover:bg-slate-50"
+                    >
+                      {tr('shell.cameraSetup')}
+                    </a>
+                  ))}
+                {isZoneFullscreen && onNavigate && (
+                  <button
+                    type="button"
+                    onClick={() =>
+                      onNavigate('incidents', {
+                        alertType: 'RESTRICTED_ZONE_INTRUSION',
+                        siteId: selectedSiteId || undefined,
+                      })
+                    }
+                    className={`inline-flex min-h-10 items-center justify-center rounded-xl px-4 py-2 text-sm font-semibold transition-colors cursor-pointer ${
+                      isZoneFullscreen
+                        ? 'bg-white text-slate-950 hover:bg-slate-100'
+                        : 'bg-[#0F172A] text-white shadow-2xs hover:bg-slate-800'
+                    }`}
+                  >
+                    {tr('shell.incidents')}
+                  </button>
+                )}
+                <button
+                  type="button"
+                  data-testid="zones-fullscreen-toggle"
+                  aria-pressed={isZoneFullscreen}
+                  onClick={() => void toggleZoneFullscreen()}
+                  className={`inline-flex min-h-10 items-center justify-center gap-1.5 rounded-xl border px-3.5 py-2 text-sm font-semibold transition-colors cursor-pointer ${
+                    isZoneFullscreen
+                      ? 'border-white/25 bg-white/15 text-white hover:bg-white/25'
+                      : 'border-slate-300 bg-white text-slate-800 shadow-2xs hover:bg-slate-50'
+                  }`}
+                >
+                  <IconMaximize className="h-4 w-4 shrink-0" />
+                  <span>{tr('common.fullscreen')}</span>
+                </button>
+              </div>
+            </header>
+
+            {/* 2-column VMS console: live video + inspector rail on xl, stacked below */}
+            <div
+              className={
+                isZoneFullscreen
+                  ? 'space-y-3'
+                  : 'grid grid-cols-1 gap-3.5 xl:grid-cols-[minmax(0,1fr)_340px] xl:items-start'
+              }
+            >
+              {/* Left: Live video stage — bounded to fit 1440×1000 & 1920×1080 viewport without vertical scroll */}
+              <div
+                className={
+                  isZoneFullscreen
+                    ? 'min-w-0'
+                    : 'min-w-0 [&_[data-testid=focused-camera-stage]]:lg:h-[clamp(18rem,calc(100dvh-25.5rem),40rem)]'
+                }
+              >
+                {session && selectedCamera ? (
+                  <FocusedCameraMedia
+                    key={JSON.stringify([sessionScope, selectedSiteId, selectedCameraId])}
+                    apiUrl={apiUrl}
+                    client={client}
+                    token={apiToken}
+                    sessionScope={sessionScope}
+                    siteId={selectedSiteId}
+                    siteCode={selectedSite?.code}
+                    siteName={selectedSite?.name}
+                    camera={selectedCamera}
+                    observationMode="zone"
+                    aiPaused={import.meta.env.VITE_AI_WORK_PAUSED === 'true'}
+                  />
+                ) : session && !sites.isPending && (!selectedSiteId || !cameras.isPending) ? (
+                  <p
+                    role="status"
+                    className="rounded-2xl border border-slate-200 bg-white p-6 text-center text-sm text-slate-600"
+                  >
+                    {tr('errors.cameraUnavailable')}
+                  </p>
+                ) : null}
+              </div>
+
+              {/* Right: Inspector Rail (340px on xl) */}
+              {!isZoneFullscreen && (
+                <aside
+                  aria-label={tSafety('zoneMonitor.inspectorRail.monitorStatus')}
+                  className="space-y-3"
+                >
+                  {/* Selectors card */}
+                  <section
+                    aria-label={tr('common.restricted_zone_monitoring')}
+                    className="rounded-2xl border border-slate-200/90 bg-white px-4 py-3 shadow-2xs text-slate-900 space-y-3"
+                  >
+                    <label className="block min-w-0 space-y-1 text-sm font-semibold">
+                      <span>{tr('common.site_fa7955')}</span>
+                      <select
+                        value={selectedSiteId}
+                        onChange={(e) => {
+                          const nextSiteId = e.target.value;
+                          activeScopeRef.current = {
+                            userId: session?.user.id ?? null,
+                            siteId: nextSiteId,
+                            cameraId: '',
+                            regionId: '',
+                          };
+                          clearTransientFeedback();
+                          setRequestedSiteId(nextSiteId);
+                          setRequestedCameraId('');
+                          setRequestedRegionId('');
+                        }}
+                        disabled={sites.isPending || !sites.data?.items.length}
+                        className="h-10 min-h-10 w-full min-w-0 truncate rounded-xl border border-slate-300 bg-white px-3 py-2 text-sm font-medium text-slate-900 shadow-2xs outline-none focus:border-slate-900 disabled:bg-slate-100 disabled:text-slate-500"
+                      >
+                        {!selectedSiteId && <option value="">{tr('common.unavailable')}</option>}
+                        {sites.data?.items.map((site) => (
+                          <option key={site.id} value={site.id}>
+                            {site.code} · {site.name}
+                          </option>
+                        ))}
+                      </select>
+                    </label>
+
+                    <label className="block min-w-0 space-y-1 text-sm font-semibold">
+                      <span>{tr('common.camera')}</span>
+                      <select
+                        value={selectedCameraId}
+                        onChange={(e) => {
+                          const nextCamId = e.target.value;
+                          activeScopeRef.current = {
+                            userId: session?.user.id ?? null,
+                            siteId: selectedSiteId,
+                            cameraId: nextCamId,
+                            regionId: '',
+                          };
+                          clearTransientFeedback();
+                          setRequestedCameraId(nextCamId);
+                          setRequestedRegionId('');
+                        }}
+                        disabled={cameras.isPending || !scopedCameras.length}
+                        className="h-10 min-h-10 w-full min-w-0 truncate rounded-xl border border-slate-300 bg-white px-3 py-2 text-sm font-medium text-slate-900 shadow-2xs outline-none focus:border-slate-900 disabled:bg-slate-100 disabled:text-slate-500"
+                      >
+                        {!selectedCameraId && (
+                          <option value="">{tr('common.select_camera')}</option>
+                        )}
+                        {scopedCameras.map((camera) => (
+                          <option key={camera.id} value={camera.id}>
+                            {camera.name} ({camera.code} · v{camera.configurationVersion})
+                          </option>
+                        ))}
+                      </select>
+                    </label>
+
+                    <label className="block min-w-0 space-y-1 text-sm font-semibold">
+                      <span>{tr('common.region_zone')}</span>
+                      <select
+                        value={selectedRegionId}
+                        onChange={(e) => {
+                          const nextRegId = e.target.value;
+                          activeScopeRef.current = {
+                            userId: session?.user.id ?? null,
+                            siteId: selectedSiteId,
+                            cameraId: selectedCameraId,
+                            regionId: nextRegId,
+                          };
+                          clearTransientFeedback();
+                          setRequestedRegionId(nextRegId);
+                        }}
+                        disabled={regions.isPending || selectableRegions.length === 0}
+                        className="h-10 min-h-10 w-full min-w-0 truncate rounded-xl border border-slate-300 bg-white px-3 py-2 text-sm font-medium text-slate-900 shadow-2xs outline-none focus:border-slate-900 disabled:bg-slate-100 disabled:text-slate-500"
+                      >
+                        {selectableRegions.length === 0 && (
+                          <option value="">{tr('common.no_resolved_zone')}</option>
+                        )}
+                        {selectableRegions.map((region, index) => (
+                          <option key={region.id} value={region.id}>
+                            {tSafety('zoneMonitor.inspectorRail.regionLabel', {
+                              index: index + 1,
+                              version: region.version,
+                              status: region.isActive
+                                ? tSafety('zoneMonitor.inspectorRail.regionActive')
+                                : tSafety('zoneMonitor.inspectorRail.regionInactive'),
+                            })}
+                          </option>
+                        ))}
+                      </select>
+                    </label>
+                  </section>
+
+                  {/* Synced status card */}
+                  <div className="rounded-2xl border border-slate-200/90 bg-white px-4 py-3 shadow-2xs">
+                    <div className="flex items-center gap-2">
+                      <span className="inline-flex items-center rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-1.5 text-xs font-semibold tabular-nums text-emerald-900">
+                        {tr('common.server_synced_vvalue', {
+                          value1: selectedCamera?.configurationVersion ?? 0,
+                        })}
+                      </span>
+                    </div>
+                  </div>
+
+                  {/* AI boundary note */}
+                  <div className="rounded-2xl border border-slate-200/90 bg-slate-50/90 px-4 py-3 text-xs text-slate-700 leading-relaxed">
+                    {tSafety('zoneMonitor.inspectorRail.aiBoundaryNote')}
+                  </div>
+
+                  {/* Action buttons */}
+                  <div className="space-y-2">
+                    {canAccessCameraSetup &&
+                      (inRouter ? (
+                        <Link
+                          to={cameraSetupHref}
+                          className="inline-flex w-full min-h-10 items-center justify-center rounded-xl border border-slate-300 bg-white px-3.5 py-2 text-sm font-semibold text-slate-800 shadow-2xs hover:bg-slate-50 transition-colors"
+                        >
+                          {tr('shell.cameraSetup')}
+                        </Link>
+                      ) : (
+                        <a
+                          href={cameraSetupHref}
+                          className="inline-flex w-full min-h-10 items-center justify-center rounded-xl border border-slate-300 bg-white px-3.5 py-2 text-sm font-semibold text-slate-800 shadow-2xs hover:bg-slate-50"
+                        >
+                          {tr('shell.cameraSetup')}
+                        </a>
+                      ))}
+                    {onNavigate && (
+                      <button
+                        type="button"
+                        onClick={() =>
+                          onNavigate('incidents', {
+                            alertType: 'RESTRICTED_ZONE_INTRUSION',
+                            siteId: selectedSiteId || undefined,
+                          })
+                        }
+                        className="inline-flex w-full min-h-10 items-center justify-center rounded-xl bg-[#0F172A] px-4 py-2 text-sm font-semibold text-white shadow-2xs hover:bg-slate-800 transition-colors cursor-pointer"
+                      >
+                        {tr('shell.incidents')}
+                      </button>
+                    )}
+                  </div>
+                </aside>
+              )}
+
+              {/* Fullscreen: selectors inline */}
+              {isZoneFullscreen && (
+                <>
+                  <section
+                    aria-label={tr('common.restricted_zone_monitoring')}
+                    className="rounded-2xl border border-white/15 bg-slate-900/95 px-4 py-3 shadow-2xs text-white"
+                  >
+                    <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-[minmax(0,1.2fr)_minmax(0,1.2fr)_minmax(0,1fr)_auto] lg:items-end">
+                      <label className="block min-w-0 space-y-1 text-sm font-semibold">
+                        <span>{tr('common.site_fa7955')}</span>
+                        <select
+                          value={selectedSiteId}
+                          onChange={(e) => {
+                            const nextSiteId = e.target.value;
+                            activeScopeRef.current = {
+                              userId: session?.user.id ?? null,
+                              siteId: nextSiteId,
+                              cameraId: '',
+                              regionId: '',
+                            };
+                            clearTransientFeedback();
+                            setRequestedSiteId(nextSiteId);
+                            setRequestedCameraId('');
+                            setRequestedRegionId('');
+                          }}
+                          disabled={sites.isPending || !sites.data?.items.length}
+                          className="h-10 min-h-10 w-full min-w-0 truncate rounded-xl border border-slate-300 bg-white px-3 py-2 text-sm font-medium text-slate-900 shadow-2xs outline-none focus:border-slate-900 disabled:bg-slate-100 disabled:text-slate-500"
+                        >
+                          {!selectedSiteId && <option value="">{tr('common.unavailable')}</option>}
+                          {sites.data?.items.map((site) => (
+                            <option key={site.id} value={site.id}>
+                              {site.code} · {site.name}
+                            </option>
+                          ))}
+                        </select>
+                      </label>
+                      <label className="block min-w-0 space-y-1 text-sm font-semibold">
+                        <span>{tr('common.camera')}</span>
+                        <select
+                          value={selectedCameraId}
+                          onChange={(e) => {
+                            const nextCamId = e.target.value;
+                            activeScopeRef.current = {
+                              userId: session?.user.id ?? null,
+                              siteId: selectedSiteId,
+                              cameraId: nextCamId,
+                              regionId: '',
+                            };
+                            clearTransientFeedback();
+                            setRequestedCameraId(nextCamId);
+                            setRequestedRegionId('');
+                          }}
+                          disabled={cameras.isPending || !scopedCameras.length}
+                          className="h-10 min-h-10 w-full min-w-0 truncate rounded-xl border border-slate-300 bg-white px-3 py-2 text-sm font-medium text-slate-900 shadow-2xs outline-none focus:border-slate-900 disabled:bg-slate-100 disabled:text-slate-500"
+                        >
+                          {!selectedCameraId && (
+                            <option value="">{tr('common.select_camera')}</option>
+                          )}
+                          {scopedCameras.map((camera) => (
+                            <option key={camera.id} value={camera.id}>
+                              {camera.name} ({camera.code} · v{camera.configurationVersion})
+                            </option>
+                          ))}
+                        </select>
+                      </label>
+                      <label className="block min-w-0 space-y-1 text-sm font-semibold">
+                        <span>{tr('common.region_zone')}</span>
+                        <select
+                          value={selectedRegionId}
+                          onChange={(e) => {
+                            const nextRegId = e.target.value;
+                            activeScopeRef.current = {
+                              userId: session?.user.id ?? null,
+                              siteId: selectedSiteId,
+                              cameraId: selectedCameraId,
+                              regionId: nextRegId,
+                            };
+                            clearTransientFeedback();
+                            setRequestedRegionId(nextRegId);
+                          }}
+                          disabled={regions.isPending || selectableRegions.length === 0}
+                          className="h-10 min-h-10 w-full min-w-0 truncate rounded-xl border border-slate-300 bg-white px-3 py-2 text-sm font-medium text-slate-900 shadow-2xs outline-none focus:border-slate-900 disabled:bg-slate-100 disabled:text-slate-500"
+                        >
+                          {selectableRegions.length === 0 && (
+                            <option value="">{tr('common.no_resolved_zone')}</option>
+                          )}
+                          {selectableRegions.map((region) => (
+                            <option key={region.id} value={region.id}>
+                              {tr('restricted_zone_view.region_value_vvalue_value', {
+                                value1: region.id.slice(0, 8),
+                                value2: region.version,
+                                value3: region.isActive ? tr('common.active_bdecc2') : '',
+                              })}
+                            </option>
+                          ))}
+                        </select>
+                      </label>
+                      <div className="flex min-h-10 items-center">
+                        <span className="inline-flex items-center rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-1.5 text-xs font-semibold tabular-nums text-emerald-900">
+                          {tr('common.server_synced_vvalue', {
+                            value1: selectedCamera?.configurationVersion ?? 0,
+                          })}
+                        </span>
+                      </div>
+                    </div>
+                  </section>
+                  {session && selectedCamera ? (
+                    <FocusedCameraMedia
+                      key={JSON.stringify([sessionScope, selectedSiteId, selectedCameraId])}
+                      apiUrl={apiUrl}
+                      client={client}
+                      token={apiToken}
+                      sessionScope={sessionScope}
+                      siteId={selectedSiteId}
+                      siteCode={selectedSite?.code}
+                      siteName={selectedSite?.name}
+                      camera={selectedCamera}
+                      observationMode="zone"
+                      aiPaused={import.meta.env.VITE_AI_WORK_PAUSED === 'true'}
+                    />
+                  ) : session && !sites.isPending && (!selectedSiteId || !cameras.isPending) ? (
+                    <p
+                      role="status"
+                      className="rounded-2xl border border-slate-200 bg-white p-6 text-center text-sm text-slate-600"
+                    >
+                      {tr('errors.cameraUnavailable')}
+                    </p>
+                  ) : null}
+                </>
+              )}
+            </div>
+          </>
+        )}
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-6 max-w-[1202px] mx-auto text-[#182232] pb-10">

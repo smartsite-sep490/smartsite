@@ -15,6 +15,8 @@ export interface IdentificationCopy {
     assigneeLoading: string;
     assigneeUnavailable: string;
     evidenceNotice: string;
+    evidenceOptionalNotice: string;
+    evidenceApprovedNotice: string;
     reasonLabel: string;
     reasonPlaceholder: string;
     reasonHint: string;
@@ -62,6 +64,9 @@ export const IDENTIFICATION_COPY: Record<'vi' | 'en', IdentificationCopy> = {
       assigneeLoading: 'Đang tải Quản lý công trường…',
       assigneeUnavailable: 'Chưa có Quản lý công trường phù hợp.',
       evidenceNotice: 'Thông tin hồ sơ — chưa có ảnh riêng cho yêu cầu này.',
+      evidenceOptionalNotice:
+        'Chưa đính kèm ảnh — nếu gửi ngay sẽ chỉ chia sẻ thông tin hồ sơ (chọn, xem trước và tích xác nhận ảnh cắt ở trên nếu cần gửi kèm ảnh).',
+      evidenceApprovedNotice: 'Đã xác nhận đính kèm 1 ảnh cắt đã che vùng cho Quản lý công trường.',
       reasonLabel: 'Lý do yêu cầu',
       reasonPlaceholder: 'Nêu thông tin cần hỗ trợ xác minh…',
       reasonHint: 'Tối đa 2.000 ký tự.',
@@ -124,6 +129,10 @@ export const IDENTIFICATION_COPY: Record<'vi' | 'en', IdentificationCopy> = {
       assigneeLoading: 'Checking Site Manager…',
       assigneeUnavailable: 'No eligible Site Manager available.',
       evidenceNotice: 'Case details only — subject image unavailable.',
+      evidenceOptionalNotice:
+        'No image confirmed yet — submitting now shares case details only (choose, preview, and confirm a masked crop above to attach it).',
+      evidenceApprovedNotice:
+        'Approved masked subject crop attached — the Site Manager will receive this shared image.',
       reasonLabel: 'Request reason',
       reasonPlaceholder: 'Note what needs verification…',
       reasonHint: 'Up to 2,000 characters.',

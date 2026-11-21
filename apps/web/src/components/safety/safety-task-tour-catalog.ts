@@ -77,10 +77,10 @@ const SAFETY_TASK_TOUR_EN = {
     'Each card groups one camera timestamp with separate per-case read acknowledgement and PPE findings. Counts reflect only flagged cases (affected people with recorded checks in this frame) — never a healthy-person total or current live person count.',
   'tour.frameInbox.mediaEvidence.title': 'Original Frame JPEG vs Person Crop',
   'tour.frameInbox.mediaEvidence.body':
-    'Open the shared original frame JPEG for full scene context, or toggle an individual mechanical person crop to inspect PPE details without treating crops as verified identity.',
+    'Open the shared original frame JPEG for full scene context, or toggle an individual person crop to inspect PPE details without treating crops as verified identity.',
   'tour.frameInbox.subjectStatus.title': 'Pending, Denied & Unconfirmed Identity',
   'tour.frameInbox.subjectStatus.body':
-    'Identity stays Unconfirmed (Unknown) until human review. Zone checks distinguish Pending assessment (awaiting authorization check, not denied) from confirmed Denied entries and fail-closed Insufficient evidence.',
+    'Identity stays Unconfirmed (Unknown) until human review. Zone checks distinguish Pending assessment (awaiting authorization check, not denied) from confirmed Denied entries and Insufficient evidence (not a confirmed violation).',
   'tour.frameInbox.caseReview.title': 'Open Case & Return to Frame',
   'tour.frameInbox.caseReview.body':
     'Open a person’s case to inspect full episode evidence and findings, then use Back to this frame to return with your Site and Camera filters preserved.',
@@ -163,7 +163,7 @@ const SAFETY_TASK_TOUR_VI: Record<keyof typeof SAFETY_TASK_TOUR_EN, string> = {
     'Mỗi thẻ gộp một thời điểm chụp camera với trạng thái xác nhận đã đọc riêng cho từng ca và phát hiện PPE. Số lượng chỉ tính số ca được gắn cờ (người có ghi nhận kiểm tra cần xem xét trong khung hình này — không báo số người trực tiếp hiện tại, tổng số người an toàn hay tổng quân số tại hiện trường).',
   'tour.frameInbox.mediaEvidence.title': 'Ảnh Gốc Toàn Khung & Ảnh Cắt Từng Người',
   'tour.frameInbox.mediaEvidence.body':
-    'Mở ảnh JPEG gốc dùng chung để xem toàn cảnh hiện trường, hoặc bật ảnh cắt cơ học của từng người để kiểm tra PPE mà không coi ảnh cắt là danh tính đã xác minh.',
+    'Mở ảnh JPEG gốc dùng chung để xem toàn cảnh hiện trường, hoặc bật ảnh cắt riêng của từng người để kiểm tra PPE mà không coi ảnh cắt là danh tính đã xác minh.',
   'tour.frameInbox.subjectStatus.title': 'Đang chờ, Từ chối & Danh tính Chưa xác nhận',
   'tour.frameInbox.subjectStatus.body':
     'Danh tính luôn ở trạng thái Chưa xác nhận (Unknown) cho đến khi có đối chiếu của con người. Kiểm tra vùng phân biệt rõ Đang chờ đánh giá (chưa kết luận từ chối) với Không được phép đã xác nhận và Chưa đủ bằng chứng.',

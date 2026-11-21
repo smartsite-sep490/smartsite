@@ -325,7 +325,9 @@ describe('Camera Setup Queue 1 approved missing UI regressions', () => {
 
     fireEvent.click(screen.getByRole('button', { name: 'Save PPE policy' }));
     const conflictAlert = await screen.findByRole('alert');
-    expect(conflictAlert.textContent).toMatch(/Configuration version conflict/i);
+    expect(conflictAlert.textContent).toMatch(
+      /configuration changed or the camera view needs confirmation/i,
+    );
 
     fireEvent.click(screen.getByRole('button', { name: 'Reset draft' }));
     expect(screen.queryByTestId('camera-ppe-unsaved-draft')).toBeNull();
@@ -973,9 +975,10 @@ describe('Camera Setup Queue 1 approved missing UI regressions', () => {
       );
 
       const contextBar = await screen.findByTestId('polygon-authoring-context');
-      expect(contextBar.textContent).toContain('ZONE-A');
+      expect(contextBar.textContent).toContain('Crane Lifting Bay');
       expect(contextBar.textContent).toContain('CAM-101');
       expect(contextBar.textContent).toContain('640×360');
+      expect(screen.getByTestId('polygon-authoring-tech-details').textContent).toContain('ZONE-A');
 
       const layoutGrid = screen.getByTestId('polygon-authoring-layout');
       expect(layoutGrid.className).toContain('grid-cols-1');

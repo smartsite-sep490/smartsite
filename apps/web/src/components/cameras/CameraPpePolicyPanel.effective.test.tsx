@@ -180,7 +180,7 @@ describe('CameraPpePolicyPanel effective PPE, mode distinction, and saved vs app
 
     const inheritCard = await screen.findByTestId(`camera-ppe-region-card-${REGION_INHERIT_ID}`);
     expect(inheritCard.getAttribute('data-policy-mode')).toBe('INHERIT');
-    expect(within(inheritCard).getByText('Z-01 · Scaffold Area')).toBeTruthy();
+    expect(within(inheritCard).getByText('Scaffold Area')).toBeTruthy();
     expect(within(inheritCard).getByText('Use camera default')).toBeTruthy();
     expect(within(inheritCard).getByText('From camera default')).toBeTruthy();
     expect(within(inheritCard).getByText('Hard hat')).toBeTruthy();
@@ -189,7 +189,7 @@ describe('CameraPpePolicyPanel effective PPE, mode distinction, and saved vs app
 
     const explicitCard = screen.getByTestId(`camera-ppe-region-card-${REGION_EXPLICIT_ID}`);
     expect(explicitCard.getAttribute('data-policy-mode')).toBe('EXPLICIT');
-    expect(within(explicitCard).getByText('Z-02 · Welding Bay')).toBeTruthy();
+    expect(within(explicitCard).getByText('Welding Bay')).toBeTruthy();
     expect(within(explicitCard).getByText('Custom')).toBeTruthy();
     expect(within(explicitCard).getByText('Custom on this region')).toBeTruthy();
     expect(within(explicitCard).getByText('Gloves')).toBeTruthy();
@@ -198,14 +198,14 @@ describe('CameraPpePolicyPanel effective PPE, mode distinction, and saved vs app
 
     const disabledCard = screen.getByTestId(`camera-ppe-region-card-${REGION_DISABLED_ID}`);
     expect(disabledCard.getAttribute('data-policy-mode')).toBe('DISABLED');
-    expect(within(disabledCard).getByText('Z-03 · Maintenance Path')).toBeTruthy();
+    expect(within(disabledCard).getByText('Maintenance Path')).toBeTruthy();
     expect(within(disabledCard).getByText('Disabled')).toBeTruthy();
     expect(within(disabledCard).getByText('PPE checks disabled')).toBeTruthy();
     expect(within(disabledCard).getByText('Reason: Maintenance corridor')).toBeTruthy();
 
     // Quick-selecting a region shows live effective PPE preview in editor
     await user.click(
-      within(inheritCard).getByRole('button', { name: 'Edit policy for Z-01 · Scaffold Area' }),
+      within(inheritCard).getByRole('button', { name: 'Edit policy for Scaffold Area' }),
     );
     const preview = await screen.findByTestId('camera-ppe-draft-preview');
     expect(within(preview).getByText('Hard hat')).toBeTruthy();
@@ -434,6 +434,53 @@ describe('CameraPpePolicyPanel effective PPE, mode distinction, and saved vs app
     expect(within(regionCard).getByText('Worker applied (v4)')).toBeTruthy();
   });
 
+  it('uses configuration Zone metadata for a Manager without requesting the monitoring-only projection', async () => {
+    const getCameraObservationZones = vi.fn().mockRejectedValue({ status: 403 });
+    const listZones = vi.fn().mockResolvedValue({
+      items: [makeZone(ZONE_1_ID, 'Z-01', 'Scaffold Area', ['BOOTS'])],
+      total: 1,
+    });
+    const context: CameraPpeContext = {
+      setupKey: ['manager-zone-metadata'],
+      token: 'manager-token',
+      siteId: SITE_ID,
+      onUnauthorized: vi.fn(),
+      client: {
+        readSavedPpePolicy: vi.fn(async (_token, _siteId, _cameraId, regionId) => ({
+          cameraId: CAMERA_ID,
+          regionId: regionId ?? null,
+          configurationVersion: 4,
+          savedRevision: 2,
+          policy: regionId
+            ? { mode: 'INHERIT' as const }
+            : { mode: 'EXPLICIT' as const, requiredPpe: ['HARD_HAT' as const] },
+        })),
+        listRegions: vi.fn().mockResolvedValue({
+          items: [makeRegion(REGION_INHERIT_ID, ZONE_1_ID)],
+          total: 1,
+        }),
+        getCameraObservationZones,
+        listZones,
+        initializePpePolicy: vi.fn(),
+        updateCameraPpePolicy: vi.fn(),
+        updateRegionPpePolicy: vi.fn(),
+        activateRegionWithPpePolicy: vi.fn(),
+      },
+    };
+    renderPanel({ context, camera: makeCamera(4), canWrite: true });
+    fireEvent.click(screen.getByRole('button', { name: 'Camera PPE policy' }));
+    const region = await screen.findByTestId(`camera-ppe-region-card-${REGION_INHERIT_ID}`);
+    await waitFor(() => expect(within(region).getByText('Scaffold Area')).toBeTruthy());
+    expect(listZones).toHaveBeenCalledWith(
+      'manager-token',
+      SITE_ID,
+      { offset: 0, limit: 100 },
+      expect.objectContaining({ signal: expect.any(AbortSignal) }),
+    );
+    expect(getCameraObservationZones).not.toHaveBeenCalled();
+    expect(context.onUnauthorized).not.toHaveBeenCalled();
+  });
+
   it('resolves human Zone labels from scoped getCameraObservationZones, rejects cross-scope responses, hides UUIDs in details on missing/denied metadata, and explains config vs worker/model capability truthfully without static CORE/HOLD badges', async () => {
     const OTHER_SITE_ID = '99999999-9999-4999-8999-999999999999';
     const OTHER_CAMERA_ID = 'eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee';
@@ -502,19 +549,20 @@ describe('CameraPpePolicyPanel effective PPE, mode distinction, and saved vs app
       },
     };
 
-    const { queryClient } = renderPanel({ context, camera: makeCamera(4), canWrite: true });
+    const { queryClient } = renderPanel({ context, camera: makeCamera(4), canWrite: false });
     fireEvent.click(screen.getByRole('button', { name: 'Camera PPE policy' }));
 
     const resolvedCard = await screen.findByTestId(`camera-ppe-region-card-${REGION_INHERIT_ID}`);
     await waitFor(() => {
-      expect(within(resolvedCard).getByText('Z-OBS · Crane Hook Zone')).toBeTruthy();
+      expect(within(resolvedCard).getByText('Crane Hook Zone')).toBeTruthy();
     });
 
-    // Technical UUIDs live inside closed <details>, not as exposed primary text
+    // Technical codes & UUIDs live inside closed <details>, not as exposed primary text
     const resolvedTech = within(resolvedCard).getByTestId(
       `camera-ppe-region-tech-${REGION_INHERIT_ID}`,
     ) as HTMLDetailsElement;
     expect(resolvedTech.open).toBe(false);
+    expect(resolvedTech.textContent).toContain('Z-OBS');
     expect(resolvedTech.textContent).toContain(REGION_INHERIT_ID);
     expect(resolvedTech.textContent).toContain(ZONE_1_ID);
 
@@ -532,7 +580,7 @@ describe('CameraPpePolicyPanel effective PPE, mode distinction, and saved vs app
     // Policy scope <select> options use human labels without raw UUIDs
     const scopeSelect = screen.getByLabelText('Policy scope') as HTMLSelectElement;
     const optionTexts = Array.from(scopeSelect.options).map((o) => o.textContent ?? '');
-    expect(optionTexts.some((txt) => txt.includes('Z-OBS · Crane Hook Zone'))).toBe(true);
+    expect(optionTexts.some((txt) => txt.includes('Crane Hook Zone'))).toBe(true);
     expect(optionTexts.some((txt) => txt.includes('Observation region #2'))).toBe(true);
     expect(optionTexts.some((txt) => txt.includes(REGION_INHERIT_ID))).toBe(false);
     expect(optionTexts.some((txt) => txt.includes(REGION_EXPLICIT_ID))).toBe(false);

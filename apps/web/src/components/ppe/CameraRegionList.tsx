@@ -7,12 +7,15 @@ import {
   registerCameraRegionPanelCatalog,
 } from './camera-region-panel-catalog';
 import { RegionGeometryConfirmationStatus } from './RegionGeometryConfirmationStatus';
+import { doesRegionNeedViewRevalidation } from './cameraRegionReferenceUtils';
 import { extractRegionPolygonCoordinates, type NormalizedPoint } from './region-polygon-geometry';
 
 registerCameraRegionPanelCatalog();
 
 export interface CameraRegionListProps {
   selectedCameraId: string;
+  selectedZone?: { code: string; name: string } | null;
+  currentViewRevision?: number | null;
   isCameraBaseError: boolean;
   isLoadingCameras: boolean;
   allFetchedRegions: RegionResponse[];
@@ -33,6 +36,8 @@ export interface CameraRegionListProps {
 
 export function CameraRegionList({
   selectedCameraId,
+  selectedZone = null,
+  currentViewRevision = null,
   isCameraBaseError,
   isLoadingCameras,
   allFetchedRegions,
@@ -126,40 +131,83 @@ export function CameraRegionList({
       )}
 
       {visibleLinkedRegions.length > 0 && (
-        <div className="space-y-2 max-h-40 overflow-y-auto pr-1 custom-scrollbar">
-          {visibleLinkedRegions.map((region) => {
+        <div className="space-y-2 max-h-60 overflow-y-auto pr-1 custom-scrollbar">
+          {visibleLinkedRegions.map((region, idx) => {
             const editablePoints = extractRegionPolygonCoordinates(region.polygon);
+            const needsRevalidation = doesRegionNeedViewRevalidation(
+              region.geometryConfirmation,
+              currentViewRevision,
+            );
+            const regionNumberTitle = t('regionSetup.list.regionNumberTitle', { index: idx + 1 });
+            const regionTitle = selectedZone
+              ? `${selectedZone.name} · ${regionNumberTitle}`
+              : regionNumberTitle;
             return (
               <div
                 key={region.id}
                 className="rounded-xl border border-slate-200/70 bg-[#F8FAFC] p-3 flex flex-wrap items-center justify-between gap-2.5 text-xs min-w-0"
               >
-                <div className="flex flex-wrap items-baseline gap-x-2 gap-y-1 min-w-0 flex-1">
-                  <span className="font-bold text-slate-900 break-all select-all font-mono text-[11px]">
-                    {region.id}
-                  </span>
-                  <span className="text-slate-400">·</span>
-                  <span className="text-slate-600 shrink-0">
-                    {t('regionSetup.list.versionStatus', {
-                      version: region.version,
-                      status: region.isActive
-                        ? t('regionSetup.list.statusActive')
-                        : t('regionSetup.list.statusInactive'),
-                    })}
-                  </span>
-                  <RegionGeometryConfirmationStatus
-                    geometryConfirmation={region.geometryConfirmation}
-                  />
+                <div className="min-w-0 flex-1 space-y-1">
+                  <div className="flex flex-wrap items-center gap-x-2 gap-y-1 min-w-0">
+                    <span
+                      title={regionTitle}
+                      className="font-semibold text-slate-900 break-words [overflow-wrap:anywhere]"
+                    >
+                      {regionTitle}
+                    </span>
+                    <span className="text-slate-400">·</span>
+                    <span className="text-slate-600 shrink-0">
+                      {t('regionSetup.list.versionStatus', {
+                        version: region.version,
+                        status: region.isActive
+                          ? t('regionSetup.list.statusActive')
+                          : t('regionSetup.list.statusInactive'),
+                      })}
+                    </span>
+                    <RegionGeometryConfirmationStatus
+                      geometryConfirmation={region.geometryConfirmation}
+                      currentViewRevision={currentViewRevision}
+                    />
+                  </div>
+                  <details
+                    data-testid={`camera-region-list-tech-${region.id}`}
+                    className="text-[11px] text-slate-500"
+                  >
+                    <summary className="cursor-pointer select-none font-medium text-slate-500 hover:text-slate-800">
+                      {t('regionSetup.list.technicalIdSummary')}
+                    </summary>
+                    <div className="mt-0.5 space-y-0.5 font-mono text-[11px] text-slate-600 break-all">
+                      <p className="select-all">
+                        {t('regionSetup.list.technicalRegionId', { id: region.id })}
+                      </p>
+                      {selectedZone?.code && (
+                        <p className="text-slate-500 select-all">
+                          {t('regionSetup.list.technicalZoneCode', { code: selectedZone.code })}
+                        </p>
+                      )}
+                      <p className="text-slate-500 select-all">
+                        {t('regionSetup.list.technicalZoneId', { id: region.zoneId })}
+                      </p>
+                    </div>
+                  </details>
                 </div>
-                <div className="flex items-center gap-2 shrink-0">
+                <div className="flex flex-wrap items-center gap-2 shrink-0">
                   {editablePoints && (
                     <button
                       type="button"
                       onClick={() => onStartEditingRegion(region, editablePoints)}
                       disabled={!canStartDrawing || isCurrentScopeActive}
-                      className="rounded-lg border border-slate-200 bg-white px-2.5 py-1 text-[11px] font-semibold text-slate-700 hover:bg-slate-100 transition-colors cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#0F172A]"
+                      className={`rounded-lg border px-2.5 py-1 text-[11px] font-semibold transition-colors cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#0F172A] ${
+                        needsRevalidation
+                          ? 'border-amber-300 bg-amber-50 text-amber-900 hover:bg-amber-100'
+                          : 'border-slate-200 bg-white text-slate-700 hover:bg-slate-100'
+                      }`}
                     >
-                      {t('regionSetup.list.editGeometry')}
+                      {t(
+                        needsRevalidation
+                          ? 'regionSetup.list.revalidateGeometry'
+                          : 'regionSetup.list.editGeometry',
+                      )}
                     </button>
                   )}
                   <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider bg-white border border-slate-200/80 shadow-[0_1px_3px_rgba(0,0,0,0.02)] text-slate-600 shrink-0">

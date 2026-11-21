@@ -97,17 +97,35 @@ export function SafetyEpisodeWorkspace({
 
   const returnToFrame =
     grouped && !frameGrouped && scopedSite && Boolean(validRecipientId) && Boolean(originFrameKey);
-  if (returnToFrame && originFrameKey) frameTarget.set('frameKey', originFrameKey);
+  const identificationReturnsToFrame =
+    identification &&
+    Boolean(matchedOfficerSiteId) &&
+    !validOriginRecipientId &&
+    Boolean(originFrameKey);
+  if ((returnToFrame || identificationReturnsToFrame) && originFrameKey) {
+    frameTarget.set('frameKey', originFrameKey);
+  }
   const returnToFrameHref = returnToFrame ? `/incidents?${frameTarget}` : undefined;
+
+  const baseSafetySearch = new URLSearchParams();
+  if (matchedOfficerSiteId) {
+    baseSafetySearch.set('siteId', matchedOfficerSiteId);
+  } else if (matchedIdentificationSiteId) {
+    baseSafetySearch.set('siteId', matchedIdentificationSiteId);
+  }
+  const baseSafetyHref =
+    baseSafetySearch.size > 0 ? `/incidents?${baseSafetySearch}` : '/incidents';
 
   const target = new URLSearchParams();
   if (matchedOfficerSiteId) target.set('siteId', matchedOfficerSiteId);
   if (!grouped) target.set('tab', 'episodes');
   const targetHref = target.size > 0 ? `/incidents?${target}` : '/incidents';
 
-  let identificationBackHref = '/incidents';
-  let identificationBackLabel = t('episodes.back');
-  if (matchedOfficerSiteId && validOriginRecipientId) {
+  const episodeNavSearch = new URLSearchParams({ tab: 'episodes' });
+  if (matchedOfficerSiteId) episodeNavSearch.set('siteId', matchedOfficerSiteId);
+  let episodeNavHref = `/incidents?${episodeNavSearch}`;
+  let episodeNavLabel = t('episodes.title');
+  if (identification && matchedOfficerSiteId && validOriginRecipientId) {
     const backSearch = new URLSearchParams({
       tab: 'episodes',
       siteId: matchedOfficerSiteId,
@@ -115,17 +133,19 @@ export function SafetyEpisodeWorkspace({
     });
     if (originFrameKey) backSearch.set('frameKey', originFrameKey);
     if (originCameraId) backSearch.set('cameraId', originCameraId);
-    identificationBackHref = `/incidents?${backSearch}`;
-    identificationBackLabel = tSafety('episodes.identificationBackToEpisode');
-  } else if (matchedOfficerSiteId && originFrameKey) {
-    const backSearch = new URLSearchParams({ tab: 'ppe-frames', siteId: matchedOfficerSiteId });
-    if (originCameraId) backSearch.set('cameraId', originCameraId);
-    backSearch.set('frameKey', originFrameKey);
-    identificationBackHref = `/incidents?${backSearch}`;
-    identificationBackLabel = t('frameInbox.backToFrame');
-  } else if (matchedIdentificationSiteId) {
-    identificationBackHref = `/incidents?${new URLSearchParams({ siteId: matchedIdentificationSiteId })}`;
+    episodeNavHref = `/incidents?${backSearch}`;
+    episodeNavLabel = tSafety('episodes.identificationBackToEpisode');
   }
+
+  const isOperationsActive = !grouped && !identification;
+  const isFrameActive = frameGrouped;
+  const isEpisodeActive = grouped && !frameGrouped;
+  const isIdentificationActive = identification;
+
+  const navPillClass = (active: boolean) =>
+    active
+      ? 'inline-flex min-h-9 items-center justify-center rounded-lg bg-[#0F172A] px-3.5 py-1.5 text-sm font-semibold text-white shadow-2xs transition-colors hover:bg-slate-800 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-slate-900'
+      : 'inline-flex min-h-9 items-center justify-center rounded-lg px-3.5 py-1.5 text-sm font-semibold text-slate-700 transition-colors hover:bg-white hover:text-slate-950 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-slate-900';
 
   const allowed =
     Boolean(session?.accessToken) &&
@@ -157,13 +177,14 @@ export function SafetyEpisodeWorkspace({
   }
 
   return (
-    <div className="space-y-4">
+    <div className="w-full min-w-0 space-y-3.5">
       {(allowed || identificationAllowed) && (
         <nav
           aria-label={t('episodes.views')}
-          className="flex flex-wrap items-center justify-between gap-3"
+          data-testid="safety-workspace-mode-bar"
+          className="flex flex-wrap items-center justify-between gap-2.5 rounded-2xl border border-slate-200/90 bg-white px-4 py-2.5 shadow-2xs sm:px-5"
         >
-          <p className="text-sm text-slate-600">
+          <p className="min-w-[min(100%,20rem)] flex-1 text-xs sm:text-sm leading-snug text-slate-600">
             {identification
               ? tSafety('episodes.identificationWorkspaceIntro')
               : frameGrouped
@@ -172,32 +193,49 @@ export function SafetyEpisodeWorkspace({
                   ? t('episodes.intro')
                   : t('episodes.entryHint')}
           </p>
-          {allowed && !frameGrouped && !identification && (
+          <div
+            data-testid="safety-workspace-mode-actions"
+            className="flex flex-wrap items-center gap-1 rounded-xl border border-slate-200/80 bg-slate-100/90 p-1"
+          >
             <Link
-              className="rounded-lg bg-teal-800 px-4 py-2 text-sm font-semibold text-white focus-visible:outline-2"
-              to={`/incidents?${frameTarget}`}
+              aria-current={isOperationsActive ? 'page' : undefined}
+              className={navPillClass(isOperationsActive)}
+              to={baseSafetyHref}
             >
-              {t(returnToFrame ? 'frameInbox.backToFrame' : 'episodes.frameTitle')}
+              {t('episodes.back')}
             </Link>
-          )}
-          {(allowed || identification) && (
-            <Link
-              className="rounded-lg border border-slate-200 bg-white px-4 py-2 text-sm font-semibold focus-visible:outline-2"
-              to={identification ? identificationBackHref : targetHref}
-            >
-              {identification
-                ? identificationBackLabel
-                : t(grouped ? 'episodes.back' : 'episodes.title')}
-            </Link>
-          )}
-          {identificationAllowed && !identification && (
-            <Link
-              className="rounded-lg border border-slate-200 bg-white px-4 py-2 text-sm font-semibold focus-visible:outline-2"
-              to={`/incidents?${identificationTarget}`}
-            >
-              {tSafety('episodes.identificationWorkspaceNav')}
-            </Link>
-          )}
+            {allowed && (
+              <Link
+                aria-current={isFrameActive ? 'page' : undefined}
+                className={navPillClass(isFrameActive)}
+                to={`/incidents?${frameTarget}`}
+              >
+                {t(
+                  returnToFrame || identificationReturnsToFrame
+                    ? 'frameInbox.backToFrame'
+                    : 'episodes.frameTitle',
+                )}
+              </Link>
+            )}
+            {allowed && (
+              <Link
+                aria-current={isEpisodeActive ? 'page' : undefined}
+                className={navPillClass(isEpisodeActive)}
+                to={episodeNavHref}
+              >
+                {episodeNavLabel}
+              </Link>
+            )}
+            {identificationAllowed && (
+              <Link
+                aria-current={isIdentificationActive ? 'page' : undefined}
+                className={navPillClass(isIdentificationActive)}
+                to={`/incidents?${identificationTarget}`}
+              >
+                {tSafety('episodes.identificationWorkspaceNav')}
+              </Link>
+            )}
+          </div>
         </nav>
       )}
       {identification && identificationAllowed && session ? (

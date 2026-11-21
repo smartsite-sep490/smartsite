@@ -56,13 +56,16 @@ export function EpisodeInboxFilters({
   const { t } = useTranslation();
 
   return (
-    <>
+    <div className="space-y-3 rounded-2xl border border-slate-200/90 bg-white p-4 shadow-2xs sm:px-5">
       <header className="flex flex-wrap items-center justify-between gap-3">
         <div>
-          <h1 id="episode-inbox-heading" className="text-2xl font-semibold text-slate-950">
+          <h1
+            id="episode-inbox-heading"
+            className="text-2xl sm:text-[26px] font-bold tracking-tight text-slate-950"
+          >
             {t('episodes.title')}
           </h1>
-          <p className="mt-1 text-sm text-slate-600">
+          <p className="mt-0.5 text-xs sm:text-sm text-slate-600 tabular-nums">
             {t('episodes.count', {
               loaded: loadedCount,
               total: totalCount,
@@ -82,19 +85,19 @@ export function EpisodeInboxFilters({
       {showUpdatesBanner && (
         <div
           role="status"
-          className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-blue-200 bg-blue-50 p-4 text-sm"
+          className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-teal-700/35 bg-teal-50/70 px-4 py-3 text-sm text-teal-950"
         >
-          <p>{t('episodes.newItems')}</p>
+          <p className="font-medium">{t('episodes.newItems')}</p>
           <Button variant="outline" disabled={loadUpdatesDisabled} onClick={onLoadUpdates}>
             {t('episodes.loadUpdates')}
           </Button>
         </div>
       )}
-      <div className="grid gap-4 sm:grid-cols-2">
-        <label className="space-y-1 text-sm font-medium">
-          {t('episodes.site')}
+      <div className="grid gap-3 border-t border-slate-100 pt-3 sm:grid-cols-2 lg:max-w-2xl">
+        <label className="flex min-w-0 flex-col gap-1 sm:flex-row sm:items-center sm:gap-2 text-xs sm:text-sm font-semibold text-slate-800">
+          <span className="shrink-0 text-slate-600">{t('episodes.site')}</span>
           <select
-            className="block w-full rounded-lg border border-slate-300 bg-white p-2.5"
+            className="block h-10 w-full min-w-0 truncate rounded-xl border border-slate-300 bg-white px-3 text-sm font-medium text-slate-900 transition-colors hover:border-slate-400 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-teal-800"
             value={siteId}
             onChange={(e) => onFilterChange('siteId', e.target.value)}
           >
@@ -106,10 +109,10 @@ export function EpisodeInboxFilters({
             ))}
           </select>
         </label>
-        <label className="space-y-1 text-sm font-medium">
-          {t('episodes.filter')}
+        <label className="flex min-w-0 flex-col gap-1 sm:flex-row sm:items-center sm:gap-2 text-xs sm:text-sm font-semibold text-slate-800">
+          <span className="shrink-0 text-slate-600">{t('episodes.filter')}</span>
           <select
-            className="block w-full rounded-lg border border-slate-300 bg-white p-2.5"
+            className="block h-10 w-full min-w-0 truncate rounded-xl border border-slate-300 bg-white px-3 text-sm font-medium text-slate-900 transition-colors hover:border-slate-400 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-teal-800"
             value={readStatus}
             onChange={(e) => onFilterChange('readStatus', e.target.value)}
           >
@@ -123,7 +126,7 @@ export function EpisodeInboxFilters({
           {t('episodes.moreSites')}
         </Button>
       )}
-    </>
+    </div>
   );
 }
 
@@ -164,36 +167,48 @@ export function EpisodeQueueList({
             type="button"
             key={row.id}
             aria-pressed={row.id === selectedId}
-            className={`w-full rounded-xl border p-4 text-left focus-visible:outline-2 ${
+            className={`w-full rounded-2xl border p-3.5 text-left transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-teal-800 ${
               row.id === selectedId
-                ? 'border-orange-500 bg-orange-50'
-                : 'border-slate-200 bg-white hover:border-slate-400'
+                ? 'border-slate-900 bg-slate-900/[0.04] ring-1 ring-slate-900/15 shadow-2xs'
+                : row.unread
+                  ? 'border-slate-300 border-l-4 border-l-teal-700 bg-white shadow-2xs hover:bg-slate-50/70'
+                  : 'border-slate-200 bg-white/95 hover:border-slate-300 hover:bg-white'
             }`}
             onClick={() => onSelectRow(row.id)}
           >
             <span className="flex items-center justify-between gap-2">
-              <strong>
+              <strong className="text-sm font-semibold text-slate-950">
                 {row.episode.subject.kind === 'EVENT_LOCAL'
                   ? t('episodes.subject', {
                       number: row.episode.subject.personObservationIndex + 1,
                     })
                   : t('episodes.trackedSubject')}
               </strong>
-              <span className="text-xs">{t(row.unread ? 'episodes.unread' : 'episodes.read')}</span>
+              <span
+                className={`inline-flex items-center gap-1 rounded-md border px-2 py-0.5 text-xs font-semibold ${
+                  row.unread
+                    ? 'border-teal-700/35 bg-teal-50 text-teal-950'
+                    : 'border-slate-200 bg-slate-100 text-slate-600'
+                }`}
+              >
+                {row.unread && (
+                  <span aria-hidden="true" className="h-1.5 w-1.5 rounded-full bg-teal-700" />
+                )}
+                {t(row.unread ? 'episodes.unread' : 'episodes.read')}
+              </span>
             </span>
-            <span className="mt-1 block truncate text-sm text-slate-700">
+            <span className="mt-1 block truncate text-xs sm:text-sm font-medium text-slate-600">
               {siteNames.get(row.episode.siteId.toLowerCase()) ?? t('episodes.siteNamePending')}
               {cameraLabel ? ` · ${cameraLabel}` : ''}
             </span>
-            <span className="mt-2 block text-sm">
-              {t('episodes.findings', { count: row.episode.findingCount })}
+            <span className="mt-2 flex items-center justify-between gap-2 text-xs tabular-nums">
+              <span className="rounded-md border border-amber-300/80 bg-amber-50/80 px-2 py-0.5 font-semibold text-amber-950">
+                {t('episodes.findings', { count: row.episode.findingCount })}
+              </span>
+              <time className="text-slate-500" dateTime={row.episode.firstObservedAt}>
+                {formatObservedDate(row.episode.firstObservedAt)}
+              </time>
             </span>
-            <time
-              className="mt-1 block text-xs text-slate-500"
-              dateTime={row.episode.firstObservedAt}
-            >
-              {formatObservedDate(row.episode.firstObservedAt)}
-            </time>
           </button>
         );
       })}

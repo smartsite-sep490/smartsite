@@ -95,7 +95,7 @@ describe('CameraSetupContextPanel saved configuration vs worker-applied status',
 
     const selectedRegion = screen.getByRole('region', { name: 'Selected camera' });
     expect(selectedRegion.getAttribute('data-tour-anchor')).toBe('camera-setup-save');
-    expect(within(selectedRegion).getByText('CAM-101 · North Crane')).toBeTruthy();
+    expect(within(selectedRegion).getByText('North Crane · CAM-101')).toBeTruthy();
 
     const savedSummary = within(selectedRegion).getByTestId('camera-saved-config-summary');
     expect(savedSummary.getAttribute('data-application-state')).toBe('SAVED_METADATA_ONLY');
