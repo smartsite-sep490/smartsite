@@ -22,6 +22,13 @@ export interface Mf06VerifiedFrameMedia {
   readonly sha256: string;
 }
 
+/** Only a server-injected private reader; scope comes from validated stored evidence. */
+export type Mf06PrivateFrameReader = (
+  sha256: string,
+  scope: { eventId: string; payloadHash: string },
+  signal?: AbortSignal,
+) => Promise<Buffer | null>;
+
 async function readBoundedFrame(
   root: string,
   name: string,
@@ -93,9 +100,10 @@ export async function readMf06FrameMedia(
   root: string,
   reference: Mf06FrameReference,
   signal?: AbortSignal,
+  privateReader?: Mf06PrivateFrameReader,
 ): Promise<Mf06VerifiedFrameMedia | null> {
   try {
-    if (signal?.aborted || !isAbsolute(root)) return null;
+    if (signal?.aborted || (!privateReader && !isAbsolute(root))) return null;
     const ref = snapshotMf06Json(reference) as Mf06FrameReference;
     if (
       ![ref.uri, ref.sha256, ref.eventId, ref.streamSessionId, ref.payloadHash].every(
@@ -122,10 +130,14 @@ export async function readMf06FrameMedia(
     if (ref.uri.toLowerCase() !== `local://evidence/${session}/${ref.sequenceNumber}/${event}.jpg`)
       return null;
     const fileName = `${session}_${ref.sequenceNumber}_${event}.jpg`;
-    const bytes = await readBoundedFrame(root, fileName, signal);
+    const bytes = privateReader
+      ? await privateReader(ref.sha256, { eventId: event, payloadHash: ref.payloadHash }, signal)
+      : await readBoundedFrame(root, fileName, signal);
     signal?.throwIfAborted();
     if (
       !bytes ||
+      bytes.length < 4 ||
+      bytes.length > LIMITS.maxFrameBytes ||
       bytes[0] !== 0xff ||
       bytes[1] !== 0xd8 ||
       bytes[bytes.length - 2] !== 0xff ||
@@ -154,9 +166,10 @@ export async function readMf06SubjectMedia(
   reference: Mf06FrameReference,
   subject: ObservationSubjectRef,
   signal?: AbortSignal,
+  privateReader?: Mf06PrivateFrameReader,
 ): Promise<SafetySubjectCrop | null> {
   try {
-    if (signal?.aborted || !isAbsolute(root)) return null;
+    if (signal?.aborted || (!privateReader && !isAbsolute(root))) return null;
     const ref = snapshotMf06Json(reference) as Mf06FrameReference;
     const selected = projectObservationSubjectRef(snapshotMf06Json(subject));
     if (
@@ -181,7 +194,7 @@ export async function readMf06SubjectMedia(
     )
       return null;
     const { width, height } = ref.frameDimensions;
-    const frame = await readMf06FrameMedia(root, ref, signal);
+    const frame = await readMf06FrameMedia(root, ref, signal, privateReader);
     signal?.throwIfAborted();
     if (!frame) return null;
     // shortcut: Sharp decode cannot be preempted here; isolate it before requiring a hard cancellation deadline.
