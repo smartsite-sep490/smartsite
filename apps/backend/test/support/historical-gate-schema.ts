@@ -19,3 +19,8 @@ export async function installGateSchemaForHistoricalFixture(source: DataSource) 
     await manager.query('ALTER TABLE camera_observation_region ADD COLUMN site_id uuid NOT NULL');
   });
 }
+
+/** Remove fixture-only account columns before applying the actual email migration. */
+export async function removeAccountEmailProjectionForHistoricalFixture(source: DataSource) {
+  await source.query('ALTER TABLE app_user DROP COLUMN email_verified_at, DROP COLUMN email');
+}
