@@ -31,7 +31,7 @@ function reject(status: 400 | 409 | 503): never {
   });
 }
 
-/** Disabled/unregistered LIVE transport prototype. It never stores/admit events or emits alerts.
+/** Opt-in LIVE storage transport. It never stores/admits events or emits alerts.
  * A stale upload may leave a private immutable object, but never a receipt or public media grant.
  */
 export class TrackedFrameEvidenceUpload {
@@ -49,7 +49,16 @@ export class TrackedFrameEvidenceUpload {
     bytes: Buffer,
   ): Promise<AiFrameEvidenceReceipt> {
     if (!this.enabled) reject(503);
-    if (!Buffer.isBuffer(bytes) || !bytes.length || bytes.length > 1_048_576) reject(400);
+    if (
+      !Buffer.isBuffer(bytes) ||
+      bytes.length < 4 ||
+      bytes.length > 1_048_576 ||
+      bytes[0] !== 0xff ||
+      bytes[1] !== 0xd8 ||
+      bytes[bytes.length - 2] !== 0xff ||
+      bytes[bytes.length - 1] !== 0xd9
+    )
+      reject(400);
     // Snapshot before any await: a caller cannot swap the event, binding or image mid-upload.
     const content = Buffer.from(bytes);
     let originalPayload: unknown;
@@ -91,7 +100,10 @@ export class TrackedFrameEvidenceUpload {
       reject(400);
     }
     // Remote I/O is deliberately outside both short authorization transactions.
-    await this.storage.saveAiFrame(content, sha256);
+    await this.storage.saveAiFrame(content, sha256, {
+      eventId: bound.eventId,
+      payloadHash: bound.payloadHash,
+    });
     const current = await source.transaction((manager) =>
       this.authenticator.authenticate(manager, originalPayload, originalContext, secret),
     );

@@ -26,6 +26,18 @@ const validKey = (key: string) =>
   );
 const AI_FRAME_LIMIT = 1_048_576;
 const aiFrameHash = (value: string) => /^[0-9a-f]{64}$/.test(value);
+export interface AiFrameStorageScope {
+  readonly eventId: string;
+  readonly payloadHash: string;
+}
+const aiFrameKey = (sha256: string, scope: AiFrameStorageScope) =>
+  aiFrameHash(sha256) &&
+  typeof scope?.eventId === 'string' &&
+  /^[0-9a-f]{8}(-[0-9a-f]{4}){3}-[0-9a-f]{12}$/i.test(scope.eventId) &&
+  typeof scope.payloadHash === 'string' &&
+  aiFrameHash(scope.payloadHash)
+    ? `ai-frame-${scope.eventId.toLowerCase()}-${scope.payloadHash}-${sha256}.jpg`
+    : null;
 const validAiFrame = (bytes: Buffer, sha256: string) =>
   Buffer.isBuffer(bytes) &&
   bytes.length >= 4 &&
@@ -81,10 +93,16 @@ export class StorageService {
   }
 
   /** Private immutable frame namespace; deliberately excluded from C02 inventory/cleanup. */
-  async saveAiFrame(bytes: Buffer, expectedSha256: string): Promise<void> {
+  async saveAiFrame(
+    bytes: Buffer,
+    expectedSha256: string,
+    scope: AiFrameStorageScope,
+  ): Promise<void> {
     if (!aiFrameHash(expectedSha256) || !validAiFrame(bytes, expectedSha256)) return unavailable();
     const content = Buffer.from(bytes);
-    const key = `ai-frame-${expectedSha256}.jpg`;
+    const identity = { eventId: scope?.eventId, payloadHash: scope?.payloadHash };
+    const key = aiFrameKey(expectedSha256, identity);
+    if (!key) return unavailable();
     try {
       const provider = this.config.get('STORAGE_PROVIDER', { infer: true });
       if (provider === 'R2') {
@@ -106,7 +124,7 @@ export class StorageService {
             (error as { $metadata?: { httpStatusCode?: number } }).$metadata?.httpStatusCode !== 412
           )
             throw error;
-          if (!(await this.readAiFrame(expectedSha256))) return unavailable();
+          if (!(await this.readAiFrame(expectedSha256, identity))) return unavailable();
         }
         // An ambiguous PUT must never delete an existing content-addressed object.
       } else if (provider === 'LOCAL' || provider === undefined) {
@@ -124,7 +142,7 @@ export class StorageService {
             await link(temporary, join(root, key));
           } catch (error) {
             if ((error as NodeJS.ErrnoException).code !== 'EEXIST') throw error;
-            if (!(await this.readAiFrame(expectedSha256))) return unavailable();
+            if (!(await this.readAiFrame(expectedSha256, identity))) return unavailable();
           }
         } finally {
           await unlink(temporary);
@@ -136,10 +154,14 @@ export class StorageService {
   }
 
   /** Missing, corrupt or unavailable media stays unavailable; caller cancellation propagates. */
-  async readAiFrame(sha256: string, signal?: AbortSignal): Promise<Buffer | null> {
+  async readAiFrame(
+    sha256: string,
+    scope: AiFrameStorageScope,
+    signal?: AbortSignal,
+  ): Promise<Buffer | null> {
     signal?.throwIfAborted();
-    if (!aiFrameHash(sha256)) return null;
-    const key = `ai-frame-${sha256}.jpg`;
+    const key = aiFrameKey(sha256, scope);
+    if (!key) return null;
     try {
       let bytes: Buffer;
       const provider = this.config.get('STORAGE_PROVIDER', { infer: true });

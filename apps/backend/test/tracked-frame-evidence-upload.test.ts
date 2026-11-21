@@ -56,9 +56,14 @@ function fixture(bytes: Buffer, enabled = true) {
     },
   };
   const storage = {
-    async saveAiFrame(content: Buffer, expected: string) {
+    async saveAiFrame(
+      content: Buffer,
+      expected: string,
+      scope: { eventId: string; payloadHash: string },
+    ) {
       assert.equal(locks, 0, 'remote storage must not run inside a DB transaction');
       assert.equal(sha(content), expected);
+      assert.deepEqual(scope, { eventId, payloadHash: 'a'.repeat(64) });
       writes++;
     },
   };
@@ -135,9 +140,13 @@ test('invalid, oversized or non-JPEG bytes never reach object storage', async ()
   })
     .png()
     .toBuffer();
-  for (const bytes of [Buffer.from('not an image'), Buffer.alloc(1048577), png]) {
+  const trailingJpeg = Buffer.concat([await jpeg(), Buffer.from('trailing-data')]);
+  for (const bytes of [Buffer.from('not an image'), Buffer.alloc(1048577), png, trailingJpeg]) {
     const f = fixture(bytes);
-    await assert.rejects(f.service.store(f.source, f.payload, f.context, 'issued-secret', bytes));
+    await assert.rejects(
+      f.service.store(f.source, f.payload, f.context, 'issued-secret', bytes),
+      (error: unknown) => error instanceof PublicHttpException && error.getStatus() === 400,
+    );
     assert.equal(f.counts().writes, 0);
   }
 });
