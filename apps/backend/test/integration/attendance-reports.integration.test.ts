@@ -398,6 +398,10 @@ test('attendance reports: real HTTP/auth, PostgreSQL totals, calendar data, sear
             403,
           );
         }
+        await dataSource
+          .getRepository(UserRoleAssignmentEntity)
+          .delete({ userId: managerId, siteId, role: UserRole.SITE_MANAGER });
+        await assert.rejects(service.export(actor(managerId), siteId, query), denied);
         await dataSource.getRepository(UserRoleAssignmentEntity).save({
           id: randomUUID(),
           userId,
@@ -410,6 +414,12 @@ test('attendance reports: real HTTP/auth, PostgreSQL totals, calendar data, sear
           .getRepository(UserRoleAssignmentEntity)
           .delete({ userId, role: UserRole.SITE_MANAGER });
         await assert.rejects(service.export(actor(userId), siteId, query), denied);
+        await dataSource.getRepository(UserRoleAssignmentEntity).save({
+          id: randomUUID(),
+          userId: managerId,
+          siteId,
+          role: UserRole.SITE_MANAGER,
+        });
         assert.equal((await service.export(actor(managerId), siteId, query)).total, 3);
         await assert.rejects(service.export(actor(adminId), siteId, query), denied);
         await assert.rejects(service.export(actor(repId), otherSite, query), denied);
