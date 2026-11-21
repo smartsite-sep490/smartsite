@@ -1,5 +1,5 @@
 import { userErrorMessage } from '../../../i18n/messages';
-import { translate as tr } from '../../../i18n';
+import { translate as tr, uiLanguage } from '../../../i18n';
 import { useTranslation } from 'react-i18next';
 import React, { useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
@@ -11,7 +11,6 @@ import {
 import { DocumentFileInputs, WorkerDocumentsPanel } from './WorkerDocumentsPanel';
 import { documentKinds, validDocumentFile } from './worker-document-files';
 import { DocumentMediaPicker } from './DocumentMediaPicker';
-import { WORKER_DEFAULT_TEMPORARY_PASSWORD } from '@smartsite/contracts/management';
 import { useManagementClient, useAuth, useCurrentUser } from '../../../features/auth/auth-session';
 import { WorkerEnrollmentView } from '../../access/enrollment/WorkerEnrollmentView';
 import { loadAllPages } from '../load-all-pages';
@@ -223,6 +222,7 @@ function WorkerAccountForm({
   const [contractorId, setContractorId] = useState('');
   const [displayName, setDisplayName] = useState('');
   const [username, setUsername] = useState('');
+  const [email, setEmail] = useState('');
   const [nationalId, setNationalId] = useState('');
   const [phoneNumber, setPhoneNumber] = useState('');
   const [gender, setGender] = useState<'MALE' | 'FEMALE' | 'OTHER' | ''>('');
@@ -245,6 +245,9 @@ function WorkerAccountForm({
 
   const create = useMutation({
     mutationFn: async () => {
+      const recipient = email.trim().toLowerCase();
+      if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(recipient))
+        throw new Error(tr('worker_onboarding_view.invalidEmail'));
       if (
         !/^[0-9]{12}$/.test(nationalId) ||
         !/^\+?[0-9]{9,15}$/.test(phoneNumber) ||
@@ -263,6 +266,8 @@ function WorkerAccountForm({
           siteId,
           displayName: displayName.trim(),
           username: username.trim().toLowerCase(),
+          email: recipient,
+          language: uiLanguage(),
           nationalId,
           phoneNumber,
           gender,
@@ -295,6 +300,7 @@ function WorkerAccountForm({
     onSuccess: () => {
       setDisplayName('');
       setUsername('');
+      setEmail('');
       setNationalId('');
       setPhoneNumber('');
       setFiles({});
@@ -460,6 +466,27 @@ function WorkerAccountForm({
               </div>
 
               {/* Password credentials callout */}
+              <label className="block text-xs font-bold uppercase tracking-wider text-slate-700">
+                {tr('worker_onboarding_view.email')}
+                <input
+                  className={field}
+                  type="email"
+                  aria-label={tr('worker_onboarding_view.email')}
+                  aria-describedby="worker-onboarding-email-hint"
+                  required
+                  maxLength={254}
+                  autoComplete="email"
+                  value={email}
+                  disabled={!!pendingAccount}
+                  onChange={(event) => setEmail(event.target.value)}
+                />
+                <span
+                  id="worker-onboarding-email-hint"
+                  className="mt-2 block text-xs font-medium normal-case tracking-normal text-slate-500"
+                >
+                  {tr('worker_onboarding_view.emailHint')}
+                </span>
+              </label>
               <div className="rounded-xl border border-blue-200/80 bg-blue-50/70 p-4 flex items-start gap-3 shadow-2xs">
                 <IconKey className="w-5 h-5 text-blue-600 shrink-0 mt-0.5" />
                 <div className="text-xs space-y-1">
@@ -653,6 +680,7 @@ function WorkerAccountForm({
                   !selected ||
                   !displayName.trim() ||
                   !username.trim() ||
+                  !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim()) ||
                   !nationalId ||
                   !phoneNumber ||
                   !gender ||
@@ -710,13 +738,10 @@ function WorkerAccountForm({
                     role="status"
                     className="text-xs leading-relaxed text-emerald-900 font-medium mt-1"
                   >
-                    {tr('common.account')} {create.data.account.username}{' '}
-                    {tr(
-                      'worker_onboarding_view.and_worker_profile_created_give_the_worker_their_temporary_password',
-                    )}{' '}
-                    <strong className="font-mono bg-white px-1.5 py-0.5 rounded border border-emerald-200 text-emerald-950 font-bold">
-                      {WORKER_DEFAULT_TEMPORARY_PASSWORD}
-                    </strong>
+                    {tr('worker_onboarding_view.createdWithEmail', {
+                      username: create.data.account.username,
+                      email: create.data.account.email ?? '',
+                    })}{' '}
                     {tr('worker_onboarding_view.then_register_their_face_below_worker_code')}{' '}
                     <strong className="font-mono bg-white px-1.5 py-0.5 rounded border border-emerald-200 text-emerald-950 font-bold">
                       {create.data.worker.externalId}
@@ -733,7 +758,7 @@ function WorkerAccountForm({
                     🏷️ {create.data.worker.externalId}
                   </span>
                   <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-lg bg-white border border-emerald-200 font-mono font-bold text-emerald-900 shadow-2xs">
-                    🔑 {WORKER_DEFAULT_TEMPORARY_PASSWORD}
+                    {create.data.account.email}
                   </span>
                 </div>
               </div>

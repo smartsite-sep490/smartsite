@@ -2580,7 +2580,7 @@
   "worker_onboarding_view.could_not_load_your_contractors": "Không thể tải nhà thầu của bạn.",
   "worker_onboarding_view.no_active_contractor_participation_is_assigned_to_you_at_this_site_contact_your_si": "Bạn chưa được gán nhà thầu đang tham gia công trường này. Hãy liên hệ người quản trị công trường.",
   "common.create_worker_account": "Tạo tài khoản công nhân",
-  "worker_onboarding_view.the_account_receives_the_worker_role_at_this_site_and_can_sign_in_immediately_pass": "Tài khoản được gán vai trò công nhân tại công trường này và có thể đăng nhập ngay. Đổi mật khẩu là tùy chọn. Mã công nhân được tạo tự động khi lưu. Mật khẩu ban đầu mặc định:",
+  "worker_onboarding_view.the_account_receives_the_worker_role_at_this_site_and_can_sign_in_immediately_pass": "Tài khoản được gán vai trò công nhân tại công trường này. Mật khẩu riêng và mã xác minh được gửi qua email. Mã công nhân được tạo tự động.",
   "common.full_name": "Họ tên",
   "common.account": "Tài khoản",
   "worker_onboarding_view.and_worker_profile_created_give_the_worker_their_temporary_password": "và hồ sơ công nhân đã được tạo. Cung cấp cho công nhân mật khẩu ban đầu",
@@ -3848,7 +3848,7 @@
   "documents.next": "Trang sau",
   "documents.previous": "Trang trước",
   "documents.onlyPending": "Chỉ hiện hồ sơ cần duyệt / bổ sung",
-  "documents.accountHint": "Mật khẩu ban đầu: 12345678. Công nhân chỉ được hoạt động khi cả ba giấy tờ đã được duyệt và còn hiệu lực.",
+  "documents.accountHint": "Công nhân chỉ được hoạt động khi cả ba giấy tờ đã được duyệt và còn hiệu lực. Thông tin đăng nhập được gửi đến email công nhân.",
   "documents.saved": "Đã gửi hồ sơ cho Cán bộ an toàn duyệt.",
   "documents.invalidFile": "Chọn JPEG, PNG hoặc PDF tối đa 5 MB.",
   "documents.search": "Tìm theo mã hoặc tên công nhân",
@@ -4200,5 +4200,9 @@
   "admin_sites.name": "Tên công trường",
   "admin_sites.invalid_selection": "Công trường được yêu cầu không tồn tại hoặc không khả dụng. Vui lòng chọn lại.",
   "admin_sites.occupied": "Thu hồi quản lý hiện tại trước khi gán hoặc tạo người thay thế.",
-  "admin_dashboard.no_sites": "Chưa có công trường. Tạo công trường đầu tiên tại mục Công trường."
+  "admin_dashboard.no_sites": "Chưa có công trường. Tạo công trường đầu tiên tại mục Công trường.",
+  "worker_onboarding_view.email": "Email công nhân",
+  "worker_onboarding_view.emailHint": "Tên đăng nhập, mật khẩu ban đầu riêng và mã xác minh sẽ được gửi đến email này sau khi tạo tài khoản.",
+  "worker_onboarding_view.invalidEmail": "Nhập email công nhân hợp lệ.",
+  "worker_onboarding_view.createdWithEmail": "Tài khoản {{username}} và hồ sơ công nhân đã được tạo. Thông tin đăng nhập và mã xác minh đã được đưa vào hàng đợi gửi đến {{email}}."
 }

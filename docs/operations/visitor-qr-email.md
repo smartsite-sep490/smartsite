@@ -26,13 +26,19 @@ setting both values. For Compose, export these two variables in the shell or pas
 environment file containing only the email settings. `infra/compose.yaml` forwards them to the Backend;
 do not reuse a host-only PostgreSQL URL inside the Backend container.
 
-Mobile worker onboarding and account recovery reuse these same two settings and sender. No second
+Web and Mobile worker onboarding and account recovery reuse these same two settings and sender. No second
 Resend account or key is required. The development backend does not read the repository-root `.env`;
 keep the mail values in `apps/backend/.env` or exported environment variables. Account email has its
 own encrypted outbox and one-time challenges, independent of visitor approval/persistence. Apply
 `AccountEmailRecovery1795392000000` before deploying that workflow. Codes expire after ten minutes;
 reset is available only for verified account email. Preserve `AUTH_JWT_SECRET` to decrypt queued mail.
 See [the Mobile API audit](mobile-api-audit.vi.md) for UI entry points and verification limits.
+
+Both worker creation forms require an email address and pass the selected UI language to the Backend.
+The Backend queues a unique initial password and verification code to that address; the forms do not
+advertise the legacy default password. A successful creation means mail was queued, not delivered to
+the inbox. Upload retries reuse the created account instead of creating another one. Existing clients
+without email retain the legacy Backend compatibility path.
 
 ## Behavior
 
