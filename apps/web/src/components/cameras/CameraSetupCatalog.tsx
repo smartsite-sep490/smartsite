@@ -30,6 +30,7 @@ export function CameraSetupCatalog({
   open,
   statusContext,
   policyContext,
+  sourceSetupStage,
 }: {
   siteId?: string;
   siteCode?: string;
@@ -47,6 +48,7 @@ export function CameraSetupCatalog({
   open: CameraSetupOpenHandler;
   statusContext?: CameraApplicationStatusContext;
   policyContext?: CameraPpeContext;
+  sourceSetupStage?: ReactNode;
 }) {
   const { t } = useTranslation(SAFETY_NAMESPACE);
   const catalogId = useId();
@@ -114,6 +116,7 @@ export function CameraSetupCatalog({
         </div>
         {canReadCameras && (
           <>
+            {sourceSetupStage}
             {!cameras.baseError && !cameras.isPending && (
               <CameraSetupChecklist
                 siteId={siteId}
@@ -146,6 +149,7 @@ export function CameraSetupCatalog({
                 statusContext={statusContext}
               />
             )}
+
             {selectedCamera && policyContext && !cameras.baseError && (
               <CameraPpePolicyPanel
                 key={selectedCamera.id}

@@ -231,3 +231,13 @@ export type {
 } from '@smartsite/contracts';
 export type { ContractorTeamCalendarItem, ContractorTeamCalendarQuery } from '@smartsite/contracts';
 export type { ContractorTeamCalendarResponse } from '@smartsite/contracts';
+
+export { cameraSourceClient, SourceSetupError } from './camera-source';
+export type { SourceActivationResult } from '@smartsite/contracts';
+export type {
+  CameraSourceClient,
+  CameraSourceKind,
+  CameraSourceDraft,
+  SourceHost,
+  SourceTestResult,
+} from './camera-source';

@@ -1,0 +1,626 @@
+import { useEffect, useId, useRef, useState } from 'react';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { useTranslation } from 'react-i18next';
+import { SAFETY_NAMESPACE } from '../../i18n/runtime';
+import { CAMERA_BUTTON_STYLES, CAMERA_FIELD_STYLES } from './camera-dialog-styles';
+import {
+  cameraSourceClient,
+  SourceSetupError,
+  type CameraSourceClient,
+  type CameraSourceDraft,
+  type CameraSourceKind,
+  type SourceTestResult,
+} from '@smartsite/api-client';
+import './camera-source-copy';
+import type { SourceConfigurationResumeCommand } from '@smartsite/contracts';
+
+export interface CameraSourceSetupProps {
+  apiUrl: string;
+  token: string;
+  siteId: string;
+  camera: { id: string; name: string; configurationVersion?: number };
+  setupKey: readonly unknown[];
+  canWrite: boolean;
+  onUnauthorized: () => void;
+  client?: CameraSourceClient;
+}
+export function CameraSourceSetupPanel(props: CameraSourceSetupProps) {
+  // Scope replacement unmounts the old draft and aborts any secret-bearing request.
+  return (
+    <SourceWorkspace
+      key={JSON.stringify([props.setupKey, props.siteId, props.camera.id])}
+      {...props}
+    />
+  );
+}
+function SourceWorkspace({
+  apiUrl,
+  token,
+  siteId,
+  camera,
+  setupKey,
+  canWrite,
+  onUnauthorized,
+  client = cameraSourceClient,
+}: CameraSourceSetupProps) {
+  const { t } = useTranslation(SAFETY_NAMESPACE),
+    id = useId();
+  const [hostId, setHostId] = useState(''),
+    [kind, setKind] = useState<CameraSourceKind | 'BROWSER'>('WEBCAM');
+  const [device, setDevice] = useState(''),
+    [asset, setAsset] = useState(''),
+    [endpoint, setEndpoint] = useState('');
+  const [username, setUsername] = useState(''),
+    [password, setPassword] = useState('');
+  const [pending, setPending] = useState(false),
+    [result, setResult] = useState<SourceTestResult | null>(null);
+  const [error, setError] = useState(''),
+    [revoked, setRevoked] = useState(false),
+    [now, setNow] = useState(() => Date.now());
+  const operation = useRef<{ version: number; abort?: AbortController }>({ version: 0 });
+  const cache = useQueryClient();
+  const resumeCommand = useRef<SourceConfigurationResumeCommand | undefined>(undefined);
+  const applying = useMutation({
+    mutationFn: async () => {
+      if (
+        !result ||
+        result.sourceKind !== 'LIVE' ||
+        !caps?.applySupported ||
+        !client.apply ||
+        now >= Date.parse(result.expiresAt)
+      )
+        throw new SourceSetupError(409);
+      return client.apply(
+        apiUrl,
+        token,
+        siteId,
+        camera.id,
+        hostId,
+        {
+          commandId: crypto.randomUUID(),
+          receiptId: result.receiptId,
+          expectedRevision: caps.sourceRevision ?? 0,
+        },
+        new AbortController().signal,
+      );
+    },
+    retry: false,
+    onSuccess: () => {
+      setPassword('');
+      void hosts.refetch();
+      void cache.invalidateQueries({ predicate: (q) => q.queryKey.includes(siteId) });
+    },
+    onError: (e) => {
+      if (e instanceof SourceSetupError && [401, 403].includes(e.status)) {
+        setRevoked(true);
+        setPassword('');
+        onUnauthorized();
+      }
+    },
+  });
+  const resuming = useMutation({
+    mutationFn: async () => {
+      if (
+        !client.resume ||
+        caps?.configurationResumeSupported !== true ||
+        camera.configurationVersion === undefined ||
+        !canWrite ||
+        revoked ||
+        applying.isPending ||
+        pending
+      )
+        throw new SourceSetupError(409);
+      const command = resumeCommand.current ?? {
+        commandId: crypto.randomUUID(),
+        expectedRevision: caps.sourceRevision ?? 0,
+        expectedConfigurationVersion: camera.configurationVersion,
+      };
+      resumeCommand.current = command;
+      return client.resume(
+        apiUrl,
+        token,
+        siteId,
+        camera.id,
+        hostId,
+        command,
+        new AbortController().signal,
+      );
+    },
+    retry: false,
+    onSuccess: () => {
+      setPassword('');
+      void hosts.refetch();
+    },
+    onError: (e) => {
+      if (e instanceof SourceSetupError && [401, 403].includes(e.status)) {
+        setRevoked(true);
+        setPassword('');
+        onUnauthorized();
+      }
+    },
+  });
+  const resumeScope = useRef({ hostId, version: camera.configurationVersion });
+  const { isPending: resumePending, reset: resetResume } = resuming;
+  useEffect(() => {
+    if (resumePending) return;
+    if (
+      resumeScope.current.hostId !== hostId ||
+      resumeScope.current.version !== camera.configurationVersion
+    ) {
+      resetResume();
+      resumeCommand.current = undefined;
+      resumeScope.current = { hostId, version: camera.configurationVersion };
+    }
+  }, [hostId, camera.configurationVersion, resumePending, resetResume]);
+  useEffect(() => {
+    if (!resuming.isSuccess) return;
+    // Only application receipts: refetching a reference image could retire the view.
+    const refresh = () =>
+      void cache.invalidateQueries({
+        predicate: (q) =>
+          q.queryKey.includes('application-status') &&
+          q.queryKey.includes(siteId) &&
+          q.queryKey.includes(camera.id),
+      });
+    refresh();
+    const timer = setInterval(refresh, 2000);
+    const deadline = setTimeout(() => clearInterval(timer), 30000);
+    return () => {
+      clearInterval(timer);
+      clearTimeout(deadline);
+    };
+  }, [resuming.isSuccess, cache, siteId, camera.id]);
+  useEffect(
+    () => () => {
+      operation.current.version++;
+      operation.current.abort?.abort();
+    },
+    [],
+  );
+  useEffect(() => {
+    if (!result) return;
+    const timer = setInterval(() => setNow(Date.now()), 1000);
+    return () => clearInterval(timer);
+  }, [result]);
+  const hosts = useQuery({
+    queryKey: [...setupKey, 'camera-source-hosts', siteId, camera.id],
+    retry: false,
+    queryFn: ({ signal }) => client.hosts(apiUrl, token, siteId, camera.id, signal),
+  });
+  const hostAccessDenied =
+    hosts.error instanceof SourceSetupError && [401, 403].includes(hosts.error.status);
+  const authFailureReported = useRef(false);
+  useEffect(() => {
+    if (hostAccessDenied && !authFailureReported.current) {
+      authFailureReported.current = true;
+      operation.current.version++;
+      operation.current.abort?.abort();
+      onUnauthorized();
+    }
+  }, [hostAccessDenied, onUnauthorized]);
+  const host = hosts.data?.find((h) => h.id === hostId),
+    caps = host?.capabilities;
+  const supported = kind !== 'BROWSER' && host?.available && caps?.sourceKinds.includes(kind);
+  const reset = () => {
+    operation.current.version++;
+    operation.current.abort?.abort();
+    setPending(false);
+    setResult(null);
+    setError('');
+  };
+  const change = (update: () => void) => {
+    if (applying.isPending || resuming.isPending) return;
+    reset();
+    applying.reset();
+    update();
+  };
+  const draft: CameraSourceDraft | null =
+    kind === 'WEBCAM' && device
+      ? { kind, deviceId: device }
+      : kind === 'VIDEO' && asset
+        ? { kind, assetId: asset }
+        : kind === 'RTSP' && endpoint.trim()
+          ? {
+              kind,
+              endpoint: endpoint.trim(),
+              ...(username || password ? { username, password } : {}),
+            }
+          : null;
+  const canTest = Boolean(
+    canWrite &&
+    !revoked &&
+    !hosts.isError &&
+    supported &&
+    draft &&
+    !pending &&
+    !applying.isPending &&
+    !resuming.isPending,
+  );
+  async function test() {
+    if (!canTest || !draft) return;
+    applying.reset();
+    reset();
+    const version = operation.current.version,
+      abort = new AbortController();
+    operation.current.abort = abort;
+    setPending(true);
+    try {
+      const value = await client.probe(
+        apiUrl,
+        token,
+        siteId,
+        camera.id,
+        hostId,
+        draft,
+        abort.signal,
+      );
+      if (operation.current.version !== version || abort.signal.aborted) return;
+      setResult(value);
+      setNow(Date.now());
+    } catch (e) {
+      if (operation.current.version !== version || abort.signal.aborted) return;
+      const status = e instanceof SourceSetupError ? e.status : undefined;
+      if (status === 401 || status === 403) {
+        setRevoked(true);
+        setPassword('');
+        setError('cameraSource.forbidden');
+        if (status === 401) onUnauthorized();
+      } else setError(status === 409 ? 'cameraSource.busy' : 'cameraSource.error');
+    } finally {
+      if (operation.current.version === version) setPending(false);
+    }
+  }
+  const blocked = revoked || !canWrite || applying.isPending || resuming.isPending;
+  if (hostAccessDenied) {
+    return (
+      <section
+        role="alert"
+        className="mt-5 rounded-xl border border-rose-200 bg-rose-50 p-4 text-sm text-rose-900"
+      >
+        {t('cameraSource.forbidden')}
+      </section>
+    );
+  }
+  return (
+    <section
+      className="mt-5 min-w-0 overflow-hidden rounded-2xl border border-slate-200 bg-white"
+      aria-labelledby={`${id}-heading`}
+    >
+      <header className="border-b border-slate-100 px-4 py-4 sm:px-5">
+        <p className="text-xs font-semibold text-slate-500">{camera.name}</p>
+        <h2
+          id={`${id}-heading`}
+          className="mt-1 text-lg font-semibold tracking-tight text-slate-950"
+        >
+          {t('cameraSource.title')}
+        </h2>
+        <p className="mt-1 max-w-3xl text-sm leading-relaxed text-slate-600">
+          {t('cameraSource.intro')}
+        </p>
+      </header>
+      <div className="space-y-5 p-4 sm:p-5">
+        <fieldset
+          className="grid min-w-0 grid-cols-1 gap-2 sm:grid-cols-2 xl:grid-cols-4"
+          disabled={blocked}
+        >
+          <legend className="sr-only">{t('cameraSource.title')}</legend>
+          {(['WEBCAM', 'RTSP', 'VIDEO', 'BROWSER'] as const).map((option) => (
+            <label
+              key={option}
+              className={`min-w-0 cursor-pointer rounded-xl border p-3 transition-colors focus-within:ring-2 focus-within:ring-slate-700 ${kind === option ? 'border-slate-900 bg-slate-50' : 'border-slate-200 hover:border-slate-400'}`}
+            >
+              <span className="flex items-start gap-2">
+                <input
+                  className="mt-1 shrink-0 accent-slate-900"
+                  type="radio"
+                  name={`${id}-kind`}
+                  checked={kind === option}
+                  onChange={() =>
+                    change(() => {
+                      setKind(option);
+                      setPassword('');
+                    })
+                  }
+                />
+                <span className="text-sm font-semibold text-slate-950">
+                  {t(`cameraSource.${option}`)}
+                </span>
+              </span>
+              <span className="mt-2 block text-xs leading-relaxed text-slate-600">
+                {t(`cameraSource.${option}Help`)}
+              </span>
+            </label>
+          ))}
+        </fieldset>
+        {kind === 'BROWSER' ? (
+          <p
+            role="status"
+            className="rounded-xl border border-amber-200 bg-amber-50 p-3 text-sm text-amber-950"
+          >
+            {t('cameraSource.browserUnavailable')}
+          </p>
+        ) : (
+          <>
+            <div className="flex min-w-0 flex-wrap items-end gap-3">
+              <div className="min-w-0 flex-1 space-y-1.5">
+                <label className={CAMERA_FIELD_STYLES.label} htmlFor={`${id}-host`}>
+                  {t('cameraSource.host')}
+                </label>
+                <select
+                  id={`${id}-host`}
+                  className={CAMERA_FIELD_STYLES.input}
+                  value={hostId}
+                  disabled={blocked || hosts.isPending}
+                  onChange={(e) =>
+                    change(() => {
+                      setHostId(e.target.value);
+                      setDevice('');
+                      setAsset('');
+                      setPassword('');
+                    })
+                  }
+                >
+                  <option value="">{t('cameraSource.chooseHost')}</option>
+                  {hosts.data?.map((h) => (
+                    <option key={h.id} value={h.id}>
+                      {h.label}
+                      {h.available ? '' : ` — ${t('cameraSource.offline')}`}
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <button
+                type="button"
+                className={CAMERA_BUTTON_STYLES.secondary}
+                disabled={hosts.isFetching || pending || applying.isPending}
+                onClick={() => {
+                  reset();
+                  void hosts.refetch();
+                }}
+              >
+                {t('cameraSource.refresh')}
+              </button>
+            </div>
+            <p className="text-xs leading-relaxed text-slate-600">{t('cameraSource.hostHelp')}</p>
+            {hosts.isPending ? (
+              <p role="status" className="text-sm text-slate-600">
+                {t('cameraSource.loading')}
+              </p>
+            ) : hosts.isError ? (
+              <p role="alert" className="text-sm text-amber-900">
+                {t('cameraSource.unavailable')}
+              </p>
+            ) : hosts.data?.length === 0 ? (
+              <p
+                role="status"
+                className="rounded-xl border border-slate-200 bg-slate-50 p-3 text-sm text-slate-700"
+              >
+                {t('cameraSource.noHosts')}
+              </p>
+            ) : null}
+            {host && !host.available && (
+              <p role="status" className="text-sm text-amber-900">
+                {t('cameraSource.unavailable')}
+              </p>
+            )}
+            {host?.available && !supported && (
+              <p role="status" className="text-sm text-amber-900">
+                {t('cameraSource.unsupported')}
+              </p>
+            )}
+            {supported && (
+              <div className="max-w-3xl space-y-3">
+                {kind === 'WEBCAM' && (
+                  <div className="space-y-1.5">
+                    <label htmlFor={`${id}-device`} className={CAMERA_FIELD_STYLES.label}>
+                      {t('cameraSource.device')}
+                    </label>
+                    <select
+                      id={`${id}-device`}
+                      className={CAMERA_FIELD_STYLES.input}
+                      value={device}
+                      disabled={blocked}
+                      onChange={(e) => change(() => setDevice(e.target.value))}
+                    >
+                      <option value="">{t('cameraSource.chooseDevice')}</option>
+                      {caps?.webcams.map((d) => (
+                        <option key={d.id} value={d.id}>
+                          {d.label}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                )}
+                {kind === 'VIDEO' && (
+                  <div className="space-y-1.5">
+                    <label htmlFor={`${id}-asset`} className={CAMERA_FIELD_STYLES.label}>
+                      {t('cameraSource.video')}
+                    </label>
+                    <select
+                      id={`${id}-asset`}
+                      className={CAMERA_FIELD_STYLES.input}
+                      value={asset}
+                      disabled={blocked}
+                      onChange={(e) => change(() => setAsset(e.target.value))}
+                    >
+                      <option value="">{t('cameraSource.chooseVideo')}</option>
+                      {caps?.videos.map((d) => (
+                        <option key={d.id} value={d.id}>
+                          {d.label}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                )}
+                {kind === 'RTSP' && (
+                  <fieldset className="space-y-3" disabled={blocked}>
+                    <div className="space-y-1.5">
+                      <label htmlFor={`${id}-endpoint`} className={CAMERA_FIELD_STYLES.label}>
+                        {t('cameraSource.endpoint')}
+                      </label>
+                      <input
+                        id={`${id}-endpoint`}
+                        value={endpoint}
+                        autoComplete="off"
+                        placeholder={t('cameraSource.endpointExample')}
+                        className={CAMERA_FIELD_STYLES.input}
+                        onChange={(e) => change(() => setEndpoint(e.target.value))}
+                      />
+                    </div>
+                    <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                      <div className="space-y-1.5">
+                        <label htmlFor={`${id}-username`} className={CAMERA_FIELD_STYLES.label}>
+                          {t('cameraSource.username')}
+                        </label>
+                        <input
+                          id={`${id}-username`}
+                          value={username}
+                          autoComplete="off"
+                          className={CAMERA_FIELD_STYLES.input}
+                          onChange={(e) => change(() => setUsername(e.target.value))}
+                        />
+                      </div>
+                      <div className="space-y-1.5">
+                        <label htmlFor={`${id}-password`} className={CAMERA_FIELD_STYLES.label}>
+                          {t('cameraSource.password')}
+                        </label>
+                        <input
+                          id={`${id}-password`}
+                          type="password"
+                          value={password}
+                          autoComplete="new-password"
+                          className={CAMERA_FIELD_STYLES.input}
+                          onChange={(e) => change(() => setPassword(e.target.value))}
+                        />
+                      </div>
+                    </div>
+                    <p className="text-xs text-slate-600">{t('cameraSource.credentialHelp')}</p>
+                  </fieldset>
+                )}
+                <div className="flex flex-wrap gap-2">
+                  <button
+                    type="button"
+                    className={CAMERA_BUTTON_STYLES.primary}
+                    disabled={!canTest}
+                    onClick={() => void test()}
+                  >
+                    {t(pending ? 'cameraSource.testing' : 'cameraSource.test')}
+                  </button>
+                  {pending && (
+                    <button
+                      type="button"
+                      className={CAMERA_BUTTON_STYLES.secondary}
+                      onClick={reset}
+                    >
+                      {t('cameraSource.cancel')}
+                    </button>
+                  )}
+                </div>
+              </div>
+            )}
+          </>
+        )}
+        {error && (
+          <p
+            role="alert"
+            className="rounded-lg border border-rose-200 bg-rose-50 p-3 text-sm text-rose-900"
+          >
+            {t(error)}
+          </p>
+        )}
+        {caps?.configurationResumeSupported === true &&
+          client.resume &&
+          camera.configurationVersion !== undefined && (
+            <aside className="space-y-3 rounded-xl border border-sky-200 bg-sky-50 p-4">
+              <h3 className="text-sm font-semibold text-slate-950">
+                {t('cameraSource.savedConfiguration')}
+              </h3>
+              <p className="text-sm leading-relaxed text-slate-700">
+                {t('cameraSource.resumeHelp')}
+              </p>
+              <button
+                type="button"
+                className={CAMERA_BUTTON_STYLES.secondary}
+                disabled={blocked || pending || resuming.isSuccess}
+                onClick={() => resuming.mutate()}
+              >
+                {t(
+                  resuming.isPending
+                    ? 'cameraSource.resuming'
+                    : resuming.isError
+                      ? 'cameraSource.retryResume'
+                      : 'cameraSource.resume',
+                )}
+              </button>
+              {resuming.isSuccess && (
+                <p role="status" className="text-sm text-slate-700">
+                  {t('cameraSource.resumeStarted')}
+                </p>
+              )}
+              {resuming.isError && (
+                <p role="alert" className="text-sm text-rose-900">
+                  {t('cameraSource.resumeError')}
+                </p>
+              )}
+            </aside>
+          )}
+        {applying.isError && (
+          <p
+            role="alert"
+            className="rounded-lg border border-rose-200 bg-rose-50 p-3 text-sm text-rose-900"
+          >
+            {t('cameraSource.applyError')}
+          </p>
+        )}
+        {applying.isSuccess && (
+          <p
+            role="status"
+            className="rounded-lg border border-emerald-200 bg-emerald-50 p-3 text-sm text-emerald-950"
+          >
+            {t('cameraSource.running')}
+          </p>
+        )}
+        {result && host?.available && !hosts.isError && (
+          <figure className="max-w-3xl space-y-3 overflow-hidden rounded-xl border border-slate-200 bg-slate-50 p-3">
+            <figcaption className="flex flex-wrap items-center justify-between gap-2 text-sm font-semibold text-slate-900">
+              <span>{t('cameraSource.tested')}</span>
+              <span className="text-xs">
+                {t(result.sourceKind === 'REPLAY' ? 'cameraSource.replay' : 'cameraSource.live')}
+              </span>
+            </figcaption>
+            <img
+              src={result.frame.imageDataUrl}
+              alt={t('cameraSource.preview', { camera: camera.name })}
+              width={result.frame.width}
+              height={result.frame.height}
+              className="max-h-96 w-full rounded-lg bg-slate-950 object-contain"
+            />
+            <p className="text-sm text-slate-700">
+              {t(
+                now >= Date.parse(result.expiresAt)
+                  ? 'cameraSource.expired'
+                  : 'cameraSource.notApplied',
+              )}
+            </p>
+            {caps?.applySupported &&
+              canWrite &&
+              result.sourceKind === 'LIVE' &&
+              !applying.isSuccess && (
+                <button
+                  type="button"
+                  className={CAMERA_BUTTON_STYLES.primary}
+                  disabled={blocked || applying.isError || now >= Date.parse(result.expiresAt)}
+                  onClick={() => applying.mutate()}
+                >
+                  {t(applying.isPending ? 'cameraSource.applying' : 'cameraSource.apply')}
+                </button>
+              )}
+          </figure>
+        )}
+        <p className="border-t border-slate-100 pt-3 text-xs leading-relaxed text-slate-600">
+          {t('cameraSource.next')}
+        </p>
+      </div>
+    </section>
+  );
+}

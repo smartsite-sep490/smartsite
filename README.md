@@ -19,6 +19,36 @@ Computer-vision and AI workloads live in the companion repository: [smartsite-se
 
 Before contributing or using a coding assistant, read [AGENTS.md](AGENTS.md) for the mandatory architecture, security, testing, Git, and code-quality rules, then follow [CONTRIBUTING.md](CONTRIBUTING.md) for the team workflow.
 
+## Experimental camera source connection workspace
+
+`VITE_SMARTSITE_ENABLE_SOURCE_SETUP=true` enables source-specific connection
+tests for a selected registered camera. The Backend's optional
+`SMARTSITE_AI_SOURCE_HOSTS` JSON array contains trusted entries with `id`,
+`label`, `siteIds` and `origin`. The default empty list disables testing. Use
+HTTPS in production; HTTP loopback is allowed only outside production. Origins
+and the existing server-only AI service token never go to the browser.
+
+The shared API client reads scoped host capabilities using
+`GET /api/v1/sites/:siteId/cameras/:cameraId/source-hosts` and tests sources with
+`POST` to that path plus `/:hostId/probe`. The assigned Site Manager can test;
+existing authorized camera readers can inspect capabilities. Authentication is
+rechecked after the remote call. Draft/scope changes cancel pending tests.
+
+USB webcams belong to the selected AI host; approved recorded videos are REPLAY;
+IP/RTSP cameras use a separate URL and credentials. This browser's camera is
+explicitly unsupported until media ingestion is implemented. Successful tests
+show a real image but do not persist source changes or start AI:
+`applySupported=false` on a test-only host. An operator-configured source driver
+and `SMARTSITE_AI_SOURCE_APPLY_ENABLED=true` enable receipt-bound LIVE source
+activation for the Backend's explicit camera allowlist. The old owner stops
+before trusted generation renewal; the new source starts only after prior views
+are retired. Settings are encrypted on the host. Failure leaves an explicit
+reconciliation state; browser disconnect cannot undo a committed transition.
+No generation secret is returned to the browser. Apply does not claim inference
+or business alert readiness; a fresh view and PPE configuration are still required.
+Browser media transport, replay activation and general remote-host rollout remain
+unfinished. Native RTSP redirect/SDP egress still needs deployment-level enforcement.
+
 ## Architecture
 
 ```text

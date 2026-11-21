@@ -330,6 +330,11 @@ export const backendEnvironmentSchema = z
     AI_RATE_LIMIT_LIMIT: integer(600, 1, Number.MAX_SAFE_INTEGER),
     AI_CONFIGURATION_CAMERA_IDS: cameraIdsSchema,
     SMARTSITE_AI_PREVIEW_SOURCES: previewSourcesSchema,
+    SMARTSITE_AI_SOURCE_HOSTS: z.string().max(32768).optional(),
+    SMARTSITE_AI_SOURCE_APPLY_ENABLED: z
+      .enum(['true', 'false'])
+      .default('false')
+      .transform((v) => v === 'true'),
     STORAGE_PROVIDER: z.enum(['LOCAL', 'R2']).default('LOCAL'),
     STORAGE_LOCAL_ROOT: z
       .string()
