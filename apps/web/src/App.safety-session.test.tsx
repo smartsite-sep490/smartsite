@@ -24,8 +24,8 @@ vi.mock('gsap', () => ({
   },
 }));
 vi.mock('./components/landing/LandingPage', () => ({ LandingPage: () => <div>Landing</div> }));
-vi.mock('./components/layout/AppLayout', () => ({
-  AppLayout: ({ children }: { children: React.ReactNode }) => <main>{children}</main>,
+vi.mock('./features/notifications/NotificationBell', () => ({
+  NotificationBell: () => null,
 }));
 afterEach(() => {
   cleanup();
@@ -89,10 +89,10 @@ it('App clears the authenticated Safety workspace even when server logout fails'
   );
   fireEvent.click(await screen.findByRole('button', { name: /^Incidents$/ }));
   expect(await screen.findByText('No incidents found.')).not.toBeNull();
-  fireEvent.click(screen.getByRole('button', { name: 'Sign out Representative' }));
+  fireEvent.click(screen.getByRole('button', { name: 'Logout' }));
   await waitFor(() => expect(logout).toHaveBeenCalledOnce());
   expect(await screen.findByRole('button', { name: 'Sign In' })).not.toBeNull();
-  expect(screen.queryByRole('button', { name: 'Sign out Representative' })).toBeNull();
+  expect(screen.queryByRole('button', { name: 'Logout' })).toBeNull();
   expect(cache.getQueryCache().findAll({ queryKey: ['safety-workflow'] })).toHaveLength(0);
   expect(cache.getQueryData(['auth', 'me', 'http://localhost:3000'])).toBeUndefined();
   expect(sessionStorage.getItem('smartsite:signed-out')).toBe('true');
@@ -196,9 +196,9 @@ it('login animation cannot navigate back to Dashboard after opening Safety', asy
   fireEvent.click(screen.getByRole('button', { name: 'Sign In' }));
   await screen.findByRole('button', { name: 'Open Safety' });
   fireEvent.click(screen.getByRole('button', { name: 'Open Safety' }));
-  await screen.findByRole('button', { name: 'Sign out Representative' });
+  await screen.findByRole('button', { name: 'Logout' });
   act(() => {
     for (const callback of animations.callbacks) callback();
   });
-  expect(screen.getByRole('button', { name: 'Sign out Representative' })).not.toBeNull();
+  expect(screen.getByRole('button', { name: 'Logout' })).not.toBeNull();
 });

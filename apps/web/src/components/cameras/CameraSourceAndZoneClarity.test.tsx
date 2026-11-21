@@ -365,6 +365,8 @@ describe('Human Zone/Region labels and honest provisioned-source setup guidance'
         name: 'North Gate Camera',
         code: 'CAM-01',
         externalId: 'camera-a',
+        type: 'ZONE',
+        gateId: null,
       }),
     );
 
