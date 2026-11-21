@@ -231,14 +231,14 @@ export function CameraSetupChecklist({
       data-setup-complete={checklist.isSetupComplete ? 'true' : 'false'}
       data-config-saved={checklist.isConfigSaved ? 'true' : 'false'}
       data-worker-applied={checklist.isWorkerApplied ? 'true' : 'false'}
-      className="min-w-0 rounded-2xl border border-slate-200/90 bg-white p-4 shadow-2xs"
+      className="min-w-0 rounded-xl border border-slate-200 bg-white px-4 py-3"
     >
       <div className="flex flex-wrap items-center justify-between gap-2">
         <p className="text-sm font-semibold text-slate-900">{t('cameraSetup.checklist.heading')}</p>
         <div className="flex flex-wrap items-center gap-2">
           <span
             data-testid="camera-setup-checklist-overall"
-            className={`inline-flex items-center rounded-md border px-2.5 py-0.5 text-xs font-semibold tabular-nums ${
+            className={`inline-flex items-center rounded-md border px-2.5 py-0.5 text-sm font-semibold tabular-nums ${
               OVERALL_BADGE_STYLES[checklist.overallState]
             }`}
           >
@@ -257,24 +257,24 @@ export function CameraSetupChecklist({
         </div>
       </div>
 
-      <dl className="mt-2.5 grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
+      <dl className="mt-2.5 grid divide-y divide-slate-200 rounded-xl border border-slate-200 bg-slate-50/40 sm:grid-cols-2 sm:divide-y-0 sm:divide-x lg:grid-cols-4">
         {checklist.items.map((item) => (
           <div
             key={item.id}
             data-testid={`camera-setup-step-${item.id}`}
             data-step-status={item.status}
-            className="min-w-0 rounded-lg border border-slate-200/80 bg-slate-50/60 px-3 py-2 text-xs"
+            className="min-w-0 px-3 py-2 text-sm"
           >
-            <dt className="flex items-center gap-1.5 font-medium text-slate-600">
+            <dt className="flex items-center gap-1.5 text-xs font-medium text-slate-600">
               <span
                 aria-hidden="true"
-                className={`h-1.5 w-1.5 shrink-0 rounded-full ${MILESTONE_DOT_STYLES[item.status]}`}
+                className={`h-2 w-2 shrink-0 rounded-full ${MILESTONE_DOT_STYLES[item.status]}`}
               />
               <span className="min-w-0 break-words [overflow-wrap:anywhere]">
                 {t(item.labelKey)}
               </span>
             </dt>
-            <dd className="mt-1 min-w-0 break-words [overflow-wrap:anywhere] font-semibold tabular-nums text-slate-900">
+            <dd className="mt-1 min-w-0 break-words [overflow-wrap:anywhere] text-sm font-semibold tabular-nums text-slate-950">
               {t(item.valueKey, item.valueParams)}
             </dd>
           </div>

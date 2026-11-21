@@ -53,6 +53,13 @@ const en = {
   'episodes.identificationWorkspaceNav': 'Identification requests',
   'episodes.identificationWorkspaceLoading': 'Loading identification requests…',
   'episodes.identificationBackToEpisode': 'Back to episode record',
+  'episodes.emptyGuideHint':
+    'Evidence photos stay closed until you pick a case so personal media is only opened on demand.',
+  'episodes.emptyGuideStep1': 'Inspect verified JPEG evidence on demand for the selected subject.',
+  'episodes.emptyGuideStep2':
+    'Review each PPE or restricted-zone finding independently — marking read never resolves a violation.',
+  'episodes.emptyGuideStep3':
+    'Request Site Manager identification when a subject remains unknown and requires follow-up.',
   'trackedWorkspace.title': 'Tracked episode evidence',
   'trackedWorkspace.subtitle':
     'Original observation mappings and verified JPEG media for this tracked episode. Technical segment metadata never implies a Worker or team identity.',
@@ -100,6 +107,14 @@ const vi: Record<keyof typeof en, string> = {
   'episodes.identificationWorkspaceNav': 'Yêu cầu xác minh',
   'episodes.identificationWorkspaceLoading': 'Đang tải yêu cầu xác minh…',
   'episodes.identificationBackToEpisode': 'Quay lại hồ sơ người',
+  'episodes.emptyGuideHint':
+    'Ảnh bằng chứng không tự mở sẵn — chỉ tải khi bạn chọn một hồ sơ cụ thể bên trái.',
+  'episodes.emptyGuideStep1':
+    'Mở xem ảnh JPEG gốc có kiểm tra mã băm cho từng lượt ghi nhận của chủ thể.',
+  'episodes.emptyGuideStep2':
+    'Duyệt riêng từng phát hiện PPE hoặc vùng hạn chế — đánh dấu đã đọc không đồng nghĩa đã xử lý.',
+  'episodes.emptyGuideStep3':
+    'Gửi yêu cầu xác minh danh tính tới Quản lý công trường khi cần đối chiếu nhân sự.',
   'trackedWorkspace.title': 'Bằng chứng hồ sơ theo dõi liên tiếp',
   'trackedWorkspace.subtitle':
     'Chuỗi hình ảnh JPEG gốc và các lần ghi nhận của cùng một lượt theo dõi camera. Mã phân đoạn kỹ thuật chỉ phục vụ gom nhóm hình ảnh, không xác định danh tính công nhân hay tổ đội.',

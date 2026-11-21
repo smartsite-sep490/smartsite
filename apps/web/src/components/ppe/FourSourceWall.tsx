@@ -210,10 +210,10 @@ export function FourSourceWallTile(props: FourSourceWallTileProps) {
 
   const stageHeightClass =
     cameraCountInGrid === 1
-      ? 'lg:h-[clamp(20rem,calc(100vh-20.5rem),38rem)] [[data-monitor-fullscreen=true]_&]:lg:h-[clamp(24rem,calc(100vh-10rem),52rem)]'
+      ? 'lg:h-[clamp(17.5rem,calc(100dvh-23.5rem),36rem)] [[data-monitor-fullscreen=true]_&]:lg:h-[clamp(22rem,calc(100dvh-10rem),52rem)]'
       : cameraCountInGrid === 2
-        ? 'lg:h-[clamp(17rem,calc(100vh-19.5rem),28rem)] [[data-monitor-fullscreen=true]_&]:lg:h-[clamp(20rem,calc(100vh-10.5rem),36rem)]'
-        : 'lg:h-[clamp(13rem,calc((100vh-18rem)/2),20.5rem)] [[data-monitor-fullscreen=true]_&]:lg:h-[clamp(15rem,calc((100vh-10.5rem)/2),26rem)]';
+        ? 'lg:h-[clamp(15rem,calc(100dvh-21rem),26rem)] [[data-monitor-fullscreen=true]_&]:lg:h-[clamp(20rem,calc(100dvh-10.5rem),36rem)]'
+        : 'lg:h-[clamp(11.5rem,calc((100dvh-20.5rem)/2),19.5rem)] [[data-monitor-fullscreen=true]_&]:lg:h-[clamp(15rem,calc((100dvh-10.5rem)/2),26rem)]';
 
   return (
     <div
@@ -223,9 +223,9 @@ export function FourSourceWallTile(props: FourSourceWallTileProps) {
         camera: camera.name || camera.code,
       })}
       onClick={() => onSelect(camera.id)}
-      className={`relative min-w-0 rounded-2xl border transition-all flex flex-col overflow-hidden cursor-pointer select-none bg-[#0B0F17] ${
+      className={`relative min-w-0 rounded-xl border transition-all flex flex-col overflow-hidden cursor-pointer select-none bg-[#0B0F17] ${
         isSelected
-          ? 'border-amber-400/90 ring-2 ring-amber-400/30 shadow-sm'
+          ? 'border-amber-400/90 ring-1 ring-amber-400/40 shadow-2xs'
           : 'border-slate-800 hover:border-slate-700'
       }`}
     >
@@ -251,22 +251,26 @@ export function FourSourceWallTile(props: FourSourceWallTileProps) {
           )}
         </div>
 
-        <div className="flex flex-wrap items-center gap-2 shrink-0 ml-auto">
+        <div className="flex flex-wrap items-center gap-2.5 shrink-0 ml-auto">
           <span
             data-testid={`wall-source-badge-${camera.id}`}
-            className={`inline-flex items-center gap-1.5 px-2 py-0.5 rounded-md text-xs font-semibold tracking-wide border ${
+            className={`inline-flex items-center gap-1.5 text-sm font-semibold ${
               isAiWorkPaused
-                ? 'bg-amber-500/15 text-amber-200 border-amber-500/35'
+                ? 'text-amber-200'
                 : isLive
-                  ? 'bg-emerald-500/15 text-emerald-200 border-emerald-500/35'
+                  ? 'text-emerald-300'
                   : isReplay
-                    ? 'bg-amber-500/15 text-amber-200 border-amber-500/35'
-                    : 'bg-slate-800 text-slate-300 border-slate-700'
+                    ? 'text-amber-200'
+                    : 'text-slate-300'
             }`}
           >
             <span
               className={`w-2 h-2 rounded-full ${
-                isLive ? 'bg-emerald-400' : isReplay ? 'bg-amber-400' : 'bg-slate-400'
+                isLive
+                  ? 'bg-emerald-400'
+                  : isReplay || isAiWorkPaused
+                    ? 'bg-amber-400'
+                    : 'bg-slate-400'
               }`}
             />
             {isAiWorkPaused
@@ -377,7 +381,7 @@ export function FourSourceWallTile(props: FourSourceWallTileProps) {
 
       <div
         data-testid={`wall-metadata-bar-${camera.id}`}
-        className="relative z-10 px-3.5 py-2.5 bg-slate-950/95 border-t border-white/10 text-white text-xs space-y-2"
+        className="relative z-10 px-3.5 py-2.5 bg-slate-950/95 border-t border-white/10 text-white text-sm space-y-2"
       >
         <div className="flex min-w-0 flex-wrap items-center justify-between gap-2">
           <span
@@ -417,7 +421,7 @@ export function FourSourceWallTile(props: FourSourceWallTileProps) {
             onClick={(e) => e.stopPropagation()}
             className="text-xs text-slate-300 min-w-0 shrink-0 open:basis-full open:order-last"
           >
-            <summary className="inline-flex min-h-8 items-center cursor-pointer font-medium text-xs text-slate-200 hover:text-white select-none px-3 py-1.5 rounded-lg border border-white/15 bg-white/5 hover:bg-white/15 transition-colors">
+            <summary className="inline-flex min-h-9 items-center cursor-pointer font-medium text-sm text-slate-200 hover:text-white select-none px-3 py-1.5 rounded-lg border border-white/15 bg-white/5 hover:bg-white/15 transition-colors">
               {t('ppe.common.details')}
             </summary>
             <div className="mt-2 pt-2 border-t border-white/15 space-y-2 max-h-32 overflow-y-auto overscroll-contain pr-1">
@@ -458,7 +462,7 @@ export function FourSourceWallTile(props: FourSourceWallTileProps) {
                 e.stopPropagation();
                 onSelect(camera.id);
               }}
-              className={`inline-flex min-h-8 items-center px-3 py-1.5 rounded-lg text-xs font-medium transition-colors cursor-pointer focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white ${
+              className={`inline-flex min-h-9 items-center px-3 py-1.5 rounded-lg text-sm font-medium transition-colors cursor-pointer focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white ${
                 isSelected
                   ? 'border border-amber-400/40 bg-amber-400/15 font-semibold text-amber-200'
                   : 'border border-white/15 bg-transparent text-slate-300 hover:bg-white/10 hover:text-white'
@@ -479,9 +483,9 @@ export function FourSourceWallTile(props: FourSourceWallTileProps) {
                   e.stopPropagation();
                   onEnlarge(camera.id);
                 }}
-                className="inline-flex min-h-8 items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold bg-white/15 text-white hover:bg-white/25 transition-colors cursor-pointer focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white"
+                className="inline-flex min-h-9 items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-semibold bg-white/15 text-white hover:bg-white/25 transition-colors cursor-pointer focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white"
               >
-                <IconMaximize className="w-3.5 h-3.5 shrink-0" />
+                <IconMaximize className="w-4 h-4 shrink-0" />
                 <span>{t('ppe.wall.enlargeCameraBtn')}</span>
               </button>
             )}
@@ -496,9 +500,9 @@ export function FourSourceWallTile(props: FourSourceWallTileProps) {
                   e.stopPropagation();
                   onOpenEvidence(camera.id);
                 }}
-                className="inline-flex min-h-8 items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold border border-white/15 bg-white/5 text-slate-100 hover:bg-white/15 transition-colors cursor-pointer focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white"
+                className="inline-flex min-h-9 items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-semibold border border-white/15 bg-white/5 text-slate-100 hover:bg-white/15 transition-colors cursor-pointer focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white"
               >
-                <IconShield className="w-3.5 h-3.5 shrink-0" />
+                <IconShield className="w-4 h-4 shrink-0" />
                 <span>{t('ppe.common.evidence')}</span>
               </button>
             )}

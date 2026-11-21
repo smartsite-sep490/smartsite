@@ -237,25 +237,25 @@ export function MonitorEvidenceDrawer({
           </header>
 
           <div className="rounded-xl border border-slate-200 bg-slate-50/80 p-3.5 space-y-2">
-            <div className="flex flex-wrap items-center justify-between gap-2 text-xs sm:text-sm">
+            <div className="flex flex-wrap items-center justify-between gap-2 text-sm">
               <span className="font-semibold text-slate-700">
                 {trMonitor('monitor.drawer.currentStatus')}
               </span>
               <span
                 data-testid="monitor-drawer-source-state"
-                className={`rounded-md border px-2.5 py-0.5 text-xs font-semibold ${
+                className={`inline-flex items-center gap-1.5 text-sm font-semibold ${
                   activePreview
-                    ? 'border-emerald-300 bg-emerald-50 text-emerald-900'
+                    ? 'text-emerald-800'
                     : aiPaused || isRawModeActive
-                      ? 'border-amber-300 bg-amber-50 text-amber-900'
-                      : 'border-rose-200 bg-rose-50 text-rose-900'
+                      ? 'text-amber-800'
+                      : 'text-rose-700'
                 }`}
               >
                 {statusBadgeText}
               </span>
             </div>
             {formattedTime && activePreview && (
-              <div className="flex flex-wrap items-center justify-between gap-2 text-xs sm:text-sm text-slate-600">
+              <div className="flex flex-wrap items-center justify-between gap-2 text-sm text-slate-600">
                 <span>{trMonitor('monitor.drawer.capturedAt')}</span>
                 <span className="font-mono font-semibold tabular-nums text-slate-800">
                   {formattedTime}
@@ -277,11 +277,11 @@ export function MonitorEvidenceDrawer({
                 {trMonitor('monitor.drawer.noDetections')}
               </p>
             ) : (
-              <ul className="space-y-2.5">
+              <ul className="divide-y divide-slate-200/80 rounded-xl border border-slate-200 bg-white overflow-hidden">
                 {detections.map((detection, index) => (
                   <li
                     key={`${detection.eventId}-${detection.trackId ?? index}`}
-                    className="rounded-xl border border-slate-200 bg-white p-3.5 space-y-2 shadow-2xs"
+                    className="p-3.5 space-y-2"
                   >
                     <div className="flex flex-wrap items-center justify-between gap-1.5">
                       <span className="inline-flex items-center gap-1.5 text-sm font-semibold text-slate-950">
@@ -292,13 +292,13 @@ export function MonitorEvidenceDrawer({
                       </span>
                     </div>
                     {detection.trackId !== null && detection.trackId !== undefined && (
-                      <p className="text-xs text-slate-500 tabular-nums">
+                      <p className="text-xs text-slate-600 tabular-nums">
                         {trMonitor('monitor.drawer.trackDisclaimer', {
                           trackId: detection.trackId,
                         })}
                       </p>
                     )}
-                    <div className="grid grid-cols-1 gap-1.5 pt-1 text-xs sm:text-sm">
+                    <div className="grid grid-cols-1 gap-1.5 pt-1 text-sm">
                       <div className="flex items-center justify-between gap-2 rounded-lg bg-slate-50 px-2.5 py-1.5">
                         <span className="font-medium text-slate-700">
                           {trMonitor('monitor.drawer.ppeHardHat')}
@@ -333,7 +333,7 @@ export function MonitorEvidenceDrawer({
               <Link
                 data-testid="monitor-drawer-frame-inbox-link"
                 to={`/incidents?${frameInboxParams}`}
-                className="flex min-h-10 w-full items-center justify-between gap-2 rounded-xl bg-slate-900 px-4 py-2.5 text-sm font-semibold text-white hover:bg-slate-800 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-slate-900"
+                className="flex min-h-10 w-full items-center justify-between gap-2 rounded-xl bg-[#0F172A] px-4 py-2.5 text-sm font-semibold text-white hover:bg-slate-800 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-slate-900"
               >
                 <span>{trMonitor('monitor.drawer.openFrameInbox')}</span>
                 <IconChevronRight className="h-4 w-4 shrink-0" />

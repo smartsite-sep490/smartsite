@@ -146,11 +146,8 @@ const STAGE_KEYS = [
 export function CameraSetupStageCards() {
   const { t } = useTranslation(SAFETY_NAMESPACE);
   return (
-    <div
-      data-testid="camera-setup-stages-disclosure"
-      className="min-w-0 border-t border-slate-200/80 pt-3 text-xs text-slate-600"
-    >
-      <p className="mb-2 text-xs font-semibold text-slate-700">
+    <div data-testid="camera-setup-stages-disclosure" className="min-w-0 text-sm text-slate-700">
+      <p className="mb-2.5 text-sm font-semibold text-slate-900">
         {t('cameraSetup.stagesDisclosureLabel')}
       </p>
       <ol
@@ -160,12 +157,14 @@ export function CameraSetupStageCards() {
         {STAGE_KEYS.map(([titleKey, bodyKey]) => (
           <li
             key={titleKey}
-            className="min-w-0 rounded-lg border border-slate-200/80 bg-white px-3.5 py-2.5 text-xs leading-5"
+            className="min-w-0 rounded-xl border border-slate-200 bg-white px-3.5 py-2.5"
           >
-            <p className="break-words [overflow-wrap:anywhere] font-semibold text-slate-900">
+            <p className="break-words [overflow-wrap:anywhere] text-sm font-semibold text-slate-900">
               {t(titleKey)}
             </p>
-            <p className="mt-1 break-words [overflow-wrap:anywhere] text-slate-600">{t(bodyKey)}</p>
+            <p className="mt-1 break-words [overflow-wrap:anywhere] text-xs leading-5 text-slate-600">
+              {t(bodyKey)}
+            </p>
           </li>
         ))}
       </ol>
@@ -177,52 +176,54 @@ export function CameraSetupRowMetadata(props: { row: CameraResponse; isEnabled: 
   const { row, isEnabled } = props;
   const { t } = useTranslation(SAFETY_NAMESPACE);
   return (
-    <div className="min-w-0 space-y-1.5 text-xs text-slate-600">
-      <dl className="min-w-0 flex flex-wrap items-center gap-2">
-        <div className="min-w-0 inline-flex items-center">
+    <div className="min-w-0 space-y-1 text-sm text-slate-600">
+      <dl className="min-w-0 flex flex-wrap items-baseline gap-x-2 gap-y-0.5">
+        <div className="inline-flex items-center gap-1.5">
           <dt className="sr-only">{t('cameraSetup.statusLabel')}</dt>
-          <dd className="min-w-0">
+          <dd
+            className={`inline-flex items-center gap-1.5 text-sm font-medium ${
+              isEnabled ? 'text-emerald-800' : 'text-slate-600'
+            }`}
+          >
             <span
-              className={`inline-flex max-w-full items-center gap-1.5 rounded-md border px-2.5 py-1 text-xs font-medium break-words [overflow-wrap:anywhere] ${
-                isEnabled
-                  ? 'border-emerald-200 bg-emerald-50/70 text-slate-800'
-                  : 'border-slate-200 bg-slate-100 text-slate-600'
+              aria-hidden="true"
+              className={`h-2 w-2 shrink-0 rounded-full ${
+                isEnabled ? 'bg-emerald-600' : 'bg-slate-400'
               }`}
-            >
-              <span
-                aria-hidden="true"
-                className={`h-1.5 w-1.5 shrink-0 rounded-full ${
-                  isEnabled ? 'bg-emerald-600' : 'bg-slate-400'
-                }`}
-              />
-              {t(isEnabled ? 'cameraSetup.enabled' : 'cameraSetup.disabled')}
-            </span>
+            />
+            {t(isEnabled ? 'cameraSetup.enabled' : 'cameraSetup.disabled')}
           </dd>
         </div>
-        <div className="min-w-0 max-w-full inline-flex items-center gap-1.5 rounded-md border border-slate-200/80 bg-slate-50 px-2.5 py-1">
-          <dt className="text-slate-500">{t('cameraSetup.codeLabel')}</dt>
+        <span aria-hidden="true" className="text-slate-300">
+          ·
+        </span>
+        <div className="min-w-0 inline-flex items-baseline gap-1">
+          <dt className="sr-only">{t('cameraSetup.codeLabel')}</dt>
           <dd className="min-w-0 max-w-full break-all font-mono text-xs font-semibold tabular-nums text-slate-800">
             {row.code}
           </dd>
         </div>
-        <div className="min-w-0 inline-flex items-center gap-1.5 rounded-md border border-slate-200/80 bg-slate-50 px-2.5 py-1 text-slate-500">
+        <span aria-hidden="true" className="text-slate-300">
+          ·
+        </span>
+        <div className="inline-flex items-baseline gap-1 text-xs text-slate-500">
           <dt>{t('cameraSetup.revisionLabel')}</dt>
-          <dd className="font-mono text-xs font-semibold tabular-nums text-slate-700">
+          <dd className="font-mono text-xs font-semibold tabular-nums text-slate-800">
             v{row.configurationVersion}
           </dd>
         </div>
       </dl>
       <details className="min-w-0 text-xs text-slate-500">
-        <summary className="inline-flex min-h-7 cursor-pointer select-none items-center gap-1 rounded-md px-1.5 py-0.5 text-xs font-medium text-slate-600 hover:bg-slate-100 hover:text-slate-900 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-slate-900">
+        <summary className="inline-flex min-h-7 cursor-pointer select-none items-center gap-1 rounded-md py-0.5 text-xs font-medium text-slate-600 hover:text-slate-900 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#0F172A]">
           <span>{t('cameraSetup.technicalSourceDetails')}</span>
         </summary>
         <dl className="mt-1 min-w-0">
           <div
             data-testid="camera-row-source-id"
-            className="min-w-0 max-w-full inline-flex items-center gap-1.5 rounded-md border border-slate-200/80 bg-slate-50 px-2.5 py-1 text-slate-500"
+            className="min-w-0 max-w-full inline-flex items-center gap-1.5 text-xs text-slate-600"
           >
-            <dt>{t('cameraSetup.field.externalId')}</dt>
-            <dd className="min-w-0 max-w-full break-all font-mono text-xs font-semibold text-slate-700">
+            <dt>{t('cameraSetup.field.externalId')}:</dt>
+            <dd className="min-w-0 max-w-full break-all font-mono font-semibold text-slate-800">
               {row.externalId}
             </dd>
           </div>
@@ -270,22 +271,27 @@ export function CameraSetupContextBar({
       : '';
 
   return (
-    <div className="min-w-0 space-y-3 rounded-2xl border border-slate-200/90 bg-slate-50/70 p-4 text-xs text-slate-700">
-      <div className="min-w-0 flex flex-wrap items-center justify-between gap-2.5">
-        <div className="min-w-0 flex flex-wrap items-center gap-2">
+    <div className="min-w-0 space-y-3 text-sm text-slate-700">
+      <div className="min-w-0 flex flex-wrap items-center justify-between gap-2.5 border-b border-slate-200 pb-2.5">
+        <div className="min-w-0 flex flex-wrap items-center gap-x-2.5 gap-y-1 text-sm">
           {siteBadge && (
-            <span className="min-w-0 max-w-full break-words [overflow-wrap:anywhere] rounded-md border border-slate-200 bg-white px-2.5 py-1 text-xs font-semibold text-slate-800">
+            <span className="min-w-0 max-w-full break-words [overflow-wrap:anywhere] font-semibold text-slate-900">
               {siteBadge}
             </span>
           )}
+          {siteBadge && rows.length > 0 && (
+            <span aria-hidden="true" className="text-slate-300">
+              ·
+            </span>
+          )}
           {rows.length > 0 && (
-            <span className="inline-flex max-w-full items-center break-words rounded-md border border-slate-200 bg-white px-2.5 py-1 text-xs font-medium tabular-nums text-slate-700">
+            <span className="inline-flex max-w-full items-center break-words font-medium tabular-nums text-slate-600">
               {t('cameraSetup.catalogBreakdown', { active: activeCount, inactive: inactiveCount })}
             </span>
           )}
         </div>
         <details className="group min-w-0 text-xs text-slate-600">
-          <summary className="inline-flex min-h-8 cursor-pointer list-none items-center gap-1.5 rounded-lg border border-slate-200/80 bg-white/80 px-2.5 py-1 text-xs font-medium text-slate-700 transition-colors hover:border-slate-300 hover:bg-white hover:text-slate-900 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-slate-900">
+          <summary className="inline-flex min-h-8 cursor-pointer list-none items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-2.5 py-1 text-xs font-medium text-slate-700 transition-colors hover:border-slate-300 hover:bg-slate-50 hover:text-slate-900 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#0F172A]">
             <span>{t('cameraSetup.metadataDisclosureLabel')}</span>
             <span
               aria-hidden="true"
@@ -294,7 +300,7 @@ export function CameraSetupContextBar({
               ▾
             </span>
           </summary>
-          <div className="mt-2 min-w-0 space-y-1.5 rounded-lg border border-slate-200/90 bg-white px-3.5 py-2.5 text-xs leading-5 text-slate-600">
+          <div className="mt-2 min-w-0 space-y-1.5 rounded-xl border border-slate-200 bg-slate-50/50 px-3.5 py-2.5 text-sm leading-relaxed text-slate-600">
             <p className="break-words [overflow-wrap:anywhere]">
               {t(
                 canManageCameras
@@ -319,7 +325,7 @@ export function CameraSetupContextBar({
       </div>
 
       {!canManageCameras && (
-        <p className="min-w-0 break-words [overflow-wrap:anywhere] rounded-lg border border-slate-200/90 bg-white px-3.5 py-2.5 text-xs leading-5 text-slate-700">
+        <p className="min-w-0 break-words [overflow-wrap:anywhere] rounded-xl border border-slate-200 bg-slate-50/60 px-3.5 py-2.5 text-sm leading-relaxed text-slate-700">
           {t('cameraSetup.scopeReadOnlyReason')}
         </p>
       )}
@@ -329,23 +335,30 @@ export function CameraSetupContextBar({
           role="region"
           aria-label={t('cameraSetup.selectedHeading')}
           data-tour-anchor="camera-setup-save"
-          className={`min-w-0 flex flex-col justify-between gap-3 rounded-xl border border-slate-200 bg-white p-4 shadow-2xs border-l-4 ${
-            isSelectedActive ? 'border-l-slate-900' : 'border-l-slate-400'
+          className={`min-w-0 flex flex-col justify-between gap-3.5 rounded-xl border border-slate-200 bg-white p-4 sm:p-5 border-l-[3px] ${
+            isSelectedActive ? 'border-l-[#0F172A]' : 'border-l-slate-400'
           }`}
         >
-          <div className="min-w-0 space-y-2.5">
+          <div className="min-w-0 space-y-3">
             <div className="flex flex-wrap items-center justify-between gap-2.5">
-              <div className="flex min-w-0 flex-wrap items-center gap-2">
-                <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+              <div className="flex min-w-0 flex-wrap items-center gap-2.5">
+                <p className="text-xs font-medium text-slate-500">
                   {t('cameraSetup.selectedHeading')}
                 </p>
+                <span aria-hidden="true" className="text-slate-300">
+                  ·
+                </span>
                 <span
-                  className={`inline-flex items-center gap-1.5 rounded-md border px-2 py-0.5 text-xs font-semibold tabular-nums ${
-                    isSelectedActive
-                      ? 'border-emerald-200 bg-emerald-50 text-emerald-900'
-                      : 'border-slate-200 bg-slate-100 text-slate-700'
+                  className={`inline-flex items-center gap-1.5 text-sm font-semibold tabular-nums ${
+                    isSelectedActive ? 'text-emerald-800' : 'text-slate-600'
                   }`}
                 >
+                  <span
+                    aria-hidden="true"
+                    className={`h-2 w-2 rounded-full ${
+                      isSelectedActive ? 'bg-emerald-600' : 'bg-slate-400'
+                    }`}
+                  />
                   {t(isSelectedActive ? 'cameraSetup.enabled' : 'cameraSetup.disabled')} · v
                   {selectedCamera.configurationVersion}
                 </span>
@@ -354,7 +367,7 @@ export function CameraSetupContextBar({
                 <div className="flex min-w-0 max-w-full flex-wrap items-center gap-2">
                   <label
                     htmlFor="camera-setup-quick-select"
-                    className="text-xs font-medium text-slate-600"
+                    className="text-sm font-medium text-slate-700"
                   >
                     {t('cameraSetup.chooseCamera')}
                   </label>
@@ -364,7 +377,7 @@ export function CameraSetupContextBar({
                     aria-label={t('cameraSetup.chooseCamera')}
                     value={selectedCamera.id}
                     onChange={(event) => onSelectCamera(event.target.value)}
-                    className="min-h-10 min-w-0 max-w-full rounded-xl border border-slate-300 bg-white px-3 py-1.5 text-sm font-medium text-slate-900 shadow-2xs hover:border-slate-400 focus-visible:border-slate-900 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-slate-900"
+                    className="min-h-10 min-w-0 max-w-full rounded-xl border border-slate-300 bg-white px-3 py-1.5 text-sm font-medium text-slate-900 hover:border-slate-400 focus-visible:border-[#0F172A] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#0F172A]"
                   >
                     {rows.map((row) => (
                       <option key={row.id} value={row.id}>
@@ -384,13 +397,13 @@ export function CameraSetupContextBar({
                 {`${selectedCamera.name} · ${selectedCamera.code}`}
               </p>
               <details className="min-w-0 text-xs text-slate-600">
-                <summary className="inline-flex min-h-7 cursor-pointer select-none items-center gap-1 rounded-md px-1.5 py-0.5 text-xs font-medium text-slate-600 hover:bg-slate-100 hover:text-slate-900 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-slate-900">
+                <summary className="inline-flex min-h-7 cursor-pointer select-none items-center gap-1 rounded-md px-1.5 py-0.5 text-xs font-medium text-slate-600 hover:bg-slate-100 hover:text-slate-900 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#0F172A]">
                   <span>{t('cameraSetup.technicalSourceDetails')}</span>
                 </summary>
                 <div className="mt-1">
                   <span
                     data-testid="selected-camera-source-id"
-                    className="inline-flex max-w-full items-center gap-1 rounded-md border border-slate-200/90 bg-slate-50 px-2.5 py-1 font-mono text-xs font-medium text-slate-700 break-all"
+                    className="inline-flex max-w-full items-center gap-1.5 rounded-lg border border-slate-200 bg-slate-50 px-2.5 py-1 font-mono text-xs font-medium text-slate-700 break-all"
                   >
                     <span>{t('cameraSetup.field.externalId')}:</span>
                     <span className="font-semibold text-slate-900">
@@ -407,14 +420,14 @@ export function CameraSetupContextBar({
               <div
                 data-testid="camera-saved-config-summary"
                 data-application-state="SAVED_METADATA_ONLY"
-                className="min-w-0 space-y-1 rounded-lg border border-slate-200/80 bg-slate-50/80 px-3 py-2 text-xs text-slate-600"
+                className="mt-2 min-w-0 space-y-1 border-t border-slate-200 pt-3 text-sm text-slate-700"
               >
-                <p className="min-w-0 break-words [overflow-wrap:anywhere] font-medium text-slate-800">
+                <p className="min-w-0 break-words [overflow-wrap:anywhere] font-semibold text-slate-900">
                   {t('cameraSetup.savedConfigVersionStatus', {
                     version: selectedCamera.configurationVersion,
                   })}
                 </p>
-                <p className="min-w-0 break-words [overflow-wrap:anywhere] text-slate-600">
+                <p className="min-w-0 break-words [overflow-wrap:anywhere] text-sm leading-relaxed text-slate-600">
                   {t(
                     canManageCameras
                       ? isSelectedActive
@@ -431,7 +444,7 @@ export function CameraSetupContextBar({
             {(canManageCameras || Boolean(canOpenMonitoring && selectedMonitorQuery)) && (
               <div
                 data-tour-anchor="camera-setup-regions"
-                className="flex min-w-0 max-w-full flex-wrap items-center gap-2 pt-0.5"
+                className="flex min-w-0 max-w-full flex-wrap items-center gap-2 border-t border-slate-100 pt-3"
               >
                 {canManageCameras &&
                   (isSelectedActive ? (
@@ -492,7 +505,7 @@ export function CameraSetupContextBar({
             )}
 
             {canManageCameras && (
-              <p className="min-w-0 max-w-3xl break-words [overflow-wrap:anywhere] text-xs leading-5 text-slate-600">
+              <p className="min-w-0 max-w-3xl break-words [overflow-wrap:anywhere] text-sm leading-relaxed text-slate-600">
                 {t(
                   isSelectedActive
                     ? 'cameraSetup.selectedActiveNext'

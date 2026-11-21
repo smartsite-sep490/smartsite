@@ -8,7 +8,7 @@ import {
   IconShield,
   IconUser,
 } from '../icons';
-import { Alert, AlertDescription, AlertTitle, Badge, Button, Card, CardHeader } from '../ui';
+import { Alert, AlertDescription, AlertTitle, Badge, Button } from '../ui';
 import {
   outcomeBadgeVariant,
   statusBadgeVariant,
@@ -36,11 +36,11 @@ export interface SafetyIdentificationDetailOverviewProps {
 function waitingCalloutAccentClass(status: SafetyIdentificationRequest['status']): string {
   switch (status) {
     case 'OPEN':
-      return 'border-l-amber-500 bg-amber-50/45';
+      return 'border-l-amber-500 bg-amber-50/40';
     case 'RESPONDED':
-      return 'border-l-[#F66B17] bg-orange-50/45';
+      return 'border-l-teal-700 bg-teal-50/35';
     case 'CLOSED':
-      return 'border-l-emerald-500 bg-emerald-50/35';
+      return 'border-l-emerald-600 bg-emerald-50/35';
     case 'CANCELLED':
       return 'border-l-slate-400 bg-slate-50/75';
   }
@@ -90,13 +90,17 @@ export function SafetyIdentificationDetailOverview({
 
   return (
     <>
-      <Card className="space-y-3.5">
+      <div className="space-y-3.5 rounded-xl border border-slate-200 bg-white p-4 sm:p-5">
         <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-100 pb-3">
-          <div className="flex flex-wrap items-center gap-2.5 min-w-0">
-            <Badge variant={statusBadgeVariant(request.status)} dot>
+          <div className="flex flex-wrap items-center gap-2 min-w-0">
+            <Badge
+              variant={statusBadgeVariant(request.status)}
+              dot
+              className="text-xs! font-medium! normal-case! tracking-normal!"
+            >
               {copy.filters.statuses[request.status]}
             </Badge>
-            <h3 className="text-base font-extrabold text-[#071A2B] tracking-tight">
+            <h3 className="text-base font-semibold text-slate-950 tracking-tight">
               {copy.detail.title}
             </h3>
           </div>
@@ -104,6 +108,7 @@ export function SafetyIdentificationDetailOverview({
             type="button"
             variant="outline"
             size="sm"
+            className="text-xs font-semibold"
             isLoading={detailLoading}
             leftIcon={<IconRefresh className="w-3.5 h-3.5" />}
             onClick={onRefreshDetail}
@@ -143,11 +148,11 @@ export function SafetyIdentificationDetailOverview({
 
         <div
           data-testid="c02-subject-status-strip"
-          className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-slate-200/80 bg-slate-50/75 px-3 py-2 text-xs"
+          className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-slate-200/80 bg-slate-50/75 px-3.5 py-2.5 text-sm"
         >
-          <div className="flex flex-wrap items-center gap-2 min-w-0">
-            <span className="font-semibold text-slate-500">{copy.detail.subjectLabel}:</span>
-            <span className="font-bold text-[#071A2B]">{humanSubject}</span>
+          <div className="flex flex-wrap items-center gap-1.5 min-w-0">
+            <span className="font-medium text-slate-600">{copy.detail.subjectLabel}:</span>
+            <span className="font-semibold text-slate-950">{humanSubject}</span>
           </div>
           <div className="flex flex-wrap items-center gap-2">
             <Badge
@@ -158,44 +163,45 @@ export function SafetyIdentificationDetailOverview({
                     ? 'success'
                     : 'neutral'
               }
+              className="text-xs! font-medium! normal-case! tracking-normal!"
             >
               {evidenceSummaryText}
             </Badge>
-            <span className="rounded-md border border-slate-200 bg-white px-2 py-0.5 font-mono text-[11px] font-semibold text-slate-600">
+            <span className="rounded border border-slate-200 bg-white px-2 py-0.5 font-mono text-xs font-medium text-slate-600 tabular-nums">
               {`v${request.version}`}
             </span>
           </div>
         </div>
 
         <div
-          className={`grid gap-3 sm:grid-cols-2 rounded-xl border border-slate-200/90 border-l-4 p-3.5 ${waitingCalloutAccentClass(request.status)}`}
+          className={`grid gap-3 sm:grid-cols-2 rounded-lg border border-slate-200/90 border-l-[3px] p-3.5 ${waitingCalloutAccentClass(request.status)}`}
         >
-          <div className="space-y-1">
-            <span className="text-[11px] font-bold uppercase tracking-wider text-slate-600 flex items-center gap-1.5">
-              <IconClock className="w-3.5 h-3.5 text-[#F66B17]" />
+          <div className="space-y-0.5">
+            <span className="text-xs font-medium text-slate-600 flex items-center gap-1.5">
+              <IconClock className="w-3.5 h-3.5 text-slate-500" />
               {waitingGuidance.waitingLabel}
             </span>
-            <p className="text-xs font-extrabold text-[#071A2B]">{waitingGuidance.waitingActor}</p>
+            <p className="text-sm font-semibold text-slate-950">{waitingGuidance.waitingActor}</p>
           </div>
-          <div className="space-y-1">
-            <span className="text-[11px] font-bold uppercase tracking-wider text-slate-600">
+          <div className="space-y-0.5">
+            <span className="text-xs font-medium text-slate-600">
               {waitingGuidance.nextActionLabel}
             </span>
-            <p className="text-xs text-slate-800 leading-relaxed">{waitingGuidance.nextAction}</p>
+            <p className="text-sm text-slate-800 leading-relaxed">{waitingGuidance.nextAction}</p>
           </div>
         </div>
 
         <div className="space-y-1 px-0.5">
-          <span className="block text-[11px] font-bold uppercase tracking-wider text-slate-500">
+          <span className="block text-xs font-medium text-slate-600">
             {copy.detail.requestReasonLabel}
           </span>
-          <p className="text-sm text-[#071A2B] whitespace-pre-wrap break-words leading-relaxed">
+          <p className="text-sm text-slate-950 whitespace-pre-wrap break-words leading-relaxed">
             {request.reason}
           </p>
         </div>
 
         {request.evidenceAvailability.status === 'UNAVAILABLE' && (
-          <div className="flex flex-wrap items-center gap-2 rounded-xl border border-amber-200/80 bg-amber-50/60 px-3 py-2 text-xs font-medium text-amber-950">
+          <div className="flex flex-wrap items-center gap-2 rounded-lg border border-amber-200/80 bg-amber-50/60 px-3.5 py-2.5 text-sm font-medium text-amber-950">
             <IconShield className="w-4 h-4 shrink-0 text-amber-600" />
             <span>{copy.detail.evidenceUnavailableBody}</span>
           </div>
@@ -204,37 +210,35 @@ export function SafetyIdentificationDetailOverview({
         <div
           data-testid="c02-lifecycle-separation-strip"
           aria-label={copy.detail.lifecycleStripAriaLabel}
-          className="grid gap-2 sm:grid-cols-3 rounded-xl border border-slate-200/80 bg-slate-50/65 p-2.5 text-[11px]"
+          className="grid divide-y sm:grid-cols-3 sm:divide-y-0 sm:divide-x divide-slate-200 rounded-lg border border-slate-200 bg-white overflow-hidden"
         >
-          <div className="rounded-lg border border-slate-200/80 bg-white px-2.5 py-2 space-y-0.5">
-            <span className="block font-bold text-[#071A2B]">
+          <div className="px-3.5 py-2.5 space-y-0.5">
+            <span className="block text-sm font-semibold text-slate-950">
               {copy.detail.lifecycleStage1Title}
             </span>
-            <span className="block text-slate-600 leading-snug">{stage1Status}</span>
+            <span className="block text-xs text-slate-600 leading-snug">{stage1Status}</span>
           </div>
           <div
-            className={`rounded-lg border px-2.5 py-2 space-y-0.5 ${
-              isClosed ? 'border-emerald-200 bg-emerald-50/60' : 'border-slate-200/80 bg-white'
-            }`}
+            className={`px-3.5 py-2.5 space-y-0.5 ${isClosed ? 'bg-emerald-50/50' : 'bg-white'}`}
           >
-            <span className="flex items-center gap-1 font-bold text-[#071A2B]">
-              {isClosed && <IconCheck className="h-3 w-3 shrink-0 text-emerald-600" />}
+            <span className="flex items-center gap-1.5 text-sm font-semibold text-slate-950">
+              {isClosed && <IconCheck className="h-4 w-4 shrink-0 text-emerald-600" />}
               <span>{copy.detail.lifecycleStage2Title}</span>
             </span>
-            <span className="block text-slate-700 leading-snug">{stage2Status}</span>
+            <span className="block text-xs text-slate-700 leading-snug">{stage2Status}</span>
           </div>
-          <div className="rounded-lg border border-slate-200/80 bg-white px-2.5 py-2 space-y-0.5">
-            <span className="block font-bold text-[#071A2B]">
+          <div className="px-3.5 py-2.5 space-y-0.5">
+            <span className="block text-sm font-semibold text-slate-950">
               {copy.detail.lifecycleStage3Title}
             </span>
-            <span className="block text-slate-600 leading-snug">
+            <span className="block text-xs text-slate-600 leading-snug">
               {copy.detail.lifecycleStage3Body}
             </span>
           </div>
         </div>
 
-        <details className="rounded-xl border border-slate-200/80 bg-slate-50/70 p-3 text-xs">
-          <summary className="cursor-pointer font-bold text-slate-700 select-none">
+        <details className="rounded-lg border border-slate-200/80 bg-slate-50/70 p-3 text-xs">
+          <summary className="cursor-pointer font-semibold text-slate-700 select-none">
             {copy.detail.technicalDetailsLabel}
           </summary>
           <div className="mt-3 space-y-2.5 border-t border-slate-200/70 pt-3 text-slate-600">
@@ -272,13 +276,13 @@ export function SafetyIdentificationDetailOverview({
               </div>
               <div>
                 <dt className="font-semibold text-slate-500">{copy.detail.createdAtLabel}</dt>
-                <dd className="text-slate-800">
+                <dd className="text-slate-800 tabular-nums">
                   {formatIdentificationDateTime(request.createdAt)}
                 </dd>
               </div>
               <div>
                 <dt className="font-semibold text-slate-500">{copy.detail.dueAtLabel}</dt>
-                <dd className="text-slate-800">
+                <dd className="text-slate-800 tabular-nums">
                   {request.dueAt
                     ? formatIdentificationDateTime(request.dueAt)
                     : copy.detail.noDueDate}
@@ -293,84 +297,99 @@ export function SafetyIdentificationDetailOverview({
                 </dd>
               </div>
             </dl>
-            <p className="text-[11px] text-slate-500 leading-relaxed">
-              {copy.detail.separationBody}
-            </p>
+            <p className="text-xs text-slate-600 leading-relaxed">{copy.detail.separationBody}</p>
           </div>
         </details>
-      </Card>
+      </div>
 
-      <Card className="space-y-3">
-        <CardHeader
-          title={
-            isClosed
-              ? copy.detail.proposalAcceptedTitle
-              : isCancelled && request.result
-                ? copy.detail.proposalCancelledTitle
-                : copy.detail.proposalTitle
-          }
-          icon={<IconUser className="w-4 h-4" />}
-          action={
-            request.result ? (
-              <div className="flex flex-wrap items-center gap-1.5">
-                {isResponded && (
-                  <Badge variant="warning" dot>
-                    {copy.detail.proposalPendingBadge}
-                  </Badge>
-                )}
-                {isCancelled && (
-                  <Badge variant="neutral" dot>
-                    {copy.detail.proposalCancelledBadge}
-                  </Badge>
-                )}
-                {isClosed && (
-                  <Badge variant="success" dot>
-                    {copy.detail.proposalAcceptedBadge}
-                  </Badge>
-                )}
-                <Badge variant={isClosed ? outcomeBadgeVariant(request.result.outcome) : 'neutral'}>
-                  {copy.outcomes[request.result.outcome]}
+      <div className="space-y-3 rounded-xl border border-slate-200 bg-white p-4 sm:p-5">
+        <div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-100 pb-3">
+          <div className="flex items-center gap-2">
+            <IconUser className="w-4 h-4 text-slate-500 shrink-0" />
+            <h3 className="text-sm font-semibold text-slate-950">
+              {isClosed
+                ? copy.detail.proposalAcceptedTitle
+                : isCancelled && request.result
+                  ? copy.detail.proposalCancelledTitle
+                  : copy.detail.proposalTitle}
+            </h3>
+          </div>
+          {request.result && (
+            <div className="flex flex-wrap items-center gap-1.5">
+              {isResponded && (
+                <Badge
+                  variant="warning"
+                  dot
+                  className="text-xs! font-medium! normal-case! tracking-normal!"
+                >
+                  {copy.detail.proposalPendingBadge}
                 </Badge>
-              </div>
-            ) : undefined
-          }
-        />
+              )}
+              {isCancelled && (
+                <Badge
+                  variant="neutral"
+                  dot
+                  className="text-xs! font-medium! normal-case! tracking-normal!"
+                >
+                  {copy.detail.proposalCancelledBadge}
+                </Badge>
+              )}
+              {isClosed && (
+                <Badge
+                  variant="success"
+                  dot
+                  className="text-xs! font-medium! normal-case! tracking-normal!"
+                >
+                  {copy.detail.proposalAcceptedBadge}
+                </Badge>
+              )}
+              <Badge
+                variant={isClosed ? outcomeBadgeVariant(request.result.outcome) : 'neutral'}
+                className="text-xs! font-medium! normal-case! tracking-normal!"
+              >
+                {copy.outcomes[request.result.outcome]}
+              </Badge>
+            </div>
+          )}
+        </div>
         {request.result ? (
           <div className="space-y-3">
             <div className="space-y-1">
-              <span className="block text-[11px] font-bold uppercase tracking-wider text-slate-500">
+              <span className="block text-xs font-medium text-slate-600">
                 {copy.detail.proposalReasonLabel}
               </span>
-              <p className="text-sm text-[#071A2B] whitespace-pre-wrap break-words leading-relaxed">
+              <p className="text-sm text-slate-950 whitespace-pre-wrap break-words leading-relaxed">
                 {request.result.reason}
               </p>
             </div>
-            <dl className="grid gap-2.5 sm:grid-cols-3 rounded-xl border border-slate-200/80 bg-slate-50/60 p-3 text-xs">
+            <dl className="grid gap-3 sm:grid-cols-3 rounded-lg border border-slate-200/80 bg-slate-50/60 p-3.5">
               <div>
-                <dt className="font-semibold text-slate-500">{copy.detail.proposalWorkerLabel}</dt>
-                <dd className="mt-0.5 font-semibold text-[#071A2B] break-words">
+                <dt className="text-xs font-medium text-slate-600">
+                  {copy.detail.proposalWorkerLabel}
+                </dt>
+                <dd className="mt-0.5 text-sm font-semibold text-slate-950 break-words">
                   {resolveWorkerLabel(request.result.workerId)}
                 </dd>
               </div>
               <div>
-                <dt className="font-semibold text-slate-500">
+                <dt className="text-xs font-medium text-slate-600">
                   {copy.detail.proposalContractorLabel}
                 </dt>
-                <dd className="mt-0.5 font-semibold text-[#071A2B] break-words">
+                <dd className="mt-0.5 text-sm font-semibold text-slate-950 break-words">
                   {resolveContractorLabel(request.result.contractorId)}
                 </dd>
               </div>
               <div>
-                <dt className="font-semibold text-slate-500">
+                <dt className="text-xs font-medium text-slate-600">
                   {copy.detail.proposalRespondedAtLabel}
                 </dt>
-                <dd className="mt-0.5 text-slate-800">
+                <dd className="mt-0.5 text-sm text-slate-800 tabular-nums">
                   {formatIdentificationDateTime(request.result.respondedAt)}
                 </dd>
               </div>
             </dl>
-            <details className="rounded-xl border border-slate-200/70 bg-slate-50/60 p-2.5 text-[11px] text-slate-600">
-              <summary className="cursor-pointer font-semibold text-slate-600 select-none">
+            <details className="rounded-lg border border-slate-200/70 bg-slate-50/60 p-2.5 text-xs text-slate-600">
+              <summary className="cursor-pointer font-medium text-slate-700 select-none">
                 {copy.detail.technicalDetailsLabel}
               </summary>
               <div className="mt-2 space-y-1 font-mono break-all">
@@ -392,9 +411,9 @@ export function SafetyIdentificationDetailOverview({
             </details>
           </div>
         ) : (
-          <p className="text-xs text-slate-600">{copy.detail.proposalEmpty}</p>
+          <p className="text-sm text-slate-600">{copy.detail.proposalEmpty}</p>
         )}
-      </Card>
+      </div>
     </>
   );
 }

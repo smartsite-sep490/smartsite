@@ -13,12 +13,12 @@ import {
   type CameraApplicationStatusResult,
 } from './useCameraApplicationStatus';
 
-const STATE_BADGE_TONES = {
-  LOADED: 'border-emerald-200 bg-emerald-50 text-emerald-900',
-  PENDING: 'border-amber-200 bg-amber-50 text-amber-950',
-  UNCONFIRMED: 'border-amber-200 bg-amber-50 text-amber-950',
-  REJECTED: 'border-rose-200 bg-rose-50 text-rose-900',
-  STALE: 'border-rose-200 bg-rose-50 text-rose-900',
+const STATE_TEXT_TONES = {
+  LOADED: { dot: 'bg-emerald-600', text: 'text-emerald-800' },
+  PENDING: { dot: 'bg-amber-600', text: 'text-amber-900' },
+  UNCONFIRMED: { dot: 'bg-amber-600', text: 'text-amber-900' },
+  REJECTED: { dot: 'bg-rose-600', text: 'text-rose-800' },
+  STALE: { dot: 'bg-rose-600', text: 'text-rose-800' },
 } as const;
 
 export type {
@@ -46,10 +46,10 @@ export function CameraApplicationStatusSummary({
         aria-busy={query.isFetching ? 'true' : 'false'}
         data-testid="camera-application-status"
         data-application-state="UNAVAILABLE"
-        className="mt-2 min-w-0 space-y-1 rounded-lg border border-slate-200/80 bg-slate-50/80 px-3 py-2 text-xs text-slate-600"
+        className="mt-2 min-w-0 space-y-1.5 border-t border-slate-200 pt-3 text-sm text-slate-700"
       >
         <div className="min-w-0 flex flex-wrap items-center justify-between gap-2">
-          <p className="min-w-0 break-words [overflow-wrap:anywhere]">
+          <p className="min-w-0 font-medium text-slate-900 break-words [overflow-wrap:anywhere]">
             {t('cameraSetup.savedConfigVersionStatus', {
               version: camera.configurationVersion,
             })}
@@ -66,12 +66,12 @@ export function CameraApplicationStatusSummary({
           )}
         </div>
         {query.isFetching && (
-          <p className="min-w-0 break-words [overflow-wrap:anywhere] text-xs text-slate-500">
+          <p className="min-w-0 break-words [overflow-wrap:anywhere] text-sm text-slate-600">
             {t('cameraSetup.appStatus.checking')}
           </p>
         )}
         {query.isError && !query.isFetching && errorStatus !== 401 && (
-          <p className="min-w-0 break-words [overflow-wrap:anywhere] text-xs text-amber-900">
+          <p className="min-w-0 break-words [overflow-wrap:anywhere] text-sm text-amber-900">
             {t(
               errorStatus === 403 || errorStatus === 404
                 ? 'cameraSetup.appStatus.forbidden'
@@ -108,6 +108,8 @@ export function CameraApplicationStatusSummary({
       : null;
   const actionGuidance = effectiveState !== 'LOADED' && actionKey ? t(actionKey) : null;
 
+  const stateTone = STATE_TEXT_TONES[effectiveState];
+
   return (
     <div
       role="status"
@@ -116,19 +118,20 @@ export function CameraApplicationStatusSummary({
       data-testid="camera-application-status"
       data-application-state={effectiveState}
       data-view-validity={rawStatus.viewValidity}
-      className="mt-2 min-w-0 space-y-1.5 rounded-lg border border-slate-200/80 bg-slate-50/80 px-3 py-2 text-xs text-slate-700"
+      className="mt-2 min-w-0 space-y-2 border-t border-slate-200 pt-3 text-sm text-slate-700"
     >
       <div className="min-w-0 flex flex-wrap items-center justify-between gap-2">
-        <div className="min-w-0 flex flex-wrap items-center gap-x-2 gap-y-1 tabular-nums">
-          <span className="text-xs sm:text-sm font-semibold text-slate-900">
+        <div className="min-w-0 flex flex-wrap items-center gap-x-3 gap-y-1 tabular-nums">
+          <span className="text-sm font-semibold text-slate-950">
             {t('cameraSetup.appStatus.revisions', {
               desired: rawStatus.desiredRevision,
               reported: reportedLabel,
             })}
           </span>
           <span
-            className={`rounded-md border px-2.5 py-0.5 text-xs font-semibold ${STATE_BADGE_TONES[effectiveState]}`}
+            className={`inline-flex items-center gap-1.5 text-sm font-semibold ${stateTone.text}`}
           >
+            <span aria-hidden="true" className={`h-2 w-2 shrink-0 rounded-full ${stateTone.dot}`} />
             {t(`cameraSetup.appStatus.state.${effectiveState}`, {
               reported: rawStatus.reportedRevision ?? reportedLabel,
             })}
@@ -146,10 +149,10 @@ export function CameraApplicationStatusSummary({
       {effectiveState !== 'LOADED' && (reasonDescription || actionGuidance) && (
         <div
           data-testid="camera-application-reason-guidance"
-          className={`min-w-0 space-y-1 rounded-lg border px-3 py-2 text-xs ${
+          className={`min-w-0 space-y-1 rounded-xl border px-3 py-2 text-sm ${
             effectiveState === 'REJECTED' || effectiveState === 'STALE'
-              ? 'border-rose-200 bg-rose-50/90 text-rose-950'
-              : 'border-amber-200 bg-amber-50/80 text-amber-950'
+              ? 'border-rose-200 bg-rose-50/70 text-rose-950'
+              : 'border-amber-200 bg-amber-50/70 text-amber-950'
           }`}
         >
           {effectiveReasonCode && reasonDescription && (
@@ -167,21 +170,22 @@ export function CameraApplicationStatusSummary({
       )}
       <p
         data-testid="camera-view-validity-warning"
-        className="min-w-0 break-words [overflow-wrap:anywhere] text-xs font-medium text-amber-900"
+        className="flex min-w-0 items-start gap-2 break-words [overflow-wrap:anywhere] text-sm font-medium text-amber-900"
       >
-        {t(`cameraSetup.appStatus.viewValidity.${rawStatus.viewValidity}`)}
+        <span aria-hidden="true" className="mt-2 h-1.5 w-1.5 shrink-0 rounded-full bg-amber-600" />
+        <span>{t(`cameraSetup.appStatus.viewValidity.${rawStatus.viewValidity}`)}</span>
       </p>
-      <details className="group min-w-0 text-xs text-slate-500">
-        <summary className="inline-flex min-h-8 cursor-pointer list-none items-center gap-1.5 rounded-lg px-2 py-1 font-medium text-slate-600 hover:bg-slate-200/60 hover:text-slate-900 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-slate-900">
+      <details className="group min-w-0 text-xs text-slate-600">
+        <summary className="inline-flex min-h-8 cursor-pointer list-none items-center gap-1.5 rounded-lg px-1.5 py-1 font-medium text-slate-600 hover:bg-slate-100 hover:text-slate-900 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-slate-900">
           <span>{t('cameraSetup.appStatus.details')}</span>
           <span
             aria-hidden="true"
-            className="text-xs text-slate-400 transition-transform duration-150 group-open:rotate-180"
+            className="text-xs text-slate-500 transition-transform duration-150 group-open:rotate-180"
           >
             ▾
           </span>
         </summary>
-        <div className="mt-1.5 min-w-0 space-y-1 rounded-lg border border-slate-200/80 bg-white px-3 py-2 text-xs text-slate-600">
+        <div className="mt-1.5 min-w-0 space-y-1 rounded-xl border border-slate-200 bg-slate-50/50 px-3 py-2 text-xs text-slate-600">
           <p className="min-w-0 break-words [overflow-wrap:anywhere] font-mono tabular-nums">
             {t('cameraSetup.appStatus.timestamps', {
               observedAt: rawStatus.observedAt,
