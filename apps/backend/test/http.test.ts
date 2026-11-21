@@ -23,6 +23,8 @@ import { DataSource } from 'typeorm';
 import type { NestExpressApplication } from '@nestjs/platform-express';
 import { AppModule } from '../src/app.module.js';
 import { configureApplication } from '../src/configure-app.js';
+import { TrackedFrameEvidenceController } from '../src/integrations/ai/tracked-frame-evidence.controller.js';
+import { TrackedFrameEvidenceUpload } from '../src/integrations/ai/tracked-frame-evidence-upload.js';
 import { validateEnvironment } from '../src/config/environment.js';
 import type { BackendEnvironment } from '../src/config/environment.js';
 import { createLoggerParams } from '../src/observability/logger.js';
@@ -113,8 +115,10 @@ async function startApplication(
     unavailable?: boolean;
     httpLimit?: number;
     aiLimit?: number;
+    evidenceEndpoint?: boolean;
   } = {},
 ) {
+  let evidenceUploadCalls = 0;
   const dataSource = {
     isInitialized: !options.unavailable,
     destroyed: false,
@@ -149,7 +153,24 @@ async function startApplication(
   const configService = new ConfigService<BackendEnvironment, true>(config);
   const module = await Test.createTestingModule({
     imports: [AppModule],
-    controllers: [FoundationTestController, PayloadTestController],
+    controllers: [
+      FoundationTestController,
+      PayloadTestController,
+      ...(options.evidenceEndpoint ? [TrackedFrameEvidenceController] : []),
+    ],
+    providers: options.evidenceEndpoint
+      ? [
+          {
+            provide: TrackedFrameEvidenceUpload,
+            useValue: {
+              async store() {
+                evidenceUploadCalls += 1;
+                throw new Error('Upload mock must not be reached without service auth');
+              },
+            },
+          },
+        ]
+      : [],
   })
     .overrideProvider(ConfigService)
     .useValue(configService)
@@ -174,7 +195,13 @@ async function startApplication(
 
   await app.listen(0, '127.0.0.1');
   t.after(() => app.close());
-  return { app, dataSource, logLines, url: await app.getUrl() };
+  return {
+    app,
+    dataSource,
+    logLines,
+    url: await app.getUrl(),
+    getEvidenceUploadCalls: () => evidenceUploadCalls,
+  };
 }
 
 test('liveness reports the exact public contract independently of database failure', async (t) => {
@@ -438,6 +465,35 @@ test('HTTP and AI limits are independent, health is exempt, forwarded IP cannot 
   const aiLimited = await fetch(`${url}/api/v1/integrations/ai/events`, { method: 'POST' });
   assert.equal((await assertError(aiLimited, 429)).code, 'RATE_LIMIT_EXCEEDED');
   assert.ok(Number(aiLimited.headers.get('retry-after')) > 0);
+});
+
+test('tracked frame evidence upload uses the AI rate budget rather than the lower HTTP budget while enforcing auth', async (t) => {
+  const { url, getEvidenceUploadCalls } = await startApplication(t, {
+    httpLimit: 1,
+    aiLimit: 3,
+    evidenceEndpoint: true,
+  });
+  assert.equal((await fetch(`${url}/api/v1/test-foundation/query?count=1`)).status, 200);
+  const httpLimited = await fetch(`${url}/api/v1/test-foundation/query?count=1`, {
+    headers: { 'X-Forwarded-For': '203.0.113.9' },
+  });
+  assert.equal((await assertError(httpLimited, 429)).code, 'RATE_LIMIT_EXCEEDED');
+
+  for (let i = 0; i < 3; i++) {
+    const unauthorized = await fetch(`${url}/api/v1/integrations/ai/tracked-parts/evidence`, {
+      method: 'POST',
+    });
+    const error = await assertError(unauthorized, 401);
+    assert.equal(error.code, 'UNAUTHORIZED');
+  }
+  assert.equal(getEvidenceUploadCalls(), 0);
+
+  const aiLimited = await fetch(`${url}/api/v1/integrations/ai/tracked-parts/evidence`, {
+    method: 'POST',
+  });
+  assert.equal((await assertError(aiLimited, 429)).code, 'RATE_LIMIT_EXCEEDED');
+  assert.ok(Number(aiLimited.headers.get('retry-after')) > 0);
+  assert.equal(getEvidenceUploadCalls(), 0);
 });
 
 test('CORS grants exact allowed origins and excludes lookalikes and null origins', async (t) => {
