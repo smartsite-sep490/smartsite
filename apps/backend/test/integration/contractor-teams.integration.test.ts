@@ -238,11 +238,24 @@ test('contractor teams: scoped dashboard, HTTP contracts, membership history, co
     );
     await t.test(
       'membership transfer is optimistic, preserves history and concurrent updates admit one winner',
-      async () => {
+      async (sub) => {
         const old = (
           await service.workers(rep, siteId, contractorId, { teamId: paint.id })
         ).items.find((w) => w.workerId === aId)!;
+        await dataSource.query(
+          "UPDATE contractor_team_membership SET joined_at=date_trunc('milliseconds',joined_at)+interval '1 microsecond' WHERE id=$1",
+          [old.membershipId],
+        );
+        sub.mock.timers.enable({ apis: ['Date'], now: Date.now() - 120000 });
         const result = await assign(aId, floor.id, old.membershipId);
+        sub.mock.timers.reset();
+        const [ordered] = await dataSource.query(
+          `SELECT old_row.left_at>=old_row.joined_at AND new_row.joined_at>=old_row.left_at AS valid
+          FROM contractor_team_membership old_row CROSS JOIN contractor_team_membership new_row
+          WHERE old_row.id=$1 AND new_row.id=$2`,
+          [old.membershipId, result.membershipId],
+        );
+        assert.equal(ordered.valid, true);
         await assert.rejects(assign(aId, paint.id, old.membershipId));
         assert.equal(
           (
@@ -265,7 +278,21 @@ test('contractor teams: scoped dashboard, HTTP contracts, membership history, co
         const c = (await service.workers(rep, siteId, contractorId, {})).items.find(
           (w) => w.workerId === cId,
         )!;
-        await assign(cId, null, c.membershipId);
+        sub.mock.timers.enable({ apis: ['Date'], now: Date.now() - 120000 });
+        const removal = {
+          requestId: randomUUID(),
+          teamId: null,
+          expectedMembershipId: c.membershipId,
+          reason: 'Remove with an application clock behind the database',
+        };
+        await service.assign(rep, siteId, contractorId, cId, removal);
+        await service.assign(rep, siteId, contractorId, cId, removal);
+        sub.mock.timers.reset();
+        const [ended] = await dataSource.query(
+          'SELECT left_at>=joined_at AS valid FROM contractor_team_membership WHERE id=$1',
+          [c.membershipId],
+        );
+        assert.equal(ended.valid, true);
         const now = await service.workers(rep, siteId, contractorId, { unassigned: true });
         assert.equal(now.total, 1);
         assert.equal(now.items[0]!.workerId, cId);
