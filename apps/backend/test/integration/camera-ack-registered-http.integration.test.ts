@@ -165,18 +165,15 @@ test('registered ACK route persists an authenticated receipt without claiming ap
   assert.equal(loadedStatus.desiredRevision, bundle.configurationVersion);
   assert.equal(loadedStatus.reportedRevision, bundle.configurationVersion);
   assert.equal(loadedStatus.viewValidity, 'UNCONFIRMED');
+  const safety = await actor('SAFETY_OFFICER', site);
+  assert.equal(
+    (await fetch(`${base}/application-status`, { headers: safety.headers })).status,
+    200,
+  );
   for (const [role, scope] of [
     ['ADMIN', null],
-    ['SAFETY_OFFICER', site],
-  ] as const) {
-    const reader = await actor(role, scope);
-    assert.equal(
-      (await fetch(`${base}/application-status`, { headers: reader.headers })).status,
-      200,
-    );
-  }
-  for (const [role, scope] of [
     ['WORKER', site],
+    ['SAFETY_OFFICER', otherSite],
     ['SITE_MANAGER', otherSite],
   ] as const) {
     const denied = await actor(role, scope);

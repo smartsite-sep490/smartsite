@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
 import { after, test } from 'node:test';
 import { JwtService } from '@nestjs/jwt';
+import { ForbiddenException } from '@nestjs/common';
 import dataSource from '../support/test-data-source.js';
 import { AuthService } from '../../src/modules/auth/auth.service.js';
 import { AuthTokenService } from '../../src/modules/auth/auth-token.service.js';
@@ -148,14 +149,16 @@ test('auth migration, bootstrap, sessions, account lifecycle and last Admin rule
   assert.equal(resetLogin.user.mustChangePassword, false);
   await assert.rejects(
     users.setStatus(admin.id, admin.id, { isActive: false }),
-    (error: unknown) =>
-      error instanceof PublicHttpException &&
-      error.publicPayload.code === 'LAST_ACTIVE_ADMIN_REQUIRED',
+    (error: unknown) => error instanceof ForbiddenException && error.getStatus() === 403,
   );
   await assert.rejects(
     users.replaceRoleAssignments(admin.id, {
       roleAssignments: [{ role: UserRole.SECURITY_OFFICER, siteId: site.id }],
     }),
+    (error: unknown) =>
+      error instanceof PublicHttpException &&
+      error.getStatus() === 409 &&
+      error.publicPayload.code === 'LAST_ACTIVE_ADMIN_REQUIRED',
   );
   const secondAdmin = await users.create({
     username: `admin-two-${suffix}`,

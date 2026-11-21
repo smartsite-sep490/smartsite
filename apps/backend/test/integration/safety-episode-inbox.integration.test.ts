@@ -204,7 +204,9 @@ test('episode detail returns only exact-subject findings and hash-bound evidence
     f.user,
     f.sites[0],
   ]);
-  assert.equal((await (await fetch(endpoint, { headers })).json()).identityDecision, null);
+  const adminOnlyDetail = await fetch(endpoint, { headers });
+  assert.equal(adminOnlyDetail.status, 403);
+  assert.equal((await adminOnlyDetail.json()).code, 'FORBIDDEN');
   await db.query(
     "INSERT INTO user_role_assignment(id,user_id,site_id,role) VALUES($1,$2,$3,'SAFETY_OFFICER')",
     [randomUUID(), f.user, f.sites[0]],
@@ -751,12 +753,22 @@ test('Site episode list scopes camera/Zone filters, pagination and live grants o
     "INSERT INTO user_role_assignment(id,user_id,site_id,role) VALUES($1,$2,NULL,'ADMIN')",
     [randomUUID(), f.user],
   );
-  assert.equal((await fetch(endpoint, { headers })).status, 200);
   const otherSiteEndpoint = endpoint.replace(f.sites[0]!, f.sites[2]!);
-  assert.equal(
-    (await (await fetch(otherSiteEndpoint, { headers })).json()).items[0].id,
-    f.episodes[2],
+  assert.equal((await fetch(endpoint, { headers })).status, 403);
+  assert.equal((await fetch(otherSiteEndpoint, { headers })).status, 403);
+  await db.query(
+    "INSERT INTO user_role_assignment(id,user_id,site_id,role) VALUES($1,$2,$3,'SAFETY_OFFICER')",
+    [randomUUID(), f.user, f.sites[0]],
   );
+  assert.equal((await fetch(endpoint, { headers })).status, 200);
+  assert.equal((await fetch(otherSiteEndpoint, { headers })).status, 403);
+  await db.query(
+    "INSERT INTO user_role_assignment(id,user_id,site_id,role) VALUES($1,$2,$3,'SAFETY_OFFICER')",
+    [randomUUID(), f.user, f.sites[2]],
+  );
+  const otherSiteResponse = await fetch(otherSiteEndpoint, { headers });
+  assert.equal(otherSiteResponse.status, 200);
+  assert.equal((await otherSiteResponse.json()).items[0].id, f.episodes[2]);
   await db.query('UPDATE app_user SET must_change_password=true WHERE id=$1', [f.user]);
   const blocked = await fetch(endpoint, { headers });
   assert.equal(blocked.status, 403);
