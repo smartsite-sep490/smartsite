@@ -144,48 +144,46 @@ export function FrameInboxSubjectRow({
   return (
     <li
       data-testid={`frame-subject-row-${personNumber}`}
-      className={`min-w-0 rounded-xl border p-3.5 sm:p-4 transition-colors ${
-        entry.unread
-          ? 'border-slate-200/95 border-l-4 border-l-teal-700 bg-white shadow-2xs'
-          : 'border-slate-200 bg-white/85'
+      className={`min-w-0 border-l-[3px] px-3.5 py-3 transition-colors ${
+        entry.unread ? 'border-l-teal-700 bg-white' : 'border-l-transparent bg-slate-50/35'
       }`}
     >
       <div
         data-tour-anchor={isTourTarget ? 'frame-inbox-subject-status' : undefined}
-        className="min-w-0 space-y-2.5"
+        className="min-w-0 space-y-2"
       >
         <div className="flex flex-wrap items-center justify-between gap-2">
           <div className="flex min-w-0 flex-wrap items-center gap-2">
             <span
               aria-hidden="true"
-              className={`inline-flex h-7 min-w-7 items-center justify-center rounded-lg px-2 text-xs font-bold tabular-nums ${
-                entry.unread ? 'bg-teal-900 text-white' : 'bg-slate-200 text-slate-800'
+              className={`inline-flex h-6 min-w-6 items-center justify-center rounded-md px-1.5 text-xs font-semibold tabular-nums ${
+                entry.unread ? 'bg-[#0F172A] text-white' : 'bg-slate-200 text-slate-700'
               }`}
             >
               {personNumber}
             </span>
-            <h3 className="text-sm sm:text-base font-semibold text-slate-950">
+            <h3 className="text-sm font-semibold text-slate-950">
               {t('frameInbox.person', { number: personNumber })}
             </h3>
             {entry.findingCount > 0 && (
               <span
                 data-testid={`frame-subject-ppe-count-${personNumber}`}
-                className="inline-flex items-center gap-1 rounded-md border border-amber-300/90 bg-amber-50 px-2 py-0.5 text-xs font-semibold tabular-nums text-amber-950"
+                className="inline-flex items-center gap-1 rounded border border-amber-200/90 bg-amber-50/90 px-1.5 py-0.5 text-xs font-semibold tabular-nums text-amber-950"
               >
-                <IconHardHat className="h-3.5 w-3.5 shrink-0 text-amber-800" />
+                <IconHardHat className="h-3.5 w-3.5 shrink-0 text-amber-700" />
                 <span>{t('frameInbox.findings', { count: entry.findingCount })}</span>
               </span>
             )}
           </div>
 
-          <div className="flex flex-wrap items-center gap-1.5 text-xs">
+          <div className="flex flex-wrap items-center gap-x-2.5 gap-y-1 text-xs">
             {entry.contentRevision > 1 && (
               <span
                 data-testid={`frame-subject-revision-${personNumber}`}
-                className={`inline-flex items-center rounded-md border px-2 py-0.5 text-xs font-semibold tabular-nums ${
+                className={`tabular-nums ${
                   entry.unread
-                    ? 'border-indigo-200 bg-indigo-50 text-indigo-950'
-                    : 'border-slate-200 bg-slate-100 text-slate-600'
+                    ? 'rounded border border-teal-200/80 bg-teal-50/75 px-1.5 py-0.5 font-medium text-teal-900'
+                    : 'text-slate-500'
                 }`}
               >
                 {tSafety(
@@ -194,17 +192,12 @@ export function FrameInboxSubjectRow({
                 )}
               </span>
             )}
-            <span
-              data-testid={`frame-subject-identity-${personNumber}`}
-              className="inline-flex items-center rounded-md border border-slate-200 bg-slate-100 px-2 py-0.5 text-xs font-medium text-slate-700"
-            >
+            <span data-testid={`frame-subject-identity-${personNumber}`} className="text-slate-600">
               {tSafety('frameInbox.identityUnconfirmedBadge')}
             </span>
             <span
-              className={`inline-flex items-center gap-1.5 rounded-md border px-2 py-0.5 text-xs font-semibold ${
-                entry.unread
-                  ? 'border-teal-700/30 bg-teal-50 text-teal-950'
-                  : 'border-slate-200 bg-slate-100 text-slate-600'
+              className={`inline-flex items-center gap-1 ${
+                entry.unread ? 'font-semibold text-teal-800' : 'text-slate-500'
               }`}
             >
               {entry.unread && (
@@ -224,7 +217,7 @@ export function FrameInboxSubjectRow({
           <div
             role="alert"
             data-testid={`frame-subject-findings-error-${personNumber}`}
-            className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-amber-300 bg-amber-50 px-3 py-2 text-xs text-amber-950"
+            className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-amber-200 bg-amber-50/80 px-3 py-1.5 text-xs text-amber-950"
           >
             <span>
               {findingsForbidden
@@ -236,7 +229,7 @@ export function FrameInboxSubjectRow({
                 type="button"
                 disabled={findingsQuery.isFetching}
                 onClick={() => void findingsQuery.refetch()}
-                className="inline-flex min-h-7 items-center rounded-md border border-amber-400/80 bg-white px-2.5 py-0.5 text-xs font-semibold text-amber-950 hover:bg-amber-100/70 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-teal-800 disabled:opacity-50"
+                className="inline-flex h-7 items-center rounded-md border border-amber-300 bg-white px-2.5 text-xs font-semibold text-amber-950 hover:bg-amber-50 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-teal-800 disabled:opacity-50"
               >
                 {t('common.retry')}
               </button>
@@ -248,44 +241,42 @@ export function FrameInboxSubjectRow({
           <ul
             aria-label={t('frameInbox.subjectFindingsLabel')}
             data-testid={`frame-subject-findings-${personNumber}`}
-            className="divide-y divide-amber-200/60 rounded-lg border border-amber-200/85 bg-amber-50/45 px-3 py-1"
+            className="divide-y divide-amber-200/50 rounded-lg border border-amber-200/80 bg-amber-50/40 px-3 py-0.5"
           >
             {findings.map((finding) => (
               <li
                 key={finding.alertId}
-                className="flex flex-wrap items-center justify-between gap-2 py-1.5 text-xs sm:text-sm"
+                className="flex flex-wrap items-center justify-between gap-2 py-1.5 text-xs"
               >
-                <span className="inline-flex items-center gap-2 font-medium text-slate-900">
-                  <IconHardHat className="h-4 w-4 shrink-0 text-amber-800" />
+                <span className="inline-flex items-center gap-1.5 font-medium text-slate-900">
+                  <IconHardHat className="h-3.5 w-3.5 shrink-0 text-amber-700" />
                   <span>
                     {t('ppeNotifications.' + finding.candidateSubtype, {
                       defaultValue: localizedLabel(finding.candidateSubtype),
                     })}
                   </span>
                 </span>
-                <span className="text-xs font-medium text-amber-900">
-                  {localizedLabel(finding.status)}
-                </span>
+                <span className="font-medium text-amber-900">{localizedLabel(finding.status)}</span>
               </li>
             ))}
           </ul>
         )}
 
         {entry.findingCount === 0 && (
-          <p className="text-xs sm:text-sm text-slate-600">{t('frameInbox.noPpeFindings')}</p>
+          <p className="text-xs text-slate-500">{t('frameInbox.noPpeFindings')}</p>
         )}
 
         {!entry.source && (
           <div
             data-testid={`frame-subject-crop-missing-${personNumber}`}
-            className="flex flex-wrap items-center gap-1.5 rounded-lg border border-amber-200 bg-amber-50/75 px-2.5 py-1.5 text-xs text-amber-950"
+            className="flex flex-wrap items-center gap-1.5 text-xs text-amber-900"
           >
             <IconAlertTriangle className="h-3.5 w-3.5 shrink-0 text-amber-700" />
             <span className="font-medium">{t('frameInbox.personEvidenceMissing')}</span>
-            <span aria-hidden="true" className="text-amber-700/60">
+            <span aria-hidden="true" className="text-slate-400">
               ·
             </span>
-            <span>{t('frameInbox.evidenceInCase')}</span>
+            <span className="text-slate-600">{t('frameInbox.evidenceInCase')}</span>
           </div>
         )}
 
@@ -331,21 +322,21 @@ export function FrameInboxSubjectRow({
 
       <div
         data-tour-anchor={isTourTarget ? 'frame-inbox-open-case' : undefined}
-        className="mt-3 flex flex-col gap-2 border-t border-slate-100 pt-3 sm:flex-row sm:flex-wrap sm:items-center sm:justify-between"
+        className="mt-2.5 flex flex-col gap-2 border-t border-slate-100 pt-2.5 sm:flex-row sm:flex-wrap sm:items-center sm:justify-between"
       >
-        <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-center">
+        <div className="flex flex-col gap-1.5 sm:flex-row sm:flex-wrap sm:items-center">
           {entry.source && (
             <button
               type="button"
               aria-pressed={personPhotoOpen}
               onClick={onTogglePersonPhoto}
-              className={`inline-flex min-h-9 w-full sm:w-auto items-center justify-center gap-1.5 rounded-lg border px-3 py-1.5 text-xs sm:text-sm font-semibold transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-teal-800 focus-visible:ring-2 focus-visible:ring-teal-700/30 ${
+              className={`inline-flex h-8 w-full sm:w-auto items-center justify-center gap-1.5 rounded-lg border px-2.5 text-xs font-semibold whitespace-nowrap transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-teal-800 ${
                 personPhotoOpen
-                  ? 'border-teal-700 bg-teal-50 text-teal-950'
-                  : 'border-slate-300 bg-white text-slate-800 hover:bg-slate-50'
+                  ? 'border-teal-700/60 bg-teal-50/80 text-teal-950'
+                  : 'border-slate-200 bg-white text-slate-700 hover:border-slate-300 hover:bg-slate-50'
               }`}
             >
-              <IconEye className="h-4 w-4 shrink-0" />
+              <IconEye className="h-3.5 w-3.5 shrink-0" />
               <span>
                 {t(
                   personPhotoOpen
@@ -362,9 +353,9 @@ export function FrameInboxSubjectRow({
               data-testid={`frame-subject-mark-read-${personNumber}`}
               disabled={isAckPending}
               onClick={onMarkCaseRead}
-              className="inline-flex min-h-9 w-full sm:w-auto items-center justify-center gap-1.5 rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-xs sm:text-sm font-semibold text-slate-800 transition-colors hover:bg-slate-50 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-teal-800 focus-visible:ring-2 focus-visible:ring-teal-700/30 disabled:cursor-not-allowed disabled:opacity-50"
+              className="inline-flex h-8 w-full sm:w-auto items-center justify-center gap-1 rounded-lg px-2.5 text-xs font-medium whitespace-nowrap text-slate-600 transition-colors hover:bg-slate-100 hover:text-slate-950 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-teal-800 disabled:cursor-not-allowed disabled:opacity-50"
             >
-              <IconCheck className="h-3.5 w-3.5 shrink-0 text-teal-800" />
+              <IconCheck className="h-3.5 w-3.5 shrink-0 text-slate-500" />
               <span>
                 {isAckPending ? t('frameInbox.markingRead') : tSafety('frameInbox.markCaseRead')}
               </span>
@@ -374,7 +365,7 @@ export function FrameInboxSubjectRow({
 
         <Link
           aria-describedby={handoffHintId}
-          className="inline-flex min-h-9 sm:min-h-10 w-full sm:w-auto sm:ml-auto items-center justify-center gap-1.5 rounded-lg bg-teal-800 px-3.5 py-2 text-xs sm:text-sm font-semibold text-white shadow-2xs transition-colors hover:bg-teal-900 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-teal-900 focus-visible:ring-2 focus-visible:ring-teal-700/40"
+          className="inline-flex h-9 w-full sm:w-auto sm:ml-auto items-center justify-center gap-1.5 rounded-lg bg-[#0F172A] px-3.5 text-xs sm:text-sm font-semibold whitespace-nowrap text-white transition-colors hover:bg-slate-800 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-slate-900"
           to={`/incidents?${caseParams}`}
         >
           <span>{t('frameInbox.openCase', { number: personNumber })}</span>

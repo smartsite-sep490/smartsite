@@ -3,7 +3,6 @@ import { useSearchParams } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { ApiError } from '@smartsite/api-client';
 import { IconBuilding, IconCamera, IconFilter, IconX } from './components/icons';
-import { Badge } from './components/ui';
 import { useManagementClient } from './features/auth/auth-session';
 
 export interface FrameCameraOption {
@@ -92,7 +91,6 @@ export function FrameInboxSiteFilter({
     }
   }
   const cameraOptions = [...cameraMap.entries()];
-  const hasActiveFilter = Boolean(siteId || cameraId);
 
   function applySiteFilter(nextSiteId: string) {
     const next = new URLSearchParams(params);
@@ -113,24 +111,18 @@ export function FrameInboxSiteFilter({
   }
 
   return (
-    <div
-      className={`space-y-2 rounded-xl border px-3 py-2.5 sm:px-3.5 transition-colors ${
-        hasActiveFilter && !revoked
-          ? 'border-teal-700/35 bg-teal-50/45 ring-1 ring-teal-700/10'
-          : 'border-slate-200/80 bg-slate-50/70'
-      }`}
-    >
-      <div className="flex flex-col gap-2.5 xl:flex-row xl:items-center xl:justify-between">
-        <div className="grid w-full min-w-0 gap-2.5 sm:grid-cols-2 xl:max-w-xl">
-          <label className="flex min-w-0 flex-col gap-1 sm:flex-row sm:items-center sm:gap-2 text-xs sm:text-sm font-semibold text-slate-800">
+    <div className="space-y-2">
+      <div className="flex flex-col gap-2.5 lg:flex-row lg:items-center lg:justify-between">
+        <div className="grid w-full min-w-0 gap-2.5 sm:grid-cols-2 lg:max-w-xl">
+          <label className="flex min-w-0 flex-col gap-1 sm:flex-row sm:items-center sm:gap-2 text-xs font-medium text-slate-700">
             <span className="shrink-0 text-slate-600">{t('episodes.site')}</span>
             <select
               value={siteId ?? ''}
               disabled={revoked}
-              className={`block h-10 w-full min-w-0 max-w-full truncate rounded-xl border px-3 text-sm transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-teal-800 focus-visible:ring-2 focus-visible:ring-teal-700/30 disabled:cursor-not-allowed disabled:bg-slate-100 disabled:text-slate-500 ${
+              className={`block h-9 w-full min-w-0 max-w-full truncate rounded-lg border px-2.5 text-sm transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-teal-800 disabled:cursor-not-allowed disabled:bg-slate-100 disabled:text-slate-500 ${
                 siteId && !revoked
-                  ? 'border-teal-700 bg-white font-semibold text-teal-950 ring-1 ring-teal-700/20'
-                  : 'border-slate-300 bg-white font-medium text-slate-900 hover:border-slate-400'
+                  ? 'border-teal-700/70 bg-teal-50/35 font-semibold text-teal-950'
+                  : 'border-slate-200 bg-white font-medium text-slate-900 hover:border-slate-300'
               }`}
               onChange={(event) => applySiteFilter(event.target.value)}
             >
@@ -142,15 +134,15 @@ export function FrameInboxSiteFilter({
               ))}
             </select>
           </label>
-          <label className="flex min-w-0 flex-col gap-1 sm:flex-row sm:items-center sm:gap-2 text-xs sm:text-sm font-semibold text-slate-800">
+          <label className="flex min-w-0 flex-col gap-1 sm:flex-row sm:items-center sm:gap-2 text-xs font-medium text-slate-700">
             <span className="shrink-0 text-slate-600">{t('episodes.camera')}</span>
             <select
               value={cameraId ?? ''}
               disabled={revoked || (cameraOptions.length === 0 && !cameraId)}
-              className={`block h-10 w-full min-w-0 max-w-full truncate rounded-xl border px-3 text-sm transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-teal-800 focus-visible:ring-2 focus-visible:ring-teal-700/30 disabled:cursor-not-allowed disabled:bg-slate-100 disabled:text-slate-500 ${
+              className={`block h-9 w-full min-w-0 max-w-full truncate rounded-lg border px-2.5 text-sm transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-teal-800 disabled:cursor-not-allowed disabled:bg-slate-100 disabled:text-slate-500 ${
                 cameraId && !revoked
-                  ? 'border-teal-700 bg-white font-semibold text-teal-950 ring-1 ring-teal-700/20'
-                  : 'border-slate-300 bg-white font-medium text-slate-900 hover:border-slate-400'
+                  ? 'border-teal-700/70 bg-teal-50/35 font-semibold text-teal-950'
+                  : 'border-slate-200 bg-white font-medium text-slate-900 hover:border-slate-300'
               }`}
               onChange={(event) => applyCameraFilter(event.target.value)}
             >
@@ -164,58 +156,46 @@ export function FrameInboxSiteFilter({
           </label>
         </div>
         {!revoked && (
-          <div className="flex min-w-0 flex-wrap items-center gap-2 xl:justify-end">
+          <div className="flex min-w-0 flex-wrap items-center gap-2 lg:justify-end">
             {siteId ? (
               <>
-                <Badge
-                  variant="info"
-                  dot
-                  className="max-w-[min(100%,18rem)] normal-case tracking-normal border-teal-700/30 bg-teal-100/80 px-2.5 py-1 text-xs font-semibold text-teal-950"
-                >
-                  <IconFilter className="h-3.5 w-3.5 shrink-0" />
+                <span className="inline-flex max-w-[min(100%,18rem)] items-center gap-1.5 rounded-md border border-teal-700/25 bg-teal-50/75 px-2.5 py-1 text-xs font-medium text-teal-950">
+                  <IconFilter className="h-3.5 w-3.5 shrink-0 text-teal-700" />
                   <span className="truncate">
                     {t('frameInbox.activeSiteBadge', {
                       site: names.get(siteId) ?? t('episodes.siteNamePending'),
                     })}
                   </span>
-                </Badge>
+                </span>
                 <button
                   type="button"
                   onClick={() => applySiteFilter('')}
-                  className="inline-flex shrink-0 items-center gap-1.5 rounded-lg border border-teal-700/40 bg-white px-2.5 py-1.5 text-xs font-semibold whitespace-nowrap text-teal-950 shadow-2xs transition-colors hover:bg-teal-50 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-teal-800 focus-visible:ring-2 focus-visible:ring-teal-700/30"
+                  className="inline-flex h-8 shrink-0 items-center gap-1 rounded-lg px-2 text-xs font-medium whitespace-nowrap text-slate-600 transition-colors hover:bg-slate-100 hover:text-slate-950 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-teal-800"
                 >
                   <IconX className="h-3.5 w-3.5 shrink-0" />
                   <span>{t('frameInbox.clearSiteFilter')}</span>
                 </button>
               </>
             ) : (
-              <Badge
-                variant="neutral"
-                dot
-                className="normal-case tracking-normal px-2.5 py-1 text-xs font-medium whitespace-nowrap"
-              >
-                <IconBuilding className="h-3.5 w-3.5 shrink-0" />
+              <span className="inline-flex items-center gap-1.5 text-xs font-medium whitespace-nowrap text-slate-600 tabular-nums">
+                <IconBuilding className="h-3.5 w-3.5 shrink-0 text-slate-400" />
                 <span>{t('frameInbox.allAssignedSitesBadge', { count: siteIds.length })}</span>
-              </Badge>
+              </span>
             )}
             {cameraId && (
               <>
-                <Badge
-                  variant="info"
-                  dot
-                  className="max-w-[min(100%,16rem)] normal-case tracking-normal border-teal-700/30 bg-teal-100/80 px-2.5 py-1 text-xs font-semibold text-teal-950"
-                >
-                  <IconCamera className="h-3.5 w-3.5 shrink-0" />
+                <span className="inline-flex max-w-[min(100%,16rem)] items-center gap-1.5 rounded-md border border-teal-700/25 bg-teal-50/75 px-2.5 py-1 text-xs font-medium text-teal-950">
+                  <IconCamera className="h-3.5 w-3.5 shrink-0 text-teal-700" />
                   <span className="truncate">
                     {t('frameInbox.activeCameraBadge', {
                       camera: cameraMap.get(cameraId) ?? t('frameInbox.cameraNamePending'),
                     })}
                   </span>
-                </Badge>
+                </span>
                 <button
                   type="button"
                   onClick={() => applyCameraFilter('')}
-                  className="inline-flex shrink-0 items-center gap-1.5 rounded-lg border border-teal-700/40 bg-white px-2.5 py-1.5 text-xs font-semibold whitespace-nowrap text-teal-950 shadow-2xs transition-colors hover:bg-teal-50 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-teal-800 focus-visible:ring-2 focus-visible:ring-teal-700/30"
+                  className="inline-flex h-8 shrink-0 items-center gap-1 rounded-lg px-2 text-xs font-medium whitespace-nowrap text-slate-600 transition-colors hover:bg-slate-100 hover:text-slate-950 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-teal-800"
                 >
                   <IconX className="h-3.5 w-3.5 shrink-0" />
                   <span>{t('frameInbox.clearCameraFilter')}</span>
