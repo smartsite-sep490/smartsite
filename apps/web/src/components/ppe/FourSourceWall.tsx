@@ -377,7 +377,7 @@ export function FourSourceWallTile(props: FourSourceWallTileProps) {
 
       <div
         data-testid={`wall-metadata-bar-${camera.id}`}
-        className="relative z-10 px-3.5 py-2.5 bg-slate-950/95 border-t border-white/10 text-white text-xs space-y-2"
+        className="relative z-10 px-3.5 py-2.5 bg-slate-950/95 border-t border-white/10 text-white text-sm space-y-2"
       >
         <div className="flex min-w-0 flex-wrap items-center justify-between gap-2">
           <span
@@ -417,7 +417,7 @@ export function FourSourceWallTile(props: FourSourceWallTileProps) {
             onClick={(e) => e.stopPropagation()}
             className="text-xs text-slate-300 min-w-0 shrink-0 open:basis-full open:order-last"
           >
-            <summary className="inline-flex min-h-8 items-center cursor-pointer font-medium text-xs text-slate-200 hover:text-white select-none px-3 py-1.5 rounded-lg border border-white/15 bg-white/5 hover:bg-white/15 transition-colors">
+            <summary className="inline-flex min-h-9 items-center cursor-pointer font-medium text-sm text-slate-200 hover:text-white select-none px-3 py-1.5 rounded-lg border border-white/15 bg-white/5 hover:bg-white/15 transition-colors">
               {t('ppe.common.details')}
             </summary>
             <div className="mt-2 pt-2 border-t border-white/15 space-y-2 max-h-32 overflow-y-auto overscroll-contain pr-1">
@@ -458,7 +458,7 @@ export function FourSourceWallTile(props: FourSourceWallTileProps) {
                 e.stopPropagation();
                 onSelect(camera.id);
               }}
-              className={`inline-flex min-h-8 items-center px-3 py-1.5 rounded-lg text-xs font-medium transition-colors cursor-pointer focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white ${
+              className={`inline-flex min-h-9 items-center px-3 py-1.5 rounded-lg text-sm font-medium transition-colors cursor-pointer focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white ${
                 isSelected
                   ? 'border border-amber-400/40 bg-amber-400/15 font-semibold text-amber-200'
                   : 'border border-white/15 bg-transparent text-slate-300 hover:bg-white/10 hover:text-white'
@@ -479,9 +479,9 @@ export function FourSourceWallTile(props: FourSourceWallTileProps) {
                   e.stopPropagation();
                   onEnlarge(camera.id);
                 }}
-                className="inline-flex min-h-8 items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold bg-white/15 text-white hover:bg-white/25 transition-colors cursor-pointer focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white"
+                className="inline-flex min-h-9 items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-semibold bg-white/15 text-white hover:bg-white/25 transition-colors cursor-pointer focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white"
               >
-                <IconMaximize className="w-3.5 h-3.5 shrink-0" />
+                <IconMaximize className="w-4 h-4 shrink-0" />
                 <span>{t('ppe.wall.enlargeCameraBtn')}</span>
               </button>
             )}
@@ -496,9 +496,9 @@ export function FourSourceWallTile(props: FourSourceWallTileProps) {
                   e.stopPropagation();
                   onOpenEvidence(camera.id);
                 }}
-                className="inline-flex min-h-8 items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold border border-white/15 bg-white/5 text-slate-100 hover:bg-white/15 transition-colors cursor-pointer focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white"
+                className="inline-flex min-h-9 items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-semibold border border-white/15 bg-white/5 text-slate-100 hover:bg-white/15 transition-colors cursor-pointer focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white"
               >
-                <IconShield className="w-3.5 h-3.5 shrink-0" />
+                <IconShield className="w-4 h-4 shrink-0" />
                 <span>{t('ppe.common.evidence')}</span>
               </button>
             )}

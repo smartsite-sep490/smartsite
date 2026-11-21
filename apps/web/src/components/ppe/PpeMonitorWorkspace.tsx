@@ -191,7 +191,7 @@ function MonitorScope({
       void sites.fetchNextPage({ cancelRefetch: false });
   }, [visibleSites.length, allowed, chosenSite, site, sites]);
   const siteSelector = (
-    <label className="flex w-full sm:w-auto sm:flex-[1_1_9.5rem] lg:max-w-[11rem] flex-wrap sm:flex-nowrap items-center gap-2 min-w-0 text-sm font-semibold text-slate-700">
+    <label className="flex w-full sm:w-auto sm:flex-[1_1_12.5rem] lg:max-w-[16rem] flex-wrap sm:flex-nowrap items-center gap-2 min-w-0 text-sm font-semibold text-slate-700">
       <span className="shrink-0">{t('monitor.site')}</span>
       <select
         name="monitorSite"
@@ -587,7 +587,7 @@ function CameraScope({
     <div className="space-y-3">
       <div className="flex min-w-0 flex-wrap items-center gap-2.5 rounded-xl border border-slate-200 bg-white px-3.5 py-2 shadow-2xs">
         {siteSelector}
-        <label className="flex w-full sm:w-auto sm:flex-[1_1_9.5rem] lg:max-w-[11rem] flex-wrap sm:flex-nowrap items-center gap-2 min-w-0 text-sm font-semibold text-slate-700">
+        <label className="flex w-full sm:w-auto sm:flex-[1_1_13rem] lg:max-w-[17rem] flex-wrap sm:flex-nowrap items-center gap-2 min-w-0 text-sm font-semibold text-slate-700">
           <span className="shrink-0">{t('monitor.camera')}</span>
           <select
             name="monitorCamera"
@@ -672,23 +672,6 @@ function CameraScope({
                 ? t('monitor.error')
                 : t('monitor.loaded', { loaded: cameras.rows.length, total: cameras.total ?? '—' })}
           </p>
-          <MonitorWorkspaceTour
-            userId={session.user.id}
-            scope={scope}
-            observationMode="ppe"
-            siteId={site.id}
-            selectedCameraId={selected?.id}
-            isMetadataReady={
-              !cameras.isPending &&
-              (!cameras.isError ||
-                (cameras.isFetchNextPageError &&
-                  !(
-                    cameras.error instanceof ApiError &&
-                    [401, 403, 404].includes(cameras.error.status ?? 0)
-                  )))
-            }
-            hasActiveCamera={Boolean(selected)}
-          />
         </div>
         {siteNotices}
         {aiPaused && !selected && (
@@ -911,6 +894,25 @@ function CameraScope({
           enableFrameInboxLink={Boolean(enableFrameInboxLink)}
           snapshot={evidenceCamera ? snapshotsByCamera[evidenceCamera.id] : undefined}
           isRawModeActive={Boolean(focus && evidenceCamera?.id === selected?.id && focusRawMode)}
+        />
+      </div>
+      <div className="flex flex-wrap items-center justify-end gap-2 pt-0.5">
+        <MonitorWorkspaceTour
+          userId={session.user.id}
+          scope={scope}
+          observationMode="ppe"
+          siteId={site.id}
+          selectedCameraId={selected?.id}
+          isMetadataReady={
+            !cameras.isPending &&
+            (!cameras.isError ||
+              (cameras.isFetchNextPageError &&
+                !(
+                  cameras.error instanceof ApiError &&
+                  [401, 403, 404].includes(cameras.error.status ?? 0)
+                )))
+          }
+          hasActiveCamera={Boolean(selected)}
         />
       </div>
     </div>

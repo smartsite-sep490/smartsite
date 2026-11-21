@@ -282,7 +282,7 @@ export function NotificationBell({
           align="end"
           role="dialog"
           aria-label={tr('common.notifications')}
-          className="z-50 w-[min(440px,calc(100vw-24px))] overflow-hidden rounded-xl border border-slate-200 bg-white shadow-lg text-slate-900"
+          className="z-50 w-[min(460px,calc(100vw-24px))] overflow-hidden rounded-xl border border-slate-200 bg-white shadow-lg text-slate-900"
         >
           {/* Header */}
           <div className="flex items-center justify-between gap-2 border-b border-slate-200/80 bg-slate-50/80 px-4 py-3">
@@ -292,19 +292,19 @@ export function NotificationBell({
                 {tr('common.notifications')}
               </h2>
               {count !== undefined && count > 0 && (
-                <span className="rounded-md border border-slate-200 bg-white px-2 py-0.5 text-xs font-semibold tabular-nums text-slate-700 shrink-0">
-                  {tr('common.value_new', { value1: count })}
+                <span className="text-xs font-semibold tabular-nums text-slate-600 shrink-0">
+                  · {tr('common.value_new', { value1: count })}
                 </span>
               )}
             </div>
 
             <button
               type="button"
-              className="inline-flex min-h-8 items-center gap-1.5 rounded-lg px-2.5 py-1 text-xs font-semibold text-slate-700 hover:text-slate-950 hover:bg-slate-200/60 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-slate-900 disabled:opacity-40 disabled:pointer-events-none transition-colors cursor-pointer shrink-0"
+              className="inline-flex min-h-9 items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-sm font-medium text-slate-700 hover:text-slate-950 hover:bg-slate-200/60 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-slate-900 disabled:opacity-40 disabled:pointer-events-none transition-colors cursor-pointer shrink-0"
               disabled={unavailable || !legacyCount || actionPending}
               onClick={() => markAll.mutate()}
             >
-              <IconCheck className="w-3.5 h-3.5 text-slate-600" />
+              <IconCheck className="w-4 h-4 text-slate-600" />
               <span>
                 {tr(
                   showPpeInbox
@@ -318,14 +318,14 @@ export function NotificationBell({
           {/* Tab Selector — only when PPE inbox is active */}
           {showPpeInbox && (
             <div className="px-4 py-2 border-b border-slate-200/80 bg-white">
-              <div className="inline-flex p-0.5 bg-slate-100 rounded-lg border border-slate-200/80 text-xs gap-0.5 w-full">
+              <div className="inline-flex p-0.5 bg-slate-100 rounded-lg border border-slate-200/80 text-sm gap-0.5 w-full">
                 <button
                   type="button"
                   aria-pressed={activeTab === 'camera'}
                   onClick={() => setActiveTab('camera')}
-                  className={`flex-1 inline-flex min-h-8 items-center justify-center px-3 py-1 rounded-md text-xs font-semibold transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-slate-900 cursor-pointer ${
+                  className={`flex-1 inline-flex min-h-9 items-center justify-center px-3 py-1.5 rounded-md text-sm font-medium transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-slate-900 cursor-pointer ${
                     activeTab === 'camera'
-                      ? 'bg-white text-slate-950 shadow-2xs'
+                      ? 'bg-white font-semibold text-slate-950 shadow-2xs'
                       : 'text-slate-600 hover:text-slate-950'
                   }`}
                 >
@@ -333,8 +333,8 @@ export function NotificationBell({
                   {showPpeInbox &&
                     ppeFrames.isSuccess &&
                     (ppeFrames.data?.unreadCount ?? 0) > 0 && (
-                      <span className="ml-1.5 inline-flex min-w-[20px] h-5 items-center justify-center rounded-md border border-amber-200 bg-amber-100 px-1.5 text-xs font-semibold text-amber-950 tabular-nums">
-                        {ppeFrames.data?.unreadCount ?? 0}
+                      <span className="ml-1.5 text-xs font-semibold text-amber-800 tabular-nums">
+                        ({ppeFrames.data?.unreadCount ?? 0})
                       </span>
                     )}
                 </button>
@@ -342,16 +342,16 @@ export function NotificationBell({
                   type="button"
                   aria-pressed={activeTab === 'system'}
                   onClick={() => setActiveTab('system')}
-                  className={`flex-1 inline-flex min-h-8 items-center justify-center px-3 py-1 rounded-md text-xs font-semibold transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-slate-900 cursor-pointer ${
+                  className={`flex-1 inline-flex min-h-9 items-center justify-center px-3 py-1.5 rounded-md text-sm font-medium transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-slate-900 cursor-pointer ${
                     activeTab === 'system'
-                      ? 'bg-white text-slate-950 shadow-2xs'
+                      ? 'bg-white font-semibold text-slate-950 shadow-2xs'
                       : 'text-slate-600 hover:text-slate-950'
                   }`}
                 >
                   <span>{tSafety('notificationCenter.scheduleSystem')}</span>
                   {legacyCount !== undefined && legacyCount > 0 && (
-                    <span className="ml-1.5 inline-flex min-w-[20px] h-5 items-center justify-center rounded-md bg-slate-200 px-1.5 text-xs font-semibold text-slate-800 tabular-nums">
-                      {legacyCount}
+                    <span className="ml-1.5 text-xs font-semibold text-slate-600 tabular-nums">
+                      ({legacyCount})
                     </span>
                   )}
                 </button>
@@ -370,7 +370,7 @@ export function NotificationBell({
                 />
               </div>
               {!unavailable && data && !data.items.length && (
-                <div className="flex items-center justify-between gap-2 bg-slate-50/80 px-4 py-2.5 text-xs text-slate-600">
+                <div className="flex items-center justify-between gap-2 bg-slate-50/80 px-4 py-2.5 text-sm text-slate-600">
                   <span>{tr('notification_bell.no_other_notifications_yet')}</span>
                   <button
                     type="button"
@@ -392,7 +392,7 @@ export function NotificationBell({
                 className="px-4 py-2 border-b border-slate-100/80 bg-white"
                 aria-label={tr('common.notification_filter')}
               >
-                <div className="inline-flex p-0.5 bg-slate-100/90 rounded-xl border border-slate-200/60 text-xs gap-1 w-full sm:w-auto">
+                <div className="inline-flex p-0.5 bg-slate-100 rounded-lg border border-slate-200/80 text-sm gap-1 w-full sm:w-auto">
                   {(['ALL', 'UNREAD'] as const).map((filter) => (
                     <button
                       key={filter}
@@ -407,10 +407,10 @@ export function NotificationBell({
                         deleteSingle.reset();
                         setDeletedCount(null);
                       }}
-                      className={`flex-1 sm:flex-initial px-3 py-1 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+                      className={`flex-1 sm:flex-initial px-3 py-1 rounded-md text-sm font-medium transition-colors cursor-pointer ${
                         readStatus === filter
-                          ? 'bg-white text-[#071A2B] shadow-2xs'
-                          : 'text-slate-500 hover:text-slate-900 hover:bg-white/50'
+                          ? 'bg-white font-semibold text-slate-950 shadow-2xs'
+                          : 'text-slate-600 hover:text-slate-950'
                       }`}
                     >
                       {filter === 'ALL' ? tr('common.all') : tr('common.unread')}
@@ -423,7 +423,7 @@ export function NotificationBell({
                 <div className="px-4 py-2 border-b border-slate-100">
                   <button
                     type="button"
-                    className="text-xs font-semibold text-rose-700 rounded-lg px-2 py-1 hover:bg-rose-50 focus-visible:outline-2 disabled:opacity-40"
+                    className="text-sm font-medium text-rose-700 rounded-lg px-2 py-1 hover:bg-rose-50 focus-visible:outline-2 disabled:opacity-40 cursor-pointer"
                     disabled={unavailable || !readCount || actionPending}
                     onClick={() => {
                       setConfirmDelete(true);
@@ -686,7 +686,7 @@ export function NotificationBell({
                                   </div>
 
                                   <p
-                                    className="text-xs leading-relaxed text-slate-600 break-words whitespace-pre-line"
+                                    className="text-sm leading-relaxed text-slate-700 break-words whitespace-pre-line"
                                     title={formatNotificationDisplayMessage(item)}
                                   >
                                     {formatNotificationDisplayMessage(item)}
@@ -729,9 +729,9 @@ export function NotificationBell({
                                       deleteSingle.reset();
                                       deleteRead.reset();
                                     }}
-                                    className="p-2 rounded-lg text-slate-500 hover:text-rose-700 hover:bg-rose-50 opacity-0 group-hover:opacity-100 focus-visible:opacity-100 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-slate-900 transition-colors cursor-pointer disabled:opacity-40"
+                                    className="h-9 w-9 inline-flex items-center justify-center rounded-lg text-slate-500 hover:text-rose-700 hover:bg-rose-50 opacity-0 group-hover:opacity-100 focus-visible:opacity-100 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-slate-900 transition-colors cursor-pointer disabled:opacity-40"
                                   >
-                                    <IconTrash className="w-3.5 h-3.5" />
+                                    <IconTrash className="w-4 h-4" />
                                   </button>
                                   <div className="text-slate-500 group-hover:text-slate-800 group-hover:translate-x-0.5 transition-all">
                                     <IconArrowRight className="w-3.5 h-3.5" />
@@ -747,7 +747,7 @@ export function NotificationBell({
                         <button
                           type="button"
                           disabled={query.isFetchingNextPage}
-                          className="w-full py-3 text-xs font-bold text-slate-700 hover:text-[#071A2B] hover:bg-slate-50 border-t border-slate-100/80 transition-colors flex items-center justify-center gap-2 cursor-pointer"
+                          className="w-full py-3 text-sm font-semibold text-slate-700 hover:text-slate-950 hover:bg-slate-50 border-t border-slate-100/80 transition-colors flex items-center justify-center gap-2 cursor-pointer"
                           onClick={() => void query.fetchNextPage()}
                         >
                           {query.isFetchingNextPage ? (

@@ -273,16 +273,16 @@ export function FocusedCameraMedia({
           </h2>
           <span
             data-testid="focused-source-state"
-            className={`inline-flex max-w-full items-center gap-1.5 rounded-md border px-2.5 py-1 text-xs font-semibold tracking-wide whitespace-normal break-words [overflow-wrap:anywhere] ${
+            className={`inline-flex max-w-full items-center gap-1.5 text-sm font-semibold whitespace-normal break-words [overflow-wrap:anywhere] ${
               aiPaused || isRawMode
-                ? 'border-amber-400/40 bg-amber-500/15 text-amber-200'
+                ? 'text-amber-200'
                 : isLiveBadge
-                  ? 'border-emerald-400/40 bg-emerald-500/15 text-emerald-200'
+                  ? 'text-emerald-300'
                   : isReplayBadge
-                    ? 'border-amber-400/40 bg-amber-500/15 text-amber-200'
+                    ? 'text-amber-200'
                     : pending
-                      ? 'border-slate-600 bg-slate-800 text-slate-200'
-                      : 'border-rose-400/40 bg-rose-500/15 text-rose-200'
+                      ? 'text-slate-200'
+                      : 'text-rose-200'
             }`}
           >
             <span
@@ -372,8 +372,8 @@ export function FocusedCameraMedia({
         data-testid="focused-camera-stage"
         className={
           present
-            ? 'relative aspect-video w-full lg:aspect-auto lg:h-[clamp(15rem,calc(100dvh-29.5rem),33rem)] [[data-monitor-fullscreen=true]_&]:lg:h-[clamp(22rem,calc(100dvh-10rem),52rem)] bg-[#070A10] text-white overflow-hidden'
-            : 'relative flex min-h-[13rem] w-full items-center justify-center lg:h-[clamp(15rem,calc(100dvh-29.5rem),33rem)] [[data-monitor-fullscreen=true]_&]:lg:h-[clamp(22rem,calc(100dvh-10rem),52rem)] bg-[#070A10] text-white'
+            ? 'relative aspect-video w-full lg:aspect-auto lg:h-[clamp(15rem,calc(100dvh-28rem),34rem)] [[data-monitor-fullscreen=true]_&]:lg:h-[clamp(22rem,calc(100dvh-10rem),52rem)] bg-[#070A10] text-white overflow-hidden'
+            : 'relative flex min-h-[13rem] w-full items-center justify-center lg:h-[clamp(15rem,calc(100dvh-28rem),34rem)] [[data-monitor-fullscreen=true]_&]:lg:h-[clamp(22rem,calc(100dvh-10rem),52rem)] bg-[#070A10] text-white'
         }
       >
         {!aiPaused && mode === 'ai' && snapshot.preview && (
@@ -422,7 +422,7 @@ export function FocusedCameraMedia({
 
       <div
         data-testid="focused-telemetry-strip"
-        className="flex min-w-0 flex-wrap items-start sm:items-center justify-between gap-x-4 gap-y-2.5 border-t border-white/10 bg-slate-950/95 px-3.5 sm:px-4 py-2.5 text-xs sm:text-sm text-slate-300"
+        className="flex min-w-0 flex-wrap items-start sm:items-center justify-between gap-x-4 gap-y-2 border-t border-white/10 bg-slate-950/95 px-3.5 sm:px-4 py-2 text-sm text-slate-200"
       >
         <div className="flex min-w-0 max-w-full flex-1 basis-full sm:basis-auto flex-col gap-1.5">
           <div className="flex min-w-0 max-w-full flex-wrap items-center gap-x-3 gap-y-1">
