@@ -210,10 +210,10 @@ export function FourSourceWallTile(props: FourSourceWallTileProps) {
 
   const stageHeightClass =
     cameraCountInGrid === 1
-      ? 'lg:h-[clamp(20rem,calc(100vh-20.5rem),38rem)] [[data-monitor-fullscreen=true]_&]:lg:h-[clamp(24rem,calc(100vh-10rem),52rem)]'
+      ? 'lg:h-[clamp(17.5rem,calc(100dvh-23.5rem),36rem)] [[data-monitor-fullscreen=true]_&]:lg:h-[clamp(22rem,calc(100dvh-10rem),52rem)]'
       : cameraCountInGrid === 2
-        ? 'lg:h-[clamp(17rem,calc(100vh-19.5rem),28rem)] [[data-monitor-fullscreen=true]_&]:lg:h-[clamp(20rem,calc(100vh-10.5rem),36rem)]'
-        : 'lg:h-[clamp(13rem,calc((100vh-18rem)/2),20.5rem)] [[data-monitor-fullscreen=true]_&]:lg:h-[clamp(15rem,calc((100vh-10.5rem)/2),26rem)]';
+        ? 'lg:h-[clamp(15rem,calc(100dvh-21rem),26rem)] [[data-monitor-fullscreen=true]_&]:lg:h-[clamp(20rem,calc(100dvh-10.5rem),36rem)]'
+        : 'lg:h-[clamp(11.5rem,calc((100dvh-20.5rem)/2),19.5rem)] [[data-monitor-fullscreen=true]_&]:lg:h-[clamp(15rem,calc((100dvh-10.5rem)/2),26rem)]';
 
   return (
     <div
@@ -223,9 +223,9 @@ export function FourSourceWallTile(props: FourSourceWallTileProps) {
         camera: camera.name || camera.code,
       })}
       onClick={() => onSelect(camera.id)}
-      className={`relative min-w-0 rounded-2xl border transition-all flex flex-col overflow-hidden cursor-pointer select-none bg-[#0B0F17] ${
+      className={`relative min-w-0 rounded-xl border transition-all flex flex-col overflow-hidden cursor-pointer select-none bg-[#0B0F17] ${
         isSelected
-          ? 'border-amber-400/90 ring-2 ring-amber-400/30 shadow-sm'
+          ? 'border-amber-400/90 ring-1 ring-amber-400/40 shadow-2xs'
           : 'border-slate-800 hover:border-slate-700'
       }`}
     >

@@ -124,16 +124,19 @@ it('renders full-width authenticated workspace without fake Admin banner or dupl
     expect(root.className).not.toContain('max-w-[1202px]');
     expect(root.className).not.toContain('mx-auto');
 
-    // Never claim Global Admin session or render duplicate inline Sign-out button
+    // Never claim Global Admin session, internal backend jargon, or render duplicate inline Sign-out button
     expect(screen.queryByText(/Admin Session Active|PHIÊN QUẢN TRỊ VIÊN/i)).toBeNull();
     expect(
       screen.queryByText(/Global Admin role verified|quyền quản trị viên hệ thống/i),
     ).toBeNull();
+    expect(screen.queryByText(/Backend evaluation required|Cần backend xét quyền/i)).toBeNull();
     expect(screen.queryByRole('button', { name: /Sign out|Đăng xuất/i })).toBeNull();
 
-    // Real 24px h1 + 40px selects + fullscreen toggle + role-gated /camera-setup link
+    // Real 24px h1 + unified single-row 40px selects + fullscreen toggle + role-gated /camera-setup link
     expect(screen.getByRole('heading', { level: 1 })).toBeTruthy();
-    for (const select of document.querySelectorAll('select')) {
+    const selects = document.querySelectorAll('select');
+    expect(selects.length).toBe(3);
+    for (const select of selects) {
       expect(select.className).toContain('h-10');
       expect(select.className).toContain('text-sm');
     }

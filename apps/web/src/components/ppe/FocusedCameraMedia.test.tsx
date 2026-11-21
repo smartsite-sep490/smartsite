@@ -57,8 +57,10 @@ it('activates exactly the selected transport and never overlays AI on raw video'
   expect(hooks.raw.mock.lastCall?.[0].enabled).toBe(false);
   expect(hooks.recorded.mock.lastCall?.[0].enabled).toBe(true);
 });
-it('paused state disables every transport and suppresses even previously decoded media', () => {
+it('paused state disables every transport and shows single calm paused status without duplicate footer label', () => {
   render(<FocusedCameraMedia {...props} aiPaused />);
+  expect(screen.getByTestId('focused-source-state').textContent).toBe('AI paused');
+  expect(screen.getByTestId('focused-people-state').textContent).toBe('Person count unavailable');
   fireEvent.click(screen.getByRole('button', { name: 'Recorded source video' }));
   for (const hook of Object.values(hooks)) expect(hook.mock.lastCall?.[0].enabled).toBe(false);
   expect(document.querySelector('video')).toBeNull();
