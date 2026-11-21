@@ -237,25 +237,25 @@ export function MonitorEvidenceDrawer({
           </header>
 
           <div className="rounded-xl border border-slate-200 bg-slate-50/80 p-3.5 space-y-2">
-            <div className="flex flex-wrap items-center justify-between gap-2 text-xs sm:text-sm">
+            <div className="flex flex-wrap items-center justify-between gap-2 text-sm">
               <span className="font-semibold text-slate-700">
                 {trMonitor('monitor.drawer.currentStatus')}
               </span>
               <span
                 data-testid="monitor-drawer-source-state"
-                className={`rounded-md border px-2.5 py-0.5 text-xs font-semibold ${
+                className={`inline-flex items-center gap-1.5 text-sm font-semibold ${
                   activePreview
-                    ? 'border-emerald-300 bg-emerald-50 text-emerald-900'
+                    ? 'text-emerald-800'
                     : aiPaused || isRawModeActive
-                      ? 'border-amber-300 bg-amber-50 text-amber-900'
-                      : 'border-rose-200 bg-rose-50 text-rose-900'
+                      ? 'text-amber-800'
+                      : 'text-rose-700'
                 }`}
               >
                 {statusBadgeText}
               </span>
             </div>
             {formattedTime && activePreview && (
-              <div className="flex flex-wrap items-center justify-between gap-2 text-xs sm:text-sm text-slate-600">
+              <div className="flex flex-wrap items-center justify-between gap-2 text-sm text-slate-600">
                 <span>{trMonitor('monitor.drawer.capturedAt')}</span>
                 <span className="font-mono font-semibold tabular-nums text-slate-800">
                   {formattedTime}
@@ -298,7 +298,7 @@ export function MonitorEvidenceDrawer({
                         })}
                       </p>
                     )}
-                    <div className="grid grid-cols-1 gap-1.5 pt-1 text-xs sm:text-sm">
+                    <div className="grid grid-cols-1 gap-1.5 pt-1 text-sm">
                       <div className="flex items-center justify-between gap-2 rounded-lg bg-slate-50 px-2.5 py-1.5">
                         <span className="font-medium text-slate-700">
                           {trMonitor('monitor.drawer.ppeHardHat')}

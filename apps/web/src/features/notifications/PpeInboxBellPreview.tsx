@@ -7,6 +7,7 @@ import {
 } from '../../components/safety-episodes/safetyUrlParams';
 import { uiLocale } from '../../i18n';
 import { translate as tr } from '../../i18n';
+import { IconAlertTriangle, IconClock, IconHardHat } from '../../components/icons';
 import type { usePpeFrameInboxPreview } from './usePpeFrameInboxPreview';
 
 const inboxHref = '/incidents?tab=ppe-frames';
@@ -48,8 +49,8 @@ export function PpeInboxBellPreview({
 
   return (
     <section aria-label={t('episodes.frameTitle')} className="border-b border-slate-200/80">
-      <div className="flex items-center justify-between gap-2 px-4 py-2.5 text-xs">
-        <h3 className="font-semibold text-slate-700">{t('episodes.frameTitle')}</h3>
+      <div className="flex items-center justify-between gap-2 px-4 py-2.5 text-sm">
+        <h3 className="font-semibold text-slate-800">{t('episodes.frameTitle')}</h3>
         <Link
           to={inboxHref}
           onClick={onNavigate}
@@ -59,17 +60,17 @@ export function PpeInboxBellPreview({
         </Link>
       </div>
       {query.isPending && (
-        <p role="status" className="px-4 pb-3 text-xs text-slate-600">
+        <p role="status" className="px-4 pb-3 text-sm text-slate-600">
           {t('episodes.loading')}
         </p>
       )}
       {query.isError && (
-        <p role="alert" className="px-4 pb-3 text-xs text-rose-700">
+        <p role="alert" className="px-4 pb-3 text-sm text-rose-700">
           {t('episodes.unavailable')}
         </p>
       )}
       {query.isSuccess && rows.length === 0 && (
-        <p role="status" className="px-4 pb-3 text-xs text-slate-600">
+        <p role="status" className="px-4 pb-3 text-sm text-slate-600">
           {t('episodes.empty')}
         </p>
       )}
@@ -105,14 +106,14 @@ export function PpeInboxBellPreview({
                     to={`/incidents?${itemParams}`}
                     onClick={onNavigate}
                     data-testid="notification-bell-ppe-frame"
-                    className={`group flex min-h-11 items-start gap-2.5 border-l-[3px] px-4 py-3 text-xs transition-colors focus-visible:outline-2 focus-visible:outline-offset-[-2px] focus-visible:outline-teal-800 ${
+                    className={`group flex min-h-11 items-start gap-2.5 border-l-[3px] px-4 py-3 text-sm transition-colors focus-visible:outline-2 focus-visible:outline-offset-[-2px] focus-visible:outline-teal-800 ${
                       unread
                         ? 'border-l-teal-700 bg-teal-50/20 hover:bg-teal-50/40'
                         : 'border-l-transparent bg-white hover:bg-slate-50'
                     }`}
                   >
                     <span
-                      className={`mt-1.5 h-2 w-2 shrink-0 rounded-full ${
+                      className={`mt-2 h-2 w-2 shrink-0 rounded-full ${
                         unread ? 'bg-teal-700' : 'bg-transparent'
                       }`}
                       aria-label={unread ? t('episodes.unread') : undefined}
@@ -138,31 +139,39 @@ export function PpeInboxBellPreview({
 
                       <span className="block truncate text-xs text-slate-600">{siteName}</span>
 
-                      <div className="flex flex-wrap items-center gap-1.5 pt-0.5">
-                        <span className="text-xs font-medium text-slate-700 tabular-nums">
+                      <div className="flex flex-wrap items-center gap-x-3 gap-y-1 pt-0.5 text-sm">
+                        <span className="font-medium text-slate-900 tabular-nums">
                           {t('episodes.framePeople', { count: cases.length })}
                         </span>
                         {findingCount > 0 && (
-                          <span className="inline-flex items-center rounded-md border border-amber-200/90 bg-amber-50/90 px-2 py-0.5 text-xs font-medium text-amber-950 tabular-nums">
-                            {t('episodes.findings', { count: findingCount })}
+                          <span className="inline-flex items-center gap-1 font-medium text-slate-950 tabular-nums">
+                            <IconHardHat className="h-4 w-4 shrink-0 text-amber-700" />
+                            <span>{t('episodes.findings', { count: findingCount })}</span>
                           </span>
                         )}
                         {deniedCount > 0 && (
-                          <span className="inline-flex items-center rounded-md border border-rose-200/90 bg-rose-50/90 px-2 py-0.5 text-xs font-medium text-rose-950 tabular-nums">
-                            {t('episodes.frameZoneDenials', { count: deniedCount })}
+                          <span className="inline-flex items-center gap-1 font-semibold text-rose-700 tabular-nums">
+                            <IconAlertTriangle className="h-4 w-4 shrink-0 text-rose-600" />
+                            <span>{t('episodes.frameZoneDenials', { count: deniedCount })}</span>
                           </span>
                         )}
                         {laterDenials > 0 && (
-                          <span className="inline-flex items-center rounded-md border border-rose-300 bg-rose-100 px-2 py-0.5 text-xs font-semibold text-rose-950 tabular-nums">
-                            {t('episodes.laterFrameZoneDenials', { count: laterDenials })}
+                          <span className="inline-flex items-center gap-1 font-semibold text-rose-800 tabular-nums">
+                            <IconAlertTriangle className="h-4 w-4 shrink-0 text-rose-700" />
+                            <span>
+                              {t('episodes.laterFrameZoneDenials', { count: laterDenials })}
+                            </span>
                           </span>
                         )}
                         {pendingZoneCount > 0 && (
                           <span
                             data-testid="bell-frame-zone-pending"
-                            className="inline-flex items-center rounded-md border border-amber-200/90 bg-amber-50/90 px-2 py-0.5 text-xs font-medium text-amber-950 tabular-nums"
+                            className="inline-flex items-center gap-1 font-medium text-amber-800 tabular-nums"
                           >
-                            {t('episodes.frameZonePending', { count: pendingZoneCount })}
+                            <IconClock className="h-4 w-4 shrink-0 text-amber-700" />
+                            <span>
+                              {t('episodes.frameZonePending', { count: pendingZoneCount })}
+                            </span>
                           </span>
                         )}
                       </div>

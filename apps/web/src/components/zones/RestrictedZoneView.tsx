@@ -827,8 +827,8 @@ export function RestrictedZoneView({
       ? 'h-10 min-h-10 flex-1 min-w-0 max-w-full truncate rounded-lg border border-slate-700 bg-slate-950 px-3 py-1.5 text-sm font-normal text-white focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white disabled:opacity-50'
       : 'h-10 min-h-10 flex-1 min-w-0 max-w-full truncate rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-sm font-normal text-slate-900 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-slate-900 disabled:bg-slate-50 disabled:text-slate-500';
     const selectLabelClass = isZoneFullscreen
-      ? 'flex w-full sm:w-auto sm:flex-[1_1_11rem] lg:max-w-[14rem] flex-wrap sm:flex-nowrap items-center gap-2 min-w-0 text-sm font-semibold text-slate-200'
-      : 'flex w-full sm:w-auto sm:flex-[1_1_11rem] lg:max-w-[14rem] flex-wrap sm:flex-nowrap items-center gap-2 min-w-0 text-sm font-semibold text-slate-700';
+      ? 'flex w-full sm:w-auto sm:flex-[1_1_12rem] lg:max-w-[16rem] flex-wrap sm:flex-nowrap items-center gap-2 min-w-0 text-sm font-semibold text-slate-200'
+      : 'flex w-full sm:w-auto sm:flex-[1_1_12rem] lg:max-w-[16rem] flex-wrap sm:flex-nowrap items-center gap-2 min-w-0 text-sm font-semibold text-slate-700';
 
     return (
       <div
@@ -1043,13 +1043,11 @@ export function RestrictedZoneView({
                 </select>
               </label>
 
-              <div className="flex min-w-0 max-w-full flex-wrap items-center gap-2 sm:ml-auto">
+              <div className="flex min-w-0 max-w-full flex-wrap items-center gap-3 sm:ml-auto">
                 {selectedCamera && (
                   <span
-                    className={`inline-flex items-center gap-1.5 rounded-lg border px-2.5 py-1.5 text-xs font-semibold tabular-nums ${
-                      isZoneFullscreen
-                        ? 'border-emerald-400/35 bg-emerald-500/15 text-emerald-200'
-                        : 'border-emerald-200/90 bg-emerald-50/90 text-emerald-900'
+                    className={`inline-flex items-center gap-1.5 text-sm font-medium tabular-nums ${
+                      isZoneFullscreen ? 'text-emerald-300' : 'text-emerald-800'
                     }`}
                   >
                     <span className="h-2 w-2 rounded-full bg-emerald-600 shrink-0" />
@@ -1060,9 +1058,9 @@ export function RestrictedZoneView({
                     </span>
                   </span>
                 )}
-                <details className="relative text-xs">
+                <details className="relative text-sm">
                   <summary
-                    className={`inline-flex min-h-9 cursor-pointer items-center rounded-lg border px-3 py-1.5 font-medium select-none ${
+                    className={`inline-flex min-h-9 cursor-pointer items-center rounded-lg border px-3 py-1.5 text-sm font-medium select-none ${
                       isZoneFullscreen
                         ? 'border-white/20 bg-white/10 text-slate-200 hover:bg-white/20'
                         : 'border-slate-200 bg-slate-50/80 text-slate-700 hover:bg-slate-100'
@@ -1071,7 +1069,7 @@ export function RestrictedZoneView({
                     {tSafety('zoneMonitor.toolbar.boundarySummary')}
                   </summary>
                   <p
-                    className={`mt-2 max-w-md rounded-lg border p-3 text-xs leading-relaxed sm:absolute sm:right-0 sm:z-20 sm:w-80 sm:shadow-lg ${
+                    className={`mt-2 max-w-md rounded-lg border p-3 text-sm leading-relaxed sm:absolute sm:right-0 sm:z-20 sm:w-80 sm:shadow-lg ${
                       isZoneFullscreen
                         ? 'border-slate-700 bg-slate-900 text-slate-200'
                         : 'border-slate-200 bg-white text-slate-700'
