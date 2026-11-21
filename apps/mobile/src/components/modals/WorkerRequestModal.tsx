@@ -23,6 +23,14 @@ import { LeaveNoticeFields } from '../../features/scheduling/leave-notice-fields
 import type { LeaveNoticeType } from '@smartsite/api-client';
 import { ErrorNotice, Button } from '../../features/shared/ui';
 import { RequestSheet } from '../../features/shared/request-sheet';
+import {
+  requestScheduleIssue,
+  requestTimingMessage,
+  useEligibleTimeSchedules,
+} from '../../features/scheduling/time-request-eligibility';
+
+import { useWorkerLeaveAvailability } from '../../features/scheduling/worker-leave-availability';
+import { useRequestFeedback } from '../../features/shared/request-feedback';
 
 interface WorkerRequestModalProps {
   visible: boolean;
@@ -56,6 +64,8 @@ function WorkerRequestForm({
   const [showShiftDropdown, setShowShiftDropdown] = useState(false);
   const [localError, setLocalError] = useState<string | null>(null);
   const command = useCommand();
+  const reportSubmitted = useRequestFeedback();
+  const leaveAvailability = useWorkerLeaveAvailability(visible && activeTab === 'leave');
 
   const schedules = useQuery({
     queryKey: [...queryKey, 'my-schedules-for-request', activeTab],
@@ -88,7 +98,24 @@ function WorkerRequestForm({
     enabled: visible && activeTab === 'swap' && Boolean(selectedScheduleId),
   });
 
-  const selectedSchedule = schedules.data?.items?.find((s) => s.id === selectedScheduleId);
+  const { eligible, now } = useEligibleTimeSchedules(
+    schedules.data?.items ?? [],
+    shifts.data ?? [],
+    activeTab === 'leave' ? 'LEAVE' : 'OVERTIME',
+    noticeType,
+  );
+  const availableSchedules =
+    activeTab === 'leave'
+      ? eligible
+      : eligible.filter(
+          (s) =>
+            !shiftRequestLocked(
+              s.workDate,
+              shifts.data?.find((shift) => shift.id === s.shiftId),
+              now,
+            ),
+        );
+  const selectedSchedule = availableSchedules.find((s) => s.id === selectedScheduleId);
   const selectedShift = selectedSchedule
     ? shifts.data?.find((s) => s.id === selectedSchedule.shiftId)
     : undefined;
@@ -129,6 +156,17 @@ function WorkerRequestForm({
         throw new Error(t('common.retry'));
       if (!selectedSchedule || selectedSchedule.workerId !== workerId || !selectedSchedule.isActive)
         throw new Error(tr('requests.outOfScope'));
+      if (activeTab === 'leave') {
+        if (!leaveAvailability.ready || leaveAvailability.locked)
+          throw new Error(leaveAvailability.message || t('common.retry'));
+        const issue = requestScheduleIssue(
+          selectedSchedule.workDate,
+          selectedShift,
+          'LEAVE',
+          noticeType,
+        );
+        if (issue) throw new Error(requestTimingMessage(issue));
+      }
 
       if (
         activeTab !== 'leave' &&
@@ -174,6 +212,7 @@ function WorkerRequestForm({
         }
       });
       setReason('');
+      reportSubmitted();
       onSuccess?.();
       onClose();
     } catch (err) {
@@ -194,6 +233,8 @@ function WorkerRequestForm({
             <Text accessibilityRole="alert">{t('schedule.shiftStartedLocked')}</Text>
           )}
           <ErrorNotice error={localError ? new Error(localError) : command.error} />
+          <ErrorNotice error={leaveAvailability.error} />
+          {!!leaveAvailability.message && <Text>{leaveAvailability.message}</Text>}
           <View style={styles.actionsRow}>
             <Pressable
               accessibilityRole="button"
@@ -212,8 +253,9 @@ function WorkerRequestForm({
               onPress={handleSubmit}
               disabled={
                 command.isPending ||
+                (activeTab === 'leave' && (!leaveAvailability.ready || leaveAvailability.locked)) ||
                 locked ||
-                !selectedScheduleId ||
+                !selectedSchedule ||
                 reason.trim().length < 5 ||
                 (activeTab === 'swap' && !targetCoworkerId) ||
                 (activeTab === 'change' && !targetShiftId) ||
@@ -270,7 +312,18 @@ function WorkerRequestForm({
       </View>
 
       <View style={styles.body}>
-        {activeTab === 'leave' && <LeaveNoticeFields value={noticeType} onChange={setNoticeType} />}
+        {activeTab === 'leave' && (
+          <LeaveNoticeFields
+            value={noticeType}
+            onChange={(value) => {
+              setNoticeType(value);
+              setSelectedScheduleId('');
+              setShowScheduleDropdown(false);
+              setLocalError(null);
+              command.reset();
+            }}
+          />
+        )}
         {/* Field: Schedule Selector */}
         <View style={styles.fieldGroup}>
           <Text style={styles.label}>{t('schedule.shift')}</Text>
@@ -294,7 +347,7 @@ function WorkerRequestForm({
 
           {showScheduleDropdown && (
             <View style={styles.dropdownList}>
-              {schedules.data?.items?.map((item) => {
+              {availableSchedules.map((item) => {
                 const sh = shifts.data?.find((s) => s.id === item.shiftId);
                 return (
                   <Pressable
@@ -321,8 +374,16 @@ function WorkerRequestForm({
                   </Pressable>
                 );
               })}
-              {!schedules.data?.items?.length && (
-                <Text style={styles.emptyNotice}>{t('schedule.noSchedules')}</Text>
+              {!availableSchedules.length && (
+                <Text style={styles.emptyNotice}>
+                  {t(
+                    activeTab !== 'leave'
+                      ? 'schedule.noSchedules'
+                      : noticeType === 'PLANNED'
+                        ? 'leavePolicy.noPlannedSchedules'
+                        : 'leavePolicy.noEmergencySchedules',
+                  )}
+                </Text>
               )}
             </View>
           )}
