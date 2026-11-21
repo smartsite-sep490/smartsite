@@ -221,6 +221,9 @@ describe('durable Web notification bell', () => {
     const item = await screen.findByTestId('notification-bell-ppe-frame');
     expect(item.textContent).toMatch(/3 people/);
     expect(item.textContent).toMatch(/4 findings/);
+    expect(item.textContent?.match(/Camera A/g)).toHaveLength(1);
+    expect(screen.queryByText('New')).toBeNull();
+    expect(document.querySelector('[role="dialog"]')?.innerHTML).not.toMatch(/text-\[(?:9|10|11)px\]/);
     expect(screen.getAllByTestId('notification-bell-ppe-frame')).toHaveLength(1);
     expect(await screen.findByText('No other notifications yet.')).toBeTruthy();
     fireEvent.click(item);

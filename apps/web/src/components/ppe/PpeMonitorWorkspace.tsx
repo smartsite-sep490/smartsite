@@ -191,7 +191,7 @@ function MonitorScope({
       void sites.fetchNextPage({ cancelRefetch: false });
   }, [visibleSites.length, allowed, chosenSite, site, sites]);
   const siteSelector = (
-    <label className="flex w-full sm:w-auto sm:flex-[1_1_14rem] lg:max-w-xs flex-wrap sm:flex-nowrap items-center gap-2 min-w-0 text-sm font-semibold text-slate-700">
+    <label className="flex w-full sm:w-auto sm:flex-[1_1_9.5rem] lg:max-w-[11rem] flex-wrap sm:flex-nowrap items-center gap-2 min-w-0 text-sm font-semibold text-slate-700">
       <span className="shrink-0">{t('monitor.site')}</span>
       <select
         name="monitorSite"
@@ -272,18 +272,18 @@ function MonitorScope({
           <p className="mt-0.5 text-sm text-slate-600">{t('monitor.hint')}</p>
         </div>
         {site && (
-          <div className="flex flex-wrap items-center gap-2 shrink-0">
+          <div className="flex min-w-0 max-w-full flex-wrap items-center gap-2">
             {enableFrameInboxLink && (
               <Link
                 data-testid="monitor-frame-inbox-link"
-                className="inline-flex min-h-10 items-center rounded-lg border border-slate-300 bg-white px-3.5 py-2 text-sm font-semibold text-slate-800 whitespace-nowrap hover:bg-slate-50 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-slate-900"
+                className="inline-flex min-h-10 max-w-full items-center rounded-lg border border-slate-300 bg-white px-3.5 py-2 text-sm font-semibold text-slate-800 sm:whitespace-nowrap hover:bg-slate-50 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-slate-900"
                 to={`/incidents?tab=ppe-frames&siteId=${encodeURIComponent(site.id)}`}
               >
                 {trMonitor('monitor.frameInbox')}
               </Link>
             )}
             <Link
-              className="inline-flex min-h-10 items-center rounded-lg bg-[#0F172A] px-4 py-2 text-sm font-semibold text-white whitespace-nowrap hover:bg-slate-800 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-slate-900"
+              className="inline-flex min-h-10 max-w-full items-center rounded-lg bg-[#0F172A] px-4 py-2 text-sm font-semibold text-white sm:whitespace-nowrap hover:bg-slate-800 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-slate-900"
               data-tour-anchor="monitor-safety-records"
               to={`/incidents?tab=episodes&siteId=${encodeURIComponent(site.id)}`}
             >
@@ -587,7 +587,7 @@ function CameraScope({
     <div className="space-y-3">
       <div className="flex min-w-0 flex-wrap items-center gap-2.5 rounded-xl border border-slate-200 bg-white px-3.5 py-2 shadow-2xs">
         {siteSelector}
-        <label className="flex w-full sm:w-auto sm:flex-[1_1_12rem] lg:max-w-[15rem] flex-wrap sm:flex-nowrap items-center gap-2 min-w-0 text-sm font-semibold text-slate-700">
+        <label className="flex w-full sm:w-auto sm:flex-[1_1_9.5rem] lg:max-w-[11rem] flex-wrap sm:flex-nowrap items-center gap-2 min-w-0 text-sm font-semibold text-slate-700">
           <span className="shrink-0">{t('monitor.camera')}</span>
           <select
             name="monitorCamera"

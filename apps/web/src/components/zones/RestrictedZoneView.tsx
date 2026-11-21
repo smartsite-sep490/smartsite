@@ -821,8 +821,8 @@ export function RestrictedZoneView({
 
   if (linkedMonitoring) {
     const setupButtonClass = isZoneFullscreen
-      ? 'inline-flex min-h-10 items-center justify-center rounded-lg border border-white/20 bg-white/10 px-3.5 py-2 text-sm font-semibold text-white whitespace-nowrap hover:bg-white/20 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white'
-      : 'inline-flex min-h-10 items-center justify-center rounded-lg border border-slate-300 bg-white px-3.5 py-2 text-sm font-semibold text-slate-800 whitespace-nowrap hover:bg-slate-50 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-slate-900';
+      ? 'inline-flex min-h-10 max-w-full items-center justify-center rounded-lg border border-white/20 bg-white/10 px-3.5 py-2 text-sm font-semibold text-white sm:whitespace-nowrap hover:bg-white/20 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white'
+      : 'inline-flex min-h-10 max-w-full items-center justify-center rounded-lg border border-slate-300 bg-white px-3.5 py-2 text-sm font-semibold text-slate-800 sm:whitespace-nowrap hover:bg-slate-50 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-slate-900';
     const selectControlClass = isZoneFullscreen
       ? 'h-10 min-h-10 flex-1 min-w-0 max-w-full truncate rounded-lg border border-slate-700 bg-slate-950 px-3 py-1.5 text-sm font-normal text-white focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white disabled:opacity-50'
       : 'h-10 min-h-10 flex-1 min-w-0 max-w-full truncate rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-sm font-normal text-slate-900 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-slate-900 disabled:bg-slate-50 disabled:text-slate-500';
@@ -875,7 +875,7 @@ export function RestrictedZoneView({
                         .includes(roleLabel.toLowerCase());
                       return (
                         <span
-                          className={`inline-flex items-center gap-1.5 rounded-lg border px-2.5 py-0.5 text-xs font-medium ${
+                          className={`inline-flex max-w-full flex-wrap items-center gap-1.5 rounded-lg border px-2.5 py-0.5 text-xs font-medium ${
                             isZoneFullscreen
                               ? 'border-white/20 bg-white/10 text-slate-200'
                               : 'border-slate-200 bg-slate-100 text-slate-700'
@@ -901,7 +901,7 @@ export function RestrictedZoneView({
                 </p>
               </div>
 
-              <div className="flex flex-wrap items-center gap-2 shrink-0">
+              <div className="flex min-w-0 max-w-full flex-wrap items-center gap-2">
                 {canAccessCameraSetup &&
                   (inRouter ? (
                     <Link to={cameraSetupHref} className={setupButtonClass}>
@@ -921,7 +921,7 @@ export function RestrictedZoneView({
                         siteId: selectedSiteId || undefined,
                       })
                     }
-                    className={`inline-flex min-h-10 items-center justify-center rounded-lg px-4 py-2 text-sm font-semibold whitespace-nowrap transition-colors cursor-pointer focus-visible:outline-2 focus-visible:outline-offset-2 ${
+                    className={`inline-flex min-h-10 max-w-full items-center justify-center rounded-lg px-4 py-2 text-sm font-semibold sm:whitespace-nowrap transition-colors cursor-pointer focus-visible:outline-2 focus-visible:outline-offset-2 ${
                       isZoneFullscreen
                         ? 'bg-white text-slate-950 hover:bg-slate-100 focus-visible:outline-white'
                         : 'bg-[#0F172A] text-white hover:bg-slate-800 focus-visible:outline-slate-900'
@@ -935,7 +935,7 @@ export function RestrictedZoneView({
                   data-testid="zones-fullscreen-toggle"
                   aria-pressed={isZoneFullscreen}
                   onClick={() => void toggleZoneFullscreen()}
-                  className={`inline-flex min-h-10 items-center justify-center gap-1.5 rounded-lg border px-3.5 py-2 text-sm font-medium whitespace-nowrap transition-colors cursor-pointer focus-visible:outline-2 focus-visible:outline-offset-2 ${
+                  className={`inline-flex min-h-10 max-w-full items-center justify-center gap-1.5 rounded-lg border px-3.5 py-2 text-sm font-medium sm:whitespace-nowrap transition-colors cursor-pointer focus-visible:outline-2 focus-visible:outline-offset-2 ${
                     isZoneFullscreen
                       ? 'border-white/25 bg-white/15 text-white hover:bg-white/25 focus-visible:outline-white'
                       : 'border-slate-300 bg-white text-slate-800 hover:bg-slate-50 focus-visible:outline-slate-900'
