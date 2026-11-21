@@ -266,7 +266,11 @@ export function FourSourceWallTile(props: FourSourceWallTileProps) {
           >
             <span
               className={`w-2 h-2 rounded-full ${
-                isLive ? 'bg-emerald-400' : isReplay || isAiWorkPaused ? 'bg-amber-400' : 'bg-slate-400'
+                isLive
+                  ? 'bg-emerald-400'
+                  : isReplay || isAiWorkPaused
+                    ? 'bg-amber-400'
+                    : 'bg-slate-400'
               }`}
             />
             {isAiWorkPaused

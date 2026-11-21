@@ -693,7 +693,10 @@ export function NotificationBell({
                                   </p>
 
                                   {/* Compact metadata strip */}
-                                  {(item.siteName || item.workDate || item.fromShiftName || item.toShiftName) && (
+                                  {(item.siteName ||
+                                    item.workDate ||
+                                    item.fromShiftName ||
+                                    item.toShiftName) && (
                                     <div className="flex flex-wrap items-center gap-x-2.5 gap-y-1 pt-0.5 text-xs text-slate-600 tabular-nums">
                                       {item.siteName && <span>{item.siteName}</span>}
                                       {item.workDate && (
