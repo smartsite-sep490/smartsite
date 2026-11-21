@@ -16,6 +16,8 @@ vi.mock('../../components/modals/CreateWorkerModal', () => ({ CreateWorkerModal:
 vi.mock('../../components/modals/ScheduleAssignModal', () => ({ ScheduleAssignModal: () => null }));
 vi.mock('./worker-documents', () => ({ WorkerDocuments: () => null }));
 vi.mock('../shared/uploads', () => ({ Attachments: () => null, EvidenceButton: () => null }));
+vi.mock('expo-file-system', () => ({ File: vi.fn(), Paths: { cache: 'test-cache' } }));
+vi.mock('expo-sharing', () => ({ isAvailableAsync: vi.fn(async () => true), shareAsync: vi.fn() }));
 let workspace: ReturnType<typeof useWorkspace>;
 let root: ReactTestRenderer;
 let cache: QueryClient;
@@ -59,6 +61,17 @@ async function click(label: string) {
 beforeEach(() => {
   cache = new QueryClient({ defaultOptions: { queries: { retry: false, gcTime: 0 } } });
   const client = new SmartSiteManagementClient('https://api.example.test');
+  vi.spyOn(client, 'contractorTeamAttendance').mockResolvedValue({
+    teamId: 'team',
+    teamName: 'Synthetic Team',
+    workDate: '2026-11-09',
+    total: 0,
+    present: 0,
+    absent: 0,
+    pending: 0,
+    matched: 0,
+    items: [],
+  });
   workspace = {
     client,
     token: 'token',
@@ -135,6 +148,33 @@ beforeEach(() => {
     ],
     total: 1,
   });
+  vi.spyOn(client, 'contractorTeamCalendar').mockResolvedValue({
+    items: [
+      {
+        teamId: 'team',
+        teamName: 'Synthetic Team',
+        shiftId: 'shift',
+        scheduleVersionId: 'version',
+        workDate: '2026-11-09',
+        workerCount: 10,
+      },
+    ],
+  });
+  vi.spyOn(client, 'listContractorTeams').mockResolvedValue({
+    items: [
+      {
+        id: 'team',
+        siteId: 'site',
+        contractorId: 'contractor',
+        name: 'Synthetic Team',
+        description: '',
+        version: 1,
+        isActive: true,
+        memberCount: 10,
+      },
+    ],
+    total: 1,
+  });
 });
 afterEach(async () => {
   if (root) await act(async () => root.unmount());
@@ -174,43 +214,88 @@ it('paginates the contractor roster in eight compact rows without leaking anothe
 
 it('keeps contractor schedule filters collapsed and sends the contractor scope and page size', async () => {
   await mount(<ContractorSchedule initialDate="2026-11-09" />);
-  expect(workspace.client.listWorkerSchedules).toHaveBeenCalledWith(
+  expect(workspace.client.contractorTeamCalendar).toHaveBeenCalledWith(
     'token',
     'site',
     expect.objectContaining({
       contractorId: 'contractor',
-      limit: 8,
       fromDate: '2026-11-09',
-      toDate: '2026-11-09',
+      toDate: '2026-11-15',
     }),
   );
   expect(buttons(t('requests.filter'))[0]!.props.accessibilityState.expanded).toBe(false);
   expect(JSON.stringify(root.toJSON())).toContain('Synthetic Shift');
+  expect(JSON.stringify(root.toJSON())).toContain('Synthetic Team');
+  expect(JSON.stringify(root.toJSON())).not.toContain('Synthetic Worker 0');
+  expect(workspace.client.listWorkerSchedules).not.toHaveBeenCalled();
   expect(JSON.stringify(root.toJSON())).not.toContain(t('attendance.customRange'));
 });
 
 it('keeps the chosen contractor day and API range in sync while navigating weeks', async () => {
   await mount(<ContractorSchedule initialDate="2026-11-09" />);
   await click(t('schedule.nextWeek'));
-  expect(workspace.client.listWorkerSchedules).toHaveBeenLastCalledWith(
+  expect(workspace.client.contractorTeamCalendar).toHaveBeenLastCalledWith(
     'token',
     'site',
     expect.objectContaining({
       fromDate: '2026-11-16',
-      toDate: '2026-11-16',
+      toDate: '2026-11-22',
       contractorId: 'contractor',
     }),
   );
   await click(t('schedule.previousWeek'));
-  expect(workspace.client.listWorkerSchedules).toHaveBeenLastCalledWith(
+  expect(workspace.client.contractorTeamCalendar).toHaveBeenLastCalledWith(
     'token',
     'site',
-    expect.objectContaining({ fromDate: '2026-11-09', toDate: '2026-11-09' }),
+    expect.objectContaining({ fromDate: '2026-11-09', toDate: '2026-11-15' }),
   );
   await click(t('requests.filter'));
-  expect(JSON.stringify(root.toJSON())).toContain(t('attendance.customRange'));
+  expect(JSON.stringify(root.toJSON())).toContain(t('teamCalendar.allTeams'));
   await click(t('requests.filter'));
-  expect(JSON.stringify(root.toJSON())).not.toContain(t('attendance.customRange'));
+  expect(JSON.stringify(root.toJSON())).not.toContain(t('teamCalendar.allTeams'));
+});
+
+it('opens the redesigned group day modal from the calendar and keeps scheduled counts distinct from attendance', async () => {
+  await mount(<ContractorSchedule initialDate="2026-11-09" />);
+  await click(t('teamCalendar.open', { name: 'Synthetic Team' }));
+  const modal = root.root.findAll(
+    (node) => String(node.type) === 'Modal' && node.props.visible,
+  )[0]!;
+  const output = modal
+    .findAll((node) => String(node.type) === 'Text')
+    .map((node) => node.children.join(''))
+    .join('\n');
+  expect(output).toContain(t('scheduleDay.title'));
+  expect(output).toContain(t('scheduleDay.starts'));
+  expect(output).toContain(t('scheduleDay.ends'));
+  expect(output).toContain('08:00');
+  expect(output).toContain('17:00');
+  expect(output).toContain('Synthetic Team');
+  expect(output).toContain(t('teamCalendar.assignedCount', { count: 10 }));
+  expect(output).toContain(t('scheduleDay.groupHint'));
+  expect(output).not.toContain('Synthetic Worker 0');
+});
+
+it('shows grouped schedules while explaining shifts without a confirmed team', async () => {
+  vi.mocked(workspace.client.contractorTeamCalendar).mockResolvedValue({
+    items: [
+      {
+        teamId: 'team',
+        teamName: 'Synthetic Team',
+        shiftId: 'shift',
+        scheduleVersionId: 'version',
+        workDate: '2026-11-09',
+        workerCount: 3,
+      },
+    ],
+    unassignedScheduleCount: 2,
+  });
+  await mount(<ContractorSchedule initialDate="2026-11-09" />);
+  const output = JSON.stringify(root.toJSON());
+  expect(output).toContain('Synthetic Team');
+  expect(output).toContain(t('teamCalendar.unassignedHint', { count: 2 }));
+  expect(output).not.toContain('Synthetic Worker 0');
+  expect(workspace.client.listWorkerSchedules).not.toHaveBeenCalled();
 });
 
 it('scopes attendance before paging and opens real session details without fabricated clock times', async () => {
