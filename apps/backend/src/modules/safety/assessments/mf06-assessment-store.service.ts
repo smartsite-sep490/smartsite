@@ -3,6 +3,7 @@ import { randomUUID } from 'node:crypto';
 import { computeCanonicalPayloadHash } from '@smartsite/contracts';
 import { z } from 'zod';
 import { snapshotMf06Json as snapshot } from './mf06-json-snapshot.js';
+import { validateMf06ObservationEvent } from './mf06-observation-event.js';
 import type {
   Mf06AssessmentOutcome,
   Mf06AssessmentReasonCode,
@@ -11,6 +12,7 @@ import type {
 import {
   MAIN_AUTHORITY_ARCHIVE_FORMATS,
   decodeStoredMainAuthorityArchive,
+  parseMainAuthorityInstant,
   type MainAuthorityArchive,
   type MainAuthorityArchiveContext,
 } from '../../zones/main-authority-archive-codec.js';
@@ -162,16 +164,60 @@ function commandHash(input: Mf06AssessmentAppendInput): string {
 }
 const timestamp = (column: string) =>
   `to_char(${column} AT TIME ZONE 'UTC','YYYY-MM-DD"T"HH24:MI:SS.US"Z"')`;
+/** Recover only the known JS Date millisecond representation from the immutable raw event. */
+function originalCapturedAt(row: Row): string {
+  const stored = String(row.captured_at);
+  const raw = row.original_raw_payload;
+  if (!record(raw) || typeof raw.capturedAt !== 'string') return stored;
+  const exact = parseMainAuthorityInstant(raw.capturedAt);
+  const summary = parseMainAuthorityInstant(stored);
+  const original =
+    typeof row.original_captured_at === 'string'
+      ? parseMainAuthorityInstant(row.original_captured_at)
+      : null;
+  if (
+    exact === null ||
+    summary === null ||
+    summary % 1000n !== 0n ||
+    exact < summary ||
+    exact - summary >= 1000n ||
+    (original !== exact && original !== summary)
+  )
+    return stored;
+  try {
+    if (
+      !validateMf06ObservationEvent(raw).isValid ||
+      typeof raw.eventId !== 'string' ||
+      raw.eventId.toLowerCase() !== String(row.event_id).toLowerCase() ||
+      computeCanonicalPayloadHash(raw) !== row.original_payload_hash
+    )
+      return stored;
+    const remainder = ((exact % 1000n) + 1000n) % 1000n;
+    return (
+      new Date(Number((exact - remainder) / 1000n)).toISOString().slice(0, -1) +
+      remainder.toString().padStart(3, '0') +
+      'Z'
+    );
+  } catch {
+    return stored; // The archive comparison still rejects an uncertified alternative timestamp.
+  }
+}
 // Fixed SQL identifiers only. One statement reads original request and immutable artifact together.
 const assessmentSelect = (schema: string) => `SELECT a.*, r.camera_id,r.zone_id,r.requested_purpose,
   ${timestamp('r.captured_at')} AS captured_at, ${timestamp('a.assessed_at')} AS assessed_at,
+  original.raw_payload AS original_raw_payload,r.payload_hash AS original_payload_hash,
+  ${timestamp('original.captured_at')} AS original_captured_at,
   art.body AS artifact_body,art.sha256 AS artifact_sha256,
   (art.body_hash=encode(sha256(convert_to(art.body::text,'UTF8')),'hex')) AS artifact_body_intact
   FROM ${schema}.zone_entry_assessment a JOIN ${schema}.zone_entry_assessment_request r ON r.request_id=a.request_id
     AND r.site_id=a.site_id AND r.event_id=a.event_id AND r.binding_hash=a.binding_hash
+  LEFT JOIN ${schema}.ai_observation_event original ON original.event_id=r.event_id
+    AND original.payload_hash=r.payload_hash
+    AND (original.captured_at=r.captured_at OR date_trunc('milliseconds',original.captured_at)=r.captured_at)
   LEFT JOIN ${schema}.zone_entry_authority_artifact art ON art.artifact_id=a.authority_artifact_id AND art.request_id=a.request_id`;
 function mapRecord(row: Row): Mf06RecordedAssessment | null {
   let authorityArtifact: MainAuthorityArchive | null = null;
+  let capturedAt = String(row.captured_at);
   if (row.authority_artifact_id !== null) {
     if (
       !row.artifact_body ||
@@ -179,14 +225,23 @@ function mapRecord(row: Row): Mf06RecordedAssessment | null {
       typeof row.artifact_sha256 !== 'string'
     )
       return null;
-    const decoded = decodeStoredMainAuthorityArchive(row.artifact_body, {
+    const context: MainAuthorityArchiveContext & { sha256: string } = {
       siteId: String(row.site_id),
       zoneId: String(row.zone_id),
       workerId: row.worker_id === null ? null : String(row.worker_id),
-      capturedAt: String(row.captured_at),
+      capturedAt,
       purpose: row.requested_purpose as MainAuthorityArchiveContext['purpose'],
       sha256: row.artifact_sha256,
-    });
+    };
+    let decoded = decodeStoredMainAuthorityArchive(row.artifact_body, context);
+    if (decoded.status !== 'VALID') {
+      const original = originalCapturedAt(row);
+      decoded = decodeStoredMainAuthorityArchive(row.artifact_body, {
+        ...context,
+        capturedAt: original,
+      });
+      if (decoded.status === 'VALID') capturedAt = original;
+    }
     if (decoded.status !== 'VALID') return null;
     authorityArtifact = decoded.archive;
   }
@@ -198,7 +253,7 @@ function mapRecord(row: Row): Mf06RecordedAssessment | null {
     siteId: String(row.site_id),
     eventId: String(row.event_id),
     bindingHash: String(row.binding_hash),
-    capturedAt: String(row.captured_at),
+    capturedAt,
     assessedAt: String(row.assessed_at),
     cameraId: String(row.camera_id),
     zoneId: String(row.zone_id),
