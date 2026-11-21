@@ -1,4 +1,7 @@
-import { installGateSchemaForHistoricalFixture } from '../support/historical-gate-schema.js';
+import {
+  installGateSchemaForHistoricalFixture,
+  removeAccountEmailProjectionForHistoricalFixture,
+} from '../support/historical-gate-schema.js';
 import 'reflect-metadata';
 import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
@@ -188,6 +191,7 @@ test('subject provenance survives upgrade, retry and rollback boundaries in isol
 
     // Current ingestion requires the complete registered schema; the historical upgrade above
     // still proves the predecessor boundary independently of later migrations.
+    await removeAccountEmailProjectionForHistoricalFixture(db);
     db.setOptions({
       migrations: registered.filter(
         (m) => typeof m === 'function' && m.name !== 'GateRegistry1795046400001',
