@@ -167,15 +167,9 @@ export class ContractorOperationsService {
       });
   }
 
-  private isAdmin(actor: WorkforceActor): boolean {
-    return actor.roleAssignments.some(
-      ({ role, siteId }) => role === UserRole.ADMIN && siteId === null,
-    );
-  }
-
-  private assertAdmin(actor: WorkforceActor): void {
+  private denyGlobalDirectory(actor: WorkforceActor): never {
     this.assertPasswordChanged(actor);
-    if (!this.isAdmin(actor)) this.forbidden();
+    this.forbidden();
   }
 
   private hasSiteRole(actor: WorkforceActor, siteId: string, role: UserRole): boolean {
@@ -258,7 +252,7 @@ export class ContractorOperationsService {
   }
 
   async createContractor(actor: WorkforceActor, input: CreateContractorCommand) {
-    this.assertAdmin(actor);
+    this.denyGlobalDirectory(actor);
     const value = command(CreateContractorCommand, input);
     try {
       return await this.dataSource.getRepository(ContractorEntity).save({
@@ -305,7 +299,7 @@ export class ContractorOperationsService {
     contractorIdValue: string,
     input: GrantContractorRepresentativeCommand,
   ) {
-    this.assertAdmin(actor);
+    this.denyGlobalDirectory(actor);
     const contractorId = uuid(contractorIdValue);
     const value = command(GrantContractorRepresentativeCommand, input);
     return this.dataSource.transaction(async (manager) => {

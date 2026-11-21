@@ -21,7 +21,7 @@ import {
   ValidateIf,
   ValidateNested,
 } from 'class-validator';
-import { DataSource, In, type EntityManager } from 'typeorm';
+import { DataSource, In, QueryFailedError, type EntityManager } from 'typeorm';
 import { WORKER_DEFAULT_TEMPORARY_PASSWORD } from '@smartsite/contracts/management';
 import { command, knownUnique, page, uuid } from '../../common/configuration/commands.js';
 import { PublicHttpException } from '../../common/http/public-http-exception.js';
@@ -130,6 +130,18 @@ export class ResetPasswordDto {
   @MaxLength(PASSWORD_MAX_LENGTH)
   @Matches(PASSWORD_POLICY_PATTERN, { message: PASSWORD_POLICY_MESSAGE })
   temporaryPassword!: string;
+}
+
+function accountUnique(error: unknown): never {
+  if (error instanceof QueryFailedError) {
+    const driver = error.driverError as { code?: string; constraint?: string };
+    if (driver.code === '23505' && driver.constraint === 'uq_site_single_manager')
+      throw new PublicHttpException(409, {
+        code: 'SITE_MANAGER_ALREADY_ASSIGNED',
+        message: 'This site already has a Site Manager',
+      });
+  }
+  return knownUnique(error, ['uq_app_user_username']);
 }
 
 @Injectable()
@@ -258,7 +270,7 @@ export class UsersService {
         return this.createInTransaction(manager, value, passwordHash);
       });
     } catch (error) {
-      knownUnique(error, ['uq_app_user_username', 'uq_site_single_manager']);
+      accountUnique(error);
     }
   }
 
@@ -452,7 +464,10 @@ export class UsersService {
         assignments.some(({ role, siteId }) => role === UserRole.ADMIN && siteId === null) &&
         (await this.activeAdminCount(manager)) <= 1
       )
-        throw new ConflictException('At least one active Admin is required');
+        throw new PublicHttpException(409, {
+          code: 'LAST_ACTIVE_ADMIN_REQUIRED',
+          message: 'At least one active Admin is required',
+        });
       user.isActive = value.isActive;
       await manager.getRepository(UserEntity).save(user);
       if (!value.isActive) await this.revokeSessions(manager, id);
@@ -511,7 +526,10 @@ export class UsersService {
             ({ role, siteId }) => role === UserRole.ADMIN && siteId === null,
           );
         if (user.isActive && removesAdmin && (await this.activeAdminCount(manager)) <= 1)
-          throw new ConflictException('At least one active Admin is required');
+          throw new PublicHttpException(409, {
+            code: 'LAST_ACTIVE_ADMIN_REQUIRED',
+            message: 'At least one active Admin is required',
+          });
         await manager.getRepository(UserRoleAssignmentEntity).delete({ userId: id });
         await manager.getRepository(UserRoleAssignmentEntity).insert(
           value.roleAssignments.map(({ role, siteId }) => ({
@@ -525,7 +543,7 @@ export class UsersService {
         return this.response(manager, user);
       });
     } catch (error) {
-      knownUnique(error, ['uq_site_single_manager']);
+      accountUnique(error);
     }
   }
 

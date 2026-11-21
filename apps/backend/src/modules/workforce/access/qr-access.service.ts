@@ -71,20 +71,11 @@ const expiresInFiveMinutes = () => new Date(Date.now() + 300_000);
 function forbidden(message = 'Access to this site is required'): never {
   throw new PublicHttpException(HttpStatus.FORBIDDEN, { code: 'FORBIDDEN', message });
 }
-export function requireSiteRole(
-  actor: WorkforceActor,
-  siteId: string,
-  roles: readonly UserRole[],
-  allowAdmin = true,
-) {
+export function requireSiteRole(actor: WorkforceActor, siteId: string, roles: readonly UserRole[]) {
   uuid(siteId);
   if (
     actor.mustChangePassword ||
-    !actor.roleAssignments.some(
-      (r) =>
-        (allowAdmin && r.role === UserRole.ADMIN && r.siteId === null) ||
-        (r.siteId === siteId && roles.includes(r.role)),
-    )
+    !actor.roleAssignments.some((r) => r.siteId === siteId && roles.includes(r.role))
   )
     forbidden();
 }
@@ -315,7 +306,7 @@ export class QrAccessService {
     attemptId: string,
     input: ConfirmPassageCommand,
   ) {
-    requireSiteRole(actor, siteId, [UserRole.SECURITY_OFFICER], false);
+    requireSiteRole(actor, siteId, [UserRole.SECURITY_OFFICER]);
     uuid(attemptId);
     const value = command(ConfirmPassageCommand, input);
     const result = await this.source.transaction(async (manager) => {
@@ -403,7 +394,7 @@ export class QrAccessService {
                 : 'Already checked out. No new attendance was recorded.',
           });
         }
-        requireSiteRole(actor, siteId, [UserRole.SECURITY_OFFICER], false);
+        requireSiteRole(actor, siteId, [UserRole.SECURITY_OFFICER]);
         if (!value.reviewNote || value.reviewNote.trim().length < 5)
           invalid('Record a reason of at least 5 characters for a separate physical passage');
         attempt.reviewedBy = actor.id;
@@ -411,7 +402,7 @@ export class QrAccessService {
         attempt.reviewNote = value.reviewNote;
       }
       if (attempt.direction === 'IN' && evaluation.scheduleStatus !== 'SCHEDULED') {
-        requireSiteRole(actor, siteId, [UserRole.SECURITY_OFFICER], false);
+        requireSiteRole(actor, siteId, [UserRole.SECURITY_OFFICER]);
         if (!value.reviewNote && !attempt.reviewNote)
           invalid('Security must record a reason for entry without a current shift');
         attempt.reviewedBy = actor.id;
@@ -484,7 +475,7 @@ export class QrAccessService {
     gateId: string,
     input: ManualWorkerVerificationCommand,
   ) {
-    requireSiteRole(actor, siteId, [UserRole.SECURITY_OFFICER], false);
+    requireSiteRole(actor, siteId, [UserRole.SECURITY_OFFICER]);
     requireGate(gateId);
     await requireActiveGate(this.source.manager, siteId, gateId);
     const value = command(ManualWorkerVerificationCommand, input);
@@ -572,7 +563,7 @@ export class QrAccessService {
     visitId: string,
     input: ManualVisitCheckoutCommand,
   ) {
-    requireSiteRole(actor, siteId, [UserRole.SECURITY_OFFICER], false);
+    requireSiteRole(actor, siteId, [UserRole.SECURITY_OFFICER]);
     const value = command(ManualVisitCheckoutCommand, input);
     uuid(visitId);
     return this.source.transaction(async (manager) => {
@@ -892,7 +883,7 @@ export class QrAccessService {
     };
   }
   async retryVisitorEmail(actor: WorkforceActor, siteId: string, visitId: string) {
-    requireSiteRole(actor, siteId, [UserRole.SITE_MANAGER], false);
+    requireSiteRole(actor, siteId, [UserRole.SITE_MANAGER]);
     uuid(visitId);
     const visit = await this.source
       .getRepository(VisitorVisitEntity)
@@ -928,7 +919,7 @@ export class QrAccessService {
     input: VisitDecisionCommand,
   ) {
     // Only the Site Manager assigned to the registered site can approve, including for global Admin accounts.
-    requireSiteRole(actor, siteId, [UserRole.SITE_MANAGER], false);
+    requireSiteRole(actor, siteId, [UserRole.SITE_MANAGER]);
     const value = command(VisitDecisionCommand, input);
     uuid(visitId);
     const result = await this.source.transaction(async (manager) => {
@@ -1065,7 +1056,7 @@ export class QrAccessService {
     gateId: string,
     input: CameraFallbackCommand,
   ) {
-    requireSiteRole(actor, siteId, [UserRole.SECURITY_OFFICER], false);
+    requireSiteRole(actor, siteId, [UserRole.SECURITY_OFFICER]);
     requireGate(gateId);
     await requireActiveGate(this.source.manager, siteId, gateId);
     const value = command(CameraFallbackCommand, input);
@@ -1080,7 +1071,7 @@ export class QrAccessService {
     direction: 'IN' | 'OUT',
     reason: string,
   ): Promise<QrFallbackResponse> {
-    requireSiteRole(actor, siteId, [UserRole.SECURITY_OFFICER], false);
+    requireSiteRole(actor, siteId, [UserRole.SECURITY_OFFICER]);
     const session = await this.source.transaction(async (manager) => {
       await requireActiveGate(manager, siteId, gateId);
       return manager.getRepository(QrFallbackSessionEntity).save({
@@ -1106,7 +1097,7 @@ export class QrAccessService {
     siteId: string,
     input: IssueWorkerQrCommand,
   ): Promise<QrPassResponse> {
-    requireSiteRole(actor, siteId, [UserRole.WORKER], false);
+    requireSiteRole(actor, siteId, [UserRole.WORKER]);
     const value = command(IssueWorkerQrCommand, input);
     if (
       (!value.direction && !value.fallbackSessionId) ||
@@ -1198,7 +1189,7 @@ export class QrAccessService {
     gateId: string,
     input: PreviewVisitorQrCommand,
   ) {
-    requireSiteRole(actor, siteId, [UserRole.SECURITY_OFFICER], false);
+    requireSiteRole(actor, siteId, [UserRole.SECURITY_OFFICER]);
     requireGate(gateId);
     await requireActiveGate(this.source.manager, siteId, gateId);
     const value = command(PreviewVisitorQrCommand, input);
@@ -1302,7 +1293,7 @@ export class QrAccessService {
     gateId: string,
     input: VerifyVisitorQrCommand,
   ): Promise<VisitorGateEventResponse> {
-    requireSiteRole(actor, siteId, [UserRole.SECURITY_OFFICER], false);
+    requireSiteRole(actor, siteId, [UserRole.SECURITY_OFFICER]);
     requireGate(gateId);
     await requireActiveGate(this.source.manager, siteId, gateId);
     const value = command(VerifyVisitorQrCommand, input);
@@ -1482,7 +1473,7 @@ export class QrAccessService {
     gateId: string,
     input: VerifyWorkerQrCommand,
   ): Promise<WorkerQrVerificationResponse> {
-    requireSiteRole(actor, siteId, [UserRole.SECURITY_OFFICER], false);
+    requireSiteRole(actor, siteId, [UserRole.SECURITY_OFFICER]);
     requireGate(gateId);
     await requireActiveGate(this.source.manager, siteId, gateId);
     const value = command(VerifyWorkerQrCommand, input);

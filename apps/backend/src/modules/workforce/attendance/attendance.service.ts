@@ -107,7 +107,7 @@ export class AttendanceService {
     siteId: string,
     workerId: string,
   ) {
-    requireSiteRole(actor, siteId, [UserRole.WORKER], false);
+    requireSiteRole(actor, siteId, [UserRole.WORKER]);
     const worker = await manager.getRepository(WorkerEntity).findOneBy({ id: workerId, siteId });
     if (!worker || (await attendanceAccess(manager, actor, worker)) !== 'SELF')
       conflict('Worker can request corrections only for their own attendance');
@@ -125,7 +125,7 @@ export class AttendanceService {
     gateEventId: string,
     input: RecordAttendanceCommand,
   ) {
-    requireSiteRole(actor, siteId, [UserRole.SECURITY_OFFICER, UserRole.WORKER], false);
+    requireSiteRole(actor, siteId, [UserRole.SECURITY_OFFICER, UserRole.WORKER]);
     const value = command(RecordAttendanceCommand, input);
     uuid(gateEventId);
     return this.source.transaction(async (manager) => {
@@ -463,7 +463,7 @@ export class AttendanceService {
     correctionId: string,
     input: ReviewAttendanceCorrectionCommand,
   ) {
-    requireSiteRole(actor, siteId, [UserRole.CONTRACTOR_REPRESENTATIVE], false);
+    requireSiteRole(actor, siteId, [UserRole.CONTRACTOR_REPRESENTATIVE]);
     uuid(correctionId);
     const value = command(ReviewAttendanceCorrectionCommand, input);
     const reviewNote = value.reviewNote ?? null;

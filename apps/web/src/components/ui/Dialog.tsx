@@ -351,7 +351,7 @@ export function Dialog({
         aria-labelledby={titleId}
         aria-describedby={description ? descriptionId : undefined}
         tabIndex={-1}
-        className={`relative z-10 bg-white rounded-2xl border border-slate-200 shadow-2xl w-full ${maxWidthStyles[maxWidth]} p-6 space-y-4 animate-in zoom-in-95 duration-200 outline-none`}
+        className={`relative z-10 max-h-[calc(100dvh-2rem)] overflow-y-auto bg-white rounded-2xl border border-slate-200 shadow-2xl w-full ${maxWidthStyles[maxWidth]} p-6 space-y-4 animate-in zoom-in-95 duration-200 outline-none`}
       >
         <div className="flex items-start justify-between pb-3 border-b border-slate-100">
           <div className="flex items-center gap-3">

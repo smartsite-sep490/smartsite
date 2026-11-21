@@ -73,7 +73,7 @@ export async function fixture() {
     revoked: false,
     userActive: true,
     mustChangePassword: false,
-    roleAssignments: [{ role: 'ADMIN', siteId: null }] as RoleAssignmentFixture[],
+    roleAssignments: [{ role: 'SITE_MANAGER', siteId }] as RoleAssignmentFixture[],
     inactive: false,
     cameraSite: siteId,
     cameraEntityId: cameraId,

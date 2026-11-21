@@ -121,7 +121,7 @@ export class WorkforceController {
     @Param('siteId') siteId: string,
     @Body() input: CreateWorkerDto,
   ) {
-    requireSiteRole(request.user!, siteId, [UserRole.CONTRACTOR_REPRESENTATIVE], false);
+    requireSiteRole(request.user!, siteId, [UserRole.CONTRACTOR_REPRESENTATIVE]);
     if (!input.contractorId || input.userId)
       invalid(
         'Create a contractor Worker profile first; account linking is a separate administrative action',

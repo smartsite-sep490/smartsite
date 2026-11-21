@@ -47,19 +47,41 @@ export function useCameraSetupWorkspace(apiUrl: string, session: SharedSession) 
     session.user.roleAssignments,
   ];
 
-  const sites = useSetupCatalog<SiteResponse>([...key, 'sites'], !revoked, (offset, signal) =>
+  const siteCatalog = useSetupCatalog<SiteResponse>([...key, 'sites'], !revoked, (offset, signal) =>
     client.listSites(session.accessToken, { offset, limit: 20 }, { signal }),
   );
+  const sites = {
+    ...siteCatalog,
+    rows: siteCatalog.rows.filter((site) =>
+      session.user.roleAssignments.some(
+        (r) => r.siteId === site.id && ['SITE_MANAGER', 'SAFETY_OFFICER'].includes(r.role),
+      ),
+    ),
+  };
   const requestedSite = params.get('siteId');
   const site = requestedSite ? sites.rows.find((row) => row.id === requestedSite) : sites.rows[0];
+  useEffect(() => {
+    const requestedAllowed = session.user.roleAssignments.some(
+      (r) => r.siteId === requestedSite && ['SITE_MANAGER', 'SAFETY_OFFICER'].includes(r.role),
+    );
+    if (
+      !revoked &&
+      (!sites.rows.length || (requestedAllowed && !site)) &&
+      siteCatalog.hasNextPage &&
+      !siteCatalog.isFetching &&
+      !siteCatalog.error
+    )
+      siteCatalog.loadMore();
+  }, [revoked, sites.rows.length, requestedSite, site, session.user.roleAssignments, siteCatalog]);
   const capabilities = deriveZonePpeCapabilities(session.user, site?.id);
   const canReadZones =
     !revoked &&
-    session.user.roleAssignments.some(({ role, siteId }) => role === 'ADMIN' && siteId === null);
+    session.user.roleAssignments.some(
+      ({ role, siteId }) =>
+        siteId === site?.id && ['SITE_MANAGER', 'SAFETY_OFFICER'].includes(role),
+    );
   const canReadCameras = session.user.roleAssignments.some(
-    ({ role, siteId }) =>
-      (role === 'ADMIN' && siteId === null) ||
-      (siteId === site?.id && ['SITE_MANAGER', 'SAFETY_OFFICER'].includes(role)),
+    ({ role, siteId }) => siteId === site?.id && ['SITE_MANAGER', 'SAFETY_OFFICER'].includes(role),
   );
 
   const cameras = useSetupCatalog<CameraResponse>(
@@ -182,9 +204,7 @@ export function useCameraSetupWorkspace(apiUrl: string, session: SharedSession) 
   if (returnCamera) returnParams.set('cameraId', returnCamera.id);
 
   const canOpenMonitoring = session.user.roleAssignments.some(
-    (role) =>
-      (role.role === 'ADMIN' && role.siteId === null) ||
-      (role.role === 'SAFETY_OFFICER' && role.siteId === site?.id),
+    (role) => role.role === 'SAFETY_OFFICER' && role.siteId === site?.id,
   );
 
   const activeDialog =

@@ -413,7 +413,7 @@ describe('Camera Monitor Queue 2 readability, state distinction, and layout cont
       Reflect.deleteProperty(document, 'fullscreenElement');
     }
 
-    // Empty active cameras: ADMIN sees Inspect Camera Setup link; SAFETY_OFFICER does not
+    // Only an explicit Site Manager role can open Camera Setup from monitoring.
     cleanup();
     mockState.cameras.mockResolvedValue({
       items: [{ ...CAM_01, status: 'INACTIVE' }],
@@ -422,7 +422,20 @@ describe('Camera Monitor Queue 2 readability, state distinction, and layout cont
     render(
       <QueryClientProvider client={queryClient}>
         <MemoryRouter initialEntries={['/ppe']}>
-          <PpeMonitorWorkspace apiUrl="http://127.0.0.1:3000" session={makeSession('ADMIN')} />
+          <PpeMonitorWorkspace
+            apiUrl="http://127.0.0.1:3000"
+            session={{
+              ...makeSession('SAFETY_OFFICER'),
+              user: {
+                ...makeSession('SAFETY_OFFICER').user,
+                roleAssignments: [
+                  { role: 'ADMIN', siteId: null },
+                  { role: 'SAFETY_OFFICER', siteId: SITE_ID },
+                  { role: 'SITE_MANAGER', siteId: SITE_ID },
+                ],
+              },
+            }}
+          />
         </MemoryRouter>
       </QueryClientProvider>,
     );

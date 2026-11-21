@@ -1,3 +1,4 @@
+import { PublicHttpException } from '../../src/common/http/public-http-exception.js';
 import { participateContractor } from '../support/contractor-participation.js';
 import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
@@ -81,7 +82,9 @@ test('one manager per Site survives concurrent creation and replacement; differe
     users.replaceRoleAssignments(otherManager!.id, {
       roleAssignments: [{ role: UserRole.SITE_MANAGER, siteId: site.id }],
     }),
-    { status: 409 },
+    (error: unknown) =>
+      error instanceof PublicHttpException &&
+      error.publicPayload.code === 'SITE_MANAGER_ALREADY_ASSIGNED',
   );
   assert.equal((await users.get(otherManager!.id)).roleAssignments[0]?.siteId, other.id);
 });

@@ -1,3 +1,4 @@
+import { loadAllPages } from '../load-all-pages';
 import { SiteGatesPanel } from './SiteGatesPanel';
 import { useGateCatalog } from '../../access/useGateCatalog';
 import { localizedLabel } from '../../../i18n/labels';
@@ -242,16 +243,14 @@ export function SiteOperationsSetupView({
 
   const sites = useQuery({
     queryKey: [...key, 'sites'],
-    queryFn: () => client.listSites(accessToken!, { limit: 100 }),
+    queryFn: ({ signal }) =>
+      loadAllPages((options) => client.listSites(accessToken!, options, { signal }), signal),
     enabled: !!accessToken,
   });
 
-  const admin = user?.roleAssignments.some((r) => r.role === 'ADMIN' && r.siteId === null);
   const permittedSites =
-    sites.data?.items.filter(
-      (site) =>
-        admin ||
-        user?.roleAssignments.some((r) => r.role === 'SITE_MANAGER' && r.siteId === site.id),
+    sites.data?.items.filter((site) =>
+      user?.roleAssignments.some((r) => r.role === 'SITE_MANAGER' && r.siteId === site.id),
     ) ?? [];
   const siteId =
     controlledSiteId ||

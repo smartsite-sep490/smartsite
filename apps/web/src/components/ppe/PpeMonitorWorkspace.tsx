@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type ReactNode } from 'react';
+import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { Link, useLocation } from 'react-router-dom';
 import { ApiError } from '@smartsite/api-client';
 import { MonitorWorkspaceTour } from './MonitorWorkspaceTour';
@@ -122,10 +122,7 @@ export function PpeMonitorWorkspace({
   const canRead =
     session.user.isActive &&
     !session.user.mustChangePassword &&
-    session.user.roleAssignments.some(
-      (r) =>
-        (r.role === 'ADMIN' && r.siteId === null) || (r.role === 'SAFETY_OFFICER' && !!r.siteId),
-    );
+    session.user.roleAssignments.some((r) => r.role === 'SAFETY_OFFICER' && !!r.siteId);
   if (!canRead) return <p role="alert">{t('monitor.denied')}</p>;
   return (
     <MonitorScope
@@ -159,16 +156,28 @@ function MonitorScope({
   const sites = useMonitorPages(scope, 'sites', true, (offset, signal) =>
     client.listSites(session.accessToken, { offset, limit: 20 }, { signal }),
   );
-  const globalAdmin = session.user.roleAssignments.some(
-    (r) => r.role === 'ADMIN' && r.siteId === null,
+  const allowed = useMemo(
+    () =>
+      new Set(
+        session.user.roleAssignments
+          .filter((r) => r.role === 'SAFETY_OFFICER')
+          .map((r) => r.siteId),
+      ),
+    [session.user.roleAssignments],
   );
-  const allowed = new Set(
-    session.user.roleAssignments.filter((r) => r.role === 'SAFETY_OFFICER').map((r) => r.siteId),
-  );
-  const visibleSites = sites.rows.filter((site) => globalAdmin || allowed.has(site.id));
+  const visibleSites = sites.rows.filter((site) => allowed.has(site.id));
   const site =
     visibleSites.find((row) => row.id === chosenSite) ??
     (linkedSiteId && chosenSite === linkedSiteId ? undefined : visibleSites[0]);
+  useEffect(() => {
+    if (
+      (!visibleSites.length || (allowed.has(chosenSite) && !site)) &&
+      sites.hasNextPage &&
+      !sites.isFetching &&
+      !sites.error
+    )
+      void sites.fetchNextPage({ cancelRefetch: false });
+  }, [visibleSites.length, allowed, chosenSite, site, sites]);
   const siteSelector = (
     <label className="flex flex-wrap sm:flex-nowrap items-center gap-2 min-w-0 flex-[1_1_13rem] lg:max-w-xs text-xs font-medium text-slate-800">
       <span className="shrink-0">{t('monitor.site')}</span>
@@ -283,7 +292,9 @@ function MonitorScope({
           site={site}
           siteSelector={siteSelector}
           siteNotices={siteNotices}
-          globalAdmin={globalAdmin}
+          canManageCameras={session.user.roleAssignments.some(
+            (r) => r.role === 'SITE_MANAGER' && r.siteId === site.id,
+          )}
           linkedCameraId={site.id === linkedSiteId ? linkedCameraId : ''}
         />
       ) : (
@@ -305,7 +316,7 @@ function CameraScope({
   site,
   siteSelector,
   siteNotices,
-  globalAdmin,
+  canManageCameras,
   linkedCameraId,
 }: Props & {
   client: SmartSiteManagementClient;
@@ -313,7 +324,7 @@ function CameraScope({
   site: { id: string; name: string; code: string };
   siteSelector: ReactNode;
   siteNotices: ReactNode;
-  globalAdmin: boolean;
+  canManageCameras: boolean;
   linkedCameraId: string;
 }) {
   const { t } = useTranslation(SAFETY_NAMESPACE);
@@ -589,7 +600,7 @@ function CameraScope({
             )}
             <div className="flex flex-wrap items-center justify-between gap-2 pt-0.5">
               <p className="text-slate-600">{trMonitor('monitor.emptyOfficerHint')}</p>
-              {globalAdmin && (
+              {canManageCameras && (
                 <Link
                   data-testid="monitor-inspect-camera-setup"
                   className="rounded-md border border-slate-300 bg-white px-3 py-1 font-semibold text-slate-900 hover:bg-slate-100"

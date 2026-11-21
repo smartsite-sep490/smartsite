@@ -46,10 +46,9 @@ export class GateReadGuard implements CanActivate {
       !request.user.mustChangePassword &&
       request.user.roleAssignments.some(
         (r) =>
-          (read && r.role === UserRole.ADMIN && r.siteId === null) ||
-          (r.siteId === request.params.siteId?.toLowerCase() &&
-            (r.role === UserRole.SITE_MANAGER ||
-              (read && [UserRole.SAFETY_OFFICER, UserRole.SECURITY_OFFICER].includes(r.role)))),
+          r.siteId === request.params.siteId?.toLowerCase() &&
+          (r.role === UserRole.SITE_MANAGER ||
+            (read && [UserRole.SAFETY_OFFICER, UserRole.SECURITY_OFFICER].includes(r.role))),
       );
     if (!allowed)
       throw new PublicHttpException(403, {

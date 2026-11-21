@@ -387,7 +387,11 @@ describe('RestrictedZoneView Backend Polygon Persistence & Scope Integration', (
 
     await performAdminLogin(user);
 
-    expect(listSitesSpy).toHaveBeenCalledWith('mock-admin-token', { limit: 100 });
+    expect(listSitesSpy).toHaveBeenCalledWith(
+      'mock-admin-token',
+      { offset: 0, limit: 100 },
+      expect.objectContaining({ signal: expect.anything() }),
+    );
     expect(listCamerasSpy).toHaveBeenCalledWith('mock-admin-token', 'site-alpha', { limit: 100 });
     expect(listRegionsSpy).toHaveBeenCalledWith('mock-admin-token', 'site-alpha', 'cam-1', {
       limit: 100,

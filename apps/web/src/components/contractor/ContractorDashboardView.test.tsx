@@ -6,6 +6,9 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { ContractorDashboardView } from './ContractorDashboardView';
 import { DashboardView } from '../dashboard/DashboardView';
+vi.mock('../dashboard/AdminDashboardView', () => ({
+  AdminDashboardView: () => <div>Administration overview</div>,
+}));
 
 const api = vi.hoisted(() => ({
   contractorDashboardScopes: vi.fn(),
@@ -521,7 +524,7 @@ describe('ContractorDashboardView Integration & UI Rules', () => {
     });
   });
 
-  it('DashboardView preserves standard site overview for ADMIN role', async () => {
+  it('DashboardView selects administrative overview for ADMIN role', async () => {
     mockCurrentUser.data.roleAssignments = [{ role: 'ADMIN', siteId: null }];
 
     queryClient = new QueryClient({
@@ -539,7 +542,7 @@ describe('ContractorDashboardView Integration & UI Rules', () => {
     );
 
     await waitFor(() => {
-      expect(screen.getByText('Site Operational Overview')).not.toBeNull();
+      expect(screen.getByText('Administration overview')).not.toBeNull();
     });
   });
 });

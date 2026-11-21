@@ -1,3 +1,4 @@
+import { loadAllPages } from '../workforce/load-all-pages';
 import { useManagementClient } from '../../features/auth/auth-session';
 import { SafetyOverviewView } from '../safety/SafetyOverviewView';
 import { SafetyChecklistsView } from '../safety/SafetyChecklistsView';
@@ -147,7 +148,7 @@ type WorkspaceTab =
   'Overview' | 'Alerts' | 'Incidents' | 'Checklists' | 'Safety Tasks' | 'Documents';
 function initialWorkspaceTab(session: Pick<LoginResponse, 'user'>): WorkspaceTab {
   const roles = session.user.roleAssignments;
-  return roles.some(({ role }) => role === 'SAFETY_OFFICER' || role === 'ADMIN')
+  return roles.some(({ role }) => role === 'SAFETY_OFFICER')
     ? 'Overview'
     : roles.some(({ role }) => role === 'CONTRACTOR_REPRESENTATIVE')
       ? 'Incidents'
@@ -308,9 +309,7 @@ export function SafetyAlertsView({
       const generation = lifecycleGeneration.current;
       const result = await client.login(username, password);
       const canReviewSafetyAlerts = result.user.roleAssignments.some(
-        ({ role, siteId }) =>
-          (role === 'ADMIN' && siteId === null) ||
-          (['SAFETY_OFFICER', 'SITE_MANAGER'].includes(role) && siteId !== null),
+        ({ role, siteId }) => ['SAFETY_OFFICER', 'SITE_MANAGER'].includes(role) && siteId !== null,
       );
       if (!canReviewSafetyAlerts) {
         await client.logout().catch(() => undefined);
@@ -376,13 +375,11 @@ export function SafetyAlertsView({
   const token = session?.accessToken ?? '';
   const sites = useQuery({
     queryKey: ['sites', apiUrl, sessionScope],
-    queryFn: ({ signal }) => client.listSites(token, { limit: 100 }, { signal }),
+    queryFn: ({ signal }) =>
+      loadAllPages((options) => client.listSites(token, options, { signal }), signal),
     enabled: token.length > 0,
   });
 
-  const isGlobalAdmin =
-    session?.user.roleAssignments.some(({ role, siteId }) => role === 'ADMIN' && siteId === null) ??
-    false;
   const siteIdsForCurrentTab = useMemo(
     () =>
       new Set(
@@ -398,9 +395,8 @@ export function SafetyAlertsView({
     [session, workspaceTab],
   );
   const visibleSites = useMemo(
-    () =>
-      sites.data?.items.filter((site) => isGlobalAdmin || siteIdsForCurrentTab.has(site.id)) ?? [],
-    [isGlobalAdmin, siteIdsForCurrentTab, sites.data?.items],
+    () => sites.data?.items.filter((site) => siteIdsForCurrentTab.has(site.id)) ?? [],
+    [siteIdsForCurrentTab, sites.data?.items],
   );
 
   const alertSiteUnavailable =
@@ -418,18 +414,14 @@ export function SafetyAlertsView({
     session?.user.roleAssignments.some(
       (r) => r.role === 'SAFETY_OFFICER' && r.siteId === selectedSiteId,
     ) ?? false;
-  const canAlerts =
-    isGlobalAdmin ||
-    session?.user.roleAssignments.some(
-      (r) => r.role === 'SAFETY_OFFICER' && r.siteId === selectedSiteId,
-    );
-  const canTasks =
-    isGlobalAdmin ||
-    session?.user.roleAssignments.some(
-      (r) =>
-        ['SAFETY_OFFICER', 'SITE_MANAGER', 'CONTRACTOR_REPRESENTATIVE'].includes(r.role) &&
-        r.siteId === selectedSiteId,
-    );
+  const canAlerts = session?.user.roleAssignments.some(
+    (r) => r.role === 'SAFETY_OFFICER' && r.siteId === selectedSiteId,
+  );
+  const canTasks = session?.user.roleAssignments.some(
+    (r) =>
+      ['SAFETY_OFFICER', 'SITE_MANAGER', 'CONTRACTOR_REPRESENTATIVE'].includes(r.role) &&
+      r.siteId === selectedSiteId,
+  );
   const alerts = useQuery({
     queryKey: [
       'safety-alerts',

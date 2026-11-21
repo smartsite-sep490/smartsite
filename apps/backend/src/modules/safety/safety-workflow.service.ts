@@ -73,7 +73,6 @@ const denied = (): never => {
 };
 const has = (user: AuthenticatedUser, siteId: string | null, role: UserRole) =>
   user.roleAssignments.some((r) => r.role === role && r.siteId === siteId);
-const admin = (user: AuthenticatedUser) => has(user, null, UserRole.ADMIN);
 const json = <T>(value: unknown): T => JSON.parse(JSON.stringify(value)) as T;
 const incidentStates = ['OPEN', 'ASSIGNED', 'IN_PROGRESS', 'CLOSED', 'REOPENED'];
 const taskStates = ['ASSIGNED', 'IN_PROGRESS', 'COMPLETED', 'VERIFIED', 'CANCELLED'];
@@ -117,7 +116,6 @@ export class SafetyWorkflowService {
   }
   private readIncident(actor: AuthenticatedUser, siteId: string) {
     if (
-      !admin(actor) &&
       ![UserRole.SAFETY_OFFICER, UserRole.SITE_MANAGER, UserRole.CONTRACTOR_REPRESENTATIVE].some(
         (role) => has(actor, siteId, role),
       )
@@ -125,15 +123,10 @@ export class SafetyWorkflowService {
       denied();
   }
   private fullIncident(actor: AuthenticatedUser, siteId: string) {
-    return (
-      admin(actor) ||
-      has(actor, siteId, UserRole.SAFETY_OFFICER) ||
-      has(actor, siteId, UserRole.SITE_MANAGER)
-    );
+    return has(actor, siteId, UserRole.SAFETY_OFFICER) || has(actor, siteId, UserRole.SITE_MANAGER);
   }
   private readTask(actor: AuthenticatedUser, task: SafetyTaskEntity) {
     if (
-      !admin(actor) &&
       !has(actor, task.siteId, UserRole.SITE_MANAGER) &&
       !(has(actor, task.siteId, UserRole.SAFETY_OFFICER) && task.assignedTo === actor.id)
     )
@@ -1410,7 +1403,7 @@ export class SafetyWorkflowService {
     if (assignedTo) uuid(assignedTo);
     return this.db.transaction(async (manager) => {
       const actor = await this.actor(manager, actorId, siteId);
-      if (!admin(actor) && !has(actor, siteId, UserRole.SITE_MANAGER)) {
+      if (!has(actor, siteId, UserRole.SITE_MANAGER)) {
         required(actor, siteId, UserRole.SAFETY_OFFICER);
         assignedTo = actor.id;
       }
@@ -1446,12 +1439,11 @@ export class SafetyWorkflowService {
       invalid('Invalid assignee role');
     const representatives = await this.db.transaction(async (manager) => {
       const actor = await this.actor(manager, actorId, siteId);
-      if (!admin(actor))
-        required(
-          actor,
-          siteId,
-          role === UserRole.SAFETY_OFFICER ? UserRole.SITE_MANAGER : UserRole.SAFETY_OFFICER,
-        );
+      required(
+        actor,
+        siteId,
+        role === UserRole.SAFETY_OFFICER ? UserRole.SITE_MANAGER : UserRole.SAFETY_OFFICER,
+      );
       if (role === UserRole.CONTRACTOR_REPRESENTATIVE) {
         return this.workforce.incidentRepresentatives(
           manager,
@@ -1475,7 +1467,7 @@ export class SafetyWorkflowService {
   ) {
     return this.db.transaction(async (manager) => {
       const actor = await this.actor(manager, actorId, siteId);
-      if (!admin(actor)) required(actor, siteId, UserRole.SAFETY_OFFICER);
+      required(actor, siteId, UserRole.SAFETY_OFFICER);
       return contractorId
         ? this.workforce.incidentWorkers(manager, siteId, uuid(contractorId), offset, limit)
         : this.workforce.incidentContractors(manager, siteId, offset, limit);

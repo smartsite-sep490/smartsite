@@ -352,7 +352,7 @@ describe('CameraSetupView guided tour and persisted setup checklist (P3.3)', () 
     );
   });
 
-  it('shows only read-only steps to ADMIN, closes on camera/site/error changes, and suppresses background tour during dialogs', async () => {
+  it('denies ADMIN and closes the Manager tour on camera/site/error and dialog changes', async () => {
     const adminSession = makeSession({
       user: {
         id: 'admin-global',
@@ -363,32 +363,8 @@ describe('CameraSetupView guided tour and persisted setup checklist (P3.3)', () 
     });
     const adminView = renderSetup(adminSession);
 
-    fireEvent.click(await screen.findByTestId('safety-task-tour-invitation-start'));
-    const adminTour = await screen.findByTestId('safety-task-tour');
-    expect(adminTour.textContent).toContain('Step 1 of 4');
-    expect(adminTour.textContent).toContain('Select Site & Camera (Read-Only)');
-
-    fireEvent.click(screen.getByTestId('safety-task-tour-next'));
-    expect(screen.getByTestId('safety-task-tour').getAttribute('data-tour-step')).toBe(
-      'camera-setup-zone-draw',
-    );
-    expect(screen.getByTestId('safety-task-tour').textContent).toContain(
-      'Review Zone & Region PPE Modes (Read-Only)',
-    );
-
-    fireEvent.click(screen.getByTestId('safety-task-tour-next'));
-    expect(screen.getByTestId('safety-task-tour').getAttribute('data-tour-step')).toBe(
-      'camera-setup-ppe-policy',
-    );
-    expect(screen.getByTestId('safety-task-tour').textContent).toMatch(
-      /Inspect Effective Region PPE \(Read-Only\)/i,
-    );
-
-    fireEvent.click(screen.getByTestId('safety-task-tour-next'));
-    expect(screen.getByTestId('safety-task-tour').getAttribute('data-tour-step')).toBe(
-      'camera-setup-save',
-    );
-    expect(screen.getByTestId('safety-task-tour-done')).toBeTruthy();
+    expect(screen.getByRole('alert')).toBeTruthy();
+    expect(screen.queryByTestId('safety-task-tour-trigger')).toBeNull();
     adminView.unmount();
 
     // Unauthorized Safety Officer never sees Camera Setup or tour

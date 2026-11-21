@@ -386,24 +386,20 @@ export class WorkforceConfigurationService {
       (until && (+until <= now || +until <= +from))
     )
       conflict('Representative registration requires a currently active participation interval');
-    const contractor = await manager
-      .getRepository(ContractorEntity)
-      .save({
-        id: randomUUID(),
-        code: `CTR-${randomUUID().toUpperCase()}`,
-        name: value.name,
-        isActive: true,
-      });
-    await manager
-      .getRepository(ContractorSiteParticipationEntity)
-      .save({
-        id: randomUUID(),
-        contractorId: contractor.id,
-        siteId,
-        validFrom: from,
-        validUntil: until,
-        isActive: true,
-      });
+    const contractor = await manager.getRepository(ContractorEntity).save({
+      id: randomUUID(),
+      code: `CTR-${randomUUID().toUpperCase()}`,
+      name: value.name,
+      isActive: true,
+    });
+    await manager.getRepository(ContractorSiteParticipationEntity).save({
+      id: randomUUID(),
+      contractorId: contractor.id,
+      siteId,
+      validFrom: from,
+      validUntil: until,
+      isActive: true,
+    });
     return contractor;
   }
 
@@ -552,9 +548,7 @@ export class WorkforceConfigurationService {
     let contractorIdScope: string | undefined;
     if (
       !user.roleAssignments.some(
-        (r) =>
-          r.role === UserRole.ADMIN ||
-          (r.siteId === scopedSiteId && r.role === UserRole.SITE_MANAGER),
+        (r) => r.siteId === scopedSiteId && r.role === UserRole.SITE_MANAGER,
       )
     ) {
       // Must be CONTRACTOR_REPRESENTATIVE or WORKER
@@ -633,11 +627,10 @@ export class WorkforceConfigurationService {
     if (
       !user.roleAssignments.some(
         (r) =>
-          (r.role === UserRole.ADMIN && r.siteId === null) ||
-          (r.siteId === scopedSiteId &&
-            [UserRole.SITE_MANAGER, UserRole.SAFETY_OFFICER, UserRole.SECURITY_OFFICER].includes(
-              r.role,
-            )),
+          r.siteId === scopedSiteId &&
+          [UserRole.SITE_MANAGER, UserRole.SAFETY_OFFICER, UserRole.SECURITY_OFFICER].includes(
+            r.role,
+          ),
       )
     ) {
       const rep = user.roleAssignments.some(
@@ -731,9 +724,7 @@ export class WorkforceConfigurationService {
     let contractorIdScope: string | undefined;
     if (
       !user.roleAssignments.some(
-        (r) =>
-          r.role === UserRole.ADMIN ||
-          (r.siteId === scopedSiteId && r.role === UserRole.SITE_MANAGER),
+        (r) => r.siteId === scopedSiteId && r.role === UserRole.SITE_MANAGER,
       )
     ) {
       const rep = user.roleAssignments.some(

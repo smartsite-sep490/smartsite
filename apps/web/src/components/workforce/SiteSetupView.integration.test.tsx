@@ -21,6 +21,7 @@ vi.mock('../../features/auth/auth-session', async (importOriginal) => ({
 }));
 
 beforeEach(() => {
+  window.history.replaceState({}, '', '/');
   session.user = { id: 'admin', roleAssignments: [{ role: 'ADMIN', siteId: null }] };
   mockGateCatalog();
   vi.spyOn(SmartSiteManagementClient.prototype, 'listGlobalContractors').mockResolvedValue({
@@ -30,6 +31,7 @@ beforeEach(() => {
 });
 
 afterEach(() => {
+  window.history.replaceState({}, '', '/');
   cleanup();
   vi.restoreAllMocks();
 });
@@ -94,6 +96,51 @@ function setup(
   return { cache, user: userEvent.setup() };
 }
 
+it('opens the requested site rather than the first result and reports an unknown site', async () => {
+  vi.spyOn(SmartSiteManagementClient.prototype, 'listUsers').mockResolvedValue({
+    items: [],
+    total: 0,
+  });
+  window.history.replaceState({}, '', '/site-setup?siteId=site-b');
+  const { cache } = setup([
+    { id: 'site-a', code: 'A', name: 'Alpha', createdAt: '' },
+    { id: 'site-b', code: 'B', name: 'Beta', createdAt: '' },
+  ]);
+  expect(await screen.findByRole('heading', { name: 'Beta', level: 2 })).toBeTruthy();
+  cleanup();
+  cache.clear();
+  window.history.replaceState({}, '', '/site-setup?siteId=missing');
+  const second = setup();
+  expect((await screen.findByRole('alert')).textContent).toContain(
+    'The requested site is unavailable',
+  );
+  second.cache.clear();
+});
+
+it('keeps the Admin site page free of gate and contractor queries and supports renaming', async () => {
+  vi.spyOn(SmartSiteManagementClient.prototype, 'listUsers').mockResolvedValue({
+    items: [],
+    total: 0,
+  });
+  const rename = vi.spyOn(SmartSiteManagementClient.prototype, 'renameSite').mockResolvedValue({
+    id: 'site-a',
+    code: 'A',
+    name: 'New Alpha',
+    createdAt: '',
+  });
+  const { user, cache } = setup();
+  await user.click(await screen.findByRole('button', { name: 'Rename site' }));
+  expect(screen.queryByRole('heading', { name: 'Site gates' })).toBeNull();
+  expect(SmartSiteManagementClient.prototype.listGlobalContractors).not.toHaveBeenCalled();
+  expect(SmartSiteManagementClient.prototype.listAllSiteGates).not.toHaveBeenCalled();
+  const field = screen.getByLabelText('Site name');
+  await user.clear(field);
+  await user.type(field, 'New Alpha');
+  await user.click(screen.getByRole('button', { name: 'Confirm' }));
+  await waitFor(() => expect(rename).toHaveBeenCalledWith('admin-token', 'site-a', 'New Alpha'));
+  cache.clear();
+});
+
 it('lets the assigned manager create a gate from the actual Site setup page', async () => {
   session.user = manager('manager');
   const gate = { ...gateFixture('site-a')[0]!, code: 'MAIN', name: 'Main entrance' };
@@ -120,13 +167,15 @@ it('lets the assigned manager create a gate from the actual Site setup page', as
   cache.clear();
 });
 
-it('shows the gate catalog to Admin without configuration actions', async () => {
+it('does not load operational gates for a pure Admin', async () => {
   vi.spyOn(SmartSiteManagementClient.prototype, 'listUsers').mockResolvedValue({
     items: [],
     total: 0,
   });
   const { cache } = setup();
-  await screen.findByText(gateFixture('site-a')[0]!.name);
+  await screen.findByRole('heading', { name: 'Alpha', level: 2 });
+  expect(screen.queryByText(gateFixture('site-a')[0]!.name)).toBeNull();
+  expect(SmartSiteManagementClient.prototype.listAllSiteGates).not.toHaveBeenCalled();
   expect(screen.queryByRole('button', { name: 'Create gate' })).toBeNull();
   expect(screen.queryByRole('button', { name: 'Deactivate' })).toBeNull();
   cache.clear();

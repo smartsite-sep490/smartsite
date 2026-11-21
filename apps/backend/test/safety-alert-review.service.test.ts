@@ -77,16 +77,17 @@ function contextFor(input: {
   } as unknown as ExecutionContext;
 }
 
-test('SafetyAlertAccessGuard allows global Admin and exact-Site Safety Officer only', () => {
+test('SafetyAlertAccessGuard denies global Admin and allows exact-Site Safety Officer', () => {
   const siteId = randomUUID();
   const otherSiteId = randomUUID();
   const guard = new SafetyAlertAccessGuard();
 
-  assert.equal(
-    guard.canActivate(
-      contextFor({ siteId, assignments: [{ role: UserRole.ADMIN, siteId: null }] }),
-    ),
-    true,
+  assert.throws(
+    () =>
+      guard.canActivate(
+        contextFor({ siteId, assignments: [{ role: UserRole.ADMIN, siteId: null }] }),
+      ),
+    { status: 403 },
   );
   assert.equal(
     guard.canActivate(

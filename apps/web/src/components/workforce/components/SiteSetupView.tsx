@@ -5,7 +5,6 @@ import { useTranslation } from 'react-i18next';
 import { SiteZoneSetup } from './SiteZoneSetup';
 import { ContractorZoneSetup } from './ContractorZoneSetup';
 import { ManagerContractorDetails } from '../../dashboard/ManagerContractorDetails';
-import { ContractorParticipationDirectory } from './ContractorParticipationDirectory';
 import React, { useState, useMemo } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { ApiError } from '@smartsite/api-client';
@@ -34,6 +33,7 @@ import {
   ToastContainer,
   useToast,
 } from '../../ui';
+import { Dialog } from '../../ui/Dialog';
 import { participationDates } from './participation-dates';
 import {
   addSiteManagerAssignment,
@@ -68,7 +68,9 @@ export function SiteSetupView({ apiUrl }: SiteSetupViewProps) {
   const canSetup = isAdmin || hasManagerRole;
 
   // Navigation & Selection state
-  const [selectedSiteId, setSelectedSiteId] = useState<string | null>(null);
+  const [selectedSiteId, setSelectedSiteId] = useState<string | null>(() =>
+    new URLSearchParams(window.location.search).get('siteId'),
+  );
   const [detailContractor, setDetailContractor] = useState<{
     siteId: string;
     contractorId: string;
@@ -94,6 +96,8 @@ export function SiteSetupView({ apiUrl }: SiteSetupViewProps) {
   const [siteName, setSiteName] = useState('');
   const [siteCode, setSiteCode] = useState('');
   const [siteError, setSiteError] = useState<string | null>(null);
+
+  const [renameSite, setRenameSite] = useState<{ id: string; name: string } | null>(null);
 
   // Representative Form State
   const [repUsername, setRepUsername] = useState('');
@@ -148,7 +152,7 @@ export function SiteSetupView({ apiUrl }: SiteSetupViewProps) {
   const selectedSite = useMemo(() => {
     if (selectedSiteId) {
       const found = sites.find((s) => s.id === selectedSiteId);
-      if (found) return found;
+      return found ?? null;
     }
     return sites[0] ?? null;
   }, [sites, selectedSiteId]);
@@ -266,6 +270,7 @@ export function SiteSetupView({ apiUrl }: SiteSetupViewProps) {
       setSiteCode('');
       setShowCreateSiteModal(false);
       queryClient.invalidateQueries({ queryKey: [...setupKey, 'sites'] });
+      void queryClient.invalidateQueries({ queryKey: ['account-management', apiUrl] });
       setSelectedSiteId(newSite.id);
     },
     onError: (err: unknown) => {
@@ -274,6 +279,16 @@ export function SiteSetupView({ apiUrl }: SiteSetupViewProps) {
       } else {
         setSiteError(tr('site_setup_view.failed_to_create_site_please_check_input_parameters'));
       }
+    },
+  });
+
+  const renameSiteMutation = useMutation({
+    mutationFn: (input: { id: string; name: string }) =>
+      client.renameSite(accessToken!, input.id, input.name.trim()),
+    onSuccess: () => {
+      setRenameSite(null);
+      void queryClient.invalidateQueries({ queryKey: [...setupKey, 'sites'] });
+      void queryClient.invalidateQueries({ queryKey: ['account-management', apiUrl] });
     },
   });
 
@@ -310,6 +325,7 @@ export function SiteSetupView({ apiUrl }: SiteSetupViewProps) {
         predicate: (query) => query.queryKey.includes(activeSiteId!),
       });
       queryClient.invalidateQueries({ queryKey: [...setupKey, 'users'] });
+      void queryClient.invalidateQueries({ queryKey: ['account-management', apiUrl] });
       queryClient.invalidateQueries({
         queryKey: [...setupKey, 'contractor-representative-assignments', activeSiteId],
       });
@@ -407,6 +423,7 @@ export function SiteSetupView({ apiUrl }: SiteSetupViewProps) {
       setSelectedManagerId('');
       setShowAssignManagerModal(false);
       queryClient.invalidateQueries({ queryKey: [...setupKey, 'users'] });
+      void queryClient.invalidateQueries({ queryKey: ['account-management', apiUrl] });
       setTimeout(() => setManagerSuccessMsg(null), 5000);
     },
     onError: (err: unknown) => {
@@ -433,6 +450,7 @@ export function SiteSetupView({ apiUrl }: SiteSetupViewProps) {
       setManagerSuccessMsg(tr('site_setup_view.manager_revoked'));
       showToast(tr('site_setup_view.manager_revoked'));
       await queryClient.invalidateQueries({ queryKey: [...setupKey, 'users'] });
+      void queryClient.invalidateQueries({ queryKey: ['account-management', apiUrl] });
       setTimeout(() => setManagerSuccessMsg(null), 5000);
     },
     onError: (error) => setManagerError(userErrorMessage(error)),
@@ -462,6 +480,7 @@ export function SiteSetupView({ apiUrl }: SiteSetupViewProps) {
       setShowCreateManagerModal(false);
       setShowAssignManagerModal(false);
       queryClient.invalidateQueries({ queryKey: [...setupKey, 'users'] });
+      void queryClient.invalidateQueries({ queryKey: ['account-management', apiUrl] });
       setTimeout(() => setManagerSuccessMsg(null), 5000);
     },
     onError: (err: unknown) => {
@@ -497,6 +516,7 @@ export function SiteSetupView({ apiUrl }: SiteSetupViewProps) {
   // ── Handlers ───────────────────────────────────────────────────────────────
   const handleCreateSiteSubmit = (e: React.FormEvent) => {
     e.preventDefault();
+    if (createSiteMutation.isPending) return;
     setSiteError(null);
     if (!siteName.trim()) {
       setSiteError(tr('site_setup_view.site_name_is_required'));
@@ -614,12 +634,14 @@ export function SiteSetupView({ apiUrl }: SiteSetupViewProps) {
       return;
     }
 
+    if (assignSiteManagerMutation.isPending || siteManagers.length > 0) return;
     assignSiteManagerMutation.mutate({ siteId: activeSiteId, userId: selectedManagerId });
   };
 
   const handleCreateSiteManagerSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     setCreateManagerError(null);
+    if (createSiteManagerMutation.isPending || siteManagers.length > 0) return;
     if (!activeSiteId) {
       setCreateManagerError(tr('site_setup_view.please_select_an_active_site_first'));
       return;
@@ -719,7 +741,13 @@ export function SiteSetupView({ apiUrl }: SiteSetupViewProps) {
           siteId={activeSiteId ?? undefined}
         />
       )}
-      {isAdmin && <ContractorParticipationDirectory apiUrl={apiUrl} />}
+      {selectedSiteId &&
+        sitesQuery.isSuccess &&
+        !sites.some((site) => site.id === selectedSiteId) && (
+          <p role="alert" className="rounded-xl border border-amber-200 bg-amber-50 p-3 text-sm">
+            {tr('admin_sites.invalid_selection')}
+          </p>
+        )}
       {(sitesQuery.isError ||
         usersQuery.isError ||
         contractorsQuery.isError ||
@@ -1049,6 +1077,18 @@ export function SiteSetupView({ apiUrl }: SiteSetupViewProps) {
                     {isAdmin && (
                       <button
                         type="button"
+                        className="min-h-10 rounded-xl border px-3 text-xs font-semibold"
+                        onClick={() => {
+                          renameSiteMutation.reset();
+                          setRenameSite({ id: selectedSite.id, name: selectedSite.name });
+                        }}
+                      >
+                        {tr('admin_sites.rename')}
+                      </button>
+                    )}
+                    {isAdmin && (
+                      <button
+                        type="button"
                         disabled={!managersLoaded}
                         onClick={openAssignSiteManagerModal}
                         className="inline-flex items-center gap-1.5 min-h-10 px-3.5 rounded-xl border border-orange-200 bg-orange-50 text-xs font-bold text-[#C6530E] hover:bg-orange-100 hover:border-orange-300 transition-colors cursor-pointer active:scale-[0.98]"
@@ -1171,7 +1211,7 @@ export function SiteSetupView({ apiUrl }: SiteSetupViewProps) {
                 )}
               </div>
 
-              {activeSiteId && accessToken && currentUser && (
+              {isManager && activeSiteId && accessToken && currentUser && (
                 <SiteGatesPanel
                   key={activeSiteId}
                   client={client}
@@ -1487,411 +1527,396 @@ export function SiteSetupView({ apiUrl }: SiteSetupViewProps) {
       </div>
 
       {/* ── MODAL 1: Assign Site Manager Modal ───────────────────────────────── */}
-      {showAssignManagerModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-[#071A2B]/40 backdrop-blur-xs p-4 animate-in fade-in duration-200">
-          <div className="bg-white rounded-2xl border border-slate-200 shadow-2xl max-w-lg w-full p-6 space-y-4 animate-in zoom-in-95 duration-200">
-            <div className="flex items-center justify-between pb-3 border-b border-slate-100">
-              <div className="flex items-center gap-2.5">
-                <div className="w-8 h-8 rounded-xl bg-[#071A2B] text-white flex items-center justify-center">
-                  <IconShield className="w-4 h-4 text-[#F66B17]" />
-                </div>
-                <div>
-                  <h3 className="text-sm font-bold text-slate-900">
-                    {tr('common.assign_site_manager')}
-                  </h3>
-                  <p className="text-[11px] text-slate-500">
-                    {tr('site_setup_view.assign_an_existing_account_to_value', {
-                      value1: selectedSite?.name,
-                    })}
-                  </p>
-                </div>
-              </div>
-              <button
-                type="button"
-                onClick={() => setShowAssignManagerModal(false)}
-                className="w-7 h-7 rounded-lg text-slate-400 hover:text-slate-600 hover:bg-slate-100 flex items-center justify-center transition-colors cursor-pointer"
-              >
-                <IconX className="w-4 h-4" />
-              </button>
+      <Dialog
+        open={showAssignManagerModal}
+        title={tr('common.assign_site_manager')}
+        maxWidth="lg"
+        onClose={() => {
+          if (!(assignSiteManagerMutation.isPending || revokeSiteManagerMutation.isPending))
+            setShowAssignManagerModal(false);
+        }}
+      >
+        <form onSubmit={handleAssignSiteManagerSubmit} className="space-y-4">
+          {managerError && (
+            <div className="p-3 rounded-xl bg-rose-50 border border-rose-200 flex items-center gap-2 text-rose-700 text-xs">
+              <IconAlertCircle className="w-4 h-4 shrink-0" />
+              <span>{localizedError(managerError ?? undefined)}</span>
             </div>
+          )}
 
-            <form onSubmit={handleAssignSiteManagerSubmit} className="space-y-4">
-              {managerError && (
-                <div className="p-3 rounded-xl bg-rose-50 border border-rose-200 flex items-center gap-2 text-rose-700 text-xs">
-                  <IconAlertCircle className="w-4 h-4 shrink-0" />
-                  <span>{localizedError(managerError ?? undefined)}</span>
-                </div>
-              )}
-
-              {siteManagers.length > 0 ? (
-                <div className="p-3 rounded-xl bg-amber-50 border border-amber-200 text-amber-800 text-xs leading-relaxed">
-                  {tr('common.assigned_site_managers')}{' '}
-                  <span className="font-bold">
-                    {siteManagers
-                      .map(
-                        (manager) =>
-                          `${manager.displayName || `@${manager.username}`} (${!manager.isActive ? tr('common.disabled') : manager.mustChangePassword ? tr('common.password_change_required') : tr('common.ready_to_approve')})`,
-                      )
-                      .join(', ')}
-                  </span>
-                  {siteManagers.map((manager) => (
-                    <div key={manager.id} className="mt-3">
-                      {revokeManagerId === manager.id ? (
-                        <div className="space-y-2">
-                          <p>
-                            {tr('site_setup_view.revoke_manager_confirm', {
-                              name: manager.displayName || manager.username,
-                              site: selectedSite?.name,
-                            })}
-                          </p>
-                          <div className="flex gap-2">
-                            <button
-                              type="button"
-                              className="rounded-lg bg-rose-700 px-3 py-2 font-bold text-white disabled:opacity-50"
-                              disabled={revokeSiteManagerMutation.isPending}
-                              onClick={() =>
-                                activeSiteId &&
-                                revokeSiteManagerMutation.mutate({
-                                  userId: manager.id,
-                                  siteId: activeSiteId,
-                                })
-                              }
-                            >
-                              {tr('site_setup_view.confirm_revoke')}
-                            </button>
-                            <button
-                              type="button"
-                              className="rounded-lg border border-amber-300 px-3 py-2 font-bold"
-                              disabled={revokeSiteManagerMutation.isPending}
-                              onClick={() => setRevokeManagerId(null)}
-                            >
-                              {tr('common.cancel')}
-                            </button>
-                          </div>
-                        </div>
-                      ) : (
+          {siteManagers.length > 0 ? (
+            <div className="p-3 rounded-xl bg-amber-50 border border-amber-200 text-amber-800 text-xs leading-relaxed">
+              {tr('common.assigned_site_managers')}{' '}
+              <span className="font-bold">
+                {siteManagers
+                  .map(
+                    (manager) =>
+                      `${manager.displayName || `@${manager.username}`} (${!manager.isActive ? tr('common.disabled') : manager.mustChangePassword ? tr('common.password_change_required') : tr('common.ready_to_approve')})`,
+                  )
+                  .join(', ')}
+              </span>
+              {siteManagers.map((manager) => (
+                <div key={manager.id} className="mt-3">
+                  {revokeManagerId === manager.id ? (
+                    <div className="space-y-2">
+                      <p>
+                        {tr('site_setup_view.revoke_manager_confirm', {
+                          name: manager.displayName || manager.username,
+                          site: selectedSite?.name,
+                        })}
+                      </p>
+                      <div className="flex gap-2">
                         <button
                           type="button"
-                          className="rounded-lg border border-rose-300 bg-white px-3 py-2 font-bold text-rose-700 hover:bg-rose-50"
-                          onClick={() => setRevokeManagerId(manager.id)}
+                          className="rounded-lg bg-rose-700 px-3 py-2 font-bold text-white disabled:opacity-50"
+                          disabled={revokeSiteManagerMutation.isPending}
+                          onClick={() =>
+                            activeSiteId &&
+                            revokeSiteManagerMutation.mutate({
+                              userId: manager.id,
+                              siteId: activeSiteId,
+                            })
+                          }
                         >
-                          {tr('site_setup_view.revoke_manager')}
+                          {tr('site_setup_view.confirm_revoke')}
                         </button>
-                      )}
+                        <button
+                          type="button"
+                          className="rounded-lg border border-amber-300 px-3 py-2 font-bold"
+                          disabled={revokeSiteManagerMutation.isPending}
+                          onClick={() => setRevokeManagerId(null)}
+                        >
+                          {tr('common.cancel')}
+                        </button>
+                      </div>
                     </div>
-                  ))}
-                </div>
-              ) : null}
-              {assignableSiteManagers.length > 0 ? (
-                <SmartSelect
-                  id="site-manager-select"
-                  label={tr('common.site_manager_account')}
-                  fieldRequired
-                  placeholder={tr('site_setup_view.select_an_existing_site_manager')}
-                  value={selectedManagerId}
-                  onChange={setSelectedManagerId}
-                  searchable
-                  searchPlaceholder={tr('common.search_account')}
-                  options={assignableSiteManagers.map((manager) => ({
-                    value: manager.id,
-                    label: manager.displayName,
-                    badge: `@${manager.username}`,
-                  }))}
-                />
-              ) : (
-                <div className="p-3 rounded-xl bg-amber-50 border border-amber-200 text-amber-800 text-xs leading-relaxed">
-                  {tr('site_setup_view.no_active_account_with_the')}{' '}
-                  <span className="font-bold">{tr('common.site_manager_ada41a')}</span>{' '}
-                  {tr('site_setup_view.role_is_available_for_this_site')}
-                </div>
-              )}
-
-              <button
-                type="button"
-                onClick={openCreateSiteManagerModal}
-                disabled={siteManagers.length > 0}
-                className="w-full px-3 py-2.5 rounded-xl border border-dashed border-[#F66B17]/50 bg-orange-50/50 text-xs font-bold text-[#C6530E] hover:bg-orange-50 transition-colors cursor-pointer"
-              >
-                {tr('site_setup_view.create_new_site_manager')}
-              </button>
-
-              <div className="p-3 rounded-xl bg-blue-50 border border-blue-100 text-blue-800 text-xs leading-relaxed">
-                {tr(
-                  'site_setup_view.existing_role_assignments_for_this_account_will_be_preserved_the_site_manager_role',
-                )}
-              </div>
-
-              <div className="flex items-center justify-end gap-2 pt-3 border-t border-slate-100">
-                <button
-                  type="button"
-                  onClick={() => setShowAssignManagerModal(false)}
-                  className="px-4 py-2 rounded-xl border border-slate-200 bg-white text-xs font-semibold text-slate-700 hover:bg-slate-50 transition-colors cursor-pointer"
-                >
-                  {tr('common.cancel')}
-                </button>
-
-                <button
-                  type="submit"
-                  disabled={
-                    siteManagers.length > 0 ||
-                    assignSiteManagerMutation.isPending ||
-                    assignableSiteManagers.length === 0 ||
-                    !selectedManagerId
-                  }
-                  className="flex items-center gap-2 px-4 py-2 rounded-xl bg-[#071A2B] text-white text-xs font-bold hover:bg-[#0E2841] transition-all cursor-pointer shadow-xs disabled:opacity-50"
-                >
-                  {assignSiteManagerMutation.isPending ? (
-                    <IconLoader className="w-3.5 h-3.5 animate-spin" />
                   ) : (
-                    <IconShield className="w-3.5 h-3.5 text-[#F66B17]" />
+                    <button
+                      type="button"
+                      className="rounded-lg border border-rose-300 bg-white px-3 py-2 font-bold text-rose-700 hover:bg-rose-50"
+                      onClick={() => setRevokeManagerId(manager.id)}
+                    >
+                      {tr('site_setup_view.revoke_manager')}
+                    </button>
                   )}
-                  <span>
-                    {assignSiteManagerMutation.isPending
-                      ? tr('common.assigning_085b87')
-                      : tr('common.assign_site_manager')}
-                  </span>
-                </button>
+                </div>
+              ))}
+            </div>
+          ) : null}
+          {siteManagers.length === 0 &&
+            (assignableSiteManagers.length > 0 ? (
+              <SmartSelect
+                id="site-manager-select"
+                label={tr('common.site_manager_account')}
+                fieldRequired
+                placeholder={tr('site_setup_view.select_an_existing_site_manager')}
+                value={selectedManagerId}
+                onChange={setSelectedManagerId}
+                searchable
+                searchPlaceholder={tr('common.search_account')}
+                options={assignableSiteManagers.map((manager) => ({
+                  value: manager.id,
+                  label: manager.displayName,
+                  badge: `@${manager.username}`,
+                }))}
+              />
+            ) : (
+              <div className="p-3 rounded-xl bg-amber-50 border border-amber-200 text-amber-800 text-xs leading-relaxed">
+                {tr('site_setup_view.no_active_account_with_the')}{' '}
+                <span className="font-bold">{tr('common.site_manager_ada41a')}</span>{' '}
+                {tr('site_setup_view.role_is_available_for_this_site')}
               </div>
-            </form>
+            ))}
+
+          <button
+            type="button"
+            onClick={openCreateSiteManagerModal}
+            disabled={siteManagers.length > 0}
+            title={siteManagers.length > 0 ? tr('admin_sites.occupied') : undefined}
+            className="w-full px-3 py-2.5 rounded-xl border border-dashed border-[#F66B17]/50 bg-orange-50/50 text-xs font-bold text-[#C6530E] hover:bg-orange-50 transition-colors cursor-pointer"
+          >
+            {tr('site_setup_view.create_new_site_manager')}
+          </button>
+
+          {siteManagers.length > 0 && (
+            <p className="text-xs text-amber-800">{tr('admin_sites.occupied')}</p>
+          )}
+          <div className="p-3 rounded-xl bg-blue-50 border border-blue-100 text-blue-800 text-xs leading-relaxed">
+            {tr(
+              'site_setup_view.existing_role_assignments_for_this_account_will_be_preserved_the_site_manager_role',
+            )}
           </div>
-        </div>
-      )}
+
+          <div className="flex items-center justify-end gap-2 pt-3 border-t border-slate-100">
+            <button
+              type="button"
+              onClick={() => setShowAssignManagerModal(false)}
+              className="px-4 py-2 rounded-xl border border-slate-200 bg-white text-xs font-semibold text-slate-700 hover:bg-slate-50 transition-colors cursor-pointer"
+            >
+              {tr('common.cancel')}
+            </button>
+
+            <button
+              type="submit"
+              disabled={
+                siteManagers.length > 0 ||
+                assignSiteManagerMutation.isPending ||
+                assignableSiteManagers.length === 0 ||
+                !selectedManagerId
+              }
+              className="flex items-center gap-2 px-4 py-2 rounded-xl bg-[#071A2B] text-white text-xs font-bold hover:bg-[#0E2841] transition-all cursor-pointer shadow-xs disabled:opacity-50"
+            >
+              {assignSiteManagerMutation.isPending ? (
+                <IconLoader className="w-3.5 h-3.5 animate-spin" />
+              ) : (
+                <IconShield className="w-3.5 h-3.5 text-[#F66B17]" />
+              )}
+              <span>
+                {assignSiteManagerMutation.isPending
+                  ? tr('common.assigning_085b87')
+                  : tr('common.assign_site_manager')}
+              </span>
+            </button>
+          </div>
+        </form>{' '}
+      </Dialog>
 
       {/* ── MODAL 2: Create Site Manager Modal ──────────────────────────────── */}
-      {showCreateManagerModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-[#071A2B]/40 backdrop-blur-xs p-4 animate-in fade-in duration-200">
-          <div className="bg-white rounded-2xl border border-slate-200 shadow-2xl max-w-lg w-full p-6 space-y-4 animate-in zoom-in-95 duration-200">
-            <div className="flex items-center justify-between pb-3 border-b border-slate-100">
-              <div className="flex items-center gap-2.5">
-                <div className="w-8 h-8 rounded-xl bg-[#071A2B] text-white flex items-center justify-center">
-                  <IconShield className="w-4 h-4 text-[#F66B17]" />
-                </div>
-                <div>
-                  <h3 className="text-sm font-bold text-slate-900">
-                    {tr('common.create_site_manager')}
-                  </h3>
-                  <p className="text-[11px] text-slate-500">
-                    {tr('site_setup_view.create_a_site_manager_account_for_value', {
-                      value1: selectedSite?.name,
-                    })}
-                  </p>
-                </div>
-              </div>
-              <button
-                type="button"
-                onClick={() => setShowCreateManagerModal(false)}
-                className="w-7 h-7 rounded-lg text-slate-400 hover:text-slate-600 hover:bg-slate-100 flex items-center justify-center transition-colors cursor-pointer"
+      <Dialog
+        open={showCreateManagerModal}
+        title={tr('common.create_site_manager')}
+        maxWidth="lg"
+        onClose={() => {
+          if (!createSiteManagerMutation.isPending) setShowCreateManagerModal(false);
+        }}
+      >
+        <form onSubmit={handleCreateSiteManagerSubmit} className="space-y-4">
+          {createManagerError && (
+            <div className="p-3 rounded-xl bg-rose-50 border border-rose-200 flex items-center gap-2 text-rose-700 text-xs">
+              <IconAlertCircle className="w-4 h-4 shrink-0" />
+              <span>{localizedError(createManagerError ?? undefined)}</span>
+            </div>
+          )}
+
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
+            <div className="space-y-1">
+              <label
+                htmlFor="site-manager-username-input"
+                className="block text-xs font-bold text-slate-700"
               >
-                <IconX className="w-4 h-4" />
-              </button>
+                {tr('common.username')} <span className="text-rose-500">*</span>
+              </label>
+              <input
+                id="site-manager-username-input"
+                type="text"
+                required
+                placeholder={tr('common.e_g_manager_site_a')}
+                value={managerUsername}
+                onChange={(e) => setManagerUsername(e.target.value)}
+                className="w-full rounded-xl border border-slate-200 bg-white px-3.5 py-2 text-xs text-slate-900 placeholder:text-slate-400 outline-none focus:border-[#F66B17] focus:ring-2 focus:ring-[#F66B17]/10"
+              />
             </div>
 
-            <form onSubmit={handleCreateSiteManagerSubmit} className="space-y-4">
-              {createManagerError && (
-                <div className="p-3 rounded-xl bg-rose-50 border border-rose-200 flex items-center gap-2 text-rose-700 text-xs">
-                  <IconAlertCircle className="w-4 h-4 shrink-0" />
-                  <span>{localizedError(createManagerError ?? undefined)}</span>
-                </div>
-              )}
-
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
-                <div className="space-y-1">
-                  <label
-                    htmlFor="site-manager-username-input"
-                    className="block text-xs font-bold text-slate-700"
-                  >
-                    {tr('common.username')} <span className="text-rose-500">*</span>
-                  </label>
-                  <input
-                    id="site-manager-username-input"
-                    type="text"
-                    required
-                    placeholder={tr('common.e_g_manager_site_a')}
-                    value={managerUsername}
-                    onChange={(e) => setManagerUsername(e.target.value)}
-                    className="w-full rounded-xl border border-slate-200 bg-white px-3.5 py-2 text-xs text-slate-900 placeholder:text-slate-400 outline-none focus:border-[#F66B17] focus:ring-2 focus:ring-[#F66B17]/10"
-                  />
-                </div>
-
-                <div className="space-y-1">
-                  <label
-                    htmlFor="site-manager-displayname-input"
-                    className="block text-xs font-bold text-slate-700"
-                  >
-                    {tr('common.display_name_18d67c')} <span className="text-rose-500">*</span>
-                  </label>
-                  <input
-                    id="site-manager-displayname-input"
-                    type="text"
-                    required
-                    placeholder={tr('site_setup_view.e_g_nguyen_van_a')}
-                    value={managerDisplayName}
-                    onChange={(e) => setManagerDisplayName(e.target.value)}
-                    className="w-full rounded-xl border border-slate-200 bg-white px-3.5 py-2 text-xs text-slate-900 placeholder:text-slate-400 outline-none focus:border-[#F66B17] focus:ring-2 focus:ring-[#F66B17]/10"
-                  />
-                </div>
-              </div>
-
-              <div className="space-y-1">
-                <label
-                  htmlFor="site-manager-password-input"
-                  className="block text-xs font-bold text-slate-700"
-                >
-                  {tr('common.temporary_password')} <span className="text-rose-500">*</span>
-                </label>
-                <div className="relative">
-                  <input
-                    id="site-manager-password-input"
-                    type={showManagerPassword ? 'text' : 'password'}
-                    required
-                    placeholder={tr('site_setup_view.must_meet_policy_min_8_chars_aa1')}
-                    value={managerPassword}
-                    onChange={(e) => setManagerPassword(e.target.value)}
-                    className="w-full rounded-xl border border-slate-200 bg-white px-3.5 py-2 pr-16 text-xs text-slate-900 placeholder:text-slate-400 outline-none focus:border-[#F66B17] focus:ring-2 focus:ring-[#F66B17]/10"
-                  />
-                  <button
-                    type="button"
-                    onClick={() => setShowManagerPassword(!showManagerPassword)}
-                    className="absolute right-3 top-1/2 -translate-y-1/2 text-[11px] font-bold text-slate-400 hover:text-slate-700 cursor-pointer"
-                  >
-                    {showManagerPassword ? tr('common.hide') : tr('common.show')}
-                  </button>
-                </div>
-              </div>
-
-              <div className="p-3 rounded-xl bg-blue-50 border border-blue-100 text-blue-800 text-xs leading-relaxed">
-                {tr('site_setup_view.this_account_will_be_created_with_the')}{' '}
-                <span className="font-bold">{tr('common.site_manager_ada41a')}</span>{' '}
-                {tr('site_setup_view.role_for_this_site')}
-              </div>
-
-              <div className="flex items-center justify-end gap-2 pt-3 border-t border-slate-100">
-                <button
-                  type="button"
-                  onClick={() => setShowCreateManagerModal(false)}
-                  className="px-4 py-2 rounded-xl border border-slate-200 bg-white text-xs font-semibold text-slate-700 hover:bg-slate-50 transition-colors cursor-pointer"
-                >
-                  {tr('common.cancel')}
-                </button>
-                <button
-                  type="submit"
-                  disabled={createSiteManagerMutation.isPending}
-                  className="flex items-center gap-2 px-4 py-2 rounded-xl bg-[#071A2B] text-white text-xs font-bold hover:bg-[#0E2841] transition-all cursor-pointer shadow-xs disabled:opacity-50"
-                >
-                  {createSiteManagerMutation.isPending ? (
-                    <IconLoader className="w-3.5 h-3.5 animate-spin" />
-                  ) : (
-                    <IconShield className="w-3.5 h-3.5 text-[#F66B17]" />
-                  )}
-                  <span>
-                    {createSiteManagerMutation.isPending
-                      ? tr('common.creating_def709')
-                      : tr('common.create_site_manager')}
-                  </span>
-                </button>
-              </div>
-            </form>
+            <div className="space-y-1">
+              <label
+                htmlFor="site-manager-displayname-input"
+                className="block text-xs font-bold text-slate-700"
+              >
+                {tr('common.display_name_18d67c')} <span className="text-rose-500">*</span>
+              </label>
+              <input
+                id="site-manager-displayname-input"
+                type="text"
+                required
+                placeholder={tr('site_setup_view.e_g_nguyen_van_a')}
+                value={managerDisplayName}
+                onChange={(e) => setManagerDisplayName(e.target.value)}
+                className="w-full rounded-xl border border-slate-200 bg-white px-3.5 py-2 text-xs text-slate-900 placeholder:text-slate-400 outline-none focus:border-[#F66B17] focus:ring-2 focus:ring-[#F66B17]/10"
+              />
+            </div>
           </div>
-        </div>
-      )}
+
+          <div className="space-y-1">
+            <label
+              htmlFor="site-manager-password-input"
+              className="block text-xs font-bold text-slate-700"
+            >
+              {tr('common.temporary_password')} <span className="text-rose-500">*</span>
+            </label>
+            <div className="relative">
+              <input
+                id="site-manager-password-input"
+                type={showManagerPassword ? 'text' : 'password'}
+                required
+                placeholder={tr('site_setup_view.must_meet_policy_min_8_chars_aa1')}
+                value={managerPassword}
+                onChange={(e) => setManagerPassword(e.target.value)}
+                className="w-full rounded-xl border border-slate-200 bg-white px-3.5 py-2 pr-16 text-xs text-slate-900 placeholder:text-slate-400 outline-none focus:border-[#F66B17] focus:ring-2 focus:ring-[#F66B17]/10"
+              />
+              <button
+                type="button"
+                onClick={() => setShowManagerPassword(!showManagerPassword)}
+                className="absolute right-3 top-1/2 -translate-y-1/2 text-[11px] font-bold text-slate-400 hover:text-slate-700 cursor-pointer"
+              >
+                {showManagerPassword ? tr('common.hide') : tr('common.show')}
+              </button>
+            </div>
+          </div>
+
+          <div className="p-3 rounded-xl bg-blue-50 border border-blue-100 text-blue-800 text-xs leading-relaxed">
+            {tr('site_setup_view.this_account_will_be_created_with_the')}{' '}
+            <span className="font-bold">{tr('common.site_manager_ada41a')}</span>{' '}
+            {tr('site_setup_view.role_for_this_site')}
+          </div>
+
+          <div className="flex items-center justify-end gap-2 pt-3 border-t border-slate-100">
+            <button
+              type="button"
+              onClick={() => setShowCreateManagerModal(false)}
+              className="px-4 py-2 rounded-xl border border-slate-200 bg-white text-xs font-semibold text-slate-700 hover:bg-slate-50 transition-colors cursor-pointer"
+            >
+              {tr('common.cancel')}
+            </button>
+            <button
+              type="submit"
+              disabled={createSiteManagerMutation.isPending}
+              className="flex items-center gap-2 px-4 py-2 rounded-xl bg-[#071A2B] text-white text-xs font-bold hover:bg-[#0E2841] transition-all cursor-pointer shadow-xs disabled:opacity-50"
+            >
+              {createSiteManagerMutation.isPending ? (
+                <IconLoader className="w-3.5 h-3.5 animate-spin" />
+              ) : (
+                <IconShield className="w-3.5 h-3.5 text-[#F66B17]" />
+              )}
+              <span>
+                {createSiteManagerMutation.isPending
+                  ? tr('common.creating_def709')
+                  : tr('common.create_site_manager')}
+              </span>
+            </button>
+          </div>
+        </form>{' '}
+      </Dialog>
 
       {/* ── MODAL 3: Create Site Modal ───────────────────────────────────────── */}
-      {showCreateSiteModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-[#071A2B]/40 backdrop-blur-xs p-4 animate-in fade-in duration-200">
-          <div className="bg-white rounded-2xl border border-slate-200 shadow-2xl max-w-md w-full p-6 space-y-4 animate-in zoom-in-95 duration-200">
-            <div className="flex items-center justify-between pb-3 border-b border-slate-100">
-              <div className="flex items-center gap-2.5">
-                <div className="w-8 h-8 rounded-xl bg-[#071A2B] text-white flex items-center justify-center">
-                  <IconBuilding className="w-4 h-4 text-[#F66B17]" />
-                </div>
-                <div>
-                  <h3 className="text-sm font-bold text-slate-900">
-                    {tr('common.create_new_site')}
-                  </h3>
-                  <p className="text-[11px] text-slate-500">
-                    {tr('site_setup_view.add_a_new_project_site_to_the_organization')}
-                  </p>
-                </div>
-              </div>
-              <button
-                type="button"
-                onClick={() => setShowCreateSiteModal(false)}
-                className="w-7 h-7 rounded-lg text-slate-400 hover:text-slate-600 hover:bg-slate-100 flex items-center justify-center transition-colors cursor-pointer"
-              >
-                <IconX className="w-4 h-4" />
-              </button>
+      <Dialog
+        open={showCreateSiteModal}
+        title={tr('common.create_new_site')}
+        maxWidth="lg"
+        onClose={() => {
+          if (!createSiteMutation.isPending) setShowCreateSiteModal(false);
+        }}
+      >
+        <form onSubmit={handleCreateSiteSubmit} className="space-y-4">
+          {siteError && (
+            <div className="p-3 rounded-xl bg-rose-50 border border-rose-200 flex items-center gap-2 text-rose-700 text-xs">
+              <IconAlertCircle className="w-4 h-4 shrink-0" />
+              <span>{localizedError(siteError ?? undefined)}</span>
             </div>
+          )}
 
-            <form onSubmit={handleCreateSiteSubmit} className="space-y-4">
-              {siteError && (
-                <div className="p-3 rounded-xl bg-rose-50 border border-rose-200 flex items-center gap-2 text-rose-700 text-xs">
-                  <IconAlertCircle className="w-4 h-4 shrink-0" />
-                  <span>{localizedError(siteError ?? undefined)}</span>
-                </div>
-              )}
-
-              <div className="space-y-1">
-                <label htmlFor="site-name-input" className="block text-xs font-bold text-slate-700">
-                  {tr('common.site_name')} <span className="text-rose-500">*</span>
-                </label>
-                <input
-                  id="site-name-input"
-                  type="text"
-                  required
-                  placeholder={tr('site_setup_view.e_g_landmark_81_tower_phase_2')}
-                  value={siteName}
-                  onChange={(e) => setSiteName(e.target.value)}
-                  className="w-full rounded-xl border border-slate-200 bg-white px-3.5 py-2 text-xs text-slate-900 placeholder:text-slate-400 outline-none focus:border-[#F66B17] focus:ring-2 focus:ring-[#F66B17]/10"
-                />
-              </div>
-
-              <div className="space-y-1">
-                <label htmlFor="site-code-input" className="block text-xs font-bold text-slate-700">
-                  {tr('common.site_code')}{' '}
-                  <span className="text-slate-400 font-normal">
-                    {tr('site_setup_view.optional_auto_generated_if_blank')}
-                  </span>
-                </label>
-                <input
-                  id="site-code-input"
-                  type="text"
-                  placeholder={tr('common.e_g_lm81_p2')}
-                  value={siteCode}
-                  onChange={(e) => setSiteCode(e.target.value)}
-                  className="w-full rounded-xl border border-slate-200 bg-white px-3.5 py-2 text-xs font-mono text-slate-900 placeholder:text-slate-400 uppercase outline-none focus:border-[#F66B17] focus:ring-2 focus:ring-[#F66B17]/10"
-                />
-              </div>
-
-              <div className="flex items-center justify-end gap-2 pt-3 border-t border-slate-100">
-                <button
-                  type="button"
-                  onClick={() => setShowCreateSiteModal(false)}
-                  className="px-4 py-2 rounded-xl border border-slate-200 bg-white text-xs font-semibold text-slate-700 hover:bg-slate-50 transition-colors cursor-pointer"
-                >
-                  {tr('common.cancel')}
-                </button>
-
-                <button
-                  type="submit"
-                  disabled={createSiteMutation.isPending}
-                  className="flex items-center gap-2 px-4 py-2 rounded-xl bg-[#071A2B] text-white text-xs font-bold hover:bg-[#0E2841] transition-all cursor-pointer shadow-xs disabled:opacity-50"
-                >
-                  {createSiteMutation.isPending ? (
-                    <IconLoader className="w-3.5 h-3.5 animate-spin" />
-                  ) : (
-                    <IconPlus className="w-3.5 h-3.5 text-[#F66B17]" />
-                  )}
-                  <span>
-                    {createSiteMutation.isPending
-                      ? tr('common.creating_def709')
-                      : tr('common.create_site')}
-                  </span>
-                </button>
-              </div>
-            </form>
+          <div className="space-y-1">
+            <label htmlFor="site-name-input" className="block text-xs font-bold text-slate-700">
+              {tr('common.site_name')} <span className="text-rose-500">*</span>
+            </label>
+            <input
+              id="site-name-input"
+              type="text"
+              required
+              placeholder={tr('site_setup_view.e_g_landmark_81_tower_phase_2')}
+              value={siteName}
+              onChange={(e) => setSiteName(e.target.value)}
+              className="w-full rounded-xl border border-slate-200 bg-white px-3.5 py-2 text-xs text-slate-900 placeholder:text-slate-400 outline-none focus:border-[#F66B17] focus:ring-2 focus:ring-[#F66B17]/10"
+            />
           </div>
-        </div>
-      )}
+
+          <div className="space-y-1">
+            <label htmlFor="site-code-input" className="block text-xs font-bold text-slate-700">
+              {tr('common.site_code')}{' '}
+              <span className="text-slate-400 font-normal">
+                {tr('site_setup_view.optional_auto_generated_if_blank')}
+              </span>
+            </label>
+            <input
+              id="site-code-input"
+              type="text"
+              placeholder={tr('common.e_g_lm81_p2')}
+              value={siteCode}
+              onChange={(e) => setSiteCode(e.target.value)}
+              className="w-full rounded-xl border border-slate-200 bg-white px-3.5 py-2 text-xs font-mono text-slate-900 placeholder:text-slate-400 uppercase outline-none focus:border-[#F66B17] focus:ring-2 focus:ring-[#F66B17]/10"
+            />
+          </div>
+
+          <div className="flex items-center justify-end gap-2 pt-3 border-t border-slate-100">
+            <button
+              type="button"
+              onClick={() => setShowCreateSiteModal(false)}
+              className="px-4 py-2 rounded-xl border border-slate-200 bg-white text-xs font-semibold text-slate-700 hover:bg-slate-50 transition-colors cursor-pointer"
+            >
+              {tr('common.cancel')}
+            </button>
+
+            <button
+              type="submit"
+              disabled={createSiteMutation.isPending}
+              className="flex items-center gap-2 px-4 py-2 rounded-xl bg-[#071A2B] text-white text-xs font-bold hover:bg-[#0E2841] transition-all cursor-pointer shadow-xs disabled:opacity-50"
+            >
+              {createSiteMutation.isPending ? (
+                <IconLoader className="w-3.5 h-3.5 animate-spin" />
+              ) : (
+                <IconPlus className="w-3.5 h-3.5 text-[#F66B17]" />
+              )}
+              <span>
+                {createSiteMutation.isPending
+                  ? tr('common.creating_def709')
+                  : tr('common.create_site')}
+              </span>
+            </button>
+          </div>
+        </form>{' '}
+      </Dialog>
+
+      <Dialog
+        open={Boolean(renameSite)}
+        title={tr('admin_sites.rename')}
+        onClose={() => {
+          if (!renameSiteMutation.isPending) setRenameSite(null);
+        }}
+      >
+        <form
+          className="space-y-4"
+          onSubmit={(event) => {
+            event.preventDefault();
+            if (renameSite && renameSite.name.trim() && !renameSiteMutation.isPending)
+              renameSiteMutation.mutate(renameSite);
+          }}
+        >
+          <label className="block space-y-2 text-sm">
+            <span>{tr('admin_sites.name')}</span>
+            <input
+              className="min-h-10 w-full rounded-xl border px-3"
+              required
+              maxLength={255}
+              value={renameSite?.name ?? ''}
+              disabled={renameSiteMutation.isPending}
+              onChange={(event) =>
+                setRenameSite((current) =>
+                  current ? { ...current, name: event.target.value } : null,
+                )
+              }
+            />
+          </label>
+          {renameSiteMutation.isError && (
+            <p role="alert">{userErrorMessage(renameSiteMutation.error)}</p>
+          )}
+          <button
+            type="submit"
+            className="min-h-10 rounded-xl bg-[#041D2E] px-4 text-white"
+            disabled={renameSiteMutation.isPending || !renameSite?.name.trim()}
+          >
+            {tr('accounts.confirm')}
+          </button>
+        </form>
+      </Dialog>
 
       {/* ── MODAL 5: Assign Existing Representative Modal ───────────────────── */}
       {showAssignRepModal && (

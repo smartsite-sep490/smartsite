@@ -1110,11 +1110,7 @@ export class SchedulingWorkflowService {
   private async getRequestScope(actor: AuthenticatedUser, siteId: string) {
     this.assertPasswordChanged(actor);
     if (
-      actor.roleAssignments.some(
-        (a) =>
-          (a.role === UserRole.ADMIN && a.siteId === null) ||
-          (a.role === UserRole.SITE_MANAGER && a.siteId === siteId),
-      )
+      actor.roleAssignments.some((a) => a.role === UserRole.SITE_MANAGER && a.siteId === siteId)
     ) {
       return { type: 'ALL' };
     }

@@ -1,7 +1,6 @@
 import type { RoleAssignmentResponse } from '@smartsite/contracts/management';
 
-// Navigation is the union of explicitly assigned roles. An administrator may
-// observe business workspaces; write capabilities remain scoped to their owners.
+// Operational navigation comes only from explicitly assigned site roles.
 export function workspaceTabs(assignments: readonly RoleAssignmentResponse[]): string[] {
   const admin = assignments.some((r) => r.role === 'ADMIN' && r.siteId === null);
   const has = (...roles: string[]) =>
@@ -15,12 +14,12 @@ export function workspaceTabs(assignments: readonly RoleAssignmentResponse[]): s
   if (has('SITE_MANAGER', 'CONTRACTOR_REPRESENTATIVE', 'WORKER')) tabs.push('workforce');
   if (admin) tabs.push('accounts');
   if (admin || has('SITE_MANAGER')) tabs.push('site-setup');
-  if (admin || has('SITE_MANAGER')) tabs.push('camera-setup');
+  if (has('SITE_MANAGER')) tabs.push('camera-setup');
   if (has('SITE_MANAGER', 'CONTRACTOR_REPRESENTATIVE')) tabs.push('schedule-setup');
-  if (admin || has('SITE_MANAGER', 'CONTRACTOR_REPRESENTATIVE', 'SECURITY_OFFICER', 'WORKER'))
+  if (has('SITE_MANAGER', 'CONTRACTOR_REPRESENTATIVE', 'SECURITY_OFFICER', 'WORKER'))
     tabs.push('access');
-  if (admin || has('SITE_MANAGER', 'SAFETY_OFFICER')) tabs.push('live-monitoring', 'ppe', 'zones');
-  if (admin || has('SITE_MANAGER', 'SAFETY_OFFICER')) tabs.push('incidents');
+  if (has('SITE_MANAGER', 'SAFETY_OFFICER')) tabs.push('live-monitoring', 'ppe', 'zones');
+  if (has('SITE_MANAGER', 'SAFETY_OFFICER')) tabs.push('incidents');
   if (has('WORKER', 'CONTRACTOR_REPRESENTATIVE', 'SAFETY_OFFICER')) tabs.push('worker-documents');
   return tabs;
 }

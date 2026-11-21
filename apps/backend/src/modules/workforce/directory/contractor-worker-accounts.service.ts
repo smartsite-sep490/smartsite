@@ -226,7 +226,7 @@ export class ContractorWorkerAccountsService {
     siteIdValue: string,
   ): Promise<ContractorWorkerAccountOptionsResponse> {
     const siteId = uuid(siteIdValue);
-    requireSiteRole(actor, siteId, [UserRole.CONTRACTOR_REPRESENTATIVE], false);
+    requireSiteRole(actor, siteId, [UserRole.CONTRACTOR_REPRESENTATIVE]);
     const grants = await this.source
       .getRepository(ContractorRepresentativeGrantEntity)
       .findBy({ userId: actor.id });
