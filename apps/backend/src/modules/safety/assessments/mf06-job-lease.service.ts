@@ -104,9 +104,17 @@ export class Mf06JobLeaseService {
 
   async retry(
     claim: Mf06JobClaim,
-    errorCode: 'RESOLVER_TIMEOUT' | 'RESOLVER_UNAVAILABLE' | 'DATABASE_UNAVAILABLE',
+    errorCode:
+      'RESOLVER_TIMEOUT' | 'RESOLVER_UNAVAILABLE' | 'DATABASE_UNAVAILABLE' | 'WORKER_SHUTDOWN',
   ): Promise<'RETRY' | 'FAILED' | 'STALE'> {
-    if (!['RESOLVER_TIMEOUT', 'RESOLVER_UNAVAILABLE', 'DATABASE_UNAVAILABLE'].includes(errorCode))
+    if (
+      ![
+        'RESOLVER_TIMEOUT',
+        'RESOLVER_UNAVAILABLE',
+        'DATABASE_UNAVAILABLE',
+        'WORKER_SHUTDOWN',
+      ].includes(errorCode)
+    )
       return 'STALE';
     return this.transition(claim, 'RETRY', errorCode) as Promise<'RETRY' | 'FAILED' | 'STALE'>;
   }
