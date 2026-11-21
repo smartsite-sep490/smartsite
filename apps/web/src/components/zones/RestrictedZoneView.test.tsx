@@ -25,6 +25,12 @@ if (typeof globalThis.ResizeObserver !== 'function') {
   } as unknown as typeof ResizeObserver;
 }
 
+vi.mock('../ppe/FocusedCameraMedia', () => ({
+  FocusedCameraMedia: ({ siteId, camera }: { siteId: string; camera: { id: string } }) => (
+    <div data-testid="zone-production-camera" data-site={siteId} data-camera={camera.id} />
+  ),
+}));
+
 const state = vi.hoisted(() => ({ preview: null as DecodedPreview | null }));
 vi.mock('../cameras/useRealtimePreview', () => ({
   useRealtimePreview: () => ({ preview: state.preview, connected: true, error: null }),
@@ -362,6 +368,18 @@ describe('RestrictedZoneView Backend Polygon Persistence & Scope Integration', (
     await screen.findByText('Your sign-in details are incorrect or this account cannot sign in.');
     expect(screen.queryByText(/session has expired/i)).toBeNull();
     expect(document.body.textContent).not.toContain('PRIVATE_LOGIN_ERROR');
+  });
+
+  it('opens the real camera workspace without deep-link parameters for an application session', async () => {
+    render(
+      <QueryClientProvider client={queryClient}>
+        <RestrictedZoneView authenticatedSession={mockAdminLogin} />
+      </QueryClientProvider>,
+    );
+    const camera = await screen.findByTestId('zone-production-camera');
+    expect(camera.getAttribute('data-site')).toBe('site-alpha');
+    expect(camera.getAttribute('data-camera')).toBe('cam-1');
+    expect(document.querySelector('video[src*="hazard_restricted_zone_test"]')).toBeNull();
   });
 
   it('uses the application session and does not log out when leaving zone configuration', async () => {
