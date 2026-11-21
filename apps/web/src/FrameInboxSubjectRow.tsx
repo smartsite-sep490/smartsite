@@ -38,12 +38,16 @@ interface SubjectFindingItem {
 }
 
 function zoneToneClass(status: FrameCase['zoneEntries'][number]['status']) {
-  if (status === 'DENIED') return 'border-rose-300 bg-rose-50/90 text-rose-950';
-  if (status === 'PENDING') {
-    return 'border-dashed border-amber-400 bg-amber-50/85 text-amber-950';
+  if (status === 'DENIED') {
+    return 'border-slate-200/80 border-l-rose-600 bg-rose-50/45 text-rose-950';
   }
-  if (status === 'ALLOWED') return 'border-emerald-200 bg-emerald-50/85 text-emerald-900';
-  return 'border-slate-200 bg-slate-100/90 text-slate-700';
+  if (status === 'PENDING') {
+    return 'border-slate-200/80 border-l-amber-500 bg-amber-50/45 text-amber-950';
+  }
+  if (status === 'ALLOWED') {
+    return 'border-slate-200/80 border-l-emerald-600 bg-emerald-50/40 text-emerald-950';
+  }
+  return 'border-slate-200/80 border-l-slate-400 bg-slate-50/80 text-slate-700';
 }
 
 export function FrameInboxSubjectRow({
@@ -144,16 +148,16 @@ export function FrameInboxSubjectRow({
   return (
     <li
       data-testid={`frame-subject-row-${personNumber}`}
-      className={`min-w-0 border-l-[3px] px-3.5 py-3 transition-colors ${
+      className={`min-w-0 border-l-[3px] px-4 py-3.5 transition-colors ${
         entry.unread ? 'border-l-teal-700 bg-white' : 'border-l-transparent bg-slate-50/35'
       }`}
     >
       <div
         data-tour-anchor={isTourTarget ? 'frame-inbox-subject-status' : undefined}
-        className="min-w-0 space-y-2"
+        className="min-w-0 space-y-2.5"
       >
         <div className="flex flex-wrap items-center justify-between gap-2">
-          <div className="flex min-w-0 flex-wrap items-center gap-2">
+          <div className="flex min-w-0 flex-wrap items-center gap-2.5">
             <span
               aria-hidden="true"
               className={`inline-flex h-6 min-w-6 items-center justify-center rounded-md px-1.5 text-xs font-semibold tabular-nums ${
@@ -168,22 +172,20 @@ export function FrameInboxSubjectRow({
             {entry.findingCount > 0 && (
               <span
                 data-testid={`frame-subject-ppe-count-${personNumber}`}
-                className="inline-flex items-center gap-1 rounded border border-amber-200/90 bg-amber-50/90 px-1.5 py-0.5 text-xs font-semibold tabular-nums text-amber-950"
+                className="inline-flex items-center gap-1.5 text-sm font-semibold tabular-nums text-amber-800"
               >
-                <IconHardHat className="h-3.5 w-3.5 shrink-0 text-amber-700" />
+                <IconHardHat className="h-4 w-4 shrink-0 text-amber-600" />
                 <span>{t('frameInbox.findings', { count: entry.findingCount })}</span>
               </span>
             )}
           </div>
 
-          <div className="flex flex-wrap items-center gap-x-2.5 gap-y-1 text-xs">
+          <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs">
             {entry.contentRevision > 1 && (
               <span
                 data-testid={`frame-subject-revision-${personNumber}`}
                 className={`tabular-nums ${
-                  entry.unread
-                    ? 'rounded border border-teal-200/80 bg-teal-50/75 px-1.5 py-0.5 font-medium text-teal-900'
-                    : 'text-slate-500'
+                  entry.unread ? 'font-semibold text-teal-800' : 'text-slate-500'
                 }`}
               >
                 {tSafety(
@@ -196,7 +198,7 @@ export function FrameInboxSubjectRow({
               {tSafety('frameInbox.identityUnconfirmedBadge')}
             </span>
             <span
-              className={`inline-flex items-center gap-1 ${
+              className={`inline-flex items-center gap-1.5 ${
                 entry.unread ? 'font-semibold text-teal-800' : 'text-slate-500'
               }`}
             >
@@ -209,7 +211,7 @@ export function FrameInboxSubjectRow({
         </div>
 
         {canLoadFindings && findingsQuery.isPending && (
-          <p role="status" className="text-xs text-slate-600">
+          <p role="status" className="text-sm text-slate-600">
             {t('frameInbox.subjectFindingsLoading')}
           </p>
         )}
@@ -217,7 +219,7 @@ export function FrameInboxSubjectRow({
           <div
             role="alert"
             data-testid={`frame-subject-findings-error-${personNumber}`}
-            className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-amber-200 bg-amber-50/80 px-3 py-1.5 text-xs text-amber-950"
+            className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-amber-200 bg-amber-50/70 px-3 py-2 text-sm text-amber-950"
           >
             <span>
               {findingsForbidden
@@ -229,7 +231,7 @@ export function FrameInboxSubjectRow({
                 type="button"
                 disabled={findingsQuery.isFetching}
                 onClick={() => void findingsQuery.refetch()}
-                className="inline-flex h-7 items-center rounded-md border border-amber-300 bg-white px-2.5 text-xs font-semibold text-amber-950 hover:bg-amber-50 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-teal-800 disabled:opacity-50"
+                className="inline-flex h-8 items-center rounded-md border border-amber-300 bg-white px-3 text-xs font-semibold text-amber-950 hover:bg-amber-50 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-teal-800 disabled:opacity-50"
               >
                 {t('common.retry')}
               </button>
@@ -241,37 +243,39 @@ export function FrameInboxSubjectRow({
           <ul
             aria-label={t('frameInbox.subjectFindingsLabel')}
             data-testid={`frame-subject-findings-${personNumber}`}
-            className="divide-y divide-amber-200/50 rounded-lg border border-amber-200/80 bg-amber-50/40 px-3 py-0.5"
+            className="divide-y divide-amber-200/60 border-l-2 border-l-amber-500 bg-amber-50/35 px-3 py-0.5"
           >
             {findings.map((finding) => (
               <li
                 key={finding.alertId}
-                className="flex flex-wrap items-center justify-between gap-2 py-1.5 text-xs"
+                className="flex flex-wrap items-center justify-between gap-2 py-2 text-sm"
               >
-                <span className="inline-flex items-center gap-1.5 font-medium text-slate-900">
-                  <IconHardHat className="h-3.5 w-3.5 shrink-0 text-amber-700" />
+                <span className="inline-flex items-center gap-2 font-medium text-slate-900">
+                  <IconHardHat className="h-4 w-4 shrink-0 text-amber-600" />
                   <span>
                     {t('ppeNotifications.' + finding.candidateSubtype, {
                       defaultValue: localizedLabel(finding.candidateSubtype),
                     })}
                   </span>
                 </span>
-                <span className="font-medium text-amber-900">{localizedLabel(finding.status)}</span>
+                <span className="text-xs font-semibold text-amber-900">
+                  {localizedLabel(finding.status)}
+                </span>
               </li>
             ))}
           </ul>
         )}
 
         {entry.findingCount === 0 && (
-          <p className="text-xs text-slate-500">{t('frameInbox.noPpeFindings')}</p>
+          <p className="text-sm text-slate-600">{t('frameInbox.noPpeFindings')}</p>
         )}
 
         {!entry.source && (
           <div
             data-testid={`frame-subject-crop-missing-${personNumber}`}
-            className="flex flex-wrap items-center gap-1.5 text-xs text-amber-900"
+            className="flex flex-wrap items-center gap-1.5 text-sm text-amber-900"
           >
-            <IconAlertTriangle className="h-3.5 w-3.5 shrink-0 text-amber-700" />
+            <IconAlertTriangle className="h-4 w-4 shrink-0 text-amber-600" />
             <span className="font-medium">{t('frameInbox.personEvidenceMissing')}</span>
             <span aria-hidden="true" className="text-slate-400">
               ·
@@ -286,13 +290,13 @@ export function FrameInboxSubjectRow({
               <div
                 key={zone.requestId}
                 data-zone-status={zone.status}
-                className={`flex flex-wrap items-center justify-between gap-x-2 gap-y-1 rounded-lg border px-2.5 py-1.5 text-xs ${zoneToneClass(zone.status)}`}
+                className={`flex flex-wrap items-center justify-between gap-x-3 gap-y-1 rounded-r-md border border-l-[3px] px-3 py-2 text-sm ${zoneToneClass(zone.status)}`}
               >
                 <span className="inline-flex items-center gap-1.5 font-semibold">
                   {zone.status === 'DENIED' ? (
-                    <IconAlertTriangle className="h-3.5 w-3.5 shrink-0 text-rose-700" />
+                    <IconAlertTriangle className="h-4 w-4 shrink-0 text-rose-700" />
                   ) : zone.status === 'PENDING' ? (
-                    <IconClock className="h-3.5 w-3.5 shrink-0 text-amber-700" />
+                    <IconClock className="h-4 w-4 shrink-0 text-amber-700" />
                   ) : null}
                   <span>
                     {t(zone.laterFrame ? 'frameInbox.laterZone' : 'frameInbox.zone')} ·{' '}
@@ -300,17 +304,17 @@ export function FrameInboxSubjectRow({
                   </span>
                 </span>
                 {zone.status === 'PENDING' && (
-                  <span className="font-medium text-amber-900">
+                  <span className="text-xs font-medium text-amber-900">
                     {t('frameInbox.zonePendingHint')}
                   </span>
                 )}
                 {zone.status === 'DENIED' && zone.reasonCode && (
-                  <span className="font-medium text-rose-900">
+                  <span className="text-xs font-medium text-rose-900">
                     {formatZoneReason(zone.reasonCode)}
                   </span>
                 )}
                 {zone.status === 'UNAVAILABLE' && zone.reasonCode && (
-                  <span className="font-medium text-slate-700">
+                  <span className="text-xs font-medium text-slate-700">
                     {formatZoneReason(zone.reasonCode)}
                   </span>
                 )}
@@ -322,21 +326,21 @@ export function FrameInboxSubjectRow({
 
       <div
         data-tour-anchor={isTourTarget ? 'frame-inbox-open-case' : undefined}
-        className="mt-2.5 flex flex-col gap-2 border-t border-slate-100 pt-2.5 sm:flex-row sm:flex-wrap sm:items-center sm:justify-between"
+        className="mt-3 flex flex-col gap-2 border-t border-slate-100 pt-3 sm:flex-row sm:flex-wrap sm:items-center sm:justify-between"
       >
-        <div className="flex flex-col gap-1.5 sm:flex-row sm:flex-wrap sm:items-center">
+        <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-center">
           {entry.source && (
             <button
               type="button"
               aria-pressed={personPhotoOpen}
               onClick={onTogglePersonPhoto}
-              className={`inline-flex h-8 w-full sm:w-auto items-center justify-center gap-1.5 rounded-lg border px-2.5 text-xs font-semibold whitespace-nowrap transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-teal-800 ${
+              className={`inline-flex h-9 w-full sm:w-auto items-center justify-center gap-1.5 rounded-lg border px-3 text-sm font-medium whitespace-nowrap transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-teal-800 ${
                 personPhotoOpen
                   ? 'border-teal-700/60 bg-teal-50/80 text-teal-950'
                   : 'border-slate-200 bg-white text-slate-700 hover:border-slate-300 hover:bg-slate-50'
               }`}
             >
-              <IconEye className="h-3.5 w-3.5 shrink-0" />
+              <IconEye className="h-4 w-4 shrink-0" />
               <span>
                 {t(
                   personPhotoOpen
@@ -353,9 +357,9 @@ export function FrameInboxSubjectRow({
               data-testid={`frame-subject-mark-read-${personNumber}`}
               disabled={isAckPending}
               onClick={onMarkCaseRead}
-              className="inline-flex h-8 w-full sm:w-auto items-center justify-center gap-1 rounded-lg px-2.5 text-xs font-medium whitespace-nowrap text-slate-600 transition-colors hover:bg-slate-100 hover:text-slate-950 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-teal-800 disabled:cursor-not-allowed disabled:opacity-50"
+              className="inline-flex h-9 w-full sm:w-auto items-center justify-center gap-1.5 rounded-lg px-3 text-sm font-medium whitespace-nowrap text-slate-600 transition-colors hover:bg-slate-100 hover:text-slate-950 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-teal-800 disabled:cursor-not-allowed disabled:opacity-50"
             >
-              <IconCheck className="h-3.5 w-3.5 shrink-0 text-slate-500" />
+              <IconCheck className="h-4 w-4 shrink-0 text-slate-500" />
               <span>
                 {isAckPending ? t('frameInbox.markingRead') : tSafety('frameInbox.markCaseRead')}
               </span>
@@ -365,11 +369,11 @@ export function FrameInboxSubjectRow({
 
         <Link
           aria-describedby={handoffHintId}
-          className="inline-flex h-9 w-full sm:w-auto sm:ml-auto items-center justify-center gap-1.5 rounded-lg bg-[#0F172A] px-3.5 text-xs sm:text-sm font-semibold whitespace-nowrap text-white transition-colors hover:bg-slate-800 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-slate-900"
+          className="inline-flex h-9 w-full sm:w-auto sm:ml-auto items-center justify-center gap-1.5 rounded-lg bg-[#0F172A] px-3.5 text-sm font-semibold whitespace-nowrap text-white transition-colors hover:bg-slate-800 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-slate-900"
           to={`/incidents?${caseParams}`}
         >
           <span>{t('frameInbox.openCase', { number: personNumber })}</span>
-          <IconChevronRight className="h-3.5 w-3.5 shrink-0" />
+          <IconChevronRight className="h-4 w-4 shrink-0" />
         </Link>
         <span
           id={handoffHintId}

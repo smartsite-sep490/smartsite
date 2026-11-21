@@ -91,7 +91,7 @@ export function SafetyIdentificationQueueCard({
       </div>
 
       {queueLoading && (
-        <p role="status" className="px-4 py-6 text-center text-xs font-medium text-slate-600">
+        <p role="status" className="px-4 py-6 text-center text-sm font-medium text-slate-600">
           {copy.queue.loading}
         </p>
       )}

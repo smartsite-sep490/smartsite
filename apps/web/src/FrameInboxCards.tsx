@@ -4,13 +4,10 @@ import { useTranslation } from 'react-i18next';
 import type { SafetyFrameInboxPage } from '@smartsite/api-client';
 import {
   IconAlertTriangle,
-  IconBuilding,
-  IconCamera,
   IconCheck,
   IconChevronDown,
   IconClock,
   IconHardHat,
-  IconUsers,
 } from './components/icons';
 import { isSafetyIdentificationRouteEnabled } from './components/safety-episodes/safetyUrlParams';
 import type { useManagementClient } from './features/auth/auth-session';
@@ -118,30 +115,43 @@ export function FrameInboxCards({
   });
   const tourCardIndex = firstExpandedIndex >= 0 ? firstExpandedIndex : 0;
 
+  const hasMultiUnread = unreadFramesWithKeys.length > 1;
+  const hasSelection = selectedUnreadFrames.length > 0;
+  const rowOuterGridClass = hasMultiUnread
+    ? 'grid grid-cols-1 lg:grid-cols-[20px_minmax(0,1fr)_36px] lg:items-center gap-2.5 lg:gap-3'
+    : 'grid grid-cols-1 lg:grid-cols-[minmax(0,1fr)_36px] lg:items-center gap-2.5 lg:gap-3';
+  const rowColumnsGridClass =
+    'grid w-full min-w-0 grid-cols-1 gap-2 lg:grid-cols-[132px_minmax(175px,1.15fr)_122px_minmax(220px,1.55fr)_104px] lg:items-center lg:gap-4';
+
   return (
     <>
       {read.isError && (
-        <p
-          role="alert"
-          className="rounded-xl border border-amber-300 bg-amber-50 p-3.5 text-sm font-medium text-amber-950"
-        >
-          {t('frameInbox.readError')}
-        </p>
+        <div className="p-4 border-b border-slate-200">
+          <p
+            role="alert"
+            className="rounded-lg border border-amber-300 bg-amber-50 p-3 text-sm font-medium text-amber-950"
+          >
+            {t('frameInbox.readError')}
+          </p>
+        </div>
       )}
       {frames.length > 0 && (
-        <div className="overflow-hidden rounded-xl border border-slate-200 bg-white divide-y divide-slate-200/80">
-          {unreadFramesWithKeys.length > 1 && (
+        <div className="divide-y divide-slate-200/80">
+          {hasMultiUnread && hasSelection ? (
             <div
               data-testid="frame-inbox-batch-bar"
-              className="flex flex-col gap-2 bg-slate-50/80 px-3.5 py-2 sm:flex-row sm:items-center sm:justify-between sm:px-4"
+              className="flex flex-wrap items-center justify-between gap-3 bg-[#0F172A] px-4 py-2.5 text-white sm:px-5"
             >
-              <div className="flex flex-wrap items-center gap-2.5 text-xs sm:text-[13px]">
-                <label className="inline-flex cursor-pointer select-none items-center gap-2 font-medium text-slate-700">
+              <div className="flex flex-wrap items-center gap-3 text-sm">
+                <label className="inline-flex cursor-pointer select-none items-center gap-2.5 font-medium">
                   <input
                     type="checkbox"
                     checked={allPageUnreadSelected}
                     disabled={read.isPending}
-                    className="h-4 w-4 rounded border-slate-400 accent-teal-800 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-teal-800"
+                    aria-label={tSafety('frameInbox.selectAllUnreadPage', {
+                      count: unreadFramesWithKeys.length,
+                    })}
+                    className="h-4 w-4 rounded border-slate-400 accent-teal-500 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white"
                     onChange={(event) => {
                       if (event.target.checked) {
                         const next: Record<string, boolean> = {};
@@ -152,55 +162,145 @@ export function FrameInboxCards({
                       }
                     }}
                   />
-                  <span>
-                    {tSafety('frameInbox.selectAllUnreadPage', {
-                      count: unreadFramesWithKeys.length,
+                  <span className="tabular-nums">
+                    {tSafety('frameInbox.selectedFramesCount', {
+                      count: selectedUnreadFrames.length,
                     })}
                   </span>
                 </label>
-                {selectedUnreadFrames.length > 0 ? (
-                  <div className="inline-flex items-center gap-2">
-                    <span className="rounded bg-teal-50 px-2 py-0.5 text-xs font-semibold text-teal-900 tabular-nums">
-                      {tSafety('frameInbox.selectedFramesCount', {
-                        count: selectedUnreadFrames.length,
-                      })}
-                    </span>
-                    <button
-                      type="button"
-                      onClick={() => setSelectedFrameKeys({})}
-                      className="text-xs font-medium text-slate-600 underline decoration-slate-400 underline-offset-2 hover:text-slate-950"
-                    >
-                      {tSafety('frameInbox.clearFrameSelection')}
-                    </button>
-                  </div>
-                ) : (
-                  <span className="hidden 2xl:inline text-xs text-slate-500">
-                    {tSafety('frameInbox.batchAckScopeHint')}
-                  </span>
-                )}
+                <button
+                  type="button"
+                  onClick={() => setSelectedFrameKeys({})}
+                  className="text-xs font-medium text-slate-300 underline decoration-slate-500 underline-offset-2 hover:text-white focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white"
+                >
+                  {tSafety('frameInbox.clearFrameSelection')}
+                </button>
               </div>
               <button
                 type="button"
                 data-testid="frame-inbox-mark-visible-read"
                 disabled={read.isPending || batchTargetCases.length === 0}
                 onClick={() => read.mutate(batchTargetCases)}
-                className="inline-flex h-8 shrink-0 items-center justify-center gap-1.5 rounded-lg border border-slate-300 bg-white px-3 text-xs font-semibold whitespace-nowrap text-slate-800 transition-colors hover:border-slate-400 hover:bg-slate-50 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-teal-800 disabled:cursor-not-allowed disabled:opacity-50"
+                className="inline-flex h-9 shrink-0 items-center justify-center gap-1.5 rounded-lg bg-white px-3.5 text-sm font-semibold whitespace-nowrap text-slate-950 transition-colors hover:bg-slate-100 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white disabled:cursor-not-allowed disabled:opacity-50"
               >
-                <IconCheck className="h-3.5 w-3.5 shrink-0 text-teal-700" />
+                <IconCheck className="h-4 w-4 shrink-0 text-teal-700" />
                 <span>
                   {read.isPending
                     ? t('frameInbox.markingRead')
-                    : selectedUnreadFrames.length > 0
-                      ? tSafety('frameInbox.markSelectedRead', {
-                          count: selectedUnreadFrames.length,
-                        })
-                      : tSafety('frameInbox.markVisiblePageRead', {
-                          count: unreadFramesWithKeys.length,
-                        })}
+                    : tSafety('frameInbox.markSelectedRead', {
+                        count: selectedUnreadFrames.length,
+                      })}
                 </span>
               </button>
             </div>
+          ) : (
+            <div
+              data-testid={hasMultiUnread ? 'frame-inbox-batch-bar' : undefined}
+              className="bg-slate-50/90 px-4 py-2.5 sm:px-5"
+            >
+              <div className="flex flex-wrap items-center justify-between gap-2 lg:hidden">
+                {hasMultiUnread && (
+                  <>
+                    <label className="inline-flex cursor-pointer select-none items-center gap-2 text-sm font-medium text-slate-700">
+                      <input
+                        type="checkbox"
+                        checked={allPageUnreadSelected}
+                        disabled={read.isPending}
+                        className="h-4 w-4 rounded border-slate-400 accent-teal-800 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-teal-800"
+                        onChange={(event) => {
+                          if (event.target.checked) {
+                            const next: Record<string, boolean> = {};
+                            for (const item of unreadFramesWithKeys) next[item.key] = true;
+                            setSelectedFrameKeys(next);
+                          } else {
+                            setSelectedFrameKeys({});
+                          }
+                        }}
+                      />
+                      <span>
+                        {tSafety('frameInbox.selectAllUnreadPage', {
+                          count: unreadFramesWithKeys.length,
+                        })}
+                      </span>
+                    </label>
+                    <button
+                      type="button"
+                      disabled={read.isPending || batchTargetCases.length === 0}
+                      onClick={() => read.mutate(batchTargetCases)}
+                      className="inline-flex h-8 shrink-0 items-center gap-1.5 rounded-lg px-2.5 text-xs font-medium text-slate-600 hover:bg-slate-200/70 hover:text-slate-950 disabled:opacity-50"
+                    >
+                      <IconCheck className="h-3.5 w-3.5 shrink-0" />
+                      <span>
+                        {read.isPending
+                          ? t('frameInbox.markingRead')
+                          : tSafety('frameInbox.markPageReadShort')}
+                      </span>
+                    </button>
+                  </>
+                )}
+              </div>
+
+              <div
+                className={`hidden lg:grid ${rowOuterGridClass} border-l-[3px] border-l-transparent`}
+              >
+                {hasMultiUnread && (
+                  <div className="flex items-center">
+                    <input
+                      type="checkbox"
+                      checked={allPageUnreadSelected}
+                      disabled={read.isPending}
+                      aria-label={tSafety('frameInbox.selectAllUnreadPage', {
+                        count: unreadFramesWithKeys.length,
+                      })}
+                      title={tSafety('frameInbox.selectAllUnreadPage', {
+                        count: unreadFramesWithKeys.length,
+                      })}
+                      className="h-4 w-4 cursor-pointer rounded border-slate-400 accent-teal-800 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-teal-800"
+                      onChange={(event) => {
+                        if (event.target.checked) {
+                          const next: Record<string, boolean> = {};
+                          for (const item of unreadFramesWithKeys) next[item.key] = true;
+                          setSelectedFrameKeys(next);
+                        } else {
+                          setSelectedFrameKeys({});
+                        }
+                      }}
+                    />
+                  </div>
+                )}
+                <div
+                  className={`${rowColumnsGridClass} text-xs font-semibold text-slate-600`}
+                  aria-hidden="true"
+                >
+                  <span>{tSafety('frameInbox.colTime')}</span>
+                  <span>{tSafety('frameInbox.colLocation')}</span>
+                  <span>{tSafety('frameInbox.colPeople')}</span>
+                  <span>{tSafety('frameInbox.colObservations')}</span>
+                  <span className="text-right">{tSafety('frameInbox.colActions')}</span>
+                </div>
+                <div className="flex items-center justify-end">
+                  {hasMultiUnread && (
+                    <button
+                      type="button"
+                      data-testid="frame-inbox-mark-visible-read"
+                      disabled={read.isPending || batchTargetCases.length === 0}
+                      title={tSafety('frameInbox.markVisiblePageRead', {
+                        count: unreadFramesWithKeys.length,
+                      })}
+                      aria-label={tSafety('frameInbox.markVisiblePageRead', {
+                        count: unreadFramesWithKeys.length,
+                      })}
+                      onClick={() => read.mutate(batchTargetCases)}
+                      className="inline-flex h-8 w-8 items-center justify-center rounded-lg text-slate-500 transition-colors hover:bg-slate-200/80 hover:text-teal-800 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-teal-800 disabled:cursor-not-allowed disabled:opacity-40"
+                    >
+                      <IconCheck className="h-4 w-4 shrink-0" />
+                    </button>
+                  )}
+                </div>
+              </div>
+            </div>
           )}
+
           {frames.map((frame, frameIndex) => {
             const key = JSON.stringify([frame.siteId, frame.cameraId, frame.frameKey]);
             const panelId = `frame-breakdown-${frameIndex}`;
@@ -216,10 +316,21 @@ export function FrameInboxCards({
             const updatedCaseCount = frame.cases.filter(
               (entry) => entry.unread && entry.contentRevision > 1,
             ).length;
-            const hasZoneQualifiers =
-              laterDenials > 0 || pendingZoneCount > 0 || unavailableZoneCount > 0;
+            const hasSecondarySignals =
+              updatedCaseCount > 0 ||
+              laterDenials > 0 ||
+              pendingZoneCount > 0 ||
+              unavailableZoneCount > 0;
             const sharedEvidenceEntry = frame.cases.find((entry) => entry.source);
-            const displayTimestamp = new Date(frame.capturedAt).toLocaleString(uiLocale());
+            const capturedDate = new Date(frame.capturedAt);
+            const displayTime = capturedDate.toLocaleTimeString(uiLocale(), {
+              hour: '2-digit',
+              minute: '2-digit',
+              second: '2-digit',
+              hour12: false,
+            });
+            const displayDate = capturedDate.toLocaleDateString(uiLocale());
+            const displayTimestamp = capturedDate.toLocaleString(uiLocale());
             const summaryAriaLabel = [
               frame.cameraName,
               frame.siteName,
@@ -250,16 +361,18 @@ export function FrameInboxCards({
                 key={key}
                 className={`min-w-0 border-l-[3px] transition-colors ${
                   selectedFrameKeys[key] && frame.unread
-                    ? 'border-l-teal-700 bg-teal-50/35'
-                    : frame.unread
-                      ? 'border-l-teal-700 bg-white'
-                      : 'border-l-transparent bg-slate-50/30 hover:bg-white'
+                    ? 'border-l-teal-700 bg-teal-50/40'
+                    : expanded
+                      ? 'border-l-slate-900 bg-slate-50/40'
+                      : frame.unread
+                        ? 'border-l-teal-700 bg-white hover:bg-slate-50/70'
+                        : 'border-l-transparent bg-white hover:bg-slate-50/70'
                 }`}
               >
-                <div className="flex flex-col gap-2 px-3.5 py-2.5 sm:px-4 lg:flex-row lg:items-center lg:gap-3">
-                  <div className="flex min-w-0 flex-1 items-start gap-2.5 lg:items-center">
-                    {unreadFramesWithKeys.length > 1 &&
-                      (frame.unread ? (
+                <div className={`${rowOuterGridClass} px-4 py-3.5 sm:px-5`}>
+                  {hasMultiUnread && (
+                    <div className="flex items-center">
+                      {frame.unread ? (
                         <input
                           type="checkbox"
                           checked={Boolean(selectedFrameKeys[key])}
@@ -268,7 +381,7 @@ export function FrameInboxCards({
                             camera: frame.cameraName,
                             time: displayTimestamp,
                           })}
-                          className="mt-1 lg:mt-0 h-4 w-4 shrink-0 cursor-pointer rounded border-slate-400 accent-teal-800 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-teal-800"
+                          className="h-4 w-4 shrink-0 cursor-pointer rounded border-slate-400 accent-teal-800 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-teal-800"
                           onChange={(event) =>
                             setSelectedFrameKeys((prev) => ({
                               ...prev,
@@ -278,184 +391,214 @@ export function FrameInboxCards({
                         />
                       ) : (
                         <span aria-hidden="true" className="hidden lg:block h-4 w-4 shrink-0" />
-                      ))}
-                    <button
-                      type="button"
-                      aria-label={summaryAriaLabel}
-                      data-testid="frame-triage-columns"
-                      data-tour-anchor={
-                        frameIndex === tourCardIndex ? 'frame-inbox-card-summary' : undefined
-                      }
-                      aria-expanded={expanded}
-                      aria-controls={panelId}
-                      onClick={() => setOpen(expanded ? '' : key)}
-                      className="group flex min-w-0 flex-1 flex-col gap-2 rounded-lg px-1.5 py-1 -mx-1.5 -my-1 text-left transition-colors hover:bg-slate-50/90 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-teal-800 sm:flex-row sm:items-center sm:justify-between sm:gap-3"
-                    >
-                      <div className="min-w-0 flex-1 space-y-1">
-                        <div className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-0.5">
-                          {frame.unread && (
-                            <span
-                              aria-hidden="true"
-                              className="h-2 w-2 shrink-0 rounded-full bg-teal-700"
-                            />
-                          )}
-                          <span
-                            title={frame.cameraName}
-                            className={`inline-flex min-w-0 items-center gap-1.5 text-sm ${
-                              frame.unread
-                                ? 'font-semibold text-slate-950'
-                                : 'font-medium text-slate-800'
-                            }`}
-                          >
-                            <IconCamera className="h-3.5 w-3.5 shrink-0 text-slate-400" />
-                            <span className="truncate">{frame.cameraName}</span>
-                          </span>
-                          <span aria-hidden="true" className="hidden sm:inline text-slate-300">
-                            ·
-                          </span>
-                          <span className="inline-flex shrink-0 items-center gap-1 text-xs tabular-nums text-slate-500">
-                            <IconClock className="h-3.5 w-3.5 shrink-0 text-slate-400" />
-                            <time dateTime={frame.capturedAt}>{displayTimestamp}</time>
-                          </span>
-                          <span aria-hidden="true" className="hidden sm:inline text-slate-300">
-                            ·
-                          </span>
-                          <span
-                            className={`shrink-0 text-xs ${
-                              frame.unread ? 'font-semibold text-teal-800' : 'text-slate-500'
-                            }`}
-                          >
-                            {t(frame.unread ? 'episodes.unread' : 'episodes.read')}
-                          </span>
-                        </div>
+                      )}
+                    </div>
+                  )}
 
-                        <div className="flex min-w-0 flex-wrap items-center gap-x-2.5 gap-y-1 text-xs tabular-nums">
+                  <button
+                    type="button"
+                    aria-label={summaryAriaLabel}
+                    data-testid="frame-triage-columns"
+                    data-tour-anchor={
+                      frameIndex === tourCardIndex ? 'frame-inbox-card-summary' : undefined
+                    }
+                    aria-expanded={expanded}
+                    aria-controls={panelId}
+                    onClick={() => setOpen(expanded ? '' : key)}
+                    className={`group ${rowColumnsGridClass} rounded-lg py-0.5 text-left focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-teal-800`}
+                  >
+                    {/* Col 1: Time & Read State */}
+                    <div className="min-w-0 space-y-0.5 tabular-nums">
+                      <div className="flex items-center gap-2">
+                        <span
+                          aria-hidden="true"
+                          className={`h-2 w-2 shrink-0 rounded-full ${
+                            frame.unread ? 'bg-teal-700' : 'bg-slate-300'
+                          }`}
+                        />
+                        <time
+                          dateTime={frame.capturedAt}
+                          className={`text-sm ${
+                            frame.unread
+                              ? 'font-semibold text-slate-950'
+                              : 'font-medium text-slate-700'
+                          }`}
+                        >
+                          {displayTime}
+                        </time>
+                        <span className="sr-only">
+                          {t(frame.unread ? 'episodes.unread' : 'episodes.read')}
+                        </span>
+                      </div>
+                      <div className="pl-4 text-xs text-slate-500">{displayDate}</div>
+                    </div>
+
+                    {/* Col 2: Location (Camera + Site) */}
+                    <div className="min-w-0 space-y-0.5">
+                      <div
+                        title={frame.cameraName}
+                        className={`text-sm leading-snug break-words ${
+                          frame.unread
+                            ? 'font-semibold text-slate-950'
+                            : 'font-medium text-slate-800'
+                        }`}
+                      >
+                        {frame.cameraName}
+                      </div>
+                      <div
+                        title={frame.siteName}
+                        className="text-xs leading-snug text-slate-600 break-words"
+                      >
+                        {frame.siteName}
+                      </div>
+                    </div>
+
+                    {/* Col 3: Distinct Flagged People */}
+                    <div className="min-w-0 tabular-nums">
+                      <span
+                        data-testid="frame-summary-subjects-pill"
+                        className={`block text-sm leading-snug ${
+                          frame.unread
+                            ? 'font-semibold text-slate-950'
+                            : 'font-medium text-slate-700'
+                        }`}
+                      >
+                        {t('frameInbox.people', { count: frame.cases.length })}
+                      </span>
+                    </div>
+
+                    {/* Col 4: Observations Needing Attention */}
+                    <div className="min-w-0 space-y-1 tabular-nums">
+                      <div className="flex flex-col gap-1">
+                        {deniedCount > 0 && (
                           <span
-                            title={frame.siteName}
-                            className="inline-flex max-w-full sm:max-w-[19rem] items-center gap-1 text-slate-600"
+                            data-testid="frame-summary-zone-denied-pill"
+                            className="inline-flex items-start gap-1.5 text-sm font-semibold leading-snug text-rose-700"
                           >
-                            <IconBuilding className="h-3.5 w-3.5 shrink-0 text-slate-400" />
-                            <span className="truncate">{frame.siteName}</span>
+                            <IconAlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-rose-600" />
+                            <span>{t('episodes.frameZoneDenials', { count: deniedCount })}</span>
                           </span>
-                          <span aria-hidden="true" className="hidden sm:inline text-slate-300">
-                            ·
-                          </span>
-                          <span className="inline-flex items-center gap-1 font-medium text-slate-700">
-                            <IconUsers className="h-3.5 w-3.5 shrink-0 text-slate-400" />
-                            <span data-testid="frame-summary-subjects-pill">
-                              {t('frameInbox.people', { count: frame.cases.length })}
-                            </span>
-                          </span>
-                          <span
-                            data-testid="frame-summary-ppe-pill"
-                            className={`inline-flex items-center gap-1 ${
-                              frame.findingCount > 0
-                                ? 'rounded border border-amber-200/90 bg-amber-50/90 px-1.5 py-0.5 font-semibold text-amber-950'
-                                : 'text-slate-500'
-                            }`}
-                          >
-                            {frame.findingCount > 0 && (
-                              <IconHardHat className="h-3.5 w-3.5 shrink-0 text-amber-700" />
-                            )}
-                            <span>
-                              {frame.findingCount > 0
-                                ? t('frameInbox.findings', { count: frame.findingCount })
-                                : t('frameInbox.noPpeFindings')}
-                            </span>
-                          </span>
-                          {deniedCount > 0 && (
-                            <span
-                              data-testid="frame-summary-zone-denied-pill"
-                              className="inline-flex items-center gap-1 rounded border border-rose-200/90 bg-rose-50/90 px-1.5 py-0.5 font-semibold text-rose-950"
-                            >
-                              <IconAlertTriangle className="h-3.5 w-3.5 shrink-0 text-rose-700" />
-                              <span>{t('episodes.frameZoneDenials', { count: deniedCount })}</span>
-                            </span>
+                        )}
+                        <span
+                          data-testid="frame-summary-ppe-pill"
+                          className={`inline-flex items-start gap-1.5 text-sm leading-snug ${
+                            frame.findingCount > 0 ? 'font-medium text-slate-950' : 'text-slate-500'
+                          }`}
+                        >
+                          {frame.findingCount > 0 && (
+                            <IconHardHat className="mt-0.5 h-4 w-4 shrink-0 text-amber-700" />
                           )}
+                          <span>
+                            {frame.findingCount > 0
+                              ? t('frameInbox.findings', { count: frame.findingCount })
+                              : t('frameInbox.noPpeFindings')}
+                          </span>
+                        </span>
+                      </div>
+
+                      {hasSecondarySignals && (
+                        <div className="flex flex-wrap items-center gap-x-3 gap-y-0.5 text-xs text-slate-600">
                           {updatedCaseCount > 0 && (
                             <span
                               data-testid="frame-updated-cases-pill"
-                              className="inline-flex items-center rounded border border-teal-200/80 bg-teal-50/75 px-1.5 py-0.5 font-medium text-teal-900"
+                              className="inline-flex items-center gap-1 font-medium text-teal-800"
                             >
-                              {tSafety('frameInbox.updatedCasesPill', { count: updatedCaseCount })}
+                              <span
+                                aria-hidden="true"
+                                className="h-1.5 w-1.5 rounded-full bg-teal-700"
+                              />
+                              <span>
+                                {tSafety('frameInbox.updatedCasesPill', {
+                                  count: updatedCaseCount,
+                                })}
+                              </span>
                             </span>
                           )}
-                          {hasZoneQualifiers && (
-                            <>
-                              {laterDenials > 0 && (
-                                <span className="font-medium text-rose-800">
-                                  {t('episodes.laterFrameZoneDenials', { count: laterDenials })}
-                                </span>
-                              )}
-                              {pendingZoneCount > 0 && (
-                                <span
-                                  data-testid="frame-pending-zone-summary"
-                                  className="inline-flex items-center gap-1 font-medium text-amber-800"
-                                >
-                                  <IconClock className="h-3.5 w-3.5 shrink-0 text-amber-600" />
-                                  <span>
-                                    {t('frameInbox.zonePendingCount', { count: pendingZoneCount })}
-                                  </span>
-                                </span>
-                              )}
-                              {unavailableZoneCount > 0 && (
-                                <span
-                                  data-testid="frame-unavailable-zone-summary"
-                                  className="inline-flex items-center gap-1 text-slate-500"
-                                >
-                                  <IconAlertTriangle className="h-3.5 w-3.5 shrink-0 text-slate-400" />
-                                  <span>
-                                    {tSafety('frameInbox.zoneUnavailableCount', {
-                                      count: unavailableZoneCount,
-                                    })}
-                                  </span>
-                                </span>
-                              )}
-                            </>
+                          {laterDenials > 0 && (
+                            <span className="font-medium text-rose-700">
+                              {t('episodes.laterFrameZoneDenials', { count: laterDenials })}
+                            </span>
+                          )}
+                          {pendingZoneCount > 0 && (
+                            <span
+                              data-testid="frame-pending-zone-summary"
+                              className="inline-flex items-center gap-1 font-medium text-amber-800"
+                            >
+                              <IconClock className="h-3.5 w-3.5 shrink-0 text-amber-600" />
+                              <span>
+                                {t('frameInbox.zonePendingCount', { count: pendingZoneCount })}
+                              </span>
+                            </span>
+                          )}
+                          {unavailableZoneCount > 0 && (
+                            <span
+                              data-testid="frame-unavailable-zone-summary"
+                              className="inline-flex items-center gap-1 text-slate-500"
+                            >
+                              <IconAlertTriangle className="h-3.5 w-3.5 shrink-0 text-slate-400" />
+                              <span>
+                                {tSafety('frameInbox.zoneUnavailableCount', {
+                                  count: unavailableZoneCount,
+                                })}
+                              </span>
+                            </span>
                           )}
                         </div>
-                      </div>
+                      )}
+                    </div>
 
+                    {/* Col 5: Single Primary Investigation Action */}
+                    <div className="flex lg:justify-end">
                       <span
-                        className={`inline-flex h-8 w-fit shrink-0 items-center gap-1.5 rounded-lg border px-2.5 text-xs font-semibold whitespace-nowrap transition-colors ${
+                        className={`inline-flex h-9 w-fit shrink-0 items-center gap-1.5 rounded-lg border px-3 text-sm font-medium whitespace-nowrap transition-colors ${
                           expanded
-                            ? 'border-slate-900 bg-slate-900 text-white'
-                            : 'border-slate-200 bg-white text-slate-800 group-hover:border-slate-300 group-hover:bg-slate-50'
+                            ? 'border-slate-900 bg-[#0F172A] text-white'
+                            : 'border-slate-200 bg-white text-slate-900 group-hover:border-slate-300 group-hover:bg-slate-50'
                         }`}
                       >
                         <span>
-                          {t(expanded ? 'frameInbox.hideBreakdown' : 'frameInbox.showBreakdown')}
+                          {tSafety(
+                            expanded ? 'frameInbox.collapseAction' : 'frameInbox.inspectAction',
+                          )}
                         </span>
                         <IconChevronDown
-                          className={`h-3.5 w-3.5 shrink-0 transition-transform ${expanded ? 'rotate-180' : ''}`}
+                          className={`h-4 w-4 shrink-0 transition-transform ${expanded ? 'rotate-180' : ''}`}
                         />
                       </span>
-                    </button>
-                  </div>
+                    </div>
+                  </button>
 
-                  {frame.unread && (
-                    <button
-                      type="button"
-                      disabled={read.isPending}
-                      onClick={() => read.mutate(frame.cases)}
-                      className="inline-flex h-8 w-fit shrink-0 items-center justify-center gap-1 rounded-lg px-2.5 text-xs font-medium whitespace-nowrap text-slate-600 transition-colors hover:bg-slate-100 hover:text-slate-950 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-teal-800 disabled:cursor-not-allowed disabled:opacity-50"
-                    >
-                      <IconCheck className="h-3.5 w-3.5 shrink-0 text-slate-500" />
-                      <span>
-                        {read.isPending ? t('frameInbox.markingRead') : t('frameInbox.markRead')}
-                      </span>
-                    </button>
-                  )}
+                  {/* Trailing Quiet Per-Row Mark-Read Utility */}
+                  <div className="flex items-center lg:justify-end">
+                    {frame.unread ? (
+                      <button
+                        type="button"
+                        disabled={read.isPending || hasSelection}
+                        aria-label={
+                          read.isPending ? t('frameInbox.markingRead') : t('frameInbox.markRead')
+                        }
+                        title={
+                          read.isPending ? t('frameInbox.markingRead') : t('frameInbox.markRead')
+                        }
+                        onClick={() => read.mutate(frame.cases)}
+                        className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-lg text-slate-400 transition-colors hover:bg-slate-100 hover:text-teal-800 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-teal-800 disabled:cursor-not-allowed disabled:opacity-40"
+                      >
+                        <IconCheck className="h-4 w-4 shrink-0" />
+                      </button>
+                    ) : (
+                      <span aria-hidden="true" className="hidden lg:block h-9 w-9 shrink-0" />
+                    )}
+                  </div>
                 </div>
 
                 {expanded && (
                   <div
                     id={panelId}
                     data-testid="frame-expanded-workspace"
-                    className="min-w-0 border-t border-slate-200 bg-slate-50/60 p-3.5 sm:p-4 space-y-3.5"
+                    className="min-w-0 border-t border-slate-200 bg-slate-50/70 px-4 py-4 sm:px-5 sm:py-5 space-y-4"
                   >
-                    <div className="grid min-w-0 grid-cols-1 gap-4 lg:grid-cols-12 lg:items-start">
-                      <div className="min-w-0 space-y-2.5 lg:col-span-5 lg:sticky lg:top-4">
+                    <div className="grid min-w-0 grid-cols-1 gap-5 lg:grid-cols-12 lg:items-start">
+                      <div className="min-w-0 space-y-3 lg:col-span-5 lg:sticky lg:top-4">
                         <div
                           data-tour-anchor={
                             frameIndex === firstExpandedIndex
@@ -481,7 +624,7 @@ export function FrameInboxCards({
 
                         <details
                           data-testid="frame-technical-details"
-                          className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs text-slate-600"
+                          className="rounded-lg border border-slate-200 bg-white px-3.5 py-2.5 text-xs text-slate-600"
                         >
                           <summary className="min-h-6 cursor-pointer font-medium text-slate-700 hover:text-slate-950 select-none">
                             {tSafety('frameInbox.technicalSummary')}
@@ -492,10 +635,10 @@ export function FrameInboxCards({
                         </details>
                       </div>
 
-                      <div className="min-w-0 space-y-2.5 lg:col-span-7">
+                      <div className="min-w-0 space-y-3 lg:col-span-7">
                         <div className="space-y-1">
                           <div className="flex flex-wrap items-baseline justify-between gap-2">
-                            <h2 className="text-sm font-semibold text-slate-950">
+                            <h2 className="text-base font-semibold text-slate-950">
                               {t('frameInbox.personBreakdown')}
                             </h2>
                             <details className="text-xs text-slate-600">
@@ -504,13 +647,13 @@ export function FrameInboxCards({
                               </summary>
                               <p
                                 data-testid="frame-check-scope-note"
-                                className="mt-1.5 rounded-lg border border-slate-200 bg-white p-2.5 text-xs leading-relaxed text-slate-600"
+                                className="mt-1.5 rounded-lg border border-slate-200 bg-white p-3 text-xs leading-relaxed text-slate-600"
                               >
                                 {tSafety(FRAME_INBOX_SCOPE_KEY)}
                               </p>
                             </details>
                           </div>
-                          <p className="text-xs leading-relaxed text-slate-600">
+                          <p className="text-xs sm:text-[13px] leading-relaxed text-slate-600">
                             {tSafety(
                               c02Enabled
                                 ? 'frameInbox.caseIdentificationHint'

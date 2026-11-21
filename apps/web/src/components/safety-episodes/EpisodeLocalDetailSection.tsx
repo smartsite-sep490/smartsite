@@ -5,6 +5,7 @@ import { useTranslation } from 'react-i18next';
 import type { useManagementClient } from '../../features/auth/auth-session';
 import { uiLocale } from '../../i18n';
 import { localizedLabel } from '../../i18n/labels';
+import { IconHardHat } from '../icons';
 import { Button } from '../ui';
 import { EpisodeEvidence } from './EpisodeEvidence';
 import { EpisodeRequestIdentificationLink } from './EpisodeRequestIdentificationLink';
@@ -65,7 +66,7 @@ export function EpisodeInboxFilters({
           >
             {t('episodes.title')}
           </h1>
-          <p className="mt-0.5 text-xs sm:text-[13px] text-slate-600 tabular-nums">
+          <p className="mt-0.5 text-sm text-slate-600 tabular-nums">
             {t('episodes.count', {
               loaded: loadedCount,
               total: totalCount,
@@ -93,8 +94,8 @@ export function EpisodeInboxFilters({
           </Button>
         </div>
       )}
-      <div className="grid gap-2.5 border-t border-slate-100 pt-2.5 sm:grid-cols-2 lg:max-w-2xl">
-        <label className="flex min-w-0 flex-col gap-1 sm:flex-row sm:items-center sm:gap-2 text-xs font-medium text-slate-700">
+      <div className="grid gap-3 border-t border-slate-100 pt-3 sm:grid-cols-2 lg:max-w-3xl">
+        <label className="flex min-w-0 flex-col gap-1 sm:flex-row sm:items-center sm:gap-2 text-sm font-medium text-slate-700">
           <span className="shrink-0 text-slate-600">{t('episodes.site')}</span>
           <select
             className="block h-9 w-full min-w-0 truncate rounded-lg border border-slate-200 bg-white px-2.5 text-sm font-medium text-slate-900 transition-colors hover:border-slate-300 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-teal-800"
@@ -109,7 +110,7 @@ export function EpisodeInboxFilters({
             ))}
           </select>
         </label>
-        <label className="flex min-w-0 flex-col gap-1 sm:flex-row sm:items-center sm:gap-2 text-xs font-medium text-slate-700">
+        <label className="flex min-w-0 flex-col gap-1 sm:flex-row sm:items-center sm:gap-2 text-sm font-medium text-slate-700">
           <span className="shrink-0 text-slate-600">{t('episodes.filter')}</span>
           <select
             className="block h-9 w-full min-w-0 truncate rounded-lg border border-slate-200 bg-white px-2.5 text-sm font-medium text-slate-900 transition-colors hover:border-slate-300 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-teal-800"
@@ -177,7 +178,7 @@ export function EpisodeQueueList({
               type="button"
               key={row.id}
               aria-pressed={isSelected}
-              className={`block w-full border-l-[3px] px-3.5 py-2.5 text-left transition-colors focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-teal-800 ${
+              className={`block w-full border-l-[3px] px-4 py-3 text-left transition-colors focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-teal-800 ${
                 isSelected
                   ? 'border-l-slate-900 bg-slate-100/75'
                   : row.unread
@@ -197,7 +198,7 @@ export function EpisodeQueueList({
                   {cameraLabel ? `${siteLabel} · ${cameraLabel}` : subjectLabel}
                 </strong>
                 <span
-                  className={`mt-0.5 inline-flex shrink-0 items-center gap-1 text-xs whitespace-nowrap ${
+                  className={`mt-0.5 inline-flex shrink-0 items-center gap-1.5 text-xs whitespace-nowrap ${
                     row.unread ? 'font-semibold text-teal-800' : 'text-slate-500'
                   }`}
                 >
@@ -210,17 +211,20 @@ export function EpisodeQueueList({
               <span className="mt-0.5 block text-xs leading-snug text-slate-600 break-words">
                 {cameraLabel ? subjectLabel : siteLabel}
               </span>
-              <span className="mt-1.5 flex flex-wrap items-center justify-between gap-2 text-xs tabular-nums">
+              <span className="mt-2 flex flex-wrap items-center justify-between gap-2 tabular-nums">
                 <span
                   className={
                     row.episode.findingCount > 0
-                      ? 'inline-flex items-center rounded border border-amber-200/90 bg-amber-50/90 px-1.5 py-0.5 font-semibold text-amber-950'
-                      : 'text-slate-500'
+                      ? 'inline-flex items-center gap-1.5 text-sm font-semibold text-amber-800'
+                      : 'text-sm text-slate-500'
                   }
                 >
-                  {t('episodes.findings', { count: row.episode.findingCount })}
+                  {row.episode.findingCount > 0 && (
+                    <IconHardHat className="h-4 w-4 shrink-0 text-amber-600" />
+                  )}
+                  <span>{t('episodes.findings', { count: row.episode.findingCount })}</span>
                 </span>
-                <time className="text-slate-500" dateTime={row.episode.firstObservedAt}>
+                <time className="text-xs text-slate-500" dateTime={row.episode.firstObservedAt}>
                   {formatObservedDate(row.episode.firstObservedAt)}
                 </time>
               </span>

@@ -112,14 +112,14 @@ export function FrameInboxSiteFilter({
 
   return (
     <div className="space-y-2">
-      <div className="flex flex-col gap-2.5 lg:flex-row lg:items-center lg:justify-between">
-        <div className="grid w-full min-w-0 gap-2.5 sm:grid-cols-2 lg:max-w-xl">
-          <label className="flex min-w-0 flex-col gap-1 sm:flex-row sm:items-center sm:gap-2 text-xs font-medium text-slate-700">
+      <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+        <div className="grid w-full min-w-0 gap-3 sm:grid-cols-2 lg:max-w-3xl">
+          <label className="flex min-w-0 flex-col gap-1 sm:flex-row sm:items-center sm:gap-2.5 text-sm font-medium text-slate-700">
             <span className="shrink-0 text-slate-600">{t('episodes.site')}</span>
             <select
               value={siteId ?? ''}
               disabled={revoked}
-              className={`block h-9 w-full min-w-0 max-w-full truncate rounded-lg border px-2.5 text-sm transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-teal-800 disabled:cursor-not-allowed disabled:bg-slate-100 disabled:text-slate-500 ${
+              className={`block h-9 w-full min-w-0 max-w-full truncate rounded-lg border px-3 text-sm transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-teal-800 disabled:cursor-not-allowed disabled:bg-slate-100 disabled:text-slate-500 ${
                 siteId && !revoked
                   ? 'border-teal-700/70 bg-teal-50/35 font-semibold text-teal-950'
                   : 'border-slate-200 bg-white font-medium text-slate-900 hover:border-slate-300'
@@ -134,12 +134,12 @@ export function FrameInboxSiteFilter({
               ))}
             </select>
           </label>
-          <label className="flex min-w-0 flex-col gap-1 sm:flex-row sm:items-center sm:gap-2 text-xs font-medium text-slate-700">
+          <label className="flex min-w-0 flex-col gap-1 sm:flex-row sm:items-center sm:gap-2.5 text-sm font-medium text-slate-700">
             <span className="shrink-0 text-slate-600">{t('episodes.camera')}</span>
             <select
               value={cameraId ?? ''}
               disabled={revoked || (cameraOptions.length === 0 && !cameraId)}
-              className={`block h-9 w-full min-w-0 max-w-full truncate rounded-lg border px-2.5 text-sm transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-teal-800 disabled:cursor-not-allowed disabled:bg-slate-100 disabled:text-slate-500 ${
+              className={`block h-9 w-full min-w-0 max-w-full truncate rounded-lg border px-3 text-sm transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-teal-800 disabled:cursor-not-allowed disabled:bg-slate-100 disabled:text-slate-500 ${
                 cameraId && !revoked
                   ? 'border-teal-700/70 bg-teal-50/35 font-semibold text-teal-950'
                   : 'border-slate-200 bg-white font-medium text-slate-900 hover:border-slate-300'
@@ -177,7 +177,7 @@ export function FrameInboxSiteFilter({
                 </button>
               </>
             ) : (
-              <span className="inline-flex items-center gap-1.5 text-xs font-medium whitespace-nowrap text-slate-600 tabular-nums">
+              <span className="inline-flex items-center gap-1.5 text-xs font-medium whitespace-nowrap text-slate-500 tabular-nums">
                 <IconBuilding className="h-3.5 w-3.5 shrink-0 text-slate-400" />
                 <span>{t('frameInbox.allAssignedSitesBadge', { count: siteIds.length })}</span>
               </span>

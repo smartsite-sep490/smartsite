@@ -210,6 +210,16 @@ describe('FramePpeInbox operational hierarchy, side-by-side evidence split, and 
     const toggle = await screen.findByRole('button', {
       name: /3 people to review · 3 PPE findings · 1 denied Zone entry/i,
     });
+    // Rev 2 aligned column headers & 14px primary typography hierarchy
+    expect(screen.getByText('Captured')).toBeTruthy();
+    expect(screen.getByText('Camera & Site')).toBeTruthy();
+    expect(screen.getByText('People')).toBeTruthy();
+    expect(screen.getByText('Observations')).toBeTruthy();
+    expect(screen.getByText('Action')).toBeTruthy();
+    expect(within(toggle).getByTestId('frame-summary-subjects-pill').className).toContain(
+      'text-sm',
+    );
+    expect(within(toggle).getByTestId('frame-summary-ppe-pill').className).toContain('text-sm');
     expect(within(toggle).getByTestId('frame-summary-subjects-pill').textContent).toBe(
       '3 people to review',
     );
