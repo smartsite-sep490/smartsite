@@ -1,7 +1,7 @@
 import { test, expect } from '@playwright/test';
 
 for (const mobile of [false, true]) {
-  test(`Admin management flow ${mobile ? 'mobile' : 'desktop'}`, async ({ page }) => {
+  test(`Admin management flow ${mobile ? 'mobile' : 'desktop'}`, async ({ page }, testInfo) => {
     await page.setViewportSize(
       mobile ? { width: 390, height: 844 } : { width: 1440, height: 1000 },
     );
@@ -71,7 +71,7 @@ for (const mobile of [false, true]) {
     await expect(page.locator('vite-error-overlay')).toHaveCount(0);
     await expect(page.getByText('328', { exact: true })).toHaveCount(0);
     await page.screenshot({
-      path: `D:/SEP490/.admin-dashboard-${mobile ? 'mobile' : 'desktop'}.png`,
+      path: testInfo.outputPath('admin-dashboard.png'),
       fullPage: true,
     });
     await page.getByRole('button', { name: 'Open site', exact: true }).click();
@@ -80,12 +80,50 @@ for (const mobile of [false, true]) {
       page.getByRole('heading', { name: 'Synthetic Alpha', level: 2, exact: true }),
     ).toBeVisible();
     await expect(page.getByRole('heading', { name: 'Site gates' })).toHaveCount(0);
+    await page.screenshot({ path: testInfo.outputPath('admin-sites.png'), fullPage: true });
+    await page.getByRole('button', { name: 'Rename site', exact: true }).click();
+    const rename = page.getByRole('dialog', { name: 'Rename site', exact: true });
+    await expect(rename).toBeVisible();
+    await rename.getByRole('textbox').fill('Canceled change');
+    await rename.getByRole('button', { name: 'Cancel', exact: true }).click();
+    await expect(rename).toHaveCount(0);
+    await expect(
+      page.getByRole('heading', { name: 'Synthetic Alpha', level: 2, exact: true }),
+    ).toBeVisible();
+    await page.getByRole('button', { name: 'New Site', exact: true }).click();
+    const createSite = page.getByRole('dialog', { name: 'Create New Site', exact: true });
+    await expect(createSite).toBeVisible();
+    await createSite.getByRole('button', { name: 'Cancel', exact: true }).click();
+    await expect(createSite).toHaveCount(0);
+    await page.getByRole('button', { name: 'Assign Site Manager', exact: true }).click();
+    const assignManager = page.getByRole('dialog');
+    await expect(assignManager).toBeVisible();
+    await assignManager
+      .getByRole('button', { name: '+ Create New Site Manager', exact: true })
+      .click();
+    const createManager = page.getByRole('dialog', { name: 'Create Site Manager', exact: true });
+    await expect(createManager).toBeVisible();
+    await createManager.getByRole('button', { name: 'Show', exact: true }).click();
+    await expect(createManager.locator('#site-manager-password-input')).toHaveAttribute(
+      'type',
+      'text',
+    );
+    await page.screenshot({ path: testInfo.outputPath('admin-manager-dialog.png') });
+    await page.keyboard.press('Escape');
+    await expect(page.getByRole('dialog')).toHaveCount(0);
     await page.goto('/ppe');
     await expect(page).toHaveURL(/\/dashboard$/);
     await page
       .getByRole('navigation', { name: 'Administrative shortcuts' })
       .getByRole('button', { name: 'Account management' })
       .click();
+    await expect(
+      page.getByRole('heading', { name: 'Account management', exact: true }),
+    ).toBeVisible();
+    await page.screenshot({ path: testInfo.outputPath('admin-accounts.png'), fullPage: true });
+    await page.getByRole('searchbox').fill('no-matching-account');
+    await page.getByRole('button', { name: 'Clear search', exact: true }).click();
+    await expect(page.getByRole('searchbox')).toHaveValue('');
     await page.getByRole('button', { name: 'Create account', exact: true }).click();
     const dialog = page.getByRole('dialog', { name: 'Create account' });
     await expect(dialog).toBeVisible();
@@ -99,10 +137,13 @@ for (const mobile of [false, true]) {
     const bounds = await dialog.boundingBox();
     expect(bounds!.height).toBeLessThanOrEqual(page.viewportSize()!.height - 30);
     await page.screenshot({
-      path: `D:/SEP490/.admin-account-dialog-${mobile ? 'mobile' : 'desktop'}.png`,
+      path: testInfo.outputPath('admin-account-dialog.png'),
     });
     await page.keyboard.press('Escape');
     await expect(dialog).toHaveCount(0);
+    expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(
+      page.viewportSize()!.width,
+    );
     expect(operationalReads).toEqual([]);
     expect(errors).toEqual([]);
     expect(consoleProblems).toEqual([]);

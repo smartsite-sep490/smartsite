@@ -33,6 +33,7 @@ import {
   ToastContainer,
   useToast,
 } from '../../ui';
+import { Button } from '../../ui/Button';
 import { Dialog } from '../../ui/Dialog';
 import { participationDates } from './participation-dates';
 import {
@@ -697,7 +698,12 @@ export function SiteSetupView({ apiUrl }: SiteSetupViewProps) {
         </div>
 
         <div className="flex items-center gap-2.5">
-          <button
+          <Button
+            variant="outline"
+            isLoading={
+              sitesQuery.isFetching || contractorsQuery.isFetching || usersQuery.isFetching
+            }
+            leftIcon={<IconRefreshCw className="h-3.5 w-3.5" />}
             type="button"
             onClick={() => {
               sitesQuery.refetch();
@@ -706,17 +712,16 @@ export function SiteSetupView({ apiUrl }: SiteSetupViewProps) {
               if (isManager && activeSiteId) representativeAssignmentsQuery.refetch();
             }}
             disabled={sitesQuery.isFetching || contractorsQuery.isFetching}
-            className="flex items-center gap-2 px-3 py-2 rounded-xl border border-slate-200 bg-white text-xs font-semibold text-slate-700 hover:bg-slate-50 hover:text-slate-900 transition-colors cursor-pointer shadow-xs disabled:opacity-50"
+            className="min-h-10"
             title={tr('site_setup_view.refresh_sites_and_contractors_data')}
           >
-            <IconRefreshCw
-              className={`w-3.5 h-3.5 text-slate-500 ${sitesQuery.isFetching ? 'animate-spin' : ''}`}
-            />
             <span>{tr('common.refresh')}</span>
-          </button>
+          </Button>
 
           {isAdmin && (
-            <button
+            <Button
+              variant="primary"
+              leftIcon={<IconPlus className="h-3.5 w-3.5" />}
               type="button"
               onClick={() => {
                 setSiteError(null);
@@ -724,11 +729,10 @@ export function SiteSetupView({ apiUrl }: SiteSetupViewProps) {
                 setSiteCode('');
                 setShowCreateSiteModal(true);
               }}
-              className="flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-[#041D2E] text-white text-xs font-bold hover:bg-[#072A42] transition-all cursor-pointer shadow-xs active:scale-[0.98]"
+              className="min-h-10"
             >
-              <IconPlus className="w-3.5 h-3.5 text-[#F66B17]" />
               <span>{tr('common.new_site')}</span>
-            </button>
+            </Button>
           )}
         </div>
       </div>
@@ -1075,31 +1079,33 @@ export function SiteSetupView({ apiUrl }: SiteSetupViewProps) {
                   {/* Actions Bar */}
                   <div className="flex flex-wrap items-center justify-start xl:justify-end gap-2">
                     {isAdmin && (
-                      <button
+                      <Button
+                        variant="outline"
                         type="button"
-                        className="min-h-10 rounded-xl border px-3 text-xs font-semibold"
+                        className="min-h-10"
                         onClick={() => {
                           renameSiteMutation.reset();
                           setRenameSite({ id: selectedSite.id, name: selectedSite.name });
                         }}
                       >
                         {tr('admin_sites.rename')}
-                      </button>
+                      </Button>
                     )}
                     {isAdmin && (
-                      <button
+                      <Button
+                        variant="primary"
+                        leftIcon={<IconShield className="h-3.5 w-3.5" />}
                         type="button"
                         disabled={!managersLoaded}
                         onClick={openAssignSiteManagerModal}
-                        className="inline-flex items-center gap-1.5 min-h-10 px-3.5 rounded-xl border border-orange-200 bg-orange-50 text-xs font-bold text-[#C6530E] hover:bg-orange-100 hover:border-orange-300 transition-colors cursor-pointer active:scale-[0.98]"
+                        className="min-h-10"
                       >
-                        <IconShield className="w-3.5 h-3.5" />
                         <span>
                           {siteManagers.length === 0
                             ? tr('common.assign_site_manager')
                             : tr('common.manage_site_managers')}
                         </span>
-                      </button>
+                      </Button>
                     )}
 
                     {isManager && (
@@ -1566,9 +1572,11 @@ export function SiteSetupView({ apiUrl }: SiteSetupViewProps) {
                         })}
                       </p>
                       <div className="flex gap-2">
-                        <button
+                        <Button
+                          variant="destructive"
+                          isLoading={revokeSiteManagerMutation.isPending}
                           type="button"
-                          className="rounded-lg bg-rose-700 px-3 py-2 font-bold text-white disabled:opacity-50"
+                          className="min-h-10"
                           disabled={revokeSiteManagerMutation.isPending}
                           onClick={() =>
                             activeSiteId &&
@@ -1579,25 +1587,27 @@ export function SiteSetupView({ apiUrl }: SiteSetupViewProps) {
                           }
                         >
                           {tr('site_setup_view.confirm_revoke')}
-                        </button>
-                        <button
+                        </Button>
+                        <Button
+                          variant="outline"
                           type="button"
-                          className="rounded-lg border border-amber-300 px-3 py-2 font-bold"
+                          className="min-h-10"
                           disabled={revokeSiteManagerMutation.isPending}
                           onClick={() => setRevokeManagerId(null)}
                         >
                           {tr('common.cancel')}
-                        </button>
+                        </Button>
                       </div>
                     </div>
                   ) : (
-                    <button
+                    <Button
+                      variant="destructive"
                       type="button"
-                      className="rounded-lg border border-rose-300 bg-white px-3 py-2 font-bold text-rose-700 hover:bg-rose-50"
+                      className="min-h-10"
                       onClick={() => setRevokeManagerId(manager.id)}
                     >
                       {tr('site_setup_view.revoke_manager')}
-                    </button>
+                    </Button>
                   )}
                 </div>
               ))}
@@ -1628,15 +1638,16 @@ export function SiteSetupView({ apiUrl }: SiteSetupViewProps) {
               </div>
             ))}
 
-          <button
+          <Button
+            variant="outline"
             type="button"
             onClick={openCreateSiteManagerModal}
             disabled={siteManagers.length > 0}
             title={siteManagers.length > 0 ? tr('admin_sites.occupied') : undefined}
-            className="w-full px-3 py-2.5 rounded-xl border border-dashed border-[#F66B17]/50 bg-orange-50/50 text-xs font-bold text-[#C6530E] hover:bg-orange-50 transition-colors cursor-pointer"
+            className="min-h-10"
           >
             {tr('site_setup_view.create_new_site_manager')}
-          </button>
+          </Button>
 
           {siteManagers.length > 0 && (
             <p className="text-xs text-amber-800">{tr('admin_sites.occupied')}</p>
@@ -1648,15 +1659,20 @@ export function SiteSetupView({ apiUrl }: SiteSetupViewProps) {
           </div>
 
           <div className="flex items-center justify-end gap-2 pt-3 border-t border-slate-100">
-            <button
+            <Button
+              variant="outline"
               type="button"
+              disabled={assignSiteManagerMutation.isPending}
               onClick={() => setShowAssignManagerModal(false)}
-              className="px-4 py-2 rounded-xl border border-slate-200 bg-white text-xs font-semibold text-slate-700 hover:bg-slate-50 transition-colors cursor-pointer"
+              className="min-h-10"
             >
               {tr('common.cancel')}
-            </button>
+            </Button>
 
-            <button
+            <Button
+              variant="primary"
+              isLoading={assignSiteManagerMutation.isPending}
+              leftIcon={<IconShield className="h-3.5 w-3.5" />}
               type="submit"
               disabled={
                 siteManagers.length > 0 ||
@@ -1664,19 +1680,14 @@ export function SiteSetupView({ apiUrl }: SiteSetupViewProps) {
                 assignableSiteManagers.length === 0 ||
                 !selectedManagerId
               }
-              className="flex items-center gap-2 px-4 py-2 rounded-xl bg-[#071A2B] text-white text-xs font-bold hover:bg-[#0E2841] transition-all cursor-pointer shadow-xs disabled:opacity-50"
+              className="min-h-10"
             >
-              {assignSiteManagerMutation.isPending ? (
-                <IconLoader className="w-3.5 h-3.5 animate-spin" />
-              ) : (
-                <IconShield className="w-3.5 h-3.5 text-[#F66B17]" />
-              )}
               <span>
                 {assignSiteManagerMutation.isPending
                   ? tr('common.assigning_085b87')
                   : tr('common.assign_site_manager')}
               </span>
-            </button>
+            </Button>
           </div>
         </form>{' '}
       </Dialog>
@@ -1713,7 +1724,7 @@ export function SiteSetupView({ apiUrl }: SiteSetupViewProps) {
                 placeholder={tr('common.e_g_manager_site_a')}
                 value={managerUsername}
                 onChange={(e) => setManagerUsername(e.target.value)}
-                className="w-full rounded-xl border border-slate-200 bg-white px-3.5 py-2 text-xs text-slate-900 placeholder:text-slate-400 outline-none focus:border-[#F66B17] focus:ring-2 focus:ring-[#F66B17]/10"
+                className="min-h-10 w-full rounded-xl border border-slate-200 bg-white px-3.5 py-2 text-xs text-slate-900 placeholder:text-slate-400 outline-none focus:border-[#F66B17] focus:ring-2 focus:ring-[#F66B17]/10"
               />
             </div>
 
@@ -1731,7 +1742,7 @@ export function SiteSetupView({ apiUrl }: SiteSetupViewProps) {
                 placeholder={tr('site_setup_view.e_g_nguyen_van_a')}
                 value={managerDisplayName}
                 onChange={(e) => setManagerDisplayName(e.target.value)}
-                className="w-full rounded-xl border border-slate-200 bg-white px-3.5 py-2 text-xs text-slate-900 placeholder:text-slate-400 outline-none focus:border-[#F66B17] focus:ring-2 focus:ring-[#F66B17]/10"
+                className="min-h-10 w-full rounded-xl border border-slate-200 bg-white px-3.5 py-2 text-xs text-slate-900 placeholder:text-slate-400 outline-none focus:border-[#F66B17] focus:ring-2 focus:ring-[#F66B17]/10"
               />
             </div>
           </div>
@@ -1751,12 +1762,12 @@ export function SiteSetupView({ apiUrl }: SiteSetupViewProps) {
                 placeholder={tr('site_setup_view.must_meet_policy_min_8_chars_aa1')}
                 value={managerPassword}
                 onChange={(e) => setManagerPassword(e.target.value)}
-                className="w-full rounded-xl border border-slate-200 bg-white px-3.5 py-2 pr-16 text-xs text-slate-900 placeholder:text-slate-400 outline-none focus:border-[#F66B17] focus:ring-2 focus:ring-[#F66B17]/10"
+                className="min-h-10 w-full rounded-xl border border-slate-200 bg-white px-3.5 py-2 pr-16 text-xs text-slate-900 placeholder:text-slate-400 outline-none focus:border-[#F66B17] focus:ring-2 focus:ring-[#F66B17]/10"
               />
               <button
                 type="button"
                 onClick={() => setShowManagerPassword(!showManagerPassword)}
-                className="absolute right-3 top-1/2 -translate-y-1/2 text-[11px] font-bold text-slate-400 hover:text-slate-700 cursor-pointer"
+                className="absolute right-1 top-1/2 inline-flex min-h-10 min-w-10 -translate-y-1/2 items-center justify-center rounded-lg text-xs font-semibold text-slate-600 hover:bg-slate-100"
               >
                 {showManagerPassword ? tr('common.hide') : tr('common.show')}
               </button>
@@ -1770,29 +1781,29 @@ export function SiteSetupView({ apiUrl }: SiteSetupViewProps) {
           </div>
 
           <div className="flex items-center justify-end gap-2 pt-3 border-t border-slate-100">
-            <button
+            <Button
+              variant="outline"
               type="button"
+              disabled={createSiteManagerMutation.isPending}
               onClick={() => setShowCreateManagerModal(false)}
-              className="px-4 py-2 rounded-xl border border-slate-200 bg-white text-xs font-semibold text-slate-700 hover:bg-slate-50 transition-colors cursor-pointer"
+              className="min-h-10"
             >
               {tr('common.cancel')}
-            </button>
-            <button
+            </Button>
+            <Button
+              variant="primary"
+              isLoading={createSiteManagerMutation.isPending}
+              leftIcon={<IconShield className="h-3.5 w-3.5" />}
               type="submit"
               disabled={createSiteManagerMutation.isPending}
-              className="flex items-center gap-2 px-4 py-2 rounded-xl bg-[#071A2B] text-white text-xs font-bold hover:bg-[#0E2841] transition-all cursor-pointer shadow-xs disabled:opacity-50"
+              className="min-h-10"
             >
-              {createSiteManagerMutation.isPending ? (
-                <IconLoader className="w-3.5 h-3.5 animate-spin" />
-              ) : (
-                <IconShield className="w-3.5 h-3.5 text-[#F66B17]" />
-              )}
               <span>
                 {createSiteManagerMutation.isPending
                   ? tr('common.creating_def709')
                   : tr('common.create_site_manager')}
               </span>
-            </button>
+            </Button>
           </div>
         </form>{' '}
       </Dialog>
@@ -1825,7 +1836,7 @@ export function SiteSetupView({ apiUrl }: SiteSetupViewProps) {
               placeholder={tr('site_setup_view.e_g_landmark_81_tower_phase_2')}
               value={siteName}
               onChange={(e) => setSiteName(e.target.value)}
-              className="w-full rounded-xl border border-slate-200 bg-white px-3.5 py-2 text-xs text-slate-900 placeholder:text-slate-400 outline-none focus:border-[#F66B17] focus:ring-2 focus:ring-[#F66B17]/10"
+              className="min-h-10 w-full rounded-xl border border-slate-200 bg-white px-3.5 py-2 text-xs text-slate-900 placeholder:text-slate-400 outline-none focus:border-[#F66B17] focus:ring-2 focus:ring-[#F66B17]/10"
             />
           </div>
 
@@ -1842,35 +1853,35 @@ export function SiteSetupView({ apiUrl }: SiteSetupViewProps) {
               placeholder={tr('common.e_g_lm81_p2')}
               value={siteCode}
               onChange={(e) => setSiteCode(e.target.value)}
-              className="w-full rounded-xl border border-slate-200 bg-white px-3.5 py-2 text-xs font-mono text-slate-900 placeholder:text-slate-400 uppercase outline-none focus:border-[#F66B17] focus:ring-2 focus:ring-[#F66B17]/10"
+              className="min-h-10 w-full rounded-xl border border-slate-200 bg-white px-3.5 py-2 text-xs font-mono text-slate-900 placeholder:text-slate-400 uppercase outline-none focus:border-[#F66B17] focus:ring-2 focus:ring-[#F66B17]/10"
             />
           </div>
 
           <div className="flex items-center justify-end gap-2 pt-3 border-t border-slate-100">
-            <button
+            <Button
+              variant="outline"
               type="button"
+              disabled={createSiteMutation.isPending}
               onClick={() => setShowCreateSiteModal(false)}
-              className="px-4 py-2 rounded-xl border border-slate-200 bg-white text-xs font-semibold text-slate-700 hover:bg-slate-50 transition-colors cursor-pointer"
+              className="min-h-10"
             >
               {tr('common.cancel')}
-            </button>
+            </Button>
 
-            <button
+            <Button
+              variant="primary"
+              isLoading={createSiteMutation.isPending}
+              leftIcon={<IconPlus className="h-3.5 w-3.5" />}
               type="submit"
               disabled={createSiteMutation.isPending}
-              className="flex items-center gap-2 px-4 py-2 rounded-xl bg-[#071A2B] text-white text-xs font-bold hover:bg-[#0E2841] transition-all cursor-pointer shadow-xs disabled:opacity-50"
+              className="min-h-10"
             >
-              {createSiteMutation.isPending ? (
-                <IconLoader className="w-3.5 h-3.5 animate-spin" />
-              ) : (
-                <IconPlus className="w-3.5 h-3.5 text-[#F66B17]" />
-              )}
               <span>
                 {createSiteMutation.isPending
                   ? tr('common.creating_def709')
                   : tr('common.create_site')}
               </span>
-            </button>
+            </Button>
           </div>
         </form>{' '}
       </Dialog>
@@ -1890,10 +1901,10 @@ export function SiteSetupView({ apiUrl }: SiteSetupViewProps) {
               renameSiteMutation.mutate(renameSite);
           }}
         >
-          <label className="block space-y-2 text-sm">
+          <label className="block space-y-2 text-xs font-semibold text-slate-700">
             <span>{tr('admin_sites.name')}</span>
             <input
-              className="min-h-10 w-full rounded-xl border px-3"
+              className="min-h-10 w-full rounded-xl border border-slate-200 px-3 text-xs text-slate-800 focus:border-[#F66B17] focus:outline-none focus:ring-2 focus:ring-orange-100"
               required
               maxLength={255}
               value={renameSite?.name ?? ''}
@@ -1908,13 +1919,25 @@ export function SiteSetupView({ apiUrl }: SiteSetupViewProps) {
           {renameSiteMutation.isError && (
             <p role="alert">{userErrorMessage(renameSiteMutation.error)}</p>
           )}
-          <button
-            type="submit"
-            className="min-h-10 rounded-xl bg-[#041D2E] px-4 text-white"
-            disabled={renameSiteMutation.isPending || !renameSite?.name.trim()}
-          >
-            {tr('accounts.confirm')}
-          </button>
+          <div className="flex justify-end gap-2 border-t border-slate-100 pt-4">
+            <Button
+              variant="outline"
+              className="min-h-10"
+              disabled={renameSiteMutation.isPending}
+              onClick={() => setRenameSite(null)}
+            >
+              {tr('common.cancel')}
+            </Button>
+            <Button
+              variant="primary"
+              isLoading={renameSiteMutation.isPending}
+              type="submit"
+              className="min-h-10"
+              disabled={renameSiteMutation.isPending || !renameSite?.name.trim()}
+            >
+              {tr('accounts.confirm')}
+            </Button>
+          </div>
         </form>
       </Dialog>
 
