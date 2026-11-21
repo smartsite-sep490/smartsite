@@ -1,7 +1,7 @@
 import 'reflect-metadata';
 import assert from 'node:assert/strict';
 import { createHash, randomUUID } from 'node:crypto';
-import { mkdtemp, writeFile } from 'node:fs/promises';
+import { mkdtemp, readFile, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import sharp from 'sharp';
@@ -28,6 +28,8 @@ import { TrackedFrameAdmission } from '../../src/integrations/ai/tracked-frame-a
 import { TrackedFrameRecovery } from '../../src/integrations/ai/tracked-frame-recovery.js';
 import { buildMigrationOptions } from '../../src/database/typeorm.migration-profile.js';
 import { recordCameraConfigurationAcknowledgement } from '../../src/modules/cameras/camera-configuration-acknowledgement.js';
+import { provisionCameraWorkerGeneration } from '../../src/modules/cameras/camera-worker-generations.js';
+import { StorageService } from '../../src/integrations/storage/storage.service.js';
 
 for (const variant of [
   'ppe-only',
@@ -129,6 +131,7 @@ for (const variant of [
             ? 'tracked-v16-identification'
             : 'tracked-v16',
         AI_TRACKED_FRAME_RUNTIME_ENABLED: 'true',
+        AI_EVIDENCE_OBJECT_STORAGE_ENABLED: variant === 'camera-v17' ? 'true' : 'false',
         MF06_ENQUEUE_ENABLED: uppercaseZone || variant === 'zone-unissued' ? 'true' : 'false',
         ...(uppercaseZone || variant === 'zone-unissued'
           ? { MF06_ENQUEUE_MAX_OUTSTANDING: '8' }
@@ -383,6 +386,48 @@ for (const variant of [
         'x-worker-generation-secret': fixture.generation.secret,
         'content-type': 'application/json',
       };
+      const makeEvidenceForm = () => {
+        const form = new FormData();
+        form.append('schemaVersion', '1.0.0');
+        form.append('event', JSON.stringify(event));
+        form.append('context', JSON.stringify(fixture.context));
+        form.append(
+          'frame',
+          new Blob([new Uint8Array(bytes)], { type: 'image/jpeg' }),
+          'frame.jpg',
+        );
+        return form;
+      };
+      const uploadEvidence = () =>
+        fetch(prefix + '/tracked-parts/evidence', {
+          method: 'POST',
+          headers: {
+            authorization: headers.authorization,
+            'x-worker-generation-secret': headers['x-worker-generation-secret'],
+          },
+          body: makeEvidenceForm(),
+        });
+      if (variant === 'camera-v17') {
+        const uploaded = await uploadEvidence();
+        assert.equal(uploaded.status, 200, await uploaded.clone().text());
+        const stored = await uploaded.json();
+        assert.equal(stored.kind, 'EVIDENCE_STORED');
+        assert.equal(stored.eventId, event.eventId);
+        assert.equal(stored.sha256, digest);
+        assert.deepEqual(
+          await readFile(
+            join(evidenceRoot, `ai-frame-${event.eventId}-${stored.payloadHash}-${digest}.jpg`),
+          ),
+          bytes,
+        );
+        assert.deepEqual(
+          await runtimeDb.query(
+            'SELECT count(*)::int AS count FROM ai_observation_event WHERE event_id=$1',
+            [event.eventId],
+          ),
+          [{ count: 0 }],
+        );
+      }
       const post = () =>
         fetch(prefix + '/tracked-parts', {
           method: 'POST',
@@ -740,6 +785,26 @@ for (const variant of [
           ),
           [{ unread: 3 }],
         );
+      }
+      if (variant === 'camera-v17') {
+        const storage = module.get(StorageService);
+        const originalSave = storage.saveAiFrame.bind(storage);
+        storage.saveAiFrame = async (content, expectedHash, scope) => {
+          await originalSave(content, expectedHash, scope);
+          await provisionCameraWorkerGeneration(
+            runtimeDb,
+            fixture.cameraId,
+            [fixture.cameraId],
+            120000,
+          );
+        };
+        try {
+          const stale = await uploadEvidence();
+          assert.equal(stale.status, 409, await stale.clone().text());
+          assert.equal((await stale.json()).code, 'CONFLICT');
+        } finally {
+          storage.saveAiFrame = originalSave;
+        }
       }
     } finally {
       if (app) await app.close();

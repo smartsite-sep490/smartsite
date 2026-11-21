@@ -8,6 +8,10 @@ import { CameraEventAdmissionService } from '../../modules/cameras/camera-event-
 import { TrackedSafetyProjection } from '../../modules/safety/alerts/tracked-safety-projection.js';
 import { TrackedFrameAdmission } from './tracked-frame-admission.js';
 import { TrackedFrameRecovery } from './tracked-frame-recovery.js';
+import { StorageModule } from '../storage/storage.module.js';
+import { StorageService } from '../storage/storage.service.js';
+import { TrackedFrameEvidenceController } from './tracked-frame-evidence.controller.js';
+import { TrackedFrameEvidenceUpload } from './tracked-frame-evidence-upload.js';
 import {
   TrackedFrameResultController,
   TrackedRawPartController,
@@ -147,7 +151,12 @@ export class TrackedFrameRuntimeModule {
     const { profile, pending, heads, recovery, maxRecipients } = structuredClone(options);
     return {
       module: TrackedFrameRuntimeModule,
-      controllers: [TrackedRawPartController, TrackedFrameResultController],
+      imports: [StorageModule],
+      controllers: [
+        TrackedRawPartController,
+        TrackedFrameResultController,
+        TrackedFrameEvidenceController,
+      ],
       providers: [
         ServiceAuthGuard,
         {
@@ -160,6 +169,20 @@ export class TrackedFrameRuntimeModule {
           inject: [TrackedPartAuthenticator],
           useFactory: (auth: TrackedPartAuthenticator) =>
             new TrackedFramePrototypeStore(auth, pending),
+        },
+        {
+          provide: TrackedFrameEvidenceUpload,
+          inject: [TrackedPartAuthenticator, StorageService, ConfigService],
+          useFactory: (
+            auth: TrackedPartAuthenticator,
+            storage: StorageService,
+            config: ConfigService<BackendEnvironment, true>,
+          ) =>
+            new TrackedFrameEvidenceUpload(
+              auth,
+              storage,
+              config.get('AI_EVIDENCE_OBJECT_STORAGE_ENABLED', { infer: true }) === true,
+            ),
         },
         ...(profile.wireVersion !== '1.5.0'
           ? [
