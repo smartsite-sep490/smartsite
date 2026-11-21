@@ -3,6 +3,11 @@ import type {
   SafetyIdentificationRequest,
 } from '@smartsite/contracts/safety-identification';
 import { uiLocale } from '../../i18n';
+import {
+  sanitizeSafetyFrameKey,
+  sanitizeSafetyQueryId,
+  sanitizeSafetyUuid,
+} from '../safety-episodes/safetyUrlParams';
 import { IDENTIFICATION_MAX_REASON_LENGTH, type IdentificationCopy } from './IdentificationCopy';
 import type { IdentificationResponseSubmission, NamedCandidate } from './SafetyIdentificationForms';
 import type { IdentificationWorkspaceCopy } from './IdentificationWorkspaceCopy';
@@ -81,4 +86,60 @@ export function validateIdentificationDetailReason(
   if (!trimmed) return copy.validation.reasonRequired;
   if (trimmed.length > IDENTIFICATION_MAX_REASON_LENGTH) return copy.validation.reasonTooLong;
   return null;
+}
+
+export function formatHumanSubjectSummary(
+  subject: SafetyIdentificationRequest['subject'],
+  copy: IdentificationWorkspaceCopy,
+): string {
+  if (subject.kind === 'TRACKED') {
+    return copy.detail.subjectSummaryTracked;
+  }
+  return copy.detail.subjectSummaryEventLocal(subject.personObservationIndex + 1);
+}
+
+export interface IdentificationOriginLinks {
+  hasValidOrigin: boolean;
+  inboxReturnHref: string | null;
+  incidentsWorkspaceHref: string;
+}
+
+export function buildIdentificationOriginLinks(params: {
+  siteId: string;
+  originRecipientId?: string;
+  originFrameKey?: string;
+  originCameraId?: string;
+}): IdentificationOriginLinks {
+  const safeSiteId = sanitizeSafetyQueryId(params.siteId);
+  const validOriginRecipientId = sanitizeSafetyUuid(params.originRecipientId);
+  const validOriginFrameKey = sanitizeSafetyFrameKey(params.originFrameKey);
+  const validOriginCameraId = sanitizeSafetyUuid(params.originCameraId)?.toLowerCase();
+
+  const incidentsParams = new URLSearchParams();
+  if (safeSiteId) {
+    incidentsParams.set('siteId', safeSiteId);
+  }
+  const incidentsWorkspaceHref =
+    incidentsParams.size > 0 ? `/incidents?${incidentsParams}` : '/incidents';
+
+  if (!safeSiteId || !validOriginRecipientId) {
+    return {
+      hasValidOrigin: false,
+      inboxReturnHref: null,
+      incidentsWorkspaceHref,
+    };
+  }
+
+  const originParams = new URLSearchParams();
+  originParams.set('tab', 'episodes');
+  originParams.set('siteId', safeSiteId);
+  originParams.set('recipientId', validOriginRecipientId);
+  if (validOriginFrameKey) originParams.set('frameKey', validOriginFrameKey);
+  if (validOriginCameraId) originParams.set('cameraId', validOriginCameraId);
+
+  return {
+    hasValidOrigin: true,
+    inboxReturnHref: `/incidents?${originParams}`,
+    incidentsWorkspaceHref,
+  };
 }

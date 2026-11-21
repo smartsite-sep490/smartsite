@@ -28,6 +28,7 @@ export interface SafetyTaskTourProps {
   scopeKey: string;
   isAuthorized?: boolean;
   steps?: readonly SafetyTourStepSpec[];
+  unobtrusiveEntry?: boolean;
 }
 
 const stepSpec = (id: string, anchor: string, prefix: string): SafetyTourStepSpec => ({
@@ -264,6 +265,10 @@ export function clearSafetyTourProgress(
 
 export function isElementAvailable(el: HTMLElement | null): el is HTMLElement {
   if (!el || !el.isConnected || el.closest('[hidden], [inert], [aria-hidden="true"], .sr-only')) {
+    return false;
+  }
+  const details = el.closest('details');
+  if (details && !details.open && details !== el && !el.closest('summary')) {
     return false;
   }
   for (let node: HTMLElement | null = el; node; node = node.parentElement) {

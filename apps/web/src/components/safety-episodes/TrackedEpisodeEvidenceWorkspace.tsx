@@ -33,6 +33,7 @@ export type TrackedEpisodeEvidenceClient = Pick<
   | 'readTrackedEpisodeMedia'
   | 'getTrackedObservationIdentity'
 > & {
+  getTrackedObservationIdentityCard?: SmartSiteManagementClient['getTrackedObservationIdentityCard'];
   listSafetyIdentificationRequests?: SmartSiteManagementClient['listSafetyIdentificationRequests'];
 };
 
@@ -46,6 +47,7 @@ export interface TrackedEpisodeEvidenceWorkspaceProps {
   originRecipientId?: string;
   returnToFrameHref?: string;
   canReviewFindings?: boolean;
+  enableIdentityCard?: boolean;
   renderRevisionAction?: (revision: number, recheck: () => Promise<boolean>) => ReactNode;
 }
 
@@ -183,6 +185,7 @@ function TrackedEpisodeEvidenceWorkspaceInner({
   originRecipientId,
   returnToFrameHref,
   canReviewFindings = false,
+  enableIdentityCard,
   renderRevisionAction,
 }: TrackedEpisodeEvidenceWorkspaceProps & {
   instanceId: string;
@@ -531,6 +534,10 @@ function TrackedEpisodeEvidenceWorkspaceInner({
     }
   };
 
+  const handleRefreshIdentityObservationSource = async () => {
+    await Promise.all([detailQuery.refetch(), historyQuery.refetch()]);
+  };
+
   const viewerIdentityContent =
     verifiedViewerMedia !== null &&
     activeMediaSelection !== null &&
@@ -546,6 +553,8 @@ function TrackedEpisodeEvidenceWorkspaceInner({
         episodeId={episodeId}
         source={activeMediaSelection.source}
         expectedPayloadHash={expectedPayloadHash}
+        enableIdentityCard={enableIdentityCard}
+        onRefreshSource={handleRefreshIdentityObservationSource}
       />
     ) : undefined;
 

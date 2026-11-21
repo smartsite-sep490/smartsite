@@ -117,7 +117,7 @@ export function EffectivePpeDetails({
         <span className="text-xs font-medium text-slate-700">
           {t('cameraPpe.effectivePpeLabel')}:
         </span>
-        <span className="text-[11px] text-slate-500">
+        <span className="text-xs text-slate-500">
           {t(
             effective.source === 'CAMERA_DEFAULT'
               ? 'cameraPpe.effectiveFromCamera'
@@ -224,25 +224,25 @@ export function CameraDefaultSummaryCard({
     >
       <div className="flex flex-wrap items-center justify-between gap-2">
         <div className="flex flex-wrap items-center gap-2 min-w-0">
-          <h4 className="text-xs font-semibold text-slate-900">
+          <h4 className="text-sm font-semibold text-slate-900">
             {t('cameraPpe.cameraSummaryHeading')}
           </h4>
           {cameraPolicy ? (
             <span
-              className={`rounded-md border px-2 py-0.5 text-[11px] font-semibold ${MODE_BADGE_CLASSES[cameraPolicy.mode]}`}
+              className={`rounded-md border px-2 py-0.5 text-xs font-semibold ${MODE_BADGE_CLASSES[cameraPolicy.mode]}`}
             >
               {t(modeBadgeCopyKey(cameraPolicy.mode))}
             </span>
           ) : (
             <span
-              className={`rounded-md border px-2 py-0.5 text-[11px] font-semibold ${MODE_BADGE_CLASSES.UNCONFIGURED}`}
+              className={`rounded-md border px-2 py-0.5 text-xs font-semibold ${MODE_BADGE_CLASSES.UNCONFIGURED}`}
             >
               {t('cameraPpe.modeBadge.UNCONFIGURED')}
             </span>
           )}
         </div>
         <div className="flex items-center gap-2">
-          <span className="text-[11px] font-mono text-slate-500 tabular-nums">
+          <span className="text-xs font-mono text-slate-500 tabular-nums">
             {cameraSaved.savedRevision !== null
               ? t('cameraPpe.savedConfigMeta', {
                   configVersion: cameraSaved.configurationVersion,
@@ -328,6 +328,16 @@ function formatRegionAppliedLabel(
   };
 }
 
+function buildZoneNameCounts(items: readonly RegionPolicyItemView[]): Map<string, number> {
+  const counts = new Map<string, number>();
+  for (const entry of items) {
+    if (!entry.zone) continue;
+    const key = entry.zone.name.trim().toLowerCase();
+    counts.set(key, (counts.get(key) ?? 0) + 1);
+  }
+  return counts;
+}
+
 export function RegionEffectivePolicyList({
   items,
   savedVsApplied,
@@ -342,10 +352,11 @@ export function RegionEffectivePolicyList({
   onRetryRegion: (regionId: string) => void;
 }) {
   const { t } = useTranslation(SAFETY_NAMESPACE);
+  const zoneNameCounts = buildZoneNameCounts(items);
 
   return (
     <div className="space-y-2">
-      <h4 className="text-xs font-semibold text-slate-900">
+      <h4 className="text-sm font-semibold text-slate-900 tabular-nums">
         {t('cameraPpe.regionsHeading', { count: items.length })}
       </h4>
       {items.length === 0 ? (
@@ -359,10 +370,14 @@ export function RegionEffectivePolicyList({
         >
           {items.map(
             ({ region, regionIndex, sameZoneCount, zone, saved, effective, isSelected }) => {
+              const regionBadge = t('cameraPpe.regionNumberBadge', { index: regionIndex });
+              const needsRegionDisambiguator =
+                sameZoneCount > 1 ||
+                (zone ? (zoneNameCounts.get(zone.name.trim().toLowerCase()) ?? 0) > 1 : false);
               const targetLabel = zone
-                ? sameZoneCount > 1
-                  ? `${zone.code} · ${zone.name} (${t('cameraPpe.regionNumberBadge', { index: regionIndex })})`
-                  : `${zone.code} · ${zone.name}`
+                ? needsRegionDisambiguator
+                  ? `${zone.name} (${regionBadge})`
+                  : zone.name
                 : t('cameraPpe.regionUnresolvedLabel', { index: regionIndex });
               const modeKey =
                 effective.kind === 'resolved' || effective.kind === 'camera-unconfigured'
@@ -384,20 +399,24 @@ export function RegionEffectivePolicyList({
                   <div className="flex flex-wrap items-start justify-between gap-2">
                     <div className="min-w-0 space-y-1">
                       <div className="flex flex-wrap items-center gap-2">
-                        <span className="text-xs font-semibold text-slate-900 break-words">
+                        <span
+                          title={targetLabel}
+                          className="text-sm font-semibold text-slate-900 break-words [overflow-wrap:anywhere]"
+                        >
                           {targetLabel}
                         </span>
                         {!zone && (
-                          <span className="rounded-md border border-slate-200 bg-slate-100 px-1.5 py-0.5 text-[11px] font-medium text-slate-600">
+                          <span className="rounded-md border border-slate-200 bg-slate-100 px-1.5 py-0.5 text-xs font-medium text-slate-600">
                             {t('cameraPpe.zoneMetadataUnavailable')}
                           </span>
                         )}
                         <span
-                          className={`rounded-md border px-2 py-0.5 text-[11px] font-semibold ${MODE_BADGE_CLASSES[modeKey]}`}
+                          className={`rounded-md border px-2 py-0.5 text-xs font-semibold ${MODE_BADGE_CLASSES[modeKey]}`}
                         >
                           {t(modeBadgeCopyKey(modeKey))}
                         </span>
-                        <span className="rounded-md border border-slate-200 bg-slate-50 px-1.5 py-0.5 text-[11px] text-slate-600">
+                        <span className="rounded-md border border-slate-200 bg-slate-50 px-1.5 py-0.5 text-xs tabular-nums text-slate-600">
+                          {zone && !needsRegionDisambiguator ? `${regionBadge} · ` : ''}
                           {t('cameraPpe.regionVersionMeta', { version: region.version })} ·{' '}
                           {t(
                             region.isActive ? 'cameraPpe.regionActive' : 'cameraPpe.regionInactive',
@@ -406,12 +425,13 @@ export function RegionEffectivePolicyList({
                       </div>
                       <details
                         data-testid={`camera-ppe-region-tech-${region.id}`}
-                        className="text-[11px] text-slate-500"
+                        className="text-xs text-slate-500"
                       >
-                        <summary className="cursor-pointer select-none font-medium text-slate-600 hover:text-slate-900">
+                        <summary className="inline-flex min-h-7 cursor-pointer select-none items-center font-medium text-slate-600 hover:text-slate-900">
                           {t('cameraPpe.technicalIdsSummary')}
                         </summary>
-                        <div className="mt-1 space-y-0.5 font-mono text-[11px] text-slate-600 break-all">
+                        <div className="mt-1 space-y-0.5 font-mono text-xs text-slate-600 break-all">
+                          {zone && <p>{t('cameraPpe.technicalZoneCode', { code: zone.code })}</p>}
                           <p>{t('cameraPpe.technicalRegionId', { id: region.id })}</p>
                           <p>{t('cameraPpe.technicalZoneId', { id: region.zoneId })}</p>
                         </div>
@@ -435,7 +455,7 @@ export function RegionEffectivePolicyList({
                     onRetry={() => onRetryRegion(region.id)}
                   />
 
-                  <div className="flex flex-wrap items-center justify-between gap-2 border-t border-slate-100 pt-1.5 text-[11px]">
+                  <div className="flex flex-wrap items-center justify-between gap-2 border-t border-slate-100 pt-1.5 text-xs">
                     {effective.kind !== 'loading' && effective.kind !== 'error' && (
                       <span className="font-mono text-slate-500 tabular-nums">
                         {saved?.savedRevision != null
@@ -450,7 +470,7 @@ export function RegionEffectivePolicyList({
                             : t('cameraPpe.absent')}
                       </span>
                     )}
-                    <span className={regionSync.tone}>
+                    <span className={`${regionSync.tone} tabular-nums`}>
                       {regionSync.version !== undefined
                         ? t(regionSync.key, { version: regionSync.version })
                         : t(regionSync.key)}
@@ -477,11 +497,92 @@ export function EffectivePpePreviewBox({
       data-testid="camera-ppe-draft-preview"
       className="rounded-lg border border-slate-200/80 bg-slate-50/70 px-3 py-2 space-y-1"
     >
-      <p className="text-[11px] font-semibold text-slate-700">{t('cameraPpe.previewHeading')}</p>
+      <p className="text-xs font-semibold text-slate-700">{t('cameraPpe.previewHeading')}</p>
       {effective ? (
         <EffectivePpeDetails effective={effective} />
       ) : (
         <p className="text-xs text-slate-600">{t('cameraPpe.previewRequiresCameraInit')}</p>
+      )}
+    </div>
+  );
+}
+
+export function CameraDefaultImpactCard({
+  items,
+  draftCameraPolicy,
+}: {
+  items: readonly RegionPolicyItemView[];
+  draftCameraPolicy: CameraPpePolicy | null;
+}) {
+  const { t } = useTranslation(SAFETY_NAMESPACE);
+  const zoneNameCounts = buildZoneNameCounts(items);
+  const activeItems = items.filter((entry) => entry.region.isActive);
+  const formatName = ({ regionIndex, sameZoneCount, zone }: RegionPolicyItemView): string => {
+    if (!zone) {
+      return t('cameraPpe.regionUnresolvedLabel', { index: regionIndex });
+    }
+    const needsRegionDisambiguator =
+      sameZoneCount > 1 || (zoneNameCounts.get(zone.name.trim().toLowerCase()) ?? 0) > 1;
+    return needsRegionDisambiguator
+      ? `${zone.name} (${t('cameraPpe.regionNumberBadge', { index: regionIndex })})`
+      : zone.name;
+  };
+
+  const inheritingNames = activeItems
+    .filter(
+      (entry) =>
+        (entry.effective.kind === 'resolved' || entry.effective.kind === 'camera-unconfigured') &&
+        entry.effective.mode === 'INHERIT',
+    )
+    .map(formatName);
+  const unaffectedNames = activeItems
+    .filter(
+      (entry) =>
+        (entry.effective.kind === 'resolved' || entry.effective.kind === 'camera-unconfigured') &&
+        entry.effective.mode !== 'INHERIT',
+    )
+    .map(formatName);
+
+  return (
+    <div
+      data-testid="camera-ppe-affected-regions-preview"
+      className="rounded-lg border border-slate-200/80 bg-slate-50/70 px-3 py-2.5 space-y-1.5 text-xs text-slate-700"
+    >
+      <p className="text-xs font-semibold text-slate-800">{t('cameraPpe.impactHeading')}</p>
+      <p className="break-words [overflow-wrap:anywhere]">
+        {inheritingNames.length > 0
+          ? t('cameraPpe.impactInheriting', {
+              count: inheritingNames.length,
+              names: inheritingNames.join(', '),
+            })
+          : t('cameraPpe.impactNoneInheriting')}
+      </p>
+      {unaffectedNames.length > 0 && (
+        <p className="text-slate-600 break-words [overflow-wrap:anywhere]">
+          {t('cameraPpe.impactUnaffected', {
+            count: unaffectedNames.length,
+            names: unaffectedNames.join(', '),
+          })}
+        </p>
+      )}
+      {draftCameraPolicy && (
+        <div className="space-y-1 border-t border-slate-200/70 pt-1.5">
+          <p className="text-xs font-medium text-slate-600">
+            {t('cameraPpe.impactPreviewEffective')}
+          </p>
+          {draftCameraPolicy.mode === 'DISABLED' ? (
+            <div className="space-y-0.5">
+              <p className="font-medium text-rose-800">{t('cameraPpe.effectiveDisabled')}</p>
+              {draftCameraPolicy.reason && (
+                <p className="text-slate-600 break-words [overflow-wrap:anywhere]">
+                  {t('cameraPpe.effectiveReason', { reason: draftCameraPolicy.reason })}
+                </p>
+              )}
+            </div>
+          ) : (
+            <PpeItemBadges items={draftCameraPolicy.requiredPpe} />
+          )}
+        </div>
       )}
     </div>
   );

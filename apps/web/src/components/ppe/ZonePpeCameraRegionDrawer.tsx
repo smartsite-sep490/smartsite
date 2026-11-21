@@ -60,6 +60,8 @@ export interface ZonePpeCameraRegionDrawerProps {
   editingRegion?: EditingRegionScope | null;
   tourUserId?: string | null;
   lastSavedDraft: string | null;
+  isLoadingReference?: boolean;
+  onRequestFreshReference?: () => void;
   onAcceptCandidateReference: (candidate: CameraConfigurationReference) => void;
   onCancelCandidateReview: () => void;
   onScopeRevoked: (status: number) => void;
@@ -150,6 +152,8 @@ function ZonePpeCameraRegionDrawerContent(
     candidateReference,
     editingRegion,
     lastSavedDraft,
+    isLoadingReference = false,
+    onRequestFreshReference,
     onDraftStateChange,
   } = props;
   const { t } = useTranslation(SAFETY_NAMESPACE);
@@ -447,6 +451,20 @@ function ZonePpeCameraRegionDrawerContent(
   const geometryErrorKey = draftPoints.length >= 3 ? validatePolygonGeometry(draftPoints) : null;
   const isConsentDisabled =
     createRegionMutation.isPending || isReferenceExpired || !isReferenceScopeValid;
+  const isConflictServerError =
+    serverErrorKey === 'regionSetup.error.409' || serverErrorKey === 'regionSetup.error.409Edit';
+  const showReloadConflictReferenceBtn = Boolean(
+    onRequestFreshReference &&
+    !candidateReference &&
+    (isConflictServerError || isReferenceRevisionStale),
+  );
+  const hasPpePolicyControls = Boolean(
+    !editingRegion &&
+    usesV2 &&
+    savedPolicy.isSuccess &&
+    !savedPolicy.isFetching &&
+    savedPolicy.data?.configurationVersion === frozenReference.configurationVersion,
+  );
   const saveReadinessHint = isReferenceExpired
     ? t('regionSetup.drawer.readinessExpired')
     : currentDraftKey === lastSavedDraft
@@ -466,23 +484,68 @@ function ZonePpeCameraRegionDrawerContent(
                 ? t('regionSetup.drawer.readinessPolicy')
                 : t('regionSetup.drawer.readinessReady');
 
+  const cameraDisplayLabel =
+    selectedCamera.name.trim() && selectedCamera.name.trim() !== selectedCamera.code.trim()
+      ? `${selectedCamera.name} · ${selectedCamera.code}`
+      : selectedCamera.code;
+  const authoringContextSummary = editingRegion
+    ? t('regionSetup.drawer.imageContextEditingSummary', {
+        zoneName: selectedZone.name,
+        regionVersion: editingRegion.version,
+        cameraLabel: cameraDisplayLabel,
+        sourceKind: frozenReference.sourceKind,
+        version: frozenReference.configurationVersion,
+        width,
+        height,
+      })
+    : t('regionSetup.drawer.imageContextSummary', {
+        zoneName: selectedZone.name,
+        cameraLabel: cameraDisplayLabel,
+        sourceKind: frozenReference.sourceKind,
+        version: frozenReference.configurationVersion,
+        width,
+        height,
+      });
+
   return (
     <div className="min-w-0 space-y-2.5">
-      <div className="flex flex-wrap items-center justify-between gap-2 min-w-0">
-        <p
-          data-testid="polygon-authoring-context"
-          className="min-w-0 break-words [overflow-wrap:anywhere] text-xs font-medium text-slate-700"
-        >
-          {t('regionSetup.drawer.imageContextSummary', {
-            zoneCode: selectedZone.code,
-            zoneName: selectedZone.name,
-            cameraCode: selectedCamera.code,
-            sourceKind: frozenReference.sourceKind,
-            version: frozenReference.configurationVersion,
-            width,
-            height,
-          })}
-        </p>
+      <div className="flex flex-wrap items-start justify-between gap-2 min-w-0">
+        <div className="min-w-0 flex-1 space-y-1">
+          <p
+            data-testid="polygon-authoring-context"
+            title={authoringContextSummary}
+            className="min-w-0 break-words [overflow-wrap:anywhere] text-xs font-medium text-slate-700"
+          >
+            {authoringContextSummary}
+          </p>
+          <details
+            data-testid="polygon-authoring-tech-details"
+            className="text-[11px] text-slate-500"
+          >
+            <summary className="cursor-pointer select-none font-medium text-slate-500 hover:text-slate-800">
+              {t('regionSetup.drawer.technicalDetailsSummary')}
+            </summary>
+            <div className="mt-0.5 flex flex-wrap items-center gap-x-3 gap-y-0.5 font-mono text-[11px] text-slate-600 break-all">
+              <span className="select-all">
+                {t('regionSetup.drawer.technicalZoneCode', { code: selectedZone.code })}
+              </span>
+              <span className="text-slate-500 select-all">
+                {t('regionSetup.drawer.technicalZoneId', { id: selectedZone.id })}
+              </span>
+              <span className="text-slate-500 select-all">
+                {t('regionSetup.drawer.technicalSourceId', { id: selectedCamera.externalId })}
+              </span>
+              {editingRegion && (
+                <span className="text-slate-500 select-all">
+                  {t('regionSetup.drawer.technicalRegionId', {
+                    id: editingRegion.id,
+                    version: editingRegion.version,
+                  })}
+                </span>
+              )}
+            </div>
+          </details>
+        </div>
         <RegionPolygonTaskTour
           apiUrl={props.apiUrl}
           sessionScope={props.sessionScope}
@@ -496,6 +559,7 @@ function ZonePpeCameraRegionDrawerContent(
           tourUserId={props.tourUserId}
           isReferenceExpired={isReferenceExpired}
           isSaving={createRegionMutation.isPending}
+          hasPpePolicyControls={hasPpePolicyControls}
         />
       </div>
       {candidateReference && (
@@ -524,6 +588,18 @@ function ZonePpeCameraRegionDrawerContent(
         saveReadinessHint={saveReadinessHint}
         inspectorSlot={
           <div data-tour-anchor="polygon-frozen-reference" className="min-w-0 space-y-2.5">
+            {editingRegion?.needsViewRevalidation && (
+              <div
+                role="status"
+                data-testid="polygon-revalidation-banner"
+                className="rounded-lg border border-amber-300 bg-amber-50 p-2.5 text-xs text-amber-950 flex items-start gap-2"
+              >
+                <IconAlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-amber-700" />
+                <span className="min-w-0 break-words">
+                  {t('regionSetup.drawer.revalidationBanner')}
+                </span>
+              </div>
+            )}
             {validationError && (
               <div
                 role="alert"
@@ -536,10 +612,30 @@ function ZonePpeCameraRegionDrawerContent(
             {serverError && (
               <div
                 role="alert"
-                className="rounded-lg border border-red-200 bg-red-50 p-2.5 text-xs text-red-800 flex items-center gap-2"
+                className="rounded-lg border border-red-200 bg-red-50 p-2.5 text-xs text-red-800 space-y-2"
               >
-                <IconAlertTriangle className="h-4 w-4 shrink-0 text-red-600" />
-                <span>{serverError}</span>
+                <div className="flex items-start gap-2">
+                  <IconAlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-red-600" />
+                  <span className="min-w-0 break-words">{serverError}</span>
+                </div>
+                {showReloadConflictReferenceBtn && (
+                  <div className="flex justify-end">
+                    <button
+                      type="button"
+                      data-testid="polygon-conflict-reload-reference"
+                      disabled={isLoadingReference || createRegionMutation.isPending}
+                      onClick={onRequestFreshReference}
+                      className="rounded-lg border border-red-300 bg-white px-2.5 py-1 text-xs font-semibold text-red-900 hover:bg-red-100 transition-colors cursor-pointer disabled:opacity-50"
+                    >
+                      {t('regionSetup.error.409ReloadBtn', {
+                        version: Math.max(
+                          targetCameraVersion,
+                          frozenReference.configurationVersion + 1,
+                        ),
+                      })}
+                    </button>
+                  </div>
+                )}
               </div>
             )}
             <RegionReferenceViewConsentCheckbox
@@ -556,6 +652,11 @@ function ZonePpeCameraRegionDrawerContent(
                 setConfirmedConsentKey(nextChecked ? currentConsentBindingKey : null);
               }}
             />
+            {editingRegion && (
+              <p className="rounded-lg border border-slate-200/80 bg-white px-2.5 py-2 text-xs text-slate-600 break-words">
+                {t('regionSetup.drawer.editGeometryPpeNote')}
+              </p>
+            )}
             {!editingRegion &&
               (savedPolicy.isError ? (
                 <div role="alert">

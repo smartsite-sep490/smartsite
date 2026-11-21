@@ -7,6 +7,7 @@ import {
   type ReactNode,
 } from 'react';
 import { useTranslation } from 'react-i18next';
+import { uiLocale } from '../../i18n';
 import { SAFETY_NAMESPACE } from '../../i18n/runtime';
 import { IconAlertTriangle } from '../icons';
 import {
@@ -15,8 +16,10 @@ import {
 } from './RegionPolygonEditorControls';
 import {
   ZOOM_STEPS,
+  calculatePolygonArea,
   clampViewportPan,
   mapClientPointToNormalized,
+  validatePolygonGeometry,
   validateVertexCandidate,
   type NormalizedPoint,
   type RegionPolygonValidationKey,
@@ -311,6 +314,20 @@ export function RegionPolygonCanvasEditor({
   };
 
   const viewBox = `${pan[0] * frame.width} ${pan[1] * frame.height} ${frame.width / zoom} ${frame.height / zoom}`;
+  const isPolygonValid = points.length >= 3 && validatePolygonGeometry(points) === null;
+  const polygonAreaRatio = isPolygonValid ? calculatePolygonArea(points) : null;
+  const coveragePercentLabel =
+    polygonAreaRatio !== null
+      ? new Intl.NumberFormat(uiLocale(), {
+          minimumFractionDigits: 2,
+          maximumFractionDigits: 2,
+        }).format(polygonAreaRatio * 100)
+      : null;
+  const isLargePolygon = polygonAreaRatio !== null && polygonAreaRatio >= 0.85;
+  const polygonSvgPath =
+    points.length >= 3
+      ? `M ${points.map(([x, y]) => `${x * frame.width} ${y * frame.height}`).join(' L ')} Z`
+      : '';
 
   const toolbarElement = (
     <RegionPolygonEditorToolbar
@@ -318,6 +335,8 @@ export function RegionPolygonCanvasEditor({
       isConfirmingDiscard={isConfirmingDiscard}
       isDirty={isDirty}
       pointsCount={points.length}
+      coveragePercentLabel={coveragePercentLabel}
+      isLargePolygon={isLargePolygon}
       canUndo={undoStack.length > 0}
       hasSelectedVertex={activeSelectedIdx !== null}
       zoomIdx={zoomIdx}
@@ -377,6 +396,29 @@ export function RegionPolygonCanvasEditor({
       >
         {!isImageStale && (
           <image href={frame.imageDataUrl} width={frame.width} height={frame.height} />
+        )}
+
+        <rect
+          data-testid="camera-full-frame-guide"
+          x={1}
+          y={1}
+          width={Math.max(0, frame.width - 2)}
+          height={Math.max(0, frame.height - 2)}
+          fill="none"
+          stroke="rgba(248, 250, 252, 0.45)"
+          strokeWidth="1.5"
+          strokeDasharray="6 4"
+          pointerEvents="none"
+        />
+
+        {points.length >= 3 && (
+          <path
+            data-testid="polygon-outside-dim-mask"
+            d={`M 0 0 H ${frame.width} V ${frame.height} H 0 Z ${polygonSvgPath}`}
+            fillRule="evenodd"
+            fill="rgba(15, 23, 42, 0.38)"
+            pointerEvents="none"
+          />
         )}
 
         {points.length === 2 && (
