@@ -47,6 +47,3 @@ export function accountErrorKey(error: unknown): string {
 
 export const accountControl =
   'min-h-10 w-full rounded-xl border border-slate-200 bg-white px-3.5 py-2 text-xs text-slate-800 placeholder-slate-400 transition-all shadow-2xs hover:border-slate-300 focus:border-[#F66B17] focus:outline-none focus:ring-2 focus:ring-orange-100 disabled:bg-slate-50 disabled:text-slate-500';
-
-export const accountButton =
-  'inline-flex min-h-9 items-center justify-center gap-1.5 rounded-xl border border-slate-200 bg-white px-3.5 py-2 text-xs font-semibold text-slate-700 shadow-2xs transition-all hover:bg-slate-50 hover:border-slate-300 active:scale-[0.99] disabled:cursor-not-allowed disabled:opacity-50 cursor-pointer';

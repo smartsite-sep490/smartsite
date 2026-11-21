@@ -10,13 +10,13 @@ import {
 import type { ProvisionableRoleAssignment } from '@smartsite/contracts';
 import {
   ACCOUNT_ROLES,
-  accountButton,
   accountControl,
   accountErrorKey,
   validAssignments,
   validTemporaryPassword,
 } from './account-utils';
 import { IconAlertTriangle } from '../../components/icons';
+import { Button } from '../../components/ui/Button';
 import { Dialog } from '../../components/ui/Dialog';
 
 export type AccountEditorAction =
@@ -198,7 +198,7 @@ export function AccountEditor({
                 </p>
               </div>
               <p className="text-xs text-amber-800 bg-amber-50 p-2.5 rounded-lg border border-amber-200/80">
-                💡 {t('accounts.temporaryHint')}
+                {t('accounts.temporaryHint')}
               </p>
             </div>
           )}
@@ -213,9 +213,10 @@ export function AccountEditor({
                   </h3>
                   <p className="text-[11px] text-slate-500 mt-0.5">{t('accounts.scopeHint')}</p>
                 </div>
-                <button
+                <Button
+                  variant="outline"
                   type="button"
-                  className="inline-flex items-center gap-1.5 rounded-lg border border-slate-200 bg-white hover:bg-slate-50 px-2.5 py-1 text-xs font-bold text-[#F66B17] shadow-2xs transition-all cursor-pointer"
+                  className="min-h-10"
                   onClick={() =>
                     setAssignments((rows) => [
                       ...rows,
@@ -224,7 +225,7 @@ export function AccountEditor({
                   }
                 >
                   {t('accounts.addRole')}
-                </button>
+                </Button>
               </div>
 
               <div className="space-y-2.5">
@@ -306,9 +307,10 @@ export function AccountEditor({
                     <div className="flex flex-wrap gap-2">
                       {(assignment.role === 'SAFETY_OFFICER' ||
                         assignment.role === 'SECURITY_OFFICER') && (
-                        <button
+                        <Button
+                          variant="outline"
                           type="button"
-                          className="inline-flex min-h-10 items-center justify-center rounded-xl border border-orange-200 bg-white px-3 py-2 text-xs font-semibold text-[#C6530E] hover:bg-orange-50 focus-visible:outline-2"
+                          className="min-h-10"
                           aria-label={t('accounts.addSiteForRole', { number: index + 1 })}
                           onClick={() =>
                             setAssignments((rows) => [
@@ -318,17 +320,18 @@ export function AccountEditor({
                           }
                         >
                           {t('accounts.addSite')}
-                        </button>
+                        </Button>
                       )}
-                      <button
+                      <Button
+                        variant="outline"
                         type="button"
-                        className="inline-flex min-h-10 items-center justify-center gap-1 rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-600 hover:text-rose-700 hover:border-rose-200 hover:bg-rose-50 transition-all cursor-pointer disabled:opacity-40 disabled:pointer-events-none"
+                        className="min-h-10"
                         disabled={assignments.length === 1}
                         aria-label={t('accounts.removeRoleNumber', { number: index + 1 })}
                         onClick={() => setAssignments((rows) => rows.filter((_, i) => i !== index))}
                       >
                         {t('accounts.removeRole')}
-                      </button>
+                      </Button>
                     </div>
                   </div>
                 ))}
@@ -337,7 +340,7 @@ export function AccountEditor({
               <p className="text-xs text-slate-600">{t('accounts.representativeHint')}</p>
               {action.mode === 'roles' && (
                 <p className="text-xs text-amber-800 bg-amber-50 p-2.5 rounded-lg border border-amber-200">
-                  ⚠️ {t('accounts.rolesHint')}
+                  {t('accounts.rolesHint')}
                 </p>
               )}
             </div>
@@ -346,7 +349,7 @@ export function AccountEditor({
           {/* Mode-specific context hints */}
           {action.mode === 'password' && (
             <p className="text-xs text-amber-800 bg-amber-50 p-2.5 rounded-lg border border-amber-200">
-              ⚠️ {t('accounts.resetHint')}
+              {t('accounts.resetHint')}
             </p>
           )}
           {action.mode === 'status' && (
@@ -373,24 +376,24 @@ export function AccountEditor({
 
           {/* Modal Footer Actions */}
           <div className="flex items-center justify-end gap-2.5 border-t border-slate-100 pt-4">
-            <button
+            <Button
+              variant="outline"
               type="button"
-              className={accountButton}
+              className="min-h-10"
               disabled={mutation.isPending}
               onClick={onClose}
             >
               {t('accounts.cancel')}
-            </button>
-            <button
+            </Button>
+            <Button
+              variant={action.mode === 'status' && account?.isActive ? 'destructive' : 'primary'}
+              isLoading={mutation.isPending}
               type="submit"
-              className="inline-flex min-h-9 items-center justify-center gap-2 rounded-xl bg-[#F66B17] hover:bg-[#E05A0A] text-white px-5 py-2 text-xs font-bold shadow-xs transition-all active:scale-[0.99] disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer"
+              className="min-h-10"
               disabled={mutation.isPending || (editingRoles && !sitesReady)}
             >
-              {mutation.isPending && (
-                <div className="h-3.5 w-3.5 border-2 border-white border-t-transparent rounded-full animate-spin" />
-              )}
               <span>{t(mutation.isPending ? 'accounts.saving' : 'accounts.confirm')}</span>
-            </button>
+            </Button>
           </div>
         </fieldset>
       </form>

@@ -138,10 +138,7 @@ test('ERD: bounded permissions, gate confirmation, temporary passage and attenda
       validUntil: until,
     });
     const observer = { ...manager, roleAssignments: [{ role: UserRole.ADMIN, siteId: null }] };
-    const observed = await setup.options(observer, siteId);
-    assert.equal(observed.canReviewAssignments, false);
-    assert.equal(observed.canGrantContractorZones, false);
-    assert.equal(observed.canGrantWorkerZones, false);
+    await assert.rejects(setup.options(observer, siteId), { status: 403 });
     await assert.rejects(
       operations.siteManagerDecision(observer, assignment.id, { approve: true }),
     );

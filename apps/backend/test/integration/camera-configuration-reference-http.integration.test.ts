@@ -120,24 +120,18 @@ test('registered image/reference HTTP routes enforce existing read roles and ret
       .status,
     400,
   );
-  for (const role of ['SAFETY_OFFICER', 'ADMIN']) {
-    const reader = await actor(role, role === 'ADMIN' ? null : site);
-    assert.equal(
-      (await fetch(`${base}/configuration-reference`, { headers: reader.headers })).status,
-      200,
-    );
+  const safety = await actor('SAFETY_OFFICER', site);
+  for (const route of ['configuration-image', 'configuration-reference']) {
+    assert.equal((await fetch(`${base}/${route}`, { headers: safety.headers })).status, 200);
   }
   const denied = await actor('WORKER', site),
-    otherManager = await actor('SITE_MANAGER', otherSite);
+    otherManager = await actor('SITE_MANAGER', otherSite),
+    otherSafety = await actor('SAFETY_OFFICER', otherSite),
+    admin = await actor('ADMIN', null);
   const before = reads;
-  assert.equal(
-    (await fetch(`${base}/configuration-reference`, { headers: denied.headers })).status,
-    403,
-  );
-  assert.equal(
-    (await fetch(`${base}/configuration-reference`, { headers: otherManager.headers })).status,
-    403,
-  );
+  for (const reader of [denied, otherManager, otherSafety, admin])
+    for (const route of ['configuration-image', 'configuration-reference'])
+      assert.equal((await fetch(`${base}/${route}`, { headers: reader.headers })).status, 403);
   assert.equal(
     (
       await fetch(`${base.replace(site, otherSite)}/configuration-reference`, {

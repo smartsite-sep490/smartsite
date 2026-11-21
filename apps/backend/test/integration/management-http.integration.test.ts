@@ -195,10 +195,7 @@ test('Admin Site setup and scoped Manager Zone setup feed an allowlisted AI snap
     const participationResponse = await fetch(`${participationPath}?offset=0&limit=1`, {
       headers: { Authorization: `Bearer ${adminToken}` },
     });
-    assert.equal(participationResponse.status, 200);
-    const participationBody = await participationResponse.json();
-    assert.equal(participationBody.items[0].site.id, site.id);
-    assert.equal(participationBody.items[0].status, 'ACTIVE');
+    assert.equal(participationResponse.status, 403);
     assert.equal(
       (
         await fetch(`${participationPath}?limit=101`, {
@@ -210,7 +207,7 @@ test('Admin Site setup and scoped Manager Zone setup feed an allowlisted AI snap
     const directoryPath = `${url}/api/v1/contractors?limit=1`;
     assert.equal(
       (await fetch(directoryPath, { headers: { Authorization: `Bearer ${adminToken}` } })).status,
-      200,
+      403,
     );
     assert.equal(
       (await fetch(directoryPath, { headers: { Authorization: `Bearer ${managerToken}` } })).status,
@@ -375,8 +372,31 @@ test('Admin Site setup and scoped Manager Zone setup feed an allowlisted AI snap
     );
     assert.equal(workerResponse.status, 201);
     const worker = (await workerResponse.json()) as { id: string };
+    for (const path of [
+      `/sites/${site.id}/workers`,
+      `/sites/${site.id}/contractors`,
+      `/sites/${site.id}/zones/${zone.id}/access-grants`,
+      `/sites/${site.id}/zone-entry-decisions`,
+    ]) {
+      assert.equal(
+        (
+          await fetch(`${url}/api/v1${path}`, {
+            headers: { Authorization: `Bearer ${adminToken}` },
+          })
+        ).status,
+        403,
+      );
+      assert.equal(
+        (
+          await fetch(`${url}/api/v1${path.replace(site.id, randomUUID())}`, {
+            headers: { Authorization: `Bearer ${managerToken}` },
+          })
+        ).status,
+        403,
+      );
+    }
     const workerList = await fetch(`${url}/api/v1/sites/${site.id}/workers`, {
-      headers: { Authorization: `Bearer ${adminToken}` },
+      headers: { Authorization: `Bearer ${managerToken}` },
     });
     assert.equal(workerList.status, 200);
     assert.equal(((await workerList.json()) as { total: number }).total, 1);
@@ -403,7 +423,7 @@ test('Admin Site setup and scoped Manager Zone setup feed an allowlisted AI snap
     );
     assert.equal(grantResponse.status, 201);
     const grantList = await fetch(`${url}/api/v1/sites/${site.id}/zones/${zone.id}/access-grants`, {
-      headers: { Authorization: `Bearer ${adminToken}` },
+      headers: { Authorization: `Bearer ${managerToken}` },
     });
     assert.equal(grantList.status, 200);
     const grantListBody = (await grantList.json()) as { items: { id: string }[]; total: number };
@@ -471,7 +491,7 @@ test('Admin Site setup and scoped Manager Zone setup feed an allowlisted AI snap
     assert.equal(((await firstEvent.json()) as { status: string }).status, 'PROCESSED');
     const unverifiedDecisions = await fetch(
       `${url}/api/v1/sites/${site.id}/zone-entry-decisions?zoneId=${zone.id}&status=UNAVAILABLE`,
-      { headers: { Authorization: `Bearer ${adminToken}` } },
+      { headers: { Authorization: `Bearer ${managerToken}` } },
     );
     assert.equal(unverifiedDecisions.status, 200);
     assert.equal(((await unverifiedDecisions.json()) as { total: number }).total, 1);
@@ -496,7 +516,7 @@ test('Admin Site setup and scoped Manager Zone setup feed an allowlisted AI snap
     assert.equal(((await deniedEvent.json()) as { status: string }).status, 'PROCESSED');
     const stillUnverifiedDecisions = await fetch(
       `${url}/api/v1/sites/${site.id}/zone-entry-decisions?zoneId=${zone.id}&status=UNAVAILABLE`,
-      { headers: { Authorization: `Bearer ${adminToken}` } },
+      { headers: { Authorization: `Bearer ${managerToken}` } },
     );
     assert.equal(stillUnverifiedDecisions.status, 200);
     assert.equal(((await stillUnverifiedDecisions.json()) as { total: number }).total, 2);

@@ -53,8 +53,9 @@ test('attendance reports: real HTTP/auth, PostgreSQL totals, calendar data, sear
   const repId = randomUUID(),
     userId = randomUUID(),
     outsiderId = randomUUID(),
+    managerId = randomUUID(),
     adminId = randomUUID();
-  const userIds = [repId, userId, outsiderId, adminId];
+  const userIds = [repId, userId, outsiderId, managerId, adminId];
   const query = { fromDate: '2026-10-12', toDate: '2026-10-18' };
   const actor = (id: string) => ({ id, mustChangePassword: false, roleAssignments: [] });
   let app: NestExpressApplication | undefined;
@@ -78,6 +79,7 @@ test('attendance reports: real HTTP/auth, PostgreSQL totals, calendar data, sear
       [repId, UserRole.CONTRACTOR_REPRESENTATIVE, siteId],
       [userId, UserRole.WORKER, siteId],
       [outsiderId, UserRole.WORKER, otherSite],
+      [managerId, UserRole.SITE_MANAGER, siteId],
       [adminId, UserRole.ADMIN, null],
     ] as const)
       await dataSource
@@ -277,7 +279,10 @@ test('attendance reports: real HTTP/auth, PostgreSQL totals, calendar data, sear
         .totalMinutes,
       255,
     );
-    assert.equal((await service.summary(actor(adminId), siteId, query)).totalWorkers, 3);
+    assert.equal((await service.summary(actor(managerId), siteId, query)).totalWorkers, 3);
+    await assert.rejects(service.summary(actor(managerId), otherSite, query), { status: 403 });
+    await assert.rejects(service.summary(actor(adminId), siteId, query), { status: 403 });
+    await assert.rejects(service.list(actor(adminId), siteId, query), { status: 403 });
     await assert.rejects(
       service.list(actor(repId), siteId, { ...query, workerId: excluded.id }),
       (e: unknown) => (e as { getStatus(): number }).getStatus() === 403,
@@ -360,6 +365,16 @@ test('attendance reports: real HTTP/auth, PostgreSQL totals, calendar data, sear
       403,
     );
     const exportUrl = `${url}/api/v1/sites/${siteId}/attendance-export?${suffix}`;
+    const adminLogin = await auth.login(adminId, password);
+    for (const route of ['attendance-summary', 'attendance-workers', 'attendance-export'])
+      assert.equal(
+        (
+          await fetch(`${url}/api/v1/sites/${siteId}/${route}?${suffix}`, {
+            headers: { Authorization: `Bearer ${adminLogin.accessToken}` },
+          })
+        ).status,
+        403,
+      );
     await t.test(
       'export has its own persisted role boundary and excludes Worker self scope',
       async () => {
@@ -383,6 +398,10 @@ test('attendance reports: real HTTP/auth, PostgreSQL totals, calendar data, sear
             403,
           );
         }
+        await dataSource
+          .getRepository(UserRoleAssignmentEntity)
+          .delete({ userId: managerId, siteId, role: UserRole.SITE_MANAGER });
+        await assert.rejects(service.export(actor(managerId), siteId, query), denied);
         await dataSource.getRepository(UserRoleAssignmentEntity).save({
           id: randomUUID(),
           userId,
@@ -395,7 +414,14 @@ test('attendance reports: real HTTP/auth, PostgreSQL totals, calendar data, sear
           .getRepository(UserRoleAssignmentEntity)
           .delete({ userId, role: UserRole.SITE_MANAGER });
         await assert.rejects(service.export(actor(userId), siteId, query), denied);
-        assert.equal((await service.export(actor(adminId), siteId, query)).total, 3);
+        await dataSource.getRepository(UserRoleAssignmentEntity).save({
+          id: randomUUID(),
+          userId: managerId,
+          siteId,
+          role: UserRole.SITE_MANAGER,
+        });
+        assert.equal((await service.export(actor(managerId), siteId, query)).total, 3);
+        await assert.rejects(service.export(actor(adminId), siteId, query), denied);
         await assert.rejects(service.export(actor(repId), otherSite, query), denied);
         await assert.rejects(
           service.export(actor(repId), siteId, { ...query, workerId: excluded.id }),

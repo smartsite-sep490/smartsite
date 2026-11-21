@@ -64,6 +64,10 @@ test('MF07 Site setup reuses one Contractor across Sites and shares Representati
       siteId,
     })),
   };
+  const manager = (siteId: string): AuthenticatedUser => ({
+    ...admin,
+    roleAssignments: [{ role: UserRole.SITE_MANAGER, siteId }],
+  });
   const workforce = new WorkforceConfigurationService(dataSource);
   const main = new ContractorOperationsService(dataSource);
   const input = { code: `C_${suffix}`, name: 'Shared Contractor' };
@@ -72,9 +76,11 @@ test('MF07 Site setup reuses one Contractor across Sites and shares Representati
   assert.equal(first.id, second.id);
   await participateContractor(dataSource, siteA, first.id);
   await participateContractor(dataSource, siteB, first.id);
-  assert.equal((await workforce.listContractors(admin, siteA)).total, 1);
-  assert.equal((await workforce.listContractors(admin, siteB)).total, 1);
-  assert.equal((await workforce.listContractors(admin, siteC)).total, 0);
+  assert.equal((await workforce.listContractors(manager(siteA), siteA)).total, 1);
+  assert.equal((await workforce.listContractors(manager(siteB), siteB)).total, 1);
+  assert.equal((await workforce.listContractors(manager(siteC), siteC)).total, 0);
+  await assert.rejects(workforce.listContractors(admin, siteA), { status: 403 });
+  await assert.rejects(workforce.listContractors(manager(siteA), siteB), { status: 403 });
   assert.equal(
     await dataSource
       .getRepository(ContractorSiteParticipationEntity)
@@ -156,7 +162,7 @@ test('MF07 Site setup reuses one Contractor across Sites and shares Representati
   await dataSource
     .getRepository(ContractorSiteParticipationEntity)
     .update({ contractorId: first.id, siteId: siteB }, { isActive: false });
-  assert.equal((await workforce.listContractors(admin, siteB)).total, 0);
+  assert.equal((await workforce.listContractors(manager(siteB), siteB)).total, 0);
   await assert.rejects(workforce.list(rep, siteB));
   await assert.rejects(
     new ScheduleConfigurationService(dataSource).listWorkerSchedules(rep, siteB),

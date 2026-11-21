@@ -5,6 +5,8 @@ import { loadAllPages } from '../workforce/load-all-pages';
 import { getSiteManagers, getReadySiteManagers } from '../workforce/utils/site-setup-helpers';
 import type { ActiveTab } from '../layout/AppLayout';
 import type { DashboardNavigateContext } from './DashboardView';
+import { Button } from '../ui/Button';
+import { IconRefresh } from '../icons';
 
 interface Props {
   apiUrl: string;
@@ -41,9 +43,13 @@ export function AdminDashboardView({ apiUrl, onNavigate }: Props) {
     return (
       <div role="alert" className="rounded-xl border border-rose-200 bg-rose-50 p-5 space-y-3">
         <p>{t('admin_dashboard.unavailable')}</p>
-        <button type="button" onClick={refresh} className="underline">
+        <Button
+          variant="outline"
+          onClick={refresh}
+          isLoading={users.isFetching || sites.isFetching}
+        >
           {t('accounts.retry')}
-        </button>
+        </Button>
       </div>
     );
   if (users.isPending || sites.isPending) return <p role="status">{t('accounts.loading')}</p>;
@@ -59,52 +65,47 @@ export function AdminDashboardView({ apiUrl, onNavigate }: Props) {
   ] as const;
   return (
     <div className="mx-auto max-w-7xl space-y-6">
-      <header className="flex flex-wrap items-center justify-between gap-3">
+      <header className="flex flex-wrap items-center justify-between gap-4 rounded-2xl border border-slate-200 bg-white p-5 shadow-xs">
         <div>
-          <h1 className="text-2xl font-bold text-slate-900">{t('admin_dashboard.title')}</h1>
-          <p className="mt-1 text-sm text-slate-600">{t('admin_dashboard.description')}</p>
+          <h1 className="text-xl font-bold tracking-tight text-[#041D2E]">
+            {t('admin_dashboard.title')}
+          </h1>
+          <p className="mt-1 text-xs text-slate-600">{t('admin_dashboard.description')}</p>
         </div>
-        <button
-          type="button"
+        <Button
+          variant="outline"
           onClick={refresh}
-          disabled={users.isFetching || sites.isFetching}
-          className="min-h-10 rounded-xl border bg-white px-4 text-sm disabled:opacity-50"
+          isLoading={users.isFetching || sites.isFetching}
+          leftIcon={<IconRefresh className="h-3.5 w-3.5" />}
+          className="min-h-10"
         >
           {t('admin_dashboard.refresh')}
-        </button>
+        </Button>
       </header>
       <dl className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
         {metrics.map(([label, value]) => (
-          <div key={label} className="rounded-2xl border bg-white p-5">
+          <div key={label} className="rounded-2xl border border-slate-200 bg-white p-5 shadow-xs">
             <dt className="text-sm text-slate-600">{t(label)}</dt>
             <dd className="mt-2 text-3xl font-bold text-slate-900">{value}</dd>
           </div>
         ))}
       </dl>
       <nav aria-label={t('admin_dashboard.shortcuts')} className="flex flex-wrap gap-3">
-        <button
-          type="button"
-          onClick={() => onNavigate('accounts')}
-          className="min-h-10 rounded-xl bg-[#041D2E] px-4 text-sm font-semibold text-white"
-        >
-          {t('accounts.title')}
-        </button>
-        <button
-          type="button"
-          onClick={() => onNavigate('site-setup')}
-          className="min-h-10 rounded-xl border bg-white px-4 text-sm font-semibold"
-        >
+        <Button variant="primary" onClick={() => onNavigate('site-setup')} className="min-h-10">
           {t('admin_dashboard.manage_sites')}
-        </button>
+        </Button>
+        <Button variant="outline" onClick={() => onNavigate('accounts')} className="min-h-10">
+          {t('accounts.title')}
+        </Button>
       </nav>
-      <section className="rounded-2xl border bg-white p-5">
+      <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-xs">
         <h2 className="text-lg font-bold text-slate-900">{t('admin_dashboard.needs_manager')}</h2>
         {pendingSites.length === 0 ? (
           <p className="mt-3 text-sm text-slate-600">
             {t(sites.data.items.length ? 'admin_dashboard.all_ready' : 'admin_dashboard.no_sites')}
           </p>
         ) : (
-          <ul className="mt-3 divide-y">
+          <ul className="mt-3 divide-y divide-slate-100">
             {pendingSites.map((site) => {
               const managers = getSiteManagers(accounts, site.id);
               const status = !managers.length
@@ -122,13 +123,13 @@ export function AdminDashboardView({ apiUrl, onNavigate }: Props) {
                     <p className="text-sm text-slate-500">{site.code}</p>
                     <p className="mt-1 text-sm text-amber-800">{t(`admin_dashboard.${status}`)}</p>
                   </div>
-                  <button
-                    type="button"
+                  <Button
+                    variant="outline"
                     onClick={() => onNavigate('site-setup', { siteId: site.id })}
-                    className="min-h-10 rounded-xl border px-4 text-sm font-semibold"
+                    className="min-h-10"
                   >
                     {t('admin_dashboard.open_site')}
-                  </button>
+                  </Button>
                 </li>
               );
             })}

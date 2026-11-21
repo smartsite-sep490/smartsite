@@ -14,8 +14,9 @@ import {
   IconX,
   IconAlertTriangle,
 } from '../../components/icons';
+import { Button } from '../../components/ui/Button';
 import { AccountEditor, type AccountEditorAction } from './AccountEditor';
-import { ACCOUNT_ROLES, accountButton, accountControl, accountErrorKey } from './account-utils';
+import { ACCOUNT_ROLES, accountControl, accountErrorKey } from './account-utils';
 
 const PAGE_SIZE = 20;
 
@@ -125,9 +126,9 @@ export function AccountsView({ apiUrl }: { apiUrl: string }) {
         >
           <IconAlertTriangle className="mx-auto h-8 w-8 text-rose-600" />
           <p className="text-xs font-semibold text-rose-800">{t(accountErrorKey(profile.error))}</p>
-          <button className={accountButton} onClick={() => void profile.refetch()}>
+          <Button variant="outline" className="min-h-10" onClick={() => void profile.refetch()}>
             {t('accounts.retry')}
-          </button>
+          </Button>
         </div>
       </div>
     );
@@ -164,31 +165,34 @@ export function AccountsView({ apiUrl }: { apiUrl: string }) {
                 {tr('integrated_ui.admin_console')}
               </span>
             </div>
-            <h1 className="text-xl font-extrabold tracking-tight text-[#111111]">
+            <h1 className="text-xl font-bold tracking-tight text-[#041D2E]">
               {t('accounts.title')}
             </h1>
             <p className="text-xs text-[#6B6B6B]">{t('accounts.description')}</p>
           </div>
 
           <div className="flex flex-wrap items-center gap-2.5">
-            <button
+            <Button
+              isLoading={users.isFetching || sites.isFetching}
+              leftIcon={<IconRefresh className="h-3.5 w-3.5" />}
+              variant="outline"
               type="button"
-              className={accountButton}
+              className="min-h-10"
               onClick={refresh}
               disabled={users.isFetching || sites.isFetching}
             >
-              <IconRefresh className="w-3.5 h-3.5" />
               <span>{t('accounts.refresh')}</span>
-            </button>
-            <button
+            </Button>
+            <Button
+              variant="primary"
+              leftIcon={<IconUsers className="h-4 w-4" />}
               type="button"
-              className="inline-flex min-h-9 items-center justify-center gap-1.5 rounded-xl bg-[#F66B17] hover:bg-[#E05A0A] text-white px-4 py-2 text-xs font-bold shadow-xs transition-all active:scale-[0.99] disabled:cursor-not-allowed disabled:opacity-50 cursor-pointer"
+              className="min-h-10"
               disabled={!sites.isSuccess || Boolean(editor)}
               onClick={() => open({ mode: 'create' })}
             >
-              <IconUsers className="w-4 h-4" />
               <span>{t('accounts.create')}</span>
-            </button>
+            </Button>
           </div>
         </div>
 
@@ -233,6 +237,7 @@ export function AccountsView({ apiUrl }: { apiUrl: string }) {
               <button
                 key={m.id}
                 type="button"
+                aria-pressed={m.active}
                 onClick={() => {
                   setStatus(m.id);
                   setPage(0);
@@ -268,8 +273,9 @@ export function AccountsView({ apiUrl }: { apiUrl: string }) {
           </div>
           <button
             type="button"
+            aria-label={t('common.close')}
             onClick={() => setSaved(false)}
-            className="text-emerald-700 hover:text-emerald-900 cursor-pointer"
+            className="inline-flex min-h-10 min-w-10 items-center justify-center rounded-lg text-emerald-700 hover:bg-emerald-100"
           >
             <IconX className="w-3.5 h-3.5" />
           </button>
@@ -285,9 +291,9 @@ export function AccountsView({ apiUrl }: { apiUrl: string }) {
             <IconAlertTriangle className="w-4 h-4 text-amber-600 shrink-0" />
             <span>{t('accounts.sitesError')}</span>
           </div>
-          <button className={accountButton} onClick={() => void sites.refetch()}>
+          <Button variant="outline" className="min-h-10" onClick={() => void sites.refetch()}>
             {t('accounts.retry')}
-          </button>
+          </Button>
         </div>
       )}
 
@@ -341,8 +347,9 @@ export function AccountsView({ apiUrl }: { apiUrl: string }) {
               {search && (
                 <button
                   type="button"
+                  aria-label={t('common.clear_search')}
                   onClick={() => setSearch('')}
-                  className="absolute inset-y-0 right-0 pr-3 flex items-center text-slate-400 hover:text-slate-600 cursor-pointer"
+                  className="absolute inset-y-0 right-0 min-w-10 justify-center flex items-center text-slate-400 hover:text-slate-600 cursor-pointer"
                 >
                   <IconX className="w-3.5 h-3.5" />
                 </button>
@@ -436,9 +443,9 @@ export function AccountsView({ apiUrl }: { apiUrl: string }) {
         ) : users.isError ? (
           <div role="alert" className="space-y-3 p-6">
             <p className="text-xs font-semibold text-rose-800">{t(accountErrorKey(users.error))}</p>
-            <button className={accountButton} onClick={() => void users.refetch()}>
+            <Button variant="outline" className="min-h-10" onClick={() => void users.refetch()}>
               {t('accounts.retry')}
-            </button>
+            </Button>
           </div>
         ) : rows.length === 0 ? (
           <p className="p-12 text-center text-xs text-slate-400">{t('accounts.empty')}</p>
@@ -569,33 +576,32 @@ export function AccountsView({ apiUrl }: { apiUrl: string }) {
                           aria-label={t('accounts.actionsFor', { username: account.username })}
                           className="inline-flex flex-wrap items-center justify-end gap-1.5"
                         >
-                          <button
+                          <Button
+                            variant="outline"
+                            leftIcon={<IconShield className="h-3.5 w-3.5" />}
                             type="button"
-                            className="inline-flex items-center gap-1 rounded-lg border border-slate-200 bg-white hover:bg-slate-50 hover:border-slate-300 px-2.5 py-1 text-xs font-semibold text-slate-700 shadow-2xs transition-all cursor-pointer disabled:opacity-50"
+                            className="min-h-10"
                             disabled={!sites.isSuccess || Boolean(editor)}
                             onClick={() => open({ mode: 'roles', account })}
                           >
-                            <IconShield className="w-3.5 h-3.5 text-slate-400" />
                             <span>{t('accounts.editRoles')}</span>
-                          </button>
+                          </Button>
 
-                          <button
+                          <Button
+                            variant="outline"
+                            leftIcon={<IconKey className="h-3.5 w-3.5" />}
                             type="button"
-                            className="inline-flex items-center gap-1 rounded-lg border border-slate-200 bg-white hover:bg-slate-50 hover:border-slate-300 px-2.5 py-1 text-xs font-semibold text-slate-700 shadow-2xs transition-all cursor-pointer disabled:opacity-50"
+                            className="min-h-10"
                             disabled={Boolean(editor)}
                             onClick={() => open({ mode: 'password', account })}
                           >
-                            <IconKey className="w-3.5 h-3.5 text-slate-400" />
                             <span>{t('accounts.resetPassword')}</span>
-                          </button>
+                          </Button>
 
-                          <button
+                          <Button
+                            variant={account.isActive ? 'destructive' : 'outline'}
                             type="button"
-                            className={`inline-flex items-center gap-1 rounded-lg px-2.5 py-1 text-xs font-semibold transition-all cursor-pointer disabled:opacity-50 ${
-                              account.isActive
-                                ? 'border border-slate-200 text-slate-600 hover:text-rose-700 hover:border-rose-200 hover:bg-rose-50'
-                                : 'border border-emerald-200 bg-emerald-50 text-emerald-800 hover:bg-emerald-100'
-                            }`}
+                            className="min-h-10"
                             disabled={account.id === currentUser!.id || Boolean(editor)}
                             title={
                               account.id === currentUser!.id
@@ -607,7 +613,7 @@ export function AccountsView({ apiUrl }: { apiUrl: string }) {
                             <span>
                               {t(account.isActive ? 'accounts.disable' : 'accounts.enable')}
                             </span>
-                          </button>
+                          </Button>
                         </div>
                       </td>
                     </tr>
@@ -627,22 +633,24 @@ export function AccountsView({ apiUrl }: { apiUrl: string }) {
             {t('accounts.page', { page: currentPage + 1, total: totalPages })}
           </span>
           <div className="flex gap-2">
-            <button
+            <Button
+              variant="outline"
               type="button"
-              className={accountButton}
+              className="min-h-10"
               disabled={currentPage === 0}
               onClick={() => setPage(currentPage - 1)}
             >
               {t('accounts.previous')}
-            </button>
-            <button
+            </Button>
+            <Button
+              variant="outline"
               type="button"
-              className={accountButton}
+              className="min-h-10"
               disabled={currentPage + 1 >= totalPages}
               onClick={() => setPage(currentPage + 1)}
             >
               {t('accounts.next')}
-            </button>
+            </Button>
           </div>
         </nav>
       </section>
