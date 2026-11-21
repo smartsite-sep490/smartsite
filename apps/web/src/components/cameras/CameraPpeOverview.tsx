@@ -408,7 +408,10 @@ export function RegionEffectivePolicyList({
                         <span
                           className={`inline-flex items-center gap-1.5 text-sm font-medium ${modeTone.text}`}
                         >
-                          <span aria-hidden="true" className={`h-2 w-2 rounded-full ${modeTone.dot}`} />
+                          <span
+                            aria-hidden="true"
+                            className={`h-2 w-2 rounded-full ${modeTone.dot}`}
+                          />
                           {t(modeBadgeCopyKey(modeKey))}
                         </span>
                         <span className="text-xs tabular-nums text-slate-500">

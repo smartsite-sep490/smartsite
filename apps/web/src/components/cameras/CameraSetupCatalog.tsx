@@ -418,7 +418,9 @@ export function CameraSetupCatalog({
                 data-testid="camera-setup-empty-catalog"
                 className="space-y-3 rounded-xl border border-dashed border-slate-200 bg-slate-50/50 px-5 py-6 text-center"
               >
-                <p className="text-base font-semibold text-slate-900">{t('cameraSetup.noCameras')}</p>
+                <p className="text-base font-semibold text-slate-900">
+                  {t('cameraSetup.noCameras')}
+                </p>
                 <p className="mx-auto max-w-xl text-sm leading-relaxed text-slate-600">
                   {t(
                     canManageCameras

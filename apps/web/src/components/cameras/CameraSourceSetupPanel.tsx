@@ -311,7 +311,11 @@ function SourceWorkspace({
         ? { dot: 'bg-rose-600', text: 'text-rose-800', key: 'cameraSource.stage2Error' as const }
         : { dot: 'bg-slate-400', text: 'text-slate-700', key: 'cameraSource.stage2Idle' as const };
   const stage4Status = applying.isSuccess
-    ? { dot: 'bg-emerald-600', text: 'text-emerald-800', key: 'cameraSource.stage4Running' as const }
+    ? {
+        dot: 'bg-emerald-600',
+        text: 'text-emerald-800',
+        key: 'cameraSource.stage4Running' as const,
+      }
     : resuming.isSuccess
       ? { dot: 'bg-teal-600', text: 'text-teal-900', key: 'cameraSource.stage4Resumed' as const }
       : activeResult?.sourceKind === 'REPLAY' && !isExpired
@@ -333,10 +337,7 @@ function SourceWorkspace({
     >
       <header className="border-b border-slate-200 px-4 py-4 sm:px-5">
         <p className="text-sm font-semibold text-slate-700 tabular-nums">{camera.name}</p>
-        <h2
-          id={`${id}-heading`}
-          className="mt-1 text-lg font-bold tracking-tight text-slate-950"
-        >
+        <h2 id={`${id}-heading`} className="mt-1 text-lg font-bold tracking-tight text-slate-950">
           {t('cameraSource.title')}
         </h2>
         <p className="mt-1 max-w-3xl text-sm leading-relaxed text-slate-600">
@@ -352,7 +353,10 @@ function SourceWorkspace({
           <div className="min-w-0 px-3.5 py-2.5 space-y-1">
             <dt className="text-xs font-medium text-slate-600">{t('cameraSource.stage1Label')}</dt>
             <dd className="flex items-start gap-2 text-sm font-semibold text-slate-900 tabular-nums">
-              <span aria-hidden="true" className="mt-1.5 h-2 w-2 shrink-0 rounded-full bg-[#0F172A]" />
+              <span
+                aria-hidden="true"
+                className="mt-1.5 h-2 w-2 shrink-0 rounded-full bg-[#0F172A]"
+              />
               <span className="min-w-0 break-words [overflow-wrap:anywhere]">
                 {t('cameraSource.stage1Done', {
                   name: camera.name,
@@ -369,13 +373,18 @@ function SourceWorkspace({
                 aria-hidden="true"
                 className={`mt-1.5 h-2 w-2 shrink-0 rounded-full ${stage2Tone.dot}`}
               />
-              <span className="min-w-0 break-words [overflow-wrap:anywhere]">{t(stage2Tone.key)}</span>
+              <span className="min-w-0 break-words [overflow-wrap:anywhere]">
+                {t(stage2Tone.key)}
+              </span>
             </dd>
           </div>
           <div className="min-w-0 px-3.5 py-2.5 space-y-1">
             <dt className="text-xs font-medium text-slate-600">{t('cameraSource.stage3Label')}</dt>
             <dd className="flex items-start gap-2 text-sm font-semibold text-slate-900 tabular-nums">
-              <span aria-hidden="true" className="mt-1.5 h-2 w-2 shrink-0 rounded-full bg-slate-600" />
+              <span
+                aria-hidden="true"
+                className="mt-1.5 h-2 w-2 shrink-0 rounded-full bg-slate-600"
+              />
               <span>
                 {t('cameraSource.stage3Value', { version: camera.configurationVersion ?? 0 })}
               </span>
@@ -398,10 +407,7 @@ function SourceWorkspace({
           </div>
         </dl>
 
-        <fieldset
-          className="grid min-w-0 grid-cols-1 gap-2.5 sm:grid-cols-2"
-          disabled={blocked}
-        >
+        <fieldset className="grid min-w-0 grid-cols-1 gap-2.5 sm:grid-cols-2" disabled={blocked}>
           <legend className="sr-only">{t('cameraSource.title')}</legend>
           {(['WEBCAM', 'RTSP', 'VIDEO', 'BROWSER'] as const).map((option) => (
             <label
@@ -721,7 +727,11 @@ function SourceWorkspace({
                           : 'bg-emerald-600'
                     }`}
                   />
-                  {t(activeResult.sourceKind === 'REPLAY' ? 'cameraSource.replay' : 'cameraSource.live')}
+                  {t(
+                    activeResult.sourceKind === 'REPLAY'
+                      ? 'cameraSource.replay'
+                      : 'cameraSource.live',
+                  )}
                 </span>
               </span>
             </figcaption>

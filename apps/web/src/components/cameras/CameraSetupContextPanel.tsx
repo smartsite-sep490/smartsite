@@ -146,10 +146,7 @@ const STAGE_KEYS = [
 export function CameraSetupStageCards() {
   const { t } = useTranslation(SAFETY_NAMESPACE);
   return (
-    <div
-      data-testid="camera-setup-stages-disclosure"
-      className="min-w-0 text-sm text-slate-700"
-    >
+    <div data-testid="camera-setup-stages-disclosure" className="min-w-0 text-sm text-slate-700">
       <p className="mb-2.5 text-sm font-semibold text-slate-900">
         {t('cameraSetup.stagesDisclosureLabel')}
       </p>

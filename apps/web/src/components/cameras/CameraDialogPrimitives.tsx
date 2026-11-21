@@ -118,8 +118,8 @@ export function CameraManagementMetadataCard({
             aria-hidden="true"
             className={`h-2 w-2 rounded-full ${isActive ? 'bg-emerald-600' : 'bg-slate-400'}`}
           />
-          {t(isActive ? 'cameraSetup.manage.statusActive' : 'cameraSetup.manage.statusInactive')} · v
-          {camera.configurationVersion}
+          {t(isActive ? 'cameraSetup.manage.statusActive' : 'cameraSetup.manage.statusInactive')} ·
+          v{camera.configurationVersion}
         </span>
       </div>
       <p className="text-sm leading-relaxed text-slate-600 break-words">
