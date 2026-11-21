@@ -70,6 +70,26 @@ export class TrackedEpisodeFramesController {
       evidenceIndex: parsed.evidenceIndex,
     });
   }
+  @Get('findings/:alertId/events/:eventId/identity-card')
+  @Header('Cache-Control', 'private, no-store')
+  identityCard(
+    @Req() request: AuthenticatedRequest,
+    @Param('siteId') siteId: string,
+    @Param('id') id: string,
+    @Param('alertId') alertId: string,
+    @Param('eventId') eventId: string,
+    @Query() query: Record<string, unknown>,
+  ) {
+    const parsed = parseTrackedEpisodeMediaQuery(query);
+    if (!parsed || Object.hasOwn(query, 'representation'))
+      invalid('Invalid original identity query');
+    return this.frames.identityCard(request, siteId, id, {
+      alertId,
+      eventId,
+      personObservationIndex: parsed.personObservationIndex,
+      evidenceIndex: parsed.evidenceIndex,
+    });
+  }
   @Get('findings/:alertId/events/:eventId/frame')
   @Header('Cache-Control', 'private, no-store')
   @Header('X-Content-Type-Options', 'nosniff')
