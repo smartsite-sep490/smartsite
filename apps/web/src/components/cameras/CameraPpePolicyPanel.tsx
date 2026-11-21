@@ -300,6 +300,8 @@ export function CameraPpePolicyPanel({
   statusContext,
   expandSignal = 0,
   defaultOpen = false,
+  embeddedInTab = false,
+  onOpenChange,
   onOpenReference,
   onOpenApply,
 }: {
@@ -310,6 +312,8 @@ export function CameraPpePolicyPanel({
   statusContext?: CameraApplicationStatusContext;
   expandSignal?: number;
   defaultOpen?: boolean;
+  embeddedInTab?: boolean;
+  onOpenChange?: (isOpen: boolean) => void;
   onOpenReference?: (trigger: HTMLButtonElement) => void;
   onOpenApply?: () => void;
 }) {
@@ -329,8 +333,10 @@ export function CameraPpePolicyPanel({
     if (open) {
       setManualOpen(false);
       setDismissedSignal(expandSignal);
+      onOpenChange?.(false);
     } else {
       setManualOpen(true);
+      onOpenChange?.(true);
     }
   };
 
@@ -339,14 +345,18 @@ export function CameraPpePolicyPanel({
       ref={sectionRef}
       data-testid="camera-ppe-policy-panel"
       data-tour-anchor="camera-setup-ppe-policy"
-      className="rounded-xl border border-slate-200 bg-white p-4 sm:p-5 min-w-0"
+      className={
+        embeddedInTab
+          ? 'rounded-xl border border-slate-200 bg-white p-4 min-w-0'
+          : 'rounded-xl border border-slate-200 bg-white p-4 sm:p-5 min-w-0'
+      }
     >
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div className="min-w-0 space-y-0.5">
           <button
             type="button"
             aria-expanded={open}
-            className="inline-flex min-h-10 items-center gap-2 rounded-lg text-left text-base font-bold tracking-tight text-slate-950 hover:text-slate-700 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-slate-900 cursor-pointer"
+            className="inline-flex min-h-9 items-center gap-2 rounded-lg text-left text-base font-bold tracking-tight text-slate-950 hover:text-slate-700 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-slate-900 cursor-pointer"
             onClick={toggleOpen}
           >
             <span>{t('cameraPpe.title')}</span>
@@ -354,7 +364,9 @@ export function CameraPpePolicyPanel({
               {open ? '▾' : '▸'}
             </span>
           </button>
-          <p className="text-sm text-slate-600 leading-relaxed">{t('cameraPpe.subtitle')}</p>
+          {(!embeddedInTab || !open) && (
+            <p className="text-sm text-slate-600 leading-relaxed">{t('cameraPpe.subtitle')}</p>
+          )}
         </div>
       </div>
       {open && (
@@ -364,6 +376,7 @@ export function CameraPpePolicyPanel({
           canWrite={canWrite}
           camera={camera}
           statusContext={statusContext}
+          embeddedInTab={embeddedInTab}
           onOpenReference={onOpenReference}
           onOpenApply={onOpenApply}
         />
@@ -378,6 +391,7 @@ function PolicyEditor({
   canWrite,
   camera: cameraRecord,
   statusContext,
+  embeddedInTab = false,
   onOpenReference,
   onOpenApply,
 }: {
@@ -386,6 +400,7 @@ function PolicyEditor({
   canWrite: boolean;
   camera?: CameraResponse;
   statusContext?: CameraApplicationStatusContext;
+  embeddedInTab?: boolean;
   onOpenReference?: (trigger: HTMLButtonElement) => void;
   onOpenApply?: () => void;
 }) {
@@ -839,7 +854,11 @@ function PolicyEditor({
         : 'cameraPpe.error';
 
   return (
-    <div className="mt-4 grid gap-4 text-sm min-w-0">
+    <div
+      className={
+        embeddedInTab ? 'mt-2.5 grid gap-3 text-sm min-w-0' : 'mt-4 grid gap-4 text-sm min-w-0'
+      }
+    >
       {activeDenialStatus !== null ? (
         <div
           role="alert"
@@ -880,6 +899,7 @@ function PolicyEditor({
       ) : (
         <>
           <SavedVsAppliedBanner
+            compact={embeddedInTab}
             state={savedVsApplied}
             onRefreshStatus={
               applicationStatus.canQuery
@@ -920,7 +940,11 @@ function PolicyEditor({
 
           <div
             data-testid="camera-ppe-capability-note"
-            className="rounded-xl border border-slate-200 bg-slate-50/50 px-3.5 py-2.5 text-sm leading-relaxed text-slate-600 space-y-1"
+            className={
+              embeddedInTab
+                ? 'rounded-lg border border-slate-200 bg-slate-50/50 px-3 py-2 text-xs leading-relaxed text-slate-600 space-y-0.5'
+                : 'rounded-xl border border-slate-200 bg-slate-50/50 px-3.5 py-2.5 text-sm leading-relaxed text-slate-600 space-y-1'
+            }
           >
             <p>{t('cameraPpe.capabilityTruthNote')}</p>
             <p className="text-xs text-slate-600">{t('cameraPpe.modelCapabilityDistinction')}</p>
