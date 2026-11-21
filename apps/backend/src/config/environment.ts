@@ -302,6 +302,10 @@ export const backendEnvironmentSchema = z
       .default('false')
       .transform((value) => value === 'true'),
     AI_TRACKED_FRAME_RUNTIME_POLICY: trackedRuntimePolicyEnvironment.optional(),
+    AI_EVIDENCE_OBJECT_STORAGE_ENABLED: z
+      .enum(['false', 'true'])
+      .default('false')
+      .transform((value) => value === 'true'),
     DATABASE_SCHEMA: z.string().optional(),
     SMARTSITE_DB_MIGRATION_PROFILE: z.enum(TRACKED_MIGRATION_PROFILES).optional(),
     SAFETY_IDENTIFICATION_ENABLED: z
