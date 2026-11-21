@@ -638,6 +638,36 @@ function ZonePpeCameraRegionDrawerContent(
                 )}
               </div>
             )}
+            {!serverError && isReferenceRevisionStale && showReloadConflictReferenceBtn && (
+              <div
+                role="status"
+                data-testid="polygon-stale-revision-banner"
+                className="rounded-lg border border-amber-200 bg-amber-50 p-2.5 text-xs text-amber-950 space-y-2"
+              >
+                <p className="min-w-0 break-words">
+                  {t('regionSetup.drawer.readinessRevisionStale', {
+                    refVersion: frozenReference.configurationVersion,
+                    camVersion: targetCameraVersion,
+                  })}
+                </p>
+                <div className="flex justify-end">
+                  <button
+                    type="button"
+                    data-testid="polygon-stale-reload-reference"
+                    disabled={isLoadingReference || createRegionMutation.isPending}
+                    onClick={onRequestFreshReference}
+                    className="rounded-lg border border-amber-300 bg-white px-2.5 py-1 text-xs font-semibold text-amber-950 hover:bg-amber-100 transition-colors cursor-pointer disabled:opacity-50"
+                  >
+                    {t('regionSetup.error.409ReloadBtn', {
+                      version: Math.max(
+                        targetCameraVersion,
+                        frozenReference.configurationVersion + 1,
+                      ),
+                    })}
+                  </button>
+                </div>
+              </div>
+            )}
             <RegionReferenceViewConsentCheckbox
               checked={isReferenceViewConfirmed}
               disabled={isConsentDisabled}

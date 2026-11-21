@@ -32,6 +32,8 @@ export function CameraSetupCatalog({
   policyContext,
   sourceSetupStage,
   inlineRegionStage,
+  autoExpandPpeCameraId = null,
+  onOpenApply,
 }: {
   siteId?: string;
   siteCode?: string;
@@ -51,6 +53,8 @@ export function CameraSetupCatalog({
   policyContext?: CameraPpeContext;
   sourceSetupStage?: ReactNode;
   inlineRegionStage?: ReactNode;
+  autoExpandPpeCameraId?: string | null;
+  onOpenApply?: () => void;
 }) {
   const { t } = useTranslation(SAFETY_NAMESPACE);
   const catalogId = useId();
@@ -229,6 +233,22 @@ export function CameraSetupCatalog({
                                   {t('cameraSetup.regionsAction')}
                                 </button>
                               )}
+                              {isEnabled && policyContext && (
+                                <button
+                                  type="button"
+                                  className={railInlineAction}
+                                  aria-describedby={nameId}
+                                  onClick={() => {
+                                    setFocusedCameraId(row.id);
+                                    setPpeExpandRequest((prev) => ({
+                                      cameraId: row.id,
+                                      seq: (prev?.seq ?? 0) + 1,
+                                    }));
+                                  }}
+                                >
+                                  {t('cameraSetup.ppeAction')}
+                                </button>
+                              )}
                               <button
                                 type="button"
                                 className={`${railInlineAction} shrink-0`}
@@ -371,7 +391,9 @@ export function CameraSetupCatalog({
                   context={policyContext}
                   statusContext={statusContext}
                   canWrite={canManageCameras}
+                  defaultOpen={autoExpandPpeCameraId === selectedCamera.id}
                   onOpenReference={(trigger) => open('regions', selectedCamera.id, trigger)}
+                  onOpenApply={onOpenApply}
                   expandSignal={
                     ppeExpandRequest?.cameraId === selectedCamera.id ? ppeExpandRequest.seq : 0
                   }

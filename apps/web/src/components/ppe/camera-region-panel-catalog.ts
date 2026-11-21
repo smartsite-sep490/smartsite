@@ -13,10 +13,12 @@ export interface ZonePpeCameraRegionPanelProps {
   credentialId: number;
   siteId: string;
   initialCameraId?: string;
+  initialRegionId?: string;
   zones: ZoneResponse[];
   tourUserId?: string | null;
   onSelectCamera?: (cameraId: string) => void;
   onDraftStateChange?: (state: { dirty: boolean; saving: boolean }) => void;
+  onOpenApply?: () => void;
   onUnauthorized?: () => void;
   onClose?: () => void;
 }
@@ -97,6 +99,13 @@ const CAMERA_REGION_PANEL_EN = {
   'regionSetup.list.technicalZoneId': 'Zone ID: {id}',
   'regionSetup.list.editGeometry': 'Edit Geometry',
   'regionSetup.list.revalidateGeometry': 'Revalidate Geometry',
+  'regionSetup.list.editNeedReference': 'Load image & edit',
+  'regionSetup.list.loadingReferenceForEdit': 'Loading reference…',
+  'regionSetup.list.otherZonesHeading': 'Saved Regions in Other Zones on this Camera ({count})',
+  'regionSetup.list.otherZonesHint':
+    'Select Edit to switch to that Zone, load a fresh reference image if needed, and update the saved polygon.',
+  'regionSetup.list.restrictedBadge': 'Restricted Zone',
+  'regionSetup.feedback.jumpToApplyBtn': 'Go to apply on worker',
   'regionSetup.list.retryingMore': 'Retrying more regions…',
   'regionSetup.list.retryNextPage': 'Retry loading more regions',
   'regionSetup.list.loadingMore': 'Loading more regions…',
@@ -167,6 +176,13 @@ const CAMERA_REGION_PANEL_VI: Record<keyof typeof CAMERA_REGION_PANEL_EN, string
   'regionSetup.list.technicalZoneId': 'Mã khu vực (Zone ID): {id}',
   'regionSetup.list.editGeometry': 'Sửa hình học',
   'regionSetup.list.revalidateGeometry': 'Xác nhận lại hình học',
+  'regionSetup.list.editNeedReference': 'Lấy ảnh & sửa hình học',
+  'regionSetup.list.loadingReferenceForEdit': 'Đang lấy ảnh tham chiếu…',
+  'regionSetup.list.otherZonesHeading': 'Vùng quan sát đã lưu ở Khu vực khác trên Camera ({count})',
+  'regionSetup.list.otherZonesHint':
+    'Nhấn để tự chuyển sang Khu vực tương ứng, lấy ảnh tham chiếu mới nếu cần và sửa đa giác đã lưu.',
+  'regionSetup.list.restrictedBadge': 'Khu vực hạn chế',
+  'regionSetup.feedback.jumpToApplyBtn': 'Đi tới áp dụng cho worker',
   'regionSetup.list.retryingMore': 'Đang thử tải thêm vùng quan sát…',
   'regionSetup.list.retryNextPage': 'Thử tải thêm vùng quan sát',
   'regionSetup.list.loadingMore': 'Đang tải thêm vùng quan sát…',

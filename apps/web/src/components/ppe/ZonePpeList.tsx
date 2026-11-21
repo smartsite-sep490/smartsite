@@ -161,154 +161,165 @@ export function ZonePpeList({
         )}
 
         {showZoneSection && !isPending && scopedZones.length > 0 && (
-          <div className="space-y-2 max-h-64 overflow-y-auto pr-1 custom-scrollbar">
-            {scopedZones.map((zone) => {
-              const isEditingThisZone = canManageZones && editingZoneId === zone.id;
+          <div className="space-y-2.5">
+            {scopedZones.some((zone) => zone.configurationLocked) && (
+              <p
+                role="note"
+                data-testid="zone-locked-ppe-edit-guidance"
+                className="rounded-xl border border-slate-200 bg-slate-50/80 px-3.5 py-2 text-xs leading-relaxed text-slate-700"
+              >
+                {t('zoneSetup.rename.lockedPpeGuidance')}
+              </p>
+            )}
+            <div className="space-y-2 max-h-64 overflow-y-auto pr-1 custom-scrollbar">
+              {scopedZones.map((zone) => {
+                const isEditingThisZone = canManageZones && editingZoneId === zone.id;
 
-              if (isEditingThisZone) {
-                return (
-                  <form
-                    key={zone.id}
-                    onSubmit={(event) => {
-                      event.preventDefault();
-                      onSaveRename(zone);
-                    }}
-                    onKeyDown={(event) => {
-                      if (event.key === 'Escape') {
+                if (isEditingThisZone) {
+                  return (
+                    <form
+                      key={zone.id}
+                      onSubmit={(event) => {
                         event.preventDefault();
-                        event.stopPropagation();
-                        onCancelRename();
-                      }
-                    }}
-                    className="rounded-xl border border-slate-300 bg-white p-3.5 space-y-3 shadow-xs"
-                  >
-                    <div className="flex items-center justify-between text-xs font-semibold text-slate-700">
-                      <span>
-                        {t('zoneSetup.rename.headingPrefix')}{' '}
-                        <strong className="text-slate-900">{zone.code}</strong>
-                      </span>
-                      {zone.configurationLocked && (
-                        <span className="text-[10px] font-medium text-slate-500 bg-slate-100 px-2 py-0.5 rounded">
-                          {t('zoneSetup.rename.policyLockedBadge')}
-                        </span>
-                      )}
-                    </div>
-
-                    <div>
-                      <label
-                        htmlFor={`new-zone-name-${zone.id}`}
-                        className="block text-xs font-semibold text-slate-700 mb-1"
-                      >
-                        {t('zoneSetup.rename.newNameLabel')}
-                      </label>
-                      <input
-                        id={`new-zone-name-${zone.id}`}
-                        name="newZoneName"
-                        type="text"
-                        ref={renameInputRef}
-                        maxLength={255}
-                        value={editingZoneName}
-                        onChange={(e) => onEditingZoneNameChange(e.target.value)}
-                        disabled={isRenamingZone}
-                        aria-invalid={Boolean(renameValidationError || renameServerError)}
-                        aria-describedby={
-                          renameValidationError
-                            ? `rename-error-${zone.id}`
-                            : renameServerError
-                              ? `rename-server-error-${zone.id}`
-                              : undefined
+                        onSaveRename(zone);
+                      }}
+                      onKeyDown={(event) => {
+                        if (event.key === 'Escape') {
+                          event.preventDefault();
+                          event.stopPropagation();
+                          onCancelRename();
                         }
-                        className="w-full min-w-0 rounded-xl border border-slate-200 bg-white px-3.5 py-1.5 text-xs text-slate-800 outline-none focus:border-slate-900 focus:ring-1 focus:ring-slate-900 disabled:bg-slate-50 disabled:text-slate-400"
-                      />
-                      {renameValidationError && (
-                        <p
-                          id={`rename-error-${zone.id}`}
-                          role="alert"
-                          className="text-[11px] text-red-600 mt-1 font-medium"
-                        >
-                          {renameValidationError}
-                        </p>
-                      )}
-                      {renameServerError && (
-                        <p
-                          id={`rename-server-error-${zone.id}`}
-                          role="alert"
-                          className="text-[11px] text-red-600 mt-1 font-medium"
-                        >
-                          {renameServerError}
-                        </p>
-                      )}
-                    </div>
-
-                    <div className="flex items-center justify-end gap-2 pt-1">
-                      <button
-                        type="button"
-                        onClick={onCancelRename}
-                        disabled={isRenamingZone}
-                        className="rounded-xl border border-slate-200 bg-white px-3 py-1.5 text-xs font-semibold text-slate-700 hover:bg-slate-50 transition-colors cursor-pointer disabled:opacity-50"
-                      >
-                        {t('zoneSetup.rename.cancelBtn')}
-                      </button>
-                      <button
-                        type="submit"
-                        disabled={isRenamingZone}
-                        className="rounded-xl bg-[#0F172A] px-3.5 py-1.5 text-xs font-semibold text-white hover:bg-slate-800 transition-colors cursor-pointer disabled:opacity-50 shadow-xs flex items-center gap-1.5"
-                      >
-                        {isRenamingZone ? (
-                          <>
-                            <span className="w-3 h-3 rounded-full border-2 border-white border-t-transparent animate-spin" />
-                            {t('zoneSetup.rename.savingBtn')}
-                          </>
-                        ) : (
-                          t('zoneSetup.rename.saveBtn')
-                        )}
-                      </button>
-                    </div>
-                  </form>
-                );
-              }
-
-              const renameLabel = t('zoneSetup.rename.triggerBtn', { code: zone.code });
-
-              return (
-                <div
-                  key={zone.id}
-                  className="rounded-xl border border-slate-200/70 bg-[#F8FAFC] p-3 flex flex-wrap items-center justify-between gap-2 text-xs"
-                >
-                  <div className="flex items-center gap-2 min-w-0">
-                    <span className="font-bold text-slate-900">{zone.code}</span>
-                    <span className="text-slate-400">·</span>
-                    <span className="text-slate-700 font-medium truncate">{zone.name}</span>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <div className="flex flex-wrap items-center gap-1.5">
-                      {zone.requiredPpe.map((item) => (
-                        <span
-                          key={item}
-                          className="inline-flex items-center px-2.5 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider bg-white border border-slate-200/80 shadow-[0_1px_3px_rgba(0,0,0,0.02)] text-slate-600"
-                        >
-                          {formatPpeLabel(item, t)}
+                      }}
+                      className="rounded-xl border border-slate-300 bg-white p-3.5 space-y-3 shadow-xs"
+                    >
+                      <div className="flex items-center justify-between text-xs font-semibold text-slate-700">
+                        <span>
+                          {t('zoneSetup.rename.headingPrefix')}{' '}
+                          <strong className="text-slate-900">{zone.code}</strong>
                         </span>
-                      ))}
+                        {zone.configurationLocked && (
+                          <span className="text-[10px] font-medium text-slate-500 bg-slate-100 px-2 py-0.5 rounded">
+                            {t('zoneSetup.rename.policyLockedBadge')}
+                          </span>
+                        )}
+                      </div>
+
+                      <div>
+                        <label
+                          htmlFor={`new-zone-name-${zone.id}`}
+                          className="block text-xs font-semibold text-slate-700 mb-1"
+                        >
+                          {t('zoneSetup.rename.newNameLabel')}
+                        </label>
+                        <input
+                          id={`new-zone-name-${zone.id}`}
+                          name="newZoneName"
+                          type="text"
+                          ref={renameInputRef}
+                          maxLength={255}
+                          value={editingZoneName}
+                          onChange={(e) => onEditingZoneNameChange(e.target.value)}
+                          disabled={isRenamingZone}
+                          aria-invalid={Boolean(renameValidationError || renameServerError)}
+                          aria-describedby={
+                            renameValidationError
+                              ? `rename-error-${zone.id}`
+                              : renameServerError
+                                ? `rename-server-error-${zone.id}`
+                                : undefined
+                          }
+                          className="w-full min-w-0 rounded-xl border border-slate-200 bg-white px-3.5 py-1.5 text-xs text-slate-800 outline-none focus:border-slate-900 focus:ring-1 focus:ring-slate-900 disabled:bg-slate-50 disabled:text-slate-400"
+                        />
+                        {renameValidationError && (
+                          <p
+                            id={`rename-error-${zone.id}`}
+                            role="alert"
+                            className="text-[11px] text-red-600 mt-1 font-medium"
+                          >
+                            {renameValidationError}
+                          </p>
+                        )}
+                        {renameServerError && (
+                          <p
+                            id={`rename-server-error-${zone.id}`}
+                            role="alert"
+                            className="text-[11px] text-red-600 mt-1 font-medium"
+                          >
+                            {renameServerError}
+                          </p>
+                        )}
+                      </div>
+
+                      <div className="flex items-center justify-end gap-2 pt-1">
+                        <button
+                          type="button"
+                          onClick={onCancelRename}
+                          disabled={isRenamingZone}
+                          className="rounded-xl border border-slate-200 bg-white px-3 py-1.5 text-xs font-semibold text-slate-700 hover:bg-slate-50 transition-colors cursor-pointer disabled:opacity-50"
+                        >
+                          {t('zoneSetup.rename.cancelBtn')}
+                        </button>
+                        <button
+                          type="submit"
+                          disabled={isRenamingZone}
+                          className="rounded-xl bg-[#0F172A] px-3.5 py-1.5 text-xs font-semibold text-white hover:bg-slate-800 transition-colors cursor-pointer disabled:opacity-50 shadow-xs flex items-center gap-1.5"
+                        >
+                          {isRenamingZone ? (
+                            <>
+                              <span className="w-3 h-3 rounded-full border-2 border-white border-t-transparent animate-spin" />
+                              {t('zoneSetup.rename.savingBtn')}
+                            </>
+                          ) : (
+                            t('zoneSetup.rename.saveBtn')
+                          )}
+                        </button>
+                      </div>
+                    </form>
+                  );
+                }
+
+                const renameLabel = t('zoneSetup.rename.triggerBtn', { code: zone.code });
+
+                return (
+                  <div
+                    key={zone.id}
+                    className="rounded-xl border border-slate-200/70 bg-[#F8FAFC] p-3 flex flex-wrap items-center justify-between gap-2 text-xs"
+                  >
+                    <div className="flex items-center gap-2 min-w-0">
+                      <span className="font-bold text-slate-900">{zone.code}</span>
+                      <span className="text-slate-400">·</span>
+                      <span className="text-slate-700 font-medium truncate">{zone.name}</span>
                     </div>
-                    {canManageZones && (
-                      <button
-                        type="button"
-                        ref={(el) => {
-                          renameTriggerRefs.current[zone.id] = el;
-                        }}
-                        onClick={() => onStartRename(zone)}
-                        disabled={isRenamingZone}
-                        aria-label={renameLabel}
-                        className="rounded-lg border border-slate-200 bg-white px-2.5 py-1 text-[11px] font-semibold text-slate-700 hover:bg-slate-50 hover:text-slate-900 transition-colors cursor-pointer shadow-xs disabled:opacity-40"
-                      >
-                        {renameLabel}
-                      </button>
-                    )}
+                    <div className="flex items-center gap-2">
+                      <div className="flex flex-wrap items-center gap-1.5">
+                        {zone.requiredPpe.map((item) => (
+                          <span
+                            key={item}
+                            className="inline-flex items-center px-2.5 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider bg-white border border-slate-200/80 shadow-[0_1px_3px_rgba(0,0,0,0.02)] text-slate-600"
+                          >
+                            {formatPpeLabel(item, t)}
+                          </span>
+                        ))}
+                      </div>
+                      {canManageZones && (
+                        <button
+                          type="button"
+                          ref={(el) => {
+                            renameTriggerRefs.current[zone.id] = el;
+                          }}
+                          onClick={() => onStartRename(zone)}
+                          disabled={isRenamingZone}
+                          aria-label={renameLabel}
+                          className="rounded-lg border border-slate-200 bg-white px-2.5 py-1 text-[11px] font-semibold text-slate-700 hover:bg-slate-50 hover:text-slate-900 transition-colors cursor-pointer shadow-xs disabled:opacity-40"
+                        >
+                          {renameLabel}
+                        </button>
+                      )}
+                    </div>
                   </div>
-                </div>
-              );
-            })}
+                );
+              })}
+            </div>
           </div>
         )}
 

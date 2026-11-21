@@ -40,6 +40,7 @@ export function useZonePpeCameraRegionPanel({
   credentialId,
   siteId,
   initialCameraId,
+  initialRegionId,
   zones,
   onSelectCamera,
   onUnauthorized,
@@ -50,6 +51,7 @@ export function useZonePpeCameraRegionPanel({
   const queryClient = useQueryClient();
 
   const [requestedZoneId, setSelectedZoneId] = useState<string>(() => zones[0]?.id ?? '');
+  const [hasManualZoneSelection, setHasManualZoneSelection] = useState(false);
   const selectedZoneId = zones.some((zone) => zone.id === requestedZoneId)
     ? requestedZoneId
     : (zones[0]?.id ?? '');
@@ -201,10 +203,28 @@ export function useZonePpeCameraRegionPanel({
   const hasReferenceOrMutationDenial = Boolean(
     activeMutationScopeError || isAuthOrScopeError(configReference.error),
   );
+  const visibleAllCameraRegions =
+    isCameraBaseError || isRegionBaseError || hasReferenceOrMutationDenial ? [] : allFetchedRegions;
   const visibleLinkedRegions =
     isCameraBaseError || isRegionBaseError || hasReferenceOrMutationDenial
       ? []
       : existingLinkedRegions;
+
+  const initialRegionTarget = useMemo(
+    () =>
+      initialRegionId
+        ? (allFetchedRegions.find((region) => region.id === initialRegionId) ?? null)
+        : null,
+    [allFetchedRegions, initialRegionId],
+  );
+  if (
+    !hasManualZoneSelection &&
+    initialRegionTarget &&
+    initialRegionTarget.zoneId !== requestedZoneId &&
+    zones.some((zone) => zone.id === initialRegionTarget.zoneId)
+  ) {
+    setSelectedZoneId(initialRegionTarget.zoneId);
+  }
 
   const has401Error = Boolean(
     activeMutationScopeError?.status === 401 ||
@@ -235,12 +255,19 @@ export function useZonePpeCameraRegionPanel({
     version: number;
     configurationVersion: number;
   } | null>(null);
+  const [pendingEditIntent, setPendingEditIntent] = useState<{
+    regionId: string;
+    zoneId: string;
+    cameraId: string;
+    initialPoints: NormalizedPoint[];
+  } | null>(null);
 
   const resetDrawingSession = () => {
     setDrawingScope(null);
     setIsCandidateReviewOpen(false);
     setLastSavedDraft(null);
     setSavedRegionInfo(null);
+    setPendingEditIntent(null);
   };
 
   const isHookReferenceScopeValid =
@@ -346,17 +373,21 @@ export function useZonePpeCameraRegionPanel({
     setSavedRegionInfo(null);
   };
 
-  const handleStartEditingRegion = (region: RegionResponse, initialPoints: NormalizedPoint[]) => {
-    if (!canStartDrawing || !validHookReference || !selectedCamera) return;
-    if (isConfigurationReferenceExpiredAt(validHookReference, Date.now())) return;
+  const openRegionEditor = (
+    region: RegionResponse,
+    initialPoints: NormalizedPoint[],
+    reference: CameraConfigurationReference,
+    targetZoneId: string,
+  ) => {
     setIsCandidateReviewOpen(false);
+    setPendingEditIntent(null);
     const confirmation = region.geometryConfirmation;
     const confirmedOnCurrentView =
       confirmation?.status === 'MANUALLY_CONFIRMED' &&
-      confirmation.viewRevision === validHookReference.issuedReference.viewRevision;
+      confirmation.viewRevision === reference.issuedReference.viewRevision;
     const needsViewRevalidation = doesRegionNeedViewRevalidation(
       confirmation,
-      validHookReference.issuedReference.viewRevision,
+      reference.issuedReference.viewRevision,
     );
     setDrawingScope({
       apiUrl,
@@ -366,12 +397,12 @@ export function useZonePpeCameraRegionPanel({
       internalNonce,
       siteId,
       cameraId: selectedCameraId,
-      zoneId: selectedZoneId,
-      reference: validHookReference,
+      zoneId: targetZoneId,
+      reference,
       editingRegion: {
         id: region.id,
         version: region.version,
-        expectedConfigurationVersion: validHookReference.configurationVersion,
+        expectedConfigurationVersion: reference.configurationVersion,
         initialPoints,
         needsViewRevalidation,
       },
@@ -379,6 +410,66 @@ export function useZonePpeCameraRegionPanel({
     setLastSavedDraft(confirmedOnCurrentView ? JSON.stringify(initialPoints) : null);
     setSavedRegionInfo(null);
   };
+
+  const handleStartEditingRegion = (region: RegionResponse, initialPoints: NormalizedPoint[]) => {
+    if (!canStartDrawing || !validHookReference || !selectedCamera) return;
+    if (isConfigurationReferenceExpiredAt(validHookReference, Date.now())) return;
+    openRegionEditor(region, initialPoints, validHookReference, selectedZoneId);
+  };
+
+  const handleEditSavedRegion = (region: RegionResponse, initialPoints: NormalizedPoint[]) => {
+    if (!selectedCamera || isCurrentScopeActive) return;
+    if (!zones.some((zone) => zone.id === region.zoneId)) return;
+    const targetZoneId = region.zoneId;
+    if (targetZoneId !== selectedZoneId) {
+      setHasManualZoneSelection(true);
+      setSelectedZoneId(targetZoneId);
+      setActiveSelectionKey(`${siteId}:${targetZoneId}:${selectedCameraId}`);
+    }
+    if (
+      canRequestReference &&
+      validHookReference &&
+      validHookReference.configurationVersion === selectedCamera.configurationVersion &&
+      !isConfigurationReferenceExpiredAt(validHookReference, Date.now())
+    ) {
+      openRegionEditor(region, initialPoints, validHookReference, targetZoneId);
+      return;
+    }
+    if (!canRequestReference || configReference.isLoading) return;
+    setSavedRegionInfo(null);
+    setPendingEditIntent({
+      regionId: region.id,
+      zoneId: targetZoneId,
+      cameraId: selectedCameraId,
+      initialPoints,
+    });
+    void configReference.request();
+  };
+
+  if (pendingEditIntent) {
+    if (
+      pendingEditIntent.cameraId !== selectedCameraId ||
+      pendingEditIntent.zoneId !== selectedZoneId ||
+      activeMutationScopeError ||
+      (configReference.error && !configReference.isLoading)
+    ) {
+      setPendingEditIntent(null);
+    } else if (
+      !configReference.isLoading &&
+      validHookReference &&
+      selectedCamera &&
+      validHookReference.configurationVersion === selectedCamera.configurationVersion
+    ) {
+      const latestRegion = allFetchedRegions.find((r) => r.id === pendingEditIntent.regionId);
+      if (latestRegion) {
+        const latestPoints =
+          extractRegionPolygonCoordinates(latestRegion.polygon) ?? pendingEditIntent.initialPoints;
+        openRegionEditor(latestRegion, latestPoints, validHookReference, pendingEditIntent.zoneId);
+      } else {
+        setPendingEditIntent(null);
+      }
+    }
+  }
 
   const handleAcceptCandidateReference = (candidate: CameraConfigurationReference) => {
     if (isConfigurationReferenceExpiredAt(candidate, Date.now())) return;
@@ -447,6 +538,7 @@ export function useZonePpeCameraRegionPanel({
   };
 
   const handleZoneChange = (zoneId: string) => {
+    setHasManualZoneSelection(true);
     setSelectedZoneId(zoneId);
     resetDrawingSession();
   };
@@ -498,6 +590,7 @@ export function useZonePpeCameraRegionPanel({
     cameraServerTotal,
     regionsInfiniteQuery,
     allFetchedRegions,
+    visibleAllCameraRegions,
     visibleLinkedRegions,
     regionError,
     isRegionBaseError,
@@ -510,6 +603,7 @@ export function useZonePpeCameraRegionPanel({
     lastSavedDraft,
     canRequestReference,
     canStartDrawing,
+    pendingEditRegionId: pendingEditIntent?.regionId ?? null,
     successFeedback,
     savedRegionInfo,
     isCurrentScopeActive,
@@ -519,6 +613,7 @@ export function useZonePpeCameraRegionPanel({
     handleRequestReference,
     handleStartDrawing,
     handleStartEditingRegion,
+    handleEditSavedRegion,
     handleAcceptCandidateReference,
     handleSaveSuccess,
     handleZoneChange,

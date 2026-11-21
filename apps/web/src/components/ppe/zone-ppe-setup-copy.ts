@@ -82,6 +82,8 @@ const en = {
 
   'zoneSetup.rename.headingPrefix': 'Renaming zone:',
   'zoneSetup.rename.policyLockedBadge': 'Policy locked · Name editable',
+  'zoneSetup.rename.lockedPpeGuidance':
+    'Zone-level template PPE locks once linked to a camera region. To edit active required PPE after setup, open Camera PPE policy on the selected camera.',
   'zoneSetup.rename.newNameLabel': 'New zone name',
   'zoneSetup.rename.cancelBtn': 'Cancel rename',
   'zoneSetup.rename.savingBtn': 'Saving name...',
@@ -186,6 +188,8 @@ const vi: Record<ZonePpeSetupCopyKey, string> = {
 
   'zoneSetup.rename.headingPrefix': 'Đang đổi tên khu vực:',
   'zoneSetup.rename.policyLockedBadge': 'Đã khóa chính sách · Có thể đổi tên',
+  'zoneSetup.rename.lockedPpeGuidance':
+    'PPE mẫu cấp khu vực sẽ khóa sau khi gắn vùng quan sát camera. Để sửa yêu cầu PPE đang áp dụng sau khi thiết lập, hãy mở Chính sách PPE trên camera đang chọn.',
   'zoneSetup.rename.newNameLabel': 'Tên khu vực mới',
   'zoneSetup.rename.cancelBtn': 'Hủy đổi tên',
   'zoneSetup.rename.savingBtn': 'Đang lưu tên...',

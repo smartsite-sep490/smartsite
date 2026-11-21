@@ -31,7 +31,9 @@ export interface ZonePpeSetupPanelProps {
   canReadZones?: boolean;
   section?: 'all' | 'zones' | 'regions';
   initialCameraId?: string;
+  initialRegionId?: string;
   onSelectCamera?: (cameraId: string) => void;
+  onOpenApply?: () => void;
   onClose: () => void;
   embedded?: boolean;
   tourUserId?: string | null;
