@@ -421,7 +421,11 @@ export function SafetyEpisodeInbox({
             onLoadMore={() => void inbox.fetchNextPage()}
           />
           <Card className="min-w-0 space-y-5" aria-label={t('episodes.detail')}>
-            {!selected && <p>{t('episodes.select')}</p>}
+            {!selected && (
+              <div className="rounded-xl border border-dashed border-slate-200 bg-slate-50/70 px-5 py-8 text-center text-sm text-slate-600">
+                <p>{t('episodes.select')}</p>
+              </div>
+            )}
             {selected?.episode.subject.kind === 'EVENT_LOCAL' && detail.isPending && (
               <p role="status">{t('episodes.loading')}</p>
             )}

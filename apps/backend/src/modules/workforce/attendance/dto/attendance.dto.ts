@@ -15,7 +15,27 @@ import {
   Min,
   MinLength,
 } from 'class-validator';
-import type { AttendanceDayStatus } from '@smartsite/contracts';
+import type { AttendanceDayStatus, WorkerRequestsQuery } from '@smartsite/contracts';
+export class WorkerRequestsDto {
+  @IsOptional()
+  @IsIn(['LEAVE', 'OVERTIME', 'CHANGE', 'SWAP', 'CORRECTION'])
+  kind?: WorkerRequestsQuery['kind'];
+  @IsOptional()
+  @IsIn(['PENDING', 'APPROVED', 'REJECTED', 'CANCELLED', 'CONFLICTED'])
+  status?: WorkerRequestsQuery['status'];
+  @IsOptional() @IsUUID() requestId?: string;
+  @IsOptional()
+  @Transform(({ value }: { value: unknown }) => (value === undefined ? undefined : Number(value)))
+  @IsInt()
+  @Min(0)
+  offset?: number;
+  @IsOptional()
+  @Transform(({ value }: { value: unknown }) => (value === undefined ? undefined : Number(value)))
+  @IsInt()
+  @Min(1)
+  @Max(100)
+  limit?: number;
+}
 export class AttendanceDaysDto {
   @IsOptional() @Matches(/^\d{4}-\d{2}-\d{2}$/) @IsISO8601({ strict: true }) fromDate?: string;
   @IsOptional() @Matches(/^\d{4}-\d{2}-\d{2}$/) @IsISO8601({ strict: true }) toDate?: string;
@@ -39,6 +59,7 @@ export class AttendanceOverviewQueryDto {
   @IsOptional() @IsUUID() dayId?: string;
 }
 export class AttendanceTimeRequestsDto {
+  @IsOptional() @IsUUID() requestId?: string;
   @IsIn(['OVERTIME', 'LEAVE']) kind!: 'OVERTIME' | 'LEAVE';
   @IsOptional() @IsUUID() workerId?: string;
   @IsOptional() @IsIn(['PENDING', 'APPROVED', 'REJECTED']) status?:

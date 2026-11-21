@@ -35,6 +35,26 @@ export interface ScopedWallSnapshot {
   receivedAt: number;
 }
 
+const UUID_SUBSTRING_RE = /[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/i;
+
+function formatSingleLinkedZoneChip(zone: { code: string; name: string } | undefined): {
+  label: string | null;
+  title: string | undefined;
+} {
+  if (!zone) {
+    return { label: null, title: undefined };
+  }
+  const trimmedName = zone.name.trim();
+  const trimmedCode = zone.code.trim();
+  const label =
+    UUID_SUBSTRING_RE.test(trimmedCode) && trimmedName ? trimmedName : trimmedCode || trimmedName;
+  const title =
+    trimmedName && trimmedCode && trimmedName !== trimmedCode
+      ? `${trimmedName} (${trimmedCode})`
+      : label;
+  return { label: label || null, title: title || undefined };
+}
+
 export interface FourSourceWallTileProps {
   apiUrl: string;
   client: SmartSiteManagementClient;
@@ -45,6 +65,7 @@ export interface FourSourceWallTileProps {
   siteCode?: string;
   siteName?: string;
   camera: CameraResponse;
+  cameraCountInGrid?: number;
   isSelected: boolean;
   isTourEnlargeAnchor?: boolean;
   onSelect: (cameraId: string) => void;
@@ -70,6 +91,7 @@ export function FourSourceWallTile(props: FourSourceWallTileProps) {
     siteCode,
     siteName,
     camera,
+    cameraCountInGrid = 4,
     isSelected,
     isTourEnlargeAnchor,
     onSelect,
@@ -173,14 +195,25 @@ export function FourSourceWallTile(props: FourSourceWallTileProps) {
     status,
     errorStatus: effectiveErrorStatus,
   });
+  const singleZoneDisplay =
+    zonesState.zones.length === 1 ? formatSingleLinkedZoneChip(zonesState.zones[0]) : null;
   const linkedZoneSummary =
     zonesState.zones.length === 1
-      ? zonesState.zones[0]?.code
+      ? (singleZoneDisplay?.label ?? null)
       : zonesState.zones.length > 1
         ? trMonitor('monitor.zones.linkedCount', {
             count: Math.max(zonesState.total, zonesState.zones.length),
           })
         : null;
+  const linkedZoneTitle =
+    zonesState.zones.length === 1 ? singleZoneDisplay?.title : (linkedZoneSummary ?? undefined);
+
+  const stageHeightClass =
+    cameraCountInGrid === 1
+      ? 'lg:h-[clamp(20rem,calc(100vh-20.5rem),38rem)] [[data-monitor-fullscreen=true]_&]:lg:h-[clamp(24rem,calc(100vh-10rem),52rem)]'
+      : cameraCountInGrid === 2
+        ? 'lg:h-[clamp(17rem,calc(100vh-19.5rem),28rem)] [[data-monitor-fullscreen=true]_&]:lg:h-[clamp(20rem,calc(100vh-10.5rem),36rem)]'
+        : 'lg:h-[clamp(13rem,calc((100vh-18rem)/2),20.5rem)] [[data-monitor-fullscreen=true]_&]:lg:h-[clamp(15rem,calc((100vh-10.5rem)/2),26rem)]';
 
   return (
     <div
@@ -190,56 +223,52 @@ export function FourSourceWallTile(props: FourSourceWallTileProps) {
         camera: camera.name || camera.code,
       })}
       onClick={() => onSelect(camera.id)}
-      className={`relative min-w-0 rounded-xl border transition-all flex flex-col overflow-hidden cursor-pointer select-none bg-[#0F141C] ${
+      className={`relative min-w-0 rounded-2xl border transition-all flex flex-col overflow-hidden cursor-pointer select-none bg-[#0B0F17] ${
         isSelected
-          ? 'border-[#0F172A] ring-2 ring-[#0F172A]/40 shadow-sm'
+          ? 'border-amber-400/90 ring-2 ring-amber-400/30 shadow-sm'
           : 'border-slate-800 hover:border-slate-700'
       }`}
     >
-      <div className="relative z-10 px-2.5 py-1.5 bg-slate-950/90 border-b border-white/10 flex flex-wrap items-center justify-between text-white gap-1.5 pointer-events-none">
-        <div className="flex items-center gap-1.5 min-w-0 flex-1 pr-1">
-          {camera.code && camera.name && camera.name !== camera.code && (
-            <span className="rounded border border-white/15 bg-white/10 px-1.5 py-0.5 font-mono text-[11px] font-semibold text-slate-200 flex-shrink-0">
-              {camera.code}
-            </span>
-          )}
+      <div className="relative z-10 px-3.5 py-2.5 bg-slate-950/95 border-b border-white/10 flex flex-wrap items-center justify-between text-white gap-x-3 gap-y-1.5 pointer-events-none">
+        <div className="flex min-w-0 flex-1 items-center gap-2 overflow-hidden">
           <span
-            title={`${camera.name || camera.code} (${camera.code})`}
-            className="font-bold text-xs tracking-wide text-white truncate"
+            title={
+              camera.name && camera.code && camera.name !== camera.code
+                ? `${camera.name} (${camera.code})`
+                : camera.name || camera.code
+            }
+            className="pointer-events-auto min-w-0 flex-1 font-semibold text-sm sm:text-base tracking-tight text-white truncate"
           >
             {camera.name || camera.code}
           </span>
-          {linkedZoneSummary && (
-            <span
-              data-testid={`wall-zone-chip-${camera.id}`}
-              className="hidden sm:inline-flex items-center rounded border border-sky-400/30 bg-sky-500/15 px-1.5 py-0.5 text-[11px] font-medium text-sky-200 flex-shrink-0"
-            >
-              {linkedZoneSummary}
-            </span>
-          )}
           {isSelected && (
             <span
               data-testid={`focused-badge-${camera.id}`}
-              className="bg-[#111111] text-white border border-white/20 text-[11px] font-bold px-1.5 py-0.5 rounded uppercase flex-shrink-0"
+              className="rounded-md border border-amber-400/35 bg-amber-400/15 px-2 py-0.5 text-xs font-medium text-amber-200 shrink-0"
             >
               {t('ppe.wall.context.focusedBadge')}
             </span>
           )}
         </div>
 
-        <div className="flex items-center gap-1.5 flex-shrink-0">
+        <div className="flex flex-wrap items-center gap-2 shrink-0 ml-auto">
           <span
             data-testid={`wall-source-badge-${camera.id}`}
-            className={`px-1.5 py-0.5 rounded text-[11px] font-bold tracking-wider uppercase border ${
+            className={`inline-flex items-center gap-1.5 px-2 py-0.5 rounded-md text-xs font-semibold tracking-wide border ${
               isAiWorkPaused
-                ? 'bg-amber-500/20 text-amber-200 border-amber-500/40'
+                ? 'bg-amber-500/15 text-amber-200 border-amber-500/35'
                 : isLive
-                  ? 'bg-red-500/20 text-red-200 border-red-500/40'
+                  ? 'bg-emerald-500/15 text-emerald-200 border-emerald-500/35'
                   : isReplay
-                    ? 'bg-amber-500/20 text-amber-200 border-amber-500/40'
-                    : 'bg-slate-700/40 text-slate-300 border-slate-600/40'
+                    ? 'bg-amber-500/15 text-amber-200 border-amber-500/35'
+                    : 'bg-slate-800 text-slate-300 border-slate-700'
             }`}
           >
+            <span
+              className={`w-2 h-2 rounded-full ${
+                isLive ? 'bg-emerald-400' : isReplay ? 'bg-amber-400' : 'bg-slate-400'
+              }`}
+            />
             {isAiWorkPaused
               ? t('ppe.badge.aiPaused')
               : isReplay
@@ -250,43 +279,41 @@ export function FourSourceWallTile(props: FourSourceWallTileProps) {
                     ? t('ppe.wall.sourceConnecting')
                     : t('ppe.wall.sourceUnavailable')}
           </span>
-          <div className="flex items-center gap-1 px-1.5 py-0.5 rounded bg-black/60">
-            <span
-              className={`w-1.5 h-1.5 rounded-full ${
-                isLive ? 'bg-red-400' : isReplay ? 'bg-amber-400' : 'bg-slate-400'
-              }`}
-            />
-            <span className="font-mono text-[11px] font-semibold text-white/90">
-              {formattedCapturedAt}
-            </span>
-          </div>
+          <span className="font-mono text-xs font-medium tabular-nums text-slate-300">
+            {formattedCapturedAt}
+          </span>
         </div>
       </div>
 
       <div
         data-testid={`wall-video-viewport-${camera.id}`}
-        className="relative aspect-video w-full lg:aspect-auto lg:h-[clamp(9.25rem,calc((100vh-22rem)/2),13.75rem)] [[data-monitor-fullscreen=true]_&]:lg:h-[clamp(11rem,calc((100vh-10.5rem)/2),24rem)] bg-[#0F141C] overflow-hidden"
+        onDoubleClick={(e) => {
+          if (!onEnlarge) return;
+          e.stopPropagation();
+          onEnlarge(camera.id);
+        }}
+        className={`relative aspect-video w-full lg:aspect-auto ${stageHeightClass} bg-[#070A10] overflow-hidden`}
       >
         {isAiWorkPaused ? (
           <div
             data-testid={`wall-paused-${camera.id}`}
-            className="absolute inset-0 flex items-center justify-center text-white p-3 text-center"
+            className="absolute inset-0 flex items-center justify-center text-white p-4 text-center"
           >
-            <div className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-slate-900/90 border border-slate-700/80">
+            <div className="flex items-center gap-2 px-3.5 py-2 rounded-xl bg-slate-900/90 border border-slate-700/80">
               <IconCamera className="w-4 h-4 text-amber-400 shrink-0" />
-              <p className="text-xs font-semibold text-white">{t('ppe.viewport.pausedTitle')}</p>
+              <p className="text-sm font-medium text-white">{t('ppe.viewport.pausedTitle')}</p>
             </div>
           </div>
         ) : isApplying && isSelected ? (
           <div
             data-testid={`wall-applying-${camera.id}`}
-            className="absolute inset-0 flex flex-col items-center justify-center text-white/80 p-3 text-center space-y-1.5"
+            className="absolute inset-0 flex flex-col items-center justify-center text-white/80 p-4 text-center space-y-2"
           >
-            <div className="w-5 h-5 rounded-full border-2 border-amber-400 border-t-transparent animate-spin mb-0.5" />
-            <p className="text-xs font-semibold text-amber-300">
+            <div className="w-5 h-5 rounded-full border-2 border-amber-400 border-t-transparent animate-spin" />
+            <p className="text-sm font-semibold text-amber-300">
               {t('ppe.viewport.applyingTitle')}
             </p>
-            <p className="text-xs text-white/50">{t('ppe.wall.awaitingSnapshot')}</p>
+            <p className="text-xs text-slate-300">{t('ppe.wall.awaitingSnapshot')}</p>
           </div>
         ) : preview ? (
           <RealtimePreviewCanvas
@@ -294,23 +321,24 @@ export function FourSourceWallTile(props: FourSourceWallTileProps) {
             mode="ppe"
             showModelObjects={showModelObjects}
             filterClasses={filterClasses}
+            hideFrameDetailsOverlay
           />
         ) : status === 'CONNECTING' ? (
-          <div className="absolute inset-0 flex flex-col items-center justify-center text-white/80 p-3 text-center">
-            <div className="w-5 h-5 rounded-full border-2 border-slate-400 border-t-transparent animate-spin mb-1.5" />
-            <p className="text-xs font-semibold">
+          <div className="absolute inset-0 flex flex-col items-center justify-center text-slate-200 p-4 text-center gap-2">
+            <div className="w-5 h-5 rounded-full border-2 border-slate-400 border-t-transparent animate-spin" />
+            <p className="text-sm font-medium">
               {t('ppe.wall.connectingSnapshot', { cadence: isSelected ? '500ms' : '1s' })}
             </p>
           </div>
         ) : (
-          <div className="absolute inset-0 flex flex-col items-center justify-center text-white/80 p-2.5 text-center space-y-1">
+          <div className="absolute inset-0 flex flex-col items-center justify-center text-slate-200 p-4 text-center space-y-2">
             <IconAlertTriangle className="w-5 h-5 text-amber-400 shrink-0" />
-            <p className="text-[11px] font-bold uppercase tracking-wider text-amber-300">
+            <p className="text-xs font-bold uppercase tracking-wider text-amber-300">
               {t('ppe.wall.snapshotUnavailable')}
             </p>
             <span
               data-testid={`wall-failure-kind-${camera.id}`}
-              className="rounded border border-white/15 bg-white/10 px-2 py-0.5 text-[11px] font-medium text-slate-200"
+              className="rounded-md border border-white/15 bg-white/10 px-2.5 py-0.5 text-xs font-medium text-slate-200"
             >
               {telemetry.failureKind === 'ACCESS_RESTRICTED'
                 ? trMonitor('monitor.state.accessRestricted')
@@ -318,7 +346,7 @@ export function FourSourceWallTile(props: FourSourceWallTileProps) {
                   ? trMonitor('monitor.state.cameraUnavailable')
                   : trMonitor('monitor.state.aiUnavailable')}
             </span>
-            <p className="text-[11px] leading-snug text-white/65 max-w-xs break-words [overflow-wrap:anywhere]">
+            <p className="text-xs leading-relaxed text-slate-300 max-w-xs break-words [overflow-wrap:anywhere]">
               {telemetry.failureKind === 'ACCESS_RESTRICTED'
                 ? trMonitor('monitor.state.accessRestrictedHint')
                 : telemetry.failureKind === 'CAMERA_UNAVAILABLE'
@@ -326,7 +354,7 @@ export function FourSourceWallTile(props: FourSourceWallTileProps) {
                   : trMonitor('monitor.state.aiUnavailableHint')}
             </p>
             {errorStatus === 429 && (
-              <p role="status" aria-live="polite" className="text-[11px] text-white/70">
+              <p role="status" aria-live="polite" className="text-xs text-slate-300">
                 {t('ppe.viewport.snapshotCooldown429')}
               </p>
             )}
@@ -338,7 +366,7 @@ export function FourSourceWallTile(props: FourSourceWallTileProps) {
                   retry();
                 }}
                 disabled={retryDisabled}
-                className="pointer-events-auto rounded-lg bg-white px-2.5 py-1 text-xs font-semibold text-[#111111] hover:bg-slate-100 transition-colors cursor-pointer mt-0.5 disabled:cursor-not-allowed disabled:opacity-50"
+                className="pointer-events-auto inline-flex min-h-9 items-center rounded-lg bg-white px-3.5 py-1.5 text-xs font-semibold text-slate-950 hover:bg-slate-100 transition-colors cursor-pointer mt-1 disabled:cursor-not-allowed disabled:opacity-50"
               >
                 {t('mf06.detail.retry')}
               </button>
@@ -349,17 +377,17 @@ export function FourSourceWallTile(props: FourSourceWallTileProps) {
 
       <div
         data-testid={`wall-metadata-bar-${camera.id}`}
-        className="relative z-10 px-2.5 py-1.5 bg-slate-950/90 border-t border-white/10 text-white text-xs"
+        className="relative z-10 px-3.5 py-2.5 bg-slate-950/95 border-t border-white/10 text-white text-xs space-y-2"
       >
-        <div className="flex flex-wrap items-center gap-1.5 pointer-events-auto">
+        <div className="flex min-w-0 flex-wrap items-center justify-between gap-2">
           <span
             data-testid={`wall-people-state-${camera.id}`}
-            className={`min-w-0 flex-[1_1_8rem] rounded-md border px-2 py-0.5 text-[11px] leading-tight font-medium break-words [overflow-wrap:anywhere] ${
+            className={`min-w-0 flex-1 leading-relaxed tabular-nums break-words [overflow-wrap:anywhere] ${
               telemetry.peopleState.kind === 'ACTIVE_COUNT'
-                ? 'border-emerald-400/30 bg-emerald-500/15 font-semibold text-emerald-200'
+                ? 'font-semibold text-emerald-300'
                 : telemetry.peopleState.kind === 'ZERO_CLEAR_FRAME'
-                  ? 'border-white/15 bg-white/10 text-slate-200'
-                  : 'border-amber-400/25 bg-amber-500/10 text-amber-200'
+                  ? 'text-slate-300'
+                  : 'text-amber-300'
             }`}
           >
             {telemetry.peopleState.kind === 'ACTIVE_COUNT'
@@ -372,16 +400,27 @@ export function FourSourceWallTile(props: FourSourceWallTileProps) {
                     ? trMonitor('monitor.people.connecting')
                     : trMonitor('monitor.people.unavailable')}
           </span>
+          {linkedZoneSummary && (
+            <span
+              data-testid={`wall-zone-chip-${camera.id}`}
+              title={linkedZoneTitle}
+              className="pointer-events-auto max-w-[13rem] truncate rounded-md border border-white/15 bg-white/5 px-2 py-0.5 text-xs font-medium text-slate-300 shrink-0"
+            >
+              {linkedZoneSummary}
+            </span>
+          )}
+        </div>
 
+        <div className="flex flex-wrap items-center justify-between gap-2 pointer-events-auto">
           <details
             data-testid={`wall-tile-details-${camera.id}`}
             onClick={(e) => e.stopPropagation()}
-            className="text-xs text-white/80 min-w-0 shrink-0 open:basis-full open:order-last"
+            className="text-xs text-slate-300 min-w-0 shrink-0 open:basis-full open:order-last"
           >
-            <summary className="inline-flex items-center cursor-pointer font-semibold text-xs text-white/90 hover:text-white select-none px-2.5 py-1 rounded-lg bg-white/15 hover:bg-white/25 transition-colors">
+            <summary className="inline-flex min-h-8 items-center cursor-pointer font-medium text-xs text-slate-200 hover:text-white select-none px-3 py-1.5 rounded-lg border border-white/15 bg-white/5 hover:bg-white/15 transition-colors">
               {t('ppe.common.details')}
             </summary>
-            <div className="mt-1.5 pt-1.5 border-t border-white/15 space-y-1.5 max-h-28 overflow-y-auto overscroll-contain pr-1">
+            <div className="mt-2 pt-2 border-t border-white/15 space-y-2 max-h-32 overflow-y-auto overscroll-contain pr-1">
               <CameraObservationZones
                 siteCode={siteCode}
                 siteName={siteName}
@@ -391,7 +430,7 @@ export function FourSourceWallTile(props: FourSourceWallTileProps) {
                 isSelected={false}
                 zonesState={zonesState}
               />
-              <div className="flex flex-wrap items-center gap-2 text-xs font-mono text-white/60">
+              <div className="flex flex-wrap items-center gap-3 text-xs font-mono tabular-nums text-slate-400">
                 <span>
                   {t('mf06.detail.field.cameraId')} {camera.id}
                 </span>
@@ -409,7 +448,7 @@ export function FourSourceWallTile(props: FourSourceWallTileProps) {
             </div>
           </details>
 
-          <div className="flex shrink-0 flex-wrap items-center gap-1.5 ml-auto">
+          <div className="flex min-w-0 max-w-full flex-wrap items-center gap-2 sm:ml-auto">
             <button
               type="button"
               data-testid={`focus-btn-${camera.id}`}
@@ -419,8 +458,10 @@ export function FourSourceWallTile(props: FourSourceWallTileProps) {
                 e.stopPropagation();
                 onSelect(camera.id);
               }}
-              className={`px-2.5 py-1 rounded-lg text-xs font-semibold transition-colors cursor-pointer focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white ${
-                isSelected ? 'bg-white text-[#111111]' : 'bg-white/20 text-white hover:bg-white/40'
+              className={`inline-flex min-h-8 items-center px-3 py-1.5 rounded-lg text-xs font-medium transition-colors cursor-pointer focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white ${
+                isSelected
+                  ? 'border border-amber-400/40 bg-amber-400/15 font-semibold text-amber-200'
+                  : 'border border-white/15 bg-transparent text-slate-300 hover:bg-white/10 hover:text-white'
               }`}
             >
               {isSelected ? t('ppe.overview.selectedAria') : t('ppe.overview.selectTitle')}
@@ -438,9 +479,9 @@ export function FourSourceWallTile(props: FourSourceWallTileProps) {
                   e.stopPropagation();
                   onEnlarge(camera.id);
                 }}
-                className="px-2.5 py-1 rounded-lg text-xs font-semibold bg-white/20 text-white hover:bg-white/40 transition-colors flex items-center gap-1.5 cursor-pointer focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white"
+                className="inline-flex min-h-8 items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold bg-white/15 text-white hover:bg-white/25 transition-colors cursor-pointer focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white"
               >
-                <IconMaximize className="w-3.5 h-3.5" />
+                <IconMaximize className="w-3.5 h-3.5 shrink-0" />
                 <span>{t('ppe.wall.enlargeCameraBtn')}</span>
               </button>
             )}
@@ -455,9 +496,9 @@ export function FourSourceWallTile(props: FourSourceWallTileProps) {
                   e.stopPropagation();
                   onOpenEvidence(camera.id);
                 }}
-                className="px-2.5 py-1 rounded-lg text-xs font-semibold bg-white/20 text-white hover:bg-white/40 transition-colors flex items-center gap-1.5 cursor-pointer focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white"
+                className="inline-flex min-h-8 items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold border border-white/15 bg-white/5 text-slate-100 hover:bg-white/15 transition-colors cursor-pointer focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white"
               >
-                <IconShield className="w-3.5 h-3.5" />
+                <IconShield className="w-3.5 h-3.5 shrink-0" />
                 <span>{t('ppe.common.evidence')}</span>
               </button>
             )}
@@ -523,21 +564,22 @@ export function FourSourceWall(props: FourSourceWallProps) {
     return (
       <div
         data-testid="wall-empty-state"
-        className="rounded-2xl border border-slate-200/80 bg-white p-8 text-center space-y-2 shadow-sm"
+        className="rounded-2xl border border-slate-200 bg-white p-8 text-center space-y-2 shadow-xs"
       >
         <p className="text-sm font-semibold text-slate-800">{t('ppe.wall.emptyTitle')}</p>
-        <p className="text-xs text-slate-500">{t('ppe.wall.emptyDesc')}</p>
+        <p className="text-xs sm:text-sm text-slate-600">{t('ppe.wall.emptyDesc')}</p>
       </div>
     );
   }
 
-  const unassignedCount = Math.max(0, 4 - activeCameras.length);
   const hasSelectedInWall = activeCameras.some((c) => c.id === selectedCameraId);
+  const gridColumnsClass =
+    activeCameras.length === 1 ? 'grid-cols-1 gap-4' : 'grid-cols-1 lg:grid-cols-2 gap-3.5';
 
   return (
     <div
       data-testid="four-source-wall-grid"
-      className="grid grid-cols-1 lg:grid-cols-2 items-start gap-2.5 w-full min-w-0"
+      className={`grid ${gridColumnsClass} items-start w-full min-w-0`}
     >
       {activeCameras.map((camera, idx) => (
         <FourSourceWallTile
@@ -551,6 +593,7 @@ export function FourSourceWall(props: FourSourceWallProps) {
           siteCode={siteCode}
           siteName={siteName}
           camera={camera}
+          cameraCountInGrid={activeCameras.length}
           isSelected={camera.id === selectedCameraId}
           isTourEnlargeAnchor={hasSelectedInWall ? camera.id === selectedCameraId : idx === 0}
           onSelect={onSelectCamera}
@@ -567,27 +610,6 @@ export function FourSourceWall(props: FourSourceWallProps) {
           onTileUnmount={onTileUnmount}
         />
       ))}
-
-      {Array.from({ length: unassignedCount }).map((_, idx) => {
-        const slotNumber = activeCameras.length + idx + 1;
-        return (
-          <div
-            key={`unassigned-slot-${slotNumber}`}
-            data-testid={`wall-unassigned-slot-${slotNumber}`}
-            className="rounded-xl border border-dashed border-slate-200 bg-[#F8FAFC] aspect-video w-full lg:aspect-auto lg:h-[clamp(13rem,calc((100vh-17.5rem)/2),17.75rem)] flex flex-col items-center justify-center p-4 text-center select-none"
-          >
-            <div className="w-8 h-8 rounded-full bg-white border border-slate-200 shadow-xs flex items-center justify-center text-slate-600 mb-2 font-mono text-xs font-semibold">
-              {slotNumber}
-            </div>
-            <p className="text-xs font-semibold text-slate-700">
-              {t('ppe.wall.unassignedSlotTitle', { slot: slotNumber })}
-            </p>
-            <p className="text-[10px] text-slate-500 mt-1 max-w-[220px]">
-              {t('ppe.wall.unassignedSlotDesc')}
-            </p>
-          </div>
-        );
-      })}
     </div>
   );
 }

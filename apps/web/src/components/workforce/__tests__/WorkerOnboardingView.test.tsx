@@ -9,7 +9,7 @@ import {
   type WorkerResponse,
 } from '@smartsite/api-client';
 import { WorkerOnboardingView } from '../components/WorkerOnboardingView';
-import { translate as tr } from '../../../i18n';
+import i18n, { translate as tr } from '../../../i18n';
 import { LanguageSwitcher } from '../../../i18n/LanguageSwitcher';
 
 const session = vi.hoisted(() => ({ user: null as AccountResponse | null }));
@@ -32,7 +32,8 @@ vi.mock('../../access/enrollment/WorkerEnrollmentView', () => ({
   ),
 }));
 let cache: QueryClient;
-beforeEach(() => {
+beforeEach(async () => {
+  await i18n.changeLanguage('en');
   URL.createObjectURL = vi.fn(() => 'blob:synthetic-document');
   URL.revokeObjectURL = vi.fn();
   cache = new QueryClient({
@@ -116,6 +117,7 @@ beforeEach(() => {
     account: {
       id: 'account-1',
       username: 'worker001',
+      email: 'worker@example.test',
       displayName: 'New Worker',
       roleAssignments: [{ role: 'WORKER', siteId: 'site-a' }],
       isActive: true,
@@ -138,9 +140,11 @@ function mount() {
 }
 async function fill() {
   const user = userEvent.setup();
-  await screen.findByRole('heading', { name: 'Create Worker account' });
-  await user.type(screen.getByLabelText('Full name'), 'New Worker');
-  await user.type(screen.getByLabelText('Username'), 'Worker001');
+  await screen.findByRole('heading', { name: tr('common.create_worker_account') });
+  await user.type(screen.getByLabelText(tr('common.full_name')), 'New Worker');
+  await user.type(screen.getByLabelText(tr('common.username')), 'Worker001');
+  await user.click(screen.getByLabelText(tr('worker_onboarding_view.email')));
+  await user.paste('Worker@Example.Test');
   await fillDocuments(user);
   return user;
 }
@@ -172,6 +176,25 @@ it('submits the selected dates and files as one bundle after account creation', 
   const [, site, worker, input, files] = vi.mocked(
     SmartSiteManagementClient.prototype.submitWorkerDocuments,
   ).mock.calls[0]!;
+  expect(SmartSiteManagementClient.prototype.createContractorWorkerAccount).toHaveBeenCalledWith(
+    'representative-token',
+    'own-contractor',
+    {
+      siteId: 'site-a',
+      displayName: 'New Worker',
+      username: 'worker001',
+      email: 'worker@example.test',
+      language: 'en',
+      nationalId: '000000000001',
+      phoneNumber: '0900000001',
+      gender: 'MALE',
+      address: 'Synthetic address',
+    },
+  );
+  expect(screen.getByText(/Account worker001 and Worker profile created/).textContent).toMatch(
+    /queued for worker@example.test/,
+  );
+  expect(screen.queryByText(/12345678/)).toBeNull();
   expect(site).toBe('site-a');
   expect(worker).toBe('worker-1');
   expect(input.safetyCardRequired).toBe(true);
@@ -197,6 +220,52 @@ it('retries a failed bundle without creating another Worker account', async () =
     1,
   );
 });
+
+it('requires a valid worker email before sending the bundle', async () => {
+  mount();
+  const user = await fill();
+  const field = screen.getByLabelText(tr('worker_onboarding_view.email'));
+  await user.clear(field);
+  expect(
+    screen.getByRole('button', { name: tr('documents.sendBundle') }).hasAttribute('disabled'),
+  ).toBe(true);
+  await user.type(field, 'not-an-email');
+  expect(
+    screen.getByRole('button', { name: tr('documents.sendBundle') }).hasAttribute('disabled'),
+  ).toBe(true);
+  expect(SmartSiteManagementClient.prototype.createContractorWorkerAccount).not.toHaveBeenCalled();
+});
+it.each(['en', 'vi'] as const)(
+  'keeps bundle and email draft when switching from %s',
+  async (language) => {
+    await i18n.changeLanguage(language);
+    mount();
+    const user = await fill();
+    await user.click(screen.getByRole('button', { name: tr('language.choose') }));
+    await user.click(
+      screen.getByRole('button', { name: language === 'en' ? /Tiếng Việt/ : /English/ }),
+    );
+    expect((screen.getByLabelText(tr('common.username')) as HTMLInputElement).value).toBe(
+      'Worker001',
+    );
+    expect(
+      (screen.getByLabelText(tr('worker_onboarding_view.email')) as HTMLInputElement).value,
+    ).toBe('Worker@Example.Test');
+    await user.click(screen.getByRole('button', { name: tr('documents.sendBundle') }));
+    await waitFor(() =>
+      expect(SmartSiteManagementClient.prototype.submitWorkerDocuments).toHaveBeenCalledTimes(1),
+    );
+    expect(SmartSiteManagementClient.prototype.createContractorWorkerAccount).toHaveBeenCalledWith(
+      'representative-token',
+      'own-contractor',
+      expect.objectContaining({
+        email: 'worker@example.test',
+        language: language === 'en' ? 'vi' : 'en',
+      }),
+    );
+  },
+);
+
 function rosterWorker(id: string, contractorId = 'own-contractor'): WorkerResponse {
   return {
     id,

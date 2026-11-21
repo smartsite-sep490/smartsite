@@ -2580,7 +2580,7 @@
   "worker_onboarding_view.could_not_load_your_contractors": "Could not load your contractors.",
   "worker_onboarding_view.no_active_contractor_participation_is_assigned_to_you_at_this_site_contact_your_si": "No active contractor participation is assigned to you at this Site. Contact your Site administrator.",
   "common.create_worker_account": "Create Worker account",
-  "worker_onboarding_view.the_account_receives_the_worker_role_at_this_site_and_can_sign_in_immediately_pass": "The account receives the Worker role at this Site and can sign in immediately. Password change is optional. The Worker code is generated automatically when you save. Default temporary password:",
+  "worker_onboarding_view.the_account_receives_the_worker_role_at_this_site_and_can_sign_in_immediately_pass": "The account receives the Worker role at this Site. Its unique password and verification code are sent by email. Worker codes are generated automatically.",
   "common.full_name": "Full name",
   "common.account": "Account",
   "worker_onboarding_view.and_worker_profile_created_give_the_worker_their_temporary_password": "and Worker profile created. Give the Worker their temporary password",
@@ -3848,7 +3848,7 @@
   "documents.next": "Next page",
   "documents.previous": "Previous page",
   "documents.onlyPending": "Show pending / incomplete profiles only",
-  "documents.accountHint": "Initial password: 12345678. Worker operations require all required documents approved and valid.",
+  "documents.accountHint": "Sign-in details are sent to the Worker email. Worker operations require the required documents to be approved and current.",
   "documents.saved": "Documents submitted for Safety Officer review.",
   "documents.invalidFile": "Choose JPEG, PNG or PDF up to 5 MB.",
   "documents.search": "Search Worker name or code",
@@ -4232,5 +4232,9 @@
   "documents.readablePdf": "Choose a readable PDF with at most four pages",
   "documents.readableImage": "Choose a readable image up to 20 megapixels",
   "documents.readableDocument": "Choose a readable document within the file limits",
-  "documents.validationUnavailable": "Document file validation is unavailable. Retry before submitting."
+  "documents.validationUnavailable": "Document file validation is unavailable. Retry before submitting.",
+  "worker_onboarding_view.email": "Worker email",
+  "worker_onboarding_view.emailHint": "The username, a unique initial password and a verification code will be emailed here after account creation.",
+  "worker_onboarding_view.invalidEmail": "Enter a valid worker email address.",
+  "worker_onboarding_view.createdWithEmail": "Account {{username}} and Worker profile created. Login details and a verification code are queued for {{email}}."
 }

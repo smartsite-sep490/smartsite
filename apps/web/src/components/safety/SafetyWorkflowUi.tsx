@@ -509,6 +509,7 @@ export function Pager({
 }) {
   useTranslation();
 
+  if (!total && !offset) return null;
   return (
     <div className="flex flex-wrap items-center justify-between gap-2 py-2 text-xs text-[var(--text-secondary)]">
       <button

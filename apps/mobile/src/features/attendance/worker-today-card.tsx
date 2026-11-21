@@ -2,6 +2,7 @@ import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { useQuery } from '@tanstack/react-query';
 import { useTranslation, uiLocale } from '../../i18n';
 import { colors } from '../../theme/colors';
+import { IconChevronRight } from '../../components/common/Icons';
 import { useWorkspace } from '../workspace/workspace-context';
 import { localDate, minutes } from '../shared/data';
 import { QueryState } from '../shared/ui';
@@ -33,7 +34,12 @@ export function WorkerTodayCard({ dayId, onDay }: { dayId?: string; onDay: (id: 
         const entry = last?.effectiveInAt ?? last?.rawInAt;
         const exit = last?.effectiveOutAt ?? last?.rawOutAt;
         return (
-          <View style={styles.card}>
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel={t('attendance.dayDetail')}
+            onPress={() => onDay(data.day.id)}
+            style={({ pressed }) => [styles.card, pressed && { opacity: 0.65 }]}
+          >
             <View style={styles.heading}>
               <View style={styles.headingCopy}>
                 <Text style={styles.eyebrow}>{t('attendanceUi.todayOverview')}</Text>
@@ -41,12 +47,15 @@ export function WorkerTodayCard({ dayId, onDay }: { dayId?: string; onDay: (id: 
                   {data.day.shiftName ?? t('attendance.shiftNotAssigned')}
                 </Text>
               </View>
-              <View style={styles.presence}>
-                <Text style={styles.presenceText}>
+              <View style={styles.total}>
+                <Text style={styles.hours}>
+                  {minutes(data.day.confirmedMinutes ?? data.day.provisionalMinutes)}
+                </Text>
+                <Text style={styles.label}>
                   {t(
-                    data.day.presence === 'INSIDE'
-                      ? 'attendance.insideSite'
-                      : 'attendance.outsideSite',
+                    data.day.confirmedMinutes === null
+                      ? 'attendance.provisionalHours'
+                      : 'attendance.confirmedHours',
                   )}
                 </Text>
               </View>
@@ -81,27 +90,18 @@ export function WorkerTodayCard({ dayId, onDay }: { dayId?: string; onDay: (id: 
                 </View>
               ))}
             </View>
-            <View style={styles.total}>
-              <Text style={styles.label}>
+            <View style={styles.footer}>
+              <Text style={styles.presenceText}>
                 {t(
-                  data.day.confirmedMinutes === null
-                    ? 'attendance.provisionalHours'
-                    : 'attendance.confirmedHours',
+                  data.day.presence === 'INSIDE'
+                    ? 'attendance.insideSite'
+                    : 'attendance.outsideSite',
                 )}
               </Text>
-              <Text style={styles.hours}>
-                {minutes(data.day.confirmedMinutes ?? data.day.provisionalMinutes)}
-              </Text>
+              <Text style={styles.detailText}>{t('attendance.dayDetail')}</Text>
+              <IconChevronRight size={14} color={colors.primary} />
             </View>
-            <Pressable
-              accessibilityRole="button"
-              accessibilityLabel={t('attendance.dayDetail')}
-              onPress={() => onDay(data.day.id)}
-              style={styles.detail}
-            >
-              <Text style={styles.detailText}>{t('attendance.dayDetail')} →</Text>
-            </Pressable>
-          </View>
+          </Pressable>
         );
       }}
     </QueryState>
@@ -109,46 +109,38 @@ export function WorkerTodayCard({ dayId, onDay }: { dayId?: string; onDay: (id: 
 }
 
 const styles = StyleSheet.create({
-  card: { backgroundColor: colors.slateNavy, borderRadius: 22, padding: 20, gap: 16 },
-  heading: { flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', gap: 10 },
-  headingCopy: { flex: 1, minWidth: 130 },
-  eyebrow: { fontSize: 12, fontWeight: '700', color: '#FDBA74', marginBottom: 5 },
-  shift: { fontSize: 18, fontWeight: '800', color: '#FFFFFF', lineHeight: 25 },
-  presence: {
-    backgroundColor: '#243449',
-    borderRadius: 20,
-    paddingVertical: 7,
-    paddingHorizontal: 11,
+  card: {
+    backgroundColor: colors.surface,
+    borderRadius: 16,
+    padding: 14,
+    gap: 10,
+    borderWidth: 1,
+    borderColor: colors.border,
   },
-  presenceText: { fontSize: 11, fontWeight: '600', color: '#FFFFFF' },
-  caption: { color: '#CBD5E1', fontSize: 12, marginBottom: -5 },
+  heading: { flexDirection: 'row', alignItems: 'center', gap: 12 },
+  headingCopy: { flex: 1, minWidth: 0, gap: 3 },
+  eyebrow: { fontSize: 11, fontWeight: '600', color: colors.primary },
+  shift: { fontSize: 14, fontWeight: '700', color: colors.textPrimary, lineHeight: 21 },
+  presenceText: { fontSize: 11, color: colors.textMuted, flex: 1 },
+  caption: { color: colors.textMuted, fontSize: 11 },
   times: { flexDirection: 'row', gap: 12 },
   timeCol: {
     flex: 1,
     minWidth: 0,
-    backgroundColor: '#17283D',
-    padding: 14,
-    borderRadius: 15,
-    gap: 5,
-  },
-  label: { fontSize: 12, lineHeight: 18, color: '#CBD5E1' },
-  clock: { fontSize: 28, lineHeight: 36, color: '#FFFFFF', fontWeight: '800' },
-  missing: { color: '#FDBA74' },
-  date: { fontSize: 11, lineHeight: 17, color: '#CBD5E1' },
-  total: {
     flexDirection: 'row',
     flexWrap: 'wrap',
-    justifyContent: 'space-between',
     alignItems: 'center',
-    gap: 8,
+    gap: 5,
+    backgroundColor: colors.surfaceSubtle,
+    padding: 9,
+    borderRadius: 10,
   },
-  hours: { color: '#FFFFFF', fontSize: 19, fontWeight: '800' },
-  detail: {
-    minHeight: 44,
-    borderTopWidth: 1,
-    borderTopColor: '#334155',
-    justifyContent: 'center',
-    paddingTop: 12,
-  },
-  detailText: { color: '#FDBA74', fontSize: 13, fontWeight: '700' },
+  label: { fontSize: 11, lineHeight: 17, color: colors.textSecondary },
+  clock: { fontSize: 17, lineHeight: 23, color: colors.textPrimary, fontWeight: '700' },
+  missing: { color: colors.warningText },
+  date: { fontSize: 10, lineHeight: 16, color: colors.textMuted },
+  total: { alignItems: 'flex-end', maxWidth: '48%', gap: 2 },
+  hours: { color: colors.textPrimary, fontSize: 21, lineHeight: 28, fontWeight: '700' },
+  footer: { flexDirection: 'row', alignItems: 'center', gap: 10 },
+  detailText: { color: colors.primary, fontSize: 11, fontWeight: '600' },
 });

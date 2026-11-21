@@ -149,6 +149,8 @@ export function AttendanceDetail({ dayId, onBack }: { dayId: string; onBack: () 
   );
 }
 
+import { useRequestFeedback } from '../shared/request-feedback';
+
 function CorrectionModal({
   session,
   timezone,
@@ -169,6 +171,7 @@ function CorrectionModal({
     [reason, setReason] = useState('');
   const command = useCommand(),
     requestId = useRequestId();
+  const reportSubmitted = useRequestFeedback();
 
   return (
     <RequestSheet
@@ -198,6 +201,7 @@ function CorrectionModal({
                   ...input,
                   requestId: requestId(input),
                 });
+                reportSubmitted();
                 onSubmitted?.();
                 onClose();
               })

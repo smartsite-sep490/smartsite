@@ -5,7 +5,6 @@ import { SmartSiteManagementClient, type ContractorTeamResponse } from '@smartsi
 import type { useWorkspace } from '../workspace/workspace-context';
 import { MobileLayoutProvider } from '../shared/mobile-layout';
 import { Choice } from '../shared/ui';
-import { DateTimeField } from '../shared/date-time-field';
 import { ScrollDateTimePicker } from '../shared/scroll-date-time-picker';
 import { translate as t } from '../../i18n';
 import { TeamsScreen } from './teams-screen';
@@ -386,73 +385,35 @@ it('adds an unassigned worker from Add member and removes a specific member with
   );
 });
 
-it('prefills the assignment when granting access from the selected assignment detail', async () => {
+it('shows only contractor zones and opens their scoped read-only details', async () => {
   await mount(<AccessScreen onBack={vi.fn()} />);
-  await click(t('access.assignmentsTab'));
-  await click(t('areaUi.openAssignment', { name: 'Own Worker' }));
-  await click(t('access.grantWorker'));
-  expect(
-    root.root
-      .findAllByType(Choice)
-      .some((node) => node.props.label === t('access.approvedAssignment')),
-  ).toBe(false);
-  await choose(t('access.contractorZoneGrant'), 'permission');
-  const dates = root.root.findAllByType(DateTimeField);
-  await act(async () => dates[0]!.props.onChange(from));
-  await act(async () => dates[1]!.props.onChange(to));
-  await click(t('access.grantWorker'));
-  expect(workspace.client.grantWorkerZone).toHaveBeenCalledWith(
-    'token',
-    'site',
-    expect.objectContaining({
-      workerAssignmentId: 'assignment',
-      contractorZonePermissionId: 'permission',
-    }),
-  );
+  const output = JSON.stringify(root.toJSON());
+  expect(output).toContain('Own Zone');
+  expect(output).not.toContain('Private Zone');
+  expect(output).not.toContain('Private Worker');
+  expect(buttons(t('access.assignmentsTab'))).toHaveLength(0);
+  expect(buttons(t('access.workerPermissionsTab'))).toHaveLength(0);
+  await click(t('areaUi.openZone', { name: 'Own Zone' }));
+  expect(JSON.stringify(root.toJSON())).toContain(t('teamUi.zoneDetails'));
+  expect(JSON.stringify(root.toJSON())).toContain(t('access.authorizationHint'));
+  expect(buttons(t('access.requestAssignment'))).toHaveLength(0);
+  expect(buttons(t('access.grantWithinScope'))).toHaveLength(0);
+  expect(workspace.client.grantWorkerZone).not.toHaveBeenCalled();
 });
 
-it('keeps zones, assignments and worker grants scoped while submitting through the grant sheet', async () => {
-  await mount(<AccessScreen onBack={vi.fn()} />);
-  expect(JSON.stringify(root.toJSON())).toContain('Own Zone');
-  expect(JSON.stringify(root.toJSON())).not.toContain('Private Zone');
-  await click(t('access.assignmentsTab'));
-  expect(JSON.stringify(root.toJSON())).not.toContain('Private Worker');
-  await click(t('access.workerPermissionsTab'));
-  expect(JSON.stringify(root.toJSON())).not.toContain('Private Worker');
-  await click(t('access.grantWithinScope'));
-  await choose(t('access.approvedAssignment'), 'assignment');
-  await choose(t('access.contractorZoneGrant'), 'permission');
-  for (const [label, value] of [
-    [t('access.validFrom'), from],
-    [t('access.validUntil'), to],
-  ]) {
-    const field = root.root
-      .findAllByType(DateTimeField)
-      .find((node) => node.props.label === label)!;
-    await act(async () => field.props.onChange(value));
-  }
-  await click(t('access.grantWorker'));
-  expect(workspace.client.grantWorkerZone).toHaveBeenCalledWith('token', 'site', {
-    workerAssignmentId: 'assignment',
-    contractorZonePermissionId: 'permission',
-    validFrom: '2026-11-01T00:00:00.000Z',
-    validUntil: '2026-12-01T00:00:00.000Z',
-    requestId: expect.any(String),
-  });
-});
-
-it('hides worker grant tools when the API does not allow granting worker zones', async () => {
+it('keeps zone viewing available without worker grant capability', async () => {
   vi.mocked(workspace.client.accessSetup).mockResolvedValue({
     ...accessData,
     canGrantWorkerZones: false,
   });
   await mount(<AccessScreen onBack={vi.fn()} />);
+  expect(JSON.stringify(root.toJSON())).toContain('Own Zone');
   expect(buttons(t('access.workerPermissionsTab'))).toHaveLength(0);
   expect(buttons(t('access.grantWithinScope'))).toHaveLength(0);
   expect(workspace.client.grantWorkerZone).not.toHaveBeenCalled();
 });
 
-it('explains missing contractor grants and keeps assignment requests available', async () => {
+it('explains missing contractor zones without exposing individual assignment or grant tools', async () => {
   vi.mocked(workspace.client.accessSetup).mockResolvedValue({
     ...accessData,
     contractorPermissions: [],
@@ -461,52 +422,6 @@ it('explains missing contractor grants and keeps assignment requests available',
   await mount(<AccessScreen onBack={vi.fn()} />);
   expect(JSON.stringify(root.toJSON())).toContain(t('access.noContractorGrantHint'));
   expect(buttons(t('access.requestAssignment'))).toHaveLength(0);
-  await click(t('access.assignmentsTab'));
-  expect(buttons(t('access.requestAssignment'))[0]!.props.disabled).toBe(false);
-  await click(t('access.workerPermissionsTab'));
-  expect(buttons(t('access.requestAssignment'))).toHaveLength(0);
-  expect(buttons(t('access.grantWithinScope'))[0]!.props.disabled).toBe(true);
-  expect(JSON.stringify(root.toJSON())).toContain(t('access.approvedAssignmentRequired'));
-});
-
-it('submits a worker assignment request without needing a contractor zone grant', async () => {
-  vi.mocked(workspace.client.accessSetup).mockResolvedValue({
-    ...accessData,
-    contractorPermissions: [],
-  });
-  await mount(<AccessScreen onBack={vi.fn()} />);
-  await click(t('access.assignmentsTab'));
-  await click(t('access.requestAssignment'));
-  const dates = root.root.findAllByType(DateTimeField);
-  expect(Number.isFinite(Date.parse(dates[0]!.props.value))).toBe(true);
-  expect(Date.parse(dates[1]!.props.value) - Date.parse(dates[0]!.props.value)).toBe(8 * 3600_000);
-  await choose(t('schedule.worker'), 'worker');
-  const zone = root.root.findAll(
-    (node) => String(node.type) === 'Pressable' && node.props.accessibilityLabel === 'Own Zone',
-  )[0]!;
-  await act(async () => zone.props.onPress());
-  await act(async () => dates[0]!.props.onChange(from));
-  await act(async () => dates[1]!.props.onChange(to));
-  await click(t('access.submitAssignment'));
-  expect(workspace.client.createWorkerSiteZoneAssignment).toHaveBeenCalledWith('token', 'worker', {
-    siteId: 'site',
-    zoneIds: ['zone'],
-    validFrom: '2026-11-01T00:00:00.000Z',
-    validUntil: '2026-12-01T00:00:00.000Z',
-  });
-  expect(JSON.stringify(root.toJSON())).not.toContain(t('access.assignmentOutsideParticipation'));
-});
-
-it('explains a grant period outside the assignment instead of sending an invalid command', async () => {
-  await mount(<AccessScreen onBack={vi.fn()} />);
-  await click(t('access.workerPermissionsTab'));
-  await click(t('access.grantWithinScope'));
-  await choose(t('access.approvedAssignment'), 'assignment');
-  await choose(t('access.contractorZoneGrant'), 'permission');
-  const dates = root.root.findAllByType(DateTimeField);
-  await act(async () => dates[0]!.props.onChange(from));
-  await act(async () => dates[1]!.props.onChange('2027-01-01T00:00:00Z'));
-  await click(t('access.grantWorker'));
-  expect(workspace.client.grantWorkerZone).not.toHaveBeenCalled();
-  expect(JSON.stringify(root.toJSON())).toContain(t('access.workerGrantOutsideScope'));
+  expect(buttons(t('access.assignmentsTab'))).toHaveLength(0);
+  expect(buttons(t('access.workerPermissionsTab'))).toHaveLength(0);
 });

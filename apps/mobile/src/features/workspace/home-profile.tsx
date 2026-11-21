@@ -19,7 +19,7 @@ import { WorkerQrModal } from '../../components/worker/WorkerQrModal';
 import { WorkerRequestModal } from '../../components/modals/WorkerRequestModal';
 import { WorkerDocuments } from '../contractor/worker-documents';
 import { AccountEmailCard } from '../auth/account-email-card';
-import { MobilePushCard } from './mobile-push';
+import { LogoutConfirmation } from '../auth/logout-confirmation';
 import {
   IconDocument,
   IconPlus,
@@ -375,10 +375,9 @@ export function ProfileScreen({
 }) {
   const { t, i18n } = useTranslation();
   const { scope, user, client, token, queryKey, canSwitchScope } = useWorkspace();
-  const { session } = useAuth();
   const [showPasswordModal, setShowPasswordModal] = useState(false);
+  const [showLogoutModal, setShowLogoutModal] = useState(false);
   const [documents, setDocuments] = useState(initialDocuments);
-  const command = useCommand();
 
   const worker = useQuery({
     queryKey: [...queryKey, 'own-worker'],
@@ -509,8 +508,6 @@ export function ProfileScreen({
 
         {/* 2. Section "General" (Cài đặt chung) */}
         <View style={profileStyles.generalSection}>
-          <AccountEmailCard />
-          <MobilePushCard />
           <Text style={profileStyles.sectionTitle}>{t('profile.generalSection')}</Text>
 
           <View style={profileStyles.menuGroupCard}>
@@ -530,6 +527,9 @@ export function ProfileScreen({
               <IconChevronRight size={16} color="#CBD5E1" />
             </View>
 
+            <View style={profileStyles.menuDivider} />
+
+            <AccountEmailCard settingsRow />
             <View style={profileStyles.menuDivider} />
 
             {/* Row 2: Location / Công trường */}
@@ -701,13 +701,11 @@ export function ProfileScreen({
             <Pressable
               accessibilityRole="button"
               accessibilityLabel={t('common.logout')}
-              disabled={command.isPending}
               style={({ pressed }) => [
                 profileStyles.menuItem,
                 pressed && { opacity: 0.75, backgroundColor: '#FEF2F2' },
-                command.isPending && { opacity: 0.6 },
               ]}
-              onPress={() => command.mutate(() => session.logout())}
+              onPress={() => setShowLogoutModal(true)}
             >
               <View style={[profileStyles.menuIconBox, { backgroundColor: '#FEF2F2' }]}>
                 <IconLogout size={18} color="#EF4444" />
@@ -735,6 +733,7 @@ export function ProfileScreen({
           visible={showPasswordModal}
           onClose={() => setShowPasswordModal(false)}
         />
+        {showLogoutModal && <LogoutConfirmation onClose={() => setShowLogoutModal(false)} />}
       </ScrollView>
     </SafeAreaView>
   );

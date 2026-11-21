@@ -40,9 +40,16 @@ interface SafetyTaskTourSessionProps {
   tourVersion: number;
   userId?: string | null;
   steps: readonly SafetyTourStepSpec[];
+  unobtrusiveEntry?: boolean;
 }
 
-function SafetyTaskTourSession({ taskId, tourVersion, userId, steps }: SafetyTaskTourSessionProps) {
+function SafetyTaskTourSession({
+  taskId,
+  tourVersion,
+  userId,
+  steps,
+  unobtrusiveEntry = false,
+}: SafetyTaskTourSessionProps) {
   registerSafetyTaskTourCatalog();
   const { t: tSafety } = useTranslation(SAFETY_NAMESPACE, { lng: uiLanguage() });
   const titleId = useId();
@@ -50,6 +57,7 @@ function SafetyTaskTourSession({ taskId, tourVersion, userId, steps }: SafetyTas
   const triggerRef = useRef<HTMLButtonElement | null>(null);
   const nextBtnRef = useRef<HTMLButtonElement | null>(null);
   const highlightRef = useRef<HTMLDivElement | null>(null);
+  const tourSectionRef = useRef<HTMLElement | null>(null);
   const focusPrimaryRef = useRef(false);
   const wasTourVisibleRef = useRef(false);
   const prevStepIdRef = useRef<string | null>(null);
@@ -273,19 +281,43 @@ function SafetyTaskTourSession({ taskId, tourVersion, userId, steps }: SafetyTas
     };
   }, [isOpen, currentStep]);
 
+  const isLastStep = currentIndex + 1 >= availableSteps.length;
+
   useEffect(() => {
-    if (!isTourVisible) return;
+    if (!isTourVisible || !currentStep) return;
     const onKeyDown = (event: KeyboardEvent) => {
       if (hasBlockingDialog(triggerRef.current)) return;
       if (event.key === 'Escape' && !event.defaultPrevented) {
         event.preventDefault();
         event.stopPropagation();
         closeTour(true);
+        return;
+      }
+      const inTour = Boolean(
+        (event.target instanceof Node && tourSectionRef.current?.contains(event.target)) ||
+        (document.activeElement && tourSectionRef.current?.contains(document.activeElement)),
+      );
+      if (!inTour || event.defaultPrevented) return;
+      if (event.key === 'ArrowRight' && !isLastStep) {
+        event.preventDefault();
+        setActiveStepId(availableSteps[currentIndex + 1]?.id ?? null);
+      } else if (event.key === 'ArrowLeft' && currentIndex > 0) {
+        event.preventDefault();
+        const prevSteps = availableSteps
+          .slice(0, currentIndex)
+          .filter(
+            (step) =>
+              (!step.isAllowed || step.isAllowed()) &&
+              isElementAvailable(document.querySelector<HTMLElement>(step.anchorSelector)),
+          );
+        if (prevSteps.length <= 1) focusPrimaryRef.current = true;
+        setDomTick((n) => n + 1);
+        setActiveStepId(prevSteps.at(-1)?.id ?? currentStep.id);
       }
     };
     window.addEventListener('keydown', onKeyDown, true);
     return () => window.removeEventListener('keydown', onKeyDown, true);
-  }, [isTourVisible, closeTour]);
+  }, [isTourVisible, currentStep, currentIndex, isLastStep, availableSteps, closeTour]);
 
   const finishWithStatus = (status: SafetyTourProgressStatus) => {
     writeSafetyTourProgress(userId, taskId, tourVersion, status);
@@ -312,8 +344,8 @@ function SafetyTaskTourSession({ taskId, tourVersion, userId, steps }: SafetyTas
     setIsOpen(true);
   };
 
-  const isLastStep = currentIndex + 1 >= availableSteps.length;
-  const showInvitation = isInviteEligible && !isTourVisible && availableSteps.length > 0;
+  const showInvitation =
+    !unobtrusiveEntry && isInviteEligible && !isTourVisible && availableSteps.length > 0;
 
   return (
     <div className="relative inline-flex flex-wrap items-center gap-2 max-w-full">
@@ -329,17 +361,21 @@ function SafetyTaskTourSession({ taskId, tourVersion, userId, steps }: SafetyTas
           }
           startTour();
         }}
-        className="px-3 py-1 rounded-full border border-slate-200/90 bg-white hover:bg-slate-50 text-xs font-semibold text-slate-700 hover:text-slate-900 transition-colors cursor-pointer shadow-xs focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-slate-900"
+        className={
+          unobtrusiveEntry
+            ? 'inline-flex min-h-10 items-center rounded-lg border border-slate-300 bg-white px-3.5 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50 hover:text-slate-950 transition-colors cursor-pointer focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-slate-900'
+            : 'inline-flex min-h-8 items-center px-3 py-1 rounded-full border border-slate-200/90 bg-white hover:bg-slate-50 text-xs font-semibold text-slate-700 hover:text-slate-900 transition-colors cursor-pointer shadow-xs focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-slate-900'
+        }
       >
         {progress ? tSafety('tour.replayBtn') : tSafety('tour.triggerBtn')}
       </button>
 
-      {progress && !isTourVisible && sanitizeTourUserId(userId) !== null && (
+      {progress && !isTourVisible && sanitizeTourUserId(userId) !== null && !unobtrusiveEntry && (
         <button
           type="button"
           data-testid="safety-task-tour-reset"
           onClick={resetProgress}
-          className="px-2.5 py-1 rounded-full border border-slate-200/80 bg-slate-50 hover:bg-slate-100 text-xs font-medium text-slate-600 hover:text-slate-900 transition-colors cursor-pointer focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-slate-900"
+          className="inline-flex min-h-8 items-center px-2.5 py-1 rounded-full border border-slate-200/80 bg-slate-50 hover:bg-slate-100 text-xs font-medium text-slate-600 hover:text-slate-900 transition-colors cursor-pointer focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-slate-900"
         >
           {tSafety('tour.resetBtn')}
         </button>
@@ -366,6 +402,7 @@ function SafetyTaskTourSession({ taskId, tourVersion, userId, steps }: SafetyTas
           />
 
           <section
+            ref={tourSectionRef}
             role="region"
             aria-labelledby={titleId}
             aria-describedby={bodyId}
@@ -375,7 +412,7 @@ function SafetyTaskTourSession({ taskId, tourVersion, userId, steps }: SafetyTas
           >
             <div className="flex items-start justify-between gap-2">
               <div className="min-w-0">
-                <p className="text-[11px] font-semibold uppercase tracking-wider text-slate-500">
+                <p className="text-xs font-semibold uppercase tracking-wider text-slate-500 tabular-nums">
                   {tSafety('tour.stepCounter', {
                     current: currentIndex + 1,
                     total: availableSteps.length,
@@ -393,27 +430,27 @@ function SafetyTaskTourSession({ taskId, tourVersion, userId, steps }: SafetyTas
                 data-testid="safety-task-tour-close"
                 aria-label={tSafety('tour.closeAria')}
                 onClick={() => closeTour(true)}
-                className="rounded-lg px-2 py-1 text-xs font-semibold text-slate-500 hover:bg-slate-100 hover:text-slate-900 cursor-pointer focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-slate-900"
+                className="inline-flex min-h-8 min-w-8 items-center justify-center rounded-lg px-2 py-1 text-sm font-semibold text-slate-500 hover:bg-slate-100 hover:text-slate-900 cursor-pointer focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-slate-900"
               >
                 ×
               </button>
             </div>
             <p
               id={bodyId}
-              className="text-xs text-slate-600 leading-relaxed break-words [overflow-wrap:anywhere]"
+              className="text-xs sm:text-sm text-slate-600 leading-relaxed break-words [overflow-wrap:anywhere]"
             >
               {tSafety(currentStep.bodyKey)}
             </p>
-            <div className="flex flex-wrap items-center justify-between gap-2 pt-1 border-t border-slate-100">
+            <div className="flex flex-wrap items-center justify-between gap-2 pt-2 border-t border-slate-100">
               <button
                 type="button"
                 data-testid="safety-task-tour-skip"
                 onClick={() => finishWithStatus('SKIPPED')}
-                className="rounded px-1.5 py-0.5 text-xs font-semibold text-slate-500 hover:text-slate-800 cursor-pointer focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-slate-900"
+                className="inline-flex min-h-8 items-center rounded-lg px-2.5 py-1 text-xs font-semibold text-slate-600 hover:bg-slate-100 hover:text-slate-900 cursor-pointer focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-slate-900"
               >
                 {tSafety('tour.skipBtn')}
               </button>
-              <div className="flex flex-wrap items-center gap-1.5">
+              <div className="flex flex-wrap items-center gap-2">
                 {currentIndex > 0 && (
                   <button
                     type="button"
@@ -432,7 +469,7 @@ function SafetyTaskTourSession({ taskId, tourVersion, userId, steps }: SafetyTas
                       setDomTick((n) => n + 1);
                       setActiveStepId(prevSteps.at(-1)?.id ?? currentStep.id);
                     }}
-                    className="rounded-lg border border-slate-200 bg-white px-2.5 py-1 text-xs font-semibold text-slate-700 hover:bg-slate-50 cursor-pointer focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-slate-900"
+                    className="inline-flex min-h-8 items-center rounded-lg border border-slate-200 bg-white px-3 py-1 text-xs font-semibold text-slate-700 hover:bg-slate-50 cursor-pointer focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-slate-900"
                   >
                     {tSafety('tour.backBtn')}
                   </button>
@@ -448,7 +485,7 @@ function SafetyTaskTourSession({ taskId, tourVersion, userId, steps }: SafetyTas
                       setActiveStepId(availableSteps[currentIndex + 1]?.id ?? null);
                     }
                   }}
-                  className="rounded-lg bg-[#0F172A] px-3 py-1 text-xs font-semibold text-white hover:bg-slate-800 cursor-pointer focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-slate-900"
+                  className="inline-flex min-h-8 items-center rounded-lg bg-[#0F172A] px-3.5 py-1 text-xs font-semibold text-white hover:bg-slate-800 cursor-pointer focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-slate-900"
                 >
                   {tSafety(isLastStep ? 'tour.doneBtn' : 'tour.nextBtn')}
                 </button>
@@ -468,6 +505,7 @@ export function SafetyTaskTour({
   scopeKey,
   isAuthorized = true,
   steps = MONITOR_TOUR_STEPS,
+  unobtrusiveEntry = false,
 }: SafetyTaskTourProps) {
   if (!isAuthorized) return null;
   const sessionKey = `${scopeKey}::${userId ?? ''}::${taskId}::${tourVersion}`;
@@ -478,6 +516,7 @@ export function SafetyTaskTour({
       tourVersion={tourVersion}
       userId={userId}
       steps={steps}
+      unobtrusiveEntry={unobtrusiveEntry}
     />
   );
 }

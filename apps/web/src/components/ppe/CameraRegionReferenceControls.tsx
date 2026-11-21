@@ -2,6 +2,7 @@ import { useTranslation } from 'react-i18next';
 import { ApiError } from '@smartsite/api-client';
 import { CAMERA_BUTTON_STYLES } from '../cameras/camera-dialog-styles';
 import { IconAlertTriangle } from '../icons';
+import { uiLocale } from '../../i18n';
 import { SAFETY_NAMESPACE } from '../../i18n/runtime';
 import { registerCameraRegionPanelCatalog } from './camera-region-panel-catalog';
 import { registerCameraRegionReferenceCatalog } from './camera-region-reference-catalog';
@@ -10,6 +11,19 @@ import type { NormalizedPoint } from './region-polygon-geometry';
 import type { CameraConfigurationReference } from './useCameraConfigurationReference';
 
 const DETAILS_DISCLOSURE_KEY = 'regionSetup.reference.detailsDisclosure';
+
+function formatReferenceTimestamp(iso: string): string {
+  const parsed = Date.parse(iso);
+  if (!Number.isFinite(parsed)) return iso;
+  try {
+    return new Intl.DateTimeFormat(uiLocale(), {
+      dateStyle: 'short',
+      timeStyle: 'medium',
+    }).format(new Date(parsed));
+  } catch {
+    return iso;
+  }
+}
 
 registerCameraRegionPanelCatalog();
 registerCameraRegionReferenceCatalog();
@@ -66,11 +80,18 @@ export function CameraRegionReferenceStatusCard({
                     : 'border-amber-200 bg-amber-50 text-amber-900'
                 }`}
               >
-                {reference.sourceKind}
+                {reference.sourceKind === 'REPLAY'
+                  ? t('regionSetup.reference.sourceKindReplayBadge')
+                  : reference.sourceKind}
               </span>
               <span className="inline-flex max-w-full items-center break-words rounded-full border border-slate-200 bg-white px-2.5 py-0.5 font-semibold text-slate-700">
                 {t('regionSetup.reference.revisionBadge', {
                   version: reference.configurationVersion,
+                })}
+              </span>
+              <span className="inline-flex max-w-full items-center break-words rounded-full border border-slate-200 bg-white px-2.5 py-0.5 font-semibold text-slate-700">
+                {t('regionSetup.reference.viewMeta', {
+                  viewRevision: reference.issuedReference.viewRevision,
                 })}
               </span>
               {isDrawingActive && (
@@ -110,6 +131,40 @@ export function CameraRegionReferenceStatusCard({
               : t('regionSetup.reference.getBtn')}
         </button>
       </div>
+
+      {reference && (
+        <div
+          data-testid="reference-provenance-summary"
+          className="min-w-0 flex flex-wrap items-center gap-x-2.5 gap-y-1 rounded-xl border border-slate-200/80 bg-white px-2.5 py-1.5 text-[11px] text-slate-700"
+        >
+          <span className="min-w-0 max-w-full break-all font-mono font-medium">
+            {t('regionSetup.reference.sourceMeta', {
+              source: reference.frame.cameraExternalId,
+            })}
+          </span>
+          <span aria-hidden="true" className="text-slate-300">
+            ·
+          </span>
+          <span
+            title={reference.frame.sessionId}
+            className="min-w-0 max-w-full break-all font-mono text-slate-600"
+          >
+            {t('regionSetup.reference.sessionMeta', {
+              session: `${reference.frame.sessionId.slice(0, 8)}…`,
+            })}
+          </span>
+          <span aria-hidden="true" className="text-slate-300">
+            ·
+          </span>
+          <span className="min-w-0 max-w-full break-words tabular-nums text-slate-700">
+            <time dateTime={reference.frame.capturedAt}>
+              {t('regionSetup.reference.capturedAt', {
+                time: formatReferenceTimestamp(reference.frame.capturedAt),
+              })}
+            </time>
+          </span>
+        </div>
+      )}
 
       {errorMessage && (
         <div
@@ -162,6 +217,9 @@ export function CameraRegionReferenceStatusCard({
           </p>
           {reference && (
             <div className="min-w-0 flex flex-wrap items-center gap-x-3 gap-y-1 font-mono text-[11px] tabular-nums text-slate-600">
+              <span className="min-w-0 max-w-full break-all">
+                {t('regionSetup.reference.sessionMeta', { session: reference.frame.sessionId })}
+              </span>
               <span className="min-w-0 max-w-full break-all">
                 {t('regionSetup.reference.capturedAt', { time: reference.frame.capturedAt })}
               </span>

@@ -19,6 +19,10 @@ const CAMERA_REGION_REFERENCE_EN = {
   'regionSetup.reference.loadingCandidateBtn': 'Loading new reference…',
   'regionSetup.reference.capturedAt': 'Captured: {time}',
   'regionSetup.reference.expiresAt': 'Expires: {time}',
+  'regionSetup.reference.sourceKindReplayBadge': 'REPLAY · Test video',
+  'regionSetup.reference.sourceMeta': 'Source: {source}',
+  'regionSetup.reference.sessionMeta': 'Session: {session}',
+  'regionSetup.reference.viewMeta': 'View v{viewRevision}',
   'regionSetup.reference.revisionBadge': 'Config v{version}',
   'regionSetup.reference.expiredBadge': 'Expired',
   'regionSetup.reference.noneLoadedHint':
@@ -73,6 +77,10 @@ const CAMERA_REGION_REFERENCE_VI: Record<keyof typeof CAMERA_REGION_REFERENCE_EN
   'regionSetup.reference.loadingCandidateBtn': 'Đang tải ảnh tham chiếu mới…',
   'regionSetup.reference.capturedAt': 'Chụp lúc: {time}',
   'regionSetup.reference.expiresAt': 'Hết hạn: {time}',
+  'regionSetup.reference.sourceKindReplayBadge': 'REPLAY · Video thử nghiệm',
+  'regionSetup.reference.sourceMeta': 'Nguồn: {source}',
+  'regionSetup.reference.sessionMeta': 'Phiên: {session}',
+  'regionSetup.reference.viewMeta': 'Khung nhìn v{viewRevision}',
   'regionSetup.reference.revisionBadge': 'Cấu hình v{version}',
   'regionSetup.reference.expiredBadge': 'Đã hết hạn',
   'regionSetup.reference.noneLoadedHint':

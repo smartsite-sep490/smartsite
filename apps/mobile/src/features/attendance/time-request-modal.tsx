@@ -8,21 +8,18 @@ import {
 } from '@smartsite/api-client';
 import { useTranslation, translate as tr } from '../../i18n';
 import { useWorkspace } from '../workspace/workspace-context';
-import {
-  allPages,
-  minutes,
-  instant,
-  localDate,
-  required,
-  useCommand,
-  useRequestId,
-} from '../shared/data';
+import { allPages, minutes, instant, required, useCommand, useRequestId } from '../shared/data';
 import { Choice, ErrorNotice, Field, Hint, QueryState } from '../shared/ui';
 import { DateTimeField } from '../shared/date-time-field';
 import { colors } from '../../theme/colors';
 import { RequestSheet } from '../shared/request-sheet';
 import { FormSection } from '../shared/form-section';
 import { IconCalendar, IconClock, IconChevronRight } from '../../components/common/Icons';
+import {
+  requestScheduleIssue,
+  requestTimingMessage,
+  useEligibleTimeSchedules,
+} from '../scheduling/time-request-eligibility';
 
 interface TimeRequestModalProps {
   visible: boolean;
@@ -41,6 +38,9 @@ export function TimeRequestModal(props: TimeRequestModalProps) {
   ) : null;
 }
 
+import { useWorkerLeaveAvailability } from '../scheduling/worker-leave-availability';
+import { useRequestFeedback } from '../shared/request-feedback';
+
 function TimeRequestForm({
   visible,
   onClose,
@@ -51,7 +51,6 @@ function TimeRequestForm({
   const { t } = useTranslation();
   const { scope, client, token, queryKey, workerId } = useWorkspace();
   const requestedWorkerId = onBehalfWorkerId ?? workerId;
-  const [openedAt] = useState(() => Date.now());
   const [noticeType, setNoticeType] = useState<LeaveNoticeType>('PLANNED');
   const [kind, setKind] = useState<'LEAVE' | 'OVERTIME'>(onBehalfWorkerId ? 'LEAVE' : initialKind),
     [scheduleId, setSchedule] = useState(''),
@@ -60,6 +59,10 @@ function TimeRequestForm({
     [reason, setReason] = useState('');
   const command = useCommand(),
     requestId = useRequestId();
+  const reportSubmitted = useRequestFeedback();
+  const leaveAvailability = useWorkerLeaveAvailability(
+    visible && !onBehalfWorkerId && kind === 'LEAVE',
+  );
 
   const schedules = useQuery({
     queryKey: [...queryKey, 'request-schedules', requestedWorkerId],
@@ -82,37 +85,23 @@ function TimeRequestForm({
     enabled: visible && !!requestedWorkerId,
   });
 
-  const availableSchedules = (schedules.data ?? [])
-    .filter((s) => {
-      if (s.workerId !== requestedWorkerId || !s.isActive) return false;
-      if (kind === 'LEAVE') return true;
-      const shift = shifts.data?.find((v) => v.id === s.shiftId);
-      if (!shift) return false;
-      try {
-        const window = scheduledShiftWindow(
-          {
-            startsAt: new Date(shift.startsAt),
-            endsAt: new Date(shift.endsAt),
-            timezone: shift.timezone,
-          },
-          s.workDate,
-        );
-        return (
-          localDate(new Date(Math.max(+window.endsAt, openedAt + 60000)), shift.timezone) ===
-          localDate(window.endsAt, shift.timezone)
-        );
-      } catch {
-        return false;
-      }
-    })
-    .map((s) => ({
-      value: s.id,
-      label: `${s.workDate} · ${shifts.data?.find((v) => v.id === s.shiftId)?.name ?? tr('schedule.shift')}`,
-    }));
+  const { eligible } = useEligibleTimeSchedules(
+    (schedules.data ?? []).filter((s) => s.workerId === requestedWorkerId),
+    shifts.data ?? [],
+    kind,
+    noticeType,
+  );
+  const selectedSchedule = eligible.find((s) => s.id === scheduleId);
+  const selectionValid = !!selectedSchedule;
+  const availableSchedules = eligible.map((s) => ({
+    value: s.id,
+    label: `${s.workDate} · ${shifts.data?.find((v) => v.id === s.shiftId)?.name ?? tr('schedule.shift')}`,
+  }));
 
   const canSubmit =
+    (kind !== 'LEAVE' || (leaveAvailability.ready && !leaveAvailability.locked)) &&
     !command.isPending &&
-    !!scheduleId &&
+    selectionValid &&
     !!from &&
     !!to &&
     reason.trim().length >= 5 &&
@@ -121,7 +110,7 @@ function TimeRequestForm({
     !schedules.isRefetchError &&
     !shifts.isRefetchError;
   const duration =
-    from && to && Date.parse(to) > Date.parse(from)
+    selectionValid && from && to && Date.parse(to) > Date.parse(from)
       ? minutes(Math.round((Date.parse(to) - Date.parse(from)) / 60000))
       : null;
 
@@ -149,6 +138,10 @@ function TimeRequestForm({
       footer={
         <View style={styles.footer}>
           <ErrorNotice error={command.error} />
+          <ErrorNotice error={leaveAvailability.error} />
+          {!!leaveAvailability.message && (
+            <Text style={styles.footerHint}>{leaveAvailability.message}</Text>
+          )}
           {duration && (
             <View style={styles.durationRow}>
               <IconClock size={17} color={colors.primary} />
@@ -168,6 +161,8 @@ function TimeRequestForm({
             ]}
             onPress={() =>
               command.mutate(async () => {
+                if (kind === 'LEAVE' && (!leaveAvailability.ready || leaveAvailability.locked))
+                  throw new Error(leaveAvailability.message || t('common.retry'));
                 const startsAt = instant(from),
                   endsAt = instant(to);
                 if (endsAt <= startsAt) throw new Error(tr('validation.timeEndAfterStart'));
@@ -176,6 +171,13 @@ function TimeRequestForm({
                 const selected = schedules.data?.find((s) => s.id === scheduleId);
                 if (!selected || selected.workerId !== requestedWorkerId || !selected.isActive)
                   throw new Error(tr('requests.outOfScope'));
+                const issue = requestScheduleIssue(
+                  selected.workDate,
+                  shifts.data?.find((s) => s.id === selected.shiftId),
+                  kind,
+                  noticeType,
+                );
+                if (issue) throw new Error(requestTimingMessage(issue));
                 const input = {
                   workerScheduleId: scheduleId,
                   kind,
@@ -192,6 +194,7 @@ function TimeRequestForm({
                 setFrom('');
                 setTo('');
                 setReason('');
+                reportSubmitted();
                 onSubmitted?.();
                 onClose();
               })
@@ -251,6 +254,55 @@ function TimeRequestForm({
           </View>
         )}
         <FormSection number="01" title={t('attendanceUi.chooseSchedule')}>
+          {kind === 'LEAVE' && (
+            <View style={styles.noticeGroup}>
+              <Text style={styles.fieldLabel}>{t('leavePolicy.noticeType')}</Text>
+              <View style={styles.noticeOptions}>
+                {(['PLANNED', 'EMERGENCY'] as const).map((value) => (
+                  <Pressable
+                    key={value}
+                    accessibilityRole="radio"
+                    accessibilityLabel={t(
+                      value === 'PLANNED' ? 'leavePolicy.planned' : 'leavePolicy.emergency',
+                    )}
+                    accessibilityState={{
+                      checked: noticeType === value,
+                      disabled: command.isPending,
+                    }}
+                    disabled={command.isPending}
+                    onPress={() => {
+                      if (value === noticeType) return;
+                      setNoticeType(value);
+                      setSchedule('');
+                      setFrom('');
+                      setTo('');
+                      command.reset();
+                    }}
+                    style={({ pressed }) => [
+                      styles.noticeOption,
+                      noticeType === value && styles.noticeSelected,
+                      pressed && styles.pressed,
+                    ]}
+                  >
+                    <View style={[styles.radio, noticeType === value && styles.radioSelected]}>
+                      {noticeType === value && <View style={styles.radioDot} />}
+                    </View>
+                    <Text
+                      style={[styles.noticeText, noticeType === value && styles.kindSelectedText]}
+                    >
+                      {t(value === 'PLANNED' ? 'leavePolicy.planned' : 'leavePolicy.emergency')}
+                    </Text>
+                  </Pressable>
+                ))}
+              </View>
+              <Text style={styles.help}>
+                {t('leavePolicy.noticeHint', { hours: LEAVE_NOTICE_HOURS })}
+              </Text>
+              {noticeType === 'EMERGENCY' && (
+                <Text style={styles.help}>{t('leavePolicy.emergencyHint')}</Text>
+              )}
+            </View>
+          )}
           <QueryState query={shifts}>
             {() => (
               <QueryState query={schedules}>
@@ -259,11 +311,11 @@ function TimeRequestForm({
                     <Choice
                       disabled={command.isPending}
                       label={tr('attendance.assignedShift')}
-                      value={scheduleId}
+                      value={selectedSchedule?.id ?? ''}
                       onChange={(id) => {
                         setSchedule(id);
                         command.reset();
-                        const schedule = schedules.data?.find(
+                        const schedule = eligible.find(
                           (s) => s.id === id && s.workerId === requestedWorkerId,
                         );
                         const shift = shifts.data?.find((v) => v.id === schedule?.shiftId);
@@ -301,7 +353,17 @@ function TimeRequestForm({
                       }}
                       options={availableSchedules}
                     />
-                    {!availableSchedules.length && <Hint>{t('attendanceUi.noSchedules')}</Hint>}
+                    {!availableSchedules.length && (
+                      <Hint>
+                        {t(
+                          kind === 'OVERTIME'
+                            ? 'leavePolicy.noOvertimeSchedules'
+                            : noticeType === 'PLANNED'
+                              ? 'leavePolicy.noPlannedSchedules'
+                              : 'leavePolicy.noEmergencySchedules',
+                        )}
+                      </Hint>
+                    )}
                   </>
                 )}
               </QueryState>
@@ -310,50 +372,8 @@ function TimeRequestForm({
         </FormSection>
 
         <FormSection number="02" title={t('attendanceUi.chooseTime')}>
-          {kind === 'LEAVE' && (
-            <View style={styles.noticeGroup}>
-              <Text style={styles.fieldLabel}>{t('leavePolicy.noticeType')}</Text>
-              <View style={styles.noticeOptions}>
-                {(['PLANNED', 'EMERGENCY'] as const).map((value) => (
-                  <Pressable
-                    key={value}
-                    accessibilityRole="radio"
-                    accessibilityLabel={t(
-                      value === 'PLANNED' ? 'leavePolicy.planned' : 'leavePolicy.emergency',
-                    )}
-                    accessibilityState={{
-                      checked: noticeType === value,
-                      disabled: command.isPending,
-                    }}
-                    disabled={command.isPending}
-                    onPress={() => setNoticeType(value)}
-                    style={({ pressed }) => [
-                      styles.noticeOption,
-                      noticeType === value && styles.noticeSelected,
-                      pressed && styles.pressed,
-                    ]}
-                  >
-                    <View style={[styles.radio, noticeType === value && styles.radioSelected]}>
-                      {noticeType === value && <View style={styles.radioDot} />}
-                    </View>
-                    <Text
-                      style={[styles.noticeText, noticeType === value && styles.kindSelectedText]}
-                    >
-                      {t(value === 'PLANNED' ? 'leavePolicy.planned' : 'leavePolicy.emergency')}
-                    </Text>
-                  </Pressable>
-                ))}
-              </View>
-              <Text style={styles.help}>
-                {t('leavePolicy.noticeHint', { hours: LEAVE_NOTICE_HOURS })}
-              </Text>
-              {noticeType === 'EMERGENCY' && (
-                <Text style={styles.help}>{t('leavePolicy.emergencyHint')}</Text>
-              )}
-            </View>
-          )}
           {onBehalfWorkerId && <Hint>{t('leavePolicy.onBehalfHint')}</Hint>}
-          {scheduleId && (
+          {selectionValid && (
             <Text style={styles.timezone}>
               {
                 shifts.data?.find(
@@ -362,7 +382,7 @@ function TimeRequestForm({
               }
             </Text>
           )}
-          {scheduleId ? (
+          {selectionValid ? (
             <>
               <DateTimeField
                 compact

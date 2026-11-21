@@ -1,4 +1,8 @@
-import { leaveNotice } from '@smartsite/contracts';
+import {
+  leaveNotice,
+  timeRequestTimingIssue,
+  TIME_REQUEST_TIMING_MESSAGES,
+} from '@smartsite/contracts';
 import { Injectable } from '@nestjs/common';
 import { PublicHttpException } from '../../../common/http/public-http-exception.js';
 import { randomUUID } from 'node:crypto';
@@ -44,6 +48,8 @@ import {
 } from './dto/attendance.dto.js';
 import { auditAccess } from '../shared/access-audit.js';
 import { workDateAt, scheduledShiftWindow } from './attendance-calculation.js';
+import { assertWorkerLeaveAvailable, workerRequests } from './worker-requests.js';
+import { WorkerRequestsDto } from './dto/attendance.dto.js';
 
 @Injectable()
 export class AttendanceDaysService {
@@ -51,6 +57,19 @@ export class AttendanceDaysService {
     private readonly source: DataSource,
     private readonly reconciliation: AttendanceReconciliationService,
   ) {}
+  async myRequests(actor: WorkforceActor, siteIdValue: string, input: WorkerRequestsDto) {
+    const siteId = uuid(siteIdValue),
+      value = command(WorkerRequestsDto, input);
+    const worker = await this.source
+      .getRepository(WorkerEntity)
+      .findOneBy({ siteId, userId: actor.id, isActive: true });
+    if (!worker || (await attendanceAccess(this.source.manager, actor, worker)) !== 'SELF')
+      throw new PublicHttpException(403, {
+        code: 'FORBIDDEN',
+        message: 'Worker request history is outside your scope',
+      });
+    return workerRequests(this.source.manager, worker, actor.id, value);
+  }
   private duplicate(session: AttendanceSessionEntity) {
     return (
       session.status === 'NEEDS_REVIEW' &&
@@ -82,7 +101,11 @@ export class AttendanceDaysService {
       }
     }
     if (!visible.length) return { items: [], total: 0 };
-    const where = { siteId, workerId: In(visible.map((w) => w.id)) };
+    const where = {
+      siteId,
+      workerId: In(visible.map((w) => w.id)),
+      ...(value.requestId ? { id: value.requestId } : {}),
+    };
     const page = {
       skip: value.offset ?? 0,
       take: value.limit ?? 20,
@@ -583,9 +606,14 @@ export class AttendanceDaysService {
         return { id: old.id };
       }
       if (!schedule.isActive) conflict('Schedule is inactive');
+      const submittedAt = new Date();
+      const timingIssue = timeRequestTimingIssue(shift, value.kind, value.noticeType, submittedAt);
+      if (timingIssue) conflict(TIME_REQUEST_TIMING_MESSAGES[timingIssue]);
+      if (value.kind === 'LEAVE' && access === 'SELF')
+        await assertWorkerLeaveAvailable(manager, worker, actor.id);
       if (
         value.kind === 'OVERTIME' &&
-        (start <= new Date() || (start < shift.endsAt && end > shift.startsAt))
+        (start <= submittedAt || (start < shift.endsAt && end > shift.startsAt))
       )
         conflict(
           'Overtime must be requested and approved before it starts, outside the regular shift',
@@ -623,7 +651,7 @@ export class AttendanceDaysService {
         });
       else
         await manager.getRepository(AbsenceRequestEntity).save({
-          ...leaveNotice(shift.startsAt, value.noticeType),
+          ...leaveNotice(shift.startsAt, value.noticeType, submittedAt),
           id: value.requestId,
           siteId,
           workerId: worker.id,

@@ -94,3 +94,17 @@ Cần kiểm tra riêng bằng thiết bị Mobile và OpenAI thật trên giấ
 Docker daemon không phản hồi nên Compose build/readiness chưa được xác minh. Chưa chạy Tesseract/Poppler
 thật trên máy này, OpenAI trả phí hoặc thiết bị Mobile thật. Không nộp giấy, sửa dữ liệu hay chạy migration
 trên production. Cần review của người phụ trách trước khi phát hành đồng bộ Backend/Web/Mobile.
+
+## Kiểm tra tích hợp main ngày 22/11/2026
+
+Đã tích hợp `origin/main` tại `a77fe12e`, giữ thay đổi email onboarding, request tracking và Safety UI.
+Xử lý xung đột bản dịch và test đăng ký, giữ email đăng nhập cùng khai báo thẻ tùy chọn.
+
+- `pnpm check`: đạt lint, typecheck, toàn bộ test và build Backend/Web/Mobile Android/iOS.
+- Web: 1.195 test đạt, bốn test HTTP có điều kiện được bỏ qua. Backend: 836; Mobile: 178;
+  contracts: 263; API client: 258; scripts: 24 test đạt.
+- Test giao nhau sau merge: 31 test Web và bảy test bản dịch/hồ sơ Mobile đạt.
+- Prettier cho file thay đổi và kiểm tra diff đạt; không còn file xung đột.
+
+PostgreSQL và Playwright nêu trên là kết quả trong lượt triển khai trước; chưa chạy lại sau đợt main này.
+Các giới hạn Docker, engine OCR thật, OpenAI thật và thiết bị Mobile thật vẫn áp dụng.

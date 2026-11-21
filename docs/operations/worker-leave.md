@@ -11,12 +11,13 @@ another authorized Representative must review those entries.
 
 - `noticeType` is `PLANNED` or `EMERGENCY`. A new request from an older client without this
   field defaults to planned. Existing database rows remain unclassified (`null`).
-- The staffing recommendation is **24 hours before the assigned shift starts**, not before
-  the requested leave interval. This is an internal advisory policy, not a statutory cutoff.
+- Planned leave requires **at least 24 hours before the assigned shift starts**, not before
+  the requested leave interval. The exact 24-hour boundary is accepted.
   `LEAVE_NOTICE_HOURS` is the shared default in the contracts package.
-- Late planned requests and emergencies are still accepted. Reason is mandatory (5–1,000
-  characters); the Worker explains the emergency or late notification there. There is no
-  hard retrospective cutoff that could exclude a Worker who was unable to communicate.
+- Emergency leave is available for shifts taking place today in the shift timezone that
+  have not ended, including an ongoing overnight shift from the previous work date.
+  Future-day emergency leave and new requests for an ended shift are rejected. Reason
+  remains mandatory (5–1,000 characters), including representative entries on behalf.
 - Backend derives and persists `shortNotice` from its actual receipt time and the scheduled
   shift window, including timezone and overnight shifts. Clients cannot supply this flag,
   the submitting user or the submission timestamp.
@@ -27,6 +28,33 @@ another authorized Representative must review those entries.
   `submittedOnBehalf`, `requestedByUserId` and `createdAt` for the review queue.
 
 ## APIs and compatibility
+
+Workers may submit only one new leave request within 24 hours of their latest successful
+self-submission, regardless of whether it is pending, approved, rejected, cancelled or conflicted.
+This applies across both leave APIs and different assigned shifts in the same Site/Worker scope.
+The Backend serializes submissions with the Worker lock and checks PostgreSQL time; client clock
+changes or concurrent requests do not bypass the limit. An identical idempotent retry remains valid.
+Representative entries on behalf are separate and retain the existing authorization/review rules.
+
+`GET /my-requests` returns the authenticated Worker's own submitted leave, overtime, shift changes,
+swaps and attendance corrections. It supports type/status/ID filtering and stable pagination, returns
+`serverTime` and unfiltered `leaveAvailableAt`, and preserves history for inactive schedules. Applied
+shift changes/swaps are included by the Approved filter. It does not accept a caller-selected Worker.
+The existing time-request list additionally accepts `requestId`, without removing scope checks.
+
+Mobile has a Worker **Submitted requests** tab with status filters, review notes and request details.
+The list uses compact tappable rows with localized dates and short status badges. A single New
+request action opens a type menu; type/status filters use a compact sheet with Apply and Clear.
+Reasons and review notes are shown in full inside the request detail sheet.
+Successful submissions show a translated confirmation with a link to the history; failed sends retain
+the draft and never show success. Leave creation controls show the next available submission time.
+Attendance time-request notifications carry an additive request ID/type alongside the existing day
+target, so Mobile opens the exact request for Contractor review or Worker history, independent of
+the current queue page/status. Incoming swap-consent notifications retain their own consent view.
+The Worker Submitted/Needs your response tabs stay on the same compact screen. Incoming rows
+contain only pending swap invitations addressed to that Worker. Details compare their current shift
+with the proposed shift in a compact sheet; agreement sends the request to Contractor review, while
+decline requires a reason. Failed responses retain the draft and remain retryable.
 
 All routes below use `/api/v1/sites/:siteId` and require a user bearer token.
 
@@ -42,6 +70,9 @@ All routes below use `/api/v1/sites/:siteId` and require a user bearer token.
 `PENDING_MANAGER` remains the persisted/wire leave status for compatibility; Mobile labels it
 as awaiting a Representative. No schema enum rename or historical request rewrite is performed.
 Overtime remains worker-submitted, outside the shift and requested/approved before it starts.
+The assigned regular shift must not have ended when submitting a new overtime request.
+These creation cutoffs apply to both leave APIs. Historical requests remain reviewable,
+and an identical retry of an existing time-request ID still succeeds after its cutoff.
 
 ## Attendance and Mobile
 
@@ -55,9 +86,12 @@ For illness during a shift, select the remaining unworked interval; the Mobile f
 suggests now through shift end and retains recorded hours. Actual IN/OUT evidence is preserved.
 
 Worker: the home quick request and schedule detail offer planned/emergency full-shift leave;
-Work Hours offers hourly leave and overtime. Leave selectors include historical active shifts
-for retrospective emergencies. Request times are derived from the assigned work date and
-shift timezone; dates/times remain editable. Overtime excludes obsolete workdays.
+Work Hours offers hourly leave and overtime. Planned selectors show only shifts at least
+24 hours away; emergency selectors show today's unended shifts. Overtime excludes ended
+assigned shifts, including ones that ended earlier today. Classification is selected before
+the schedule; changing it clears the old selection. Open forms refresh at submission cutoffs
+and on foreground, and recheck eligibility when submitting. Request times are derived from
+the assigned work date and shift timezone; dates/times remain editable.
 
 The Worker attendance tab separates **Timesheet** from **My requests**. Timesheet shows the
 latest real IN/OUT session for today, separate provisional/confirmed hours, direct leave/OT

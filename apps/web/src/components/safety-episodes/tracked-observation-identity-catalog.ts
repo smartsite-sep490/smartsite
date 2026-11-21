@@ -1,4 +1,7 @@
-import type { TrackedObservationIdentity } from '@smartsite/contracts/tracked-episode-frames';
+import type {
+  TrackedObservationIdentity,
+  TrackedObservationIdentityCard,
+} from '@smartsite/contracts/tracked-episode-frames';
 import {
   hasRegisteredFeatureKey,
   registerFeatureCatalog,
@@ -17,6 +20,9 @@ const en = {
   'trackedIdentity.loading': 'Reading manual identity record for this observation…',
   'trackedIdentity.error': 'Could not read manual identity record for this observation.',
   'trackedIdentity.retry': 'Retry identity read',
+  'trackedIdentity.conflict':
+    'Observation or identity revision changed since this view opened. Refresh the observation source and read again.',
+  'trackedIdentity.refreshSourceAction': 'Refresh observation & retry',
   'trackedIdentity.forbidden':
     'Manual identity record is unavailable or your role does not have permission to read identity records in this scope.',
   'trackedIdentity.noDecision': 'No manual link recorded for this observation',
@@ -28,7 +34,18 @@ const en = {
     'Manual Worker ID (this observation only): {{workerId}} · Rev #{{revision}} · {{recordedAt}}',
   'trackedIdentity.resolvedSummaryNoUuid':
     'Manual worker link recorded (this observation only) · Rev #{{revision}} · {{recordedAt}}',
+  'trackedIdentity.workerCardLabel':
+    'Scoped site directory metadata (manual verification for this observation only)',
+  'trackedIdentity.workerCodeLabel': 'Worker code',
+  'trackedIdentity.workerActiveBadge': 'Active in site directory',
+  'trackedIdentity.workerInactiveBadge': 'Inactive in site directory',
+  'trackedIdentity.workerInactiveNote':
+    'Historical manual verification for this exact observation remains preserved; this worker is currently marked inactive in the site directory.',
+  'trackedIdentity.directoryUnavailable':
+    'Historical manual identity decision is recorded for this exact observation, but current site directory metadata is unavailable.',
   'trackedIdentity.workerId': 'Manual Worker ID',
+  'trackedIdentity.workerExternalIdTech': 'Current directory worker code',
+  'trackedIdentity.workerDirectoryStatusTech': 'Current directory status',
   'trackedIdentity.workerRefDisclosure': 'Technical worker reference',
   'trackedIdentity.reasonLabel': 'Reason',
   'trackedIdentity.showTechnical': 'Show identity technical details',
@@ -67,6 +84,9 @@ const vi: Record<keyof typeof en, string> = {
   'trackedIdentity.loading': 'Đang đọc bản ghi định danh thủ công cho quan sát này…',
   'trackedIdentity.error': 'Không thể đọc bản ghi định danh thủ công cho quan sát này.',
   'trackedIdentity.retry': 'Thử đọc lại định danh',
+  'trackedIdentity.conflict':
+    'Dữ liệu quan sát hoặc phiên bản định danh đã thay đổi kể từ khi mở khung này. Vui lòng làm mới nguồn quan sát và đọc lại.',
+  'trackedIdentity.refreshSourceAction': 'Làm mới quan sát & đọc lại',
   'trackedIdentity.forbidden':
     'Bản ghi định danh thủ công không khả dụng hoặc vai trò của bạn không có quyền đọc bản ghi định danh trong phạm vi này.',
   'trackedIdentity.noDecision': 'Chưa có liên kết thủ công cho quan sát này',
@@ -78,7 +98,18 @@ const vi: Record<keyof typeof en, string> = {
     'Mã Công nhân thủ công (chỉ quan sát này): {{workerId}} · Phiên bản #{{revision}} · {{recordedAt}}',
   'trackedIdentity.resolvedSummaryNoUuid':
     'Đã ghi nhận liên kết Công nhân thủ công (chỉ quan sát này) · Phiên bản #{{revision}} · {{recordedAt}}',
+  'trackedIdentity.workerCardLabel':
+    'Thông tin danh bạ công trường hiện tại (xác minh thủ công chỉ cho quan sát này)',
+  'trackedIdentity.workerCodeLabel': 'Mã công nhân',
+  'trackedIdentity.workerActiveBadge': 'Đang hoạt động trong danh bạ',
+  'trackedIdentity.workerInactiveBadge': 'Ngừng hoạt động trong danh bạ',
+  'trackedIdentity.workerInactiveNote':
+    'Quyết định xác minh thủ công trong lịch sử cho đúng quan sát này vẫn được giữ nguyên; công nhân hiện đang ở trạng thái ngừng hoạt động trong danh bạ công trường.',
+  'trackedIdentity.directoryUnavailable':
+    'Đã có quyết định định danh thủ công trong lịch sử cho đúng quan sát này, nhưng thông tin danh bạ công trường hiện tại không khả dụng.',
   'trackedIdentity.workerId': 'Mã Công nhân thủ công',
+  'trackedIdentity.workerExternalIdTech': 'Mã ngoài công nhân trong danh bạ',
+  'trackedIdentity.workerDirectoryStatusTech': 'Trạng thái danh bạ hiện tại',
   'trackedIdentity.workerRefDisclosure': 'Tham chiếu mã công nhân kỹ thuật',
   'trackedIdentity.reasonLabel': 'Lý do',
   'trackedIdentity.showTechnical': 'Hiện chi tiết kỹ thuật định danh',
@@ -104,12 +135,12 @@ const vi: Record<keyof typeof en, string> = {
   'trackedIdentity.evidenceSha256': 'SHA-256 bằng chứng quyết định',
 };
 
-if (!hasRegisteredFeatureKey('trackedIdentity.title')) {
+if (!hasRegisteredFeatureKey('trackedIdentity.conflict')) {
   registerFeatureCatalog({ en, vi });
 }
 
 export function buildTechnicalEntries(
-  usableIdentity: TrackedObservationIdentity,
+  usableIdentity: TrackedObservationIdentity | TrackedObservationIdentityCard,
   tSafety: (key: string) => string,
 ): Array<{ label: string; value: string }> {
   const latestDecision = usableIdentity.latestDecision;
@@ -153,6 +184,22 @@ export function buildTechnicalEntries(
   base.push({ label: tSafety('trackedIdentity.decisionId'), value: latestDecision.id });
   if (latestDecision.workerId !== null) {
     base.push({ label: tSafety('trackedIdentity.workerId'), value: latestDecision.workerId });
+  }
+  if (
+    latestDecision.action === 'RESOLVE' &&
+    'worker' in usableIdentity &&
+    usableIdentity.worker !== null
+  ) {
+    base.push(
+      {
+        label: tSafety('trackedIdentity.workerExternalIdTech'),
+        value: usableIdentity.worker.externalId,
+      },
+      {
+        label: tSafety('trackedIdentity.workerDirectoryStatusTech'),
+        value: usableIdentity.worker.isActive ? 'ACTIVE' : 'INACTIVE',
+      },
+    );
   }
   base.push(
     { label: tSafety('trackedIdentity.actorUserId'), value: latestDecision.actorUserId },

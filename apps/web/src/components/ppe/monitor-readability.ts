@@ -9,7 +9,8 @@ import type { ScopedPreviewStatus } from '../cameras/useScopedCameraPreview';
 
 export const MONITOR_READABILITY_EN = {
   'monitor.layout.groupAria': 'Camera display layout',
-  'monitor.layout.grid4': 'Camera grid (4)',
+  'monitor.layout.grid4': 'Camera grid',
+  'monitor.layout.gridCount': 'Camera grid ({count})',
   'monitor.layout.focus1': 'Focus (1)',
   'monitor.layout.exitFullscreen': 'Exit fullscreen',
   'monitor.layout.useFocusFallback': 'Switch to Focus (1) view',
@@ -42,14 +43,38 @@ export const MONITOR_READABILITY_EN = {
   'focus.unavailableAi': 'AI snapshot is currently unavailable (camera feed or AI worker offline).',
   'focus.unavailableSource': 'Camera source video is currently unavailable.',
   'focus.unavailableDenied': 'Access to this camera source is restricted or unavailable.',
-  'focus.backToGrid': 'Back to 4-camera grid',
+  'focus.backToGrid': 'Back to camera grid',
+  'monitor.drawer.title': 'Camera observation & evidence',
+  'monitor.drawer.subtitle':
+    'Preliminary AI observations for this camera. Saved violations and identity decisions are reviewed in Safety Records.',
+  'monitor.drawer.closeAria': 'Close evidence inspector',
+  'monitor.drawer.closeBtn': 'Close',
+  'monitor.drawer.currentStatus': 'Current source state',
+  'monitor.drawer.capturedAt': 'Captured at',
+  'monitor.drawer.detectionsHeading': 'Person observations in analyzed frame',
+  'monitor.drawer.personObservation': 'Person #{index} · Identity: Unknown',
+  'monitor.drawer.trackDisclaimer': 'Technical track #{trackId} (not a Worker ID or team)',
+  'monitor.drawer.ppeHardHat': 'Hard hat',
+  'monitor.drawer.ppeSafetyVest': 'Safety vest',
+  'monitor.drawer.ppePresent': 'Detected',
+  'monitor.drawer.ppeMissingConfirmed': 'Missing (preliminary)',
+  'monitor.drawer.ppeMissingChecking': 'Checking across frames',
+  'monitor.drawer.ppeUnobservable': 'Unobservable',
+  'monitor.drawer.noDetections': 'No person observations in the current analyzed frame.',
+  'monitor.drawer.noActiveFrame':
+    'No active analyzed AI frame is available right now. Open saved records below to inspect persisted evidence.',
+  'monitor.drawer.openFrameInbox': 'Open Grouped Frame Inbox for this camera',
+  'monitor.drawer.openEpisodes': 'Open Safety Records for this camera',
+  'monitor.drawer.sessionId': 'Session ID:',
+  'monitor.drawer.sequence': 'Frame seq:',
 } as const;
 
 export type MonitorReadabilityKey = keyof typeof MONITOR_READABILITY_EN;
 
 export const MONITOR_READABILITY_VI: Record<MonitorReadabilityKey, string> = {
   'monitor.layout.groupAria': 'Bố cục hiển thị camera',
-  'monitor.layout.grid4': 'Lưới camera (4)',
+  'monitor.layout.grid4': 'Lưới camera',
+  'monitor.layout.gridCount': 'Lưới camera ({count})',
   'monitor.layout.focus1': 'Tiêu điểm (1)',
   'monitor.layout.exitFullscreen': 'Thoát toàn màn hình',
   'monitor.layout.useFocusFallback': 'Chuyển sang khung Tiêu điểm (1)',
@@ -84,10 +109,34 @@ export const MONITOR_READABILITY_VI: Record<MonitorReadabilityKey, string> = {
     'Ảnh phân tích AI hiện không khả dụng (nguồn camera hoặc worker AI đang gián đoạn).',
   'focus.unavailableSource': 'Video nguồn camera hiện không khả dụng.',
   'focus.unavailableDenied': 'Quyền truy cập nguồn camera này bị hạn chế hoặc không khả dụng.',
-  'focus.backToGrid': 'Quay lại lưới 4 camera',
+  'focus.backToGrid': 'Quay lại lưới camera',
+  'monitor.drawer.title': 'Quan sát camera & bằng chứng',
+  'monitor.drawer.subtitle':
+    'Quan sát AI sơ bộ của camera đang chọn. Việc duyệt vi phạm và xác minh danh tính thực hiện tại Hồ sơ an toàn.',
+  'monitor.drawer.closeAria': 'Đóng bảng bằng chứng',
+  'monitor.drawer.closeBtn': 'Đóng',
+  'monitor.drawer.currentStatus': 'Trạng thái nguồn hiện tại',
+  'monitor.drawer.capturedAt': 'Thời điểm chụp',
+  'monitor.drawer.detectionsHeading': 'Quan sát người trong khung đã phân tích',
+  'monitor.drawer.personObservation': 'Người #{index} · Danh tính: Chưa xác định',
+  'monitor.drawer.trackDisclaimer':
+    'Mã theo dõi kỹ thuật #{trackId} (không phải mã Công nhân hay tổ đội)',
+  'monitor.drawer.ppeHardHat': 'Mũ bảo hộ',
+  'monitor.drawer.ppeSafetyVest': 'Áo phản quang',
+  'monitor.drawer.ppePresent': 'Đã phát hiện',
+  'monitor.drawer.ppeMissingConfirmed': 'Thiếu (quan sát sơ bộ)',
+  'monitor.drawer.ppeMissingChecking': 'Đang đối chiếu qua các khung',
+  'monitor.drawer.ppeUnobservable': 'Chưa đủ góc nhìn',
+  'monitor.drawer.noDetections': 'Không có quan sát người trong khung phân tích hiện tại.',
+  'monitor.drawer.noActiveFrame':
+    'Hiện chưa có khung phân tích AI đang hoạt động. Mở hồ sơ đã lưu bên dưới để xem bằng chứng.',
+  'monitor.drawer.openFrameInbox': 'Mở Hộp thư khung hình gộp của camera này',
+  'monitor.drawer.openEpisodes': 'Mở Hồ sơ an toàn của camera này',
+  'monitor.drawer.sessionId': 'Mã phiên:',
+  'monitor.drawer.sequence': 'Số thứ tự frame:',
 };
 
-const SENTINEL_KEY: MonitorReadabilityKey = 'monitor.people.unavailable';
+const SENTINEL_KEY: MonitorReadabilityKey = 'monitor.drawer.openEpisodes';
 
 export function registerMonitorReadabilityCatalog(): void {
   if (hasRegisteredFeatureKey(SENTINEL_KEY)) {
@@ -108,6 +157,16 @@ export function useMonitorReadabilityTranslate() {
     (key: MonitorReadabilityKey, params?: Record<string, string | number>) =>
       params ? rawT(key, { replace: params }) : rawT(key),
     [rawT],
+  );
+}
+
+/** Never render URL userinfo or protocol URLs as technical source identifiers. */
+export function isSafeDisplaySourceId(externalId: string | null | undefined): boolean {
+  return Boolean(
+    externalId &&
+    externalId.trim().length > 0 &&
+    !externalId.includes('://') &&
+    !externalId.includes('@'),
   );
 }
 
@@ -134,6 +193,7 @@ export function resolveMonitorTelemetryState(input: {
   status: ScopedPreviewStatus;
   errorStatus: number | null;
   isRawTransport?: boolean;
+  hasActiveRawMedia?: boolean;
 }): {
   failureKind: MonitorSourceFailureKind;
   peopleState: MonitorPeopleCountState;
@@ -146,8 +206,16 @@ export function resolveMonitorTelemetryState(input: {
   }
 
   if (input.isRawTransport) {
+    const rawFailureKind: MonitorSourceFailureKind =
+      input.hasActiveRawMedia !== false
+        ? 'NONE'
+        : input.status === 'CONNECTING'
+          ? 'CONNECTING'
+          : input.errorStatus === 401 || input.errorStatus === 403
+            ? 'ACCESS_RESTRICTED'
+            : 'CAMERA_UNAVAILABLE';
     return {
-      failureKind: 'NONE',
+      failureKind: rawFailureKind,
       peopleState: { kind: 'RAW_SOURCE_NO_AI' },
     };
   }

@@ -45,6 +45,17 @@ export function isSafetyIdentificationRouteEnabled(override?: boolean): boolean 
   return import.meta.env.VITE_SMARTSITE_ENABLE_C02_IDENTIFICATION !== 'false';
 }
 
+/**
+ * Exact-observation identity card (/identity-card) stays disabled by default until the composed
+ * Backend slice (PR #247 / 5af9e8f2) is deployed; never enable solely because the branch exists.
+ */
+export function isObservationIdentityCardEnabled(override?: boolean): boolean {
+  if (typeof override === 'boolean') {
+    return override;
+  }
+  return import.meta.env.VITE_SMARTSITE_ENABLE_OBSERVATION_IDENTITY_CARD === 'true';
+}
+
 export function sameSafetyId(
   left: string | null | undefined,
   right: string | null | undefined,

@@ -13,9 +13,10 @@ const REGION_POLYGON_DRAWER_EN = {
     'Region was created with an unexpected camera or zone scope. Please refresh.',
   'regionSetup.error.403': 'You do not have permission to perform this action.',
   'regionSetup.error.409':
-    'Configuration version conflict. Camera configuration was updated by another operator. Please review and try saving again.',
+    'Configuration version conflict: camera configuration was updated first. Your polygon draft is preserved — load and accept the latest camera image below, then save again.',
   'regionSetup.error.409Edit':
-    'Configuration version conflict. Camera configuration was updated by another operator. Your unsaved draft is kept; please review the current camera configuration and reopen this region to edit from the latest revision.',
+    'Configuration version conflict: camera configuration was updated first. Your unsaved polygon draft is preserved — load and accept the latest camera image below, or reopen this region from the latest revision.',
+  'regionSetup.error.409ReloadBtn': 'Load latest reference (v{version}) & keep draft',
   'regionSetup.error.saveDefault':
     'Failed to save observation region. Please verify your inputs and try again.',
 } as const;
@@ -31,9 +32,10 @@ const REGION_POLYGON_DRAWER_VI: Record<keyof typeof REGION_POLYGON_DRAWER_EN, st
     'Vùng quan sát được tạo với phạm vi camera hoặc khu vực không khớp. Vui lòng làm mới.',
   'regionSetup.error.403': 'Bạn không có quyền thực hiện thao tác này.',
   'regionSetup.error.409':
-    'Xung đột phiên bản cấu hình. Cấu hình camera đã được người vận hành khác cập nhật. Vui lòng kiểm tra và lưu lại.',
+    'Xung đột phiên bản cấu hình: camera vừa được cập nhật lên phiên bản mới. Bản nháp đa giác vẫn được giữ nguyên — hãy tải và chấp nhận ảnh tham chiếu mới nhất bên dưới rồi lưu lại.',
   'regionSetup.error.409Edit':
-    'Xung đột phiên bản cấu hình. Cấu hình camera đã được người vận hành khác cập nhật. Bản nháp chưa lưu vẫn được giữ nguyên; vui lòng xem lại cấu hình camera hiện tại và mở lại vùng quan sát này để chỉnh sửa từ phiên bản mới nhất.',
+    'Xung đột phiên bản cấu hình: camera vừa được cập nhật lên phiên bản mới. Bản nháp đa giác vẫn được giữ nguyên — hãy tải và chấp nhận ảnh tham chiếu mới nhất bên dưới, hoặc mở lại vùng từ phiên bản mới nhất.',
+  'regionSetup.error.409ReloadBtn': 'Tải ảnh mới nhất (v{version}) & giữ bản nháp',
   'regionSetup.error.saveDefault':
     'Không thể lưu vùng quan sát. Vui lòng kiểm tra dữ liệu và thử lại.',
 };

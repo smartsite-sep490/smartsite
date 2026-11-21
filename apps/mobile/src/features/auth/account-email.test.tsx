@@ -102,7 +102,10 @@ it('requires the current password to change email and opens verification for the
   const update = vi
     .spyOn(workspace.client, 'setAccountEmail')
     .mockResolvedValue({ accepted: true });
-  await mount(<AccountEmailCard />);
+  workspace.user.emailVerifiedAt = '2026-11-21T00:00:00Z';
+  await mount(<AccountEmailCard settingsRow />);
+  expect(JSON.stringify(root.toJSON())).not.toContain(t('accountEmail.profileHint'));
+  expect(JSON.stringify(root.toJSON())).toContain(t('accountEmail.verified'));
   await click(t('accountEmail.changeEmail'));
   await input(t('accountEmail.email'), 'new@example.test');
   expect(buttons(t('accountEmail.saveEmail'))[0]!.props.disabled).toBe(true);
@@ -120,7 +123,7 @@ it('verifies only the current authenticated account and hides verification contr
   const verify = vi
     .spyOn(workspace.client, 'verifyAccountEmail')
     .mockResolvedValue({ accepted: true });
-  await mount(<AccountEmailCard />);
+  await mount(<AccountEmailCard settingsRow />);
   await click(t('accountEmail.verifyAction'));
   await input(t('accountEmail.code'), '654321');
   await click(t('accountEmail.verifyAction'));

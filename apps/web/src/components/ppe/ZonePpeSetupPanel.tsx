@@ -91,10 +91,10 @@ function ZonePpeSetupPanelInternal(props: ZonePpeSetupPanelInternalProps) {
               <IconShield className="h-4.5 w-4.5" />
             </span>
             <div className="min-w-0">
-              <h3 className="text-base font-bold text-slate-900 truncate">
+              <h3 className="text-base font-bold text-slate-900 break-words [overflow-wrap:anywhere]">
                 {t(section === 'regions' ? 'regionSetup.title' : 'zoneSetup.title')}
               </h3>
-              <p className="text-xs text-slate-500 truncate mt-0.5">
+              <p className="text-xs text-slate-500 break-words [overflow-wrap:anywhere] mt-0.5">
                 {section === 'regions' ? (
                   t('regionSetup.subtitle')
                 ) : (
@@ -180,6 +180,7 @@ function ZonePpeSetupPanelInternal(props: ZonePpeSetupPanelInternalProps) {
               embedded={section === 'regions'}
               onSelectCamera={onSelectCamera}
               onDraftStateChange={setRegionDraft}
+              onUnauthorized={props.onUnauthorized}
               apiUrl={apiUrl}
               client={client}
               token={token}

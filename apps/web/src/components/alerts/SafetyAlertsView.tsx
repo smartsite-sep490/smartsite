@@ -14,6 +14,7 @@ import { StatusBadge, TechnicalDetails } from '../safety/SafetyWorkflowUi';
 import { IncidentView } from '../safety/IncidentView';
 import { SafetyTasksView } from '../safety/SafetyTasksView';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useInRouterContext } from 'react-router-dom';
 import type { FormEvent } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import {
@@ -171,6 +172,7 @@ export function SafetyAlertsView({
   useTranslation();
 
   const client = useManagementClient(apiUrl);
+  const inRouter = useInRouterContext();
   const queryClient = useQueryClient();
   const [workspaceTab, setWorkspaceTab] = useState<WorkspaceTab>(
     initialDocumentWorkerId
@@ -648,96 +650,108 @@ export function SafetyAlertsView({
   }
 
   return (
-    <div className="mx-auto max-w-[1202px] w-full min-w-0 space-y-3 pb-10 text-[#2F3437]">
+    <div
+      data-testid="safety-operations-fullwidth-root"
+      className="w-full min-w-0 space-y-3.5 pb-10 text-slate-900"
+    >
       {alertSiteUnavailable && <p role="alert">{tr('ppeNotifications.targetUnavailable')}</p>}
-      <header className="flex flex-wrap items-start justify-between gap-3 min-w-0">
-        <div className="min-w-0">
-          <h1 className="mt-1 text-2xl font-bold tracking-tight text-[#111111]">
-            {tr('common.safety_operations')}
-          </h1>
-        </div>
-        <div className="flex min-w-0 flex-wrap items-end gap-3 lg:max-w-[55%]">
-          <label className="min-w-0 w-full sm:w-72 text-xs font-bold uppercase tracking-wider text-[#6B6B6B]">
-            {tr('common.site_fa7955')}
-            <select
-              value={selectedSiteId}
-              onChange={(event) => {
-                setRelatedAlertFilter(undefined);
-                setRelatedChecklistFilter(undefined);
-                setIncidentReturn(undefined);
-                setChecklistDraft(undefined);
-                setRequestedChecklistId('');
-                setCreatedIncidentId('');
-                setRequestedSiteId(event.target.value);
-                setMobileAlertDetail(false);
-                setIncidentSourceAlert('');
-                setRequestedAlertId('');
-                setOffset(0);
-                resetReviewDraft();
-              }}
-              disabled={sites.isPending || visibleSites.length === 0}
-              className="mt-1.5 w-full min-w-0 truncate rounded-md border border-[#EAEAEA] bg-white px-3 py-2 text-sm font-semibold text-[#2F3437]"
-            >
-              {alertSiteUnavailable && (
-                <option value="" disabled>
-                  {tr('accounts.selectSite')}
-                </option>
+      <div className="rounded-2xl border border-slate-200/90 bg-white shadow-2xs min-w-0">
+        <header className="flex flex-col gap-3 px-4 py-3.5 sm:px-5 lg:flex-row lg:items-center lg:justify-between min-w-0">
+          <div className="min-w-0">
+            <h1 className="text-2xl sm:text-[26px] font-bold tracking-tight text-slate-950">
+              {tr('common.safety_operations')}
+            </h1>
+            <p className="mt-0.5 text-xs sm:text-[13px] text-slate-500">
+              {tr(
+                'safety_alerts_view.review_alerts_manage_corrective_work_and_verify_safety_tasks_for_your_site',
               )}
-              {visibleSites.map((site) => (
-                <option key={site.id} value={site.id}>
-                  {site.code} · {site.name}
-                </option>
-              ))}
-            </select>
-          </label>
-          <button
-            type="button"
-            onClick={handleLogout}
-            className="rounded-md border border-[#EAEAEA] bg-white px-3 py-2 text-sm font-semibold text-[#2F3437] hover:bg-[#F7F6F3] shrink-0 max-w-full truncate"
-          >
-            {tr('common.sign_out_value', { value1: session.user.displayName })}
-          </button>
-        </div>
-      </header>
+            </p>
+          </div>
+          <div className="flex min-w-0 flex-wrap items-center gap-3">
+            <label className="flex min-w-0 w-full sm:w-auto flex-wrap sm:flex-nowrap items-center gap-2.5 text-sm font-semibold text-slate-700">
+              <span className="shrink-0">{tr('common.site_fa7955')}</span>
+              <select
+                value={selectedSiteId}
+                onChange={(event) => {
+                  setRelatedAlertFilter(undefined);
+                  setRelatedChecklistFilter(undefined);
+                  setIncidentReturn(undefined);
+                  setChecklistDraft(undefined);
+                  setRequestedChecklistId('');
+                  setCreatedIncidentId('');
+                  setRequestedSiteId(event.target.value);
+                  setMobileAlertDetail(false);
+                  setIncidentSourceAlert('');
+                  setRequestedAlertId('');
+                  setOffset(0);
+                  resetReviewDraft();
+                }}
+                disabled={sites.isPending || visibleSites.length === 0}
+                className="h-10 w-full sm:w-80 min-w-0 truncate rounded-xl border border-slate-300 bg-white px-3.5 text-sm font-medium text-slate-900 shadow-2xs transition-colors hover:border-slate-400 focus-visible:border-slate-900 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-slate-900"
+              >
+                {alertSiteUnavailable && (
+                  <option value="" disabled>
+                    {tr('accounts.selectSite')}
+                  </option>
+                )}
+                {visibleSites.map((site) => (
+                  <option key={site.id} value={site.id}>
+                    {site.code} · {site.name}
+                  </option>
+                ))}
+              </select>
+            </label>
+            {(!externalSession || (!inRouter && Boolean(onSignOut))) && (
+              <button
+                type="button"
+                onClick={handleLogout}
+                className="inline-flex h-10 items-center rounded-xl border border-slate-300 bg-white px-3.5 text-sm font-semibold text-slate-800 hover:bg-slate-50 shrink-0 max-w-full truncate"
+              >
+                {tr('common.sign_out_value', { value1: session.user.displayName })}
+              </button>
+            )}
+          </div>
+        </header>
 
-      <nav
-        className="flex flex-wrap gap-1 border-b border-[var(--border)] pb-2"
-        aria-label={tr('common.safety_workspace')}
-      >
-        {(
-          [
-            'Overview',
-            'Alerts',
-            'Incidents',
-            'Checklists',
-            'Safety Tasks',
-            ...(canReviewSafety ? ['Documents' as const] : []),
-          ] as const
-        ).map((tab) => (
-          <button
-            type="button"
-            key={tab}
-            aria-pressed={workspaceTab === tab}
-            disabled={
-              (tab === 'Alerts' && !canAlerts) ||
-              ((tab === 'Safety Tasks' || tab === 'Overview') && !canTasks)
-            }
-            onClick={() => setWorkspaceTab(tab)}
-            className={
-              'min-h-11 rounded-lg px-4 py-2 text-sm font-semibold transition-colors disabled:opacity-40 disabled:cursor-not-allowed ' +
-              (workspaceTab === tab
-                ? 'bg-[#111] text-white'
-                : 'text-[var(--text-secondary)] hover:bg-[var(--surface-bone)]')
-            }
-          >
-            {tab === 'Documents' ? tr('documents.reviewQueue') : localizedLabel(tab)}
-          </button>
-        ))}
-      </nav>
+        <nav
+          className="flex flex-wrap items-center gap-1 border-t border-slate-100 bg-slate-50/70 px-3 py-2 sm:px-4 rounded-b-2xl"
+          aria-label={tr('common.safety_workspace')}
+        >
+          {(
+            [
+              'Overview',
+              'Alerts',
+              'Incidents',
+              'Checklists',
+              'Safety Tasks',
+              ...(canReviewSafety ? ['Documents' as const] : []),
+            ] as const
+          ).map((tab) => (
+            <button
+              type="button"
+              key={tab}
+              aria-pressed={workspaceTab === tab}
+              disabled={
+                (tab === 'Alerts' && !canAlerts) ||
+                ((tab === 'Safety Tasks' || tab === 'Overview') && !canTasks)
+              }
+              onClick={() => setWorkspaceTab(tab)}
+              className={
+                'min-h-9 rounded-xl px-3.5 py-1.5 text-sm font-semibold transition-colors cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed ' +
+                (workspaceTab === tab
+                  ? 'bg-[#0F172A] text-white shadow-2xs'
+                  : 'text-slate-700 hover:bg-white hover:text-slate-950')
+              }
+            >
+              {tab === 'Documents' ? tr('documents.reviewQueue') : localizedLabel(tab)}
+            </button>
+          ))}
+        </nav>
+      </div>
       <section
         data-tour-anchor="alerts-queue-filter"
         className={
-          'grid gap-3 sm:gap-4 rounded-xl border border-[#EAEAEA] bg-white p-4 grid-cols-1 sm:grid-cols-2 min-w-0 ' +
+          'grid gap-3 sm:gap-4 rounded-2xl border border-slate-200/90 bg-white p-4 shadow-2xs grid-cols-1 sm:grid-cols-2 min-w-0 ' +
           (workspaceTab === 'Alerts' && canAlerts
             ? mobileAlertDetail
               ? 'hidden lg:grid'

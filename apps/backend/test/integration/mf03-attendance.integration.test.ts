@@ -353,7 +353,10 @@ test('MF03: interval totals, missing checkout, notifications, approvals, scope a
       endsAt: at('17:00').toISOString(),
       reason: 'Synthetic partial leave',
     };
+    const originalRequestClock = Date.now();
+    t.mock.timers.setTime(+at('08:00') - 86400000);
     await days.request(workerActor, siteId, request);
+    t.mock.timers.setTime(originalRequestClock);
     await days.request(workerActor, siteId, request);
     const requestNotice = await dataSource.getRepository(UserNotificationEntity).findOneByOrFail({
       requestId: request.requestId,
@@ -427,7 +430,7 @@ test('MF03: interval totals, missing checkout, notifications, approvals, scope a
         startsAt: at('17:00').toISOString(),
         endsAt: at('18:00').toISOString(),
       }),
-      /before/,
+      /shift that has ended/,
     );
     const future = new Date(Date.now() + 86400000),
       futureEnd = new Date(+future + 3600000);
@@ -703,6 +706,13 @@ test('MF03: interval totals, missing checkout, notifications, approvals, scope a
       isActive: true,
     });
     const wholeLeaveId = randomUUID();
+    const originalWholeLeaveClock = Date.now();
+    t.mock.timers.setTime(+leaveStart - 86400000);
+    // This scenario is a later submission, outside the Worker-wide 24-hour cooldown.
+    await dataSource.query(
+      "UPDATE absence_request SET created_at=clock_timestamp()-interval '25 hours' WHERE id=$1 AND site_id=$2",
+      [request.requestId, siteId],
+    );
     await days.request(workerActor, siteId, {
       requestId: wholeLeaveId,
       workerScheduleId: leaveSchedule.id,
@@ -711,6 +721,7 @@ test('MF03: interval totals, missing checkout, notifications, approvals, scope a
       endsAt: leaveEnd.toISOString(),
       reason: 'Approved whole shift leave',
     });
+    t.mock.timers.setTime(originalWholeLeaveClock);
     await days.review(repActor, siteId, wholeLeaveId, 'LEAVE', {
       approve: true,
       reviewNote: 'Approved whole shift',
