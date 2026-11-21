@@ -1,3 +1,4 @@
+import { loadAllPages } from '../workforce/load-all-pages';
 import { FocusedCameraMedia } from '../ppe/FocusedCameraMedia';
 import { useManagementClient } from '../../features/auth/auth-session';
 import { authErrorMessage } from '../../features/auth/auth-errors';
@@ -112,9 +113,7 @@ export function RestrictedZoneView({
   const canRead =
     !externalSession ||
     session?.user.roleAssignments.some(
-      ({ role, siteId }) =>
-        (role === 'ADMIN' && siteId === null) ||
-        (siteId !== null && ['SITE_MANAGER', 'SAFETY_OFFICER'].includes(role)),
+      ({ role, siteId }) => siteId !== null && ['SITE_MANAGER', 'SAFETY_OFFICER'].includes(role),
     );
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
@@ -370,17 +369,24 @@ export function RestrictedZoneView({
 
   const sites = useQuery({
     queryKey: ['zone-admin', apiUrl, sessionScope, 'sites'],
-    queryFn: () => client.listSites(apiToken, { limit: 100 }),
+    queryFn: ({ signal }) =>
+      loadAllPages((options) => client.listSites(apiToken, options, { signal }), signal),
     enabled: !!canRead && apiToken.length > 0,
   });
 
+  const scopedSites =
+    sites.data?.items.filter((site) =>
+      session?.user.roleAssignments.some(
+        (r) => r.siteId === site.id && ['SITE_MANAGER', 'SAFETY_OFFICER'].includes(r.role),
+      ),
+    ) ?? [];
   const selectedSiteId =
     (!linkedMonitoring || sites.isSuccess) &&
-    sites.data?.items.some((site) => site.id === requestedSiteId)
+    scopedSites.some((site) => site.id === requestedSiteId)
       ? requestedSiteId
       : linkedMonitoring && requestedSiteId === linkedSiteId
         ? ''
-        : (sites.data?.items[0]?.id ?? '');
+        : (scopedSites[0]?.id ?? '');
   const canConfigure =
     !session ||
     session.user.roleAssignments.some(
@@ -878,11 +884,11 @@ export function RestrictedZoneView({
                   setRequestedCameraId('');
                   setRequestedRegionId('');
                 }}
-                disabled={sites.isPending || !sites.data?.items.length}
+                disabled={sites.isPending || !scopedSites.length}
                 className="w-full rounded-lg border border-[#EAEAEA] bg-white px-2.5 py-1.5 text-xs font-medium text-[#2F3437] outline-none focus:border-[#F66B17]"
               >
                 {!selectedSiteId && <option value="">{tr('common.unavailable')}</option>}
-                {sites.data?.items.map((site) => (
+                {scopedSites.map((site) => (
                   <option key={site.id} value={site.id}>
                     {site.code} · {site.name}
                   </option>

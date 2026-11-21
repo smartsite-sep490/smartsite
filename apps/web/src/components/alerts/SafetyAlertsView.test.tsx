@@ -317,7 +317,7 @@ describe('SafetyAlertsView Integration (Plan §15 A4 Parent View & Session Scope
   });
 
   it.each([false, true])(
-    'Admin is read-only even with Safety on another Site: %s',
+    'Admin has no implicit safety access, including Safety on another Site: %s',
     async (otherSite) => {
       const user = userEvent.setup();
 
@@ -371,21 +371,13 @@ describe('SafetyAlertsView Integration (Plan §15 A4 Parent View & Session Scope
       await user.type(screen.getByLabelText(/Password/i), 'password123');
       await user.click(screen.getByRole('button', { name: 'Sign in' }));
 
-      // Đăng nhập thành công, hàng đợi cảnh báo hiển thị
-      await screen.findByRole('heading', { name: 'Safety operations' });
-      await screen.findByText(/Công trường Alpha/i);
-      await user.click(screen.getByRole('button', { name: 'Alerts' }));
-
-      // Chờ chi tiết cảnh báo được tải
-      await screen.findByText('00000000-0000-4000-8000-000000000001');
-
-      // Admin đơn thuần: không có role SAFETY_OFFICER tại công trường này -> canReviewIdentity được tính là false
-      // Do đó ObservationIdentityReviewPanel KHÔNG được mount
-      expect(screen.queryByText('Xác minh người trong ảnh')).toBeNull();
+      if (otherSite) {
+        await screen.findByRole('heading', { name: 'Safety operations' });
+        expect(screen.queryByRole('option', { name: /Công trường Alpha/i })).toBeNull();
+      } else {
+        expect(await screen.findByRole('alert')).toBeTruthy();
+      }
       expect(screen.queryByRole('button', { name: 'Confirm violation' })).toBeNull();
-      expect(screen.queryByRole('button', { name: 'Dismiss alert' })).toBeNull();
-      expect(screen.queryByRole('button', { name: 'Request more evidence' })).toBeNull();
-
       // Tuyệt đối không gọi bất kỳ API danh tính nào
       expect(getIdentityContextSpy).not.toHaveBeenCalled();
       expect(listWorkersSpy).not.toHaveBeenCalled();
@@ -639,7 +631,7 @@ describe('SafetyAlertsView Integration (Plan §15 A4 Parent View & Session Scope
     const user = userEvent.setup();
 
     vi.spyOn(SmartSiteManagementClient.prototype, 'login').mockResolvedValue(
-      mockAdminLoginResponse,
+      mockSafetyOfficerLoginResponse,
     );
     vi.spyOn(SmartSiteManagementClient.prototype, 'listSites').mockResolvedValue(mockSitesList);
     const listAlertsSpy = vi
@@ -669,7 +661,7 @@ describe('SafetyAlertsView Integration (Plan §15 A4 Parent View & Session Scope
     expect(typeSelect.value).toBe('PPE_VIOLATION');
 
     expect(listAlertsSpy).toHaveBeenCalledWith(
-      mockAdminLoginResponse.accessToken,
+      mockSafetyOfficerLoginResponse.accessToken,
       'site-alpha',
       expect.objectContaining({ type: 'PPE_VIOLATION' }),
       expect.objectContaining({ signal: expect.any(AbortSignal) }),
@@ -704,7 +696,7 @@ describe('SafetyAlertsView Integration (Plan §15 A4 Parent View & Session Scope
     const user = userEvent.setup();
 
     vi.spyOn(SmartSiteManagementClient.prototype, 'login').mockResolvedValue(
-      mockAdminLoginResponse,
+      mockSafetyOfficerLoginResponse,
     );
     vi.spyOn(SmartSiteManagementClient.prototype, 'listSites').mockResolvedValue(mockSitesList);
     vi.spyOn(SmartSiteManagementClient.prototype, 'listSafetyAlerts').mockResolvedValue({
@@ -745,7 +737,7 @@ describe('SafetyAlertsView Integration (Plan §15 A4 Parent View & Session Scope
   it('Changing alert pages clears the selected previous-page alert detail', async () => {
     const user = userEvent.setup();
     vi.spyOn(SmartSiteManagementClient.prototype, 'login').mockResolvedValue(
-      mockAdminLoginResponse,
+      mockSafetyOfficerLoginResponse,
     );
     vi.spyOn(SmartSiteManagementClient.prototype, 'listSites').mockResolvedValue(mockSitesList);
     const first = { ...mockAlert, id: 'first', candidateSubtype: 'FIRST_ALERT' };

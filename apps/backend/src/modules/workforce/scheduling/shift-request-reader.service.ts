@@ -24,11 +24,7 @@ export class ShiftRequestReaderService {
     const workerView = query.view === 'WORKER' || query.view === 'INCOMING';
     const readAll =
       !workerView &&
-      actor.roleAssignments.some(
-        (a) =>
-          (a.role === UserRole.ADMIN && a.siteId === null) ||
-          (a.role === UserRole.SITE_MANAGER && a.siteId === site),
-      );
+      actor.roleAssignments.some((a) => a.role === UserRole.SITE_MANAGER && a.siteId === site);
     const role = workerView ? UserRole.WORKER : UserRole.CONTRACTOR_REPRESENTATIVE;
     const deny = () => {
       throw new PublicHttpException(HttpStatus.FORBIDDEN, {
@@ -111,7 +107,7 @@ export class ShiftRequestReaderService {
           AND EXISTS (SELECT 1 FROM contractor_site_participation p WHERE p.site_id = r.site_id
             AND p.contractor_id = w.contractor_id AND p.is_active AND p.valid_from <= CURRENT_TIMESTAMP
             AND (p.valid_until IS NULL OR p.valid_until > CURRENT_TIMESTAMP))
-          AND EXISTS (SELECT 1 FROM user_role_assignment a WHERE a.user_id = $2 AND ((a.site_id = r.site_id AND (a.role = $4 OR ($10 AND a.role = 'SITE_MANAGER'))) OR ($10 AND a.site_id IS NULL AND a.role = 'ADMIN')))
+          AND EXISTS (SELECT 1 FROM user_role_assignment a WHERE a.user_id = $2 AND ((a.site_id = r.site_id AND (a.role = $4 OR ($10 AND a.role = 'SITE_MANAGER')))))
           AND ($10 OR ($3::uuid IS NOT NULL AND (r.worker_id = $3 OR r.coworker_worker_id = $3)
             AND EXISTS (SELECT 1 FROM worker me WHERE me.id = $3 AND me.user_id = $2 AND me.site_id = r.site_id AND me.is_active))
             OR ($3::uuid IS NULL AND EXISTS (SELECT 1 FROM contractor_representative_assignment a

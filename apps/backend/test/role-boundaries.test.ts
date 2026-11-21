@@ -32,10 +32,10 @@ function context(
   } as unknown as ExecutionContext;
 }
 
-test('operational configuration permits scoped managers, lets Admin observe, and denies other roles or sites', () => {
+test('operational configuration permits scoped managers and denies implicit Admin access', () => {
   const guard = new SiteConfigurationGuard();
   assert.equal(guard.canActivate(context(UserRole.SITE_MANAGER, 'POST')), true);
-  assert.equal(guard.canActivate(context(UserRole.ADMIN, 'GET')), true);
+  assert.throws(() => guard.canActivate(context(UserRole.ADMIN, 'GET')), denied);
   assert.equal(guard.canActivate(context(UserRole.SAFETY_OFFICER, 'GET')), true);
   for (const role of [
     UserRole.ADMIN,
@@ -52,9 +52,9 @@ test('operational configuration permits scoped managers, lets Admin observe, and
   );
 });
 
-test('Admin observes alerts but only exact-Site Safety Officer records review decisions', () => {
+test('Admin cannot read alerts and only exact-Site Safety Officer records review decisions', () => {
   const guard = new SafetyAlertAccessGuard();
-  assert.equal(guard.canActivate(context(UserRole.ADMIN, 'GET')), true);
+  assert.throws(() => guard.canActivate(context(UserRole.ADMIN, 'GET')), denied);
   assert.throws(() => guard.canActivate(context(UserRole.ADMIN, 'POST')), denied);
   assert.equal(guard.canActivate(context(UserRole.SAFETY_OFFICER, 'POST')), true);
   assert.throws(

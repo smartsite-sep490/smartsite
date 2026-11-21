@@ -189,6 +189,23 @@ function renderWorkspace(
 describe('CameraSetupView parent workspace integration', () => {
   let transport: MockTransport;
 
+  it('uses only the explicit manager site for a mixed Admin account', async () => {
+    const otherSite = 'b1000000-0000-4000-8000-000000000002';
+    transport.listSites.mockResolvedValue({
+      items: [makeSite(), makeSite({ id: otherSite, name: 'Assigned Beta' })],
+      total: 2,
+    });
+    const session = makeSession();
+    session.user.roleAssignments = [
+      { role: 'ADMIN', siteId: null },
+      { role: 'SITE_MANAGER', siteId: otherSite },
+    ];
+    renderWorkspace(session);
+    await waitFor(() => expect(transport.listCameras).toHaveBeenCalled());
+    expect(transport.listCameras.mock.calls.every((call) => call[1] === otherSite)).toBe(true);
+    expect(screen.queryByRole('option', { name: /Alpha Construction Site/ })).toBeNull();
+  });
+
   beforeEach(async () => {
     await changeUiLanguage('en');
     localStorage.clear();
@@ -236,7 +253,7 @@ describe('CameraSetupView parent workspace integration', () => {
     expect(transport.listSites).not.toHaveBeenCalled();
   });
 
-  it('renders assigned Site Manager actions, missing-site notice, and tour context while keeping Admin in read-only catalog mode', async () => {
+  it('renders assigned Site Manager actions, missing-site notice, and tour context while denying a pure Admin', async () => {
     const managerSession = makeSession();
     const { unmount } = renderWorkspace(managerSession, '/camera-setup?siteId=missing-site-999');
 
@@ -277,27 +294,9 @@ describe('CameraSetupView parent workspace integration', () => {
     });
     renderWorkspace(adminSession, `/camera-setup?siteId=${SITE_A_ID}&cameraId=${CAM_1_ID}`);
 
-    await waitFor(() => {
-      expect(screen.getByText('North Gate Camera')).toBeTruthy();
-    });
-
-    const adminWorkflowGroup = screen.getByRole('group', { name: 'Camera setup actions' });
-    expect(within(adminWorkflowGroup).getByRole('button', { name: 'View Zones' })).toBeTruthy();
-    expect(
-      within(adminWorkflowGroup).queryByRole('button', { name: 'Register camera' }),
-    ).toBeNull();
-    expect(screen.queryByRole('button', { name: 'Regions' })).toBeNull();
-    expect(screen.queryByRole('button', { name: 'Manage North Gate Camera' })).toBeNull();
-    expect(
-      screen.getByText(
-        'Read-only catalog scope: only the assigned Site Manager can register cameras, change status, or edit Zone and region policies.',
-      ),
-    ).toBeTruthy();
-
-    const monitoringNav = screen.getByRole('navigation', { name: 'Open monitoring' });
-    expect(
-      within(monitoringNav).getByRole('link', { name: 'PPE monitoring' }).getAttribute('href'),
-    ).toBe(`/ppe?siteId=${SITE_A_ID}&cameraId=${CAM_1_ID}`);
+    expect(await screen.findByRole('alert')).toBeTruthy();
+    expect(screen.queryByText('North Gate Camera')).toBeNull();
+    expect(screen.queryByRole('navigation', { name: 'Open monitoring' })).toBeNull();
   });
 
   it('resolves deep-linked unloaded region camera lookup and aborts in-flight getCamera when site scope changes', async () => {

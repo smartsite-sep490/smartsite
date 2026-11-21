@@ -103,9 +103,9 @@ export function AppLayout({ currentTab: propCurrentTab, onSelectTab, children }:
     ].includes(activeTab);
   const allowedTabs = workspaceTabs(currentUser?.roleAssignments ?? []);
   const workerOnly = roles.length === 1 && roles[0] === 'WORKER';
-  const attendanceWorkspace =
-    !roles.includes('ADMIN') &&
-    roles.some((role) => ['SITE_MANAGER', 'CONTRACTOR_REPRESENTATIVE'].includes(role));
+  const attendanceWorkspace = roles.some((role) =>
+    ['SITE_MANAGER', 'CONTRACTOR_REPRESENTATIVE'].includes(role),
+  );
   const navGroups = [
     {
       label: t('shell.workspace'),
@@ -154,7 +154,7 @@ export function AppLayout({ currentTab: propCurrentTab, onSelectTab, children }:
   const selectedSiteId =
     searchParams.get('siteId') ?? currentUser?.roleAssignments.find((r) => r.siteId)?.siteId;
   const workforceRoles = (currentUser?.roleAssignments ?? [])
-    .filter((r) => r.siteId === selectedSiteId || (r.role === 'ADMIN' && r.siteId === null))
+    .filter((r) => r.siteId === selectedSiteId)
     .map((r) => r.role);
   const workforceTabs = getWorkforceTabs(workforceRoles);
   const requestedWorkforceTab = searchParams.get('tab');
@@ -421,7 +421,7 @@ export function AppLayout({ currentTab: propCurrentTab, onSelectTab, children }:
               </div>
             </div>
 
-            {mainSafetyUi && (
+            {(mainSafetyUi || roles.includes('ADMIN')) && (
               <button
                 type="button"
                 onClick={() => navigate('/account/password')}

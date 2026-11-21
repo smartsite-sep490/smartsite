@@ -61,10 +61,9 @@ export class CameraConfigurationImageService implements OnModuleDestroy {
       !user.isActive ||
       !user.roleAssignments.some(
         ({ role, siteId: assignedSite }) =>
-          (role === UserRole.ADMIN && assignedSite === null) ||
-          ((role === UserRole.SITE_MANAGER || role === UserRole.SAFETY_OFFICER) &&
-            assignedSite !== null &&
-            assignedSite.toLowerCase() === siteId),
+          (role === UserRole.SITE_MANAGER || role === UserRole.SAFETY_OFFICER) &&
+          assignedSite !== null &&
+          assignedSite.toLowerCase() === siteId,
       )
     ) {
       throw new PublicHttpException(HttpStatus.FORBIDDEN, {

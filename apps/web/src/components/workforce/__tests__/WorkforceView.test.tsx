@@ -30,11 +30,11 @@ describe('WorkforceView & MF07 Workflow Logic', () => {
     expect(tabs.showReview).toBe(true);
   });
 
-  it('System Admin observes requests without a personal Worker schedule', () => {
+  it('System Admin has no operational workforce tabs', () => {
     const tabs = getWorkforceTabs(['ADMIN']);
     expect(tabs.showSchedule).toBe(false);
-    expect(tabs.showReview).toBe(true);
-    expect(tabs.defaultTab).toBe('review');
+    expect(tabs.showReview).toBe(false);
+    expect(tabs.defaultTab).toBe('schedule');
   });
 
   it('Multiple roles combines visibility and prioritizes the personal Worker schedule', () => {

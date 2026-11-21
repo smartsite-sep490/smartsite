@@ -8,6 +8,24 @@ afterEach(async () => {
 });
 
 describe.each(['en', 'vi'] as const)('safe UI errors in %s', (language) => {
+  it('explains manager conflicts separately from last-admin protection in site forms', async () => {
+    await i18n.changeLanguage(language);
+    for (const [code, key] of [
+      ['SITE_MANAGER_ALREADY_ASSIGNED', 'accounts.errorSiteManager'],
+      ['LAST_ACTIVE_ADMIN_REQUIRED', 'accounts.errorLastAdmin'],
+    ] as const) {
+      const error = new ApiError('http', 'PRIVATE_SENTINEL', 409, {
+        success: false,
+        statusCode: 409,
+        code,
+        message: 'PRIVATE_SENTINEL',
+        requestId: 'test',
+        timestamp: '',
+        path: '/users',
+      });
+      expect(userErrorMessage(error)).toBe(translate(key));
+    }
+  });
   it('replaces unknown technical text without changing authored content', async () => {
     await i18n.changeLanguage(language);
     for (const text of [

@@ -247,9 +247,13 @@ test('HTTP separates Admin, Worker and AI configuration credentials', async (t) 
     403,
   );
   const alertsUrl = `${url}/api/v1/sites/${siteId}/safety-alerts`;
+  assert.equal(
+    (await fetch(alertsUrl, { headers: { Authorization: `Bearer ${adminToken}` } })).status,
+    403,
+  );
   const alertList = await fetch(
     `${alertsUrl}?offset=2&limit=5&status=PENDING_REVIEW&type=PPE_VIOLATION`,
-    { headers: { Authorization: `Bearer ${adminToken}` } },
+    { headers: { Authorization: `Bearer ${safetyOfficerToken}` } },
   );
   assert.equal(alertList.status, 200);
   assert.equal(alertList.headers.get('cache-control'), 'no-store');
@@ -270,7 +274,7 @@ test('HTTP separates Admin, Worker and AI configuration credentials', async (t) 
   ]);
   assert.equal(((await alertList.json()) as { total: number }).total, 1);
   const alertDetail = await fetch(`${alertsUrl}/${alertId}`, {
-    headers: { Authorization: `Bearer ${adminToken}` },
+    headers: { Authorization: `Bearer ${safetyOfficerToken}` },
   });
   assert.equal(alertDetail.status, 200);
   assert.equal(alertDetail.headers.get('cache-control'), 'no-store');

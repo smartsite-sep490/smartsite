@@ -28,11 +28,7 @@ export function CameraSetupView({ apiUrl, sharedSession }: CameraSetupViewProps)
   const roles = sharedSession.user.roleAssignments;
   const allowed =
     !sharedSession.user.mustChangePassword &&
-    roles.some(
-      (role) =>
-        (role.role === 'ADMIN' && role.siteId === null) ||
-        (role.role === 'SITE_MANAGER' && role.siteId !== null),
-    );
+    roles.some((role) => role.role === 'SITE_MANAGER' && role.siteId !== null);
   if (!allowed) return <p role="alert">{t('cameraSetup.denied')}</p>;
   const key = JSON.stringify([
     apiUrl,

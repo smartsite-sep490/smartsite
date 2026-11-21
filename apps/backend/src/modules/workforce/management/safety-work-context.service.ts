@@ -54,7 +54,7 @@ export class SafetyWorkContextService {
     const rows = (await m.query(
       `SELECT s.id,s.code,s.name FROM site s
       WHERE s.id=$1 AND EXISTS(SELECT 1 FROM app_user u WHERE u.id=$2 AND u.is_active AND NOT u.must_change_password)
-      AND EXISTS(SELECT 1 FROM user_role_assignment r WHERE r.user_id=$2 AND ((r.role='ADMIN' AND r.site_id IS NULL) OR (r.site_id=s.id AND r.role IN ('SAFETY_OFFICER','SITE_MANAGER'))))`,
+      AND EXISTS(SELECT 1 FROM user_role_assignment r WHERE r.user_id=$2 AND (r.site_id=s.id AND r.role IN ('SAFETY_OFFICER','SITE_MANAGER')))`,
       [uuid(siteId), actor.id],
     )) as { id: string; code: string; name: string }[];
     if (!rows.length)

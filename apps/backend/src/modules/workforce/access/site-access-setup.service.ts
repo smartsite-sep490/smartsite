@@ -69,16 +69,14 @@ export function containedInterval(
 @Injectable()
 export class SiteAccessSetupService {
   constructor(private readonly source: DataSource) {}
-  private isAdmin(actor: WorkforceActor) {
-    return actor.roleAssignments.some((r) => r.role === UserRole.ADMIN && r.siteId === null);
-  }
+
   private async requireRepresentative(
     manager: EntityManager,
     actor: WorkforceActor,
     siteId: string,
     contractorId: string,
   ) {
-    requireSiteRole(actor, siteId, [UserRole.CONTRACTOR_REPRESENTATIVE], false);
+    requireSiteRole(actor, siteId, [UserRole.CONTRACTOR_REPRESENTATIVE]);
     if (
       !(await manager
         .getRepository(ContractorRepresentativeAssignmentEntity)
@@ -94,7 +92,7 @@ export class SiteAccessSetupService {
     let participations = await this.source
       .getRepository(ContractorSiteParticipationEntity)
       .findBy({ siteId, isActive: true });
-    if (!siteManager && !this.isAdmin(actor)) {
+    if (!siteManager) {
       const grants = await this.source
         .getRepository(ContractorRepresentativeAssignmentEntity)
         .findBy({ userId: actor.id, siteId });
@@ -104,10 +102,9 @@ export class SiteAccessSetupService {
     }
     const contractors = await this.source.getRepository(ContractorEntity).find();
     const workers = await this.source.getRepository(WorkerEntity).findBy({ siteId });
-    const scopedWorkers =
-      siteManager || this.isAdmin(actor)
-        ? workers
-        : workers.filter((w) => participations.some((p) => p.contractorId === w.contractorId));
+    const scopedWorkers = siteManager
+      ? workers
+      : workers.filter((w) => participations.some((p) => p.contractorId === w.contractorId));
     const assignments = (
       await this.source.getRepository(WorkerSiteZoneAssignmentEntity).findBy({ siteId })
     ).filter((a) => scopedWorkers.some((w) => w.id === a.workerId));
@@ -179,7 +176,7 @@ export class SiteAccessSetupService {
     siteId: string,
     input: GrantContractorZoneCommand | GrantContractorZoneDatesCommand,
   ) {
-    requireSiteRole(actor, siteId, [UserRole.SITE_MANAGER], false);
+    requireSiteRole(actor, siteId, [UserRole.SITE_MANAGER]);
     if (!input || typeof input !== 'object' || Array.isArray(input)) invalid();
     const value =
       'startDate' in input
@@ -276,7 +273,7 @@ export class SiteAccessSetupService {
       );
   }
   async grantWorker(actor: WorkforceActor, siteId: string, input: GrantWorkerZoneCommand) {
-    requireSiteRole(actor, siteId, [UserRole.CONTRACTOR_REPRESENTATIVE], false);
+    requireSiteRole(actor, siteId, [UserRole.CONTRACTOR_REPRESENTATIVE]);
     const value = command(GrantWorkerZoneCommand, input);
     return this.source.transaction(async (manager) => {
       const assignment = await manager.getRepository(WorkerSiteZoneAssignmentEntity).findOne({
@@ -370,7 +367,6 @@ export class SiteAccessSetupService {
       actor,
       siteId,
       kind === 'contractor' ? [UserRole.SITE_MANAGER] : [UserRole.CONTRACTOR_REPRESENTATIVE],
-      false,
     );
     if (
       kind === 'contractor' &&
@@ -383,7 +379,7 @@ export class SiteAccessSetupService {
     uuid(permissionId);
     return this.source.transaction(async (manager) => {
       if (kind === 'contractor') {
-        requireSiteRole(actor, siteId, [UserRole.SITE_MANAGER], false);
+        requireSiteRole(actor, siteId, [UserRole.SITE_MANAGER]);
         const permission = await manager
           .getRepository(ContractorZonePermissionEntity)
           .findOne({ where: { id: permissionId }, lock: { mode: 'pessimistic_write' } });

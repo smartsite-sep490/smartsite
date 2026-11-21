@@ -152,7 +152,7 @@ test('four distinct camera reads may proceed; the fifth is refused and admission
         user: {
           isActive: true,
           mustChangePassword: false,
-          roleAssignments: [{ role: 'ADMIN', siteId: null }],
+          roleAssignments: [{ role: 'SITE_MANAGER', siteId }],
         },
       };
     },

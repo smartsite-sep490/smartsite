@@ -9,7 +9,7 @@ import { CreateGateDto, GatesService, UpdateGateDto } from '../src/modules/gates
 import { CreateCameraCommand } from '../src/modules/cameras/camera-configuration.service.js';
 import { UserRole } from '../src/database/entities/user.entity.js';
 
-test('Gate configuration permissions require role and exact Site; Admin observes', () => {
+test('Gate configuration permissions require role and exact Site; Admin has no implicit access', () => {
   const guard = new GateReadGuard();
   const site = '11111111-1111-4111-8111-111111111111';
   const context = (role: UserRole, method: string, siteId: string | null = site) =>
@@ -24,7 +24,7 @@ test('Gate configuration permissions require role and exact Site; Admin observes
     }) as ExecutionContext;
   for (const role of [UserRole.SITE_MANAGER, UserRole.SAFETY_OFFICER, UserRole.SECURITY_OFFICER])
     assert.equal(guard.canActivate(context(role, 'GET')), true);
-  assert.equal(guard.canActivate(context(UserRole.ADMIN, 'GET', null)), true);
+  assert.throws(() => guard.canActivate(context(UserRole.ADMIN, 'GET', null)));
   assert.equal(guard.canActivate(context(UserRole.SITE_MANAGER, 'POST')), true);
   for (const role of [
     UserRole.ADMIN,

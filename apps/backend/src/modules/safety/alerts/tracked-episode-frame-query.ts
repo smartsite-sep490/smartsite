@@ -124,14 +124,7 @@ export class TrackedEpisodeFrameQuery {
       'SELECT role,site_id FROM user_role_assignment WHERE user_id=$1 ORDER BY id FOR SHARE',
       [request.user.id],
     );
-    if (
-      !roles.some(
-        (r) =>
-          (r.role === 'ADMIN' && r.site_id === null) ||
-          (r.role === 'SAFETY_OFFICER' && r.site_id === siteId),
-      )
-    )
-      denied();
+    if (!roles.some((r) => r.role === 'SAFETY_OFFICER' && r.site_id === siteId)) denied();
     return {
       userId: request.user.id,
       sessionId: request.sessionId,

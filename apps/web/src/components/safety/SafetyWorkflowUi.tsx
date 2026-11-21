@@ -393,9 +393,8 @@ export function OfficerName({
 
   const allowed = p.user.roleAssignments.some(
     (r) =>
-      (r.role === 'ADMIN' && r.siteId === null) ||
-      (r.siteId === p.siteId &&
-        r.role === (role === 'SAFETY_OFFICER' ? 'SITE_MANAGER' : 'SAFETY_OFFICER')),
+      r.siteId === p.siteId &&
+      r.role === (role === 'SAFETY_OFFICER' ? 'SITE_MANAGER' : 'SAFETY_OFFICER'),
   );
   const query = useQuery({
     queryKey: [

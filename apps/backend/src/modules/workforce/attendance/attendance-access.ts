@@ -44,14 +44,7 @@ export async function attendanceAccess(
   )
     return 'SELF' as const;
   if (representative && participation) return 'REPRESENTATIVE' as const;
-  if (
-    !review &&
-    roles.some(
-      (r) =>
-        (r.role === UserRole.ADMIN && r.siteId === null) ||
-        (r.siteId === worker.siteId && r.role === UserRole.SITE_MANAGER),
-    )
-  )
+  if (!review && roles.some((r) => r.siteId === worker.siteId && r.role === UserRole.SITE_MANAGER))
     return 'STAFF' as const;
   throw new PublicHttpException(403, {
     code: 'FORBIDDEN',

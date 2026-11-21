@@ -29,18 +29,17 @@ export function validTemporaryPassword(password: string): boolean {
   );
 }
 
-export function accountErrorKey(
-  error: unknown,
-  operation?: 'create' | 'roles' | 'password' | 'status',
-): string {
+export function accountErrorKey(error: unknown): string {
   if (!(error instanceof ApiError)) return 'accounts.errorUnexpected';
   if (error.status === 401) return 'accounts.errorSession';
   if (error.status === 403) return 'accounts.denied';
   if (error.status === 404) return 'accounts.errorMissing';
-  if (error.status === 409)
-    return operation === 'roles' || operation === 'status'
-      ? 'accounts.errorLastAdmin'
-      : 'accounts.errorConflict';
+  if (error.status === 409) {
+    if (error.backendError?.code === 'LAST_ACTIVE_ADMIN_REQUIRED') return 'accounts.errorLastAdmin';
+    if (error.backendError?.code === 'SITE_MANAGER_ALREADY_ASSIGNED')
+      return 'accounts.errorSiteManager';
+    return 'accounts.errorConflict';
+  }
   if (error.status === 400) return 'accounts.errorValidation';
   if (error.status === 429) return 'accounts.errorRate';
   return 'accounts.errorUnexpected';

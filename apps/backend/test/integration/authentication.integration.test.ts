@@ -1,3 +1,4 @@
+import { PublicHttpException } from '../../src/common/http/public-http-exception.js';
 import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
 import { after, test } from 'node:test';
@@ -145,7 +146,12 @@ test('auth migration, bootstrap, sessions, account lifecycle and last Admin rule
   await assert.rejects(auth.login(worker.username, 'WorkerTemp123!'));
   const resetLogin = await auth.login(worker.username, 'WorkerReset123!', AuthClientType.MOBILE);
   assert.equal(resetLogin.user.mustChangePassword, false);
-  await assert.rejects(users.setStatus(admin.id, admin.id, { isActive: false }));
+  await assert.rejects(
+    users.setStatus(admin.id, admin.id, { isActive: false }),
+    (error: unknown) =>
+      error instanceof PublicHttpException &&
+      error.publicPayload.code === 'LAST_ACTIVE_ADMIN_REQUIRED',
+  );
   await assert.rejects(
     users.replaceRoleAssignments(admin.id, {
       roleAssignments: [{ role: UserRole.SECURITY_OFFICER, siteId: site.id }],

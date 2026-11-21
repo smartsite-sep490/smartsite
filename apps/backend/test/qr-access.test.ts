@@ -62,7 +62,7 @@ test('visitor approval requires a Site Manager assignment for the exact register
     mustChangePassword: false,
     roleAssignments: [{ role: UserRole.SITE_MANAGER, siteId }],
   };
-  requireSiteRole(actor, siteId, [UserRole.SITE_MANAGER], false);
+  requireSiteRole(actor, siteId, [UserRole.SITE_MANAGER]);
   for (const denied of [
     { ...actor, mustChangePassword: true },
     { ...actor, roleAssignments: [] },
@@ -70,7 +70,7 @@ test('visitor approval requires a Site Manager assignment for the exact register
     { ...actor, roleAssignments: [{ role: UserRole.ADMIN, siteId: null }] },
     { ...actor, roleAssignments: [{ role: UserRole.SECURITY_OFFICER, siteId }] },
   ]) {
-    assert.throws(() => requireSiteRole(denied, siteId, [UserRole.SITE_MANAGER], false));
+    assert.throws(() => requireSiteRole(denied, siteId, [UserRole.SITE_MANAGER]));
   }
 });
 test('QR commands reject fabricated authorization, subject IDs, invalid counts and missing timezone', () => {

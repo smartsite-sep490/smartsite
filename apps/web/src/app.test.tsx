@@ -6,6 +6,9 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { MemoryRouter, useNavigate } from 'react-router-dom';
 import { describe, expect, it, vi, beforeEach, afterEach } from 'vitest';
 import { App } from './app';
+vi.mock('./components/dashboard/DashboardView', () => ({
+  DashboardView: () => <h1>Administrative dashboard</h1>,
+}));
 import type { RoleAssignmentResponse } from '@smartsite/contracts/management';
 
 const accountState = vi.hoisted(() => ({
@@ -264,7 +267,7 @@ describe('App Navigation and Context Lifecycle', () => {
     expect(screen.queryByRole('heading', { name: 'Safety Alerts Queue' })).toBeNull();
   });
 
-  it('retains other explicitly assigned roles for a Security/Admin account', async () => {
+  it('keeps Security access without granting Safety to a Security/Admin account', async () => {
     accountState.roleAssignments = [
       { role: 'SECURITY_OFFICER', siteId: 'site-alpha' },
       { role: 'ADMIN', siteId: null },
@@ -276,7 +279,7 @@ describe('App Navigation and Context Lifecycle', () => {
         </QueryClientProvider>
       </MemoryRouter>,
     );
-    expect(await screen.findByRole('heading', { name: 'PPE Monitoring' })).toBeTruthy();
+    expect(await screen.findByRole('heading', { name: 'Administrative dashboard' })).toBeTruthy();
   });
 
   it.each(['ADMIN', 'SITE_MANAGER'] as const)('opens Camera Setup as %s', async (role) => {
@@ -288,7 +291,11 @@ describe('App Navigation and Context Lifecycle', () => {
         </QueryClientProvider>
       </MemoryRouter>,
     );
-    expect(await screen.findByRole('heading', { name: 'Camera setup workspace' })).toBeTruthy();
+    expect(
+      await screen.findByRole('heading', {
+        name: role === 'ADMIN' ? 'Administrative dashboard' : 'Camera setup workspace',
+      }),
+    ).toBeTruthy();
   });
 
   it('redirects a Safety-only account away from Camera Setup', () => {
@@ -305,6 +312,7 @@ describe('App Navigation and Context Lifecycle', () => {
   });
 
   it('forwards the linked Site and camera to Restricted Zones', async () => {
+    accountState.roleAssignments = [{ role: 'SAFETY_OFFICER', siteId: 'site-alpha' }];
     render(
       <MemoryRouter initialEntries={['/zones?siteId=site-alpha&cameraId=cam-2']}>
         <QueryClientProvider client={queryClient}>
@@ -316,6 +324,7 @@ describe('App Navigation and Context Lifecycle', () => {
   });
 
   it('sets initialType when navigated with context, and clears it when navigating via sidebar without context', async () => {
+    accountState.roleAssignments = [{ role: 'SAFETY_OFFICER', siteId: 'site-alpha' }];
     const user = userEvent.setup();
 
     render(
@@ -337,7 +346,7 @@ describe('App Navigation and Context Lifecycle', () => {
 
     // 3. Switch back to PPE via sidebar
     await user.click(screen.getByRole('button', { name: 'Sidebar PPE' }));
-    expect(screen.getByRole('heading', { name: 'PPE Monitoring' })).not.toBeNull();
+    expect(await screen.findByRole('heading', { name: 'PPE Monitoring' })).not.toBeNull();
 
     // 4. Click sidebar incidents directly (no context) -> context MUST be cleared, defaulting to ALL
     await user.click(screen.getByRole('button', { name: 'Sidebar Incidents' }));
@@ -346,6 +355,7 @@ describe('App Navigation and Context Lifecycle', () => {
   });
 
   it('clears PPE filter to ALL immediately when clicking Sidebar Incidents from filtered incidents view', async () => {
+    accountState.roleAssignments = [{ role: 'SAFETY_OFFICER', siteId: 'site-alpha' }];
     const user = userEvent.setup();
 
     render(

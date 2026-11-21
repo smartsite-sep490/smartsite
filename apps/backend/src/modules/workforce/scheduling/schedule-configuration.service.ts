@@ -60,12 +60,6 @@ export class ScheduleConfigurationService {
       });
   }
 
-  private isGlobalAdmin(user: AuthenticatedUser): boolean {
-    return user.roleAssignments.some(
-      (assignment) => assignment.role === UserRole.ADMIN && assignment.siteId === null,
-    );
-  }
-
   private hasSiteRole(user: AuthenticatedUser, role: UserRole, siteId: string): boolean {
     return user.roleAssignments.some(
       (assignment) => assignment.role === role && assignment.siteId === siteId,
@@ -80,8 +74,7 @@ export class ScheduleConfigurationService {
     this.assertPasswordChanged(user);
     const scopedSiteId = uuid(siteId).toLowerCase();
     const scopedWorkerScheduleId = uuid(workerScheduleId);
-    const isManager =
-      this.isGlobalAdmin(user) || this.hasSiteRole(user, UserRole.SITE_MANAGER, scopedSiteId);
+    const isManager = this.hasSiteRole(user, UserRole.SITE_MANAGER, scopedSiteId);
     const isWorker = this.hasSiteRole(user, UserRole.WORKER, scopedSiteId);
     const isRepresentative = this.hasSiteRole(
       user,
@@ -148,7 +141,7 @@ export class ScheduleConfigurationService {
   }
 
   private assertSiteAccess(user: AuthenticatedUser, siteId: string) {
-    if (!user.roleAssignments.some((r) => r.role === UserRole.ADMIN || r.siteId === siteId)) {
+    if (!user.roleAssignments.some((r) => r.siteId === siteId)) {
       throw new PublicHttpException(HttpStatus.FORBIDDEN, {
         code: 'FORBIDDEN',
         message: 'Forbidden',
@@ -166,8 +159,7 @@ export class ScheduleConfigurationService {
     siteId: string,
   ): Promise<string[] | null> {
     this.assertPasswordChanged(user);
-    if (this.isGlobalAdmin(user) || this.hasSiteRole(user, UserRole.SITE_MANAGER, siteId))
-      return null;
+    if (this.hasSiteRole(user, UserRole.SITE_MANAGER, siteId)) return null;
 
     if (this.hasSiteRole(user, UserRole.CONTRACTOR_REPRESENTATIVE, siteId)) {
       const assignments = await this.dataSource
@@ -561,9 +553,7 @@ export class ScheduleConfigurationService {
     let workerIdScope: string | undefined;
     if (
       !user.roleAssignments.some(
-        (r) =>
-          r.role === UserRole.ADMIN ||
-          (r.siteId === scopedSiteId && r.role === UserRole.SITE_MANAGER),
+        (r) => r.siteId === scopedSiteId && r.role === UserRole.SITE_MANAGER,
       )
     ) {
       // Must be CONTRACTOR_REPRESENTATIVE or WORKER

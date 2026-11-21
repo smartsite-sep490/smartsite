@@ -70,6 +70,44 @@ afterEach(() => {
   vi.restoreAllMocks();
 });
 
+it('keeps an existing representative site immutable and supports explicit revocation', async () => {
+  const representative: AccountResponse = {
+    ...manager,
+    id: 'rep',
+    username: 'rep.test',
+    roleAssignments: [
+      { role: 'CONTRACTOR_REPRESENTATIVE', siteId: 'alpha' },
+      { role: 'WORKER', siteId: 'beta' },
+    ],
+  };
+  vi.mocked(SmartSiteManagementClient.prototype.listUsers).mockResolvedValue({
+    items: [admin, representative],
+    total: 2,
+  });
+  const replace = vi
+    .spyOn(SmartSiteManagementClient.prototype, 'replaceUserRoleAssignments')
+    .mockResolvedValue({
+      ...representative,
+      roleAssignments: [{ role: 'WORKER', siteId: 'beta' }],
+    });
+  mount();
+  const user = userEvent.setup();
+  await user.click(
+    within(await screen.findByRole('group', { name: 'Actions for rep.test' })).getByRole('button', {
+      name: 'Edit roles',
+    }),
+  );
+  expect((screen.getByLabelText('Role 1') as HTMLSelectElement).disabled).toBe(true);
+  expect((screen.getByLabelText('Site 1') as HTMLSelectElement).disabled).toBe(true);
+  await user.click(screen.getByRole('button', { name: 'Remove role 1' }));
+  await user.click(screen.getByRole('button', { name: 'Confirm' }));
+  await waitFor(() =>
+    expect(replace).toHaveBeenCalledWith('synthetic-token', 'rep', [
+      { role: 'WORKER', siteId: 'beta' },
+    ]),
+  );
+});
+
 it.each([
   ['signed out', undefined, null],
   ['manager', manager, 'synthetic-token'],
@@ -248,9 +286,7 @@ it('shows a translated conflict and keeps the form available for correction', as
   await user.selectOptions(screen.getByLabelText('Vai trò 1'), 'WORKER');
   await user.selectOptions(screen.getByLabelText('Công trường 1'), 'alpha');
   await user.click(screen.getByRole('button', { name: 'Xác nhận' }));
-  expect((await screen.findByRole('alert')).textContent).toBe(
-    'Hệ thống phải có ít nhất một tài khoản Admin đang hoạt động.',
-  );
+  expect((await screen.findByRole('alert')).textContent).toBe(i18n.t('accounts.errorConflict'));
   expect(screen.getByLabelText('Vai trò 1')).toBeTruthy();
   expect(logout).not.toHaveBeenCalled();
 });
