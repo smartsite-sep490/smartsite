@@ -23,6 +23,14 @@ export const FRAME_INBOX_EXTRA_EN = {
   'frameInbox.selectFrameAria': 'Select frame {{camera}} at {{time}}',
   'frameInbox.batchAckScopeHint':
     'Acknowledges displayed content revisions only; each person case still requires explicit Safety Officer review.',
+  'frameInbox.colTime': 'Captured',
+  'frameInbox.colLocation': 'Camera & Site',
+  'frameInbox.colPeople': 'People',
+  'frameInbox.colObservations': 'Observations',
+  'frameInbox.colActions': 'Action',
+  'frameInbox.inspectAction': 'Inspect',
+  'frameInbox.collapseAction': 'Collapse',
+  'frameInbox.markPageReadShort': 'Mark page read',
 } as const;
 
 export type FrameInboxExtraKey = keyof typeof FRAME_INBOX_EXTRA_EN;
@@ -50,6 +58,14 @@ export const FRAME_INBOX_EXTRA_VI: Record<FrameInboxExtraKey, string> = {
   'frameInbox.selectFrameAria': 'Chọn khung hình {{camera}} lúc {{time}}',
   'frameInbox.batchAckScopeHint':
     'Chỉ xác nhận đã xem đúng phiên bản đang hiển thị trên trang; việc kết luận từng phát hiện vẫn thực hiện riêng trong hồ sơ.',
+  'frameInbox.colTime': 'Thời điểm',
+  'frameInbox.colLocation': 'Camera & Công trường',
+  'frameInbox.colPeople': 'Số người',
+  'frameInbox.colObservations': 'Quan sát cần chú ý',
+  'frameInbox.colActions': 'Thao tác',
+  'frameInbox.inspectAction': 'Chi tiết',
+  'frameInbox.collapseAction': 'Thu gọn',
+  'frameInbox.markPageReadShort': 'Đọc cả trang',
 };
 
 export function registerFrameInboxExtraCatalog(): void {

@@ -134,7 +134,7 @@ export function SafetyIdentificationToolbar({
             >
               {copy.header.title}
             </h2>
-            <p className="text-xs sm:text-[13px] text-slate-600 max-w-3xl leading-snug">
+            <p className="text-sm text-slate-600 max-w-3xl leading-snug">
               {isOfficer ? copy.header.officerSubtitle : copy.header.managerSubtitle}
             </p>
           </div>
@@ -144,9 +144,9 @@ export function SafetyIdentificationToolbar({
               type="button"
               variant="outline"
               size="md"
-              className="h-9 text-xs sm:text-sm font-semibold"
+              className="h-9 text-sm font-semibold"
               isLoading={queueFetching}
-              leftIcon={<IconRefresh className="w-3.5 h-3.5" />}
+              leftIcon={<IconRefresh className="w-4 h-4" />}
               onClick={onRefreshQueue}
             >
               {copy.header.refreshQueue}
@@ -156,13 +156,9 @@ export function SafetyIdentificationToolbar({
                 type="button"
                 variant={isCreateOpen ? 'outline' : 'default'}
                 size="md"
-                className="h-9 text-xs sm:text-sm font-semibold"
+                className="h-9 text-sm font-semibold"
                 leftIcon={
-                  isCreateOpen ? (
-                    <IconX className="w-3.5 h-3.5" />
-                  ) : (
-                    <IconPlus className="w-3.5 h-3.5" />
-                  )
+                  isCreateOpen ? <IconX className="w-4 h-4" /> : <IconPlus className="w-4 h-4" />
                 }
                 onClick={onToggleCreate}
               >
@@ -172,13 +168,13 @@ export function SafetyIdentificationToolbar({
           </div>
         </div>
 
-        <div className="flex flex-wrap items-end gap-3 border-t border-slate-100 pt-2.5 min-w-0">
+        <div className="flex flex-wrap items-end gap-3.5 border-t border-slate-100 pt-3 min-w-0">
           <div className="min-w-0 w-full sm:w-auto sm:max-w-md space-y-1">
             <label
               htmlFor={`${baseId}-site-select`}
-              className="flex items-center gap-1.5 text-xs font-medium text-slate-600"
+              className="flex items-center gap-1.5 text-sm font-medium text-slate-700"
             >
-              <IconBuilding className="w-3.5 h-3.5 shrink-0 text-slate-400" />
+              <IconBuilding className="w-4 h-4 shrink-0 text-slate-400" />
               <span>{copy.filters.siteLabel}</span>
             </label>
             <select
@@ -201,9 +197,9 @@ export function SafetyIdentificationToolbar({
           <div className="min-w-0 w-full sm:w-auto sm:max-w-xs space-y-1">
             <label
               htmlFor={`${baseId}-status-select`}
-              className="flex items-center gap-1.5 text-xs font-medium text-slate-600"
+              className="flex items-center gap-1.5 text-sm font-medium text-slate-700"
             >
-              <IconFilter className="w-3.5 h-3.5 shrink-0 text-slate-400" />
+              <IconFilter className="w-4 h-4 shrink-0 text-slate-400" />
               <span>{copy.filters.statusLabel}</span>
             </label>
             <select

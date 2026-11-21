@@ -186,12 +186,12 @@ export function SafetyOverviewView(
             <h2 className="text-base sm:text-lg font-semibold tracking-tight text-slate-950">
               {tr('safety_workspace.safety_overview')}
             </h2>
-            <p className="text-xs text-slate-600">
+            <p className="text-sm text-slate-600">
               {tr('safety_workspace.planned_teams_work_preparation_and_related_alerts')}
             </p>
           </div>
           <button
-            className="inline-flex h-9 items-center justify-center rounded-lg border border-slate-200 bg-white px-3 text-xs sm:text-sm font-semibold text-slate-800 transition-colors hover:border-slate-300 hover:bg-slate-50 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-slate-900"
+            className="inline-flex h-9 items-center justify-center rounded-lg border border-slate-200 bg-white px-3.5 text-sm font-semibold text-slate-800 transition-colors hover:border-slate-300 hover:bg-slate-50 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-slate-900"
             onClick={() => {
               void query.refetch();
               if (mode === 'week') void week.refetch();
@@ -680,7 +680,7 @@ export function SafetyOverviewView(
           )}
           {!selectedId && (
             <div className="rounded-xl border border-slate-200 bg-white p-5 text-sm text-slate-600">
-              <p className="text-xs leading-relaxed text-slate-600">
+              <p className="text-sm leading-relaxed text-slate-600">
                 {tr('safety_workspace.select_a_team_to_see_its_work_context')}
               </p>
             </div>

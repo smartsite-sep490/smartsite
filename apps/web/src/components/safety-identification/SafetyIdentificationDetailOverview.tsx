@@ -148,7 +148,7 @@ export function SafetyIdentificationDetailOverview({
 
         <div
           data-testid="c02-subject-status-strip"
-          className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-slate-200/80 bg-slate-50/75 px-3 py-2 text-xs"
+          className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-slate-200/80 bg-slate-50/75 px-3.5 py-2.5 text-sm"
         >
           <div className="flex flex-wrap items-center gap-1.5 min-w-0">
             <span className="font-medium text-slate-600">{copy.detail.subjectLabel}:</span>
@@ -174,7 +174,7 @@ export function SafetyIdentificationDetailOverview({
         </div>
 
         <div
-          className={`grid gap-3 sm:grid-cols-2 rounded-lg border border-slate-200/90 border-l-[3px] p-3 ${waitingCalloutAccentClass(request.status)}`}
+          className={`grid gap-3 sm:grid-cols-2 rounded-lg border border-slate-200/90 border-l-[3px] p-3.5 ${waitingCalloutAccentClass(request.status)}`}
         >
           <div className="space-y-0.5">
             <span className="text-xs font-medium text-slate-600 flex items-center gap-1.5">
@@ -187,7 +187,7 @@ export function SafetyIdentificationDetailOverview({
             <span className="text-xs font-medium text-slate-600">
               {waitingGuidance.nextActionLabel}
             </span>
-            <p className="text-xs text-slate-800 leading-relaxed">{waitingGuidance.nextAction}</p>
+            <p className="text-sm text-slate-800 leading-relaxed">{waitingGuidance.nextAction}</p>
           </div>
         </div>
 
@@ -201,7 +201,7 @@ export function SafetyIdentificationDetailOverview({
         </div>
 
         {request.evidenceAvailability.status === 'UNAVAILABLE' && (
-          <div className="flex flex-wrap items-center gap-2 rounded-lg border border-amber-200/80 bg-amber-50/60 px-3 py-2 text-xs font-medium text-amber-950">
+          <div className="flex flex-wrap items-center gap-2 rounded-lg border border-amber-200/80 bg-amber-50/60 px-3.5 py-2.5 text-sm font-medium text-amber-950">
             <IconShield className="w-4 h-4 shrink-0 text-amber-600" />
             <span>{copy.detail.evidenceUnavailableBody}</span>
           </div>
@@ -210,30 +210,28 @@ export function SafetyIdentificationDetailOverview({
         <div
           data-testid="c02-lifecycle-separation-strip"
           aria-label={copy.detail.lifecycleStripAriaLabel}
-          className="grid gap-2 sm:grid-cols-3 rounded-lg border border-slate-200/80 bg-slate-50/65 p-2.5 text-xs"
+          className="grid divide-y sm:grid-cols-3 sm:divide-y-0 sm:divide-x divide-slate-200 rounded-lg border border-slate-200 bg-white overflow-hidden"
         >
-          <div className="rounded-md border border-slate-200/80 bg-white px-2.5 py-2 space-y-0.5">
-            <span className="block font-semibold text-slate-950">
+          <div className="px-3.5 py-2.5 space-y-0.5">
+            <span className="block text-sm font-semibold text-slate-950">
               {copy.detail.lifecycleStage1Title}
             </span>
-            <span className="block text-slate-600 leading-snug">{stage1Status}</span>
+            <span className="block text-xs text-slate-600 leading-snug">{stage1Status}</span>
           </div>
           <div
-            className={`rounded-md border px-2.5 py-2 space-y-0.5 ${
-              isClosed ? 'border-emerald-200 bg-emerald-50/60' : 'border-slate-200/80 bg-white'
-            }`}
+            className={`px-3.5 py-2.5 space-y-0.5 ${isClosed ? 'bg-emerald-50/50' : 'bg-white'}`}
           >
-            <span className="flex items-center gap-1 font-semibold text-slate-950">
-              {isClosed && <IconCheck className="h-3.5 w-3.5 shrink-0 text-emerald-600" />}
+            <span className="flex items-center gap-1.5 text-sm font-semibold text-slate-950">
+              {isClosed && <IconCheck className="h-4 w-4 shrink-0 text-emerald-600" />}
               <span>{copy.detail.lifecycleStage2Title}</span>
             </span>
-            <span className="block text-slate-700 leading-snug">{stage2Status}</span>
+            <span className="block text-xs text-slate-700 leading-snug">{stage2Status}</span>
           </div>
-          <div className="rounded-md border border-slate-200/80 bg-white px-2.5 py-2 space-y-0.5">
-            <span className="block font-semibold text-slate-950">
+          <div className="px-3.5 py-2.5 space-y-0.5">
+            <span className="block text-sm font-semibold text-slate-950">
               {copy.detail.lifecycleStage3Title}
             </span>
-            <span className="block text-slate-600 leading-snug">
+            <span className="block text-xs text-slate-600 leading-snug">
               {copy.detail.lifecycleStage3Body}
             </span>
           </div>
@@ -364,26 +362,28 @@ export function SafetyIdentificationDetailOverview({
                 {request.result.reason}
               </p>
             </div>
-            <dl className="grid gap-2.5 sm:grid-cols-3 rounded-lg border border-slate-200/80 bg-slate-50/60 p-3 text-xs">
+            <dl className="grid gap-3 sm:grid-cols-3 rounded-lg border border-slate-200/80 bg-slate-50/60 p-3.5">
               <div>
-                <dt className="font-medium text-slate-600">{copy.detail.proposalWorkerLabel}</dt>
-                <dd className="mt-0.5 font-semibold text-slate-950 break-words">
+                <dt className="text-xs font-medium text-slate-600">
+                  {copy.detail.proposalWorkerLabel}
+                </dt>
+                <dd className="mt-0.5 text-sm font-semibold text-slate-950 break-words">
                   {resolveWorkerLabel(request.result.workerId)}
                 </dd>
               </div>
               <div>
-                <dt className="font-medium text-slate-600">
+                <dt className="text-xs font-medium text-slate-600">
                   {copy.detail.proposalContractorLabel}
                 </dt>
-                <dd className="mt-0.5 font-semibold text-slate-950 break-words">
+                <dd className="mt-0.5 text-sm font-semibold text-slate-950 break-words">
                   {resolveContractorLabel(request.result.contractorId)}
                 </dd>
               </div>
               <div>
-                <dt className="font-medium text-slate-600">
+                <dt className="text-xs font-medium text-slate-600">
                   {copy.detail.proposalRespondedAtLabel}
                 </dt>
-                <dd className="mt-0.5 text-slate-800 tabular-nums">
+                <dd className="mt-0.5 text-sm text-slate-800 tabular-nums">
                   {formatIdentificationDateTime(request.result.respondedAt)}
                 </dd>
               </div>
@@ -411,7 +411,7 @@ export function SafetyIdentificationDetailOverview({
             </details>
           </div>
         ) : (
-          <p className="text-xs text-slate-600">{copy.detail.proposalEmpty}</p>
+          <p className="text-sm text-slate-600">{copy.detail.proposalEmpty}</p>
         )}
       </div>
     </>
