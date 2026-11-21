@@ -60,3 +60,22 @@ export interface ScheduleAssignmentChangeResponse {
   changedCount?: number;
   skippedCount?: number;
 }
+export interface ContractorTeamCalendarItem {
+  teamId: string;
+  teamName: string;
+  workDate: string;
+  shiftId: string;
+  scheduleVersionId: string;
+  workerCount: number;
+}
+export interface ContractorTeamCalendarResponse {
+  items: ContractorTeamCalendarItem[];
+  /** Legacy schedules without an unambiguous team for their shift start. */
+  unassignedScheduleCount?: number;
+}
+export interface ContractorTeamCalendarQuery {
+  contractorId: string;
+  fromDate: string;
+  toDate: string;
+  teamId?: string;
+}

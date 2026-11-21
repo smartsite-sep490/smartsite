@@ -14,7 +14,8 @@ import { WorkerAvatar } from '../../components/common/WorkerAvatar';
 import { useTranslation, uiLocale } from '../../i18n';
 import { colors } from '../../theme/colors';
 import { allPages, localDate, validDates } from '../shared/data';
-import { Body, Button, Card, Choice, Hint, Page, QueryState } from '../shared/ui';
+import { Button, Choice, QueryState } from '../shared/ui';
+import { ScheduleDaySheet } from './schedule-day-sheet';
 import { useWorkspace } from '../workspace/workspace-context';
 import { MonthYearPicker } from '../shared/month-year-picker';
 import {
@@ -127,30 +128,6 @@ export function WorkerScheduleScreen({
     const duration = (+new Date(shift.endsAt) - +new Date(shift.startsAt)) / 3600000;
     return `${shiftClock(shift, 'start')} – ${shiftClock(shift, 'end')}${nextDay > 0 ? ` ${t('schedule.nextDay', { count: nextDay })}` : ''} · ${t('schedule.hours', { hours: new Intl.NumberFormat(locale, { maximumFractionDigits: 2 }).format(duration) })}`;
   };
-
-  if (selected)
-    return (
-      <Page title={t('schedule.details')} onBack={() => setSelected(null)}>
-        <Card>
-          <Text style={styles.shiftTitle}>{selected.shift?.name ?? t('schedule.shift')}</Text>
-          <Body>{dateLabel(selected.schedule.workDate)}</Body>
-          <Body>{scope.siteName}</Body>
-          <Body>{shiftTime(selected.shift)}</Body>
-          {selected.shift && <Hint>{selected.shift.timezone}</Hint>}
-          <Hint>
-            {t(
-              selected.schedule.isActive ? 'schedule.activeSchedule' : 'schedule.cancelledSchedule',
-            )}
-          </Hint>
-          {selected.schedule.isActive && (
-            <Button
-              label={t('schedule.requestAction')}
-              onPress={() => onRequest(selected.schedule, selected.shift)}
-            />
-          )}
-        </Card>
-      </Page>
-    );
 
   return (
     <ScrollView
@@ -438,6 +415,19 @@ export function WorkerScheduleScreen({
         )}
       </QueryState>
 
+      {selected && (
+        <ScheduleDaySheet
+          key={selected.schedule.id}
+          schedule={selected.schedule}
+          shift={selected.shift}
+          onClose={() => setSelected(null)}
+          onRequest={() => {
+            const value = selected;
+            setSelected(null);
+            onRequest(value.schedule, value.shift);
+          }}
+        />
+      )}
       <MonthYearPicker
         visible={showMonths}
         value={selectedDate}

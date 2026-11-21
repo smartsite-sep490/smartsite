@@ -1,4 +1,9 @@
 import { Injectable } from '@nestjs/common';
+import { SetTeamLeaderDto } from './dto/team-attendance.dto.js';
+import { scheduledShiftWindow, type ContractorTeamAttendanceResponse } from '@smartsite/contracts';
+import { ShiftEntity } from '../../../database/entities/index.js';
+import { ContractorTeamAttendanceQueryDto } from './dto/contractor-team-attendance.dto.js';
+import { CONTRACTOR_TEAM_ATTENDANCE_QUERY } from './contractor-team-attendance-query.js';
 import { DataSource, type EntityManager, In, IsNull } from 'typeorm';
 import type {
   ContractorDashboardScope,
@@ -49,6 +54,44 @@ import {
 
 @Injectable()
 export class ContractorTeamsService {
+  async attendance(
+    actor: AuthenticatedUser,
+    siteValue: string,
+    contractorValue: string,
+    teamValue: string,
+    input: ContractorTeamAttendanceQueryDto,
+  ): Promise<ContractorTeamAttendanceResponse> {
+    const siteId = uuid(siteValue),
+      contractorId = uuid(contractorValue),
+      teamId = uuid(teamValue);
+    const value = command(ContractorTeamAttendanceQueryDto, input);
+    return this.source.transaction('REPEATABLE READ', async (m) => {
+      await this.scope(m, actor, siteId, contractorId);
+      const team = await m
+        .getRepository(ContractorTeamEntity)
+        .findOneBy({ id: teamId, siteId, contractorId });
+      const shift = await m.getRepository(ShiftEntity).findOneBy({ id: value.shiftId, siteId });
+      if (!team || !shift) missing();
+      const window = scheduledShiftWindow(shift, value.workDate);
+      const [result] = await m.query<
+        Pick<
+          ContractorTeamAttendanceResponse,
+          'items' | 'total' | 'present' | 'absent' | 'pending' | 'matched'
+        >[]
+      >(CONTRACTOR_TEAM_ATTENDANCE_QUERY, [
+        siteId,
+        contractorId,
+        teamId,
+        value.workDate,
+        value.shiftId,
+        value.scheduleVersionId,
+        window.startsAt,
+        value.offset ?? 0,
+        value.limit ?? 8,
+      ]);
+      return { teamId, teamName: team.name, workDate: value.workDate, ...result! };
+    });
+  }
   private async assignedZones(
     m: EntityManager,
     team: ContractorTeamEntity,
@@ -395,6 +438,7 @@ export class ContractorTeamsService {
       membershipId: team ? member!.id : null,
       teamId: team?.id ?? null,
       teamName: team?.name ?? null,
+      isLeader: !!team && team.leaderWorkerId === worker.id,
       zones: team ? await this.assignedZones(this.source.manager, team) : [],
     };
   }
@@ -442,8 +486,61 @@ export class ContractorTeamsService {
       isActive: team.isActive,
       version: team.version,
       memberCount: Number(counts!.count),
+      leaderWorkerId: team.leaderWorkerId ?? null,
       zoneAssignments: await this.assignedZones(m, team),
     };
+  }
+  async setLeader(
+    actor: AuthenticatedUser,
+    siteValue: string,
+    contractorValue: string,
+    teamValue: string,
+    input: SetTeamLeaderDto,
+  ) {
+    const siteId = uuid(siteValue).toLowerCase(),
+      contractorId = uuid(contractorValue).toLowerCase(),
+      id = uuid(teamValue).toLowerCase();
+    const value = command(SetTeamLeaderDto, input);
+    return this.source.transaction(async (m) => {
+      await this.scope(m, actor, siteId, contractorId);
+      const team = await m.getRepository(ContractorTeamEntity).findOne({
+        where: { id, siteId, contractorId, isActive: true },
+        lock: { mode: 'pessimistic_write' },
+      });
+      if (!team) missing();
+      if (team.version !== value.expectedVersion) conflict();
+      if (value.workerId) {
+        const worker = await m
+          .getRepository(WorkerEntity)
+          .findOneBy({ id: value.workerId, siteId, contractorId, isActive: true });
+        if (
+          !worker?.userId ||
+          !(await m
+            .getRepository(ContractorTeamMembershipEntity)
+            .existsBy({ teamId: id, workerId: worker.id, leftAt: IsNull() }))
+        )
+          invalid('Leader must be an active team member with an account');
+        const user = await m
+          .getRepository(UserEntity)
+          .findOneBy({ id: worker.userId, isActive: true });
+        if (
+          !user ||
+          !(await m
+            .getRepository(UserRoleAssignmentEntity)
+            .existsBy({ userId: user.id, siteId, role: UserRole.WORKER }))
+        )
+          invalid('Leader must have an active worker account');
+      }
+      const previousWorkerId = team.leaderWorkerId;
+      team.leaderWorkerId = value.workerId;
+      team.version += 1;
+      await m.save(team);
+      await auditAccess(m, actor.id, siteId, 'TEAM_LEADER_CHANGED', 'contractor_team', id, null, {
+        previousWorkerId,
+        workerId: value.workerId,
+      });
+      return this.view(m, team);
+    });
   }
   async list(
     actor: AuthenticatedUser,
@@ -669,6 +766,7 @@ export class ContractorTeamsService {
       )
         conflict('Move or remove all members before archiving this team');
       team.isActive = false;
+      team.leaderWorkerId = null;
       team.version++;
       await m.getRepository(ContractorTeamEntity).save(team);
       await auditAccess(
@@ -773,6 +871,22 @@ export class ContractorTeamsService {
         if (current?.teamId === value.teamId) return result(current, target ?? null);
         const now = new Date();
         if (current) {
+          const oldTeam = teams.find((t) => t.id === current.teamId);
+          if (oldTeam?.leaderWorkerId === workerId) {
+            oldTeam.leaderWorkerId = null;
+            oldTeam.version += 1;
+            await m.save(oldTeam);
+            await auditAccess(
+              m,
+              actor.id,
+              siteId,
+              'TEAM_LEADER_CHANGED',
+              'contractor_team',
+              oldTeam.id,
+              reason,
+              { previousWorkerId: workerId, workerId: null },
+            );
+          }
           current.leftAt = now;
           current.endedBy = actor.id;
           current.endReason = reason;

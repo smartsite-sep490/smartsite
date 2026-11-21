@@ -132,7 +132,10 @@ it('renders a readable iOS spinner and keeps its calendar draft until Done', asy
   expect(picker.props.themeVariant).toBe('light');
   expect(picker.props.textColor).toBe('#0F172A');
   expect(picker.props.timeZoneName).toBe('UTC');
-  await act(async () => picker.props.onChange({ type: 'set' }, new Date('2026-11-18T00:00:00Z')));
+  expect(picker.props.onChange).toBeUndefined();
+  await act(async () =>
+    picker.props.onValueChange({ type: 'set' }, new Date('2026-11-18T00:00:00Z')),
+  );
   expect(confirm).not.toHaveBeenCalled();
   expect(JSON.stringify(root.toJSON())).toContain(
     t('datePicker.selectedValue', {
@@ -157,7 +160,10 @@ it('confirms iOS time changes without changing the date or the timestamp seconds
   );
   await click(t('common.chooseTime', { label: 'Start' }));
   const picker = root.root.findAll((node) => String(node.type) === 'DateTimePicker')[0]!;
-  await act(async () => picker.props.onChange({ type: 'set' }, new Date(2026, 10, 15, 17, 30)));
+  expect(picker.props.onChange).toBeUndefined();
+  await act(async () =>
+    picker.props.onValueChange({ type: 'set' }, new Date(2026, 10, 15, 17, 30)),
+  );
   expect(change).not.toHaveBeenCalled();
   await click(t('common.done'));
   expect(change).toHaveBeenCalledWith(new Date(2026, 10, 15, 17, 30, 5, 6).toISOString());

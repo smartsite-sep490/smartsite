@@ -319,6 +319,27 @@ function retryAfter(response: Response): number | undefined {
 }
 
 export class SmartSiteManagementClient {
+  mobilePushSettings(token: string) {
+    return this.request<import('@smartsite/contracts').MobilePushSettingsResponse>(
+      'GET',
+      '/me/push-devices',
+      token,
+    );
+  }
+  registerMobilePush(
+    token: string,
+    id: string,
+    input: import('@smartsite/contracts').RegisterMobilePushCommand,
+  ) {
+    return this.request<{ id: string }>('PUT', `/me/push-devices/${pathId(id)}`, token, input);
+  }
+  removeMobilePush(
+    token: string,
+    id: string,
+    input: import('@smartsite/contracts').RemoveMobilePushCommand,
+  ) {
+    return this.request<{ id: string }>('DELETE', `/me/push-devices/${pathId(id)}`, token, input);
+  }
   requestPasswordReset(input: import('@smartsite/contracts').RequestPasswordResetCommand) {
     return this.request<import('@smartsite/contracts').AccountEmailChallengeResponse>(
       'POST',
@@ -364,6 +385,22 @@ export class SmartSiteManagementClient {
       '/auth/email/verify',
       token,
       input,
+    );
+  }
+  contractorTeamAttendance(
+    token: string,
+    siteId: string,
+    contractorId: string,
+    teamId: string,
+    query: import('@smartsite/contracts').ContractorTeamAttendanceQuery,
+  ) {
+    return this.request<import('@smartsite/contracts').ContractorTeamAttendanceResponse>(
+      'GET',
+      this.listPath(
+        `/sites/${pathId(siteId)}/contractors/${pathId(contractorId)}/teams/${pathId(teamId)}/attendance`,
+        { ...query },
+      ),
+      token,
     );
   }
   updateTeamZone(
@@ -451,6 +488,40 @@ export class SmartSiteManagementClient {
       'GET',
       `/sites/${pathId(siteId)}/my-team`,
       token,
+    );
+  }
+  scheduleTeamAttendance(token: string, siteId: string, scheduleId: string) {
+    return this.request<ScheduleTeamAttendanceResponse>(
+      'GET',
+      `/sites/${pathId(siteId)}/worker-schedules/${pathId(scheduleId)}/zone-attendance`,
+      token,
+    );
+  }
+  submitTeamAttendance(
+    token: string,
+    siteId: string,
+    scheduleId: string,
+    input: SubmitTeamAttendanceCommand,
+  ) {
+    return this.request<ScheduleTeamAttendanceResponse>(
+      'PUT',
+      `/sites/${pathId(siteId)}/worker-schedules/${pathId(scheduleId)}/zone-attendance`,
+      token,
+      input,
+    );
+  }
+  setContractorTeamLeader(
+    token: string,
+    siteId: string,
+    contractorId: string,
+    teamId: string,
+    input: SetTeamLeaderCommand,
+  ) {
+    return this.request<ContractorTeamResponse>(
+      'PUT',
+      `/sites/${pathId(siteId)}/contractors/${pathId(contractorId)}/teams/${pathId(teamId)}/leader`,
+      token,
+      input,
     );
   }
   contractorDashboardScopes(token: string) {
@@ -4163,6 +4234,13 @@ export class SmartSiteManagementClient {
       token,
     );
   }
+  contractorTeamCalendar(token: string, siteId: string, input: ContractorTeamCalendarQuery) {
+    return this.request<ContractorTeamCalendarResponse>(
+      'GET',
+      this.listPath(`/sites/${pathId(siteId)}/schedule-assignments/calendar`, { ...input }),
+      token,
+    );
+  }
   changeScheduleAssignment(
     token: string,
     siteId: string,
@@ -4561,3 +4639,10 @@ export async function readRecordedCameraVideo(
   if (!client) throw new TypeError('A configured management client is required.');
   return client.readRecordedCameraVideo(token, siteId, cameraId, options);
 }
+import type {
+  ScheduleTeamAttendanceResponse,
+  SubmitTeamAttendanceCommand,
+  SetTeamLeaderCommand,
+} from '@smartsite/contracts';
+import type { ContractorTeamCalendarQuery } from '@smartsite/contracts';
+import type { ContractorTeamCalendarResponse } from '@smartsite/contracts';

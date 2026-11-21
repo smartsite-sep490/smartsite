@@ -207,6 +207,17 @@ export const backendEnvironmentSchema = z
       .optional(),
     ...databaseFields,
     PORT: integer(3000, 1, 65535),
+    EXPO_PUSH_ENABLED: z
+      .enum(['true', 'false'])
+      .default('false')
+      .transform((value) => value === 'true'),
+    EXPO_ACCESS_TOKEN: z
+      .string()
+      .trim()
+      .max(2048)
+      .refine((value) => !/\s/.test(value), 'must not contain whitespace')
+      .optional()
+      .transform((value) => value || undefined),
     RESEND_API_KEY: z
       .string()
       .trim()

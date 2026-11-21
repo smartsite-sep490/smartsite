@@ -198,8 +198,8 @@ export function ScrollDateTimePicker({
             is24Hour
             timeZoneName={utc ? 'UTC' : undefined}
             style={styles.nativePicker}
-            onChange={(event, date) => {
-              if (event.type !== 'set' || !date || !Number.isFinite(+date)) return;
+            onValueChange={(_event, date) => {
+              if (!Number.isFinite(+date)) return;
               const picked = dateParts(date, utc);
               setParts((current) =>
                 mode === 'date'

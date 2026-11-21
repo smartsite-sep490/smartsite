@@ -103,6 +103,8 @@ export interface AttendanceDaysResponse {
   canRequest: boolean;
 }
 export interface AttendanceDayDetailResponse {
+  /** Server-authorized acknowledgement of an otherwise resolved early checkout. */
+  canAcknowledgeEarlyCheckout?: boolean;
   day: AttendanceDayResponse;
   sessions: AttendanceSessionResponse[];
   currentSchedule?: {
@@ -152,6 +154,8 @@ export interface AttendanceOverviewResponse {
     reason: string;
     status: string;
     reviewNote: string | null;
+    /** Pending and reviewable by this caller, excluding their own request. */
+    canReview?: boolean;
   }>;
 }
 export interface AttendanceOverviewQuery {

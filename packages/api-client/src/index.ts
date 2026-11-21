@@ -6,6 +6,11 @@ import {
 } from './errors';
 export * from './errors';
 export type {
+  RegisterMobilePushCommand,
+  RemoveMobilePushCommand,
+  MobilePushSettingsResponse,
+} from '@smartsite/contracts';
+export type {
   RequestPasswordResetCommand,
   ConfirmPasswordResetCommand,
   SetAccountEmailCommand,
@@ -214,3 +219,15 @@ export type { CameraMediaFrame } from '@smartsite/contracts/camera-preview';
 export type { CameraVideoStreamOptions } from './camera-media-stream';
 
 export { isShiftStarted } from '@smartsite/contracts/management';
+export type {
+  TeamAttendanceStatus,
+  ContractorTeamAttendanceQuery,
+  ContractorTeamAttendanceResponse,
+  TeamAttendanceGateCheck,
+  TeamAttendanceMemberResponse,
+  ScheduleTeamAttendanceResponse,
+  SubmitTeamAttendanceCommand,
+  SetTeamLeaderCommand,
+} from '@smartsite/contracts';
+export type { ContractorTeamCalendarItem, ContractorTeamCalendarQuery } from '@smartsite/contracts';
+export type { ContractorTeamCalendarResponse } from '@smartsite/contracts';

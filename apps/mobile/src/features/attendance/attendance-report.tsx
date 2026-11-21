@@ -16,10 +16,12 @@ export function AttendanceReport({
   fromDate,
   toDate,
   onDay,
+  selectedWorkerId,
 }: {
   fromDate: string;
   toDate: string;
   onDay: (id: string) => void;
+  selectedWorkerId?: string;
 }) {
   useTranslation();
   const { scope, client, token, workerId, queryKey, user } = useWorkspace();
@@ -43,7 +45,12 @@ export function AttendanceReport({
     fromDate,
     toDate,
     timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
-    ...(scope.role === 'worker' ? { workerId } : { contractorId: scope.contractorId }),
+    ...(scope.role === 'worker'
+      ? { workerId }
+      : {
+          contractorId: scope.contractorId,
+          ...(selectedWorkerId ? { workerId: selectedWorkerId } : {}),
+        }),
   };
   const query = useQuery({
     queryKey: [...queryKey, 'attendance-report', filter, offset],
