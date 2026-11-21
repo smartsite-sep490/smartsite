@@ -109,7 +109,8 @@ export function RestrictedZoneView({
   const [localSession, setSession] = useState<LoginResponse | null>(null);
   const session = authenticatedSession ?? localSession;
   const externalSession = authenticatedSession !== undefined;
-  const linkedMonitoring = !!(externalSession && linkedSiteId && linkedCameraId);
+  // Application navigation must never fall back to the standalone replay fixture.
+  const linkedMonitoring = externalSession;
   const canRead =
     !externalSession ||
     session?.user.roleAssignments.some(
@@ -119,9 +120,11 @@ export function RestrictedZoneView({
   const [password, setPassword] = useState('');
   const [loginError, setLoginError] = useState<string | null>(null);
 
-  const [requestedSiteId, setRequestedSiteId] = useState(linkedMonitoring ? linkedSiteId : '');
+  const [requestedSiteId, setRequestedSiteId] = useState(
+    linkedMonitoring ? (linkedSiteId ?? '') : '',
+  );
   const [requestedCameraId, setRequestedCameraId] = useState(
-    linkedMonitoring ? linkedCameraId : '',
+    linkedMonitoring ? (linkedCameraId ?? '') : '',
   );
   const [requestedRegionId, setRequestedRegionId] = useState('');
   const [conflictMessage, setConflictMessage] = useState<string | null>(null);
