@@ -129,8 +129,8 @@ export function PolicyFields({
       aria-describedby={activeFieldsetErrorId}
       className="grid gap-3 rounded-xl border border-slate-200 bg-slate-50/40 p-3.5 min-w-0"
     >
-      <legend className="px-1 text-xs font-semibold text-slate-900">{label}</legend>
-      <label className="grid gap-1 text-xs font-medium text-slate-700">
+      <legend className="px-1 text-sm font-semibold text-slate-900">{label}</legend>
+      <label className="grid gap-1 text-sm font-medium text-slate-800">
         <span>{t('cameraPpe.mode')}</span>
         <select
           className={CAMERA_FIELD_STYLES.input}
@@ -187,12 +187,16 @@ export function PolicyFields({
                   </label>
                   <span
                     id={itemBadgeId}
-                    className={
-                      isCore
-                        ? 'inline-flex items-center rounded-md border border-emerald-200 bg-emerald-50 px-2 py-0.5 text-xs font-semibold text-emerald-800'
-                        : 'inline-flex items-center rounded-md border border-sky-200 bg-sky-50 px-2 py-0.5 text-xs font-semibold text-sky-800'
-                    }
+                    className={`inline-flex items-center gap-1.5 text-xs font-medium ${
+                      isCore ? 'text-emerald-800' : 'text-slate-600'
+                    }`}
                   >
+                    <span
+                      aria-hidden="true"
+                      className={`h-1.5 w-1.5 rounded-full ${
+                        isCore ? 'bg-emerald-600' : 'bg-teal-600'
+                      }`}
+                    />
                     {t(
                       isCore
                         ? 'cameraPpe.readinessCoreBadge'
@@ -206,7 +210,7 @@ export function PolicyFields({
           <p
             id={readinessGuidanceId}
             data-testid="ppe-readiness-guidance"
-            className="text-xs leading-relaxed text-slate-600 break-words"
+            className="text-sm leading-relaxed text-slate-600 break-words"
           >
             {t('cameraPpe.readinessGuidanceNote')}
           </p>
@@ -214,7 +218,7 @@ export function PolicyFields({
             <p
               id={explicitErrorId}
               data-testid="ppe-policy-explicit-validation"
-              className="rounded-lg border border-amber-200 bg-amber-50 px-2.5 py-1.5 text-xs font-medium text-amber-900 break-words"
+              className="rounded-xl border border-amber-200 bg-amber-50/80 px-3 py-2 text-sm font-medium text-amber-900 break-words"
             >
               {t('cameraPpe.validationExplicitEmpty')}
             </p>
@@ -223,7 +227,7 @@ export function PolicyFields({
       )}
       {value.mode === 'DISABLED' && (
         <div className="grid gap-1.5 min-w-0">
-          <label className="grid gap-1 text-xs font-medium text-slate-700">
+          <label className="grid gap-1 text-sm font-medium text-slate-800">
             <span>{t('cameraPpe.reason')}</span>
             <input
               className={CAMERA_FIELD_STYLES.input}
@@ -238,7 +242,7 @@ export function PolicyFields({
             <p
               id={disabledErrorId}
               data-testid="ppe-policy-disabled-validation"
-              className="rounded-lg border border-amber-200 bg-amber-50 px-2.5 py-1.5 text-xs font-medium text-amber-900 break-words"
+              className="rounded-xl border border-amber-200 bg-amber-50/80 px-3 py-2 text-sm font-medium text-amber-900 break-words"
             >
               {t(disabledValidationKey)}
             </p>
@@ -292,7 +296,7 @@ export function CameraPpePolicyPanel({
       ref={sectionRef}
       data-testid="camera-ppe-policy-panel"
       data-tour-anchor="camera-setup-ppe-policy"
-      className="rounded-2xl border border-slate-200 bg-white p-4 sm:p-5 shadow-xs min-w-0"
+      className="rounded-xl border border-slate-200 bg-white p-4 sm:p-5 min-w-0"
     >
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div className="min-w-0 space-y-0.5">
@@ -793,7 +797,7 @@ function PolicyEditor({
       {activeDenialStatus !== null ? (
         <div
           role="alert"
-          className="rounded-xl border border-rose-200 bg-rose-50 px-3.5 py-2.5 text-xs text-rose-900 flex flex-wrap items-center justify-between gap-2"
+          className="rounded-xl border border-rose-200 bg-rose-50 px-3.5 py-2.5 text-sm text-rose-900 flex flex-wrap items-center justify-between gap-2"
         >
           <span>{t(denialCopyKey)}</span>
           {activeDenialStatus !== 401 && (
@@ -812,7 +816,7 @@ function PolicyEditor({
       ) : failed ? (
         <div
           role="alert"
-          className="rounded-xl border border-rose-200 bg-rose-50 px-3.5 py-2.5 text-xs text-rose-900 flex flex-wrap items-center gap-2"
+          className="rounded-xl border border-rose-200 bg-rose-50 px-3.5 py-2.5 text-sm text-rose-900 flex flex-wrap items-center gap-2"
         >
           <span>{t('cameraPpe.error')}</span>
           <button
@@ -824,7 +828,7 @@ function PolicyEditor({
           </button>
         </div>
       ) : !ready ? (
-        <p role="status" className="text-xs text-slate-600">
+        <p role="status" className="text-sm text-slate-600">
           {t('cameraPpe.loading')}
         </p>
       ) : (
@@ -850,7 +854,7 @@ function PolicyEditor({
 
           <p
             data-testid="camera-ppe-capability-note"
-            className="rounded-xl border border-slate-200/80 bg-slate-50/70 px-3.5 py-2 text-xs leading-relaxed text-slate-600"
+            className="rounded-xl border border-slate-200 bg-slate-50/50 px-3.5 py-2.5 text-sm leading-relaxed text-slate-600"
           >
             {t('cameraPpe.capabilityTruthNote')}
           </p>
@@ -907,7 +911,7 @@ function PolicyEditor({
               </div>
 
               {!canWrite && (
-                <p className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs text-slate-700">
+                <p className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-700">
                   {t('cameraPpe.readOnlyNotice')}
                 </p>
               )}
@@ -916,7 +920,7 @@ function PolicyEditor({
                 <p
                   role="status"
                   data-testid="camera-ppe-preserved-region-drafts"
-                  className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs font-medium text-amber-950"
+                  className="rounded-xl border border-amber-200 bg-amber-50/80 px-3 py-2 text-sm font-medium text-amber-950"
                 >
                   {t('cameraPpe.preservedRegionDrafts', { count: Object.keys(bindings).length })}
                 </p>
@@ -1064,7 +1068,7 @@ function PolicyEditor({
       {receipt !== undefined && (
         <p
           role="status"
-          className="rounded-xl border border-emerald-200 bg-emerald-50 px-3.5 py-2 text-xs font-medium text-emerald-900"
+          className="rounded-xl border border-emerald-200 bg-emerald-50 px-3.5 py-2.5 text-sm font-medium text-emerald-900"
         >
           {t('cameraPpe.saved', { revision: receipt })}
         </p>
@@ -1072,7 +1076,7 @@ function PolicyEditor({
       {mutation.isError && activeDenialStatus === null && (
         <p
           role="alert"
-          className="rounded-xl border border-rose-200 bg-rose-50 px-3.5 py-2 text-xs font-medium text-rose-900"
+          className="rounded-xl border border-rose-200 bg-rose-50 px-3.5 py-2.5 text-sm font-medium text-rose-900"
         >
           {t(resolvePpeMutationErrorKey(mutation.error))}
         </p>

@@ -224,4 +224,52 @@ describe('source-specific camera setup', () => {
     });
     await waitFor(() => expect(screen.queryByRole('img')).toBeNull());
   });
+  it('separates registered camera, tested REPLAY receipt, saved backend vN, and applied worker stages without offering live activation for REPLAY or leaking RTSP passwords', async () => {
+    const user = userEvent.setup();
+    const probe = vi.fn().mockResolvedValue({
+      state: 'TESTED',
+      receiptId: 'replay-receipt',
+      expiresAt: new Date(Date.now() + 60000).toISOString(),
+      sourceKind: 'REPLAY',
+      frame: {
+        width: 640,
+        height: 480,
+        capturedAt: new Date().toISOString(),
+        imageDataUrl: 'data:image/jpeg;base64,/9j/2Q==',
+      },
+    });
+    setup({
+      hosts: async () => [
+        {
+          ...host,
+          capabilities: { ...host.capabilities, applySupported: true, sourceRevision: 1 },
+        },
+      ],
+      probe,
+      apply: vi.fn(),
+    });
+    await screen.findByRole('option', { name: 'AI at Site A' });
+    const stageSummary = screen.getByTestId('camera-source-stage-summary');
+    expect(stageSummary.textContent).toContain('Gate camera (metadata v12)');
+    expect(stageSummary.textContent).toContain('Backend v12');
+    expect(stageSummary.textContent).toContain('Not tested yet');
+
+    await user.selectOptions(screen.getByRole('combobox', { name: /^(AI host|Máy AI)$/ }), 'edge');
+    await user.click(screen.getByRole('radio', { name: /IP camera|Camera IP/ }));
+    const pwInput = screen.getByLabelText(/Camera password|Mật khẩu camera/) as HTMLInputElement;
+    await user.type(pwInput, 'secret-pass-1');
+    expect(pwInput.value).toBe('secret-pass-1');
+
+    // Switching to Recorded video clears transient RTSP password cleanly
+    await user.click(screen.getByRole('radio', { name: /Recorded video|Video đã ghi/ }));
+    await user.selectOptions(screen.getByLabelText(/Video/), 'clip');
+    await user.click(screen.getByRole('button', { name: /Test connection|Kiểm tra kết nối/ }));
+    await screen.findByRole('img');
+    expect(screen.getByText(/RECORDED VIDEO · REPLAY/i)).toBeTruthy();
+    expect(screen.getByText(/cannot be activated as a live AI source/i)).toBeTruthy();
+    expect(screen.queryByRole('button', { name: /Save and activate|Lưu và kích hoạt/ })).toBeNull();
+    expect(screen.getByTestId('camera-source-stage-summary').textContent).toContain(
+      'REPLAY clip verified',
+    );
+  });
 });

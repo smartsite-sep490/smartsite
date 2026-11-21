@@ -28,12 +28,13 @@ export interface RegionPolicyItemView {
 function PpeItemBadges({ items }: { items: readonly PpeItem[] }) {
   const { t } = useTranslation(SAFETY_NAMESPACE);
   return (
-    <ul className="flex flex-wrap gap-1.5">
+    <ul className="flex flex-wrap gap-x-3 gap-y-1.5">
       {items.map((item) => (
         <li
           key={item}
-          className="inline-flex items-center rounded-md border border-slate-200 bg-white px-2 py-0.5 text-xs font-medium text-slate-800"
+          className="inline-flex items-center gap-1.5 rounded-md border border-slate-200 bg-white px-2.5 py-0.5 text-sm font-medium text-slate-800"
         >
+          <span aria-hidden="true" className="h-1.5 w-1.5 shrink-0 rounded-full bg-[#0F172A]" />
           {t(PPE_ITEM_LABEL_KEY[item])}
         </li>
       ))}
@@ -41,11 +42,11 @@ function PpeItemBadges({ items }: { items: readonly PpeItem[] }) {
   );
 }
 
-const MODE_BADGE_CLASSES = {
-  INHERIT: 'border-sky-200 bg-sky-50 text-sky-900',
-  EXPLICIT: 'border-indigo-200 bg-indigo-50 text-indigo-900',
-  DISABLED: 'border-rose-200 bg-rose-50 text-rose-900',
-  UNCONFIGURED: 'border-amber-200 bg-amber-50 text-amber-900',
+const MODE_INDICATOR_CLASSES = {
+  INHERIT: { dot: 'bg-teal-600', text: 'text-slate-800' },
+  EXPLICIT: { dot: 'bg-[#0F172A]', text: 'text-slate-900' },
+  DISABLED: { dot: 'bg-rose-600', text: 'text-rose-800' },
+  UNCONFIGURED: { dot: 'bg-amber-600', text: 'text-amber-900' },
 } as const;
 
 function modeBadgeCopyKey(
@@ -73,11 +74,11 @@ export function EffectivePpeDetails({
   const { t } = useTranslation(SAFETY_NAMESPACE);
 
   if (effective.kind === 'loading') {
-    return <p className="text-xs text-slate-500">{t('cameraPpe.effectiveLoading')}</p>;
+    return <p className="text-sm text-slate-500">{t('cameraPpe.effectiveLoading')}</p>;
   }
   if (effective.kind === 'error') {
     return (
-      <div className="flex flex-wrap items-center gap-2 text-xs text-rose-800">
+      <div className="flex flex-wrap items-center gap-2 text-sm text-rose-800">
         <span>{t('cameraPpe.effectiveError')}</span>
         {onRetry && (
           <button type="button" className={CAMERA_BUTTON_STYLES.compactSecondary} onClick={onRetry}>
@@ -88,14 +89,14 @@ export function EffectivePpeDetails({
     );
   }
   if (effective.kind === 'unconfigured') {
-    return <p className="text-xs text-amber-900">{t('cameraPpe.effectiveUnknownUninitialized')}</p>;
+    return <p className="text-sm text-amber-900">{t('cameraPpe.effectiveUnknownUninitialized')}</p>;
   }
   if (effective.kind === 'camera-unconfigured') {
-    return <p className="text-xs text-amber-900">{t('cameraPpe.effectiveUnknownCameraDefault')}</p>;
+    return <p className="text-sm text-amber-900">{t('cameraPpe.effectiveUnknownCameraDefault')}</p>;
   }
   if (effective.disabled) {
     return (
-      <div className="space-y-1 text-xs text-slate-700">
+      <div className="space-y-1 text-sm text-slate-700">
         <p className="font-medium text-rose-800">
           {t(
             effective.disabledByCameraDefault
@@ -114,7 +115,7 @@ export function EffectivePpeDetails({
   return (
     <div className="space-y-1.5">
       <div className="flex flex-wrap items-center gap-2">
-        <span className="text-xs font-medium text-slate-700">
+        <span className="text-sm font-medium text-slate-700">
           {t('cameraPpe.effectivePpeLabel')}:
         </span>
         <span className="text-xs text-slate-500">
@@ -187,14 +188,14 @@ export function SavedVsAppliedBanner({ state }: { state: SavedVsAppliedState }) 
     <div
       data-testid="camera-ppe-sync-status"
       data-sync-state={state.kind}
-      className="rounded-xl border border-slate-200/80 bg-slate-50/70 px-3.5 py-2.5 space-y-1.5"
+      className="rounded-xl border border-slate-200 bg-slate-50/50 px-3.5 py-2.5 space-y-1.5"
     >
       <div className="flex flex-wrap items-center justify-between gap-2">
-        <span className="text-xs font-semibold text-slate-800">{t('cameraPpe.syncHeading')}</span>
+        <span className="text-sm font-semibold text-slate-900">{t('cameraPpe.syncHeading')}</span>
         <span className="text-xs font-mono text-slate-700 tabular-nums">{savedLabel}</span>
       </div>
       <p
-        className={`rounded-lg border px-2.5 py-1.5 text-xs font-medium break-words [overflow-wrap:anywhere] ${workerTone}`}
+        className={`rounded-lg border px-3 py-1.5 text-sm font-medium break-words [overflow-wrap:anywhere] ${workerTone}`}
       >
         {workerText}
       </p>
@@ -216,6 +217,8 @@ export function CameraDefaultSummaryCard({
   onSelectCameraDefault: () => void;
 }) {
   const { t } = useTranslation(SAFETY_NAMESPACE);
+  const modeKey = cameraPolicy ? cameraPolicy.mode : 'UNCONFIGURED';
+  const modeTone = MODE_INDICATOR_CLASSES[modeKey];
 
   return (
     <div
@@ -223,23 +226,14 @@ export function CameraDefaultSummaryCard({
       className="rounded-xl border border-slate-200 bg-white px-3.5 py-3 space-y-2"
     >
       <div className="flex flex-wrap items-center justify-between gap-2">
-        <div className="flex flex-wrap items-center gap-2 min-w-0">
-          <h4 className="text-sm font-semibold text-slate-900">
+        <div className="flex flex-wrap items-center gap-2.5 min-w-0">
+          <h4 className="text-sm font-semibold text-slate-950">
             {t('cameraPpe.cameraSummaryHeading')}
           </h4>
-          {cameraPolicy ? (
-            <span
-              className={`rounded-md border px-2 py-0.5 text-xs font-semibold ${MODE_BADGE_CLASSES[cameraPolicy.mode]}`}
-            >
-              {t(modeBadgeCopyKey(cameraPolicy.mode))}
-            </span>
-          ) : (
-            <span
-              className={`rounded-md border px-2 py-0.5 text-xs font-semibold ${MODE_BADGE_CLASSES.UNCONFIGURED}`}
-            >
-              {t('cameraPpe.modeBadge.UNCONFIGURED')}
-            </span>
-          )}
+          <span className={`inline-flex items-center gap-1.5 text-sm font-medium ${modeTone.text}`}>
+            <span aria-hidden="true" className={`h-2 w-2 rounded-full ${modeTone.dot}`} />
+            {t(modeBadgeCopyKey(modeKey))}
+          </span>
         </div>
         <div className="flex items-center gap-2">
           <span className="text-xs font-mono text-slate-500 tabular-nums">
@@ -265,9 +259,9 @@ export function CameraDefaultSummaryCard({
       </div>
 
       {!cameraPolicy ? (
-        <p className="text-xs text-amber-900">{t('cameraPpe.cameraUninitializedNote')}</p>
+        <p className="text-sm text-amber-900">{t('cameraPpe.cameraUninitializedNote')}</p>
       ) : cameraPolicy.mode === 'DISABLED' ? (
-        <div className="text-xs text-slate-700 space-y-0.5">
+        <div className="text-sm text-slate-700 space-y-0.5">
           <p className="font-medium text-rose-800">{t('cameraPpe.effectiveDisabled')}</p>
           {cameraPolicy.reason && (
             <p className="text-slate-600 break-words [overflow-wrap:anywhere]">
@@ -360,7 +354,7 @@ export function RegionEffectivePolicyList({
         {t('cameraPpe.regionsHeading', { count: items.length })}
       </h4>
       {items.length === 0 ? (
-        <p className="rounded-xl border border-dashed border-slate-200 bg-slate-50/70 px-3.5 py-3 text-xs text-slate-600">
+        <p className="rounded-xl border border-dashed border-slate-200 bg-slate-50/70 px-3.5 py-3 text-sm text-slate-600">
           {t('cameraPpe.regionsEmpty')}
         </p>
       ) : (
@@ -383,6 +377,7 @@ export function RegionEffectivePolicyList({
                 effective.kind === 'resolved' || effective.kind === 'camera-unconfigured'
                   ? effective.mode
                   : 'UNCONFIGURED';
+              const modeTone = MODE_INDICATOR_CLASSES[modeKey];
               const regionSync = formatRegionAppliedLabel(saved, savedVsApplied, region.isActive);
 
               return (
@@ -390,32 +385,33 @@ export function RegionEffectivePolicyList({
                   key={region.id}
                   data-testid={`camera-ppe-region-card-${region.id}`}
                   data-policy-mode={modeKey}
-                  className={`rounded-xl border px-3.5 py-3 space-y-2 transition-colors ${
+                  className={`rounded-xl border px-3.5 py-3 space-y-2 transition-colors border-l-[3px] ${
                     isSelected
-                      ? 'border-slate-900 bg-slate-50/80 ring-1 ring-slate-900/10'
-                      : 'border-slate-200 bg-white'
+                      ? 'border-slate-300 border-l-[#0F172A] bg-slate-50/80'
+                      : 'border-slate-200 border-l-transparent bg-white'
                   }`}
                 >
                   <div className="flex flex-wrap items-start justify-between gap-2">
                     <div className="min-w-0 space-y-1">
-                      <div className="flex flex-wrap items-center gap-2">
+                      <div className="flex flex-wrap items-baseline gap-x-2.5 gap-y-1">
                         <span
                           title={targetLabel}
-                          className="text-sm font-semibold text-slate-900 break-words [overflow-wrap:anywhere]"
+                          className="text-sm font-semibold text-slate-950 break-words [overflow-wrap:anywhere]"
                         >
                           {targetLabel}
                         </span>
                         {!zone && (
-                          <span className="rounded-md border border-slate-200 bg-slate-100 px-1.5 py-0.5 text-xs font-medium text-slate-600">
+                          <span className="text-xs font-medium text-slate-600">
                             {t('cameraPpe.zoneMetadataUnavailable')}
                           </span>
                         )}
                         <span
-                          className={`rounded-md border px-2 py-0.5 text-xs font-semibold ${MODE_BADGE_CLASSES[modeKey]}`}
+                          className={`inline-flex items-center gap-1.5 text-sm font-medium ${modeTone.text}`}
                         >
+                          <span aria-hidden="true" className={`h-2 w-2 rounded-full ${modeTone.dot}`} />
                           {t(modeBadgeCopyKey(modeKey))}
                         </span>
-                        <span className="rounded-md border border-slate-200 bg-slate-50 px-1.5 py-0.5 text-xs tabular-nums text-slate-600">
+                        <span className="text-xs tabular-nums text-slate-500">
                           {zone && !needsRegionDisambiguator ? `${regionBadge} · ` : ''}
                           {t('cameraPpe.regionVersionMeta', { version: region.version })} ·{' '}
                           {t(
@@ -455,9 +451,9 @@ export function RegionEffectivePolicyList({
                     onRetry={() => onRetryRegion(region.id)}
                   />
 
-                  <div className="flex flex-wrap items-center justify-between gap-2 border-t border-slate-100 pt-1.5 text-xs">
+                  <div className="flex flex-wrap items-center justify-between gap-2 border-t border-slate-100 pt-2 text-sm">
                     {effective.kind !== 'loading' && effective.kind !== 'error' && (
-                      <span className="font-mono text-slate-500 tabular-nums">
+                      <span className="font-mono text-xs text-slate-500 tabular-nums">
                         {saved?.savedRevision != null
                           ? t('cameraPpe.savedConfigMeta', {
                               configVersion: saved.configurationVersion,
@@ -495,13 +491,13 @@ export function EffectivePpePreviewBox({
   return (
     <div
       data-testid="camera-ppe-draft-preview"
-      className="rounded-lg border border-slate-200/80 bg-slate-50/70 px-3 py-2 space-y-1"
+      className="rounded-xl border border-slate-200 bg-slate-50/50 px-3 py-2.5 space-y-1.5"
     >
-      <p className="text-xs font-semibold text-slate-700">{t('cameraPpe.previewHeading')}</p>
+      <p className="text-sm font-semibold text-slate-800">{t('cameraPpe.previewHeading')}</p>
       {effective ? (
         <EffectivePpeDetails effective={effective} />
       ) : (
-        <p className="text-xs text-slate-600">{t('cameraPpe.previewRequiresCameraInit')}</p>
+        <p className="text-sm text-slate-600">{t('cameraPpe.previewRequiresCameraInit')}</p>
       )}
     </div>
   );
@@ -546,9 +542,9 @@ export function CameraDefaultImpactCard({
   return (
     <div
       data-testid="camera-ppe-affected-regions-preview"
-      className="rounded-lg border border-slate-200/80 bg-slate-50/70 px-3 py-2.5 space-y-1.5 text-xs text-slate-700"
+      className="rounded-xl border border-slate-200 bg-slate-50/50 px-3 py-2.5 space-y-1.5 text-sm text-slate-700"
     >
-      <p className="text-xs font-semibold text-slate-800">{t('cameraPpe.impactHeading')}</p>
+      <p className="text-sm font-semibold text-slate-900">{t('cameraPpe.impactHeading')}</p>
       <p className="break-words [overflow-wrap:anywhere]">
         {inheritingNames.length > 0
           ? t('cameraPpe.impactInheriting', {
@@ -566,8 +562,8 @@ export function CameraDefaultImpactCard({
         </p>
       )}
       {draftCameraPolicy && (
-        <div className="space-y-1 border-t border-slate-200/70 pt-1.5">
-          <p className="text-xs font-medium text-slate-600">
+        <div className="space-y-1 border-t border-slate-200 pt-2">
+          <p className="text-sm font-medium text-slate-700">
             {t('cameraPpe.impactPreviewEffective')}
           </p>
           {draftCameraPolicy.mode === 'DISABLED' ? (
