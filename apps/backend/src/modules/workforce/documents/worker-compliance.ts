@@ -31,6 +31,7 @@ export function complianceState(
   documents: Pick<WorkerDocumentEntity, 'kind' | 'status' | 'issuedOn' | 'expiresOn'>[],
   at = new Date(),
   noticeDays = 30,
+  safetyCardRequired = true,
 ) {
   const today = complianceDate(at);
   const notice = complianceDate(new Date(at.getTime() + noticeDays * 86400000));
@@ -40,8 +41,11 @@ export function complianceState(
       (d) =>
         d.kind === kind && d.issuedOn && d.issuedOn <= today && d.expiresOn && d.expiresOn >= today,
     );
-  const missingKinds = DOCUMENT_KINDS.filter((kind) => !valid(kind));
-  const expiringKinds = DOCUMENT_KINDS.filter((kind) => {
+  const requiredKinds = DOCUMENT_KINDS.filter(
+    (kind) => safetyCardRequired || kind !== 'SAFETY_CARD',
+  );
+  const missingKinds = requiredKinds.filter((kind) => !valid(kind));
+  const expiringKinds = requiredKinds.filter((kind) => {
     const doc = valid(kind);
     return !!doc?.expiresOn && doc.expiresOn <= notice;
   });
@@ -49,7 +53,7 @@ export function complianceState(
     ? 'NOT_REQUIRED'
     : !missingKinds.length
       ? 'ACTIVE'
-      : approved.some((d) => d.expiresOn && d.expiresOn < today)
+      : approved.some((d) => requiredKinds.includes(d.kind) && d.expiresOn && d.expiresOn < today)
         ? 'EXPIRED'
         : 'PENDING';
   return { status, missingKinds: [...missingKinds], expiringKinds: [...expiringKinds] };
@@ -62,6 +66,7 @@ export function documentReviewState(
   >[],
   identityComplete: boolean,
   at = new Date(),
+  safetyCardRequired = true,
 ): { submissionStatus: WorkerDocumentSubmissionStatus; needsSupplement: boolean } {
   const today = complianceDate(at);
   const submissionStatus = documents.some((doc) => doc.status === 'PENDING')
@@ -71,7 +76,7 @@ export function documentReviewState(
       : 'NOT_SUBMITTED';
   const needsSupplement =
     !identityComplete ||
-    DOCUMENT_KINDS.some((kind) => {
+    DOCUMENT_KINDS.filter((kind) => safetyCardRequired || kind !== 'SAFETY_CARD').some((kind) => {
       const current = documents.filter((doc) => doc.kind === kind);
       if (current.some((doc) => doc.status === 'PENDING')) return false;
       const latest = [...current]
@@ -99,7 +104,7 @@ function documentStatus(
   identityImages: number,
   at: Date,
 ): WorkerComplianceStatus {
-  const state = complianceState(true, documents, at);
+  const state = complianceState(true, documents, at, 30, profile?.safetyCardRequired ?? true);
   if (
     state.status === 'ACTIVE' &&
     profile?.identityRequired &&

@@ -2,7 +2,6 @@ import { useState } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { useQuery } from '@tanstack/react-query';
 import type {
-  NativeUploadFile,
   WorkerComplianceResponse,
   WorkerDocumentKind,
   WorkerDocumentResponse,
@@ -10,19 +9,12 @@ import type {
 import { useTranslation, uiLocale } from '../../i18n';
 import { colors } from '../../theme/colors';
 import { WorkerAvatar } from '../../components/common/WorkerAvatar';
-import {
-  IconAlert,
-  IconChevronRight,
-  IconDocument,
-  IconShield,
-  IconUser,
-} from '../../components/common/Icons';
+import { IconChevronRight, IconShield, IconUser } from '../../components/common/Icons';
 import { useWorkspace } from '../workspace/workspace-context';
-import { useCommand } from '../shared/data';
-import { Button, ErrorNotice, Hint, QueryState } from '../shared/ui';
-import { Attachments, EvidenceButton } from '../shared/uploads';
+import { Button, Hint, QueryState } from '../shared/ui';
+import { EvidenceButton } from '../shared/uploads';
 import { RequestSheet } from '../shared/request-sheet';
-import { WorkerCertificateSubmission, SubmittedExpiryEditor } from './worker-document-forms';
+import { WorkerDocumentBundleForm } from './worker-document-bundle-form';
 
 export const documentKinds: readonly WorkerDocumentKind[] = [
   'SAFETY_CARD',
@@ -32,7 +24,8 @@ export const documentKinds: readonly WorkerDocumentKind[] = [
 type Selection =
   | { type: 'profile' }
   | { type: 'identity'; side: 'FRONT' | 'BACK' }
-  | { type: 'certificate'; kind: WorkerDocumentKind; upload: boolean };
+  | { type: 'certificate'; kind: WorkerDocumentKind }
+  | { type: 'bundle' };
 
 function DocumentStatus({ status }: { status: string }) {
   const { t } = useTranslation();
@@ -69,64 +62,46 @@ export function currentDocuments(documents: WorkerDocumentResponse[], kind: Work
 export function WorkerDocuments({
   workerId,
   canUpload = false,
-  canSubmitDocuments = false,
 }: {
   workerId: string;
   canUpload?: boolean;
-  canSubmitDocuments?: boolean;
 }) {
   const { t } = useTranslation();
   const { client, token, scope, queryKey } = useWorkspace();
   const [selected, setSelected] = useState<Selection | null>(null);
-  const [identityFiles, setIdentityFiles] = useState<NativeUploadFile[]>([]);
-  const [formBusy, setFormBusy] = useState(false);
-  const [saved, setSaved] = useState(false);
-  const [history, setHistory] = useState(false);
-  const command = useCommand();
   const profile = useQuery({
     queryKey: [...queryKey, 'worker-documents', workerId],
     queryFn: () => client.workerCompliance(token, scope.siteId, workerId),
   });
-  const canSubmit = canUpload || canSubmitDocuments;
-  const open = (value: Selection) => {
-    setSelected(value);
-    setIdentityFiles([]);
-    setSaved(false);
-    setHistory(false);
-    command.reset();
-  };
+  const data = profile.data;
+  const selectedDocuments =
+    selected?.type === 'certificate' ? currentDocuments(data?.documents ?? [], selected.kind) : [];
+  const image =
+    selected?.type === 'identity'
+      ? data?.identityImages.find((item) => item.side === selected.side)
+      : undefined;
   const title =
     selected?.type === 'certificate'
-      ? t(`documents.${selected.kind}`)
+      ? t('documents.' + selected.kind)
       : selected?.type === 'identity'
-        ? t(`documents.${selected.side}`)
-        : t('workforce.workerProfile');
-  const documents =
-    selected?.type === 'certificate'
-      ? currentDocuments(profile.data?.documents ?? [], selected.kind)
-      : [];
-  const upload = selected?.type === 'certificate' && selected.upload;
-  const identity =
-    selected?.type === 'identity'
-      ? profile.data?.identityImages.find((i) => i.side === selected.side)
-      : undefined;
+        ? t('documents.' + selected.side)
+        : selected?.type === 'bundle'
+          ? t('documents.bundleTitle')
+          : t('workforce.workerProfile');
   return (
     <View style={styles.screen}>
-      <View style={styles.heading}>
-        <Text style={styles.eyebrow}>{t('documentUi.eyebrow')}</Text>
-        <Text style={styles.hint}>{t('documentUi.subtitle')}</Text>
-      </View>
       <QueryState query={profile}>
         {(data) => {
-          const approved = documentKinds.filter((kind) =>
-            data.documents.some((d) => d.kind === kind && d.status === 'APPROVED'),
-          ).length;
+          const requiredKinds = documentKinds.filter(
+            (kind) => kind !== 'SAFETY_CARD' || data.safetyCardRequired !== false,
+          );
+          const approved = requiredKinds.filter((kind) => !data.missingKinds.includes(kind)).length;
           return (
             <>
               <Pressable
                 accessibilityRole="button"
                 accessibilityLabel={t('workforce.workerProfile')}
-                onPress={() => open({ type: 'profile' })}
+                onPress={() => setSelected({ type: 'profile' })}
                 style={styles.profileCard}
               >
                 <WorkerAvatar size={44} role="worker" />
@@ -139,287 +114,127 @@ export function WorkerDocuments({
               <View style={styles.summary}>
                 <View style={styles.grow}>
                   <Text style={styles.sectionTitle}>
-                    {t('documentUi.completion', { count: approved, total: documentKinds.length })}
+                    {t('documentUi.completion', { count: approved, total: requiredKinds.length })}
                   </Text>
                   <Text style={styles.hint}>
                     {t(
-                      data.needsSupplement
-                        ? 'documents.needsSupplement'
-                        : data.status === 'EXPIRED'
-                          ? 'documents.EXPIRED'
-                          : 'documentUi.reviewHint',
+                      data.needsSupplement ? 'documents.needsSupplement' : 'documentUi.reviewHint',
                     )}
                   </Text>
                 </View>
                 <DocumentStatus status={data.status} />
               </View>
+              {canUpload && (
+                <Button
+                  label={t('documents.bundleTitle')}
+                  onPress={() => setSelected({ type: 'bundle' })}
+                />
+              )}
               <Text style={styles.sectionTitle}>{t('documents.identityHeading')}</Text>
               <View style={styles.list}>
-                {(['FRONT', 'BACK'] as const).map((side) => {
-                  const image = data.identityImages.find((i) => i.side === side);
-                  return (
-                    <Pressable
-                      key={side}
-                      accessibilityRole="button"
-                      accessibilityLabel={t(`documents.${side}`)}
-                      onPress={() => open({ type: 'identity', side })}
-                      style={styles.row}
-                    >
-                      <View style={styles.icon}>
-                        <IconUser size={19} color={colors.primary} />
-                      </View>
-                      <View style={styles.grow}>
-                        <Text style={styles.rowTitle}>{t(`documents.${side}`)}</Text>
-                        <Text style={styles.hint}>
-                          {t(image ? 'documentUi.fileReady' : 'documents.noFile')}
-                        </Text>
-                      </View>
-                      <IconChevronRight size={18} color={colors.textMuted} />
-                    </Pressable>
-                  );
-                })}
+                {(['FRONT', 'BACK'] as const).map((side) => (
+                  <Pressable
+                    key={side}
+                    accessibilityRole="button"
+                    accessibilityLabel={t('documents.' + side)}
+                    onPress={() => setSelected({ type: 'identity', side })}
+                    style={styles.row}
+                  >
+                    <IconUser size={19} color={colors.primary} />
+                    <Text style={styles.rowTitle}>{t('documents.' + side)}</Text>
+                    <IconChevronRight size={18} color={colors.textMuted} />
+                  </Pressable>
+                ))}
               </View>
               <Text style={styles.sectionTitle}>{t('documents.certificatesHeading')}</Text>
               <View style={styles.list}>
                 {documentKinds.map((kind) => {
-                  const items = currentDocuments(data.documents, kind),
-                    pending = items.find((d) => d.status === 'PENDING'),
-                    current = items.find((d) => d.status === 'APPROVED') ?? items[0];
-                  const expired =
-                    data.status === 'EXPIRED' &&
-                    current?.expiresOn &&
-                    current.expiresOn < new Date().toISOString().slice(0, 10);
+                  const items = currentDocuments(data.documents, kind);
+                  const doc =
+                    items.find((item) => item.status === 'PENDING') ??
+                    items.find((item) => item.status === 'APPROVED') ??
+                    items[0];
                   return (
                     <Pressable
                       key={kind}
                       accessibilityRole="button"
-                      accessibilityLabel={t(`documents.${kind}`)}
-                      onPress={() => open({ type: 'certificate', kind, upload: false })}
+                      accessibilityLabel={t('documents.' + kind)}
+                      onPress={() => setSelected({ type: 'certificate', kind })}
                       style={styles.certificate}
                     >
                       <View style={styles.rowHeader}>
-                        <View style={styles.icon}>
-                          <IconShield size={19} color={colors.primary} />
-                        </View>
-                        <View style={styles.grow}>
-                          <Text style={styles.rowTitle}>{t(`documents.${kind}`)}</Text>
-                        </View>
-                        <IconChevronRight size={18} color={colors.textMuted} />
-                      </View>
-                      <View style={styles.certificateMeta}>
-                        <DocumentStatus
-                          status={
-                            pending
-                              ? 'PENDING'
-                              : expired
-                                ? 'EXPIRED'
-                                : (current?.status ?? 'MISSING')
-                          }
-                        />
-                        <Text style={[styles.hint, styles.flexText]}>
-                          {current?.expiresOn
-                            ? t('documentUi.validUntil', { date: documentDate(current.expiresOn) })
-                            : t('documentUi.openDetails')}
+                        <IconShield size={19} color={colors.primary} />
+                        <Text style={[styles.rowTitle, styles.grow]}>
+                          {t('documents.' + kind)}
+                          {kind === 'SAFETY_CARD' && data.safetyCardRequired === false
+                            ? ' (' + t('documents.optional') + ')'
+                            : ''}
                         </Text>
                       </View>
-                      {pending && current?.status === 'APPROVED' && (
-                        <Text style={styles.hint}>{t('documentUi.renewalPending')}</Text>
-                      )}
+                      <DocumentStatus status={doc?.status ?? 'MISSING'} />
+                      {doc?.reviewNote && <Text style={styles.noticeText}>{doc.reviewNote}</Text>}
                     </Pressable>
                   );
                 })}
               </View>
-              {data.expiringKinds.length > 0 && (
-                <View style={styles.notice}>
-                  <IconAlert size={17} color="#A16C21" />
-                  <Text style={styles.noticeText}>{t('documents.expiring')}</Text>
-                </View>
-              )}
             </>
           );
         }}
       </QueryState>
-      {selected && profile.data && (
+      {selected && data && (
         <RequestSheet
           visible
-          variant="compact"
+          footer={null}
+          variant={selected.type === 'bundle' ? 'form' : 'compact'}
           title={title}
-          subtitle={profile.data.displayName}
-          busy={command.isPending || formBusy}
+          subtitle={data.displayName}
           onClose={() => setSelected(null)}
-          footer={
-            <View style={styles.footer}>
-              <ErrorNotice error={command.error} />
-              {selected.type === 'certificate' && !upload && canSubmit && (
-                <Button
-                  label={t(documents.length ? 'documentUi.submitNew' : 'documents.upload')}
-                  disabled={profile.isError}
-                  onPress={() => {
-                    setSaved(false);
-                    setSelected({ ...selected, upload: true });
-                  }}
-                />
-              )}
-              {selected.type === 'identity' && !identity && canUpload && (
-                <Button
-                  label={t('documents.upload')}
-                  disabled={command.isPending || profile.isError || !identityFiles[0]}
-                  onPress={() => {
-                    const file = identityFiles[0];
-                    if (!file || selected.type !== 'identity') return;
-                    const side = selected.side;
-                    command.mutate(async () => {
-                      await client.uploadWorkerIdentityImage(
-                        token,
-                        scope.siteId,
-                        workerId,
-                        side,
-                        file,
-                      );
-                      setIdentityFiles([]);
-                      await profile.refetch();
-                      setSaved(true);
-                    });
-                  }}
-                />
-              )}
-              {upload && (
-                <Button
-                  secondary
-                  label={t('common.back')}
-                  disabled={formBusy}
-                  onPress={() =>
-                    selected.type === 'certificate' && setSelected({ ...selected, upload: false })
+        >
+          {selected.type === 'profile' && <ProfileDetails data={data} />}
+          {selected.type === 'bundle' && canUpload && (
+            <WorkerDocumentBundleForm
+              key={data.workerId}
+              profile={data}
+              onSubmitted={() => {
+                setSelected(null);
+                void profile.refetch();
+              }}
+            />
+          )}
+          {selected.type === 'identity' &&
+            (image ? (
+              <>
+                <Text style={styles.filename}>{image.originalName}</Text>
+                <EvidenceButton
+                  label={t('documents.view')}
+                  mediaType={image.mediaType}
+                  load={() =>
+                    client.workerIdentityImageFile(token, scope.siteId, workerId, image.id)
                   }
                 />
-              )}
-            </View>
-          }
-        >
-          {saved && (
-            <Text accessibilityLiveRegion="polite" style={styles.saved}>
-              {t('documentUi.submitted')}
-            </Text>
-          )}
-          {profile.isError && <ErrorNotice error={profile.error} />}
-          {selected.type === 'profile' && <ProfileDetails data={profile.data} />}
-          {selected.type === 'identity' && (
+              </>
+            ) : (
+              <Hint>{t('documents.noFile')}</Hint>
+            ))}
+          {selected.type === 'certificate' && (
             <>
-              {identity ? (
-                <>
-                  <Text style={styles.filename}>{identity.originalName}</Text>
-                  <EvidenceButton
-                    label={t('documents.view')}
-                    mediaType={identity.mediaType}
-                    load={() =>
-                      client.workerIdentityImageFile(token, scope.siteId, workerId, identity.id)
-                    }
-                  />
-                  {identity.identityCheck?.status === 'MISMATCH' && (
-                    <Text style={styles.noticeText}>{t('documents.identityMismatch')}</Text>
-                  )}
-                  {canUpload && (
-                    <Button
-                      secondary
-                      label={t('documents.ocr')}
-                      disabled={command.isPending || profile.isError}
-                      onPress={() =>
-                        command.mutate(() =>
-                          client.retryWorkerIdentityOcr(token, scope.siteId, workerId, identity.id),
-                        )
-                      }
-                    />
-                  )}
-                </>
-              ) : canUpload && profile.data.contractorId ? (
-                <>
-                  <Text style={styles.hint}>{t('documentUi.identityHint')}</Text>
-                  <Attachments
-                    files={identityFiles}
-                    maxFiles={1}
-                    allowPdf={false}
-                    disabled={command.isPending || profile.isError}
-                    onChange={setIdentityFiles}
-                    validateFile={async (file) => {
-                      const result = await client.checkDocumentImageQuality(
-                        token,
-                        scope.siteId,
-                        profile.data!.contractorId!,
-                        file,
-                      );
-                      if (result.status !== 'ACCEPTED')
-                        throw new Error(t(`documents.${result.reason}`));
-                    }}
-                  />
-                </>
-              ) : (
-                <Hint>{t('documents.noFile')}</Hint>
-              )}
+              {selectedDocuments.map((doc) => (
+                <CertificateDetails key={doc.id} doc={doc} workerId={workerId} />
+              ))}
+              {!selectedDocuments.length && <Hint>{t('documents.noFile')}</Hint>}
+              {data.documents
+                .filter((doc) => doc.kind === selected.kind && doc.status === 'SUPERSEDED')
+                .map((doc) => (
+                  <CertificateDetails key={doc.id} doc={doc} workerId={workerId} />
+                ))}
             </>
           )}
-          {selected.type === 'certificate' &&
-            (upload ? (
-              <WorkerCertificateSubmission
-                key={selected.kind}
-                workerId={workerId}
-                kind={selected.kind}
-                requireDate={canSubmitDocuments}
-                disabled={profile.isError}
-                onBusyChange={setFormBusy}
-                onSubmitted={() => {
-                  setSelected({ ...selected, upload: false });
-                  setSaved(true);
-                  void profile.refetch();
-                }}
-              />
-            ) : (
-              <>
-                {!documents.length && (
-                  <View style={styles.empty}>
-                    <IconDocument size={30} color={colors.textMuted} />
-                    <Text style={styles.rowTitle}>{t('documents.noFile')}</Text>
-                    <Text style={styles.hint}>
-                      {t(canSubmit ? 'documentUi.emptyUpload' : 'documentUi.emptyReadOnly')}
-                    </Text>
-                  </View>
-                )}
-                {documents.map((doc) => (
-                  <CertificateDetails
-                    key={`${doc.id}:${doc.version}`}
-                    doc={doc}
-                    workerId={workerId}
-                    canEdit={canSubmit && !profile.isError}
-                  />
-                ))}
-                {profile.data.documents.some(
-                  (d) => d.kind === selected.kind && d.status === 'SUPERSEDED',
-                ) && (
-                  <>
-                    <Button
-                      secondary
-                      label={t(history ? 'documentUi.hideHistory' : 'documentUi.history')}
-                      onPress={() => setHistory(!history)}
-                    />
-                    {history &&
-                      profile.data.documents
-                        .filter((d) => d.kind === selected.kind && d.status === 'SUPERSEDED')
-                        .map((doc) => (
-                          <CertificateDetails
-                            key={doc.id}
-                            doc={doc}
-                            workerId={workerId}
-                            canEdit={false}
-                          />
-                        ))}
-                  </>
-                )}
-              </>
-            ))}
         </RequestSheet>
       )}
     </View>
   );
 }
+
 function ProfileDetails({ data }: { data: WorkerComplianceResponse }) {
   const { t } = useTranslation();
   return (
@@ -440,77 +255,45 @@ function ProfileDetails({ data }: { data: WorkerComplianceResponse }) {
     </View>
   );
 }
-function CertificateDetails({
-  doc,
-  workerId,
-  canEdit,
-}: {
-  doc: WorkerDocumentResponse;
-  workerId: string;
-  canEdit: boolean;
-}) {
+function CertificateDetails({ doc, workerId }: { doc: WorkerDocumentResponse; workerId: string }) {
   const { t } = useTranslation();
   const { client, token, scope } = useWorkspace();
-  const [editing, setEditing] = useState(false);
-  const command = useCommand();
   return (
     <View style={styles.document}>
       <DocumentStatus status={doc.status} />
       <Text style={styles.filename}>{doc.originalName}</Text>
-      <View style={styles.dates}>
-        <View style={styles.grow}>
-          <Text style={styles.hint}>{t('documents.issuedOn')}</Text>
-          <Text style={styles.value}>{documentDate(doc.issuedOn ?? doc.submittedIssuedOn)}</Text>
-        </View>
-        <View style={styles.grow}>
-          <Text style={styles.hint}>{t('documents.expiresOn')}</Text>
-          <Text style={styles.value}>{documentDate(doc.expiresOn ?? doc.submittedExpiresOn)}</Text>
-        </View>
-      </View>
+      <Text style={styles.hint}>
+        {t('documents.issuedOn')}: {documentDate(doc.issuedOn)}
+      </Text>
+      <Text style={styles.hint}>
+        {t('documents.expiresOn')}: {documentDate(doc.expiresOn)}
+      </Text>
+      {doc.submittedIssuedOn && (
+        <Text style={styles.hint}>
+          {t('documents.declaredIssuedOn')}: {documentDate(doc.submittedIssuedOn)}
+        </Text>
+      )}
+      {doc.submittedExpiresOn && (
+        <Text style={styles.hint}>
+          {t('documents.declaredExpiresOn')}: {documentDate(doc.submittedExpiresOn)}
+        </Text>
+      )}
       {doc.reviewNote && (
         <View style={styles.review}>
           <Text style={styles.label}>{t('documentUi.reviewNote')}</Text>
           <Text style={styles.hint}>{doc.reviewNote}</Text>
         </View>
       )}
-      {doc.identityCheck?.status === 'MISMATCH' && (
-        <Text style={styles.noticeText}>{t('documents.identityMismatch')}</Text>
-      )}
+      {doc.identityCheck?.status === 'MISMATCH' && <Hint>{t('documents.identityMismatch')}</Hint>}
       <EvidenceButton
         label={t('documents.view')}
         mediaType={doc.mediaType}
         load={() => client.workerDocumentFile(token, scope.siteId, workerId, doc.id)}
       />
-      {doc.status === 'PENDING' && canEdit && (
-        <>
-          <Button
-            secondary
-            label={t('documentUi.editDeclaredDate')}
-            onPress={() => setEditing(!editing)}
-          />
-          {editing && (
-            <SubmittedExpiryEditor
-              doc={doc}
-              disabled={command.isPending}
-              save={(value) =>
-                command.mutate(async () => {
-                  await client.updateWorkerDocumentExpiry(token, scope.siteId, workerId, doc.id, {
-                    expectedVersion: doc.version,
-                    ...(doc.kind === 'HEALTH_CERTIFICATE'
-                      ? { submittedIssuedOn: value }
-                      : { submittedExpiresOn: value }),
-                  });
-                  setEditing(false);
-                })
-              }
-            />
-          )}
-          <ErrorNotice error={command.error} />
-        </>
-      )}
     </View>
   );
 }
+
 const styles = StyleSheet.create({
   screen: { gap: 16, paddingBottom: 24 },
   heading: { gap: 6, paddingVertical: 4 },

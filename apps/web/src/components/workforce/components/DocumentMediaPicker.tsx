@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
+import type { DocumentImageQuality } from '@smartsite/api-client';
 import { useTranslation } from 'react-i18next';
 import { translate as tr } from '../../../i18n';
 import { localizedError } from '../../../i18n/messages';
@@ -11,16 +12,19 @@ export function DocumentMediaPicker({
   validate,
   disabled = false,
   allowPdf = true,
+  referenceNationalId,
 }: {
   label: string;
   file?: File;
   onSelect: (file: File) => void | Promise<void>;
-  validate: (file: File) => Promise<void>;
+  validate: (file: File) => Promise<void | DocumentImageQuality>;
+  referenceNationalId?: string;
   disabled?: boolean;
   allowPdf?: boolean;
 }) {
   useTranslation();
   const [pending, setPending] = useState(false);
+  const [check, setCheck] = useState<DocumentImageQuality>();
   const [error, setError] = useState('');
   const preview = useRef<HTMLImageElement>(null);
   useEffect(() => {
@@ -41,7 +45,8 @@ export function DocumentMediaPicker({
         !candidate.size
       )
         throw new Error(tr('documents.invalidFile'));
-      await validate(candidate);
+      const result = await validate(candidate);
+      setCheck(result || undefined);
       await onSelect(candidate);
     } catch (e) {
       setError(e instanceof Error ? e.message : tr('documents.IMAGE_INVALID'));
@@ -51,7 +56,7 @@ export function DocumentMediaPicker({
   };
   return (
     <div
-      className={`group relative rounded-2xl border p-4 transition-all duration-200 ${
+      className={`group relative min-w-0 rounded-2xl border p-3 sm:p-4 transition-all duration-200 ${
         error
           ? 'border-red-300 bg-red-50/30'
           : file
@@ -88,7 +93,7 @@ export function DocumentMediaPicker({
             type="file"
             accept={allowPdf ? 'image/jpeg,image/png,application/pdf' : 'image/jpeg,image/png'}
             disabled={disabled || pending}
-            className="block w-full text-xs text-slate-500 file:mr-3 file:py-2 file:px-3.5 file:rounded-xl file:border-0 file:text-xs file:font-bold file:bg-orange-50 file:text-[#F66B17] hover:file:bg-orange-100 cursor-pointer rounded-xl border border-slate-200 bg-slate-50/70 p-1.5 focus:outline-none focus:border-[#F66B17] transition-all disabled:opacity-50"
+            className="block w-full min-w-0 text-xs text-slate-500 file:mr-3 file:py-2 file:px-3.5 file:rounded-xl file:border-0 file:text-xs file:font-bold file:bg-orange-50 file:text-[#F66B17] hover:file:bg-orange-100 cursor-pointer rounded-xl border border-slate-200 bg-slate-50/70 p-1.5 focus:outline-none focus:border-[#F66B17] transition-all disabled:opacity-50"
             onChange={(e) => {
               const candidate = e.target.files?.[0];
               e.target.value = '';
@@ -106,6 +111,14 @@ export function DocumentMediaPicker({
           </p>
         )}
 
+        {file && check && (
+          <div role="status" className="space-y-1 text-xs text-amber-900">
+            {check.status !== 'ACCEPTED' && <p>{tr('documents.' + check.reason)}</p>}
+            {!!check.ocr?.nationalIds?.some(
+              (id) => referenceNationalId && id !== referenceNationalId,
+            ) && <p>{tr('documents.identityMismatch')}</p>}
+          </div>
+        )}
         {/* Image Preview Thumbnail */}
         {file?.type.startsWith('image/') && (
           <div className="relative mt-2 overflow-hidden rounded-xl border border-slate-200 bg-slate-50 p-1.5 flex items-center justify-center max-h-48">

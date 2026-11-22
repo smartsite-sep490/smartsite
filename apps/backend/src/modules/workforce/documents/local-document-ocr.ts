@@ -7,22 +7,31 @@ import { ConfigService } from '@nestjs/config';
 import type { BackendEnvironment } from '../../../config/environment.js';
 import { backendDirectory } from '../../../config/runtime-environment.js';
 
-/** A single bounded CPU lane per Backend, with originals confined to a private temporary directory. */
+/** One bounded OCR lane and one validation lane, with originals confined to private temporary directories. */
 @Injectable()
 export class LocalDocumentOcr {
   private busy = false;
+  private validating = false;
   private readonly logger = new Logger(LocalDocumentOcr.name);
   constructor(private readonly config: ConfigService<BackendEnvironment, true>) {}
 
   async run(
     bytes: Buffer,
     mediaType: string,
-    operation: 'ocr' | 'image-quality',
+    operation: 'ocr' | 'inspect' | 'validate',
   ): Promise<Record<string, unknown> | null> {
     const configured = this.config.get('WORKER_DOCUMENT_PYTHON', { infer: true });
-    if (!configured || this.busy || !bytes.length || bytes.length > 5 * 1024 * 1024) return null;
+    const validating = operation === 'validate';
+    if (
+      !configured ||
+      (validating ? this.validating : this.busy) ||
+      !bytes.length ||
+      bytes.length > 5 * 1024 * 1024
+    )
+      return null;
     if (!['image/jpeg', 'image/png', 'application/pdf'].includes(mediaType)) return null;
-    this.busy = true;
+    if (validating) this.validating = true;
+    else this.busy = true;
     let folder: string | undefined;
     try {
       folder = await mkdtemp(path.join(tmpdir(), 'smartsite-document-'));
@@ -88,7 +97,8 @@ export class LocalDocumentOcr {
       } catch {
         this.logger.error({ event: 'document_ocr_cleanup_failed' });
       } finally {
-        this.busy = false;
+        if (validating) this.validating = false;
+        else this.busy = false;
       }
     }
   }

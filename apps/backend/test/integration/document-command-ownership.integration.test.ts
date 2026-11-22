@@ -171,3 +171,192 @@ test('document review rechecks original Officer session and keeps document, noti
     await owned.dispose();
   }
 });
+
+test('document bundle rechecks the original Representative session and scope after file preparation', async () => {
+  const owned = createIsolatedTestDatabase(),
+    db = owned.dataSource;
+  try {
+    await owned.initialize();
+    const site = randomUUID(),
+      contractor = randomUUID(),
+      actor = randomUUID(),
+      worker = randomUUID();
+    const password = 'SyntheticInitial123!';
+    await db.query("INSERT INTO site(id,code,name) VALUES($1,$1::uuid::text,'Synthetic Site')", [
+      site,
+    ]);
+    await db.query(
+      "INSERT INTO contractor(id,code,name) VALUES($1,$1::uuid::text,'Synthetic Contractor')",
+      [contractor],
+    );
+    await db.query(
+      "INSERT INTO app_user(id,username,display_name,password_hash) VALUES($1,$1::uuid::text,'Synthetic Representative',$2)",
+      [actor, await hashPassword(password)],
+    );
+    const role = randomUUID(),
+      grant = randomUUID();
+    await db.query(
+      "INSERT INTO user_role_assignment(id,user_id,site_id,role) VALUES($1,$2,$3,'CONTRACTOR_REPRESENTATIVE')",
+      [role, actor, site],
+    );
+    await db.query(
+      'INSERT INTO contractor_representative_grant(id,user_id,contractor_id) VALUES($1,$2,$3)',
+      [grant, actor, contractor],
+    );
+    await db.query(
+      "INSERT INTO contractor_site_participation(id,contractor_id,site_id,valid_from,is_active) VALUES($1,$2,$3,'2020-01-01',true)",
+      [randomUUID(), contractor, site],
+    );
+    await db.query(
+      "INSERT INTO worker(id,site_id,contractor_id,external_id,display_name) VALUES($1,$2,$3,$1::uuid::text,'Synthetic Worker')",
+      [worker, site, contractor],
+    );
+    const config = createTestConfig();
+    const auth = new AuthService(db, new AuthTokenService(new JwtService(), config)),
+      guard = new UserAuthGuard(auth);
+    const login = async () => {
+      const signedIn = await auth.login(actor, password, AuthClientType.WEB);
+      const request: AuthenticatedRequest = {
+        headers: { authorization: 'Bearer ' + signedIn.accessToken },
+      };
+      await guard.authenticateRequest(request);
+      return {
+        request,
+        actor: request.user!,
+        context: configurationCommandContext(request, guard),
+      };
+    };
+    let interrupt: () => Promise<void> = async () => {};
+    const stored = new Set<string>();
+    let prepared = 0;
+    const storage = {
+      save: async (buffer: Buffer, mediaType: string) => {
+        const storageKey = randomUUID();
+        stored.add(storageKey);
+        return {
+          storageProvider: 'LOCAL',
+          storageKey,
+          sha256: 'a'.repeat(64),
+          size: buffer.length,
+          mediaType,
+        };
+      },
+      remove: async (file: { storageKey: string }) => {
+        stored.delete(file.storageKey);
+      },
+    };
+    const ocr = {
+      inspect: async () => {
+        prepared++;
+        await interrupt();
+        return {
+          quality: { status: 'UNAVAILABLE', reason: 'OCR_ENGINE_UNAVAILABLE' },
+          ocr: { status: 'UNAVAILABLE', issuedOn: null, expiresOn: null, warnings: [] },
+        };
+      },
+    };
+    const service = new WorkerDocumentsService(
+      db,
+      new ContractorOperationsService(db),
+      storage as never,
+      ocr as never,
+      new DocumentNotificationsService(db, config),
+      {} as never,
+    );
+    const buffer = Buffer.from([255, 216, 255, 1, 255, 217]);
+    const file = { buffer, size: buffer.length, mimetype: 'image/jpeg' };
+    const files = { HEALTH_CERTIFICATE: file, PERSONAL_INSURANCE: file };
+    const command = {
+      expectedVersion: 0,
+      safetyCardRequired: false,
+      documents: {
+        HEALTH_CERTIFICATE: { submittedIssuedOn: '2026-11-01' },
+        PERSONAL_INSURANCE: { submittedExpiresOn: '2099-11-01' },
+      },
+    };
+    for (const change of ['logout', 'role', 'grant'] as const) {
+      const current = await login();
+      let changed = false;
+      interrupt = async () => {
+        if (changed) return;
+        changed = true;
+        if (change === 'logout')
+          await db.query('UPDATE auth_session SET revoked_at=clock_timestamp() WHERE id=$1', [
+            current.request.sessionId,
+          ]);
+        if (change === 'role')
+          await db.query("UPDATE user_role_assignment SET role='WORKER' WHERE id=$1", [role]);
+        if (change === 'grant')
+          await db.query('DELETE FROM contractor_representative_grant WHERE id=$1', [grant]);
+      };
+      await assert.rejects(
+        service.submit(
+          current.actor,
+          site,
+          worker,
+          { ...command, requestId: randomUUID() },
+          files,
+          current.context,
+        ),
+        (e) => (e as { getStatus(): number }).getStatus() === (change === 'logout' ? 401 : 403),
+      );
+      assert.equal(stored.size, 0);
+      assert.equal(
+        Number(
+          (
+            await db.query('SELECT count(*) AS n FROM worker_document WHERE worker_id=$1', [worker])
+          )[0].n,
+        ),
+        0,
+      );
+      assert.equal(
+        Number(
+          (
+            await db.query(
+              'SELECT count(*) AS n FROM worker_compliance_profile WHERE worker_id=$1',
+              [worker],
+            )
+          )[0].n,
+        ),
+        0,
+      );
+      if (change === 'role')
+        await db.query(
+          "UPDATE user_role_assignment SET role='CONTRACTOR_REPRESENTATIVE' WHERE id=$1",
+          [role],
+        );
+      if (change === 'grant')
+        await db.query(
+          'INSERT INTO contractor_representative_grant(id,user_id,contractor_id) VALUES($1,$2,$3)',
+          [grant, actor, contractor],
+        );
+    }
+    interrupt = async () => {};
+    const current = await login();
+    const input = { ...command, requestId: randomUUID() };
+    const receipt = await service.submit(
+      current.actor,
+      site,
+      worker,
+      input,
+      files,
+      current.context,
+    );
+    assert.equal(receipt.documentIds.length, 2);
+    assert.equal(stored.size, 2);
+    const count = prepared;
+    assert.deepEqual(
+      await service.submit(current.actor, site, worker, input, files, current.context),
+      receipt,
+    );
+    assert.equal(prepared, count);
+    await db.query("UPDATE user_role_assignment SET role='WORKER' WHERE id=$1", [role]);
+    await assert.rejects(
+      service.submit(current.actor, site, worker, input, files, current.context),
+      (e) => (e as { getStatus(): number }).getStatus() === 403,
+    );
+    assert.equal(prepared, count);
+  } finally {
+    await owned.dispose();
+  }
+});

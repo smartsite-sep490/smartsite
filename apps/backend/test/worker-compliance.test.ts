@@ -25,21 +25,13 @@ import {
 } from '../src/modules/workforce/documents/document-ocr.service.js';
 import { createTestConfig } from './support/config.js';
 import { command } from '../src/common/configuration/commands.js';
-import {
-  UploadWorkerDocumentDto,
-  UpdateWorkerDocumentExpiryDto,
-} from '../src/modules/workforce/documents/worker-documents.commands.js';
+import { UploadWorkerDocumentDto } from '../src/modules/workforce/documents/worker-documents.commands.js';
 import { LocalDocumentOcr } from '../src/modules/workforce/documents/local-document-ocr.js';
 const kinds = ['SAFETY_CARD', 'HEALTH_CERTIFICATE', 'PERSONAL_INSURANCE'] as const;
-test('manual expiry DTOs accept only date suggestions and require a version for corrections', () => {
+test('preflight DTO accepts only declared date suggestions', () => {
   assert.equal(
     command(UploadWorkerDocumentDto, { submittedExpiresOn: '2027-10-18' }).submittedExpiresOn,
     '2027-10-18',
-  );
-  assert.equal(
-    command(UpdateWorkerDocumentExpiryDto, { expectedVersion: 2, submittedExpiresOn: null })
-      .submittedExpiresOn,
-    null,
   );
   for (const input of [
     { submittedExpiresOn: '18/10/2027' },
@@ -47,12 +39,6 @@ test('manual expiry DTOs accept only date suggestions and require a version for 
     { submittedExpiresOn: '2027-10-18', approve: true },
   ])
     assert.throws(() => command(UploadWorkerDocumentDto, input));
-  for (const input of [
-    { submittedExpiresOn: '2027-10-18' },
-    { expectedVersion: 1 },
-    { expectedVersion: 1, submittedExpiresOn: null, expiresOn: '2028-01-01' },
-  ])
-    assert.throws(() => command(UpdateWorkerDocumentExpiryDto, input));
 });
 test('citizen ID comparison is advisory and keeps unreadable or missing references distinct', () => {
   const ocr = {
@@ -230,7 +216,7 @@ test('future issues and malformed dates cannot establish validity; uploads requi
   );
 });
 
-test('document adapters reject inconsistent quality, malformed IDs, invalid dates and unavailable engines', async () => {
+test('document adapters reject malformed IDs, invalid dates and unavailable engines', async () => {
   const local = new LocalDocumentOcr(createTestConfig());
   const adapter = new DocumentOcrService(local);
   const bytes = Buffer.from('synthetic');
@@ -254,11 +240,6 @@ test('document adapters reject inconsistent quality, malformed IDs, invalid date
     warnings: [],
   });
   assert.equal((await adapter.read(bytes, 'image/jpeg')).status, 'UNAVAILABLE');
-  local.run = async () => ({ status: 'ACCEPTED', reason: 'IMAGE_BLURRY' });
-  assert.equal((await adapter.quality(bytes, 'image/jpeg')).status, 'UNAVAILABLE');
-  local.run = async () => ({ status: 'ACCEPTED', reason: 'IMAGE_ACCEPTED' });
-  assert.equal((await adapter.quality(bytes, 'image/jpeg')).status, 'ACCEPTED');
   local.run = async () => null;
   assert.equal((await adapter.read(bytes, 'image/jpeg')).status, 'UNAVAILABLE');
-  assert.equal((await adapter.quality(bytes, 'image/jpeg')).status, 'UNAVAILABLE');
 });

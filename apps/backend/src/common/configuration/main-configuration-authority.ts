@@ -43,6 +43,7 @@ type Operation =
   | 'WORKER_ACCOUNT_PREPARE'
   | 'WORKER_ACCOUNT_LINK'
   | 'WORKER_PROFILE_UPDATE'
+  | 'WORKER_DOCUMENT_SUBMIT'
   | 'WORKER_DOCUMENT_REVIEW'
   | 'WORKER_GATE_PERMISSIONS_SET'
   | 'CONTRACTOR_WORKER_CREATE'
@@ -223,6 +224,7 @@ export async function executeMainConfigurationCommand<T>(
                                       ? ['worker_site_zone_assignment', 'site']
                                       : operation === 'SITE_CREATE' ||
                                           operation === 'WORKER_DOCUMENT_REVIEW' ||
+                                          operation === 'WORKER_DOCUMENT_SUBMIT' ||
                                           operation === 'WORKER_GATE_PERMISSIONS_SET'
                                         ? ['site']
                                         : operation === 'ZONE_CREATE' ||
@@ -278,6 +280,7 @@ export async function executeMainConfigurationCommand<T>(
   const refreshAfterLock =
     revokesAccountSessions ||
     operation === 'WORKER_ACCOUNT_PREPARE' ||
+    operation === 'WORKER_DOCUMENT_SUBMIT' ||
     operation.startsWith('TEAM_') ||
     operation === 'CONTRACTOR_ZONE_GRANT' ||
     operation === 'CONTRACTOR_ZONE_REVOKE' ||

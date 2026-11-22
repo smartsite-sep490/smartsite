@@ -245,3 +245,9 @@ export type {
   SourceHost,
   SourceTestResult,
 } from './camera-source';
+
+export type {
+  SubmitWorkerDocumentsCommand,
+  WorkerDocumentSubmissionResponse,
+  WorkerDocumentAiSummary,
+} from '@smartsite/contracts';
