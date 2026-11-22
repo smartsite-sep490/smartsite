@@ -17,6 +17,7 @@ import {
   attendanceHours,
   attendanceLabel,
   attendanceTime,
+  formatWorkDate,
 } from './attendance-display';
 
 export function WorkerAttendanceSummary({
@@ -239,13 +240,15 @@ export function WorkerAttendanceSummary({
               <h3 className="font-bold text-[#071A2B] group-hover:text-[#F66B17] transition-colors text-sm">
                 {selectedDayId
                   ? tr('worker_attendance_summary.attendance_intervals_value', {
-                      value1: detail.data?.day.workDate ?? tr('common.selected_day'),
+                      value1: detail.data?.day.workDate
+                        ? formatWorkDate(detail.data.day.workDate)
+                        : tr('common.selected_day'),
                     })
                   : tr('common.today_s_attendance_intervals')}
               </h3>
               <p className="text-xs text-slate-400 font-medium mt-0.5">
                 {detail.data?.day.timezone ?? timezone} ·{' '}
-                {selectedDayId ? tr('common.selected_workday') : today}
+                {selectedDayId ? tr('common.selected_workday') : formatWorkDate(today)}
               </p>
             </div>
           </div>

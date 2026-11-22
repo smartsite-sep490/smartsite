@@ -1,3 +1,4 @@
+import { SmartNativeSelect } from '../ui/SmartNativeSelect';
 import { userErrorMessage } from '../../i18n/messages';
 import { translate as tr } from '../../i18n';
 import { useTranslation } from 'react-i18next';
@@ -87,7 +88,7 @@ export function ManagerDashboardView({
           <div className="flex flex-wrap items-center gap-3">
             <label className="flex min-w-0 max-w-full flex-wrap items-center gap-2 text-sm font-bold text-[#041D2E]">
               {tr('common.managed_site')}
-              <select
+              <SmartNativeSelect
                 value={siteId}
                 onChange={(e) => {
                   setSelection({ siteId: e.target.value, offset: 0 });
@@ -100,7 +101,7 @@ export function ManagerDashboardView({
                     {site.name}
                   </option>
                 ))}
-              </select>
+              </SmartNativeSelect>
             </label>
             <button
               type="button"

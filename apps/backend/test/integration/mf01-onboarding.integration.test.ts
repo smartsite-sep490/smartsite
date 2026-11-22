@@ -979,7 +979,7 @@ test('MF01: contractor onboarding, assignment requests, consent and current entr
         return evaluateWorkerAccess(manager, current, scope, gate, 'IN');
       });
     await t.test(
-      'pending assignment cannot grant entry even after successful face enrollment',
+      'face enrollment alone does not replace document and schedule requirements',
       async () => {
         assert.equal((await evaluate()).decision.authorization, 'DENIED');
       },
@@ -988,12 +988,12 @@ test('MF01: contractor onboarding, assignment requests, consent and current entr
       .getRepository(WorkerSiteZoneAssignmentEntity)
       .update(assignment.id, { status: WorkerSiteZoneAssignmentStatus.APPROVED });
     await approvedWorkerDocuments(dataSource, [worker.id], representativeId);
-    await t.test('approved assignment still requires a current Worker schedule', async () => {
+    await t.test('Site membership still requires a current Worker schedule', async () => {
       assert.equal((await evaluate()).decision.reasonCode, 'NO_SCHEDULE');
     });
     await assignTestShift(dataSource, siteId, worker.id);
     await t.test(
-      'current approved assignment permits every gate without gate grants; other Sites remain denied',
+      'current Site membership and schedule permit every gate; other Sites remain denied',
       async () => {
         assert.equal((await evaluate()).decision.authorization, 'ALLOWED');
         assert.equal((await evaluate('gate2')).decision.authorization, 'ALLOWED');
@@ -1058,22 +1058,25 @@ test('MF01: contractor onboarding, assignment requests, consent and current entr
         }
       },
     );
-    await t.test('expired and revoked assignments deny entry', async () => {
-      await dataSource
-        .getRepository(WorkerSiteZoneAssignmentEntity)
-        .update(assignment.id, { validUntil: new Date(Date.now() - 60_000) });
-      try {
-        assert.equal((await evaluate()).decision.authorization, 'DENIED');
-      } finally {
+    await t.test(
+      'legacy assignment expiry or revocation does not override current Site membership and schedule',
+      async () => {
         await dataSource
           .getRepository(WorkerSiteZoneAssignmentEntity)
-          .update(assignment.id, { validUntil: until });
-      }
-      await dataSource
-        .getRepository(WorkerSiteZoneAssignmentEntity)
-        .update(assignment.id, { status: WorkerSiteZoneAssignmentStatus.REVOKED });
-      assert.equal((await evaluate()).decision.authorization, 'DENIED');
-    });
+          .update(assignment.id, { validUntil: new Date(Date.now() - 60_000) });
+        try {
+          assert.equal((await evaluate()).decision.authorization, 'ALLOWED');
+        } finally {
+          await dataSource
+            .getRepository(WorkerSiteZoneAssignmentEntity)
+            .update(assignment.id, { validUntil: until });
+        }
+        await dataSource
+          .getRepository(WorkerSiteZoneAssignmentEntity)
+          .update(assignment.id, { status: WorkerSiteZoneAssignmentStatus.REVOKED });
+        assert.equal((await evaluate()).decision.authorization, 'ALLOWED');
+      },
+    );
 
     await t.test('Contractor Representative manages only its own worker profiles', async (mt) => {
       const managed = await operations.createWorker(representative, contractorId, {

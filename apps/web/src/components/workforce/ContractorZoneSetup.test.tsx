@@ -80,9 +80,9 @@ it('retains the request ID when a failed permission assignment is retried', asyn
   const user = mount();
   await screen.findByLabelText('Contractor');
   await user.click(screen.getByLabelText('Contractor'));
-  await user.click(within(screen.getByRole('dialog')).getByRole('button', { name: 'Contractor' }));
+  await user.click(within(screen.getByRole('dialog')).getByRole('option', { name: 'Contractor' }));
   await user.click(screen.getByLabelText('Zone'));
-  await user.click(within(screen.getByRole('dialog')).getByRole('button', { name: 'Work area' }));
+  await user.click(within(screen.getByRole('dialog')).getByRole('option', { name: 'Work area' }));
   await user.click(screen.getByRole('button', { name: 'Assign Contractor Zone' }));
   await screen.findByText('Something went wrong. Please try again.');
   await user.click(screen.getByRole('button', { name: 'Assign Contractor Zone' }));
@@ -101,9 +101,9 @@ it('only accepts calendar dates, includes the entire selected end day and permit
   expect(screen.getByLabelText('Start date').textContent).toMatch(/\d{2}\/\d{2}\/\d{4}/);
   expect(screen.getByLabelText('End date').textContent).toMatch(/\d{2}\/\d{2}\/\d{4}/);
   await user.click(screen.getByLabelText('Contractor'));
-  await user.click(within(screen.getByRole('dialog')).getByRole('button', { name: 'Contractor' }));
+  await user.click(within(screen.getByRole('dialog')).getByRole('option', { name: 'Contractor' }));
   await user.click(screen.getByLabelText('Zone'));
-  await user.click(within(screen.getByRole('dialog')).getByRole('button', { name: 'Work area' }));
+  await user.click(within(screen.getByRole('dialog')).getByRole('option', { name: 'Work area' }));
   const today = new Date();
   const iso = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`;
   await user.click(screen.getByRole('button', { name: 'Assign Contractor Zone' }));

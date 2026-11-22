@@ -1,3 +1,4 @@
+import { SecurityBrowserWebcam1795564800000 } from './migrations/1795564800000-SecurityBrowserWebcam.js';
 import { GateRegistry1795046400001 } from './migrations/1795046400001-GateRegistry.js';
 import { AutomaticScheduleVersion1795132800000 } from './migrations/1795132800000-AutomaticScheduleVersion.js';
 import { WorkerDocumentAiAnalysis1795132800001 } from './migrations/1795132800001-WorkerDocumentAiAnalysis.js';
@@ -100,6 +101,7 @@ export function buildTypeOrmOptions(config: DatabaseConnectionConfig): DataSourc
     connectTimeoutMS: timeoutMs,
     entities: [...ENTITIES],
     migrations: [
+      SecurityBrowserWebcam1795564800000,
       GateRegistry1795046400001,
       WorkerDocumentAiAnalysis1795132800001,
       AutomaticScheduleVersion1795132800000,

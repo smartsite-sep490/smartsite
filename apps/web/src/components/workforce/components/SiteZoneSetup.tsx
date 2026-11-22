@@ -1,3 +1,4 @@
+import { SmartNativeSelect } from '../../ui/SmartNativeSelect';
 import { useManagementClient } from '../../../features/auth/auth-session';
 import { userErrorMessage } from '../../../i18n/messages';
 import { translate as tr } from '../../../i18n';
@@ -255,7 +256,7 @@ export function SiteZoneSetup({
 
             <label className="grid gap-1.5 text-xs font-semibold text-slate-700">
               {tr('common.zone_type')}
-              <select
+              <SmartNativeSelect
                 className="w-full rounded-xl border border-slate-200 bg-slate-50/60 px-3.5 py-2.5 text-sm text-slate-900 focus:border-[#F66B17] focus:bg-white focus:outline-none focus:ring-2 focus:ring-orange-500/10 transition-colors cursor-pointer disabled:opacity-60 disabled:cursor-not-allowed"
                 disabled={isPolicyDisabled}
                 value={type}
@@ -264,12 +265,12 @@ export function SiteZoneSetup({
                 <option value="STANDARD">{tr('common.standard')}</option>
                 <option value="RESTRICTED">{tr('common.restricted')}</option>
                 <option value="HAZARDOUS">{tr('common.hazardous')}</option>
-              </select>
+              </SmartNativeSelect>
             </label>
 
             <label className="grid gap-1.5 text-xs font-semibold text-slate-700">
               {tr('common.access_policy')}
-              <select
+              <SmartNativeSelect
                 className="w-full rounded-xl border border-slate-200 bg-slate-50/60 px-3.5 py-2.5 text-sm text-slate-900 focus:border-[#F66B17] focus:bg-white focus:outline-none focus:ring-2 focus:ring-orange-500/10 transition-colors cursor-pointer disabled:opacity-60 disabled:cursor-not-allowed"
                 disabled={isPolicyDisabled}
                 value={policy}
@@ -280,7 +281,7 @@ export function SiteZoneSetup({
                   {tr('common.authorization_required')}
                 </option>
                 <option value="PROHIBITED_FOR_ALL">{tr('common.prohibited_for_all')}</option>
-              </select>
+              </SmartNativeSelect>
             </label>
           </div>
 

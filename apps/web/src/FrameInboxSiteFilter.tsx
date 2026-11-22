@@ -1,3 +1,4 @@
+import { SmartNativeSelect } from './components/ui/SmartNativeSelect';
 import { useInfiniteQuery, useQuery } from '@tanstack/react-query';
 import { useSearchParams } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
@@ -124,7 +125,7 @@ export function FrameInboxSiteFilter({
         <div className="grid w-full gap-3 sm:grid-cols-2 lg:max-w-2xl">
           <label className="block w-full space-y-1.5 text-sm font-semibold text-slate-900">
             {t('episodes.site')}
-            <select
+            <SmartNativeSelect
               value={siteId ?? ''}
               disabled={revoked}
               className={`block w-full rounded-xl border px-3 py-2.5 text-sm transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-teal-800 focus-visible:ring-2 focus-visible:ring-teal-700/30 disabled:cursor-not-allowed disabled:bg-slate-100 disabled:text-slate-500 ${
@@ -140,11 +141,11 @@ export function FrameInboxSiteFilter({
                   {names.get(id) ?? t('episodes.siteNamePending')}
                 </option>
               ))}
-            </select>
+            </SmartNativeSelect>
           </label>
           <label className="block w-full space-y-1.5 text-sm font-semibold text-slate-900">
             {t('episodes.camera')}
-            <select
+            <SmartNativeSelect
               value={cameraId ?? ''}
               disabled={revoked || (cameraOptions.length === 0 && !cameraId)}
               className={`block w-full rounded-xl border px-3 py-2.5 text-sm transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-teal-800 focus-visible:ring-2 focus-visible:ring-teal-700/30 disabled:cursor-not-allowed disabled:bg-slate-100 disabled:text-slate-500 ${
@@ -160,7 +161,7 @@ export function FrameInboxSiteFilter({
                   {name}
                 </option>
               ))}
-            </select>
+            </SmartNativeSelect>
           </label>
         </div>
         {!revoked && (

@@ -1,3 +1,4 @@
+import { SmartNativeSelect } from '../ui/SmartNativeSelect';
 import { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { useSearchParams } from 'react-router-dom';
@@ -54,7 +55,7 @@ export function AssignedWorkView({
       <h1 className="text-xl font-bold">{t('shell.assignedWork')}</h1>
       <label className="block min-w-0 text-sm">
         {t('common.site')}{' '}
-        <select
+        <SmartNativeSelect
           className="mt-1 block w-full min-w-0 max-w-full rounded-lg border border-slate-200 bg-white p-2"
           value={siteId}
           onChange={(e) => {
@@ -67,7 +68,7 @@ export function AssignedWorkView({
               {s.name}
             </option>
           ))}
-        </select>
+        </SmartNativeSelect>
       </label>
       <nav className="flex flex-wrap gap-4">
         <button aria-pressed={!checklist} onClick={() => navigate('incidents')}>

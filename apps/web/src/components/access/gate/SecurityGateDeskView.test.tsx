@@ -59,29 +59,9 @@ function renderSourceDesk() {
   );
 }
 
-it('blocks FACE without a registered source and retains the QR fallback', async () => {
+it('automatically scans the local webcam without registered Gate cameras', async () => {
   cameraMock.active = true;
-  vi.spyOn(SmartSiteManagementClient.prototype, 'listGateSources').mockResolvedValue({ items: [] });
-  const verify = vi.spyOn(SmartSiteManagementClient.prototype, 'verifyFaceGate');
-  renderSourceDesk();
-  expect(await screen.findByText(/No active camera is registered/)).toBeTruthy();
-  expect(screen.getByRole('button', { name: 'Use QR' })).toBeTruthy();
-  await new Promise((resolve) => setTimeout(resolve, 1200));
-  expect(verify).not.toHaveBeenCalled();
-});
-
-it('requires a choice among several registered sources and sends the selected UUID', async () => {
-  cameraMock.active = true;
-  const gateId = 'a1000000-0000-4000-8000-000000000001';
-  vi.spyOn(SmartSiteManagementClient.prototype, 'listGateSources').mockResolvedValue({
-    items: ['source-one', 'source-two'].map((id) => ({
-      id,
-      siteId: 'site-1',
-      gateId,
-      code: id,
-      name: id,
-    })),
-  });
+  const sources = vi.spyOn(SmartSiteManagementClient.prototype, 'listGateSources');
   vi.spyOn(SmartSiteManagementClient.prototype, 'observeGateFace').mockResolvedValue({
     state: 'NEW_FACE',
     reasonCode: 'FACE_PRESENCE_NEW',
@@ -90,27 +70,13 @@ it('requires a choice among several registered sources and sends the selected UU
     .spyOn(SmartSiteManagementClient.prototype, 'verifyFaceGate')
     .mockRejectedValue(new Error('Synthetic unavailable'));
   renderSourceDesk();
-  const select = (await screen.findByLabelText('Registered Gate camera')) as HTMLSelectElement;
-  await screen.findByRole('option', { name: /source-two/ });
-  expect(select.value).toBe('');
-  expect(verify).not.toHaveBeenCalled();
-  fireEvent.change(select, { target: { value: 'source-two' } });
   await waitFor(() => expect(verify).toHaveBeenCalled(), { timeout: 5000 });
-  expect(verify.mock.calls[0]?.[5]).toBe('source-two');
+  expect(screen.queryByLabelText('Registered Gate camera')).toBeNull();
+  expect(sources).not.toHaveBeenCalled();
+  expect(verify.mock.calls[0]?.[5]).toBeUndefined();
 });
-
-it('ignores pending presence after changing the registered Camera', async () => {
+it('ignores pending webcam presence after changing the Gate', async () => {
   cameraMock.active = true;
-  const gateId = 'a1000000-0000-4000-8000-000000000001';
-  vi.spyOn(SmartSiteManagementClient.prototype, 'listGateSources').mockResolvedValue({
-    items: ['source-one', 'source-two'].map((id) => ({
-      id,
-      siteId: 'site-1',
-      gateId,
-      code: id,
-      name: id,
-    })),
-  });
   const pending = deferred<Awaited<ReturnType<SmartSiteManagementClient['observeGateFace']>>>();
   const presence = vi
     .spyOn(SmartSiteManagementClient.prototype, 'observeGateFace')
@@ -118,19 +84,10 @@ it('ignores pending presence after changing the registered Camera', async () => 
     .mockResolvedValue({ state: 'SAME_FACE', reasonCode: 'FACE_PRESENCE_SAME' });
   const verify = vi.spyOn(SmartSiteManagementClient.prototype, 'verifyFaceGate');
   renderSourceDesk();
-  await screen.findByRole('option', { name: /source-one/ });
-  fireEvent.change(screen.getByLabelText('Registered Gate camera'), {
-    target: { value: 'source-one' },
-  });
   await waitFor(() => expect(presence).toHaveBeenCalled(), { timeout: 5000 });
-  fireEvent.change(screen.getByLabelText('Registered Gate camera'), {
-    target: { value: 'source-two' },
-  });
+  changeGateContext('gate');
   await act(async () => pending.resolve({ state: 'NEW_FACE', reasonCode: 'FACE_PRESENCE_NEW' }));
   expect(verify).not.toHaveBeenCalled();
-  expect((screen.getByLabelText('Registered Gate camera') as HTMLSelectElement).value).toBe(
-    'source-two',
-  );
 });
 
 function deferred<T>() {
@@ -508,7 +465,8 @@ it.each(automaticFaceOutcomes)(
         externalId: 'W1',
         displayName: 'Synthetic worker',
         contractorName: 'Synthetic contractor',
-        assignmentStatus: 'APPROVED',
+        assignmentStatus: 'MISSING',
+        ...{ scheduleStatus: outcome === 'no-schedule' ? 'NO_SCHEDULE' : 'SCHEDULED' },
       },
       decision: {
         technicalOutcome: 'MATCHED',
@@ -608,6 +566,8 @@ it.each(automaticFaceOutcomes)(
     }
     await waitFor(() => expect(confirm).toHaveBeenCalledTimes(1), { timeout: 3000 });
     if (outcome === 'schedule-removed') {
+      expect(await screen.findByText('No schedule')).toBeTruthy();
+      expect(screen.queryByText('Scheduled')).toBeNull();
       expect(
         (await screen.findAllByText('You have not been assigned a work shift for today.')).length,
       ).toBeGreaterThan(0);
@@ -627,6 +587,9 @@ it.each(automaticFaceOutcomes)(
       return;
     }
     if (outcome === 'recorded') {
+      expect(await screen.findByText('Scheduled')).toBeTruthy();
+      expect(screen.queryByText(/^Site Assignment/)).toBeNull();
+      expect(screen.queryByText('Missing')).toBeNull();
       await waitFor(() =>
         expect(screen.queryByRole('button', { name: 'Confirm actual passage' })).toBeNull(),
       );

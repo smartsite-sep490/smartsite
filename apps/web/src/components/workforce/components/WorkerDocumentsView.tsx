@@ -1,3 +1,4 @@
+import { SmartNativeSelect } from '../../ui/SmartNativeSelect';
 import { useState } from 'react';
 import { useLocation } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
@@ -8,7 +9,7 @@ import { userErrorMessage } from '../../../i18n/messages';
 import { WorkerDocumentsPanel } from './WorkerDocumentsPanel';
 import { WorkerDocumentReviewView } from '../../safety/WorkerDocumentReviewView';
 import { loadAllPages } from '../load-all-pages';
-import { IconBuilding2, IconLoader, IconAlertTriangle } from '../../icons';
+import { IconBuilding2, IconLoader, IconAlertTriangle, IconShield } from '../../icons';
 
 export function WorkerDocumentsView({ apiUrl }: { apiUrl: string }) {
   useTranslation();
@@ -74,42 +75,49 @@ export function WorkerDocumentsView({ apiUrl }: { apiUrl: string }) {
   }
 
   return (
-    <div className="mx-auto max-w-6xl space-y-7 pb-12">
-      {/* Hero Header */}
-      <header className="rounded-2xl border border-slate-200/90 bg-white p-5 sm:p-6 shadow-xs relative overflow-hidden">
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-6 relative z-10">
-          <div>
-            <h1 className="text-2xl sm:text-3xl font-black text-[#041D2E] tracking-tight">
-              {tr('documents.title')}
-            </h1>
+    <div className="mx-auto max-w-6xl space-y-6 pb-12">
+      {/* Executive Context Bar: Balanced Left Breadcrumb & Right Site Selector */}
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-2 border-b border-slate-200/80">
+        <div className="flex items-center gap-2.5 min-w-0">
+          <div className="w-8 h-8 rounded-xl bg-gradient-to-br from-[#041D2E] to-slate-800 text-white flex items-center justify-center shadow-2xs border border-slate-700/50 shrink-0">
+            <IconShield className="w-4 h-4 text-[#F66B17]" />
           </div>
-
-          {/* Site Selector Card */}
-          {allowed.length > 0 && (
-            <div className="shrink-0 w-full sm:w-72 rounded-xl border border-slate-200/90 bg-slate-50/70 p-3.5 space-y-1.5 shadow-2xs">
-              <label
-                htmlFor="worker-documents-site-select"
-                className="flex items-center gap-2 text-xs font-bold uppercase tracking-wider text-slate-500"
-              >
-                <IconBuilding2 className="w-3.5 h-3.5 text-slate-400" />
-                <span>{tr('common.site_fa7955')}</span>
-              </label>
-              <select
-                id="worker-documents-site-select"
-                value={siteId}
-                onChange={(e) => setRequestedSite(e.target.value)}
-                className="w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm font-semibold text-slate-800 shadow-2xs focus:border-[#F66B17] focus:outline-none focus:ring-2 focus:ring-[#F66B17]/15 transition-all"
-              >
-                {allowed.map((s) => (
-                  <option key={s.id} value={s.id}>
-                    {s.name}
-                  </option>
-                ))}
-              </select>
-            </div>
-          )}
+          <div className="flex flex-wrap items-center gap-2 text-xs min-w-0">
+            <span className="font-mono text-[11px] font-bold uppercase tracking-[0.16em] text-[#F66B17] shrink-0">
+              {tr('common.workforce_operations')}
+            </span>
+            <span className="text-slate-300">/</span>
+            <span className="font-bold text-slate-700 truncate">
+              {tr('documents.complianceDossierTitle')}
+            </span>
+          </div>
         </div>
-      </header>
+
+        {allowed.length > 0 && (
+          <div className="shrink-0 flex items-center gap-2 rounded-xl border border-slate-200/90 bg-white px-3 py-1.5 shadow-2xs self-start sm:self-auto">
+            <IconBuilding2 className="w-4 h-4 text-[#F66B17] shrink-0" />
+            <label
+              htmlFor="worker-documents-site-select"
+              className="text-xs font-bold uppercase tracking-wider text-slate-500 cursor-pointer"
+            >
+              {tr('common.site_fa7955')}
+            </label>
+            <span className="text-slate-300">|</span>
+            <SmartNativeSelect
+              id="worker-documents-site-select"
+              value={siteId}
+              onChange={(e) => setRequestedSite(e.target.value)}
+              className="border-0 bg-transparent py-0.5 pr-6 text-xs font-bold text-slate-800 focus:outline-none cursor-pointer"
+            >
+              {allowed.map((s) => (
+                <option key={s.id} value={s.id}>
+                  {s.name}
+                </option>
+              ))}
+            </SmartNativeSelect>
+          </div>
+        )}
+      </div>
 
       {/* Loading state */}
       {(user.isPending || sites.isPending) && (

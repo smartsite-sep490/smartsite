@@ -1,3 +1,4 @@
+import { SmartNativeSelect } from '../../ui/SmartNativeSelect';
 import { SiteGatesPanel } from './SiteGatesPanel';
 import { useGateCatalog } from '../../access/useGateCatalog';
 import { localizedLabel } from '../../../i18n/labels';
@@ -410,7 +411,7 @@ export function SiteOperationsSetupView({
             {/* Site selector */}
             <label className="flex flex-wrap items-center gap-2 text-xs font-bold text-slate-600">
               <span>{t('siteOps.siteLabel')}</span>
-              <select
+              <SmartNativeSelect
                 className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-1.5 text-xs font-semibold text-slate-800 hover:border-slate-300 focus:outline-none focus:ring-2 focus:ring-[#F66B17]/20 focus:border-[#F66B17] transition-all duration-200 cursor-pointer"
                 value={siteId}
                 onChange={(e) => setSite(e.target.value)}
@@ -420,7 +421,7 @@ export function SiteOperationsSetupView({
                     {s.name}
                   </option>
                 ))}
-              </select>
+              </SmartNativeSelect>
             </label>
           </div>
         </div>
@@ -788,7 +789,7 @@ export function SiteOperationsSetupView({
                       <label className="text-xs font-bold text-slate-700">
                         {t('siteOps.policyLabel')}
                       </label>
-                      <select
+                      <SmartNativeSelect
                         aria-label={t('siteOps.policyLabel')}
                         className={fieldInput}
                         value={policy}
@@ -799,7 +800,7 @@ export function SiteOperationsSetupView({
                         <option value="NONE">{t('siteOps.policyNone')}</option>
                         <option value="AUTHORIZATION_REQUIRED">{t('siteOps.policyAuth')}</option>
                         <option value="PROHIBITED_FOR_ALL">{t('siteOps.policyProhibited')}</option>
-                      </select>
+                      </SmartNativeSelect>
                     </div>
                   </div>
                   <div className="flex justify-end pt-1">
@@ -920,18 +921,18 @@ export function SiteOperationsSetupView({
                   </p>
                   <label>
                     {t('gateSetup.type')}{' '}
-                    <select
+                    <SmartNativeSelect
                       value={cameraType}
                       onChange={(e) => setCameraType(e.target.value as 'ZONE' | 'GATE')}
                     >
                       <option value="ZONE">{t('gateSetup.zone')}</option>
                       <option value="GATE">{t('gateSetup.gate')}</option>
-                    </select>
+                    </SmartNativeSelect>
                   </label>
                   {cameraType === 'GATE' && (
                     <label>
                       {t('gateSetup.title')}
-                      <select
+                      <SmartNativeSelect
                         required
                         value={selectedCameraGate}
                         onChange={(e) => setCameraGate(e.target.value)}
@@ -942,7 +943,7 @@ export function SiteOperationsSetupView({
                             {g.name}
                           </option>
                         ))}
-                      </select>
+                      </SmartNativeSelect>
                     </label>
                   )}
                   <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">

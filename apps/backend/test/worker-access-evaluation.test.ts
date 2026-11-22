@@ -28,6 +28,8 @@ function fixture(
     overtime?: boolean;
     missingShift?: boolean;
     legacyGateId?: string;
+    assignmentStatus?: string | null;
+    participation?: 'missing' | 'inactive' | 'expired' | 'future' | 'foreign';
   } = {},
 ) {
   const builder = {
@@ -50,17 +52,20 @@ function fixture(
         };
       if (entity === WorkerSiteZoneAssignmentEntity)
         return {
-          find: async () => [
-            {
-              id: 'assignment',
-              gateId: options.legacyGateId ?? null,
-              siteId: 'site',
-              siteContractorId: 'participation',
-              status: 'APPROVED',
-              validFrom: new Date('2026-01-01'),
-              validUntil: new Date('2027-01-01'),
-            },
-          ],
+          find: async () =>
+            options.assignmentStatus === null
+              ? []
+              : [
+                  {
+                    id: 'assignment',
+                    gateId: options.legacyGateId ?? null,
+                    siteId: 'site',
+                    siteContractorId: 'participation',
+                    status: options.assignmentStatus ?? 'APPROVED',
+                    validFrom: new Date('2026-01-01'),
+                    validUntil: new Date('2027-01-01'),
+                  },
+                ],
         };
       if (entity === WorkerScheduleEntity)
         return { find: async () => (workDate ? [{ shiftId: 'shift', workDate }] : []) };
@@ -80,15 +85,20 @@ function fixture(
                 },
         };
       if (entity === ContractorEntity) return { findOne: async () => ({ isActive: true }) };
-      if (entity === ContractorSiteParticipationEntity)
-        return {
-          findOne: async () => ({
-            isActive: true,
-            contractorId: 'contractor',
-            validFrom: new Date('2025-01-01'),
-            validUntil: null,
-          }),
+      if (entity === ContractorSiteParticipationEntity) {
+        const participation = {
+          id: 'participation',
+          siteId: options.participation === 'foreign' ? 'other-site' : 'site',
+          isActive: options.participation !== 'inactive',
+          contractorId: 'contractor',
+          validFrom: new Date(options.participation === 'future' ? '2027-01-01' : '2025-01-01'),
+          validUntil: options.participation === 'expired' ? new Date('2026-10-01') : null,
         };
+        return {
+          find: async () => (options.participation === 'missing' ? [] : [participation]),
+          findOne: async () => (options.participation === 'missing' ? null : participation),
+        };
+      }
       return { createQueryBuilder: () => builder };
     },
   } as unknown as EntityManager;
@@ -193,3 +203,33 @@ test('site-wide gate access still denies an inactive worker', async () => {
   );
   assert.deepEqual(result.decision, { authorization: 'DENIED', reasonCode: 'WORKER_INACTIVE' });
 });
+
+for (const status of [null, 'PENDING', 'SAFETY_REVIEWED', 'REJECTED', 'REVOKED', 'EXPIRED']) {
+  test('scheduled Site worker can enter without separate approval: ' + status, async () => {
+    const result = await evaluateWorkerAccess(
+      fixture('2026-10-11', { assignmentStatus: status }),
+      worker,
+      'site',
+      'gate1',
+      'IN',
+      at,
+    );
+    assert.deepEqual(result.decision, { authorization: 'ALLOWED', reasonCode: 'VALID_ASSIGNMENT' });
+  });
+}
+for (const participation of ['missing', 'inactive', 'expired', 'future', 'foreign'] as const) {
+  test('Site membership cannot bypass ' + participation + ' Contractor participation', async () => {
+    const result = await evaluateWorkerAccess(
+      fixture('2026-10-11', { assignmentStatus: null, participation }),
+      worker,
+      'site',
+      'gate1',
+      'IN',
+      at,
+    );
+    assert.deepEqual(result.decision, {
+      authorization: 'DENIED',
+      reasonCode: 'CONTRACTOR_SITE_PARTICIPATION_INVALID',
+    });
+  });
+}

@@ -17,7 +17,6 @@ import {
   ContractorEntity,
   ContractorSiteParticipationEntity,
   WorkerSiteZoneAssignmentEntity,
-  WorkerSiteZoneAssignmentStatus,
   GateAccessLogEntity,
   ContractorRepresentativeGrantEntity,
 } from '../../src/database/entities/index.js';
@@ -41,8 +40,7 @@ test('account linking, encrypted DB enrollment, scoped matching and revocation',
   const workerId = randomUUID();
   const secondWorkerId = randomUUID();
   const contractorId = randomUUID();
-  const participationId = randomUUID(),
-    assignmentId = randomUUID();
+  const participationId = randomUUID();
   const actor = {
     id: actorId,
     mustChangePassword: false,
@@ -264,17 +262,6 @@ test('account linking, encrypted DB enrollment, scoped matching and revocation',
     assert.equal(matched.worker?.userId, accountId);
     assert.notEqual(matched.decision.authorization, 'ALLOWED'); // account is not permission
     assert.equal(matched.log?.workerId, workerId);
-    await dataSource.getRepository(WorkerSiteZoneAssignmentEntity).save({
-      id: assignmentId,
-      workerId,
-      siteId,
-      siteContractorId: participationId,
-      zoneIds: [randomUUID()],
-      status: WorkerSiteZoneAssignmentStatus.APPROVED,
-      validFrom: new Date(Date.now() - 60_000),
-      validUntil: new Date(Date.now() + 3600_000),
-      requestedByUserId: actorId,
-    });
     await approvedWorkerDocuments(dataSource, [workerId], actorId);
     const deniedNoShift = await gate.verify(
       actor,
@@ -289,6 +276,19 @@ test('account linking, encrypted DB enrollment, scoped matching and revocation',
     assert.equal(deniedNoShift.decision.qrFallbackAllowed, false);
     assert.equal(deniedNoShift.attempt?.status, 'DENIED');
     await assignTestShift(dataSource, siteId, workerId);
+    const entry = await gate.verify(
+      actor,
+      siteId,
+      'a1000000-0000-4000-8000-000000000001',
+      frame,
+      'IN',
+    );
+    assert.equal(entry.decision.authorization, 'ALLOWED');
+    assert.equal(entry.worker?.scheduleStatus, 'SCHEDULED');
+    assert.equal(
+      await dataSource.getRepository(WorkerSiteZoneAssignmentEntity).countBy({ workerId }),
+      0,
+    );
     const allowed = await gate.verify(
       actor,
       siteId,

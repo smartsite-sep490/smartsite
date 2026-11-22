@@ -46,8 +46,8 @@ import type { VisitorAttendanceResponse } from '@smartsite/contracts';
   ['id', 'gateId', 'siteId'],
   { name: 'fk_attempt_source_camera', onDelete: 'RESTRICT' },
 )
-@Check('ck_attempt_face_source', "method <> 'FACE' OR source_camera_id IS NOT NULL")
 export class AccessAttemptEntity {
+  // FACE with no registered source is captured by the Security browser webcam.
   @Column({ name: 'source_camera_id', type: 'uuid', nullable: true }) sourceCameraId!:
     string | null;
   @PrimaryColumn({ type: 'uuid', primaryKeyConstraintName: 'pk_access_attempt_id' }) id!: string;

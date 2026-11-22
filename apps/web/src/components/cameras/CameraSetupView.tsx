@@ -1,3 +1,4 @@
+import { SmartNativeSelect } from '../ui/SmartNativeSelect';
 import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Link } from 'react-router-dom';
@@ -191,7 +192,7 @@ function SetupWorkspace({ apiUrl, session }: { apiUrl: string; session: SharedSe
             >
               {t('cameraSetup.site')}
             </label>
-            <select
+            <SmartNativeSelect
               id="camera-setup-site"
               value={site?.id ?? ''}
               disabled={sites.baseError || sites.isPending}
@@ -208,7 +209,7 @@ function SetupWorkspace({ apiUrl, session }: { apiUrl: string; session: SharedSe
                   {row.code} · {row.name}
                 </option>
               ))}
-            </select>
+            </SmartNativeSelect>
           </div>
           {sites.hasNextPage && !sites.baseError && (
             <button

@@ -1,3 +1,4 @@
+import { SmartNativeSelect } from '../../ui/SmartNativeSelect';
 import { useManagementClient } from '../../../features/auth/auth-session';
 import { translate as tr } from '../../../i18n';
 import { useMemo, useRef, useState, type FormEvent } from 'react';
@@ -1318,7 +1319,7 @@ export function VisitorAccessView({
             <div className="lg:col-span-1 space-y-4">
               <label className="block text-xs font-bold text-slate-700">
                 {t('visitor.gate')}
-                <select
+                <SmartNativeSelect
                   className={`${field} mt-1.5`}
                   disabled={verify.isPending || load.isPending}
                   value={gateId}
@@ -1333,7 +1334,7 @@ export function VisitorAccessView({
                       {g.name}
                     </option>
                   ))}
-                </select>
+                </SmartNativeSelect>
               </label>
 
               <div className="rounded-xl border border-slate-200 bg-slate-50/50 p-3">

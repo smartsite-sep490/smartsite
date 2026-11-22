@@ -1,3 +1,4 @@
+import { SmartNativeSelect } from '../ui/SmartNativeSelect';
 import { useManagementClient } from '../../features/auth/auth-session';
 import { SafetyOverviewView } from '../safety/SafetyOverviewView';
 import { SafetyChecklistsView } from '../safety/SafetyChecklistsView';
@@ -667,7 +668,7 @@ export function SafetyAlertsView({
         <div className="flex min-w-0 flex-wrap items-end gap-3 lg:max-w-[55%]">
           <label className="min-w-0 w-full sm:w-72 text-xs font-bold uppercase tracking-wider text-[#6B6B6B]">
             {tr('common.site_fa7955')}
-            <select
+            <SmartNativeSelect
               value={selectedSiteId}
               onChange={(event) => {
                 setRelatedAlertFilter(undefined);
@@ -696,7 +697,7 @@ export function SafetyAlertsView({
                   {site.code} · {site.name}
                 </option>
               ))}
-            </select>
+            </SmartNativeSelect>
           </label>
           <button
             type="button"
@@ -757,7 +758,7 @@ export function SafetyAlertsView({
           <>
             <label className="min-w-0 text-xs font-bold uppercase tracking-wider text-[#6B6B6B]">
               {tr('common.status')}
-              <select
+              <SmartNativeSelect
                 value={status}
                 onChange={(event) => {
                   setStatus(event.target.value as 'ALL' | SafetyAlertStatus);
@@ -773,11 +774,11 @@ export function SafetyAlertsView({
                     {formatLabel(value)}
                   </option>
                 ))}
-              </select>
+              </SmartNativeSelect>
             </label>
             <label className="min-w-0 text-xs font-bold uppercase tracking-wider text-[#6B6B6B] sm:col-span-2 lg:col-span-1">
               {tr('common.alert_type')}
-              <select
+              <SmartNativeSelect
                 value={type}
                 onChange={(event) => {
                   setType(event.target.value as 'ALL' | SafetyAlertType);
@@ -793,7 +794,7 @@ export function SafetyAlertsView({
                     {formatLabel(value)}
                   </option>
                 ))}
-              </select>
+              </SmartNativeSelect>
             </label>
           </>
         )}

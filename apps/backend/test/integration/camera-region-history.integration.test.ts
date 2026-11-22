@@ -119,7 +119,9 @@ test('Region history preserves active state, cutover truth and atomic legacy mut
     await db.destroy();
     db.setOptions({
       migrations: migrations.filter(
-        (m) => typeof m === 'function' && m.name !== 'GateRegistry1795046400001',
+        (m) =>
+          typeof m === 'function' &&
+          !['GateRegistry1795046400001', 'SecurityBrowserWebcam1795564800000'].includes(m.name),
       ),
     });
     await db.initialize();

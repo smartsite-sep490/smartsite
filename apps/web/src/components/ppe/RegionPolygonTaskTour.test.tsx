@@ -180,7 +180,9 @@ describe('RegionPolygonTaskTour (P8-S3 camera-side polygon guided tour)', () => 
     expect(step1.textContent).toContain('Step 1 of 6');
     expect(step1.textContent).toMatch(/Camera & Zone/i);
     expect(
-      document.querySelector('select#select-camera-link')?.getAttribute('data-tour-active-anchor'),
+      document
+        .querySelector('[data-select-for="select-camera-link"]')
+        ?.getAttribute('data-tour-active-anchor'),
     ).toBe('true');
 
     // Step 2: Capturing / confirming current 5-minute reference image

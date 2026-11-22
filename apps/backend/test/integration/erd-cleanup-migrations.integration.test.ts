@@ -29,7 +29,9 @@ async function predecessor(run: (source: DataSource, runner: QueryRunner) => Pro
     // This predecessor rehearsal preserves legacy access data and stops before the clean Gate cutover.
     migrations: Array.isArray(options.migrations)
       ? options.migrations.filter(
-          (m) => typeof m === 'function' && m.name !== 'GateRegistry1795046400001',
+          (m) =>
+            typeof m === 'function' &&
+            !['GateRegistry1795046400001', 'SecurityBrowserWebcam1795564800000'].includes(m.name),
         )
       : options.migrations,
     schema,

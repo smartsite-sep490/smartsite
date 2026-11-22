@@ -194,7 +194,9 @@ test('subject provenance survives upgrade, retry and rollback boundaries in isol
     await removeAccountEmailProjectionForHistoricalFixture(db);
     db.setOptions({
       migrations: registered.filter(
-        (m) => typeof m === 'function' && m.name !== 'GateRegistry1795046400001',
+        (m) =>
+          typeof m === 'function' &&
+          !['GateRegistry1795046400001', 'SecurityBrowserWebcam1795564800000'].includes(m.name),
       ),
     });
     await db.destroy();

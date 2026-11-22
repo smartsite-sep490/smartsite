@@ -28,8 +28,11 @@ import {
   IconShield,
   IconAlertTriangle,
   IconUser,
+  IconBuilding2,
   IconLoader,
   IconChevronDown,
+  IconHardHat,
+  IconCheckCircle2,
 } from '../../icons';
 
 const fieldClass =
@@ -253,80 +256,117 @@ export function WorkerDocumentsPanel(p: Props) {
   const identityUploadedCount = data.identityImages.length;
 
   return (
-    <section className="space-y-4 rounded-2xl border border-slate-200/90 bg-white p-4 sm:p-6 shadow-xs">
+    <section className="space-y-5 rounded-2xl border border-slate-200/90 bg-white p-5 sm:p-6 shadow-xs">
       {!preview && refreshNotice}
-      {/* Compact Worker Profile Summary */}
-      <div className="rounded-2xl border border-slate-200/80 bg-gradient-to-br from-slate-50/90 to-slate-100/40 p-4 sm:p-5 space-y-3">
-        <div className="flex flex-wrap items-center justify-between gap-3">
-          <div className="flex items-center gap-3 min-w-0">
-            <div className="w-10 h-10 rounded-xl bg-[#041D2E] text-white flex items-center justify-center font-black text-base shadow-xs shrink-0">
+      {/* Double-Bezel Worker Profile Card */}
+      <div className="rounded-2xl border border-slate-200/80 bg-gradient-to-br from-slate-50/90 via-white to-slate-50/40 p-4 sm:p-5 space-y-4">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+          <div className="flex items-center gap-3.5 min-w-0">
+            <div className="w-12 h-12 rounded-2xl bg-gradient-to-br from-[#041D2E] via-slate-800 to-slate-900 text-white flex items-center justify-center font-black text-lg shadow-sm ring-2 ring-slate-100 border border-slate-700/50 shrink-0">
               {data.displayName.charAt(0).toUpperCase()}
             </div>
-            <div className="min-w-0">
-              <div className="flex items-center gap-2">
+            <div className="min-w-0 space-y-1">
+              <div className="flex items-center gap-2.5">
                 <h3 className="text-base sm:text-lg font-black text-[#041D2E] tracking-tight truncate">
                   {data.displayName}
                 </h3>
-                <span className="font-mono text-xs font-bold px-2 py-0.5 rounded-md bg-slate-200/80 text-slate-700 shrink-0">
+                <span className="font-mono text-xs font-bold px-2 py-0.5 rounded-md bg-slate-100 text-slate-700 border border-slate-200/80 shrink-0">
                   {data.externalId}
                 </span>
               </div>
-              <p className="font-mono text-xs font-semibold text-slate-500 mt-0.5">
-                {tr('documents.nationalId')}: {data.nationalId ?? '—'} ·{' '}
-                {tr('documents.phoneNumber')}: {data.phoneNumber ?? '—'}
+              <p className="text-xs font-semibold text-slate-500">
+                {tr('common.workforce_operations')} · {tr('documents.personnelRecord')}
               </p>
             </div>
           </div>
 
           <div className="flex items-center gap-2 shrink-0">
             <WorkerDocumentStatusTags profile={data} />
-
-            {/* Quick Expand / Collapse All Toggle */}
-            <button
-              type="button"
-              onClick={toggleAll}
-              className="px-2.5 py-1 rounded-lg border border-slate-200 bg-white hover:bg-slate-50 text-[11px] font-bold text-slate-600 transition-all shadow-2xs cursor-pointer select-none"
-            >
-              {expandedSections.length === allSections.length
-                ? tr('documents.collapseAll')
-                : tr('documents.expandAll')}
-            </button>
           </div>
         </div>
 
         {p.canSubmitDocuments && (
-          <p className="text-xs text-slate-600">{tr('documents.renewalHint')}</p>
-        )}
-        {/* Read-only warning for workers */}
-        {!canUploadCertificates && !p.canReview && data.status !== 'ACTIVE' && (
-          <p
-            role="status"
-            className="text-xs font-semibold text-amber-800 bg-amber-50/80 border border-amber-200 rounded-xl p-2.5 leading-relaxed"
-          >
-            {tr('documents.readOnly')}
-          </p>
+          <div className="flex items-start gap-2.5 rounded-xl border border-blue-200/70 bg-gradient-to-r from-blue-50/70 to-indigo-50/40 p-3 text-xs text-blue-900 shadow-2xs">
+            <IconShield className="w-4 h-4 text-blue-600 mt-0.5 shrink-0" />
+            <p className="leading-relaxed font-medium">{tr('documents.renewalHint')}</p>
+          </div>
         )}
 
-        {/* Additional profile details in compact line */}
-        <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-slate-500 pt-1 border-t border-slate-200/60">
-          <span>
-            {tr('documents.gender')}:{' '}
-            <strong className="text-slate-700">
-              {data.gender ? tr(`documents.${data.gender}`) : '—'}
-            </strong>
-          </span>
-          <span>·</span>
-          <span className="truncate max-w-md">
-            {tr('documents.address')}:{' '}
-            <strong className="text-slate-700">{data.address ?? '—'}</strong>
-          </span>
+        {/* Read-only warning for workers */}
+        {!canUploadCertificates && !p.canReview && data.status !== 'ACTIVE' && (
+          <div
+            role="status"
+            className="flex items-start gap-2.5 text-xs font-semibold text-amber-800 bg-amber-50/80 border border-amber-200 rounded-xl p-3 shadow-2xs leading-relaxed"
+          >
+            <IconAlertTriangle className="w-4 h-4 text-amber-600 mt-0.5 shrink-0" />
+            <span>{tr('documents.readOnly')}</span>
+          </div>
+        )}
+
+        {/* Executive 4-Cell Bento Information Grid */}
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-2.5 pt-3 border-t border-slate-200/60">
+          <div className="flex items-center gap-2.5 px-3 py-2 rounded-xl bg-white/90 border border-slate-200/80 shadow-2xs">
+            <div className="w-8 h-8 rounded-lg bg-sky-50 text-sky-600 border border-sky-100 flex items-center justify-center shrink-0">
+              <IconUser className="w-4 h-4" />
+            </div>
+            <div className="min-w-0">
+              <p className="text-[10px] font-bold uppercase tracking-wider text-slate-400">
+                {tr('documents.nationalId')}
+              </p>
+              <p className="font-mono text-xs font-bold text-slate-800 truncate">
+                {data.nationalId ?? '—'}
+              </p>
+            </div>
+          </div>
+
+          <div className="flex items-center gap-2.5 px-3 py-2 rounded-xl bg-white/90 border border-slate-200/80 shadow-2xs">
+            <div className="w-8 h-8 rounded-lg bg-emerald-50 text-emerald-600 border border-emerald-100 flex items-center justify-center shrink-0">
+              <IconCheck className="w-4 h-4" />
+            </div>
+            <div className="min-w-0">
+              <p className="text-[10px] font-bold uppercase tracking-wider text-slate-400">
+                {tr('documents.phoneNumber')}
+              </p>
+              <p className="font-mono text-xs font-bold text-slate-800 truncate">
+                {data.phoneNumber ?? '—'}
+              </p>
+            </div>
+          </div>
+
+          <div className="flex items-center gap-2.5 px-3 py-2 rounded-xl bg-white/90 border border-slate-200/80 shadow-2xs">
+            <div className="w-8 h-8 rounded-lg bg-amber-50 text-amber-600 border border-amber-100 flex items-center justify-center shrink-0">
+              <IconUser className="w-4 h-4" />
+            </div>
+            <div className="min-w-0">
+              <p className="text-[10px] font-bold uppercase tracking-wider text-slate-400">
+                {tr('documents.gender')}
+              </p>
+              <p className="text-xs font-bold text-slate-800 truncate">
+                {data.gender ? tr(`documents.${data.gender}`) : '—'}
+              </p>
+            </div>
+          </div>
+
+          <div className="flex items-center gap-2.5 px-3 py-2 rounded-xl bg-white/90 border border-slate-200/80 shadow-2xs">
+            <div className="w-8 h-8 rounded-lg bg-orange-50 text-[#F66B17] border border-orange-100 flex items-center justify-center shrink-0">
+              <IconBuilding2 className="w-4 h-4" />
+            </div>
+            <div className="min-w-0">
+              <p className="text-[10px] font-bold uppercase tracking-wider text-slate-400">
+                {tr('documents.address')}
+              </p>
+              <p className="text-xs font-bold text-slate-800 truncate" title={data.address ?? undefined}>
+                {data.address ?? '—'}
+              </p>
+            </div>
+          </div>
         </div>
 
         {/* Expiring alert */}
         {!p.canReview && data.expiringKinds.length > 0 && (
           <div
             role="status"
-            className="flex items-center gap-2 p-2.5 rounded-xl bg-amber-50 border border-amber-200 text-xs font-bold text-amber-800 shadow-2xs"
+            className="flex items-center gap-2 p-3 rounded-xl bg-amber-50/90 border border-amber-200 text-xs font-bold text-amber-800 shadow-2xs"
           >
             <IconClock className="w-4 h-4 text-amber-600 shrink-0" />
             <span>{tr('documents.expiring')}</span>
@@ -343,32 +383,60 @@ export function WorkerDocumentsPanel(p: Props) {
         </div>
       )}
 
+      {/* Document Section Control Header */}
+      <div className="flex items-center justify-between pt-1">
+        <h4 className="text-xs font-bold uppercase tracking-wider text-slate-400 flex items-center gap-2">
+          <span className="w-2 h-2 rounded-full bg-[#F66B17]" />
+          <span>{tr('documents.complianceChecklist')}</span>
+        </h4>
+        <button
+          type="button"
+          onClick={toggleAll}
+          className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl border border-slate-200 bg-white hover:bg-slate-50 text-xs font-bold text-slate-700 transition-all shadow-2xs active:scale-[0.98] cursor-pointer select-none"
+        >
+          <span>
+            {expandedSections.length === allSections.length
+              ? tr('documents.collapseAll')
+              : tr('documents.expandAll')}
+          </span>
+        </button>
+      </div>
+
       {/* Accordion 1: Căn cước công dân (Mặt trước & Mặt sau) */}
       <div className="rounded-2xl border border-slate-200/90 bg-white shadow-2xs overflow-hidden transition-all">
         <button
           type="button"
           onClick={() => toggleSection('IDENTITY')}
-          className="w-full flex items-center justify-between gap-3 p-3.5 sm:p-4 bg-slate-50/70 hover:bg-slate-100/70 text-left cursor-pointer transition-colors select-none"
+          className="w-full flex items-center justify-between gap-3 p-3.5 sm:p-4 bg-slate-50/60 hover:bg-slate-100/60 text-left cursor-pointer transition-colors select-none"
         >
-          <div className="flex items-center gap-2.5 min-w-0 flex-1">
-            <IconUser className="w-4 h-4 text-[#F66B17] shrink-0" />
-            <span className="font-extrabold text-sm text-slate-800 truncate">
-              {tr('documents.identityBothSides')}
-            </span>
+          <div className="flex items-center gap-3.5 min-w-0 flex-1">
+            <div className="w-10 h-10 rounded-xl bg-sky-50 text-sky-600 flex items-center justify-center border border-sky-200/60 shadow-2xs shrink-0">
+              <IconUser className="w-5 h-5" />
+            </div>
+            <div>
+              <span className="font-extrabold text-sm text-[#041D2E] block truncate">
+                {tr('documents.identityBothSides')}
+              </span>
+              <span className="text-xs font-medium text-slate-500 block mt-0.5">
+                {identityUploadedCount === 2
+                  ? (tr('documents.identitySidesComplete'))
+                  : (tr('documents.identitySidesIncomplete'))}
+              </span>
+            </div>
           </div>
 
           <div className="flex items-center gap-1.5 sm:gap-2 shrink-0 flex-wrap justify-end">
             {/* Identity Mismatch Warning Pill */}
             {identityMismatch && (
-              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[11px] font-bold bg-amber-100 text-amber-900 border border-amber-300 shadow-2xs whitespace-nowrap">
-                <IconAlertTriangle className="w-3 h-3 text-amber-700 shrink-0" />
+              <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-bold bg-amber-50 text-amber-900 border border-amber-200/90 shadow-2xs whitespace-nowrap">
+                <IconAlertTriangle className="w-3.5 h-3.5 text-amber-600 shrink-0" />
                 <span>{tr('documents.identityMismatchShort')}</span>
               </span>
             )}
 
             {/* Status Pill */}
             <span
-              className={`inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-md text-xs font-bold border whitespace-nowrap ${
+              className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-bold border whitespace-nowrap ${
                 identityUploadedCount === 2
                   ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
                   : 'bg-slate-100 text-slate-600 border-slate-200'
@@ -758,36 +826,61 @@ export function WorkerDocumentsPanel(p: Props) {
               <button
                 type="button"
                 onClick={() => toggleSection(kind)}
-                className="w-full flex items-center justify-between gap-3 p-3.5 sm:p-4 bg-slate-50/70 hover:bg-slate-100/70 text-left cursor-pointer transition-colors select-none"
+                className="w-full flex items-center justify-between gap-3 p-3.5 sm:p-4 bg-slate-50/60 hover:bg-slate-100/60 text-left cursor-pointer transition-colors select-none"
               >
-                <div className="flex items-center gap-2.5 min-w-0 flex-1">
-                  <IconShield className="w-4 h-4 text-[#F66B17] shrink-0" />
-                  <span className="font-extrabold text-sm text-slate-900 truncate">
-                    {tr(`documents.${kind}`)}
-                  </span>
+                <div className="flex items-center gap-3.5 min-w-0 flex-1">
+                  <div
+                    className={`w-10 h-10 rounded-xl flex items-center justify-center border shadow-2xs shrink-0 ${
+                      kind === 'SAFETY_CARD'
+                        ? 'bg-orange-50 text-[#F66B17] border-orange-200/60'
+                        : kind === 'HEALTH_CERTIFICATE'
+                          ? 'bg-emerald-50 text-emerald-600 border-emerald-200/60'
+                          : 'bg-indigo-50 text-indigo-600 border-indigo-200/60'
+                    }`}
+                  >
+                    {kind === 'SAFETY_CARD' ? (
+                      <IconHardHat className="w-5 h-5" />
+                    ) : kind === 'HEALTH_CERTIFICATE' ? (
+                      <IconCheckCircle2 className="w-5 h-5" />
+                    ) : (
+                      <IconShield className="w-5 h-5" />
+                    )}
+                  </div>
+                  <div>
+                    <span className="font-extrabold text-sm text-[#041D2E] block truncate">
+                      {tr(`documents.${kind}`)}
+                    </span>
+                    <span className="text-xs font-mono font-medium text-slate-500 block mt-0.5">
+                      {currentDoc?.expiresOn
+                        ? `${tr('documents.expiresOn')}: ${currentDoc.expiresOn}`
+                        : currentDoc
+                          ? (tr('documents.submittedPendingApproval'))
+                          : (tr('documents.documentNotSubmitted'))}
+                    </span>
+                  </div>
                 </div>
 
                 {/* Status & Warning Pills on the Outside */}
                 <div className="flex items-center gap-1.5 sm:gap-2 shrink-0 flex-wrap justify-end">
                   {/* Warning Pill for Identity Mismatch */}
                   {hasMismatch && (
-                    <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[11px] font-bold bg-amber-100 text-amber-900 border border-amber-300 shadow-2xs whitespace-nowrap">
-                      <IconAlertTriangle className="w-3 h-3 text-amber-700 shrink-0" />
+                    <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-bold bg-amber-50 text-amber-900 border border-amber-200/90 shadow-2xs whitespace-nowrap">
+                      <IconAlertTriangle className="w-3.5 h-3.5 text-amber-600 shrink-0" />
                       <span>{tr('documents.identityMismatchShort')}</span>
                     </span>
                   )}
 
                   {/* Warning Pill for Expiring */}
                   {isExpiring && (
-                    <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[11px] font-bold bg-amber-50 text-amber-800 border border-amber-200 shadow-2xs whitespace-nowrap">
-                      <IconClock className="w-3 h-3 text-amber-600 shrink-0" />
+                    <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-bold bg-amber-50 text-amber-800 border border-amber-200 shadow-2xs whitespace-nowrap">
+                      <IconClock className="w-3.5 h-3.5 text-amber-600 shrink-0" />
                       <span>{tr('common.expiring_soon')}</span>
                     </span>
                   )}
 
                   {/* Document Approval / Pending / Missing Status Badge */}
                   <span
-                    className={`inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-md text-xs font-bold border whitespace-nowrap ${
+                    className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-bold border whitespace-nowrap ${
                       isApproved
                         ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
                         : isPendingDoc

@@ -6,5 +6,6 @@ export * from './Tabs';
 export * from './Card';
 export * from './Alert';
 export * from './SmartFormControls';
+export * from './SmartNativeSelect';
 export * from './Toast';
 export * from './useToast';

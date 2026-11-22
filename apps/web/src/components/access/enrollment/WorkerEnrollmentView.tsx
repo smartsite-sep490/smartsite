@@ -1,3 +1,4 @@
+import { SmartNativeSelect } from '../../ui/SmartNativeSelect';
 import { useManagementClient } from '../../../features/auth/auth-session';
 import { localizedError, localizeMessage, userErrorMessage } from '../../../i18n/messages';
 import { localizedLabel } from '../../../i18n/labels';
@@ -629,7 +630,7 @@ export function WorkerEnrollmentView({
                 {tr('common.target_account')}
               </label>
               <div className="mt-1.5 flex gap-2">
-                <select
+                <SmartNativeSelect
                   id="face-account"
                   value={accountId}
                   onChange={(event) => {
@@ -666,7 +667,7 @@ export function WorkerEnrollmentView({
                         {user.username} — {user.displayName}
                       </option>
                     ))}
-                </select>
+                </SmartNativeSelect>
                 <button
                   type="button"
                   onClick={() => linkAccount.mutate(accountId)}
@@ -934,7 +935,7 @@ export function WorkerEnrollmentView({
         <section className="rounded-2xl border border-slate-200/90 bg-white p-6 shadow-xs">
           <label className="mb-4 block text-xs font-semibold">
             {tr('worker_enrollment_view.existing_worker_profile_account_optional')}
-            <select
+            <SmartNativeSelect
               className="mt-1 block w-full rounded border p-2"
               value={directWorkerId}
               onChange={(e) => {
@@ -951,7 +952,7 @@ export function WorkerEnrollmentView({
                     {w.displayName} · {w.externalId}
                   </option>
                 ))}
-            </select>
+            </SmartNativeSelect>
           </label>
           {workerChoices.error && <p role="alert">{userErrorMessage(workerChoices.error)}</p>}
           <p className="mb-3 text-xs text-slate-600">
@@ -1073,7 +1074,7 @@ export function WorkerEnrollmentView({
               <label htmlFor="enrollment-camera" className="text-xs text-slate-600">
                 {tr('common.camera')}
               </label>
-              <select
+              <SmartNativeSelect
                 id="enrollment-camera"
                 value={cameraDeviceId}
                 disabled={isQualityChecking || countdown !== null}
@@ -1092,7 +1093,7 @@ export function WorkerEnrollmentView({
                     {device.label || tr('common.camera_value', { value1: index + 1 })}
                   </option>
                 ))}
-              </select>
+              </SmartNativeSelect>
               <button
                 type="button"
                 disabled={isQualityChecking || countdown !== null}

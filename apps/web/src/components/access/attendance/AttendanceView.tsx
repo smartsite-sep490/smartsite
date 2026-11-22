@@ -1,3 +1,4 @@
+import { SmartNativeSelect } from '../../ui/SmartNativeSelect';
 import { useManagementClient } from '../../../features/auth/auth-session';
 import { userErrorMessage } from '../../../i18n/messages';
 import { localizedLabel } from '../../../i18n/labels';
@@ -537,7 +538,7 @@ export function AttendanceView({
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               <label className="block text-[10px] font-bold uppercase tracking-[0.18em] text-[#607A96] sm:col-span-2">
                 {tr('common.session')}
-                <select
+                <SmartNativeSelect
                   value={sessionId}
                   onChange={(e) => {
                     setSessionId(e.target.value);
@@ -567,7 +568,7 @@ export function AttendanceView({
                         </option>
                       ),
                   )}
-                </select>
+                </SmartNativeSelect>
               </label>
               <CorrectionTimeField
                 key={`${sessionId}-in`}
@@ -983,7 +984,7 @@ export function AttendanceView({
               {/* Selectors Group */}
               <div className="flex flex-wrap items-center gap-2.5">
                 {/* Status Select */}
-                <select
+                <SmartNativeSelect
                   value={statusFilter}
                   onChange={(e) => setStatusFilter(e.target.value as AttendanceReportStatus | '')}
                   aria-label={tr('attendance_report.today_status')}
@@ -998,10 +999,10 @@ export function AttendanceView({
                   <option value="OFF">{localizedLabel('OFF')}</option>
                   <option value="APPROVED_LEAVE">{localizedLabel('APPROVED_LEAVE')}</option>
                   <option value="UNAVAILABLE">{localizedLabel('UNAVAILABLE')}</option>
-                </select>
+                </SmartNativeSelect>
 
                 {/* Shifts Select */}
-                <select
+                <SmartNativeSelect
                   value={shiftId ?? ''}
                   onChange={(e) => setShiftId(e.target.value || undefined)}
                   aria-label={tr('attendance_report.all_shifts')}
@@ -1013,7 +1014,7 @@ export function AttendanceView({
                       {s.name}
                     </option>
                   ))}
-                </select>
+                </SmartNativeSelect>
 
                 {/* Date Controls */}
                 <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl border border-slate-200 bg-white shadow-2xs">

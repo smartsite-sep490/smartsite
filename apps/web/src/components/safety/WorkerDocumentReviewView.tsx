@@ -1,3 +1,4 @@
+import { SmartNativeSelect } from '../ui/SmartNativeSelect';
 import { useState } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useTranslation } from 'react-i18next';
@@ -130,7 +131,7 @@ export function WorkerDocumentReviewView(p: {
                 <span className="block text-[11px] font-extrabold uppercase tracking-wider text-slate-500 truncate">
                   {tr('documents.submissionFilter')}
                 </span>
-                <select
+                <SmartNativeSelect
                   value={submissionStatus}
                   onChange={(e) => {
                     setSubmissionStatus(e.target.value as WorkerDocumentSubmissionStatus | '');
@@ -144,7 +145,7 @@ export function WorkerDocumentReviewView(p: {
                       {tr(`documents.${status}`)}
                     </option>
                   ))}
-                </select>
+                </SmartNativeSelect>
               </label>
 
               <label

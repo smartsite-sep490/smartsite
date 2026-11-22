@@ -1,3 +1,4 @@
+import { SmartNativeSelect } from '../../ui/SmartNativeSelect';
 import { useManagementClient } from '../../../features/auth/auth-session';
 import { userErrorMessage } from '../../../i18n/messages';
 import { localizedLabel } from '../../../i18n/labels';
@@ -150,7 +151,7 @@ export function SiteAccessSetupView({
           </label>
           <label className="min-w-0 max-w-full text-xs font-semibold">
             {tr('common.zone')}{' '}
-            <select
+            <SmartNativeSelect
               className={inputClass}
               value={zoneId}
               onChange={(e) => setZoneId(e.target.value)}
@@ -161,14 +162,14 @@ export function SiteAccessSetupView({
                   {z.name}
                 </option>
               ))}
-            </select>
+            </SmartNativeSelect>
           </label>
         </div>
         {data.canGrantContractorZones && (
           <div className="space-y-3 rounded-xl bg-slate-50 p-4">
             <label className="min-w-0 max-w-full text-xs font-semibold">
               {tr('site_access_setup_view.contractor_at_this_site')}{' '}
-              <select
+              <SmartNativeSelect
                 className={inputClass}
                 value={participationId}
                 onChange={(e) => setParticipationId(e.target.value)}
@@ -179,7 +180,7 @@ export function SiteAccessSetupView({
                     {p.name}
                   </option>
                 ))}
-              </select>
+              </SmartNativeSelect>
             </label>
             <button
               className="rounded bg-slate-900 px-4 py-2 text-sm text-white disabled:opacity-50"
@@ -196,7 +197,7 @@ export function SiteAccessSetupView({
           <div className="space-y-3 rounded-xl bg-slate-50 p-4">
             <label className="min-w-0 max-w-full text-xs font-semibold">
               {tr('common.worker')}{' '}
-              <select
+              <SmartNativeSelect
                 className={inputClass}
                 value={workerId}
                 onChange={(e) => setWorkerId(e.target.value)}
@@ -207,7 +208,7 @@ export function SiteAccessSetupView({
                     {w.name}
                   </option>
                 ))}
-              </select>
+              </SmartNativeSelect>
             </label>
             <button
               className="rounded border px-4 py-2 text-sm disabled:opacity-50"
@@ -218,7 +219,7 @@ export function SiteAccessSetupView({
             </button>
             <label className="block text-xs font-semibold">
               {tr('common.approved_worker_assignment')}{' '}
-              <select
+              <SmartNativeSelect
                 className={inputClass}
                 value={assignmentId}
                 onChange={(e) => setAssignmentId(e.target.value)}
@@ -231,11 +232,11 @@ export function SiteAccessSetupView({
                       {a.workerName} · {new Date(a.validUntil!).toLocaleString(uiLocale())}
                     </option>
                   ))}
-              </select>
+              </SmartNativeSelect>
             </label>
             <label className="block text-xs font-semibold">
               {tr('common.contractor_zone_permission')}{' '}
-              <select
+              <SmartNativeSelect
                 className={inputClass}
                 value={permissionId}
                 onChange={(e) => setPermissionId(e.target.value)}
@@ -253,7 +254,7 @@ export function SiteAccessSetupView({
                       {permissionLabel(p.id)}
                     </option>
                   ))}
-              </select>
+              </SmartNativeSelect>
             </label>
             <button
               className="rounded bg-slate-900 px-4 py-2 text-sm text-white disabled:opacity-50"

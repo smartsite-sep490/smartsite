@@ -1,3 +1,4 @@
+import { SmartNativeSelect } from '../ui/SmartNativeSelect';
 import { FocusedCameraMedia } from '../ppe/FocusedCameraMedia';
 import { useManagementClient } from '../../features/auth/auth-session';
 import { authErrorMessage } from '../../features/auth/auth-errors';
@@ -863,7 +864,7 @@ export function RestrictedZoneView({
               <label className="block text-[10px] font-bold uppercase tracking-wider text-[#6B6B6B] mb-1">
                 {tr('common.site_fa7955')}
               </label>
-              <select
+              <SmartNativeSelect
                 value={selectedSiteId}
                 onChange={(e) => {
                   const siteId = e.target.value;
@@ -887,14 +888,14 @@ export function RestrictedZoneView({
                     {site.code} · {site.name}
                   </option>
                 ))}
-              </select>
+              </SmartNativeSelect>
             </div>
 
             <div>
               <label className="block text-[10px] font-bold uppercase tracking-wider text-[#6B6B6B] mb-1">
                 {tr('common.camera')}
               </label>
-              <select
+              <SmartNativeSelect
                 value={selectedCameraId}
                 onChange={(e) => {
                   const cameraId = e.target.value;
@@ -917,14 +918,14 @@ export function RestrictedZoneView({
                     {camera.code} · {camera.name} (v{camera.configurationVersion})
                   </option>
                 ))}
-              </select>
+              </SmartNativeSelect>
             </div>
 
             <div>
               <label className="block text-[10px] font-bold uppercase tracking-wider text-[#6B6B6B] mb-1">
                 {tr('common.region_zone')}
               </label>
-              <select
+              <SmartNativeSelect
                 value={selectedRegionId}
                 onChange={(e) => {
                   const regionId = e.target.value;
@@ -949,7 +950,7 @@ export function RestrictedZoneView({
                     })}
                   </option>
                 ))}
-              </select>
+              </SmartNativeSelect>
             </div>
 
             <div className="flex items-center gap-2 pt-1 sm:pt-0">

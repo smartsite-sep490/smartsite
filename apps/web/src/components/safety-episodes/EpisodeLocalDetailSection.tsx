@@ -1,3 +1,4 @@
+import { SmartNativeSelect } from '../ui/SmartNativeSelect';
 import type { ReactNode } from 'react';
 import { Link } from 'react-router-dom';
 import type { SafetyEpisode, SafetyEpisodeInboxPage } from '@smartsite/api-client';
@@ -93,7 +94,7 @@ export function EpisodeInboxFilters({
       <div className="grid gap-4 sm:grid-cols-2">
         <label className="space-y-1 text-sm font-medium">
           {t('episodes.site')}
-          <select
+          <SmartNativeSelect
             className="block w-full rounded-lg border border-slate-300 bg-white p-2.5"
             value={siteId}
             onChange={(e) => onFilterChange('siteId', e.target.value)}
@@ -104,18 +105,18 @@ export function EpisodeInboxFilters({
                 {siteNames.get(id.toLowerCase()) ?? t('episodes.siteNamePending')}
               </option>
             ))}
-          </select>
+          </SmartNativeSelect>
         </label>
         <label className="space-y-1 text-sm font-medium">
           {t('episodes.filter')}
-          <select
+          <SmartNativeSelect
             className="block w-full rounded-lg border border-slate-300 bg-white p-2.5"
             value={readStatus}
             onChange={(e) => onFilterChange('readStatus', e.target.value)}
           >
             <option value="ALL">{t('episodes.all')}</option>
             <option value="UNREAD">{t('episodes.unread')}</option>
-          </select>
+          </SmartNativeSelect>
         </label>
       </div>
       {hasMoreSites && (

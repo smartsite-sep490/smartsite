@@ -1,8 +1,8 @@
-import { localizedLabel } from '../../i18n/labels';
+import { SmartNativeSelect } from '../ui/SmartNativeSelect';
 import { userErrorMessage } from '../../i18n/messages';
 import { translate as tr } from '../../i18n';
-import { useCallback, useState } from 'react';
-import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { useState } from 'react';
+import { useQuery } from '@tanstack/react-query';
 import {
   IconAlertTriangle,
   IconBuilding2,
@@ -23,7 +23,6 @@ import {
   useManagementClient,
   useAuth,
   useCurrentUser,
-  useLogout,
 } from '../../features/auth/auth-session';
 import { isSecurityWorkspaceOnly } from '../../features/auth/workspace-access';
 import { useTranslation } from 'react-i18next';
@@ -119,23 +118,13 @@ function errorMessage(error: unknown): string {
 export function AccessControlView({ apiUrl }: AccessControlViewProps) {
   const { t } = useTranslation();
   const client = useManagementClient(apiUrl);
-  const queryClient = useQueryClient();
   const { accessToken } = useAuth();
   const currentUserQuery = useCurrentUser(apiUrl);
-  const logoutMutation = useLogout(apiUrl);
   const [requestedSiteId, setRequestedSiteId] = useState('');
   const [accessSubTab, setAccessSubTab] = useState<AccessSubTab>(() =>
     new URLSearchParams(window.location.search).get('tab') === 'attendance'
       ? 'attendance'
       : 'zone-permissions',
-  );
-
-  const removeSessionQueries = useCallback(
-    (userId: string) => {
-      queryClient.removeQueries({ queryKey: ['access-control', apiUrl, userId] });
-      queryClient.removeQueries({ queryKey: ['gate-access-logs', apiUrl, userId] });
-    },
-    [apiUrl, queryClient],
   );
 
   // Site Access uses the authenticated app session. It must not create a second
@@ -204,13 +193,6 @@ export function AccessControlView({ apiUrl }: AccessControlViewProps) {
     !securityOnly &&
     siteRoles.some((role) => ['SITE_MANAGER', 'CONTRACTOR_REPRESENTATIVE'].includes(role));
 
-  const logout = () => {
-    setRequestedSiteId('');
-    setAccessSubTab('zone-permissions');
-    if (sessionScope) removeSessionQueries(sessionScope);
-    logoutMutation.mutate();
-  };
-
   if (!accessToken || currentUserQuery.isPending) {
     return (
       <div className="flex min-h-[60vh] items-center justify-center p-4">
@@ -269,57 +251,27 @@ export function AccessControlView({ apiUrl }: AccessControlViewProps) {
     <div className="mx-auto max-w-[1360px] space-y-5 pb-12 text-[#182232]">
       {/* Top Banner / Identity Header */}
       {!attendanceWorkspace && (
-        <header className="rounded-xl border border-[#EAEAEA] bg-white p-5 shadow-xs">
+        <header className="rounded-2xl border border-slate-200/80 bg-white p-5 shadow-xs">
           <div className="flex flex-wrap items-center justify-between gap-4">
-            <div className="space-y-1">
+            <div className="space-y-1.5">
               {!attendanceWorkspace && (
-                <div className="flex items-center gap-2.5">
-                  <span className="inline-flex items-center gap-1.5 rounded-full bg-orange-50 px-2.5 py-0.5 text-[11px] font-bold uppercase tracking-wider text-[#F66B17] border border-orange-200/60">
+                <div className="flex items-center gap-2">
+                  <span className="inline-flex items-center gap-1.5 rounded-full bg-orange-50 px-2.5 py-0.5 text-[10px] font-bold uppercase tracking-wider text-[#F66B17] border border-orange-200/60">
                     <span className="h-1.5 w-1.5 rounded-full bg-[#F66B17]" />
                     {t('access.systemBadge')}
                   </span>
-                  <span className="hidden sm:inline-block rounded-full bg-[#F7F6F3] border border-[#EAEAEA] px-2.5 py-0.5 text-[10px] font-semibold uppercase tracking-wider text-[#6B6B6B]">
+                  <span className="hidden sm:inline-block rounded-full bg-slate-100 border border-slate-200 px-2.5 py-0.5 text-[10px] font-semibold uppercase tracking-wider text-slate-500">
                     {t('access.portalBadge')}
                   </span>
                 </div>
               )}
-              <h1 className="text-2xl font-bold tracking-tight text-[#111111]">
+              <h1 className="text-xl sm:text-2xl font-bold tracking-tight text-slate-900">
                 {securityOnly
                   ? t('security.title')
                   : attendanceWorkspace
                     ? t('access.tabs.attendance.label')
                     : t('access.title')}
               </h1>
-            </div>
-
-            {/* User Profile Chip & Session Actions */}
-            <div className="flex items-center gap-3">
-              <div className="flex items-center gap-3 rounded-lg border border-[#EAEAEA] bg-[#FBFBFA] px-3.5 py-2">
-                <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-[#111111] text-xs font-bold text-white">
-                  {currentUser.displayName.slice(0, 2).toUpperCase()}
-                </div>
-                <div className="text-left">
-                  <span className="block text-xs font-bold text-[#2F3437] leading-tight">
-                    {currentUser.displayName}
-                  </span>
-                  <span className="inline-flex items-center gap-1 text-[10px] font-bold text-emerald-700 uppercase">
-                    <span className="h-1.5 w-1.5 rounded-full bg-emerald-600" />
-                    {isGlobalAdmin
-                      ? t('access.globalAdmin')
-                      : securityOnly
-                        ? t('accounts.role.SECURITY_OFFICER')
-                        : siteRoles.map(localizedLabel).join(' · ')}
-                  </span>
-                </div>
-              </div>
-              <button
-                onClick={logout}
-                type="button"
-                disabled={logoutMutation.isPending}
-                className="flex items-center gap-1.5 rounded-lg border border-[#EAEAEA] bg-white px-3.5 py-2 text-xs font-bold text-[#2F3437] transition-colors hover:border-red-200 hover:bg-red-50 hover:text-red-700 cursor-pointer"
-              >
-                <span>{t('access.signOut')}</span>
-              </button>
             </div>
           </div>
         </header>
@@ -409,7 +361,8 @@ export function AccessControlView({ apiUrl }: AccessControlViewProps) {
         </nav>
       )}
 
-      {/* Unified Global Site Selector Strip */}
+      {/* Unified Global Site Selector Strip (hidden on gate-desk since SecurityGateDeskView owns site/gate selector) */}
+      {activeTab !== 'gate-desk' && (
       <section className="flex flex-wrap items-center justify-between gap-4 rounded-xl border border-[#EAEAEA] bg-white p-3.5 shadow-xs">
         <div className="flex min-w-0 max-w-full flex-wrap items-center gap-3">
           <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-orange-50 text-[#F66B17] border border-orange-200/60">
@@ -422,7 +375,7 @@ export function AccessControlView({ apiUrl }: AccessControlViewProps) {
             >
               {tr('common.active_managed_site')}
             </label>
-            <select
+            <SmartNativeSelect
               id="access-site-select"
               value={siteId}
               onChange={(event) => setRequestedSiteId(event.target.value)}
@@ -433,7 +386,7 @@ export function AccessControlView({ apiUrl }: AccessControlViewProps) {
                   {site.name}
                 </option>
               ))}
-            </select>
+            </SmartNativeSelect>
           </div>
         </div>
 
@@ -458,6 +411,7 @@ export function AccessControlView({ apiUrl }: AccessControlViewProps) {
           </button>
         </div>
       </section>
+      )}
 
       {/* Global State Notifications */}
       {sites.isPending && (

@@ -1,3 +1,4 @@
+import { SmartNativeSelect } from '../ui/SmartNativeSelect';
 import { useInfiniteQuery } from '@tanstack/react-query';
 import { ApiError } from '@smartsite/api-client';
 import { useEffect, useId, useState } from 'react';
@@ -187,7 +188,7 @@ export function IdentificationEvidenceApproval({
           )}
           <label className="block text-sm">
             {pickCopy('Nguồn ảnh', 'Image source')}
-            <select
+            <SmartNativeSelect
               className="ml-2 rounded border"
               value={index}
               onChange={(event) => {
@@ -205,7 +206,7 @@ export function IdentificationEvidenceApproval({
                   {pickCopy('Ảnh', 'Image')} {i + 1}
                 </option>
               ))}
-            </select>
+            </SmartNativeSelect>
           </label>
           {!hardDenial && sources.hasNextPage && (
             <Button

@@ -183,6 +183,7 @@ it('lets keyboard users switch views using the summary cards', async () => {
   const user = userEvent.setup();
   mount();
   const requests = await screen.findByRole('button', { name: /Shift Requests/ });
+  expect(screen.queryByRole('heading', { name: i18n.t('common.my_schedule') })).toBeNull();
   requests.focus();
   await user.keyboard('{Enter}');
   expect(requests.getAttribute('aria-pressed')).toBe('true');

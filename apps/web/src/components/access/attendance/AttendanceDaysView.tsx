@@ -1,3 +1,4 @@
+import { SmartNativeSelect } from '../../ui/SmartNativeSelect';
 import { useManagementClient } from '../../../features/auth/auth-session';
 import { localizedError, userErrorMessage } from '../../../i18n/messages';
 import { uiLocale } from '../../../i18n';
@@ -24,7 +25,6 @@ import type {
 import {
   IconChevronRight,
   IconChevronLeft,
-  IconChevronDown,
   IconRefresh,
   IconClock,
   IconCalendar,
@@ -620,8 +620,8 @@ export function AttendanceDaysView({
                   {tr('common.status')}
                 </label>
                 <div className="relative">
-                  <IconFilter className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-slate-400" />
-                  <select
+                  <IconFilter className="absolute left-2.5 top-1/2 -translate-y-1/2 z-10 pointer-events-none w-3.5 h-3.5 text-slate-400" />
+                  <SmartNativeSelect
                     id="filter-status"
                     className="pl-8 pr-8 py-2 rounded-xl border border-slate-200/90 bg-white text-xs font-semibold text-[#071A2B] shadow-2xs focus:border-[#F66B17] focus:ring-2 focus:ring-orange-100 focus:outline-none appearance-none cursor-pointer transition-all"
                     value={statusFilter}
@@ -635,7 +635,7 @@ export function AttendanceDaysView({
                     <option value="NEEDS_REVIEW">{tr('common.needs_review')}</option>
                     <option value="CONFIRMED">{tr('common.confirmed')}</option>
                     <option value="ABSENT">{localizedLabel('ABSENT')}</option>
-                  </select>
+                  </SmartNativeSelect>
                 </div>
               </div>
               {data.canReview && (
@@ -647,8 +647,8 @@ export function AttendanceDaysView({
                     {tr('common.worker')}
                   </label>
                   <div className="relative">
-                    <IconUsers className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-slate-400" />
-                    <select
+                    <IconUsers className="absolute left-2.5 top-1/2 -translate-y-1/2 z-10 pointer-events-none w-3.5 h-3.5 text-slate-400" />
+                    <SmartNativeSelect
                       id="filter-worker"
                       className="pl-8 pr-8 py-2 rounded-lg border border-slate-200 bg-white text-xs font-semibold text-[#071A2B] focus:border-[#F66B17] focus:ring-2 focus:ring-orange-100 focus:outline-none appearance-none cursor-pointer"
                       value={workerFilter}
@@ -665,7 +665,7 @@ export function AttendanceDaysView({
                           {worker.displayName}
                         </option>
                       ))}
-                    </select>
+                    </SmartNativeSelect>
                   </div>
                 </div>
               )}
@@ -996,21 +996,28 @@ export function AttendanceDaysView({
               )}
 
               {/* Work Intervals */}
-              <div className="space-y-2">
-                <h4 className="text-[11px] font-bold uppercase tracking-wider text-slate-400">
-                  {tr('common.work_intervals')}
-                </h4>
+              <div className="space-y-2.5">
+                <div className="flex items-center justify-between">
+                  <h4 className="text-[11px] font-bold uppercase tracking-wider text-slate-400">
+                    {tr('common.work_intervals')}
+                  </h4>
+                  {detail.isSuccess && (
+                    <span className="text-[11px] font-medium text-slate-400">
+                      {detail.data?.sessions.length ?? 0} {tr('attendance_days_view.intervals_unit')}
+                    </span>
+                  )}
+                </div>
                 {detail.isPending && (
-                  <div className="flex items-center gap-2 text-xs text-slate-400">
+                  <div className="flex items-center gap-2 text-xs text-slate-400 py-3">
                     <div className="h-3 w-3 animate-spin rounded-full border-2 border-[#F66B17] border-t-transparent" />
                     {tr('common.loading_intervals')}
                   </div>
                 )}
                 {detail.data?.sessions.some((s) => s.status === 'MISSING_IN') && (
-                  <div className="flex items-start justify-between gap-2 rounded-lg border border-amber-200 bg-amber-50 p-3">
+                  <div className="flex items-start justify-between gap-2 rounded-xl border border-amber-200/80 bg-amber-50/70 p-3 shadow-2xs">
                     <div className="flex items-start gap-2">
                       <IconAlertTriangle className="w-3.5 h-3.5 text-amber-600 mt-0.5 shrink-0" />
-                      <p className="text-xs text-amber-700">
+                      <p className="text-xs text-amber-800">
                         {tr(
                           'attendance_days_view.missing_in_request_a_correction_with_the_actual_entry_time',
                         )}
@@ -1027,21 +1034,26 @@ export function AttendanceDaysView({
                   </div>
                 )}
                 {detail.data?.sessions.some((s) => s.effectiveInAt && !s.effectiveOutAt) && (
-                  <div className="flex items-start gap-2 rounded-lg border border-blue-200 bg-blue-50 p-3">
+                  <div className="flex items-start gap-2 rounded-xl border border-blue-200/80 bg-blue-50/70 p-3 shadow-2xs">
                     <IconClock className="w-3.5 h-3.5 text-blue-600 mt-0.5 shrink-0" />
-                    <p className="text-xs text-blue-700">
+                    <p className="text-xs text-blue-800">
                       {tr('attendance_days_view.open_session_checkout_not_recorded')}
                     </p>
                   </div>
                 )}
-                <div className="divide-y divide-slate-100 rounded-xl border border-slate-200 overflow-hidden">
+                <div className="divide-y divide-slate-100 rounded-xl border border-slate-200/90 bg-white overflow-hidden shadow-2xs">
                   {detail.data?.sessions.map((s) => (
-                    <div key={s.id} className="px-4 py-3 bg-white">
+                    <div
+                      key={s.id}
+                      className={`px-4 py-3 transition-colors ${
+                        s.status === 'IGNORED' ? 'bg-slate-50/60' : 'hover:bg-slate-50/40'
+                      }`}
+                    >
                       {s.status === 'IGNORED' ||
                       (s.status === 'NEEDS_REVIEW' && !s.effectiveInAt) ? (
-                        <div className="flex items-center justify-between">
-                          <div>
-                            <p className="text-xs font-semibold text-slate-600">
+                        <div className="flex items-start justify-between gap-3">
+                          <div className="space-y-0.5">
+                            <p className="text-xs font-mono font-semibold text-slate-600">
                               {tr('common.duplicate_in_value', {
                                 value1: s.rawInAt
                                   ? new Date(s.rawInAt).toLocaleString(uiLocale())
@@ -1054,7 +1066,7 @@ export function AttendanceDaysView({
                                 : tr('common.needs_representative_review')}
                             </p>
                             {s.ignoreReason && (
-                              <p className="text-[11px] text-slate-400 mt-0.5">
+                              <p className="text-[11px] text-slate-500 bg-slate-100/80 inline-block px-2 py-0.5 rounded-md mt-1 border border-slate-200/60">
                                 {tr('common.reason_value', { value1: s.ignoreReason })}
                               </p>
                             )}
@@ -1062,24 +1074,24 @@ export function AttendanceDaysView({
                           <StatusBadge status={s.status} />
                         </div>
                       ) : (
-                        <div className="flex items-center justify-between">
-                          <div>
-                            <p className="text-xs font-semibold text-slate-700">
+                        <div className="flex items-center justify-between gap-3">
+                          <div className="space-y-0.5">
+                            <p className="text-xs font-mono font-semibold text-slate-800 tracking-tight">
                               {s.effectiveInAt
                                 ? new Date(s.effectiveInAt).toLocaleString(uiLocale())
                                 : tr('common.missing_entry')}
-                              {' → '}
+                              <span className="text-slate-400 font-sans mx-1.5 font-normal">→</span>
                               {s.effectiveOutAt
                                 ? new Date(s.effectiveOutAt).toLocaleString(uiLocale())
                                 : tr('common.awaiting_checkout')}
                             </p>
                             {s.effectiveInAt && !s.effectiveOutAt && (
-                              <p className="text-[11px] text-blue-600">
+                              <p className="text-[11px] text-blue-600 font-medium">
                                 {tr('attendance_days_view.open_session_checkout_not_recorded')}
                               </p>
                             )}
                             {!s.effectiveInAt && s.status !== 'IGNORED' && (
-                              <p className="text-[11px] text-amber-600">
+                              <p className="text-[11px] text-amber-600 font-medium">
                                 {tr('attendance_days_view.incomplete_evidence_hours_not_counted')}
                               </p>
                             )}
@@ -1088,13 +1100,20 @@ export function AttendanceDaysView({
                         </div>
                       )}
                       {s.canIgnoreDuplicate && (
-                        <button
-                          className="mt-2 flex items-center gap-1 px-3 py-1.5 rounded-lg border border-slate-200 text-xs font-semibold text-slate-600 hover:border-[#F66B17] hover:text-[#F66B17] transition-colors disabled:opacity-50"
-                          disabled={ignoreDuplicate.isPending || reviewNote.trim().length < 5}
-                          onClick={() => ignoreDuplicate.mutate(s)}
-                        >
-                          {tr('common.ignore_duplicate_in')}
-                        </button>
+                        <div className="mt-2.5 pt-2 border-t border-slate-100 flex items-center justify-between">
+                          <span className="text-[11px] text-slate-400">
+                            {reviewNote.trim().length < 5
+                              ? (tr('attendance_days_view.duplicate_note_required'))
+                              : (tr('attendance_days_view.ready_to_ignore'))}
+                          </span>
+                          <button
+                            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-slate-200 bg-white text-xs font-semibold text-slate-700 shadow-2xs hover:border-[#F66B17] hover:text-[#F66B17] transition-all disabled:opacity-40 disabled:pointer-events-none active:scale-[0.98]"
+                            disabled={ignoreDuplicate.isPending || reviewNote.trim().length < 5}
+                            onClick={() => ignoreDuplicate.mutate(s)}
+                          >
+                            {tr('common.ignore_duplicate_in')}
+                          </button>
+                        </div>
                       )}
                     </div>
                   ))}
@@ -1121,42 +1140,116 @@ export function AttendanceDaysView({
 
                 if (!data.canReview || !hasActionableReview) return null;
 
+                const isNoteValid = reviewNote.trim().length > 0;
+
                 return (
-                  <div className="space-y-3 pt-2">
-                    <div className="space-y-1">
-                      <label
-                        htmlFor="review-note-input"
-                        className="block text-[10px] font-bold uppercase tracking-wider text-slate-500"
-                      >
-                        {tr('common.review_note')}
-                      </label>
-                      <input
-                        id="review-note-input"
-                        className="w-full px-3 py-2 rounded-lg border border-slate-200 text-xs text-[#071A2B] focus:border-[#F66B17] focus:ring-2 focus:ring-orange-100 focus:outline-none"
-                        maxLength={1000}
-                        placeholder={tr('attendance_days_view.add_a_note_for_your_review_decision')}
-                        value={reviewNote}
-                        onChange={(e) => setReviewNote(e.target.value)}
-                      />
+                  <div className="rounded-2xl border border-slate-200/90 bg-gradient-to-b from-slate-50/80 via-white to-slate-50/40 p-5 shadow-xs space-y-4">
+                    {/* Header with context badge */}
+                    <div className="flex items-start justify-between gap-3 pb-3 border-b border-slate-100">
+                      <div className="space-y-1">
+                        <div className="flex items-center gap-2">
+                          <span className="inline-flex items-center px-2 py-0.5 rounded-md text-[10px] font-bold uppercase tracking-wider bg-orange-100 text-[#F66B17] border border-orange-200/60">
+                            {canConfirmEarly ? tr('common.early_departure') : tr('common.needs_review')}
+                          </span>
+                          {canConfirmEarly && (
+                            <h4 className="text-xs font-bold text-[#071A2B]">
+                              {tr('attendance_days_view.confirm_actual_hours_for_early_departure')}
+                            </h4>
+                          )}
+                        </div>
+                        <p className="text-xs text-slate-500 leading-relaxed">
+                          {canConfirmEarly
+                            ? (tr('attendance_days_view.early_departure_review_help'))
+                            : (tr('attendance_days_view.duplicate_review_help'))}
+                        </p>
+                      </div>
                     </div>
 
+                    {/* Integrated Review Note Field */}
+                    <div className="space-y-1.5">
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center gap-1.5">
+                          <label
+                            htmlFor="review-note-input"
+                            className="text-xs font-bold text-slate-700"
+                          >
+                            {tr('common.review_note')}
+                          </label>
+                          <span className="text-[10px] font-semibold text-rose-500 bg-rose-50 px-1.5 py-0.5 rounded border border-rose-200/60">
+                            {tr('common.required')}
+                          </span>
+                        </div>
+                        <span className="text-[11px] font-mono text-slate-400">
+                          {reviewNote.length}/1000
+                        </span>
+                      </div>
+
+                      <div className="relative">
+                        <input
+                          id="review-note-input"
+                          className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200/90 bg-white text-xs text-[#071A2B] placeholder:text-slate-400 shadow-2xs focus:border-[#F66B17] focus:ring-2 focus:ring-orange-100 focus:outline-none transition-all"
+                          maxLength={1000}
+                          placeholder={tr('attendance_days_view.add_a_note_for_your_review_decision')}
+                          value={reviewNote}
+                          onChange={(e) => setReviewNote(e.target.value)}
+                        />
+                      </div>
+
+                      {/* Live feedback hint */}
+                      <div className="flex items-center justify-between pt-0.5 text-[11px]">
+                        {!isNoteValid ? (
+                          <span className="text-amber-600 flex items-center gap-1.5 font-medium">
+                            <IconAlertTriangle className="w-3.5 h-3.5 text-amber-500 shrink-0" />
+                            {tr('attendance_days_view.confirmation_note_required')}
+                          </span>
+                        ) : (
+                          <span className="text-emerald-600 flex items-center gap-1.5 font-semibold">
+                            <IconCheck className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
+                            {tr('attendance_days_view.confirmation_note_ready')}
+                          </span>
+                        )}
+                        {hasDuplicateToIgnore && reviewNote.trim().length < 5 && (
+                          <span className="text-slate-400">
+                            {tr('attendance_days_view.duplicate_note_minimum')}
+                          </span>
+                        )}
+                      </div>
+                    </div>
+
+                    {/* Integrated Confirmation Action Bar */}
                     {canConfirmEarly && (
-                      <div className="flex items-center justify-between rounded-xl border border-slate-200 bg-slate-50 px-4 py-3">
-                        <p className="text-xs text-slate-600">
-                          {tr('attendance_days_view.confirm_actual_hours_for_early_departure')}
-                        </p>
+                      <div className="pt-3 border-t border-slate-100 flex items-center justify-between gap-3">
+                        <div className="text-[11px] text-slate-500 hidden sm:block">
+                          {isNoteValid
+                            ? (tr('attendance_days_view.actual_hours_ready'))
+                            : (tr('attendance_days_view.confirmation_locked'))}
+                        </div>
                         <button
-                          disabled={confirm.isPending || !reviewNote.trim()}
+                          disabled={confirm.isPending || !isNoteValid}
                           onClick={() => confirm.mutate(activeDay)}
                           aria-label={tr(
                             'attendance_days_view.confirm_actual_hours_for_early_departure_5fc05a',
                           )}
-                          className="flex items-center gap-1 px-3 py-1.5 rounded-lg bg-emerald-600 text-white text-xs font-bold disabled:opacity-50 hover:bg-emerald-700 transition-colors"
+                          className={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-xs font-bold transition-all shadow-2xs active:scale-[0.98] ${
+                            isNoteValid && !confirm.isPending
+                              ? 'bg-emerald-600 text-white hover:bg-emerald-700 shadow-emerald-600/10 cursor-pointer'
+                              : 'bg-slate-100 text-slate-400 border border-slate-200 cursor-not-allowed opacity-70'
+                          }`}
                         >
-                          <IconCheck className="w-3.5 h-3.5" />{' '}
-                          {tr(
-                            'attendance_days_view.confirm_actual_hours_for_early_departure_5fc05a',
-                          )}
+                          <div
+                            className={`w-4 h-4 rounded-full flex items-center justify-center transition-colors ${
+                              isNoteValid && !confirm.isPending
+                                ? 'bg-white/20 text-white'
+                                : 'bg-slate-200 text-slate-400'
+                            }`}
+                          >
+                            <IconCheck className="w-3 h-3" />
+                          </div>
+                          <span>
+                            {tr(
+                              'attendance_days_view.confirm_actual_hours_for_early_departure_5fc05a',
+                            )}
+                          </span>
                         </button>
                       </div>
                     )}
@@ -1553,7 +1646,7 @@ export function AttendanceDaysView({
                 {tr('common.queue_type')}
               </label>
               <div className="relative group">
-                <select
+                <SmartNativeSelect
                   id="queue-kind"
                   aria-label={tr('common.queue_type')}
                   className="pl-3.5 pr-8 py-1.5 rounded-xl border border-slate-200/90 bg-slate-50/70 hover:bg-white text-xs font-bold text-[#071A2B] shadow-2xs hover:border-slate-300 hover:shadow-xs focus:border-[#F66B17] focus:ring-2 focus:ring-[#F66B17]/15 focus:outline-none transition-all duration-150 cursor-pointer appearance-none"
@@ -1565,17 +1658,14 @@ export function AttendanceDaysView({
                 >
                   <option value="OVERTIME">{tr('common.overtime')}</option>
                   <option value="LEAVE">{tr('common.leave')}</option>
-                </select>
-                <div className="absolute right-2.5 top-1/2 -translate-y-1/2 pointer-events-none text-slate-400 group-focus-within:text-[#F66B17] transition-colors">
-                  <IconChevronDown className="w-3.5 h-3.5" />
-                </div>
+                </SmartNativeSelect>
               </div>
 
               <label htmlFor="queue-status" className="sr-only">
                 {tr('common.request_status')}
               </label>
               <div className="relative group">
-                <select
+                <SmartNativeSelect
                   id="queue-status"
                   aria-label={tr('common.request_status')}
                   className="pl-3.5 pr-8 py-1.5 rounded-xl border border-slate-200/90 bg-slate-50/70 hover:bg-white text-xs font-bold text-[#071A2B] shadow-2xs hover:border-slate-300 hover:shadow-xs focus:border-[#F66B17] focus:ring-2 focus:ring-[#F66B17]/15 focus:outline-none transition-all duration-150 cursor-pointer appearance-none"
@@ -1589,10 +1679,7 @@ export function AttendanceDaysView({
                   <option value="PENDING">{tr('common.pending')}</option>
                   <option value="APPROVED">{tr('common.approved')}</option>
                   <option value="REJECTED">{tr('common.rejected')}</option>
-                </select>
-                <div className="absolute right-2.5 top-1/2 -translate-y-1/2 pointer-events-none text-slate-400 group-focus-within:text-[#F66B17] transition-colors">
-                  <IconChevronDown className="w-3.5 h-3.5" />
-                </div>
+                </SmartNativeSelect>
               </div>
             </div>
           </div>

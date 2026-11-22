@@ -1,3 +1,4 @@
+import { SmartNativeSelect } from '../../ui/SmartNativeSelect';
 import { useManagementClient } from '../../../features/auth/auth-session';
 import { localizeMessage, userErrorMessage } from '../../../i18n/messages';
 import { translate as tr } from '../../../i18n';
@@ -1090,18 +1091,18 @@ function BatchEditor({
         >
           <label className="block text-xs">
             {tr('common.action')}
-            <select
+            <SmartNativeSelect
               className={field}
               value={actionValue}
               onChange={(e) => setAction(e.target.value as typeof actionValue)}
             >
               <option value="CANCEL">{tr('common.cancel_schedules')}</option>
               <option value="CHANGE_SHIFT">{tr('common.change_shift')}</option>
-            </select>
+            </SmartNativeSelect>
           </label>
           <label className="block text-xs">
             {tr('common.apply_change_to')}
-            <select
+            <SmartNativeSelect
               className={field}
               value={scope}
               onChange={(e) => setScope(e.target.value as typeof scope)}
@@ -1113,7 +1114,7 @@ function BatchEditor({
               <option value="UNSTARTED">
                 {tr('schedule_assignment_form.all_unstarted_schedules_in_this_batch')}
               </option>
-            </select>
+            </SmartNativeSelect>
           </label>
           {scope !== 'UNSTARTED' && (
             <SmartDatePicker
@@ -1126,19 +1127,19 @@ function BatchEditor({
           )}
           <label className="block text-xs">
             {tr('common.affected_workers')}
-            <select className={field} value={worker} onChange={(e) => setWorker(e.target.value)}>
+            <SmartNativeSelect className={field} value={worker} onChange={(e) => setWorker(e.target.value)}>
               <option value="">{tr('common.all_assigned_members')}</option>
               {batch.members.map((member) => (
                 <option key={member.workerId} value={member.workerId}>
                   {member.workerName}
                 </option>
               ))}
-            </select>
+            </SmartNativeSelect>
           </label>
           {actionValue === 'CHANGE_SHIFT' && (
             <label className="block text-xs">
               {tr('common.replacement_shift')}
-              <select
+              <SmartNativeSelect
                 required
                 className={field}
                 value={shift}
@@ -1150,7 +1151,7 @@ function BatchEditor({
                     {shift.name}
                   </option>
                 ))}
-              </select>
+              </SmartNativeSelect>
             </label>
           )}
           <label className="block text-xs">

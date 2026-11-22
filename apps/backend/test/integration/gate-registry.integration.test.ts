@@ -1,4 +1,5 @@
 import 'reflect-metadata';
+import { SecurityBrowserWebcam1795564800000 } from '../../src/database/migrations/1795564800000-SecurityBrowserWebcam.js';
 import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
 import { test } from 'node:test';
@@ -229,6 +230,19 @@ test('Gate schema, scope, registered FACE sources and configuration boundaries o
       mustChangePassword: false,
       roleAssignments: [{ role: UserRole.SECURITY_OFFICER, siteId: sites[0]! }],
     };
+    await t.test('webcam migration can roll back before browser FACE history exists', async () => {
+      const runner = db.createQueryRunner();
+      await runner.connect();
+      await runner.startTransaction();
+      try {
+        const migration = new SecurityBrowserWebcam1795564800000();
+        await migration.down(runner);
+        await migration.up(runner);
+      } finally {
+        await runner.rollbackTransaction();
+        await runner.release();
+      }
+    });
     let aiCalls = 0;
     const face = new FaceGateService(db, {
       verify: async () => {
@@ -243,9 +257,9 @@ test('Gate schema, scope, registered FACE sources and configuration boundaries o
       originalname: 'synthetic.jpg',
     };
     await t.test(
-      'FACE rejects missing, ZONE, wrong-Gate and inactive sources before AI',
+      'FACE rejects supplied ZONE, wrong-Gate and inactive sources before AI',
       async () => {
-        for (const id of [undefined, zoneCamera.id, randomUUID()])
+        for (const id of [zoneCamera.id, randomUUID()])
           await assert.rejects(
             face.observe(security, sites[0]!, gate.id, randomUUID(), frame, id as string),
           );
@@ -262,6 +276,52 @@ test('Gate schema, scope, registered FACE sources and configuration boundaries o
         assert.equal(aiCalls, 1);
       },
     );
+    const browserGate = await gates.create(sites[0]!, { name: 'Browser webcam gate' }, context);
+    await t.test(
+      'Security webcam presence needs no registration and rejects invalid Gate scope',
+      async () => {
+        const before = aiCalls,
+          sessionId = randomUUID();
+        assert.equal(
+          (await face.observe(security, sites[0]!, browserGate.id, sessionId, frame, undefined))
+            .state,
+          'NEW_FACE',
+        );
+        assert.equal(aiCalls, before + 1);
+        for (const [actor, siteId, gateId] of [
+          [security, sites[0]!, inactive.id],
+          [security, sites[0]!, other.id],
+          [security, sites[0]!, randomUUID()],
+          [{ ...security, roleAssignments: [] }, sites[0]!, browserGate.id],
+          [security, sites[1]!, other.id],
+        ] as Array<[typeof security, string, string]>)
+          await assert.rejects(face.observe(actor, siteId, gateId, sessionId, frame, undefined));
+        assert.equal(aiCalls, before + 1);
+      },
+    );
+    await t.test(
+      'webcam verification retains unknown identity without creating a passage',
+      async () => {
+        const result = await face.verify(security, sites[0]!, browserGate.id, frame, 'IN');
+        assert.equal(result.decision.technicalOutcome, 'UNKNOWN');
+        assert.ok(result.attempt);
+        const stored = await db
+          .getRepository(AccessAttemptEntity)
+          .findOneByOrFail({ id: result.attempt.id });
+        assert.equal(stored.sourceCameraId, null);
+        assert.equal(stored.workerId, null);
+        assert.equal(stored.status, 'PENDING');
+        assert.equal(
+          (
+            await db.query(
+              'SELECT count(*)::int AS count FROM gate_event WHERE access_attempt_id=$1',
+              [stored.id],
+            )
+          )[0].count,
+          0,
+        );
+      },
+    );
     const workerId = randomUUID(),
       attemptId = randomUUID();
     await db.getRepository(WorkerEntity).save({
@@ -273,6 +333,44 @@ test('Gate schema, scope, registered FACE sources and configuration boundaries o
       displayName: 'Synthetic Worker',
       isActive: true,
     });
+    await t.test(
+      'webcam FACE attempts persist and confirm idempotently without a registered source',
+      async () => {
+        const service = new QrAccessService(db);
+        const attempt = await db.transaction((manager) =>
+          service.recordAttempt(manager, {
+            actor: security,
+            siteId: sites[0]!,
+            gateId: browserGate.id,
+            method: 'FACE',
+            direction: 'OUT',
+            workerId,
+            identityStatus: 'MATCHED',
+            authorization: 'ALLOWED',
+            reasonCode: 'EXIT_RECORD_ONLY',
+          }),
+        );
+        assert.equal(
+          (await db.getRepository(AccessAttemptEntity).findOneByOrFail({ id: attempt.id }))
+            .sourceCameraId,
+          null,
+        );
+        await gates.update(sites[0]!, browserGate.id, { status: 'INACTIVE' }, context);
+        await assert.rejects(
+          service.confirmPassage(security, sites[0]!, attempt.id, { idempotencyKey: randomUUID() }),
+          /Gate is inactive/,
+        );
+        await gates.update(sites[0]!, browserGate.id, { status: 'ACTIVE' }, context);
+        const command = { idempotencyKey: randomUUID() };
+        const event = await service.confirmPassage(security, sites[0]!, attempt.id, command);
+        assert.equal(
+          (await service.confirmPassage(security, sites[0]!, attempt.id, command)).id,
+          event.id,
+        );
+        assert.equal(event.accessAttemptId, attempt.id);
+        assert.equal(event.gateName, browserGate.name);
+      },
+    );
     await db.getRepository(AccessAttemptEntity).save({
       id: attemptId,
       siteId: sites[0]!,
@@ -294,6 +392,11 @@ test('Gate schema, scope, registered FACE sources and configuration boundaries o
     await t.test(
       'confirm rechecks a source disabled after verify and leaves no passage or attendance',
       async () => {
+        const attendanceBefore = (
+          await db.query('SELECT count(*)::int AS count FROM attendance_event WHERE worker_id=$1', [
+            workerId,
+          ])
+        )[0].count;
         await assert.rejects(
           new QrAccessService(db).confirmPassage(security, sites[0]!, attemptId, {
             idempotencyKey: randomUUID(),
@@ -315,12 +418,24 @@ test('Gate schema, scope, registered FACE sources and configuration boundaries o
               [workerId],
             )
           )[0].count,
-          0,
+          attendanceBefore,
         );
         await db.getRepository(AccessAttemptEntity).delete(attemptId);
         await assert.rejects(db.getRepository(GateEntity).delete(gate.id));
       },
     );
+    await t.test('webcam migration rollback refuses to discard FACE history', async () => {
+      const runner = db.createQueryRunner();
+      await runner.connect();
+      await runner.startTransaction();
+      try {
+        await assert.rejects(new SecurityBrowserWebcam1795564800000().down(runner));
+      } finally {
+        await runner.rollbackTransaction();
+        await runner.release();
+      }
+      assert.ok(await db.getRepository(AccessAttemptEntity).existsBy({ method: 'FACE', workerId }));
+    });
     await t.test('permission revocation inside the mutation transaction is enforced', async () => {
       await db
         .getRepository(UserRoleAssignmentEntity)

@@ -1,3 +1,4 @@
+import { SmartNativeSelect } from '../../ui/SmartNativeSelect';
 import type { SmartSiteManagementClient } from '@smartsite/api-client';
 import { useManagementClient } from '../../../features/auth/auth-session';
 import { localizedLabel } from '../../../i18n/labels';
@@ -229,7 +230,7 @@ export function ZonePermissionsView({
       <section className="rounded-xl border border-[#EAEAEA] bg-white p-4 shadow-xs">
         <label className="text-xs font-bold uppercase tracking-wider text-[#6B6B6B]">
           {tr('common.restricted_zone')}
-          <select
+          <SmartNativeSelect
             value={zoneId}
             onChange={(event) => {
               setRequestedZoneId(event.target.value);
@@ -244,7 +245,7 @@ export function ZonePermissionsView({
                 {zone.code} · {zone.name} · {localizedLabel(zone.restrictionPolicy)}
               </option>
             ))}
-          </select>
+          </SmartNativeSelect>
         </label>
       </section>
 
@@ -389,7 +390,7 @@ export function ZonePermissionsView({
           >
             <label className="text-xs font-bold text-[#6B6B6B] sm:col-span-2">
               {tr('common.worker')}
-              <select
+              <SmartNativeSelect
                 required
                 disabled={!canManageGrants}
                 value={grantWorkerId}
@@ -404,11 +405,11 @@ export function ZonePermissionsView({
                       {worker.externalId} · {worker.displayName}
                     </option>
                   ))}
-              </select>
+              </SmartNativeSelect>
             </label>
             <label className="text-xs font-bold text-[#6B6B6B]">
               {tr('common.effect')}
-              <select
+              <SmartNativeSelect
                 disabled={!canManageGrants}
                 value={grantEffect}
                 onChange={(event) => setGrantEffect(event.target.value as ZoneAccessEffect)}
@@ -416,7 +417,7 @@ export function ZonePermissionsView({
               >
                 <option value="ALLOW">{tr('common.allow')}</option>
                 <option value="DENY">{tr('common.deny')}</option>
-              </select>
+              </SmartNativeSelect>
             </label>
             <label className="text-xs font-bold text-[#6B6B6B]">
               {tr('common.valid_from')}
@@ -544,7 +545,7 @@ export function ZonePermissionsView({
           </div>
           <label className="text-xs font-bold uppercase tracking-wider text-[#6B6B6B]">
             {tr('common.status')}
-            <select
+            <SmartNativeSelect
               value={decisionStatus}
               onChange={(event) => {
                 setDecisionStatus(event.target.value as typeof decisionStatus);
@@ -558,7 +559,7 @@ export function ZonePermissionsView({
                   {zoneDecisionLabel(status)}
                 </option>
               ))}
-            </select>
+            </SmartNativeSelect>
           </label>
         </div>
         {decisions.error && (

@@ -1,3 +1,4 @@
+import { SmartNativeSelect } from '../ui/SmartNativeSelect';
 import type { IdentificationCreateFormProps } from './safetyIdentificationFormTypes';
 import React from 'react';
 import {
@@ -173,7 +174,7 @@ export function SafetyIdentificationToolbar({
               <IconBuilding className="w-3.5 h-3.5 shrink-0 text-slate-500" />
               <span>{copy.filters.siteLabel}</span>
             </label>
-            <select
+            <SmartNativeSelect
               id={`${baseId}-site-select`}
               value={selectedSiteId}
               onChange={(event) => onSiteSwitch(event.target.value)}
@@ -187,7 +188,7 @@ export function SafetyIdentificationToolbar({
                   </option>
                 );
               })}
-            </select>
+            </SmartNativeSelect>
           </div>
 
           <div className="min-w-0 w-full sm:w-auto sm:max-w-xs space-y-1">
@@ -198,7 +199,7 @@ export function SafetyIdentificationToolbar({
               <IconFilter className="w-3.5 h-3.5 shrink-0 text-slate-500" />
               <span>{copy.filters.statusLabel}</span>
             </label>
-            <select
+            <SmartNativeSelect
               id={`${baseId}-status-select`}
               value={statusFilter}
               onChange={(event) => onStatusFilterChange(event.target.value as StatusFilterValue)}
@@ -210,7 +211,7 @@ export function SafetyIdentificationToolbar({
                   {copy.filters.statuses[status]}
                 </option>
               ))}
-            </select>
+            </SmartNativeSelect>
           </div>
         </div>
       </Card>
@@ -230,7 +231,7 @@ export function SafetyIdentificationToolbar({
                   {copy.createPanel.episodeLoading}
                 </p>
               ) : (
-                <select
+                <SmartNativeSelect
                   id={`${baseId}-create-episode-select`}
                   value={createEpisodeId}
                   disabled={createPending}
@@ -247,7 +248,7 @@ export function SafetyIdentificationToolbar({
                       {formatEpisodeOptionLabel(episode)}
                     </option>
                   ))}
-                </select>
+                </SmartNativeSelect>
               )}
             </Card>
           ) : createEpisodeId ? (

@@ -51,7 +51,7 @@ it('loads only granted Zones, formats dates and retains request ID through faile
   const zone = await screen.findByLabelText(/Granted Zone/);
   expect(zone.tagName).toBe('BUTTON');
   await user.click(zone);
-  await user.click(screen.getByRole('button', { name: /Gạch.*12.*13/ }));
+  await user.click(screen.getByRole('option', { name: /Gạch.*12.*13/ }));
   expect(screen.getByLabelText('Start date').textContent).toContain('12/10/2026');
   expect(screen.getByLabelText('End date').textContent).toContain('13/10/2026');
   await user.click(screen.getByRole('button', { name: 'Assign Team Zone' }));

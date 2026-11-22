@@ -1,3 +1,4 @@
+import { SmartNativeSelect } from '../ui/SmartNativeSelect';
 import { useTranslation } from 'react-i18next';
 import type { ZoneResponse } from '@smartsite/api-client';
 import type { CameraResponse } from '@smartsite/contracts';
@@ -58,7 +59,7 @@ export function CameraRegionSelectionControls({
         <label htmlFor="select-zone-link" className="block text-xs font-semibold text-slate-700">
           {t('regionSetup.field.selectZone')}
         </label>
-        <select
+        <SmartNativeSelect
           id="select-zone-link"
           aria-label={t('regionSetup.field.selectZone')}
           value={selectedZoneId}
@@ -71,7 +72,7 @@ export function CameraRegionSelectionControls({
               {zone.code} · {zone.name}
             </option>
           ))}
-        </select>
+        </SmartNativeSelect>
       </div>
 
       <div className="min-w-0 w-full space-y-1.5">
@@ -93,7 +94,7 @@ export function CameraRegionSelectionControls({
           )}
         </div>
 
-        <select
+        <SmartNativeSelect
           id="select-camera-link"
           aria-label={t('regionSetup.field.selectCamera')}
           value={selectedCameraId}
@@ -107,7 +108,7 @@ export function CameraRegionSelectionControls({
               {camera.code} · {camera.name}
             </option>
           ))}
-        </select>
+        </SmartNativeSelect>
 
         {isCamerasInitialLoading && (
           <div role="status" aria-live="polite" className="text-xs text-slate-500 py-1">

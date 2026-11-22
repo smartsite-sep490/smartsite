@@ -1,3 +1,4 @@
+import { SmartNativeSelect } from '../ui/SmartNativeSelect';
 import { useTranslation } from 'react-i18next';
 import { translate as tr } from '../../i18n';
 import { useState } from 'react';
@@ -165,7 +166,7 @@ export function CreateChecklistForm(
           </summary>
           <label className="text-sm font-semibold">
             {tr('common.contractor')}
-            <select
+            <SmartNativeSelect
               className={fieldClass}
               value={contractor}
               onChange={(e) => {
@@ -180,12 +181,12 @@ export function CreateChecklistForm(
                   {c.name}
                 </option>
               ))}
-            </select>
+            </SmartNativeSelect>
           </label>
         </details>
         <label className="text-sm font-semibold">
           {tr('labels.TEAM')}
-          <select
+          <SmartNativeSelect
             className={fieldClass}
             required
             value={teamId}
@@ -203,11 +204,11 @@ export function CreateChecklistForm(
                   {t.contractorName} · {t.name}
                 </option>
               ))}
-          </select>
+          </SmartNativeSelect>
         </label>
         <label className="text-sm font-semibold">
           {tr('common.zone')}
-          <select
+          <SmartNativeSelect
             className={fieldClass}
             required
             value={selectedZone}
@@ -219,12 +220,12 @@ export function CreateChecklistForm(
                 {z.name} · {z.code}
               </option>
             ))}
-          </select>
+          </SmartNativeSelect>
         </label>
         {windows.length > 1 && (
           <label className="text-sm font-semibold">
             {tr('safety_workspace.planned_work_window')}
-            <select
+            <SmartNativeSelect
               className={fieldClass}
               value={windowChoice}
               onChange={(e) => setWindowChoice(e.target.value)}
@@ -237,7 +238,7 @@ export function CreateChecklistForm(
                   {w.shiftName} · {localInput(w.startsAt)} – {localInput(w.endsAt)}
                 </option>
               ))}
-            </select>
+            </SmartNativeSelect>
           </label>
         )}
         {!windows.length && !detail.isPending && (
@@ -335,7 +336,7 @@ export function CreateChecklistForm(
         </summary>
         <label className="text-sm font-semibold">
           {tr('safety_workspace.suggested_checklist')}
-          <select
+          <SmartNativeSelect
             className={fieldClass}
             value={preset}
             onChange={(e) => {
@@ -346,7 +347,7 @@ export function CreateChecklistForm(
           >
             <option value="HEIGHT">{tr('safety_workspace.working_at_height')}</option>
             <option value="ELECTRICAL">{tr('safety_workspace.electrical_work')}</option>
-          </select>
+          </SmartNativeSelect>
         </label>
         <button
           className={buttonClass}
@@ -508,7 +509,7 @@ export function ReportChecklistForm({
             </h3>
             <label className="block text-sm font-semibold">
               {tr('safety_workspace.result_value1', { value1: item.text })}
-              <select
+              <SmartNativeSelect
                 className={fieldClass}
                 required
                 value={r.answer}
@@ -520,7 +521,7 @@ export function ReportChecklistForm({
                 <option value="PASS">{tr('safety_workspace.pass')}</option>
                 <option value="FAIL">{tr('safety_workspace.fail')}</option>
                 <option value="NOT_APPLICABLE">{tr('safety_workspace.not_applicable')}</option>
-              </select>
+              </SmartNativeSelect>
             </label>
             {r.answer === 'FAIL' || r.answer === 'NOT_APPLICABLE' || r.showNote || !!r.note ? (
               <label className="block text-sm font-semibold">

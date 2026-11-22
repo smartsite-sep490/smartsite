@@ -23,6 +23,7 @@ export async function evaluateWorkerAccess(
   at = new Date(),
   lock = false,
 ) {
+  // Optional history reference; approval is not a Gate authorization prerequisite.
   const assignments = await manager.getRepository(WorkerSiteZoneAssignmentEntity).find({
     where: { workerId: worker.id, siteId },
     order: { validFrom: 'DESC', id: 'ASC' },
@@ -109,29 +110,34 @@ export async function evaluateWorkerAccess(
   else if (worker.siteId !== siteId) reason = 'SITE_MISMATCH';
   else if (!(await workerDocumentsAllowEntry(manager, worker.id, at)))
     reason = 'WORKER_DOCUMENTS_INVALID';
-  else if (!assignment) reason = 'ASSIGNMENT_MISSING';
-  else if (!assignment.siteContractorId) reason = 'CONTRACTOR_SITE_PARTICIPATION_INVALID';
   else {
-    const participation = await manager.getRepository(ContractorSiteParticipationEntity).findOne({
-      where: { id: assignment.siteContractorId, siteId },
-      ...(lock ? { lock: { mode: 'pessimistic_read' as const } } : {}),
-    });
     const contractor = worker.contractorId
       ? await manager.getRepository(ContractorEntity).findOne({
           where: { id: worker.contractorId },
           ...(lock ? { lock: { mode: 'pessimistic_read' as const } } : {}),
         })
       : null;
-    if (!contractor?.isActive) reason = 'CONTRACTOR_INACTIVE';
-    else if (
-      !participation?.isActive ||
-      participation.contractorId !== worker.contractorId ||
-      participation.validFrom > at ||
-      (participation.validUntil && participation.validUntil <= at) ||
-      participation.validFrom > assignment.validFrom ||
-      (participation.validUntil && participation.validUntil < assignment.validUntil!)
-    )
-      reason = 'CONTRACTOR_SITE_PARTICIPATION_INVALID';
+    if (!worker.contractorId || !contractor?.isActive) reason = 'CONTRACTOR_INACTIVE';
+    else {
+      // A Worker is already scoped to its Site/Contractor when the representative creates it.
+      // Gate eligibility uses current participation, independently of legacy approval records.
+      const participations = await manager.getRepository(ContractorSiteParticipationEntity).find({
+        where: { siteId, contractorId: worker.contractorId, isActive: true },
+        order: { validFrom: 'DESC', id: 'ASC' },
+        ...(lock ? { lock: { mode: 'pessimistic_read' as const } } : {}),
+      });
+      if (
+        !participations.some(
+          (p) =>
+            p.isActive &&
+            p.siteId === siteId &&
+            p.contractorId === worker.contractorId &&
+            p.validFrom <= at &&
+            (!p.validUntil || p.validUntil > at),
+        )
+      )
+        reason = 'CONTRACTOR_SITE_PARTICIPATION_INVALID';
+    }
   }
   if (!reason && scheduleStatus === 'NO_SCHEDULE')
     reason = scheduleDataUnavailable ? 'AUTHORIZATION_DATA_UNAVAILABLE' : 'NO_SCHEDULE';

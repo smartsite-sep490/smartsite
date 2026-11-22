@@ -55,7 +55,10 @@ export interface FaceGateVerificationResponse {
     externalId: string;
     displayName: string;
     contractorName: string;
+    /** Legacy approval-history status; not a prerequisite for Gate entry. */
     assignmentStatus: string;
+    /** Additive Gate context. Older servers may omit this field. */
+    scheduleStatus?: 'SCHEDULED' | 'OUTSIDE_SHIFT' | 'NO_SCHEDULE' | 'NOT_APPLICABLE';
   };
 }
 

@@ -290,7 +290,7 @@ describe('ContractorDashboardView Integration & UI Rules', () => {
     await userEvent.setup().click(select);
     await userEvent
       .setup()
-      .click(screen.getByRole('button', { name: /Riverside Complex — Apex Painting Ltd/i }));
+      .click(screen.getByRole('option', { name: /Riverside Complex — Apex Painting Ltd/i }));
 
     await waitFor(() => {
       expect(api.contractorDashboard).toHaveBeenCalledWith(
@@ -310,7 +310,7 @@ describe('ContractorDashboardView Integration & UI Rules', () => {
     expect(scope.tagName).toBe('BUTTON');
     await user.click(scope);
     await user.click(
-      screen.getByRole('button', { name: /Riverside Complex — Apex Painting Ltd/i }),
+      screen.getByRole('option', { name: /Riverside Complex — Apex Painting Ltd/i }),
     );
     await screen.findByRole('heading', { name: /Riverside Complex/i });
 
@@ -318,7 +318,7 @@ describe('ContractorDashboardView Integration & UI Rules', () => {
     const teamFilter = screen.getByLabelText(/Filter Workers by Team/i);
     expect(teamFilter.tagName).toBe('BUTTON');
     await user.click(teamFilter);
-    await user.click(screen.getByRole('button', { name: 'Interior Paint Team' }));
+    await user.click(screen.getByRole('option', { name: 'Interior Paint Team' }));
     await waitFor(() =>
       expect(api.listContractorTeamWorkers).toHaveBeenCalledWith(
         'synthetic-jwt-token',
@@ -447,7 +447,7 @@ describe('ContractorDashboardView Integration & UI Rules', () => {
 
     const targetSelect = screen.getByLabelText(/Target Team/i);
     await user.click(targetSelect);
-    await user.click(screen.getByRole('button', { name: /Interior Paint Team.*12/ }));
+    await user.click(screen.getByRole('option', { name: /Interior Paint Team.*12/ }));
 
     expect(screen.queryByLabelText(/^Reason/i)).toBeNull();
 
@@ -481,7 +481,7 @@ describe('ContractorDashboardView Integration & UI Rules', () => {
     expect(screen.queryByLabelText(/^Reason/i)).toBeNull();
 
     await user.click(screen.getByLabelText(/Target Team/i));
-    await user.click(screen.getByRole('button', { name: /Exterior Coating Team.*7/ }));
+    await user.click(screen.getByRole('option', { name: /Exterior Coating Team.*7/ }));
     await user.click(confirm);
 
     await waitFor(() => {

@@ -1,3 +1,4 @@
+import { SmartNativeSelect } from '../ui/SmartNativeSelect';
 import { useTranslation } from 'react-i18next';
 import { translate as tr } from '../../i18n';
 import { useState } from 'react';
@@ -83,7 +84,7 @@ export function SafetyZoneContext(
         <>
           <label className="block text-sm">
             {tr('common.zone')}
-            <select
+            <SmartNativeSelect
               className="mt-2 w-full rounded-lg border p-2"
               value={selected.id}
               onChange={(e) => {
@@ -98,7 +99,7 @@ export function SafetyZoneContext(
                   {z.name}
                 </option>
               ))}
-            </select>
+            </SmartNativeSelect>
           </label>
           <p className="text-xs text-[var(--text-secondary)]">
             {tr('safety_workspace.recorded_grant_value1_value2', {

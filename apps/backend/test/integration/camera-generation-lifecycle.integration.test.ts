@@ -1,4 +1,5 @@
 import 'reflect-metadata';
+import { SecurityBrowserWebcam1795564800000 } from '../../src/database/migrations/1795564800000-SecurityBrowserWebcam.js';
 import { GateRegistry1795046400001 } from '../../src/database/migrations/1795046400001-GateRegistry.js';
 import assert from 'node:assert/strict';
 import { randomUUID, createHash } from 'node:crypto';
@@ -32,6 +33,7 @@ test('generation lifecycle retains server ownership, transactional replacement a
         await runner.startTransaction();
         try {
           const migration = new CameraWorkerGenerations1794614400000();
+          await new SecurityBrowserWebcam1795564800000().down(runner);
           await new GateRegistry1795046400001().down(runner);
           await migration.down(runner);
           assert.equal(
@@ -40,6 +42,7 @@ test('generation lifecycle retains server ownership, transactional replacement a
           );
           await migration.up(runner);
           await new GateRegistry1795046400001().up(runner);
+          await new SecurityBrowserWebcam1795564800000().up(runner);
           await runner.commitTransaction();
         } catch (error) {
           await runner.rollbackTransaction();

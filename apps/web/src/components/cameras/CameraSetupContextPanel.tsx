@@ -1,3 +1,4 @@
+import { SmartNativeSelect } from '../ui/SmartNativeSelect';
 import { useTranslation } from 'react-i18next';
 import { Link } from 'react-router-dom';
 import type { CameraResponse } from '@smartsite/contracts/management';
@@ -333,7 +334,7 @@ export function CameraSetupContextBar({
                   >
                     {t('cameraSetup.chooseCamera')}
                   </label>
-                  <select
+                  <SmartNativeSelect
                     id="camera-setup-quick-select"
                     data-testid="camera-setup-quick-select"
                     aria-label={t('cameraSetup.chooseCamera')}
@@ -346,7 +347,7 @@ export function CameraSetupContextBar({
                         {row.code} · {row.name}
                       </option>
                     ))}
-                  </select>
+                  </SmartNativeSelect>
                 </div>
               )}
               {canManageCameras && (

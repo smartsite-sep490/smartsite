@@ -1,3 +1,4 @@
+import { SmartNativeSelect } from '../../ui/SmartNativeSelect';
 import { useManagementClient } from '../../../features/auth/auth-session';
 import { localizedError, localizeMessage, userErrorMessage } from '../../../i18n/messages';
 import { localizedLabel } from '../../../i18n/labels';
@@ -108,24 +109,6 @@ export function SecurityGateDeskView(props: SecurityGateDeskViewProps) {
   const selectedGateId = gates.some((g) => g.id === requestedGate)
     ? requestedGate
     : (gates[0]?.id ?? '');
-  const sources = useQuery({
-    queryKey: [
-      'gate-sources',
-      props.apiUrl,
-      props.sessionScope,
-      props.selectedSiteId,
-      selectedGateId,
-    ],
-    enabled: !!props.token && !!props.selectedSiteId && !!selectedGateId,
-    queryFn: () => client.listGateSources(props.token!, props.selectedSiteId, selectedGateId),
-    refetchInterval: 15_000,
-  });
-  const registeredSources = sources.error ? [] : (sources.data?.items ?? []);
-  const [requestedSource, setSource] = useState('');
-  const selectedSourceId =
-    registeredSources.find((c) => c.id === requestedSource)?.id ??
-    (registeredSources.length === 1 ? registeredSources[0]!.id : '');
-
   const [direction, setDirection] = useState<'IN' | 'OUT'>('IN');
   // A new operator workspace must not retain another Site's pending attempts or QR sessions.
   return (
@@ -136,7 +119,6 @@ export function SecurityGateDeskView(props: SecurityGateDeskViewProps) {
         props.selectedSiteId,
         props.isSecurityOfficer,
         selectedGateId,
-        selectedSourceId,
       ])}
       {...props}
       {...{
@@ -144,10 +126,6 @@ export function SecurityGateDeskView(props: SecurityGateDeskViewProps) {
         gates,
         selectedGateId,
         setSelectedGateId,
-        sources,
-        registeredSources,
-        selectedSourceId,
-        setSource,
         direction,
         setDirection,
       }}
@@ -167,10 +145,6 @@ function ScopedSecurityGateDeskView({
   gates,
   selectedGateId,
   setSelectedGateId,
-  sources,
-  registeredSources,
-  selectedSourceId,
-  setSource,
   direction,
   setDirection,
 }: SecurityGateDeskViewProps & {
@@ -178,12 +152,8 @@ function ScopedSecurityGateDeskView({
   gates: import('@smartsite/contracts').GateResponse[];
   selectedGateId: string;
   setSelectedGateId: (id: string) => void;
-  sources: { isPending: boolean; error: Error | null; refetch: () => unknown };
-  registeredSources: import('@smartsite/contracts').GateSourceResponse[];
   direction: 'IN' | 'OUT';
   setDirection: (direction: 'IN' | 'OUT') => void;
-  selectedSourceId: string;
-  setSource: (id: string) => void;
 }) {
   useTranslation();
 
@@ -205,7 +175,7 @@ function ScopedSecurityGateDeskView({
     () => () => {
       scanGeneration.current += 1;
     },
-    [apiUrl, sessionScope, selectedSiteId, selectedGateId, selectedSourceId, direction, token],
+    [apiUrl, sessionScope, selectedSiteId, selectedGateId, direction, token],
   );
   const scanBusy = useRef(false);
   const presenceSession = useRef('');
@@ -224,6 +194,9 @@ function ScopedSecurityGateDeskView({
   const [repeatNotice, setRepeatNotice] = useState('');
   const [separatePassage, setSeparatePassage] = useState(false);
   const [confirmedEvent, setConfirmedEvent] = useState<GateEventResponse | null>(null);
+  const [candidateWorker, setCandidateWorker] = useState<
+    FaceGateVerificationResponse['worker'] | null
+  >(null);
   const handleNoScheduleDenial = useCallback(() => {
     setCurrentAttempt((attempt) =>
       attempt ? { ...attempt, status: 'DENIED', scheduleStatus: 'NO_SCHEDULE' } : null,
@@ -234,6 +207,9 @@ function ScopedSecurityGateDeskView({
       reasonCode: 'NO_SCHEDULE',
       qrFallbackAllowed: false,
     });
+    setCandidateWorker((worker) =>
+      worker ? { ...worker, scheduleStatus: 'NO_SCHEDULE' } : worker,
+    );
     setScanMessage(getSafeReasonMessage('NO_SCHEDULE'));
     setConfirmedEvent(null);
     setRepeatNotice('');
@@ -283,9 +259,6 @@ function ScopedSecurityGateDeskView({
       }
     },
   });
-  const [candidateWorker, setCandidateWorker] = useState<
-    FaceGateVerificationResponse['worker'] | null
-  >(null);
 
   // QR Fallback modal state
   const [qrModalOpen, setQrModalOpen] = useState(false);
@@ -414,8 +387,7 @@ function ScopedSecurityGateDeskView({
 
   // Presence checks do not create gate events; only a confirmed new face is verified.
   const handleScanFace = useCallback(async () => {
-    if (scanBusy.current || !token || !selectedSiteId || !selectedGateId || !selectedSourceId)
-      return;
+    if (scanBusy.current || !token || !selectedSiteId || !selectedGateId) return;
     const video = videoRef.current;
     if (!video || !cameraActive) {
       setCameraError(tr('security_gate_desk_view.webcam_feed_is_not_running'));
@@ -440,7 +412,6 @@ function ScopedSecurityGateDeskView({
         selectedGateId,
         presenceSession.current,
         frameBlob,
-        selectedSourceId,
       );
       if (generation !== scanGeneration.current || !cameraMountedRef.current) return;
       if (presence.state !== 'NEW_FACE' && presence.state !== 'AI_UNAVAILABLE') {
@@ -470,7 +441,6 @@ function ScopedSecurityGateDeskView({
           selectedGateId,
           frameBlob,
           direction,
-          selectedSourceId,
         );
         if (generation !== scanGeneration.current || !cameraMountedRef.current) return;
         setLastDecision(data.decision);
@@ -537,7 +507,6 @@ function ScopedSecurityGateDeskView({
     cameraActive,
     direction,
     selectedGateId,
-    selectedSourceId,
     selectedSiteId,
     token,
     updateCapturedPreview,
@@ -549,7 +518,7 @@ function ScopedSecurityGateDeskView({
       !cameraActive ||
       networkError ||
       !selectedSiteId ||
-      !selectedSourceId ||
+      !selectedGateId ||
       !token ||
       qrModalOpen ||
       fallback
@@ -572,8 +541,8 @@ function ScopedSecurityGateDeskView({
     cameraActive,
     handleScanFace,
     networkError,
+    selectedGateId,
     selectedSiteId,
-    selectedSourceId,
     token,
     qrModalOpen,
     fallback,
@@ -640,161 +609,123 @@ function ScopedSecurityGateDeskView({
 
   return (
     <div className="space-y-6">
-      {/* Top Bar: Gate Selector & Direction Command Strip */}
-      <section className="flex flex-wrap items-center justify-between gap-4 rounded-2xl border border-slate-200/90 bg-white p-4 shadow-xs">
-        <div className="flex min-w-0 max-w-full flex-wrap items-center gap-4">
-          <div className="flex w-full min-w-0 max-w-full items-center gap-2.5 sm:w-auto">
-            <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-orange-100/80 text-[#F66B17]">
-              <IconBuilding2 className="h-4 w-4" />
-            </div>
-            <div className="min-w-0 max-w-full">
-              <label
-                htmlFor="gate-site-select"
-                className="block text-[10px] font-bold uppercase tracking-wider text-slate-500"
-              >
-                {tr('common.active_site')}
-              </label>
-              <select
-                id="gate-site-select"
-                value={selectedSiteId}
-                onChange={(e) => {
-                  handleResetScan();
-                  onSelectSite(e.target.value);
-                }}
-                className="mt-0.5 w-full min-w-0 max-w-full rounded-lg border border-slate-200 bg-slate-50/80 px-2.5 py-1 text-xs font-bold text-slate-800 focus:border-[#F66B17] focus:bg-white focus:ring-2 focus:ring-[#F66B17]/15 focus:outline-none"
-              >
-                {sites.map((site) => (
-                  <option key={site.id} value={site.id}>
-                    {site.name}
-                  </option>
-                ))}
-              </select>
-            </div>
-          </div>
-
-          <div className="h-8 w-px bg-slate-200 hidden sm:block" />
-
-          <div className="flex w-full min-w-0 max-w-full items-center gap-2.5 sm:w-auto">
-            <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-slate-100 text-slate-700">
-              <IconKey className="h-4 w-4" />
-            </div>
-            <div className="min-w-0 max-w-full">
-              <label
-                htmlFor="gate-selector"
-                className="block text-[10px] font-bold uppercase tracking-wider text-slate-500"
-              >
-                {tr('common.access_gate')}
-              </label>
-              <select
-                id="gate-selector"
-                value={selectedGateId}
-                disabled={isScanning || !gates.length}
-                onChange={(e) => {
-                  handleResetScan();
-                  setSelectedGateId(e.target.value);
-                }}
-                className="mt-0.5 w-full min-w-0 max-w-full rounded-lg border border-slate-200 bg-slate-50/80 px-2.5 py-1 text-xs font-bold text-slate-800 focus:border-[#F66B17] focus:bg-white focus:ring-2 focus:ring-[#F66B17]/15 focus:outline-none disabled:bg-slate-100"
-              >
-                {gates.map((gate) => (
-                  <option key={gate.id} value={gate.id}>
-                    {gate.name} ({gate.code})
-                  </option>
-                ))}
-              </select>
-            </div>
-          </div>
-        </div>
-
-        <GateCatalogNotice query={gateCatalog} />
-        {!!selectedGateId && (
-          <div className="space-y-2">
-            <label className="block text-sm font-bold">
-              {tr('gateSetup.source')}
-              <select
-                className="ml-2 rounded-lg border p-2"
-                value={selectedSourceId}
-                disabled={sources.isPending || !!sources.error}
-                onChange={(e) => {
-                  handleResetScan();
-                  setSource(e.target.value);
-                }}
-              >
-                <option value="">{tr('gateSetup.selectSource')}</option>
-                {registeredSources.map((c) => (
-                  <option key={c.id} value={c.id}>
-                    {c.name} ({c.code})
-                  </option>
-                ))}
-              </select>
-            </label>
-            {sources.isPending && <p role="status">{tr('gateSetup.loadingSources')}</p>}
-            {sources.error && (
-              <p role="alert">
-                {userErrorMessage(sources.error)}{' '}
-                <button type="button" onClick={() => void sources.refetch()}>
-                  {tr('gateSetup.retry')}
-                </button>
-              </p>
-            )}
-            {!sources.isPending && !selectedSourceId && (
-              <>
-                <p role="status">
-                  {tr(registeredSources.length ? 'gateSetup.selectSource' : 'gateSetup.noSources')}
-                </p>
-                <button
-                  type="button"
-                  disabled={fallbackMutation.isPending}
-                  onClick={() => {
-                    stopCamera();
-                    fallbackMutation.mutate(scanGeneration.current);
-                  }}
+      {/* Top Bar: Gate Console Strip */}
+      <section className="rounded-2xl border border-slate-200/80 bg-white p-4 sm:p-5 shadow-xs space-y-4">
+        {/* Row 1: Site, Gate & Direction */}
+        <div className="flex flex-wrap items-center justify-between gap-4">
+          <div className="flex flex-wrap items-center gap-4 sm:gap-6 min-w-0">
+            {/* Active Site Picker */}
+            <div className="flex items-center gap-3">
+              <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-orange-50 border border-orange-200/60 text-[#F66B17] shadow-2xs">
+                <IconBuilding2 className="h-5 w-5" />
+              </div>
+              <div className="min-w-0">
+                <label
+                  htmlFor="gate-site-select"
+                  className="block text-[10px] font-bold uppercase tracking-wider text-slate-400"
                 >
-                  {tr('gateSetup.useQr')}
-                </button>
-              </>
-            )}
+                  {tr('common.active_site')}
+                </label>
+                <SmartNativeSelect
+                  id="gate-site-select"
+                  value={selectedSiteId}
+                  onChange={(e) => {
+                    handleResetScan();
+                    onSelectSite(e.target.value);
+                  }}
+                  className="mt-0.5 rounded-lg border border-slate-200 bg-slate-50/60 px-3 py-1.5 text-xs font-bold text-slate-800 transition-all hover:bg-white hover:border-slate-300 focus:border-[#F66B17] focus:bg-white focus:ring-2 focus:ring-[#F66B17]/15 focus:outline-none cursor-pointer"
+                >
+                  {sites.map((site) => (
+                    <option key={site.id} value={site.id}>
+                      {site.name}
+                    </option>
+                  ))}
+                </SmartNativeSelect>
+              </div>
+            </div>
+
+            <div className="h-8 w-px bg-slate-200/80 hidden sm:block" />
+
+            {/* Access Gate Picker */}
+            <div className="flex items-center gap-3">
+              <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-slate-100 border border-slate-200/60 text-slate-600 shadow-2xs">
+                <IconKey className="h-5 w-5" />
+              </div>
+              <div className="min-w-0">
+                <label
+                  htmlFor="gate-selector"
+                  className="block text-[10px] font-bold uppercase tracking-wider text-slate-400"
+                >
+                  {tr('common.access_gate')}
+                </label>
+                <SmartNativeSelect
+                  id="gate-selector"
+                  value={selectedGateId}
+                  disabled={isScanning || !gates.length}
+                  onChange={(e) => {
+                    handleResetScan();
+                    setSelectedGateId(e.target.value);
+                  }}
+                  className="mt-0.5 rounded-lg border border-slate-200 bg-slate-50/60 px-3 py-1.5 text-xs font-bold text-slate-800 transition-all hover:bg-white hover:border-slate-300 focus:border-[#F66B17] focus:bg-white focus:ring-2 focus:ring-[#F66B17]/15 focus:outline-none disabled:bg-slate-100 disabled:text-slate-400 cursor-pointer"
+                >
+                  {gates.map((gate) => (
+                    <option key={gate.id} value={gate.id}>
+                      {gate.name} ({gate.code})
+                    </option>
+                  ))}
+                </SmartNativeSelect>
+              </div>
+            </div>
           </div>
-        )}
-        {/* Direction Switcher (IN vs OUT) */}
-        <div className="flex items-center gap-3">
-          <span className="text-xs font-bold uppercase tracking-wider text-slate-500">
-            {tr('common.direction')}
-          </span>
-          <div className="inline-flex rounded-xl border border-slate-200 bg-slate-100/90 p-1 shadow-2xs">
-            <button
-              type="button"
-              disabled={isScanning}
-              onClick={() => {
-                handleResetScan();
-                setDirection('IN');
-              }}
-              className={`flex items-center gap-2 rounded-lg px-4 py-2 text-xs font-bold transition-all ${
-                direction === 'IN'
-                  ? 'bg-emerald-600 text-white shadow-sm ring-2 ring-emerald-500/20'
-                  : 'text-slate-600 hover:text-slate-900'
-              }`}
-            >
-              <span className="h-2 w-2 rounded-full bg-emerald-300" />
-              <span>{tr('common.in_check_in')}</span>
-            </button>
-            <button
-              type="button"
-              disabled={isScanning}
-              onClick={() => {
-                handleResetScan();
-                setDirection('OUT');
-              }}
-              className={`flex items-center gap-2 rounded-lg px-4 py-2 text-xs font-bold transition-all ${
-                direction === 'OUT'
-                  ? 'bg-blue-600 text-white shadow-sm ring-2 ring-blue-500/20'
-                  : 'text-slate-600 hover:text-slate-900'
-              }`}
-            >
-              <span className="h-2 w-2 rounded-full bg-blue-300" />
-              <span>{tr('common.out_check_out')}</span>
-            </button>
+
+          {/* Direction Switcher (IN vs OUT) */}
+          <div className="flex items-center gap-3 ml-auto">
+            <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400 hidden sm:inline-block">
+              {tr('common.direction')}
+            </span>
+            <div className="inline-flex rounded-xl border border-slate-200 bg-slate-100/90 p-1 shadow-2xs">
+              <button
+                type="button"
+                disabled={isScanning}
+                onClick={() => {
+                  handleResetScan();
+                  setDirection('IN');
+                }}
+                className={`flex items-center gap-2 rounded-lg px-3.5 py-1.5 text-xs font-bold transition-all cursor-pointer ${
+                  direction === 'IN'
+                    ? 'bg-emerald-600 text-white shadow-xs'
+                    : 'text-slate-600 hover:text-slate-900'
+                }`}
+              >
+                <span
+                  className={`h-2 w-2 rounded-full ${direction === 'IN' ? 'bg-white' : 'bg-emerald-500'}`}
+                />
+                <span>{tr('common.in_check_in')}</span>
+              </button>
+              <button
+                type="button"
+                disabled={isScanning}
+                onClick={() => {
+                  handleResetScan();
+                  setDirection('OUT');
+                }}
+                className={`flex items-center gap-2 rounded-lg px-3.5 py-1.5 text-xs font-bold transition-all cursor-pointer ${
+                  direction === 'OUT'
+                    ? 'bg-blue-600 text-white shadow-xs'
+                    : 'text-slate-600 hover:text-slate-900'
+                }`}
+              >
+                <span
+                  className={`h-2 w-2 rounded-full ${direction === 'OUT' ? 'bg-white' : 'bg-blue-500'}`}
+                />
+                <span>{tr('common.out_check_out')}</span>
+              </button>
+            </div>
           </div>
         </div>
+
+        {/* Gate availability */}
+        <GateCatalogNotice query={gateCatalog} />
       </section>
 
       {/* Main Split: Camera Feed & Decision Desk Panel */}
@@ -811,7 +742,7 @@ function ScopedSecurityGateDeskView({
               >
                 {tr('common.camera_device')}
               </label>
-              <select
+              <SmartNativeSelect
                 id="gate-camera-device-select"
                 value={cameraDeviceId}
                 disabled={isScanning}
@@ -830,7 +761,7 @@ function ScopedSecurityGateDeskView({
                     {device.label || tr('common.camera_value', { value1: index + 1 })}
                   </option>
                 ))}
-              </select>
+              </SmartNativeSelect>
             </div>
 
             <div className="flex items-center gap-2">
@@ -867,7 +798,7 @@ function ScopedSecurityGateDeskView({
                 <p className="text-sm font-semibold text-slate-300">
                   {tr('common.webcam_not_active')}
                 </p>
-                {cameraError && !sources.isPending && !!selectedGateId && (
+                {cameraError && !!selectedGateId && (
                   <div className="mt-2 max-w-sm space-y-2">
                     <p className="text-xs text-red-400">{localizeMessage(cameraError)}</p>
                     {lastDecision?.authorization !== 'DENIED' && (
@@ -1051,9 +982,13 @@ function ScopedSecurityGateDeskView({
                   </div>
                 </div>
                 <div className="mt-3 flex items-center justify-between border-t border-slate-100 pt-2.5 text-xs">
-                  <span className="text-slate-500 font-medium">{tr('common.site_assignment')}</span>
-                  <span className="font-bold text-emerald-700">
-                    {localizedLabel(candidateWorker.assignmentStatus)}
+                  <span className="text-slate-500 font-medium">{tr('common.shift')}</span>
+                  <span
+                    className={`font-bold ${candidateWorker.scheduleStatus === 'SCHEDULED' ? 'text-emerald-700' : 'text-slate-600'}`}
+                  >
+                    {candidateWorker.scheduleStatus
+                      ? localizedLabel(candidateWorker.scheduleStatus)
+                      : tr('common.unavailable')}
                   </span>
                 </div>
               </div>

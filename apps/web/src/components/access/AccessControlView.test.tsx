@@ -248,12 +248,10 @@ describe('Site Access ERD integration', () => {
     await screen.findByText('No visitor pass requests at this site.');
     expect(authSessionMock.logout).not.toHaveBeenCalled();
   });
-  it('signs out through the shared session', async () => {
-    const user = userEvent.setup();
+  it('does not duplicate app-level sign out button inside access control', async () => {
     mount();
     await screen.findByRole('heading', { name: 'Worker assignments and Zone permissions' });
-    await user.click(screen.getByRole('button', { name: /sign out/i }));
-    expect(authSessionMock.logout).toHaveBeenCalledTimes(1);
+    expect(screen.queryByRole('button', { name: /sign out/i })).toBeNull();
   });
   it('Representative opens Attendance without Zone Permissions or Worker Biometrics', async () => {
     authSessionMock.user = {
