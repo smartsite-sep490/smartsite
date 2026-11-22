@@ -21,6 +21,12 @@ const STATE_TEXT_TONES = {
   STALE: { dot: 'bg-rose-600', text: 'text-rose-800' },
 } as const;
 
+const VIEW_VALIDITY_TONES = {
+  UNCONFIRMED: { text: 'text-slate-600', dot: 'bg-slate-400' },
+  NEEDS_REVALIDATION: { text: 'font-medium text-amber-900', dot: 'bg-amber-600' },
+  UNAVAILABLE: { text: 'font-medium text-amber-900', dot: 'bg-amber-600' },
+} as const;
+
 export type {
   CameraApplicationStatusClient,
   CameraApplicationStatusContext,
@@ -139,6 +145,7 @@ export function CameraApplicationStatusSummary({
   const actionGuidance = effectiveState !== 'LOADED' && actionKey ? t(actionKey) : null;
 
   const stateTone = STATE_TEXT_TONES[effectiveState];
+  const viewValidityTone = VIEW_VALIDITY_TONES[rawStatus.viewValidity];
   const technicalDetailsContent = (
     <div className="mt-1.5 min-w-0 space-y-1 rounded-xl border border-slate-200 bg-slate-50/50 px-3 py-2 text-xs text-slate-600">
       <p className="min-w-0 break-words [overflow-wrap:anywhere] font-mono tabular-nums">
@@ -190,7 +197,7 @@ export function CameraApplicationStatusSummary({
           {compact && (
             <span
               data-testid="camera-view-validity-warning"
-              className="inline-flex min-w-0 items-center gap-1.5 break-words [overflow-wrap:anywhere] text-xs font-medium text-amber-900"
+              className={`inline-flex min-w-0 items-center gap-1.5 break-words [overflow-wrap:anywhere] text-xs ${viewValidityTone.text}`}
             >
               <span aria-hidden="true" className="text-slate-300">
                 ·
@@ -252,11 +259,11 @@ export function CameraApplicationStatusSummary({
         <>
           <p
             data-testid="camera-view-validity-warning"
-            className="flex min-w-0 items-start gap-2 break-words [overflow-wrap:anywhere] text-sm font-medium text-amber-900"
+            className={`flex min-w-0 items-start gap-2 break-words [overflow-wrap:anywhere] text-sm ${viewValidityTone.text}`}
           >
             <span
               aria-hidden="true"
-              className="mt-2 h-1.5 w-1.5 shrink-0 rounded-full bg-amber-600"
+              className={`mt-2 h-1.5 w-1.5 shrink-0 rounded-full ${viewValidityTone.dot}`}
             />
             <span>{t(`cameraSetup.appStatus.viewValidity.${rawStatus.viewValidity}`)}</span>
           </p>

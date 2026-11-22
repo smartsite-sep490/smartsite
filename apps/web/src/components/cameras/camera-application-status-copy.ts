@@ -19,7 +19,8 @@ const en = {
   'cameraSetup.appStatus.state.LOADED': 'AI has received the configuration',
   'cameraSetup.appStatus.state.REJECTED': 'Saved · AI could not apply configuration',
   'cameraSetup.appStatus.state.STALE': 'Saved · Unable to confirm',
-  'cameraSetup.appStatus.viewValidity.UNCONFIRMED': 'Needs camera angle review',
+  'cameraSetup.appStatus.viewValidity.UNCONFIRMED':
+    'Keep the camera fixed; review the region after changing its angle.',
   'cameraSetup.appStatus.viewValidity.NEEDS_REVALIDATION': 'Needs camera angle review',
   'cameraSetup.appStatus.viewValidity.UNAVAILABLE': 'Camera angle reference unavailable',
   'cameraSetup.appStatus.timestamps': 'Observed: {{observedAt}} · Last receipt: {{lastReceiptAt}}',
@@ -88,7 +89,8 @@ const vi: Record<keyof typeof en, string> = {
   'cameraSetup.appStatus.state.LOADED': 'Máy AI đã nhận cấu hình',
   'cameraSetup.appStatus.state.REJECTED': 'Đã lưu · Máy AI không áp dụng được cấu hình',
   'cameraSetup.appStatus.state.STALE': 'Đã lưu · Chưa xác nhận được',
-  'cameraSetup.appStatus.viewValidity.UNCONFIRMED': 'Cần kiểm tra góc camera',
+  'cameraSetup.appStatus.viewValidity.UNCONFIRMED':
+    'Giữ camera cố định; kiểm tra lại vùng sau khi đổi góc.',
   'cameraSetup.appStatus.viewValidity.NEEDS_REVALIDATION': 'Cần kiểm tra lại góc camera',
   'cameraSetup.appStatus.viewValidity.UNAVAILABLE': 'Chưa có ảnh góc nhìn camera',
   'cameraSetup.appStatus.timestamps':
