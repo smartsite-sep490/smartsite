@@ -14,6 +14,7 @@ import { userErrorMessage } from '../../../i18n/messages';
 import { SmartDatePicker } from '../../ui';
 import { DocumentMediaPicker } from './DocumentMediaPicker';
 import { documentKinds } from './worker-document-files';
+import { IconChevronDown } from '../../icons';
 
 const fieldClass =
   'block w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-800 focus:border-[var(--action-primary)] focus:outline-none focus:ring-2 focus:ring-orange-100';
@@ -46,8 +47,9 @@ export function WorkerDocumentBundleForm({
     phoneNumber: profile.phoneNumber ?? '',
     gender: profile.gender,
     address: profile.address ?? '',
-  });
+  }); 
   const [identityChanged, setIdentityChanged] = useState(false);
+  const [expanded, setExpanded] = useState(true);
   const requestId = useRef(crypto.randomUUID());
   const changed = () => {
     requestId.current = crypto.randomUUID();
@@ -96,14 +98,40 @@ export function WorkerDocumentBundleForm({
   });
   return (
     <form
-      className="space-y-5 rounded-2xl border border-slate-200 bg-slate-50 p-3 sm:p-5"
+      className="space-y-4 rounded-2xl border border-slate-200/90 bg-slate-50/60 p-4 sm:p-5 shadow-2xs transition-all"
       onSubmit={(event) => {
         event.preventDefault();
         submit.mutate();
       }}
     >
-      <h3 className="font-bold text-[var(--text-heading)]">{tr('documents.bundleTitle')}</h3>
-      {(profile.version ?? 0) > baseVersion && (
+      <div
+        className={`flex items-center justify-between cursor-pointer select-none ${
+          expanded ? 'border-b border-slate-200/60 pb-3' : ''
+        }`}
+        onClick={() => setExpanded(!expanded)}
+      >
+        <h3 className="font-extrabold text-sm text-[#041D2E]">{tr('documents.bundleTitle')}</h3>
+        <button
+          type="button"
+          aria-expanded={expanded}
+          aria-label={tr('documents.bundleTitle')}
+          onClick={(e) => {
+            e.stopPropagation();
+            setExpanded(!expanded);
+          }}
+          className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl border border-slate-200 bg-white hover:bg-slate-50 text-xs font-bold text-slate-700 transition-all shadow-2xs active:scale-[0.98] cursor-pointer select-none"
+        >
+          <span>{expanded ? tr('common.collapse') : tr('common.expand')}</span>
+          <IconChevronDown
+            className={`w-3.5 h-3.5 text-slate-500 transition-transform duration-200 ${
+              expanded ? 'rotate-180' : ''
+            }`}
+          />
+        </button>
+      </div>
+      {expanded && (
+        <>
+          {(profile.version ?? 0) > baseVersion && (
         <p role="alert" className="rounded-xl bg-amber-50 p-3 text-sm text-amber-900">
           {tr('documents.profileChanged')}{' '}
           <button
@@ -130,10 +158,14 @@ export function WorkerDocumentBundleForm({
         </p>
       )}
       <fieldset disabled={submit.isPending} className="space-y-5">
-        <label className="block space-y-1 text-sm font-semibold text-slate-700">
-          <span>{tr('documents.safetyCardRequired')}</span>
+        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 p-3 rounded-xl bg-white border border-slate-200/80 shadow-2xs">
+          <label htmlFor="bundle-safety-card-select" className="text-xs font-bold text-slate-700">
+            {tr('documents.safetyCardRequired')}
+          </label>
           <select
-            className={fieldClass}
+            id="bundle-safety-card-select"
+            aria-label={tr('documents.safetyCardRequired')}
+            className="w-full sm:w-auto rounded-lg border border-slate-200 bg-slate-50 px-3 py-1.5 text-xs font-bold text-slate-800 focus:border-[#F66B17] focus:outline-none cursor-pointer"
             value={String(required)}
             onChange={(event) => {
               setRequired(event.target.value === 'true');
@@ -143,7 +175,7 @@ export function WorkerDocumentBundleForm({
             <option value="true">{tr('documents.cardRequired')}</option>
             <option value="false">{tr('documents.cardNotRequired')}</option>
           </select>
-        </label>
+        </div>
         <details className="rounded-xl border border-slate-200 bg-white p-3">
           <summary className="cursor-pointer font-semibold text-sm">
             {tr('documents.identityBothSides')}
@@ -227,60 +259,65 @@ export function WorkerDocumentBundleForm({
             return (
               <section
                 key={kind}
-                className="space-y-3 rounded-xl border border-slate-200 bg-white p-3"
+                className="space-y-2.5 rounded-xl border border-slate-200/90 bg-white p-3.5 shadow-2xs flex flex-col justify-between"
               >
-                <h4 className="font-semibold text-sm">
-                  {tr('documents.' + kind)}
-                  {kind === 'SAFETY_CARD' && !required ? ' (' + tr('documents.optional') + ')' : ''}
-                </h4>
-                {latest?.status === 'REJECTED' && (
-                  <p className="rounded-lg bg-rose-50 p-2 text-xs text-rose-800">
-                    {tr('documents.REJECTED')}: {latest.reviewNote}
-                  </p>
-                )}
-                {needsFile && (
-                  <p className="text-xs font-semibold text-amber-900">
-                    {tr('documents.fileRequired')}
-                  </p>
-                )}
-                <SmartDatePicker
-                  label={tr(
-                    kind === 'HEALTH_CERTIFICATE'
-                      ? 'documents.declaredIssuedOn'
-                      : 'documents.declaredExpiresOn',
+                <div className="space-y-2.5">
+                  <div className="flex items-center justify-between gap-1.5 border-b border-slate-100 pb-2">
+                    <h4 className="font-extrabold text-xs text-slate-900 truncate">
+                      {tr('documents.' + kind)}
+                      {kind === 'SAFETY_CARD' && !required ? ' (' + tr('documents.optional') + ')' : ''}
+                    </h4>
+                    {needsFile && (
+                      <span className="text-[10px] font-bold text-amber-700 bg-amber-50 px-1.5 py-0.5 rounded border border-amber-200 shrink-0">
+                        {tr('documents.fileRequired')}
+                      </span>
+                    )}
+                  </div>
+                  {latest?.status === 'REJECTED' && (
+                    <p className="rounded-lg bg-rose-50 p-2 text-xs text-rose-800">
+                      {tr('documents.REJECTED')}: {latest.reviewNote}
+                    </p>
                   )}
-                  value={date}
-                  fieldRequired={!!files[kind]}
-                  disablePast={false}
-                  onChange={(value) => {
-                    setDates((previous) => ({ ...previous, [kind]: value }));
-                    changed();
-                  }}
-                />
-                <DocumentMediaPicker
-                  label={tr('documents.' + kind)}
-                  file={files[kind]}
-                  validate={async (file) => {
-                    const result = await client.checkWorkerDocumentDates(
-                      token,
-                      siteId,
-                      profile.workerId,
-                      kind,
-                      file,
-                      {},
-                    );
-                    setChecks((previous) => ({ ...previous, [kind]: result }));
-                    if (result.dateCheck.detectedDate)
-                      setDates((previous) => ({
-                        ...previous,
-                        [kind]: previous[kind] || result.dateCheck.detectedDate!,
-                      }));
-                  }}
-                  onSelect={(file) => {
-                    setFiles((previous) => ({ ...previous, [kind]: file }));
-                    changed();
-                  }}
-                />
+                  <SmartDatePicker
+                    label={tr(
+                      kind === 'HEALTH_CERTIFICATE'
+                        ? 'documents.declaredIssuedOn'
+                        : 'documents.declaredExpiresOn',
+                    )}
+                    value={date}
+                    fieldRequired={!!files[kind]}
+                    disablePast={false}
+                    onChange={(value) => {
+                      setDates((previous) => ({ ...previous, [kind]: value }));
+                      changed();
+                    }}
+                  />
+                  <DocumentMediaPicker
+                    label={tr('documents.' + kind)}
+                    file={files[kind]}
+                    hideHeader
+                    validate={async (file) => {
+                      const result = await client.checkWorkerDocumentDates(
+                        token,
+                        siteId,
+                        profile.workerId,
+                        kind,
+                        file,
+                        {},
+                      );
+                      setChecks((previous) => ({ ...previous, [kind]: result }));
+                      if (result.dateCheck.detectedDate)
+                        setDates((previous) => ({
+                          ...previous,
+                          [kind]: previous[kind] || result.dateCheck.detectedDate!,
+                        }));
+                    }}
+                    onSelect={(file) => {
+                      setFiles((previous) => ({ ...previous, [kind]: file }));
+                      changed();
+                    }}
+                  />
+                </div>
                 {files[kind] && !isWorkerDocumentDate(date) && (
                   <p role="alert" className="text-xs text-red-700">
                     {tr('documents.dateRequiredHint')}
@@ -351,10 +388,12 @@ export function WorkerDocumentBundleForm({
             !identityChanged &&
             required === (profile.safetyCardRequired ?? true))
         }
-        className="rounded-xl bg-[var(--action-primary)] px-5 py-3 text-sm font-bold text-white hover:bg-[var(--action-primary-hover)] disabled:opacity-50"
+        className="rounded-xl bg-[#F66B17] hover:bg-[#e05d0e] px-5 py-2.5 text-xs font-bold text-white shadow-2xs hover:shadow-xs active:scale-95 transition-all disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer"
       >
         {tr(submit.isPending ? 'common.saving' : 'documents.sendBundle')}
       </button>
-    </form>
+    </>
+  )}
+</form>
   );
 }
