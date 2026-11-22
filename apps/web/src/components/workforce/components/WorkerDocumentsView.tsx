@@ -75,9 +75,9 @@ export function WorkerDocumentsView({ apiUrl }: { apiUrl: string }) {
   }
 
   return (
-    <div className="mx-auto max-w-6xl space-y-6 pb-12">
+    <div className="mx-auto max-w-7xl space-y-3 pb-8">
       {/* Site selector */}
-      <div className="flex justify-end pb-2 border-b border-slate-200/80">
+      <div className="flex justify-end">
         {allowed.length > 0 && (
           <div className="shrink-0 flex items-center gap-2 rounded-xl border border-slate-200/90 bg-white px-3 py-1.5 shadow-2xs self-start sm:self-auto">
             <IconBuilding2 className="w-4 h-4 text-[#F66B17] shrink-0" />

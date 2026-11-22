@@ -259,9 +259,6 @@ export function AppLayout({ currentTab: propCurrentTab, onSelectTab, children }:
                       Site
                     </span>
                   </div>
-                  <span className="text-[9px] font-mono tracking-widest text-slate-400 uppercase mt-0.5 font-semibold">
-                    {t('shell.operations')}
-                  </span>
                 </div>
               )}
             </div>
@@ -286,14 +283,6 @@ export function AppLayout({ currentTab: propCurrentTab, onSelectTab, children }:
             <nav className="space-y-6" aria-label={t('shell.navigation')}>
               {navGroups.map((group, groupIdx) => (
                 <div key={groupIdx} className="space-y-1.5">
-                  {!isCollapsed && (
-                    <div className="hidden lg:flex px-3 mb-2 items-center gap-1.5">
-                      <span className="w-1 h-1 rounded-full bg-[#FF7A1A]/70" />
-                      <p className="text-[10px] font-mono font-bold uppercase tracking-[0.2em] text-slate-400/80">
-                        {group.label}
-                      </p>
-                    </div>
-                  )}
                   {group.items.map((item) => {
                     const isActive = activeTab === item.id;
                     const Icon = item.icon;

@@ -7,7 +7,6 @@ import type {
   SmartSiteManagementClient,
   WorkerDocumentSubmissionStatus,
 } from '@smartsite/api-client';
-import { WorkerDocumentStatusTags } from '../workforce/components/WorkerDocumentStatusTags';
 import { WorkerDocumentsPanel } from '../workforce/components/WorkerDocumentsPanel';
 import { translate as tr } from '../../i18n';
 import { userErrorMessage } from '../../i18n/messages';
@@ -96,63 +95,50 @@ export function WorkerDocumentReviewView(p: {
   };
 
   return (
-    <section className="space-y-6 rounded-2xl border border-slate-200/90 bg-white p-3 sm:p-7 shadow-xs">
-      {/* Header section with badge & title */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-slate-100 pb-5">
-        <div className="space-y-1">
-          <div className="flex items-center gap-2.5">
-            <h2 className="text-xl sm:text-2xl font-black text-[#041D2E] tracking-tight">
-              {tr('documents.reviewQueue')}
-            </h2>
-            {total > 0 && (
-              <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-bold bg-orange-100/80 text-[#F66B17] border border-orange-200">
-                {total}
-              </span>
-            )}
-          </div>
-          <p className="text-xs text-slate-500 leading-relaxed max-w-2xl">
-            {tr('documents.ocrHint')}
-          </p>
-        </div>
-
-        {/* Refresh button */}
-        <button
-          type="button"
-          onClick={refresh}
-          disabled={workers.isFetching}
-          className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl border border-slate-200 bg-slate-50/80 text-xs font-bold text-slate-700 hover:bg-slate-100 transition-all shadow-2xs self-start sm:self-auto cursor-pointer"
-        >
-          <IconRefresh
-            className={`w-3.5 h-3.5 text-slate-500 ${workers.isFetching ? 'animate-spin text-[#F66B17]' : ''}`}
-          />
-          <span>{tr('documents.refresh')}</span>
-        </button>
-      </div>
+    <section className="space-y-4 rounded-2xl border border-slate-200/90 bg-white p-3 sm:p-5 shadow-xs">
+      {/* Screen-reader accessible title for tests & a11y */}
+      <h2 className="sr-only">{tr('documents.reviewQueue')}</h2>
 
       {/* Main Review Area: 2-column Master-Detail on desktop */}
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
         {/* Left Column: Search, Filters & Worker Queue */}
-        <div className="lg:col-span-5 space-y-4">
+        <div className="lg:col-span-4 space-y-4">
           {/* Filter and Search Bar */}
           <div className="p-3 sm:p-3.5 rounded-2xl border border-slate-200/90 bg-slate-50/60 space-y-2.5 shadow-2xs">
-            <label className="block text-xs font-bold text-slate-700 space-y-1">
-              <span className="block text-[11px] font-extrabold uppercase tracking-wider text-slate-500">
+            <div className="flex items-center justify-between pb-1">
+              <label
+                htmlFor="worker-documents-search-input"
+                className="block text-[11px] font-extrabold uppercase tracking-wider text-slate-500 cursor-pointer"
+              >
                 {tr('documents.search')}
-              </span>
-              <div className="relative">
-                <IconSearch className="w-4 h-4 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2 pointer-events-none" />
-                <input
-                  value={search}
-                  maxLength={120}
-                  placeholder={tr('documents.search')}
-                  onChange={(e) => {
-                    setSearch(e.target.value);
-                    setOffset(0);
-                  }}
-                  className="w-full pl-10 pr-4 py-2 rounded-xl border border-slate-200 bg-white text-xs font-medium text-slate-800 placeholder:text-slate-400 focus:border-[#F66B17] focus:ring-2 focus:ring-[#F66B17]/15 focus:outline-none transition-all shadow-2xs"
+              </label>
+              <button
+                type="button"
+                onClick={refresh}
+                disabled={workers.isFetching}
+                className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg border border-slate-200 bg-white text-xs font-bold text-slate-700 hover:bg-slate-50 transition-all shadow-2xs cursor-pointer"
+              >
+                <IconRefresh
+                  className={`w-3.5 h-3.5 text-slate-500 ${workers.isFetching ? 'animate-spin text-[#F66B17]' : ''}`}
                 />
-              </div>
-            </label>
+                <span>{tr('documents.refresh')}</span>
+              </button>
+            </div>
+            <div className="relative">
+              <IconSearch className="w-4 h-4 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2 pointer-events-none" />
+              <input
+                id="worker-documents-search-input"
+                aria-label={tr('documents.search')}
+                value={search}
+                maxLength={120}
+                placeholder={tr('documents.search')}
+                onChange={(e) => {
+                  setSearch(e.target.value);
+                  setOffset(0);
+                }}
+                className="w-full pl-10 pr-4 py-2 rounded-xl border border-slate-200 bg-white text-xs font-medium text-slate-800 placeholder:text-slate-400 focus:border-[#F66B17] focus:ring-2 focus:ring-[#F66B17]/15 focus:outline-none transition-all shadow-2xs"
+              />
+            </div>
 
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
               <label className="block text-xs font-bold text-slate-700 space-y-1">
@@ -308,45 +294,88 @@ export function WorkerDocumentReviewView(p: {
                     {isSelected && (
                       <div className="absolute left-0 top-0 bottom-0 w-1.5 bg-[#F66B17]" />
                     )}
-                    <div className="flex flex-col items-start gap-3 sm:flex-row sm:items-center sm:justify-between">
-                      <div className="flex items-center gap-3 min-w-0 flex-1">
-                        <div
-                          className={`w-10 h-10 rounded-xl flex items-center justify-center font-extrabold text-xs shrink-0 shadow-2xs transition-colors ${
-                            isSelected
-                              ? 'bg-[#F66B17] text-white shadow-orange-500/20 shadow-sm'
-                              : 'bg-gradient-to-br from-slate-100 to-slate-200/80 text-[#041D2E] border border-slate-200'
+                    <div className="space-y-2.5">
+                      <div className="flex items-center justify-between gap-3 min-w-0">
+                        <div className="flex items-center gap-2.5 min-w-0 flex-1">
+                          <div
+                            className={`w-9 h-9 rounded-xl flex items-center justify-center font-extrabold text-xs shrink-0 transition-colors ${
+                              isSelected
+                                ? 'bg-[#F66B17] text-white shadow-2xs'
+                                : 'bg-slate-100 text-[#041D2E] border border-slate-200'
+                            }`}
+                          >
+                            {w.displayName.charAt(0).toUpperCase()}
+                          </div>
+                          <div className="min-w-0 flex-1">
+                            <p className="font-bold text-sm text-slate-900 group-hover:text-[#F66B17] transition-colors truncate">
+                              {w.displayName}
+                            </p>
+                            <span className="font-mono text-[10px] font-semibold text-slate-500 bg-slate-100 px-1 py-0.5 rounded border border-slate-200/80">
+                              {w.externalId}
+                            </span>
+                          </div>
+                        </div>
+
+                        {/* Top-right: Single primary status badge */}
+                        <span
+                          className={`inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-md text-xs font-bold border shrink-0 ${
+                            w.submissionStatus === 'PENDING_REVIEW'
+                              ? 'bg-amber-50 text-amber-800 border-amber-200/90'
+                              : w.submissionStatus === 'REVIEWED'
+                                ? 'bg-emerald-50 text-emerald-700 border-emerald-200/90'
+                                : 'bg-slate-100 text-slate-600 border-slate-200'
                           }`}
                         >
-                          {w.displayName.charAt(0).toUpperCase()}
-                        </div>
-                        <div className="min-w-0 flex-1">
-                          <p className="font-bold text-sm text-slate-900 group-hover:text-[#F66B17] transition-colors truncate">
-                            {w.displayName}
-                          </p>
-                          <span className="font-mono text-[11px] font-semibold text-slate-500 bg-slate-100 px-1.5 py-0.5 rounded border border-slate-200/80">
-                            {w.externalId}
-                          </span>
-                        </div>
+                          <span
+                            className={`w-1.5 h-1.5 rounded-full shrink-0 ${
+                              w.submissionStatus === 'PENDING_REVIEW'
+                                ? 'bg-amber-500'
+                                : w.submissionStatus === 'REVIEWED'
+                                  ? 'bg-emerald-500'
+                                  : 'bg-slate-400'
+                            }`}
+                          />
+                          <span>{tr(`documents.${w.submissionStatus ?? 'NOT_SUBMITTED'}`)}</span>
+                        </span>
                       </div>
 
-                      <div className="flex flex-row flex-wrap items-start gap-1.5 max-w-full sm:flex-col sm:items-end sm:max-w-[55%]">
-                        <WorkerDocumentStatusTags profile={w} />
-                        {(p.canReview ?? true) && (
-                          <WorkerDocumentAiStatus
-                            profile={w}
-                            running={
-                              selection.activeWorker === w.workerId ||
-                              selection.manualWorker === w.workerId
-                            }
-                          />
-                        )}
-                        {!(p.canReview ?? true) && w.expiringKinds.length > 0 && (
-                          <span className="inline-flex items-center gap-1 text-[10px] font-bold text-amber-800 bg-amber-50 px-2 py-0.5 rounded-md border border-amber-200/80 shadow-2xs whitespace-nowrap">
-                            <IconClock className="w-2.5 h-2.5 text-amber-600" />
-                            <span>{tr('common.expiring_soon')}</span>
-                          </span>
-                        )}
-                      </div>
+                      {/* Sub-row for Warning / Supplement Badges and AI Status */}
+                      {(w.needsSupplement ||
+                        w.status === 'EXPIRED' ||
+                        w.expiringKinds?.length > 0 ||
+                        ((p.canReview ?? true) &&
+                          (selection.activeWorker === w.workerId ||
+                            selection.manualWorker === w.workerId))) && (
+                        <div className="flex flex-wrap items-center gap-1.5 pt-1.5 border-t border-slate-100">
+                          {w.needsSupplement && (
+                            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[10px] font-bold bg-rose-50 text-rose-700 border border-rose-200 shadow-2xs">
+                              <span className="w-1.5 h-1.5 rounded-full bg-rose-500 shrink-0" />
+                              <span>{tr('documents.needsSupplement')}</span>
+                            </span>
+                          )}
+                          {w.status === 'EXPIRED' && (
+                            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[10px] font-bold bg-red-50 text-red-800 border border-red-300 shadow-2xs">
+                              <span className="w-1.5 h-1.5 rounded-full bg-red-600 shrink-0" />
+                              <span>{tr(`documents.${w.status}`)}</span>
+                            </span>
+                          )}
+                          {(p.canReview ?? true) && (
+                            <WorkerDocumentAiStatus
+                              profile={w}
+                              running={
+                                selection.activeWorker === w.workerId ||
+                                selection.manualWorker === w.workerId
+                              }
+                            />
+                          )}
+                          {!(p.canReview ?? true) && w.expiringKinds.length > 0 && (
+                            <span className="inline-flex items-center gap-1 text-[10px] font-bold text-amber-800 bg-amber-50 px-2 py-0.5 rounded-md border border-amber-200/80 shadow-2xs whitespace-nowrap">
+                              <IconClock className="w-2.5 h-2.5 text-amber-600" />
+                              <span>{tr('common.expiring_soon')}</span>
+                            </span>
+                          )}
+                        </div>
+                      )}
                     </div>
                   </button>
                 </li>
@@ -385,7 +414,7 @@ export function WorkerDocumentReviewView(p: {
         </div>
 
         {/* Right Column: Selected Worker Details & Document Review */}
-        <div className="lg:col-span-7">
+        <div className="lg:col-span-8">
           {selected ? (
             <WorkerDocumentsPanel
               key={selected}

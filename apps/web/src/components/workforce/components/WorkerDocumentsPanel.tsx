@@ -25,12 +25,8 @@ import {
   IconClock,
   IconShield,
   IconAlertTriangle,
-  IconUser,
-  IconBuilding2,
   IconLoader,
   IconChevronDown,
-  IconHardHat,
-  IconCheckCircle2,
 } from '../../icons';
 
 const fieldClass =
@@ -205,9 +201,10 @@ export function WorkerDocumentsPanel(p: Props) {
   };
 
   const toggleAll = () => {
+    const shouldCollapse = expandedSections.length > 0;
     setSectionChoices(
       Object.fromEntries(
-        allSections.map((id) => [id, expandedSections.length !== allSections.length]),
+        allSections.map((id) => [id, !shouldCollapse]),
       ),
     );
   };
@@ -306,8 +303,7 @@ export function WorkerDocumentsPanel(p: Props) {
         </div>
 
         {p.canUpload && (
-          <div className="flex items-start gap-2.5 rounded-xl border border-blue-200/70 bg-gradient-to-r from-blue-50/70 to-indigo-50/40 p-3 text-xs text-blue-900 shadow-2xs">
-            <IconShield className="w-4 h-4 text-blue-600 mt-0.5 shrink-0" />
+          <div className="rounded-xl border border-blue-200/80 bg-blue-50/60 px-3.5 py-2.5 text-xs text-blue-900 shadow-2xs">
             <p className="leading-relaxed font-medium">{tr('documents.renewalHint')}</p>
           </div>
         )}
@@ -323,65 +319,45 @@ export function WorkerDocumentsPanel(p: Props) {
           </div>
         )}
 
-        {/* Executive 4-Cell Bento Information Grid */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-2.5 pt-3 border-t border-slate-200/60">
-          <div className="flex items-center gap-2.5 px-3 py-2 rounded-xl bg-white/90 border border-slate-200/80 shadow-2xs">
-            <div className="w-8 h-8 rounded-lg bg-sky-50 text-sky-600 border border-sky-100 flex items-center justify-center shrink-0">
-              <IconUser className="w-4 h-4" />
-            </div>
-            <div className="min-w-0">
-              <p className="text-[10px] font-bold uppercase tracking-wider text-slate-400">
-                {tr('documents.nationalId')}
-              </p>
-              <p className="font-mono text-xs font-bold text-slate-800 truncate">
-                {data.nationalId ?? '—'}
-              </p>
-            </div>
+        {/* Executive Information Grid */}
+        <div className="grid grid-cols-3 gap-2.5 pt-3 border-t border-slate-200/60">
+          <div className="px-3 py-2 rounded-xl bg-slate-50/80 border border-slate-200/70 shadow-2xs">
+            <p className="text-[10px] font-bold uppercase tracking-wider text-slate-400">
+              {tr('documents.nationalId')}
+            </p>
+            <p className="font-mono text-xs font-bold text-slate-800 truncate mt-0.5">
+              {data.nationalId ?? '—'}
+            </p>
           </div>
 
-          <div className="flex items-center gap-2.5 px-3 py-2 rounded-xl bg-white/90 border border-slate-200/80 shadow-2xs">
-            <div className="w-8 h-8 rounded-lg bg-emerald-50 text-emerald-600 border border-emerald-100 flex items-center justify-center shrink-0">
-              <IconCheck className="w-4 h-4" />
-            </div>
-            <div className="min-w-0">
-              <p className="text-[10px] font-bold uppercase tracking-wider text-slate-400">
-                {tr('documents.phoneNumber')}
-              </p>
-              <p className="font-mono text-xs font-bold text-slate-800 truncate">
-                {data.phoneNumber ?? '—'}
-              </p>
-            </div>
+          <div className="px-3 py-2 rounded-xl bg-slate-50/80 border border-slate-200/70 shadow-2xs">
+            <p className="text-[10px] font-bold uppercase tracking-wider text-slate-400">
+              {tr('documents.phoneNumber')}
+            </p>
+            <p className="font-mono text-xs font-bold text-slate-800 truncate mt-0.5">
+              {data.phoneNumber ?? '—'}
+            </p>
           </div>
 
-          <div className="flex items-center gap-2.5 px-3 py-2 rounded-xl bg-white/90 border border-slate-200/80 shadow-2xs">
-            <div className="w-8 h-8 rounded-lg bg-amber-50 text-amber-600 border border-amber-100 flex items-center justify-center shrink-0">
-              <IconUser className="w-4 h-4" />
-            </div>
-            <div className="min-w-0">
-              <p className="text-[10px] font-bold uppercase tracking-wider text-slate-400">
-                {tr('documents.gender')}
-              </p>
-              <p className="text-xs font-bold text-slate-800 truncate">
-                {data.gender ? tr(`documents.${data.gender}`) : '—'}
-              </p>
-            </div>
+          <div className="px-3 py-2 rounded-xl bg-slate-50/80 border border-slate-200/70 shadow-2xs">
+            <p className="text-[10px] font-bold uppercase tracking-wider text-slate-400">
+              {tr('documents.gender')}
+            </p>
+            <p className="text-xs font-bold text-slate-800 truncate mt-0.5">
+              {data.gender ? tr(`documents.${data.gender}`) : '—'}
+            </p>
           </div>
 
-          <div className="flex items-center gap-2.5 px-3 py-2 rounded-xl bg-white/90 border border-slate-200/80 shadow-2xs">
-            <div className="w-8 h-8 rounded-lg bg-orange-50 text-[#F66B17] border border-orange-100 flex items-center justify-center shrink-0">
-              <IconBuilding2 className="w-4 h-4" />
-            </div>
-            <div className="min-w-0">
-              <p className="text-[10px] font-bold uppercase tracking-wider text-slate-400">
-                {tr('documents.address')}
-              </p>
-              <p
-                className="text-xs font-bold text-slate-800 truncate"
-                title={data.address ?? undefined}
-              >
-                {data.address ?? '—'}
-              </p>
-            </div>
+          <div className="col-span-3 px-3 py-2 rounded-xl bg-slate-50/80 border border-slate-200/70 shadow-2xs">
+            <p className="text-[10px] font-bold uppercase tracking-wider text-slate-400">
+              {tr('documents.address')}
+            </p>
+            <p
+              className="text-xs font-bold text-slate-800 mt-0.5"
+              title={data.address ?? undefined}
+            >
+              {data.address ?? '—'}
+            </p>
           </div>
         </div>
 
@@ -432,10 +408,15 @@ export function WorkerDocumentsPanel(p: Props) {
           className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl border border-slate-200 bg-white hover:bg-slate-50 text-xs font-bold text-slate-700 transition-all shadow-2xs active:scale-[0.98] cursor-pointer select-none"
         >
           <span>
-            {expandedSections.length === allSections.length
+            {expandedSections.length > 0
               ? tr('documents.collapseAll')
               : tr('documents.expandAll')}
           </span>
+          <IconChevronDown
+            className={`w-3.5 h-3.5 text-slate-500 transition-transform duration-200 ${
+              expandedSections.length > 0 ? 'rotate-180' : ''
+            }`}
+          />
         </button>
       </div>
 
@@ -444,25 +425,20 @@ export function WorkerDocumentsPanel(p: Props) {
         <button
           type="button"
           onClick={() => toggleSection('IDENTITY')}
-          className="w-full flex flex-col items-start sm:flex-row sm:items-center sm:justify-between gap-3 p-3.5 sm:p-4 bg-slate-50/60 hover:bg-slate-100/60 text-left cursor-pointer transition-colors select-none"
+          className="w-full flex items-center justify-between gap-3 px-4 py-3 bg-slate-50/60 hover:bg-slate-100/60 text-left cursor-pointer transition-colors select-none"
         >
-          <div className="flex w-full sm:w-auto items-center gap-3.5 min-w-0 flex-1">
-            <div className="w-10 h-10 rounded-xl bg-sky-50 text-sky-600 flex items-center justify-center border border-sky-200/60 shadow-2xs shrink-0">
-              <IconUser className="w-5 h-5" />
-            </div>
-            <div className="min-w-0">
-              <span className="font-extrabold text-sm text-[#041D2E] block break-words">
-                {tr('documents.identityBothSides')}
-              </span>
-              <span className="text-xs font-medium text-slate-500 block mt-0.5 break-words">
-                {identityUploadedCount === 2
-                  ? tr('documents.identitySidesComplete')
-                  : tr('documents.identitySidesIncomplete')}
-              </span>
-            </div>
+          <div className="min-w-0 flex-1">
+            <span className="font-extrabold text-sm text-[#041D2E] block truncate">
+              {tr('documents.identityBothSides')}
+            </span>
+            <span className="text-xs font-medium text-slate-500 block mt-0.5 truncate">
+              {identityUploadedCount === 2
+                ? tr('documents.identitySidesComplete')
+                : tr('documents.identitySidesIncomplete')}
+            </span>
           </div>
 
-          <div className="flex items-center gap-1.5 sm:gap-2 max-w-full flex-wrap justify-start sm:justify-end">
+          <div className="flex items-center gap-2 shrink-0">
             {/* Identity Mismatch Warning Pill */}
             {identityMismatch && (
               <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-bold bg-amber-50 text-amber-900 border border-amber-200/90 shadow-2xs max-w-full whitespace-normal">
@@ -847,42 +823,23 @@ export function WorkerDocumentsPanel(p: Props) {
               <button
                 type="button"
                 onClick={() => toggleSection(kind)}
-                className="w-full flex flex-col items-start sm:flex-row sm:items-center sm:justify-between gap-3 p-3.5 sm:p-4 bg-slate-50/60 hover:bg-slate-100/60 text-left cursor-pointer transition-colors select-none"
+                className="w-full flex items-center justify-between gap-3 px-4 py-3 bg-slate-50/60 hover:bg-slate-100/60 text-left cursor-pointer transition-colors select-none"
               >
-                <div className="flex w-full sm:w-auto items-center gap-3.5 min-w-0 flex-1">
-                  <div
-                    className={`w-10 h-10 rounded-xl flex items-center justify-center border shadow-2xs shrink-0 ${
-                      kind === 'SAFETY_CARD'
-                        ? 'bg-orange-50 text-[#F66B17] border-orange-200/60'
-                        : kind === 'HEALTH_CERTIFICATE'
-                          ? 'bg-emerald-50 text-emerald-600 border-emerald-200/60'
-                          : 'bg-indigo-50 text-indigo-600 border-indigo-200/60'
-                    }`}
-                  >
-                    {kind === 'SAFETY_CARD' ? (
-                      <IconHardHat className="w-5 h-5" />
-                    ) : kind === 'HEALTH_CERTIFICATE' ? (
-                      <IconCheckCircle2 className="w-5 h-5" />
-                    ) : (
-                      <IconShield className="w-5 h-5" />
-                    )}
-                  </div>
-                  <div className="min-w-0">
-                    <span className="font-extrabold text-sm text-[#041D2E] block break-words">
-                      {tr(`documents.${kind}`)}
-                    </span>
-                    <span className="text-xs font-mono font-medium text-slate-500 block mt-0.5 break-words">
-                      {currentDoc?.expiresOn
-                        ? `${tr('documents.expiresOn')}: ${currentDoc.expiresOn}`
-                        : currentDoc
-                          ? tr('documents.submittedPendingApproval')
-                          : tr('documents.documentNotSubmitted')}
-                    </span>
-                  </div>
+                <div className="min-w-0 flex-1">
+                  <span className="font-extrabold text-sm text-[#041D2E] block truncate">
+                    {tr(`documents.${kind}`)}
+                  </span>
+                  <span className="text-xs font-mono font-medium text-slate-500 block mt-0.5 truncate">
+                    {currentDoc?.expiresOn
+                      ? `${tr('documents.expiresOn')}: ${currentDoc.expiresOn}`
+                      : currentDoc
+                        ? tr('documents.submittedPendingApproval')
+                        : tr('documents.documentNotSubmitted')}
+                  </span>
                 </div>
 
                 {/* Status & Warning Pills on the Outside */}
-                <div className="flex items-center gap-1.5 sm:gap-2 max-w-full flex-wrap justify-start sm:justify-end">
+                <div className="flex items-center gap-2 shrink-0">
                   {/* Warning Pill for Identity Mismatch */}
                   {hasMismatch && (
                     <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-bold bg-amber-50 text-amber-900 border border-amber-200/90 shadow-2xs max-w-full whitespace-normal">
