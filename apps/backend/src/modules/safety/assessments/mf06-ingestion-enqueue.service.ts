@@ -7,6 +7,11 @@ import { EventProcessingStatus } from '../../../database/entities/enums.js';
 import { PublicHttpException } from '../../../common/http/public-http-exception.js';
 import { Mf06EnqueueService } from './mf06-enqueue.service.js';
 import {
+  enqueueMf06Retrospective,
+  listMf06RetrospectiveOptions,
+  type Mf06RetrospectiveInput,
+} from './mf06-retrospective-enqueue.js';
+import {
   isTrackedProjectionTransaction,
   type TrackedProjectionFrame,
 } from '../../../integrations/ai/tracked-frame-admission.js';
@@ -65,6 +70,33 @@ export class Mf06IngestionEnqueueService {
     return this.withCapacity(manager, cap, () =>
       new Mf06EnqueueService(this.db).enqueueSealedFrame(manager, frame),
     );
+  }
+
+  async enqueueRetrospective(
+    manager: EntityManager,
+    input: Mf06RetrospectiveInput,
+  ): Promise<readonly string[]> {
+    this.requireRetrospectiveProfile();
+    return this.withCapacity(manager, this.requireCapacity(manager), () =>
+      enqueueMf06Retrospective(manager, input),
+    );
+  }
+
+  async listRetrospectiveOptions(
+    manager: EntityManager,
+    input: Omit<Mf06RetrospectiveInput, 'initialRequestId' | 'commandId'>,
+  ) {
+    this.requireRetrospectiveProfile();
+    return listMf06RetrospectiveOptions(manager, input);
+  }
+
+  private requireRetrospectiveProfile() {
+    if (
+      this.config.get('MF06_ENQUEUE_ENABLED', { infer: true }) !== true ||
+      this.config.get('SMARTSITE_DB_MIGRATION_PROFILE', { infer: true }) !==
+        'tracked-v17-identification-ppe-authority'
+    )
+      throw this.unavailable();
   }
 
   private requireCapacity(manager: EntityManager): number {

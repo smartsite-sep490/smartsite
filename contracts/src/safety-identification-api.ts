@@ -104,6 +104,41 @@ export interface SafetyIdentificationHistoryEntry {
 
 export type SafetyIdentificationHistoryPage = Page<SafetyIdentificationHistoryEntry>;
 
+export interface SafetyIdentificationRetrospectiveCommand {
+  commandId: string;
+  episodeId: string;
+  identificationVersion: number;
+  initialRequestId: string;
+}
+
+export type Mf06DecisionOutcome = 'ALLOWED' | 'DENIED' | 'UNAVAILABLE';
+export interface SafetyIdentificationRetrospectiveAssessment {
+  requestId: string;
+  initialRequestId: string;
+  cameraId: string;
+  zoneId: string;
+  cameraName: string | null;
+  zoneName: string | null;
+  identificationVersion: number;
+  capturedAt: string;
+  status: Mf06DecisionOutcome | 'PENDING' | 'CLAIMED' | 'FAILED' | 'CANCELLED';
+  reasonCode: string | null;
+  originalOutcome: Mf06DecisionOutcome | null;
+}
+
+export interface SafetyIdentificationRetrospectiveOptions {
+  episodeId: string;
+  identificationVersion: number;
+  items: {
+    initialRequestId: string;
+    cameraName: string;
+    zoneName: string;
+    capturedAt: string;
+  }[];
+}
+export type SafetyIdentificationRetrospectivePage =
+  Page<SafetyIdentificationRetrospectiveAssessment>;
+
 export interface SafetyIdentificationAssignee {
   id: string;
   displayName: string;

@@ -37,6 +37,40 @@ export class SafetyIdentificationController {
     return this.identification.create(request, siteId, body);
   }
 
+  @Post(':id/retrospective-assessment')
+  @HttpCode(202)
+  @Header('Cache-Control', 'private, no-store')
+  enqueueRetrospective(
+    @Req() request: AuthenticatedRequest,
+    @Param('siteId') siteId: string,
+    @Param('id') id: string,
+    @Body() body: unknown,
+  ) {
+    return this.identification.enqueueRetrospective(request, siteId, id, body);
+  }
+
+  @Get(':id/retrospective-assessments')
+  @Header('Cache-Control', 'private, no-store')
+  retrospectiveHistory(
+    @Req() request: AuthenticatedRequest,
+    @Param('siteId') siteId: string,
+    @Param('id') id: string,
+    @Query('offset') offset?: string,
+    @Query('limit') limit?: string,
+  ) {
+    return this.identification.retrospectiveHistory(request, siteId, id, offset, limit);
+  }
+
+  @Get(':id/retrospective-assessment-options')
+  @Header('Cache-Control', 'private, no-store')
+  retrospectiveOptions(
+    @Req() request: AuthenticatedRequest,
+    @Param('siteId') siteId: string,
+    @Param('id') id: string,
+  ) {
+    return this.identification.retrospectiveOptions(request, siteId, id);
+  }
+
   @Post(':id/:action')
   @Header('Cache-Control', 'private, no-store')
   change(
