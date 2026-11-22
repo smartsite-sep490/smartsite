@@ -11,9 +11,20 @@ import type { BackendEnvironment } from '../src/config/environment.js';
 import { verifyPassword } from '../src/modules/auth/password.js';
 
 const secret = 'synthetic-unit-test-email-secret';
-function fixture(verified = true) {
+const syntheticUserId = '11111111-1111-4111-8111-111111111111';
+
+function fixture(
+  verified = true,
+  options?: {
+    onBetweenPrecheckAndCommand?: (state: {
+      user: UserEntity;
+      expireChallenge: () => void;
+      replaceChallengeId: (nextId: string) => void;
+    }) => void;
+  },
+) {
   const user = {
-    id: 'synthetic-user',
+    id: syntheticUserId,
     username: 'synthetic',
     email: 'synthetic@example.test',
     emailVerifiedAt: verified ? new Date() : null,
@@ -24,8 +35,12 @@ function fixture(verified = true) {
   let committed = false,
     attempts = 0,
     consumed = false,
+    expired = false,
     revoked = false,
-    queueCalls = 0;
+    queueCalls = 0,
+    authorityCommands = 0,
+    challengeId = 'challenge-1',
+    transactionCount = 0;
   const repository = {
     createQueryBuilder: () => ({
       setLock() {
@@ -34,8 +49,9 @@ function fixture(verified = true) {
       where() {
         return this;
       },
-      getOne: async () => user,
+      getOne: async () => (user.isActive ? user : null),
     }),
+    findOne: async () => (user.isActive ? user : null),
     save: async () => user,
   };
   const manager = {
@@ -49,12 +65,15 @@ function fixture(verified = true) {
         : repository,
     query: async (sql: string, args: unknown[] = []) => {
       if (sql.startsWith('SELECT EXISTS')) return [{ recent: false }];
+      if (sql.startsWith('SELECT id FROM app_user')) return user.isActive ? [{ id: user.id }] : [];
+      if (sql.startsWith('SELECT count(*) FILTER'))
+        return [{ n: 0, legacy: 0, baseline: 0, history: 0 }];
       if (sql.startsWith('SELECT id,token_hash'))
-        return consumed
+        return consumed || expired
           ? []
           : [
               {
-                id: 'challenge',
+                id: challengeId,
                 token_hash: emailCodeHash(secret, user.id, 'RESET', '123456'),
                 attempts,
               },
@@ -63,17 +82,34 @@ function fixture(verified = true) {
         attempts++;
         consumed = args[1] === true || attempts >= 5;
       }
+      if (sql.includes('authorization_history_command')) authorityCommands++;
       if (sql.startsWith('INSERT INTO')) queueCalls++;
       return [];
     },
   } as unknown as EntityManager;
   const source = {
-    transaction: async (run: (m: EntityManager) => Promise<unknown>) => {
+    transaction: async (
+      isolationOrRun: string | ((m: EntityManager) => Promise<unknown>),
+      maybeRun?: (m: EntityManager) => Promise<unknown>,
+    ) => {
+      const run = typeof isolationOrRun === 'function' ? isolationOrRun : maybeRun!;
+      transactionCount += 1;
+      if (transactionCount === 2) {
+        options?.onBetweenPrecheckAndCommand?.({
+          user,
+          expireChallenge: () => {
+            expired = true;
+          },
+          replaceChallengeId: (nextId: string) => {
+            challengeId = nextId;
+          },
+        });
+      }
       const result = await run(manager);
       committed = true;
       return result;
     },
-  } as DataSource;
+  } as unknown as DataSource;
   const config = new ConfigService<BackendEnvironment, true>({
     NODE_ENV: 'test',
     AUTH_JWT_SECRET: secret,
@@ -83,7 +119,15 @@ function fixture(verified = true) {
   return {
     user,
     service: new AccountEmailService(source, config),
-    state: () => ({ committed, attempts, consumed, revoked, queueCalls }),
+    state: () => ({
+      committed,
+      attempts,
+      consumed,
+      expired,
+      revoked,
+      queueCalls,
+      authorityCommands,
+    }),
   };
 }
 
@@ -117,4 +161,72 @@ test('unverified email cannot request or confirm a password reset and the reques
   await assert.rejects(f.service.confirmReset('synthetic', '123456', 'SyntheticPassword9!'));
   assert.equal(f.state().attempts, 0);
   assert.equal(f.state().revoked, false);
+});
+
+test('confirmReset fails closed when account email, password version, or challenge changes or is replaced with the same code between precheck and command', async () => {
+  const cases: Array<{
+    name: string;
+    mutate: (ctx: {
+      user: UserEntity;
+      expireChallenge: () => void;
+      replaceChallengeId: (nextId: string) => void;
+    }) => void;
+    expectedHash: string;
+  }> = [
+    {
+      name: 'account email changed',
+      mutate: ({ user }) => {
+        user.email = 'changed@example.test';
+      },
+      expectedHash: 'old-synthetic-hash',
+    },
+    {
+      name: 'email verification cleared',
+      mutate: ({ user }) => {
+        user.emailVerifiedAt = null;
+      },
+      expectedHash: 'old-synthetic-hash',
+    },
+    {
+      name: 'password version changed',
+      mutate: ({ user }) => {
+        user.passwordHash = 'rotated-by-other-request';
+      },
+      expectedHash: 'rotated-by-other-request',
+    },
+    {
+      name: 'challenge expired',
+      mutate: ({ expireChallenge }) => {
+        expireChallenge();
+      },
+      expectedHash: 'old-synthetic-hash',
+    },
+    {
+      name: 'account deactivated',
+      mutate: ({ user }) => {
+        user.isActive = false;
+      },
+      expectedHash: 'old-synthetic-hash',
+    },
+    {
+      name: 'challenge replaced with new challengeId carrying the same code',
+      mutate: ({ replaceChallengeId }) => {
+        replaceChallengeId('challenge-2');
+      },
+      expectedHash: 'old-synthetic-hash',
+    },
+  ];
+
+  for (const item of cases) {
+    const f = fixture(true, { onBetweenPrecheckAndCommand: item.mutate });
+    await assert.rejects(
+      f.service.confirmReset('synthetic', '123456', 'SyntheticPassword9!'),
+      (error: unknown) => (error as { getStatus?: () => number }).getStatus?.() === 400,
+      `expected 400 when ${item.name}`,
+    );
+    assert.equal(f.user.passwordHash, item.expectedHash, `password unchanged when ${item.name}`);
+    assert.equal(f.state().revoked, false, `sessions unrevoked when ${item.name}`);
+    assert.equal(f.state().consumed, false, `challenge not consumed when ${item.name}`);
+    assert.equal(f.state().authorityCommands, 0, `no authority command recorded when ${item.name}`);
+  }
 });
