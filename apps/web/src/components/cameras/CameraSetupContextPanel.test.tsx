@@ -236,4 +236,33 @@ describe('CameraSetupContextPanel saved configuration vs worker-applied status',
       ),
     ).toBeTruthy();
   });
+
+  it('keeps compact context header and expanded diagnostics in normal document scroll without sticky positioning', () => {
+    render(
+      <CameraSetupContextBar
+        compact
+        siteCode="SITE-01"
+        siteName="North Yard"
+        rows={[ACTIVE_CAMERA]}
+        selectedCamera={ACTIVE_CAMERA}
+        canManageCameras={true}
+        canOpenMonitoring={false}
+        open={vi.fn()}
+        diagnosticsSlot={<div data-testid="expanded-diagnostics-slot">Diagnostics details</div>}
+      />,
+    );
+
+    const header = screen.getByTestId('camera-setup-sticky-header');
+    const tokens = header.className.split(/\s+/);
+    expect(tokens).not.toContain('lg:sticky');
+    expect(tokens).not.toContain('lg:top-16');
+    expect(tokens).not.toContain('lg:z-10');
+    expect(tokens).not.toContain('backdrop-blur-xs');
+
+    const diagnostics = within(header).getByTestId(
+      'camera-setup-diagnostics-disclosure',
+    ) as HTMLDetailsElement;
+    diagnostics.open = true;
+    expect(within(diagnostics).getByTestId('expanded-diagnostics-slot')).toBeTruthy();
+  });
 });
