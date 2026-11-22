@@ -137,8 +137,11 @@ it('renders full-width authenticated workspace without fake Admin banner or dupl
     const selects = document.querySelectorAll('select');
     expect(selects.length).toBe(3);
     for (const select of selects) {
-      expect(select.className).toContain('h-10');
-      expect(select.className).toContain('text-sm');
+      const visibleControl = select.parentElement!;
+      expect(visibleControl.querySelector('[data-select-value]')).toBeTruthy();
+      expect(visibleControl.className).toContain('h-10');
+      expect(visibleControl.className).toContain('min-h-10');
+      expect(visibleControl.className).toContain('text-sm');
     }
     expect(screen.getByTestId('zones-fullscreen-toggle')).toBeTruthy();
     expect(screen.queryByRole('link', { name: /Camera setup|Thiết lập camera/i })).toBeNull();
