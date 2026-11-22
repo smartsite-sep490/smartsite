@@ -32,6 +32,7 @@ export { SmartSiteManagementClient } from './management';
 export type { ManagementSession, SavedPpePolicy, PpePolicySaveReceipt } from './management';
 export type { NativeUploadFile, UploadFile } from './management';
 export type { SafetyAlertListOptions, ZoneEntryDecisionListOptions } from './management';
+export type { SafetyIdentificationRetrospectiveAssessment } from '@smartsite/contracts/safety-identification';
 export type {
   ObservationIdentityContextResponse,
   ObservationIdentityDecisionCommand,

@@ -8,6 +8,8 @@ import { EventProcessingStatus } from '../src/database/entities/enums.js';
 import { ZoneEntryAssessmentRequestEntity } from '../src/database/entities/zone-entry-assessment-request.entity.js';
 import type { Mf06JobClaim } from '../src/modules/safety/assessments/mf06-job-lease.service.js';
 import { Mf06ClaimContextReader } from '../src/modules/safety/assessments/mf06-claim-context.reader.js';
+import { computeMf06InitialBinding } from '../src/modules/safety/assessments/mf06-event-admission.js';
+import { selectZoneEntrySubject } from '../src/modules/safety/identity/observation-identity-subject.js';
 
 const SITE_ID = '11111111-1111-4111-8111-111111111111';
 const CAMERA_ID = '22222222-2222-4222-8222-222222222222';
@@ -53,6 +55,8 @@ function makeFixture() {
     evidence: [],
   };
   const payloadHash = computeCanonicalPayloadHash(rawPayload);
+  const selected = selectZoneEntrySubject(rawPayload, 1);
+  assert.ok(selected.zoneEligible);
   const event: AiObservationEventEntity = {
     eventId: EVENT_ID,
     payloadHash,
@@ -84,7 +88,7 @@ function makeFixture() {
     capturedAt: new Date(CAPTURED_AT),
     requestedPurpose: 'INITIAL_OBSERVATION_ASSESSMENT',
     requestRevision: 1,
-    bindingHash: 'b'.repeat(64),
+    bindingHash: computeMf06InitialBinding(EVENT_ID, selected),
     requestedAt: new Date('2026-10-10T01:02:05.000Z'),
   };
   const claim: Mf06JobClaim = Object.freeze({
@@ -169,6 +173,9 @@ function makeFakeDataSource(options?: {
             step(`sql:site:${String(params?.[0])}`);
             return options?.siteRows ?? [{ id: SITE_ID }];
           }
+          if (text.includes('AS authority_captured_at') && text.includes('WHERE r.request_id=$1')) {
+            return [{ authority_captured_at: null }];
+          }
           throw new Error(`Unexpected SQL: ${text}`);
         },
         getRepository(entity: unknown) {
@@ -182,6 +189,19 @@ function makeFakeDataSource(options?: {
           }
           if (entity === AiObservationEventEntity) {
             return {
+              createQueryBuilder() {
+                return {
+                  select() {
+                    return this;
+                  },
+                  where() {
+                    return this;
+                  },
+                  async getRawOne() {
+                    return { admission_context: null };
+                  },
+                };
+              },
               async findOneBy(where: { eventId: string }) {
                 step(`repo:event:${where.eventId}`);
                 return options && 'event' in options ? options.event : f.event;

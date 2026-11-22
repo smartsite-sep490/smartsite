@@ -1,3 +1,4 @@
+import { Mf06IngestionEnqueueService } from '../assessments/mf06-ingestion-enqueue.service.js';
 import { lockC02EvidenceStaging } from './c02-evidence-inventory.js';
 import { Injectable } from '@nestjs/common';
 import {
@@ -61,6 +62,13 @@ class CreateIdentificationDto {
   @IsOptional() @IsISO8601({ strict: true }) @Matches(/T.*(?:Z|[+-]\d{2}:\d{2})$/) dueAt?:
     string | null;
   @IsArray() @ArrayMaxSize(32) @IsUUID(undefined, { each: true }) evidenceRefs!: string[];
+}
+
+class RetrospectiveAssessmentDto {
+  @IsUUID() commandId!: string;
+  @IsUUID() episodeId!: string;
+  @IsUUID() initialRequestId!: string;
+  @IsInt() @Min(3) @Max(2147483647) identificationVersion!: number;
 }
 
 class VersionDto {
@@ -203,6 +211,7 @@ export class SafetyIdentificationService {
     private readonly storage: StorageService,
     private readonly trackedFrames: TrackedEpisodeFrameQuery,
     private readonly alertEvidence: SafetyAlertEvidenceService,
+    private readonly mf06Queue: Mf06IngestionEnqueueService,
   ) {}
 
   private async actor(manager: EntityManager, request: AuthenticatedRequest, siteId: string) {
@@ -228,6 +237,131 @@ export class SafetyIdentificationService {
       officer: roles.some(({ role }) => role === 'SAFETY_OFFICER'),
       siteManager: roles.some(({ role }) => role === 'SITE_MANAGER'),
     };
+  }
+
+  async enqueueRetrospective(
+    request: AuthenticatedRequest,
+    siteValue: string,
+    requestValue: string,
+    body: unknown,
+  ): Promise<{ requestId: string }> {
+    const siteId = uuid(siteValue).toLowerCase();
+    const identificationRequestId = uuid(requestValue).toLowerCase();
+    const input = command(RetrospectiveAssessmentDto, body);
+    return this.db.transaction(async (manager) => {
+      const actor = await this.actor(manager, request, siteId);
+      if (!actor.officer) forbidden();
+      const [requestId] = await this.mf06Queue.enqueueRetrospective(manager, {
+        siteId,
+        identificationRequestId,
+        identificationVersion: input.identificationVersion,
+        commandId: input.commandId.toLowerCase(),
+        episodeId: input.episodeId.toLowerCase(),
+        initialRequestId: input.initialRequestId.toLowerCase(),
+      });
+      if (!requestId) missing();
+      return { requestId };
+    });
+  }
+
+  async retrospectiveOptions(request: AuthenticatedRequest, siteValue: string, idValue: string) {
+    const siteId = uuid(siteValue).toLowerCase();
+    const identificationRequestId = uuid(idValue).toLowerCase();
+    return this.db.transaction('REPEATABLE READ', async (manager) => {
+      const actor = await this.actor(manager, request, siteId);
+      if (!actor.officer) forbidden();
+      const [current] = await manager.query<
+        { episodeId: string; identificationVersion: number; status: string }[]
+      >(
+        `SELECT episode_id AS "episodeId", version AS "identificationVersion", status
+           FROM safety_identification_request WHERE site_id=$1 AND id=$2`,
+        [siteId, identificationRequestId],
+      );
+      if (!current) missing();
+      const { episodeId, identificationVersion, status } = current;
+      const items =
+        status === 'CLOSED'
+          ? await this.mf06Queue.listRetrospectiveOptions(manager, {
+              siteId,
+              identificationRequestId,
+              episodeId,
+              identificationVersion,
+            })
+          : [];
+      return { episodeId, identificationVersion, items };
+    });
+  }
+
+  async retrospectiveHistory(
+    request: AuthenticatedRequest,
+    siteValue: string,
+    idValue: string,
+    offset?: string,
+    limit?: string,
+  ) {
+    const siteId = uuid(siteValue).toLowerCase();
+    const id = uuid(idValue).toLowerCase();
+    const page = pagination(offset, limit);
+    return this.db.transaction('REPEATABLE READ', async (manager) => {
+      const actor = await this.actor(manager, request, siteId);
+      if (!actor.officer) forbidden();
+      const [context] = await manager.query(
+        'SELECT id FROM safety_identification_request WHERE site_id=$1 AND id=$2',
+        [siteId, id],
+      );
+      if (!context) missing();
+      const [profile] = await manager.query(
+        `SELECT EXISTS (
+           SELECT FROM pg_catalog.pg_attribute
+           WHERE attrelid=to_regclass('zone_entry_assessment')
+             AND attname='c02_acceptance_id' AND NOT attisdropped
+         ) AS available`,
+      );
+      if (!profile?.available)
+        throw new PublicHttpException(503, {
+          code: 'SERVICE_UNAVAILABLE',
+          message: 'Retrospective assessments are unavailable',
+        });
+      const scope = `
+        FROM safety_identification_action c
+        JOIN zone_entry_assessment_request q
+          ON (q.site_id,q.c02_acceptance_id)=(c.site_id,c.command_id)
+         AND q.requested_purpose='RETROSPECTIVE_REVIEW'
+        JOIN zone_entry_assessment_job j ON j.request_id=q.request_id
+        LEFT JOIN zone_entry_assessment a
+          ON (a.request_id,a.site_id,a.event_id,a.binding_hash)
+           = (q.request_id,q.site_id,q.event_id,q.binding_hash)
+        LEFT JOIN zone_entry_assessment original
+          ON original.request_id=q.initial_request_id AND original.site_id=q.site_id`;
+      const predicate = " WHERE c.site_id=$1 AND c.request_id=$2 AND c.kind='ACCEPT'";
+      const [count]: [{ total: number }] = await manager.query(
+        'SELECT count(*)::int AS total ' + scope + predicate,
+        [siteId, id],
+      );
+      const items = await manager.query(
+        `SELECT q.request_id AS "requestId", q.initial_request_id AS "initialRequestId",
+          q.zone_id AS "zoneId", q.camera_id AS "cameraId",
+          camera.name AS "cameraName", zone.name AS "zoneName",
+          to_char(q.authority_captured_at AT TIME ZONE 'UTC','YYYY-MM-DD"T"HH24:MI:SS.US"Z"') AS "capturedAt",
+          c.request_version AS "identificationVersion",
+          CASE WHEN a.provenance='SYNTHETIC_TEST' THEN 'UNAVAILABLE'
+            WHEN a.outcome IS NOT NULL THEN a.outcome
+            WHEN j.status='SUCCEEDED' THEN 'UNAVAILABLE'
+            ELSE j.status END AS status,
+          CASE WHEN a.provenance='SYNTHETIC_TEST' THEN 'AUTHORITY_UNAVAILABLE'
+            ELSE a.reason_code END AS "reasonCode",
+          CASE WHEN original.provenance='SYNTHETIC_TEST' THEN 'UNAVAILABLE'
+            ELSE original.outcome END AS "originalOutcome"
+        ` +
+          scope +
+          ` LEFT JOIN camera ON (camera.id,camera.site_id)=(q.camera_id,q.site_id)
+             LEFT JOIN zone ON (zone.id,zone.site_id)=(q.zone_id,q.site_id)` +
+          predicate +
+          ' ORDER BY q.authority_captured_at DESC,q.request_id OFFSET $3 LIMIT $4',
+        [siteId, id, page.offset, page.limit],
+      );
+      return { items, total: count.total };
+    });
   }
 
   async assignee(
