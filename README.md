@@ -49,6 +49,13 @@ or business alert readiness; a fresh view and PPE configuration are still requir
 Browser media transport, replay activation and general remote-host rollout remain
 unfinished. Native RTSP redirect/SDP egress still needs deployment-level enforcement.
 
+The Backend also accepts the explicit `1.1.0` unowned PREPARED receipt for a
+genuinely new allowed Camera. This uses guarded first issuance, not a fabricated
+previous generation or automatic owner recovery. Existing `1.0.0` owned receipts
+and public RUNNING results are unchanged. The paired AI producer/operator profile
+must be deployed separately; consumer support alone does not enable first-camera
+setup. See [source bootstrap contract](contracts/camera-source-bootstrap.md).
+
 ## Architecture
 
 ```text

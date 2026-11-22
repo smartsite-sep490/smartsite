@@ -1,4 +1,7 @@
-import type { SourceConfigurationResumeCommand } from '@smartsite/contracts';
+import type {
+  SourceActivationResult,
+  SourceConfigurationResumeCommand,
+} from '@smartsite/contracts';
 import type { SourceActivationState, SourceGeneration } from './camera-source-activation.js';
 
 export interface SourceConfigurationResumePorts {
@@ -13,7 +16,7 @@ export async function resumeAcceptedCameraSource(
   command: SourceConfigurationResumeCommand,
   expectedOwner: string,
   ports: SourceConfigurationResumePorts,
-): Promise<SourceActivationState> {
+): Promise<SourceActivationResult> {
   command = { ...command };
   await ports.authorize();
   const prepared = await ports.prepare();

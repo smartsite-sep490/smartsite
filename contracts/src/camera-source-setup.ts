@@ -24,6 +24,16 @@ export interface SourceActivationResult {
   sourceKind: 'LIVE';
   currentGenerationId: string;
 }
+/** Internal host preparation: null is explicit first-source state, never authorization. */
+export type SourcePreparationResult = Omit<
+  SourceActivationResult,
+  'state' | 'sourceRevision' | 'currentGenerationId'
+> & {
+  state: 'PREPARED';
+} & (
+    | { schemaVersion?: '1.0.0'; sourceRevision: number; currentGenerationId: string }
+    | { schemaVersion: '1.1.0'; sourceRevision: 0; currentGenerationId: null }
+  );
 export interface SourceConfigurationResumeCommand {
   commandId: string;
   expectedRevision: number;

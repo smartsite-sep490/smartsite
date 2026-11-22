@@ -77,16 +77,29 @@ export const sourceActivationCommandSchema = z
       .max(Number.MAX_SAFE_INTEGER - 1),
   })
   .strict();
-export const sourceActivationStateSchema = z
+const ownedSourceActivationStateSchema = z
   .object({
     schemaVersion: z.literal('1.0.0'),
-    state: z.enum(['PREPARED', 'RUNNING']),
     commandId: z.uuid(),
     sourceRevision: z.number().int().min(0).max(Number.MAX_SAFE_INTEGER),
     sourceKind: z.literal('LIVE'),
     currentGenerationId: z.uuid(),
   })
   .strict();
+export const sourceActivationStateSchema = z.union([
+  ownedSourceActivationStateSchema.extend({ state: z.literal('PREPARED') }),
+  ownedSourceActivationStateSchema.extend({ state: z.literal('RUNNING') }),
+  z
+    .object({
+      schemaVersion: z.literal('1.1.0'),
+      state: z.literal('PREPARED'),
+      commandId: z.uuid(),
+      sourceRevision: z.literal(0),
+      sourceKind: z.literal('LIVE'),
+      currentGenerationId: z.null(),
+    })
+    .strict(),
+]);
 
 export const sourceConfigurationResumeSchema = z
   .object({

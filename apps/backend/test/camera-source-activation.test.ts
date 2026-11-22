@@ -49,7 +49,7 @@ test('activation stops old owner, rechecks authority, issues once, then starts w
       },
     },
   );
-  assert.deepEqual(calls, ['auth', 'stop', 'auth', 'issue', 'start', 'auth']);
+  assert.deepEqual(calls, ['auth', 'stop', 'auth', 'issue', 'auth', 'start', 'auth']);
   assert.equal(result.state, 'RUNNING');
   assert.doesNotMatch(JSON.stringify(result), /server-only-generation/);
 });
