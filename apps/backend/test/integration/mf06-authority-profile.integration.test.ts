@@ -3,6 +3,8 @@ import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
 import { test } from 'node:test';
 import { DataSource } from 'typeorm';
+import { validateEnvironment } from '../../src/config/environment.js';
+import { buildCutoverDataSourceOptions } from '../../src/scripts/activate-authority-cutover.js';
 import { buildMigrationOptions } from '../../src/database/typeorm.migration-profile.js';
 import { createIsolatedTestDatabase } from '../support/isolated-test-database.js';
 import { resolveTestDatabaseUrl } from '../support/test-environment.js';
@@ -10,6 +12,9 @@ import { resolveTestDatabaseUrl } from '../support/test-environment.js';
 const authorityMigrations = [
   'InstallAuthorityJournal1795046400012',
   'InstallAuthorityCutover1795046400013',
+  'ExactMf06AuthorityTime1795046400014',
+  'Mf06RetrospectiveBinding1795046400015',
+  'Mf06RetrospectiveResult1795046400016',
 ];
 
 for (const upgrade of [false, true]) {
@@ -41,7 +46,10 @@ for (const upgrade of [false, true]) {
       assert.ok(before.some((row) => row.name === 'LeaveNotice1795046400000'));
       const source = await open('tracked-v17-identification-ppe-authority');
       const applied = (await source.runMigrations()).map((row) => row.name);
-      assert.deepEqual(upgrade ? applied : applied.slice(-2), authorityMigrations);
+      assert.deepEqual(
+        upgrade ? applied : applied.slice(-authorityMigrations.length),
+        authorityMigrations,
+      );
       assert.deepEqual(await source.runMigrations(), []);
       const after = await db.query('SELECT timestamp,name FROM migrations ORDER BY id');
       assert.deepEqual(after.slice(0, before.length), before);
@@ -56,6 +64,24 @@ for (const upgrade of [false, true]) {
         await db.query('SELECT count(*)::int AS count FROM authorization_history_source'),
         [{ count: 18 }],
       );
+      const operator = new DataSource(
+        buildCutoverDataSourceOptions(
+          validateEnvironment({
+            NODE_ENV: 'test',
+            DATABASE_URL: resolveTestDatabaseUrl(),
+            DATABASE_SCHEMA: db.driver.schema,
+            SMARTSITE_DB_MIGRATION_PROFILE: 'tracked-v17-identification-ppe-authority',
+          }),
+        ),
+      );
+      sources.push(operator);
+      await operator.initialize();
+      assert.deepEqual(await operator.query('SELECT current_schema() AS schema'), [
+        { schema: db.driver.schema },
+      ]);
+      assert.deepEqual(await operator.query('SELECT name FROM site WHERE id=$1', [siteId]), [
+        { name: 'Retained authority test site' },
+      ]);
     } finally {
       for (const source of sources) if (source.isInitialized) await source.destroy();
       await owned.dispose();

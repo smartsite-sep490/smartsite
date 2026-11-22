@@ -30,6 +30,7 @@ export interface Mf06AssessmentAppendInput {
   profileRevision: string | null;
   frameSha256: string | null;
   cropSha256: string | null;
+  c02AcceptanceId?: string;
   authorityArtifact: MainAuthorityArchive | null;
 }
 export type Mf06RecordedAssessment = Readonly<{
@@ -53,11 +54,16 @@ export type Mf06RecordedAssessment = Readonly<{
   profileRevision: string | null;
   frameSha256: string | null;
   cropSha256: string | null;
+  c02AcceptanceId?: string;
   authorityArtifact: MainAuthorityArchive | null;
 }>;
 export type Mf06AssessmentStoreResult =
   | { state: 'RECORDED' | 'REPLAY'; assessment: Mf06RecordedAssessment }
   | { state: 'STALE' | 'CONFLICT' | 'UNAVAILABLE'; reason: string };
+export interface Mf06NotificationDenial {
+  assessment: Mf06RecordedAssessment;
+  candidateSubtype: 'ZONE_ENTRY_PROHIBITED' | 'ZONE_ENTRY_UNAUTHORIZED';
+}
 
 type Row = Record<string, unknown>;
 const uuidPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -99,6 +105,7 @@ const inputSchema = z.strictObject({
   profileRevision: uuid.nullable(),
   frameSha256: hash.nullable(),
   cropSha256: hash.nullable(),
+  c02AcceptanceId: uuid.optional(),
   authorityArtifact: z
     .strictObject({
       format: z.enum(MAIN_AUTHORITY_ARCHIVE_FORMATS),
@@ -131,15 +138,17 @@ function prepare(value: unknown): Mf06AssessmentAppendInput | null {
     const input = parsed.data;
     if (!reasonMatrix[input.outcome].includes(input.reasonCode)) return null;
     if (input.outcome !== 'UNAVAILABLE' && input.authorityArtifact === null) return null;
-    if (
-      ['AUTHORIZED', 'UNAUTHORIZED'].includes(input.reasonCode) &&
-      (!input.workerId ||
-        !input.profileRevision ||
-        !input.frameSha256 ||
-        !input.cropSha256 ||
-        input.provenance === 'UNAVAILABLE')
-    )
+    const identityVerdict = ['AUTHORIZED', 'UNAUTHORIZED'].includes(input.reasonCode);
+    if (identityVerdict) {
+      if (!input.workerId || !input.frameSha256 || input.provenance === 'UNAVAILABLE') return null;
+      if (input.c02AcceptanceId) {
+        if (input.profileRevision !== null || input.cropSha256 !== null) return null;
+      } else if (!input.profileRevision || !input.cropSha256) {
+        return null;
+      }
+    } else if (input.c02AcceptanceId) {
       return null;
+    }
     let authorityArtifact: MainAuthorityArchive | null = null;
     if (input.authorityArtifact) {
       const payload = input.authorityArtifact.payload;
@@ -202,9 +211,14 @@ function originalCapturedAt(row: Row): string {
     return stored; // The archive comparison still rejects an uncertified alternative timestamp.
   }
 }
+// Internal authority binding only; retain legacy captured_at in public records.
+const authorityTimestamp = timestamp(
+  `COALESCE((to_jsonb(r)->>'authority_captured_at')::timestamptz,r.captured_at)`,
+);
 // Fixed SQL identifiers only. One statement reads original request and immutable artifact together.
 const assessmentSelect = (schema: string) => `SELECT a.*, r.camera_id,r.zone_id,r.requested_purpose,
   ${timestamp('r.captured_at')} AS captured_at, ${timestamp('a.assessed_at')} AS assessed_at,
+  ${authorityTimestamp} AS authority_captured_at,
   original.raw_payload AS original_raw_payload,r.payload_hash AS original_payload_hash,
   ${timestamp('original.captured_at')} AS original_captured_at,
   art.body AS artifact_body,art.sha256 AS artifact_sha256,
@@ -229,7 +243,7 @@ function mapRecord(row: Row): Mf06RecordedAssessment | null {
       siteId: String(row.site_id),
       zoneId: String(row.zone_id),
       workerId: row.worker_id === null ? null : String(row.worker_id),
-      capturedAt,
+      capturedAt: String(row.authority_captured_at),
       purpose: row.requested_purpose as MainAuthorityArchiveContext['purpose'],
       sha256: row.artifact_sha256,
     };
@@ -266,6 +280,9 @@ function mapRecord(row: Row): Mf06RecordedAssessment | null {
     profileRevision: row.profile_revision === null ? null : String(row.profile_revision),
     frameSha256: row.frame_sha256 === null ? null : String(row.frame_sha256),
     cropSha256: row.crop_sha256 === null ? null : String(row.crop_sha256),
+    ...(typeof row.c02_acceptance_id === 'string'
+      ? { c02AcceptanceId: row.c02_acceptance_id }
+      : {}),
     authorityArtifact,
   };
   const input = prepare({
@@ -285,6 +302,7 @@ function mapRecord(row: Row): Mf06RecordedAssessment | null {
     profileRevision: stored.profileRevision,
     frameSha256: stored.frameSha256,
     cropSha256: stored.cropSha256,
+    ...(stored.c02AcceptanceId ? { c02AcceptanceId: stored.c02AcceptanceId } : {}),
     authorityArtifact,
   });
   return input && commandHash(input) === stored.commandHash ? stored : null;
@@ -295,7 +313,13 @@ function errorCode(error: unknown): string | null {
 
 /** Private persistence, not an evaluator or public trust boundary. No provider/worker registration. */
 export class Mf06AssessmentStore {
-  constructor(private readonly db: DataSource) {}
+  constructor(
+    private readonly db: DataSource,
+    private readonly projectDenial?: (
+      manager: EntityManager,
+      assessment: Mf06RecordedAssessment,
+    ) => Promise<void>,
+  ) {}
 
   private schema(): string {
     const schema = this.db.driver?.schema;
@@ -336,6 +360,49 @@ export class Mf06AssessmentStore {
    * the caller owns rollback and retries of the entire transaction, not just append.
    * This persistence primitive does not establish identity or evaluate authority.
    */
+  async readNotificationDenialInTransaction(
+    manager: EntityManager,
+    siteId: string,
+    assessmentId: string,
+  ): Promise<Mf06NotificationDenial | null> {
+    const assessment = await this.readRecordedInTransaction(manager, siteId, assessmentId);
+    if (
+      !assessment ||
+      assessment.outcome !== 'DENIED' ||
+      assessment.provenance !== 'TRUSTED_SERVICE' ||
+      assessment.purpose !== 'INITIAL_OBSERVATION_ASSESSMENT' ||
+      !assessment.authorityArtifact
+    )
+      return null;
+    const zones = assessment.authorityArtifact.payload.sources
+      .filter((source) => source.sourceKind === 'ZONE_POLICY')
+      .flatMap((source) => source.rows)
+      .filter(
+        (row) =>
+          typeof row.id === 'string' &&
+          row.id.toLowerCase() === assessment.zoneId &&
+          typeof row.site_id === 'string' &&
+          row.site_id.toLowerCase() === assessment.siteId,
+      );
+    if (zones.length !== 1) return null;
+    if (
+      assessment.reasonCode === 'POLICY_PROHIBITED' &&
+      zones[0]!.restriction_policy === 'PROHIBITED_FOR_ALL'
+    )
+      return Object.freeze({ assessment, candidateSubtype: 'ZONE_ENTRY_PROHIBITED' });
+    if (
+      assessment.reasonCode === 'UNAUTHORIZED' &&
+      zones[0]!.restriction_policy === 'AUTHORIZATION_REQUIRED' &&
+      assessment.workerId &&
+      assessment.profileRevision &&
+      assessment.frameSha256 &&
+      assessment.cropSha256 &&
+      !assessment.c02AcceptanceId
+    )
+      return Object.freeze({ assessment, candidateSubtype: 'ZONE_ENTRY_UNAUTHORIZED' });
+    return null;
+  }
+
   async finalizeInTransaction(
     manager: EntityManager,
     value: Mf06AssessmentAppendInput,
@@ -353,7 +420,15 @@ export class Mf06AssessmentStore {
     }[];
     if (settings[0]?.transaction_isolation !== 'serializable')
       return { state: 'UNAVAILABLE', reason: 'SERIALIZABLE_TRANSACTION_REQUIRED' };
-    return this.append(manager, input, commandHash(input));
+    const result = await this.append(manager, input, commandHash(input));
+    if (
+      (result.state === 'RECORDED' || result.state === 'REPLAY') &&
+      result.assessment.outcome === 'DENIED' &&
+      result.assessment.provenance === 'TRUSTED_SERVICE' &&
+      result.assessment.purpose === 'INITIAL_OBSERVATION_ASSESSMENT'
+    )
+      await this.projectDenial?.(manager, result.assessment);
+    return result;
   }
 
   async finalize(value: Mf06AssessmentAppendInput): Promise<Mf06AssessmentStoreResult> {
@@ -390,7 +465,7 @@ export class Mf06AssessmentStore {
       `${this.schema()},pg_catalog,pg_temp`,
     ]);
     const requests = (await manager.query(
-      `SELECT r.*,${timestamp('r.captured_at')} AS captured_at
+      `SELECT r.*,${timestamp('r.captured_at')} AS captured_at,${authorityTimestamp} AS authority_captured_at
       FROM ${this.schema()}.zone_entry_assessment_request r WHERE request_id=$1 AND site_id=$2 FOR SHARE`,
       [input.claim.requestId, input.siteId],
     )) as Row[];
@@ -398,6 +473,11 @@ export class Mf06AssessmentStore {
     if (!request) return { state: 'UNAVAILABLE', reason: 'REQUEST_NOT_FOUND_IN_SCOPE' };
     if (request.binding_hash !== input.bindingHash)
       return { state: 'STALE', reason: 'BINDING_HASH_MISMATCH' };
+    if (
+      ['AUTHORIZED', 'UNAUTHORIZED'].includes(input.reasonCode) &&
+      (request.c02_acceptance_id ?? undefined) !== input.c02AcceptanceId
+    )
+      return { state: 'STALE', reason: 'IDENTITY_SOURCE_MISMATCH' };
     const existing = (await manager.query(
       `${assessmentSelect(this.schema())} WHERE a.request_id=$1 AND a.site_id=$2`,
       [input.claim.requestId, input.siteId],
@@ -433,7 +513,7 @@ export class Mf06AssessmentStore {
         siteId: String(request.site_id),
         zoneId: String(request.zone_id),
         workerId: input.workerId,
-        capturedAt: String(request.captured_at),
+        capturedAt: String(request.authority_captured_at),
         purpose: request.requested_purpose as MainAuthorityArchiveContext['purpose'],
         sha256: input.authorityArtifact.sha256,
       });
@@ -452,8 +532,10 @@ export class Mf06AssessmentStore {
     }
     await manager.query(
       `INSERT INTO ${this.schema()}.zone_entry_assessment(assessment_id,request_id,command_id,command_hash,site_id,event_id,binding_hash,
-      outcome,reason_code,evaluator_version,provenance,worker_id,profile_revision,frame_sha256,crop_sha256,authority_artifact_id,claim_head_revision,claim_lease_token)
-      VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18)`,
+      outcome,reason_code,evaluator_version,provenance,worker_id,profile_revision,frame_sha256,crop_sha256,authority_artifact_id,claim_head_revision,claim_lease_token
+      ${input.c02AcceptanceId ? ',c02_acceptance_id' : ''})
+      VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18
+      ${input.c02AcceptanceId ? ',$19' : ''})`,
       [
         randomUUID(),
         input.claim.requestId,
@@ -473,6 +555,7 @@ export class Mf06AssessmentStore {
         artifactId,
         input.claim.headRevision,
         input.claim.leaseToken,
+        ...(input.c02AcceptanceId ? [input.c02AcceptanceId] : []),
       ],
     );
     const rows = (await manager.query(

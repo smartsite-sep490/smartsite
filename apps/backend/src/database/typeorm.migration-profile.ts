@@ -1,3 +1,6 @@
+import { Mf06RetrospectiveBinding1795046400015 } from './migrations/1795046400015-Mf06RetrospectiveBinding.js';
+import { Mf06RetrospectiveResult1795046400016 } from './migrations/1795046400016-Mf06RetrospectiveResult.js';
+import { ExactMf06AuthorityTime1795046400014 } from './migrations/1795046400014-ExactMf06AuthorityTime.js';
 import { InstallAuthorityJournal1795046400012 } from './migrations/1795046400012-InstallAuthorityJournal.js';
 import { InstallAuthorityCutover1795046400013 } from './migrations/1795046400013-InstallAuthorityCutover.js';
 import type { DataSourceOptions } from 'typeorm';
@@ -60,7 +63,13 @@ export function buildMigrationOptions(
       ...(includesCameraPpeProfile(profile) ? [CameraPpePolicyStorage1795046400010] : []),
       ...(includesCameraPpeWireV17(profile) ? [TrackedCameraPpeWire1795046400011] : []),
       ...(profile === 'tracked-v17-identification-ppe-authority'
-        ? [InstallAuthorityJournal1795046400012, InstallAuthorityCutover1795046400013]
+        ? [
+            InstallAuthorityJournal1795046400012,
+            InstallAuthorityCutover1795046400013,
+            ExactMf06AuthorityTime1795046400014,
+            Mf06RetrospectiveBinding1795046400015,
+            Mf06RetrospectiveResult1795046400016,
+          ]
         : []),
     ],
   };

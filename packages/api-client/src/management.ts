@@ -36,6 +36,9 @@ import type {
   SafetyIdentificationRequestPage,
   SafetyIdentificationStatus,
   SafetyIdentificationVersionCommand,
+  SafetyIdentificationRetrospectiveCommand,
+  SafetyIdentificationRetrospectiveOptions,
+  SafetyIdentificationRetrospectivePage,
 } from '@smartsite/contracts/safety-identification';
 import {
   trackedEpisodeMediaPath,
@@ -2362,6 +2365,57 @@ export class SmartSiteManagementClient {
     if (options.offset !== undefined) query.set('offset', String(options.offset));
     if (options.limit !== undefined) query.set('limit', String(options.limit));
     const path = `/sites/${pathId(siteId)}/safety-identification-requests/${pathId(id)}/history`;
+    return this.request(
+      'GET',
+      `${path}${query.size ? `?${query}` : ''}`,
+      token,
+      undefined,
+      undefined,
+      requestOptions,
+    );
+  }
+
+  listSafetyIdentificationRetrospectiveOptions(
+    token: string,
+    siteId: string,
+    id: string,
+    requestOptions?: RequestOptions,
+  ): Promise<SafetyIdentificationRetrospectiveOptions> {
+    return this.request(
+      'GET',
+      `/sites/${pathId(siteId)}/safety-identification-requests/${pathId(id)}/retrospective-assessment-options`,
+      token,
+      undefined,
+      undefined,
+      requestOptions,
+    );
+  }
+
+  requestSafetyIdentificationRetrospectiveAssessment(
+    token: string,
+    siteId: string,
+    id: string,
+    input: SafetyIdentificationRetrospectiveCommand,
+  ): Promise<{ requestId: string }> {
+    return this.request(
+      'POST',
+      `/sites/${pathId(siteId)}/safety-identification-requests/${pathId(id)}/retrospective-assessment`,
+      token,
+      input,
+    );
+  }
+
+  listSafetyIdentificationRetrospectiveAssessments(
+    token: string,
+    siteId: string,
+    id: string,
+    options: PageOptions = {},
+    requestOptions?: RequestOptions,
+  ): Promise<SafetyIdentificationRetrospectivePage> {
+    const query = new URLSearchParams();
+    if (options.offset !== undefined) query.set('offset', String(options.offset));
+    if (options.limit !== undefined) query.set('limit', String(options.limit));
+    const path = `/sites/${pathId(siteId)}/safety-identification-requests/${pathId(id)}/retrospective-assessments`;
     return this.request(
       'GET',
       `${path}${query.size ? `?${query}` : ''}`,
