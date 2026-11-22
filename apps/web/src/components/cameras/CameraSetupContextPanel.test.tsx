@@ -227,8 +227,14 @@ describe('CameraSetupContextPanel saved configuration vs worker-applied status',
     await waitFor(() => {
       expect(appStatus.getAttribute('data-application-state')).toBe('LOADED');
     });
-    expect(within(appStatus).getByText('Saved v3 · Worker reported: v3')).toBeTruthy();
-    expect(within(appStatus).getByText('Worker loaded v3')).toBeTruthy();
+    const primaryStatus = within(appStatus).getByTestId('camera-application-primary-status');
+    expect(primaryStatus.textContent).toBe('AI has received the configuration');
+    expect(primaryStatus.textContent).not.toMatch(/Worker|v3/);
+    const technicalDetails = within(appStatus).getByTestId(
+      'camera-application-technical-details',
+    ) as HTMLDetailsElement;
+    expect(technicalDetails.open).toBe(false);
+    expect(within(technicalDetails).getByText('Saved version: v3 · AI reported: v3')).toBeTruthy();
     expect(screen.queryByTestId('camera-saved-config-summary')).toBeNull();
     expect(
       screen.getByText(

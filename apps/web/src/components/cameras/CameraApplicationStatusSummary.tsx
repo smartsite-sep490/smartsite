@@ -56,20 +56,44 @@ export function CameraApplicationStatusSummary({
       >
         <div className="min-w-0 flex flex-wrap items-center justify-between gap-2">
           <p className="min-w-0 font-medium text-slate-900 break-words [overflow-wrap:anywhere]">
-            {t('cameraSetup.savedConfigVersionStatus', {
-              version: camera.configurationVersion,
-            })}
+            {t('cameraSetup.appStatus.unavailablePrimary')}
           </p>
-          {canQuery && errorStatus !== 401 && errorStatus !== 403 && (
-            <button
-              type="button"
-              className={CAMERA_BUTTON_STYLES.compactSecondary}
-              disabled={query.isFetching}
-              onClick={() => void query.refetch()}
+          <div className="flex flex-wrap items-center gap-1.5">
+            <details
+              data-testid="camera-application-technical-details"
+              className="group min-w-0 text-xs text-slate-600"
             >
-              {t('cameraSetup.appStatus.refresh')}
-            </button>
-          )}
+              <summary className="inline-flex min-h-7 cursor-pointer list-none items-center gap-1 rounded-md px-1.5 py-0.5 font-medium text-slate-600 hover:bg-slate-100 hover:text-slate-900 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-slate-900">
+                <span>{t('cameraSetup.appStatus.details')}</span>
+                <span
+                  aria-hidden="true"
+                  className="text-xs text-slate-500 transition-transform duration-150 group-open:rotate-180"
+                >
+                  ▾
+                </span>
+              </summary>
+              <div className="mt-1 min-w-0 space-y-1 rounded-xl border border-slate-200 bg-slate-50/50 px-3 py-2 text-xs text-slate-600">
+                <p className="min-w-0 break-words [overflow-wrap:anywhere] font-mono tabular-nums">
+                  {t('cameraSetup.appStatus.savedOnlyVersion', {
+                    version: camera.configurationVersion,
+                  })}
+                </p>
+                <p className="min-w-0 break-words [overflow-wrap:anywhere]">
+                  {t('cameraSetup.appStatus.caveat')}
+                </p>
+              </div>
+            </details>
+            {canQuery && errorStatus !== 401 && errorStatus !== 403 && (
+              <button
+                type="button"
+                className={CAMERA_BUTTON_STYLES.compactSecondary}
+                disabled={query.isFetching}
+                onClick={() => void query.refetch()}
+              >
+                {t('cameraSetup.appStatus.refresh')}
+              </button>
+            )}
+          </div>
         </div>
         {query.isFetching && (
           <p className="min-w-0 break-words [overflow-wrap:anywhere] text-sm text-slate-600">
@@ -115,6 +139,30 @@ export function CameraApplicationStatusSummary({
   const actionGuidance = effectiveState !== 'LOADED' && actionKey ? t(actionKey) : null;
 
   const stateTone = STATE_TEXT_TONES[effectiveState];
+  const technicalDetailsContent = (
+    <div className="mt-1.5 min-w-0 space-y-1 rounded-xl border border-slate-200 bg-slate-50/50 px-3 py-2 text-xs text-slate-600">
+      <p className="min-w-0 break-words [overflow-wrap:anywhere] font-mono tabular-nums">
+        {t('cameraSetup.appStatus.revisions', {
+          desired: rawStatus.desiredRevision,
+          reported: reportedLabel,
+        })}
+      </p>
+      {effectiveReasonCode && (
+        <p className="min-w-0 break-words [overflow-wrap:anywhere] font-mono">
+          {t('cameraSetup.appStatus.reasonCodeLine', { code: effectiveReasonCode })}
+        </p>
+      )}
+      <p className="min-w-0 break-words [overflow-wrap:anywhere] font-mono tabular-nums">
+        {t('cameraSetup.appStatus.timestamps', {
+          observedAt: rawStatus.observedAt,
+          lastReceiptAt: lastReceiptLabel,
+        })}
+      </p>
+      <p className="min-w-0 break-words [overflow-wrap:anywhere]">
+        {t('cameraSetup.appStatus.caveat')}
+      </p>
+    </div>
+  );
 
   return (
     <div
@@ -131,26 +179,13 @@ export function CameraApplicationStatusSummary({
       }
     >
       <div className="min-w-0 flex flex-wrap items-center justify-between gap-x-2 gap-y-1">
-        <div className="min-w-0 flex flex-wrap items-center gap-x-2.5 gap-y-0.5 tabular-nums">
+        <div className="min-w-0 flex flex-wrap items-center gap-x-2.5 gap-y-0.5">
           <span
-            className={
-              compact
-                ? 'text-xs font-semibold text-slate-950'
-                : 'text-sm font-semibold text-slate-950'
-            }
-          >
-            {t('cameraSetup.appStatus.revisions', {
-              desired: rawStatus.desiredRevision,
-              reported: reportedLabel,
-            })}
-          </span>
-          <span
+            data-testid="camera-application-primary-status"
             className={`inline-flex items-center gap-1.5 font-semibold ${compact ? 'text-xs' : 'text-sm'} ${stateTone.text}`}
           >
             <span aria-hidden="true" className={`h-2 w-2 shrink-0 rounded-full ${stateTone.dot}`} />
-            {t(`cameraSetup.appStatus.state.${effectiveState}`, {
-              reported: rawStatus.reportedRevision ?? reportedLabel,
-            })}
+            {t(`cameraSetup.appStatus.state.${effectiveState}`)}
           </span>
           {compact && (
             <span
@@ -166,7 +201,10 @@ export function CameraApplicationStatusSummary({
         </div>
         <div className="flex flex-wrap items-center gap-1.5">
           {compact && (
-            <details className="group min-w-0 text-xs text-slate-600">
+            <details
+              data-testid="camera-application-technical-details"
+              className="group min-w-0 text-xs text-slate-600"
+            >
               <summary className="inline-flex min-h-7 cursor-pointer list-none items-center gap-1 rounded-md px-1.5 py-0.5 font-medium text-slate-600 hover:bg-slate-100 hover:text-slate-900 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-slate-900">
                 <span>{t('cameraSetup.appStatus.details')}</span>
                 <span
@@ -176,17 +214,7 @@ export function CameraApplicationStatusSummary({
                   ▾
                 </span>
               </summary>
-              <div className="mt-1 min-w-0 space-y-1 rounded-xl border border-slate-200 bg-slate-50/50 px-3 py-2 text-xs text-slate-600">
-                <p className="min-w-0 break-words [overflow-wrap:anywhere] font-mono tabular-nums">
-                  {t('cameraSetup.appStatus.timestamps', {
-                    observedAt: rawStatus.observedAt,
-                    lastReceiptAt: lastReceiptLabel,
-                  })}
-                </p>
-                <p className="min-w-0 break-words [overflow-wrap:anywhere]">
-                  {t('cameraSetup.appStatus.caveat')}
-                </p>
-              </div>
+              {technicalDetailsContent}
             </details>
           )}
           <button
@@ -212,7 +240,6 @@ export function CameraApplicationStatusSummary({
             <p className="min-w-0 font-medium break-words [overflow-wrap:anywhere]">
               {t('cameraSetup.appStatus.reasonLine', {
                 reason: reasonDescription,
-                code: effectiveReasonCode,
               })}
             </p>
           )}
@@ -233,7 +260,10 @@ export function CameraApplicationStatusSummary({
             />
             <span>{t(`cameraSetup.appStatus.viewValidity.${rawStatus.viewValidity}`)}</span>
           </p>
-          <details className="group min-w-0 text-xs text-slate-600">
+          <details
+            data-testid="camera-application-technical-details"
+            className="group min-w-0 text-xs text-slate-600"
+          >
             <summary className="inline-flex min-h-8 cursor-pointer list-none items-center gap-1.5 rounded-lg px-1.5 py-1 font-medium text-slate-600 hover:bg-slate-100 hover:text-slate-900 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-slate-900">
               <span>{t('cameraSetup.appStatus.details')}</span>
               <span
@@ -243,17 +273,7 @@ export function CameraApplicationStatusSummary({
                 ▾
               </span>
             </summary>
-            <div className="mt-1.5 min-w-0 space-y-1 rounded-xl border border-slate-200 bg-slate-50/50 px-3 py-2 text-xs text-slate-600">
-              <p className="min-w-0 break-words [overflow-wrap:anywhere] font-mono tabular-nums">
-                {t('cameraSetup.appStatus.timestamps', {
-                  observedAt: rawStatus.observedAt,
-                  lastReceiptAt: lastReceiptLabel,
-                })}
-              </p>
-              <p className="min-w-0 break-words [overflow-wrap:anywhere]">
-                {t('cameraSetup.appStatus.caveat')}
-              </p>
-            </div>
+            {technicalDetailsContent}
           </details>
         </>
       )}
