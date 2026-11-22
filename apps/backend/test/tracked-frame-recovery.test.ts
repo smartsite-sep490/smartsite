@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import { randomUUID } from 'node:crypto';
 import { test } from 'node:test';
 import type { DataSource } from 'typeorm';
 import { TrackedFrameAdmission } from '../src/integrations/ai/tracked-frame-admission.js';
@@ -89,3 +90,115 @@ for (const phase of ['expiry', 'admission'] as const) {
     },
   );
 }
+
+test(
+  'TrackedFrameRecovery validates sourceGap options and leaves notified=false when onGap returns false',
+  { timeout: 3000 },
+  async () => {
+    let sweepPhase: 'start' | 'confirm' = 'start';
+    const source = {
+      async query() {
+        sweepPhase = 'start';
+        return [];
+      },
+    } as unknown as DataSource;
+    const dummyAdmission = {
+      async readCurrentScope() {
+        return undefined;
+      },
+      async recoverPending() {
+        return [];
+      },
+      async recheckSourceGap() {
+        return false;
+      },
+    } as unknown as TrackedFrameAdmission;
+
+    assert.throws(
+      () =>
+        new TrackedFrameRecovery(source, dummyAdmission, {
+          cameraIds: [cameraId],
+          intervalMs: 20,
+          maxFramesPerCamera: 2,
+          sourceGap: { minPersistentMs: 19, onGap: () => true },
+        }),
+    );
+    assert.throws(
+      () =>
+        new TrackedFrameRecovery(source, dummyAdmission, {
+          cameraIds: [cameraId],
+          intervalMs: 20,
+          maxFramesPerCamera: 2,
+          sourceGap: { minPersistentMs: 20.5, onGap: () => true },
+        }),
+    );
+
+    // Covers: scope rotation between recoverPending & notify (suppressed),
+    // recheckSourceGap=false (suppressed), onGap returning false (notified stays false -> retried),
+    // and onGap returning true (suppressed on subsequent sweeps).
+    let mode: 'rotate-before-notify' | 'recheck-false' | 'notify-false-then-true' =
+      'rotate-before-notify';
+    let notifyCallCount = 0;
+    const resumedDone = deferred();
+    const notifiedKeys: string[] = [];
+
+    const admission = {
+      async readCurrentScope() {
+        if (sweepPhase === 'confirm' && mode === 'rotate-before-notify') {
+          sweepPhase = 'start';
+          return { cameraId, generationId: randomUUID(), streamSessionId: sessionId };
+        }
+        sweepPhase = 'start';
+        return { cameraId, generationId, streamSessionId: sessionId };
+      },
+      async recoverPending() {
+        sweepPhase = 'confirm';
+        return [{ frameId: frames[0]!.frameId, kind: 'PENDING_PREDECESSOR', reason: 'SOURCE_GAP' }];
+      },
+      async recheckSourceGap() {
+        return mode !== 'recheck-false';
+      },
+    } as unknown as TrackedFrameAdmission;
+
+    const recovery = new TrackedFrameRecovery(source, admission, {
+      cameraIds: [cameraId],
+      intervalMs: 5,
+      maxFramesPerCamera: 2,
+      sourceGap: {
+        minPersistentMs: 15,
+        onGap(signal) {
+          notifyCallCount++;
+          notifiedKeys.push(`${signal.generationId}:${signal.frameId}`);
+          if (notifyCallCount === 1) return false;
+          resumedDone.resolve();
+          return true;
+        },
+      },
+    });
+
+    const keepAlive = setInterval(() => {}, 25);
+    recovery.onApplicationBootstrap();
+    try {
+      await new Promise((resolve) => setTimeout(resolve, 35));
+      assert.equal(notifyCallCount, 0);
+
+      mode = 'recheck-false';
+      await new Promise((resolve) => setTimeout(resolve, 35));
+      assert.equal(notifyCallCount, 0);
+
+      mode = 'notify-false-then-true';
+      await resumedDone.promise;
+      const countAfterTrue = notifyCallCount;
+      await new Promise((resolve) => setTimeout(resolve, 35));
+      assert.equal(notifyCallCount, 2);
+      assert.equal(notifyCallCount, countAfterTrue);
+      assert.deepEqual(notifiedKeys, [
+        `${generationId}:${frames[0]!.frameId}`,
+        `${generationId}:${frames[0]!.frameId}`,
+      ]);
+    } finally {
+      clearInterval(keepAlive);
+      await recovery.onModuleDestroy();
+    }
+  },
+);

@@ -6,8 +6,11 @@ import type { BackendEnvironment } from '../../config/environment.js';
 import { ServiceAuthGuard } from '../../modules/auth/service-auth.guard.js';
 import { CameraEventAdmissionService } from '../../modules/cameras/camera-event-admission.service.js';
 import { TrackedSafetyProjection } from '../../modules/safety/alerts/tracked-safety-projection.js';
-import { TrackedFrameAdmission } from './tracked-frame-admission.js';
+import { TrackedFrameAdmission, type TrackedFrameKey } from './tracked-frame-admission.js';
 import { TrackedFrameRecovery } from './tracked-frame-recovery.js';
+import { TrackedSourceGapResume } from './tracked-source-gap-resume.js';
+import { CamerasModule } from '../../modules/cameras/cameras.module.js';
+import { CameraSourceService } from '../../modules/cameras/camera-source.service.js';
 import { StorageModule } from '../storage/storage.module.js';
 import { StorageService } from '../storage/storage.service.js';
 import { TrackedFrameEvidenceController } from './tracked-frame-evidence.controller.js';
@@ -28,7 +31,13 @@ export interface TrackedFrameRuntimeOptions {
   };
   readonly pending: TrackedPendingPolicy;
   readonly heads: ConstructorParameters<typeof TrackedFrameAdmission>[1];
-  readonly recovery: Omit<ConstructorParameters<typeof TrackedFrameRecovery>[2], 'cameraIds'>;
+  readonly recovery: Omit<ConstructorParameters<typeof TrackedFrameRecovery>[2], 'cameraIds'> & {
+    readonly automaticResume?: {
+      readonly hostId: string;
+      readonly minPersistentMs: number;
+      readonly maxStarts: number;
+    };
+  };
   readonly maxRecipients: number;
 }
 
@@ -149,9 +158,10 @@ export class TrackedFrameRuntimeModule {
     if (!options.profile || !['1.5.0', '1.6.0', '1.7.0'].includes(options.profile.wireVersion))
       throw new Error('An explicit tracked wire version is required');
     const { profile, pending, heads, recovery, maxRecipients } = structuredClone(options);
+    const { automaticResume, ...frameRecovery } = recovery;
     return {
       module: TrackedFrameRuntimeModule,
-      imports: [StorageModule],
+      imports: [StorageModule, ...(automaticResume ? [CamerasModule] : [])],
       controllers: [
         TrackedRawPartController,
         TrackedFrameResultController,
@@ -208,12 +218,47 @@ export class TrackedFrameRuntimeModule {
               new TrackedSafetyProjection(db, config, { maxRecipients }),
             ),
         },
+        ...(automaticResume
+          ? [
+              {
+                provide: TrackedSourceGapResume,
+                inject: [CameraSourceService, DataSource, TrackedFrameAdmission],
+                useFactory: (
+                  sources: CameraSourceService,
+                  db: DataSource,
+                  admission: TrackedFrameAdmission,
+                ) =>
+                  new TrackedSourceGapResume(
+                    sources,
+                    (key) => admission.recheckSourceGap(db, key),
+                    profile.allowedCameraIds,
+                    automaticResume.maxStarts,
+                  ),
+              },
+            ]
+          : []),
         {
           provide: TrackedFrameRecovery,
-          inject: [DataSource, TrackedFrameAdmission],
-          useFactory: (db: DataSource, admission: TrackedFrameAdmission) =>
+          inject: [
+            DataSource,
+            TrackedFrameAdmission,
+            ...(automaticResume ? [TrackedSourceGapResume] : []),
+          ],
+          useFactory: (
+            db: DataSource,
+            admission: TrackedFrameAdmission,
+            resume?: TrackedSourceGapResume,
+          ) =>
             new TrackedFrameRecovery(db, admission, {
-              ...recovery,
+              ...frameRecovery,
+              ...(automaticResume
+                ? {
+                    sourceGap: {
+                      minPersistentMs: automaticResume.minPersistentMs,
+                      onGap: (key: Readonly<TrackedFrameKey>) => resume!.notify(key),
+                    },
+                  }
+                : {}),
               cameraIds: profile.allowedCameraIds,
             }),
         },
