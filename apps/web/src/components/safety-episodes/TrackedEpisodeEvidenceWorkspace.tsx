@@ -14,7 +14,7 @@ import { uiLocale } from '../../i18n';
 import { localizedLabel } from '../../i18n/labels';
 import { SAFETY_NAMESPACE } from '../../i18n/runtime';
 import { IconAlertCircle, IconClock, IconLoader, IconRefresh } from '../icons';
-import { Badge, Button, Card } from '../ui';
+import { Badge, Button } from '../ui';
 import { EpisodeRequestIdentificationLink } from './EpisodeRequestIdentificationLink';
 import { isSafetyIdentificationRouteEnabled } from './safetyUrlParams';
 import { TrackedEvidenceViewer, type TrackedEvidenceViewerStatus } from './TrackedEvidenceViewer';
@@ -33,6 +33,7 @@ export type TrackedEpisodeEvidenceClient = Pick<
   | 'readTrackedEpisodeMedia'
   | 'getTrackedObservationIdentity'
 > & {
+  getTrackedObservationIdentityCard?: SmartSiteManagementClient['getTrackedObservationIdentityCard'];
   listSafetyIdentificationRequests?: SmartSiteManagementClient['listSafetyIdentificationRequests'];
 };
 
@@ -46,6 +47,7 @@ export interface TrackedEpisodeEvidenceWorkspaceProps {
   originRecipientId?: string;
   returnToFrameHref?: string;
   canReviewFindings?: boolean;
+  enableIdentityCard?: boolean;
   renderRevisionAction?: (revision: number, recheck: () => Promise<boolean>) => ReactNode;
 }
 
@@ -183,6 +185,7 @@ function TrackedEpisodeEvidenceWorkspaceInner({
   originRecipientId,
   returnToFrameHref,
   canReviewFindings = false,
+  enableIdentityCard,
   renderRevisionAction,
 }: TrackedEpisodeEvidenceWorkspaceProps & {
   instanceId: string;
@@ -531,6 +534,10 @@ function TrackedEpisodeEvidenceWorkspaceInner({
     }
   };
 
+  const handleRefreshIdentityObservationSource = async () => {
+    await Promise.all([detailQuery.refetch(), historyQuery.refetch()]);
+  };
+
   const viewerIdentityContent =
     verifiedViewerMedia !== null &&
     activeMediaSelection !== null &&
@@ -546,6 +553,8 @@ function TrackedEpisodeEvidenceWorkspaceInner({
         episodeId={episodeId}
         source={activeMediaSelection.source}
         expectedPayloadHash={expectedPayloadHash}
+        enableIdentityCard={enableIdentityCard}
+        onRefreshSource={handleRefreshIdentityObservationSource}
       />
     ) : undefined;
 
@@ -570,10 +579,10 @@ function TrackedEpisodeEvidenceWorkspaceInner({
       data-testid="tracked-episode-workspace"
       className="space-y-4"
     >
-      <Card className="space-y-4">
+      <div className="space-y-3.5 rounded-xl border border-slate-200 bg-white p-4">
         <div className="flex flex-wrap items-start justify-between gap-3">
-          <div className="space-y-1">
-            <h2 className="text-lg font-bold text-slate-900">
+          <div className="min-w-[min(100%,18rem)] flex-1 space-y-1">
+            <h2 className="text-base font-semibold text-slate-950">
               {tSafety('trackedWorkspace.title')}
             </h2>
             <p className="text-xs leading-relaxed text-slate-600">
@@ -584,6 +593,7 @@ function TrackedEpisodeEvidenceWorkspaceInner({
             <div className="flex flex-wrap items-center gap-2">
               <Badge
                 variant={usableDetail.collectionState === 'SEALED' ? 'neutral' : 'info'}
+                className="text-xs! font-medium! normal-case! tracking-normal!"
                 data-testid="tracked-workspace-state-badge"
               >
                 {tSafety(
@@ -592,7 +602,11 @@ function TrackedEpisodeEvidenceWorkspaceInner({
                     : 'trackedWorkspace.stateCollecting',
                 )}
               </Badge>
-              <Badge variant="default" data-testid="tracked-workspace-revision-badge">
+              <Badge
+                variant="neutral"
+                className="text-xs! font-medium! normal-case! tracking-normal!"
+                data-testid="tracked-workspace-revision-badge"
+              >
                 <span className="tabular-nums">
                   {tSafety('trackedWorkspace.revisionBadge', {
                     revision: usableDetail.contentRevision,
@@ -784,6 +798,7 @@ function TrackedEpisodeEvidenceWorkspaceInner({
                           )}
                           <Badge
                             variant={findingStatusBadgeVariant(finding.status)}
+                            className="text-xs! font-medium! normal-case! tracking-normal!"
                             data-testid={`tracked-workspace-finding-status-${alertId}`}
                           >
                             {localizedLabel(finding.status)}
@@ -837,7 +852,7 @@ function TrackedEpisodeEvidenceWorkspaceInner({
             </>
           )
         )}
-      </Card>
+      </div>
 
       {usableDetail && (
         <TrackedObservationHistory

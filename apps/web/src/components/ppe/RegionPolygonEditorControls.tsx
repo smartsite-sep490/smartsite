@@ -17,6 +17,8 @@ export interface RegionPolygonEditorToolbarProps {
   isConfirmingDiscard: boolean;
   isDirty: boolean;
   pointsCount: number;
+  coveragePercentLabel?: string | null;
+  isLargePolygon?: boolean;
   canUndo: boolean;
   hasSelectedVertex: boolean;
   zoomIdx: number;
@@ -44,6 +46,8 @@ export function RegionPolygonEditorToolbar({
   isConfirmingDiscard,
   isDirty,
   pointsCount,
+  coveragePercentLabel = null,
+  isLargePolygon = false,
   canUndo,
   hasSelectedVertex,
   zoomIdx,
@@ -125,6 +129,18 @@ export function RegionPolygonEditorToolbar({
               <span className="rounded-md border border-slate-200/80 bg-white px-2 py-0.5 text-xs font-semibold tabular-nums text-slate-800">
                 {t('regionSetup.drawer.pointsCount', { count: pointsCount })}
               </span>
+              {coveragePercentLabel && (
+                <span
+                  data-testid="polygon-frame-coverage"
+                  className={`rounded-md border px-2 py-0.5 text-xs font-semibold tabular-nums ${
+                    isLargePolygon
+                      ? 'border-amber-300 bg-amber-50 text-amber-900'
+                      : 'border-sky-200 bg-sky-50 text-sky-900'
+                  }`}
+                >
+                  {t('regionSetup.drawer.frameCoverage', { percent: coveragePercentLabel })}
+                </span>
+              )}
             </div>
 
             <div className="flex flex-wrap items-center gap-1.5">
@@ -268,6 +284,14 @@ export function RegionPolygonEditorToolbar({
           </div>
         </div>
       </div>
+      {isLargePolygon && coveragePercentLabel && (
+        <p
+          data-testid="polygon-large-frame-hint"
+          className="rounded-xl border border-amber-200 bg-amber-50/90 px-3 py-2 text-xs text-amber-900 break-words"
+        >
+          {t('regionSetup.drawer.largePolygonFrameHint', { percent: coveragePercentLabel })}
+        </p>
+      )}
     </>
   );
 }

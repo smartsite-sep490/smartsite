@@ -58,7 +58,11 @@ it('shows the current workspace and workforce function in the header without glo
 
 it('shows Site Operations Configuration in the manager header', () => {
   roles = ['SITE_MANAGER'];
-  render(<MemoryRouter initialEntries={['/site-setup']}><AppLayout>Content</AppLayout></MemoryRouter>);
+  render(
+    <MemoryRouter initialEntries={['/site-setup']}>
+      <AppLayout>Content</AppLayout>
+    </MemoryRouter>,
+  );
   const header = within(screen.getByRole('banner'));
   expect(header.getByRole('heading', { name: 'Site Operations Configuration' })).toBeTruthy();
 });
@@ -180,12 +184,16 @@ it.each(['WORKER', 'SECURITY_OFFICER', 'ADMIN'])(
   },
 );
 
-it.each([['ADMIN'], ['ADMIN', 'CONTRACTOR_REPRESENTATIVE']])(
-  'retains Site Access for Admin roles %j',
-  (...userRoles) => {
-    expect(navigationFor(userRoles).getByRole('button', { name: 'Site Access' })).toBeTruthy();
-  },
-);
+it('gives pure Admin only management navigation and mixed representative its attendance workspace', () => {
+  const adminNav = navigationFor(['ADMIN']);
+  expect(adminNav.queryByRole('button', { name: 'Site Access' })).toBeNull();
+  cleanup();
+  expect(
+    navigationFor(['ADMIN', 'CONTRACTOR_REPRESENTATIVE']).getByRole('button', {
+      name: 'Attendance',
+    }),
+  ).toBeTruthy();
+});
 
 it.each([['ADMIN'], ['ADMIN', 'SITE_MANAGER']])(
   'shows account management only for global Admin %j',

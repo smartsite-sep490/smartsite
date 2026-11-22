@@ -10,7 +10,6 @@ import {
   IconClock,
   IconEye,
   IconHardHat,
-  IconUser,
 } from './components/icons';
 import {
   isSafetyIdentificationRouteEnabled,
@@ -18,7 +17,6 @@ import {
   sanitizeSafetyQueryId,
   sanitizeSafetyUuid,
 } from './components/safety-episodes/safetyUrlParams';
-import { Badge } from './components/ui';
 import { useManagementClient } from './features/auth/auth-session';
 import i18n from './i18n';
 import { hasRegisteredFeatureKey } from './i18n/feature-catalog-registry';
@@ -34,17 +32,22 @@ function humanizeSnakeCode(code: string): string {
 
 interface SubjectFindingItem {
   alertId: string;
+  alertType?: string;
   candidateSubtype: string;
   status: string;
 }
 
 function zoneToneClass(status: FrameCase['zoneEntries'][number]['status']) {
-  if (status === 'DENIED') return 'border-rose-300 bg-rose-50 text-rose-950 font-semibold';
-  if (status === 'PENDING') {
-    return 'border-dashed border-amber-400 bg-amber-50 text-amber-950 font-medium';
+  if (status === 'DENIED') {
+    return 'border-slate-200/80 border-l-rose-600 bg-rose-50/45 text-rose-950';
   }
-  if (status === 'ALLOWED') return 'border-emerald-200 bg-emerald-50 text-emerald-900 font-medium';
-  return 'border-slate-200 bg-slate-100 text-slate-700 font-medium';
+  if (status === 'PENDING') {
+    return 'border-slate-200/80 border-l-amber-500 bg-amber-50/45 text-amber-950';
+  }
+  if (status === 'ALLOWED') {
+    return 'border-slate-200/80 border-l-emerald-600 bg-emerald-50/40 text-emerald-950';
+  }
+  return 'border-slate-200/80 border-l-slate-400 bg-slate-50/80 text-slate-700';
 }
 
 export function FrameInboxSubjectRow({
@@ -52,6 +55,7 @@ export function FrameInboxSubjectRow({
   token,
   scope,
   siteId,
+  frameCameraId,
   cameraId,
   frameKey,
   entry,
@@ -66,6 +70,7 @@ export function FrameInboxSubjectRow({
   token: string;
   scope: string;
   siteId: string;
+  frameCameraId: string;
   cameraId?: string;
   frameKey: string;
   entry: FrameCase;
@@ -91,7 +96,10 @@ export function FrameInboxSubjectRow({
       'frame-subject-findings',
       scope,
       siteId,
+      frameCameraId,
+      frameKey,
       isTrackedFrame ? 'tracked' : 'event',
+      entry.recipientId,
       entry.episodeId,
       entry.contentRevision,
     ],
@@ -99,7 +107,13 @@ export function FrameInboxSubjectRow({
       const detail = isTrackedFrame
         ? await client.getTrackedEpisode(token, siteId, entry.episodeId, { signal })
         : await client.getSafetyEpisode(token, siteId, entry.episodeId, { signal });
-      return Array.isArray(detail?.findings) ? detail.findings : [];
+      const rawFindings: SubjectFindingItem[] = Array.isArray(detail?.findings)
+        ? detail.findings
+        : [];
+      // Frame/case findingCount counts PPE ONLY; Zone assessments are rendered in zoneEntries.
+      return rawFindings.filter(
+        (finding) => !finding.alertType || finding.alertType === 'PPE_VIOLATION',
+      );
     },
     enabled: canLoadFindings,
     retry: false,
@@ -119,7 +133,7 @@ export function FrameInboxSubjectRow({
   const findingsForbidden =
     findingsQuery.error instanceof ApiError &&
     [401, 403, 404].includes(findingsQuery.error.status ?? 0);
-  const findings = findingsQuery.data ?? [];
+  const findings = findingsForbidden || findingsQuery.isError ? [] : (findingsQuery.data ?? []);
   const safeSiteId = sanitizeSafetyQueryId(siteId);
   const safeRecipientId = sanitizeSafetyQueryId(entry.recipientId);
   const safeFrameKey = sanitizeSafetyFrameKey(frameKey);
@@ -134,234 +148,251 @@ export function FrameInboxSubjectRow({
   return (
     <li
       data-testid={`frame-subject-row-${personNumber}`}
-      className={`rounded-xl border p-3 sm:p-3.5 transition-colors ${
-        entry.unread
-          ? 'border-slate-200 border-l-4 border-l-teal-600 bg-white shadow-2xs'
-          : 'border-slate-200/80 bg-slate-50/70'
+      className={`min-w-0 border-l-[3px] px-4 py-3.5 transition-colors ${
+        entry.unread ? 'border-l-teal-700 bg-white' : 'border-l-transparent bg-slate-50/35'
       }`}
     >
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-        <div
-          data-tour-anchor={isTourTarget ? 'frame-inbox-subject-status' : undefined}
-          className="min-w-0 space-y-1.5"
-        >
-          <div className="flex flex-wrap items-center gap-2">
+      <div
+        data-tour-anchor={isTourTarget ? 'frame-inbox-subject-status' : undefined}
+        className="min-w-0 space-y-2.5"
+      >
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <div className="flex min-w-0 flex-wrap items-center gap-2.5">
             <span
               aria-hidden="true"
-              className="inline-flex h-6 min-w-6 items-center justify-center gap-0.5 rounded-md border border-slate-200 bg-slate-100 px-1.5 text-xs font-bold text-slate-700"
-            >
-              <IconUser className="h-3 w-3 shrink-0" />
-              {personNumber}
-            </span>
-            <span className="text-sm font-semibold text-slate-950">
-              {t('frameInbox.person', { number: personNumber })}
-              {entry.findingCount > 0 &&
-                ` · ${t('frameInbox.findings', { count: entry.findingCount })}`}
-            </span>
-            <Badge
-              variant={entry.unread ? 'warning' : 'neutral'}
-              dot={entry.unread}
-              className={`normal-case tracking-normal text-[11px] font-semibold ${
-                entry.unread ? 'border-teal-700/30 bg-teal-50 text-teal-950' : ''
+              className={`inline-flex h-6 min-w-6 items-center justify-center rounded-md px-1.5 text-xs font-semibold tabular-nums ${
+                entry.unread ? 'bg-[#0F172A] text-white' : 'bg-slate-200 text-slate-700'
               }`}
             >
-              {t(entry.unread ? 'episodes.unread' : 'episodes.read')}
-            </Badge>
-            <Badge
-              variant="neutral"
-              data-testid={`frame-subject-identity-${personNumber}`}
-              className="normal-case tracking-normal text-[11px] font-medium"
-            >
-              {tSafety('frameInbox.identityUnconfirmedBadge')}
-            </Badge>
-          </div>
-          {canLoadFindings && findingsQuery.isPending && (
-            <p role="status" className="text-xs text-slate-600">
-              {t('frameInbox.subjectFindingsLoading')}
-            </p>
-          )}
-          {canLoadFindings && findingsQuery.isError && (
-            <div
-              role="alert"
-              data-testid={`frame-subject-findings-error-${personNumber}`}
-              className="flex flex-wrap items-center gap-2 rounded-lg border border-amber-300 bg-amber-50 px-2.5 py-1.5 text-xs text-amber-950"
-            >
-              <span>
-                {findingsForbidden
-                  ? t('frameInbox.unavailable')
-                  : tSafety('frameInbox.subjectFindingsError')}
+              {personNumber}
+            </span>
+            <h3 className="text-sm font-semibold text-slate-950">
+              {t('frameInbox.person', { number: personNumber })}
+            </h3>
+            {entry.findingCount > 0 && (
+              <span
+                data-testid={`frame-subject-ppe-count-${personNumber}`}
+                className="inline-flex items-center gap-1.5 text-sm font-semibold tabular-nums text-amber-800"
+              >
+                <IconHardHat className="h-4 w-4 shrink-0 text-amber-600" />
+                <span>{t('frameInbox.findings', { count: entry.findingCount })}</span>
               </span>
-              {!findingsForbidden && (
-                <button
-                  type="button"
-                  disabled={findingsQuery.isFetching}
-                  onClick={() => void findingsQuery.refetch()}
-                  className="rounded px-1.5 py-0.5 font-semibold underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-teal-800 disabled:opacity-50"
-                >
-                  {t('common.retry')}
-                </button>
-              )}
-            </div>
-          )}
-          {findings.length > 0 && (
-            <ul
-              aria-label={t('frameInbox.subjectFindingsLabel')}
-              data-testid={`frame-subject-findings-${personNumber}`}
-              className="flex flex-wrap gap-1.5 pt-0.5"
+            )}
+          </div>
+
+          <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs">
+            {entry.contentRevision > 1 && (
+              <span
+                data-testid={`frame-subject-revision-${personNumber}`}
+                className={`tabular-nums ${
+                  entry.unread ? 'font-semibold text-teal-800' : 'text-slate-500'
+                }`}
+              >
+                {tSafety(
+                  entry.unread ? 'frameInbox.caseUpdatedRevision' : 'frameInbox.caseSeenRevision',
+                  { revision: entry.contentRevision },
+                )}
+              </span>
+            )}
+            <span data-testid={`frame-subject-identity-${personNumber}`} className="text-slate-600">
+              {tSafety('frameInbox.identityUnconfirmedBadge')}
+            </span>
+            <span
+              className={`inline-flex items-center gap-1.5 ${
+                entry.unread ? 'font-semibold text-teal-800' : 'text-slate-500'
+              }`}
             >
-              {findings.map((finding) => (
-                <li
-                  key={finding.alertId}
-                  className="inline-flex items-center gap-1.5 rounded-md border border-amber-300/80 bg-amber-50/80 px-2 py-0.5 text-xs font-medium text-slate-900"
-                >
-                  <IconHardHat className="h-3 w-3 shrink-0 text-amber-800" />
+              {entry.unread && (
+                <span aria-hidden="true" className="h-1.5 w-1.5 rounded-full bg-teal-700" />
+              )}
+              {t(entry.unread ? 'episodes.unread' : 'episodes.read')}
+            </span>
+          </div>
+        </div>
+
+        {canLoadFindings && findingsQuery.isPending && (
+          <p role="status" className="text-sm text-slate-600">
+            {t('frameInbox.subjectFindingsLoading')}
+          </p>
+        )}
+        {canLoadFindings && findingsQuery.isError && (
+          <div
+            role="alert"
+            data-testid={`frame-subject-findings-error-${personNumber}`}
+            className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-amber-200 bg-amber-50/70 px-3 py-2 text-sm text-amber-950"
+          >
+            <span>
+              {findingsForbidden
+                ? t('frameInbox.unavailable')
+                : tSafety('frameInbox.subjectFindingsError')}
+            </span>
+            {!findingsForbidden && (
+              <button
+                type="button"
+                disabled={findingsQuery.isFetching}
+                onClick={() => void findingsQuery.refetch()}
+                className="inline-flex h-8 items-center rounded-md border border-amber-300 bg-white px-3 text-xs font-semibold text-amber-950 hover:bg-amber-50 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-teal-800 disabled:opacity-50"
+              >
+                {t('common.retry')}
+              </button>
+            )}
+          </div>
+        )}
+
+        {findings.length > 0 && (
+          <ul
+            aria-label={t('frameInbox.subjectFindingsLabel')}
+            data-testid={`frame-subject-findings-${personNumber}`}
+            className="divide-y divide-amber-200/60 border-l-2 border-l-amber-500 bg-amber-50/35 px-3 py-0.5"
+          >
+            {findings.map((finding) => (
+              <li
+                key={finding.alertId}
+                className="flex flex-wrap items-center justify-between gap-2 py-2 text-sm"
+              >
+                <span className="inline-flex items-center gap-2 font-medium text-slate-900">
+                  <IconHardHat className="h-4 w-4 shrink-0 text-amber-600" />
                   <span>
                     {t('ppeNotifications.' + finding.candidateSubtype, {
                       defaultValue: localizedLabel(finding.candidateSubtype),
                     })}
                   </span>
-                  <span aria-hidden="true" className="text-slate-400">
-                    ·
-                  </span>
-                  <span className="text-[11px] text-slate-700">
-                    {localizedLabel(finding.status)}
-                  </span>
-                </li>
-              ))}
-            </ul>
-          )}
-          <div className="flex flex-wrap items-center gap-1.5">
-            {entry.findingCount === 0 && (
-              <Badge
-                variant="neutral"
-                className="normal-case tracking-normal text-[11px] font-medium"
-              >
-                {t('frameInbox.noPpeFindings')}
-              </Badge>
-            )}
-            {entry.source ? (
-              <Badge variant="info" className="normal-case tracking-normal text-[11px] font-medium">
-                <IconHardHat className="h-3 w-3 shrink-0" />
-                <span>{t('frameInbox.personCropAvailable')}</span>
-              </Badge>
-            ) : (
-              <span
-                data-testid={`frame-subject-crop-missing-${personNumber}`}
-                className="inline-flex flex-wrap items-center gap-1.5 rounded-md border border-amber-200 bg-amber-50/70 px-2 py-0.5 text-xs text-amber-950"
-              >
-                <IconAlertTriangle className="h-3.5 w-3.5 shrink-0 text-amber-700" />
-                <span>{t('frameInbox.personEvidenceMissing')}</span>
-                <span aria-hidden="true" className="text-amber-700/60">
-                  ·
                 </span>
-                <span>{t('frameInbox.evidenceInCase')}</span>
-              </span>
-            )}
+                <span className="text-xs font-semibold text-amber-900">
+                  {localizedLabel(finding.status)}
+                </span>
+              </li>
+            ))}
+          </ul>
+        )}
+
+        {entry.findingCount === 0 && (
+          <p className="text-sm text-slate-600">{t('frameInbox.noPpeFindings')}</p>
+        )}
+
+        {!entry.source && (
+          <div
+            data-testid={`frame-subject-crop-missing-${personNumber}`}
+            className="flex flex-wrap items-center gap-1.5 text-sm text-amber-900"
+          >
+            <IconAlertTriangle className="h-4 w-4 shrink-0 text-amber-600" />
+            <span className="font-medium">{t('frameInbox.personEvidenceMissing')}</span>
+            <span aria-hidden="true" className="text-slate-400">
+              ·
+            </span>
+            <span className="text-slate-600">{t('frameInbox.evidenceInCase')}</span>
           </div>
-          {entry.zoneEntries?.length > 0 && (
-            <div className="flex flex-wrap gap-1.5 pt-0.5">
-              {entry.zoneEntries.map((zone) => (
-                <div
-                  key={zone.requestId}
-                  data-zone-status={zone.status}
-                  className={`inline-flex flex-wrap items-center gap-1.5 rounded-md border px-2 py-0.5 text-xs ${zoneToneClass(zone.status)}`}
-                >
+        )}
+
+        {entry.zoneEntries?.length > 0 && (
+          <div className="space-y-1.5">
+            {entry.zoneEntries.map((zone) => (
+              <div
+                key={zone.requestId}
+                data-zone-status={zone.status}
+                className={`flex flex-wrap items-center justify-between gap-x-3 gap-y-1 rounded-r-md border border-l-[3px] px-3 py-2 text-sm ${zoneToneClass(zone.status)}`}
+              >
+                <span className="inline-flex items-center gap-1.5 font-semibold">
                   {zone.status === 'DENIED' ? (
-                    <IconAlertTriangle className="h-3.5 w-3.5 shrink-0 text-rose-700" />
+                    <IconAlertTriangle className="h-4 w-4 shrink-0 text-rose-700" />
                   ) : zone.status === 'PENDING' ? (
-                    <IconClock className="h-3.5 w-3.5 shrink-0 text-amber-700" />
+                    <IconClock className="h-4 w-4 shrink-0 text-amber-700" />
                   ) : null}
                   <span>
                     {t(zone.laterFrame ? 'frameInbox.laterZone' : 'frameInbox.zone')} ·{' '}
                     {t(`frameInbox.zoneStatus.${zone.status}`)}
                   </span>
-                  {zone.status === 'PENDING' && (
-                    <span className="rounded bg-amber-100 px-1.5 py-0.5 text-[11px] font-medium text-amber-950">
-                      {t('frameInbox.zonePendingHint')}
-                    </span>
-                  )}
-                  {zone.status === 'DENIED' && zone.reasonCode && (
-                    <span className="rounded bg-rose-100 px-1.5 py-0.5 text-[11px] font-medium text-rose-950">
-                      {formatZoneReason(zone.reasonCode)}
-                    </span>
-                  )}
-                  {zone.status === 'UNAVAILABLE' && zone.reasonCode && (
-                    <span className="rounded bg-slate-200/80 px-1.5 py-0.5 text-[11px] font-medium text-slate-800">
-                      {formatZoneReason(zone.reasonCode)}
-                    </span>
-                  )}
-                </div>
-              ))}
-            </div>
+                </span>
+                {zone.status === 'PENDING' && (
+                  <span className="text-xs font-medium text-amber-900">
+                    {t('frameInbox.zonePendingHint')}
+                  </span>
+                )}
+                {zone.status === 'DENIED' && zone.reasonCode && (
+                  <span className="text-xs font-medium text-rose-900">
+                    {formatZoneReason(zone.reasonCode)}
+                  </span>
+                )}
+                {zone.status === 'UNAVAILABLE' && zone.reasonCode && (
+                  <span className="text-xs font-medium text-slate-700">
+                    {formatZoneReason(zone.reasonCode)}
+                  </span>
+                )}
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+
+      <div
+        data-tour-anchor={isTourTarget ? 'frame-inbox-open-case' : undefined}
+        className="mt-3 flex flex-col gap-2 border-t border-slate-100 pt-3 sm:flex-row sm:flex-wrap sm:items-center sm:justify-between"
+      >
+        <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-center">
+          {entry.source && (
+            <button
+              type="button"
+              aria-pressed={personPhotoOpen}
+              onClick={onTogglePersonPhoto}
+              className={`inline-flex h-9 w-full sm:w-auto items-center justify-center gap-1.5 rounded-lg border px-3 text-sm font-medium whitespace-nowrap transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-teal-800 ${
+                personPhotoOpen
+                  ? 'border-teal-700/60 bg-teal-50/80 text-teal-950'
+                  : 'border-slate-200 bg-white text-slate-700 hover:border-slate-300 hover:bg-slate-50'
+              }`}
+            >
+              <IconEye className="h-4 w-4 shrink-0" />
+              <span>
+                {t(
+                  personPhotoOpen
+                    ? 'frameInbox.hidePersonEvidence'
+                    : 'frameInbox.viewPersonEvidence',
+                  { number: personNumber },
+                )}
+              </span>
+            </button>
+          )}
+          {entry.unread && onMarkCaseRead && (
+            <button
+              type="button"
+              data-testid={`frame-subject-mark-read-${personNumber}`}
+              disabled={isAckPending}
+              onClick={onMarkCaseRead}
+              className="inline-flex h-9 w-full sm:w-auto items-center justify-center gap-1.5 rounded-lg px-3 text-sm font-medium whitespace-nowrap text-slate-600 transition-colors hover:bg-slate-100 hover:text-slate-950 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-teal-800 disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              <IconCheck className="h-4 w-4 shrink-0 text-slate-500" />
+              <span>
+                {isAckPending ? t('frameInbox.markingRead') : tSafety('frameInbox.markCaseRead')}
+              </span>
+            </button>
           )}
         </div>
-        <div
-          data-tour-anchor={isTourTarget ? 'frame-inbox-open-case' : undefined}
-          className="flex flex-col gap-1.5 sm:items-end sm:shrink-0"
+
+        <Link
+          aria-describedby={handoffHintId}
+          className="inline-flex h-9 w-full sm:w-auto sm:ml-auto items-center justify-center gap-1.5 rounded-lg bg-[#0F172A] px-3.5 text-sm font-semibold whitespace-nowrap text-white transition-colors hover:bg-slate-800 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-slate-900"
+          to={`/incidents?${caseParams}`}
         >
-          <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-center sm:justify-end">
-            {entry.unread && onMarkCaseRead && (
-              <button
-                type="button"
-                data-testid={`frame-subject-mark-read-${personNumber}`}
-                disabled={isAckPending}
-                onClick={onMarkCaseRead}
-                className="inline-flex w-full sm:w-auto items-center justify-center gap-1.5 rounded-lg border border-teal-700/40 bg-teal-50/70 px-2.5 py-1.5 text-xs font-semibold text-teal-950 transition-colors hover:bg-teal-100/70 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-teal-800 focus-visible:ring-2 focus-visible:ring-teal-700/30 disabled:cursor-not-allowed disabled:opacity-50"
-              >
-                <IconCheck className="h-3.5 w-3.5 shrink-0" />
-                <span>
-                  {isAckPending ? t('frameInbox.markingRead') : tSafety('frameInbox.markCaseRead')}
-                </span>
-              </button>
-            )}
-            {entry.source && (
-              <button
-                type="button"
-                aria-pressed={personPhotoOpen}
-                onClick={onTogglePersonPhoto}
-                className={`inline-flex w-full sm:w-auto items-center justify-center gap-1.5 rounded-lg border px-2.5 py-1.5 text-xs font-semibold transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-teal-800 focus-visible:ring-2 focus-visible:ring-teal-700/30 ${
-                  personPhotoOpen
-                    ? 'border-teal-700 bg-teal-50 text-teal-950'
-                    : 'border-slate-300 bg-white text-slate-800 hover:bg-slate-50'
-                }`}
-              >
-                <IconEye className="h-3.5 w-3.5 shrink-0" />
-                <span>
-                  {t(
-                    personPhotoOpen
-                      ? 'frameInbox.hidePersonEvidence'
-                      : 'frameInbox.viewPersonEvidence',
-                    { number: personNumber },
-                  )}
-                </span>
-              </button>
-            )}
-            <Link
-              aria-describedby={handoffHintId}
-              className="inline-flex w-full sm:w-auto items-center justify-center gap-1.5 rounded-lg bg-teal-800 px-3 py-1.5 text-xs font-semibold text-white shadow-2xs transition-colors hover:bg-teal-900 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-teal-900 focus-visible:ring-2 focus-visible:ring-teal-700/40"
-              to={`/incidents?${caseParams}`}
-            >
-              <span>{t('frameInbox.openCase', { number: personNumber })}</span>
-              <IconChevronRight className="h-3.5 w-3.5 shrink-0" />
-            </Link>
-          </div>
-          <p
-            id={handoffHintId}
-            data-testid={`frame-subject-handoff-hint-${personNumber}`}
-            className="text-[11px] text-slate-600 sm:text-right"
-          >
-            {tSafety(
-              c02Enabled ? 'frameInbox.caseIdentificationHint' : 'frameInbox.caseReviewHint',
-            )}
-          </p>
-        </div>
+          <span>{t('frameInbox.openCase', { number: personNumber })}</span>
+          <IconChevronRight className="h-4 w-4 shrink-0" />
+        </Link>
+        <span
+          id={handoffHintId}
+          data-testid={`frame-subject-handoff-hint-${personNumber}`}
+          className="sr-only"
+        >
+          {tSafety(c02Enabled ? 'frameInbox.caseIdentificationHint' : 'frameInbox.caseReviewHint')}
+        </span>
       </div>
+
       {entry.source && personPhotoOpen && (
         <PersonPhoto
+          key={`${siteId}:${frameCameraId}:${frameKey}:${entry.recipientId}:${entry.episodeId}:${entry.source.alertId}:${entry.source.eventId}:${entry.source.personObservationIndex}:${entry.source.evidenceIndex}:${entry.source.sha256}`}
           client={client}
           token={token}
           scope={scope}
           siteId={siteId}
+          frameCameraId={frameCameraId}
+          frameKey={frameKey}
           entry={entry}
           personNumber={personNumber}
         />

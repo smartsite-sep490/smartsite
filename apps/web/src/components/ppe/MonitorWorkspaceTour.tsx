@@ -128,6 +128,7 @@ export function MonitorWorkspaceTour({
       scopeKey={scopeKey}
       isAuthorized={hasSiteScope}
       steps={steps}
+      unobtrusiveEntry
     />
   );
 }

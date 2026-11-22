@@ -3,14 +3,7 @@ import { useTranslation } from 'react-i18next';
 import { translate as tr, uiLocale } from '../../i18n';
 import { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
-import {
-  type WorkflowProps,
-  fieldClass,
-  cardClass,
-  buttonClass,
-  date,
-  label,
-} from './safety-workflow';
+import { type WorkflowProps, cardClass, buttonClass, date, label } from './safety-workflow';
 import { RequestError, Pager } from './SafetyWorkflowUi';
 import { SafetyZoneContext } from './SafetyZoneContext';
 import {
@@ -184,118 +177,142 @@ export function SafetyOverviewView(
         day,
     });
   const current = detail.data;
+  const overviewFieldClass =
+    'mt-1 block h-9 w-full min-w-0 rounded-lg border border-slate-200 bg-white px-2.5 text-sm font-medium text-slate-900 transition-colors hover:border-slate-300 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-slate-900';
   return (
     <div className="space-y-3 min-w-0">
-      <div className="flex flex-wrap items-center justify-between gap-2">
-        <div>
-          <h2 className="text-lg font-bold">{tr('safety_workspace.safety_overview')}</h2>
-          <p className="text-xs text-[var(--text-secondary)]">
-            {tr('safety_workspace.planned_teams_work_preparation_and_related_alerts')}
-          </p>
-        </div>
-        <button
-          className={buttonClass}
-          onClick={() => {
-            void query.refetch();
-            if (mode === 'week') void week.refetch();
-            void detail.refetch();
-            void jobs.refetch();
-            void options.refetch();
-            void contractors.refetch();
-          }}
-        >
-          {tr('safety_workspace.refresh_overview')}
-        </button>
-      </div>
-      <div className="flex flex-wrap items-end gap-3 rounded-xl border border-[var(--border)] bg-white p-3">
-        <div className="flex gap-1" aria-label={tr('safety_workspace.overview_period')}>
+      <div className="space-y-2.5 rounded-xl border border-slate-200 bg-white p-4 sm:px-5">
+        <div className="flex flex-wrap items-center justify-between gap-2.5">
+          <div className="min-w-[min(100%,18rem)] flex-1">
+            <h2 className="text-base sm:text-lg font-semibold tracking-tight text-slate-950">
+              {tr('safety_workspace.safety_overview')}
+            </h2>
+            <p className="text-sm text-slate-600">
+              {tr('safety_workspace.planned_teams_work_preparation_and_related_alerts')}
+            </p>
+          </div>
           <button
-            className={buttonClass}
-            aria-pressed={mode === 'day'}
+            className="inline-flex h-9 items-center justify-center rounded-lg border border-slate-200 bg-white px-3.5 text-sm font-semibold text-slate-800 transition-colors hover:border-slate-300 hover:bg-slate-50 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-slate-900"
             onClick={() => {
-              setMode('day');
-              reset();
+              void query.refetch();
+              if (mode === 'week') void week.refetch();
+              void detail.refetch();
+              void jobs.refetch();
+              void options.refetch();
+              void contractors.refetch();
             }}
           >
-            {tr('labels.DAY')}
-          </button>
-          <button
-            className={buttonClass}
-            aria-pressed={mode === 'week'}
-            onClick={() => {
-              setMode('week');
-              reset();
-            }}
-          >
-            {tr('labels.WEEK')}
+            {tr('safety_workspace.refresh_overview')}
           </button>
         </div>
-        <label className="text-xs font-semibold">
-          {tr('common.work_date')}
-          <input
-            className={fieldClass}
-            type="date"
-            required
-            value={day}
-            onChange={(e) => {
-              if (e.target.value) changeDay(e.target.value);
-            }}
-          />
-        </label>
-        <button className={buttonClass} onClick={() => changeDay(localDay())}>
-          {tr('calendar.today')}
-        </button>
-        <label className="min-w-0 w-full sm:w-44 text-xs font-semibold">
-          {tr('common.contractor')}
-          <SmartNativeSelect
-            className={fieldClass}
-            value={contractorId}
-            onChange={(e) => {
-              setContractor(e.target.value);
-              setTeamFilter('');
-              reset();
-            }}
+
+        <div className="flex flex-wrap items-end gap-2.5 border-t border-slate-100 pt-2.5">
+          <div
+            className="flex items-center gap-0.5 rounded-lg border border-slate-200/80 bg-slate-100/80 p-0.5"
+            aria-label={tr('safety_workspace.overview_period')}
           >
-            <option value="">{tr('safety_workspace.all_contractors')}</option>
-            {contractors.data?.map((c) => (
-              <option key={c.id} value={c.id}>
-                {c.name}
-              </option>
-            ))}
-          </SmartNativeSelect>
-        </label>
-        <label className="min-w-0 w-full sm:w-44 text-xs font-semibold">
-          {tr('labels.TEAM')}
-          <SmartNativeSelect
-            className={fieldClass}
-            value={teamFilter}
-            onChange={(e) => {
-              setTeamFilter(e.target.value);
-              reset();
-            }}
+            <button
+              className={
+                'inline-flex h-8 items-center justify-center rounded-md px-3 text-xs sm:text-sm font-semibold transition-colors ' +
+                (mode === 'day'
+                  ? 'bg-[#0F172A] text-white'
+                  : 'text-slate-700 hover:bg-white hover:text-slate-950')
+              }
+              aria-pressed={mode === 'day'}
+              onClick={() => {
+                setMode('day');
+                reset();
+              }}
+            >
+              {tr('labels.DAY')}
+            </button>
+            <button
+              className={
+                'inline-flex h-8 items-center justify-center rounded-md px-3 text-xs sm:text-sm font-semibold transition-colors ' +
+                (mode === 'week'
+                  ? 'bg-[#0F172A] text-white'
+                  : 'text-slate-700 hover:bg-white hover:text-slate-950')
+              }
+              aria-pressed={mode === 'week'}
+              onClick={() => {
+                setMode('week');
+                reset();
+              }}
+            >
+              {tr('labels.WEEK')}
+            </button>
+          </div>
+          <label className="text-xs font-medium text-slate-600">
+            {tr('common.work_date')}
+            <input
+              className={overviewFieldClass}
+              type="date"
+              required
+              value={day}
+              onChange={(e) => {
+                if (e.target.value) changeDay(e.target.value);
+              }}
+            />
+          </label>
+          <button
+            className="inline-flex h-9 items-center justify-center rounded-lg border border-slate-200 bg-white px-3 text-xs sm:text-sm font-semibold text-slate-800 transition-colors hover:border-slate-300 hover:bg-slate-50"
+            onClick={() => changeDay(localDay())}
           >
-            <option value="">{tr('common.all_teams_bf65fc')}</option>
-            {options.data?.map((t) => (
-              <option key={t.id} value={t.id}>
-                {t.name}
-              </option>
-            ))}
-          </SmartNativeSelect>
-        </label>
-      </div>
-      <div className="flex flex-wrap justify-between gap-2 text-xs text-[var(--text-secondary)]">
-        <span>
-          {tr('safety_workspace.timezone_value1_scheduled_does_not_mean_present', {
-            value1: timezone,
-          })}
-        </span>
-        <span>
-          {tr('safety_workspace.value1_refreshes_every_30_seconds_while_visible', {
-            value1: query.data?.updatedAt
-              ? tr('safety_workspace.updated_value1', { value1: date(query.data.updatedAt) })
-              : tr('safety_workspace.update_time_unavailable'),
-          })}
-        </span>
+            {tr('calendar.today')}
+          </button>
+          <label className="min-w-0 w-full sm:w-52 text-xs font-medium text-slate-600">
+            {tr('common.contractor')}
+            <SmartNativeSelect
+              className={overviewFieldClass}
+              value={contractorId}
+              onChange={(e) => {
+                setContractor(e.target.value);
+                setTeamFilter('');
+                reset();
+              }}
+            >
+              <option value="">{tr('safety_workspace.all_contractors')}</option>
+              {contractors.data?.map((c) => (
+                <option key={c.id} value={c.id}>
+                  {c.name}
+                </option>
+              ))}
+            </SmartNativeSelect>
+          </label>
+          <label className="min-w-0 w-full sm:w-52 text-xs font-medium text-slate-600">
+            {tr('labels.TEAM')}
+            <SmartNativeSelect
+              className={overviewFieldClass}
+              value={teamFilter}
+              onChange={(e) => {
+                setTeamFilter(e.target.value);
+                reset();
+              }}
+            >
+              <option value="">{tr('common.all_teams_bf65fc')}</option>
+              {options.data?.map((t) => (
+                <option key={t.id} value={t.id}>
+                  {t.name}
+                </option>
+              ))}
+            </SmartNativeSelect>
+          </label>
+        </div>
+
+        <div className="flex flex-wrap items-center justify-between gap-2 border-t border-slate-100 pt-2 text-xs text-slate-600">
+          <span>
+            {tr('safety_workspace.timezone_value1_scheduled_does_not_mean_present', {
+              value1: timezone,
+            })}
+          </span>
+          <span className="tabular-nums text-slate-500">
+            {tr('safety_workspace.value1_refreshes_every_30_seconds_while_visible', {
+              value1: query.data?.updatedAt
+                ? tr('safety_workspace.updated_value1', { value1: date(query.data.updatedAt) })
+                : tr('safety_workspace.update_time_unavailable'),
+            })}
+          </span>
+        </div>
       </div>
       <RequestError error={query.error} retry={() => void query.refetch()} />
       <RequestError error={contractors.error} retry={() => void contractors.refetch()} />
@@ -373,7 +390,7 @@ export function SafetyOverviewView(
                             })}
                           </span>
                           {d.workWindows.map((w, i) => (
-                            <span className="block text-[10px]" key={i}>
+                            <span className="block text-xs tabular-nums text-slate-600" key={i}>
                               {windowLabel(w.startsAt, w.endsAt)}
                             </span>
                           ))}
@@ -396,7 +413,37 @@ export function SafetyOverviewView(
             <p className={cardClass}>{tr('safety_workspace.loading_teams')}</p>
           )}
           {page && !page.items.length && (
-            <p className={cardClass}>{tr('safety_workspace.no_teams_found_for_this_selection')}</p>
+            <div className="rounded-2xl border border-dashed border-slate-300 bg-white p-5 text-sm text-slate-600 space-y-2.5">
+              <p className="font-medium text-slate-800">
+                {tr('safety_workspace.no_teams_found_for_this_selection')}
+              </p>
+              {(contractorId || teamFilter || day !== localDay()) && (
+                <div className="flex flex-wrap gap-2 pt-0.5">
+                  {day !== localDay() && (
+                    <button
+                      type="button"
+                      className="inline-flex h-8 items-center rounded-lg border border-slate-300 bg-slate-50 px-3 text-xs font-semibold text-slate-800 hover:bg-slate-100"
+                      onClick={() => changeDay(localDay())}
+                    >
+                      {tr('calendar.today')}
+                    </button>
+                  )}
+                  {(contractorId || teamFilter) && (
+                    <button
+                      type="button"
+                      className="inline-flex h-8 items-center rounded-lg border border-slate-300 bg-slate-50 px-3 text-xs font-semibold text-slate-800 hover:bg-slate-100"
+                      onClick={() => {
+                        setContractor('');
+                        setTeamFilter('');
+                        reset();
+                      }}
+                    >
+                      {tr('safety_workspace.clear_context_filter')}
+                    </button>
+                  )}
+                </div>
+              )}
+            </div>
           )}
           {page?.items.map((t, i) => (
             <div key={t.id}>
@@ -436,8 +483,8 @@ export function SafetyOverviewView(
                     <p
                       className={
                         t.attentionAlertCount
-                          ? 'text-sm font-semibold text-[var(--accent)]'
-                          : 'text-xs'
+                          ? 'text-xs font-semibold text-amber-800 tabular-nums'
+                          : 'text-xs text-slate-600 tabular-nums'
                       }
                     >
                       {tr('safety_workspace.related_alerts_value1', {
@@ -473,7 +520,7 @@ export function SafetyOverviewView(
               </button>
             </div>
           ))}
-          {page && (
+          {page && page.total > 0 && (
             <Pager
               offset={offset}
               total={page.total}
@@ -633,9 +680,11 @@ export function SafetyOverviewView(
             </>
           )}
           {!selectedId && (
-            <p className={cardClass}>
-              {tr('safety_workspace.select_a_team_to_see_its_work_context')}
-            </p>
+            <div className="rounded-xl border border-slate-200 bg-white p-5 text-sm text-slate-600">
+              <p className="text-sm leading-relaxed text-slate-600">
+                {tr('safety_workspace.select_a_team_to_see_its_work_context')}
+              </p>
+            </div>
           )}
         </section>
       </div>
@@ -673,7 +722,7 @@ function ChecklistSummary({
   return (
     <div className="mt-2 space-y-1 text-xs" aria-label={tr('safety_workspace.checklist_summary')}>
       {value.noChecklistAssigned && (
-        <p className="font-semibold text-[var(--accent)]">
+        <p className="font-semibold text-amber-800">
           {tr('safety_workspace.no_checklist_assigned')}
         </p>
       )}
@@ -684,7 +733,7 @@ function ChecklistSummary({
         <p>{tr('safety_workspace.not_submitted_value1', { value1: value.notSubmitted })}</p>
       )}
       {value.needsUpdate > 0 && (
-        <p className="font-semibold text-[var(--accent)]">
+        <p className="font-semibold text-amber-800">
           {tr('safety_workspace.needs_update_value1', { value1: value.needsUpdate })}
         </p>
       )}
@@ -692,7 +741,7 @@ function ChecklistSummary({
         <p>{tr('safety_workspace.awaiting_review_value1', { value1: value.awaitingReview })}</p>
       )}
       {value.recordedWithFindings > 0 && (
-        <p className="font-semibold text-[var(--accent)]">
+        <p className="font-semibold text-amber-800">
           {tr('safety_workspace.recorded_with_findings_value1', {
             value1: value.recordedWithFindings,
           })}
@@ -706,7 +755,7 @@ function ChecklistSummary({
         </p>
       )}
       {!!value.pastStartWithoutReport && (
-        <p className="text-[var(--accent)]">
+        <p className="font-medium text-amber-800">
           {tr('safety_workspace.past_planned_start_no_report_value1', {
             value1: value.pastStartWithoutReport,
           })}
@@ -748,7 +797,7 @@ function ChecklistSummary({
         </p>
       )}
       {value.pastStartWithoutReport === undefined && value.pastPlannedStart > 0 && (
-        <p className="font-semibold text-[var(--accent)]">
+        <p className="font-semibold text-amber-800">
           {tr('safety_workspace.past_planned_start_needs_attention_value1', {
             value1: value.pastPlannedStart,
           })}

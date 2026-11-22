@@ -246,6 +246,15 @@ describe('ScopedRealtimePreviewCanvas software draw-call and accessible DOM boun
     expect(screen.getByText('Observation boundaries · access policy is not shown')).toBeTruthy();
   });
 
+  it('shows the zone anchor for a person before any zone entry is emitted', () => {
+    const preview = makePreviewFixture();
+    preview.frame.zoneDetections = [];
+    render(<ScopedRealtimePreviewCanvas preview={preview} mode="zone" />);
+    // Person #7: bottom-center (192, 336), independent of zone-entry detections.
+    expect(mockCtx.fillRect).toHaveBeenCalledWith(189, 333, 6, 6);
+    expect(screen.getByText(/Bottom-center marker/)).toBeTruthy();
+  });
+
   it('respects showModelObjects off/on and filterClasses presets without turning raw detector boxes into wearer verdicts', () => {
     const positiveClassPrimary = POSITIVE_PPE_OBJECT_CLASSES[0];
     const positiveClassSecondary = POSITIVE_PPE_OBJECT_CLASSES[1];

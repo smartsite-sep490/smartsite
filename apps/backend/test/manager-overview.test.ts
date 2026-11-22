@@ -23,7 +23,6 @@ test('global participation HTTP reads require Admin and fail closed when authori
   const guards = Reflect.getMetadata(GUARDS_METADATA, ContractorParticipationQueryController);
   assert.ok(guards.includes(UserAuthGuard));
   assert.ok(guards.includes(AdminGuard));
-  const source = new DataSource({ type: 'postgres' });
   const actor = {
     id: randomUUID(),
     username: 'synthetic',
@@ -33,9 +32,9 @@ test('global participation HTTP reads require Admin and fail closed when authori
     roleAssignments: [{ role: UserRole.ADMIN, siteId: null }],
   };
   await assert.rejects(
-    new ContractorParticipationQueryService(source).participations(actor, randomUUID()),
+    new ContractorParticipationQueryService().participations(actor, randomUUID()),
   );
-  await assert.rejects(new ContractorParticipationQueryService(source).contractors(actor));
+  await assert.rejects(new ContractorParticipationQueryService().contractors(actor));
 });
 test('unavailable scope database cannot produce a management overview', async () => {
   const source = new DataSource({ type: 'postgres' });

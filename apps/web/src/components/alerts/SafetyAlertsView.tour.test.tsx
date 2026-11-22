@@ -277,7 +277,7 @@ describe('SafetyAlertsView contextual guided tour (FE-F06)', () => {
   it('skips unavailable steps by role and alert status so no step ever points to an absent control', async () => {
     const user = userEvent.setup();
 
-    // 1) Read-only Global Admin on PENDING_REVIEW alert: skips alerts-action-bar (3 steps)
+    // 1) Global Admin has no operational scope or guided tour.
     const adminView = renderWithClient(
       <SafetyAlertsView
         apiUrl="http://localhost:3000"
@@ -287,16 +287,8 @@ describe('SafetyAlertsView contextual guided tour (FE-F06)', () => {
       />,
     );
 
-    await user.click(await screen.findByTestId('safety-task-tour-invitation-start'));
-    expect(screen.getByTestId('safety-task-tour').textContent).toContain('Step 1 of 3');
-    await user.click(screen.getByTestId('safety-task-tour-next'));
-    expect(screen.getByTestId('safety-task-tour').getAttribute('data-tour-step')).toBe(
-      'alerts-case-summary',
-    );
-    await user.click(screen.getByTestId('safety-task-tour-next'));
-    expect(screen.getByTestId('safety-task-tour').getAttribute('data-tour-step')).toBe(
-      'alerts-followup',
-    );
+    expect(await screen.findByRole('alert')).toBeTruthy();
+    expect(screen.queryByTestId('safety-task-tour-invitation-start')).toBeNull();
     expect(document.querySelector('[data-tour-anchor="alerts-action-bar"]')).toBeNull();
     adminView.unmount();
     window.localStorage.clear();

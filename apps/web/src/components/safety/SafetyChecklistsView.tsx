@@ -258,8 +258,7 @@ export function SafetyChecklistsView(
             ))}
           </SmartNativeSelect>
         </label>
-        {(safety ||
-          p.user.roleAssignments.some((r) => r.role === 'ADMIN' && r.siteId === null)) && (
+        {safety && (
           <Assignee
             p={p}
             role="CONTRACTOR_REPRESENTATIVE"

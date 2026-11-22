@@ -72,6 +72,10 @@ export function userErrorMessage(error: unknown): string {
   if (error.status === 401) return translate('errors.sessionExpired');
   if (error.status === 403) return translate('errors.forbidden');
   if (error.status === 404) return translate('errors.notFound');
+  if (error.status === 409 && error.backendError?.code === 'SITE_MANAGER_ALREADY_ASSIGNED')
+    return translate('accounts.errorSiteManager');
+  if (error.status === 409 && error.backendError?.code === 'LAST_ACTIVE_ADMIN_REQUIRED')
+    return translate('accounts.errorLastAdmin');
   if (error.status === 400 || error.status === 409) {
     return (
       resolveMessage(error.message) ??

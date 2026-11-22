@@ -23,6 +23,7 @@ export interface ScopedRealtimePreviewCanvasProps {
   mode: 'ppe' | 'zone';
   showModelObjects?: boolean;
   filterClasses?: readonly string[];
+  hideFrameDetailsOverlay?: boolean;
 }
 
 export function ScopedRealtimePreviewCanvas({
@@ -30,6 +31,7 @@ export function ScopedRealtimePreviewCanvas({
   mode,
   showModelObjects = false,
   filterClasses,
+  hideFrameDetailsOverlay = false,
 }: ScopedRealtimePreviewCanvasProps) {
   registerScopedPreviewCanvasCatalog();
   const { t, i18n } = useTranslation(SAFETY_NAMESPACE);
@@ -98,6 +100,16 @@ export function ScopedRealtimePreviewCanvas({
         context.strokeStyle = '#94a3b8';
         context.lineWidth = 3;
         context.stroke();
+      }
+      // The pipeline tests the bottom-center of the Person box, not torso overlap.
+      // Draw all current persons, including those with no zone-entry event yet.
+      context.fillStyle = '#38bdf8';
+      for (const person of frame.detections) {
+        const box = person.boundingBox;
+        if (!box) continue;
+        const x = Math.round(((box.x1 + box.x2) / 2) * frame.width);
+        const y = Math.round(box.y2 * frame.height);
+        context.fillRect(x - 3, y - 3, 6, 6);
       }
     }
 
@@ -206,7 +218,8 @@ export function ScopedRealtimePreviewCanvas({
     <div className="absolute inset-0 w-full h-full pointer-events-none">
       {mode === 'zone' && preview.frame.zonePolygons.length > 0 && (
         <span className="absolute bottom-2 left-2 z-10 rounded bg-slate-950/80 px-2 py-1 text-xs text-slate-200">
-          {t('ppe.previewCanvas.observationBoundaries')}
+          <span className="block">{t('ppe.previewCanvas.observationBoundaries')}</span>
+          <span className="block max-w-sm">{t('ppe.previewCanvas.zoneAnchorHelp')}</span>
         </span>
       )}
       <canvas
@@ -228,21 +241,21 @@ export function ScopedRealtimePreviewCanvas({
       </ul>
 
       {/* Compact visible details list overlay for sighted users (default collapsed, pointer-events-auto on control only) */}
-      {detections.length > 0 && (
+      {!hideFrameDetailsOverlay && detections.length > 0 && (
         <div className="absolute bottom-2 right-2 z-20 pointer-events-none max-w-xs">
           <details
-            className="pointer-events-auto group rounded bg-stone-950/85 backdrop-blur-xs border border-stone-800 text-[11px] text-stone-300 shadow-md transition-all"
+            className="pointer-events-auto group rounded bg-stone-950/85 backdrop-blur-xs border border-stone-800 text-xs text-stone-300 shadow-md transition-all"
             aria-label={t('ppe.previewCanvas.frameDetailsAria')}
           >
-            <summary className="cursor-pointer select-none px-2.5 py-1 font-semibold text-stone-200 hover:text-white flex items-center justify-between gap-2 list-none">
+            <summary className="cursor-pointer select-none min-h-8 px-2.5 py-1 font-semibold text-stone-200 hover:text-white flex items-center justify-between gap-2 list-none">
               <span>
                 {t('ppe.previewCanvas.frameObservationsCount', { count: detections.length })}
               </span>
-              <span className="text-[9px] text-stone-400 group-open:rotate-180 transition-transform">
+              <span className="text-xs text-stone-400 group-open:rotate-180 transition-transform">
                 ▼
               </span>
             </summary>
-            <div className="p-2 pt-1 border-t border-stone-800/80 max-h-48 overflow-y-auto space-y-1.5 text-[10px] text-stone-300">
+            <div className="p-2 pt-1 border-t border-stone-800/80 max-h-48 overflow-y-auto space-y-1.5 text-xs text-stone-300">
               {detections.map((det, idx) => {
                 const box = det.boundingBox;
                 const boxStr = box
@@ -260,14 +273,16 @@ export function ScopedRealtimePreviewCanvas({
                       <span>
                         {t('ppe.trackLabel', { id: det.trackId ?? '?' })}
                         {det.regionId && (
-                          <span className="font-normal text-stone-400 text-[9px] ml-1.5">
+                          <span className="font-normal text-stone-400 text-xs ml-1.5">
                             {t('ppe.previewCanvas.regionParen', { regionId: det.regionId })}
                           </span>
                         )}
                       </span>
-                      <span className="text-stone-400 font-mono text-[9px]">{timeStr}</span>
+                      <span className="text-stone-400 font-mono tabular-nums text-xs">
+                        {timeStr}
+                      </span>
                     </div>
-                    <div className="text-stone-400">
+                    <div className="text-stone-400 tabular-nums">
                       {t('ppe.previewCanvas.boxPx', { box: boxStr })}
                     </div>
                     <div className="text-stone-300">{accessibleItems[idx]}</div>

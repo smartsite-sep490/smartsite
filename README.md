@@ -19,6 +19,43 @@ Computer-vision and AI workloads live in the companion repository: [smartsite-se
 
 Before contributing or using a coding assistant, read [AGENTS.md](AGENTS.md) for the mandatory architecture, security, testing, Git, and code-quality rules, then follow [CONTRIBUTING.md](CONTRIBUTING.md) for the team workflow.
 
+## Experimental camera source connection workspace
+
+`VITE_SMARTSITE_ENABLE_SOURCE_SETUP=true` enables source-specific connection
+tests for a selected registered camera. The Backend's optional
+`SMARTSITE_AI_SOURCE_HOSTS` JSON array contains trusted entries with `id`,
+`label`, `siteIds` and `origin`. The default empty list disables testing. Use
+HTTPS in production; HTTP loopback is allowed only outside production. Origins
+and the existing server-only AI service token never go to the browser.
+
+The shared API client reads scoped host capabilities using
+`GET /api/v1/sites/:siteId/cameras/:cameraId/source-hosts` and tests sources with
+`POST` to that path plus `/:hostId/probe`. The assigned Site Manager can test;
+existing authorized camera readers can inspect capabilities. Authentication is
+rechecked after the remote call. Draft/scope changes cancel pending tests.
+
+USB webcams belong to the selected AI host; approved recorded videos are REPLAY;
+IP/RTSP cameras use a separate URL and credentials. This browser's camera is
+explicitly unsupported until media ingestion is implemented. Successful tests
+show a real image but do not persist source changes or start AI:
+`applySupported=false` on a test-only host. An operator-configured source driver
+and `SMARTSITE_AI_SOURCE_APPLY_ENABLED=true` enable receipt-bound LIVE source
+activation for the Backend's explicit camera allowlist. The old owner stops
+before trusted generation renewal; the new source starts only after prior views
+are retired. Settings are encrypted on the host. Failure leaves an explicit
+reconciliation state; browser disconnect cannot undo a committed transition.
+No generation secret is returned to the browser. Apply does not claim inference
+or business alert readiness; a fresh view and PPE configuration are still required.
+Browser media transport, replay activation and general remote-host rollout remain
+unfinished. Native RTSP redirect/SDP egress still needs deployment-level enforcement.
+
+The Backend also accepts the explicit `1.1.0` unowned PREPARED receipt for a
+genuinely new allowed Camera. This uses guarded first issuance, not a fabricated
+previous generation or automatic owner recovery. Existing `1.0.0` owned receipts
+and public RUNNING results are unchanged. The paired AI producer/operator profile
+must be deployed separately; consumer support alone does not enable first-camera
+setup. See [source bootstrap contract](contracts/camera-source-bootstrap.md).
+
 ## Architecture
 
 ```text
@@ -166,20 +203,24 @@ exist; it never creates a simulated biometric profile or grants access.
 
 ### Worker documents and Safety approval
 
-Worker onboarding on Web/Mobile includes citizen ID, gender, address, phone number, two clear ID
-images, the Group 3 safety card, health certificate and personal insurance. Web selects existing
-files; Mobile also captures photos or selects them from the library. Quality checks reject blurry
-images, while OCR suggests dates for the Site Safety Officer to inspect and approve on Web.
-Every renewal requires another approval before its new expiry applies. Representatives can
-enter an optional expiry date for safety/insurance, or examination/issue date for health,
-if OCR fails; Worker and Safety can view this suggestion, which
-requires Safety confirmation before taking effect. All Workers, including existing accounts,
-need three current approved documents for entry and Worker write operations.
-Pending/expired accounts retain sign-in, document/status reads and trusted exit operations. OCR also
-compares labeled 12-digit citizen IDs on identity images and certificates with the saved profile.
-Mismatches are advisory warnings visible to the Worker, Representative and Safety Officer; they
-never prevent submission or Safety approval. The default expiry notice is 30 days.
-See [Worker documents](contracts/worker-documents.md) for setup, privacy and review rules.
+Contractor Representatives create Worker accounts and submit identity images and all selected
+certificates together on Web/Mobile. They handle supplements and renewals; Workers view their
+documents, status and notifications. Health certificates and labor insurance are required.
+The Representative explicitly declares whether a Group 3 safety card is required; existing
+profiles default to requiring it. Safety reviews each document and records a reason for rejection.
+Approved originals remain effective until Safety approves their replacements.
+
+OCR combines quality checks and extraction before submission, tries native PDF text first and
+caches scoped results for five minutes. Blurry images, unclear text and date/identity differences
+are advisory; corrupt files and file limits are enforced. Declared dates are required and Safety
+confirms official dates. Eligibility uses current approved required certificates through the end
+of their expiry date in Vietnam time. The expiry notice defaults to 30 days.
+
+Safety can select profiles on the current Web queue page and run a sequential quick AI scan.
+Results are saved against pending documents and successful results are reused. AI runs only
+when Safety requests it, never on submission, and cannot approve a document. Failures do not
+prevent manual review. No Cloud Tasks, Scheduler or AI job table is needed.
+See [Worker documents](contracts/worker-documents.md) for the API, setup, privacy and review rules.
 
 Document OCR runs directly under the Backend. Install Python, Tesseract with Vietnamese/English
 language data and Poppler once, configure their paths as described in the contract, then run:
@@ -198,7 +239,9 @@ Also apply `WorkerDocumentSubmittedExpiry1792713600000` for manual expiry sugges
 then `WorkerHealthIssueDate1792800000000` for health examination/issue dates. Health expiry
 is computed one calendar year after the date Safety confirms (29 February clamps to 28 February).
 Safety must approve a replacement before renewal takes effect; existing approved expiry dates
-are preserved by the migration.
+are preserved by the migration. Also apply WorkerDocumentReviewWorkflow1795478400000 before
+releasing the new batch-submission clients; the removed individual upload APIs require coordinated
+Backend, Web and Mobile deployment.
 
 ### Account-linked face enrollment
 

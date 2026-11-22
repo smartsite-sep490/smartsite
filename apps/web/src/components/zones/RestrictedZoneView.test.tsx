@@ -25,6 +25,12 @@ if (typeof globalThis.ResizeObserver !== 'function') {
   } as unknown as typeof ResizeObserver;
 }
 
+vi.mock('../ppe/FocusedCameraMedia', () => ({
+  FocusedCameraMedia: ({ siteId, camera }: { siteId: string; camera: { id: string } }) => (
+    <div data-testid="zone-production-camera" data-site={siteId} data-camera={camera.id} />
+  ),
+}));
+
 const state = vi.hoisted(() => ({ preview: null as DecodedPreview | null }));
 vi.mock('../cameras/useRealtimePreview', () => ({
   useRealtimePreview: () => ({ preview: state.preview, connected: true, error: null }),
@@ -335,10 +341,10 @@ describe('RestrictedZoneView Backend Polygon Persistence & Scope Integration', (
   });
 
   async function performAdminLogin(user: ReturnType<typeof userEvent.setup>) {
-    await user.type(screen.getByRole('textbox', { name: /Admin username/i }), 'admin');
+    await user.type(screen.getByRole('textbox', { name: /Site Manager username/i }), 'admin');
     await user.type(screen.getByLabelText(/Password/i), 'secret-password');
-    await user.click(screen.getByRole('button', { name: /Sign in as Admin/i }));
-    await screen.findByText(/Admin Session Active/i);
+    await user.click(screen.getByRole('button', { name: /Sign in as Site Manager/i }));
+    await screen.findByText(/Site Manager Session Active/i);
     await waitFor(() => {
       const comboboxes = screen.getAllByRole('combobox');
       expect(comboboxes.length).toBe(3);
@@ -356,12 +362,24 @@ describe('RestrictedZoneView Backend Polygon Persistence & Scope Integration', (
         <RestrictedZoneView />
       </QueryClientProvider>,
     );
-    await user.type(screen.getByRole('textbox', { name: /Admin username/i }), 'admin');
+    await user.type(screen.getByRole('textbox', { name: /Site Manager username/i }), 'admin');
     await user.type(screen.getByLabelText(/Password/i), 'SyntheticPassword1!');
-    await user.click(screen.getByRole('button', { name: /Sign in as Admin/i }));
+    await user.click(screen.getByRole('button', { name: /Sign in as Site Manager/i }));
     await screen.findByText('Your sign-in details are incorrect or this account cannot sign in.');
     expect(screen.queryByText(/session has expired/i)).toBeNull();
     expect(document.body.textContent).not.toContain('PRIVATE_LOGIN_ERROR');
+  });
+
+  it('opens the real camera workspace without deep-link parameters for an application session', async () => {
+    render(
+      <QueryClientProvider client={queryClient}>
+        <RestrictedZoneView authenticatedSession={mockAdminLogin} />
+      </QueryClientProvider>,
+    );
+    const camera = await screen.findByTestId('zone-production-camera');
+    expect(camera.getAttribute('data-site')).toBe('site-alpha');
+    expect(camera.getAttribute('data-camera')).toBe('cam-1');
+    expect(document.querySelector('video[src*="hazard_restricted_zone_test"]')).toBeNull();
   });
 
   it('uses the application session and does not log out when leaving zone configuration', async () => {
@@ -387,7 +405,11 @@ describe('RestrictedZoneView Backend Polygon Persistence & Scope Integration', (
 
     await performAdminLogin(user);
 
-    expect(listSitesSpy).toHaveBeenCalledWith('mock-admin-token', { limit: 100 });
+    expect(listSitesSpy).toHaveBeenCalledWith(
+      'mock-admin-token',
+      { offset: 0, limit: 100 },
+      expect.objectContaining({ signal: expect.anything() }),
+    );
     expect(listCamerasSpy).toHaveBeenCalledWith('mock-admin-token', 'site-alpha', { limit: 100 });
     expect(listRegionsSpy).toHaveBeenCalledWith('mock-admin-token', 'site-alpha', 'cam-1', {
       limit: 100,
@@ -399,7 +421,7 @@ describe('RestrictedZoneView Backend Polygon Persistence & Scope Integration', (
     expect((comboboxes[1] as HTMLSelectElement).value).toBe('cam-1');
     expect((comboboxes[2] as HTMLSelectElement).value).toBe('reg-1');
 
-    expect(screen.getByText(/Server Synced \(v3\)/i)).not.toBeNull();
+    expect(screen.getByText(/Saved config v3/i)).not.toBeNull();
   });
 
   it('SAVE TO BACKEND sends selected IDs and expectedConfigurationVersion with exact normalized coordinates', async () => {
@@ -572,9 +594,9 @@ describe('RestrictedZoneView Backend Polygon Persistence & Scope Integration', (
     // Click "Load Server Version"
     await user.click(screen.getByRole('button', { name: /Load Server Version/i }));
 
-    // Banner should disappear and public UI should reflect server synced version 4
+    // Banner should disappear and public UI should reflect saved config version 4
     expect(screen.queryByRole('alert')).toBeNull();
-    await screen.findByText(/Server Synced \(v4\)/i);
+    await screen.findByText(/Saved config v4/i);
     expect(screen.getByText(/Restored authoritative server polygon\./i)).not.toBeNull();
 
     // Next explicit save sends expectedConfigurationVersion: 4 and new server coordinates
@@ -633,7 +655,7 @@ describe('RestrictedZoneView Backend Polygon Persistence & Scope Integration', (
       expect((selects[1] as HTMLSelectElement).value).toBe('cam-2');
       expect((selects[2] as HTMLSelectElement).value).toBe('reg-2');
     });
-    await screen.findByText(/Server Synced \(v5\)/i);
+    await screen.findByText(/Saved config v5/i);
 
     // Resolve deferred mutation inside awaited act() so stale response is fully consumed
     await act(async () => {
@@ -663,7 +685,7 @@ describe('RestrictedZoneView Backend Polygon Persistence & Scope Integration', (
     const finalComboboxes = screen.getAllByRole('combobox');
     expect((finalComboboxes[1] as HTMLSelectElement).value).toBe('cam-2');
     expect((finalComboboxes[2] as HTMLSelectElement).value).toBe('reg-2');
-    expect(screen.getByText(/Server Synced \(v5\)/i)).not.toBeNull();
+    expect(screen.getByText(/Saved config v5/i)).not.toBeNull();
   });
 
   it('preserves camera mismatch guard when live preview does not match selected camera', async () => {

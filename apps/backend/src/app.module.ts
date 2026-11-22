@@ -8,6 +8,7 @@ import { runtimeEnvironmentOptions } from './config/runtime-environment.js';
 import { HttpExceptionFilter } from './common/http/http-exception.filter.js';
 import { createLoggerParams } from './observability/logger.js';
 import { TrackedFrameRuntimeModule } from './integrations/ai/tracked-frame-runtime.module.js';
+import { TrackedFrameEvidenceController } from './integrations/ai/tracked-frame-evidence.controller.js';
 import {
   TrackedFrameResultController,
   TrackedRawPartController,
@@ -28,7 +29,8 @@ function isAiEndpoint(context: ExecutionContext): boolean {
     context.getClass() === AiIngestionController ||
     context.getClass() === AiConfigurationController ||
     context.getClass() === TrackedFrameResultController ||
-    context.getClass() === TrackedRawPartController
+    context.getClass() === TrackedRawPartController ||
+    context.getClass() === TrackedFrameEvidenceController
   );
 }
 

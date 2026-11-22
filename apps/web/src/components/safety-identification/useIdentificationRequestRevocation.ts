@@ -127,6 +127,17 @@ export function useIdentificationRequestRevocation({
     queryClient.removeQueries({
       queryKey: [...scope.queryPrefix, 'site', siteId, 'history', requestId],
     });
+    const isRetrospectiveForRequest = (query: { queryKey: readonly unknown[] }) =>
+      query.queryKey[0] === scope.queryPrefix[0] &&
+      query.queryKey[1] === scope.queryPrefix[1] &&
+      query.queryKey[2] === scope.queryPrefix[2] &&
+      query.queryKey[3] === 'site' &&
+      sameId(String(query.queryKey[4] ?? ''), siteId) &&
+      (query.queryKey[5] === 'zone-reassessments' ||
+        query.queryKey[5] === 'zone-reassessment-options') &&
+      sameId(String(query.queryKey[7] ?? ''), requestId);
+    void queryClient.cancelQueries({ predicate: isRetrospectiveForRequest });
+    queryClient.removeQueries({ predicate: isRetrospectiveForRequest });
     setRecentlyReloadedRequestKey((prev) => (prev === revKey ? null : prev));
     setRevokedRequests((prev) => ({
       ...prev,

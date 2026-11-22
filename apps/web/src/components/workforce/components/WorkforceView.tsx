@@ -3,8 +3,7 @@ import { useTranslation } from 'react-i18next';
 import React, { useState } from 'react';
 import '../../../i18n';
 import { useSearchParams } from 'react-router-dom';
-import { useQuery } from '@tanstack/react-query';
-import { useManagementClient, useAuth, useCurrentUser } from '../../../features/auth/auth-session';
+import { useAuth, useCurrentUser } from '../../../features/auth/auth-session';
 
 import { WorkforceScheduleTab } from './WorkforceScheduleTab';
 import { WorkforceManagerReviewTab } from './WorkforceManagerReviewTab';
@@ -60,7 +59,6 @@ export function WorkforceView({ apiUrl: apiUrlProp }: { apiUrl: string }) {
 
   const [searchParams, setSearchParams] = useSearchParams();
   const resolvedApiUrl = apiUrlProp || apiUrl;
-  const client = useManagementClient(resolvedApiUrl);
   const { accessToken } = useAuth();
 
   // 1. Fetch authenticated user profile via /auth/me
@@ -74,33 +72,20 @@ export function WorkforceView({ apiUrl: apiUrlProp }: { apiUrl: string }) {
 
   // 2. Determine site scope from roleAssignments
   const roleAssignments = currentUser?.roleAssignments ?? [];
-  const isGlobalAdmin = roleAssignments.some((r) => r.role === 'ADMIN' && r.siteId === null);
   const scopedSiteIds = roleAssignments
+    .filter((r) => ['SITE_MANAGER', 'CONTRACTOR_REPRESENTATIVE', 'WORKER'].includes(r.role))
     .map((r) => r.siteId)
     .filter((id): id is string => id !== null && id !== undefined);
 
-  const sitesQuery = useQuery({
-    queryKey: ['workforce', resolvedApiUrl, 'sites'],
-    queryFn: () =>
-      client.listSites(accessToken!, {
-        limit: 100,
-      }),
-    enabled: !!accessToken && isGlobalAdmin && !userLoading,
-    retry: false,
-  });
-
   // 3. Resolve selectedSiteId
   const requestedSiteId = searchParams.get('siteId');
-  const autoSiteId = isGlobalAdmin
-    ? (sitesQuery.data?.items?.[0]?.id ?? null)
-    : (scopedSiteIds[0] ?? null);
-  const targetSiteAllowed =
-    !requestedSiteId || scopedSiteIds.includes(requestedSiteId) || isGlobalAdmin;
+  const autoSiteId = scopedSiteIds[0] ?? null;
+  const targetSiteAllowed = !requestedSiteId || scopedSiteIds.includes(requestedSiteId);
   const selectedSiteId = requestedSiteId ?? autoSiteId;
 
   // 4. Role-based tab visibility
   const effectiveRoles = roleAssignments
-    .filter((r) => r.siteId === selectedSiteId || (r.role === 'ADMIN' && r.siteId === null))
+    .filter((r) => r.siteId === selectedSiteId)
     .map((r) => r.role);
 
   const { showSchedule, showReview, defaultTab } = getWorkforceTabs(effectiveRoles);
@@ -137,33 +122,6 @@ export function WorkforceView({ apiUrl: apiUrlProp }: { apiUrl: string }) {
         title={tr('workforce_view.could_not_load_user_profile')}
         detail="The server returned an error while loading your account."
         onRetry={() => void refetchUser()}
-      />
-    );
-  }
-
-  if (isGlobalAdmin && sitesQuery.isLoading) {
-    return <LoadingState />;
-  }
-
-  if (isGlobalAdmin && sitesQuery.isError) {
-    const status = (sitesQuery.error as { status?: number } | null)?.status;
-    return (
-      <ErrorState
-        title={
-          status === 403
-            ? tr('common.access_denied_cc11d4')
-            : tr('workforce_view.could_not_load_sites')
-        }
-        detail={
-          status === 403
-            ? tr(
-                'workforce_view.your_account_does_not_have_permission_to_list_sites_contact_your_system_administra',
-              )
-            : tr(
-                'workforce_view.the_server_returned_an_error_while_loading_site_data_try_again_later',
-              )
-        }
-        onRetry={status !== 403 ? () => void sitesQuery.refetch() : undefined}
       />
     );
   }

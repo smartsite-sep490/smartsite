@@ -1,3 +1,5 @@
+> Admin scope update (2026-11-21): the approved boundary is now Dashboard, Accounts and Sites only. Global Admin no longer observes operational workspaces or manages contractor master data. See [current role matrix](role-function-matrix.md). Earlier parity rows below describe the previous implementation where they differ.
+
 # Đối chiếu tính năng sau khi tích hợp main
 
 Nguồn đối chiếu: `origin/main` tại `75d1d60` (#64), tích hợp vào nhánh `feat/qr_visitor_enhance`; lần đối chiếu nghiệp vụ trước tại `3ce0358` (#55–#62). Danh mục này đối chiếu chức năng đã có trong code, không khẳng định toàn bộ FR/ADD trong tài liệu đề xuất đã được triển khai.

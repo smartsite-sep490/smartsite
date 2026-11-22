@@ -66,7 +66,7 @@ export class SafetyEpisodeQueryService {
       [user.id],
     );
     const safety = roles.some((role) => role.role === 'SAFETY_OFFICER' && role.site_id === siteId);
-    if (!safety && !roles.some((role) => role.role === 'ADMIN' && role.site_id === null))
+    if (!safety)
       throw new PublicHttpException(HttpStatus.FORBIDDEN, {
         code: 'FORBIDDEN',
         message: 'Forbidden',

@@ -1,6 +1,7 @@
 import { SmartNativeSelect } from '../../ui/SmartNativeSelect';
+import { isWorkerDocumentDate } from '@smartsite/api-client';
 import { userErrorMessage } from '../../../i18n/messages';
-import { translate as tr } from '../../../i18n';
+import { translate as tr, uiLanguage } from '../../../i18n';
 import { useTranslation } from 'react-i18next';
 import React, { useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
@@ -12,7 +13,6 @@ import {
 import { DocumentFileInputs, WorkerDocumentsPanel } from './WorkerDocumentsPanel';
 import { documentKinds, validDocumentFile } from './worker-document-files';
 import { DocumentMediaPicker } from './DocumentMediaPicker';
-import { WORKER_DEFAULT_TEMPORARY_PASSWORD } from '@smartsite/contracts/management';
 import { useManagementClient, useAuth, useCurrentUser } from '../../../features/auth/auth-session';
 import { WorkerEnrollmentView } from '../../access/enrollment/WorkerEnrollmentView';
 import { loadAllPages } from '../load-all-pages';
@@ -224,13 +224,17 @@ function WorkerAccountForm({
   const [contractorId, setContractorId] = useState('');
   const [displayName, setDisplayName] = useState('');
   const [username, setUsername] = useState('');
+  const [email, setEmail] = useState('');
   const [nationalId, setNationalId] = useState('');
   const [phoneNumber, setPhoneNumber] = useState('');
   const [gender, setGender] = useState<'MALE' | 'FEMALE' | 'OTHER' | ''>('');
   const [address, setAddress] = useState('');
+  const [safetyCardRequired, setSafetyCardRequired] = useState<'' | 'true' | 'false'>('');
+  const [submissionId, setSubmissionId] = useState(() => crypto.randomUUID());
   const [identityFiles, setIdentityFiles] = useState<Partial<Record<'FRONT' | 'BACK', File>>>({});
   const [files, setFiles] = useState<Partial<Record<WorkerDocumentKind, File>>>({});
   const [expiries, setExpiries] = useState<Partial<Record<WorkerDocumentKind, string>>>({});
+  const [pendingVersion, setPendingVersion] = useState<number | null>(null);
   const [pendingAccount, setPendingAccount] = useState<ContractorWorkerAccountResponse | null>(
     null,
   );
@@ -241,11 +245,14 @@ function WorkerAccountForm({
     : (contractors[0]?.id ?? '');
   const validateImage = async (file: File) => {
     const result = await client.checkDocumentImageQuality(token, siteId, selected, file);
-    if (result.status !== 'ACCEPTED') throw new Error(tr(`documents.${result.reason}`));
+    return result;
   };
 
   const create = useMutation({
     mutationFn: async () => {
+      const recipient = email.trim().toLowerCase();
+      if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(recipient))
+        throw new Error(tr('worker_onboarding_view.invalidEmail'));
       if (
         !/^[0-9]{12}$/.test(nationalId) ||
         !/^\+?[0-9]{9,15}$/.test(phoneNumber) ||
@@ -253,9 +260,15 @@ function WorkerAccountForm({
         !address.trim() ||
         !identityFiles.FRONT ||
         !identityFiles.BACK ||
-        documentKinds.some((kind) => !files[kind])
+        !safetyCardRequired ||
+        documentKinds.some(
+          (kind) => (kind !== 'SAFETY_CARD' || safetyCardRequired === 'true') && !files[kind],
+        )
       )
         throw new Error(tr('documents.required'));
+      for (const kind of documentKinds)
+        if (files[kind] && !isWorkerDocumentDate(expiries[kind]))
+          throw new Error(tr('documents.dateRequiredHint'));
       for (const file of Object.values(files))
         if (file && !validDocumentFile(file)) throw new Error(tr('documents.invalidFile'));
       const account =
@@ -264,44 +277,52 @@ function WorkerAccountForm({
           siteId,
           displayName: displayName.trim(),
           username: username.trim().toLowerCase(),
+          email: recipient,
+          language: uiLanguage(),
           nationalId,
           phoneNumber,
           gender,
           address: address.trim(),
         }));
       setPendingAccount(account);
-      for (const side of ['FRONT', 'BACK'] as const)
-        await client.uploadWorkerIdentityImage(
-          token,
-          siteId,
-          account.worker.id,
-          side,
-          identityFiles[side]!,
-        );
+      const current = await client.workerCompliance(token, siteId, account.worker.id);
+      const expectedVersion = pendingVersion ?? current.version ?? 0;
+      setPendingVersion(expectedVersion);
+      const documents: import('@smartsite/api-client').SubmitWorkerDocumentsCommand['documents'] =
+        {};
       for (const kind of documentKinds)
-        await client.uploadWorkerDocument(
-          token,
-          siteId,
-          account.worker.id,
-          kind,
-          files[kind]!,
-          expiries[kind]
-            ? kind === 'HEALTH_CERTIFICATE'
-              ? { submittedIssuedOn: expiries[kind] }
-              : { submittedExpiresOn: expiries[kind] }
-            : {},
-        );
+        if (files[kind])
+          documents[kind] =
+            kind === 'HEALTH_CERTIFICATE'
+              ? { submittedIssuedOn: expiries[kind]! }
+              : { submittedExpiresOn: expiries[kind]! };
+      await client.submitWorkerDocuments(
+        token,
+        siteId,
+        account.worker.id,
+        {
+          requestId: submissionId,
+          expectedVersion,
+          safetyCardRequired: safetyCardRequired === 'true',
+          documents,
+        },
+        { ...files, ...identityFiles },
+      );
       return account;
     },
     onSuccess: () => {
       setDisplayName('');
       setUsername('');
+      setEmail('');
       setNationalId('');
       setPhoneNumber('');
       setFiles({});
       setExpiries({});
       setPendingAccount(null);
+      setPendingVersion(null);
       setFileVersion((v) => v + 1);
+      setSafetyCardRequired('');
+      setSubmissionId(crypto.randomUUID());
       setGender('');
       setAddress('');
       setIdentityFiles({});
@@ -461,6 +482,27 @@ function WorkerAccountForm({
               </div>
 
               {/* Password credentials callout */}
+              <label className="block text-xs font-bold uppercase tracking-wider text-slate-700">
+                {tr('worker_onboarding_view.email')}
+                <input
+                  className={field}
+                  type="email"
+                  aria-label={tr('worker_onboarding_view.email')}
+                  aria-describedby="worker-onboarding-email-hint"
+                  required
+                  maxLength={254}
+                  autoComplete="email"
+                  value={email}
+                  disabled={!!pendingAccount}
+                  onChange={(event) => setEmail(event.target.value)}
+                />
+                <span
+                  id="worker-onboarding-email-hint"
+                  className="mt-2 block text-xs font-medium normal-case tracking-normal text-slate-500"
+                >
+                  {tr('worker_onboarding_view.emailHint')}
+                </span>
+              </label>
               <div className="rounded-xl border border-blue-200/80 bg-blue-50/70 p-4 flex items-start gap-3 shadow-2xs">
                 <IconKey className="w-5 h-5 text-blue-600 shrink-0 mt-0.5" />
                 <div className="text-xs space-y-1">
@@ -579,6 +621,7 @@ function WorkerAccountForm({
                       key={`${fileVersion}:${side}`}
                       label={tr(`documents.${side}`)}
                       allowPdf={false}
+                      referenceNationalId={nationalId}
                       file={identityFiles[side]}
                       disabled={!!pendingAccount}
                       validate={validateImage}
@@ -592,15 +635,41 @@ function WorkerAccountForm({
 
               {/* 3 Safety & Health Documents */}
               <div className="pt-3 border-t border-slate-200/70">
+                <label className="block space-y-2 text-sm font-semibold text-slate-700">
+                  <span>{tr('documents.safetyCardRequired')}</span>
+                  <SmartNativeSelect
+                    required
+                    className={field}
+                    value={safetyCardRequired}
+                    disabled={create.isPending}
+                    onChange={(event) => {
+                      setSafetyCardRequired(event.target.value as typeof safetyCardRequired);
+                      setSubmissionId(crypto.randomUUID());
+                    }}
+                  >
+                    <option value="">—</option>
+                    <option value="true">{tr('documents.cardRequired')}</option>
+                    <option value="false">{tr('documents.cardNotRequired')}</option>
+                  </SmartNativeSelect>
+                </label>
                 <DocumentFileInputs
                   key={fileVersion}
+                  nationalId={nationalId}
+                  safetyCardRequired={safetyCardRequired !== 'false'}
                   files={files}
                   expiries={expiries}
-                  onExpiryChange={(kind, value) =>
-                    setExpiries((previous) => ({ ...previous, [kind]: value }))
-                  }
+                  onExpiryChange={(kind, value, preserveExisting) => {
+                    setExpiries((previous) => ({
+                      ...previous,
+                      [kind]: preserveExisting ? previous[kind] || value : value,
+                    }));
+                    setSubmissionId(crypto.randomUUID());
+                  }}
                   validate={validateImage}
-                  onChange={(kind, file) => setFiles((previous) => ({ ...previous, [kind]: file }))}
+                  onChange={(kind, file) => {
+                    setFiles((previous) => ({ ...previous, [kind]: file }));
+                    setSubmissionId(crypto.randomUUID());
+                  }}
                 />
               </div>
             </div>
@@ -638,12 +707,14 @@ function WorkerAccountForm({
                     className={`w-2 h-2 rounded-full ${
                       identityFiles.FRONT &&
                       identityFiles.BACK &&
-                      documentKinds.every((k) => !!files[k])
+                      documentKinds
+                        .filter((kind) => kind !== 'SAFETY_CARD' || safetyCardRequired === 'true')
+                        .every((kind) => !!files[kind])
                         ? 'bg-emerald-500'
                         : 'bg-slate-300'
                     }`}
                   />
-                  <span>{tr('documents.title')} (5/5)</span>
+                  <span>{tr('documents.title')}</span>
                 </div>
               </div>
 
@@ -654,13 +725,21 @@ function WorkerAccountForm({
                   !selected ||
                   !displayName.trim() ||
                   !username.trim() ||
+                  !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim()) ||
                   !nationalId ||
                   !phoneNumber ||
                   !gender ||
                   !address.trim() ||
                   !identityFiles.FRONT ||
                   !identityFiles.BACK ||
-                  documentKinds.some((kind) => !files[kind]) ||
+                  !safetyCardRequired ||
+                  documentKinds.some(
+                    (kind) =>
+                      (kind !== 'SAFETY_CARD' || safetyCardRequired === 'true') && !files[kind],
+                  ) ||
+                  documentKinds.some(
+                    (kind) => !!files[kind] && !isWorkerDocumentDate(expiries[kind]),
+                  ) ||
                   create.isPending
                 }
               >
@@ -672,7 +751,7 @@ function WorkerAccountForm({
                 ) : (
                   <>
                     <IconCheck className="w-4 h-4" />
-                    <span>{tr('common.create_worker_account')}</span>
+                    <span>{tr('documents.sendBundle')}</span>
                   </>
                 )}
               </button>
@@ -711,13 +790,10 @@ function WorkerAccountForm({
                     role="status"
                     className="text-xs leading-relaxed text-emerald-900 font-medium mt-1"
                   >
-                    {tr('common.account')} {create.data.account.username}{' '}
-                    {tr(
-                      'worker_onboarding_view.and_worker_profile_created_give_the_worker_their_temporary_password',
-                    )}{' '}
-                    <strong className="font-mono bg-white px-1.5 py-0.5 rounded border border-emerald-200 text-emerald-950 font-bold">
-                      {WORKER_DEFAULT_TEMPORARY_PASSWORD}
-                    </strong>
+                    {tr('worker_onboarding_view.createdWithEmail', {
+                      username: create.data.account.username,
+                      email: create.data.account.email ?? '',
+                    })}{' '}
                     {tr('worker_onboarding_view.then_register_their_face_below_worker_code')}{' '}
                     <strong className="font-mono bg-white px-1.5 py-0.5 rounded border border-emerald-200 text-emerald-950 font-bold">
                       {create.data.worker.externalId}
@@ -734,7 +810,7 @@ function WorkerAccountForm({
                     🏷️ {create.data.worker.externalId}
                   </span>
                   <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-lg bg-white border border-emerald-200 font-mono font-bold text-emerald-900 shadow-2xs">
-                    🔑 {WORKER_DEFAULT_TEMPORARY_PASSWORD}
+                    {create.data.account.email}
                   </span>
                 </div>
               </div>

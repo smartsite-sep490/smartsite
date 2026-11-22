@@ -1,6 +1,5 @@
 import { useTranslation } from 'react-i18next';
 import { SAFETY_NAMESPACE } from '../../i18n/runtime';
-import { CAMERA_BUTTON_STYLES } from './camera-dialog-styles';
 import { CameraSetupStageCards } from './CameraSetupContextPanel';
 
 export type CameraSetupOpenKind = 'register' | 'manage' | 'zones' | 'regions';
@@ -29,13 +28,13 @@ export function CameraSetupWorkflow({
         <div
           role="group"
           aria-label={t('cameraSetup.workflowTitle')}
-          className="flex flex-wrap items-center gap-2 sm:justify-end"
+          className="flex flex-wrap items-center gap-1.5 sm:justify-end"
         >
           {showZonesAction && (
             <button
               type="button"
               data-tour-anchor="camera-setup-zone-draw"
-              className={CAMERA_BUTTON_STYLES.secondary}
+              className="inline-flex min-h-8 items-center justify-center rounded-lg border border-slate-300 bg-white px-2.5 py-1 text-xs font-semibold text-slate-700 transition-colors hover:bg-slate-50 hover:text-slate-950 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#0F172A] cursor-pointer"
               onClick={(event) => open('zones', undefined, event.currentTarget)}
             >
               {t(canWriteZones ? 'cameraSetup.zones' : 'cameraSetup.viewZones')}
@@ -45,7 +44,7 @@ export function CameraSetupWorkflow({
             <button
               type="button"
               data-tour-anchor="camera-setup-source"
-              className={CAMERA_BUTTON_STYLES.primary}
+              className="inline-flex min-h-8 items-center justify-center rounded-lg bg-[#0F172A] px-2.5 py-1 text-xs font-semibold text-white transition-colors hover:bg-slate-800 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#0F172A] cursor-pointer"
               onClick={(event) => open('register', undefined, event.currentTarget)}
             >
               {t('cameraSetup.register')}
@@ -53,17 +52,17 @@ export function CameraSetupWorkflow({
           )}
         </div>
       )}
-      <details className="group col-span-full w-full text-xs text-slate-500">
-        <summary className="inline-flex cursor-pointer list-none items-center gap-1.5 rounded-lg border border-transparent px-2 py-1 font-medium text-slate-600 transition-colors hover:border-slate-200 hover:bg-slate-50 hover:text-slate-900 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-slate-900">
+      <details className="group hidden sm:block col-span-full w-full text-xs text-slate-600">
+        <summary className="inline-flex min-h-7 cursor-pointer list-none items-center gap-1 rounded-md px-1.5 py-0.5 text-xs font-medium text-slate-600 transition-colors hover:bg-slate-100 hover:text-slate-900 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-slate-900">
           <span>{t('cameraSetup.help')}</span>
           <span
             aria-hidden="true"
-            className="text-[10px] text-slate-400 transition-transform duration-150 group-open:rotate-180"
+            className="text-xs text-slate-500 transition-transform duration-150 group-open:rotate-180"
           >
             ▾
           </span>
         </summary>
-        <div className="mt-2 rounded-xl border border-slate-200/90 bg-slate-50/70 p-3 text-left text-xs text-slate-600">
+        <div className="mt-1.5 rounded-xl border border-slate-200 bg-slate-50/40 p-3 text-left text-sm text-slate-700">
           <CameraSetupStageCards />
         </div>
       </details>

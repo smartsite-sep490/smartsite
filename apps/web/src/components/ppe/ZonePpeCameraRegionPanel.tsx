@@ -123,10 +123,12 @@ function ZonePpeCameraRegionPanelContent(
               <IconCamera className="h-4.5 w-4.5" />
             </span>
             <div className="min-w-0">
-              <h3 className="text-base font-bold text-slate-900 truncate">
+              <h3 className="text-base font-bold text-slate-900 break-words [overflow-wrap:anywhere]">
                 {t('regionSetup.title')}
               </h3>
-              <p className="text-xs text-slate-500 truncate mt-0.5">{t('regionSetup.subtitle')}</p>
+              <p className="text-xs text-slate-500 break-words [overflow-wrap:anywhere] mt-0.5">
+                {t('regionSetup.subtitle')}
+              </p>
             </div>
           </div>
           {onClose && (
@@ -161,19 +163,31 @@ function ZonePpeCameraRegionPanelContent(
               )}
             </div>
           </div>
-          {panel.savedRegionInfo && panel.canRequestReference && (
-            <div className="flex justify-end">
-              <button
-                type="button"
-                data-testid="region-saved-reload-reference"
-                disabled={panel.configReference.isLoading}
-                onClick={panel.handleRequestReference}
-                className="rounded-lg border border-emerald-300 bg-white px-2.5 py-1 text-xs font-semibold text-emerald-900 hover:bg-emerald-100 transition-colors cursor-pointer disabled:opacity-50"
-              >
-                {t('regionSetup.feedback.reloadReferenceBtn', {
-                  configVersion: panel.savedRegionInfo.configurationVersion,
-                })}
-              </button>
+          {panel.savedRegionInfo && (panel.canRequestReference || props.onOpenApply) && (
+            <div className="flex flex-wrap items-center justify-end gap-2">
+              {props.onOpenApply && (
+                <button
+                  type="button"
+                  data-testid="region-saved-jump-to-apply"
+                  onClick={props.onOpenApply}
+                  className="rounded-lg border border-emerald-300 bg-white px-2.5 py-1 text-xs font-semibold text-emerald-900 hover:bg-emerald-100 transition-colors cursor-pointer"
+                >
+                  {t('regionSetup.feedback.jumpToApplyBtn')}
+                </button>
+              )}
+              {panel.canRequestReference && (
+                <button
+                  type="button"
+                  data-testid="region-saved-reload-reference"
+                  disabled={panel.configReference.isLoading}
+                  onClick={panel.handleRequestReference}
+                  className="rounded-lg border border-emerald-300 bg-white px-2.5 py-1 text-xs font-semibold text-emerald-900 hover:bg-emerald-100 transition-colors cursor-pointer disabled:opacity-50"
+                >
+                  {t('regionSetup.feedback.reloadReferenceBtn', {
+                    configVersion: panel.savedRegionInfo.configurationVersion,
+                  })}
+                </button>
+              )}
             </div>
           )}
         </div>
@@ -304,6 +318,8 @@ function ZonePpeCameraRegionPanelContent(
               editingRegion={panel.drawingScope.editingRegion}
               tourUserId={tourUserId}
               lastSavedDraft={panel.lastSavedDraft}
+              isLoadingReference={panel.configReference.isLoading}
+              onRequestFreshReference={panel.handleRequestReference}
               onAcceptCandidateReference={panel.handleAcceptCandidateReference}
               onScopeRevoked={panel.handleScopeRevoked}
               onCancelCandidateReview={panel.handleCancelCandidateReview}
@@ -321,9 +337,13 @@ function ZonePpeCameraRegionPanelContent(
 
       <CameraRegionList
         selectedCameraId={panel.selectedCameraId}
+        selectedZone={panel.selectedZone}
+        zones={zones}
+        currentViewRevision={panel.statusCardReference?.issuedReference.viewRevision ?? null}
         isCameraBaseError={panel.isCameraBaseError}
         isLoadingCameras={panel.camerasInfiniteQuery.isLoading}
         allFetchedRegions={panel.allFetchedRegions}
+        allCameraRegions={panel.visibleAllCameraRegions}
         visibleLinkedRegions={panel.visibleLinkedRegions}
         regionServerTotal={panel.regionServerTotal}
         isRegionsInitialLoading={panel.isRegionsInitialLoading}
@@ -333,8 +353,12 @@ function ZonePpeCameraRegionPanelContent(
         isFetchingRegions={panel.regionsInfiniteQuery.isFetching}
         hasNextRegionPage={Boolean(panel.regionsInfiniteQuery.hasNextPage)}
         canStartDrawing={panel.canStartDrawing}
+        canRequestReference={panel.canRequestReference}
+        isLoadingReference={panel.configReference.isLoading}
+        pendingEditRegionId={panel.pendingEditRegionId}
         isCurrentScopeActive={panel.isCurrentScopeActive}
         onStartEditingRegion={panel.handleStartEditingRegion}
+        onEditSavedRegion={panel.handleEditSavedRegion}
         onRetryInitialRegions={() => {
           if (panel.regionsInfiniteQuery.isFetching) return;
           void panel.regionsInfiniteQuery.refetch({ cancelRefetch: false });

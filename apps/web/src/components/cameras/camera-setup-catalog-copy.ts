@@ -13,11 +13,12 @@ const en = {
   'cameraSetup.monitorPpe': 'PPE monitoring',
   'cameraSetup.monitorZones': 'Zone monitoring',
   'cameraSetup.regionsAction': 'Regions',
+  'cameraSetup.ppeAction': 'PPE policy',
   'cameraSetup.manage': 'Manage {{name}}',
   'cameraSetup.manageAction': 'Manage',
   'cameraSetup.noCameras': 'No cameras registered for this Site yet.',
   'cameraSetup.emptyStepFlowManager':
-    'Start with Step 1 to define site Zones and PPE rules, then Step 2 to register a camera with its provisioned Source ID before loading a reference image and drawing observation regions.',
+    'Step 1: create human-named work areas (Zones). Step 2: register a camera using the technical Source ID already configured on your edge worker (do not paste RTSP URLs or passwords — stream transport is provisioned on the edge worker). Next, open Edit observation regions → Get configuration image to verify the frame, draw regions, and save PPE policy.',
   'cameraSetup.emptyStepFlowReadOnly':
     'Only the assigned Site Manager can register cameras and configure observation regions for this Site.',
   'cameraSetup.emptyStep1Action': 'Step 1 · Set up Zone PPE',
@@ -42,6 +43,12 @@ const en = {
   'cameraSetup.field.code': 'Camera code',
   'cameraSetup.field.name': 'Camera name',
   'cameraSetup.field.externalId': 'Source ID',
+  'cameraSetup.workspaceTabsLabel': 'Camera configuration tasks',
+  'cameraSetup.tabSource': 'Video source',
+  'cameraSetup.tabRegions': 'Regions & polygon',
+  'cameraSetup.tabPpe': 'PPE policy',
+  'cameraSetup.diagnosticsDisclosure': 'Setup checklist & diagnostics',
+  'cameraSetup.sourceStageSummaryDisclosure': 'Connection & application stages',
 };
 
 const vi: Record<keyof typeof en, string> = {
@@ -57,11 +64,12 @@ const vi: Record<keyof typeof en, string> = {
   'cameraSetup.monitorPpe': 'Giám sát PPE',
   'cameraSetup.monitorZones': 'Giám sát khu vực',
   'cameraSetup.regionsAction': 'Vùng quan sát',
+  'cameraSetup.ppeAction': 'Chính sách PPE',
   'cameraSetup.manage': 'Quản lý {{name}}',
   'cameraSetup.manageAction': 'Quản lý',
   'cameraSetup.noCameras': 'Chưa có camera nào được đăng ký cho công trường này.',
   'cameraSetup.emptyStepFlowManager':
-    'Bắt đầu từ Bước 1 để tạo Khu vực & quy định PPE, sau đó Bước 2 đăng ký camera bằng Mã nguồn (Source ID) đã cấp phát trước khi lấy ảnh tham chiếu và vẽ vùng quan sát.',
+    'Bước 1: tạo các khu vực làm việc có tên rõ ràng (Khu vực). Bước 2: đăng ký camera bằng Mã nguồn (Source ID) kỹ thuật đã cấu hình sẵn trên edge worker (không dán URL RTSP hay mật khẩu — kết nối luồng được cấp phát trên edge worker). Tiếp theo, mở Sửa vùng quan sát → Lấy ảnh cấu hình để kiểm tra khung hình, vẽ vùng và lưu chính sách PPE.',
   'cameraSetup.emptyStepFlowReadOnly':
     'Chỉ Quản lý công trường được phân công mới được đăng ký camera và cấu hình vùng quan sát cho công trường này.',
   'cameraSetup.emptyStep1Action': 'Bước 1 · Thiết lập PPE Khu vực',
@@ -87,6 +95,12 @@ const vi: Record<keyof typeof en, string> = {
   'cameraSetup.field.code': 'Mã camera',
   'cameraSetup.field.name': 'Tên camera',
   'cameraSetup.field.externalId': 'Mã nguồn (Source ID)',
+  'cameraSetup.workspaceTabsLabel': 'Tác vụ cấu hình camera',
+  'cameraSetup.tabSource': 'Nguồn video',
+  'cameraSetup.tabRegions': 'Vùng & đa giác',
+  'cameraSetup.tabPpe': 'Chính sách PPE',
+  'cameraSetup.diagnosticsDisclosure': 'Tiến độ thiết lập & chẩn đoán',
+  'cameraSetup.sourceStageSummaryDisclosure': 'Các giai đoạn kết nối & áp dụng',
 };
 
 registerFeatureCatalog({ en, vi });

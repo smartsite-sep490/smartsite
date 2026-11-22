@@ -1,6 +1,7 @@
+import { WorkerDocumentBundleForm } from './WorkerDocumentBundleForm';
 import { WorkerDocumentStatusTags } from './WorkerDocumentStatusTags';
 import { useEffect, useState } from 'react';
-import { useMutation, useMutationState, useQuery, useQueryClient } from '@tanstack/react-query';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useTranslation } from 'react-i18next';
 import type {
   SmartSiteManagementClient,
@@ -11,13 +12,10 @@ import { ApiError, healthCertificateExpiry } from '@smartsite/api-client';
 import { translate as tr } from '../../../i18n';
 import { userErrorMessage } from '../../../i18n/messages';
 import { DocumentMediaPicker } from './DocumentMediaPicker';
-import { SmartDatePicker } from '../../ui';
+import { Dialog, SmartDatePicker } from '../../ui';
 import { DocumentIdentityNotice } from './DocumentIdentityNotice';
 import { WorkerDocumentAnalysisNotice } from './WorkerDocumentAnalysisNotice';
-import {
-  WorkerCertificateSubmission,
-  WorkerDocumentDateNotice,
-} from './WorkerCertificateSubmission';
+import { WorkerDocumentDateNotice } from './WorkerDocumentDateNotice';
 import { documentKinds } from './worker-document-files';
 import {
   IconEye,
@@ -54,15 +52,22 @@ export function DocumentFileInputs({
   expiries,
   onExpiryChange,
   disabled = false,
+  nationalId = '',
+  safetyCardRequired = true,
 }: {
+  nationalId?: string;
+  safetyCardRequired?: boolean;
   files: Partial<Record<WorkerDocumentKind, File>>;
   onChange: (kind: WorkerDocumentKind, file?: File) => void;
-  validate: (file: File) => Promise<void>;
+  validate: (file: File) => Promise<import('@smartsite/api-client').DocumentImageQuality>;
   expiries: Partial<Record<WorkerDocumentKind, string>>;
-  onExpiryChange: (kind: WorkerDocumentKind, value: string) => void;
+  onExpiryChange: (kind: WorkerDocumentKind, value: string, preserveExisting?: boolean) => void;
   disabled?: boolean;
 }) {
   useTranslation();
+  const [checks, setChecks] = useState<
+    Partial<Record<WorkerDocumentKind, import('@smartsite/api-client').DocumentImageQuality>>
+  >({});
   return (
     <div className="space-y-4 sm:col-span-2">
       <div className="rounded-xl border border-slate-200/90 bg-slate-50/70 p-3.5 shadow-2xs">
@@ -73,34 +78,78 @@ export function DocumentFileInputs({
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-        {documentKinds.map((kind) => (
-          <div
-            key={kind}
-            className="space-y-3 rounded-2xl border border-slate-200/90 bg-white p-4 shadow-2xs"
-          >
-            <fieldset disabled={disabled}>
-              <SmartDatePicker
-                label={`${tr(`documents.${kind}`)} - ${tr(kind === 'HEALTH_CERTIFICATE' ? 'documents.submittedIssuedOn' : 'documents.submittedExpiresOn')}`}
-                value={expiries[kind] ?? ''}
-                disablePast={false}
-                onChange={(value) => onExpiryChange(kind, value)}
+        {documentKinds.map((kind) => {
+          const checked = checks[kind];
+          const detected =
+            kind === 'HEALTH_CERTIFICATE' ? checked?.ocr?.issuedOn : checked?.ocr?.expiresOn;
+          const expiry =
+            kind === 'HEALTH_CERTIFICATE'
+              ? healthCertificateExpiry(expiries[kind])
+              : expiries[kind];
+          const today = new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Ho_Chi_Minh' }).format(
+            new Date(),
+          );
+          return (
+            <div
+              key={kind}
+              className="space-y-3 rounded-2xl border border-slate-200/90 bg-white p-4 shadow-2xs"
+            >
+              <fieldset disabled={disabled}>
+                <SmartDatePicker
+                  label={`${tr(`documents.${kind}`)} - ${tr(kind === 'HEALTH_CERTIFICATE' ? 'documents.submittedIssuedOn' : 'documents.submittedExpiresOn')}`}
+                  value={expiries[kind] ?? ''}
+                  disablePast={false}
+                  onChange={(value) => onExpiryChange(kind, value)}
+                />
+              </fieldset>
+              {kind === 'HEALTH_CERTIFICATE' && (
+                <p className="text-xs text-slate-500">
+                  {tr('documents.healthExpiryRule')}{' '}
+                  {healthCertificateExpiry(expiries[kind]) ?? tr('documents.notDetermined')}
+                </p>
+              )}
+              <DocumentMediaPicker
+                label={tr(`documents.${kind}`)}
+                file={files[kind]}
+                disabled={disabled}
+                validate={async (file) => {
+                  const result = await validate(file);
+                  setChecks((previous) => ({ ...previous, [kind]: result }));
+                  if (!expiries[kind] && result.ocr) {
+                    const date =
+                      kind === 'HEALTH_CERTIFICATE' ? result.ocr.issuedOn : result.ocr.expiresOn;
+                    if (date) onExpiryChange(kind, date, true);
+                  }
+                }}
+                onSelect={(file) => onChange(kind, file)}
               />
-            </fieldset>
-            {kind === 'HEALTH_CERTIFICATE' && (
-              <p className="text-xs text-slate-500">
-                {tr('documents.healthExpiryRule')}{' '}
-                {healthCertificateExpiry(expiries[kind]) ?? tr('documents.notDetermined')}
-              </p>
-            )}
-            <DocumentMediaPicker
-              label={tr(`documents.${kind}`)}
-              file={files[kind]}
-              disabled={disabled}
-              validate={validate}
-              onSelect={(file) => onChange(kind, file)}
-            />
-          </div>
-        ))}
+              {kind === 'SAFETY_CARD' && !safetyCardRequired && (
+                <p className="text-xs text-slate-500">{tr('documents.optional')}</p>
+              )}
+              {expiry && expiry < today && (
+                <p className="text-xs font-semibold text-amber-900">
+                  {tr('documents.expiredWarning')}
+                </p>
+              )}
+              {checks[kind] && (
+                <div role="status" className="space-y-1 text-xs text-amber-900">
+                  <p>
+                    {tr('documents.dateDetected')}: {detected ?? tr('documents.notDetermined')}
+                  </p>
+                  {checks[kind]?.status !== 'ACCEPTED' && (
+                    <p>{tr('documents.' + checks[kind]?.reason)}</p>
+                  )}
+                  {!!checks[kind]?.ocr?.nationalIds?.some(
+                    (id) => nationalId && id !== nationalId,
+                  ) && <p>{tr('documents.identityMismatch')}</p>}
+                  {!!expiries[kind] && detected && expiries[kind] !== detected && (
+                    <p>{tr('documents.dateMismatch')}</p>
+                  )}
+                </div>
+              )}
+            </div>
+          );
+        })}
       </div>
       <p className="text-xs text-slate-500">{tr('documents.submittedExpiryHint')}</p>
     </div>
@@ -114,13 +163,13 @@ interface Props {
   workerId: string;
   scope: string;
   canUpload?: boolean;
-  canSubmitDocuments?: boolean;
   canReview?: boolean;
+  analysisBusy?: boolean;
+  onAnalysisChange?: (running: boolean) => void;
 }
 
 export function WorkerDocumentsPanel(p: Props) {
   useTranslation();
-  const canUploadCertificates = p.canUpload || p.canSubmitDocuments;
   const cache = useQueryClient();
   const key = ['worker-documents', p.scope, p.siteId, p.workerId];
 
@@ -133,13 +182,14 @@ export function WorkerDocumentsPanel(p: Props) {
   const [preview, setPreview] = useState<{
     url: string;
     type: string;
-    documentId?: string;
   } | null>(null);
 
   const allSections = ['IDENTITY', ...documentKinds];
   const [sectionChoices, setSectionChoices] = useState<Record<string, boolean>>({});
   const pendingSections = new Set(
-    profile.data?.documents.filter((d) => d.status === 'PENDING').map((d) => d.kind),
+    profile.data?.documents
+      .filter((d) => d.status === 'PENDING' || d.status === 'REJECTED')
+      .map((d) => d.kind),
   );
   const expandedSections = allSections.filter(
     (id) =>
@@ -175,17 +225,6 @@ export function WorkerDocumentsPanel(p: Props) {
       void cache.invalidateQueries({ queryKey: key });
       void cache.invalidateQueries({ queryKey: ['worker-document-queue'] });
     },
-  });
-  const analysisKey = [...key, 'ai-analysis'];
-  const analyze = useMutation({
-    mutationKey: analysisKey,
-    mutationFn: (id: string) => p.client.analyzeWorkerDocument(p.token, p.siteId, p.workerId, id),
-    retry: false,
-    onSettled: () => cache.invalidateQueries({ queryKey: key, exact: true }),
-  });
-  const analyzingDocuments = useMutationState({
-    filters: { mutationKey: analysisKey, exact: true, status: 'pending' },
-    select: (mutation) => mutation.state.variables,
   });
 
   if (profile.isPending) {
@@ -223,40 +262,21 @@ export function WorkerDocumentsPanel(p: Props) {
   }
 
   const data = profile.data;
-  const previewDocument =
-    p.canReview && preview?.documentId
-      ? data.documents.find((doc) => doc.id === preview.documentId)
-      : undefined;
-  const previewAnalysis = previewDocument?.aiAnalysis;
-  const isAnalyzingPreview = analyzingDocuments.includes(previewDocument?.id);
-  const canAnalyzePreview =
-    previewDocument?.status === 'PENDING' && previewAnalysis?.status !== 'COMPLETE';
-  const previewAnalysisFailed = analyze.isError && analyze.variables === previewDocument?.id;
-  const refreshNotice = connectionRefreshFailed && (
-    <div
-      role="alert"
-      className="flex flex-wrap items-center justify-between gap-2 rounded-lg bg-amber-50 p-3 text-xs text-amber-900"
-    >
-      <span>{userErrorMessage(profile.error)}</span>
-      <button
-        type="button"
-        className={secondaryButtonClass}
-        disabled={profile.isFetching}
-        onClick={() => void profile.refetch()}
-      >
+  const identityUploadedCount = data.identityImages.length;
+  const identityMismatch = data.identityImages.some(
+    (image) => image.identityCheck?.status === 'MISMATCH',
+  );
+  const refreshNotice = connectionRefreshFailed ? (
+    <p role="status" className="rounded-xl bg-amber-50 p-3 text-sm text-amber-900">
+      {tr('documents.refreshFailed')}{' '}
+      <button type="button" className="underline" onClick={() => void profile.refetch()}>
         {tr('documents.refresh')}
       </button>
-    </div>
-  );
-
-  // Check identity mismatch on front or back
-  const identityMismatch = data.identityImages.some(
-    (img) => img.identityCheck?.status === 'MISMATCH',
-  );
-  const identityUploadedCount = data.identityImages.length;
+    </p>
+  ) : null;
 
   return (
-    <section className="space-y-5 rounded-2xl border border-slate-200/90 bg-white p-5 sm:p-6 shadow-xs">
+    <section className="space-y-5 rounded-2xl border border-slate-200/90 bg-white p-3 sm:p-6 shadow-xs">
       {!preview && refreshNotice}
       {/* Double-Bezel Worker Profile Card */}
       <div className="rounded-2xl border border-slate-200/80 bg-gradient-to-br from-slate-50/90 via-white to-slate-50/40 p-4 sm:p-5 space-y-4">
@@ -266,7 +286,7 @@ export function WorkerDocumentsPanel(p: Props) {
               {data.displayName.charAt(0).toUpperCase()}
             </div>
             <div className="min-w-0 space-y-1">
-              <div className="flex items-center gap-2.5">
+              <div className="flex flex-wrap items-center gap-2.5">
                 <h3 className="text-base sm:text-lg font-black text-[#041D2E] tracking-tight truncate">
                   {data.displayName}
                 </h3>
@@ -280,12 +300,12 @@ export function WorkerDocumentsPanel(p: Props) {
             </div>
           </div>
 
-          <div className="flex items-center gap-2 shrink-0">
+          <div className="flex flex-wrap items-center gap-2 min-w-0 max-w-full">
             <WorkerDocumentStatusTags profile={data} />
           </div>
         </div>
 
-        {p.canSubmitDocuments && (
+        {p.canUpload && (
           <div className="flex items-start gap-2.5 rounded-xl border border-blue-200/70 bg-gradient-to-r from-blue-50/70 to-indigo-50/40 p-3 text-xs text-blue-900 shadow-2xs">
             <IconShield className="w-4 h-4 text-blue-600 mt-0.5 shrink-0" />
             <p className="leading-relaxed font-medium">{tr('documents.renewalHint')}</p>
@@ -293,7 +313,7 @@ export function WorkerDocumentsPanel(p: Props) {
         )}
 
         {/* Read-only warning for workers */}
-        {!canUploadCertificates && !p.canReview && data.status !== 'ACTIVE' && (
+        {!p.canUpload && !p.canReview && data.status !== 'ACTIVE' && (
           <div
             role="status"
             className="flex items-start gap-2.5 text-xs font-semibold text-amber-800 bg-amber-50/80 border border-amber-200 rounded-xl p-3 shadow-2xs leading-relaxed"
@@ -355,7 +375,10 @@ export function WorkerDocumentsPanel(p: Props) {
               <p className="text-[10px] font-bold uppercase tracking-wider text-slate-400">
                 {tr('documents.address')}
               </p>
-              <p className="text-xs font-bold text-slate-800 truncate" title={data.address ?? undefined}>
+              <p
+                className="text-xs font-bold text-slate-800 truncate"
+                title={data.address ?? undefined}
+              >
                 {data.address ?? '—'}
               </p>
             </div>
@@ -383,6 +406,20 @@ export function WorkerDocumentsPanel(p: Props) {
         </div>
       )}
 
+      {p.canUpload && (
+        <WorkerDocumentBundleForm
+          key={data.workerId}
+          client={p.client}
+          token={p.token}
+          siteId={p.siteId}
+          profile={data}
+          onSubmitted={() => {
+            void cache.invalidateQueries({ queryKey: key });
+            void cache.invalidateQueries({ queryKey: ['worker-document-queue'] });
+          }}
+        />
+      )}
+
       {/* Document Section Control Header */}
       <div className="flex items-center justify-between pt-1">
         <h4 className="text-xs font-bold uppercase tracking-wider text-slate-400 flex items-center gap-2">
@@ -407,28 +444,28 @@ export function WorkerDocumentsPanel(p: Props) {
         <button
           type="button"
           onClick={() => toggleSection('IDENTITY')}
-          className="w-full flex items-center justify-between gap-3 p-3.5 sm:p-4 bg-slate-50/60 hover:bg-slate-100/60 text-left cursor-pointer transition-colors select-none"
+          className="w-full flex flex-col items-start sm:flex-row sm:items-center sm:justify-between gap-3 p-3.5 sm:p-4 bg-slate-50/60 hover:bg-slate-100/60 text-left cursor-pointer transition-colors select-none"
         >
-          <div className="flex items-center gap-3.5 min-w-0 flex-1">
+          <div className="flex w-full sm:w-auto items-center gap-3.5 min-w-0 flex-1">
             <div className="w-10 h-10 rounded-xl bg-sky-50 text-sky-600 flex items-center justify-center border border-sky-200/60 shadow-2xs shrink-0">
               <IconUser className="w-5 h-5" />
             </div>
-            <div>
-              <span className="font-extrabold text-sm text-[#041D2E] block truncate">
+            <div className="min-w-0">
+              <span className="font-extrabold text-sm text-[#041D2E] block break-words">
                 {tr('documents.identityBothSides')}
               </span>
-              <span className="text-xs font-medium text-slate-500 block mt-0.5">
+              <span className="text-xs font-medium text-slate-500 block mt-0.5 break-words">
                 {identityUploadedCount === 2
-                  ? (tr('documents.identitySidesComplete'))
-                  : (tr('documents.identitySidesIncomplete'))}
+                  ? tr('documents.identitySidesComplete')
+                  : tr('documents.identitySidesIncomplete')}
               </span>
             </div>
           </div>
 
-          <div className="flex items-center gap-1.5 sm:gap-2 shrink-0 flex-wrap justify-end">
+          <div className="flex items-center gap-1.5 sm:gap-2 max-w-full flex-wrap justify-start sm:justify-end">
             {/* Identity Mismatch Warning Pill */}
             {identityMismatch && (
-              <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-bold bg-amber-50 text-amber-900 border border-amber-200/90 shadow-2xs whitespace-nowrap">
+              <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-bold bg-amber-50 text-amber-900 border border-amber-200/90 shadow-2xs max-w-full whitespace-normal">
                 <IconAlertTriangle className="w-3.5 h-3.5 text-amber-600 shrink-0" />
                 <span>{tr('documents.identityMismatchShort')}</span>
               </span>
@@ -436,7 +473,7 @@ export function WorkerDocumentsPanel(p: Props) {
 
             {/* Status Pill */}
             <span
-              className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-bold border whitespace-nowrap ${
+              className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-bold border max-w-full whitespace-normal ${
                 identityUploadedCount === 2
                   ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
                   : 'bg-slate-100 text-slate-600 border-slate-200'
@@ -538,35 +575,6 @@ export function WorkerDocumentsPanel(p: Props) {
                           reference={data.nationalId}
                         />
                       </div>
-                    ) : p.canUpload && data.contractorId ? (
-                      <DocumentMediaPicker
-                        label={tr(`documents.${side}`)}
-                        allowPdf={false}
-                        disabled={action.isPending}
-                        validate={async (file) => {
-                          const result = await p.client.checkDocumentImageQuality(
-                            p.token,
-                            p.siteId,
-                            data.contractorId!,
-                            file,
-                          );
-                          if (result.status !== 'ACCEPTED')
-                            throw new Error(tr(`documents.${result.reason}`));
-                        }}
-                        onSelect={(file) =>
-                          action
-                            .mutateAsync(() =>
-                              p.client.uploadWorkerIdentityImage(
-                                p.token,
-                                p.siteId,
-                                p.workerId,
-                                side,
-                                file,
-                              ),
-                            )
-                            .then(() => {})
-                        }
-                      />
                     ) : (
                       <p className="text-xs text-slate-400 italic">{tr('documents.noFile')}</p>
                     )}
@@ -583,8 +591,13 @@ export function WorkerDocumentsPanel(p: Props) {
         {documentKinds.map((kind) => {
           const docs = data.documents.filter((d) => d.kind === kind);
           const current = docs.filter((d) => d.status === 'PENDING' || d.status === 'APPROVED');
-          const history = docs.filter((d) => d.status !== 'PENDING' && d.status !== 'APPROVED');
+          const latest = [...docs]
+            .filter((doc) => doc.status !== 'SUPERSEDED')
+            .sort((a, b) => b.uploadedAt.localeCompare(a.uploadedAt))[0];
+          if (latest?.status === 'REJECTED') current.unshift(latest);
+          const history = docs.filter((doc) => !current.some((item) => item.id === doc.id));
           const currentDoc = current[0];
+          const required = kind !== 'SAFETY_CARD' || data.safetyCardRequired !== false;
 
           const isApproved = currentDoc?.status === 'APPROVED';
           const isPendingDoc = currentDoc?.status === 'PENDING';
@@ -603,7 +616,7 @@ export function WorkerDocumentsPanel(p: Props) {
               >
                 <div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-200/70 pb-3">
                   <div className="flex items-center gap-2 min-w-0">
-                    <span className="text-sm font-extrabold text-slate-900 truncate">
+                    <span className="text-sm font-extrabold text-slate-900 break-words">
                       {doc.originalName}
                     </span>
                     <span className="font-mono text-[11px] font-bold text-slate-400">
@@ -684,7 +697,6 @@ export function WorkerDocumentsPanel(p: Props) {
                         setPreview({
                           url: URL.createObjectURL(blob),
                           type: blob.type,
-                          documentId: doc.id,
                         });
                       })
                     }
@@ -694,6 +706,40 @@ export function WorkerDocumentsPanel(p: Props) {
                   </button>
                 </div>
 
+                {p.canReview &&
+                  doc.status === 'PENDING' &&
+                  doc.aiAnalysis?.status !== 'COMPLETE' && (
+                    <button
+                      type="button"
+                      disabled={
+                        action.isPending || p.analysisBusy || doc.aiAnalysis?.status === 'ANALYZING'
+                      }
+                      className={secondaryButtonClass}
+                      onClick={() =>
+                        action.mutate(async () => {
+                          p.onAnalysisChange?.(true);
+                          try {
+                            await p.client.analyzeWorkerDocument(
+                              p.token,
+                              p.siteId,
+                              p.workerId,
+                              doc.id,
+                            );
+                          } finally {
+                            p.onAnalysisChange?.(false);
+                          }
+                        })
+                      }
+                    >
+                      {tr(
+                        doc.aiAnalysis?.status === 'ANALYZING'
+                          ? 'documents.aiAnalyzing'
+                          : doc.aiAnalysis?.status === 'UNAVAILABLE'
+                            ? 'documents.aiRetry'
+                            : 'documents.aiRun',
+                      )}
+                    </button>
+                  )}
                 {p.canReview && doc.aiAnalysis && (
                   <WorkerDocumentAnalysisNotice
                     analysis={doc.aiAnalysis}
@@ -705,31 +751,6 @@ export function WorkerDocumentsPanel(p: Props) {
                 {/* Pending controls: Expiry editor, OCR hint, Safety review */}
                 {doc.status === 'PENDING' && (
                   <div className="space-y-3 pt-3 border-t border-slate-200/70">
-                    {canUploadCertificates && (
-                      <SubmittedExpiryEditor
-                        key={`${doc.id}:${doc.version}`}
-                        doc={doc}
-                        disabled={action.isPending}
-                        save={(value) =>
-                          action.mutate(() =>
-                            p.client.updateWorkerDocumentExpiry(
-                              p.token,
-                              p.siteId,
-                              p.workerId,
-                              doc.id,
-                              {
-                                expectedVersion: doc.version,
-                                ...(kind === 'HEALTH_CERTIFICATE'
-                                  ? { submittedIssuedOn: value }
-                                  : { submittedExpiresOn: value }),
-                              },
-                            ),
-                          )
-                        }
-                      />
-                    )}
-
-                    {/* OCR suggestion box */}
                     {kind === 'HEALTH_CERTIFICATE' && (
                       <p className="text-xs">
                         {tr('documents.healthExpiryRule')}{' '}
@@ -826,9 +847,9 @@ export function WorkerDocumentsPanel(p: Props) {
               <button
                 type="button"
                 onClick={() => toggleSection(kind)}
-                className="w-full flex items-center justify-between gap-3 p-3.5 sm:p-4 bg-slate-50/60 hover:bg-slate-100/60 text-left cursor-pointer transition-colors select-none"
+                className="w-full flex flex-col items-start sm:flex-row sm:items-center sm:justify-between gap-3 p-3.5 sm:p-4 bg-slate-50/60 hover:bg-slate-100/60 text-left cursor-pointer transition-colors select-none"
               >
-                <div className="flex items-center gap-3.5 min-w-0 flex-1">
+                <div className="flex w-full sm:w-auto items-center gap-3.5 min-w-0 flex-1">
                   <div
                     className={`w-10 h-10 rounded-xl flex items-center justify-center border shadow-2xs shrink-0 ${
                       kind === 'SAFETY_CARD'
@@ -846,25 +867,25 @@ export function WorkerDocumentsPanel(p: Props) {
                       <IconShield className="w-5 h-5" />
                     )}
                   </div>
-                  <div>
-                    <span className="font-extrabold text-sm text-[#041D2E] block truncate">
+                  <div className="min-w-0">
+                    <span className="font-extrabold text-sm text-[#041D2E] block break-words">
                       {tr(`documents.${kind}`)}
                     </span>
-                    <span className="text-xs font-mono font-medium text-slate-500 block mt-0.5">
+                    <span className="text-xs font-mono font-medium text-slate-500 block mt-0.5 break-words">
                       {currentDoc?.expiresOn
                         ? `${tr('documents.expiresOn')}: ${currentDoc.expiresOn}`
                         : currentDoc
-                          ? (tr('documents.submittedPendingApproval'))
-                          : (tr('documents.documentNotSubmitted'))}
+                          ? tr('documents.submittedPendingApproval')
+                          : tr('documents.documentNotSubmitted')}
                     </span>
                   </div>
                 </div>
 
                 {/* Status & Warning Pills on the Outside */}
-                <div className="flex items-center gap-1.5 sm:gap-2 shrink-0 flex-wrap justify-end">
+                <div className="flex items-center gap-1.5 sm:gap-2 max-w-full flex-wrap justify-start sm:justify-end">
                   {/* Warning Pill for Identity Mismatch */}
                   {hasMismatch && (
-                    <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-bold bg-amber-50 text-amber-900 border border-amber-200/90 shadow-2xs whitespace-nowrap">
+                    <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-bold bg-amber-50 text-amber-900 border border-amber-200/90 shadow-2xs max-w-full whitespace-normal">
                       <IconAlertTriangle className="w-3.5 h-3.5 text-amber-600 shrink-0" />
                       <span>{tr('documents.identityMismatchShort')}</span>
                     </span>
@@ -872,7 +893,7 @@ export function WorkerDocumentsPanel(p: Props) {
 
                   {/* Warning Pill for Expiring */}
                   {isExpiring && (
-                    <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-bold bg-amber-50 text-amber-800 border border-amber-200 shadow-2xs whitespace-nowrap">
+                    <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-bold bg-amber-50 text-amber-800 border border-amber-200 shadow-2xs max-w-full whitespace-normal">
                       <IconClock className="w-3.5 h-3.5 text-amber-600 shrink-0" />
                       <span>{tr('common.expiring_soon')}</span>
                     </span>
@@ -880,7 +901,7 @@ export function WorkerDocumentsPanel(p: Props) {
 
                   {/* Document Approval / Pending / Missing Status Badge */}
                   <span
-                    className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-bold border whitespace-nowrap ${
+                    className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-bold border max-w-full whitespace-normal ${
                       isApproved
                         ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
                         : isPendingDoc
@@ -902,7 +923,9 @@ export function WorkerDocumentsPanel(p: Props) {
                       }`}
                     />
                     <span>
-                      {currentDoc ? tr(`documents.${currentDoc.status}`) : tr('documents.missing')}
+                      {currentDoc
+                        ? tr(`documents.${currentDoc.status}`)
+                        : tr(required ? 'documents.missing' : 'documents.optional')}
                     </span>
                   </span>
 
@@ -927,31 +950,6 @@ export function WorkerDocumentsPanel(p: Props) {
                   {/* Current documents */}
                   <div className="space-y-3">{current.map(render)}</div>
 
-                  {/* Upload replacement */}
-                  {canUploadCertificates && (p.canSubmitDocuments || data.contractorId) && (
-                    <WorkerCertificateSubmission
-                      client={p.client}
-                      token={p.token}
-                      siteId={p.siteId}
-                      workerId={p.workerId}
-                      kind={kind}
-                      requireDate={!!p.canSubmitDocuments}
-                      disabled={action.isPending}
-                      onSubmit={(file, dates) =>
-                        action.mutateAsync(() =>
-                          p.client.uploadWorkerDocument(
-                            p.token,
-                            p.siteId,
-                            p.workerId,
-                            kind,
-                            file,
-                            dates,
-                          ),
-                        )
-                      }
-                    />
-                  )}
-
                   {/* Audit / Revisions History */}
                   {history.length > 0 && (
                     <details className="group rounded-xl border border-slate-200/80 bg-slate-50/40 p-3 text-xs">
@@ -970,134 +968,34 @@ export function WorkerDocumentsPanel(p: Props) {
         })}
       </div>
 
-      {/* Modal Dialog for View Original */}
-      {preview && (
-        <div
-          role="dialog"
-          aria-label={tr('documents.view')}
-          className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-xs animate-in fade-in duration-150"
-        >
-          <div
-            className={
-              'relative w-full max-h-[90vh] flex flex-col rounded-2xl bg-white shadow-2xl border border-slate-200 overflow-hidden ' +
-              (previewAnalysis || canAnalyzePreview ? 'max-w-5xl' : 'max-w-4xl')
-            }
-          >
-            {/* Modal Header */}
-            <div className="flex items-center justify-between px-5 py-4 border-b border-slate-100 bg-slate-50/80">
-              <div className="flex items-center gap-2">
-                <IconEye className="w-4 h-4 text-[#F66B17]" />
-                <span className="font-extrabold text-sm text-slate-900">
-                  {tr('documents.view')}
-                </span>
-              </div>
-              <button
-                type="button"
-                className={secondaryButtonClass}
-                onClick={() => setPreview(null)}
-              >
-                <IconX className="w-3.5 h-3.5 text-slate-500" />
-                <span>{tr('documents.close')}</span>
-              </button>
-            </div>
-
+      <Dialog
+        open={!!preview}
+        onClose={() => setPreview(null)}
+        title={tr('documents.view')}
+        maxWidth="xl"
+      >
+        {preview && (
+          <>
             {refreshNotice}
-            {/* Modal Content */}
-            <div className="overflow-auto bg-slate-100/50 p-4 flex flex-col gap-4 lg:flex-row">
-              <div className="flex flex-1 min-w-0 items-center justify-center min-h-[300px]">
-                {preview.type === 'application/pdf' ? (
-                  <iframe
-                    src={preview.url}
-                    title={tr('documents.view')}
-                    className="h-[600px] w-full rounded-xl border border-slate-200 bg-white"
-                  />
-                ) : (
-                  <img
-                    src={preview.url}
-                    alt={tr('documents.view')}
-                    className="max-h-[700px] max-w-full rounded-xl border border-slate-200 object-contain bg-white shadow-xs"
-                  />
-                )}
-              </div>
-              {previewDocument && (previewAnalysis || canAnalyzePreview) && (
-                <aside className="space-y-2 lg:w-72 lg:shrink-0" aria-live="polite">
-                  {previewAnalysis && (
-                    <WorkerDocumentAnalysisNotice
-                      analysis={previewAnalysis}
-                      reference={data.nationalId}
-                      kind={previewDocument.kind}
-                    />
-                  )}
-                  {canAnalyzePreview && (
-                    <>
-                      {previewAnalysisFailed && !previewAnalysis && (
-                        <p role="alert" className="text-xs text-slate-700">
-                          {tr('documents.aiUnavailable')}
-                        </p>
-                      )}
-                      <button
-                        type="button"
-                        className={secondaryButtonClass}
-                        disabled={isAnalyzingPreview}
-                        onClick={() => analyze.mutate(previewDocument.id)}
-                      >
-                        {tr(
-                          isAnalyzingPreview
-                            ? 'documents.aiAnalyzing'
-                            : previewAnalysis || previewAnalysisFailed
-                              ? 'documents.aiRetry'
-                              : 'documents.aiRun',
-                        )}
-                      </button>
-                    </>
-                  )}
-                </aside>
+            <div className="flex min-w-0 items-center justify-center rounded-xl bg-slate-50 p-2">
+              {preview.type === 'application/pdf' ? (
+                <iframe
+                  src={preview.url}
+                  title={tr('documents.view')}
+                  className="h-[65dvh] w-full rounded-xl border border-slate-200 bg-white"
+                />
+              ) : (
+                <img
+                  src={preview.url}
+                  alt={tr('documents.view')}
+                  className="max-h-[70dvh] max-w-full rounded-xl object-contain"
+                />
               )}
             </div>
-          </div>
-        </div>
-      )}
+          </>
+        )}
+      </Dialog>
     </section>
-  );
-}
-
-function SubmittedExpiryEditor({
-  doc,
-  disabled,
-  save,
-}: {
-  doc: WorkerDocumentResponse;
-  disabled: boolean;
-  save: (value: string | null) => void;
-}) {
-  const health = doc.kind === 'HEALTH_CERTIFICATE';
-  const original = (health ? doc.submittedIssuedOn : doc.submittedExpiresOn) ?? '';
-  const [value, setValue] = useState(original);
-  return (
-    <fieldset
-      disabled={disabled}
-      className="space-y-2 rounded-xl border border-orange-200/80 bg-orange-50/30 p-3.5"
-    >
-      <SmartDatePicker
-        label={tr(health ? 'documents.submittedIssuedOn' : 'documents.submittedExpiresOn')}
-        value={value}
-        disablePast={false}
-        clearable
-        onChange={setValue}
-      />
-      <p className="text-[11px] text-slate-500">
-        {tr(health ? 'documents.healthExpiryRule' : 'documents.submittedExpiryHint')}{' '}
-        {health ? (healthCertificateExpiry(value) ?? '') : ''}
-      </p>
-      <button
-        type="button"
-        className={secondaryButtonClass}
-        disabled={disabled || value === original}
-        onClick={() => save(value || null)}
-      >
-        <span>{tr('documents.saveSubmittedExpiry')}</span>
-      </button>
-    </fieldset>
   );
 }
 

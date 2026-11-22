@@ -27,6 +27,128 @@ function resolveDescribedByText(element: HTMLElement): string {
   return ids.map((id) => document.getElementById(id)?.textContent ?? '').join(' ');
 }
 
+it('refreshes a saved camera policy once instead of refetching overlapping scopes sequentially', async () => {
+  await i18n.changeLanguage('en');
+  const cameraId = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa';
+  const saved = {
+    cameraId,
+    regionId: null,
+    configurationVersion: 4,
+    savedRevision: 4,
+    policy: { mode: 'EXPLICIT' as const, requiredPpe: ['HARD_HAT' as const] },
+  };
+  const read = vi.fn().mockResolvedValue(saved);
+  const client: CameraPpeContext['client'] = {
+    readSavedPpePolicy: read,
+    listRegions: vi.fn().mockResolvedValue({ items: [], total: 0 }),
+    initializePpePolicy: vi.fn(),
+    updateCameraPpePolicy: vi.fn().mockImplementation(async (_token, _site, _camera, command) => {
+      read.mockResolvedValue({ ...saved, configurationVersion: 5, savedRevision: 5 });
+      return {
+        cameraId,
+        commandId: command.commandId,
+        configurationVersion: 5,
+        viewRevision: 1,
+        bundleSha256: 'a'.repeat(64),
+        replayed: false,
+      };
+    }),
+    updateRegionPpePolicy: vi.fn(),
+    activateRegionWithPpePolicy: vi.fn(),
+  };
+  render(
+    <QueryClientProvider
+      client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}
+    >
+      <CameraPpePolicyPanel
+        cameraId={cameraId}
+        canWrite
+        expandSignal={1}
+        context={{
+          client,
+          token: 'test',
+          siteId: 'site-test',
+          setupKey: ['refresh-once'],
+          onUnauthorized: vi.fn(),
+        }}
+      />
+    </QueryClientProvider>,
+  );
+  await screen.findByRole('checkbox', { name: 'Hard hat' });
+  expect(read).toHaveBeenCalledTimes(1);
+  fireEvent.click(screen.getByRole('button', { name: 'Save PPE policy' }));
+  await waitFor(() => expect(client.updateCameraPpePolicy).toHaveBeenCalledTimes(1));
+  await waitFor(() =>
+    expect(screen.getByRole('button', { name: 'Save PPE policy' }).hasAttribute('disabled')).toBe(
+      false,
+    ),
+  );
+  expect(read).toHaveBeenCalledTimes(2);
+});
+
+it('offers reference setup for a fresh camera without submitting or discarding the PPE draft', async () => {
+  await i18n.changeLanguage('en');
+  const cameraId = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa';
+  const siteId = 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb';
+  const openReference = vi.fn();
+  const initialize = vi.fn();
+  const client = {
+    readSavedPpePolicy: vi.fn().mockResolvedValue({
+      cameraId,
+      regionId: null,
+      configurationVersion: 4,
+      savedRevision: null,
+      policy: null,
+    }),
+    listRegions: vi.fn().mockResolvedValue({ items: [], total: 0 }),
+    initializePpePolicy: initialize,
+    updateCameraPpePolicy: vi.fn(),
+    updateRegionPpePolicy: vi.fn(),
+    activateRegionWithPpePolicy: vi.fn(),
+    getCameraApplicationStatus: vi.fn().mockResolvedValue({
+      cameraId,
+      siteId,
+      desiredRevision: 4,
+      reportedRevision: null,
+      applicationState: 'UNCONFIRMED',
+      observedAt: new Date().toISOString(),
+      lastReceiptAt: null,
+      viewValidity: 'UNAVAILABLE',
+      reasonCode: 'NO_WORKER_GENERATION',
+    }),
+  };
+  const setupKey = ['fresh-reference'];
+  render(
+    <QueryClientProvider
+      client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}
+    >
+      <CameraPpePolicyPanel
+        cameraId={cameraId}
+        canWrite
+        expandSignal={1}
+        onOpenReference={openReference}
+        context={{ client, token: 'test', siteId, setupKey, onUnauthorized: vi.fn() }}
+        statusContext={{
+          client,
+          token: 'test',
+          siteId,
+          setupKey,
+          enabled: true,
+          onUnauthorized: vi.fn(),
+        }}
+      />
+    </QueryClientProvider>,
+  );
+  fireEvent.change(await screen.findByLabelText('Policy mode'), { target: { value: 'EXPLICIT' } });
+  fireEvent.click(screen.getByRole('checkbox', { name: 'Hard hat' }));
+  fireEvent.click(await screen.findByRole('button', { name: 'Set up reference image' }));
+  expect(openReference).toHaveBeenCalledTimes(1);
+  expect(initialize).not.toHaveBeenCalled();
+  expect((screen.getByRole('checkbox', { name: 'Hard hat' }) as HTMLInputElement).checked).toBe(
+    true,
+  );
+});
+
 it('replays the original initialization when the server committed but the response was lost', async () => {
   await i18n.changeLanguage('en');
   const cameraId = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa';

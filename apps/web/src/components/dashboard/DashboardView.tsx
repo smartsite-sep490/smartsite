@@ -1,3 +1,4 @@
+import { AdminDashboardView } from './AdminDashboardView';
 import { translate as tr } from '../../i18n';
 import { useTranslation } from 'react-i18next';
 import React from 'react';
@@ -30,8 +31,11 @@ export function DashboardView({ onNavigate, apiUrl: apiUrlProp }: DashboardViewP
   const resolvedApiUrl = apiUrlProp || DEFAULT_API_URL;
   const { data: currentUser } = useCurrentUser(resolvedApiUrl);
   const roles: string[] = currentUser?.roleAssignments?.map((r) => r.role) || [];
-  const isAdmin = roles.includes('ADMIN');
+  const isAdmin =
+    currentUser?.roleAssignments.some((r) => r.role === 'ADMIN' && r.siteId === null) ?? false;
   const isContractorRep = !isAdmin && roles.includes('CONTRACTOR_REPRESENTATIVE');
+
+  if (isAdmin) return <AdminDashboardView apiUrl={resolvedApiUrl} onNavigate={onNavigate} />;
 
   if (isContractorRep) {
     return <ContractorDashboardView apiUrl={resolvedApiUrl} onNavigate={onNavigate} />;

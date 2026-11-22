@@ -10,10 +10,10 @@ export function WorkerDocumentStatusTags({
   const isReviewed = profile.submissionStatus === 'REVIEWED';
 
   return (
-    <div className="flex flex-wrap items-center gap-2 justify-end">
+    <div className="min-w-0 flex flex-wrap items-center gap-2 justify-end">
       {/* Submission status tag */}
       <span
-        className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-bold border shadow-2xs whitespace-nowrap ${
+        className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-bold border shadow-2xs max-w-full whitespace-normal ${
           isPending
             ? 'bg-amber-50 text-amber-800 border-amber-200/90'
             : isReviewed
@@ -31,7 +31,7 @@ export function WorkerDocumentStatusTags({
 
       {/* Needs supplement badge */}
       {profile.needsSupplement && (
-        <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-bold bg-rose-50 text-rose-700 border border-rose-200/90 shadow-2xs whitespace-nowrap">
+        <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-bold bg-rose-50 text-rose-700 border border-rose-200/90 shadow-2xs max-w-full whitespace-normal">
           <span className="w-1.5 h-1.5 rounded-full bg-rose-500 shrink-0" />
           <span>{tr('documents.needsSupplement')}</span>
         </span>
@@ -39,7 +39,7 @@ export function WorkerDocumentStatusTags({
 
       {/* Expired status */}
       {profile.status === 'EXPIRED' && (
-        <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-bold bg-red-50 text-red-800 border border-red-300 shadow-2xs whitespace-nowrap">
+        <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-bold bg-red-50 text-red-800 border border-red-300 shadow-2xs max-w-full whitespace-normal">
           <span className="w-1.5 h-1.5 rounded-full bg-red-600 shrink-0" />
           <span>{tr(`documents.${profile.status}`)}</span>
         </span>

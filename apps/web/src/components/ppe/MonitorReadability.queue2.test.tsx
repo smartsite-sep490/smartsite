@@ -346,10 +346,12 @@ describe('Camera Monitor Queue 2 readability, state distinction, and layout cont
     expect(linkedEmpty.textContent).toContain('The linked camera is unavailable.');
     fireEvent.click(screen.getByTestId('monitor-clear-linked-camera'));
 
-    // Grid(4) active by default; fullscreen error offers Switch to Focus (1) fallback
-    expect(await screen.findByTestId('monitor-grid-btn')).toBeTruthy();
+    // 1-camera site defaults to Focus (1); explicit Grid switch + fullscreen error offers Switch to Focus (1) fallback
+    expect(await screen.findByTestId('monitor-focus-btn')).toBeTruthy();
+    expect(screen.getByTestId('monitor-focus-btn').getAttribute('aria-pressed')).toBe('true');
+    expect(screen.getByTestId('monitor-grid-btn').getAttribute('aria-pressed')).toBe('false');
+    fireEvent.click(screen.getByTestId('monitor-grid-btn'));
     expect(screen.getByTestId('monitor-grid-btn').getAttribute('aria-pressed')).toBe('true');
-    expect(screen.getByTestId('monitor-focus-btn').getAttribute('aria-pressed')).toBe('false');
 
     fireEvent.click(screen.getByTestId('monitor-fullscreen-btn'));
     const focusFallback = await screen.findByTestId('monitor-fullscreen-focus-fallback');
@@ -413,7 +415,7 @@ describe('Camera Monitor Queue 2 readability, state distinction, and layout cont
       Reflect.deleteProperty(document, 'fullscreenElement');
     }
 
-    // Empty active cameras: ADMIN sees Inspect Camera Setup link; SAFETY_OFFICER does not
+    // Only an explicit Site Manager role can open Camera Setup from monitoring.
     cleanup();
     mockState.cameras.mockResolvedValue({
       items: [{ ...CAM_01, status: 'INACTIVE' }],
@@ -422,7 +424,20 @@ describe('Camera Monitor Queue 2 readability, state distinction, and layout cont
     render(
       <QueryClientProvider client={queryClient}>
         <MemoryRouter initialEntries={['/ppe']}>
-          <PpeMonitorWorkspace apiUrl="http://127.0.0.1:3000" session={makeSession('ADMIN')} />
+          <PpeMonitorWorkspace
+            apiUrl="http://127.0.0.1:3000"
+            session={{
+              ...makeSession('SAFETY_OFFICER'),
+              user: {
+                ...makeSession('SAFETY_OFFICER').user,
+                roleAssignments: [
+                  { role: 'ADMIN', siteId: null },
+                  { role: 'SAFETY_OFFICER', siteId: SITE_ID },
+                  { role: 'SITE_MANAGER', siteId: SITE_ID },
+                ],
+              },
+            }}
+          />
         </MemoryRouter>
       </QueryClientProvider>,
     );

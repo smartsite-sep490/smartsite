@@ -31,11 +31,14 @@ export interface ZonePpeSetupPanelProps {
   canReadZones?: boolean;
   section?: 'all' | 'zones' | 'regions';
   initialCameraId?: string;
+  initialRegionId?: string;
   onSelectCamera?: (cameraId: string) => void;
+  onOpenApply?: () => void;
   onClose: () => void;
   embedded?: boolean;
   tourUserId?: string | null;
   onDraftStateChange?: (state: { dirty: boolean; saving: boolean }) => void;
+  onUnauthorized?: () => void;
 }
 
 export interface ZonePpeSetupPanelInternalProps extends ZonePpeSetupPanelProps {

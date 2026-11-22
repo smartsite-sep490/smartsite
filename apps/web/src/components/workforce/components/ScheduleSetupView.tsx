@@ -87,26 +87,16 @@ export function ScheduleSetupView({ apiUrl }: ScheduleSetupViewProps) {
     () => currentUser?.roleAssignments ?? [],
     [currentUser?.roleAssignments],
   );
-  const isAdmin = roleAssignments.some(
-    (assignment) => assignment.role === 'ADMIN' && assignment.siteId === null,
+  const canDiscoverSites = roleAssignments.some(
+    (assignment) =>
+      assignment.role === 'SITE_MANAGER' || assignment.role === 'CONTRACTOR_REPRESENTATIVE',
   );
-  const canDiscoverSites =
-    isAdmin ||
-    roleAssignments.some(
-      (assignment) =>
-        assignment.role === 'SITE_MANAGER' || assignment.role === 'CONTRACTOR_REPRESENTATIVE',
-    );
 
   // Site Scope Determination
   const scopedSiteIds = useMemo(
     () =>
       roleAssignments
-        .filter(
-          (r) =>
-            r.role === 'SITE_MANAGER' ||
-            r.role === 'ADMIN' ||
-            r.role === 'CONTRACTOR_REPRESENTATIVE',
-        )
+        .filter((r) => r.role === 'SITE_MANAGER' || r.role === 'CONTRACTOR_REPRESENTATIVE')
         .map((r) => r.siteId)
         .filter((id): id is string => id !== null && id !== undefined),
     [roleAssignments],
@@ -144,10 +134,6 @@ export function ScheduleSetupView({ apiUrl }: ScheduleSetupViewProps) {
   const sitesQuery = useQuery({
     queryKey: ['sites', 'schedule-setup'],
     queryFn: async () => {
-      if (isAdmin) {
-        const res = await client.listSites(accessToken!);
-        return res.items;
-      }
       return Promise.all(scopedSiteIds.map((sId) => client.getSite(accessToken!, sId)));
     },
     enabled: Boolean(accessToken && canDiscoverSites),
@@ -166,11 +152,11 @@ export function ScheduleSetupView({ apiUrl }: ScheduleSetupViewProps) {
     (assignment) =>
       assignment.role === 'CONTRACTOR_REPRESENTATIVE' && assignment.siteId === activeSiteId,
   );
-  const canAccess = isAdmin || isManager || isContractorRep;
+  const canAccess = isManager || isContractorRep;
   // MF07: only a Site Manager for the selected Site may manage shifts and grant them to contractors.
   const canManageShifts = isManager;
   const canAssignWorker = isContractorRep;
-  const canViewAssignments = isAdmin || isContractorRep;
+  const canViewAssignments = isContractorRep;
   const activeTab = requestedTab === 'assignment' && !canViewAssignments ? 'shifts' : requestedTab;
   const readScopes = useQuery({
     queryKey: ['schedule-read-scopes', apiUrl, currentUser?.id, activeSiteId, isManager],

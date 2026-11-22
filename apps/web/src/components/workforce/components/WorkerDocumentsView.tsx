@@ -150,7 +150,6 @@ export function WorkerDocumentsView({ apiUrl }: { apiUrl: string }) {
             siteId={siteId}
             workerId={own.data.workerId}
             scope={apiUrl + ':' + user.data.id}
-            canSubmitDocuments
           />
         ) : null)}
     </div>

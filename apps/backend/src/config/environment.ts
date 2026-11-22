@@ -5,6 +5,7 @@ import {
 } from '../database/migration-profile-names.js';
 import { trackedRuntimePolicyEnvironment } from './tracked-runtime-environment.js';
 import { isAbsolute } from 'node:path';
+import { mf06EnvironmentFields, refineMf06Environment } from './mf06-worker-environment.js';
 import {
   isValidPassword,
   PASSWORD_MAX_LENGTH,
@@ -190,6 +191,7 @@ export const backendEnvironmentSchema = z
       .max(4096)
       .regex(/^[^\p{Cc}]+$/u)
       .optional(),
+    WORKER_DOCUMENT_OPENAI_TIMEOUT_MS: integer(30000, 1000, 120000),
     WORKER_DOCUMENT_NOTICE_DAYS: integer(30, 1, 365),
     WORKER_DOCUMENT_OPENAI_MODEL: z
       .string()
@@ -278,6 +280,7 @@ export const backendEnvironmentSchema = z
         }
       }, 'must be an absolute HTTP(S) URL without credentials')
       .optional(),
+    ...mf06EnvironmentFields,
     MF06_ENQUEUE_ENABLED: z
       .enum(['false', 'true'])
       .default('false')
@@ -300,6 +303,10 @@ export const backendEnvironmentSchema = z
       .default('false')
       .transform((value) => value === 'true'),
     AI_TRACKED_FRAME_RUNTIME_POLICY: trackedRuntimePolicyEnvironment.optional(),
+    AI_EVIDENCE_OBJECT_STORAGE_ENABLED: z
+      .enum(['false', 'true'])
+      .default('false')
+      .transform((value) => value === 'true'),
     DATABASE_SCHEMA: z.string().optional(),
     SMARTSITE_DB_MIGRATION_PROFILE: z.enum(TRACKED_MIGRATION_PROFILES).optional(),
     SAFETY_IDENTIFICATION_ENABLED: z
@@ -330,6 +337,11 @@ export const backendEnvironmentSchema = z
     AI_RATE_LIMIT_LIMIT: integer(600, 1, Number.MAX_SAFE_INTEGER),
     AI_CONFIGURATION_CAMERA_IDS: cameraIdsSchema,
     SMARTSITE_AI_PREVIEW_SOURCES: previewSourcesSchema,
+    SMARTSITE_AI_SOURCE_HOSTS: z.string().max(32768).optional(),
+    SMARTSITE_AI_SOURCE_APPLY_ENABLED: z
+      .enum(['true', 'false'])
+      .default('false')
+      .transform((v) => v === 'true'),
     STORAGE_PROVIDER: z.enum(['LOCAL', 'R2']).default('LOCAL'),
     STORAGE_LOCAL_ROOT: z
       .string()
@@ -398,6 +410,7 @@ export const backendEnvironmentSchema = z
       .optional(),
   })
   .superRefine((config, context) => {
+    refineMf06Environment(config, context, LOCAL_SERVICE_TOKEN);
     productionDatabase(config, context);
     if (config.SAFETY_EPISODE_PROJECTION_ENABLED && !config.SAFETY_EPISODE_ROUTE_EPOCH) {
       context.addIssue({

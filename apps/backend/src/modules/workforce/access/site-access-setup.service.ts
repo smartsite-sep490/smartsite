@@ -1,3 +1,7 @@
+import {
+  executeMainConfigurationCommand,
+  type MainConfigurationCommandContext,
+} from '../../../common/configuration/main-configuration-authority.js';
 import { PublicHttpException } from '../../../common/http/public-http-exception.js';
 import { Injectable } from '@nestjs/common';
 import { IsISO8601, IsUUID, IsString, MaxLength, Matches } from 'class-validator';
@@ -43,8 +47,12 @@ export class GrantContractorZoneDatesCommand {
   @IsUUID() requestId!: string;
   @IsUUID() siteContractorId!: string;
   @IsUUID() zoneId!: string;
-  @IsISO8601({ strict: true }) @Matches(/^(?!0000)\d{4}-\d{2}-\d{2}$/) startDate!: string;
-  @IsISO8601({ strict: true }) @Matches(/^(?!0000)\d{4}-\d{2}-\d{2}$/) endDate!: string;
+  @IsISO8601({ strict: true })
+  @Matches(/^(?!0000)\d{4}-\d{2}-\d{2}$/)
+  startDate!: string;
+  @IsISO8601({ strict: true })
+  @Matches(/^(?!0000)\d{4}-\d{2}-\d{2}$/)
+  endDate!: string;
   @IsString() @MaxLength(64) timezone!: string;
 }
 export class GrantWorkerZoneCommand extends PermissionIntervalCommand {
@@ -68,21 +76,39 @@ export function containedInterval(
 }
 @Injectable()
 export class SiteAccessSetupService {
-  constructor(private readonly source: DataSource) {}
-  private isAdmin(actor: WorkforceActor) {
-    return actor.roleAssignments.some((r) => r.role === UserRole.ADMIN && r.siteId === null);
+  private commandAuthorization(
+    context: MainConfigurationCommandContext | undefined,
+    actor: WorkforceActor,
+    siteId: string,
+    role: UserRole,
+  ) {
+    if (!context) return undefined;
+    return async (manager: EntityManager) => {
+      const roles = await manager.query(
+        'SELECT id FROM user_role_assignment WHERE user_id=$1 AND site_id=$2 AND role=$3 FOR SHARE',
+        [actor.id, siteId, role],
+      );
+      if (context.actorUserId !== actor.id || !roles.length)
+        throw new PublicHttpException(403, {
+          code: 'FORBIDDEN',
+          message: 'Access to this site is required',
+        });
+    };
   }
+  constructor(private readonly source: DataSource) {}
+
   private async requireRepresentative(
     manager: EntityManager,
     actor: WorkforceActor,
     siteId: string,
     contractorId: string,
   ) {
-    requireSiteRole(actor, siteId, [UserRole.CONTRACTOR_REPRESENTATIVE], false);
+    requireSiteRole(actor, siteId, [UserRole.CONTRACTOR_REPRESENTATIVE]);
     if (
-      !(await manager
-        .getRepository(ContractorRepresentativeAssignmentEntity)
-        .existsBy({ userId: actor.id, contractorId, siteId }))
+      !(await manager.getRepository(ContractorRepresentativeAssignmentEntity).findOne({
+        where: { userId: actor.id, contractorId, siteId },
+        lock: { mode: 'pessimistic_read' },
+      }))
     )
       conflict('Representative does not manage this contractor');
   }
@@ -94,7 +120,7 @@ export class SiteAccessSetupService {
     let participations = await this.source
       .getRepository(ContractorSiteParticipationEntity)
       .findBy({ siteId, isActive: true });
-    if (!siteManager && !this.isAdmin(actor)) {
+    if (!siteManager) {
       const grants = await this.source
         .getRepository(ContractorRepresentativeAssignmentEntity)
         .findBy({ userId: actor.id, siteId });
@@ -104,10 +130,9 @@ export class SiteAccessSetupService {
     }
     const contractors = await this.source.getRepository(ContractorEntity).find();
     const workers = await this.source.getRepository(WorkerEntity).findBy({ siteId });
-    const scopedWorkers =
-      siteManager || this.isAdmin(actor)
-        ? workers
-        : workers.filter((w) => participations.some((p) => p.contractorId === w.contractorId));
+    const scopedWorkers = siteManager
+      ? workers
+      : workers.filter((w) => participations.some((p) => p.contractorId === w.contractorId));
     const assignments = (
       await this.source.getRepository(WorkerSiteZoneAssignmentEntity).findBy({ siteId })
     ).filter((a) => scopedWorkers.some((w) => w.id === a.workerId));
@@ -178,8 +203,9 @@ export class SiteAccessSetupService {
     actor: WorkforceActor,
     siteId: string,
     input: GrantContractorZoneCommand | GrantContractorZoneDatesCommand,
+    context?: MainConfigurationCommandContext,
   ) {
-    requireSiteRole(actor, siteId, [UserRole.SITE_MANAGER], false);
+    requireSiteRole(actor, siteId, [UserRole.SITE_MANAGER]);
     if (!input || typeof input !== 'object' || Array.isArray(input)) invalid();
     const value =
       'startDate' in input
@@ -196,8 +222,12 @@ export class SiteAccessSetupService {
         invalid('Invalid IANA timezone');
       }
     }
-    return this.source
-      .transaction(async (manager) => {
+    return executeMainConfigurationCommand(
+      this.source,
+      context,
+      'CONTRACTOR_ZONE_GRANT',
+      { siteId, ...value },
+      async (manager) => {
         const participation = await manager
           .getRepository(ContractorSiteParticipationEntity)
           .findOne({
@@ -265,112 +295,133 @@ export class SiteAccessSetupService {
             validFrom: from.toISOString(),
             validUntil: until.toISOString(),
             ...('startDate' in value
-              ? { startDate: value.startDate, endDate: value.endDate, timezone: value.timezone }
+              ? {
+                  startDate: value.startDate,
+                  endDate: value.endDate,
+                  timezone: value.timezone,
+                }
               : {}),
           },
         );
         return permission;
-      })
-      .catch((error) =>
-        knownUnique(error, ['uq_contractor_zone_interval', 'pk_contractor_zone_permission_id']),
-      );
+      },
+      this.commandAuthorization(context, actor, siteId, UserRole.SITE_MANAGER),
+    ).catch((error) =>
+      knownUnique(error, ['uq_contractor_zone_interval', 'pk_contractor_zone_permission_id']),
+    );
   }
-  async grantWorker(actor: WorkforceActor, siteId: string, input: GrantWorkerZoneCommand) {
-    requireSiteRole(actor, siteId, [UserRole.CONTRACTOR_REPRESENTATIVE], false);
+  async grantWorker(
+    actor: WorkforceActor,
+    siteId: string,
+    input: GrantWorkerZoneCommand,
+    context?: MainConfigurationCommandContext,
+  ) {
+    requireSiteRole(actor, siteId, [UserRole.CONTRACTOR_REPRESENTATIVE]);
     const value = command(GrantWorkerZoneCommand, input);
-    return this.source.transaction(async (manager) => {
-      const assignment = await manager.getRepository(WorkerSiteZoneAssignmentEntity).findOne({
-        where: { id: value.workerAssignmentId, siteId },
-        lock: { mode: 'pessimistic_write' },
-      });
-      if (
-        !assignment?.siteContractorId ||
-        assignment.status !== 'APPROVED' ||
-        !assignment.validUntil
-      )
-        conflict('An approved worker assignment with an expiry is required');
-      const permission = await manager.getRepository(ContractorZonePermissionEntity).findOne({
-        where: {
-          id: value.contractorZonePermissionId,
-          siteContractorId: assignment.siteContractorId,
-        },
-        lock: { mode: 'pessimistic_write' },
-      });
-      const participation = await manager
-        .getRepository(ContractorSiteParticipationEntity)
-        .findOneBy({ id: assignment.siteContractorId, siteId, isActive: true });
-      const worker = await manager
-        .getRepository(WorkerEntity)
-        .findOneBy({ id: assignment.workerId, isActive: true });
-      if (
-        !permission ||
-        permission.revokedAt ||
-        !participation ||
-        !worker ||
-        participation.contractorId !== worker.contractorId
-      )
-        conflict('Worker and contractor zone scopes do not match');
-      await this.requireRepresentative(manager, actor, siteId, participation.contractorId);
-      const from = new Date(value.validFrom),
-        until = new Date(value.validUntil);
-      if (
-        !containedInterval(from, until, assignment.validFrom, assignment.validUntil) ||
-        !containedInterval(from, until, permission.validFrom, permission.validUntil) ||
-        !containedInterval(from, until, participation.validFrom, participation.validUntil)
-      )
-        conflict('Worker zone permission must fit both assignment and contractor permission');
-      const existing = await manager
-        .getRepository(WorkerZonePermissionEntity)
-        .findOneBy({ id: value.requestId });
-      if (existing) {
+    return executeMainConfigurationCommand(
+      this.source,
+      context,
+      'WORKER_ZONE_GRANT',
+      { siteId, ...value },
+      async (manager) => {
+        const assignment = await manager.getRepository(WorkerSiteZoneAssignmentEntity).findOne({
+          where: { id: value.workerAssignmentId, siteId },
+          lock: { mode: 'pessimistic_write' },
+        });
         if (
-          existing.workerAssignmentId !== assignment.id ||
-          existing.contractorZonePermissionId !== permission.id ||
-          +existing.validFrom !== +from ||
-          +existing.validUntil !== +until ||
-          existing.grantedBy !== actor.id
+          !assignment?.siteContractorId ||
+          assignment.status !== 'APPROVED' ||
+          !assignment.validUntil
         )
-          conflict('Request was used for another permission');
-        return existing;
-      }
-      const result = await manager.getRepository(WorkerZonePermissionEntity).save({
-        id: value.requestId,
-        workerAssignmentId: assignment.id,
-        contractorZonePermissionId: permission.id,
-        validFrom: from,
-        validUntil: until,
-        grantedBy: actor.id,
-        revokedAt: null,
-      });
-      await auditAccess(
-        manager,
-        actor.id,
-        siteId,
-        'WORKER_ZONE_GRANTED',
-        'worker_zone_permission',
-        result.id,
-        null,
-        {
+          conflict('An approved worker assignment with an expiry is required');
+        const permission = await manager.getRepository(ContractorZonePermissionEntity).findOne({
+          where: {
+            id: value.contractorZonePermissionId,
+            siteContractorId: assignment.siteContractorId,
+          },
+          lock: { mode: 'pessimistic_write' },
+        });
+        const participation = await manager
+          .getRepository(ContractorSiteParticipationEntity)
+          .findOneBy({
+            id: assignment.siteContractorId,
+            siteId,
+            isActive: true,
+          });
+        const worker = await manager
+          .getRepository(WorkerEntity)
+          .findOneBy({ id: assignment.workerId, isActive: true });
+        if (
+          !permission ||
+          permission.revokedAt ||
+          !participation ||
+          !worker ||
+          participation.contractorId !== worker.contractorId
+        )
+          conflict('Worker and contractor zone scopes do not match');
+        await this.requireRepresentative(manager, actor, siteId, participation.contractorId);
+        const from = new Date(value.validFrom),
+          until = new Date(value.validUntil);
+        if (
+          !containedInterval(from, until, assignment.validFrom, assignment.validUntil) ||
+          !containedInterval(from, until, permission.validFrom, permission.validUntil) ||
+          !containedInterval(from, until, participation.validFrom, participation.validUntil)
+        )
+          conflict('Worker zone permission must fit both assignment and contractor permission');
+        const existing = await manager
+          .getRepository(WorkerZonePermissionEntity)
+          .findOneBy({ id: value.requestId });
+        if (existing) {
+          if (
+            existing.workerAssignmentId !== assignment.id ||
+            existing.contractorZonePermissionId !== permission.id ||
+            +existing.validFrom !== +from ||
+            +existing.validUntil !== +until ||
+            existing.grantedBy !== actor.id
+          )
+            conflict('Request was used for another permission');
+          return existing;
+        }
+        const result = await manager.getRepository(WorkerZonePermissionEntity).save({
+          id: value.requestId,
           workerAssignmentId: assignment.id,
           contractorZonePermissionId: permission.id,
-          validFrom: from.toISOString(),
-          validUntil: until.toISOString(),
-        },
-      );
-      return result;
-    });
+          validFrom: from,
+          validUntil: until,
+          grantedBy: actor.id,
+          revokedAt: null,
+        });
+        await auditAccess(
+          manager,
+          actor.id,
+          siteId,
+          'WORKER_ZONE_GRANTED',
+          'worker_zone_permission',
+          result.id,
+          null,
+          {
+            workerAssignmentId: assignment.id,
+            contractorZonePermissionId: permission.id,
+            validFrom: from.toISOString(),
+            validUntil: until.toISOString(),
+          },
+        );
+        return result;
+      },
+      this.commandAuthorization(context, actor, siteId, UserRole.CONTRACTOR_REPRESENTATIVE),
+    );
   }
   async revoke(
     actor: WorkforceActor,
     siteId: string,
     permissionId: string,
     kind: 'contractor' | 'worker',
+    context?: MainConfigurationCommandContext,
   ) {
     requireSiteRole(
       actor,
       siteId,
       kind === 'contractor' ? [UserRole.SITE_MANAGER] : [UserRole.CONTRACTOR_REPRESENTATIVE],
-      false,
     );
     if (
       kind === 'contractor' &&
@@ -381,56 +432,70 @@ export class SiteAccessSetupService {
         message: 'Site Manager access is required',
       });
     uuid(permissionId);
-    return this.source.transaction(async (manager) => {
-      if (kind === 'contractor') {
-        requireSiteRole(actor, siteId, [UserRole.SITE_MANAGER], false);
-        const permission = await manager
-          .getRepository(ContractorZonePermissionEntity)
-          .findOne({ where: { id: permissionId }, lock: { mode: 'pessimistic_write' } });
-        if (
-          !permission ||
-          !(await manager
-            .getRepository(ContractorSiteParticipationEntity)
-            .existsBy({ id: permission.siteContractorId, siteId }))
-        )
-          missing();
-        if (permission.revokedAt) return { id: permissionId };
-        if (!permission.revokedAt) {
-          permission.revokedAt = new Date();
-          await manager.getRepository(ContractorZonePermissionEntity).save(permission);
-        }
-      } else {
-        const permission = await manager
-          .getRepository(WorkerZonePermissionEntity)
-          .findOne({ where: { id: permissionId }, lock: { mode: 'pessimistic_write' } });
-        if (!permission) missing();
-        const assignment = await manager
-          .getRepository(WorkerSiteZoneAssignmentEntity)
-          .findOneBy({ id: permission.workerAssignmentId, siteId });
-        const participation = assignment?.siteContractorId
-          ? await manager
+    return executeMainConfigurationCommand(
+      this.source,
+      context,
+      kind === 'contractor' ? 'CONTRACTOR_ZONE_REVOKE' : 'WORKER_ZONE_REVOKE',
+      { siteId, permissionId },
+      async (manager) => {
+        if (kind === 'contractor') {
+          requireSiteRole(actor, siteId, [UserRole.SITE_MANAGER]);
+          const permission = await manager.getRepository(ContractorZonePermissionEntity).findOne({
+            where: { id: permissionId },
+            lock: { mode: 'pessimistic_write' },
+          });
+          if (
+            !permission ||
+            !(await manager
               .getRepository(ContractorSiteParticipationEntity)
-              .findOneBy({ id: assignment.siteContractorId, siteId })
-          : null;
-        if (!participation) missing();
-        await this.requireRepresentative(manager, actor, siteId, participation.contractorId);
-        if (permission.revokedAt) return { id: permissionId };
-        if (!permission.revokedAt) {
-          permission.revokedAt = new Date();
-          await manager.getRepository(WorkerZonePermissionEntity).save(permission);
+              .existsBy({ id: permission.siteContractorId, siteId }))
+          )
+            missing();
+          if (permission.revokedAt) return { id: permissionId };
+          if (!permission.revokedAt) {
+            permission.revokedAt = new Date();
+            await manager.getRepository(ContractorZonePermissionEntity).save(permission);
+          }
+        } else {
+          const permission = await manager.getRepository(WorkerZonePermissionEntity).findOne({
+            where: { id: permissionId },
+            lock: { mode: 'pessimistic_write' },
+          });
+          if (!permission) missing();
+          const assignment = await manager
+            .getRepository(WorkerSiteZoneAssignmentEntity)
+            .findOneBy({ id: permission.workerAssignmentId, siteId });
+          const participation = assignment?.siteContractorId
+            ? await manager
+                .getRepository(ContractorSiteParticipationEntity)
+                .findOneBy({ id: assignment.siteContractorId, siteId })
+            : null;
+          if (!participation) missing();
+          await this.requireRepresentative(manager, actor, siteId, participation.contractorId);
+          if (permission.revokedAt) return { id: permissionId };
+          if (!permission.revokedAt) {
+            permission.revokedAt = new Date();
+            await manager.getRepository(WorkerZonePermissionEntity).save(permission);
+          }
         }
-      }
-      await auditAccess(
-        manager,
-        actor.id,
+        await auditAccess(
+          manager,
+          actor.id,
+          siteId,
+          'ZONE_PERMISSION_REVOKED',
+          `${kind}_zone_permission`,
+          permissionId,
+          null,
+          {},
+        );
+        return { id: permissionId };
+      },
+      this.commandAuthorization(
+        context,
+        actor,
         siteId,
-        'ZONE_PERMISSION_REVOKED',
-        `${kind}_zone_permission`,
-        permissionId,
-        null,
-        {},
-      );
-      return { id: permissionId };
-    });
+        kind === 'contractor' ? UserRole.SITE_MANAGER : UserRole.CONTRACTOR_REPRESENTATIVE,
+      ),
+    );
   }
 }

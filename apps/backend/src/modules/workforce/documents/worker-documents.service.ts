@@ -1,9 +1,12 @@
-import { randomUUID } from 'node:crypto';
+import { createHash, randomUUID } from 'node:crypto';
 import { Injectable, Logger } from '@nestjs/common';
 import { DataSource, type EntityManager } from 'typeorm';
 import { healthCertificateExpiry } from '@smartsite/contracts';
 import type {
   Page,
+  SubmitWorkerDocumentsCommand,
+  WorkerDocumentSubmissionResponse,
+  WorkerDocumentAiSummary,
   ReviewWorkerDocumentCommand,
   WorkerComplianceResponse,
   WorkerDocumentKind,
@@ -12,7 +15,6 @@ import type {
   WorkerDocumentIdentityCheck,
   DocumentOcrResult,
   UploadWorkerDocumentCommand,
-  UpdateWorkerDocumentExpiryCommand,
   WorkerDocumentCheckResponse,
   WorkerDocumentAnalysisResult,
   WorkerDocumentAiAnalysis,
@@ -33,14 +35,20 @@ import {
   WorkerIdentityImageEntity,
 } from '../../../database/entities/worker-document.entity.js';
 import { WorkerEntity } from '../../../database/entities/worker.entity.js';
-import { UserEntity, UserRole } from '../../../database/entities/user.entity.js';
-import { UserRoleAssignmentEntity } from '../../../database/entities/user-role-assignment.entity.js';
+import { UserRole } from '../../../database/entities/user.entity.js';
 import { StorageService } from '../../../integrations/storage/storage.service.js';
 import {
   ContractorOperationsService,
   type WorkforceActor,
 } from '../directory/contractor-operations.service.js';
+import { AccessAuditEntity } from '../../../database/entities/access-audit.entity.js';
+import { parseDocumentSubmission } from './worker-document-submission.js';
 import { auditAccess } from '../shared/access-audit.js';
+import {
+  executeMainConfigurationCommand,
+  executeMainMetadataMutation,
+  type MainConfigurationCommandContext,
+} from '../../../common/configuration/main-configuration-authority.js';
 import {
   complianceDate,
   complianceState,
@@ -48,19 +56,13 @@ import {
   DOCUMENT_KINDS,
 } from './worker-compliance.js';
 import { DocumentOcrService, isCalendarDate } from './document-ocr.service.js';
-import {
-  ReviewWorkerDocumentDto,
-  UploadWorkerDocumentDto,
-  UpdateWorkerDocumentExpiryDto,
-} from './worker-documents.commands.js';
+import { ReviewWorkerDocumentDto, UploadWorkerDocumentDto } from './worker-documents.commands.js';
 import { DocumentNotificationsService } from './document-notifications.service.js';
 import { compareDocumentDates } from './worker-document-date-check.js';
 import {
   DOCUMENT_ANALYSIS_TIMEOUT_MS,
   DocumentAnalysisService,
 } from './document-analysis.service.js';
-
-const ANALYSIS_LEASE_MS = 60_000;
 
 export interface DocumentUpload {
   buffer: Buffer;
@@ -111,7 +113,7 @@ function kindValue(value: string): WorkerDocumentKind {
 }
 function submittedDates(
   kind: WorkerDocumentKind,
-  input: UploadWorkerDocumentCommand | UpdateWorkerDocumentExpiryCommand,
+  input: UploadWorkerDocumentCommand,
   required = false,
 ) {
   const health = kind === 'HEALTH_CERTIFICATE';
@@ -171,10 +173,16 @@ export function compareDocumentIdentity(
 
 function analysisForReview(
   doc: WorkerDocumentEntity,
-  analysis: WorkerDocumentAnalysisResult,
+  analysis: WorkerDocumentAnalysisResult | WorkerDocumentAnalysisLease,
   nationalId: string | null | undefined,
 ): WorkerDocumentAiAnalysis {
+  if (analysis.status === 'ANALYZING')
+    return { status: analysis.expiresAt > Date.now() ? 'ANALYZING' : 'UNAVAILABLE' };
   if (analysis.status !== 'COMPLETE') return analysis;
+  const effectiveExpiry =
+    doc.kind === 'HEALTH_CERTIFICATE'
+      ? healthCertificateExpiry(analysis.issuedOn)
+      : analysis.expiresOn;
   const evidence: DocumentOcrResult = {
     status: 'READ',
     issuedOn: analysis.issuedOn,
@@ -187,7 +195,51 @@ function analysisForReview(
     kindMismatch: analysis.detectedKind !== null && analysis.detectedKind !== doc.kind,
     dateCheck: compareDocumentDates(doc.kind, doc, evidence),
     identityCheck: compareDocumentIdentity(nationalId, evidence).status,
+    validity:
+      effectiveExpiry && effectiveExpiry < complianceDate()
+        ? 'EXPIRED'
+        : analysis.issuedOn && analysis.issuedOn > complianceDate()
+          ? 'NOT_YET_VALID'
+          : effectiveExpiry
+            ? 'CURRENT'
+            : 'UNKNOWN',
   };
+}
+
+export function summarizeAnalysis(
+  documents: WorkerDocumentEntity[],
+  nationalId?: string | null,
+): WorkerDocumentAiSummary {
+  const pending = documents.filter((doc) => doc.status === 'PENDING');
+  const results = pending.map((doc) =>
+    doc.aiAnalysis ? analysisForReview(doc, doc.aiAnalysis, nationalId) : null,
+  );
+  const complete = results.filter((result) => result?.status === 'COMPLETE');
+  const attention = complete.some(
+    (result) =>
+      result?.status === 'COMPLETE' &&
+      (result.kindMismatch ||
+        result.dateCheck.status === 'MISMATCH' ||
+        result.identityCheck === 'MISMATCH' ||
+        result.validity === 'EXPIRED' ||
+        result.validity === 'NOT_YET_VALID'),
+  );
+  const insufficient = complete.some(
+    (result) =>
+      result?.status === 'COMPLETE' &&
+      (!result.detectedKind ||
+        result.dateCheck.status !== 'MATCH' ||
+        result.validity === 'UNKNOWN'),
+  );
+  const unresolved = pending.length - complete.length;
+  let status: WorkerDocumentAiSummary['status'] = 'NO_DISCREPANCY';
+  if (attention) status = 'ATTENTION';
+  else if (results.some((result) => result?.status === 'ANALYZING')) status = 'ANALYZING';
+  else if (insufficient || results.some((result) => result?.status === 'UNAVAILABLE'))
+    status = 'INSUFFICIENT';
+  else if (!complete.length) status = 'NOT_SCANNED';
+  else if (unresolved) status = 'INSUFFICIENT';
+  return { pending: pending.length, complete: complete.length, unresolved, status };
 }
 
 @Injectable()
@@ -225,24 +277,6 @@ export class WorkerDocumentsService {
       return worker;
     }
     if (
-      mode === 'submit' &&
-      worker.userId === actor.id &&
-      actor.roleAssignments.some((r) => r.role === UserRole.WORKER && r.siteId === siteId)
-    ) {
-      const account = await manager.getRepository(UserEntity).findOneBy({
-        id: actor.id,
-        isActive: true,
-        mustChangePassword: false,
-      });
-      const assigned = await manager.getRepository(UserRoleAssignmentEntity).existsBy({
-        userId: actor.id,
-        role: UserRole.WORKER,
-        siteId,
-      });
-      if (!account || !assigned) forbidden();
-      return worker;
-    }
-    if (
       mode === 'read' &&
       (safety ||
         (worker.userId === actor.id &&
@@ -250,16 +284,14 @@ export class WorkerDocumentsService {
     )
       return worker;
     if (!worker.contractorId) forbidden();
-    await this.operations.requireWorkerCreationAccess(manager, actor, worker.contractorId, siteId);
+    await this.operations.requireWorkerCreationAccess(
+      manager,
+      actor,
+      worker.contractorId,
+      siteId,
+      lock,
+    );
     return worker;
-  }
-  private requireDeclaredDate(actor: WorkforceActor, worker: WorkerEntity, provided: boolean) {
-    if (
-      worker.userId === actor.id &&
-      actor.roleAssignments.some((r) => r.role === UserRole.WORKER && r.siteId === worker.siteId) &&
-      !provided
-    )
-      invalid('Enter the document date before submitting.');
   }
   async checkSubmission(
     actor: WorkforceActor,
@@ -272,11 +304,13 @@ export class WorkerDocumentsService {
     const value = command(UploadWorkerDocumentDto, input);
     const kind = kindValue(kindInput);
     const manual = submittedDates(kind, value);
-    await this.access(this.source.manager, actor, siteId, workerId, 'submit');
+    const worker = await this.access(this.source.manager, actor, siteId, workerId, 'submit');
     const format = validateWorkerDocument(file);
-    const quality = await this.ocr.quality(file!.buffer, format.mediaType);
-    const ocr =
-      quality.status === 'ACCEPTED' ? await this.ocr.read(file!.buffer, format.mediaType) : null;
+    const { quality, ocr } = await this.ocr.inspect(
+      file!.buffer,
+      format.mediaType,
+      actor.id + ':' + siteId + ':' + worker.contractorId,
+    );
     return { quality, ocr, dateCheck: compareDocumentDates(kind, manual, ocr) };
   }
   async get(
@@ -309,7 +343,13 @@ export class WorkerDocumentsService {
       .addOrderBy('d.id', 'DESC');
     if (canSeeAnalysis) documentQuery.addSelect('d.aiAnalysis');
     const documents = await documentQuery.getMany();
-    const state = complianceState(true, documents, new Date(), this.notifications.noticeDays);
+    const state = complianceState(
+      true,
+      documents,
+      new Date(),
+      this.notifications.noticeDays,
+      profile?.safetyCardRequired ?? true,
+    );
     if (
       profile?.identityRequired &&
       (!profile.nationalId ||
@@ -329,6 +369,8 @@ export class WorkerDocumentsService {
       phoneNumber: profile?.phoneNumber ?? null,
       gender: profile?.gender ?? null,
       address: profile?.address ?? null,
+      version: profile?.version ?? 0,
+      safetyCardRequired: profile?.safetyCardRequired ?? true,
       identityImages: identityImages.map((i) => ({
         id: i.id,
         side: i.side,
@@ -348,14 +390,19 @@ export class WorkerDocumentsService {
             profile.address &&
             identityImages.length === 2
           ),
+        new Date(),
+        profile?.safetyCardRequired ?? true,
       ),
+      ...(canSeeAnalysis ? { aiSummary: summarizeAnalysis(documents, profile?.nationalId) } : {}),
       documents: documents.map((doc) => {
         const analysis = doc.aiAnalysis;
         return {
           ...response(doc),
           identityCheck: compareDocumentIdentity(profile?.nationalId, doc.ocr),
-          ...(canSeeAnalysis && analysis && analysis.status !== 'ANALYZING'
-            ? { aiAnalysis: analysisForReview(doc, analysis, profile?.nationalId) }
+          ...(canSeeAnalysis && analysis
+            ? {
+                aiAnalysis: analysisForReview(doc, analysis, profile?.nationalId),
+              }
             : {}),
         };
       }),
@@ -414,7 +461,9 @@ export class WorkerDocumentsService {
         `(
       EXISTS(SELECT 1 FROM worker_document d WHERE d.worker_id=w.id AND d.status='PENDING')
       OR (SELECT count(*) FROM worker_document d WHERE d.worker_id=w.id AND d.status='APPROVED'
-        AND d.issued_on<=CAST(:today AS date) AND d.expires_on>=CAST(:today AS date))<3
+        AND d.issued_on<=CAST(:today AS date) AND d.expires_on>=CAST(:today AS date)
+        AND (d.kind<>'SAFETY_CARD' OR COALESCE((SELECT p.safety_card_required FROM worker_compliance_profile p WHERE p.worker_id=w.id),true)))
+        <CASE WHEN COALESCE((SELECT p.safety_card_required FROM worker_compliance_profile p WHERE p.worker_id=w.id),true) THEN 3 ELSE 2 END
       OR EXISTS(SELECT 1 FROM worker_compliance_profile p WHERE p.worker_id=w.id AND p.identity_required AND
         (p.national_id IS NULL OR p.phone_number IS NULL OR p.gender IS NULL OR p.address IS NULL OR
          (SELECT count(*) FROM worker_identity_image i WHERE i.worker_id=w.id)<>2))
@@ -433,7 +482,8 @@ export class WorkerDocumentsService {
           (p.national_id IS NULL OR p.phone_number IS NULL OR p.gender IS NULL OR p.address IS NULL OR
            (SELECT count(*) FROM worker_identity_image i WHERE i.worker_id=w.id)<>2))
         OR EXISTS(SELECT 1 FROM (VALUES ('SAFETY_CARD'), ('HEALTH_CERTIFICATE'), ('PERSONAL_INSURANCE')) kinds(kind)
-          WHERE NOT EXISTS(SELECT 1 FROM worker_document d WHERE d.worker_id=w.id AND d.kind=kinds.kind AND d.status='PENDING')
+          WHERE (kinds.kind<>'SAFETY_CARD' OR COALESCE((SELECT p.safety_card_required FROM worker_compliance_profile p WHERE p.worker_id=w.id),true))
+          AND NOT EXISTS(SELECT 1 FROM worker_document d WHERE d.worker_id=w.id AND d.kind=kinds.kind AND d.status='PENDING')
           AND (NOT EXISTS(SELECT 1 FROM worker_document d WHERE d.worker_id=w.id AND d.kind=kinds.kind AND d.status='APPROVED'
             AND d.issued_on<=CAST(:reviewToday AS date) AND d.expires_on>=CAST(:reviewToday AS date))
             OR (SELECT d.status FROM worker_document d WHERE d.worker_id=w.id AND d.kind=kinds.kind AND d.status<>'SUPERSEDED'
@@ -450,112 +500,276 @@ export class WorkerDocumentsService {
       .take(paging.limit)
       .getManyAndCount();
     const items: WorkerComplianceResponse[] = [];
-    for (const worker of workers) items.push(await this.get(actor, siteId, worker.id, false));
+    for (const worker of workers) items.push(await this.get(actor, siteId, worker.id, safety));
     return { items, total };
   }
-  async upload(
+
+  async submit(
     actor: WorkforceActor,
     siteId: string,
     workerId: string,
-    kindInput: string,
-    file: DocumentUpload | undefined,
-    input: UploadWorkerDocumentCommand = {},
-  ): Promise<WorkerDocumentResponse> {
-    const value = command(UploadWorkerDocumentDto, input);
-    const kind = kindValue(kindInput);
-    const manual = submittedDates(kind, value);
-    const submitter = await this.access(this.source.manager, actor, siteId, workerId, 'submit');
-    this.requireDeclaredDate(actor, submitter, !!manual.submittedExpiresOn);
-    const format = validateWorkerDocument(file);
-    await this.requireQuality(file!);
-    const stored = await this.storage.save(file!.buffer, format.mediaType, format.extension);
-    let committed = false;
-    try {
-      const ocr = await this.ocr.read(file!.buffer, format.mediaType);
-      const result = await this.source.transaction(async (manager) => {
-        const worker = await this.access(manager, actor, siteId, workerId, 'submit', true);
-        const docs = manager.getRepository(WorkerDocumentEntity);
-        // Same original and unchanged metadata preserve the pending review/version.
-        const pending = await docs
-          .createQueryBuilder('d')
-          .addSelect('d.file')
-          .where('d.worker_id=:workerId AND d.kind=:kind AND d.status=:status', {
+    input: SubmitWorkerDocumentsCommand,
+    files: Partial<Record<WorkerDocumentKind | 'FRONT' | 'BACK', DocumentUpload>>,
+    context?: MainConfigurationCommandContext,
+  ): Promise<WorkerDocumentSubmissionResponse> {
+    const value = parseDocumentSubmission(input);
+    const worker = await this.access(this.source.manager, actor, siteId, workerId, 'submit');
+    const keys = [...DOCUMENT_KINDS, 'FRONT', 'BACK'] as const;
+    if (Object.keys(files).some((key) => !keys.includes(key as (typeof keys)[number])))
+      invalid('Unexpected document file');
+    for (const kind of DOCUMENT_KINDS) {
+      if (Boolean(files[kind]) !== Boolean(value.documents[kind]))
+        invalid('Each certificate requires its file and declared date');
+    }
+    const fingerprint = createHash('sha256').update(JSON.stringify(value));
+    for (const key of keys) {
+      const file = files[key];
+      if (!file) continue;
+      validateWorkerDocument(file);
+      if ((key === 'FRONT' || key === 'BACK') && file.mimetype === 'application/pdf')
+        invalid('Citizen ID sides require JPEG or PNG');
+      fingerprint.update(key).update(createHash('sha256').update(file.buffer).digest());
+    }
+    const hash = fingerprint.digest('hex');
+    const replay = async (manager: EntityManager) => {
+      const audit = await manager
+        .getRepository(AccessAuditEntity)
+        .createQueryBuilder('a')
+        .where(
+          'a.actor_account_id=:actorId AND a.site_id=:siteId AND a.entity_id=:workerId AND a.action=:action',
+          {
+            actorId: actor.id,
+            siteId,
             workerId,
-            kind,
-            status: 'PENDING',
-          })
-          .getOne();
-        if (pending?.file.sha256 === stored.sha256) {
-          if (
-            manual.provided &&
-            (manual.submittedExpiresOn !== pending.submittedExpiresOn ||
-              manual.submittedIssuedOn !== pending.submittedIssuedOn)
-          ) {
-            pending.submittedExpiresOn = manual.submittedExpiresOn;
-            pending.submittedIssuedOn = manual.submittedIssuedOn;
-            pending.version++;
-            await docs.save(pending);
-            await auditAccess(
-              manager,
-              actor.id,
-              siteId,
-              'WORKER_DOCUMENT_EXPIRY_SUBMITTED',
-              'worker',
-              workerId,
-              null,
-              {
-                documentId: pending.id,
-                submittedExpiresOn: pending.submittedExpiresOn,
-                submittedIssuedOn: pending.submittedIssuedOn,
-              },
-            );
-          }
-          return { document: response(pending), reused: true };
+            action: 'WORKER_DOCUMENTS_SUBMITTED',
+          },
+        )
+        .andWhere("a.changes->>'requestId'=:requestId", { requestId: value.requestId })
+        .getOne();
+      if (!audit) return null;
+      if (audit.changes?.fingerprint !== hash)
+        conflict('Submission request already used with different contents');
+      return {
+        requestId: value.requestId,
+        version: Number(audit.changes.version),
+        documentIds: audit.changes.documentIds as string[],
+      };
+    };
+    const authorize = context
+      ? async (manager: EntityManager) => {
+          const roles = await manager.query(
+            "SELECT id FROM user_role_assignment WHERE user_id=$1 AND site_id=$2 AND role='CONTRACTOR_REPRESENTATIVE' FOR SHARE",
+            [actor.id, siteId],
+          );
+          if (context.actorUserId !== actor.id || !roles.length) forbidden();
         }
-        if (pending)
-          await docs.update(pending.id, { status: 'SUPERSEDED', version: pending.version + 1 });
-        const profiles = manager.getRepository(WorkerComplianceProfileEntity);
-        if (!(await profiles.existsBy({ workerId })))
-          await profiles.save({ workerId, nationalId: null, phoneNumber: null });
-        const doc = await docs.save(
-          docs.create({
-            id: randomUUID(),
+      : undefined;
+    const previous = await replay(this.source.manager);
+    if (previous)
+      return executeMainMetadataMutation(
+        this.source,
+        context,
+        async (manager) => {
+          await this.access(manager, actor, siteId, workerId, 'submit', true);
+          return previous;
+        },
+        authorize,
+      );
+    const prepared = new Map<
+      (typeof keys)[number],
+      {
+        file: DocumentUpload;
+        stored: Awaited<ReturnType<StorageService['save']>>;
+        ocr: DocumentOcrResult;
+      }
+    >();
+    const adopted = new Set<string>();
+    try {
+      for (const key of keys) {
+        const file = files[key];
+        if (!file) continue;
+        const format = validateWorkerDocument(file);
+        const checked = await this.ocr.inspect(
+          file.buffer,
+          file.mimetype,
+          actor.id + ':' + siteId + ':' + worker.contractorId,
+        );
+        const stored = await this.storage.save(file.buffer, format.mediaType, format.extension);
+        prepared.set(key, { file, stored, ocr: checked.ocr });
+      }
+      return await executeMainConfigurationCommand(
+        this.source,
+        context,
+        'WORKER_DOCUMENT_SUBMIT',
+        { siteId, workerId, requestId: value.requestId, fingerprint: hash },
+        async (manager) => {
+          adopted.clear();
+          const currentWorker = await this.access(manager, actor, siteId, workerId, 'submit', true);
+          const retry = await replay(manager);
+          if (retry) return retry;
+          const profiles = manager.getRepository(WorkerComplianceProfileEntity);
+          const existing = await profiles.findOneBy({ workerId });
+          if ((existing?.version ?? 0) !== value.expectedVersion)
+            conflict('Worker profile changed. Reload before submitting.');
+          const profile = profiles.create({
+            ...existing,
             workerId,
-            kind,
-            status: 'PENDING',
-            originalName: (file!.originalname ?? `document.${format.extension}`)
-              .replace(/[\p{Cc}\p{Cs}\\/]/gu, '_')
-              .slice(0, 255),
-            file: stored,
-            ocr,
-            issuedOn: null,
-            expiresOn: null,
-            submittedExpiresOn: manual.submittedExpiresOn,
-            submittedIssuedOn: manual.submittedIssuedOn,
-            uploadedBy: actor.id,
-            reviewedBy: null,
-            reviewedAt: null,
-            reviewNote: null,
-            version: 1,
-          }),
-        );
-        await auditAccess(
-          manager,
-          actor.id,
-          worker.siteId,
-          'WORKER_DOCUMENT_SUBMITTED',
-          'worker',
-          worker.id,
-          null,
-          { documentId: doc.id, kind },
-        );
-        await this.notifications.record(manager, worker, doc, 'DOCUMENT_SUBMITTED');
-        return { document: response(doc), reused: false };
+            safetyCardRequired: value.safetyCardRequired,
+            version: value.expectedVersion + 1,
+            ...(value.identity ?? {}),
+          });
+          const images = manager.getRepository(WorkerIdentityImageEntity);
+          const currentImages = await images
+            .createQueryBuilder('i')
+            .addSelect('i.file')
+            .where('i.worker_id=:workerId', { workerId })
+            .getMany();
+          if (profile.identityRequired) {
+            if (
+              !profile.nationalId ||
+              !profile.phoneNumber ||
+              !profile.gender ||
+              !profile.address ||
+              !(['FRONT', 'BACK'] as const).every(
+                (side) => prepared.has(side) || currentImages.some((image) => image.side === side),
+              )
+            ) {
+              invalid('Complete the citizen ID profile and both ID images before sending');
+            }
+          }
+          const documents = manager.getRepository(WorkerDocumentEntity);
+          const current = await documents
+            .createQueryBuilder('d')
+            .addSelect('d.file')
+            .where('d.worker_id=:workerId', { workerId })
+            .getMany();
+          const today = complianceDate();
+          for (const kind of DOCUMENT_KINDS) {
+            if (kind === 'SAFETY_CARD' && !value.safetyCardRequired) continue;
+            if (
+              !prepared.has(kind) &&
+              !current.some(
+                (doc) =>
+                  doc.kind === kind &&
+                  (doc.status === 'PENDING' ||
+                    (doc.status === 'APPROVED' &&
+                      doc.issuedOn &&
+                      doc.issuedOn <= today &&
+                      doc.expiresOn &&
+                      doc.expiresOn >= today)),
+              )
+            ) {
+              invalid('Complete the required certificates before sending');
+            }
+          }
+          await profiles.save(profile);
+          const replacedIdentity: Record<string, unknown>[] = [];
+          for (const side of ['FRONT', 'BACK'] as const) {
+            const item = prepared.get(side);
+            if (!item) continue;
+            const old = currentImages.find((image) => image.side === side);
+            if (old?.file.sha256 === item.stored.sha256) continue;
+            if (old)
+              replacedIdentity.push({
+                side,
+                file: old.file,
+                originalName: old.originalName,
+                uploadedAt: old.uploadedAt.toISOString(),
+              });
+            await images.save(
+              images.create({
+                ...(old ?? {}),
+                id: old?.id ?? randomUUID(),
+                workerId,
+                side,
+                file: item.stored,
+                ocr: item.ocr,
+                originalName: (item.file.originalname ?? side)
+                  .replace(/[\p{Cc}\p{Cs}\\/]/gu, '_')
+                  .slice(0, 255),
+                uploadedAt: new Date(),
+              }),
+            );
+            adopted.add(item.stored.storageKey);
+          }
+          const documentIds: string[] = [];
+          for (const kind of DOCUMENT_KINDS) {
+            const item = prepared.get(kind);
+            if (!item) continue;
+            const dates = submittedDates(kind, value.documents[kind]!, true);
+            const pending = current.find((doc) => doc.kind === kind && doc.status === 'PENDING');
+            if (
+              pending?.file.sha256 === item.stored.sha256 &&
+              pending.submittedIssuedOn === dates.submittedIssuedOn &&
+              pending.submittedExpiresOn === dates.submittedExpiresOn
+            ) {
+              documentIds.push(pending.id);
+              continue;
+            }
+            if (pending)
+              await documents.update(pending.id, {
+                status: 'SUPERSEDED',
+                version: pending.version + 1,
+              });
+            const doc = await documents.save(
+              documents.create({
+                id: randomUUID(),
+                workerId,
+                kind,
+                status: 'PENDING',
+                originalName: (item.file.originalname ?? 'document')
+                  .replace(/[\p{Cc}\p{Cs}\\/]/gu, '_')
+                  .slice(0, 255),
+                file: item.stored,
+                ocr: item.ocr,
+                submittedIssuedOn: dates.submittedIssuedOn,
+                submittedExpiresOn: dates.submittedExpiresOn,
+                issuedOn: null,
+                expiresOn: null,
+                reviewedAt: null,
+                reviewedBy: null,
+                reviewNote: null,
+                uploadedBy: actor.id,
+                version: 1,
+              }),
+            );
+            documentIds.push(doc.id);
+            await this.notifications.record(manager, currentWorker, doc, 'DOCUMENT_SUBMITTED');
+            adopted.add(item.stored.storageKey);
+          }
+          await auditAccess(
+            manager,
+            actor.id,
+            siteId,
+            'WORKER_DOCUMENTS_SUBMITTED',
+            'worker',
+            workerId,
+            null,
+            {
+              requestId: value.requestId,
+              fingerprint: hash,
+              version: profile.version,
+              documentIds,
+              safetyCardRequired: value.safetyCardRequired,
+              replacedIdentity,
+              identityChanged: Boolean(value.identity),
+            },
+          );
+          await manager.query(
+            'UPDATE site SET access_policy_version=access_policy_version+1 WHERE id=$1',
+            [siteId],
+          );
+          return { requestId: value.requestId, version: profile.version, documentIds };
+        },
+        authorize,
+      ).catch((error) => {
+        adopted.clear();
+        throw error;
       });
-      committed = !result.reused;
-      return result.document;
     } finally {
-      if (!committed) await this.storage.remove(stored);
+      for (const item of prepared.values()) {
+        if (!adopted.has(item.stored.storageKey)) await this.storage.remove(item.stored);
+      }
     }
   }
 
@@ -583,7 +797,7 @@ export class WorkerDocumentsService {
       const lease: WorkerDocumentAnalysisLease = {
         status: 'ANALYZING',
         token: randomUUID(),
-        expiresAt: now + ANALYSIS_LEASE_MS,
+        expiresAt: now + (this.analysis.timeoutMs ?? DOCUMENT_ANALYSIS_TIMEOUT_MS) + 30000,
       };
       await docs.update(doc.id, { aiAnalysis: lease });
       return { doc, lease };
@@ -600,7 +814,7 @@ export class WorkerDocumentsService {
         size: doc.file.size,
         mimetype: doc.file.mediaType,
       });
-      if (Date.now() + DOCUMENT_ANALYSIS_TIMEOUT_MS >= lease.expiresAt)
+      if (Date.now() + (this.analysis.timeoutMs ?? DOCUMENT_ANALYSIS_TIMEOUT_MS) >= lease.expiresAt)
         throw new Error('Document analysis lease has insufficient time remaining');
       aiAnalysis = (await this.analysis.analyze(bytes, mediaType)) ?? aiAnalysis;
     } catch {
@@ -620,52 +834,6 @@ export class WorkerDocumentsService {
     if (!saved.affected) conflict('Document analysis has changed. Refresh before trying again.');
   }
 
-  async updateSubmittedExpiry(
-    actor: WorkforceActor,
-    siteId: string,
-    workerId: string,
-    documentId: string,
-    input: UpdateWorkerDocumentExpiryCommand,
-  ) {
-    const value = command(UpdateWorkerDocumentExpiryDto, input);
-    return this.source.transaction(async (manager) => {
-      await this.access(manager, actor, siteId, workerId, 'submit', true);
-      const repo = manager.getRepository(WorkerDocumentEntity);
-      const doc = await repo
-        .createQueryBuilder('d')
-        .addSelect('d.file')
-        .where('d.id=:id AND d.worker_id=:workerId', { id: uuid(documentId), workerId })
-        .getOne();
-      if (!doc) missing();
-      if (doc.status !== 'PENDING' || doc.version !== value.expectedVersion)
-        conflict('Document changed. Reload before reviewing.');
-      const manual = submittedDates(doc.kind, value, true);
-      if (
-        doc.submittedExpiresOn === manual.submittedExpiresOn &&
-        doc.submittedIssuedOn === manual.submittedIssuedOn
-      )
-        return response(doc);
-      doc.submittedExpiresOn = manual.submittedExpiresOn;
-      doc.submittedIssuedOn = manual.submittedIssuedOn;
-      doc.version++;
-      await repo.save(doc);
-      await auditAccess(
-        manager,
-        actor.id,
-        siteId,
-        'WORKER_DOCUMENT_EXPIRY_SUBMITTED',
-        'worker',
-        workerId,
-        null,
-        {
-          documentId: doc.id,
-          submittedExpiresOn: doc.submittedExpiresOn,
-          submittedIssuedOn: doc.submittedIssuedOn,
-        },
-      );
-      return response(doc);
-    });
-  }
   async file(actor: WorkforceActor, siteId: string, workerId: string, documentId: string) {
     await this.access(this.source.manager, actor, siteId, workerId);
     const doc = await this.source
@@ -704,92 +872,119 @@ export class WorkerDocumentsService {
     workerId: string,
     documentId: string,
     input: ReviewWorkerDocumentCommand,
+    context?: MainConfigurationCommandContext,
   ) {
     const value = command(ReviewWorkerDocumentDto, input);
-    return this.source.transaction(async (manager) => {
-      const worker = await this.access(manager, actor, siteId, workerId, 'review', true);
-      const repo = manager.getRepository(WorkerDocumentEntity);
-      const doc = await repo
-        .createQueryBuilder('d')
-        .addSelect('d.file')
-        .where('d.id=:id AND d.worker_id=:workerId', { id: uuid(documentId), workerId })
-        .getOne();
-      if (!doc) missing();
-      if (doc.status !== 'PENDING' || doc.version !== value.expectedVersion)
-        conflict('Document changed. Reload before reviewing.');
-      if (value.approve) {
-        const healthExpiry =
-          doc.kind === 'HEALTH_CERTIFICATE' ? healthCertificateExpiry(value.issuedOn) : null;
-        if (
-          doc.kind === 'HEALTH_CERTIFICATE' &&
-          value.expiresOn !== undefined &&
-          value.expiresOn !== healthExpiry
-        )
-          invalid('Health certificate expiry must be one year after the examination date.');
-        const expiresOn = doc.kind === 'HEALTH_CERTIFICATE' ? healthExpiry : value.expiresOn;
-        const profile = await manager
-          .getRepository(WorkerComplianceProfileEntity)
-          .findOneBy({ workerId });
-        if (
-          profile?.identityRequired &&
-          (await manager.getRepository(WorkerIdentityImageEntity).countBy({ workerId })) !== 2
-        )
-          conflict('Upload both citizen ID images before review');
-        if (
-          !isCalendarDate(value.issuedOn) ||
-          !isCalendarDate(expiresOn) ||
-          value.issuedOn > complianceDate() ||
-          expiresOn < complianceDate() ||
-          expiresOn < value.issuedOn
-        )
-          invalid('Confirm valid issue and expiry dates against the original document');
-        await repo
-          .createQueryBuilder()
-          .update()
-          .set({ status: 'SUPERSEDED', version: () => 'version + 1' })
-          .where('worker_id=:workerId AND kind=:kind AND status=:status', {
-            workerId,
+    return executeMainConfigurationCommand(
+      this.source,
+      context,
+      'WORKER_DOCUMENT_REVIEW',
+      {
+        siteId,
+        workerId,
+        documentId,
+        approve: value.approve,
+        expectedVersion: value.expectedVersion,
+      },
+      async (manager) => {
+        const worker = await this.access(manager, actor, siteId, workerId, 'review', true);
+        const repo = manager.getRepository(WorkerDocumentEntity);
+        const doc = await repo
+          .createQueryBuilder('d')
+          .addSelect('d.file')
+          .where('d.id=:id AND d.worker_id=:workerId', { id: uuid(documentId), workerId })
+          .getOne();
+        if (!doc) missing();
+        if (doc.status !== 'PENDING' || doc.version !== value.expectedVersion)
+          conflict('Document changed. Reload before reviewing.');
+        if (value.approve) {
+          const healthExpiry =
+            doc.kind === 'HEALTH_CERTIFICATE' ? healthCertificateExpiry(value.issuedOn) : null;
+          if (
+            doc.kind === 'HEALTH_CERTIFICATE' &&
+            value.expiresOn !== undefined &&
+            value.expiresOn !== healthExpiry
+          )
+            invalid('Health certificate expiry must be one year after the examination date.');
+          const expiresOn = doc.kind === 'HEALTH_CERTIFICATE' ? healthExpiry : value.expiresOn;
+          const profile = await manager
+            .getRepository(WorkerComplianceProfileEntity)
+            .findOneBy({ workerId });
+          if (
+            profile?.identityRequired &&
+            (await manager.getRepository(WorkerIdentityImageEntity).countBy({ workerId })) !== 2
+          )
+            conflict('Upload both citizen ID images before review');
+          if (
+            !isCalendarDate(value.issuedOn) ||
+            !isCalendarDate(expiresOn) ||
+            value.issuedOn > complianceDate() ||
+            expiresOn < complianceDate() ||
+            expiresOn < value.issuedOn
+          )
+            invalid('Confirm valid issue and expiry dates against the original document');
+          await repo
+            .createQueryBuilder()
+            .update()
+            .set({ status: 'SUPERSEDED', version: () => 'version + 1' })
+            .where('worker_id=:workerId AND kind=:kind AND status=:status', {
+              workerId,
+              kind: doc.kind,
+              status: 'APPROVED',
+            })
+            .execute();
+          doc.issuedOn = value.issuedOn;
+          doc.expiresOn = expiresOn;
+        }
+        doc.status = value.approve ? 'APPROVED' : 'REJECTED';
+        doc.reviewedAt = new Date();
+        doc.reviewedBy = actor.id;
+        doc.reviewNote = value.reviewNote;
+        doc.version += 1;
+        await repo.save(doc);
+        const profiles = manager.getRepository(WorkerComplianceProfileEntity);
+        const currentProfile = await profiles.findOneBy({ workerId });
+        if (currentProfile) await profiles.increment({ workerId }, 'version', 1);
+        else
+          await profiles.save(profiles.create({ workerId, version: 1, safetyCardRequired: true }));
+        await this.notifications.record(
+          manager,
+          worker,
+          doc,
+          value.approve ? 'DOCUMENT_APPROVED' : 'DOCUMENT_REJECTED',
+        );
+        await auditAccess(
+          manager,
+          actor.id,
+          worker.siteId,
+          'WORKER_DOCUMENT_REVIEWED',
+          'worker',
+          worker.id,
+          value.reviewNote,
+          {
+            documentId: doc.id,
             kind: doc.kind,
-            status: 'APPROVED',
-          })
-          .execute();
-        doc.issuedOn = value.issuedOn;
-        doc.expiresOn = expiresOn;
-      }
-      doc.status = value.approve ? 'APPROVED' : 'REJECTED';
-      doc.reviewedAt = new Date();
-      doc.reviewedBy = actor.id;
-      doc.reviewNote = value.reviewNote;
-      doc.version += 1;
-      await repo.save(doc);
-      await this.notifications.record(
-        manager,
-        worker,
-        doc,
-        value.approve ? 'DOCUMENT_APPROVED' : 'DOCUMENT_REJECTED',
-      );
-      await auditAccess(
-        manager,
-        actor.id,
-        worker.siteId,
-        'WORKER_DOCUMENT_REVIEWED',
-        'worker',
-        worker.id,
-        value.reviewNote,
-        {
-          documentId: doc.id,
-          kind: doc.kind,
-          status: doc.status,
-          issuedOn: doc.issuedOn,
-          expiresOn: doc.expiresOn,
-        },
-      );
-      await manager.query(
-        'UPDATE site SET access_policy_version=access_policy_version+1 WHERE id=$1',
-        [siteId],
-      );
-      return response(doc);
-    });
+            status: doc.status,
+            issuedOn: doc.issuedOn,
+            expiresOn: doc.expiresOn,
+          },
+        );
+        await manager.query(
+          'UPDATE site SET access_policy_version=access_policy_version+1 WHERE id=$1',
+          [siteId],
+        );
+        return response(doc);
+      },
+      context
+        ? async (manager) => {
+            const roles = await manager.query(
+              "SELECT id FROM user_role_assignment WHERE user_id=$1 AND site_id=$2 AND role='SAFETY_OFFICER' FOR SHARE",
+              [actor.id, siteId],
+            );
+            if (context.actorUserId !== actor.id || !roles.length) forbidden();
+          }
+        : undefined,
+    );
   }
   async checkQuality(
     actor: WorkforceActor,
@@ -804,7 +999,12 @@ export class WorkerDocumentsService {
       uuid(siteId),
     );
     validateWorkerDocument(file);
-    return this.ocr.quality(file!.buffer, file!.mimetype);
+    const checked = await this.ocr.inspect(
+      file!.buffer,
+      file!.mimetype,
+      actor.id + ':' + siteId + ':' + contractorId,
+    );
+    return { ...checked.quality, ocr: checked.ocr };
   }
   async checkWorkerQuality(
     actor: WorkforceActor,
@@ -812,80 +1012,14 @@ export class WorkerDocumentsService {
     workerId: string,
     file: DocumentUpload | undefined,
   ) {
-    await this.access(this.source.manager, actor, siteId, workerId, 'submit');
+    const worker = await this.access(this.source.manager, actor, siteId, workerId, 'submit');
     validateWorkerDocument(file);
-    return this.ocr.quality(file!.buffer, file!.mimetype);
-  }
-  private async requireQuality(file: DocumentUpload) {
-    const quality = await this.ocr.quality(file.buffer, file.mimetype);
-    if (quality.status === 'UNAVAILABLE')
-      throw new PublicHttpException(503, {
-        code: 'SERVICE_UNAVAILABLE',
-        message: 'Document image quality service is unavailable. Retry before submitting.',
-      });
-    if (quality.status !== 'ACCEPTED')
-      throw new PublicHttpException(422, {
-        code: 'VALIDATION_FAILED',
-        message: `Document image rejected: ${quality.reason}. Retake a clear image.`,
-      });
-  }
-  async uploadIdentity(
-    actor: WorkforceActor,
-    siteId: string,
-    workerId: string,
-    side: string,
-    file: DocumentUpload | undefined,
-  ) {
-    if (side !== 'FRONT' && side !== 'BACK') invalid('Invalid citizen ID side');
-    await this.access(this.source.manager, actor, siteId, workerId, 'write');
-    const format = validateWorkerDocument(file);
-    if (format.mediaType === 'application/pdf') invalid('Citizen ID requires a JPEG or PNG image');
-    await this.requireQuality(file!);
-    const stored = await this.storage.save(file!.buffer, format.mediaType, format.extension);
-    let committed = false;
-    try {
-      const ocr = await this.ocr.read(file!.buffer, format.mediaType);
-      const result = await this.source.transaction(async (manager) => {
-        const worker = await this.access(manager, actor, siteId, workerId, 'write', true);
-        const repo = manager.getRepository(WorkerIdentityImageEntity);
-        const existing = await repo
-          .createQueryBuilder('i')
-          .addSelect('i.file')
-          .where('i.worker_id=:workerId AND i.side=:side', { workerId, side })
-          .getOne();
-        if (existing) {
-          if (existing.file.sha256 !== stored.sha256)
-            conflict('Citizen ID image already recorded. Reload the Worker profile.');
-          if (!existing.ocr) await repo.update(existing.id, { ocr });
-          return { id: existing.id, reused: true };
-        }
-        const image = await repo.save({
-          id: randomUUID(),
-          workerId,
-          side: side as 'FRONT' | 'BACK',
-          file: stored,
-          ocr,
-          originalName: (file!.originalname ?? 'citizen-id.jpg')
-            .replace(/[\p{Cc}\p{Cs}\\/]/gu, '_')
-            .slice(0, 255),
-        });
-        await auditAccess(
-          manager,
-          actor.id,
-          worker.siteId,
-          'WORKER_ID_IMAGE_SUBMITTED',
-          'worker',
-          worker.id,
-          null,
-          { side, imageId: image.id },
-        );
-        return { id: image.id, reused: false };
-      });
-      committed = !result.reused;
-      return { id: result.id };
-    } finally {
-      if (!committed) await this.storage.remove(stored);
-    }
+    const checked = await this.ocr.inspect(
+      file!.buffer,
+      file!.mimetype,
+      actor.id + ':' + siteId + ':' + worker.contractorId,
+    );
+    return { ...checked.quality, ocr: checked.ocr };
   }
   async identityFile(actor: WorkforceActor, siteId: string, workerId: string, id: string) {
     await this.access(this.source.manager, actor, siteId, workerId);

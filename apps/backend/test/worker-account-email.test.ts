@@ -17,6 +17,11 @@ test('worker onboarding emails the exact unique initial password that was hashed
   const stored: unknown[] = [],
     sent: Array<{ password: string; hash: string; email: string }> = [];
   const manager = {
+    query: async (sql: string) => {
+      if (sql.includes('pg_advisory_xact_lock')) return [];
+      if (sql.includes('FROM pg_class')) return [{ n: 0, legacy: 0, baseline: 0, history: 0 }];
+      throw new Error('Unexpected query in pre-journal email fixture');
+    },
     getRepository: (entity: unknown) => ({
       update: async () => {},
       save: async (value: Record<string, unknown>) => {

@@ -224,9 +224,13 @@ it('keeps additional worker history reachable when the range spans multiple page
   });
   await mount();
   expect(buttons(`${today} Shift 1`)).toHaveLength(1);
-  expect(buttons(`${today} Shift 21`)).toHaveLength(0);
+  expect(buttons(`${today} Shift 9`)).toHaveLength(0);
+  await click('Sau');
+  expect(buttons(`${today} Shift 9`)).toHaveLength(1);
+  expect(buttons(`${today} Shift 17`)).toHaveLength(0);
   await click('Sau');
   expect(buttons(`${today} Shift 21`)).toHaveLength(1);
+  await click('Trước');
   expect(buttons(`${today} Shift 1`)).toHaveLength(0);
   await click('Trước');
   expect(buttons(`${today} Shift 1`)).toHaveLength(1);
@@ -359,6 +363,8 @@ it('keeps custom filters separate and dismisses the month picker without changin
   await click('Bộ lọc');
   expect(JSON.stringify(root.toJSON())).toContain('Tùy chỉnh');
   const calls = vi.mocked(workspace.client.attendanceSummary).mock.calls.length;
+  await click('Đóng');
+  expect(JSON.stringify(root.toJSON())).not.toContain('Tùy chỉnh');
   await click('Kỳ công');
   expect(buttons('Năm trước')).toHaveLength(1);
   expect(JSON.stringify(root.toJSON())).not.toContain('Tùy chỉnh');

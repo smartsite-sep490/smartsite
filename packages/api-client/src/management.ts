@@ -14,8 +14,10 @@ import {
   parseTrackedEpisodeDetail,
   parseTrackedEpisodeMediaSource,
   parseTrackedObservationIdentity,
+  parseTrackedObservationIdentityCard,
   type TrackedEpisodeDetail,
   type TrackedObservationIdentity,
+  type TrackedObservationIdentityCard,
   type TrackedEpisodeObservationOptions,
   type TrackedEpisodeObservationPage,
   type TrackedEpisodeMediaSource,
@@ -107,6 +109,8 @@ import type {
   AttendanceExportResponse,
   AttendanceTimeRequestsQuery,
   AttendanceTimeRequestsResponse,
+  WorkerRequestsQuery,
+  WorkerRequestsResponse,
   AttendanceDayDetailResponse,
   AttendanceTimesheetResponse,
   AttendanceDaysQuery,
@@ -637,6 +641,16 @@ export class SmartSiteManagementClient {
     return this.request<AttendanceTimeRequestsResponse>(
       'GET',
       `/sites/${pathId(siteId)}/attendance-time-requests?${query}`,
+      token,
+    );
+  }
+  myWorkerRequests(token: string, siteId: string, options: WorkerRequestsQuery = {}) {
+    const query = new URLSearchParams();
+    for (const [key, value] of Object.entries(options))
+      if (value !== undefined) query.set(key, String(value));
+    return this.request<WorkerRequestsResponse>(
+      'GET',
+      `/sites/${pathId(siteId)}/my-requests?${query}`,
       token,
     );
   }
@@ -2057,6 +2071,48 @@ export class SmartSiteManagementClient {
     return result;
   }
 
+  /** Exact-observation identity plus current scoped Worker directory metadata. */
+  async getTrackedObservationIdentityCard(
+    token: string,
+    siteId: string,
+    episodeId: string,
+    input: TrackedEpisodeMediaSource,
+    expectedPayloadHash: string,
+    options?: RequestOptions,
+  ): Promise<TrackedObservationIdentityCard> {
+    const source = parseTrackedEpisodeMediaSource(input);
+    if (
+      !source ||
+      typeof expectedPayloadHash !== 'string' ||
+      !/^[a-f0-9]{64}$/.test(expectedPayloadHash)
+    )
+      throw new ApiError('invalid-response', 'Invalid original identity source.');
+    const query = new URLSearchParams({
+      personObservationIndex: String(source.personObservationIndex),
+      evidenceIndex: String(source.evidenceIndex),
+    });
+    const payload = await this.request<unknown>(
+      'GET',
+      `/sites/${pathId(siteId)}/safety-episodes/${pathId(episodeId)}/findings/${source.alertId}/events/${source.eventId}/identity-card?${query}`,
+      token,
+      undefined,
+      undefined,
+      options,
+      { cache: 'no-store', redirect: 'error' },
+      16384,
+    );
+    const result = parseTrackedObservationIdentityCard(
+      payload,
+      siteId.toLowerCase(),
+      episodeId.toLowerCase(),
+      source,
+      expectedPayloadHash,
+    );
+    if (!result)
+      throw new ApiError('invalid-response', 'Backend returned inconsistent identity card.');
+    return result;
+  }
+
   /** Prepared episode transport; callers must wait for Backend rollout before exposing this UI. */
   async getTrackedEpisode(
     token: string,
@@ -2752,23 +2808,6 @@ export class SmartSiteManagementClient {
       { timeoutMs: 60_000 },
     );
   }
-  uploadWorkerIdentityImage(
-    token: string,
-    siteId: string,
-    workerId: string,
-    side: 'FRONT' | 'BACK',
-    file: UploadFile,
-  ) {
-    const form = new FormData();
-    appendFile(form, 'file', file);
-    return this.requestFormData<{ id: string }>(
-      'POST',
-      `/sites/${pathId(siteId)}/workers/${pathId(workerId)}/identity-images/${side}`,
-      token,
-      form,
-      { timeoutMs: 60_000 },
-    );
-  }
   workerIdentityImageFile(token: string, siteId: string, workerId: string, id: string) {
     return this.requestBlob(
       `/sites/${pathId(siteId)}/workers/${pathId(workerId)}/identity-images/${pathId(id)}/file`,
@@ -2825,43 +2864,6 @@ export class SmartSiteManagementClient {
       { timeoutMs: 60_000 },
     );
   }
-  uploadWorkerDocument(
-    token: string,
-    siteId: string,
-    workerId: string,
-    kind: WorkerDocumentKind,
-    file: UploadFile,
-    input: import('@smartsite/contracts').UploadWorkerDocumentCommand = {},
-  ) {
-    const form = new FormData();
-    appendFile(form, 'file', file);
-    if (input.submittedExpiresOn !== undefined)
-      form.append('submittedExpiresOn', input.submittedExpiresOn);
-    if (input.submittedIssuedOn !== undefined)
-      form.append('submittedIssuedOn', input.submittedIssuedOn);
-    return this.requestFormData<WorkerDocumentResponse>(
-      'POST',
-      `/sites/${pathId(siteId)}/workers/${pathId(workerId)}/documents/${pathId(kind)}`,
-      token,
-      form,
-      // Allow time for PDF quality checks, storage, and OCR.
-      { timeoutMs: 80_000 },
-    );
-  }
-  updateWorkerDocumentExpiry(
-    token: string,
-    siteId: string,
-    workerId: string,
-    id: string,
-    input: import('@smartsite/contracts').UpdateWorkerDocumentExpiryCommand,
-  ) {
-    return this.request<WorkerDocumentResponse>(
-      'PATCH',
-      `/sites/${pathId(siteId)}/workers/${pathId(workerId)}/documents/${pathId(id)}/submitted-expiry`,
-      token,
-      input,
-    );
-  }
   workerDocumentFile(token: string, siteId: string, workerId: string, id: string) {
     return this.requestBlob(
       `/sites/${pathId(siteId)}/workers/${pathId(workerId)}/documents/${pathId(id)}/file`,
@@ -2880,6 +2882,26 @@ export class SmartSiteManagementClient {
       { timeoutMs: 60_000 },
     );
   }
+  submitWorkerDocuments(
+    token: string,
+    siteId: string,
+    workerId: string,
+    input: import('@smartsite/contracts').SubmitWorkerDocumentsCommand,
+    files: Partial<
+      Record<import('@smartsite/contracts').WorkerDocumentKind | 'FRONT' | 'BACK', UploadFile>
+    >,
+  ) {
+    const form = new FormData();
+    form.append('metadata', JSON.stringify(input));
+    for (const [field, file] of Object.entries(files)) if (file) appendFile(form, field, file);
+    return this.requestFormData<import('@smartsite/contracts').WorkerDocumentSubmissionResponse>(
+      'POST',
+      '/sites/' + pathId(siteId) + '/workers/' + pathId(workerId) + '/document-submissions',
+      token,
+      form,
+      { timeoutMs: 120000 },
+    );
+  }
   analyzeWorkerDocument(token: string, siteId: string, workerId: string, id: string) {
     return this.request<void>(
       'POST',
@@ -2887,7 +2909,7 @@ export class SmartSiteManagementClient {
       token,
       undefined,
       undefined,
-      { timeoutMs: 50_000 },
+      { timeoutMs: 40_000 },
     );
   }
   reviewWorkerDocument(

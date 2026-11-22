@@ -140,11 +140,7 @@ export class SafetyOverviewService {
     );
     await this.summaries(siteId, q, [detail], detail);
     if (
-      actor.roleAssignments.some(
-        (r) =>
-          (r.role === UserRole.ADMIN && r.siteId === null) ||
-          (r.role === UserRole.SAFETY_OFFICER && r.siteId === siteId),
-      )
+      actor.roleAssignments.some((r) => r.role === UserRole.SAFETY_OFFICER && r.siteId === siteId)
     ) {
       const rows = detail.cameras.length
         ? await this.db.query(

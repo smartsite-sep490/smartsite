@@ -2,8 +2,8 @@ import { describe, expect, it } from 'vitest';
 import { workspaceTabs } from './workspace-access';
 
 describe('camera setup navigation scope', () => {
-  it('opens setup only for global Admin or explicitly assigned Site Manager', () => {
-    expect(workspaceTabs([{ role: 'ADMIN', siteId: null }])).toContain('camera-setup');
+  it('opens setup only for explicitly assigned Site Manager', () => {
+    expect(workspaceTabs([{ role: 'ADMIN', siteId: null }])).not.toContain('camera-setup');
     expect(workspaceTabs([{ role: 'SITE_MANAGER', siteId: 'assigned-site' }])).toContain(
       'camera-setup',
     );

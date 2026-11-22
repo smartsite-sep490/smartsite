@@ -10,6 +10,7 @@ import {
 import { ScheduleScreen, ShiftRequestsScreen } from './scheduling-screens';
 import type { useWorkspace } from '../workspace/workspace-context';
 import { localDate } from '../shared/data';
+import { translate as t } from '../../i18n';
 let workspace: ReturnType<typeof useWorkspace>;
 vi.mock('../workspace/workspace-context', () => ({ useWorkspace: () => workspace }));
 let root: ReactTestRenderer;
@@ -126,6 +127,25 @@ beforeEach(() => {
   });
   vi.spyOn(client, 'listAbsenceRequests').mockResolvedValue({ items: [], total: 0 });
   vi.spyOn(client, 'attendanceTimeRequests').mockResolvedValue({ items: [], total: 0 });
+  vi.spyOn(client, 'myWorkerRequests').mockImplementation(async () => ({
+    items: [
+      {
+        id: 'change-id',
+        kind: 'CHANGE',
+        status: 'PENDING_MANAGER',
+        reason: 'Need change',
+        createdAt: '2026-11-19T00:00:00Z',
+        reviewNote: null,
+        workDate: '2026-11-20',
+        startsAt: null,
+        endsAt: null,
+        dayId: null,
+      },
+    ],
+    total: 1,
+    serverTime: new Date().toISOString(),
+    leaveAvailableAt: null,
+  }));
   vi.spyOn(client, 'getShiftChangeRequest').mockImplementation(async (_token, _siteId, id) => {
     const rows = await client.listShiftRequests('token', 'site-a', { view: 'WORKER' });
     return rows.items.find((row) => row.id === id) as never;
@@ -247,6 +267,142 @@ function request(overrides: Partial<ShiftRequestResponse> = {}): ShiftRequestRes
     ...overrides,
   } as ShiftRequestResponse;
 }
+it.each(['2026-11-20T00:00:00.000Z', 'invalid-work-date'])(
+  'renders request history without crashing when workDate is %s',
+  async (workDate) => {
+    vi.mocked(workspace.client.myWorkerRequests).mockResolvedValue({
+      items: [
+        {
+          id: 'legacy-date',
+          kind: 'LEAVE',
+          status: 'PENDING_MANAGER',
+          reason: 'Synthetic leave request',
+          createdAt: '2026-11-19T00:00:00Z',
+          reviewNote: null,
+          workDate,
+          startsAt: null,
+          endsAt: null,
+          dayId: null,
+        },
+      ],
+      total: 1,
+      serverTime: '2026-11-19T00:00:00Z',
+      leaveAvailableAt: null,
+    });
+    await mount(createElement(ShiftRequestsScreen, {}));
+    expect(JSON.stringify(root.toJSON())).toContain('Synthetic leave request');
+    await click('Xem yêu cầu');
+    expect(JSON.stringify(root.toJSON())).toContain('Synthetic leave request');
+  },
+);
+async function incomingSwap() {
+  let row: Extract<ShiftRequestResponse, { requestType: 'SWAP' }> = {
+    id: 'incoming-swap',
+    siteId: 'site-a',
+    requestType: 'SWAP',
+    requesterWorkerId: 'peer-worker',
+    requesterWorkerScheduleId: 'peer-schedule',
+    coworkerWorkerId: 'own-worker',
+    coworkerWorkerScheduleId: 'own-schedule',
+    requesterShiftId: 'shift-b',
+    coworkerShiftId: 'shift-a',
+    expectedScheduleVersionId: 'version',
+    requesterWorkDate: '2026-11-21',
+    coworkerWorkDate: '2026-11-20',
+    status: 'PENDING_COWORKER',
+    requestedByUserId: 'peer-user',
+    reason: 'Please swap these assigned shifts',
+    coworkerConfirmedAt: null,
+    reviewedByUserId: null,
+    reviewedAt: null,
+    reviewReason: null,
+    appliedAt: null,
+    createdAt: '2026-11-19T00:00:00Z',
+  };
+  const existing = await workspace.client.listShifts('token', 'site-a');
+  vi.mocked(workspace.client.listShifts).mockResolvedValue({
+    items: [
+      ...existing.items,
+      {
+        ...existing.items[0]!,
+        id: 'shift-b',
+        name: 'Afternoon',
+        startsAt: '2026-11-21T06:00:00Z',
+        endsAt: '2026-11-21T10:00:00Z',
+      },
+    ],
+    total: 2,
+  });
+  vi.spyOn(workspace.client, 'listShiftRequests').mockImplementation(async () => ({
+    items: row.status === 'PENDING_COWORKER' ? [row] : [],
+    total: row.status === 'PENDING_COWORKER' ? 1 : 0,
+    pendingCount: 0,
+    incomingCount: row.status === 'PENDING_COWORKER' ? 1 : 0,
+    pendingScheduleIds: [],
+  }));
+  vi.spyOn(workspace.client, 'getShiftSwapRequest').mockImplementation(async () => row);
+  vi.spyOn(workspace.client, 'confirmShiftSwapRequest').mockImplementation(async () => {
+    row = { ...row, status: 'PENDING_MANAGER' };
+    return row;
+  });
+  vi.spyOn(workspace.client, 'declineShiftSwapRequest').mockImplementation(async () => {
+    row = { ...row, status: 'REJECTED' };
+    return row;
+  });
+  return row;
+}
+it('keeps both Worker request tabs and opens incoming consent in a compact sheet', async () => {
+  const row = await incomingSwap();
+  const change = vi.spyOn(workspace.client, 'getShiftChangeRequest');
+  await mount(createElement(ShiftRequestsScreen, {}));
+  await click(t('workerRequests.incomingTab'));
+  await settle();
+  expect(buttons(t('workerRequests.sentTab'))).toHaveLength(1);
+  expect(buttons(t('workerRequests.incomingTab'))[0]!.props.accessibilityState.selected).toBe(true);
+  expect(JSON.stringify(root.toJSON())).not.toContain(t('requests.list'));
+  expect(workspace.client.listShiftRequests).toHaveBeenCalledWith(
+    'token',
+    'site-a',
+    expect.objectContaining({ view: 'INCOMING', requestType: 'SWAP' }),
+  );
+  await click(t('requests.viewRequest'));
+  await settle();
+  expect(JSON.stringify(root.toJSON())).toContain(t('workerRequests.yourShift'));
+  expect(JSON.stringify(root.toJSON())).toContain(t('workerRequests.offeredShift'));
+  await click(t('requests.agreeSwap'));
+  await settle();
+  expect(workspace.client.confirmShiftSwapRequest).toHaveBeenCalledWith('token', 'site-a', row.id);
+  expect(JSON.stringify(root.toJSON())).toContain(t('workerRequests.swapConfirmed'));
+  expect(change).not.toHaveBeenCalled();
+});
+it('opens notified consent directly, requires a decline reason and preserves failed responses for retry', async () => {
+  const row = await incomingSwap();
+  vi.mocked(workspace.client.declineShiftSwapRequest).mockRejectedValueOnce(
+    new Error('Temporary response failure'),
+  );
+  await mount(
+    createElement(ShiftRequestsScreen, {
+      initialView: 'INCOMING',
+      initialKind: 'SWAP',
+      initialId: row.id,
+    }),
+  );
+  expect(buttons(t('requests.reject'))[0]!.props.disabled).toBe(true);
+  await text(t('requests.rejectionReason'), 'I cannot change my shift');
+  await click(t('requests.reject'));
+  await settle();
+  expect(JSON.stringify(root.toJSON())).toContain('Temporary response failure');
+  expect(JSON.stringify(root.toJSON())).not.toContain(t('workerRequests.swapDeclined'));
+  await click(t('requests.reject'));
+  await settle();
+  expect(workspace.client.declineShiftSwapRequest).toHaveBeenLastCalledWith(
+    'token',
+    'site-a',
+    row.id,
+    { reason: 'I cannot change my shift' },
+  );
+  expect(JSON.stringify(root.toJSON())).toContain(t('workerRequests.swapDeclined'));
+});
 it('refreshes the approval status and review reason while a worker keeps the request detail open', async () => {
   const pending = request();
   const approved = request({
@@ -255,6 +411,25 @@ it('refreshes the approval status and review reason while a worker keeps the req
     reviewedAt: '2026-11-14T03:00:00Z',
   });
   let current = pending;
+  vi.mocked(workspace.client.myWorkerRequests).mockImplementation(async () => ({
+    items: [
+      {
+        id: current.id,
+        kind: 'CHANGE',
+        status: current.status,
+        reason: current.reason,
+        createdAt: current.createdAt,
+        reviewNote: current.reviewReason,
+        workDate: '2026-11-20',
+        startsAt: null,
+        endsAt: null,
+        dayId: null,
+      },
+    ],
+    total: 1,
+    serverTime: new Date().toISOString(),
+    leaveAvailableAt: null,
+  }));
   vi.spyOn(workspace.client, 'listShiftRequests').mockImplementation(async () => ({
     items: [current],
     total: 1,
@@ -311,6 +486,23 @@ it('approves the chosen change request through the correct API and refreshes the
     .spyOn(workspace.client, 'approveShiftChangeRequest')
     .mockResolvedValue(request() as never);
   await mount(createElement(ShiftRequestsScreen, {}));
+  const callsBeforeFilter = list.mock.calls.length;
+  await click(t('requests.filter'));
+  const kindOption = root.root.findAll(
+    (node) =>
+      String(node.type) === 'Pressable' &&
+      node.props.accessibilityRole === 'radio' &&
+      node.props.accessibilityLabel === t('requests.typeChange'),
+  )[0]!;
+  await act(async () => kindOption.props.onPress());
+  expect(list.mock.calls.length).toBe(callsBeforeFilter);
+  await click(t('workerRequests.applyFilters'));
+  await settle();
+  expect(list).toHaveBeenCalledWith(
+    'token',
+    'site-a',
+    expect.objectContaining({ view: 'REVIEW', requestType: 'CHANGE' }),
+  );
   await click('Xem yêu cầu');
   await click('Phê duyệt yêu cầu');
   await settle();

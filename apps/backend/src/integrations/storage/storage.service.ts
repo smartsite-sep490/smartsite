@@ -1,7 +1,7 @@
 import { randomUUID, createHash } from 'node:crypto';
-import { mkdir, realpath, open, opendir, unlink } from 'node:fs/promises';
+import { mkdir, realpath, open, opendir, unlink, lstat, link } from 'node:fs/promises';
 import { constants } from 'node:fs';
-import { join } from 'node:path';
+import { join, isAbsolute } from 'node:path';
 import { Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import type { S3Client } from '@aws-sdk/client-s3';
@@ -24,6 +24,29 @@ const validKey = (key: string) =>
   /^(?:c02-evidence-(?:[0-9]{13}-)?)?[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\.[a-z0-9]{1,12}$/.test(
     key,
   );
+const AI_FRAME_LIMIT = 1_048_576;
+const aiFrameHash = (value: string) => /^[0-9a-f]{64}$/.test(value);
+export interface AiFrameStorageScope {
+  readonly eventId: string;
+  readonly payloadHash: string;
+}
+const aiFrameKey = (sha256: string, scope: AiFrameStorageScope) =>
+  aiFrameHash(sha256) &&
+  typeof scope?.eventId === 'string' &&
+  /^[0-9a-f]{8}(-[0-9a-f]{4}){3}-[0-9a-f]{12}$/i.test(scope.eventId) &&
+  typeof scope.payloadHash === 'string' &&
+  aiFrameHash(scope.payloadHash)
+    ? `ai-frame-${scope.eventId.toLowerCase()}-${scope.payloadHash}-${sha256}.jpg`
+    : null;
+const validAiFrame = (bytes: Buffer, sha256: string) =>
+  Buffer.isBuffer(bytes) &&
+  bytes.length >= 4 &&
+  bytes.length <= AI_FRAME_LIMIT &&
+  bytes[0] === 0xff &&
+  bytes[1] === 0xd8 &&
+  bytes[bytes.length - 2] === 0xff &&
+  bytes[bytes.length - 1] === 0xd9 &&
+  createHash('sha256').update(bytes).digest('hex') === sha256;
 @Injectable()
 export class StorageService {
   private readonly logger = new Logger(StorageService.name);
@@ -56,6 +79,169 @@ export class StorageService {
       return await realpath(root);
     } catch {
       return unavailable();
+    }
+  }
+  private async aiRoot(create: boolean): Promise<string> {
+    const root =
+      this.config.get('STORAGE_LOCAL_ROOT', { infer: true }) ??
+      this.config.get('SAFETY_UPLOAD_LOCAL_ROOT', { infer: true });
+    if (!root || !isAbsolute(root)) return unavailable();
+    if (create) await mkdir(root, { recursive: true, mode: 0o700 });
+    const stat = await lstat(root);
+    if (!stat.isDirectory() || stat.isSymbolicLink()) return unavailable();
+    return realpath(root);
+  }
+
+  /** Private immutable frame namespace; deliberately excluded from C02 inventory/cleanup. */
+  async saveAiFrame(
+    bytes: Buffer,
+    expectedSha256: string,
+    scope: AiFrameStorageScope,
+  ): Promise<void> {
+    if (!aiFrameHash(expectedSha256) || !validAiFrame(bytes, expectedSha256)) return unavailable();
+    const content = Buffer.from(bytes);
+    const identity = { eventId: scope?.eventId, payloadHash: scope?.payloadHash };
+    const key = aiFrameKey(expectedSha256, identity);
+    if (!key) return unavailable();
+    try {
+      const provider = this.config.get('STORAGE_PROVIDER', { infer: true });
+      if (provider === 'R2') {
+        const { client, bucket, sdk } = await this.r2();
+        try {
+          await client.send(
+            new sdk.PutObjectCommand({
+              Bucket: bucket,
+              Key: key,
+              Body: content,
+              ContentType: 'image/jpeg',
+              ContentLength: content.length,
+              IfNoneMatch: '*',
+            }),
+            { abortSignal: AbortSignal.timeout(30000) },
+          );
+        } catch (error) {
+          if (
+            (error as { $metadata?: { httpStatusCode?: number } }).$metadata?.httpStatusCode !== 412
+          )
+            throw error;
+          if (!(await this.readAiFrame(expectedSha256, identity))) return unavailable();
+        }
+        // An ambiguous PUT must never delete an existing content-addressed object.
+      } else if (provider === 'LOCAL' || provider === undefined) {
+        const root = await this.aiRoot(true);
+        const temporary = join(root, `.ai-frame-${randomUUID()}.tmp`);
+        const handle = await open(temporary, 'wx', 0o600);
+        try {
+          try {
+            await handle.writeFile(content);
+            await handle.sync();
+          } finally {
+            await handle.close();
+          }
+          try {
+            await link(temporary, join(root, key));
+          } catch (error) {
+            if ((error as NodeJS.ErrnoException).code !== 'EEXIST') throw error;
+            if (!(await this.readAiFrame(expectedSha256, identity))) return unavailable();
+          }
+        } finally {
+          await unlink(temporary);
+        }
+      } else return unavailable();
+    } catch {
+      return unavailable();
+    }
+  }
+
+  /** Missing, corrupt or unavailable media stays unavailable; caller cancellation propagates. */
+  async readAiFrame(
+    sha256: string,
+    scope: AiFrameStorageScope,
+    signal?: AbortSignal,
+  ): Promise<Buffer | null> {
+    signal?.throwIfAborted();
+    const key = aiFrameKey(sha256, scope);
+    if (!key) return null;
+    try {
+      let bytes: Buffer;
+      const provider = this.config.get('STORAGE_PROVIDER', { infer: true });
+      if (provider === 'R2') {
+        const { client, bucket, sdk } = await this.r2();
+        const abort = AbortSignal.any([AbortSignal.timeout(30000), ...(signal ? [signal] : [])]);
+        const result = await client.send(new sdk.GetObjectCommand({ Bucket: bucket, Key: key }), {
+          abortSignal: abort,
+        });
+        const body = result.Body;
+        const destroy = () => {
+          if (body && 'destroy' in body) body.destroy();
+        };
+        abort.addEventListener('abort', destroy, { once: true });
+        try {
+          abort.throwIfAborted();
+          if (
+            !body ||
+            result.ContentType !== 'image/jpeg' ||
+            !Number.isSafeInteger(result.ContentLength) ||
+            result.ContentLength! < 4 ||
+            result.ContentLength! > AI_FRAME_LIMIT
+          )
+            return null;
+          const parts: Buffer[] = [];
+          let size = 0;
+          for await (const chunk of body as AsyncIterable<Uint8Array>) {
+            abort.throwIfAborted();
+            size += chunk.length;
+            if (size > result.ContentLength!) return null;
+            parts.push(Buffer.from(chunk));
+          }
+          if (size !== result.ContentLength) return null;
+          bytes = Buffer.concat(parts);
+        } finally {
+          abort.removeEventListener('abort', destroy);
+          destroy();
+        }
+      } else if (provider === 'LOCAL' || provider === undefined) {
+        const root = await this.aiRoot(false);
+        signal?.throwIfAborted();
+        const path = join(root, key);
+        const before = await lstat(path);
+        signal?.throwIfAborted();
+        if (!before.isFile() || before.isSymbolicLink() || (await realpath(path)) !== path)
+          return null;
+        const handle = await open(
+          path,
+          constants.O_RDONLY | (constants.O_NOFOLLOW ?? 0) | (constants.O_NONBLOCK ?? 0),
+        );
+        try {
+          const stat = await handle.stat();
+          signal?.throwIfAborted();
+          if (
+            !stat.isFile() ||
+            stat.size < 4 ||
+            stat.size > AI_FRAME_LIMIT ||
+            stat.dev !== before.dev ||
+            stat.ino !== before.ino
+          )
+            return null;
+          const buffer = Buffer.alloc(AI_FRAME_LIMIT + 1);
+          let size = 0;
+          while (size < buffer.length) {
+            signal?.throwIfAborted();
+            const result = await handle.read(buffer, size, buffer.length - size, size);
+            if (!result.bytesRead) break;
+            size += result.bytesRead;
+          }
+          if (size !== stat.size) return null;
+          bytes = Buffer.from(buffer.subarray(0, size));
+        } finally {
+          await handle.close();
+        }
+      } else return null;
+      signal?.throwIfAborted();
+      return validAiFrame(bytes, sha256) ? bytes : null;
+    } catch {
+      signal?.throwIfAborted();
+      return null;
     }
   }
   /** Enumerates flat JPEG keys only. The caller must verify ownership against receipts. */

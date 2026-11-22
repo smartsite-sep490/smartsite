@@ -1,43 +1,6 @@
 import { afterEach, expect, it, vi } from 'vitest';
 import { SmartSiteManagementClient } from '../src/index';
 afterEach(() => vi.unstubAllGlobals());
-it('allows time for a slow original upload and OCR before returning the submission', async () => {
-  vi.useFakeTimers();
-  try {
-    vi.stubGlobal(
-      'fetch',
-      (_url: string, init: RequestInit) =>
-        new Promise<Response>((resolve, reject) => {
-          const timer = setTimeout(
-            () => resolve(Response.json({ id: 'pending-document' })),
-            77_000,
-          );
-          init.signal?.addEventListener(
-            'abort',
-            () => {
-              clearTimeout(timer);
-              reject(init.signal?.reason);
-            },
-            { once: true },
-          );
-        }),
-    );
-    const client = new SmartSiteManagementClient('https://api.example.test');
-    const outcome = client
-      .uploadWorkerDocument(
-        'token',
-        'site',
-        'worker',
-        'SAFETY_CARD',
-        new File(['synthetic'], 'sample.pdf', { type: 'application/pdf' }),
-      )
-      .catch((error: unknown) => error);
-    await vi.advanceTimersByTimeAsync(77_000);
-    expect(await outcome).toEqual({ id: 'pending-document' });
-  } finally {
-    vi.useRealTimers();
-  }
-});
 
 it('requests AI analysis for the stored document through a scoped command without an upload', async () => {
   const fetch = vi.fn<(url: string, init: RequestInit) => Promise<Response>>(
@@ -98,37 +61,7 @@ it('sends document search and pending filters to the Backend before pagination',
     needsSupplement: 'true',
   });
 });
-it('uploads native document and identity images through authenticated multipart without a JSON content type', async () => {
-  class NativeForm {
-    parts: [string, unknown][] = [];
-    append(name: string, value: unknown) {
-      this.parts.push([name, value]);
-    }
-  }
-  vi.stubGlobal('FormData', NativeForm);
-  const fetch = vi.fn<(url: string, init: RequestInit) => Promise<Response>>(async () =>
-    Response.json({}),
-  );
-  vi.stubGlobal('fetch', fetch);
-  const client = new SmartSiteManagementClient('https://api.example.test');
-  const file = { uri: 'file:///synthetic.jpg', name: 'synthetic.jpg', type: 'image/jpeg' };
-  await client.checkDocumentImageQuality('token', 'site/a', 'contractor/a', file);
-  await client.uploadWorkerIdentityImage('token', 'site/a', 'worker/a', 'FRONT', file);
-  await client.uploadWorkerDocument('token', 'site/a', 'worker/a', 'SAFETY_CARD', file);
-  await client.checkWorkerDocumentImageQuality('token', 'site/a', 'worker/a', file);
-  for (const [, init] of fetch.mock.calls) {
-    expect(init.headers).toMatchObject({ Authorization: 'Bearer token' });
-    expect(init.headers).not.toHaveProperty('Content-Type');
-    expect((init.body as unknown as NativeForm).parts).toEqual([['file', file]]);
-  }
-  expect(fetch.mock.calls[0]![0]).toContain(
-    '/sites/site%2Fa/contractors/contractor%2Fa/document-image-quality',
-  );
-  expect(fetch.mock.calls[1]![0]).toContain('/workers/worker%2Fa/identity-images/FRONT');
-  expect(fetch.mock.calls[3]![0]).toContain(
-    '/sites/site%2Fa/workers/worker%2Fa/document-image-quality',
-  );
-});
+
 it('keeps review dates and the expected document version in the Site and Worker scoped command', async () => {
   const fetch = vi.fn<(url: string, init: RequestInit) => Promise<Response>>(async () =>
     Response.json({}),
@@ -148,32 +81,7 @@ it('keeps review dates and the expected document version in the Site and Worker 
   );
   expect(fetch.mock.calls[0]![1].body).toBe(JSON.stringify(input));
 });
-it('sends an optional manual expiry with the file and keeps versioned corrections separate from approval', async () => {
-  const fetch = vi.fn<(url: string, init: RequestInit) => Promise<Response>>(async () =>
-    Response.json({}),
-  );
-  vi.stubGlobal('fetch', fetch);
-  const client = new SmartSiteManagementClient('https://api.example.test');
-  await client.uploadWorkerDocument(
-    'token',
-    'site',
-    'worker',
-    'HEALTH_CERTIFICATE',
-    new File(['synthetic'], 'sample.pdf', { type: 'application/pdf' }),
-    { submittedIssuedOn: '2026-10-18' },
-  );
-  const form = fetch.mock.calls[0]![1].body as FormData;
-  expect(form.get('submittedIssuedOn')).toBe('2026-10-18');
-  expect(form.get('submittedExpiresOn')).toBeNull();
-  expect(form.get('file')).toBeInstanceOf(File);
-  const input = { expectedVersion: 3, submittedExpiresOn: null };
-  await client.updateWorkerDocumentExpiry('token', 'site/a', 'worker/a', 'doc/a', input);
-  expect(fetch.mock.calls[1]![0]).toContain(
-    '/sites/site%2Fa/workers/worker%2Fa/documents/doc%2Fa/submitted-expiry',
-  );
-  expect(fetch.mock.calls[1]![1].method).toBe('PATCH');
-  expect(fetch.mock.calls[1]![1].body).toBe(JSON.stringify(input));
-});
+
 it('loads protected PDF originals using bearer authentication', async () => {
   const fetch = vi.fn<(url: string, init: RequestInit) => Promise<Response>>(
     async () =>
@@ -187,4 +95,30 @@ it('loads protected PDF originals using bearer authentication', async () => {
     'application/pdf',
   );
   expect(fetch.mock.calls[0]![1].headers).toMatchObject({ Authorization: 'Bearer token' });
+});
+it('submits a complete versioned bundle using one authenticated multipart request', async () => {
+  const fetch = vi.fn(async () =>
+    Response.json({ requestId: 'request', version: 2, documentIds: ['doc'] }),
+  );
+  vi.stubGlobal('fetch', fetch);
+  const client = new SmartSiteManagementClient('https://api.example.test');
+  const file = new File(['synthetic'], 'health.pdf', { type: 'application/pdf' });
+  const input = {
+    requestId: 'request',
+    expectedVersion: 1,
+    safetyCardRequired: false,
+    documents: { HEALTH_CERTIFICATE: { submittedIssuedOn: '2026-11-01' } },
+  };
+  await client.submitWorkerDocuments('token', 'site/a', 'worker/a', input, {
+    HEALTH_CERTIFICATE: file,
+  });
+  const [url, init] = fetch.mock.calls[0] as unknown as [string, RequestInit];
+  expect(url).toBe(
+    'https://api.example.test/api/v1/sites/site%2Fa/workers/worker%2Fa/document-submissions',
+  );
+  expect(init.headers).toMatchObject({ Authorization: 'Bearer token' });
+  expect(init.headers).not.toHaveProperty('Content-Type');
+  const form = init.body as FormData;
+  expect(JSON.parse(String(form.get('metadata')))).toEqual(input);
+  expect(form.get('HEALTH_CERTIFICATE')).toBeInstanceOf(File);
 });

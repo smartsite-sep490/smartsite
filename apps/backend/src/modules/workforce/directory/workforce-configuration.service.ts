@@ -11,6 +11,12 @@ import {
   uuid,
 } from '../../../common/configuration/commands.js';
 import { PublicHttpException } from '../../../common/http/public-http-exception.js';
+import {
+  executeMainConfigurationCommand,
+  executeMainMetadataMutation,
+  type MainConfigurationCommandContext,
+} from '../../../common/configuration/main-configuration-authority.js';
+import { siteManagerCommandAuthorization } from '../../auth/site-manager.guard.js';
 import { ContractorRepresentativeAssignmentEntity } from '../../../database/entities/contractor-representative-assignment.entity.js';
 import { ContractorRepresentativeGrantEntity } from '../../../database/entities/contractor-representative-grant.entity.js';
 import { ContractorSiteParticipationEntity } from '../../../database/entities/contractor-site-participation.entity.js';
@@ -253,66 +259,87 @@ export class WorkforceConfigurationService {
   }
 
   /** Account-first enrollment used by Face/Identity flows; remains idempotent. */
-  async forAccount(siteIdValue: string, input: LinkWorkerAccountCommand) {
+  async forAccount(
+    siteIdValue: string,
+    input: LinkWorkerAccountCommand,
+    context?: MainConfigurationCommandContext,
+  ) {
     const siteId = uuid(siteIdValue);
     const value = command(LinkWorkerAccountCommand, input);
-    return this.dataSource.transaction(async (manager) => {
-      const user = await manager
-        .getRepository(UserEntity)
-        .createQueryBuilder('user')
-        .setLock('pessimistic_write')
-        .where('user.id = :id AND user.is_active = TRUE', { id: value.userId })
-        .getOne();
-      const assignment = await manager.getRepository(UserRoleAssignmentEntity).findOneBy([
-        { userId: value.userId, siteId },
-        { userId: value.userId, siteId: IsNull(), role: UserRole.ADMIN },
-      ]);
-      if (!user || !assignment) conflict('An active account assigned to this site is required');
-      if (!(await manager.getRepository(SiteEntity).existsBy({ id: siteId }))) missing();
-      const existing = await manager
-        .getRepository(WorkerEntity)
-        .findOneBy({ siteId, userId: user.id });
-      if (existing) {
-        if (!existing.isActive) conflict('The linked worker is inactive');
-        return existing;
-      }
-      return manager.getRepository(WorkerEntity).save({
-        id: randomUUID(),
-        siteId,
-        userId: user.id,
-        externalId: `ACC-${user.id}`,
-        displayName: user.displayName,
-        isActive: true,
-      });
-    });
-  }
-
-  async linkAccount(siteIdValue: string, workerIdValue: string, input: LinkWorkerAccountCommand) {
-    const siteId = uuid(siteIdValue);
-    const workerId = uuid(workerIdValue);
-    const value = command(LinkWorkerAccountCommand, input);
-    try {
-      return await this.dataSource.transaction(async (manager) => {
-        const worker = await manager
-          .getRepository(WorkerEntity)
-          .createQueryBuilder('worker')
-          .setLock('pessimistic_write')
-          .where('worker.id = :workerId AND worker.site_id = :siteId', { workerId, siteId })
-          .getOne();
-        if (!worker) missing();
+    return executeMainConfigurationCommand(
+      this.dataSource,
+      context,
+      'WORKER_ACCOUNT_PREPARE',
+      { siteId, ...value },
+      async (manager) => {
         const user = await manager
           .getRepository(UserEntity)
-          .findOneBy({ id: value.userId, isActive: true });
+          .createQueryBuilder('user')
+          .setLock('pessimistic_write')
+          .where('user.id = :id AND user.is_active = TRUE', { id: value.userId })
+          .getOne();
         const assignment = await manager.getRepository(UserRoleAssignmentEntity).findOneBy([
           { userId: value.userId, siteId },
           { userId: value.userId, siteId: IsNull(), role: UserRole.ADMIN },
         ]);
         if (!user || !assignment) conflict('An active account assigned to this site is required');
-        if (worker.userId && worker.userId !== user.id)
-          conflict('Worker is already linked to another account');
-        worker.userId = user.id;
-        return manager.getRepository(WorkerEntity).save(worker);
-      });
+        if (!(await manager.getRepository(SiteEntity).existsBy({ id: siteId }))) missing();
+        const existing = await manager
+          .getRepository(WorkerEntity)
+          .findOneBy({ siteId, userId: user.id });
+        if (existing) {
+          if (!existing.isActive) conflict('The linked worker is inactive');
+          return existing;
+        }
+        return manager.getRepository(WorkerEntity).save({
+          id: randomUUID(),
+          siteId,
+          userId: user.id,
+          externalId: `ACC-${user.id}`,
+          displayName: user.displayName,
+          isActive: true,
+        });
+      },
+    );
+  }
+
+  async linkAccount(
+    siteIdValue: string,
+    workerIdValue: string,
+    input: LinkWorkerAccountCommand,
+    context?: MainConfigurationCommandContext,
+  ) {
+    const siteId = uuid(siteIdValue);
+    const workerId = uuid(workerIdValue);
+    const value = command(LinkWorkerAccountCommand, input);
+    try {
+      return await executeMainConfigurationCommand(
+        this.dataSource,
+        context,
+        'WORKER_ACCOUNT_LINK',
+        { siteId, workerId, ...value },
+        async (manager) => {
+          const worker = await manager
+            .getRepository(WorkerEntity)
+            .createQueryBuilder('worker')
+            .setLock('pessimistic_write')
+            .where('worker.id = :workerId AND worker.site_id = :siteId', { workerId, siteId })
+            .getOne();
+          if (!worker) missing();
+          const user = await manager
+            .getRepository(UserEntity)
+            .findOneBy({ id: value.userId, isActive: true });
+          const assignment = await manager.getRepository(UserRoleAssignmentEntity).findOneBy([
+            { userId: value.userId, siteId },
+            { userId: value.userId, siteId: IsNull(), role: UserRole.ADMIN },
+          ]);
+          if (!user || !assignment) conflict('An active account assigned to this site is required');
+          if (worker.userId && worker.userId !== user.id)
+            conflict('Worker is already linked to another account');
+          worker.userId = user.id;
+          return manager.getRepository(WorkerEntity).save(worker);
+        },
+      );
     } catch (error) {
       knownUnique(error, ['uq_worker_site_user']);
     }
@@ -331,39 +358,57 @@ export class WorkforceConfigurationService {
     if (value.contractorId && value.userId)
       await this.assertWorkerAssignment(scopedSiteId, value.contractorId, value.userId);
     try {
-      return await this.dataSource.getRepository(WorkerEntity).save({
-        id: randomUUID(),
-        siteId: scopedSiteId,
-        contractorId: value.contractorId ?? null,
-        userId: value.userId ?? null,
-        externalId: value.externalId,
-        displayName: value.displayName,
-        isActive: true,
-      });
+      return await executeMainConfigurationCommand(
+        this.dataSource,
+        undefined,
+        'WORKER_ROSTER_CREATE',
+        { siteId: scopedSiteId, ...value },
+        (manager) =>
+          manager.getRepository(WorkerEntity).save({
+            id: randomUUID(),
+            siteId: scopedSiteId,
+            contractorId: value.contractorId ?? null,
+            userId: value.userId ?? null,
+            externalId: value.externalId,
+            displayName: value.displayName,
+            isActive: true,
+          }),
+      );
     } catch (error) {
       knownUnique(error, ['uq_worker_site_external_id', 'uq_worker_site_user']);
     }
   }
 
-  async createContractor(siteId: string, input: CreateContractorDto): Promise<ContractorEntity> {
+  async createContractor(
+    siteId: string,
+    input: CreateContractorDto,
+    context?: MainConfigurationCommandContext,
+  ): Promise<ContractorEntity> {
     const scopedSiteId = uuid(siteId);
     const value = command(CreateContractorDto, input);
     const code = value.code ?? `CTR-${randomUUID().toUpperCase()}`;
     try {
-      return await this.dataSource.transaction(async (manager) => {
-        const site = await manager.getRepository(SiteEntity).findOneBy({ id: scopedSiteId });
-        if (!site) missing();
-        let contractor = await manager.getRepository(ContractorEntity).findOneBy({ code });
-        if (contractor && (contractor.name !== value.name || !contractor.isActive))
-          conflict('Contractor code belongs to another name or an inactive contractor');
-        contractor ??= await manager.getRepository(ContractorEntity).save({
-          id: randomUUID(),
-          code,
-          name: value.name,
-          isActive: true,
-        });
-        return contractor;
-      });
+      return await executeMainConfigurationCommand(
+        this.dataSource,
+        context,
+        'SITE_CONTRACTOR_CREATE',
+        { siteId: scopedSiteId, ...value },
+        async (manager) => {
+          const site = await manager.getRepository(SiteEntity).findOneBy({ id: scopedSiteId });
+          if (!site) missing();
+          let contractor = await manager.getRepository(ContractorEntity).findOneBy({ code });
+          if (contractor && (contractor.name !== value.name || !contractor.isActive))
+            conflict('Contractor code belongs to another name or an inactive contractor');
+          contractor ??= await manager.getRepository(ContractorEntity).save({
+            id: randomUUID(),
+            code,
+            name: value.name,
+            isActive: true,
+          });
+          return contractor;
+        },
+        siteManagerCommandAuthorization(scopedSiteId, context?.actorUserId),
+      );
     } catch (error) {
       knownUnique(error, ['uq_contractor_code']);
     }
@@ -386,44 +431,50 @@ export class WorkforceConfigurationService {
       (until && (+until <= now || +until <= +from))
     )
       conflict('Representative registration requires a currently active participation interval');
-    const contractor = await manager
-      .getRepository(ContractorEntity)
-      .save({
-        id: randomUUID(),
-        code: `CTR-${randomUUID().toUpperCase()}`,
-        name: value.name,
-        isActive: true,
-      });
-    await manager
-      .getRepository(ContractorSiteParticipationEntity)
-      .save({
-        id: randomUUID(),
-        contractorId: contractor.id,
-        siteId,
-        validFrom: from,
-        validUntil: until,
-        isActive: true,
-      });
+    const contractor = await manager.getRepository(ContractorEntity).save({
+      id: randomUUID(),
+      code: `CTR-${randomUUID().toUpperCase()}`,
+      name: value.name,
+      isActive: true,
+    });
+    await manager.getRepository(ContractorSiteParticipationEntity).save({
+      id: randomUUID(),
+      contractorId: contractor.id,
+      siteId,
+      validFrom: from,
+      validUntil: until,
+      isActive: true,
+    });
     return contractor;
   }
 
-  async renameContractor(siteId: string, contractorId: string, input: RenameSiteProfileDto) {
+  async renameContractor(
+    siteId: string,
+    contractorId: string,
+    input: RenameSiteProfileDto,
+    context?: MainConfigurationCommandContext,
+  ) {
     const value = command(RenameSiteProfileDto, input);
-    return this.dataSource.transaction(async (manager) => {
-      const contractor = await manager
-        .getRepository(ContractorEntity)
-        .findOne({ where: { id: uuid(contractorId) }, lock: { mode: 'pessimistic_write' } });
-      const participations = await manager
-        .getRepository(ContractorSiteParticipationEntity)
-        .findBy({ contractorId: uuid(contractorId) });
-      if (!contractor || !participations.some((p) => p.siteId === uuid(siteId))) missing();
-      if (participations.some((p) => p.siteId !== siteId))
-        conflict('Shared profiles must be edited by an administrator');
-      if (contractor.name !== value.expectedName)
-        conflict('Profile changed. Refresh before editing');
-      await manager.getRepository(ContractorEntity).update(contractor.id, { name: value.name });
-      return { id: contractor.id, name: value.name };
-    });
+    return executeMainMetadataMutation(
+      this.dataSource,
+      context,
+      async (manager) => {
+        const contractor = await manager
+          .getRepository(ContractorEntity)
+          .findOne({ where: { id: uuid(contractorId) }, lock: { mode: 'pessimistic_write' } });
+        const participations = await manager
+          .getRepository(ContractorSiteParticipationEntity)
+          .findBy({ contractorId: uuid(contractorId) });
+        if (!contractor || !participations.some((p) => p.siteId === uuid(siteId))) missing();
+        if (participations.some((p) => p.siteId !== siteId))
+          conflict('Shared profiles must be edited by an administrator');
+        if (contractor.name !== value.expectedName)
+          conflict('Profile changed. Refresh before editing');
+        await manager.getRepository(ContractorEntity).update(contractor.id, { name: value.name });
+        return { id: contractor.id, name: value.name };
+      },
+      siteManagerCommandAuthorization(siteId, context?.actorUserId),
+    );
   }
 
   async requireExclusiveRepresentativeSite(manager: EntityManager, siteId: string, userId: string) {
@@ -441,10 +492,16 @@ export class WorkforceConfigurationService {
     siteId: string,
     contractorId: string,
     input: AssignContractorRepresentativeDto,
+    context?: MainConfigurationCommandContext,
   ): Promise<ContractorRepresentativeAssignmentEntity> {
     try {
-      return await this.dataSource.transaction((manager) =>
-        this.assignRepresentativeInTransaction(manager, siteId, contractorId, input),
+      return await executeMainConfigurationCommand(
+        this.dataSource,
+        context,
+        'MAIN_REPRESENTATIVE_ASSIGN',
+        { siteId, contractorId, ...input },
+        (manager) => this.assignRepresentativeInTransaction(manager, siteId, contractorId, input),
+        siteManagerCommandAuthorization(siteId, context?.actorUserId),
       );
     } catch (error) {
       knownUnique(error, [
@@ -552,9 +609,7 @@ export class WorkforceConfigurationService {
     let contractorIdScope: string | undefined;
     if (
       !user.roleAssignments.some(
-        (r) =>
-          r.role === UserRole.ADMIN ||
-          (r.siteId === scopedSiteId && r.role === UserRole.SITE_MANAGER),
+        (r) => r.siteId === scopedSiteId && r.role === UserRole.SITE_MANAGER,
       )
     ) {
       // Must be CONTRACTOR_REPRESENTATIVE or WORKER
@@ -633,11 +688,10 @@ export class WorkforceConfigurationService {
     if (
       !user.roleAssignments.some(
         (r) =>
-          (r.role === UserRole.ADMIN && r.siteId === null) ||
-          (r.siteId === scopedSiteId &&
-            [UserRole.SITE_MANAGER, UserRole.SAFETY_OFFICER, UserRole.SECURITY_OFFICER].includes(
-              r.role,
-            )),
+          r.siteId === scopedSiteId &&
+          [UserRole.SITE_MANAGER, UserRole.SAFETY_OFFICER, UserRole.SECURITY_OFFICER].includes(
+            r.role,
+          ),
       )
     ) {
       const rep = user.roleAssignments.some(
@@ -731,9 +785,7 @@ export class WorkforceConfigurationService {
     let contractorIdScope: string | undefined;
     if (
       !user.roleAssignments.some(
-        (r) =>
-          r.role === UserRole.ADMIN ||
-          (r.siteId === scopedSiteId && r.role === UserRole.SITE_MANAGER),
+        (r) => r.siteId === scopedSiteId && r.role === UserRole.SITE_MANAGER,
       )
     ) {
       const rep = user.roleAssignments.some(

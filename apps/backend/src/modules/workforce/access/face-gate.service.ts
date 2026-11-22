@@ -206,9 +206,8 @@ export class FaceGateService {
     uuid(siteId);
     const allowed = actor.roleAssignments.some(
       ({ role, siteId: assignedSiteId }) =>
-        (readOnly && role === UserRole.ADMIN && assignedSiteId === null) ||
-        (assignedSiteId === siteId &&
-          (role === UserRole.SECURITY_OFFICER || (readOnly && role === UserRole.SITE_MANAGER))),
+        assignedSiteId === siteId &&
+        (role === UserRole.SECURITY_OFFICER || (readOnly && role === UserRole.SITE_MANAGER)),
     );
     if (actor.mustChangePassword || !allowed)
       throw new PublicHttpException(HttpStatus.FORBIDDEN, {

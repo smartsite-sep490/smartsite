@@ -5,12 +5,17 @@ import type { DataSource, EntityManager } from 'typeorm';
 import type {
   TrackedEpisodeDetail,
   TrackedObservationIdentity,
+  TrackedObservationIdentityCard,
   TrackedEpisodeObservationOptions,
   TrackedEpisodeObservationPage,
   TrackedEpisodeMediaSource,
   TrackedEpisodeMediaRepresentation,
 } from '@smartsite/contracts/tracked-episode-frames';
-import { parseTrackedEpisodeDetail } from '@smartsite/contracts/tracked-episode-frames';
+import {
+  parseTrackedEpisodeDetail,
+  parseTrackedObservationIdentityCard,
+} from '@smartsite/contracts/tracked-episode-frames';
+import type { WorkerReferenceReader } from '../identity/worker-reference.port.js';
 import {
   computeCanonicalPayloadHash,
   computeWorkerEventBindingHash,
@@ -27,6 +32,7 @@ import {
   type ResolvedObservationContext,
 } from '../../zones/observation-context-resolver.service.js';
 import { AlertCandidateEvaluator, type Observation } from './alert-candidate-evaluator.js';
+import { readTrackedZoneFindingIndexes } from './tracked-zone-finding-evidence.js';
 import {
   readMf06FrameMedia,
   readMf06SubjectMedia,
@@ -52,6 +58,7 @@ interface Scope {
 }
 interface Mapping {
   alertId: string;
+  alertType: string;
   eventId: string;
   personIndex: number;
   subtype: string;
@@ -91,7 +98,7 @@ const sequence = (value: string) =>
 function denied(): never {
   throw new PublicHttpException(403, { code: 'FORBIDDEN', message: 'Forbidden' });
 }
-const mappingColumns = `a.id AS "alertId",a.candidate_subtype AS subtype,a.zone_id AS "zoneId",m.event_id AS "eventId",m.person_observation_index AS "personIndex",
+const mappingColumns = `a.id AS "alertId",a.alert_type AS "alertType",a.candidate_subtype AS subtype,a.zone_id AS "zoneId",m.event_id AS "eventId",m.person_observation_index AS "personIndex",
   r.payload_hash AS "payloadHash",r.raw_payload AS "rawPayload",r.resolved_camera_id AS "cameraId",r.stream_session_id AS "sessionId",r.captured_at AS "capturedAt",
   r.tracking_part_index AS "partIndex",r.tracking_part_count AS "partCount",r.tracking_frame_id AS "frameId",r.tracking_source_sequence::text AS sequence,
   r.tracking_frame_state AS state,r.tracking_scope_sha256 AS "scopeSha256",r.tracking_generation_id AS "generationId",
@@ -108,6 +115,7 @@ export class TrackedEpisodeFrameQuery {
     private readonly frameReader: typeof readMf06FrameMedia = readMf06FrameMedia,
     private readonly subjectReader: typeof readMf06SubjectMedia = readMf06SubjectMedia,
     private readonly enabled: () => boolean = () => true,
+    private readonly workers?: WorkerReferenceReader,
   ) {}
 
   private async authorize(manager: EntityManager, request: AuthenticatedRequest, siteId: string) {
@@ -124,14 +132,7 @@ export class TrackedEpisodeFrameQuery {
       'SELECT role,site_id FROM user_role_assignment WHERE user_id=$1 ORDER BY id FOR SHARE',
       [request.user.id],
     );
-    if (
-      !roles.some(
-        (r) =>
-          (r.role === 'ADMIN' && r.site_id === null) ||
-          (r.role === 'SAFETY_OFFICER' && r.site_id === siteId),
-      )
-    )
-      denied();
+    if (!roles.some((r) => r.role === 'SAFETY_OFFICER' && r.site_id === siteId)) denied();
     return {
       userId: request.user.id,
       sessionId: request.sessionId,
@@ -270,78 +271,92 @@ export class TrackedEpisodeFrameQuery {
       cameraExternalId: raw.cameraExternalId,
     });
     if (!bundle) conflict('Tracked evidence configuration is unavailable');
-    const contexts = new Map<string, ResolvedObservationContext>(),
-      resolver = new ObservationContextResolverService();
-    let cameraPpe: Parameters<AlertCandidateEvaluator['evaluate']>[3];
-    for (const o of raw.observations) {
-      if (o.type !== 'PPE' || o.trackId !== person.trackId) continue;
-      if (o.scope === 'CAMERA') {
-        if (bundle.schemaVersion !== '2.0.0')
-          conflict('Tracked evidence camera policy is unavailable');
-        const location = resolveIssuedPpeLocation(bundle, person.boundingBox);
-        if (location?.policy.scope !== 'CAMERA')
-          conflict('Tracked evidence camera scope is invalid');
-        cameraPpe = { cameraId: e.cameraId, requiredPpe: location.policy.requiredPpe };
-        continue;
-      }
-      const key = `${o.regionId}:${o.geometryVersion}`;
-      if (bundle.schemaVersion === '2.0.0') {
-        const location = resolveIssuedPpeLocation(bundle, person.boundingBox);
-        if (
-          !location?.regions.some(
-            (region) =>
-              region.regionId === o.regionId.toLowerCase() &&
-              region.geometryVersion === o.geometryVersion,
+    let observationIndexes: number[];
+    if (row.alertType === 'RESTRICTED_ZONE_INTRUSION') {
+      observationIndexes = await readTrackedZoneFindingIndexes(this.db, manager, {
+        siteId: e.siteId,
+        cameraId: e.cameraId,
+        eventId: row.eventId,
+        payloadHash: row.payloadHash,
+        personIndex: row.personIndex,
+        zoneId: row.zoneId,
+        subtype: row.subtype,
+        bundle,
+      });
+    } else {
+      const contexts = new Map<string, ResolvedObservationContext>(),
+        resolver = new ObservationContextResolverService();
+      let cameraPpe: Parameters<AlertCandidateEvaluator['evaluate']>[3];
+      for (const o of raw.observations) {
+        if (o.type !== 'PPE' || o.trackId !== person.trackId) continue;
+        if (o.scope === 'CAMERA') {
+          if (bundle.schemaVersion !== '2.0.0')
+            conflict('Tracked evidence camera policy is unavailable');
+          const location = resolveIssuedPpeLocation(bundle, person.boundingBox);
+          if (location?.policy.scope !== 'CAMERA')
+            conflict('Tracked evidence camera scope is invalid');
+          cameraPpe = { cameraId: e.cameraId, requiredPpe: location.policy.requiredPpe };
+          continue;
+        }
+        const key = `${o.regionId}:${o.geometryVersion}`;
+        if (bundle.schemaVersion === '2.0.0') {
+          const location = resolveIssuedPpeLocation(bundle, person.boundingBox);
+          if (
+            !location?.regions.some(
+              (region) =>
+                region.regionId === o.regionId.toLowerCase() &&
+                region.geometryVersion === o.geometryVersion,
+            )
           )
+            conflict('Tracked evidence region scope is invalid');
+        }
+        if (!contexts.has(key)) {
+          const context = await resolver.resolveIssuedRegion(
+            manager,
+            e.siteId,
+            bundle,
+            o.regionId,
+            o.geometryVersion,
+          );
+          if (!context) conflict('Tracked evidence region is unavailable');
+          contexts.set(key, context);
+        }
+      }
+      const candidate = new AlertCandidateEvaluator()
+        .evaluate(
+          {
+            streamSessionId: raw.streamSessionId,
+            cameraExternalId: raw.cameraExternalId,
+            observations: raw.observations.filter((o) => o.type !== 'ZONE_ENTRY'),
+          },
+          contexts,
+          undefined,
+          cameraPpe,
         )
-          conflict('Tracked evidence region scope is invalid');
-      }
-      if (!contexts.has(key)) {
-        const context = await resolver.resolveIssuedRegion(
-          manager,
-          e.siteId,
-          bundle,
-          o.regionId,
-          o.geometryVersion,
+        .find(
+          (c) =>
+            c.trackId === person.trackId &&
+            c.candidateSubtype === row.subtype &&
+            (c.zoneId ?? null) === row.zoneId,
         );
-        if (!context) conflict('Tracked evidence region is unavailable');
-        contexts.set(key, context);
-      }
+      if (!candidate) conflict('Tracked evidence finding does not match the original observation');
+      observationIndexes = raw.observations.flatMap((o, i) => {
+        if (
+          o.type !== 'PPE' ||
+          o.trackId !== person.trackId ||
+          o.status !== 'MISSING' ||
+          o.ppeItem !== candidate.details.ppeItem
+        )
+          return [];
+        if (o.scope === 'CAMERA')
+          return row.zoneId === null && cameraPpe?.requiredPpe.includes(o.ppeItem) ? [i] : [];
+        const regionContext = contexts.get(`${o.regionId}:${o.geometryVersion}`);
+        return regionContext?.zoneId === row.zoneId &&
+          regionContext.zone.requiredPpe.includes(o.ppeItem)
+          ? [i]
+          : [];
+      });
     }
-    const candidate = new AlertCandidateEvaluator()
-      .evaluate(
-        {
-          streamSessionId: raw.streamSessionId,
-          cameraExternalId: raw.cameraExternalId,
-          observations: raw.observations.filter((o) => o.type !== 'ZONE_ENTRY'),
-        },
-        contexts,
-        undefined,
-        cameraPpe,
-      )
-      .find(
-        (c) =>
-          c.trackId === person.trackId &&
-          c.candidateSubtype === row.subtype &&
-          (c.zoneId ?? null) === row.zoneId,
-      );
-    if (!candidate) conflict('Tracked evidence finding does not match the original observation');
-    const observationIndexes = raw.observations.flatMap((o, i) => {
-      if (
-        o.type !== 'PPE' ||
-        o.trackId !== person.trackId ||
-        o.status !== 'MISSING' ||
-        o.ppeItem !== candidate.details.ppeItem
-      )
-        return [];
-      if (o.scope === 'CAMERA')
-        return row.zoneId === null && cameraPpe?.requiredPpe.includes(o.ppeItem) ? [i] : [];
-      const regionContext = contexts.get(`${o.regionId}:${o.geometryVersion}`);
-      return regionContext?.zoneId === row.zoneId &&
-        regionContext.zone.requiredPpe.includes(o.ppeItem)
-        ? [i]
-        : [];
-    });
     const frames = raw.evidence.flatMap((item, i) =>
       item.kind === 'FRAME' ? [{ evidenceIndex: i, sha256: item.sha256 }] : [],
     );
@@ -545,6 +560,52 @@ export class TrackedEpisodeFrameQuery {
         revision: head?.revision ?? 0,
         latestDecision,
       };
+    });
+  }
+  async identityCard(
+    request: AuthenticatedRequest,
+    rawSite: string,
+    rawEpisode: string,
+    input: Source,
+  ): Promise<TrackedObservationIdentityCard> {
+    const identity = await this.identity(request, rawSite, rawEpisode, input);
+    if (identity.latestDecision?.action !== 'RESOLVE') return { ...identity, worker: null };
+    const decision = identity.latestDecision;
+    return this.db.transaction('REPEATABLE READ', async (manager) => {
+      const actor = await this.authorize(manager, request, identity.siteId);
+      if (!actor.canReadIdentity) denied();
+      // The directory read must not label a decision superseded after the first snapshot.
+      const head = await manager.getRepository(ObservationIdentityResolutionEntity).findOneBy({
+        siteId: identity.siteId,
+        eventId: identity.source.eventId,
+        personObservationIndex: identity.source.personObservationIndex,
+      });
+      if (
+        !head ||
+        head.revision !== identity.revision ||
+        head.currentDecisionId !== decision.id ||
+        head.payloadHash !== identity.subjectRef.payloadHash ||
+        computeCanonicalPayloadHash(head.subjectRef) !==
+          computeCanonicalPayloadHash(identity.subjectRef)
+      )
+        conflict('Identity changed; refresh the original observation');
+      if (!this.workers)
+        throw new PublicHttpException(503, {
+          code: 'SERVICE_UNAVAILABLE',
+          message: 'Worker reference reader is unavailable',
+        });
+      const worker = decision.workerId
+        ? await this.workers.findForReview(manager, identity.siteId, decision.workerId, false)
+        : null;
+      const result = parseTrackedObservationIdentityCard(
+        { ...identity, worker },
+        identity.siteId,
+        identity.episodeId,
+        identity.source,
+        identity.subjectRef.payloadHash,
+      );
+      if (!result) conflict('Worker directory metadata is inconsistent');
+      return result;
     });
   }
   async read(

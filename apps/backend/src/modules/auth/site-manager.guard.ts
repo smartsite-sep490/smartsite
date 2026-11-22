@@ -52,11 +52,6 @@ export class SiteSetupReadGuard implements CanActivate {
     const request = context
       .switchToHttp()
       .getRequest<AuthenticatedRequest & { params: Record<string, string> }>();
-    if (
-      !request.user?.mustChangePassword &&
-      request.user?.roleAssignments.some((r) => r.role === UserRole.ADMIN && r.siteId === null)
-    )
-      return true;
     requireSiteManager(request.user, request.params.siteId);
     return true;
   }

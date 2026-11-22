@@ -364,6 +364,11 @@ for (const version of ['v1', 'v2-uppercase', 'v2-disabled-overlap'] as const)
       assert.equal(noDecision.latestDecision, null);
       assert.equal(noDecision.subjectRef.eventId, later.payload.eventId);
       assert.equal(noDecision.subjectRef.trackId, 99);
+      const noDecisionCard = await fetch(identityUrl.replace('/identity?', '/identity-card?'), {
+        headers,
+      });
+      assert.equal(noDecisionCard.status, 200);
+      assert.equal((await noDecisionCard.json()).worker, null);
       const firstSource = {
         alertId: second.items[0]!.alertId,
         eventId: first.payload.eventId,
@@ -411,6 +416,14 @@ for (const version of ['v1', 'v2-uppercase', 'v2-disabled-overlap'] as const)
       assert.equal(firstDecisionBody.latestDecision.action, 'CLEAR');
       assert.equal(firstDecisionBody.latestDecision.workerId, null);
       assert.equal(firstDecisionBody.latestDecision.subjectRef.eventId, first.payload.eventId);
+      assert.equal(
+        (
+          await (
+            await fetch(firstIdentityUrl.replace('/identity?', '/identity-card?'), { headers })
+          ).json()
+        ).worker,
+        null,
+      );
       assert.equal((await (await fetch(identityUrl, { headers })).json()).latestDecision, null);
       const workerId = randomUUID(),
         resolvedId = randomUUID();
@@ -431,6 +444,40 @@ for (const version of ['v1', 'v2-uppercase', 'v2-disabled-overlap'] as const)
       assert.equal(resolved.latestDecision.action, 'RESOLVE');
       assert.equal(resolved.latestDecision.workerId, workerId);
       assert.equal(resolved.latestDecision.evidenceSha256, first.sha256);
+      assert.equal('worker' in resolved, false); // Old response stays compatible with strict clients.
+      const cardUrl = firstIdentityUrl.replace('/identity?', '/identity-card?');
+      const cardResponse = await fetch(cardUrl, { headers });
+      assert.equal(cardResponse.status, 200);
+      const card = await cardResponse.json();
+      assert.deepEqual(card.worker, {
+        id: workerId,
+        siteId: f.siteId,
+        externalId: workerId,
+        displayName: 'Synthetic worker',
+        isActive: true,
+      });
+      assert.equal(card.latestDecision.id, resolvedId);
+      assert.equal((await fetch(cardUrl)).status, 401);
+      assert.equal((await fetch(cardUrl.replace(f.siteId, randomUUID()), { headers })).status, 403);
+      await db.query('UPDATE worker SET is_active=false WHERE id=$1', [workerId]);
+      assert.equal((await (await fetch(cardUrl, { headers })).json()).worker.isActive, false);
+      await db.query('UPDATE worker SET is_active=true WHERE id=$1', [workerId]);
+      const unavailableReader = new TrackedEpisodeFrameQuery(
+        db,
+        guard,
+        root,
+        undefined,
+        undefined,
+        undefined,
+        {
+          findForReview: async () => null,
+          listForReview: async () => ({ items: [], total: 0 }),
+        },
+      );
+      assert.equal(
+        (await unavailableReader.identityCard(request(), f.siteId, episodeId, firstSource)).worker,
+        null,
+      );
       assert.equal((await (await fetch(identityUrl, { headers })).json()).latestDecision, null);
       const badDecisionId = randomUUID();
       await db.query(
@@ -443,6 +490,12 @@ for (const version of ['v1', 'v2-uppercase', 'v2-disabled-overlap'] as const)
         [resolutionId, badDecisionId],
       );
       assert.equal((await fetch(firstIdentityUrl, { headers })).status, 409);
+      const staleReader = new TrackedEpisodeFrameQuery(db, guard, root);
+      staleReader.identity = async () => resolved; // The first snapshot preceded the revision change above.
+      await assert.rejects(
+        staleReader.identityCard(request(), f.siteId, episodeId, firstSource),
+        /Identity changed/,
+      );
       assert.equal((await fetch(`${identityUrl}&representation=SUBJECT`, { headers })).status, 400);
       assert.equal((await fetch(identityUrl)).status, 401);
       assert.equal(
@@ -453,6 +506,7 @@ for (const version of ['v1', 'v2-uppercase', 'v2-disabled-overlap'] as const)
         role,
       ]);
       assert.equal((await fetch(firstIdentityUrl, { headers })).status, 403);
+      assert.equal((await fetch(cardUrl, { headers })).status, 403);
       await db.query(
         "UPDATE user_role_assignment SET role='SAFETY_OFFICER',site_id=$2 WHERE id=$1",
         [role, f.siteId],

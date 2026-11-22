@@ -12,25 +12,11 @@ import {
 import type { Request } from 'express';
 import { DataSource } from 'typeorm';
 import { invalid, missing, uuid } from '../../common/configuration/commands.js';
-import { PublicHttpException } from '../../common/http/public-http-exception.js';
 import { ServiceAuthGuard } from '../../modules/auth/service-auth.guard.js';
 import { TrackedFrameAdmission, type TrackedFrameKey } from './tracked-frame-admission.js';
 
 import { TrackedFramePrototypeStore } from './tracked-frame-storage.js';
-
-function workerSecret(request: Request): string {
-  const header = 'x-worker-generation-secret';
-  const secret = request.headers[header];
-  let occurrences = 0;
-  for (let i = 0; i < request.rawHeaders.length; i += 2)
-    if (request.rawHeaders[i]?.toLowerCase() === header) occurrences++;
-  if (occurrences !== 1 || typeof secret !== 'string' || !/^[A-Za-z0-9_-]{43}$/.test(secret))
-    throw new PublicHttpException(401, {
-      code: 'UNAUTHORIZED',
-      message: 'Worker credential is invalid',
-    });
-  return secret;
-}
+import { readWorkerGenerationSecret as workerSecret } from './worker-generation-secret.js';
 
 /** Prototype endpoint. Register only with an explicitly configured tracked admission provider. */
 @Controller('integrations/ai')

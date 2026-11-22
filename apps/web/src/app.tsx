@@ -147,12 +147,21 @@ function ProtectedRoutes({ defaultAuthTab, alertsContext, onNavigate }: Protecte
             ) : defaultAuthTab === 'workforce' ? (
               <Navigate to="/workforce" replace />
             ) : (
-              <DashboardView onNavigate={(tab) => onNavigate(tab)} />
+              <DashboardView
+                onNavigate={(tab, context) =>
+                  context?.siteId && tab === 'site-setup'
+                    ? navigate(`/site-setup?siteId=${encodeURIComponent(context.siteId)}`)
+                    : onNavigate(tab)
+                }
+              />
             )
           }
         />
         <Route path="/workforce" element={<WorkforceView apiUrl={apiUrl} />} />
-        <Route path="/site-setup" element={<SiteSetupView apiUrl={apiUrl} />} />
+        <Route
+          path="/site-setup"
+          element={<SiteSetupView key={location.search} apiUrl={apiUrl} />}
+        />
         <Route path="/accounts" element={<AccountsView apiUrl={apiUrl} />} />
         <Route
           path="/assigned-work"

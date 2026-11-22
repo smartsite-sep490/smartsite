@@ -30,7 +30,23 @@ it('routes by the actual resource ID and type', () => {
       'a',
       'worker',
     ),
-  ).toEqual({ route: 'requests', id: 'swap-1', kind: 'SWAP' });
+  ).toEqual({ route: 'requests', id: 'swap-1', kind: 'SWAP', requestView: 'INCOMING' });
+});
+it('opens leave and overtime requests instead of the attendance day for both mobile roles', () => {
+  const notice = notification({
+    siteId: 'a',
+    dayId: 'day',
+    tab: 'attendance',
+    requestId: 'time-request',
+    requestType: 'TIME',
+  });
+  for (const role of ['worker', 'contractor'] as const)
+    expect(notificationTarget(notice, 'a', role)).toEqual({
+      route: 'requests',
+      id: 'time-request',
+      kind: 'TIME',
+    });
+  expect(notificationTarget(notice, 'other', 'contractor')).toBeNull();
 });
 it('does not open another site or an assigned safety workspace for Worker', () => {
   expect(

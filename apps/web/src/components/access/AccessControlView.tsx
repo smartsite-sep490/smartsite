@@ -1,4 +1,5 @@
 import { SmartNativeSelect } from '../ui/SmartNativeSelect';
+import { loadAllPages } from '../workforce/load-all-pages';
 import { userErrorMessage } from '../../i18n/messages';
 import { translate as tr } from '../../i18n';
 import { useState } from 'react';
@@ -16,14 +17,9 @@ import { GateObservationView } from './GateObservationView';
 import { SecurityGateDeskView } from './gate/SecurityGateDeskView';
 import { VisitorAccessView } from './visitor/VisitorAccessView';
 import { SiteAccessSetupView } from './permissions/SiteAccessSetupView';
-import { ZoneDecisionHistory } from './permissions/ZoneDecisionHistory';
 import { WorkerMobileQrView } from './gate/WorkerMobileQrView';
 import { AttendanceView } from './attendance/AttendanceView';
-import {
-  useManagementClient,
-  useAuth,
-  useCurrentUser,
-} from '../../features/auth/auth-session';
+import { useManagementClient, useAuth, useCurrentUser } from '../../features/auth/auth-session';
 import { isSecurityWorkspaceOnly } from '../../features/auth/workspace-access';
 import { useTranslation } from 'react-i18next';
 
@@ -133,42 +129,48 @@ export function AccessControlView({ apiUrl }: AccessControlViewProps) {
   const securityOnly = isSecurityWorkspaceOnly(currentUser?.roleAssignments ?? []);
   const token = accessToken ?? '';
   const sessionScope = currentUser?.id ?? '';
-  const isGlobalAdmin = currentUser?.roleAssignments.some(
-    (role) => role.role === 'ADMIN' && role.siteId === null,
-  );
 
   const sites = useQuery({
     queryKey: ['access-control', apiUrl, sessionScope, 'sites'],
-    queryFn: () => client.listSites(token, { limit: 100 }),
+    queryFn: ({ signal }) =>
+      loadAllPages((options) => client.listSites(token, options, { signal }), signal),
     enabled: !!token,
   });
 
-  const siteId = sites.data?.items.some((site) => site.id === requestedSiteId)
+  const scopedSites =
+    sites.data?.items.filter((site) =>
+      currentUser?.roleAssignments.some(
+        (r) =>
+          r.siteId === site.id &&
+          ['SITE_MANAGER', 'SECURITY_OFFICER', 'CONTRACTOR_REPRESENTATIVE', 'WORKER'].includes(
+            r.role,
+          ),
+      ),
+    ) ?? [];
+  const siteId = scopedSites.some((site) => site.id === requestedSiteId)
     ? requestedSiteId
-    : (sites.data?.items[0]?.id ?? '');
+    : (scopedSites[0]?.id ?? '');
 
-  const activeSiteName =
-    sites.data?.items.find((site) => site.id === siteId)?.name ?? tr('common.site');
+  const activeSiteName = scopedSites.find((site) => site.id === siteId)?.name ?? tr('common.site');
   const siteRoles =
     currentUser?.roleAssignments.filter((r) => r.siteId === siteId).map((r) => r.role) ?? [];
   const visibleTabs = ACCESS_TABS.filter((tab) => {
     if (tab.id === 'attendance')
-      return (
-        isGlobalAdmin ||
-        siteRoles.some((r) => ['SITE_MANAGER', 'CONTRACTOR_REPRESENTATIVE', 'WORKER'].includes(r))
+      return siteRoles.some((r) =>
+        ['SITE_MANAGER', 'CONTRACTOR_REPRESENTATIVE', 'WORKER'].includes(r),
       );
     if (tab.id === 'worker-qr') {
       return siteRoles.includes('WORKER');
     }
     if (tab.id === 'zone-permissions') {
-      return isGlobalAdmin;
+      return false;
     }
     if (tab.id === 'gate-desk') {
       return siteRoles.includes('SECURITY_OFFICER');
     }
-    if (tab.id === 'gate-observation') return isGlobalAdmin || siteRoles.includes('SITE_MANAGER');
+    if (tab.id === 'gate-observation') return siteRoles.includes('SITE_MANAGER');
     if (tab.id === 'visitor-gate') return siteRoles.includes('SECURITY_OFFICER');
-    if (tab.id === 'visitor-passes') return isGlobalAdmin || siteRoles.includes('SITE_MANAGER');
+    if (tab.id === 'visitor-passes') return siteRoles.includes('SITE_MANAGER');
     return false;
   }).map((tab) => ({
     ...tab,
@@ -183,13 +185,12 @@ export function AccessControlView({ apiUrl }: AccessControlViewProps) {
   }));
   const activeTab = visibleTabs.some((t) => t.id === accessSubTab)
     ? accessSubTab
-    : siteRoles.includes('WORKER') && !isGlobalAdmin
+    : siteRoles.includes('WORKER')
       ? 'worker-qr'
-      : siteRoles.includes('SECURITY_OFFICER') && !isGlobalAdmin
+      : siteRoles.includes('SECURITY_OFFICER')
         ? 'gate-desk'
         : visibleTabs[0]?.id;
   const attendanceWorkspace =
-    !isGlobalAdmin &&
     !securityOnly &&
     siteRoles.some((role) => ['SITE_MANAGER', 'CONTRACTOR_REPRESENTATIVE'].includes(role));
 
@@ -221,16 +222,15 @@ export function AccessControlView({ apiUrl }: AccessControlViewProps) {
   if (
     !currentUser ||
     !currentUser.isActive ||
-    (!isGlobalAdmin &&
-      !currentUser.roleAssignments.some((r) =>
-        [
-          'SITE_MANAGER',
-          'SECURITY_OFFICER',
-          'SAFETY_OFFICER',
-          'WORKER',
-          'CONTRACTOR_REPRESENTATIVE',
-        ].includes(r.role),
-      )) ||
+    !currentUser.roleAssignments.some((r) =>
+      [
+        'SITE_MANAGER',
+        'SECURITY_OFFICER',
+        'SAFETY_OFFICER',
+        'WORKER',
+        'CONTRACTOR_REPRESENTATIVE',
+      ].includes(r.role),
+    ) ||
     currentUser.mustChangePassword
   ) {
     return (
@@ -363,54 +363,54 @@ export function AccessControlView({ apiUrl }: AccessControlViewProps) {
 
       {/* Unified Global Site Selector Strip (hidden on gate-desk since SecurityGateDeskView owns site/gate selector) */}
       {activeTab !== 'gate-desk' && (
-      <section className="flex flex-wrap items-center justify-between gap-4 rounded-xl border border-[#EAEAEA] bg-white p-3.5 shadow-xs">
-        <div className="flex min-w-0 max-w-full flex-wrap items-center gap-3">
-          <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-orange-50 text-[#F66B17] border border-orange-200/60">
-            <IconBuilding2 className="h-4 w-4" />
-          </div>
-          <div className="min-w-0 max-w-full">
-            <label
-              htmlFor="access-site-select"
-              className="block text-[10px] font-bold uppercase tracking-wider text-[#6B6B6B]"
-            >
-              {tr('common.active_managed_site')}
-            </label>
-            <SmartNativeSelect
-              id="access-site-select"
-              value={siteId}
-              onChange={(event) => setRequestedSiteId(event.target.value)}
-              className="mt-0.5 min-w-0 max-w-full rounded-lg border border-[#EAEAEA] bg-white px-2.5 py-1 text-xs font-bold text-[#2F3437] focus:border-[#F66B17] focus:ring-2 focus:ring-orange-100 focus:outline-none"
-            >
-              {sites.data?.items.map((site) => (
-                <option key={site.id} value={site.id}>
-                  {site.name}
-                </option>
-              ))}
-            </SmartNativeSelect>
-          </div>
-        </div>
-
-        {/* Status Indicators & Refresh */}
-        <div className="flex items-center gap-3">
-          <div className="hidden sm:flex items-center gap-2 rounded-lg bg-[#F7F6F3] border border-[#EAEAEA] px-3 py-1.5 text-xs">
-            <span className="h-2 w-2 rounded-full bg-emerald-600" />
-            <span className="font-semibold text-[#6B6B6B]">
-              {tr('common.site')}
-              <span className="font-bold text-[#2F3437]">{activeSiteName}</span>
-            </span>
+        <section className="flex flex-wrap items-center justify-between gap-4 rounded-xl border border-[#EAEAEA] bg-white p-3.5 shadow-xs">
+          <div className="flex min-w-0 max-w-full flex-wrap items-center gap-3">
+            <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-orange-50 text-[#F66B17] border border-orange-200/60">
+              <IconBuilding2 className="h-4 w-4" />
+            </div>
+            <div className="min-w-0 max-w-full">
+              <label
+                htmlFor="access-site-select"
+                className="block text-[10px] font-bold uppercase tracking-wider text-[#6B6B6B]"
+              >
+                {tr('common.active_managed_site')}
+              </label>
+              <SmartNativeSelect
+                id="access-site-select"
+                value={siteId}
+                onChange={(event) => setRequestedSiteId(event.target.value)}
+                className="mt-0.5 min-w-0 max-w-full rounded-lg border border-[#EAEAEA] bg-white px-2.5 py-1 text-xs font-bold text-[#2F3437] focus:border-[#F66B17] focus:ring-2 focus:ring-orange-100 focus:outline-none"
+              >
+                {scopedSites.map((site) => (
+                  <option key={site.id} value={site.id}>
+                    {site.name}
+                  </option>
+                ))}
+              </SmartNativeSelect>
+            </div>
           </div>
 
-          <button
-            type="button"
-            onClick={() => void sites.refetch()}
-            title={tr('common.reload_sites_list')}
-            className="flex items-center gap-1.5 rounded-lg border border-[#EAEAEA] bg-white px-3 py-1.5 text-xs font-semibold text-[#2F3437] hover:bg-[#FBFBFA] transition-colors"
-          >
-            <IconRefresh className="h-3.5 w-3.5" />
-            <span className="hidden md:inline">{tr('accounts.refresh')}</span>
-          </button>
-        </div>
-      </section>
+          {/* Status Indicators & Refresh */}
+          <div className="flex items-center gap-3">
+            <div className="hidden sm:flex items-center gap-2 rounded-lg bg-[#F7F6F3] border border-[#EAEAEA] px-3 py-1.5 text-xs">
+              <span className="h-2 w-2 rounded-full bg-emerald-600" />
+              <span className="font-semibold text-[#6B6B6B]">
+                {tr('common.site')}
+                <span className="font-bold text-[#2F3437]">{activeSiteName}</span>
+              </span>
+            </div>
+
+            <button
+              type="button"
+              onClick={() => void sites.refetch()}
+              title={tr('common.reload_sites_list')}
+              className="flex items-center gap-1.5 rounded-lg border border-[#EAEAEA] bg-white px-3 py-1.5 text-xs font-semibold text-[#2F3437] hover:bg-[#FBFBFA] transition-colors"
+            >
+              <IconRefresh className="h-3.5 w-3.5" />
+              <span className="hidden md:inline">{tr('accounts.refresh')}</span>
+            </button>
+          </div>
+        </section>
       )}
 
       {/* Global State Notifications */}
@@ -437,7 +437,7 @@ export function AccessControlView({ apiUrl }: AccessControlViewProps) {
         </div>
       )}
 
-      {!sites.isPending && !sites.error && !sites.data?.items.length && (
+      {!sites.isPending && !sites.error && !scopedSites.length && (
         <div className="rounded-xl border border-[#EAEAEA] bg-white p-8 text-center text-xs text-[#6B6B6B]">
           {tr('access_control_view.no_construction_sites_currently_configured_on_the_system')}
         </div>
@@ -455,14 +455,6 @@ export function AccessControlView({ apiUrl }: AccessControlViewProps) {
                 siteId={siteId}
                 sessionScope={sessionScope}
               />
-              {isGlobalAdmin && (
-                <ZoneDecisionHistory
-                  apiUrl={apiUrl}
-                  token={token}
-                  siteId={siteId}
-                  sessionScope={sessionScope}
-                />
-              )}
             </div>
           )}
 
@@ -474,7 +466,7 @@ export function AccessControlView({ apiUrl }: AccessControlViewProps) {
               token={token}
               sessionScope={sessionScope}
               selectedSiteId={siteId}
-              sites={sites.data?.items ?? []}
+              sites={scopedSites ?? []}
               onSelectSite={setRequestedSiteId}
             />
           )}
@@ -497,19 +489,15 @@ export function AccessControlView({ apiUrl }: AccessControlViewProps) {
               token={token}
               siteId={siteId}
               sessionScope={sessionScope}
-              canExport={
-                isGlobalAdmin ||
-                siteRoles.some((role) =>
-                  ['SITE_MANAGER', 'CONTRACTOR_REPRESENTATIVE'].includes(role),
-                )
-              }
+              canExport={siteRoles.some((role) =>
+                ['SITE_MANAGER', 'CONTRACTOR_REPRESENTATIVE'].includes(role),
+              )}
               showRequests={
                 !siteRoles.includes('SITE_MANAGER') ||
                 siteRoles.includes('CONTRACTOR_REPRESENTATIVE')
               }
               isWorker={
                 siteRoles.includes('WORKER') &&
-                !isGlobalAdmin &&
                 !siteRoles.some((r) => ['SITE_MANAGER', 'CONTRACTOR_REPRESENTATIVE'].includes(r))
               }
             />
@@ -533,7 +521,7 @@ export function AccessControlView({ apiUrl }: AccessControlViewProps) {
               canApprove={activeTab === 'visitor-passes' && siteRoles.includes('SITE_MANAGER')}
               apiUrl={apiUrl}
               siteId={siteId}
-              siteName={sites.data?.items.find((site) => site.id === siteId)?.name}
+              siteName={scopedSites.find((site) => site.id === siteId)?.name}
               mode={
                 activeTab === 'visitor-gate'
                   ? 'gate'

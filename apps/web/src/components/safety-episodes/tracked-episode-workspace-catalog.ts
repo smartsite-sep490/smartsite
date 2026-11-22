@@ -53,6 +53,13 @@ const en = {
   'episodes.identificationWorkspaceNav': 'Identification requests',
   'episodes.identificationWorkspaceLoading': 'Loading identification requests…',
   'episodes.identificationBackToEpisode': 'Back to episode record',
+  'episodes.emptyGuideHint':
+    'Evidence photos stay closed until you pick a case so personal media is only opened on demand.',
+  'episodes.emptyGuideStep1': 'Inspect verified JPEG evidence on demand for the selected subject.',
+  'episodes.emptyGuideStep2':
+    'Review each PPE or restricted-zone finding independently — marking read never resolves a violation.',
+  'episodes.emptyGuideStep3':
+    'Request Site Manager identification when a subject remains unknown and requires follow-up.',
   'trackedWorkspace.title': 'Tracked episode evidence',
   'trackedWorkspace.subtitle':
     'Original observation mappings and verified JPEG media for this tracked episode. Technical segment metadata never implies a Worker or team identity.',
@@ -85,7 +92,7 @@ const en = {
 
 const vi: Record<keyof typeof en, string> = {
   'frameInbox.scopeCountNote':
-    'Số lượng chỉ tính những người có ghi nhận kiểm tra trong khung hình này (số ca được gắn cờ, không phải số người trực tiếp hiện tại hay tổng số người tại hiện trường).',
+    'Số lượng hiển thị chỉ tính các trường hợp cần kiểm tra trong khung hình này (số ca được gắn cờ, không phải số người trực tiếp hiện tại hay tổng quân số tại hiện trường).',
   'frameInbox.identityUnconfirmedBadge': 'Danh tính: Chưa xác nhận',
   'frameInbox.subjectFindingsError': 'Không tải được phát hiện PPE của người này.',
   'frameInbox.markCaseRead': 'Đánh dấu ca đã đọc',
@@ -100,11 +107,19 @@ const vi: Record<keyof typeof en, string> = {
   'episodes.identificationWorkspaceNav': 'Yêu cầu xác minh',
   'episodes.identificationWorkspaceLoading': 'Đang tải yêu cầu xác minh…',
   'episodes.identificationBackToEpisode': 'Quay lại hồ sơ người',
-  'trackedWorkspace.title': 'Bằng chứng hồ sơ theo dõi (TRACKED)',
+  'episodes.emptyGuideHint':
+    'Ảnh bằng chứng không tự mở sẵn — chỉ tải khi bạn chọn một hồ sơ cụ thể bên trái.',
+  'episodes.emptyGuideStep1':
+    'Mở xem ảnh JPEG gốc có kiểm tra mã băm cho từng lượt ghi nhận của chủ thể.',
+  'episodes.emptyGuideStep2':
+    'Duyệt riêng từng phát hiện PPE hoặc vùng hạn chế — đánh dấu đã đọc không đồng nghĩa đã xử lý.',
+  'episodes.emptyGuideStep3':
+    'Gửi yêu cầu xác minh danh tính tới Quản lý công trường khi cần đối chiếu nhân sự.',
+  'trackedWorkspace.title': 'Bằng chứng hồ sơ theo dõi liên tiếp',
   'trackedWorkspace.subtitle':
-    'Lịch sử ánh xạ quan sát gốc và ảnh JPEG đã xác minh của hồ sơ theo dõi này. Siêu dữ liệu phân đoạn kỹ thuật không bao giờ hàm ý danh tính Công nhân hay tổ đội.',
+    'Chuỗi hình ảnh JPEG gốc và các lần ghi nhận của cùng một lượt theo dõi camera. Mã phân đoạn kỹ thuật chỉ phục vụ gom nhóm hình ảnh, không xác định danh tính công nhân hay tổ đội.',
   'trackedWorkspace.loadingDetail': 'Đang tải hồ sơ theo dõi…',
-  'trackedWorkspace.errorDetail': 'Không thể tải siêu dữ liệu hồ sơ theo dõi. Vui lòng thử lại.',
+  'trackedWorkspace.errorDetail': 'Không tải được thông tin hồ sơ theo dõi. Vui lòng thử lại.',
   'trackedWorkspace.forbiddenDetail':
     'Bạn không có quyền xem hồ sơ theo dõi này trong phạm vi hiện tại.',
   'trackedWorkspace.retryDetail': 'Thử tải lại hồ sơ',
@@ -114,20 +129,20 @@ const vi: Record<keyof typeof en, string> = {
   'trackedWorkspace.captureRange': 'Khoảng thời gian ghi nhận',
   'trackedWorkspace.findingFilterLabel': 'Lọc quan sát theo phát hiện',
   'trackedWorkspace.allFindings': 'Tất cả phát hiện ({{count}})',
-  'trackedWorkspace.findingOption': '{{label}} ({{count}} ánh xạ)',
+  'trackedWorkspace.findingOption': '{{label}} ({{count}} lần ghi nhận)',
   'trackedWorkspace.findingReviewsLabel': 'Thao tác duyệt từng phát hiện',
   'trackedWorkspace.cameraPpeScope': 'Quy định PPE của camera',
   'trackedWorkspace.zonePpeScope': 'Quy định PPE theo vùng',
   'trackedWorkspace.reviewFindingAction': 'Duyệt phát hiện',
   'trackedWorkspace.findingAlertRevision': 'Bản cảnh báo #{{revision}}',
-  'trackedWorkspace.showEpisodeTechnical': 'Hiện siêu dữ liệu kỹ thuật hồ sơ',
-  'trackedWorkspace.hideEpisodeTechnical': 'Ẩn siêu dữ liệu kỹ thuật hồ sơ',
+  'trackedWorkspace.showEpisodeTechnical': 'Xem mã kỹ thuật của hồ sơ',
+  'trackedWorkspace.hideEpisodeTechnical': 'Ẩn mã kỹ thuật của hồ sơ',
   'trackedWorkspace.episodeId': 'Mã hồ sơ',
   'trackedWorkspace.siteId': 'Mã công trường',
   'trackedWorkspace.cameraId': 'Mã camera',
   'trackedWorkspace.segmentId': 'Mã phân đoạn kỹ thuật (không phải mã Công nhân)',
   'trackedWorkspace.scopeSha256': 'SHA-256 phạm vi',
-  'trackedWorkspace.nextPageFailed': 'Tải trang quan sát tiếp theo thất bại.',
+  'trackedWorkspace.nextPageFailed': 'Không tải được trang ghi nhận tiếp theo. Vui lòng thử lại.',
 };
 
 if (!hasRegisteredFeatureKey('trackedWorkspace.title')) {

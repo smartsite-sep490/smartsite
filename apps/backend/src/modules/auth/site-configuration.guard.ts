@@ -8,7 +8,7 @@ import { PublicHttpException } from '../../common/http/public-http-exception.js'
 import { UserRole } from '../../database/entities/user.entity.js';
 import type { AuthenticatedRequest } from './auth.service.js';
 
-/** Site managers own operational configuration; administrators observe it. */
+/** Configuration belongs to explicitly assigned site roles. */
 @Injectable()
 export class SiteConfigurationGuard implements CanActivate {
   canActivate(context: ExecutionContext): boolean {
@@ -24,10 +24,9 @@ export class SiteConfigurationGuard implements CanActivate {
     const siteId = request.params.siteId?.toLowerCase();
     const allowed = user.roleAssignments.some(
       (r) =>
-        (readOnly && r.role === UserRole.ADMIN && r.siteId === null) ||
-        (r.siteId !== null &&
-          r.siteId.toLowerCase() === siteId &&
-          (r.role === UserRole.SITE_MANAGER || (readOnly && r.role === UserRole.SAFETY_OFFICER))),
+        r.siteId !== null &&
+        r.siteId.toLowerCase() === siteId &&
+        (r.role === UserRole.SITE_MANAGER || (readOnly && r.role === UserRole.SAFETY_OFFICER)),
     );
     if (user.mustChangePassword || !allowed)
       throw new PublicHttpException(403, {

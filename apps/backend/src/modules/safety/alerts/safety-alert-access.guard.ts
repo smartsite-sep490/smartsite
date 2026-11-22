@@ -17,7 +17,6 @@ interface SiteScopedRequest extends AuthenticatedRequest {
 export function assertSafetySiteAccess(
   user: AuthenticatedUser | undefined,
   siteId: string | undefined,
-  method: string | undefined,
 ): void {
   if (!user) throw new UnauthorizedException();
   if (user.mustChangePassword) {
@@ -30,13 +29,10 @@ export function assertSafetySiteAccess(
   if (
     !user.roleAssignments.some(
       ({ role, siteId: assignedSiteId }) =>
-        (['GET', 'HEAD'].includes(method ?? '') &&
-          role === UserRole.ADMIN &&
-          assignedSiteId === null) ||
-        (role === UserRole.SAFETY_OFFICER &&
-          assignedSiteId !== null &&
-          normalizedSiteId !== undefined &&
-          assignedSiteId.toLowerCase() === normalizedSiteId),
+        role === UserRole.SAFETY_OFFICER &&
+        assignedSiteId !== null &&
+        normalizedSiteId !== undefined &&
+        assignedSiteId.toLowerCase() === normalizedSiteId,
     )
   )
     throw new PublicHttpException(HttpStatus.FORBIDDEN, {
@@ -49,7 +45,7 @@ export function assertSafetySiteAccess(
 export class SafetyAlertAccessGuard implements CanActivate {
   canActivate(context: ExecutionContext): boolean {
     const request = context.switchToHttp().getRequest<SiteScopedRequest>();
-    assertSafetySiteAccess(request.user, request.params?.siteId, request.method);
+    assertSafetySiteAccess(request.user, request.params?.siteId);
     return true;
   }
 }

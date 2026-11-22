@@ -4,6 +4,15 @@ import { registerFeatureCatalog } from '../../i18n/feature-catalog-registry';
 const en = {
   title: 'Camera PPE policy',
   subtitle: 'Set camera or region PPE rules and compare saved vs applied state.',
+  referenceRequired:
+    'First get a reference image in observation-region setup. Then return here to save PPE rules. Your draft stays here.',
+  referenceRevalidationRequired:
+    'Camera view or active regions need confirmation on a fresh reference image before saving PPE changes. Open observation-region setup, confirm the reference view, then return here — your draft stays preserved.',
+  openReference: 'Set up reference image',
+  refreshWorkerStatus: 'Refresh worker status',
+  jumpToApplyWorker: 'Go to apply on worker',
+  modelCapabilityDistinction:
+    'Required PPE vs model support: editing checkboxes saves the desired PPE policy revision on Backend only; actual detection depends on the classes supported by the active worker model artifact (no per-camera model weights are changed here).',
   target: 'Policy scope',
   camera: 'Camera default',
   region: 'Region',
@@ -24,7 +33,7 @@ const en = {
   failed404:
     'Target camera or observation region was not found. Refresh the catalog and try again.',
   failed409:
-    'Configuration version conflict: another update was saved first. Latest policy has been reloaded — review and save again.',
+    'Could not save: the configuration changed or the camera view needs confirmation. Check the reference image and latest policy, then try again. Your draft is preserved.',
   failed429: 'Too many policy save requests. Wait a moment before trying again.',
   unsavedDraftBadge: 'Unsaved draft',
   preservedRegionDrafts:
@@ -74,6 +83,12 @@ const en = {
   previewHeading: 'Effective PPE if saved',
   previewRequiresCameraInit:
     'Select or save a valid camera default policy to preview inherited PPE.',
+  impactHeading: 'Affected regions on this camera',
+  impactInheriting: 'Inherits camera default ({{count}}): {{names}}',
+  impactNoneInheriting:
+    'No active regions currently inherit the camera default (applies outside region overrides).',
+  impactUnaffected: 'Keeps custom or disabled rule ({{count}}): {{names}}',
+  impactPreviewEffective: 'Effective PPE for inheriting regions & unzoned camera area:',
   regionActive: 'Active',
   regionInactive: 'Inactive',
   regionVersionMeta: 'Region v{{version}}',
@@ -81,6 +96,7 @@ const en = {
   regionUnresolvedLabel: 'Observation region #{{index}}',
   zoneMetadataUnavailable: 'Zone metadata unavailable',
   technicalIdsSummary: 'Technical IDs',
+  technicalZoneCode: 'Zone code: {{code}}',
   technicalRegionId: 'Region ID: {{id}}',
   technicalZoneId: 'Zone ID: {{id}}',
   capabilityTruthNote:
@@ -116,6 +132,15 @@ const en = {
 const vi: Record<keyof typeof en, string> = {
   title: 'Chính sách PPE',
   subtitle: 'Cấu hình PPE cho camera hoặc vùng, đối chiếu trạng thái đã áp dụng.',
+  referenceRequired:
+    'Trước tiên, lấy ảnh tham chiếu trong phần vùng quan sát. Sau đó quay lại đây để lưu yêu cầu PPE. Bản nháp được giữ nguyên.',
+  referenceRevalidationRequired:
+    'Góc nhìn camera hoặc vùng quan sát đang bật cần xác nhận lại trên ảnh tham chiếu mới trước khi lưu thay đổi PPE. Mở phần vùng quan sát để xác nhận rồi quay lại đây — bản nháp vẫn được giữ nguyên.',
+  openReference: 'Thiết lập ảnh tham chiếu',
+  refreshWorkerStatus: 'Làm mới trạng thái worker',
+  jumpToApplyWorker: 'Đi tới áp dụng cho worker',
+  modelCapabilityDistinction:
+    'Phân biệt PPE bắt buộc và năng lực mô hình: thay đổi ở đây chỉ lưu phiên bản chính sách PPE mong muốn trên máy chủ; khả năng nhận diện thực tế vẫn phụ thuộc các lớp PPE mà tệp mô hình của worker đang nạp hỗ trợ (không thay đổi trọng số mô hình theo từng camera).',
   target: 'Phạm vi chính sách',
   camera: 'Mặc định camera',
   region: 'Vùng',
@@ -136,7 +161,7 @@ const vi: Record<keyof typeof en, string> = {
   failed404:
     'Không tìm thấy camera hoặc vùng quan sát mục tiêu. Vui lòng làm mới danh mục và thử lại.',
   failed409:
-    'Xung đột phiên bản cấu hình: đã có cập nhật mới hơn. Chính sách mới nhất vừa được tải lại — vui lòng kiểm tra và lưu lại.',
+    'Chưa lưu được: cấu hình đã thay đổi hoặc góc nhìn camera cần xác nhận. Kiểm tra ảnh tham chiếu và chính sách mới nhất rồi thử lại. Bản nháp được giữ nguyên.',
   failed429: 'Quá nhiều yêu cầu lưu chính sách. Vui lòng chờ giây lát rồi thử lại.',
   unsavedDraftBadge: 'Bản nháp chưa lưu',
   preservedRegionDrafts:
@@ -185,6 +210,12 @@ const vi: Record<keyof typeof en, string> = {
   previewHeading: 'PPE hiệu lực dự kiến sau khi lưu',
   previewRequiresCameraInit:
     'Cần chọn hoặc lưu chính sách mặc định camera hợp lệ để xem PPE kế thừa.',
+  impactHeading: 'Các vùng bị ảnh hưởng trên camera này',
+  impactInheriting: 'Kế thừa mặc định camera ({{count}}): {{names}}',
+  impactNoneInheriting:
+    'Hiện chưa có vùng đang bật nào kế thừa mặc định camera (áp dụng ngoài các vùng ghi đè).',
+  impactUnaffected: 'Giữ quy tắc tùy chỉnh hoặc tắt riêng ({{count}}): {{names}}',
+  impactPreviewEffective: 'PPE hiệu lực cho vùng kế thừa & phần khung hình ngoài vùng:',
   regionActive: 'Đang bật',
   regionInactive: 'Đang tắt',
   regionVersionMeta: 'Vùng v{{version}}',
@@ -192,6 +223,7 @@ const vi: Record<keyof typeof en, string> = {
   regionUnresolvedLabel: 'Vùng quan sát #{{index}}',
   zoneMetadataUnavailable: 'Chưa có thông tin khu vực',
   technicalIdsSummary: 'Mã định danh kỹ thuật',
+  technicalZoneCode: 'Mã định danh khu vực (Zone code): {{code}}',
   technicalRegionId: 'Mã vùng (Region ID): {{id}}',
   technicalZoneId: 'Mã khu vực (Zone ID): {{id}}',
   capabilityTruthNote:

@@ -1,5 +1,7 @@
 # Rà soát chức năng mobile, API và nguồn tạo dữ liệu
 
+Cập nhật giao diện ngày 21/11/2026: Mobile Contractor đã bỏ hai tab Phân công và Quyền vào trong Khu vực; chỉ còn danh sách khu vực và chi tiết. API điều phối/cấp/thu hồi quyền cá nhân vẫn có ở Backend nhưng không còn được gọi từ màn này. Hồ sơ Worker/Contractor đã bỏ mục Thông báo thiết bị; đăng xuất cần xác nhận. Các số liệu rà soát ngày 20/11 bên dưới là ảnh chụp trước thay đổi giao diện này.
+
 Ngày đối chiếu: **20/11/2026**. Phạm vi là mã đang có tại `D:/SEP490/smartsite`, gồm **Worker** và **Contractor Representative**. Không suy ra chức năng mobile từ một API chỉ tồn tại trên web.
 
 ## 1. Kết quả chính

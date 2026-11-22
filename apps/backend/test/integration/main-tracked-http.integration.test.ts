@@ -1,7 +1,7 @@
 import 'reflect-metadata';
 import assert from 'node:assert/strict';
 import { createHash, randomUUID } from 'node:crypto';
-import { mkdtemp, writeFile } from 'node:fs/promises';
+import { mkdtemp, readFile, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import sharp from 'sharp';
@@ -28,22 +28,30 @@ import { TrackedFrameAdmission } from '../../src/integrations/ai/tracked-frame-a
 import { TrackedFrameRecovery } from '../../src/integrations/ai/tracked-frame-recovery.js';
 import { buildMigrationOptions } from '../../src/database/typeorm.migration-profile.js';
 import { recordCameraConfigurationAcknowledgement } from '../../src/modules/cameras/camera-configuration-acknowledgement.js';
+import { provisionCameraWorkerGeneration } from '../../src/modules/cameras/camera-worker-generations.js';
+import { StorageService } from '../../src/integrations/storage/storage.service.js';
 
 for (const variant of [
   'ppe-only',
   'ppe-c02',
   'camera-v17',
+  'camera-upload-v17',
   'region-v17',
   'camera-region-mismatch-v17',
   'region-disabled-v17',
   'region-stale-v17',
   'zone-uppercase',
+  'zone-uppercase-v17',
   'zone-unissued',
   'zone-disabled',
 ] as const)
   test(`registered tracked worker HTTP intake preserves ${variant} handling`, async () => {
     const wire17 = variant.endsWith('-v17');
-    const cameraScope = variant === 'camera-v17' || variant === 'camera-region-mismatch-v17';
+    const uppercaseZone = variant === 'zone-uppercase' || variant === 'zone-uppercase-v17';
+    const cameraScope =
+      variant === 'camera-v17' ||
+      variant === 'camera-upload-v17' ||
+      variant === 'camera-region-mismatch-v17';
     const invalidScope = variant === 'camera-region-mismatch-v17' || variant === 'region-stale-v17';
     const withC02 = variant === 'ppe-c02' || wire17;
     const findingCount = variant === 'region-v17' ? 1 : 2;
@@ -127,9 +135,10 @@ for (const variant of [
             ? 'tracked-v16-identification'
             : 'tracked-v16',
         AI_TRACKED_FRAME_RUNTIME_ENABLED: 'true',
-        MF06_ENQUEUE_ENABLED:
-          variant === 'zone-uppercase' || variant === 'zone-unissued' ? 'true' : 'false',
-        ...(variant === 'zone-uppercase' || variant === 'zone-unissued'
+        AI_EVIDENCE_OBJECT_STORAGE_ENABLED:
+          variant === 'camera-v17' || variant === 'camera-upload-v17' ? 'true' : 'false',
+        MF06_ENQUEUE_ENABLED: uppercaseZone || variant === 'zone-unissued' ? 'true' : 'false',
+        ...(uppercaseZone || variant === 'zone-unissued'
           ? { MF06_ENQUEUE_MAX_OUTSTANDING: '8' }
           : {}),
         AI_TRACKED_FRAME_RUNTIME_POLICY: JSON.stringify({
@@ -258,11 +267,13 @@ for (const variant of [
         .jpeg()
         .toBuffer();
       const digest = createHash('sha256').update(bytes).digest('hex');
-      await writeFile(
-        join(evidenceRoot, base.streamSessionId + '_0_' + base.eventId + '.jpg'),
-        bytes,
-        { flag: 'wx' },
-      );
+      // The upload-enabled journey must succeed without a legacy local worker file.
+      if (variant !== 'camera-v17' && variant !== 'camera-upload-v17')
+        await writeFile(
+          join(evidenceRoot, base.streamSessionId + '_0_' + base.eventId + '.jpg'),
+          bytes,
+          { flag: 'wx' },
+        );
       const event = {
         ...base,
         schemaVersion: wire17 ? '1.7.0' : '1.6.0',
@@ -305,7 +316,7 @@ for (const variant of [
                   regionId:
                     variant === 'zone-unissued'
                       ? randomUUID()
-                      : variant === 'zone-uppercase'
+                      : uppercaseZone
                         ? fixture.ppeRegionId!.toUpperCase()
                         : fixture.ppeRegionId!,
                   geometryVersion: 1,
@@ -356,6 +367,15 @@ for (const variant of [
               }))
             : []),
         ]).flat();
+        if (uppercaseZone) {
+          event.observations.push({
+            type: 'ZONE_ENTRY',
+            trackId: 1,
+            regionId: fixture.ppeRegionId!.toUpperCase(),
+            geometryVersion: 1,
+            entryOrigin: 'INSIDE_ENTRY_UNOBSERVED',
+          });
+        }
         event.continuity.subjects = event.observations.flatMap((observation, index) =>
           observation.type === 'PERSON'
             ? [
@@ -373,6 +393,72 @@ for (const variant of [
         'x-worker-generation-secret': fixture.generation.secret,
         'content-type': 'application/json',
       };
+      const makeEvidenceForm = () => {
+        const form = new FormData();
+        form.append('schemaVersion', '1.0.0');
+        form.append('event', JSON.stringify(event));
+        form.append('context', JSON.stringify(fixture.context));
+        form.append(
+          'frame',
+          new Blob([new Uint8Array(bytes)], { type: 'image/jpeg' }),
+          'frame.jpg',
+        );
+        return form;
+      };
+      const uploadEvidence = () =>
+        fetch(prefix + '/tracked-parts/evidence', {
+          method: 'POST',
+          headers: {
+            authorization: headers.authorization,
+            'x-worker-generation-secret': headers['x-worker-generation-secret'],
+          },
+          body: makeEvidenceForm(),
+        });
+      if (variant === 'camera-v17' || variant === 'camera-upload-v17') {
+        const uploaded = await uploadEvidence();
+        assert.equal(uploaded.status, 200, await uploaded.clone().text());
+        const stored = await uploaded.json();
+        assert.equal(stored.kind, 'EVIDENCE_STORED');
+        assert.equal(stored.eventId, event.eventId);
+        assert.equal(stored.sha256, digest);
+        assert.deepEqual(
+          await readFile(
+            join(evidenceRoot, `ai-frame-${event.eventId}-${stored.payloadHash}-${digest}.jpg`),
+          ),
+          bytes,
+        );
+        assert.deepEqual(
+          await runtimeDb.query(
+            'SELECT count(*)::int AS count FROM ai_observation_event WHERE event_id=$1',
+            [event.eventId],
+          ),
+          [{ count: 0 }],
+        );
+      }
+      if (variant === 'camera-upload-v17') {
+        const storage = module.get(StorageService);
+        const originalSave = storage.saveAiFrame.bind(storage);
+        let savedDuringTransition = false;
+        storage.saveAiFrame = async (content, expectedHash, scope) => {
+          await originalSave(content, expectedHash, scope);
+          savedDuringTransition = true;
+          await provisionCameraWorkerGeneration(
+            runtimeDb,
+            fixture.cameraId,
+            [fixture.cameraId],
+            120000,
+          );
+        };
+        try {
+          const stale = await uploadEvidence();
+          assert.equal(stale.status, 409, await stale.clone().text());
+          assert.equal((await stale.json()).code, 'CONFLICT');
+          assert.equal(savedDuringTransition, true, 'must reach storage before generation changes');
+        } finally {
+          storage.saveAiFrame = originalSave;
+        }
+        return;
+      }
       const post = () =>
         fetch(prefix + '/tracked-parts', {
           method: 'POST',
@@ -439,7 +525,10 @@ for (const variant of [
         await new Promise((resolve) => setTimeout(resolve, 50));
       }
       assert.ok(sealed, 'Recovery did not seal the accepted frame');
-      if (variant === 'zone-uppercase') {
+      const retry = await post();
+      assert.equal(retry.status, 200);
+      assert.deepEqual(await retry.json(), receipt);
+      if (uppercaseZone) {
         const requests = await db.query(
           'SELECT region_id,person_observation_index FROM zone_entry_assessment_request',
         );
@@ -450,9 +539,7 @@ for (const variant of [
           { status: 'PENDING' },
         ]);
       }
-      const retry = await post();
-      assert.equal(retry.status, 200);
-      assert.deepEqual(await retry.json(), receipt);
+
       if (variant === 'region-disabled-v17') {
         for (const table of ['safety_episode', 'safety_alert', 'safety_episode_recipient'])
           assert.equal((await db.query(`SELECT count(*)::int AS n FROM ${table}`))[0].n, 0);
@@ -551,11 +638,18 @@ for (const variant of [
       assert.ok((withC02 ? [0, 3, 6] : [0]).includes(frameCase.source.personObservationIndex));
       assert.equal(frameCase.source.evidenceIndex, 0);
       assert.equal(frameCase.source.sha256, createHash('sha256').update(bytes).digest('hex'));
-      if (variant === 'zone-uppercase') {
-        assert.equal(frameCase.zoneEntries.length, 1);
-        assert.equal(frameCase.zoneEntries[0].status, 'PENDING');
-        assert.equal(frameCase.zoneEntries[0].reasonCode, null);
-        assert.equal(frameCase.zoneEntries[0].provenance, null);
+      if (uppercaseZone) {
+        const zoneCase = frames.items[0].cases.find(
+          (item: typeof frameCase) => item.source.personObservationIndex === 0,
+        );
+        assert.ok(zoneCase);
+        assert.equal(zoneCase.zoneEntries.length, 1);
+        assert.equal(zoneCase.zoneEntries[0].status, 'PENDING');
+        assert.equal(zoneCase.zoneEntries[0].reasonCode, null);
+        assert.equal(zoneCase.zoneEntries[0].provenance, null);
+        for (const sibling of frames.items[0].cases) {
+          if (sibling.episodeId !== zoneCase.episodeId) assert.deepEqual(sibling.zoneEntries, []);
+        }
       } else assert.deepEqual(frameCase.zoneEntries, []);
       const detailPath = api + '/sites/' + fixture.siteId + '/safety-episodes/' + row.episode.id;
       const detailResponse = await fetch(detailPath + '/tracked', { headers: officerHeaders });

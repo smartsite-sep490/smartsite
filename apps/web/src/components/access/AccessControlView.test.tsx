@@ -1,3 +1,5 @@
+import { SiteAccessSetupView } from './permissions/SiteAccessSetupView';
+import { ZoneDecisionHistory } from './permissions/ZoneDecisionHistory';
 // @vitest-environment jsdom
 import React from 'react';
 import { render, screen, cleanup, waitFor, within } from '@testing-library/react';
@@ -178,38 +180,58 @@ describe('Site Access ERD integration', () => {
     queryClient.clear();
     vi.restoreAllMocks();
   });
-  function mount() {
+  function mount(view: 'access' | 'setup' | 'history' = 'access') {
     render(
       <QueryClientProvider client={queryClient}>
-        <AccessControlView apiUrl="https://api.example.test" />
+        {view === 'setup' ? (
+          <SiteAccessSetupView
+            apiUrl="https://api.example.test"
+            token="mock-admin-token"
+            siteId="site-alpha"
+            sessionScope="manager"
+          />
+        ) : view === 'history' ? (
+          <ZoneDecisionHistory
+            apiUrl="https://api.example.test"
+            token="mock-admin-token"
+            siteId="site-alpha"
+            sessionScope="manager"
+          />
+        ) : (
+          <AccessControlView apiUrl="https://api.example.test" />
+        )}
       </QueryClientProvider>,
     );
   }
-  it('reuses authenticated session and scopes setup to the selected Site', async () => {
-    const login = vi.spyOn(SmartSiteManagementClient.prototype, 'login');
-    const user = userEvent.setup();
+  it('denies pure Admin operational access before requesting access setup', async () => {
     mount();
-    await screen.findByRole('heading', { name: 'Worker assignments and Zone permissions' });
-    expect(login).not.toHaveBeenCalled();
-    expect(screen.queryByRole('button', { name: /Gate Permissions/i })).toBeNull();
-    expect(SmartSiteManagementClient.prototype.accessSetup).toHaveBeenCalledWith(
-      'mock-admin-token',
-      'site-alpha',
-    );
-    await user.selectOptions(screen.getByLabelText(/active managed site:/i), 'site-beta');
-    await waitFor(() =>
-      expect(SmartSiteManagementClient.prototype.accessSetup).toHaveBeenCalledWith(
-        'mock-admin-token',
-        'site-beta',
-      ),
-    );
+    expect(await screen.findByRole('alert')).toBeTruthy();
+    expect(SmartSiteManagementClient.prototype.accessSetup).not.toHaveBeenCalled();
+  });
+  it('selects only the explicit site for a mixed Admin and Site Manager', async () => {
+    authSessionMock.user = {
+      ...mockAdminLoginResponse.user,
+      roleAssignments: [
+        { role: 'ADMIN', siteId: null },
+        { role: 'SITE_MANAGER', siteId: 'site-beta' },
+      ],
+    };
+    mount();
+    await screen.findByRole('button', { name: /Visitor Passes/i });
+    expect(screen.queryByRole('option', { name: /Alpha/i })).toBeNull();
+    expect(screen.getByRole('option', { name: /Beta/i })).toBeTruthy();
+    expect(screen.queryByRole('button', { name: /Zone Permissions/i })).toBeNull();
   });
   it('Site Manager reviews the pending assignment directly with its version', async () => {
     const user = userEvent.setup();
     const decide = vi
       .spyOn(SmartSiteManagementClient.prototype, 'decideWorkerSiteZoneAssignment')
       .mockResolvedValue({} as never);
-    mount();
+    authSessionMock.user = {
+      ...mockAdminLoginResponse.user,
+      roleAssignments: [{ role: 'SITE_MANAGER', siteId: 'site-alpha' }],
+    };
+    mount('setup');
     await user.click(await screen.findByRole('button', { name: 'Approve' }));
     await waitFor(() =>
       expect(decide).toHaveBeenCalledWith(
@@ -225,7 +247,11 @@ describe('Site Access ERD integration', () => {
     const revoke = vi
       .spyOn(SmartSiteManagementClient.prototype, 'revokeZonePermission')
       .mockResolvedValue({ id: 'cp-1' });
-    mount();
+    authSessionMock.user = {
+      ...mockAdminLoginResponse.user,
+      roleAssignments: [{ role: 'SITE_MANAGER', siteId: 'site-alpha' }],
+    };
+    mount('setup');
     await user.click(await screen.findByRole('button', { name: 'Revoke Contractor Zone' }));
     await waitFor(() =>
       expect(revoke).toHaveBeenCalledWith('mock-admin-token', 'site-alpha', 'cp-1', 'contractor'),
@@ -233,7 +259,11 @@ describe('Site Access ERD integration', () => {
     expect(screen.queryByRole('button', { name: 'Create permission' })).toBeNull();
   });
   it('keeps AI candidate history as authorization unavailable', async () => {
-    mount();
+    authSessionMock.user = {
+      ...mockAdminLoginResponse.user,
+      roleAssignments: [{ role: 'SITE_MANAGER', siteId: 'site-alpha' }],
+    };
+    mount('history');
     const candidate = await screen.findByText('Candidate: CANDIDATE-WKR-99');
     const row = within(candidate.closest('tr')!);
     expect(row.getByText('Authorization unavailable')).toBeTruthy();
@@ -242,8 +272,12 @@ describe('Site Access ERD integration', () => {
   });
   it('switches to Visitor passes while keeping the shared session', async () => {
     const user = userEvent.setup();
+    authSessionMock.user = {
+      ...mockAdminLoginResponse.user,
+      roleAssignments: [{ role: 'SITE_MANAGER', siteId: 'site-alpha' }],
+    };
     mount();
-    await screen.findByRole('heading', { name: 'Worker assignments and Zone permissions' });
+    await screen.findByRole('button', { name: /Visitor Passes/i });
     await user.click(screen.getByRole('button', { name: /Visitor Passes|Khách viếng thăm/i }));
     await screen.findByText('No visitor pass requests at this site.');
     expect(authSessionMock.logout).not.toHaveBeenCalled();
@@ -252,6 +286,16 @@ describe('Site Access ERD integration', () => {
     mount();
     await screen.findByRole('heading', { name: 'Worker assignments and Zone permissions' });
     expect(screen.queryByRole('button', { name: /sign out/i })).toBeNull();
+  });
+  it('keeps sign-out in the shared shell for a manager attendance workspace', async () => {
+    authSessionMock.user = {
+      ...mockAdminLoginResponse.user,
+      roleAssignments: [{ role: 'SITE_MANAGER', siteId: 'site-alpha' }],
+    };
+    mount();
+    await screen.findByRole('button', { name: /Visitor Passes/i });
+    expect(screen.queryByRole('button', { name: /sign out/i })).toBeNull();
+    expect(authSessionMock.logout).not.toHaveBeenCalled();
   });
   it('Representative opens Attendance without Zone Permissions or Worker Biometrics', async () => {
     authSessionMock.user = {

@@ -1,4 +1,7 @@
-import { PRE_NAMING_AUTHORITY_RELATIONS } from './authority-storage-relations.js';
+import {
+  AUTHORITY_RELATIONS_WITH_HISTORY,
+  PRE_NAMING_AUTHORITY_RELATIONS,
+} from './authority-storage-relations.js';
 import { randomUUID } from 'node:crypto';
 import { Logger } from '@nestjs/common';
 import { computeCanonicalPayloadHash } from '@smartsite/contracts';
@@ -40,6 +43,7 @@ type Operation =
   | 'WORKER_ACCOUNT_PREPARE'
   | 'WORKER_ACCOUNT_LINK'
   | 'WORKER_PROFILE_UPDATE'
+  | 'WORKER_DOCUMENT_SUBMIT'
   | 'WORKER_DOCUMENT_REVIEW'
   | 'WORKER_GATE_PERMISSIONS_SET'
   | 'CONTRACTOR_WORKER_CREATE'
@@ -129,8 +133,7 @@ export async function executeMainConfigurationCommand<T>(
   work: (manager: EntityManager) => Promise<T>,
   authorize?: (manager: EntityManager) => Promise<void>,
 ): Promise<T> {
-  // Legacy internal callers have no authenticated actor. Capture triggers, if installed,
-  // mark their writes unattributed; never fabricate a service/user or trusted history.
+  // Pre-journal fixtures may omit an actor; installed history requires a real command owner.
   const actorUserId = context ? uuid(context.actorUserId).toLowerCase() : null;
   const commandId = randomUUID();
   const requestHash = context
@@ -159,13 +162,15 @@ export async function executeMainConfigurationCommand<T>(
       );
 
     const installed = await manager.query(
-      "SELECT count(*) FILTER(WHERE c.relname=ANY($1::text[]))::int AS n, count(*) FILTER(WHERE c.relname=ANY($2::text[]))::int AS legacy, count(*) FILTER(WHERE c.relname='authorization_history_baseline')::int AS baseline FROM pg_class c JOIN pg_namespace n ON n.oid=c.relnamespace WHERE n.nspname=current_schema() AND c.relkind='r'",
-      [relations, PRE_NAMING_AUTHORITY_RELATIONS],
+      "SELECT count(*) FILTER(WHERE c.relname=ANY($1::text[]))::int AS n, count(*) FILTER(WHERE c.relname=ANY($2::text[]))::int AS legacy, count(*) FILTER(WHERE c.relname='authorization_history_baseline')::int AS baseline, count(*) FILTER(WHERE c.relname=ANY($3::text[]))::int AS history FROM pg_class c JOIN pg_namespace n ON n.oid=c.relnamespace WHERE n.nspname=current_schema() AND c.relkind='r'",
+      [relations, PRE_NAMING_AUTHORITY_RELATIONS, AUTHORITY_RELATIONS_WITH_HISTORY],
     );
     if (installed[0]?.legacy > 0) unavailable();
-    if (installed[0]?.n === 0 && installed[0]?.baseline > 0) unavailable();
+    if (installed[0]?.n === 0 && (installed[0]?.baseline > 0 || installed[0]?.history > 0))
+      unavailable();
     if (installed[0]?.n === 0) return { value: await work(manager), journaled: false };
     if (installed[0]?.n !== relations.length) unavailable();
+    if (!context) unavailable();
     let captures =
       operation === 'MAIN_AUTHORITY_BASELINE'
         ? MAIN_AUTHORITY_SOURCES.map(([, table]) => table)
@@ -219,6 +224,7 @@ export async function executeMainConfigurationCommand<T>(
                                       ? ['worker_site_zone_assignment', 'site']
                                       : operation === 'SITE_CREATE' ||
                                           operation === 'WORKER_DOCUMENT_REVIEW' ||
+                                          operation === 'WORKER_DOCUMENT_SUBMIT' ||
                                           operation === 'WORKER_GATE_PERMISSIONS_SET'
                                         ? ['site']
                                         : operation === 'ZONE_CREATE' ||
@@ -242,7 +248,6 @@ export async function executeMainConfigurationCommand<T>(
     if (operation.startsWith('TEAM_'))
       captures = ['contractor_team', 'contractor_team_membership', 'team_zone_permission'];
     if (!(await hasMainAuthorityCapture(manager, captures))) unavailable();
-    if (!context) return { value: await work(manager), journaled: false };
     const nested = await manager.query(
       "SELECT current_setting('smartsite.mf06_command_id',true) AS value",
     );
@@ -275,6 +280,7 @@ export async function executeMainConfigurationCommand<T>(
   const refreshAfterLock =
     revokesAccountSessions ||
     operation === 'WORKER_ACCOUNT_PREPARE' ||
+    operation === 'WORKER_DOCUMENT_SUBMIT' ||
     operation.startsWith('TEAM_') ||
     operation === 'CONTRACTOR_ZONE_GRANT' ||
     operation === 'CONTRACTOR_ZONE_REVOKE' ||

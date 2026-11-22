@@ -1,4 +1,5 @@
 import { SmartNativeSelect } from '../ui/SmartNativeSelect';
+import { WorkerDocumentQuickScan, WorkerDocumentAiStatus } from './WorkerDocumentQuickScan';
 import { useState } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useTranslation } from 'react-i18next';
@@ -37,6 +38,33 @@ export function WorkerDocumentReviewView(p: {
   const [submissionStatus, setSubmissionStatus] = useState<WorkerDocumentSubmissionStatus | ''>('');
   const [needsSupplement, setNeedsSupplement] = useState(false);
   const [search, setSearch] = useState('');
+  const selectionKey = [p.scope, p.siteId, offset, search, submissionStatus, needsSupplement].join(
+    ':',
+  );
+  const [selection, setSelection] = useState({
+    key: selectionKey,
+    revision: 0,
+    ids: [] as string[],
+    activeWorker: null as string | null,
+    manualWorker: null as string | null,
+  });
+  if (selection.key !== selectionKey) {
+    setSelection({
+      key: selectionKey,
+      revision: selection.revision + 1,
+      ids: [],
+      activeWorker: null,
+      manualWorker: null,
+    });
+  }
+  const checkedIds = selection.key === selectionKey ? selection.ids : [];
+  const toggleChecked = (id: string) =>
+    setSelection((current) => ({
+      ...current,
+      ids: current.ids.includes(id)
+        ? current.ids.filter((value) => value !== id)
+        : [...current.ids, id],
+    }));
   const workers = useQuery({
     queryKey: [
       'worker-document-queue',
@@ -68,7 +96,7 @@ export function WorkerDocumentReviewView(p: {
   };
 
   return (
-    <section className="space-y-6 rounded-2xl border border-slate-200/90 bg-white p-5 sm:p-7 shadow-xs">
+    <section className="space-y-6 rounded-2xl border border-slate-200/90 bg-white p-3 sm:p-7 shadow-xs">
       {/* Header section with badge & title */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-slate-100 pb-5">
         <div className="space-y-1">
@@ -149,7 +177,7 @@ export function WorkerDocumentReviewView(p: {
               </label>
 
               <label
-                className={`flex items-center gap-2 px-3 py-2 rounded-xl border transition-all cursor-pointer select-none text-xs font-bold shadow-2xs self-end h-[36px] ${
+                className={`flex items-center gap-2 px-3 py-2 rounded-xl border transition-all cursor-pointer select-none text-xs font-bold shadow-2xs self-end min-h-11 ${
                   needsSupplement
                     ? 'bg-rose-50 border-rose-300 text-rose-800 ring-1 ring-rose-300/40'
                     : 'bg-white border-slate-200 text-slate-600 hover:bg-slate-50 hover:border-slate-300'
@@ -208,13 +236,66 @@ export function WorkerDocumentReviewView(p: {
             </div>
           )}
 
+          {(p.canReview ?? true) && (
+            <>
+              <label className="flex items-center gap-2 text-sm font-semibold text-slate-700">
+                <input
+                  type="checkbox"
+                  className="h-4 w-4 accent-orange-500"
+                  checked={
+                    !!workers.data?.items.length &&
+                    workers.data.items.every((worker) => checkedIds.includes(worker.workerId))
+                  }
+                  onChange={(event) =>
+                    setSelection({
+                      ...selection,
+                      ids: event.target.checked
+                        ? (workers.data?.items.map((worker) => worker.workerId) ?? [])
+                        : [],
+                    })
+                  }
+                />
+                {tr('documents.selectPage')}
+              </label>
+              <WorkerDocumentQuickScan
+                key={selectionKey}
+                client={p.client}
+                token={p.token}
+                siteId={p.siteId}
+                profiles={
+                  workers.data?.items.filter((worker) => checkedIds.includes(worker.workerId)) ?? []
+                }
+                disabled={!!selection.manualWorker}
+                onUpdated={refresh}
+                onActiveChange={(workerId) =>
+                  setSelection((current) =>
+                    current.revision === selection.revision
+                      ? { ...current, activeWorker: workerId }
+                      : current,
+                  )
+                }
+              />
+            </>
+          )}
           {/* Worker List Stack without visible scrollbar */}
           <ul className="space-y-2.5 max-h-[560px] overflow-y-auto [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden">
             {workers.data?.items.map((w) => {
               const isSelected = selected === w.workerId;
 
               return (
-                <li key={w.workerId}>
+                <li key={w.workerId} className="flex items-start gap-2">
+                  {(p.canReview ?? true) && (
+                    <input
+                      type="checkbox"
+                      className="mt-5 h-4 w-4 shrink-0 accent-orange-500"
+                      aria-label={tr('documents.selectWorker', {
+                        name: w.displayName,
+                        code: w.externalId,
+                      })}
+                      checked={checkedIds.includes(w.workerId)}
+                      onChange={() => toggleChecked(w.workerId)}
+                    />
+                  )}
                   <button
                     className={`w-full rounded-2xl border p-3.5 text-left transition-all relative overflow-hidden group shadow-2xs cursor-pointer ${
                       isSelected
@@ -227,7 +308,7 @@ export function WorkerDocumentReviewView(p: {
                     {isSelected && (
                       <div className="absolute left-0 top-0 bottom-0 w-1.5 bg-[#F66B17]" />
                     )}
-                    <div className="flex items-center justify-between gap-3">
+                    <div className="flex flex-col items-start gap-3 sm:flex-row sm:items-center sm:justify-between">
                       <div className="flex items-center gap-3 min-w-0 flex-1">
                         <div
                           className={`w-10 h-10 rounded-xl flex items-center justify-center font-extrabold text-xs shrink-0 shadow-2xs transition-colors ${
@@ -248,8 +329,17 @@ export function WorkerDocumentReviewView(p: {
                         </div>
                       </div>
 
-                      <div className="flex flex-col items-end gap-1.5 shrink-0 max-w-[55%]">
+                      <div className="flex flex-row flex-wrap items-start gap-1.5 max-w-full sm:flex-col sm:items-end sm:max-w-[55%]">
                         <WorkerDocumentStatusTags profile={w} />
+                        {(p.canReview ?? true) && (
+                          <WorkerDocumentAiStatus
+                            profile={w}
+                            running={
+                              selection.activeWorker === w.workerId ||
+                              selection.manualWorker === w.workerId
+                            }
+                          />
+                        )}
                         {!(p.canReview ?? true) && w.expiringKinds.length > 0 && (
                           <span className="inline-flex items-center gap-1 text-[10px] font-bold text-amber-800 bg-amber-50 px-2 py-0.5 rounded-md border border-amber-200/80 shadow-2xs whitespace-nowrap">
                             <IconClock className="w-2.5 h-2.5 text-amber-600" />
@@ -301,6 +391,14 @@ export function WorkerDocumentReviewView(p: {
               key={selected}
               {...p}
               workerId={selected}
+              analysisBusy={!!selection.activeWorker || !!selection.manualWorker}
+              onAnalysisChange={(running) =>
+                setSelection((current) =>
+                  current.revision === selection.revision
+                    ? { ...current, manualWorker: running ? selected : null }
+                    : current,
+                )
+              }
               canReview={p.canReview ?? true}
             />
           ) : (

@@ -93,10 +93,8 @@ export class AttendanceReportsService {
       .findBy({ userId: actor.id });
     const staff = roles.some(
       (r) =>
-        (r.role === UserRole.ADMIN && r.siteId === null) ||
-        (r.siteId === siteId &&
-          (r.role === UserRole.SITE_MANAGER ||
-            (!exportOnly && r.role === UserRole.SECURITY_OFFICER))),
+        r.siteId === siteId &&
+        (r.role === UserRole.SITE_MANAGER || (!exportOnly && r.role === UserRole.SECURITY_OFFICER)),
     );
     const contractors: string[] = [];
     if (roles.some((r) => r.siteId === siteId && r.role === UserRole.CONTRACTOR_REPRESENTATIVE)) {

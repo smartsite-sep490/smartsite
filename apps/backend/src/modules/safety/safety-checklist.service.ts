@@ -79,11 +79,7 @@ export class SafetyChecklistService {
     private readonly workflow?: SafetyWorkflowService,
   ) {}
   private full(actor: AuthenticatedUser, siteId: string) {
-    return (
-      has(actor, null, UserRole.ADMIN) ||
-      has(actor, siteId, UserRole.SAFETY_OFFICER) ||
-      has(actor, siteId, UserRole.SITE_MANAGER)
-    );
+    return has(actor, siteId, UserRole.SAFETY_OFFICER) || has(actor, siteId, UserRole.SITE_MANAGER);
   }
   private async assignment(m: EntityManager, siteId: string, id: string, lock = false) {
     return (
