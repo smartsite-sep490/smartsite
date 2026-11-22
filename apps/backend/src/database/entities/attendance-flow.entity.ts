@@ -17,6 +17,9 @@ import { GateEventEntity } from './access-flow.entity.js';
 import { AttendanceDayEntity } from './attendance-day.entity.js';
 
 @Entity({ name: 'attendance_event' })
+@Index('idx_team_attendance_gate', ['shiftAssignmentId', 'siteId', 'workerId'], {
+  where: "kind = 'CHECK_IN' AND gate_event_id IS NOT NULL",
+})
 @Index('uq_attendance_event_gate', ['gateEventId'], { unique: true })
 @Check(
   'ck_attendance_event_kind',

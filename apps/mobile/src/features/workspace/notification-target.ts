@@ -19,8 +19,15 @@ export function notificationTarget(
     return role === 'contractor'
       ? { route: 'assigned', id: target.incidentId, kind: 'incident' }
       : null;
-  if ('requestId' in target)
-    return { route: 'requests', id: target.requestId, kind: target.requestType };
+  if ('requestId' in target && target.requestId && target.requestType)
+    return {
+      route: 'requests',
+      id: target.requestId,
+      kind: target.requestType,
+      ...('view' in target && target.view === 'coworker'
+        ? { requestView: 'INCOMING' as const }
+        : {}),
+    };
   if ('dayId' in target) return { route: 'attendance', id: target.dayId };
   if ('workDate' in target) return { route: 'schedule', workDate: target.workDate };
   return null;

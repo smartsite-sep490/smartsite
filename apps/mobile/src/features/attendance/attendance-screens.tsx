@@ -5,7 +5,7 @@ import { View, Text, StyleSheet, Pressable, ScrollView } from 'react-native';
 import { useQuery } from '@tanstack/react-query';
 import { useWorkspace } from '../workspace/workspace-context';
 import { allPages, displayTime, localDate, minutes, validDates } from '../shared/data';
-import { Body, CompactTabs, Disclosure, Hint, Page, Pager, QueryState } from '../shared/ui';
+import { Body, Button, CompactTabs, Disclosure, Hint, Page, Pager, QueryState } from '../shared/ui';
 import type { AttendanceDaysResponse } from '@smartsite/api-client';
 import { useScopedWorkers } from '../workspace/use-scoped-workers';
 import { AttendanceReport } from './attendance-report';
@@ -27,6 +27,7 @@ import { WorkerTimeRequests } from './worker-time-requests';
 import { WorkerTodayCard } from './worker-today-card';
 import { WorkerAttendanceDay, WorkerAttendanceSummary } from './worker-attendance-board';
 import { AttendanceDetail } from './attendance-day-detail';
+import { RequestSheet } from '../shared/request-sheet';
 
 export function AttendanceScreen({
   initialDayId,
@@ -48,6 +49,7 @@ export function AttendanceScreen({
   const [activeView, setActiveView] = useState('BOARD');
   const [requestKind, setRequestKind] = useState<'LEAVE' | 'OVERTIME'>('LEAVE');
   const [submitted, setSubmitted] = useState(false);
+  const pageSize = scope.role === 'worker' ? 8 : 20;
   const workers = useScopedWorkers();
   const workerIds = new Set(workers.data?.map((w) => w.id));
 
@@ -70,8 +72,9 @@ export function AttendanceScreen({
       const first = pages[0]!;
       return {
         ...first,
-        items: rows.slice(offset, offset + 20),
+        items: rows.slice(offset, offset + pageSize),
         total: rows.length,
+        todayDayId: rows.find((day) => day.workDate === today)?.id,
         requests: first.requests.filter((r) => workerIds.has(r.workerId)),
         canRequest: scope.role === 'worker' && first.canRequest,
       };
@@ -133,7 +136,10 @@ export function AttendanceScreen({
   return (
     <ScrollView
       style={attStyles.screen}
-      contentContainerStyle={attStyles.content}
+      contentContainerStyle={[
+        attStyles.content,
+        scope.role === 'worker' && attStyles.workerContent,
+      ]}
       showsVerticalScrollIndicator={false}
     >
       <View style={attStyles.headingRow}>
@@ -148,9 +154,8 @@ export function AttendanceScreen({
           </Pressable>
         )}
         <View style={attStyles.headingCopy}>
-          <Text style={attStyles.eyebrow}>{t('attendance.myTitle')}</Text>
           <Text accessibilityRole="header" style={attStyles.pageTitle}>
-            {scope.role === 'worker' ? t('tabs.attendance') : t('attendance.teamTitle')}
+            {scope.role === 'worker' ? t('attendance.myTitle') : t('attendance.teamTitle')}
           </Text>
         </View>
         <Pressable
@@ -206,10 +211,7 @@ export function AttendanceScreen({
         <>
           {scope.role === 'worker' && (
             <>
-              <WorkerTodayCard
-                dayId={days.data?.items.find((day) => day.workDate === today)?.id}
-                onDay={setDayId}
-              />
+              <WorkerTodayCard dayId={days.data?.todayDayId} onDay={setDayId} />
               {days.data?.canRequest && (
                 <View style={attStyles.quickActions}>
                   {(['LEAVE', 'OVERTIME'] as const).map((kind) => (
@@ -229,20 +231,15 @@ export function AttendanceScreen({
                       }}
                     >
                       {kind === 'LEAVE' ? (
-                        <IconCalendar size={22} color={colors.primary} />
+                        <IconCalendar size={18} color={colors.primary} />
                       ) : (
-                        <IconClock size={22} color={colors.primary} />
+                        <IconClock size={18} color={colors.primary} />
                       )}
                       <Text style={attStyles.quickTitle}>
                         {t(
                           kind === 'LEAVE'
                             ? 'attendanceUi.leaveAction'
                             : 'attendanceUi.overtimeAction',
-                        )}
-                      </Text>
-                      <Text style={attStyles.quickHint}>
-                        {t(
-                          kind === 'LEAVE' ? 'attendanceUi.leaveHint' : 'attendanceUi.overtimeHint',
                         )}
                       </Text>
                     </Pressable>
@@ -296,11 +293,24 @@ export function AttendanceScreen({
           </Text>
 
           {showFilters && (
-            <DateRangeFilter
-              range={range}
-              onChange={changeRange}
-              onValidate={(newRange) => validDates(newRange.fromDate, newRange.toDate)}
-            />
+            <RequestSheet
+              visible
+              variant="compact"
+              title={t('attendance.period')}
+              onClose={() => setShowFilters(false)}
+              footer={
+                <Button secondary label={t('common.done')} onPress={() => setShowFilters(false)} />
+              }
+            >
+              <DateRangeFilter
+                range={range}
+                onChange={(next) => {
+                  changeRange(next);
+                  setShowFilters(false);
+                }}
+                onValidate={(newRange) => validDates(newRange.fromDate, newRange.toDate)}
+              />
+            </RequestSheet>
           )}
 
           {/* Confirmed total with separate overtime and provisional hours. */}
@@ -380,159 +390,168 @@ export function AttendanceScreen({
                     <Text style={attStyles.emptySubtitle}>{t('attendance.emptyHistoryHint')}</Text>
                   </View>
                 )}
-                {data.items.map((day, index) =>
-                  scope.role === 'worker' ? (
-                    <WorkerAttendanceDay key={day.id} day={day} onPress={() => setDayId(day.id)} />
-                  ) : (
-                    <View key={day.id} style={attStyles.dayTimelineRow}>
-                      <View style={attStyles.dayRail}>
-                        <Text style={attStyles.railDay}>{day.workDate.slice(8)}</Text>
-                        <Text style={attStyles.railMonth}>
-                          {dateLabel(day.workDate, { month: 'short' })}
-                        </Text>
-                        <View style={attStyles.railDot} />
-                        {index < data.items.length - 1 && <View style={attStyles.railLine} />}
-                      </View>
-                      <Pressable
-                        accessibilityRole="button"
-                        accessibilityLabel={`${day.workDate} ${scope.role === 'contractor' ? day.workerName : (day.shiftName ?? t('attendance.shiftNotAssigned'))}`}
-                        style={({ pressed }) => [
-                          attStyles.dayCard,
-                          {
-                            borderLeftColor:
-                              day.status === 'CONFIRMED'
-                                ? colors.success
-                                : day.status === 'NEEDS_REVIEW'
-                                  ? colors.warning
-                                  : colors.primary,
-                          },
-                          pressed && attStyles.pressed,
-                        ]}
+                {(scope.role !== 'worker' || data.total > pageSize || offset > 0) && (
+                  <Pager offset={offset} total={data.total} size={pageSize} onChange={setOffset} />
+                )}
+                <View
+                  style={
+                    scope.role === 'worker' ? attStyles.workerHistory : attStyles.contractorHistory
+                  }
+                >
+                  {data.items.map((day, index) =>
+                    scope.role === 'worker' ? (
+                      <WorkerAttendanceDay
+                        key={day.id}
+                        day={day}
                         onPress={() => setDayId(day.id)}
-                      >
-                        <View style={attStyles.dayCardHeader}>
-                          <View style={attStyles.dayInfoCol}>
-                            <View
-                              style={[
-                                attStyles.dayStatusPill,
-                                {
-                                  backgroundColor:
-                                    day.status === 'CONFIRMED'
-                                      ? colors.successBg
-                                      : day.status === 'NEEDS_REVIEW'
-                                        ? colors.warningBg
-                                        : colors.primaryLight,
-                                },
-                              ]}
-                            >
-                              <Text style={attStyles.dayStatusText}>
-                                {localizedLabel(day.status)}
-                              </Text>
-                            </View>
-                            <Text style={attStyles.dayWorkerName}>
-                              {scope.role === 'contractor'
-                                ? day.workerName
-                                : (day.shiftName ?? t('attendance.shiftNotAssigned'))}
-                            </Text>
-                            <View style={attStyles.presenceBadge}>
+                      />
+                    ) : (
+                      <View key={day.id} style={attStyles.dayTimelineRow}>
+                        <View style={attStyles.dayRail}>
+                          <Text style={attStyles.railDay}>{day.workDate.slice(8)}</Text>
+                          <Text style={attStyles.railMonth}>
+                            {dateLabel(day.workDate, { month: 'short' })}
+                          </Text>
+                          <View style={attStyles.railDot} />
+                          {index < data.items.length - 1 && <View style={attStyles.railLine} />}
+                        </View>
+                        <Pressable
+                          accessibilityRole="button"
+                          accessibilityLabel={`${day.workDate} ${scope.role === 'contractor' ? day.workerName : (day.shiftName ?? t('attendance.shiftNotAssigned'))}`}
+                          style={({ pressed }) => [
+                            attStyles.dayCard,
+                            {
+                              borderLeftColor:
+                                day.status === 'CONFIRMED'
+                                  ? colors.success
+                                  : day.status === 'NEEDS_REVIEW'
+                                    ? colors.warning
+                                    : colors.primary,
+                            },
+                            pressed && attStyles.pressed,
+                          ]}
+                          onPress={() => setDayId(day.id)}
+                        >
+                          <View style={attStyles.dayCardHeader}>
+                            <View style={attStyles.dayInfoCol}>
                               <View
                                 style={[
-                                  attStyles.miniDot,
+                                  attStyles.dayStatusPill,
                                   {
                                     backgroundColor:
-                                      day.presence === 'INSIDE' ? '#10B981' : '#F66B17',
+                                      day.status === 'CONFIRMED'
+                                        ? colors.successBg
+                                        : day.status === 'NEEDS_REVIEW'
+                                          ? colors.warningBg
+                                          : colors.primaryLight,
                                   },
                                 ]}
-                              />
-                              <Text
-                                style={[
-                                  attStyles.presenceText,
-                                  { color: day.presence === 'INSIDE' ? '#065F46' : '#C2410C' },
-                                ]}
                               >
-                                {day.presence === 'INSIDE'
-                                  ? t('attendance.insideSite')
-                                  : t('attendance.outsideSite')}
+                                <Text style={attStyles.dayStatusText}>
+                                  {localizedLabel(day.status)}
+                                </Text>
+                              </View>
+                              <Text style={attStyles.dayWorkerName}>
+                                {scope.role === 'contractor'
+                                  ? day.workerName
+                                  : (day.shiftName ?? t('attendance.shiftNotAssigned'))}
+                              </Text>
+                              <View style={attStyles.presenceBadge}>
+                                <View
+                                  style={[
+                                    attStyles.miniDot,
+                                    {
+                                      backgroundColor:
+                                        day.presence === 'INSIDE' ? '#10B981' : '#F66B17',
+                                    },
+                                  ]}
+                                />
+                                <Text
+                                  style={[
+                                    attStyles.presenceText,
+                                    { color: day.presence === 'INSIDE' ? '#065F46' : '#C2410C' },
+                                  ]}
+                                >
+                                  {day.presence === 'INSIDE'
+                                    ? t('attendance.insideSite')
+                                    : t('attendance.outsideSite')}
+                                </Text>
+                              </View>
+                            </View>
+                            <View style={attStyles.dayHoursCol}>
+                              <Text style={attStyles.hoursText}>
+                                {day.confirmedMinutes === null
+                                  ? minutes(day.provisionalMinutes)
+                                  : minutes(day.confirmedMinutes)}
+                              </Text>
+                              <Text style={attStyles.hoursSub}>
+                                {day.confirmedMinutes === null
+                                  ? t('attendance.provisionalHours')
+                                  : t('attendance.confirmedHours')}
                               </Text>
                             </View>
                           </View>
-                          <View style={attStyles.dayHoursCol}>
-                            <Text style={attStyles.hoursText}>
-                              {day.confirmedMinutes === null
-                                ? minutes(day.provisionalMinutes)
-                                : minutes(day.confirmedMinutes)}
-                            </Text>
-                            <Text style={attStyles.hoursSub}>
-                              {day.confirmedMinutes === null
-                                ? t('attendance.provisionalHours')
-                                : t('attendance.confirmedHours')}
-                            </Text>
+
+                          <View style={attStyles.cardLocation}>
+                            <IconMapPin size={15} color={colors.textMuted} />
+                            <Text style={attStyles.locationText}>{scope.siteName}</Text>
                           </View>
-                        </View>
+                          {day.startsAt && day.endsAt && (
+                            <Text style={attStyles.locationText}>
+                              {t('attendanceUi.scheduleHours')}{' '}
+                              {new Date(day.startsAt).toLocaleTimeString(uiLocale(), {
+                                timeZone: day.timezone,
+                                hour: '2-digit',
+                                minute: '2-digit',
+                                hour12: false,
+                              })}
+                              {' – '}
+                              {new Date(day.endsAt).toLocaleTimeString(uiLocale(), {
+                                timeZone: day.timezone,
+                                hour: '2-digit',
+                                minute: '2-digit',
+                                hour12: false,
+                              })}
+                            </Text>
+                          )}
 
-                        <View style={attStyles.cardLocation}>
-                          <IconMapPin size={15} color={colors.textMuted} />
-                          <Text style={attStyles.locationText}>{scope.siteName}</Text>
-                        </View>
-                        {day.startsAt && day.endsAt && (
-                          <Text style={attStyles.locationText}>
-                            {t('attendanceUi.scheduleHours')}{' '}
-                            {new Date(day.startsAt).toLocaleTimeString(uiLocale(), {
-                              timeZone: day.timezone,
-                              hour: '2-digit',
-                              minute: '2-digit',
-                              hour12: false,
-                            })}
-                            {' – '}
-                            {new Date(day.endsAt).toLocaleTimeString(uiLocale(), {
-                              timeZone: day.timezone,
-                              hour: '2-digit',
-                              minute: '2-digit',
-                              hour12: false,
-                            })}
-                          </Text>
-                        )}
+                          {day.anomalies.length > 0 && (
+                            <View style={attStyles.anomaliesRow}>
+                              {day.anomalies
+                                .filter(
+                                  (a) =>
+                                    a !== 'PENDING_REQUEST' ||
+                                    !day.anomalies.includes('PENDING_LEAVE'),
+                                )
+                                .map((a, i) => (
+                                  <View key={i} style={attStyles.anomalyPill}>
+                                    <Text style={attStyles.anomalyText}>
+                                      ⚠️{' '}
+                                      {a === 'PENDING_LEAVE'
+                                        ? t(
+                                            day.presence === 'OUTSIDE' &&
+                                              day.provisionalMinutes === 0 &&
+                                              day.endsAt &&
+                                              Date.parse(day.endsAt) <= Date.now()
+                                              ? 'leavePolicy.absentPendingLeave'
+                                              : 'leavePolicy.pendingLeave',
+                                          )
+                                        : localizedLabel(a)}
+                                    </Text>
+                                  </View>
+                                ))}
+                            </View>
+                          )}
 
-                        {day.anomalies.length > 0 && (
-                          <View style={attStyles.anomaliesRow}>
-                            {day.anomalies
-                              .filter(
-                                (a) =>
-                                  a !== 'PENDING_REQUEST' ||
-                                  !day.anomalies.includes('PENDING_LEAVE'),
-                              )
-                              .map((a, i) => (
-                                <View key={i} style={attStyles.anomalyPill}>
-                                  <Text style={attStyles.anomalyText}>
-                                    ⚠️{' '}
-                                    {a === 'PENDING_LEAVE'
-                                      ? t(
-                                          day.presence === 'OUTSIDE' &&
-                                            day.provisionalMinutes === 0 &&
-                                            day.endsAt &&
-                                            Date.parse(day.endsAt) <= Date.now()
-                                            ? 'leavePolicy.absentPendingLeave'
-                                            : 'leavePolicy.pendingLeave',
-                                        )
-                                      : localizedLabel(a)}
-                                  </Text>
-                                </View>
-                              ))}
+                          <View style={attStyles.dayCardFooter}>
+                            <Text style={attStyles.dayDetailLink}>{t('attendance.dayDetail')}</Text>
+                            <IconChevronRight size={16} color="#FFFFFF" />
                           </View>
-                        )}
-
-                        <View style={attStyles.dayCardFooter}>
-                          <Text style={attStyles.dayDetailLink}>{t('attendance.dayDetail')}</Text>
-                          <IconChevronRight size={16} color="#FFFFFF" />
-                        </View>
-                      </Pressable>
-                    </View>
-                  ),
-                )}
-
-                {(scope.role !== 'worker' || data.total > 20) && (
-                  <Pager offset={offset} total={data.total} onChange={setOffset} />
-                )}
+                        </Pressable>
+                      </View>
+                    ),
+                  )}
+                </View>
 
                 {scope.role !== 'worker' && (
                   <View style={attStyles.secondaryCard}>
@@ -604,19 +623,23 @@ export function AttendanceScreen({
 }
 
 const attStyles = StyleSheet.create({
-  quickActions: { flexDirection: 'row', flexWrap: 'wrap', gap: 12 },
+  quickActions: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
   quickAction: {
     flex: 1,
     minWidth: 130,
-    padding: 16,
+    minHeight: 44,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 12,
+    paddingVertical: 10,
     gap: 8,
-    borderRadius: 18,
+    borderRadius: 12,
     backgroundColor: colors.surface,
     borderWidth: 1,
     borderColor: colors.primaryBorder,
   },
-  quickTitle: { fontSize: 16, fontWeight: '800', color: colors.textPrimary },
-  quickHint: { fontSize: 12, lineHeight: 18, color: colors.textMuted },
+  quickTitle: { fontSize: 13, fontWeight: '600', color: colors.textPrimary },
   successNotice: {
     padding: 14,
     borderRadius: 14,
@@ -638,6 +661,15 @@ const attStyles = StyleSheet.create({
   },
   screen: { flex: 1, backgroundColor: colors.background },
   content: { paddingHorizontal: 16, paddingTop: 20, paddingBottom: 32, gap: 18 },
+  workerContent: { paddingTop: 12, gap: 12 },
+  contractorHistory: { gap: 18 },
+  workerHistory: {
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: colors.border,
+    overflow: 'hidden',
+    backgroundColor: colors.surface,
+  },
   headingRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
   headingCopy: { flex: 1, minWidth: 0 },
   eyebrow: {
@@ -650,8 +682,8 @@ const attStyles = StyleSheet.create({
   },
   pageTitle: {
     color: colors.textPrimary,
-    fontSize: 26,
-    lineHeight: 34,
+    fontSize: 19,
+    lineHeight: 27,
     fontWeight: '800',
     letterSpacing: -0.7,
   },

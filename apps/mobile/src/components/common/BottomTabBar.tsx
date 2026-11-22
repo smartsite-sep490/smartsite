@@ -5,7 +5,7 @@ import { colors } from '../../theme/colors';
 import { IconHome, IconCalendar, IconClock, IconUser, IconUsers, IconDocument } from './Icons';
 import { useTranslation } from '../../i18n';
 
-export type WorkerTab = 'home' | 'schedule' | 'attendance' | 'profile';
+export type WorkerTab = 'home' | 'schedule' | 'attendance' | 'requests' | 'profile';
 export type ContractorTab = 'home' | 'workforce' | 'schedule' | 'requests' | 'profile';
 
 interface BottomTabBarProps {
@@ -90,7 +90,27 @@ export function BottomTabBar({
           {activeTab === 'attendance' && <View style={styles.tabIndicator} />}
         </Pressable>
 
-        {/* Tab 4: Cá nhân */}
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel={t('workerRequests.tab')}
+          accessibilityState={{ selected: activeTab === 'requests' }}
+          style={styles.tabItem}
+          onPress={() => onSelectTab('requests')}
+          hitSlop={8}
+        >
+          <IconDocument
+            size={24}
+            color={activeTab === 'requests' ? colors.primary : colors.textTertiary}
+          />
+          <Text
+            numberOfLines={1}
+            style={[styles.tabLabel, activeTab === 'requests' && styles.tabLabelActive]}
+          >
+            {t('workerRequests.tab')}
+          </Text>
+          {activeTab === 'requests' && <View style={styles.tabIndicator} />}
+        </Pressable>
+        {/* Tab 5: Cá nhân */}
         <Pressable
           accessibilityRole="button"
           accessibilityLabel={t('tabs.profile')}

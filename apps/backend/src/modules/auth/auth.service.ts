@@ -15,6 +15,8 @@ export type AuthenticatedUser = Pick<
   UserEntity,
   'id' | 'username' | 'displayName' | 'isActive' | 'mustChangePassword'
 > & {
+  email?: string | null;
+  emailVerifiedAt?: string | null;
   roleAssignments: Array<Pick<UserRoleAssignmentEntity, 'role' | 'siteId'>>;
 };
 
@@ -41,6 +43,9 @@ export function publicUser(
       ),
     isActive: user.isActive,
     mustChangePassword: user.mustChangePassword,
+    ...(user.email !== undefined
+      ? { email: user.email, emailVerifiedAt: user.emailVerifiedAt?.toISOString() ?? null }
+      : {}),
   };
 }
 

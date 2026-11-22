@@ -201,8 +201,13 @@ export * from './camera-region-geometry-confirmation.js';
 export * from './camera-configuration-bundle.js';
 export * from './camera-configuration-ack.js';
 export * from './camera-application-status.js';
-export { LEAVE_NOTICE_HOURS, leaveNotice } from './leave-notice.js';
-export type { LeaveNoticeType } from './leave-notice.js';
+export {
+  LEAVE_NOTICE_HOURS,
+  leaveNotice,
+  timeRequestTimingIssue,
+  TIME_REQUEST_TIMING_MESSAGES,
+} from './leave-notice.js';
+export type { LeaveNoticeType, TimeRequestTimingIssue } from './leave-notice.js';
 
 export { scheduledShiftWindow } from './scheduled-shift.js';
 
@@ -214,3 +219,11 @@ export * from './camera-preview.js';
 export * from './camera-observation-zones.js';
 
 export * from './gates-api.js';
+export * from './team-attendance-api.js';
+export * from './account-email-api.js';
+export * from './mobile-push-api.js';
+export type {
+  ContractorTeamCalendarItem,
+  ContractorTeamCalendarQuery,
+} from './schedule-assignment-api.js';
+export type { ContractorTeamCalendarResponse } from './schedule-assignment-api.js';

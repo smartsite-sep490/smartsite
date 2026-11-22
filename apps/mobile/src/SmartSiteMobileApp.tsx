@@ -27,6 +27,9 @@ import { QrScreen, NotificationsScreen } from './features/workspace/qr-notificat
 import { useTranslation, initSavedLanguage } from './i18n';
 import { localizeMessage } from './i18n/messages';
 import { MobileLayoutProvider } from './features/shared/mobile-layout';
+import { MobilePushProvider } from './features/workspace/mobile-push';
+import { LogoutConfirmation } from './features/auth/logout-confirmation';
+import { RequestFeedbackProvider } from './features/shared/request-feedback';
 
 export type UserRole = 'worker' | 'contractor';
 export type MobileRoute =
@@ -47,6 +50,7 @@ export type NavigationTarget = {
   id?: string;
   kind?: string;
   workDate?: string;
+  requestView?: 'INCOMING';
 };
 
 function WorkspaceApp({ onScopeChange }: { onScopeChange: () => void }) {
@@ -106,104 +110,115 @@ function WorkspaceApp({ onScopeChange }: { onScopeChange: () => void }) {
     route === 'schedule' ||
     route === 'profile' ||
     route === (contractor ? 'workforce' : 'attendance') ||
-    (contractor && route === 'requests');
+    route === 'requests';
 
   return (
-    <MobileLayoutProvider
-      compact={
-        contractor && ['workforce', 'schedule', 'requests', 'teams', 'access'].includes(route)
-      }
-    >
-      <View style={{ flex: 1, backgroundColor: palette.bg }}>
-        <StatusBar style="dark" />
-        {/* Top Header */}
-        {route !== 'profile' && (
-          <ScreenHeader
-            mode={main ? 'root' : 'detail'}
-            title={
-              !main
-                ? route === 'teams'
-                  ? selectedTeam
-                    ? t('teams.details')
-                    : t('teams.title')
-                  : route === 'access'
-                    ? t('access.title')
-                    : route === 'assigned'
-                      ? t('assignedWork.title')
-                      : route === 'qr'
-                        ? t('qr.title')
-                        : route === 'notifications'
-                          ? t('notifications.title')
-                          : undefined
-                : undefined
-            }
-            siteName={scope.siteName}
-            scopeLabel={contractor ? scope.contractorName : t('scope.workerRole')}
-            avatarRole={scope.role}
-            showAvatar={contractor && route !== 'home'}
-            showTagline={!contractor}
-            showSiteInfo={false}
-            unreadCount={notices.data?.unreadCount ?? 0}
-            onBack={!main ? back : undefined}
-            onScopeChange={onScopeChange}
-            onNotificationPress={() => navigate({ route: 'notifications' })}
-            onAvatarPress={() => navigate({ route: 'profile' })}
-          />
-        )}
-
-        <SafeAreaView
-          edges={main ? ['left', 'right'] : ['left', 'right', 'bottom']}
-          style={{ flex: 1 }}
-          key={`${route}:${navigation.id ?? ''}`}
+    <MobilePushProvider onOpenNotifications={() => navigate({ route: 'notifications' })}>
+      <RequestFeedbackProvider
+        onViewRequests={() =>
+          navigate({ route: 'requests', ...(contractor ? { kind: 'TIME' } : {}) })
+        }
+      >
+        <MobileLayoutProvider
+          compact={
+            contractor && ['workforce', 'schedule', 'requests', 'teams', 'access'].includes(route)
+          }
         >
-          {route === 'home' && <HomeScreen navigate={navigate} />}
-          {route === 'profile' && (
-            <MobileLayoutProvider compact={false}>
-              <ProfileScreen
+          <View style={{ flex: 1, backgroundColor: palette.bg }}>
+            <StatusBar style="dark" />
+            {/* Top Header */}
+            {route !== 'profile' && (
+              <ScreenHeader
+                mode={main ? 'root' : 'detail'}
+                title={
+                  !main
+                    ? route === 'teams'
+                      ? selectedTeam
+                        ? t('teams.details')
+                        : t('teams.title')
+                      : route === 'access'
+                        ? t('access.title')
+                        : route === 'assigned'
+                          ? t('assignedWork.title')
+                          : route === 'qr'
+                            ? t('qr.title')
+                            : route === 'notifications'
+                              ? t('notifications.title')
+                              : undefined
+                    : undefined
+                }
+                siteName={scope.siteName}
+                scopeLabel={contractor ? scope.contractorName : t('scope.workerRole')}
+                avatarRole={scope.role}
+                showAvatar={contractor && route !== 'home'}
+                showTagline={!contractor}
+                showSiteInfo={false}
+                unreadCount={notices.data?.unreadCount ?? 0}
+                onBack={!main ? back : undefined}
                 onScopeChange={onScopeChange}
-                initialDocuments={navigation.kind === 'documents'}
+                onNotificationPress={() => navigate({ route: 'notifications' })}
+                onAvatarPress={() => navigate({ route: 'profile' })}
               />
-            </MobileLayoutProvider>
-          )}
-          {route === 'schedule' && <ScheduleScreen initialDate={navigation.workDate} />}
-          {route === 'attendance' && (
-            <AttendanceScreen initialDayId={navigation.id} onBack={main ? undefined : back} />
-          )}
-          {route === 'requests' && (
-            <ShiftRequestsScreen
-              initialId={navigation.id}
-              initialKind={navigation.kind}
-              onBack={main ? undefined : back}
-            />
-          )}
-          {route === 'workforce' && contractor && (
-            <WorkforceScreen initialWorkerId={navigation.id} />
-          )}
-          {route === 'teams' && contractor && (
-            <TeamsScreen selectedTeam={selectedTeam} onSelectTeam={setSelectedTeam} />
-          )}
-          {route === 'access' && <AccessScreen onBack={back} embedded={contractor} />}
-          {route === 'assigned' && contractor && (
-            <AssignedWorkScreen
-              initialId={navigation.id}
-              initialKind={navigation.kind}
-              onBack={back}
-            />
-          )}
-          {route === 'qr' && !contractor && <QrScreen onBack={back} />}
-          {route === 'notifications' && <NotificationsScreen navigate={navigate} onBack={back} />}
-        </SafeAreaView>
+            )}
 
-        {main && (
-          <BottomTabBar
-            role={scope.role}
-            activeTab={route}
-            pendingRequestsCount={contractor ? (pendingRequests.data?.pendingCount ?? 0) : 0}
-            onSelectTab={(tab: WorkerTab | ContractorTab) => navigate({ route: tab })}
-          />
-        )}
-      </View>
-    </MobileLayoutProvider>
+            <SafeAreaView
+              edges={main ? ['left', 'right'] : ['left', 'right', 'bottom']}
+              style={{ flex: 1 }}
+              key={`${route}:${navigation.id ?? ''}:${navigation.kind ?? ''}:${navigation.requestView ?? ''}`}
+            >
+              {route === 'home' && <HomeScreen navigate={navigate} />}
+              {route === 'profile' && (
+                <MobileLayoutProvider compact={false}>
+                  <ProfileScreen
+                    onScopeChange={onScopeChange}
+                    initialDocuments={navigation.kind === 'documents'}
+                  />
+                </MobileLayoutProvider>
+              )}
+              {route === 'schedule' && <ScheduleScreen initialDate={navigation.workDate} />}
+              {route === 'attendance' && (
+                <AttendanceScreen initialDayId={navigation.id} onBack={main ? undefined : back} />
+              )}
+              {route === 'requests' && (
+                <ShiftRequestsScreen
+                  initialId={navigation.id}
+                  initialKind={navigation.kind}
+                  initialView={navigation.requestView}
+                  onBack={main ? undefined : back}
+                />
+              )}
+              {route === 'workforce' && contractor && (
+                <WorkforceScreen initialWorkerId={navigation.id} />
+              )}
+              {route === 'teams' && contractor && (
+                <TeamsScreen selectedTeam={selectedTeam} onSelectTeam={setSelectedTeam} />
+              )}
+              {route === 'access' && <AccessScreen onBack={back} embedded={contractor} />}
+              {route === 'assigned' && contractor && (
+                <AssignedWorkScreen
+                  initialId={navigation.id}
+                  initialKind={navigation.kind}
+                  onBack={back}
+                />
+              )}
+              {route === 'qr' && !contractor && <QrScreen onBack={back} />}
+              {route === 'notifications' && (
+                <NotificationsScreen navigate={navigate} onBack={back} />
+              )}
+            </SafeAreaView>
+
+            {main && (
+              <BottomTabBar
+                role={scope.role}
+                activeTab={route}
+                pendingRequestsCount={contractor ? (pendingRequests.data?.pendingCount ?? 0) : 0}
+                onSelectTab={(tab: WorkerTab | ContractorTab) => navigate({ route: tab })}
+              />
+            )}
+          </View>
+        </MobileLayoutProvider>
+      </RequestFeedbackProvider>
+    </MobilePushProvider>
   );
 }
 
@@ -213,6 +228,7 @@ function ScopePicker() {
     profile = useCurrentUser();
   const [choice, setChoice] = useState('');
   const [choosing, setChoosing] = useState(false);
+  const [showLogout, setShowLogout] = useState(false);
 
   const sites = useQuery({
     queryKey: ['mobile', 'sites', auth.epoch],
@@ -229,8 +245,6 @@ function ScopePicker() {
     enabled: !!isRep,
   });
 
-  const logout = useMutation({ mutationFn: () => auth.session.logout() });
-
   if (profile.isError || sites.isError || (isRep && scopes.isError))
     return (
       <SafeAreaView style={{ flex: 1, backgroundColor: palette.bg }}>
@@ -244,7 +258,8 @@ function ScopePicker() {
               if (isRep) void scopes.refetch();
             }}
           />
-          <Button secondary label={t('common.logout')} onPress={() => logout.mutate()} />
+          <Button secondary label={t('common.logout')} onPress={() => setShowLogout(true)} />
+          {showLogout && <LogoutConfirmation onClose={() => setShowLogout(false)} />}
         </Page>
       </SafeAreaView>
     );
@@ -332,8 +347,8 @@ function ScopePicker() {
             onPress={() => setChoosing(false)}
           />
         </Card>
-        <ErrorNotice error={logout.error} />
-        <Button secondary label={t('common.logout')} onPress={() => logout.mutate()} />
+        <Button secondary label={t('common.logout')} onPress={() => setShowLogout(true)} />
+        {showLogout && <LogoutConfirmation onClose={() => setShowLogout(false)} />}
       </Page>
     </SafeAreaView>
   );

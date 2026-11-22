@@ -15,6 +15,13 @@ import { WorkerEntity } from './worker.entity.js';
 import { WorkerScheduleEntity } from './worker-schedule.entity.js';
 import { UserEntity } from './user.entity.js';
 import { ShiftEntity } from './shift.entity.js';
+export interface AttendanceZoneRequirement {
+  version: 1;
+  required: boolean;
+  teamId: string | null;
+  membershipId: string | null;
+  zoneId: string | null;
+}
 
 @Entity({ name: 'attendance_day' })
 @Unique('uq_attendance_day_worker_date', ['siteId', 'workerId', 'workDate'])
@@ -37,7 +44,13 @@ import { ShiftEntity } from './shift.entity.js';
 @Check('attendance_day_max_exit_count_check', 'max_exit_count >= 0')
 @Check('attendance_day_exit_count_check', 'exit_count >= 0')
 @Check('attendance_day_deducted_minutes_check', 'deducted_minutes >= 0')
+@Check(
+  'ck_attendance_zone_requirement',
+  "zone_attendance_requirement IS NULL OR ((jsonb_typeof(zone_attendance_requirement)='object' AND zone_attendance_requirement->>'version'='1' AND jsonb_typeof(zone_attendance_requirement->'required')='boolean') IS TRUE)",
+)
 export class AttendanceDayEntity {
+  @Column({ name: 'zone_attendance_requirement', type: 'jsonb', nullable: true })
+  zoneAttendanceRequirement?: AttendanceZoneRequirement | null;
   @PrimaryColumn({ type: 'uuid' }) id!: string;
   @Column({ name: 'site_id', type: 'uuid' })
   @ForeignKey(() => SiteEntity, { name: 'attendance_day_site_id_fkey', onDelete: 'RESTRICT' })

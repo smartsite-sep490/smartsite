@@ -64,3 +64,9 @@ export class ChangeScheduleAssignmentDto {
   @MaxLength(1000)
   reason!: string;
 }
+export class ContractorTeamCalendarQueryDto {
+  @IsUUID() contractorId!: string;
+  @IsDateString({ strict: true }) @Matches(/^\d{4}-\d{2}-\d{2}$/) fromDate!: string;
+  @IsDateString({ strict: true }) @Matches(/^\d{4}-\d{2}-\d{2}$/) toDate!: string;
+  @IsOptional() @IsUUID() teamId?: string;
+}

@@ -6,6 +6,7 @@ export interface ContractorDashboardScope {
   contractorName: string;
 }
 export interface ContractorTeamResponse {
+  leaderWorkerId?: string | null;
   zoneAssignments?: TeamZoneAssignmentResponse[];
   id: string;
   siteId: string;
@@ -23,6 +24,7 @@ export interface ContractorDashboardResponse {
   unassignedWorkerCount: number;
 }
 export interface ContractorTeamWorkerResponse {
+  isLeader?: boolean;
   zones?: TeamZoneAssignmentResponse[];
   workerId: string;
   displayName: string;

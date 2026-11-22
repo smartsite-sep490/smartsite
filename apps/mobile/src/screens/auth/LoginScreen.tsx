@@ -10,7 +10,6 @@ import {
   KeyboardAvoidingView,
   Platform,
   ImageBackground,
-  Alert,
   Dimensions,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -20,6 +19,7 @@ import { SmartSiteLogo, IconUser, IconLock, IconEye } from '../../components/com
 import constructionHeroImage from '../../assets/construction_login_hero.jpg';
 import { ErrorNotice } from '../../features/shared/ui';
 import { useTranslation, setLanguage, uiLanguage } from '../../i18n';
+import { PasswordRecoverySheet } from '../../features/auth/password-recovery-sheet';
 
 interface LoginScreenProps {
   onLogin: (username: string, password: string) => void;
@@ -42,6 +42,7 @@ export function LoginScreen({ onLogin, pending, error, expired, notice }: LoginS
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
+  const [recoveryOpen, setRecoveryOpen] = useState(false);
 
   const handleLogin = () => {
     onLogin(username.trim(), password);
@@ -154,7 +155,9 @@ export function LoginScreen({ onLogin, pending, error, expired, notice }: LoginS
           {/* Forgot Password Link */}
           <Pressable
             style={styles.forgotBtn}
-            onPress={() => Alert.alert(t('profile.changePassword'), tr('auth.passwordResetHint'))}
+            accessibilityRole="button"
+            accessibilityLabel={t('auth.forgotPassword')}
+            onPress={() => setRecoveryOpen(true)}
           >
             <Text style={styles.forgotText}>{tr('auth.forgotPassword')}</Text>
           </Pressable>
@@ -176,6 +179,7 @@ export function LoginScreen({ onLogin, pending, error, expired, notice }: LoginS
           <Text style={styles.footerNote}>{tr('auth.accountsIssuedByManagement')}</Text>
         </View>
       </ScrollView>
+      {recoveryOpen && <PasswordRecoverySheet onClose={() => setRecoveryOpen(false)} />}
     </KeyboardAvoidingView>
   );
 }

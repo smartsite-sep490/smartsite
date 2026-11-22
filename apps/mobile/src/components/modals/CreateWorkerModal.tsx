@@ -4,7 +4,7 @@ import { View, Text, TextInput, Pressable, StyleSheet, ActivityIndicator } from 
 import { colors } from '../../theme/colors';
 import { useWorkspace } from '../../features/workspace/workspace-context';
 import { useCommand, required, validDates } from '../../features/shared/data';
-import { useTranslation } from '../../i18n';
+import { useTranslation, uiLanguage } from '../../i18n';
 import { IconUserPlus } from '../common/Icons';
 import type {
   NativeUploadFile,
@@ -14,7 +14,8 @@ import type {
 import { healthCertificateExpiry } from '@smartsite/api-client';
 import { Attachments } from '../../features/shared/uploads';
 import { documentKinds } from '../../features/contractor/worker-documents';
-import { Choice, Disclosure, Field, Hint } from '../../features/shared/ui';
+import { Choice, Disclosure, Hint } from '../../features/shared/ui';
+import { CalendarDateField } from '../../features/shared/calendar-date-field';
 
 import { RequestSheet } from '../../features/shared/request-sheet';
 import { FormSection } from '../../features/shared/form-section';
@@ -30,6 +31,7 @@ export function CreateWorkerModal({ visible, onClose, onSuccess }: CreateWorkerM
   const { scope, client, token } = useWorkspace();
   const [displayName, setDisplayName] = useState('');
   const [username, setUsername] = useState('');
+  const [email, setEmail] = useState('');
   const [nationalId, setNationalId] = useState('');
   const [phoneNumber, setPhoneNumber] = useState('');
   const [gender, setGender] = useState<'MALE' | 'FEMALE' | 'OTHER' | ''>('');
@@ -60,6 +62,9 @@ export function CreateWorkerModal({ visible, onClose, onSuccess }: CreateWorkerM
       for (const value of Object.values(expiries)) if (value) validDates(value, value);
       const name = required(displayName, t('workforce.fullName'));
       const user = required(username, t('workforce.username'));
+      const recipient = required(email, t('accountEmail.email')).toLowerCase();
+      if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(recipient))
+        throw new Error(t('accountEmail.invalidEmail'));
       if (
         !/^[0-9]{12}$/.test(nationalId) ||
         !/^\+?[0-9]{9,15}$/.test(phoneNumber) ||
@@ -77,6 +82,8 @@ export function CreateWorkerModal({ visible, onClose, onSuccess }: CreateWorkerM
             siteId: scope.siteId,
             displayName: name,
             username: user,
+            email: recipient,
+            language: uiLanguage(),
             nationalId,
             phoneNumber,
             gender,
@@ -107,6 +114,7 @@ export function CreateWorkerModal({ visible, onClose, onSuccess }: CreateWorkerM
       });
       setDisplayName('');
       setUsername('');
+      setEmail('');
       setNationalId('');
       setPhoneNumber('');
       setFiles({});
@@ -196,6 +204,21 @@ export function CreateWorkerModal({ visible, onClose, onSuccess }: CreateWorkerM
             autoCapitalize="none"
           />
         </View>
+        <View style={styles.fieldGroup}>
+          <Text style={styles.label}>{t('accountEmail.email')}</Text>
+          <TextInput
+            accessibilityLabel={t('accountEmail.email')}
+            style={styles.input}
+            value={email}
+            onChangeText={setEmail}
+            editable={!pendingAccount && !command.isPending}
+            keyboardType="email-address"
+            autoCapitalize="none"
+            autoCorrect={false}
+            autoComplete="email"
+          />
+          <Hint>{t('accountEmail.workerCreationHint')}</Hint>
+        </View>
       </FormSection>
       <FormSection number="02" title={t('contractorUi.requiredProfile')}>
         <View style={styles.fieldGroup}>
@@ -247,8 +270,10 @@ export function CreateWorkerModal({ visible, onClose, onSuccess }: CreateWorkerM
         </View>
         <View pointerEvents={pendingAccount || command.isPending ? 'none' : 'auto'}>
           {(['FRONT', 'BACK'] as const).map((side) => (
-            <View key={side} style={styles.fieldGroup}>
-              <Text style={styles.label}>{t(`documents.${side}`)}</Text>
+            <Disclosure
+              key={side}
+              title={`${t(`documents.${side}`)} · ${identityFiles[side]?.length ?? 0}/1`}
+            >
               <Attachments
                 files={identityFiles[side] ?? []}
                 maxFiles={1}
@@ -258,7 +283,7 @@ export function CreateWorkerModal({ visible, onClose, onSuccess }: CreateWorkerM
                   setIdentityFiles((previous) => ({ ...previous, [side]: selected }))
                 }
               />
-            </View>
+            </Disclosure>
           ))}
         </View>
       </FormSection>
@@ -270,15 +295,15 @@ export function CreateWorkerModal({ visible, onClose, onSuccess }: CreateWorkerM
               key={kind}
               title={`${t(`documents.${kind}`)} · ${files[kind]?.length ?? 0}/1`}
             >
-              <Field
-                label={`${t(`documents.${kind}`)} - ${t(kind === 'HEALTH_CERTIFICATE' ? 'documents.submittedIssuedOn' : 'documents.submittedExpiresOn')} (YYYY-MM-DD)`}
-                placeholder="YYYY-MM-DD"
+              <CalendarDateField
+                label={t(
+                  kind === 'HEALTH_CERTIFICATE'
+                    ? 'documents.submittedIssuedOn'
+                    : 'documents.submittedExpiresOn',
+                )}
                 value={expiries[kind] ?? ''}
-                maxLength={10}
-                editable={!command.isPending}
-                onChangeText={(value) =>
-                  setExpiries((previous) => ({ ...previous, [kind]: value }))
-                }
+                disabled={command.isPending}
+                onChange={(value) => setExpiries((previous) => ({ ...previous, [kind]: value }))}
               />
               <Hint>
                 {t(

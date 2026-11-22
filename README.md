@@ -81,6 +81,8 @@ Gate configuration and registered FACE sources for Site Manager/Security are doc
 Shift template archival, data retention and manual checks are documented in [Shift archival (MF03/MF07)](docs/operations/shift-archival.md).
 Team/worker assignment previews, finite weekly repetition and protected schedule changes are documented in [Team schedule assignments](docs/operations/team-schedule-assignments.md).
 
+Contractor Web/Mobile feature parity, group calendars, leader appointments, account email and compact document workflows are documented in [Contractor Web/Mobile parity](docs/operations/contractor-web-mobile-parity.md). Worker operations are deployed on Mobile.
+
 Site Managers configure shifts, schedule versions and the shifts available to each contractor.
 Contractor Representatives preview, assign and change worker/team schedules within their own
 active Site/Contractor scope. Both single-worker and batch assignment APIs enforce this boundary;
@@ -92,6 +94,8 @@ Scheduled no-shows, in-app notifications and worker calendar `ABSENT` status are
 Planned and emergency Worker leave, retrospective reporting, contractor representative approval and Mobile entry points are documented in [Worker leave and overtime](docs/operations/worker-leave.md). Apply `LeaveNotice1795046400000` before deploying this Backend and Mobile change.
 
 The read-only attendance summary and worker reports, rate definitions and shared client usage are documented in [Attendance reporting API](docs/operations/attendance-reports.md).
+
+Mobile team leader roll call, compact day-calendar sheets and document viewing/submission are documented in [Team Zone attendance](docs/operations/team-zone-attendance.md). Apply the additive team-attendance migration before updating Backend and Mobile.
 
 ### Prerequisites
 

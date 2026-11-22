@@ -5,7 +5,6 @@ import { SmartSiteManagementClient, type ContractorTeamResponse } from '@smartsi
 import type { useWorkspace } from '../workspace/workspace-context';
 import { MobileLayoutProvider } from '../shared/mobile-layout';
 import { Choice } from '../shared/ui';
-import { DateTimeField } from '../shared/date-time-field';
 import { ScrollDateTimePicker } from '../shared/scroll-date-time-picker';
 import { translate as t } from '../../i18n';
 import { TeamsScreen } from './teams-screen';
@@ -136,7 +135,7 @@ async function mount(element: React.ReactNode) {
 }
 async function click(label: string) {
   expect(buttons(label).length).toBeGreaterThan(0);
-  await act(async () => buttons(label)[0]!.props.onPress());
+  await act(async () => buttons(label).at(-1)!.props.onPress());
   await settle();
 }
 async function text(label: string, value: string) {
@@ -178,7 +177,10 @@ beforeEach(() => {
       contractorName: 'Contractor',
     },
   };
-  vi.spyOn(client, 'listContractorTeams').mockResolvedValue({ items: [team], total: 1 });
+  vi.spyOn(client, 'listContractorTeams').mockResolvedValue({
+    items: [team, { ...team, id: 'other-team', name: 'Team B' }],
+    total: 2,
+  });
   vi.spyOn(client, 'contractorTeamDetail').mockResolvedValue(team);
   vi.spyOn(client, 'listContractorTeamWorkers').mockResolvedValue({
     items: [
@@ -186,8 +188,8 @@ beforeEach(() => {
         workerId: 'worker',
         displayName: 'Own Worker',
         membershipId: 'old-membership',
-        teamId: 'other-team',
-        teamName: 'Team B',
+        teamId: 'team',
+        teamName: 'Team A',
       },
     ],
     total: 1,
@@ -250,25 +252,30 @@ it('creates a team from the shared sheet and preserves the scoped API and reques
   expect(buttons(t('teams.saveTeam'))[0]!.props.disabled).toBe(true);
 });
 
-it('keeps archival disabled for a nonempty team and submits membership changes from its sheet', async () => {
+it('keeps archival disabled for a nonempty team and transfers directly from the selected member action', async () => {
   await mount(<TeamsScreen selectedTeam={team} />);
+  await click(t('teamUi.teamActions'));
   await click(t('contractorUi.archiveTeam'));
   await text(t('teams.membershipReason'), 'Close this team');
-  expect(buttons(t('teams.archiveEmpty'))[0]!.props.disabled).toBe(true);
+  expect(buttons(t('teamUi.confirmARCHIVE'))[0]!.props.disabled).toBe(true);
   await click(t('common.close'));
-  await click(t('contractorUi.manageMembers'));
-  await choose(t('teams.workerToMove'), 'worker');
-  await text(t('teams.membershipReason'), 'Move to Team A');
-  await click(t('teams.confirmMembership'));
+  await click(t('teamUi.memberActions', { name: 'Own Worker' }));
+  await click(t('teamUi.transferMember'));
+  expect(
+    root.root.findAllByType(Choice).some((node) => node.props.label === t('teams.workerToMove')),
+  ).toBe(false);
+  await choose(t('teams.targetTeam'), 'other-team');
+  await text(t('teams.membershipReason'), 'Move to Team B');
+  await click(t('teamUi.confirmTRANSFER'));
   expect(workspace.client.assignContractorTeam).toHaveBeenCalledWith(
     'token',
     'site',
     'contractor',
     'worker',
     {
-      teamId: 'team',
+      teamId: 'other-team',
       expectedMembershipId: 'old-membership',
-      reason: 'Move to Team A',
+      reason: 'Move to Team B',
       requestId: expect.any(String),
     },
   );
@@ -276,6 +283,7 @@ it('keeps archival disabled for a nonempty team and submits membership changes f
 
 it('keeps the team zone expiry as a calendar date when editing it with the native picker', async () => {
   await mount(<TeamsScreen selectedTeam={team} />);
+  await click(t('teamUi.zoneTab'));
   await click(t('teams.grantZone'));
   await choose(t('teams.contractorZone'), 'permission');
   await click(t('common.chooseDate', { label: t('teams.validUntilLabel') }));
@@ -297,48 +305,115 @@ it('keeps the team zone expiry as a calendar date when editing it with the nativ
   );
 });
 
-it('keeps zones, assignments and worker grants scoped while submitting through the grant sheet', async () => {
-  await mount(<AccessScreen onBack={vi.fn()} />);
-  expect(JSON.stringify(root.toJSON())).toContain('Own Zone');
-  expect(JSON.stringify(root.toJSON())).not.toContain('Private Zone');
-  await click(t('access.assignmentsTab'));
-  expect(JSON.stringify(root.toJSON())).not.toContain('Private Worker');
-  await click(t('access.workerPermissionsTab'));
-  expect(JSON.stringify(root.toJSON())).not.toContain('Private Worker');
-  await click(t('access.grantWithinScope'));
-  await choose(t('access.approvedAssignment'), 'assignment');
-  await choose(t('access.contractorZoneGrant'), 'permission');
-  for (const [label, value] of [
-    [t('access.validFrom'), from],
-    [t('access.validUntil'), to],
-  ]) {
-    const field = root.root
-      .findAllByType(DateTimeField)
-      .find((node) => node.props.label === label)!;
-    await act(async () => field.props.onChange(value));
-  }
-  await click(t('access.grantWorker'));
-  expect(workspace.client.grantWorkerZone).toHaveBeenCalledWith('token', 'site', {
-    workerAssignmentId: 'assignment',
-    contractorZonePermissionId: 'permission',
-    validFrom: '2026-11-01T00:00:00.000Z',
-    validUntil: '2026-12-01T00:00:00.000Z',
-    requestId: expect.any(String),
+it('appoints the selected member directly from their action and refreshes the leader card', async () => {
+  let stored = { ...team, leaderWorkerId: null as string | null };
+  vi.mocked(workspace.client.contractorTeamDetail).mockImplementation(async () => stored);
+  const appoint = vi
+    .spyOn(workspace.client, 'setContractorTeamLeader')
+    .mockImplementation(async (_token, _site, _contractor, _team, input) => {
+      stored = { ...stored, leaderWorkerId: input.workerId, version: stored.version + 1 };
+      return stored;
+    });
+  await mount(<TeamsScreen selectedTeam={team} />);
+  expect(buttons(t('teamUi.appointLeader')).length).toBe(1);
+  await click(t('teamUi.memberActions', { name: 'Own Worker' }));
+  await click(t('teamUi.appointLeader'));
+  await click(t('teamUi.confirmLEADER'));
+  expect(appoint).toHaveBeenCalledWith('token', 'site', 'contractor', 'team', {
+    expectedVersion: 3,
+    workerId: 'worker',
   });
+  expect(JSON.stringify(root.toJSON())).toContain(t('teamUi.leaderRoleHint'));
+  expect(buttons(t('teamUi.changeLeader'))).toHaveLength(1);
 });
 
-it('hides worker grant tools when the API does not allow granting worker zones', async () => {
+it('adds an unassigned worker from Add member and removes a specific member without a worker dropdown', async () => {
+  vi.mocked(workspace.client.listContractorTeamWorkers).mockResolvedValue({
+    items: [
+      {
+        workerId: 'worker',
+        displayName: 'Own Worker',
+        membershipId: 'old-membership',
+        teamId: 'team',
+        teamName: 'Team A',
+      },
+      {
+        workerId: 'unassigned',
+        displayName: 'Available Worker',
+        membershipId: null,
+        teamId: null,
+        teamName: null,
+      },
+      {
+        workerId: 'other',
+        displayName: 'Already Assigned Worker',
+        membershipId: 'other-membership',
+        teamId: 'other-team',
+        teamName: 'Team B',
+      },
+    ],
+    total: 3,
+  });
+  await mount(<TeamsScreen selectedTeam={team} />);
+  await click(t('teamUi.addMember'));
+  expect(JSON.stringify(root.toJSON())).not.toContain('Already Assigned Worker');
+  await click('Available Worker');
+  await click(t('teamUi.confirmADD'));
+  expect(workspace.client.assignContractorTeam).toHaveBeenCalledWith(
+    'token',
+    'site',
+    'contractor',
+    'unassigned',
+    { teamId: 'team', expectedMembershipId: null, requestId: expect.any(String) },
+  );
+  await click(t('teamUi.memberActions', { name: 'Own Worker' }));
+  await click(t('teamUi.removeMember'));
+  expect(buttons(t('teamUi.confirmREMOVE'))[0]!.props.disabled).toBe(true);
+  await text(t('teams.membershipReason'), 'Worker reassigned');
+  await click(t('teamUi.confirmREMOVE'));
+  expect(workspace.client.assignContractorTeam).toHaveBeenLastCalledWith(
+    'token',
+    'site',
+    'contractor',
+    'worker',
+    {
+      teamId: null,
+      expectedMembershipId: 'old-membership',
+      reason: 'Worker reassigned',
+      requestId: expect.any(String),
+    },
+  );
+});
+
+it('shows only contractor zones and opens their scoped read-only details', async () => {
+  await mount(<AccessScreen onBack={vi.fn()} />);
+  const output = JSON.stringify(root.toJSON());
+  expect(output).toContain('Own Zone');
+  expect(output).not.toContain('Private Zone');
+  expect(output).not.toContain('Private Worker');
+  expect(buttons(t('access.assignmentsTab'))).toHaveLength(0);
+  expect(buttons(t('access.workerPermissionsTab'))).toHaveLength(0);
+  await click(t('areaUi.openZone', { name: 'Own Zone' }));
+  expect(JSON.stringify(root.toJSON())).toContain(t('teamUi.zoneDetails'));
+  expect(JSON.stringify(root.toJSON())).toContain(t('access.authorizationHint'));
+  expect(buttons(t('access.requestAssignment'))).toHaveLength(0);
+  expect(buttons(t('access.grantWithinScope'))).toHaveLength(0);
+  expect(workspace.client.grantWorkerZone).not.toHaveBeenCalled();
+});
+
+it('keeps zone viewing available without worker grant capability', async () => {
   vi.mocked(workspace.client.accessSetup).mockResolvedValue({
     ...accessData,
     canGrantWorkerZones: false,
   });
   await mount(<AccessScreen onBack={vi.fn()} />);
+  expect(JSON.stringify(root.toJSON())).toContain('Own Zone');
   expect(buttons(t('access.workerPermissionsTab'))).toHaveLength(0);
   expect(buttons(t('access.grantWithinScope'))).toHaveLength(0);
   expect(workspace.client.grantWorkerZone).not.toHaveBeenCalled();
 });
 
-it('explains missing contractor grants and keeps assignment requests available', async () => {
+it('explains missing contractor zones without exposing individual assignment or grant tools', async () => {
   vi.mocked(workspace.client.accessSetup).mockResolvedValue({
     ...accessData,
     contractorPermissions: [],
@@ -347,52 +422,6 @@ it('explains missing contractor grants and keeps assignment requests available',
   await mount(<AccessScreen onBack={vi.fn()} />);
   expect(JSON.stringify(root.toJSON())).toContain(t('access.noContractorGrantHint'));
   expect(buttons(t('access.requestAssignment'))).toHaveLength(0);
-  await click(t('access.assignmentsTab'));
-  expect(buttons(t('access.requestAssignment'))[0]!.props.disabled).toBe(false);
-  await click(t('access.workerPermissionsTab'));
-  expect(buttons(t('access.requestAssignment'))).toHaveLength(0);
-  expect(buttons(t('access.grantWithinScope'))[0]!.props.disabled).toBe(true);
-  expect(JSON.stringify(root.toJSON())).toContain(t('access.approvedAssignmentRequired'));
-});
-
-it('submits a worker assignment request without needing a contractor zone grant', async () => {
-  vi.mocked(workspace.client.accessSetup).mockResolvedValue({
-    ...accessData,
-    contractorPermissions: [],
-  });
-  await mount(<AccessScreen onBack={vi.fn()} />);
-  await click(t('access.assignmentsTab'));
-  await click(t('access.requestAssignment'));
-  const dates = root.root.findAllByType(DateTimeField);
-  expect(Number.isFinite(Date.parse(dates[0]!.props.value))).toBe(true);
-  expect(Date.parse(dates[1]!.props.value) - Date.parse(dates[0]!.props.value)).toBe(8 * 3600_000);
-  await choose(t('schedule.worker'), 'worker');
-  const zone = root.root.findAll(
-    (node) => String(node.type) === 'Pressable' && node.props.accessibilityLabel === 'Own Zone',
-  )[0]!;
-  await act(async () => zone.props.onPress());
-  await act(async () => dates[0]!.props.onChange(from));
-  await act(async () => dates[1]!.props.onChange(to));
-  await click(t('access.submitAssignment'));
-  expect(workspace.client.createWorkerSiteZoneAssignment).toHaveBeenCalledWith('token', 'worker', {
-    siteId: 'site',
-    zoneIds: ['zone'],
-    validFrom: '2026-11-01T00:00:00.000Z',
-    validUntil: '2026-12-01T00:00:00.000Z',
-  });
-  expect(JSON.stringify(root.toJSON())).not.toContain(t('access.assignmentOutsideParticipation'));
-});
-
-it('explains a grant period outside the assignment instead of sending an invalid command', async () => {
-  await mount(<AccessScreen onBack={vi.fn()} />);
-  await click(t('access.workerPermissionsTab'));
-  await click(t('access.grantWithinScope'));
-  await choose(t('access.approvedAssignment'), 'assignment');
-  await choose(t('access.contractorZoneGrant'), 'permission');
-  const dates = root.root.findAllByType(DateTimeField);
-  await act(async () => dates[0]!.props.onChange(from));
-  await act(async () => dates[1]!.props.onChange('2027-01-01T00:00:00Z'));
-  await click(t('access.grantWorker'));
-  expect(workspace.client.grantWorkerZone).not.toHaveBeenCalled();
-  expect(JSON.stringify(root.toJSON())).toContain(t('access.workerGrantOutsideScope'));
+  expect(buttons(t('access.assignmentsTab'))).toHaveLength(0);
+  expect(buttons(t('access.workerPermissionsTab'))).toHaveLength(0);
 });
