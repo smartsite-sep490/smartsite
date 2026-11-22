@@ -288,7 +288,7 @@ describe('Site Access ERD integration', () => {
       roleAssignments: [{ role: 'WORKER', siteId: 'site-alpha' }],
     };
     mount();
-    await screen.findByRole('heading', { name: 'Site Access & Biometric Identity Control' });
+    await screen.findByRole('button', { name: /Attendance|Chấm công/i });
     expect(screen.queryByRole('button', { name: /sign out/i })).toBeNull();
     expect(screen.queryByRole('button', { name: /Visitor Passes/i })).toBeNull();
     expect(authSessionMock.logout).not.toHaveBeenCalled();

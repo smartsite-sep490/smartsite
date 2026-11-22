@@ -15,12 +15,18 @@ import {
   formatWorkDate,
 } from './attendance-display';
 import { SmartDatePicker, SmartSelect, type SmartSelectOption } from '../../ui';
-import { requestTimeInstant, requestShiftTimes, requestWallTime } from './attendance-request-time';
+import { requestTimeInstant, requestWallTime } from './attendance-request-time';
+import { useAttendanceRequestEligibility } from './useAttendanceRequestEligibility';
+import {
+  TIME_REQUEST_TIMING_MESSAGES,
+  timeRequestTimingIssue,
+} from '@smartsite/contracts/leave-notice';
 import type {
   AttendanceDayResponse,
   AttendanceDayStatus,
   AttendanceTimeRequestResponse,
   AttendanceSessionResponse,
+  LeaveNoticeType,
 } from '@smartsite/contracts';
 import {
   IconChevronRight,
@@ -152,6 +158,7 @@ export function AttendanceDaysView({
   const [offset, setOffset] = useState(0);
   const [selected, setSelected] = useState<AttendanceDayResponse | null>(null);
   const [kind, setKind] = useState<'OVERTIME' | 'LEAVE'>('OVERTIME');
+  const [noticeType, setNoticeType] = useState<LeaveNoticeType>('PLANNED');
   const [startsAt, setStartsAt] = useState('');
   const [endsAt, setEndsAt] = useState('');
   const [reason, setReason] = useState('');
@@ -204,22 +211,23 @@ export function AttendanceDaysView({
 
   const requestShifts = useQuery({
     queryKey: ['attendance-request-shifts', apiUrl, sessionScope, siteId],
-    queryFn: () => client.listShifts(token, siteId),
+    queryFn: ({ signal }) => loadAllPages((page) => client.listShifts(token, siteId, page), signal),
     enabled: query.data?.canRequest === true,
     refetchInterval: 30000,
   });
-  const availableSchedules = (schedules.data?.items ?? [])
-    .flatMap((schedule) => {
-      const shift = requestShifts.data?.items.find((s) => s.id === schedule.shiftId);
-      if (!schedule.isActive || !shift) return [];
-      try {
-        if (schedule.workDate < attendanceDate(new Date(), shift.timezone)) return [];
-        return [{ schedule, shift, ...requestShiftTimes(schedule.workDate, shift) }];
-      } catch {
-        return [];
-      }
-    })
-    .sort((a, b) => a.startsAt.localeCompare(b.startsAt));
+  const eligibility = useAttendanceRequestEligibility({
+    client,
+    apiUrl,
+    token,
+    siteId,
+    sessionScope,
+    enabled: query.data?.canRequest === true && !submittedRequest,
+    schedules: schedules.data?.items ?? [],
+    shifts: requestShifts.data?.items ?? [],
+    kind,
+    noticeType,
+  });
+  const { availableSchedules } = eligibility;
 
   const workers = useQuery({
     queryKey: ['attendance-workers', apiUrl, sessionScope, siteId],
@@ -267,7 +275,11 @@ export function AttendanceDaysView({
       return;
     }
     if (requestKind === 'LEAVE') {
-      setStartsAt(entry.startsAt);
+      const remainingStart =
+        noticeType === 'EMERGENCY' && selectedAt > entry.window.startsAt
+          ? new Date(Math.ceil(+selectedAt / 60000) * 60000)
+          : entry.window.startsAt;
+      setStartsAt(requestWallTime(remainingStart, entry.shift.timezone));
       setEndsAt(entry.endsAt);
     } else {
       const end = requestTimeInstant(entry.endsAt, entry.shift.timezone);
@@ -275,6 +287,13 @@ export function AttendanceDaysView({
       setStartsAt(requestWallTime(start, entry.shift.timezone));
       setEndsAt(requestWallTime(new Date(+start + 3600000), entry.shift.timezone));
     }
+    request.reset();
+  };
+  const resetRequestSchedule = () => {
+    setScheduleId('');
+    setStartsAt('');
+    setEndsAt('');
+    requestId.current = null;
     request.reset();
   };
   const timeRequests = useQuery({
@@ -323,6 +342,9 @@ export function AttendanceDaysView({
 
   const invalidate = async () => {
     await cache.invalidateQueries({
+      queryKey: ['attendance-leave-availability', apiUrl, sessionScope, siteId],
+    });
+    await cache.invalidateQueries({
       queryKey: ['attendance-submitted-request', apiUrl, sessionScope, siteId],
     });
     await Promise.all([
@@ -351,8 +373,24 @@ export function AttendanceDaysView({
     mutationFn: async () => {
       if (!scheduleId || !startsAt || !endsAt || !reason.trim())
         throw new Error(tr('attendance_days_view.select_a_schedule_start_end_and_reason'));
+      const submittedAt = eligibility.getNow();
+      if (kind === 'LEAVE' && !eligibility.ready)
+        throw new Error(tr('attendance_leave.availability_unavailable'));
+      if (
+        kind === 'LEAVE' &&
+        eligibility.availableAt &&
+        Date.parse(eligibility.availableAt) > +submittedAt
+      )
+        throw new Error(tr('attendance_leave.cooldown_error'));
       if (!selectedRequestSchedule || schedules.isError || requestShifts.isError)
         throw new Error(tr('attendance_days_view.select_a_current_assigned_shift'));
+      const timingIssue = timeRequestTimingIssue(
+        { ...selectedRequestSchedule.window, timezone: selectedRequestSchedule.shift.timezone },
+        kind,
+        noticeType,
+        submittedAt,
+      );
+      if (timingIssue) throw new Error(TIME_REQUEST_TIMING_MESSAGES[timingIssue]);
       const start = requestTimeInstant(startsAt, selectedRequestSchedule.shift.timezone);
       const end = requestTimeInstant(endsAt, selectedRequestSchedule.shift.timezone);
       const shiftStart = requestTimeInstant(
@@ -364,7 +402,7 @@ export function AttendanceDaysView({
         selectedRequestSchedule.shift.timezone,
       );
       if (end <= start) throw new Error(tr('attendance_days_view.end_time_must_follow_start_time'));
-      if (kind === 'OVERTIME' && (start <= new Date() || (start < shiftEnd && end > shiftStart)))
+      if (kind === 'OVERTIME' && (start <= submittedAt || (start < shiftEnd && end > shiftStart)))
         throw new Error(
           tr('attendance_days_view.overtime_must_start_in_the_future_outside_regular_shift_hours'),
         );
@@ -385,8 +423,9 @@ export function AttendanceDaysView({
         startsAt: start.toISOString(),
         endsAt: end.toISOString(),
         reason: reason.trim(),
+        ...(kind === 'LEAVE' ? { noticeType } : {}),
       };
-      const fingerprint = JSON.stringify(input);
+      const fingerprint = JSON.stringify([siteId, sessionScope, input]);
       if (requestId.current?.fingerprint !== fingerprint)
         requestId.current = { fingerprint, id: crypto.randomUUID() };
       const result = await client.requestAttendanceTime(token, siteId, {
@@ -447,6 +486,7 @@ export function AttendanceDaysView({
       query.refetch(),
       timesheets.refetch(),
       timeRequests.refetch(),
+      ...(kind === 'LEAVE' && query.data?.canRequest ? [eligibility.availability.refetch()] : []),
       ...(query.data?.canRequest ? [schedules.refetch(), requestShifts.refetch()] : []),
       ...(query.data?.canReview ? [workers.refetch()] : []),
       ...(detailId ? [detail.refetch()] : []),
@@ -1003,7 +1043,8 @@ export function AttendanceDaysView({
                   </h4>
                   {detail.isSuccess && (
                     <span className="text-[11px] font-medium text-slate-400">
-                      {detail.data?.sessions.length ?? 0} {tr('attendance_days_view.intervals_unit')}
+                      {detail.data?.sessions.length ?? 0}{' '}
+                      {tr('attendance_days_view.intervals_unit')}
                     </span>
                   )}
                 </div>
@@ -1103,8 +1144,8 @@ export function AttendanceDaysView({
                         <div className="mt-2.5 pt-2 border-t border-slate-100 flex items-center justify-between">
                           <span className="text-[11px] text-slate-400">
                             {reviewNote.trim().length < 5
-                              ? (tr('attendance_days_view.duplicate_note_required'))
-                              : (tr('attendance_days_view.ready_to_ignore'))}
+                              ? tr('attendance_days_view.duplicate_note_required')
+                              : tr('attendance_days_view.ready_to_ignore')}
                           </span>
                           <button
                             className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-slate-200 bg-white text-xs font-semibold text-slate-700 shadow-2xs hover:border-[#F66B17] hover:text-[#F66B17] transition-all disabled:opacity-40 disabled:pointer-events-none active:scale-[0.98]"
@@ -1149,7 +1190,9 @@ export function AttendanceDaysView({
                       <div className="space-y-1">
                         <div className="flex items-center gap-2">
                           <span className="inline-flex items-center px-2 py-0.5 rounded-md text-[10px] font-bold uppercase tracking-wider bg-orange-100 text-[#F66B17] border border-orange-200/60">
-                            {canConfirmEarly ? tr('common.early_departure') : tr('common.needs_review')}
+                            {canConfirmEarly
+                              ? tr('common.early_departure')
+                              : tr('common.needs_review')}
                           </span>
                           {canConfirmEarly && (
                             <h4 className="text-xs font-bold text-[#071A2B]">
@@ -1159,8 +1202,8 @@ export function AttendanceDaysView({
                         </div>
                         <p className="text-xs text-slate-500 leading-relaxed">
                           {canConfirmEarly
-                            ? (tr('attendance_days_view.early_departure_review_help'))
-                            : (tr('attendance_days_view.duplicate_review_help'))}
+                            ? tr('attendance_days_view.early_departure_review_help')
+                            : tr('attendance_days_view.duplicate_review_help')}
                         </p>
                       </div>
                     </div>
@@ -1189,7 +1232,9 @@ export function AttendanceDaysView({
                           id="review-note-input"
                           className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200/90 bg-white text-xs text-[#071A2B] placeholder:text-slate-400 shadow-2xs focus:border-[#F66B17] focus:ring-2 focus:ring-orange-100 focus:outline-none transition-all"
                           maxLength={1000}
-                          placeholder={tr('attendance_days_view.add_a_note_for_your_review_decision')}
+                          placeholder={tr(
+                            'attendance_days_view.add_a_note_for_your_review_decision',
+                          )}
                           value={reviewNote}
                           onChange={(e) => setReviewNote(e.target.value)}
                         />
@@ -1221,8 +1266,8 @@ export function AttendanceDaysView({
                       <div className="pt-3 border-t border-slate-100 flex items-center justify-between gap-3">
                         <div className="text-[11px] text-slate-500 hidden sm:block">
                           {isNoteValid
-                            ? (tr('attendance_days_view.actual_hours_ready'))
-                            : (tr('attendance_days_view.confirmation_locked'))}
+                            ? tr('attendance_days_view.actual_hours_ready')
+                            : tr('attendance_days_view.confirmation_locked')}
                         </div>
                         <button
                           disabled={confirm.isPending || !isNoteValid}
@@ -1265,31 +1310,55 @@ export function AttendanceDaysView({
       <div className={activeSubTab === 'timesheet' ? 'hidden' : 'space-y-6'}>
         {data.canRequest && submittedRequest && (
           <section
-            className="rounded-2xl border border-emerald-200 bg-white p-6 space-y-3"
+            className="rounded-2xl border border-emerald-200/70 bg-emerald-50/30 p-6 space-y-4"
             aria-label={tr('common.submitted_request')}
           >
-            <h3 className="font-bold text-[#071A2B]">{tr('common.request_submitted')}</h3>
-            <p className="text-sm text-slate-600">
-              {tr(
-                submittedRequest.kind === 'OVERTIME'
-                  ? 'attendance_days_view.overtime_request_sent'
-                  : 'attendance_days_view.leave_request_sent',
-              )}
-            </p>
-            <div aria-live="polite">
+            <div className="flex items-start justify-between gap-4">
+              <div className="space-y-1">
+                <span className="text-[10px] font-bold uppercase tracking-[0.16em] text-emerald-700 block">
+                  {tr('common.request_submitted')}
+                </span>
+                <h3 className="text-sm font-extrabold text-[#071A2B] tracking-tight">
+                  {tr('common.submitted_request')}
+                </h3>
+                <p className="text-xs text-slate-500">
+                  {tr(
+                    submittedRequest.kind === 'OVERTIME'
+                      ? 'attendance_days_view.overtime_request_sent'
+                      : 'attendance_days_view.leave_request_sent',
+                  )}
+                </p>
+              </div>
+              <button
+                className="shrink-0 rounded-xl border border-slate-200 bg-white px-4 py-2 text-xs font-bold text-slate-700 shadow-2xs hover:bg-slate-50 transition-all cursor-pointer"
+                onClick={() => {
+                  setSubmittedRequest(null);
+                  resetRequestSchedule();
+                }}
+              >
+                {tr('common.new_request')}
+              </button>
+            </div>
+            <div aria-live="polite" className="space-y-2">
               {submittedStatus.isPending ? (
-                <p>{tr('common.loading_request_status')}</p>
+                <div className="flex items-center gap-2 text-xs text-slate-400">
+                  <div className="h-3 w-3 animate-spin rounded-full border-2 border-[#F66B17] border-t-transparent" />
+                  {tr('common.loading_request_status')}
+                </div>
               ) : submittedStatus.isError || !submittedStatus.data ? (
-                <div role="alert">
+                <div role="alert" className="text-xs text-red-600">
                   {tr('common.status_unavailable')}{' '}
-                  <button className="underline" onClick={() => void submittedStatus.refetch()}>
+                  <button
+                    className="underline font-semibold"
+                    onClick={() => void submittedStatus.refetch()}
+                  >
                     {tr('common.retry_request_status')}
                   </button>
                 </div>
               ) : (
                 <>
                   <StatusBadge status={submittedStatus.data.status} />
-                  <p className="mt-2 text-sm">
+                  <p className="text-xs font-mono text-slate-600">
                     {new Date(submittedStatus.data.startsAt).toLocaleString(uiLocale(), {
                       hour12: false,
                     })}{' '}
@@ -1298,14 +1367,23 @@ export function AttendanceDaysView({
                       hour12: false,
                     })}
                   </p>
-                  <p className="text-sm text-slate-600">{submittedStatus.data.reason}</p>
+                  {submittedStatus.data.kind === 'LEAVE' && submittedStatus.data.noticeType && (
+                    <p className="text-xs text-slate-500">
+                      {tr(
+                        submittedStatus.data.noticeType === 'EMERGENCY'
+                          ? 'attendance_leave.emergency'
+                          : 'attendance_leave.planned',
+                      )}
+                    </p>
+                  )}
+                  <p className="text-xs text-slate-600">{submittedStatus.data.reason}</p>
                   {submittedStatus.data.reviewNote && (
-                    <p className="text-sm">
+                    <p className="text-xs text-emerald-700 font-semibold">
                       {tr('common.review_value', { value1: submittedStatus.data.reviewNote })}
                     </p>
                   )}
                   {['PENDING', 'PENDING_MANAGER'].includes(submittedStatus.data.status) && (
-                    <p className="mt-2 text-sm text-amber-700">
+                    <p className="text-xs text-amber-700 bg-amber-50/80 border border-amber-200/60 rounded-xl px-3 py-2">
                       {tr(
                         'attendance_days_view.waiting_for_your_contractor_representative_to_review_this_request',
                       )}
@@ -1314,33 +1392,17 @@ export function AttendanceDaysView({
                 </>
               )}
             </div>
-            <button
-              className="rounded-lg border border-slate-200 px-3 py-2 text-sm font-semibold"
-              onClick={() => {
-                setSubmittedRequest(null);
-                request.reset();
-              }}
-            >
-              {tr('common.new_request')}
-            </button>
           </section>
         )}
         {data.canRequest && !submittedRequest ? (
           <div className="rounded-2xl border border-slate-200/80 bg-white shadow-[0_4px_20px_-4px_rgba(7,26,43,0.06)] overflow-hidden mt-6">
-            <div className="flex items-center justify-between px-6 py-4.5 border-b border-slate-100 bg-gradient-to-r from-slate-50/60 to-white">
-              <div className="flex items-center gap-3.5">
-                <div className="w-10 h-10 rounded-xl bg-orange-50 text-[#F66B17] flex items-center justify-center border border-orange-200/60 shadow-2xs">
-                  <IconClock className="w-5 h-5" />
-                </div>
-                <div>
-                  <span className="text-[10px] font-mono font-bold uppercase tracking-[0.16em] text-[#F66B17] block mb-0.5">
-                    {tr('common.workforce_operations')}
-                  </span>
-                  <h3 className="text-sm font-extrabold text-[#071A2B] tracking-tight">
-                    {tr('attendance_days_view.request_overtime_or_leave')}
-                  </h3>
-                </div>
-              </div>
+            <div className="px-6 py-4.5 border-b border-slate-100 bg-gradient-to-r from-slate-50/60 to-white">
+              <span className="text-[10px] font-bold uppercase tracking-[0.16em] text-[#F66B17] block mb-0.5">
+                {tr('common.workforce_operations')}
+              </span>
+              <h3 className="text-sm font-extrabold text-[#071A2B] tracking-tight">
+                {tr('attendance_days_view.request_overtime_or_leave')}
+              </h3>
             </div>
             {(schedules.isPending || requestShifts.isPending) && (
               <p role="status" className="p-6 text-xs text-slate-500 font-medium">
@@ -1365,278 +1427,361 @@ export function AttendanceDaysView({
               </div>
             )}
             {schedules.isSuccess && requestShifts.isSuccess && !availableSchedules.length && (
-              <p className="p-6 text-xs text-slate-500">
+              <p role="status" className="p-6 text-xs text-slate-500">
                 {tr(
-                  'attendance_days_view.no_current_or_upcoming_assigned_shifts_contact_your_contractor_representative',
+                  kind === 'OVERTIME'
+                    ? 'attendance_leave.no_overtime_shifts'
+                    : noticeType === 'PLANNED'
+                      ? 'attendance_leave.no_planned_shifts'
+                      : 'attendance_leave.no_emergency_shifts',
                 )}
               </p>
             )}
-            {availableSchedules.length > 0 && !schedules.isError && !requestShifts.isError && (() => {
-              const requestKindOptions: SmartSelectOption[] = [
-                {
-                  value: 'OVERTIME',
-                  label: tr('common.overtime'),
-                  icon: (
-                    <span className="w-6 h-6 rounded-lg bg-orange-50 text-[#F66B17] flex items-center justify-center shrink-0 border border-orange-200/60 shadow-2xs">
-                      <IconClock className="w-3.5 h-3.5" />
-                    </span>
-                  ),
-                  badge: '+OT',
-                  description: tr('attendance_days_view.overtime_desc'),
-                },
-                {
-                  value: 'LEAVE',
-                  label: tr('attendance_days_view.leave_whole_or_partial_shift'),
-                  icon: (
-                    <span className="w-6 h-6 rounded-lg bg-blue-50 text-blue-600 flex items-center justify-center shrink-0 border border-blue-200/60 shadow-2xs">
-                      <IconCalendar className="w-3.5 h-3.5" />
-                    </span>
-                  ),
-                  badge: 'LEAVE',
-                  description: tr('attendance_days_view.leave_desc'),
-                },
-              ];
+            {schedules.isSuccess &&
+              requestShifts.isSuccess &&
+              (() => {
+                const requestKindOptions: SmartSelectOption[] = [
+                  {
+                    value: 'OVERTIME',
+                    label: tr('common.overtime'),
+                    icon: (
+                      <span className="w-6 h-6 rounded-lg bg-orange-50 text-[#F66B17] flex items-center justify-center shrink-0 border border-orange-200/60 shadow-2xs">
+                        <IconClock className="w-3.5 h-3.5" />
+                      </span>
+                    ),
+                    badge: '+OT',
+                    description: tr('attendance_days_view.overtime_desc'),
+                  },
+                  {
+                    value: 'LEAVE',
+                    label: tr('attendance_days_view.leave_whole_or_partial_shift'),
+                    icon: (
+                      <span className="w-6 h-6 rounded-lg bg-blue-50 text-blue-600 flex items-center justify-center shrink-0 border border-blue-200/60 shadow-2xs">
+                        <IconCalendar className="w-3.5 h-3.5" />
+                      </span>
+                    ),
+                    badge: 'LEAVE',
+                    description: tr('attendance_days_view.leave_desc'),
+                  },
+                ];
 
-              const scheduleOptions: SmartSelectOption[] = availableSchedules.map(
-                ({ schedule, shift, startsAt, endsAt }) => ({
-                  value: schedule.id,
-                  label: `${schedule.workDate} · ${shift.name}`,
-                  description: `${startsAt.slice(11)}–${endsAt.slice(11)} (${shift.timezone})`,
-                  icon: (
-                    <span className="w-6 h-6 rounded-lg bg-orange-50 text-[#F66B17] flex items-center justify-center shrink-0 border border-orange-200/60 shadow-2xs">
-                      <IconCalendar className="w-3.5 h-3.5" />
-                    </span>
-                  ),
-                }),
-              );
+                const scheduleOptions: SmartSelectOption[] = availableSchedules.map(
+                  ({ schedule, shift, startsAt, endsAt }) => ({
+                    value: schedule.id,
+                    label: `${schedule.workDate} · ${shift.name}`,
+                    description: `${startsAt.slice(11)}–${endsAt.slice(11)} (${shift.timezone})`,
+                    icon: (
+                      <span className="w-6 h-6 rounded-lg bg-orange-50 text-[#F66B17] flex items-center justify-center shrink-0 border border-orange-200/60 shadow-2xs">
+                        <IconCalendar className="w-3.5 h-3.5" />
+                      </span>
+                    ),
+                  }),
+                );
 
-              return (
-              <form
-                className="p-6 sm:p-7 space-y-6"
-                onSubmit={(e) => {
-                  e.preventDefault();
-                  request.mutate();
-                }}
-              >
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
-                  <div className="space-y-1.5">
-                    <label
-                      htmlFor="assigned-shift"
-                      className="block text-[10px] font-bold uppercase tracking-[0.16em] text-slate-500"
-                    >
-                      {tr('common.assigned_shift')}
-                    </label>
-                    <SmartSelect
-                      id="assigned-shift-select"
-                      placeholder={tr('common.select_shift')}
-                      options={scheduleOptions}
-                      value={selectedRequestSchedule ? scheduleId : ''}
-                      onChange={(val) => suggestTimes(val, kind, new Date())}
-                      className="w-full"
-                    />
-                    <select
-                      id="assigned-shift"
-                      required
-                      aria-label={tr('common.assigned_shift')}
-                      className="sr-only"
-                      tabIndex={-1}
-                      value={selectedRequestSchedule ? scheduleId : ''}
-                      onChange={(e) => suggestTimes(e.target.value, kind, new Date())}
-                    >
-                      <option value="">{tr('common.select_shift')}</option>
-                      {availableSchedules.map(({ schedule, shift, startsAt, endsAt }) => (
-                        <option key={schedule.id} value={schedule.id}>
-                          {schedule.workDate} · {shift.name} · {startsAt.slice(11)}–
-                          {endsAt.slice(11)} ({shift.timezone})
-                        </option>
-                      ))}
-                    </select>
-                  </div>
-
-                  <div className="space-y-1.5">
-                    <label
-                      htmlFor="request-kind"
-                      className="block text-[10px] font-bold uppercase tracking-[0.16em] text-slate-500"
-                    >
-                      {tr('common.request_type')}
-                    </label>
-                    <SmartSelect
-                      id="request-kind-select"
-                      options={requestKindOptions}
-                      value={kind}
-                      onChange={(val) => {
-                        const next = val as 'OVERTIME' | 'LEAVE';
-                        setKind(next);
-                        suggestTimes(scheduleId, next, new Date());
-                      }}
-                      className="w-full"
-                    />
-                    <select
-                      id="request-kind"
-                      aria-label={tr('common.request_type')}
-                      className="sr-only"
-                      tabIndex={-1}
-                      value={kind}
-                      onChange={(e) => {
-                        const next = e.target.value as 'OVERTIME' | 'LEAVE';
-                        setKind(next);
-                        suggestTimes(scheduleId, next, new Date());
-                      }}
-                    >
-                      <option value="OVERTIME">{tr('common.overtime')}</option>
-                      <option value="LEAVE">
-                        {tr('attendance_days_view.leave_whole_or_partial_shift')}
-                      </option>
-                    </select>
-                  </div>
-
-                  <div className="space-y-1.5">
-                    <label
-                      htmlFor="request-start"
-                      className="block text-[10px] font-bold uppercase tracking-[0.16em] text-slate-500"
-                    >
-                      {tr('attendance_days_view.start_date_time')}
-                    </label>
-                    <div className="flex items-center gap-2.5">
-                      <div className="relative flex-1">
-                        <SmartDatePicker
-                          value={startsAt.slice(0, 10)}
-                          onChange={(val) =>
-                            setStartsAt(`${val}T${startsAt.split('T')[1] ?? ''}`)
-                          }
-                          disablePast={false}
-                          compact
-                          placeholder={tr('common.start_date')}
-                          className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200/90 bg-white text-xs font-semibold text-[#071A2B] shadow-2xs hover:border-slate-300 focus:border-[#F66B17] focus:ring-2 focus:ring-[#F66B17]/15 transition-all"
-                        />
-                        <input
-                          id="request-start-date"
-                          aria-label={tr('common.start_date')}
-                          type="date"
-                          className="sr-only"
-                          tabIndex={-1}
-                          value={startsAt.slice(0, 10)}
-                          onChange={(e) =>
-                            setStartsAt(`${e.target.value}T${startsAt.split('T')[1] ?? ''}`)
-                          }
-                        />
-                      </div>
-                      <div className="relative flex-1 group">
-                        <IconClock className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400 group-focus-within:text-[#F66B17] transition-colors pointer-events-none" />
-                        <input
-                          id="request-start"
-                          aria-label={tr('common.start_time')}
-                          type="time"
-                          required
-                          className="w-full pl-9 pr-3 py-2.5 rounded-xl border border-slate-200/90 bg-white text-xs font-semibold text-[#071A2B] shadow-2xs hover:border-slate-300 focus:border-[#F66B17] focus:ring-2 focus:ring-[#F66B17]/15 focus:outline-none transition-all"
-                          value={startsAt.split('T')[1] ?? ''}
-                          onChange={(e) =>
-                            setStartsAt(`${startsAt.slice(0, 10)}T${e.target.value}`)
-                          }
-                        />
-                      </div>
-                    </div>
-                  </div>
-                  <div className="space-y-1.5">
-                    <label
-                      htmlFor="request-end"
-                      className="block text-[10px] font-bold uppercase tracking-[0.16em] text-slate-500"
-                    >
-                      {tr('attendance_days_view.end_date_time')}
-                    </label>
-                    <div className="flex items-center gap-2.5">
-                      <div className="relative flex-1">
-                        <SmartDatePicker
-                          value={endsAt.slice(0, 10)}
-                          onChange={(val) =>
-                            setEndsAt(`${val}T${endsAt.split('T')[1] ?? ''}`)
-                          }
-                          disablePast={false}
-                          compact
-                          placeholder={tr('common.end_date')}
-                          className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200/90 bg-white text-xs font-semibold text-[#071A2B] shadow-2xs hover:border-slate-300 focus:border-[#F66B17] focus:ring-2 focus:ring-[#F66B17]/15 transition-all"
-                        />
-                        <input
-                          id="request-end-date"
-                          aria-label={tr('common.end_date')}
-                          type="date"
-                          className="sr-only"
-                          tabIndex={-1}
-                          value={endsAt.slice(0, 10)}
-                          onChange={(e) =>
-                            setEndsAt(`${e.target.value}T${endsAt.split('T')[1] ?? ''}`)
-                          }
-                        />
-                      </div>
-                      <div className="relative flex-1 group">
-                        <IconClock className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400 group-focus-within:text-[#F66B17] transition-colors pointer-events-none" />
-                        <input
-                          id="request-end"
-                          aria-label={tr('common.end_time')}
-                          type="time"
-                          required
-                          className="w-full pl-9 pr-3 py-2.5 rounded-xl border border-slate-200/90 bg-white text-xs font-semibold text-[#071A2B] shadow-2xs hover:border-slate-300 focus:border-[#F66B17] focus:ring-2 focus:ring-[#F66B17]/15 focus:outline-none transition-all"
-                          value={endsAt.split('T')[1] ?? ''}
-                          onChange={(e) => setEndsAt(`${endsAt.slice(0, 10)}T${e.target.value}`)}
-                        />
-                      </div>
-                    </div>
-                  </div>
-
-                  <div className="space-y-1.5 sm:col-span-2">
-                    <label
-                      htmlFor="request-reason"
-                      className="block text-[10px] font-bold uppercase tracking-[0.16em] text-slate-500"
-                    >
-                      {tr('common.reason')}
-                    </label>
-                    <input
-                      id="request-reason"
-                      required
-                      minLength={5}
-                      maxLength={1000}
-                      className="w-full px-4 py-2.5 rounded-xl border border-slate-200/90 text-xs font-semibold text-[#071A2B] shadow-2xs hover:border-slate-300 focus:border-[#F66B17] focus:ring-2 focus:ring-[#F66B17]/15 focus:outline-none transition-all duration-200"
-                      value={reason}
-                      onChange={(e) => setReason(e.target.value)}
-                    />
-                  </div>
-                </div>
-                <div className="flex items-center gap-3 pt-2">
-                  <button
-                    type="submit"
-                    aria-label={tr('common.submit_request')}
-                    className="group flex items-center gap-2.5 px-6 py-2.5 rounded-xl bg-[#071A2B] text-white text-xs font-bold disabled:opacity-40 hover:bg-[#04121D] transition-all shadow-sm hover:shadow active:scale-[0.98] cursor-pointer"
-                    disabled={request.isPending || !selectedRequestSchedule}
+                return (
+                  <form
+                    className="p-6 sm:p-7 space-y-6"
+                    onSubmit={(e) => {
+                      e.preventDefault();
+                      request.mutate();
+                    }}
                   >
-                    <span>{tr('common.submit_request')}</span>
-                    <div className="w-5 h-5 rounded-lg bg-white/10 group-hover:bg-[#F66B17] flex items-center justify-center transition-colors">
-                      <IconChevronRight className="w-3 h-3 text-white group-hover:translate-x-0.5 transition-transform" />
+                    {kind === 'LEAVE' && (
+                      <div
+                        className="rounded-xl border border-amber-200/70 bg-amber-50/60 px-4 py-3 space-y-1.5"
+                        aria-live="polite"
+                      >
+                        <p className="text-xs text-amber-800">
+                          {tr(
+                            noticeType === 'PLANNED'
+                              ? 'attendance_leave.planned_hint'
+                              : 'attendance_leave.emergency_hint',
+                          )}
+                        </p>
+                        {(eligibility.availability.isPending ||
+                          eligibility.availability.isFetching) && (
+                          <p role="status" className="text-xs text-amber-700">
+                            {tr('attendance_leave.checking_availability')}
+                          </p>
+                        )}
+                        {!eligibility.availability.isPending &&
+                          !eligibility.availability.isFetching &&
+                          !eligibility.ready && (
+                            <p role="alert" className="text-xs text-red-700">
+                              {tr('attendance_leave.availability_unavailable')}{' '}
+                              <button
+                                type="button"
+                                className="underline font-semibold"
+                                onClick={() => void eligibility.availability.refetch()}
+                              >
+                                {tr('attendance_leave.retry_availability')}
+                              </button>
+                            </p>
+                          )}
+                        {eligibility.locked && eligibility.availableAt && (
+                          <p role="status" className="text-xs font-semibold text-amber-900">
+                            {tr('attendance_leave.available_at', {
+                              time: new Date(eligibility.availableAt).toLocaleString(uiLocale(), {
+                                timeZone: selectedRequestSchedule?.shift.timezone,
+                                timeZoneName: 'short',
+                              }),
+                            })}
+                          </p>
+                        )}
+                      </div>
+                    )}
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
+                      <div className="space-y-1.5">
+                        <label
+                          htmlFor="request-kind"
+                          className="block text-[10px] font-bold uppercase tracking-[0.16em] text-slate-500"
+                        >
+                          {tr('common.request_type')}
+                        </label>
+                        <SmartSelect
+                          id="request-kind-select"
+                          disabled={request.isPending}
+                          options={requestKindOptions}
+                          value={kind}
+                          onChange={(val) => {
+                            const next = val as 'OVERTIME' | 'LEAVE';
+                            setKind(next);
+                            resetRequestSchedule();
+                          }}
+                          className="w-full"
+                        />
+                        <select
+                          id="request-kind"
+                          disabled={request.isPending}
+                          aria-label={tr('common.request_type')}
+                          className="sr-only"
+                          tabIndex={-1}
+                          value={kind}
+                          onChange={(e) => {
+                            const next = e.target.value as 'OVERTIME' | 'LEAVE';
+                            setKind(next);
+                            resetRequestSchedule();
+                          }}
+                        >
+                          <option value="OVERTIME">{tr('common.overtime')}</option>
+                          <option value="LEAVE">
+                            {tr('attendance_days_view.leave_whole_or_partial_shift')}
+                          </option>
+                        </select>
+                      </div>
+
+                      {kind === 'LEAVE' && (
+                        <label className="space-y-1.5">
+                          <span className="block text-[10px] font-bold uppercase tracking-[0.16em] text-slate-500">
+                            {tr('attendance_leave.notice_type')}
+                          </span>
+                          <SmartNativeSelect
+                            value={noticeType}
+                            disabled={request.isPending}
+                            onChange={(event) => {
+                              setNoticeType(event.target.value as LeaveNoticeType);
+                              resetRequestSchedule();
+                            }}
+                            className="w-full"
+                          >
+                            <option value="PLANNED">{tr('attendance_leave.planned')}</option>
+                            <option value="EMERGENCY">{tr('attendance_leave.emergency')}</option>
+                          </SmartNativeSelect>
+                        </label>
+                      )}
+
+                      <div
+                        className={kind === 'LEAVE' ? 'space-y-1.5 sm:col-span-2' : 'space-y-1.5'}
+                      >
+                        <label
+                          htmlFor="assigned-shift"
+                          className="block text-[10px] font-bold uppercase tracking-[0.16em] text-slate-500"
+                        >
+                          {tr('common.assigned_shift')}
+                        </label>
+                        <SmartSelect
+                          id="assigned-shift-select"
+                          disabled={request.isPending}
+                          placeholder={tr('common.select_shift')}
+                          options={scheduleOptions}
+                          value={selectedRequestSchedule ? scheduleId : ''}
+                          onChange={(val) => suggestTimes(val, kind, eligibility.getNow())}
+                          className="w-full"
+                        />
+                        <select
+                          id="assigned-shift"
+                          disabled={request.isPending}
+                          required
+                          aria-label={tr('common.assigned_shift')}
+                          className="sr-only"
+                          tabIndex={-1}
+                          value={selectedRequestSchedule ? scheduleId : ''}
+                          onChange={(e) => suggestTimes(e.target.value, kind, eligibility.getNow())}
+                        >
+                          <option value="">{tr('common.select_shift')}</option>
+                          {availableSchedules.map(({ schedule, shift, startsAt, endsAt }) => (
+                            <option key={schedule.id} value={schedule.id}>
+                              {schedule.workDate} · {shift.name} · {startsAt.slice(11)}–
+                              {endsAt.slice(11)} ({shift.timezone})
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+
+                      {(availableSchedules.length > 0 || scheduleId) && (
+                        <>
+                          <div className="space-y-1.5">
+                            <label
+                              htmlFor="request-start"
+                              className="block text-[10px] font-bold uppercase tracking-[0.16em] text-slate-500"
+                            >
+                              {tr('attendance_days_view.start_date_time')}
+                            </label>
+                            <div className="flex items-center gap-2.5">
+                              <div className="relative flex-1">
+                                <SmartDatePicker
+                                  value={startsAt.slice(0, 10)}
+                                  onChange={(val) =>
+                                    setStartsAt(`${val}T${startsAt.split('T')[1] ?? ''}`)
+                                  }
+                                  disablePast={false}
+                                  compact
+                                  placeholder={tr('common.start_date')}
+                                  className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200/90 bg-white text-xs font-semibold text-[#071A2B] shadow-2xs hover:border-slate-300 focus:border-[#F66B17] focus:ring-2 focus:ring-[#F66B17]/15 transition-all"
+                                />
+                                <input
+                                  id="request-start-date"
+                                  aria-label={tr('common.start_date')}
+                                  type="date"
+                                  className="sr-only"
+                                  tabIndex={-1}
+                                  value={startsAt.slice(0, 10)}
+                                  onChange={(e) =>
+                                    setStartsAt(`${e.target.value}T${startsAt.split('T')[1] ?? ''}`)
+                                  }
+                                />
+                              </div>
+                              <div className="relative flex-1 group">
+                                <IconClock className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400 group-focus-within:text-[#F66B17] transition-colors pointer-events-none" />
+                                <input
+                                  id="request-start"
+                                  aria-label={tr('common.start_time')}
+                                  type="time"
+                                  required
+                                  className="w-full pl-9 pr-3 py-2.5 rounded-xl border border-slate-200/90 bg-white text-xs font-semibold text-[#071A2B] shadow-2xs hover:border-slate-300 focus:border-[#F66B17] focus:ring-2 focus:ring-[#F66B17]/15 focus:outline-none transition-all"
+                                  value={startsAt.split('T')[1] ?? ''}
+                                  onChange={(e) =>
+                                    setStartsAt(`${startsAt.slice(0, 10)}T${e.target.value}`)
+                                  }
+                                />
+                              </div>
+                            </div>
+                          </div>
+                          <div className="space-y-1.5">
+                            <label
+                              htmlFor="request-end"
+                              className="block text-[10px] font-bold uppercase tracking-[0.16em] text-slate-500"
+                            >
+                              {tr('attendance_days_view.end_date_time')}
+                            </label>
+                            <div className="flex items-center gap-2.5">
+                              <div className="relative flex-1">
+                                <SmartDatePicker
+                                  value={endsAt.slice(0, 10)}
+                                  onChange={(val) =>
+                                    setEndsAt(`${val}T${endsAt.split('T')[1] ?? ''}`)
+                                  }
+                                  disablePast={false}
+                                  compact
+                                  placeholder={tr('common.end_date')}
+                                  className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200/90 bg-white text-xs font-semibold text-[#071A2B] shadow-2xs hover:border-slate-300 focus:border-[#F66B17] focus:ring-2 focus:ring-[#F66B17]/15 transition-all"
+                                />
+                                <input
+                                  id="request-end-date"
+                                  aria-label={tr('common.end_date')}
+                                  type="date"
+                                  className="sr-only"
+                                  tabIndex={-1}
+                                  value={endsAt.slice(0, 10)}
+                                  onChange={(e) =>
+                                    setEndsAt(`${e.target.value}T${endsAt.split('T')[1] ?? ''}`)
+                                  }
+                                />
+                              </div>
+                              <div className="relative flex-1 group">
+                                <IconClock className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400 group-focus-within:text-[#F66B17] transition-colors pointer-events-none" />
+                                <input
+                                  id="request-end"
+                                  aria-label={tr('common.end_time')}
+                                  type="time"
+                                  required
+                                  className="w-full pl-9 pr-3 py-2.5 rounded-xl border border-slate-200/90 bg-white text-xs font-semibold text-[#071A2B] shadow-2xs hover:border-slate-300 focus:border-[#F66B17] focus:ring-2 focus:ring-[#F66B17]/15 focus:outline-none transition-all"
+                                  value={endsAt.split('T')[1] ?? ''}
+                                  onChange={(e) =>
+                                    setEndsAt(`${endsAt.slice(0, 10)}T${e.target.value}`)
+                                  }
+                                />
+                              </div>
+                            </div>
+                          </div>
+
+                          <div className="space-y-1.5 sm:col-span-2">
+                            <label
+                              htmlFor="request-reason"
+                              className="block text-[10px] font-bold uppercase tracking-[0.16em] text-slate-500"
+                            >
+                              {tr('common.reason')}
+                            </label>
+                            <input
+                              id="request-reason"
+                              required
+                              minLength={5}
+                              maxLength={1000}
+                              className="w-full px-4 py-2.5 rounded-xl border border-slate-200/90 text-xs font-semibold text-[#071A2B] shadow-2xs hover:border-slate-300 focus:border-[#F66B17] focus:ring-2 focus:ring-[#F66B17]/15 focus:outline-none transition-all duration-200"
+                              value={reason}
+                              onChange={(e) => setReason(e.target.value)}
+                            />
+                          </div>
+                        </>
+                      )}
                     </div>
-                  </button>
-                  {request.isSuccess && (
-                    <span className="flex items-center gap-1.5 text-xs text-emerald-700 font-semibold bg-emerald-50 border border-emerald-200/60 px-3 py-1.5 rounded-xl">
-                      <IconCheck className="w-3.5 h-3.5" /> {tr('common.request_submitted')}
-                    </span>
-                  )}
-                </div>
-                {request.error && (
-                  <p role="alert" className="text-xs text-red-600 font-semibold">
-                    {userErrorMessage(request.error)}
-                  </p>
-                )}
-              </form>
-            );
-          })()}
+                    <div className="flex items-center gap-3 pt-2">
+                      <button
+                        type="submit"
+                        aria-label={tr('common.submit_request')}
+                        className="group flex items-center gap-2.5 px-6 py-2.5 rounded-xl bg-[#071A2B] text-white text-xs font-bold disabled:opacity-40 hover:bg-[#04121D] transition-all shadow-sm hover:shadow active:scale-[0.98] cursor-pointer"
+                        disabled={
+                          request.isPending ||
+                          !selectedRequestSchedule ||
+                          (kind === 'LEAVE' && (!eligibility.ready || eligibility.locked))
+                        }
+                      >
+                        <span>{tr('common.submit_request')}</span>
+                        <div className="w-5 h-5 rounded-lg bg-white/10 group-hover:bg-[#F66B17] flex items-center justify-center transition-colors">
+                          <IconChevronRight className="w-3 h-3 text-white group-hover:translate-x-0.5 transition-transform" />
+                        </div>
+                      </button>
+                      {request.isSuccess && (
+                        <span className="flex items-center gap-1.5 text-xs text-emerald-700 font-semibold bg-emerald-50 border border-emerald-200/60 px-3 py-1.5 rounded-xl">
+                          <IconCheck className="w-3.5 h-3.5" /> {tr('common.request_submitted')}
+                        </span>
+                      )}
+                    </div>
+                    {request.error && (
+                      <p role="alert" className="text-xs text-red-600 font-semibold">
+                        {userErrorMessage(request.error)}
+                      </p>
+                    )}
+                  </form>
+                );
+              })()}
           </div>
         ) : null}
 
         {/* ── TIME REQUESTS QUEUE ─────────────────────────────── */}
         <div className="rounded-2xl border border-slate-200/80 bg-white shadow-xs overflow-hidden">
           <div className="flex flex-wrap items-center justify-between gap-3 px-6 py-4 border-b border-slate-100 bg-gradient-to-r from-slate-50/50 to-white">
-            <div className="flex items-center gap-3">
-              <div className="w-8 h-8 rounded-lg bg-orange-50 text-[#F66B17] flex items-center justify-center border border-orange-200/60 shadow-2xs">
-                <IconClock className="w-4 h-4" />
-              </div>
+            <div>
               <h3 className="text-sm font-extrabold text-[#071A2B] tracking-tight">
                 {tr('common.time_requests')}
               </h3>
@@ -1727,6 +1872,28 @@ export function AttendanceDaysView({
                         {new Date(r.startsAt).toLocaleString(uiLocale())} →{' '}
                         {new Date(r.endsAt).toLocaleString(uiLocale())}
                       </p>
+                      {r.kind === 'LEAVE' && (
+                        <p className="text-xs text-slate-600 mt-1">
+                          {tr(
+                            r.noticeType === 'EMERGENCY'
+                              ? 'attendance_leave.emergency'
+                              : r.noticeType === 'PLANNED'
+                                ? 'attendance_leave.planned'
+                                : 'attendance_leave.unclassified',
+                          )}
+                          {r.shortNotice === true && <> · {tr('attendance_leave.short_notice')}</>}
+                          {r.submittedOnBehalf === true && (
+                            <> · {tr('attendance_leave.on_behalf')}</>
+                          )}
+                        </p>
+                      )}
+                      {r.createdAt && (
+                        <p className="text-xs text-slate-500">
+                          {tr('attendance_leave.submitted_at', {
+                            time: new Date(r.createdAt).toLocaleString(uiLocale()),
+                          })}
+                        </p>
+                      )}
                       <p className="text-[11px] text-slate-500 mt-0.5">{r.reason}</p>
                       {r.reviewNote && (
                         <p className="text-[11px] text-emerald-700 mt-0.5">

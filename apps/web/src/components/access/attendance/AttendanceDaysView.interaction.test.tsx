@@ -11,6 +11,7 @@ import i18n from '../../../i18n';
 const api = vi.hoisted(() => ({
   attendanceDays: vi.fn(),
   attendanceTimeRequests: vi.fn(),
+  myWorkerRequests: vi.fn(),
   listWorkerSchedules: vi.fn(),
   listShifts: vi.fn(),
   listWorkers: vi.fn(),
@@ -75,6 +76,12 @@ beforeEach(() => {
   window.history.replaceState({}, '', '/');
   api.attendanceTimesheets.mockResolvedValue({ items: [] });
   api.attendanceTimeRequests.mockResolvedValue({ items: [], total: 0 });
+  api.myWorkerRequests.mockImplementation(async () => ({
+    items: [],
+    total: 0,
+    serverTime: new Date().toISOString(),
+    leaveAvailableAt: null,
+  }));
   api.listWorkers.mockResolvedValue({ items: [], total: 0 });
   api.listWorkerSchedules.mockResolvedValue({ items: [], total: 0 });
   api.listShifts.mockResolvedValue({
@@ -272,7 +279,12 @@ describe('MF03 interactive UI', () => {
     await screen.findAllByText('Overtime must start in the future, outside regular shift hours.');
     expect(api.requestAttendanceTime).not.toHaveBeenCalled();
     fireEvent.change(screen.getByLabelText('Request Type'), { target: { value: 'LEAVE' } });
-    expect((screen.getByLabelText('Start time') as HTMLInputElement).value).toBe('08:00');
+    expect((screen.getByLabelText('Assigned shift') as HTMLSelectElement).value).toBe('');
+    expect(screen.queryByLabelText('Start time')).toBeNull();
+    fireEvent.change(screen.getByLabelText('Leave type'), { target: { value: 'EMERGENCY' } });
+    await screen.findByRole('option', { name: /2030-10-08 · Morning/ });
+    fireEvent.change(screen.getByLabelText('Assigned shift'), { target: { value: 'today' } });
+    expect((screen.getByLabelText('Start time') as HTMLInputElement).value).toBe('10:00');
     expect((screen.getByLabelText('End time') as HTMLInputElement).value).toBe('17:00');
   });
 

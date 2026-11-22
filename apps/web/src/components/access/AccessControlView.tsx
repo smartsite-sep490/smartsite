@@ -249,34 +249,6 @@ export function AccessControlView({ apiUrl }: AccessControlViewProps) {
 
   return (
     <div className="mx-auto max-w-[1360px] space-y-5 pb-12 text-[#182232]">
-      {/* Top Banner / Identity Header */}
-      {!attendanceWorkspace && (
-        <header className="rounded-2xl border border-slate-200/80 bg-white p-5 shadow-xs">
-          <div className="flex flex-wrap items-center justify-between gap-4">
-            <div className="space-y-1.5">
-              {!attendanceWorkspace && (
-                <div className="flex items-center gap-2">
-                  <span className="inline-flex items-center gap-1.5 rounded-full bg-orange-50 px-2.5 py-0.5 text-[10px] font-bold uppercase tracking-wider text-[#F66B17] border border-orange-200/60">
-                    <span className="h-1.5 w-1.5 rounded-full bg-[#F66B17]" />
-                    {t('access.systemBadge')}
-                  </span>
-                  <span className="hidden sm:inline-block rounded-full bg-slate-100 border border-slate-200 px-2.5 py-0.5 text-[10px] font-semibold uppercase tracking-wider text-slate-500">
-                    {t('access.portalBadge')}
-                  </span>
-                </div>
-              )}
-              <h1 className="text-xl sm:text-2xl font-bold tracking-tight text-slate-900">
-                {securityOnly
-                  ? t('security.title')
-                  : attendanceWorkspace
-                    ? t('access.tabs.attendance.label')
-                    : t('access.title')}
-              </h1>
-            </div>
-          </div>
-        </header>
-      )}
-
       {/* Modern Sub-Navigation Tabs */}
       {!(attendanceWorkspace && visibleTabs.length === 1) && (
         <nav

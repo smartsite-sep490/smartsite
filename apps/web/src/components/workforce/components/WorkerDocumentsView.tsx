@@ -9,7 +9,7 @@ import { userErrorMessage } from '../../../i18n/messages';
 import { WorkerDocumentsPanel } from './WorkerDocumentsPanel';
 import { WorkerDocumentReviewView } from '../../safety/WorkerDocumentReviewView';
 import { loadAllPages } from '../load-all-pages';
-import { IconBuilding2, IconLoader, IconAlertTriangle, IconShield } from '../../icons';
+import { IconBuilding2, IconLoader, IconAlertTriangle } from '../../icons';
 
 export function WorkerDocumentsView({ apiUrl }: { apiUrl: string }) {
   useTranslation();
@@ -76,23 +76,8 @@ export function WorkerDocumentsView({ apiUrl }: { apiUrl: string }) {
 
   return (
     <div className="mx-auto max-w-6xl space-y-6 pb-12">
-      {/* Executive Context Bar: Balanced Left Breadcrumb & Right Site Selector */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-2 border-b border-slate-200/80">
-        <div className="flex items-center gap-2.5 min-w-0">
-          <div className="w-8 h-8 rounded-xl bg-gradient-to-br from-[#041D2E] to-slate-800 text-white flex items-center justify-center shadow-2xs border border-slate-700/50 shrink-0">
-            <IconShield className="w-4 h-4 text-[#F66B17]" />
-          </div>
-          <div className="flex flex-wrap items-center gap-2 text-xs min-w-0">
-            <span className="font-mono text-[11px] font-bold uppercase tracking-[0.16em] text-[#F66B17] shrink-0">
-              {tr('common.workforce_operations')}
-            </span>
-            <span className="text-slate-300">/</span>
-            <span className="font-bold text-slate-700 truncate">
-              {tr('documents.complianceDossierTitle')}
-            </span>
-          </div>
-        </div>
-
+      {/* Site selector */}
+      <div className="flex justify-end pb-2 border-b border-slate-200/80">
         {allowed.length > 0 && (
           <div className="shrink-0 flex items-center gap-2 rounded-xl border border-slate-200/90 bg-white px-3 py-1.5 shadow-2xs self-start sm:self-auto">
             <IconBuilding2 className="w-4 h-4 text-[#F66B17] shrink-0" />

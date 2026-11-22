@@ -778,20 +778,7 @@ export function AttendanceView({
     if (isWorker) {
       return (
         <div className="space-y-6">
-          <div className="flex flex-wrap items-center justify-between gap-4 pb-2 border-b border-slate-200/60">
-            <div>
-              <h1 className="text-2xl font-black tracking-tight text-[#071A2B]">
-                {activeSubTab === 'requests'
-                  ? tr('attendance_report.requests_title')
-                  : tr('common.my_work_hours')}
-              </h1>
-              <p className="text-xs text-slate-500 font-medium mt-1">
-                {activeSubTab === 'requests'
-                  ? tr('attendance_report.requests_subtitle')
-                  : tr('attendance_report.subtitle')}
-              </p>
-            </div>
-
+          <div className="flex items-center justify-end pb-2 border-b border-slate-200/60">
             {/* Segmented Switcher for Worker */}
             <div className="inline-flex items-center p-1 rounded-2xl bg-slate-100/90 border border-slate-200/80 shadow-2xs gap-1">
               <button
@@ -845,18 +832,13 @@ export function AttendanceView({
       {/* Top Main Heading & Sub-Nav */}
       <div className="flex flex-wrap items-center justify-between gap-4 pb-2 border-b border-slate-200/60">
         <div className="flex items-center gap-4 flex-wrap">
-          <div>
-            <h1 className="text-2xl font-black tracking-tight text-[#071A2B]">
-              {activeSubTab === 'requests'
-                ? tr('attendance_report.requests_title')
-                : tr('attendance_report.title')}
-            </h1>
-            <p className="text-xs text-slate-500 font-medium mt-1">
-              {activeSubTab === 'requests'
-                ? tr('attendance_report.requests_subtitle')
-                : tr('attendance_report.subtitle')}
-            </p>
-          </div>
+          {activeSubTab === 'timesheet' && (
+            <div>
+              <h1 className="text-2xl font-black tracking-tight text-[#071A2B]">
+                {tr('attendance_report.title')}
+              </h1>
+            </div>
+          )}
 
           {/* Attendance sections available to this role */}
           <div className="inline-flex items-center p-1 rounded-2xl bg-slate-100/90 border border-slate-200/80 shadow-2xs gap-1 ml-0 sm:ml-4">
