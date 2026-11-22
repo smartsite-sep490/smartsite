@@ -37,7 +37,7 @@ registerFeatureCatalog({
     'monitor.paused': 'AI processing is paused. Camera previews are disabled.',
     'monitor.evidence': 'Open safety records',
     'monitor.denied':
-      'This monitoring screen is for a Safety Officer assigned to this site. If you are a Site Manager, use Camera setup to configure the source and monitoring areas.',
+      'Camera monitoring requires an active Site Manager or Safety Officer assigned to a site.',
     'monitor.loaded': '{loaded} loaded / {total} reported',
     'monitor.hint':
       'Choose a Site, then select or enlarge a camera. Saved findings are reviewed in safety records.',
@@ -63,7 +63,7 @@ registerFeatureCatalog({
     'monitor.paused': 'Đang tạm dừng xử lý AI. Xem trước camera đã tắt.',
     'monitor.evidence': 'Mở hồ sơ an toàn',
     'monitor.denied':
-      'Màn giám sát dành cho Cán bộ an toàn được phân công tại công trường. Nếu đang dùng tài khoản Quản lý công trường, hãy vào Thiết lập camera để cấu hình nguồn và vùng giám sát. Đăng nhập tài khoản Cán bộ an toàn để xem giám sát.',
+      'Màn giám sát camera dành cho Quản lý công trường hoặc Cán bộ an toàn đang hoạt động và được phân công tại công trường.',
     'monitor.loaded': 'Đã tải {loaded} / tổng báo về {total}',
     'monitor.hint':
       'Chọn công trường rồi chọn hoặc phóng to camera. Xem các phát hiện đã lưu tại hồ sơ an toàn.',
@@ -127,7 +127,9 @@ export function PpeMonitorWorkspace({
   const canRead =
     session.user.isActive &&
     !session.user.mustChangePassword &&
-    session.user.roleAssignments.some((r) => r.role === 'SAFETY_OFFICER' && !!r.siteId);
+    session.user.roleAssignments.some(
+      (r) => (r.role === 'SAFETY_OFFICER' || r.role === 'SITE_MANAGER') && !!r.siteId,
+    );
   if (!canRead) {
     return (
       <p
@@ -174,7 +176,7 @@ function MonitorScope({
     () =>
       new Set(
         session.user.roleAssignments
-          .filter((r) => r.role === 'SAFETY_OFFICER')
+          .filter((r) => (r.role === 'SAFETY_OFFICER' || r.role === 'SITE_MANAGER') && !!r.siteId)
           .map((r) => r.siteId),
       ),
     [session.user.roleAssignments],
@@ -183,6 +185,10 @@ function MonitorScope({
   const site =
     visibleSites.find((row) => row.id === chosenSite) ??
     (linkedSiteId && chosenSite === linkedSiteId ? undefined : visibleSites[0]);
+  const canViewSafetyRecords = Boolean(
+    site &&
+    session.user.roleAssignments.some((r) => r.role === 'SAFETY_OFFICER' && r.siteId === site.id),
+  );
   useEffect(() => {
     if (
       (!visibleSites.length || (allowed.has(chosenSite) && !site)) &&
@@ -273,7 +279,7 @@ function MonitorScope({
           </h1>
           <p className="mt-0.5 text-sm text-slate-600">{t('monitor.hint')}</p>
         </div>
-        {site && (
+        {site && canViewSafetyRecords && (
           <div className="flex min-w-0 max-w-full flex-wrap items-center gap-2">
             {enableFrameInboxLink && (
               <Link
@@ -311,6 +317,7 @@ function MonitorScope({
           canManageCameras={session.user.roleAssignments.some(
             (r) => r.role === 'SITE_MANAGER' && r.siteId === site.id,
           )}
+          canViewSafetyRecords={canViewSafetyRecords}
           linkedCameraId={site.id === linkedSiteId ? linkedCameraId : ''}
         />
       ) : (
@@ -334,6 +341,7 @@ function CameraScope({
   siteSelector,
   siteNotices,
   canManageCameras,
+  canViewSafetyRecords,
   linkedCameraId,
 }: Props & {
   client: SmartSiteManagementClient;
@@ -342,6 +350,7 @@ function CameraScope({
   siteSelector: ReactNode;
   siteNotices: ReactNode;
   canManageCameras: boolean;
+  canViewSafetyRecords: boolean;
   linkedCameraId: string;
 }) {
   const { t } = useTranslation(SAFETY_NAMESPACE);
@@ -494,9 +503,10 @@ function CameraScope({
   const selected =
     active.find((row) => row.id === chosen) ??
     (linkedCameraId && chosen === linkedCameraId ? undefined : active[0]);
-  const evidenceCamera = evidenceCameraId
-    ? active.find((row) => row.id === evidenceCameraId)
-    : undefined;
+  const evidenceCamera =
+    canViewSafetyRecords && evidenceCameraId
+      ? active.find((row) => row.id === evidenceCameraId)
+      : undefined;
 
   // With 1 available camera, open large single-camera Focus stage by default unless operator explicitly chose Grid.
   const focus =
@@ -859,7 +869,9 @@ function CameraScope({
               siteName={site.name}
               camera={selected}
               aiPaused={!!aiPaused}
-              onOpenEvidence={() => setEvidenceCameraId(selected.id)}
+              onOpenEvidence={
+                canViewSafetyRecords ? () => setEvidenceCameraId(selected.id) : undefined
+              }
               onAiSnapshotUpdate={handleFocusSnapshotUpdate}
               onTransportChoice={() => setLayoutMode('focus')}
               onExitFocus={() => {
@@ -874,7 +886,7 @@ function CameraScope({
               cameras={wall}
               selectedCameraId={selected.id}
               onSelectCamera={setCamera}
-              onOpenEvidence={(id) => setEvidenceCameraId(id)}
+              onOpenEvidence={canViewSafetyRecords ? (id) => setEvidenceCameraId(id) : undefined}
               onTilePreviewUpdate={handleTilePreviewUpdate}
               onTileUnmount={handleTileUnmount}
               onEnlargeCamera={(id) => {
@@ -884,19 +896,21 @@ function CameraScope({
               }}
             />
           ))}
-        <MonitorEvidenceDrawer
-          open={Boolean(evidenceCamera)}
-          onClose={() => setEvidenceCameraId(null)}
-          siteId={site.id}
-          siteCode={site.code}
-          siteName={site.name}
-          camera={evidenceCamera}
-          sessionScope={scope}
-          aiPaused={!!aiPaused}
-          enableFrameInboxLink={Boolean(enableFrameInboxLink)}
-          snapshot={evidenceCamera ? snapshotsByCamera[evidenceCamera.id] : undefined}
-          isRawModeActive={Boolean(focus && evidenceCamera?.id === selected?.id && focusRawMode)}
-        />
+        {canViewSafetyRecords && (
+          <MonitorEvidenceDrawer
+            open={Boolean(evidenceCamera)}
+            onClose={() => setEvidenceCameraId(null)}
+            siteId={site.id}
+            siteCode={site.code}
+            siteName={site.name}
+            camera={evidenceCamera}
+            sessionScope={scope}
+            aiPaused={!!aiPaused}
+            enableFrameInboxLink={Boolean(enableFrameInboxLink)}
+            snapshot={evidenceCamera ? snapshotsByCamera[evidenceCamera.id] : undefined}
+            isRawModeActive={Boolean(focus && evidenceCamera?.id === selected?.id && focusRawMode)}
+          />
+        )}
       </div>
       <div className="flex flex-wrap items-center justify-end gap-2 pt-0.5">
         <MonitorWorkspaceTour

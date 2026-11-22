@@ -125,8 +125,12 @@ export function RestrictedZoneView({
   const linkedMonitoring = externalSession;
   const canRead =
     !externalSession ||
-    session?.user.roleAssignments.some(
-      ({ role, siteId }) => siteId !== null && ['SITE_MANAGER', 'SAFETY_OFFICER'].includes(role),
+    Boolean(
+      session?.user.isActive &&
+      !session.user.mustChangePassword &&
+      session.user.roleAssignments.some(
+        ({ role, siteId }) => siteId !== null && ['SITE_MANAGER', 'SAFETY_OFFICER'].includes(role),
+      ),
     );
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
@@ -885,6 +889,12 @@ export function RestrictedZoneView({
         role === 'SITE_MANAGER' && (selectedSiteId ? rSiteId === selectedSiteId : rSiteId !== null),
     ),
   );
+  const canViewSafetyRecords = Boolean(
+    selectedSiteId &&
+    session?.user.roleAssignments.some(
+      ({ role, siteId: rSiteId }) => role === 'SAFETY_OFFICER' && rSiteId === selectedSiteId,
+    ),
+  );
   const activeRoleLabelKey = session?.user.roleAssignments.some(
     ({ role, siteId: rSiteId }) =>
       role === 'SITE_MANAGER' && (!selectedSiteId || rSiteId === selectedSiteId),
@@ -1059,7 +1069,7 @@ export function RestrictedZoneView({
                       {tr('shell.cameraSetup')}
                     </a>
                   ))}
-                {onNavigate && (
+                {onNavigate && canViewSafetyRecords && (
                   <button
                     type="button"
                     onClick={() =>
@@ -1120,11 +1130,11 @@ export function RestrictedZoneView({
                       setRequestedCameraId('');
                       setRequestedRegionId('');
                     }}
-                    disabled={sites.isPending || !sites.data?.items.length}
+                    disabled={sites.isPending || !scopedSites.length}
                     className={selectControlClass}
                   >
                     {!selectedSiteId && <option value="">{tr('common.unavailable')}</option>}
-                    {sites.data?.items.map((site) => (
+                    {scopedSites.map((site) => (
                       <option key={site.id} value={site.id}>
                         {site.code} · {site.name}
                       </option>
