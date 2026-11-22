@@ -43,6 +43,12 @@ const en = {
   'cameraSetup.field.code': 'Camera code',
   'cameraSetup.field.name': 'Camera name',
   'cameraSetup.field.externalId': 'Source ID',
+  'cameraSetup.workspaceTabsLabel': 'Camera configuration tasks',
+  'cameraSetup.tabSource': 'Video source',
+  'cameraSetup.tabRegions': 'Regions & polygon',
+  'cameraSetup.tabPpe': 'PPE policy',
+  'cameraSetup.diagnosticsDisclosure': 'Setup checklist & diagnostics',
+  'cameraSetup.sourceStageSummaryDisclosure': 'Connection & application stages',
 };
 
 const vi: Record<keyof typeof en, string> = {
@@ -89,6 +95,12 @@ const vi: Record<keyof typeof en, string> = {
   'cameraSetup.field.code': 'Mã camera',
   'cameraSetup.field.name': 'Tên camera',
   'cameraSetup.field.externalId': 'Mã nguồn (Source ID)',
+  'cameraSetup.workspaceTabsLabel': 'Tác vụ cấu hình camera',
+  'cameraSetup.tabSource': 'Nguồn video',
+  'cameraSetup.tabRegions': 'Vùng & đa giác',
+  'cameraSetup.tabPpe': 'Chính sách PPE',
+  'cameraSetup.diagnosticsDisclosure': 'Tiến độ thiết lập & chẩn đoán',
+  'cameraSetup.sourceStageSummaryDisclosure': 'Các giai đoạn kết nối & áp dụng',
 };
 
 registerFeatureCatalog({ en, vi });

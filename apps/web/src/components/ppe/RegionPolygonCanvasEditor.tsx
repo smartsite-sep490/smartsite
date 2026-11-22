@@ -366,7 +366,7 @@ export function RegionPolygonCanvasEditor({
   const canvasElement = (
     <div
       data-tour-anchor="polygon-canvas"
-      className="relative w-full xl:max-h-[23.5rem] border border-slate-800 rounded-xl overflow-hidden bg-slate-950 select-none shadow-inner"
+      className="relative w-full xl:max-h-[27rem] border border-slate-800 rounded-xl overflow-hidden bg-slate-950 select-none shadow-inner"
       style={{ aspectRatio: `${frame.width} / ${frame.height}` }}
     >
       {isImageStale && (
@@ -496,7 +496,7 @@ export function RegionPolygonCanvasEditor({
       <div className="min-w-0" data-ppe-region-editor onKeyDown={handleEditorKeyDown}>
         <div
           data-testid="polygon-authoring-layout"
-          className="grid min-w-0 grid-cols-1 items-start gap-4 xl:grid-cols-[minmax(0,1.4fr)_minmax(22rem,1fr)]"
+          className="grid min-w-0 grid-cols-1 items-start gap-4 2xl:grid-cols-[minmax(0,1fr)_19rem]"
         >
           <div data-testid="polygon-canvas-column" className="min-w-0 space-y-2.5">
             {canvasElement}
@@ -504,7 +504,7 @@ export function RegionPolygonCanvasEditor({
           </div>
           <div
             data-testid="polygon-inspector-column"
-            className="min-w-0 space-y-3 rounded-2xl border border-slate-200/90 bg-slate-50/50 p-3.5"
+            className="min-w-0 space-y-3 rounded-xl border border-slate-200 bg-slate-50/50 p-3.5"
           >
             {inspectorSlot}
             {footerElement}

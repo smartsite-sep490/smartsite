@@ -1,4 +1,7 @@
+import { CameraApplySavedBar } from './CameraApplySavedBar';
 import { CameraSourceSetupPanel } from './CameraSourceSetupPanel';
+import type { CameraWorkspaceTask } from './CameraSetupContextPanel';
+import { useCameraSourceResumeController } from './useCameraSourceResumeController';
 import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Link, useNavigate } from 'react-router-dom';
@@ -25,7 +28,6 @@ import { useCameraSetupWorkspace } from './useCameraSetupWorkspace';
 registerZonePpeDialogCopy();
 
 const button = CAMERA_BUTTON_STYLES.secondary;
-const surface = 'min-w-0 rounded-xl border border-slate-200 bg-white px-4 py-3 sm:px-5';
 export type CameraSetupViewProps = { apiUrl: string; sharedSession: SharedSession | null };
 
 export function CameraSetupView({ apiUrl, sharedSession }: CameraSetupViewProps) {
@@ -94,12 +96,21 @@ function SetupWorkspace({ apiUrl, session }: { apiUrl: string; session: SharedSe
     requestedId: string | null;
     cameraId: string;
   } | null>(null);
+  const [taskSelection, setTaskSelection] = useState<{
+    scopeKey: string;
+    task: CameraWorkspaceTask;
+  } | null>(null);
+  const [ppeExpandRequest, setPpeExpandRequest] = useState<{
+    cameraId: string;
+    seq: number;
+  } | null>(null);
   const [inlineRegionDraft, setInlineRegionDraft] = useState({ dirty: false, saving: false });
   const [pendingInlineExit, setPendingInlineExit] = useState<
     | { kind: 'close' }
     | { kind: 'focus'; cameraId: string }
     | { kind: 'site'; siteId: string }
     | { kind: 'navigate'; to: string }
+    | { kind: 'task'; task: 'source' | 'ppe'; cameraId?: string }
     | {
         kind: 'open';
         openKind: CameraSetupOpenKind;
@@ -216,6 +227,26 @@ function SetupWorkspace({ apiUrl, session }: { apiUrl: string; session: SharedSe
       applyCameraFocusSwitch(pending.cameraId);
       return;
     }
+    if (pending?.kind === 'task') {
+      invalidateRegionSetupCaches(site.id);
+      close();
+      const targetId = pending.cameraId ?? catalogSelectedCamera?.id;
+      if (targetId) {
+        if (targetId !== catalogSelectedCamera?.id) {
+          setFocusSelection({
+            siteId: site.id,
+            requestedId: requestedCameraId,
+            cameraId: targetId,
+          });
+        }
+        const nextScopeKey = `${site.id}:${targetId}:${requestedAction ?? ''}:${matchedRequestedCamera?.id ?? ''}`;
+        setTaskSelection({ scopeKey: nextScopeKey, task: pending.task });
+        if (pending.task === 'ppe') {
+          setPpeExpandRequest((prev) => ({ cameraId: targetId, seq: (prev?.seq ?? 0) + 1 }));
+        }
+      }
+      return;
+    }
     invalidateRegionSetupCaches(site.id);
     close();
   };
@@ -272,14 +303,130 @@ function SetupWorkspace({ apiUrl, session }: { apiUrl: string; session: SharedSe
     !cameras.baseError &&
     !revoked,
   );
+  const sharedResumeController = useCameraSourceResumeController({
+    apiUrl,
+    token: session.accessToken,
+    siteId: site?.id ?? '',
+    camera: catalogSelectedCamera,
+    setupKey: key,
+    canWrite: canManageCameras,
+    enabled: Boolean(
+      isSourceSetupVisible &&
+      site &&
+      catalogSelectedCamera &&
+      catalogSelectedCamera.status === 'ACTIVE',
+    ),
+    onUnauthorized: () => {
+      if (site) handleStatusUnauthorized(site.id);
+    },
+  });
+  const currentTaskScopeKey = `${site?.id ?? ''}:${catalogSelectedCamera?.id ?? ''}:${requestedAction ?? ''}:${matchedRequestedCamera?.id ?? ''}`;
+  const activeTask: CameraWorkspaceTask | null =
+    !catalogSelectedCamera || catalogSelectedCamera.status !== 'ACTIVE'
+      ? null
+      : isInlineRegionsOpen
+        ? 'regions'
+        : taskSelection?.scopeKey === currentTaskScopeKey
+          ? taskSelection.task
+          : requestedAction === 'ppe' &&
+              matchedRequestedCamera &&
+              catalogSelectedCamera.id === matchedRequestedCamera.id
+            ? 'ppe'
+            : isSourceSetupVisible
+              ? 'source'
+              : null;
+
+  const handleSelectWorkspaceTask = (
+    nextTask: CameraWorkspaceTask,
+    trigger?: HTMLButtonElement,
+    targetCameraId?: string,
+  ) => {
+    if (!site) return;
+    const effectiveCameraId = targetCameraId ?? catalogSelectedCamera?.id;
+    if (!effectiveCameraId) return;
+    if (nextTask === 'regions') {
+      if (effectiveCameraId !== catalogSelectedCamera?.id) {
+        if (isInlineRegionsOpen) {
+          if (effectiveRegionDraft.saving) return;
+          if (effectiveRegionDraft.dirty) {
+            setPendingInlineExit({
+              kind: 'open',
+              openKind: 'regions',
+              cameraId: effectiveCameraId,
+              trigger,
+            });
+            return;
+          }
+        }
+        setFocusSelection({
+          siteId: site.id,
+          requestedId: requestedCameraId,
+          cameraId: effectiveCameraId,
+        });
+      }
+      guardedOpen('regions', effectiveCameraId, trigger);
+      return;
+    }
+    if (isInlineRegionsOpen) {
+      if (effectiveRegionDraft.saving) return;
+      if (effectiveRegionDraft.dirty) {
+        setPendingInlineExit({ kind: 'task', task: nextTask, cameraId: effectiveCameraId });
+        return;
+      }
+      invalidateRegionSetupCaches(site.id);
+      close();
+    }
+    if (effectiveCameraId !== catalogSelectedCamera?.id) {
+      setFocusSelection({
+        siteId: site.id,
+        requestedId: requestedCameraId,
+        cameraId: effectiveCameraId,
+      });
+    }
+    const nextScopeKey = `${site.id}:${effectiveCameraId}:${requestedAction ?? ''}:${matchedRequestedCamera?.id ?? ''}`;
+    setTaskSelection({ scopeKey: nextScopeKey, task: nextTask });
+    if (nextTask === 'ppe') {
+      setPpeExpandRequest((prev) => ({
+        cameraId: effectiveCameraId,
+        seq: (prev?.seq ?? 0) + 1,
+      }));
+    }
+  };
+
+  const [applyFocusRequestSeq, setApplyFocusRequestSeq] = useState(0);
+  const handledApplyFocusSeqRef = useRef(0);
+
+  useEffect(() => {
+    if (
+      applyFocusRequestSeq === 0 ||
+      applyFocusRequestSeq === handledApplyFocusSeqRef.current ||
+      activeTask !== 'source'
+    ) {
+      return;
+    }
+    const stickyBar = document.getElementById('camera-sticky-apply-bar');
+    if (!stickyBar) return;
+    handledApplyFocusSeqRef.current = applyFocusRequestSeq;
+    stickyBar.scrollIntoView?.({ behavior: 'smooth', block: 'center' });
+    const applyBtn = stickyBar.querySelector('button');
+    if (applyBtn instanceof HTMLButtonElement && !applyBtn.disabled) {
+      applyBtn.focus();
+    }
+  }, [applyFocusRequestSeq, activeTask, sharedResumeController.hosts.data]);
+
   const handleJumpToApplyWorker = isSourceSetupVisible
     ? () => {
-        const target = document.getElementById('camera-source-resume-section');
-        target?.scrollIntoView?.({ behavior: 'smooth', block: 'center' });
-        const applyBtn = target?.querySelector('button');
-        if (applyBtn instanceof HTMLButtonElement && !applyBtn.disabled) {
-          applyBtn.focus();
+        const stickyBar = document.getElementById('camera-sticky-apply-bar');
+        if (stickyBar) {
+          stickyBar.scrollIntoView?.({ behavior: 'smooth', block: 'center' });
+          const applyBtn = stickyBar.querySelector('button');
+          if (applyBtn instanceof HTMLButtonElement && !applyBtn.disabled) {
+            applyBtn.focus();
+          }
+          return;
         }
+        setApplyFocusRequestSeq((seq) => seq + 1);
+        handleSelectWorkspaceTask('source');
       }
     : undefined;
   const headerReturnParams = new URLSearchParams(returnParams);
@@ -357,7 +504,7 @@ function SetupWorkspace({ apiUrl, session }: { apiUrl: string; session: SharedSe
 
   return (
     <div
-      className="mx-auto max-w-7xl space-y-5 pb-10"
+      className="mx-auto max-w-[90rem] space-y-3 pb-8"
       onClickCapture={(event) => {
         if (!isInlineRegionsOpen || (!effectiveRegionDraft.dirty && !effectiveRegionDraft.saving)) {
           return;
@@ -383,118 +530,159 @@ function SetupWorkspace({ apiUrl, session }: { apiUrl: string; session: SharedSe
         setPendingInlineExit({ kind: 'navigate', to: href });
       }}
     >
-      <header className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-200/80 pb-3">
-        <div className="min-w-0 space-y-1">
-          <h1 className="text-2xl sm:text-[26px] font-bold tracking-tight text-slate-950">
-            {t('cameraSetup.title')}
-          </h1>
-          <p className="max-w-2xl text-sm leading-relaxed text-slate-600">
-            {t('cameraSetup.intro')}
-          </p>
-        </div>
-        <div className="flex flex-wrap items-center gap-2">
-          <CameraSetupTour
-            userId={session.user.id}
-            tourScopeKey={`${tourScopeKey}:${catalogSelectedCamera?.id ?? 'none'}`}
-            isAuthorized={isTourAuthorized}
-            hasSiteScope={Boolean(site && !sites.isPending && !sites.baseError)}
-            canManageCameras={canManageCameras}
-            canAccessZones={canAccessTourZones}
-            selectedCamera={catalogSelectedCamera}
-          />
-          {canOpenMonitoring && (
-            <nav
-              className="flex flex-wrap items-center gap-2 rounded-xl border border-slate-200/80 bg-slate-50/80 p-1"
-              aria-label={t('cameraSetup.monitor')}
-            >
-              <Link className={button} to={site ? `/ppe?${headerReturnParams}` : '/ppe'}>
-                {t('cameraSetup.monitorPpe')}
-              </Link>
-              <Link className={button} to={site ? `/zones?${headerReturnParams}` : '/zones'}>
-                {t('cameraSetup.monitorZones')}
-              </Link>
-            </nav>
-          )}
-        </div>
-      </header>
-      <section
-        className={surface}
-        aria-label={t('cameraSetup.site')}
+      <header
         data-tour-anchor="camera-setup-scope"
+        className="rounded-xl border border-slate-200 bg-white px-3 py-2 sm:px-4 sm:py-2.5"
       >
-        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-          <div className="flex min-w-0 flex-1 flex-wrap items-center gap-3">
-            <label
-              className="shrink-0 text-sm font-semibold text-slate-800"
-              htmlFor="camera-setup-site"
-            >
-              {t('cameraSetup.site')}
-            </label>
-            <select
-              id="camera-setup-site"
-              value={site?.id ?? ''}
-              disabled={sites.baseError || sites.isPending || effectiveRegionDraft.saving}
-              className="min-h-10 w-full min-w-0 max-w-md rounded-xl border border-slate-300 bg-white px-3.5 py-2 text-sm font-medium text-slate-900 shadow-2xs transition-colors hover:border-slate-400 focus-visible:border-slate-900 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-slate-900 disabled:cursor-not-allowed disabled:bg-slate-100 disabled:text-slate-500"
-              onChange={(event) => {
-                guardedSelectSite(event.target.value);
-              }}
-            >
-              <option value="" disabled>
-                {t('cameraSetup.chooseSite')}
-              </option>
-              {sites.rows.map((row) => (
-                <option key={row.id} value={row.id}>
-                  {row.code} · {row.name}
+        <div className="flex flex-col gap-2 lg:flex-row lg:flex-wrap lg:items-center lg:justify-between">
+          <div className="flex min-w-0 flex-col gap-1.5 sm:flex-row sm:flex-wrap sm:items-center sm:gap-x-2.5 lg:flex-1">
+            <h1 className="text-base sm:text-xl font-bold tracking-tight text-slate-950 shrink-0">
+              {t('cameraSetup.title')}
+            </h1>
+            <div className="flex min-w-0 w-full items-center gap-1.5 sm:w-auto sm:min-w-[12rem] sm:flex-1 sm:max-w-sm">
+              <label
+                className="shrink-0 text-xs font-semibold text-slate-700"
+                htmlFor="camera-setup-site"
+              >
+                {t('cameraSetup.site')}
+              </label>
+              <select
+                id="camera-setup-site"
+                value={site?.id ?? ''}
+                disabled={sites.baseError || sites.isPending || effectiveRegionDraft.saving}
+                className="min-h-8 sm:min-h-9 min-w-0 flex-1 rounded-lg border border-slate-300 bg-white px-2.5 py-1 text-xs sm:text-sm font-medium text-slate-900 shadow-2xs transition-colors hover:border-slate-400 focus-visible:border-slate-900 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-slate-900 disabled:cursor-not-allowed disabled:bg-slate-100 disabled:text-slate-500"
+                onChange={(event) => {
+                  guardedSelectSite(event.target.value);
+                }}
+              >
+                <option value="" disabled>
+                  {t('cameraSetup.chooseSite')}
                 </option>
-              ))}
-            </select>
+                {sites.rows.map((row) => (
+                  <option key={row.id} value={row.id}>
+                    {row.code} · {row.name}
+                  </option>
+                ))}
+              </select>
+              {sites.hasNextPage && !sites.baseError && (
+                <button
+                  className={CAMERA_BUTTON_STYLES.compactSecondary}
+                  type="button"
+                  disabled={sites.isFetching}
+                  onClick={sites.loadMore}
+                >
+                  {t('cameraSetup.sitesMore')}
+                </button>
+              )}
+            </div>
           </div>
-          {sites.hasNextPage && !sites.baseError && (
-            <button
-              className={button}
-              type="button"
-              disabled={sites.isFetching}
-              onClick={sites.loadMore}
-            >
-              {t('cameraSetup.sitesMore')}
-            </button>
-          )}
+          <div className="flex min-w-0 flex-wrap items-center gap-1.5 lg:shrink-0 [&_[data-testid=safety-task-tour-invitation]]:hidden sm:[&_[data-testid=safety-task-tour-invitation]]:flex">
+            <CameraSetupTour
+              userId={session.user.id}
+              tourScopeKey={`${tourScopeKey}:${catalogSelectedCamera?.id ?? 'none'}`}
+              isAuthorized={isTourAuthorized}
+              hasSiteScope={Boolean(site && !sites.isPending && !sites.baseError)}
+              canManageCameras={canManageCameras}
+              canAccessZones={canAccessTourZones}
+              selectedCamera={catalogSelectedCamera}
+            />
+            {canOpenMonitoring && (
+              <nav
+                className="hidden sm:flex flex-wrap items-center gap-1.5"
+                aria-label={t('cameraSetup.monitor')}
+              >
+                <Link
+                  className={CAMERA_BUTTON_STYLES.compactSecondary}
+                  to={site ? `/ppe?${headerReturnParams}` : '/ppe'}
+                >
+                  {t('cameraSetup.monitorPpe')}
+                </Link>
+                <Link
+                  className={CAMERA_BUTTON_STYLES.compactSecondary}
+                  to={site ? `/zones?${headerReturnParams}` : '/zones'}
+                >
+                  {t('cameraSetup.monitorZones')}
+                </Link>
+              </nav>
+            )}
+          </div>
         </div>
         {sites.isPending && (
-          <p role="status" className="mt-3 text-sm text-slate-600">
+          <p role="status" className="mt-2 text-xs text-slate-600">
             {t('cameraSetup.loading')}
           </p>
         )}
         {errorNotice(sites)}
         {sites.settledEmpty && (
-          <p role="status" className="mt-3 text-sm text-slate-600">
+          <p role="status" className="mt-2 text-xs text-slate-600">
             {t('cameraSetup.noSites')}
           </p>
         )}
         {Boolean(
           requestedSite && !site && !sites.isPending && !sites.baseError && sites.rows.length > 0,
         ) && (
-          <p role="status" className="mt-3 text-sm text-slate-700">
+          <p role="status" className="mt-2 text-xs text-slate-700">
             {t('cameraSetup.linkedSelection')}
           </p>
         )}
-      </section>
+      </header>
       {site && (
         <CameraSetupCatalog
           key={site.id}
+          activeTask={activeTask}
+          onSelectTask={handleSelectWorkspaceTask}
+          ppeExpandSignal={
+            ppeExpandRequest &&
+            catalogSelectedCamera &&
+            ppeExpandRequest.cameraId === catalogSelectedCamera.id
+              ? ppeExpandRequest.seq
+              : 0
+          }
           autoExpandPpeCameraId={
             requestedAction === 'ppe' && matchedRequestedCamera ? matchedRequestedCamera.id : null
           }
           onOpenApply={handleJumpToApplyWorker}
-          sourceSetupStage={
-            isSourceSetupVisible && catalogSelectedCamera ? (
-              <CameraSourceSetupPanel
+          applySavedBar={
+            isSourceSetupVisible &&
+            catalogSelectedCamera &&
+            catalogSelectedCamera.status === 'ACTIVE' &&
+            canManageCameras ? (
+              <CameraApplySavedBar
                 apiUrl={apiUrl}
                 token={session.accessToken}
                 siteId={site.id}
                 camera={catalogSelectedCamera}
                 setupKey={key}
                 canWrite={canManageCameras}
+                controller={sharedResumeController}
+                alwaysShowWhenSupported={activeTask === 'source'}
+                statusContext={{
+                  setupKey: key,
+                  token: session.accessToken,
+                  siteId: site.id,
+                  client,
+                  enabled: Boolean(
+                    canReadCameras && !revoked && !sites.baseError && !cameras.baseError,
+                  ),
+                  onUnauthorized: () => {
+                    handleStatusUnauthorized(site.id);
+                  },
+                }}
+                onUnauthorized={() => handleStatusUnauthorized(site.id)}
+              />
+            ) : undefined
+          }
+          sourceSetupStage={
+            isSourceSetupVisible && catalogSelectedCamera ? (
+              <CameraSourceSetupPanel
+                embedded
+                apiUrl={apiUrl}
+                token={session.accessToken}
+                siteId={site.id}
+                camera={catalogSelectedCamera}
+                setupKey={key}
+                canWrite={canManageCameras}
+                resumeController={sharedResumeController}
                 onUnauthorized={() => handleStatusUnauthorized(site.id)}
               />
             ) : undefined
@@ -650,28 +838,23 @@ function InlineRegionSetupStage({
       ref={stageRef}
       data-testid="camera-setup-inline-region-stage"
       aria-label={t('regionSetup.title')}
-      className="min-w-0 rounded-xl border border-slate-200 bg-white p-4 sm:p-5 space-y-4"
+      className="min-w-0 rounded-xl border border-slate-200 bg-white p-4 space-y-3"
     >
-      <div className="flex items-start justify-between gap-3 border-b border-slate-200/80 pb-3.5 min-w-0">
-        <div className="flex items-start gap-2.5 min-w-0">
-          <span className="flex h-9 w-9 items-center justify-center rounded-xl bg-slate-900 text-white shrink-0">
-            <IconShield className="h-4.5 w-4.5" />
+      <div className="flex items-center justify-between gap-3 border-b border-slate-200/80 pb-2.5 min-w-0">
+        <div className="flex items-center gap-2.5 min-w-0">
+          <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-slate-900 text-white shrink-0">
+            <IconShield className="h-4 w-4" />
           </span>
-          <div className="min-w-0">
-            <h3 className="text-base font-bold tracking-tight text-slate-950 break-words [overflow-wrap:anywhere]">
-              {t('regionSetup.title')}
-            </h3>
-            <p className="mt-0.5 text-sm leading-relaxed text-slate-600 break-words [overflow-wrap:anywhere]">
-              {t('regionSetup.subtitle')}
-            </p>
-          </div>
+          <h3 className="text-base font-bold tracking-tight text-slate-950 break-words [overflow-wrap:anywhere]">
+            {t('regionSetup.title')}
+          </h3>
         </div>
         <button
           type="button"
           onClick={panelProps.onClose}
           disabled={saving}
           aria-label={t('zoneSetup.closeAria')}
-          className="inline-flex min-h-10 min-w-10 items-center justify-center rounded-xl border border-slate-200 bg-white p-2 text-slate-600 hover:border-slate-300 hover:bg-slate-50 hover:text-slate-900 transition-colors cursor-pointer shrink-0 disabled:cursor-not-allowed disabled:opacity-50"
+          className="inline-flex min-h-9 min-w-9 items-center justify-center rounded-lg border border-slate-200 bg-white p-1.5 text-slate-600 hover:border-slate-300 hover:bg-slate-50 hover:text-slate-900 transition-colors cursor-pointer shrink-0 disabled:cursor-not-allowed disabled:opacity-50"
         >
           <IconX className="h-4 w-4" />
         </button>

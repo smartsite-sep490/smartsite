@@ -1,5 +1,5 @@
 import { useEffect, useId, useRef, useState } from 'react';
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { useTranslation } from 'react-i18next';
 import { SAFETY_NAMESPACE } from '../../i18n/runtime';
 import { CAMERA_BUTTON_STYLES, CAMERA_FIELD_STYLES } from './camera-dialog-styles';
@@ -12,7 +12,10 @@ import {
   type SourceTestResult,
 } from '@smartsite/api-client';
 import './camera-source-copy';
-import type { SourceConfigurationResumeCommand } from '@smartsite/contracts';
+import {
+  useCameraSourceResumeController,
+  type CameraSourceResumeController,
+} from './useCameraSourceResumeController';
 
 export interface CameraSourceSetupProps {
   apiUrl: string;
@@ -23,6 +26,8 @@ export interface CameraSourceSetupProps {
   canWrite: boolean;
   onUnauthorized: () => void;
   client?: CameraSourceClient;
+  embedded?: boolean;
+  resumeController?: CameraSourceResumeController;
 }
 export function CameraSourceSetupPanel(props: CameraSourceSetupProps) {
   // Scope replacement unmounts the old draft and aborts any secret-bearing request.
@@ -42,11 +47,12 @@ function SourceWorkspace({
   canWrite,
   onUnauthorized,
   client = cameraSourceClient,
+  embedded = false,
+  resumeController: externalController,
 }: CameraSourceSetupProps) {
   const { t } = useTranslation(SAFETY_NAMESPACE),
     id = useId();
-  const [selectedHostId, setSelectedHostId] = useState<string | null>(null),
-    [kind, setKind] = useState<CameraSourceKind | 'BROWSER'>('WEBCAM');
+  const [kind, setKind] = useState<CameraSourceKind | 'BROWSER'>('WEBCAM');
   const [device, setDevice] = useState(''),
     [asset, setAsset] = useState(''),
     [endpoint, setEndpoint] = useState('');
@@ -55,11 +61,39 @@ function SourceWorkspace({
   const [pending, setPending] = useState(false),
     [result, setResult] = useState<SourceTestResult | null>(null);
   const [error, setError] = useState(''),
-    [revoked, setRevoked] = useState(false),
     [now, setNow] = useState(() => Date.now());
   const operation = useRef<{ version: number; abort?: AbortController }>({ version: 0 });
   const cache = useQueryClient();
-  const resumeCommand = useRef<SourceConfigurationResumeCommand | undefined>(undefined);
+
+  const internalController = useCameraSourceResumeController({
+    apiUrl,
+    token,
+    siteId,
+    camera,
+    setupKey,
+    canWrite,
+    enabled: !externalController,
+    onUnauthorized,
+    client,
+  });
+  const controller = externalController ?? internalController;
+  const {
+    hosts,
+    hostAccessDenied,
+    hostId,
+    host,
+    caps,
+    selectHostId,
+    resuming,
+    revoked,
+    markRevoked,
+    setSourceBusy,
+    refreshingCaps,
+    refreshHosts,
+    onSourceApplied,
+    triggerResume,
+  } = controller;
+
   const applying = useMutation({
     mutationFn: async () => {
       if (
@@ -67,6 +101,7 @@ function SourceWorkspace({
         result.sourceKind !== 'LIVE' ||
         !caps?.applySupported ||
         !client.apply ||
+        resuming.isPending ||
         now >= Date.parse(result.expiresAt)
       )
         throw new SourceSetupError(409);
@@ -87,101 +122,30 @@ function SourceWorkspace({
     retry: false,
     onSuccess: () => {
       setPassword('');
-      void hosts.refetch();
-      void cache.invalidateQueries({ predicate: (q) => q.queryKey.includes(siteId) });
-    },
-    onError: (e) => {
-      if (e instanceof SourceSetupError && [401, 403].includes(e.status)) {
-        setRevoked(true);
-        setPassword('');
-        onUnauthorized();
-      }
-    },
-  });
-  const resuming = useMutation({
-    mutationFn: async () => {
-      if (
-        !client.resume ||
-        caps?.configurationResumeSupported !== true ||
-        camera.configurationVersion === undefined ||
-        !canWrite ||
-        revoked ||
-        applying.isPending ||
-        pending
-      )
-        throw new SourceSetupError(409);
-      const command = resumeCommand.current ?? {
-        commandId: crypto.randomUUID(),
-        expectedRevision: caps.sourceRevision ?? 0,
-        expectedConfigurationVersion: camera.configurationVersion,
-      };
-      resumeCommand.current = command;
-      return client.resume(
-        apiUrl,
-        token,
-        siteId,
-        camera.id,
-        hostId,
-        command,
-        new AbortController().signal,
-      );
-    },
-    retry: false,
-    onSuccess: () => {
-      setPassword('');
-      void hosts.refetch();
-    },
-    onError: (e) => {
-      if (e instanceof SourceSetupError && [401, 403].includes(e.status)) {
-        setRevoked(true);
-        setPassword('');
-        onUnauthorized();
-      }
-    },
-  });
-  const resumeScope = useRef({ hostId: '', version: camera.configurationVersion });
-  const { isPending: resumePending, reset: resetResume } = resuming;
-  const hosts = useQuery({
-    queryKey: [...setupKey, 'camera-source-hosts', siteId, camera.id],
-    retry: false,
-    queryFn: ({ signal }) => client.hosts(apiUrl, token, siteId, camera.id, signal),
-  });
-  const availableHosts = hosts.data?.filter((h) => h.available) ?? [];
-  const hostId =
-    selectedHostId !== null
-      ? selectedHostId
-      : availableHosts.length === 1
-        ? availableHosts[0]!.id
-        : '';
-  useEffect(() => {
-    if (resumePending) return;
-    if (
-      resumeScope.current.hostId !== hostId ||
-      resumeScope.current.version !== camera.configurationVersion
-    ) {
-      resetResume();
-      resumeCommand.current = undefined;
-      resumeScope.current = { hostId, version: camera.configurationVersion };
-    }
-  }, [hostId, camera.configurationVersion, resumePending, resetResume]);
-  useEffect(() => {
-    if (!resuming.isSuccess) return;
-    // Only application receipts: refetching a reference image could retire the view.
-    const refresh = () =>
+      onSourceApplied();
       void cache.invalidateQueries({
         predicate: (q) =>
-          q.queryKey.includes('application-status') &&
-          q.queryKey.includes(siteId) &&
-          q.queryKey.includes(camera.id),
+          q.queryKey.includes(siteId) && !q.queryKey.includes('camera-source-hosts'),
       });
-    refresh();
-    const timer = setInterval(refresh, 2000);
-    const deadline = setTimeout(() => clearInterval(timer), 30000);
+    },
+    onError: (e) => {
+      if (e instanceof SourceSetupError && [401, 403].includes(e.status)) {
+        markRevoked();
+        setPassword('');
+        onUnauthorized();
+      }
+    },
+  });
+
+  useEffect(() => {
+    setSourceBusy(pending || applying.isPending);
     return () => {
-      clearInterval(timer);
-      clearTimeout(deadline);
+      setSourceBusy(false);
     };
-  }, [resuming.isSuccess, cache, siteId, camera.id]);
+  }, [pending, applying.isPending, setSourceBusy]);
+
+  const displayedPassword = resuming.isSuccess || revoked ? '' : password;
+
   useEffect(
     () => () => {
       operation.current.version++;
@@ -194,19 +158,12 @@ function SourceWorkspace({
     const timer = setInterval(() => setNow(Date.now()), 1000);
     return () => clearInterval(timer);
   }, [result]);
-  const hostAccessDenied =
-    hosts.error instanceof SourceSetupError && [401, 403].includes(hosts.error.status);
-  const authFailureReported = useRef(false);
   useEffect(() => {
-    if (hostAccessDenied && !authFailureReported.current) {
-      authFailureReported.current = true;
+    if (hostAccessDenied) {
       operation.current.version++;
       operation.current.abort?.abort();
-      onUnauthorized();
     }
-  }, [hostAccessDenied, onUnauthorized]);
-  const host = hosts.data?.find((h) => h.id === hostId),
-    caps = host?.capabilities;
+  }, [hostAccessDenied]);
   const supported = kind !== 'BROWSER' && host?.available && caps?.sourceKinds.includes(kind);
   const reset = () => {
     operation.current.version++;
@@ -268,7 +225,7 @@ function SourceWorkspace({
       if (operation.current.version !== version || abort.signal.aborted) return;
       const status = e instanceof SourceSetupError ? e.status : undefined;
       if (status === 401 || status === 403) {
-        setRevoked(true);
+        markRevoked();
         setPassword('');
         setError('cameraSource.forbidden');
         if (status === 401) onUnauthorized();
@@ -337,82 +294,112 @@ function SourceWorkspace({
             key: 'cameraSource.stage4CheckBelow' as const,
           };
 
+  const stageSummaryList = (
+    <dl
+      data-testid="camera-source-stage-summary"
+      aria-label={t('cameraSource.stagesLabel')}
+      className="grid grid-cols-1 divide-y divide-slate-200 rounded-xl border border-slate-200 bg-slate-50/40 sm:grid-cols-2 sm:divide-x [&>*:nth-child(odd)]:sm:divide-y-0 [&>*:nth-child(n+3)]:sm:border-t [&>*:nth-child(n+3)]:sm:border-slate-200"
+    >
+      <div className="min-w-0 px-3.5 py-2.5 space-y-1">
+        <dt className="text-xs font-medium text-slate-600">{t('cameraSource.stage1Label')}</dt>
+        <dd className="flex items-start gap-2 text-sm font-semibold text-slate-900 tabular-nums">
+          <span aria-hidden="true" className="mt-1.5 h-2 w-2 shrink-0 rounded-full bg-[#0F172A]" />
+          <span className="min-w-0 break-words [overflow-wrap:anywhere]">
+            {t('cameraSource.stage1Done', {
+              name: camera.name,
+              version: camera.configurationVersion ?? 0,
+            })}
+          </span>
+        </dd>
+        <p className="text-xs leading-5 text-slate-600">{t('cameraSource.stage1MetaOnly')}</p>
+      </div>
+      <div className="min-w-0 px-3.5 py-2.5 space-y-1">
+        <dt className="text-xs font-medium text-slate-600">{t('cameraSource.stage2Label')}</dt>
+        <dd className={`flex items-start gap-2 text-sm font-semibold ${stage2Tone.text}`}>
+          <span
+            aria-hidden="true"
+            className={`mt-1.5 h-2 w-2 shrink-0 rounded-full ${stage2Tone.dot}`}
+          />
+          <span className="min-w-0 break-words [overflow-wrap:anywhere]">{t(stage2Tone.key)}</span>
+        </dd>
+      </div>
+      <div className="min-w-0 px-3.5 py-2.5 space-y-1">
+        <dt className="text-xs font-medium text-slate-600">{t('cameraSource.stage3Label')}</dt>
+        <dd className="flex items-start gap-2 text-sm font-semibold text-slate-900 tabular-nums">
+          <span aria-hidden="true" className="mt-1.5 h-2 w-2 shrink-0 rounded-full bg-slate-600" />
+          <span>
+            {t('cameraSource.stage3Value', { version: camera.configurationVersion ?? 0 })}
+          </span>
+        </dd>
+        <p className="text-xs leading-5 text-slate-600">{t('cameraSource.stage3Note')}</p>
+      </div>
+      <div className="min-w-0 px-3.5 py-2.5 space-y-1">
+        <dt className="text-xs font-medium text-slate-600">{t('cameraSource.stage4Label')}</dt>
+        <dd
+          className={`flex items-start gap-2 text-sm font-semibold tabular-nums ${stage4Status.text}`}
+        >
+          <span
+            aria-hidden="true"
+            className={`mt-1.5 h-2 w-2 shrink-0 rounded-full ${stage4Status.dot}`}
+          />
+          <span className="min-w-0 break-words [overflow-wrap:anywhere]">
+            {t(stage4Status.key, { version: camera.configurationVersion ?? 0 })}
+          </span>
+        </dd>
+      </div>
+    </dl>
+  );
+
   return (
     <section
+      data-testid="camera-source-setup-panel"
       className="min-w-0 overflow-hidden rounded-xl border border-slate-200 bg-white"
       aria-labelledby={`${id}-heading`}
     >
-      <header className="border-b border-slate-200 px-4 py-4 sm:px-5">
-        <p className="text-sm font-semibold text-slate-700 tabular-nums">{camera.name}</p>
-        <h2 id={`${id}-heading`} className="mt-1 text-lg font-bold tracking-tight text-slate-950">
+      <header
+        className={
+          embedded
+            ? 'border-b border-slate-200 px-4 py-3'
+            : 'border-b border-slate-200 px-4 py-4 sm:px-5'
+        }
+      >
+        {!embedded && (
+          <p className="text-sm font-semibold text-slate-700 tabular-nums">{camera.name}</p>
+        )}
+        <h2
+          id={`${id}-heading`}
+          className={
+            embedded
+              ? 'text-base font-bold tracking-tight text-slate-950'
+              : 'mt-1 text-lg font-bold tracking-tight text-slate-950'
+          }
+        >
           {t('cameraSource.title')}
         </h2>
-        <p className="mt-1 max-w-3xl text-sm leading-relaxed text-slate-600">
+        <p className="mt-0.5 max-w-3xl text-sm leading-relaxed text-slate-600">
           {t('cameraSource.intro')}
         </p>
       </header>
-      <div className="space-y-5 p-4 sm:p-5">
-        <dl
-          data-testid="camera-source-stage-summary"
-          aria-label={t('cameraSource.stagesLabel')}
-          className="grid grid-cols-1 divide-y divide-slate-200 rounded-xl border border-slate-200 bg-slate-50/40 sm:grid-cols-2 sm:divide-x [&>*:nth-child(odd)]:sm:divide-y-0 [&>*:nth-child(n+3)]:sm:border-t [&>*:nth-child(n+3)]:sm:border-slate-200"
-        >
-          <div className="min-w-0 px-3.5 py-2.5 space-y-1">
-            <dt className="text-xs font-medium text-slate-600">{t('cameraSource.stage1Label')}</dt>
-            <dd className="flex items-start gap-2 text-sm font-semibold text-slate-900 tabular-nums">
+      <div className={embedded ? 'space-y-4 p-4' : 'space-y-5 p-4 sm:p-5'}>
+        {embedded ? (
+          <details
+            data-testid="camera-source-stages-disclosure"
+            className="group min-w-0 text-xs text-slate-600"
+          >
+            <summary className="inline-flex min-h-8 cursor-pointer list-none items-center gap-1.5 rounded-lg border border-slate-200 bg-slate-50/70 px-2.5 py-1 text-xs font-medium text-slate-700 hover:border-slate-300 hover:bg-slate-100 hover:text-slate-950 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#0F172A]">
+              <span>{t('cameraSetup.sourceStageSummaryDisclosure')}</span>
               <span
                 aria-hidden="true"
-                className="mt-1.5 h-2 w-2 shrink-0 rounded-full bg-[#0F172A]"
-              />
-              <span className="min-w-0 break-words [overflow-wrap:anywhere]">
-                {t('cameraSource.stage1Done', {
-                  name: camera.name,
-                  version: camera.configurationVersion ?? 0,
-                })}
+                className="text-xs text-slate-500 transition-transform duration-150 group-open:rotate-180"
+              >
+                ▾
               </span>
-            </dd>
-            <p className="text-xs leading-5 text-slate-600">{t('cameraSource.stage1MetaOnly')}</p>
-          </div>
-          <div className="min-w-0 px-3.5 py-2.5 space-y-1">
-            <dt className="text-xs font-medium text-slate-600">{t('cameraSource.stage2Label')}</dt>
-            <dd className={`flex items-start gap-2 text-sm font-semibold ${stage2Tone.text}`}>
-              <span
-                aria-hidden="true"
-                className={`mt-1.5 h-2 w-2 shrink-0 rounded-full ${stage2Tone.dot}`}
-              />
-              <span className="min-w-0 break-words [overflow-wrap:anywhere]">
-                {t(stage2Tone.key)}
-              </span>
-            </dd>
-          </div>
-          <div className="min-w-0 px-3.5 py-2.5 space-y-1">
-            <dt className="text-xs font-medium text-slate-600">{t('cameraSource.stage3Label')}</dt>
-            <dd className="flex items-start gap-2 text-sm font-semibold text-slate-900 tabular-nums">
-              <span
-                aria-hidden="true"
-                className="mt-1.5 h-2 w-2 shrink-0 rounded-full bg-slate-600"
-              />
-              <span>
-                {t('cameraSource.stage3Value', { version: camera.configurationVersion ?? 0 })}
-              </span>
-            </dd>
-            <p className="text-xs leading-5 text-slate-600">{t('cameraSource.stage3Note')}</p>
-          </div>
-          <div className="min-w-0 px-3.5 py-2.5 space-y-1">
-            <dt className="text-xs font-medium text-slate-600">{t('cameraSource.stage4Label')}</dt>
-            <dd
-              className={`flex items-start gap-2 text-sm font-semibold tabular-nums ${stage4Status.text}`}
-            >
-              <span
-                aria-hidden="true"
-                className={`mt-1.5 h-2 w-2 shrink-0 rounded-full ${stage4Status.dot}`}
-              />
-              <span className="min-w-0 break-words [overflow-wrap:anywhere]">
-                {t(stage4Status.key, { version: camera.configurationVersion ?? 0 })}
-              </span>
-            </dd>
-          </div>
-        </dl>
+            </summary>
+            <div className="mt-2">{stageSummaryList}</div>
+          </details>
+        ) : (
+          stageSummaryList
+        )}
 
         <fieldset className="grid min-w-0 grid-cols-1 gap-2.5 sm:grid-cols-2" disabled={blocked}>
           <legend className="sr-only">{t('cameraSource.title')}</legend>
@@ -469,7 +456,7 @@ function SourceWorkspace({
                   disabled={blocked || hosts.isPending}
                   onChange={(e) =>
                     change(() => {
-                      setSelectedHostId(e.target.value);
+                      selectHostId(e.target.value);
                       setDevice('');
                       setAsset('');
                       setPassword('');
@@ -491,7 +478,7 @@ function SourceWorkspace({
                 disabled={hosts.isFetching || pending || applying.isPending}
                 onClick={() => {
                   reset();
-                  void hosts.refetch();
+                  void refreshHosts();
                 }}
               >
                 {t('cameraSource.refresh')}
@@ -603,7 +590,7 @@ function SourceWorkspace({
                         <input
                           id={`${id}-password`}
                           type="password"
-                          value={password}
+                          value={displayedPassword}
                           autoComplete="new-password"
                           className={CAMERA_FIELD_STYLES.input}
                           onChange={(e) => change(() => setPassword(e.target.value))}
@@ -646,7 +633,8 @@ function SourceWorkspace({
             {t(error)}
           </p>
         )}
-        {caps?.configurationResumeSupported === true &&
+        {!externalController &&
+          caps?.configurationResumeSupported === true &&
           client.resume &&
           camera.configurationVersion !== undefined && (
             <aside
@@ -668,8 +656,10 @@ function SourceWorkspace({
               <button
                 type="button"
                 className={CAMERA_BUTTON_STYLES.secondary}
-                disabled={blocked || pending || resuming.isSuccess}
-                onClick={() => resuming.mutate()}
+                disabled={
+                  blocked || pending || refreshingCaps || hosts.isError || resuming.isSuccess
+                }
+                onClick={triggerResume}
               >
                 {t(
                   resuming.isPending

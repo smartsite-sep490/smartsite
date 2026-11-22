@@ -94,6 +94,7 @@ export interface CameraSetupChecklistProps {
   selectedCamera: CameraResponse | null;
   policyContext?: CameraPpeContext;
   statusContext?: CameraApplicationStatusContext;
+  compact?: boolean;
 }
 
 export function CameraSetupChecklist({
@@ -101,6 +102,7 @@ export function CameraSetupChecklist({
   selectedCamera,
   policyContext,
   statusContext,
+  compact = false,
 }: CameraSetupChecklistProps) {
   registerCameraSetupTourCopy();
   const { t } = useTranslation(SAFETY_NAMESPACE);
@@ -231,7 +233,11 @@ export function CameraSetupChecklist({
       data-setup-complete={checklist.isSetupComplete ? 'true' : 'false'}
       data-config-saved={checklist.isConfigSaved ? 'true' : 'false'}
       data-worker-applied={checklist.isWorkerApplied ? 'true' : 'false'}
-      className="min-w-0 rounded-xl border border-slate-200 bg-white px-4 py-3"
+      className={
+        compact
+          ? 'min-w-0 space-y-2'
+          : 'min-w-0 rounded-xl border border-slate-200 bg-white px-4 py-3'
+      }
     >
       <div className="flex flex-wrap items-center justify-between gap-2">
         <p className="text-sm font-semibold text-slate-900">{t('cameraSetup.checklist.heading')}</p>

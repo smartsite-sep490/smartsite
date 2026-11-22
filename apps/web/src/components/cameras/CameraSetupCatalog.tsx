@@ -8,7 +8,11 @@ import type { useSetupCatalog } from './useSetupCatalog';
 import { CAMERA_BUTTON_STYLES } from './camera-dialog-styles';
 import './camera-setup-catalog-copy';
 import type { CameraApplicationStatusContext } from './CameraApplicationStatusSummary';
-import { CameraSetupContextBar, CameraSetupRowMetadata } from './CameraSetupContextPanel';
+import {
+  CameraSetupContextBar,
+  CameraSetupRowMetadata,
+  type CameraWorkspaceTask,
+} from './CameraSetupContextPanel';
 import { CameraSetupChecklist } from './CameraSetupTour';
 import { CameraSetupWorkflow, type CameraSetupOpenHandler } from './CameraSetupWorkflow';
 import { CameraPpePolicyPanel, type CameraPpeContext } from './CameraPpePolicyPanel';
@@ -31,7 +35,11 @@ export function CameraSetupCatalog({
   statusContext,
   policyContext,
   sourceSetupStage,
+  applySavedBar,
   inlineRegionStage,
+  activeTask: controlledActiveTask,
+  onSelectTask,
+  ppeExpandSignal: controlledPpeExpandSignal,
   autoExpandPpeCameraId = null,
   onOpenApply,
 }: {
@@ -52,7 +60,15 @@ export function CameraSetupCatalog({
   statusContext?: CameraApplicationStatusContext;
   policyContext?: CameraPpeContext;
   sourceSetupStage?: ReactNode;
+  applySavedBar?: ReactNode;
   inlineRegionStage?: ReactNode;
+  activeTask?: CameraWorkspaceTask | null;
+  onSelectTask?: (
+    task: CameraWorkspaceTask,
+    trigger?: HTMLButtonElement,
+    cameraId?: string,
+  ) => void;
+  ppeExpandSignal?: number;
   autoExpandPpeCameraId?: string | null;
   onOpenApply?: () => void;
 }) {
@@ -60,6 +76,10 @@ export function CameraSetupCatalog({
   const catalogId = useId();
   const [lastRequestedId, setLastRequestedId] = useState(requestedCameraId);
   const [focusOverrideId, setInternalFocusedCameraId] = useState<string | null>(null);
+  const [internalTask, setInternalTask] = useState<{
+    cameraId: string;
+    task: CameraWorkspaceTask;
+  } | null>(null);
   const [ppeExpandRequest, setPpeExpandRequest] = useState<{
     cameraId: string;
     seq: number;
@@ -85,6 +105,48 @@ export function CameraSetupCatalog({
     (requestedCameraId ? rows.find((row) => row.id === requestedCameraId) : undefined) ??
     rows[0] ??
     null;
+  const effectiveActiveTask: CameraWorkspaceTask | null =
+    controlledActiveTask !== undefined
+      ? controlledActiveTask
+      : !selectedCamera || selectedCamera.status !== 'ACTIVE'
+        ? null
+        : inlineRegionStage
+          ? 'regions'
+          : internalTask?.cameraId === selectedCamera.id
+            ? internalTask.task
+            : sourceSetupStage
+              ? 'source'
+              : null;
+  const handleSelectTask = (
+    task: CameraWorkspaceTask,
+    trigger?: HTMLButtonElement,
+    targetCameraId?: string,
+  ) => {
+    if (onSelectTask) {
+      onSelectTask(task, trigger, targetCameraId);
+      return;
+    }
+    const cameraId = targetCameraId ?? selectedCamera?.id;
+    if (!cameraId) return;
+    if (targetCameraId && targetCameraId !== selectedCamera?.id) {
+      setFocusedCameraId(targetCameraId);
+    }
+    if (task === 'regions') {
+      open('regions', cameraId, trigger);
+      setInternalTask({ cameraId, task: 'regions' });
+      return;
+    }
+    setInternalTask({ cameraId, task });
+    if (task === 'ppe') {
+      setPpeExpandRequest((prev) => ({ cameraId, seq: (prev?.seq ?? 0) + 1 }));
+    }
+  };
+  const activePpeExpandSignal =
+    controlledPpeExpandSignal !== undefined
+      ? controlledPpeExpandSignal
+      : ppeExpandRequest && selectedCamera && ppeExpandRequest.cameraId === selectedCamera.id
+        ? ppeExpandRequest.seq
+        : 0;
   const showLinkedCameraNotice = Boolean(
     requestedCameraId &&
     !rows.some((row) => row.id === requestedCameraId) &&
@@ -101,18 +163,21 @@ export function CameraSetupCatalog({
   );
   const button = CAMERA_BUTTON_STYLES.secondary;
   const showMasterDetail = canReadCameras && !cameras.baseError && rows.length > 0;
-  const primarySurface = 'min-w-0 rounded-xl border border-slate-200 bg-white px-4 py-4 sm:p-5';
+  const hasMobileCatalogControls = Boolean(
+    cameraError || showLinkedCameraNotice || (!cameras.baseError && cameras.hasNextPage),
+  );
+  const primarySurface = 'min-w-0 rounded-xl border border-slate-200 bg-white px-3 py-3 sm:p-4';
   const railInlineAction =
     'inline-flex min-h-8 items-center rounded-md px-1.5 py-1 text-sm font-medium text-slate-700 underline decoration-slate-300 underline-offset-4 transition-colors hover:text-[#0F172A] hover:decoration-[#0F172A] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#0F172A] cursor-pointer';
   return (
     <div>
       <section className={primarySurface} aria-label={t('cameraSetup.cameras')}>
-        <div className="grid grid-cols-1 items-start gap-x-4 gap-y-2 border-b border-slate-200 pb-3 sm:grid-cols-[minmax(0,1fr)_auto]">
-          <div className="min-w-0 space-y-1">
-            <h2 className="text-lg font-bold tracking-tight text-slate-950">
+        <div className="grid grid-cols-1 items-center gap-x-3 gap-y-1.5 border-b border-slate-200 pb-2.5 sm:grid-cols-[minmax(0,1fr)_auto]">
+          <div className="min-w-0 flex flex-wrap items-baseline gap-x-2.5 gap-y-0.5">
+            <h2 className="text-base font-bold tracking-tight text-slate-950">
               {t('cameraSetup.cameras')}
             </h2>
-            <p className="max-w-2xl text-sm leading-relaxed text-slate-600">
+            <p className="hidden xl:inline text-xs text-slate-500">
               {t(capabilities.canManageRegions ? 'cameraSetup.metadata' : 'cameraSetup.adminHint')}
             </p>
           </div>
@@ -126,18 +191,32 @@ export function CameraSetupCatalog({
         {canReadCameras && showMasterDetail && (
           <div
             data-testid="camera-setup-workspace-grid"
-            className="mt-4 grid grid-cols-1 items-start gap-4 lg:grid-cols-[minmax(18.5rem,34%)_minmax(0,1fr)] xl:grid-cols-[minmax(20rem,33%)_minmax(0,1fr)]"
+            className="mt-3 grid grid-cols-1 items-start gap-4 lg:grid-cols-[14.5rem_minmax(0,1fr)] xl:grid-cols-[15rem_minmax(0,1fr)]"
           >
-            <div data-testid="camera-setup-source-rail" className="min-w-0 space-y-2.5">
+            <div
+              data-testid="camera-setup-source-rail"
+              className={`${
+                hasMobileCatalogControls
+                  ? 'min-w-0 space-y-2 lg:space-y-2.5'
+                  : 'hidden min-w-0 space-y-2.5 lg:block'
+              } lg:sticky lg:top-20`}
+            >
               {hasLoadedCameraPages && (
-                <div className="flex flex-wrap items-center justify-between gap-2 px-0.5">
+                <div
+                  className={`${
+                    !cameras.baseError && cameras.hasNextPage ? 'flex' : 'hidden lg:flex'
+                  } flex-wrap items-center justify-between gap-2 px-0.5`}
+                >
                   <p className="text-xs font-medium text-slate-600 tabular-nums">
                     {t('cameraSetup.count', { loaded: rows.length, total: cameras.total })}
                   </p>
                 </div>
               )}
               {cameraError}
-              <ul className="divide-y divide-slate-200 overflow-hidden rounded-xl border border-slate-200 bg-white">
+              <ul
+                data-testid="camera-setup-source-list"
+                className="hidden lg:block divide-y divide-slate-200 overflow-hidden rounded-xl border border-slate-200 bg-white"
+              >
                 {rows.map((row) => {
                   const isEnabled = row.status === 'ACTIVE';
                   const isSelectedCamera = selectedCamera?.id === row.id;
@@ -238,12 +317,8 @@ export function CameraSetupCatalog({
                                   type="button"
                                   className={railInlineAction}
                                   aria-describedby={nameId}
-                                  onClick={() => {
-                                    setFocusedCameraId(row.id);
-                                    setPpeExpandRequest((prev) => ({
-                                      cameraId: row.id,
-                                      seq: (prev?.seq ?? 0) + 1,
-                                    }));
+                                  onClick={(event) => {
+                                    handleSelectTask('ppe', event.currentTarget, row.id);
                                   }}
                                 >
                                   {t('cameraSetup.ppeAction')}
@@ -292,6 +367,7 @@ export function CameraSetupCatalog({
               {showLinkedCameraNotice && (
                 <p
                   role="status"
+                  data-testid="camera-setup-linked-notice"
                   className="rounded-xl border border-slate-200 bg-slate-50 px-3.5 py-2.5 text-sm text-slate-600"
                 >
                   {t(
@@ -302,9 +378,10 @@ export function CameraSetupCatalog({
                 </p>
               )}
               {!cameras.baseError && cameras.hasNextPage && (
-                <div className="pt-1">
+                <div className="pt-0.5 lg:pt-1">
                   <button
                     type="button"
+                    data-testid="camera-setup-load-more"
                     className={`${button} w-full`}
                     disabled={cameras.isFetching}
                     onClick={cameras.loadMore}
@@ -316,16 +393,8 @@ export function CameraSetupCatalog({
             </div>
 
             <div data-testid="camera-setup-detail-pane" className="min-w-0 space-y-3">
-              {sourceSetupStage}
-              {!cameras.isPending && (
-                <CameraSetupChecklist
-                  siteId={siteId}
-                  selectedCamera={selectedCamera}
-                  policyContext={policyContext}
-                  statusContext={statusContext}
-                />
-              )}
               <CameraSetupContextBar
+                compact
                 siteId={siteId}
                 siteCode={siteCode}
                 siteName={siteName}
@@ -335,55 +404,88 @@ export function CameraSetupCatalog({
                 canOpenMonitoring={canOpenMonitoring}
                 open={open}
                 onSelectCamera={rows.length > 1 ? setFocusedCameraId : undefined}
+                hasSourceTask={Boolean(sourceSetupStage)}
+                activeTask={effectiveActiveTask}
+                onSelectTask={handleSelectTask}
                 onOpenPpePolicy={
                   policyContext && selectedCamera
-                    ? () => {
-                        setPpeExpandRequest((prev) => ({
-                          cameraId: selectedCamera.id,
-                          seq: (prev?.seq ?? 0) + 1,
-                        }));
-                      }
+                    ? () => handleSelectTask('ppe', undefined, selectedCamera.id)
                     : undefined
                 }
                 statusContext={statusContext}
+                applySlot={applySavedBar}
+                diagnosticsSlot={
+                  !cameras.isPending ? (
+                    <CameraSetupChecklist
+                      compact
+                      siteId={siteId}
+                      selectedCamera={selectedCamera}
+                      policyContext={policyContext}
+                      statusContext={statusContext}
+                    />
+                  ) : undefined
+                }
               />
-              {inlineRegionStage}
-              {!inlineRegionStage && selectedCamera && selectedCamera.status !== 'ACTIVE' && (
-                <div
-                  data-testid="camera-setup-disabled-stage"
-                  className="min-w-0 rounded-xl border border-dashed border-slate-300 bg-slate-50/60 p-5 space-y-3"
-                >
-                  <div className="space-y-1">
-                    <h3 className="text-base font-bold tracking-tight text-slate-900">
-                      {t('cameraSetup.disabledStageHeading')}
-                    </h3>
-                    <p className="text-sm leading-relaxed text-slate-600 break-words [overflow-wrap:anywhere]">
-                      {t(
-                        canManageCameras
-                          ? 'cameraSetup.disabledStageBody'
-                          : 'cameraSetup.disabledStageReadOnlyBody',
-                        {
-                          name: selectedCamera.name,
-                          code: selectedCamera.code,
-                          version: selectedCamera.configurationVersion,
-                        },
-                      )}
-                    </p>
-                  </div>
-                  {canManageCameras && (
-                    <div>
-                      <button
-                        type="button"
-                        className={CAMERA_BUTTON_STYLES.secondary}
-                        onClick={(event) => open('manage', selectedCamera.id, event.currentTarget)}
-                      >
-                        {t('cameraSetup.disabledStageAction', { code: selectedCamera.code })}
-                      </button>
+              {selectedCamera && selectedCamera.status !== 'ACTIVE' ? (
+                <>
+                  <div
+                    data-testid="camera-setup-disabled-stage"
+                    className="min-w-0 rounded-xl border border-dashed border-slate-300 bg-slate-50/60 p-5 space-y-3"
+                  >
+                    <div className="space-y-1">
+                      <h3 className="text-base font-bold tracking-tight text-slate-900">
+                        {t('cameraSetup.disabledStageHeading')}
+                      </h3>
+                      <p className="text-sm leading-relaxed text-slate-600 break-words [overflow-wrap:anywhere]">
+                        {t(
+                          canManageCameras
+                            ? 'cameraSetup.disabledStageBody'
+                            : 'cameraSetup.disabledStageReadOnlyBody',
+                          {
+                            name: selectedCamera.name,
+                            code: selectedCamera.code,
+                            version: selectedCamera.configurationVersion,
+                          },
+                        )}
+                      </p>
                     </div>
+                    {canManageCameras && (
+                      <div>
+                        <button
+                          type="button"
+                          className={CAMERA_BUTTON_STYLES.secondary}
+                          onClick={(event) =>
+                            open('manage', selectedCamera.id, event.currentTarget)
+                          }
+                        >
+                          {t('cameraSetup.disabledStageAction', { code: selectedCamera.code })}
+                        </button>
+                      </div>
+                    )}
+                  </div>
+                  {!sourceSetupStage && policyContext && (
+                    <CameraPpePolicyPanel
+                      key={selectedCamera.id}
+                      cameraId={selectedCamera.id}
+                      camera={selectedCamera}
+                      context={policyContext}
+                      statusContext={statusContext}
+                      canWrite={canManageCameras}
+                      embeddedInTab
+                      defaultOpen={false}
+                      onOpenReference={(trigger) => open('regions', selectedCamera.id, trigger)}
+                      onOpenApply={onOpenApply}
+                    />
                   )}
-                </div>
-              )}
-              {selectedCamera && policyContext && (
+                </>
+              ) : effectiveActiveTask === 'regions' && inlineRegionStage ? (
+                inlineRegionStage
+              ) : effectiveActiveTask === 'source' && sourceSetupStage ? (
+                sourceSetupStage
+              ) : selectedCamera &&
+                policyContext &&
+                (effectiveActiveTask === 'ppe' ||
+                  (!sourceSetupStage && effectiveActiveTask === null)) ? (
                 <CameraPpePolicyPanel
                   key={selectedCamera.id}
                   cameraId={selectedCamera.id}
@@ -391,14 +493,20 @@ export function CameraSetupCatalog({
                   context={policyContext}
                   statusContext={statusContext}
                   canWrite={canManageCameras}
-                  defaultOpen={autoExpandPpeCameraId === selectedCamera.id}
+                  embeddedInTab
+                  defaultOpen={
+                    effectiveActiveTask === 'ppe' || autoExpandPpeCameraId === selectedCamera.id
+                  }
+                  onOpenChange={(isOpen) => {
+                    if (isOpen && effectiveActiveTask !== 'ppe') {
+                      handleSelectTask('ppe', undefined, selectedCamera.id);
+                    }
+                  }}
                   onOpenReference={(trigger) => open('regions', selectedCamera.id, trigger)}
                   onOpenApply={onOpenApply}
-                  expandSignal={
-                    ppeExpandRequest?.cameraId === selectedCamera.id ? ppeExpandRequest.seq : 0
-                  }
+                  expandSignal={activePpeExpandSignal}
                 />
-              )}
+              ) : null}
             </div>
           </div>
         )}

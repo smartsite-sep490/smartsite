@@ -1,3 +1,4 @@
+import type { ReactNode } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Link } from 'react-router-dom';
 import type { CameraResponse } from '@smartsite/contracts/management';
@@ -9,6 +10,8 @@ import {
   type CameraApplicationStatusContext,
 } from './CameraApplicationStatusSummary';
 import type { CameraSetupOpenHandler } from './CameraSetupWorkflow';
+
+export type CameraWorkspaceTask = 'source' | 'regions' | 'ppe';
 
 const en = {
   'cameraSetup.stagesDisclosureLabel': 'Four-stage setup reference',
@@ -245,6 +248,12 @@ export interface CameraSetupContextBarProps {
   onSelectCamera?: (cameraId: string) => void;
   onOpenPpePolicy?: () => void;
   statusContext?: CameraApplicationStatusContext;
+  compact?: boolean;
+  hasSourceTask?: boolean;
+  activeTask?: CameraWorkspaceTask | null;
+  onSelectTask?: (task: CameraWorkspaceTask, trigger?: HTMLButtonElement) => void;
+  applySlot?: ReactNode;
+  diagnosticsSlot?: ReactNode;
 }
 
 export function CameraSetupContextBar({
@@ -259,6 +268,12 @@ export function CameraSetupContextBar({
   onSelectCamera,
   onOpenPpePolicy,
   statusContext,
+  compact = false,
+  hasSourceTask = false,
+  activeTask = null,
+  onSelectTask,
+  applySlot,
+  diagnosticsSlot,
 }: CameraSetupContextBarProps) {
   const { t } = useTranslation(SAFETY_NAMESPACE);
   const activeCount = rows.filter((row) => row.status === 'ACTIVE').length;
@@ -269,6 +284,306 @@ export function CameraSetupContextBar({
     siteId && selectedCamera && isSelectedActive
       ? new URLSearchParams({ siteId, cameraId: selectedCamera.id }).toString()
       : '';
+
+  if (compact) {
+    const showTaskSwitcher = Boolean(
+      selectedCamera &&
+      isSelectedActive &&
+      (hasSourceTask || canManageCameras || Boolean(onOpenPpePolicy)),
+    );
+    const taskTabBase =
+      'inline-flex min-h-8 items-center justify-center rounded-lg px-2 py-1 text-xs sm:px-3 sm:text-sm font-semibold transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#0F172A] cursor-pointer';
+    const taskTabActive = `${taskTabBase} bg-[#0F172A] text-white shadow-2xs`;
+    const taskTabIdle = `${taskTabBase} text-slate-700 hover:bg-white hover:text-slate-950`;
+
+    return (
+      <div
+        data-testid="camera-setup-sticky-header"
+        className="min-w-0 space-y-2 bg-white/95 text-sm text-slate-700 backdrop-blur-xs lg:sticky lg:top-16 lg:z-10 lg:pb-1"
+      >
+        {!canManageCameras && (
+          <p className="min-w-0 break-words [overflow-wrap:anywhere] rounded-xl border border-slate-200 bg-slate-50/60 px-3 py-2 text-xs leading-relaxed text-slate-700">
+            {t('cameraSetup.scopeReadOnlyReason')}
+          </p>
+        )}
+
+        {selectedCamera && (
+          <div
+            role="region"
+            aria-label={t('cameraSetup.selectedHeading')}
+            data-tour-anchor="camera-setup-save"
+            className={`min-w-0 space-y-1.5 sm:space-y-2 rounded-xl border border-slate-200 bg-white px-2.5 py-2 sm:px-3.5 sm:py-2.5 border-l-[3px] shadow-2xs ${
+              isSelectedActive ? 'border-l-[#0F172A]' : 'border-l-slate-400'
+            }`}
+          >
+            {rows.length > 1 && onSelectCamera && (
+              <div className="flex min-w-0 items-center gap-2 border-b border-slate-100 pb-1.5 lg:hidden">
+                <label
+                  htmlFor="camera-setup-quick-select"
+                  className="shrink-0 text-xs font-semibold text-slate-700"
+                >
+                  {t('cameraSetup.chooseCamera')}
+                </label>
+                <select
+                  id="camera-setup-quick-select"
+                  data-testid="camera-setup-quick-select"
+                  aria-label={t('cameraSetup.chooseCamera')}
+                  value={selectedCamera.id}
+                  onChange={(event) => onSelectCamera(event.target.value)}
+                  className="min-h-8 min-w-0 flex-1 rounded-lg border border-slate-300 bg-white px-2 py-1 text-xs font-medium text-slate-900 hover:border-slate-400 focus-visible:border-[#0F172A] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#0F172A]"
+                >
+                  {rows.map((row) => (
+                    <option key={row.id} value={row.id}>
+                      {row.name} ({row.code})
+                    </option>
+                  ))}
+                </select>
+              </div>
+            )}
+
+            <div className="flex flex-wrap items-center justify-between gap-1.5">
+              <div className="min-w-0 flex flex-wrap items-baseline gap-x-2 gap-y-0.5">
+                <p
+                  title={`${selectedCamera.name} · ${selectedCamera.code}`}
+                  className={`${
+                    rows.length > 1 && onSelectCamera ? 'hidden lg:block ' : ''
+                  }min-w-0 max-w-full break-words [overflow-wrap:anywhere] text-base font-bold tracking-tight text-slate-950 tabular-nums`}
+                >
+                  {`${selectedCamera.name} · ${selectedCamera.code}`}
+                </p>
+                <span
+                  className={`inline-flex items-center gap-1.5 text-xs font-semibold tabular-nums ${
+                    isSelectedActive ? 'text-emerald-800' : 'text-slate-600'
+                  }`}
+                >
+                  <span
+                    aria-hidden="true"
+                    className={`h-2 w-2 rounded-full ${
+                      isSelectedActive ? 'bg-emerald-600' : 'bg-slate-400'
+                    }`}
+                  />
+                  {t(isSelectedActive ? 'cameraSetup.enabled' : 'cameraSetup.disabled')} · v
+                  {selectedCamera.configurationVersion}
+                </span>
+              </div>
+
+              <div className="flex min-w-0 flex-wrap items-center gap-1.5">
+                {canManageCameras && (
+                  <span
+                    data-tour-anchor={!isSelectedActive ? 'camera-setup-regions' : undefined}
+                    className="inline-flex"
+                  >
+                    <button
+                      type="button"
+                      className={
+                        isSelectedActive
+                          ? 'inline-flex min-h-8 items-center justify-center rounded-lg border border-slate-300 bg-white px-2.5 py-1 text-xs font-semibold text-slate-700 transition-colors hover:bg-slate-50 hover:text-slate-950 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#0F172A] cursor-pointer'
+                          : CAMERA_BUTTON_STYLES.primary
+                      }
+                      onClick={(event) => open('manage', selectedCamera.id, event.currentTarget)}
+                    >
+                      {t(
+                        isSelectedActive
+                          ? 'cameraSetup.editSelectedManage'
+                          : 'cameraSetup.enableSelectedManage',
+                        { code: selectedCamera.code },
+                      )}
+                    </button>
+                  </span>
+                )}
+                {!canManageCameras && canOpenMonitoring && Boolean(selectedMonitorQuery) && (
+                  <>
+                    <Link
+                      data-testid="selected-camera-monitor-ppe"
+                      className={CAMERA_BUTTON_STYLES.compactSecondary}
+                      to={`/ppe?${selectedMonitorQuery}`}
+                    >
+                      {t('cameraSetup.openSelectedMonitorPpe', { code: selectedCamera.code })}
+                    </Link>
+                    <Link
+                      data-testid="selected-camera-monitor-zones"
+                      className={CAMERA_BUTTON_STYLES.compactSecondary}
+                      to={`/zones?${selectedMonitorQuery}`}
+                    >
+                      {t('cameraSetup.openSelectedMonitorZones', { code: selectedCamera.code })}
+                    </Link>
+                  </>
+                )}
+              </div>
+            </div>
+
+            {statusContext ? (
+              <CameraApplicationStatusSummary
+                camera={selectedCamera}
+                context={statusContext}
+                compact
+              />
+            ) : (
+              <div
+                data-testid="camera-saved-config-summary"
+                data-application-state="SAVED_METADATA_ONLY"
+                className="min-w-0 space-y-0.5 border-t border-slate-100 pt-1.5 text-xs text-slate-700"
+              >
+                <p className="min-w-0 break-words [overflow-wrap:anywhere] font-semibold text-slate-900">
+                  {t('cameraSetup.savedConfigVersionStatus', {
+                    version: selectedCamera.configurationVersion,
+                  })}
+                </p>
+                <p className="min-w-0 break-words [overflow-wrap:anywhere] leading-relaxed text-slate-600">
+                  {t(
+                    canManageCameras
+                      ? isSelectedActive
+                        ? 'cameraSetup.savedMetadataOnlyActiveHint'
+                        : 'cameraSetup.savedMetadataOnlyInactiveHint'
+                      : isSelectedActive
+                        ? 'cameraSetup.savedMetadataOnlyReadOnlyActiveHint'
+                        : 'cameraSetup.savedMetadataOnlyReadOnlyInactiveHint',
+                  )}
+                </p>
+              </div>
+            )}
+
+            {applySlot}
+
+            <div className="flex flex-wrap items-center justify-between gap-2 border-t border-slate-100 pt-2">
+              {showTaskSwitcher && (
+                <div
+                  role="group"
+                  aria-label={t('cameraSetup.workspaceTabsLabel')}
+                  data-testid="camera-setup-task-tabs"
+                  data-tour-anchor="camera-setup-regions"
+                  className="inline-flex min-w-0 flex-wrap items-center gap-1 rounded-xl border border-slate-200 bg-slate-100/80 p-0.5"
+                >
+                  {hasSourceTask && (
+                    <button
+                      type="button"
+                      data-testid="camera-workspace-tab-source"
+                      aria-pressed={activeTask === 'source'}
+                      className={activeTask === 'source' ? taskTabActive : taskTabIdle}
+                      onClick={(event) => onSelectTask?.('source', event.currentTarget)}
+                    >
+                      {t('cameraSetup.tabSource')}
+                    </button>
+                  )}
+                  {canManageCameras && (
+                    <button
+                      type="button"
+                      data-testid="camera-workspace-tab-regions"
+                      aria-label={t('cameraSetup.editSelectedRegions', {
+                        code: selectedCamera.code,
+                      })}
+                      aria-pressed={activeTask === 'regions'}
+                      className={activeTask === 'regions' ? taskTabActive : taskTabIdle}
+                      onClick={(event) => {
+                        if (onSelectTask) {
+                          onSelectTask('regions', event.currentTarget);
+                        } else {
+                          open('regions', selectedCamera.id, event.currentTarget);
+                        }
+                      }}
+                    >
+                      {t('cameraSetup.tabRegions')}
+                    </button>
+                  )}
+                  {onOpenPpePolicy && (
+                    <button
+                      type="button"
+                      data-testid="selected-camera-open-ppe"
+                      aria-label={t('cameraSetup.configureSelectedPpe', {
+                        code: selectedCamera.code,
+                      })}
+                      aria-pressed={activeTask === 'ppe'}
+                      className={activeTask === 'ppe' ? taskTabActive : taskTabIdle}
+                      onClick={(event) => {
+                        if (onSelectTask) {
+                          onSelectTask('ppe', event.currentTarget);
+                        } else {
+                          onOpenPpePolicy();
+                        }
+                      }}
+                    >
+                      {t('cameraSetup.tabPpe')}
+                    </button>
+                  )}
+                </div>
+              )}
+
+              <div className="flex min-w-0 flex-wrap items-center gap-x-3 gap-y-1 text-xs text-slate-600">
+                <details
+                  data-testid="camera-setup-diagnostics-disclosure"
+                  className="group min-w-0"
+                >
+                  <summary className="inline-flex min-h-7 cursor-pointer list-none items-center gap-1 rounded-md py-0.5 font-medium text-slate-600 hover:text-slate-950 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#0F172A]">
+                    <span>{t('cameraSetup.diagnosticsDisclosure')}</span>
+                    <span
+                      aria-hidden="true"
+                      className="text-xs text-slate-400 transition-transform duration-150 group-open:rotate-180"
+                    >
+                      ▾
+                    </span>
+                  </summary>
+                  <div className="mt-2 min-w-0 space-y-2.5 rounded-xl border border-slate-200 bg-slate-50/50 p-3 text-xs leading-relaxed text-slate-600">
+                    {diagnosticsSlot}
+                    <div className="space-y-1 border-t border-slate-200/80 pt-2">
+                      {siteBadge && rows.length > 0 && (
+                        <p className="font-medium text-slate-700">
+                          {siteBadge} ·{' '}
+                          {t('cameraSetup.catalogBreakdown', {
+                            active: activeCount,
+                            inactive: inactiveCount,
+                          })}
+                        </p>
+                      )}
+                      <p className="break-words [overflow-wrap:anywhere]">
+                        {t(
+                          canManageCameras
+                            ? 'cameraSetup.revisionDistinctionDisclosure'
+                            : 'cameraSetup.revisionDistinctionReadOnlyDisclosure',
+                        )}
+                      </p>
+                      <p className="break-words [overflow-wrap:anywhere]">
+                        {t(
+                          canManageCameras
+                            ? 'cameraSetup.sourceIdDisclosure'
+                            : 'cameraSetup.sourceIdReadOnlyDisclosure',
+                        )}
+                      </p>
+                      {canManageCameras && (
+                        <p className="break-words [overflow-wrap:anywhere]">
+                          {t(
+                            isSelectedActive
+                              ? 'cameraSetup.selectedActiveNext'
+                              : 'cameraSetup.selectedInactiveNext',
+                          )}
+                        </p>
+                      )}
+                    </div>
+                  </div>
+                </details>
+
+                <details className="min-w-0">
+                  <summary className="inline-flex min-h-7 cursor-pointer select-none items-center gap-1 rounded-md px-1 py-0.5 font-medium text-slate-600 hover:bg-slate-100 hover:text-slate-900 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#0F172A]">
+                    <span>{t('cameraSetup.technicalSourceDetails')}</span>
+                  </summary>
+                  <div className="mt-1">
+                    <span
+                      data-testid="selected-camera-source-id"
+                      className="inline-flex max-w-full items-center gap-1.5 rounded-lg border border-slate-200 bg-slate-50 px-2.5 py-1 font-mono text-xs font-medium text-slate-700 break-all"
+                    >
+                      <span>{t('cameraSetup.field.externalId')}:</span>
+                      <span className="font-semibold text-slate-900">
+                        {selectedCamera.externalId}
+                      </span>
+                    </span>
+                  </div>
+                </details>
+              </div>
+            </div>
+          </div>
+        )}
+      </div>
+    );
+  }
 
   return (
     <div className="min-w-0 space-y-3 text-sm text-slate-700">

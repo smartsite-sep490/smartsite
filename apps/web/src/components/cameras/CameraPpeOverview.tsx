@@ -136,11 +136,13 @@ export function SavedVsAppliedBanner({
   onRefreshStatus,
   isRefreshingStatus = false,
   onOpenApply,
+  compact = false,
 }: {
   state: SavedVsAppliedState;
   onRefreshStatus?: () => void;
   isRefreshingStatus?: boolean;
   onOpenApply?: () => void;
+  compact?: boolean;
 }) {
   const { t } = useTranslation(SAFETY_NAMESPACE);
   const savedLabel =
@@ -200,6 +202,19 @@ export function SavedVsAppliedBanner({
       state.kind === 'unconfirmed' ||
       state.kind === 'stale' ||
       state.kind === 'rejected');
+
+  if (compact) {
+    return (
+      <div
+        data-testid="camera-ppe-sync-status"
+        data-sync-state={state.kind}
+        className={`flex flex-wrap items-center justify-between gap-2 rounded-lg border px-3 py-1.5 text-xs font-medium ${workerTone}`}
+      >
+        <span className="min-w-0 break-words [overflow-wrap:anywhere]">{workerText}</span>
+        <span className="font-mono text-xs tabular-nums opacity-80">{savedLabel}</span>
+      </div>
+    );
+  }
 
   return (
     <div
