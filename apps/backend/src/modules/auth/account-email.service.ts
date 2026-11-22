@@ -13,6 +13,7 @@ import { AuthSessionEntity } from '../../database/entities/auth-session.entity.j
 import { PublicHttpException } from '../../common/http/public-http-exception.js';
 import { hashPassword, verifyPassword, validPassword } from './password.js';
 import { PASSWORD_POLICY_MESSAGE } from '../../common/configuration/password-policy.js';
+import { executeMainConfigurationCommand } from '../../common/configuration/main-configuration-authority.js';
 import {
   decryptAccountEmail,
   encryptAccountEmail,
@@ -163,25 +164,41 @@ export class AccountEmailService implements OnApplicationBootstrap, OnApplicatio
     });
     return { accepted: true as const };
   }
+  private async currentChallenge(
+    manager: EntityManager,
+    user: UserEntity,
+    purpose: 'VERIFY' | 'RESET',
+  ) {
+    const [challenge] = await manager.query<{ id: string; token_hash: string; attempts: number }[]>(
+      `SELECT id,token_hash,attempts FROM account_email_challenge WHERE user_id=$1 AND email=$2 AND purpose=$3 AND consumed_at IS NULL AND expires_at>clock_timestamp() ORDER BY created_at DESC,id DESC LIMIT 1 FOR UPDATE`,
+      [user.id, user.email, purpose],
+    );
+    return challenge;
+  }
   private async consume(
     manager: EntityManager,
     user: UserEntity,
     purpose: 'VERIFY' | 'RESET',
     code: string,
+    recordAttempt = true,
+    expectedChallengeId?: string,
   ) {
-    const [challenge] = await manager.query<{ id: string; token_hash: string; attempts: number }[]>(
-      `SELECT id,token_hash,attempts FROM account_email_challenge WHERE user_id=$1 AND email=$2 AND purpose=$3 AND consumed_at IS NULL AND expires_at>now() ORDER BY created_at DESC,id DESC LIMIT 1 FOR UPDATE`,
-      [user.id, user.email, purpose],
-    );
-    if (!challenge || challenge.attempts >= 5) return false;
+    const challenge = await this.currentChallenge(manager, user, purpose);
+    if (
+      !challenge ||
+      challenge.attempts >= 5 ||
+      (expectedChallengeId !== undefined && challenge.id !== expectedChallengeId)
+    )
+      return false;
     const matches = equalEmailHash(
       challenge.token_hash,
       emailCodeHash(this.secret(), user.id, purpose, code),
     );
-    await manager.query(
-      `UPDATE account_email_challenge SET attempts=attempts+1,consumed_at=CASE WHEN $2 OR attempts+1>=5 THEN now() ELSE NULL END WHERE id=$1`,
-      [challenge.id, matches],
-    );
+    if (recordAttempt)
+      await manager.query(
+        `UPDATE account_email_challenge SET attempts=attempts+1,consumed_at=CASE WHEN $2 OR attempts+1>=5 THEN now() ELSE NULL END WHERE id=$1`,
+        [challenge.id, matches],
+      );
     return matches;
   }
   async confirmReset(identifier: string, code: string, password: string) {
@@ -191,7 +208,7 @@ export class AccountEmailService implements OnApplicationBootstrap, OnApplicatio
         message: PASSWORD_POLICY_MESSAGE,
       });
     const passwordHash = await hashPassword(password);
-    const result = await this.source.transaction(async (manager) => {
+    const account = await this.source.transaction(async (manager) => {
       const user = await manager
         .getRepository(UserEntity)
         .createQueryBuilder('u')
@@ -200,26 +217,59 @@ export class AccountEmailService implements OnApplicationBootstrap, OnApplicatio
           identifier,
         })
         .getOne();
-      if (
-        !user?.email ||
-        !user.emailVerifiedAt ||
-        !(await this.consume(manager, user, 'RESET', code))
-      )
-        return false;
-      user.passwordHash = passwordHash;
-      user.mustChangePassword = false;
-      await manager.getRepository(UserEntity).save(user);
-      await manager
-        .getRepository(AuthSessionEntity)
-        .update({ userId: user.id, revokedAt: IsNull() }, { revokedAt: new Date() });
-      await manager.query(
-        `UPDATE account_email_challenge SET consumed_at=now() WHERE user_id=$1 AND purpose='RESET' AND consumed_at IS NULL`,
-        [user.id],
-      );
-      return true;
+      if (!user?.email || !user.emailVerifiedAt) return null;
+      const challenge = await this.currentChallenge(manager, user, 'RESET');
+      if (!challenge || !(await this.consume(manager, user, 'RESET', code, false, challenge.id))) {
+        await this.consume(manager, user, 'RESET', code);
+        return null;
+      }
+      return {
+        id: user.id,
+        email: user.email,
+        passwordHash: user.passwordHash,
+        challengeId: challenge.id,
+      };
     });
-    // Throw after commit: wrong-code attempt increments must never roll back.
-    if (!result) throw invalidCode();
+    // Failed attempts commit before rejection; only a verified proof supplies a command actor.
+    if (!account) throw invalidCode();
+    const reauthorize = async (manager: EntityManager) => {
+      const current = await manager.getRepository(UserEntity).findOne({
+        where: { id: account.id, isActive: true },
+        lock: { mode: 'pessimistic_write' },
+      });
+      if (
+        !current?.emailVerifiedAt ||
+        current.email !== account.email ||
+        current.passwordHash !== account.passwordHash ||
+        !(await this.consume(manager, current, 'RESET', code, false, account.challengeId))
+      )
+        throw invalidCode();
+    };
+    await executeMainConfigurationCommand(
+      this.source,
+      { actorUserId: account.id, reauthorize },
+      'USER_PASSWORD_CHANGE',
+      { userId: account.id, mechanism: 'EMAIL_CODE' },
+      async (manager) => {
+        const user = await manager.getRepository(UserEntity).findOne({
+          where: { id: account.id, isActive: true },
+          lock: { mode: 'pessimistic_write' },
+        });
+        if (!user || !(await this.consume(manager, user, 'RESET', code, true, account.challengeId)))
+          throw invalidCode();
+        user.passwordHash = passwordHash;
+        user.mustChangePassword = false;
+        await manager.getRepository(UserEntity).save(user);
+        await manager
+          .getRepository(AuthSessionEntity)
+          .update({ userId: user.id, revokedAt: IsNull() }, { revokedAt: new Date() });
+        await manager.query(
+          `UPDATE account_email_challenge SET consumed_at=now() WHERE user_id=$1 AND purpose='RESET' AND consumed_at IS NULL`,
+          [user.id],
+        );
+      },
+      reauthorize,
+    );
     return { accepted: true as const };
   }
   async resendVerification(userId: string, language: Language = 'vi') {
