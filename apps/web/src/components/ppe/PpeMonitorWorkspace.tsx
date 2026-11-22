@@ -37,7 +37,7 @@ registerFeatureCatalog({
     'monitor.paused': 'AI processing is paused. Camera previews are disabled.',
     'monitor.evidence': 'Open safety records',
     'monitor.denied':
-      'Camera monitoring requires an active Admin or assigned Safety Officer session.',
+      'This monitoring screen is for a Safety Officer assigned to this site. If you are a Site Manager, use Camera setup to configure the source and monitoring areas.',
     'monitor.loaded': '{loaded} loaded / {total} reported',
     'monitor.hint':
       'Choose a Site, then select or enlarge a camera. Saved findings are reviewed in safety records.',
@@ -62,7 +62,8 @@ registerFeatureCatalog({
     'monitor.fullscreenError': 'Trình duyệt chưa cho phép toàn màn hình.',
     'monitor.paused': 'Đang tạm dừng xử lý AI. Xem trước camera đã tắt.',
     'monitor.evidence': 'Mở hồ sơ an toàn',
-    'monitor.denied': 'Cần phiên Admin hoặc Cán bộ an toàn đang hoạt động và được phân công.',
+    'monitor.denied':
+      'Màn giám sát dành cho Cán bộ an toàn được phân công tại công trường. Nếu đang dùng tài khoản Quản lý công trường, hãy vào Thiết lập camera để cấu hình nguồn và vùng giám sát. Đăng nhập tài khoản Cán bộ an toàn để xem giám sát.',
     'monitor.loaded': 'Đã tải {loaded} / tổng báo về {total}',
     'monitor.hint':
       'Chọn công trường rồi chọn hoặc phóng to camera. Xem các phát hiện đã lưu tại hồ sơ an toàn.',

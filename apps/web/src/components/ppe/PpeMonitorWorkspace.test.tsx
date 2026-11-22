@@ -168,7 +168,9 @@ it('manager-only session does not request Safety monitoring metadata', () => {
     />,
     { wrapper },
   );
-  expect(screen.getByRole('alert').textContent).toContain('requires an active Admin');
+  expect(screen.getByRole('alert').textContent).toContain(
+    'This monitoring screen is for a Safety Officer assigned to this site. If you are a Site Manager, use Camera setup to configure the source and monitoring areas.',
+  );
   expect(state.sites).not.toHaveBeenCalled();
   expect(state.cameras).not.toHaveBeenCalled();
 });
