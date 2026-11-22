@@ -1,10 +1,6 @@
-export interface SourceActivationState {
-  state: 'PREPARED' | 'RUNNING';
-  commandId: string;
-  sourceRevision: number;
-  sourceKind: 'LIVE';
-  currentGenerationId: string;
-}
+import type { SourceActivationResult, SourcePreparationResult } from '@smartsite/contracts';
+
+export type SourceActivationState = SourcePreparationResult | SourceActivationResult;
 export interface SourceGeneration {
   workerGenerationId: string;
   streamSessionId: string;
@@ -19,7 +15,7 @@ export interface SourceActivationCommand {
 export interface SourceActivationPorts {
   authorize(): Promise<void>;
   prepare(command: SourceActivationCommand): Promise<SourceActivationState>;
-  issue(expectedGenerationId: string, commandId: string): Promise<SourceGeneration>;
+  issue(expectedGenerationId: string | null, commandId: string): Promise<SourceGeneration>;
   commit(commandId: string, generation: SourceGeneration): Promise<SourceActivationState>;
 }
 
@@ -27,11 +23,19 @@ export interface SourceActivationPorts {
 export async function activateTestedCameraSource(
   command: SourceActivationCommand,
   ports: SourceActivationPorts,
-): Promise<SourceActivationState> {
+): Promise<SourceActivationResult> {
   await ports.authorize();
   const prepared = await ports.prepare(command);
   if (prepared.commandId !== command.commandId || prepared.sourceKind !== 'LIVE')
     throw new Error('Source activation scope changed');
+  if (
+    prepared.currentGenerationId === null &&
+    (prepared.state !== 'PREPARED' ||
+      prepared.schemaVersion !== '1.1.0' ||
+      prepared.sourceRevision !== 0 ||
+      command.expectedRevision !== 0)
+  )
+    throw new Error('Unowned source preparation scope changed');
   if (prepared.state === 'RUNNING') {
     if (prepared.sourceRevision !== command.expectedRevision + 1)
       throw new Error('Source revision changed');

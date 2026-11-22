@@ -7,7 +7,10 @@ import { AuthService } from '../auth/auth.service.js';
 import { UserRole } from '../../database/entities/user.entity.js';
 import { CameraConfigurationService } from './camera-configuration.service.js';
 import { DataSource } from 'typeorm';
-import { renewCameraWorkerGeneration } from './camera-worker-generations.js';
+import {
+  bootstrapCameraWorkerGeneration,
+  renewCameraWorkerGeneration,
+} from './camera-worker-generations.js';
 import { activateTestedCameraSource } from './camera-source-activation.js';
 import { resumeAcceptedCameraSource } from './camera-source-resume.js';
 import type { SourceConfigurationResumeResult } from '@smartsite/contracts';
@@ -475,15 +478,18 @@ export class CameraSourceService {
         authorize: () => this.authorize(token, siteId, true),
         prepare: (command) => remote('/prepare', command),
         issue: async (expected, command) => {
-          const generation = await renewCameraWorkerGeneration(
-            this.database!,
-            cameraId,
-            allowed,
-            43200000,
-            undefined,
-            expected,
-            command,
-          );
+          const generation =
+            expected === null
+              ? await bootstrapCameraWorkerGeneration(this.database!, cameraId, allowed, 43200000)
+              : await renewCameraWorkerGeneration(
+                  this.database!,
+                  cameraId,
+                  allowed,
+                  43200000,
+                  undefined,
+                  expected,
+                  command,
+                );
           // The old process has stopped and no new process may start before old geometry is retired.
           await this.database!.transaction(async (manager) => {
             const rows = await manager.query(
