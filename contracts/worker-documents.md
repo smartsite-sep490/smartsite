@@ -1,198 +1,131 @@
-# Worker onboarding documents (MF01)
+# Worker documents and Safety review (MF01)
 
-Web and Mobile Contractor Representatives collect the Worker's 12-digit citizen ID,
-gender, address, phone number, front/back ID images and three documents: Group 3 occupational safety card, health certificate,
-and personal insurance. Documents accept JPEG/PNG/PDF, at most 5 MiB each, with protected
-authenticated viewing. Citizen IDs, phone numbers and documents are excluded from
-general worker directory responses and application logs. Web selects existing images/files only.
-Mobile supports camera, photo library and file selection for every document. ID sides accept
-JPEG/PNG only. Each certificate accepts JPEG/PNG or a PDF of at most four pages.
+Contractor Representatives own initial collection, supplements and renewals. Workers read their
+own profile, originals, review state and notifications. Only Safety assigned to the same Site
+can approve or reject individual certificates. OCR and AI results are advisory.
 
-All selected/captured files pass authenticated image-quality checks before selection and
-are checked again before persistence. Unavailable quality service fails closed. OCR image
-checks cover resolution, lighting and focus; they do not establish document authenticity.
-New accounts require both ID images before Safety approval; originals remain available to
-the reviewer through protected endpoints. Mobile removes its document cache copies on
-replacement/unmount and immediately rejects/removes unreadable captures.
+## Submit a document bundle
 
-New documents enter PENDING. Only a Safety Officer assigned to the same Site can approve
-or reject them. Representatives may optionally submit a real calendar expiry date for the
-safety card and insurance (`submittedExpiresOn`). Health certificates instead accept the
-examination/issue date (`submittedIssuedOn`); the application derives expiry as one calendar
-year later, clamping a 29 February anniversary to 28 February. Dates can be supplied on account
-creation or replacement upload and corrected or cleared while PENDING. Both suggestions are
-stored separately from OCR and approved dates, appear to Worker/Representative/Safety, and
-survive OCR retries. Safety's fields prefer the Representative suggestion, then OCR, and still
-require explicit original/date confirmation. Manual input never activates a Worker or extends
-a previous approval. Corrections increment the version, so a stale review returns 409.
+POST /api/v1/sites/:siteId/workers/:workerId/document-submissions accepts authenticated multipart
+with one JSON metadata field and up to five files. Allowed file fields are FRONT, BACK,
+SAFETY_CARD, HEALTH_CERTIFICATE and PERSONAL_INSURANCE.
 
-The reviewer inspects the original and confirms/corrects issue and expiry dates. For health
-certificates only the examination/issue date is editable; Backend computes the one-year expiry
-and rejects a conflicting submitted expiry. Printed OCR expiry is ignored for this product rule.
-Existing approved health dates remain unchanged until a new Safety approval; migration never
-silently extends an approval.
-OCR suggestions never approve documents or activate Workers. If OCR cannot determine a
-date, the officer must enter it from the original; no expiry is invented from a filename
-or an unrelated date. All three approved documents must be currently valid before the
-Worker is eligible to enter. Expiry dates are inclusive in Asia/Ho_Chi_Minh.
+Example metadata for an existing Worker with complete identity evidence:
 
-Workers can submit new or replacement certificates for their own linked Worker at the requested Site,
-including when documents are expired or the Worker is manually suspended. The active account and
-persisted Worker Site role are checked again when saving. Workers can propose dates on their own
-pending certificates; they cannot replace identity images, retry OCR, approve documents or modify
-another Worker. Representative upload and Safety review remain separately scoped. Web and Mobile
-expose certificate submission in the Worker document panel.
+    {
+      "requestId": "55555555-5555-4555-8555-555555555555",
+      "expectedVersion": 1,
+      "safetyCardRequired": false,
+      "documents": {
+        "HEALTH_CERTIFICATE": { "submittedIssuedOn": "2026-11-01" },
+        "PERSONAL_INSURANCE": { "submittedExpiresOn": "2027-11-01" }
+      }
+    }
 
-Workers and Representatives select a replacement file to prefill an empty date from OCR.
-Existing manually entered dates are preserved for comparison. Web and Mobile call
-`POST /sites/:siteId/workers/:workerId/documents/:kind/check` with authenticated multipart
-`file` and `submittedExpiresOn` (Safety/Insurance) or `submittedIssuedOn` (Health).
-This read-only preflight validates ownership, current account/role, file and image quality,
-then returns `{ quality, ocr, dateCheck }` without saving evidence or changing eligibility.
-Preflight accepts an absent date so OCR can suggest one. Final Worker upload requires a real
-declared date; unreadable OCR requires manual input and rechecking. Representative dates
-remain optional for compatibility. Selection and OCR never upload a pending certificate;
-both apps wait for an explicit Send to Safety action. Final upload repeats validation and OCR independently.
+Attach files named HEALTH_CERTIFICATE and PERSONAL_INSURANCE for this example.
+Optional identity metadata contains nationalId (12 digits), phoneNumber, gender and address.
+CCCD sides accept JPEG/PNG, certificates accept JPEG/PNG/PDF, at most 5 MiB per file.
+PDFs may have at most four pages. Backend validates file signatures and decodability.
+Unknown fields, wrong date fields, missing dates and impossible dates are rejected.
 
-`dateCheck` is also an additive field on document responses, computed from proposals and OCR:
-`MATCH`, `MISMATCH`, `UNAVAILABLE` or `NO_REFERENCE`, with compared field and both dates.
-Health compares the examination/issue date; Safety/Insurance compare expiry.
-Only valid dates from a READ OCR result can match. Edited dates require a new preflight
-before UI submission. A mismatch or unreadable OCR shows a warning and may still be sent
-for Safety review; matching never approves or extends validity. Pending review screens
-show the latest comparison. No database migration is required.
+Initial collection includes both required ID images, health, labor insurance, and safety card
+when declared required. Supplements include replacements and any missing required documents,
+reusing unchanged pending documents or valid approvals.
 
-**Optional AI analysis during Safety review**
+The receipt contains requestId, version and documentIds. Exact retries reuse the existing
+audit receipt before OCR/storage. Changed payloads with the same request ID or stale versions
+return 409. Worker locking serializes submission and review. Storage happens before a short
+database transaction. New unused files are cleaned after failure or deduplication. Existing
+certificate revisions and protected references to replaced ID originals remain in history/audit.
 
-Apply migration `WorkerDocumentAiAnalysis1795132800001` before deploying this backend version.
-Set `OPENAI_API_KEY` on the backend to enable analysis. On Cloud Run, inject it from Secret
-Manager. Safety can request analysis from the pending safety card, health certificate, or personal
-insurance original preview. The backend reads the stored image or PDF and sends it to OpenAI.
-Submission, date correction, and local OCR work independently of AI. The Responses request uses
-`store: false` and a single 15-second deadline.
+Account creation keeps its existing endpoint. If submission fails after account creation,
+complete the same Worker instead of creating another account. Upgrade Web/Mobile together with
+this backend before permitting document writes. Individual certificate/identity upload and
+submitted-expiry mutation endpoints/client methods are retired.
 
-Set the backend environment variable `WORKER_DOCUMENT_OPENAI_MODEL` to override the default
-`gpt-4.1-mini`. On Cloud Run, set it on the service revision. Choose a model that supports
-image and PDF inputs and Structured Outputs with the request's JSON schema. Verify that
-the model can return the result within 15 seconds on sample documents.
+## Required documents and review
 
-The worker detail response can include `aiAnalysis` for the assigned Site Safety Officer. An AI
-result of `detectedKind: "PERSONAL_INSURANCE"` and `kindMismatch: true` flags an upload in the
-health certificate slot. Safety can inspect the result and the original together. Null fields
-indicate an uncertain read. If analysis is unavailable, Safety can retry it on the same document
-or review the original immediately. A successful result is reused. A short server-side lease
-prevents concurrent analysis of the same document and expires after 60 seconds if interrupted.
+Representatives explicitly declare whether a Group 3 safety card is required. This declaration
+takes effect immediately. Health and labor insurance remain required. Old profiles and
+Workers without a profile default to requiring the safety card. The PERSONAL_INSURANCE
+enum and stored historical data remain unchanged while the interface calls it labor insurance.
 
-Replacement uploads retain the currently approved document until a replacement is
-approved. A rejected/pending replacement never extends the previous expiry. Approval
-supersedes the old approved version, with review/version/audit history retained.
-Concurrent/stale reviews return 409. Manual suspension remains independent from document
-eligibility; approving documents must not undo a manual suspension. Exit recording
-remains allowed for an established identity even after expiry.
+Profile responses include version and safetyCardRequired. Approved, current required documents
+determine eligibility across gate, scheduling, queue filters, missing-kind labels and reminders.
+Missing required identity or manual suspension still denies operational permission.
+Uploading, OCR, AI and proposed dates never approve documents or extend an existing approval.
 
-Citizen ID checks are advisory. The Backend compares OCR suggestions from both ID images
-and all three document types with the private profile's citizen ID. Worker, Representative
-and Safety views show a mismatch warning with the reference and detected values. A mismatch
-never blocks submission, Safety approval, renewal or eligibility after otherwise valid
-approvals. Missing/ambiguous extraction and an absent profile reference remain distinct
-from a confirmed match. No public Worker directory or notification exposes these numbers.
-Apply `WorkerDocumentIdentityChecks1792627200000` after `WorkerDocuments1792540800000`
-to store the reproducible OCR result for ID images; older images can be rescanned.
+Safety confirms issue/examination and expiry against the original. Health expiry remains one
+calendar year after the confirmed examination date, clamping 29 February to 28 February.
+Expiry is inclusive in Asia/Ho_Chi_Minh. A valid approved original continues during a pending or
+rejected renewal until its replacement is approved or the original expires.
 
-Workers may sign in and read their records, documents and notifications while suspended.
-Creating shift/leave/overtime/correction requests, accepting or declining swaps and issuing
-an entry QR require current approved documents. Recording departure and issuing an exit QR
-remain available. Manual account/Worker suspension stays separate from document eligibility;
-the roster exposes `documentStatus` so a pending/expired Worker is not shown as operational.
-All Workers, including existing Workers with no compliance profile, require three valid
-approved documents. New Representative-created accounts also require the full identity
-profile and two ID images; historical Workers can submit the three documents for review.
-The expiry job runs on Backend startup and hourly, with idempotent in-app notifications
-to the Worker, scoped Representatives and Site Safety Officers. The default advance
-notice is 30 days (`WORKER_DOCUMENT_NOTICE_DAYS`, 1–365). Entry checks expiry at request time.
-There is no automatic extension from an uploaded file, OCR date, or a pending review.
+Rejection requires a note, retains history and notifies the Representative to submit corrections.
+Identity corrections and replacement ID images are version checked and audited. Existing
+approved certificates retain their status until Safety approves a replacement.
 
-Endpoints under `/api/v1`:
+## OCR preflight
 
-- `POST /sites/:siteId/contractors/:contractorId/document-image-quality`: Representative,
-  multipart `file`; returns `ACCEPTED|RETAKE|UNAVAILABLE` and a safe reason.
-- `POST /sites/:siteId/workers/:workerId/document-image-quality`: own Worker or scoped Representative,
-  multipart `file`; quality check for a certificate upload.
-- `POST /sites/:siteId/workers/:workerId/identity-images/:FRONT|BACK`: Representative,
-  quality-checked ID image; byte-identical retries reuse the existing image.
-- `GET /sites/:siteId/workers/:workerId/identity-images/:id/file`: protected ID original.
-- `GET /sites/:siteId/workers/:workerId/compliance`: own Worker, scoped Representative,
-  or Site Safety Officer; full document and profile state.
-- `GET /sites/:siteId/worker-compliance`: paged Safety review queue or Representative roster.
-  `search` (up to 120 characters) and `pendingOnly=true|false` are scoped and applied before
-  pagination; the legacy pending filter includes incomplete/expired and newly submitted renewals.
-  `submissionStatus=NOT_SUBMITTED|PENDING_REVIEW|REVIEWED` filters submission independently
-  of operational eligibility. No certificate history means NOT_SUBMITTED; any pending certificate
-  means PENDING_REVIEW; otherwise a previously submitted profile is REVIEWED.
-  `needsSupplement=true|false` is a separate combinable filter/tag. It flags missing required identity,
-  or a document kind with no pending replacement and either no current valid approval or a latest
-  rejected submission. A partial submission can be both awaiting review and need more documents.
-  A complete pending renewal does not require another upload. These tags never grant access.
-- `POST /sites/:siteId/workers/:workerId/documents/:kind/check`: own Worker or scoped Representative;
-  multipart file and proposed date; private preflight comparison without persistence.
-- `POST /sites/:siteId/workers/:workerId/documents/:kind`: own Worker or scoped Representative multipart `file`;
-  `submittedIssuedOn` for health or `submittedExpiresOn` for safety/insurance (required for Worker,
-  optional for Representative), in
-  `YYYY-MM-DD` format. A date field for the wrong document kind is rejected. Runs bounded OCR and persists
-  a pending version. Unknown fields and impossible calendar dates are rejected. Byte-identical
-  retries preserve the original; an explicitly changed proposed date increments its version.
-- `PATCH /sites/:siteId/workers/:workerId/documents/:id/submitted-expiry`: own Worker or scoped Representative,
-  `{expectedVersion, submittedIssuedOn: 'YYYY-MM-DD'|null}` for health or
-  `{expectedVersion, submittedExpiresOn: 'YYYY-MM-DD'|null}` for safety/insurance;
-  pending documents only. No file
-  re-upload is required. Approved history cannot be edited through this endpoint.
-- `GET /sites/:siteId/workers/:workerId/documents/:id/file`: protected original.
-- `POST /sites/:siteId/workers/:workerId/documents/:id/ocr`: authorized Safety/Representative retry.
-- `POST /sites/:siteId/workers/:workerId/documents/:id/ai-analysis` requires an assigned Site Safety
-  Officer and a pending document. Send an empty request. Returns 204 after persisting the result or reusing
-  a successful result. Returns 409 during an active attempt or after review. Read `aiAnalysis`
-  from worker compliance detail for the advisory result or an unavailable status.
-- `POST /sites/:siteId/workers/:workerId/identity-images/:id/ocr`: authorized Safety/Representative
-  retry of citizen ID extraction on the protected original.
-- `POST /sites/:siteId/workers/:workerId/documents/:id/reviews`: Safety Officer,
-  `{expectedVersion, approve, issuedOn?, expiresOn?, reviewNote}`. A health approval requires
-  `issuedOn`; `expiresOn` can be omitted and, when supplied, must equal the computed anniversary.
+These authenticated preflight endpoints remain available:
 
-OCR is a Backend-owned local technical adapter. NestJS sends bounded original bytes through
-stdin to the packaged Python helper, which invokes Tesseract/Poppler without a shell.
-The helper returns `{status: 'READ'|'UNREADABLE'|'UNAVAILABLE', issuedOn: 'YYYY-MM-DD'|null,
-expiresOn: 'YYYY-MM-DD'|null, nationalIds: string[], warnings: string[]}`. `nationalIds`
-contains up to five labeled 12-digit suggestions, preserving leading zeroes, and is optional
-for compatibility with stored older OCR results. Child output is bounded to 8 KiB; raw OCR
-text is not returned or persisted. OCR failures preserve review availability; quality failures
-still reject uploads. The child does not receive database credentials, account tokens or AI
-service credentials. Document data stays in a private temporary folder removed after each run.
+- POST /sites/:siteId/contractors/:contractorId/document-image-quality
+- POST /sites/:siteId/workers/:workerId/document-image-quality
+- POST /sites/:siteId/workers/:workerId/documents/:kind/check
 
-There is no document OCR HTTP service, port, AI-repository dependency or service token.
-On a new local machine, install Python 3.11+ and Tesseract with Vietnamese/English language
-data, plus Poppler (`pdfinfo` beside `pdftoppm`). Set `WORKER_DOCUMENT_TESSERACT` and
-`WORKER_DOCUMENT_PDFTOPPM` in `apps/backend/.env` if the tools are not on PATH. Then run
-`pnpm ocr:setup` once, optionally `pnpm ocr:setup --python <python-executable>`.
-Setup creates `apps/backend/ocr/.venv`, installs pinned Pillow and writes the three local
-executable settings, including `WORKER_DOCUMENT_PYTHON`, to the private Backend env file.
-Remove the retired `SMARTSITE_DOCUMENT_OCR_URL` setting; setup removes it automatically.
-Start only `pnpm dev:api` (or `pnpm dev` for Web + BE). No extra `pnpm dev:ocr` terminal is
-needed. The deployed Backend image includes Python/Pillow/Tesseract/Poppler and language data.
+The quality response includes optional OCR evidence. Certificate checks return quality, ocr
+and dateCheck without persistence. Scoped Representatives may preflight. Workers cannot
+preflight or write documents.
 
-Run `pnpm test:ocr` for synthetic parser, image-quality and private CLI boundary tests.
-Backend tests separately cover child failure, private input/environment, response bounds,
-serialization and cleanup. One CPU lane runs at a time per Backend process, with a 60-second
-outer timeout and individual engine timeouts; busy/unavailable engines return unavailable for
-retry. No runtime installation, OpenAI requests, GPU initialization or model downloads occur.
-Missing/unlabeled dates require officer confirmation. Health expiry follows the explicit
-one-year product rule above; no legal validity period is inferred for the other document kinds.
+Combined helper inspection checks quality and reads text once, sharing rendered PDF pages.
+PDF pages with useful native text use that extraction first, with OCR for the other pages.
+Changing only a date compares it with the existing OCR result instead of uploading again.
 
-Template references supplied for this feature: [Group 3 safety card](https://vienxaydung.edu.vn/mau-chung-chi-an-toan-nhom-3/)
-and [adult health examination form](https://thuvienphapluat.vn/phap-luat/ho-tro-phap-luat/mau-giay-kham-suc-khoe-dung-cho-nguoi-tu-du-18-tuoi-tro-len-moi-nhat-nam-2024-theo-thong-tu-so-3220-135567.html).
+The backend keeps at most 64 cached results for five minutes per instance, keyed by actor,
+Site, Contractor, media type, original hash and processing revision. Only evidence/metadata
+is cached. A cache miss safely recomputes. Originals remain protected and unchanged.
 
-The helper and its tests ship with the Backend; camera/face AI remains in `smartsite-ai`.
+Malformed, corrupt, oversized and excessive-page files are rejected. Blur, exposure issues,
+unreadable text, expiry and field mismatches are advisory and may be sent for human review.
+Unavailable mandatory file validation requires retry. OCR availability never establishes
+identity, document authenticity or permission.
 
-Apply `WorkerDocumentSubmittedExpiry1792713600000` after the identity OCR migration. Existing
-rows receive null and retain their approved dates. Rollback refuses to discard submitted values.
-Then apply `WorkerHealthIssueDate1792800000000` to store optional examination/issue dates.
-Existing approvals and their expiry dates are preserved; rollback refuses to discard these values.
+Keep WORKER_DOCUMENT_PYTHON, WORKER_DOCUMENT_TESSERACT, WORKER_DOCUMENT_PDFTOPPM,
+pnpm ocr:setup and pnpm test:ocr. The Backend owns the bounded helper, uses no separate HTTP
+service and passes no application secrets to child processes.
+
+## On-demand Safety AI scan
+
+Safety selects profiles on the current queue page and presses Quick AI scan. Changing Site,
+filters or page clears selection. The screen previews profile/document counts, scans pending
+documents sequentially, and reuses COMPLETE results. Stop prevents the next request.
+Leaving the screen stops future requests while persisted results remain available.
+
+POST /sites/:siteId/workers/:workerId/documents/:id/ai-analysis reads the protected stored
+original and returns 204 after saving evidence. Only scoped Safety can call it.
+Concurrent claims and stale attempts are fenced by a lease. Opening originals never invokes AI.
+Reviewed documents cannot start a new analysis.
+
+The backend uses OpenAI Responses API structured outputs with store:false. OPENAI_API_KEY
+remains server-side. WORKER_DOCUMENT_OPENAI_MODEL defaults to gpt-4.1-mini.
+WORKER_DOCUMENT_OPENAI_TIMEOUT_MS defaults to 30000. The default client waits at most 40000 ms.
+No automatic client retry occurs. Safety can request another scan after failure.
+
+aiSummary on the Safety queue considers current pending documents only and prioritizes
+discrepancies while retaining unresolved counts. Statuses are NOT_SCANNED, ANALYZING,
+ATTENTION, NO_DISCREPANCY and INSUFFICIENT. Detail includes persisted extraction plus
+computed date, identity, type and validity comparisons. A favorable label is still pending
+human review. Provider failure never prevents original viewing or manual Safety review.
+
+Representatives and Workers do not receive AI extractions. Public directories and logs
+exclude citizen IDs and evidence. There is no automatic AI on upload, Cloud Tasks,
+Scheduler or AI-job table. Existing approved-expiry notifications retain their hourly sweep,
+defaulting to 30 days advance notice and applying the declared safety-card requirement.
+
+## Migration and verification
+
+Apply WorkerDocumentReviewWorkflow1795478400000 before this backend, after existing
+WorkerDocumentAiAnalysis1795132800001. It adds safety_card_required (default true) and version
+(default 1) to worker_compliance_profile. Synchronization and startup migrations stay disabled.
+
+Run focused backend/client/Web/Mobile tests, PostgreSQL migrations and integration tests,
+repository checks and OCR tests. Automated provider tests mock OpenAI and use synthetic files.

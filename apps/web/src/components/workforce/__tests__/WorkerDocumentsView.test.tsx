@@ -211,7 +211,7 @@ it('Safety Officer opens review queue and pre-selects the worker from notificati
   expect(screen.getByRole('button', { name: tr('documents.approve') })).toBeTruthy();
 });
 
-it('Worker role opens their own document panel directly', async () => {
+it('Worker role opens their own read-only document panel directly', async () => {
   user = {
     id: 'user-worker',
     username: 'worker01',
@@ -234,7 +234,9 @@ it('Worker role opens their own document panel directly', async () => {
   expect(screen.queryByRole('heading', { name: tr('documents.reviewQueue') })).toBeNull();
   expect(await screen.findByText(/card\.jpg/)).toBeTruthy();
   expect(
-    screen.getByLabelText(`${tr('documents.upload')} — ${tr('documents.SAFETY_CARD')}`),
-  ).toBeTruthy();
+    screen.queryByLabelText(`${tr('documents.upload')} — ${tr('documents.SAFETY_CARD')}`),
+  ).toBeNull();
+  expect(screen.queryByRole('button', { name: tr('documents.sendBundle') })).toBeNull();
+  expect(screen.getByText(tr('documents.readOnly'))).toBeTruthy();
   expect(screen.queryByRole('button', { name: tr('documents.approve') })).toBeNull();
 });

@@ -392,7 +392,7 @@ export function ProfileScreen({
     return (
       <SafeAreaView edges={['top']} style={{ flex: 1 }}>
         <Page title={t('documents.title')} onBack={() => setDocuments(false)}>
-          <WorkerDocuments workerId={worker.data.id} canSubmitDocuments />
+          <WorkerDocuments workerId={worker.data.id} />
         </Page>
       </SafeAreaView>
     );

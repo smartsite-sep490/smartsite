@@ -1,3 +1,4 @@
+import { WorkerComplianceProfileEntity } from '../../../database/entities/worker-document.entity.js';
 import { randomUUID } from 'node:crypto';
 import { Injectable, Logger, type OnModuleInit, type OnModuleDestroy } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
@@ -13,7 +14,7 @@ import { complianceDate } from './worker-compliance.js';
 const labels = {
   SAFETY_CARD: 'Thẻ an toàn lao động nhóm 3',
   HEALTH_CERTIFICATE: 'Giấy khám sức khỏe',
-  PERSONAL_INSURANCE: 'Bảo hiểm cá nhân',
+  PERSONAL_INSURANCE: 'Bảo hiểm lao động',
 } as const;
 @Injectable()
 export class DocumentNotificationsService implements OnModuleInit, OnModuleDestroy {
@@ -52,6 +53,15 @@ export class DocumentNotificationsService implements OnModuleInit, OnModuleDestr
     event: WorkerDocumentNotificationEvent,
   ) {
     if (!worker.contractorId) return;
+    if (
+      doc.kind === 'SAFETY_CARD' &&
+      (event === 'DOCUMENT_EXPIRING' || event === 'DOCUMENT_EXPIRED')
+    ) {
+      const profile = await manager
+        .getRepository(WorkerComplianceProfileEntity)
+        .findOneBy({ workerId: worker.id });
+      if (profile?.safetyCardRequired === false) return;
+    }
     const site = await manager.getRepository(SiteEntity).findOneByOrFail({ id: worker.siteId });
     const recipients = await manager.query<
       { id: string; role: 'WORKER' | 'CONTRACTOR_REPRESENTATIVE' | 'SAFETY_OFFICER' }[]
@@ -76,7 +86,7 @@ export class DocumentNotificationsService implements OnModuleInit, OnModuleDestr
       event === 'DOCUMENT_SUBMITTED'
         ? 'Cần Cán bộ an toàn xem bản gốc và duyệt.'
         : event === 'DOCUMENT_APPROVED'
-          ? 'Hạn mới chỉ được áp dụng sau lần duyệt này; công nhân cần đủ cả ba giấy tờ hợp lệ.'
+          ? 'Hạn mới chỉ được áp dụng sau lần duyệt này; công nhân cần đủ các giấy tờ bắt buộc hợp lệ.'
           : event === 'DOCUMENT_REJECTED'
             ? `Cần nộp lại: ${doc.reviewNote ?? ''}`
             : `${event === 'DOCUMENT_EXPIRING' ? 'Sắp hết hạn' : 'Đã hết hạn'} ngày ${doc.expiresOn}. Cần nộp bản mới và được duyệt lại để gia hạn.`;

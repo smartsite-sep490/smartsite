@@ -5,7 +5,9 @@ import { SmartSiteManagementClient, type WorkerComplianceResponse } from '@smart
 import type { useWorkspace } from '../workspace/workspace-context';
 import { WorkerDocuments } from './worker-documents';
 import { translate as t, setLanguage } from '../../i18n';
-import { Button } from '../shared/ui';
+import { Pressable } from 'react-native';
+import { Button, Choice, Disclosure } from '../shared/ui';
+import { WorkerDocumentBundleForm } from './worker-document-bundle-form';
 import { CalendarDateField } from '../shared/calendar-date-field';
 import { Attachments } from '../shared/uploads';
 
@@ -21,7 +23,7 @@ afterEach(async () => {
   await setLanguage('vi');
 });
 
-it('keeps Worker originals read-only and allows Representative expiry suggestions on pending documents', async () => {
+it('keeps Worker documents read-only and exposes a single bundle form to Representatives', async () => {
   const check = { status: 'MISMATCH' as const, detectedNationalIds: ['000000000099'] };
   const profile: WorkerComplianceResponse = {
     workerId: 'worker',
@@ -30,7 +32,7 @@ it('keeps Worker originals read-only and allows Representative expiry suggestion
     externalId: 'W001',
     nationalId: '000000000001',
     phoneNumber: '0900000001',
-    gender: 'MALE',
+    gender: null,
     address: 'Synthetic address',
     status: 'PENDING',
     submissionStatus: 'PENDING_REVIEW',
@@ -75,7 +77,7 @@ it('keeps Worker originals read-only and allows Representative expiry suggestion
   };
   const client = new SmartSiteManagementClient('https://api.example.test');
   vi.spyOn(client, 'workerCompliance').mockResolvedValue(profile);
-  const upload = vi.spyOn(client, 'uploadWorkerDocument');
+  const submit = vi.spyOn(client, 'submitWorkerDocuments');
   workspace = {
     client,
     token: 'synthetic-token',
@@ -114,120 +116,68 @@ it('keeps Worker originals read-only and allows Representative expiry suggestion
       await new Promise((r) => setTimeout(r, 10));
     });
   expect(root.root.findAllByType(Attachments)).toHaveLength(0);
-  const click = async (label: string) =>
-    act(async () => {
-      root.root
-        .findAll((n) => String(n.type) === 'Pressable' && n.props.accessibilityLabel === label)[0]!
-        .props.onPress();
-    });
-  await click(t('documents.SAFETY_CARD'));
-  expect(JSON.stringify(root.toJSON())).toContain(t('documents.identityMismatch'));
-  expect(root.root.findAllByType(Attachments)).toHaveLength(0);
-  expect(upload).not.toHaveBeenCalled();
-  const quality = vi.spyOn(client, 'checkWorkerDocumentDates').mockResolvedValue({
-    quality: { status: 'ACCEPTED', reason: 'IMAGE_ACCEPTED' },
-    ocr: profile.documents[0]!.ocr,
-    dateCheck: {
-      status: 'NO_REFERENCE',
-      field: 'EXPIRES_ON',
-      submittedDate: null,
-      detectedDate: '2030-10-27',
-    },
-  });
-  upload.mockResolvedValue({ ...profile.documents[0]!, id: 'pending-renewal' });
-  const identity = vi.spyOn(client, 'uploadWorkerIdentityImage');
-  await act(async () =>
-    root.update(
-      <QueryClientProvider client={cache}>
-        <WorkerDocuments workerId="worker" canSubmitDocuments />
-      </QueryClientProvider>,
-    ),
-  );
-  await click(t('documentUi.submitNew'));
-  const pickers = root.root.findAllByType(Attachments);
-  expect(pickers).toHaveLength(1);
-  expect(pickers[0]!.props.disabled).toBe(false);
-  const declaredDate = root.root
-    .findAllByType(CalendarDateField)
-    .find((node) => node.props.label === t('documents.declaredExpiresOn'))!;
-  const file = { uri: 'file:///synthetic-renewal.jpg', name: 'renewal.jpg', type: 'image/jpeg' };
+  expect(
+    root.root.findAllByType(Button).some((node) => node.props.label === t('documents.bundleTitle')),
+  ).toBe(false);
   await act(async () => {
-    await pickers[0]!.props.validateFile(file);
-  });
-  await act(async () => pickers[0]!.props.onChange([file]));
-  expect(declaredDate.props.value).toBe('2030-10-27');
-  expect(quality).toHaveBeenCalledWith(
-    'synthetic-token',
-    'site',
-    'worker',
-    'SAFETY_CARD',
-    file,
-    {},
-  );
-  const submit = root.root
-    .findAllByType(Button)
-    .find((node) => node.props.label === t('documents.submitForReview') && !node.props.disabled)!;
-  expect(JSON.stringify(root.toJSON())).toContain(t('documents.dateMatch'));
-  expect(upload).not.toHaveBeenCalled();
-  await act(async () => declaredDate.props.onChange('2031-10-27'));
-  expect(submit.props.disabled).toBe(true);
-  quality.mockResolvedValue({
-    quality: { status: 'ACCEPTED', reason: 'IMAGE_ACCEPTED' },
-    ocr: { status: 'UNREADABLE', issuedOn: null, expiresOn: null, warnings: [] },
-    dateCheck: {
-      status: 'UNAVAILABLE',
-      field: 'EXPIRES_ON',
-      submittedDate: '2031-10-27',
-      detectedDate: null,
-    },
-  });
-  const recheck = root.root
-    .findAllByType(Button)
-    .find((node) => node.props.label === t('documents.dateRecheck'))!;
-  await act(async () => {
-    await recheck.props.onPress();
-    await new Promise((r) => setTimeout(r, 20));
-  });
-  expect(submit.props.disabled).toBe(false);
-  expect(JSON.stringify(root.toJSON())).toContain(t('documents.dateUnavailable'));
-  await act(async () => submit.props.onPress());
-  expect(quality).toHaveBeenCalledWith('synthetic-token', 'site', 'worker', 'SAFETY_CARD', file, {
-    submittedExpiresOn: '2031-10-27',
-  });
-  expect(upload).toHaveBeenCalledWith('synthetic-token', 'site', 'worker', 'SAFETY_CARD', file, {
-    submittedExpiresOn: '2031-10-27',
-  });
-  expect(identity).not.toHaveBeenCalled();
-  workspace = { ...workspace, scope: { ...workspace.scope, role: 'contractor' } };
-  const save = vi
-    .spyOn(client, 'updateWorkerDocumentExpiry')
-    .mockResolvedValue({ ...profile.documents[0]!, submittedExpiresOn: '2027-10-18', version: 2 });
-  await act(async () =>
     root.update(
       <QueryClientProvider client={cache}>
         <WorkerDocuments workerId="worker" canUpload />
       </QueryClientProvider>,
-    ),
-  );
-  await click(t('documentUi.editDeclaredDate'));
-  const field = root.root
-    .findAllByType(CalendarDateField)
-    .find((node) => node.props.label === t('documents.submittedExpiresOn'))!;
-  await act(async () => field.props.onChange('2027-10-18'));
-  await act(async () => {
-    await setLanguage('en');
+    );
   });
-  const translatedField = root.root
-    .findAllByType(CalendarDateField)
-    .find((node) => node.props.label === t('documents.submittedExpiresOn'))!;
-  expect(translatedField.props.value).toBe('2027-10-18');
-  expect(JSON.stringify(root.toJSON())).toContain('Synthetic Worker');
-  const button = root.root
+  const open = root.root
     .findAllByType(Button)
-    .find((node) => node.props.label === t('documents.saveSubmittedExpiry'))!;
-  await act(async () => button.props.onPress());
-  expect(save).toHaveBeenCalledWith('synthetic-token', 'site', 'worker', 'document', {
-    expectedVersion: 1,
-    submittedExpiresOn: '2027-10-18',
+    .find((node) => node.props.label === t('documents.bundleTitle'))!;
+  await act(async () => open.props.onPress());
+  expect(root.root.findByType(WorkerDocumentBundleForm).props.profile.workerId).toBe('worker');
+  expect(submit).not.toHaveBeenCalled();
+
+  const identitySection = root.root
+    .findAllByType(Disclosure)
+    .find((node) => node.props.title === t('documents.identityHeading'))!;
+  await act(async () => identitySection.findByType(Pressable).props.onPress());
+  expect(
+    identitySection
+      .findAllByType(Choice)
+      .find((node) => node.props.label === t('documents.gender'))!.props.value,
+  ).toBe('');
+  const checkDates = vi.spyOn(client, 'checkWorkerDocumentDates').mockResolvedValue({
+    quality: { status: 'RETAKE', reason: 'IMAGE_BLURRY' },
+    ocr: { status: 'READ', issuedOn: null, expiresOn: '2099-01-01', warnings: [], nationalIds: [] },
+    dateCheck: {
+      status: 'NO_REFERENCE',
+      field: 'EXPIRES_ON',
+      submittedDate: null,
+      detectedDate: '2099-01-01',
+    },
   });
+  submit.mockResolvedValue({ requestId: 'synthetic', version: 2, documentIds: ['new-card'] });
+  const analyze = vi.spyOn(client, 'analyzeWorkerDocument');
+  const cardSection = root.root
+    .findAllByType(Disclosure)
+    .find((node) => node.props.title === t('documents.SAFETY_CARD'))!;
+  await act(async () => cardSection.findByType(Pressable).props.onPress());
+  const picker = cardSection.findByType(Attachments);
+  const file = { uri: 'file:///synthetic.png', name: 'synthetic.png', type: 'image/png' };
+  await act(async () => {
+    await picker.props.validateFile(file);
+    picker.props.onChange([file]);
+  });
+  const dates = root.root.findAllByType(CalendarDateField);
+  await act(async () => dates[0]!.props.onChange('2099-01-02'));
+  expect(checkDates).toHaveBeenCalledTimes(1);
+  const send = root.root
+    .findAllByType(Button)
+    .find((node) => node.props.label === t('documents.sendBundle'))!;
+  await act(async () => send.props.onPress());
+  for (let attempt = 0; attempt < 20 && !submit.mock.calls.length; attempt++)
+    await act(async () => {
+      await new Promise((resolve) => setTimeout(resolve, 10));
+    });
+  expect(submit).toHaveBeenCalledTimes(1);
+  expect(submit.mock.calls[0]?.[3].documents).toEqual({
+    SAFETY_CARD: { submittedExpiresOn: '2099-01-02' },
+  });
+  expect(analyze).not.toHaveBeenCalled();
 });

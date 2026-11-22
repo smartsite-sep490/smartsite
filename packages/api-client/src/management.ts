@@ -2808,23 +2808,6 @@ export class SmartSiteManagementClient {
       { timeoutMs: 60_000 },
     );
   }
-  uploadWorkerIdentityImage(
-    token: string,
-    siteId: string,
-    workerId: string,
-    side: 'FRONT' | 'BACK',
-    file: UploadFile,
-  ) {
-    const form = new FormData();
-    appendFile(form, 'file', file);
-    return this.requestFormData<{ id: string }>(
-      'POST',
-      `/sites/${pathId(siteId)}/workers/${pathId(workerId)}/identity-images/${side}`,
-      token,
-      form,
-      { timeoutMs: 60_000 },
-    );
-  }
   workerIdentityImageFile(token: string, siteId: string, workerId: string, id: string) {
     return this.requestBlob(
       `/sites/${pathId(siteId)}/workers/${pathId(workerId)}/identity-images/${pathId(id)}/file`,
@@ -2881,43 +2864,6 @@ export class SmartSiteManagementClient {
       { timeoutMs: 60_000 },
     );
   }
-  uploadWorkerDocument(
-    token: string,
-    siteId: string,
-    workerId: string,
-    kind: WorkerDocumentKind,
-    file: UploadFile,
-    input: import('@smartsite/contracts').UploadWorkerDocumentCommand = {},
-  ) {
-    const form = new FormData();
-    appendFile(form, 'file', file);
-    if (input.submittedExpiresOn !== undefined)
-      form.append('submittedExpiresOn', input.submittedExpiresOn);
-    if (input.submittedIssuedOn !== undefined)
-      form.append('submittedIssuedOn', input.submittedIssuedOn);
-    return this.requestFormData<WorkerDocumentResponse>(
-      'POST',
-      `/sites/${pathId(siteId)}/workers/${pathId(workerId)}/documents/${pathId(kind)}`,
-      token,
-      form,
-      // Allow time for PDF quality checks, storage, and OCR.
-      { timeoutMs: 80_000 },
-    );
-  }
-  updateWorkerDocumentExpiry(
-    token: string,
-    siteId: string,
-    workerId: string,
-    id: string,
-    input: import('@smartsite/contracts').UpdateWorkerDocumentExpiryCommand,
-  ) {
-    return this.request<WorkerDocumentResponse>(
-      'PATCH',
-      `/sites/${pathId(siteId)}/workers/${pathId(workerId)}/documents/${pathId(id)}/submitted-expiry`,
-      token,
-      input,
-    );
-  }
   workerDocumentFile(token: string, siteId: string, workerId: string, id: string) {
     return this.requestBlob(
       `/sites/${pathId(siteId)}/workers/${pathId(workerId)}/documents/${pathId(id)}/file`,
@@ -2936,6 +2882,26 @@ export class SmartSiteManagementClient {
       { timeoutMs: 60_000 },
     );
   }
+  submitWorkerDocuments(
+    token: string,
+    siteId: string,
+    workerId: string,
+    input: import('@smartsite/contracts').SubmitWorkerDocumentsCommand,
+    files: Partial<
+      Record<import('@smartsite/contracts').WorkerDocumentKind | 'FRONT' | 'BACK', UploadFile>
+    >,
+  ) {
+    const form = new FormData();
+    form.append('metadata', JSON.stringify(input));
+    for (const [field, file] of Object.entries(files)) if (file) appendFile(form, field, file);
+    return this.requestFormData<import('@smartsite/contracts').WorkerDocumentSubmissionResponse>(
+      'POST',
+      '/sites/' + pathId(siteId) + '/workers/' + pathId(workerId) + '/document-submissions',
+      token,
+      form,
+      { timeoutMs: 120000 },
+    );
+  }
   analyzeWorkerDocument(token: string, siteId: string, workerId: string, id: string) {
     return this.request<void>(
       'POST',
@@ -2943,7 +2909,7 @@ export class SmartSiteManagementClient {
       token,
       undefined,
       undefined,
-      { timeoutMs: 50_000 },
+      { timeoutMs: 40_000 },
     );
   }
   reviewWorkerDocument(
