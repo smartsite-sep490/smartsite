@@ -9,7 +9,7 @@ import { expireTrackedPending } from './tracked-pending-expiry.js';
 
 interface SourceGapOptions {
   minPersistentMs: number;
-  onGap(signal: Readonly<TrackedFrameKey>): void;
+  onGap(signal: Readonly<TrackedFrameKey>): void | boolean;
 }
 
 interface SourceGapState {
@@ -174,7 +174,6 @@ export class TrackedFrameRecovery implements OnApplicationBootstrap, OnModuleDes
       return;
     }
     if (this.shutdown.signal.aborted) return;
-    previous.notified = true;
-    policy.onGap(signal);
+    previous.notified = policy.onGap(signal) !== false;
   }
 }

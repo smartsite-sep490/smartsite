@@ -44,6 +44,6 @@ import { CameraApplicationStatusService } from './camera-application-status.serv
     CameraConfigurationImageService,
     CameraConfigurationReferenceService,
   ],
-  exports: [CameraConfigurationService],
+  exports: [CameraConfigurationService, CameraSourceService],
 })
 export class CamerasModule {}
