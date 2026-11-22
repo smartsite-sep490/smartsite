@@ -1,3 +1,4 @@
+import { SmartNativeSelect } from '../ui/SmartNativeSelect';
 import type { ReactNode } from 'react';
 import { Link } from 'react-router-dom';
 import type { SafetyEpisode, SafetyEpisodeInboxPage } from '@smartsite/api-client';
@@ -97,7 +98,7 @@ export function EpisodeInboxFilters({
       <div className="grid gap-3 border-t border-slate-100 pt-3 sm:grid-cols-2 lg:max-w-3xl">
         <label className="flex min-w-0 flex-col gap-1 sm:flex-row sm:items-center sm:gap-2 text-sm font-medium text-slate-700">
           <span className="shrink-0 text-slate-600">{t('episodes.site')}</span>
-          <select
+          <SmartNativeSelect
             className="block h-9 w-full min-w-0 truncate rounded-lg border border-slate-200 bg-white px-2.5 text-sm font-medium text-slate-900 transition-colors hover:border-slate-300 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-teal-800"
             value={siteId}
             onChange={(e) => onFilterChange('siteId', e.target.value)}
@@ -108,18 +109,18 @@ export function EpisodeInboxFilters({
                 {siteNames.get(id.toLowerCase()) ?? t('episodes.siteNamePending')}
               </option>
             ))}
-          </select>
+          </SmartNativeSelect>
         </label>
         <label className="flex min-w-0 flex-col gap-1 sm:flex-row sm:items-center sm:gap-2 text-sm font-medium text-slate-700">
           <span className="shrink-0 text-slate-600">{t('episodes.filter')}</span>
-          <select
+          <SmartNativeSelect
             className="block h-9 w-full min-w-0 truncate rounded-lg border border-slate-200 bg-white px-2.5 text-sm font-medium text-slate-900 transition-colors hover:border-slate-300 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-teal-800"
             value={readStatus}
             onChange={(e) => onFilterChange('readStatus', e.target.value)}
           >
             <option value="ALL">{t('episodes.all')}</option>
             <option value="UNREAD">{t('episodes.unread')}</option>
-          </select>
+          </SmartNativeSelect>
         </label>
       </div>
       {hasMoreSites && (

@@ -1,3 +1,4 @@
+import { SmartNativeSelect } from '../../ui/SmartNativeSelect';
 import { isWorkerDocumentDate } from '@smartsite/api-client';
 import { userErrorMessage } from '../../../i18n/messages';
 import { translate as tr, uiLanguage } from '../../../i18n';
@@ -150,7 +151,7 @@ export function WorkerOnboardingView({ apiUrl }: { apiUrl: string }) {
                 <IconBuilding2 className="w-3.5 h-3.5 text-slate-400" />
                 <span>{tr('common.site_fa7955')}</span>
               </label>
-              <select
+              <SmartNativeSelect
                 id="worker-onboarding-site-select"
                 aria-label={tr('common.site_fa7955')}
                 className="w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs font-bold text-slate-800 shadow-2xs focus:border-[#F66B17] focus:ring-2 focus:ring-[#F66B17]/15 focus:outline-none transition-all cursor-pointer"
@@ -162,7 +163,7 @@ export function WorkerOnboardingView({ apiUrl }: { apiUrl: string }) {
                     {s.name}
                   </option>
                 ))}
-              </select>
+              </SmartNativeSelect>
             </div>
           )}
         </div>
@@ -435,7 +436,7 @@ function WorkerAccountForm({
               <div className="grid gap-4 sm:grid-cols-2">
                 <label className="text-xs font-bold uppercase tracking-wider text-slate-700">
                   {tr('common.contractor')}
-                  <select
+                  <SmartNativeSelect
                     className={field}
                     value={selected}
                     disabled={!!pendingAccount}
@@ -446,7 +447,7 @@ function WorkerAccountForm({
                         {c.name}
                       </option>
                     ))}
-                  </select>
+                  </SmartNativeSelect>
                 </label>
 
                 <label className="text-xs font-bold uppercase tracking-wider text-slate-700">
@@ -566,7 +567,7 @@ function WorkerAccountForm({
 
                 <label className="text-xs font-bold uppercase tracking-wider text-slate-700 sm:col-span-2">
                   {tr('documents.gender')}
-                  <select
+                  <SmartNativeSelect
                     className={field}
                     required
                     disabled={!!pendingAccount}
@@ -579,7 +580,7 @@ function WorkerAccountForm({
                         {tr(`documents.${value}`)}
                       </option>
                     ))}
-                  </select>
+                  </SmartNativeSelect>
                 </label>
 
                 <label className="text-xs font-bold uppercase tracking-wider text-slate-700 sm:col-span-2">
@@ -636,7 +637,7 @@ function WorkerAccountForm({
               <div className="pt-3 border-t border-slate-200/70">
                 <label className="block space-y-2 text-sm font-semibold text-slate-700">
                   <span>{tr('documents.safetyCardRequired')}</span>
-                  <select
+                  <SmartNativeSelect
                     required
                     className={field}
                     value={safetyCardRequired}
@@ -649,7 +650,7 @@ function WorkerAccountForm({
                     <option value="">—</option>
                     <option value="true">{tr('documents.cardRequired')}</option>
                     <option value="false">{tr('documents.cardNotRequired')}</option>
-                  </select>
+                  </SmartNativeSelect>
                 </label>
                 <DocumentFileInputs
                   key={fileVersion}
@@ -1115,14 +1116,14 @@ function WorkerProfileForm({
 
         <label className="text-xs font-bold uppercase tracking-wider text-slate-700">
           {tr('common.worker_status')}
-          <select
+          <SmartNativeSelect
             className={field}
             value={isActive ? 'active' : 'suspended'}
             onChange={(event) => setIsActive(event.target.value === 'active')}
           >
             <option value="active">{tr('common.active')}</option>
             <option value="suspended">{tr('common.suspended')}</option>
-          </select>
+          </SmartNativeSelect>
         </label>
 
         <p className="text-xs text-slate-500 sm:col-span-2 leading-relaxed">

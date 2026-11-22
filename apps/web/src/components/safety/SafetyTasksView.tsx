@@ -1,3 +1,4 @@
+import { SmartNativeSelect } from '../ui/SmartNativeSelect';
 import { translate as tr } from '../../i18n';
 import { useTranslation } from 'react-i18next';
 import {
@@ -172,7 +173,7 @@ export function SafetyTasksView(p: WorkflowProps) {
       >
         <label className="text-sm font-semibold">
           {tr('common.status')}
-          <select
+          <SmartNativeSelect
             className={fieldClass}
             value={status}
             onChange={(e) => {
@@ -186,7 +187,7 @@ export function SafetyTasksView(p: WorkflowProps) {
                 {label(s)}
               </option>
             ))}
-          </select>
+          </SmartNativeSelect>
         </label>
         {manager && (
           <Assignee
@@ -456,7 +457,7 @@ export function SafetyTasksView(p: WorkflowProps) {
               <>
                 <label className="block text-sm font-semibold">
                   {tr('common.task_kind')}
-                  <select name="kind" className={fieldClass}>
+                  <SmartNativeSelect name="kind" className={fieldClass}>
                     {[
                       'ZONE_INSPECTION',
                       'ALERT_VERIFICATION',
@@ -467,7 +468,7 @@ export function SafetyTasksView(p: WorkflowProps) {
                         {label(s)}
                       </option>
                     ))}
-                  </select>
+                  </SmartNativeSelect>
                 </label>
                 <Assignee p={p} role="SAFETY_OFFICER" />
                 <Field
@@ -504,10 +505,10 @@ export function SafetyTasksView(p: WorkflowProps) {
               <>
                 <label className="block text-sm font-semibold">
                   {tr('common.decision')}
-                  <select name="decision" className={fieldClass}>
+                  <SmartNativeSelect name="decision" className={fieldClass}>
                     <option value="verify">{tr('common.verify_eea274')}</option>
                     <option value="return">{tr('common.return_for_correction')}</option>
-                  </select>
+                  </SmartNativeSelect>
                 </label>
                 <Field
                   name="reason"

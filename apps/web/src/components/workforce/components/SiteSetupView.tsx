@@ -680,24 +680,26 @@ export function SiteSetupView({ apiUrl }: SiteSetupViewProps) {
       )}
       {/* 1. Header & Quick Actions */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-4 border-b border-slate-200/80">
-        <div className="flex min-w-0 items-center gap-3">
-          <div className="min-w-0">
-            <div className="flex flex-wrap items-center gap-2">
-              <span className="text-[10px] font-bold uppercase tracking-[0.16em] text-slate-500">
-                {isAdmin ? tr('common.administration') : tr('integrated_ui.site_operations')}
-              </span>
-              <span className="text-slate-300">•</span>
-              <span className="text-[10px] font-bold uppercase tracking-[0.16em] text-slate-500">
-                {isAdmin ? tr('common.workspace_setup') : tr('siteOps.titleManage')}
-              </span>
+        {isAdmin && (
+          <div className="flex min-w-0 items-center gap-3">
+            <div className="min-w-0">
+              <div className="flex flex-wrap items-center gap-2">
+                <span className="text-[10px] font-bold uppercase tracking-[0.16em] text-slate-500">
+                  {tr('common.administration')}
+                </span>
+                <span className="text-slate-300">•</span>
+                <span className="text-[10px] font-bold uppercase tracking-[0.16em] text-slate-500">
+                  {tr('common.workspace_setup')}
+                </span>
+              </div>
+              <h1 className="text-xl font-bold tracking-tight text-[#041D2E]">
+                {tr('common.site_setup')}
+              </h1>
             </div>
-            <h1 className="text-xl font-bold tracking-tight text-[#041D2E]">
-              {isAdmin ? tr('common.site_setup') : tr('site_setup_view.contractor_zone_setup')}
-            </h1>
           </div>
-        </div>
+        )}
 
-        <div className="flex items-center gap-2.5">
+        <div className="ml-auto flex items-center gap-2.5">
           <Button
             variant="outline"
             isLoading={

@@ -1,3 +1,4 @@
+import { SmartNativeSelect } from '../ui/SmartNativeSelect';
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { Link, useLocation } from 'react-router-dom';
 import { ApiError } from '@smartsite/api-client';
@@ -193,7 +194,7 @@ function MonitorScope({
   const siteSelector = (
     <label className="flex w-full sm:w-auto sm:flex-[1_1_12.5rem] lg:max-w-[16rem] flex-wrap sm:flex-nowrap items-center gap-2 min-w-0 text-sm font-semibold text-slate-700">
       <span className="shrink-0">{t('monitor.site')}</span>
-      <select
+      <SmartNativeSelect
         name="monitorSite"
         data-tour-anchor="monitor-site-scope"
         className="block h-10 flex-1 min-w-0 max-w-full truncate rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-sm font-normal text-slate-900 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-slate-900 disabled:bg-slate-50 disabled:text-slate-500"
@@ -207,7 +208,7 @@ function MonitorScope({
             {row.code ? `${row.code} · ${row.name}` : row.name}
           </option>
         ))}
-      </select>
+      </SmartNativeSelect>
     </label>
   );
 
@@ -589,7 +590,7 @@ function CameraScope({
         {siteSelector}
         <label className="flex w-full sm:w-auto sm:flex-[1_1_13rem] lg:max-w-[17rem] flex-wrap sm:flex-nowrap items-center gap-2 min-w-0 text-sm font-semibold text-slate-700">
           <span className="shrink-0">{t('monitor.camera')}</span>
-          <select
+          <SmartNativeSelect
             name="monitorCamera"
             data-tour-anchor="monitor-camera-select"
             className="block h-10 flex-1 min-w-0 max-w-full truncate rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-sm font-normal text-slate-900 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-slate-900 disabled:bg-slate-50 disabled:text-slate-500"
@@ -603,7 +604,7 @@ function CameraScope({
                 {row.code ? `${row.code} · ${row.name}` : row.name}
               </option>
             ))}
-          </select>
+          </SmartNativeSelect>
         </label>
         {selected && (
           <div className="flex min-w-0 max-w-full flex-wrap items-center gap-2">

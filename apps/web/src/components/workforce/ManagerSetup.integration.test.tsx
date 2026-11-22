@@ -161,7 +161,7 @@ async function setupManager(linkRepresentative = false) {
     </QueryClientProvider>,
   );
   await screen.findByRole('button', { name: 'New Zone' });
-  expect(screen.queryByRole('heading', { name: 'Contractor & Zone Setup' })).not.toBeNull();
+  expect(screen.queryByRole('heading', { name: 'Contractor & Zone Setup' })).toBeNull();
   expect(screen.queryByRole('heading', { name: 'Site Operations Configuration' })).toBeNull();
   expect(screen.queryByText('Site b')).toBeNull();
   expect(screen.queryByRole('button', { name: 'New Site' })).toBeNull();
@@ -221,10 +221,10 @@ it('manager creates contractors and configures scoped Zones', async () => {
   expect(screen.queryByText('Site assignments')).toBeNull();
   await user.click(screen.getByLabelText('Contractor'));
   await user.click(
-    within(screen.getByRole('dialog')).getByRole('button', { name: 'Contractor A' }),
+    within(screen.getByRole('dialog')).getByRole('option', { name: 'Contractor A' }),
   );
   await user.click(screen.getByLabelText('Zone'));
-  await user.click(within(screen.getByRole('dialog')).getByRole('button', { name: 'Zone A' }));
+  await user.click(within(screen.getByRole('dialog')).getByRole('option', { name: 'Zone A' }));
   await user.click(screen.getByRole('button', { name: 'Assign Contractor Zone' }));
   await waitFor(() =>
     expect(grantZone).toHaveBeenCalledWith(

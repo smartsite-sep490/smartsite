@@ -3090,10 +3090,10 @@ export class SmartSiteManagementClient {
     gateId: string,
     frame: Blob,
     direction: 'IN' | 'OUT',
-    sourceCameraId: string,
+    sourceCameraId?: string,
   ) {
     const form = new FormData();
-    form.append('sourceCameraId', sourceCameraId);
+    if (sourceCameraId !== undefined) form.append('sourceCameraId', sourceCameraId);
     form.append('frame', frame, 'scan-frame.jpg');
     form.append('direction', direction);
     return this.requestFormData<FaceGateVerificationResponse>(
@@ -3116,11 +3116,11 @@ export class SmartSiteManagementClient {
     gateId: string,
     sessionId: string,
     frame: Blob,
-    sourceCameraId: string,
+    sourceCameraId?: string,
   ) {
     const form = new FormData();
     form.append('frame', frame, 'presence.jpg');
-    form.append('sourceCameraId', sourceCameraId);
+    if (sourceCameraId !== undefined) form.append('sourceCameraId', sourceCameraId);
     form.append('sessionId', sessionId);
     return this.requestFormData<GateFacePresenceResponse>(
       'POST',

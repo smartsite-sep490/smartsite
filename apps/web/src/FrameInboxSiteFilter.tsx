@@ -1,3 +1,4 @@
+import { SmartNativeSelect } from './components/ui/SmartNativeSelect';
 import { useId, useState } from 'react';
 import { useInfiniteQuery, useQuery } from '@tanstack/react-query';
 import { useSearchParams } from 'react-router-dom';
@@ -226,7 +227,7 @@ export function FrameInboxSiteFilter({
         >
           <label className="flex min-w-0 flex-col gap-1 sm:flex-row sm:items-center sm:gap-2.5 text-sm font-medium text-slate-700">
             <span className="shrink-0 text-slate-600">{t('episodes.site')}</span>
-            <select
+            <SmartNativeSelect
               value={siteId ?? ''}
               disabled={revoked}
               title={activeSiteName ?? t('episodes.allSites')}
@@ -243,11 +244,11 @@ export function FrameInboxSiteFilter({
                   {names.get(id) ?? t('episodes.siteNamePending')}
                 </option>
               ))}
-            </select>
+            </SmartNativeSelect>
           </label>
           <label className="flex min-w-0 flex-col gap-1 sm:flex-row sm:items-center sm:gap-2.5 text-sm font-medium text-slate-700">
             <span className="shrink-0 text-slate-600">{t('episodes.camera')}</span>
-            <select
+            <SmartNativeSelect
               value={cameraId ?? ''}
               disabled={revoked || (cameraOptions.length === 0 && !cameraId)}
               title={activeCameraName ?? t('frameInbox.allCameras')}
@@ -264,7 +265,7 @@ export function FrameInboxSiteFilter({
                   {name}
                 </option>
               ))}
-            </select>
+            </SmartNativeSelect>
           </label>
         </div>
       </div>

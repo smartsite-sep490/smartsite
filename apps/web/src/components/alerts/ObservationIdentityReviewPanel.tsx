@@ -1,3 +1,4 @@
+import { SmartNativeSelect } from '../ui/SmartNativeSelect';
 import { localizedError } from '../../i18n/messages';
 import { localizeMessage } from '../../i18n/messages';
 import { localizedLabel } from '../../i18n/labels';
@@ -1134,7 +1135,7 @@ function ObservationIdentitySubjectForm({
               </div>
             )}
 
-            <select
+            <SmartNativeSelect
               id={workerSelectId}
               value={selectedWorkerId}
               onChange={(e) => handleWorkerChange(e.target.value)}
@@ -1168,7 +1169,7 @@ function ObservationIdentitySubjectForm({
                   ))}
                 </>
               )}
-            </select>
+            </SmartNativeSelect>
             <div className="mt-0.5 text-[10px] text-[#787774]">
               {tr(
                 'observation_identity_review_panel.nha_thau_khong_kha_dung_thong_tin_thuoc_danh_ba_hien_hanh',

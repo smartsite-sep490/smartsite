@@ -1,3 +1,4 @@
+import { SmartNativeSelect } from '../ui/SmartNativeSelect';
 import { useInfiniteQuery } from '@tanstack/react-query';
 import { ApiError } from '@smartsite/api-client';
 import { useCallback, useEffect, useId, useRef, useState } from 'react';
@@ -316,7 +317,7 @@ export function IdentificationEvidenceApproval({
           <div className="flex flex-wrap items-end gap-2.5">
             <label className="min-w-0 flex-1 sm:max-w-xs space-y-1 text-xs font-semibold text-[#071A2B]">
               <span className="block">{pickCopy('Nguồn ảnh', 'Image source')}</span>
-              <select
+              <SmartNativeSelect
                 className={`${WORKSPACE_SELECT_CLASS} w-full`}
                 value={index}
                 onChange={(event) => {
@@ -335,7 +336,7 @@ export function IdentificationEvidenceApproval({
                     {pickCopy('Ảnh', 'Image')} {i + 1}
                   </option>
                 ))}
-              </select>
+              </SmartNativeSelect>
             </label>
 
             {!hardDenial && sources.hasNextPage && (

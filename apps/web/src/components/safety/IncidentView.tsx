@@ -1,3 +1,4 @@
+import { SmartNativeSelect } from '../ui/SmartNativeSelect';
 import { translate as tr } from '../../i18n';
 import { useTranslation } from 'react-i18next';
 import {
@@ -300,7 +301,7 @@ export function IncidentView(p: IncidentViewProps) {
       >
         <label className="text-sm font-semibold">
           {tr('common.status')}
-          <select
+          <SmartNativeSelect
             className={fieldClass}
             value={status}
             onChange={(e) => {
@@ -314,7 +315,7 @@ export function IncidentView(p: IncidentViewProps) {
                 {label(s)}
               </option>
             ))}
-          </select>
+          </SmartNativeSelect>
         </label>
         {safety && (
           <Assignee
@@ -724,13 +725,13 @@ export function IncidentView(p: IncidentViewProps) {
                 />
                 <label className="block text-sm font-semibold">
                   {tr('common.severity')}
-                  <select className={fieldClass} name="severity">
+                  <SmartNativeSelect className={fieldClass} name="severity">
                     {['LOW', 'MEDIUM', 'HIGH', 'CRITICAL'].map((s) => (
                       <option key={s} value={s}>
                         {label(s)}
                       </option>
                     ))}
-                  </select>
+                  </SmartNativeSelect>
                 </label>
                 <Field
                   name="occurredAt"
@@ -821,10 +822,10 @@ export function IncidentView(p: IncidentViewProps) {
               <>
                 <label className="block text-sm font-semibold">
                   {tr('incident_view.review_decision')}
-                  <select className={fieldClass} name="decision" required>
+                  <SmartNativeSelect className={fieldClass} name="decision" required>
                     <option value="APPROVED">{tr('incident_view.verify_and_close_action')}</option>
                     <option value="REJECTED">{tr('incident_view.return_for_rework')}</option>
-                  </select>
+                  </SmartNativeSelect>
                 </label>
                 <Field
                   name="reason"
@@ -1173,7 +1174,7 @@ function ResponsibilityFields({
     <>
       <label className="block text-sm font-semibold">
         {tr('common.responsible_contractor')}
-        <select
+        <SmartNativeSelect
           className={fieldClass}
           name="contractorId"
           required
@@ -1195,7 +1196,7 @@ function ResponsibilityFields({
               {c.name}
             </option>
           ))}
-        </select>
+        </SmartNativeSelect>
       </label>
       {contractors.isPending && <p>{tr('common.loading_contractors')}</p>}
       <RequestError error={contractors.error} retry={() => void contractors.refetch()} />

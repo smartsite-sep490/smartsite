@@ -1,3 +1,4 @@
+import { SmartNativeSelect } from '../../ui/SmartNativeSelect';
 import { useManagementClient } from '../../../features/auth/auth-session';
 import { userErrorMessage } from '../../../i18n/messages';
 import { translate as tr } from '../../../i18n';
@@ -98,7 +99,7 @@ export function WorkerMobileQrView({
               >
                 {tr('worker_mobile_qr_view.passage_direction')}
               </label>
-              <select
+              <SmartNativeSelect
                 id="worker-qr-direction"
                 value={direction}
                 onChange={(event) => {
@@ -109,7 +110,7 @@ export function WorkerMobileQrView({
               >
                 <option value="IN">{tr('common.entry_in')}</option>
                 <option value="OUT">{tr('common.exit_out')}</option>
-              </select>
+              </SmartNativeSelect>
             </div>
 
             <button

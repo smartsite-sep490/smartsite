@@ -1,3 +1,4 @@
+import { SmartNativeSelect } from '../ui/SmartNativeSelect';
 import { useTranslation } from 'react-i18next';
 import { translate as tr, uiLocale } from '../../i18n';
 import { useState } from 'react';
@@ -261,7 +262,7 @@ export function SafetyOverviewView(
           </button>
           <label className="min-w-0 w-full sm:w-52 text-xs font-medium text-slate-600">
             {tr('common.contractor')}
-            <select
+            <SmartNativeSelect
               className={overviewFieldClass}
               value={contractorId}
               onChange={(e) => {
@@ -276,11 +277,11 @@ export function SafetyOverviewView(
                   {c.name}
                 </option>
               ))}
-            </select>
+            </SmartNativeSelect>
           </label>
           <label className="min-w-0 w-full sm:w-52 text-xs font-medium text-slate-600">
             {tr('labels.TEAM')}
-            <select
+            <SmartNativeSelect
               className={overviewFieldClass}
               value={teamFilter}
               onChange={(e) => {
@@ -294,7 +295,7 @@ export function SafetyOverviewView(
                   {t.name}
                 </option>
               ))}
-            </select>
+            </SmartNativeSelect>
           </label>
         </div>
 

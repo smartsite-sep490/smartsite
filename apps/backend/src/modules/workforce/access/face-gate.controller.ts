@@ -9,7 +9,7 @@ import {
   UseGuards,
   UseInterceptors,
 } from '@nestjs/common';
-import { IsIn, IsUUID } from 'class-validator';
+import { IsIn, IsUUID, ValidateIf } from 'class-validator';
 import { FileInterceptor } from '@nestjs/platform-express';
 import { ApiBearerAuth, ApiConsumes, ApiTags, ApiBody } from '@nestjs/swagger';
 import type { AuthenticatedRequest } from '../../auth/auth.service.js';
@@ -18,12 +18,16 @@ import { FaceGateService } from './face-gate.service.js';
 import type { UploadedFaceSample } from '../identity/face-enrollment.service.js';
 
 class GateVerificationCommand {
-  @IsUUID() sourceCameraId!: string;
+  @ValidateIf((_object, value) => value !== undefined)
+  @IsUUID()
+  sourceCameraId?: string;
   @IsIn(['IN', 'OUT'])
   direction: 'IN' | 'OUT' = 'IN';
 }
 class GatePresenceCommand {
-  @IsUUID() sourceCameraId!: string;
+  @ValidateIf((_object, value) => value !== undefined)
+  @IsUUID()
+  sourceCameraId?: string;
   @IsUUID()
   sessionId!: string;
 }
@@ -37,7 +41,7 @@ export class FaceGateController {
   @ApiBody({
     schema: {
       type: 'object',
-      required: ['frame', 'sessionId', 'sourceCameraId'],
+      required: ['frame', 'sessionId'],
       properties: {
         frame: { type: 'string', format: 'binary' },
         sessionId: { type: 'string', format: 'uuid' },
@@ -77,7 +81,7 @@ export class FaceGateController {
   @ApiBody({
     schema: {
       type: 'object',
-      required: ['frame', 'direction', 'sourceCameraId'],
+      required: ['frame', 'direction'],
       properties: {
         frame: { type: 'string', format: 'binary' },
         direction: { type: 'string', enum: ['IN', 'OUT'] },

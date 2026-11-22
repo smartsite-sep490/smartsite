@@ -7,7 +7,6 @@ import { userErrorMessage } from '../../../i18n/messages';
 import { attendanceHours, attendanceLabel } from './attendance-display';
 import { AttendanceStatusBadge } from './AttendanceStatusBadge';
 import { AttendanceDailyBarChart } from './AttendanceDailyBarChart';
-import { AttendanceDistributionDonut } from './AttendanceDistributionDonut';
 import {
   IconArrowRight,
   IconChevronLeft,
@@ -223,7 +222,7 @@ export function WorkerAttendanceDetailPanel({
 
       {worker && (
         <>
-          {/* Top 3 Metric & Chart Columns (as in screenshot) */}
+          {/* Working hours summary and daily chart */}
           <div className="grid grid-cols-1 lg:grid-cols-12 gap-5">
             {/* Column 1: Working Hours Summary Card */}
             <div className="lg:col-span-3 rounded-2xl border border-slate-200/80 bg-white p-5 shadow-xs flex flex-col justify-between">
@@ -291,16 +290,8 @@ export function WorkerAttendanceDetailPanel({
             </div>
 
             {/* Column 2: Daily Working Hours Stacked Bar Chart */}
-            <div className="lg:col-span-6 rounded-2xl border border-slate-200/80 bg-white p-5 shadow-xs">
+            <div className="lg:col-span-9 rounded-2xl border border-slate-200/80 bg-white p-5 shadow-xs">
               <AttendanceDailyBarChart daily={daily} />
-            </div>
-
-            {/* Column 3: Work Time Distribution Donut */}
-            <div className="lg:col-span-3 rounded-2xl border border-slate-200/80 bg-white p-5 shadow-xs flex flex-col justify-between">
-              <AttendanceDistributionDonut
-                regularMinutes={worker.regularMinutes}
-                overtimeMinutes={worker.overtimeMinutes}
-              />
             </div>
           </div>
 

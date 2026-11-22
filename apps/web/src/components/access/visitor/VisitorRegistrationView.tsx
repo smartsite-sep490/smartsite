@@ -1,3 +1,4 @@
+import { SmartNativeSelect } from '../../ui/SmartNativeSelect';
 import { translate as tr } from '../../../i18n';
 import { useMemo, useRef, useState, type FormEvent } from 'react';
 import { useMutation, useQuery } from '@tanstack/react-query';
@@ -734,7 +735,7 @@ export function VisitorRegistrationView({
               <div className="grid gap-4 sm:grid-cols-2">
                 <label className="block text-xs font-bold text-slate-700">
                   {t('visitor.site')}
-                  <select
+                  <SmartNativeSelect
                     className={field}
                     required
                     value={selectedSiteId}
@@ -746,13 +747,13 @@ export function VisitorRegistrationView({
                         {s.name}
                       </option>
                     ))}
-                  </select>
+                  </SmartNativeSelect>
                 </label>
 
                 <label className="block text-xs font-bold text-slate-700">
                   {t('visitor.gate')}
                   <GateCatalogNotice query={gates} />
-                  <select
+                  <SmartNativeSelect
                     key={selectedSiteId}
                     className={field}
                     name="gateId"
@@ -764,12 +765,12 @@ export function VisitorRegistrationView({
                         {g.name}
                       </option>
                     ))}
-                  </select>
+                  </SmartNativeSelect>
                 </label>
 
                 <label className="block text-xs font-bold text-slate-700">
                   {t('visitor.host')}
-                  <select
+                  <SmartNativeSelect
                     key={selectedSiteId}
                     name="siteManagerId"
                     className={field}
@@ -783,7 +784,7 @@ export function VisitorRegistrationView({
                         {manager.displayName}
                       </option>
                     ))}
-                  </select>
+                  </SmartNativeSelect>
                 </label>
                 {textField('targetArea', 'visitor.area')}
 

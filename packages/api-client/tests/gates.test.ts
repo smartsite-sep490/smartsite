@@ -124,3 +124,17 @@ it('rejects malformed public Gate IDs and drops unrequested response fields', as
     items: [{ id: gate.id, code: gate.code, name: gate.name }],
   });
 });
+
+it('omits registered source for Security browser webcam requests', async () => {
+  const fetch = vi.fn(async () => new Response('{}'));
+  vi.stubGlobal('fetch', fetch);
+  const client = new SmartSiteManagementClient('https://synthetic.test');
+  const frame = new Blob(['synthetic'], { type: 'image/jpeg' });
+  await client.observeGateFace('synthetic-token', siteId, gate.id, 'session-id', frame, undefined);
+  await client.verifyFaceGate('synthetic-token', siteId, gate.id, frame, 'IN', undefined);
+  for (const call of fetch.mock.calls as unknown as Array<[string, RequestInit]>) {
+    const form = call[1].body as FormData;
+    expect(form.has('sourceCameraId')).toBe(false);
+    expect(form.get('frame')).toBeInstanceOf(Blob);
+  }
+});

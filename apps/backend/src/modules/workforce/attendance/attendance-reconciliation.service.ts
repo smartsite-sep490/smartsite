@@ -63,19 +63,25 @@ export class AttendanceReconciliationService implements OnModuleInit, OnModuleDe
               ]);
               await this.refresh(manager, day.id, now);
             });
-          } catch {
+          } catch (error) {
             this.logger.error({
               action: 'attendance.reconcile.day_failed',
               dayId: day.id,
               siteId: day.siteId,
+              error: error instanceof Error ? error.message : String(error),
+              stack: error instanceof Error ? error.stack : undefined,
             });
           }
         }
         cursor = days[days.length - 1]!.id;
         if (days.length < 500) break;
       }
-    } catch {
-      this.logger.error({ action: 'attendance.reconcile.failed' });
+    } catch (error) {
+      this.logger.error({
+        action: 'attendance.reconcile.failed',
+        error: error instanceof Error ? error.message : String(error),
+        stack: error instanceof Error ? error.stack : undefined,
+      });
     } finally {
       this.running = false;
     }
@@ -117,11 +123,13 @@ export class AttendanceReconciliationService implements OnModuleInit, OnModuleDe
               return;
             await this.ensureDay(manager, worker, now, schedule, shift);
           });
-        } catch {
+        } catch (error) {
           this.logger.error({
             action: 'attendance.reconcile.schedule_failed',
             scheduleId: candidate.id,
             siteId: candidate.siteId,
+            error: error instanceof Error ? error.message : String(error),
+            stack: error instanceof Error ? error.stack : undefined,
           });
         }
       }

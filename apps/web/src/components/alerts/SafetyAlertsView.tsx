@@ -1,3 +1,4 @@
+import { SmartNativeSelect } from '../ui/SmartNativeSelect';
 import { loadAllPages } from '../workforce/load-all-pages';
 import { useManagementClient } from '../../features/auth/auth-session';
 import { SafetyOverviewView } from '../safety/SafetyOverviewView';
@@ -670,7 +671,7 @@ export function SafetyAlertsView({
           <div className="flex min-w-0 flex-wrap items-center gap-3">
             <label className="flex min-w-0 w-full sm:w-auto flex-wrap sm:flex-nowrap items-center gap-2.5 text-sm font-semibold text-slate-700">
               <span className="shrink-0">{tr('common.site_fa7955')}</span>
-              <select
+              <SmartNativeSelect
                 value={selectedSiteId}
                 onChange={(event) => {
                   setRelatedAlertFilter(undefined);
@@ -699,7 +700,7 @@ export function SafetyAlertsView({
                     {site.code} · {site.name}
                   </option>
                 ))}
-              </select>
+              </SmartNativeSelect>
             </label>
             {(!externalSession || (!inRouter && Boolean(onSignOut))) && (
               <button
@@ -763,7 +764,7 @@ export function SafetyAlertsView({
           <>
             <label className="min-w-0 text-xs font-bold uppercase tracking-wider text-[#6B6B6B]">
               {tr('common.status')}
-              <select
+              <SmartNativeSelect
                 value={status}
                 onChange={(event) => {
                   setStatus(event.target.value as 'ALL' | SafetyAlertStatus);
@@ -779,11 +780,11 @@ export function SafetyAlertsView({
                     {formatLabel(value)}
                   </option>
                 ))}
-              </select>
+              </SmartNativeSelect>
             </label>
             <label className="min-w-0 text-xs font-bold uppercase tracking-wider text-[#6B6B6B] sm:col-span-2 lg:col-span-1">
               {tr('common.alert_type')}
-              <select
+              <SmartNativeSelect
                 value={type}
                 onChange={(event) => {
                   setType(event.target.value as 'ALL' | SafetyAlertType);
@@ -799,7 +800,7 @@ export function SafetyAlertsView({
                     {formatLabel(value)}
                   </option>
                 ))}
-              </select>
+              </SmartNativeSelect>
             </label>
           </>
         )}

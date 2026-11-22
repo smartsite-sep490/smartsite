@@ -176,6 +176,51 @@ export function AppLayout({ currentTab: propCurrentTab, onSelectTab, children }:
     activeTab === 'workforce' && (workforceTabs.showReview || workforceTabs.showSchedule)
       ? t(workforceTab === 'review' ? 'shell.contractorReview' : 'app_layout.my_schedule_requests')
       : '';
+  const siteOperationsHeader =
+    activeTab === 'site-setup' && roles.includes('SITE_MANAGER') && !roles.includes('ADMIN');
+  const contractorReviewHeader =
+    activeTab === 'workforce' && workforceTabs.showReview && workforceTab === 'review';
+  const attendanceHeader = activeTab === 'access' && attendanceWorkspace;
+  const HeaderTitle =
+    siteOperationsHeader ||
+    contractorReviewHeader ||
+    (activeTab === 'workforce' && workforceTab === 'schedule') ||
+    activeTab === 'schedule-setup' ||
+    activeTab === 'worker-documents' ||
+    attendanceHeader
+      ? 'h1'
+      : 'span';
+  const headerTitle = siteOperationsHeader
+    ? t('siteOps.titleManage')
+    : contractorReviewHeader
+      ? t('common.contractor_review')
+      : activeTab === 'schedule-setup'
+        ? t('common.schedule_setup')
+        : attendanceHeader
+          ? t('access.tabs.attendance.label')
+          : functionLabel || pageLabel;
+  const headerContext = siteOperationsHeader
+    ? t('integrated_ui.site_operations')
+    : activeTab === 'schedule-setup'
+      ? t('common.workforce_management')
+      : attendanceHeader
+        ? t('common.workforce_operations')
+        : !contractorReviewHeader && functionLabel && pageLabel !== functionLabel
+          ? pageLabel
+          : '';
+  const HeaderIcon = siteOperationsHeader
+    ? IconBuilding
+    : contractorReviewHeader
+      ? IconShield
+      : activeTab === 'schedule-setup' ||
+          (activeTab === 'workforce' && workforceTab === 'schedule') ||
+          attendanceHeader
+        ? IconCalendar
+        : currentPath === 'account/password'
+          ? IconKey
+          : activeTab === 'assigned-work'
+            ? IconAlertTriangle
+            : (currentItem?.icon ?? IconDashboard);
 
   return (
     <div className="min-h-screen bg-[var(--surface-canvas)] text-[var(--text-body)] font-sans flex">
@@ -337,58 +382,25 @@ export function AppLayout({ currentTab: propCurrentTab, onSelectTab, children }:
           }
         >
           {/* Left: Brand/Context info */}
-          {activeTab === 'schedule-setup' ||
-          (activeTab === 'site-setup' &&
-            roles.includes('SITE_MANAGER') &&
-            !roles.includes('ADMIN')) ||
-          (activeTab === 'workforce' && workforceTabs.showReview && workforceTab === 'review') ||
-          (activeTab === 'access' && attendanceWorkspace) ? (
-            <div className="flex items-center gap-3 min-w-0">
-              <div
-                aria-hidden="true"
-                className="w-10 h-10 rounded-xl bg-[#071A2B] text-white flex items-center justify-center shadow-xs shrink-0"
-              >
-                {activeTab === 'site-setup' ? (
-                  <IconBuilding className="w-5 h-5 text-[#F66B17]" />
-                ) : activeTab === 'workforce' ? (
-                  <IconShield className="w-5 h-5 text-[#F66B17]" />
-                ) : (
-                  <IconCalendar className="w-5 h-5 text-[#F66B17]" />
-                )}
-              </div>
-              <div className="min-w-0">
-                <div className="flex items-center gap-2">
-                  <span className="text-xs font-semibold text-slate-500 truncate">
-                    {activeTab === 'site-setup'
-                      ? t('integrated_ui.site_operations')
-                      : activeTab === 'workforce'
-                        ? `${t('common.workforce_operations')} · ${t('common.shift_approvals')}`
-                        : activeTab === 'schedule-setup'
-                          ? t('common.workforce_management')
-                          : t('common.workforce_operations')}
-                  </span>
-                </div>
-                <h1 className="text-xl font-bold tracking-tight text-[#071A2B] truncate">
-                  {activeTab === 'site-setup'
-                    ? t('siteOps.titleManage')
-                    : activeTab === 'workforce'
-                      ? t('common.contractor_review')
-                      : activeTab === 'schedule-setup'
-                        ? t('common.schedule_setup')
-                        : t('access.tabs.attendance.label')}
-                </h1>
-              </div>
+          <div className="flex items-center gap-3 min-w-0">
+            <div
+              data-testid="workspace-header-icon"
+              aria-hidden="true"
+              className="w-10 h-10 rounded-xl bg-[#071A2B] text-white flex items-center justify-center shadow-xs shrink-0"
+            >
+              <HeaderIcon className="w-5 h-5 text-[#F66B17]" />
             </div>
-          ) : (
-            <div className="min-w-0 flex flex-col gap-0.5">
-              <span className="truncate text-[10px] font-bold uppercase tracking-wider text-[#62748E]">
-                {pageLabel}
-              </span>
-              {functionLabel && (
-                <span className="truncate text-sm font-bold text-[#071A2B]">{functionLabel}</span>
+            <div className="min-w-0">
+              {headerContext && (
+                <span className="block text-xs font-semibold text-slate-500 truncate">
+                  {headerContext}
+                </span>
               )}
+              <HeaderTitle className="block text-xl font-bold tracking-tight text-[#071A2B] truncate">
+                {headerTitle}
+              </HeaderTitle>
             </div>
-          )}
+          </div>
 
           {/* Right: Search, Notification, Profile */}
           <div className="flex items-center gap-1.5 sm:gap-4 shrink-0">

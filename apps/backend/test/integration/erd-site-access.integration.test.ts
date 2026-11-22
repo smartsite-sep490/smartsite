@@ -422,10 +422,10 @@ test('ERD: bounded permissions, gate confirmation, temporary passage and attenda
           workerId,
           direction: 'IN',
           identityConfirmed: true,
-          reviewNote: 'Cannot override expiry',
+          reviewNote: 'Site membership and schedule remain valid',
         })
       ).status,
-      'DENIED',
+      'READY',
     );
     const latestAssignment = await dataSource
       .getRepository(WorkerSiteZoneAssignmentEntity)

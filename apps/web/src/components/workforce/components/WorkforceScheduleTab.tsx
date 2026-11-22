@@ -1,3 +1,4 @@
+import { SmartNativeSelect } from '../../ui/SmartNativeSelect';
 import type { SmartSiteManagementClient } from '@smartsite/api-client';
 import { useManagementClient } from '../../../features/auth/auth-session';
 import { localizedLabel } from '../../../i18n/labels';
@@ -693,12 +694,6 @@ export function WorkforceScheduleTab({
       )}
 
       <div className="flex flex-col xl:flex-row xl:items-start justify-between gap-6 pb-2 border-b border-slate-100/0">
-        <div className="space-y-1 mt-2">
-          <h1 className="text-3xl font-black tracking-tight text-[#071A2B]">
-            {tr('common.my_schedule')}
-          </h1>
-        </div>
-
         <div className="flex flex-wrap items-center gap-3">
           <WorkerAbsenceSummary
             apiUrl={apiUrl}
@@ -1623,7 +1618,7 @@ export function WorkforceScheduleTab({
                   </span>
                   <div className="flex items-center gap-1.5 ml-2 border-l border-slate-200 pl-3">
                     <span className="text-[11px] text-slate-400">{tr('common.per_page')}</span>
-                    <select
+                    <SmartNativeSelect
                       value={requestsPageSize}
                       onChange={(e) => {
                         setRequestsPageSize(Number(e.target.value));
@@ -1635,7 +1630,7 @@ export function WorkforceScheduleTab({
                       <option value={10}>10</option>
                       <option value={20}>20</option>
                       <option value={50}>50</option>
-                    </select>
+                    </SmartNativeSelect>
                   </div>
                 </div>
 

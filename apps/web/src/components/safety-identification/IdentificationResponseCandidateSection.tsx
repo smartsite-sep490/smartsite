@@ -1,3 +1,4 @@
+import { SmartNativeSelect } from '../ui/SmartNativeSelect';
 import type { JSX } from 'react';
 import type { SafetyIdentificationOutcome } from '@smartsite/contracts/safety-identification';
 import type { IdentificationCopy } from './IdentificationCopy';
@@ -108,7 +109,7 @@ export function IdentificationResponseCandidateSection({
             >
               {copy.response.contractorLabel}
             </label>
-            <select
+            <SmartNativeSelect
               id={contractorIdInput}
               value={contractorId}
               disabled={isLocked || candidatesUnavailable}
@@ -134,7 +135,7 @@ export function IdentificationResponseCandidateSection({
                   {contractor.displayName}
                 </option>
               ))}
-            </select>
+            </SmartNativeSelect>
             {contractorError && (
               <p id={contractorErrorId} role="alert" className="text-xs font-medium text-rose-600">
                 {contractorError}
@@ -147,7 +148,7 @@ export function IdentificationResponseCandidateSection({
               <label htmlFor={workerIdInput} className="block text-xs font-semibold text-slate-800">
                 {copy.response.workerLabel}
               </label>
-              <select
+              <SmartNativeSelect
                 id={workerIdInput}
                 value={workerId}
                 disabled={isLocked || candidatesUnavailable}
@@ -173,7 +174,7 @@ export function IdentificationResponseCandidateSection({
                     {worker.displayName}
                   </option>
                 ))}
-              </select>
+              </SmartNativeSelect>
               {workerError && (
                 <p id={workerErrorId} role="alert" className="text-xs font-medium text-rose-600">
                   {workerError}

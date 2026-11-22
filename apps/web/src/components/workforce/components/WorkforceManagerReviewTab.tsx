@@ -1,3 +1,4 @@
+import { SmartNativeSelect } from '../../ui/SmartNativeSelect';
 import { useManagementClient } from '../../../features/auth/auth-session';
 import { localizedLabel } from '../../../i18n/labels';
 import { localizeMessage } from '../../../i18n/messages';
@@ -908,7 +909,7 @@ export function WorkforceManagerReviewTab({
                   </span>
                   <div className="flex items-center gap-1.5 ml-2 border-l border-slate-200 pl-3">
                     <span className="text-[11px] text-slate-400">{tr('common.per_page')}</span>
-                    <select
+                    <SmartNativeSelect
                       value={historyPageSize}
                       onChange={(e) => {
                         setHistoryPageSize(Number(e.target.value));
@@ -920,7 +921,7 @@ export function WorkforceManagerReviewTab({
                       <option value={10}>10</option>
                       <option value={20}>20</option>
                       <option value={50}>50</option>
-                    </select>
+                    </SmartNativeSelect>
                   </div>
                 </div>
 

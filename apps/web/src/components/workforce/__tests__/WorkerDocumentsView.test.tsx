@@ -204,8 +204,9 @@ it('shows submission separately from the supplement tag, including partially sub
 
 it('Safety Officer opens review queue and pre-selects the worker from notification query params', async () => {
   mount('/worker-documents?siteId=site-a&workerId=worker-1&tab=documents');
-  await screen.findByRole('heading', { name: tr('documents.title') });
   await screen.findByRole('heading', { name: tr('documents.reviewQueue') });
+  expect(screen.queryByRole('heading', { name: tr('documents.title') })).toBeNull();
+  expect((screen.getByLabelText(tr('common.site_fa7955')) as HTMLSelectElement).value).toBe('site-a');
   expect(await screen.findByText(/Nguyễn Văn An/)).toBeTruthy();
   expect(await screen.findByText(/card\.jpg/)).toBeTruthy();
   expect(screen.getByRole('button', { name: tr('documents.approve') })).toBeTruthy();
@@ -230,7 +231,9 @@ it('Worker role opens their own read-only document panel directly', async () => 
   });
 
   mount('/worker-documents?siteId=site-a');
-  await screen.findByRole('heading', { name: tr('documents.title') });
+  await screen.findByText(/card\.jpg/);
+  expect(screen.queryByRole('heading', { name: tr('documents.title') })).toBeNull();
+  expect((screen.getByLabelText(tr('common.site_fa7955')) as HTMLSelectElement).value).toBe('site-a');
   expect(screen.queryByRole('heading', { name: tr('documents.reviewQueue') })).toBeNull();
   expect(await screen.findByText(/card\.jpg/)).toBeTruthy();
   expect(

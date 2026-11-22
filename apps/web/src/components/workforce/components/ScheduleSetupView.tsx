@@ -1,3 +1,4 @@
+import { SmartNativeSelect } from '../../ui/SmartNativeSelect';
 import { localizedError, localizeMessage, userErrorMessage } from '../../../i18n/messages';
 import { uiLocale } from '../../../i18n';
 import { translate as tr } from '../../../i18n';
@@ -946,7 +947,7 @@ export function ScheduleSetupView({ apiUrl }: ScheduleSetupViewProps) {
               {!canAssignWorker && isManager && (
                 <label>
                   {tr('common.contractor')}
-                  <select
+                  <SmartNativeSelect
                     aria-label={tr('common.contractor')}
                     value={assignmentScope.contractorId}
                     onChange={(e) =>
@@ -958,7 +959,7 @@ export function ScheduleSetupView({ apiUrl }: ScheduleSetupViewProps) {
                         {o.contractorName}
                       </option>
                     ))}
-                  </select>
+                  </SmartNativeSelect>
                 </label>
               )}
               {canAssignWorker && (

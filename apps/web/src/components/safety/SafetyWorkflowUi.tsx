@@ -1,3 +1,4 @@
+import { SmartNativeSelect } from '../ui/SmartNativeSelect';
 import { userErrorMessage } from '../../i18n/messages';
 import { translate as tr } from '../../i18n';
 import { useTranslation } from 'react-i18next';
@@ -316,7 +317,7 @@ export function Assignee({
     <div>
       <label className="block text-sm font-semibold">
         {onChange ? tr('common.assigned_to') : tr('common.assignee')}
-        <select
+        <SmartNativeSelect
           className={fieldClass}
           name={onChange ? undefined : 'assignedTo'}
           required={!onChange}
@@ -347,7 +348,7 @@ export function Assignee({
               {user.displayName}
             </option>
           ))}
-        </select>
+        </SmartNativeSelect>
       </label>
       {query.isPending && (
         <p className="mt-2 text-xs text-[var(--text-secondary)]">

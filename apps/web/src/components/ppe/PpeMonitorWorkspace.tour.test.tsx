@@ -181,7 +181,7 @@ it('resets and closes an open tour on camera, Site, or credential changes', asyn
   expect(await screen.findByTestId('safety-task-tour')).toBeTruthy();
 
   const cameraSelect = document.querySelector<HTMLSelectElement>(
-    '[data-tour-anchor="monitor-camera-select"]',
+    '[data-tour-anchor="monitor-camera-select"] select',
   )!;
   fireEvent.change(cameraSelect, { target: { value: cameraB.id } });
   expect(screen.queryByTestId('safety-task-tour')).toBeNull();
@@ -190,7 +190,7 @@ it('resets and closes an open tour on camera, Site, or credential changes', asyn
   expect(await screen.findByTestId('safety-task-tour')).toBeTruthy();
 
   const siteSelect = document.querySelector<HTMLSelectElement>(
-    '[data-tour-anchor="monitor-site-scope"]',
+    '[data-tour-anchor="monitor-site-scope"] select',
   )!;
   fireEvent.change(siteSelect, { target: { value: siteB } });
   await waitFor(() => expect(screen.queryByTestId('safety-task-tour')).toBeNull());

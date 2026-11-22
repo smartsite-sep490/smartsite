@@ -1,3 +1,4 @@
+import { SmartNativeSelect } from '../../components/ui/SmartNativeSelect';
 import { translate as tr } from '../../i18n';
 import { useState, type FormEvent } from 'react';
 import { useMutation } from '@tanstack/react-query';
@@ -236,7 +237,7 @@ export function AccountEditor({
                   >
                     <label className="space-y-1 text-xs font-bold text-slate-700">
                       <span>{t('accounts.roleNumber', { number: index + 1 })}</span>
-                      <select
+                      <SmartNativeSelect
                         aria-label={t('accounts.roleNumber', { number: index + 1 })}
                         className={accountControl}
                         value={assignment.role}
@@ -264,11 +265,11 @@ export function AccountEditor({
                             {t(`accounts.role.${role}`)}
                           </option>
                         ))}
-                      </select>
+                      </SmartNativeSelect>
                     </label>
                     <label className="space-y-1 text-xs font-bold text-slate-700">
                       <span>{t('accounts.siteNumber', { number: index + 1 })}</span>
-                      <select
+                      <SmartNativeSelect
                         aria-label={t('accounts.siteNumber', { number: index + 1 })}
                         className={accountControl}
                         disabled={
@@ -302,7 +303,7 @@ export function AccountEditor({
                             {site.name} ({site.code})
                           </option>
                         ))}
-                      </select>
+                      </SmartNativeSelect>
                     </label>
                     <div className="flex flex-wrap gap-2">
                       {(assignment.role === 'SAFETY_OFFICER' ||

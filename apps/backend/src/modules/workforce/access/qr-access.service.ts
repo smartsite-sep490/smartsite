@@ -208,7 +208,7 @@ export class QrAccessService {
     },
   ) {
     await requireActiveGate(manager, input.siteId, input.gateId);
-    if (input.method === 'FACE')
+    if (input.method === 'FACE' && input.sourceCameraId !== undefined)
       await requireFaceSource(manager, input.siteId, input.gateId, input.sourceCameraId!);
     const site = await manager.getRepository(SiteEntity).findOneBy({ id: input.siteId });
     if (!site) missing();
@@ -338,7 +338,7 @@ export class QrAccessService {
         return existing;
       }
       await requireActiveGate(manager, siteId, attempt.gateId);
-      if (attempt.method === 'FACE')
+      if (attempt.method === 'FACE' && attempt.sourceCameraId !== null)
         await requireFaceSource(manager, siteId, attempt.gateId, attempt.sourceCameraId!);
       if (attempt.status === 'DENIED' && attempt.reasonCode === 'NO_SCHEDULE')
         return { deniedNoSchedule: true as const };
@@ -1544,6 +1544,7 @@ export class QrAccessService {
         displayName: worker.displayName,
         contractorName: contractor?.name ?? '',
         assignmentStatus: evaluation.assignment ? 'APPROVED' : 'MISSING',
+        scheduleStatus: evaluation.scheduleStatus,
       };
       const log = await manager.getRepository(GateAccessLogEntity).save({
         id: randomUUID(),

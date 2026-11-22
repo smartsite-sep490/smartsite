@@ -1,3 +1,4 @@
+import { SmartNativeSelect } from '../ui/SmartNativeSelect';
 import type { ReactNode } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Link } from 'react-router-dom';
@@ -324,7 +325,7 @@ export function CameraSetupContextBar({
                 >
                   {t('cameraSetup.chooseCamera')}
                 </label>
-                <select
+                <SmartNativeSelect
                   id="camera-setup-quick-select"
                   data-testid="camera-setup-quick-select"
                   aria-label={t('cameraSetup.chooseCamera')}
@@ -337,7 +338,7 @@ export function CameraSetupContextBar({
                       {row.name} ({row.code})
                     </option>
                   ))}
-                </select>
+                </SmartNativeSelect>
               </div>
             )}
 
@@ -686,7 +687,7 @@ export function CameraSetupContextBar({
                   >
                     {t('cameraSetup.chooseCamera')}
                   </label>
-                  <select
+                  <SmartNativeSelect
                     id="camera-setup-quick-select"
                     data-testid="camera-setup-quick-select"
                     aria-label={t('cameraSetup.chooseCamera')}
@@ -699,7 +700,7 @@ export function CameraSetupContextBar({
                         {row.name} ({row.code})
                       </option>
                     ))}
-                  </select>
+                  </SmartNativeSelect>
                 </div>
               )}
             </div>

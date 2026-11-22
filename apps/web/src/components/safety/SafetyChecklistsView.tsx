@@ -1,3 +1,4 @@
+import { SmartNativeSelect } from '../ui/SmartNativeSelect';
 import { useTranslation } from 'react-i18next';
 import { translate as tr } from '../../i18n';
 import { useState } from 'react';
@@ -240,7 +241,7 @@ export function SafetyChecklistsView(
       >
         <label className="text-sm font-semibold">
           {tr('common.status')}
-          <select
+          <SmartNativeSelect
             className={fieldClass}
             value={status}
             onChange={(e) => {
@@ -255,7 +256,7 @@ export function SafetyChecklistsView(
                 {s === 'ACCEPTED' ? tr('safety_workspace.recorded') : label(s)}
               </option>
             ))}
-          </select>
+          </SmartNativeSelect>
         </label>
         {safety && (
           <Assignee
@@ -849,13 +850,13 @@ function IncidentFindingForm({
       />
       <label className="text-sm font-semibold">
         {tr('common.severity')}
-        <select className={fieldClass} name="severity" defaultValue="MEDIUM">
+        <SmartNativeSelect className={fieldClass} name="severity" defaultValue="MEDIUM">
           {['LOW', 'MEDIUM', 'HIGH', 'CRITICAL'].map((s) => (
             <option key={s} value={s}>
               {label(s)}
             </option>
           ))}
-        </select>
+        </SmartNativeSelect>
       </label>
       <Field
         name="occurredAt"

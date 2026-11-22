@@ -1,4 +1,5 @@
 import 'reflect-metadata';
+import { SecurityBrowserWebcam1795564800000 } from '../../src/database/migrations/1795564800000-SecurityBrowserWebcam.js';
 import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
 import { test } from 'node:test';
@@ -17,6 +18,7 @@ test('Gate upgrade retains unambiguous legacy Zone cameras and refuses unresolve
     await runner.connect();
     await runner.startTransaction();
     try {
+      await new SecurityBrowserWebcam1795564800000().down(runner);
       await migration.down(runner);
       const ids = Array.from({ length: 8 }, () => randomUUID());
       const [siteA, siteB, cameraA, cameraB, zoneA, zoneB, userId] = ids;

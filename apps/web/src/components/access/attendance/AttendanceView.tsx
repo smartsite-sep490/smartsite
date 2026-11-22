@@ -1,3 +1,4 @@
+import { SmartNativeSelect } from '../../ui/SmartNativeSelect';
 import { useManagementClient } from '../../../features/auth/auth-session';
 import { userErrorMessage } from '../../../i18n/messages';
 import { localizedLabel } from '../../../i18n/labels';
@@ -537,7 +538,7 @@ export function AttendanceView({
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               <label className="block text-[10px] font-bold uppercase tracking-[0.18em] text-[#607A96] sm:col-span-2">
                 {tr('common.session')}
-                <select
+                <SmartNativeSelect
                   value={sessionId}
                   onChange={(e) => {
                     setSessionId(e.target.value);
@@ -567,7 +568,7 @@ export function AttendanceView({
                         </option>
                       ),
                   )}
-                </select>
+                </SmartNativeSelect>
               </label>
               <CorrectionTimeField
                 key={`${sessionId}-in`}
@@ -777,20 +778,7 @@ export function AttendanceView({
     if (isWorker) {
       return (
         <div className="space-y-6">
-          <div className="flex flex-wrap items-center justify-between gap-4 pb-2 border-b border-slate-200/60">
-            <div>
-              <h1 className="text-2xl font-black tracking-tight text-[#071A2B]">
-                {activeSubTab === 'requests'
-                  ? tr('attendance_report.requests_title')
-                  : tr('common.my_work_hours')}
-              </h1>
-              <p className="text-xs text-slate-500 font-medium mt-1">
-                {activeSubTab === 'requests'
-                  ? tr('attendance_report.requests_subtitle')
-                  : tr('attendance_report.subtitle')}
-              </p>
-            </div>
-
+          <div className="flex items-center justify-end pb-2 border-b border-slate-200/60">
             {/* Segmented Switcher for Worker */}
             <div className="inline-flex items-center p-1 rounded-2xl bg-slate-100/90 border border-slate-200/80 shadow-2xs gap-1">
               <button
@@ -844,18 +832,13 @@ export function AttendanceView({
       {/* Top Main Heading & Sub-Nav */}
       <div className="flex flex-wrap items-center justify-between gap-4 pb-2 border-b border-slate-200/60">
         <div className="flex items-center gap-4 flex-wrap">
-          <div>
-            <h1 className="text-2xl font-black tracking-tight text-[#071A2B]">
-              {activeSubTab === 'requests'
-                ? tr('attendance_report.requests_title')
-                : tr('attendance_report.title')}
-            </h1>
-            <p className="text-xs text-slate-500 font-medium mt-1">
-              {activeSubTab === 'requests'
-                ? tr('attendance_report.requests_subtitle')
-                : tr('attendance_report.subtitle')}
-            </p>
-          </div>
+          {activeSubTab === 'timesheet' && (
+            <div>
+              <h1 className="text-2xl font-black tracking-tight text-[#071A2B]">
+                {tr('attendance_report.title')}
+              </h1>
+            </div>
+          )}
 
           {/* Attendance sections available to this role */}
           <div className="inline-flex items-center p-1 rounded-2xl bg-slate-100/90 border border-slate-200/80 shadow-2xs gap-1 ml-0 sm:ml-4">
@@ -983,7 +966,7 @@ export function AttendanceView({
               {/* Selectors Group */}
               <div className="flex flex-wrap items-center gap-2.5">
                 {/* Status Select */}
-                <select
+                <SmartNativeSelect
                   value={statusFilter}
                   onChange={(e) => setStatusFilter(e.target.value as AttendanceReportStatus | '')}
                   aria-label={tr('attendance_report.today_status')}
@@ -998,10 +981,10 @@ export function AttendanceView({
                   <option value="OFF">{localizedLabel('OFF')}</option>
                   <option value="APPROVED_LEAVE">{localizedLabel('APPROVED_LEAVE')}</option>
                   <option value="UNAVAILABLE">{localizedLabel('UNAVAILABLE')}</option>
-                </select>
+                </SmartNativeSelect>
 
                 {/* Shifts Select */}
-                <select
+                <SmartNativeSelect
                   value={shiftId ?? ''}
                   onChange={(e) => setShiftId(e.target.value || undefined)}
                   aria-label={tr('attendance_report.all_shifts')}
@@ -1013,7 +996,7 @@ export function AttendanceView({
                       {s.name}
                     </option>
                   ))}
-                </select>
+                </SmartNativeSelect>
 
                 {/* Date Controls */}
                 <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl border border-slate-200 bg-white shadow-2xs">

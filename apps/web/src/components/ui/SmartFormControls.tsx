@@ -170,7 +170,14 @@ export interface SmartSelectProps {
   searchPlaceholder?: string;
   icon?: React.ReactNode;
   align?: 'start' | 'center' | 'end';
+  /** Native form control used by SmartNativeSelect; the menu remains shared. */
+  nativeControl?: React.ReactNode;
+  nativeControlRef?: React.RefObject<HTMLSelectElement | null>;
 }
+
+type NativeSelectAttributes = React.SelectHTMLAttributes<HTMLSelectElement> & {
+  'data-tour-anchor'?: string;
+};
 
 export function SmartSelect({
   label,
@@ -190,6 +197,8 @@ export function SmartSelect({
   searchPlaceholder = tr('common.search'),
   icon,
   align = 'start',
+  nativeControl,
+  nativeControlRef,
 }: SmartSelectProps) {
   useTranslation();
 
@@ -197,8 +206,15 @@ export function SmartSelect({
   const id = propId ?? fallbackId;
   const [open, setOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
+  const menuId = useId();
+  const menuRef = React.useRef<HTMLDivElement>(null);
+  const interactedOutside = React.useRef(false);
 
   const selectedOption = options.find((opt) => opt.value === value);
+  const Container = nativeControl ? 'span' : 'div';
+  const nativeAttributes = React.isValidElement<NativeSelectAttributes>(nativeControl)
+    ? nativeControl.props
+    : undefined;
 
   const filteredOptions = React.useMemo(() => {
     if (!searchQuery.trim()) return options;
@@ -225,7 +241,7 @@ export function SmartSelect({
         } ${className}`;
 
   return (
-    <div className="space-y-1.5">
+    <Container className={nativeControl ? 'contents' : 'space-y-1.5'}>
       {label && (
         <label
           htmlFor={id}
@@ -244,20 +260,74 @@ export function SmartSelect({
           if (!nextOpen) setSearchQuery('');
         }}
       >
-        <Popover.Trigger asChild>
-          <button id={id} type="button" disabled={disabled} className={triggerClasses}>
-            <div className="flex items-center gap-2 truncate pr-1">
-              {icon && <span className="shrink-0 text-slate-500">{icon}</span>}
-              {selectedOption?.icon && <span className="shrink-0">{selectedOption.icon}</span>}
-              <span className="truncate">
-                {selectedOption
-                  ? selectedOption.label
-                  : placeholder || tr('common.select_an_option')}
+        {nativeControl ? (
+          <Popover.Anchor asChild>
+            <span
+              data-select-for={nativeAttributes?.id}
+              data-tour-anchor={nativeAttributes?.['data-tour-anchor']}
+              style={nativeAttributes?.style}
+              className={`${triggerClasses} relative min-w-0 focus-within:border-[#F66B17] focus-within:ring-2 focus-within:ring-[#F66B17]/15 has-[:disabled]:opacity-50 has-[:disabled]:cursor-not-allowed`}
+              onClick={(event) => {
+                if (disabled || nativeControlRef?.current?.matches(':disabled')) return;
+                if (nativeControlRef?.current?.contains(event.target as Node)) return;
+                event.preventDefault();
+                nativeControlRef?.current?.focus();
+                setOpen(!open);
+                setSearchQuery('');
+              }}
+              onKeyDown={(event) => {
+                if (
+                  disabled ||
+                  nativeControlRef?.current?.matches(':disabled') ||
+                  event.defaultPrevented
+                )
+                  return;
+                if (['ArrowDown', 'ArrowUp', 'Enter', ' '].includes(event.key)) {
+                  event.preventDefault();
+                  setOpen(true);
+                }
+              }}
+            >
+              {React.isValidElement<NativeSelectAttributes>(nativeControl)
+                ? React.cloneElement(nativeControl, {
+                    'aria-expanded': open,
+                    'aria-controls': open ? menuId : undefined,
+                    'aria-haspopup': 'listbox',
+                    'aria-hidden': open || undefined,
+                    'data-tour-anchor': undefined,
+                    style: undefined,
+                  })
+                : nativeControl}
+              <span
+                className="flex min-w-0 w-full items-center justify-between gap-2"
+                aria-hidden="true"
+              >
+                {/* Keep the selected display out of an enclosing label's text content. */}
+                <span
+                  className="truncate after:content-[attr(data-value)]"
+                  data-select-value
+                  data-value={selectedOption?.label ?? placeholder ?? tr('common.select_an_option')}
+                />
+                <IconChevDown open={open} />
               </span>
-            </div>
-            <IconChevDown open={open} />
-          </button>
-        </Popover.Trigger>
+            </span>
+          </Popover.Anchor>
+        ) : (
+          <Popover.Trigger asChild>
+            <button id={id} type="button" disabled={disabled} className={triggerClasses}>
+              <div className="flex items-center gap-2 truncate pr-1">
+                {icon && <span className="shrink-0 text-slate-500">{icon}</span>}
+                {selectedOption?.icon && <span className="shrink-0">{selectedOption.icon}</span>}
+                <span className="truncate">
+                  {selectedOption
+                    ? selectedOption.label
+                    : placeholder || tr('common.select_an_option')}
+                </span>
+              </div>
+              <IconChevDown open={open} />
+            </button>
+          </Popover.Trigger>
+        )}
         <Popover.Portal>
           <Popover.Content
             side="bottom"
@@ -266,114 +336,201 @@ export function SmartSelect({
             collisionPadding={12}
             className="z-50 min-w-[var(--radix-popover-trigger-width)] max-w-[calc(100vw-24px)] rounded-xl border border-[#DCE6EF] bg-white shadow-[0_16px_48px_rgba(7,26,43,0.14)] p-1 overflow-hidden"
             style={{ outline: 'none' }}
+            onOpenAutoFocus={(event) => {
+              event.preventDefault();
+              interactedOutside.current = false;
+              const menu = menuRef.current;
+              const search = menu?.querySelector<HTMLInputElement>('input');
+              const selected = menu?.querySelector<HTMLButtonElement>(
+                '[data-smart-option][aria-selected="true"]:not(:disabled)',
+              );
+              (
+                search ??
+                selected ??
+                menu?.querySelector<HTMLButtonElement>('[data-smart-option]:not(:disabled)')
+              )?.focus();
+            }}
+            onCloseAutoFocus={
+              nativeControl
+                ? (event) => {
+                    event.preventDefault();
+                    if (!interactedOutside.current) nativeControlRef?.current?.focus();
+                  }
+                : undefined
+            }
+            onInteractOutside={() => {
+              interactedOutside.current = true;
+            }}
+            onEscapeKeyDown={(event) => {
+              event.preventDefault();
+              event.stopPropagation();
+              setOpen(false);
+              setSearchQuery('');
+            }}
           >
-            {(searchable || options.length > 8) && (
-              <div className="p-1.5 border-b border-slate-100 flex items-center gap-1.5 mb-1 bg-slate-50/80 rounded-lg">
-                <svg
-                  className="w-3.5 h-3.5 text-slate-400 shrink-0"
-                  viewBox="0 0 16 16"
-                  fill="none"
-                  stroke="currentColor"
-                  strokeWidth="1.5"
-                >
-                  <circle cx="7" cy="7" r="5" />
-                  <path d="M11 11l3.5 3.5" strokeLinecap="round" />
-                </svg>
-                <input
-                  type="text"
-                  value={searchQuery}
-                  onChange={(e) => setSearchQuery(e.target.value)}
-                  placeholder={searchPlaceholder}
-                  className="w-full bg-transparent text-xs text-slate-800 outline-none placeholder:text-slate-400 font-medium"
-                />
-                {searchQuery && (
-                  <button
-                    type="button"
-                    onClick={() => setSearchQuery('')}
-                    className="text-slate-400 hover:text-slate-600 p-0.5 rounded cursor-pointer"
+            <div
+              ref={menuRef}
+              onKeyDown={(event) => {
+                if (event.key === 'Tab' && nativeControlRef?.current) {
+                  // Continue the browser's tab order from the original form control.
+                  // Stop Radix FocusScope from looping through the portaled options.
+                  event.stopPropagation();
+                  interactedOutside.current = true;
+                  nativeControlRef.current.focus();
+                  setOpen(false);
+                  setSearchQuery('');
+                  return;
+                }
+                if (!['ArrowDown', 'ArrowUp', 'Home', 'End'].includes(event.key)) return;
+                if (event.target instanceof HTMLInputElement && ['Home', 'End'].includes(event.key))
+                  return;
+                event.preventDefault();
+                const items = Array.from(
+                  event.currentTarget.querySelectorAll<HTMLButtonElement>(
+                    '[data-smart-option]:not(:disabled)',
+                  ),
+                );
+                if (!items.length) return;
+                const index = items.indexOf(document.activeElement as HTMLButtonElement);
+                const next =
+                  event.key === 'Home'
+                    ? 0
+                    : event.key === 'End'
+                      ? items.length - 1
+                      : event.key === 'ArrowDown'
+                        ? (index + 1) % items.length
+                        : (index - 1 + items.length) % items.length;
+                items[next]?.focus();
+              }}
+            >
+              {(searchable || options.length > 8) && (
+                <div className="p-1.5 border-b border-slate-100 flex items-center gap-1.5 mb-1 bg-slate-50/80 rounded-lg">
+                  <svg
+                    className="w-3.5 h-3.5 text-slate-400 shrink-0"
+                    viewBox="0 0 16 16"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth="1.5"
                   >
-                    <svg className="w-3 h-3" viewBox="0 0 12 12" fill="none" stroke="currentColor">
-                      <path d="M2 2l8 8M10 2L2 10" strokeWidth="1.5" strokeLinecap="round" />
-                    </svg>
-                  </button>
-                )}
-              </div>
-            )}
-
-            <div className="max-h-[260px] overflow-y-auto space-y-0.5 custom-scrollbar p-0.5">
-              {filteredOptions.length === 0 ? (
-                <div className="p-3 text-xs text-[#94A3B8] text-center">
-                  {searchQuery
-                    ? tr('common.no_matching_options')
-                    : tr('common.no_options_available')}
-                </div>
-              ) : (
-                filteredOptions.map((opt) => {
-                  const isSelected = value === opt.value;
-                  return (
+                    <circle cx="7" cy="7" r="5" />
+                    <path d="M11 11l3.5 3.5" strokeLinecap="round" />
+                  </svg>
+                  <input
+                    type="text"
+                    aria-label={searchPlaceholder}
+                    value={searchQuery}
+                    onChange={(e) => setSearchQuery(e.target.value)}
+                    placeholder={searchPlaceholder}
+                    className="w-full bg-transparent text-xs text-slate-800 outline-none placeholder:text-slate-400 font-medium"
+                  />
+                  {searchQuery && (
                     <button
-                      key={opt.value}
                       type="button"
-                      disabled={opt.disabled}
-                      onClick={() => {
-                        onChange?.(opt.value);
-                        setOpen(false);
-                      }}
-                      className={`w-full text-left px-3 py-2 text-xs rounded-lg transition-all flex items-center justify-between gap-2 cursor-pointer ${
-                        isSelected
-                          ? 'bg-[#071A2B] text-white font-bold shadow-xs'
-                          : 'text-slate-800 hover:bg-[#F5F8FB] hover:text-[#071A2B] font-medium'
-                      } ${opt.disabled ? 'opacity-40 cursor-not-allowed' : ''}`}
+                      aria-label={tr('common.clear_search')}
+                      onClick={() => setSearchQuery('')}
+                      className="text-slate-400 hover:text-slate-600 p-0.5 rounded cursor-pointer"
                     >
-                      <div className="flex items-center gap-2 truncate">
-                        {opt.icon && <span className="shrink-0">{opt.icon}</span>}
-                        <div className="truncate">
-                          <span className="truncate">{opt.label}</span>
-                          {opt.description && (
+                      <svg
+                        className="w-3 h-3"
+                        viewBox="0 0 12 12"
+                        fill="none"
+                        stroke="currentColor"
+                      >
+                        <path d="M2 2l8 8M10 2L2 10" strokeWidth="1.5" strokeLinecap="round" />
+                      </svg>
+                    </button>
+                  )}
+                </div>
+              )}
+
+              <div
+                id={menuId}
+                role="listbox"
+                aria-label={
+                  label || selectedOption?.label || placeholder || tr('common.select_an_option')
+                }
+                className="max-h-[260px] overflow-y-auto space-y-0.5 custom-scrollbar p-0.5"
+              >
+                {filteredOptions.length === 0 ? (
+                  <div className="p-3 text-xs text-[#94A3B8] text-center">
+                    {searchQuery
+                      ? tr('common.no_matching_options')
+                      : tr('common.no_options_available')}
+                  </div>
+                ) : (
+                  filteredOptions.map((opt) => {
+                    const isSelected = value === opt.value;
+                    return (
+                      <button
+                        key={opt.value}
+                        type="button"
+                        role="option"
+                        aria-selected={isSelected}
+                        data-smart-option
+                        disabled={opt.disabled}
+                        onClick={() => {
+                          onChange?.(opt.value);
+                          setOpen(false);
+                          setSearchQuery('');
+                        }}
+                        className={`w-full text-left px-3 py-2 text-xs rounded-lg transition-all flex items-center justify-between gap-2 cursor-pointer ${
+                          isSelected
+                            ? 'bg-[#071A2B] text-white font-bold shadow-xs'
+                            : 'text-slate-800 hover:bg-[#F5F8FB] hover:text-[#071A2B] font-medium'
+                        } ${opt.disabled ? 'opacity-40 cursor-not-allowed' : ''}`}
+                      >
+                        <div className="flex items-center gap-2 truncate">
+                          {opt.icon && <span className="shrink-0">{opt.icon}</span>}
+                          <div className="truncate">
+                            <span className="truncate">{opt.label}</span>
+                            {opt.description && (
+                              <span
+                                className={`block text-[10px] ${
+                                  isSelected ? 'text-slate-300' : 'text-slate-400'
+                                }`}
+                              >
+                                {opt.description}
+                              </span>
+                            )}
+                          </div>
+                        </div>
+                        <div className="flex items-center gap-1.5 shrink-0">
+                          {opt.badge && (
                             <span
-                              className={`block text-[10px] ${
-                                isSelected ? 'text-slate-300' : 'text-slate-400'
+                              className={`text-[10px] px-1.5 py-0.5 rounded font-mono ${
+                                isSelected
+                                  ? 'bg-white/20 text-white'
+                                  : 'bg-slate-100 text-slate-600'
                               }`}
                             >
-                              {opt.description}
+                              {opt.badge}
                             </span>
                           )}
+                          {isSelected && (
+                            <svg
+                              className="w-3.5 h-3.5 text-[#F66B17] shrink-0"
+                              viewBox="0 0 16 16"
+                              fill="currentColor"
+                            >
+                              <path
+                                fillRule="evenodd"
+                                d="M12.416 3.376a.75.75 0 0 1 .208 1.04l-5 7.5a.75.75 0 0 1-1.154.114l-3-3a.75.75 0 0 1 1.06-1.06l2.353 2.353 4.493-6.739a.75.75 0 0 1 1.04-.208Z"
+                                clipRule="evenodd"
+                              />
+                            </svg>
+                          )}
                         </div>
-                      </div>
-                      <div className="flex items-center gap-1.5 shrink-0">
-                        {opt.badge && (
-                          <span
-                            className={`text-[10px] px-1.5 py-0.5 rounded font-mono ${
-                              isSelected ? 'bg-white/20 text-white' : 'bg-slate-100 text-slate-600'
-                            }`}
-                          >
-                            {opt.badge}
-                          </span>
-                        )}
-                        {isSelected && (
-                          <svg
-                            className="w-3.5 h-3.5 text-[#F66B17] shrink-0"
-                            viewBox="0 0 16 16"
-                            fill="currentColor"
-                          >
-                            <path
-                              fillRule="evenodd"
-                              d="M12.416 3.376a.75.75 0 0 1 .208 1.04l-5 7.5a.75.75 0 0 1-1.154.114l-3-3a.75.75 0 0 1 1.06-1.06l2.353 2.353 4.493-6.739a.75.75 0 0 1 1.04-.208Z"
-                              clipRule="evenodd"
-                            />
-                          </svg>
-                        )}
-                      </div>
-                    </button>
-                  );
-                })
-              )}
+                      </button>
+                    );
+                  })
+                )}
+              </div>
             </div>
           </Popover.Content>
         </Popover.Portal>
       </Popover.Root>
       {error && <p className="text-[11px] text-red-500 font-medium">{localizeMessage(error)}</p>}
-    </div>
+    </Container>
   );
 }
 

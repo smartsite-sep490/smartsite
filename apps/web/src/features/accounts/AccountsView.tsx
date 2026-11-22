@@ -1,3 +1,4 @@
+import { SmartNativeSelect } from '../../components/ui/SmartNativeSelect';
 import { translate as tr } from '../../i18n';
 import { useMemo, useState } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
@@ -359,7 +360,7 @@ export function AccountsView({ apiUrl }: { apiUrl: string }) {
 
           <label className="space-y-1.5 text-xs font-bold text-slate-700">
             <span>{t('accounts.roleFilter')}</span>
-            <select
+            <SmartNativeSelect
               aria-label={t('accounts.roleFilter')}
               className={accountControl}
               value={role}
@@ -374,12 +375,12 @@ export function AccountsView({ apiUrl }: { apiUrl: string }) {
                   {t(`accounts.role.${value}`)}
                 </option>
               ))}
-            </select>
+            </SmartNativeSelect>
           </label>
 
           <label className="space-y-1.5 text-xs font-bold text-slate-700">
             <span>{t('accounts.siteFilter')}</span>
-            <select
+            <SmartNativeSelect
               aria-label={t('accounts.siteFilter')}
               className={accountControl}
               value={siteId}
@@ -395,12 +396,12 @@ export function AccountsView({ apiUrl }: { apiUrl: string }) {
                   {site.name} ({site.code})
                 </option>
               ))}
-            </select>
+            </SmartNativeSelect>
           </label>
 
           <label className="space-y-1.5 text-xs font-bold text-slate-700">
             <span>{t('accounts.statusFilter')}</span>
-            <select
+            <SmartNativeSelect
               aria-label={t('accounts.statusFilter')}
               className={accountControl}
               value={status}
@@ -413,7 +414,7 @@ export function AccountsView({ apiUrl }: { apiUrl: string }) {
               <option value="active">{t('accounts.active')}</option>
               <option value="inactive">{t('accounts.inactive')}</option>
               <option value="temporary">{t('accounts.passwordRequired')}</option>
-            </select>
+            </SmartNativeSelect>
           </label>
         </div>
       </section>

@@ -75,6 +75,7 @@ it('uses independent full-month aggregates, minutes and scoped attention totals'
   expect(screen.getByText('1h 30m')).toBeTruthy();
   expect(await screen.findByText('0h 42m')).toBeTruthy();
   expect(await screen.findByText('31')).toBeTruthy();
+  expect(screen.getByText('Asia/Ho_Chi_Minh · 10/10/2026')).toBeTruthy();
   expect(api.attendanceTimesheets).toHaveBeenCalledWith('synthetic', 'site', {
     fromDate: '2026-10-01',
     toDate: '2026-10-31',
@@ -106,7 +107,7 @@ it('opens a notification day and does not show an ignored duplicate marker as ch
   const toggle = screen.getByRole('button', { name: /View details/i });
   fireEvent.click(toggle);
   await screen.findByText('Duplicate ignored');
-  expect(screen.getByRole('heading', { name: 'Attendance intervals · 2026-10-08' })).toBeTruthy();
+  expect(screen.getByRole('heading', { name: 'Attendance intervals · 08/10/2026' })).toBeTruthy();
   expect(screen.queryByRole('heading', { name: "Today's attendance intervals" })).toBeNull();
   expect(screen.getByText(/Duplicate check-in.*09:28/)).toBeTruthy();
   expect(screen.queryByText(/09:29/)).toBeNull();

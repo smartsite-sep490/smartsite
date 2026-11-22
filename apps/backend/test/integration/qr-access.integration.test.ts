@@ -22,7 +22,6 @@ import {
   FaceProfileEntity,
   FaceProfileStatus,
   WorkerSiteZoneAssignmentEntity,
-  WorkerSiteZoneAssignmentStatus,
   GateEventEntity,
   VisitorVisitEntity,
   QrFallbackSessionEntity,
@@ -60,8 +59,7 @@ test('real PostgreSQL visitor approval, group counts, expiring QR, replay and wo
   const workerActor = actor(accountId, UserRole.WORKER);
   const contractorId = randomUUID(),
     workerId = randomUUID();
-  const participationId = randomUUID(),
-    assignmentId = randomUUID();
+  const participationId = randomUUID();
   const service = new QrAccessService(dataSource, undefined, undefined, createTestConfig());
   const gateId = 'a1000000-0000-4000-8000-000000000001';
   const registration = {
@@ -519,18 +517,6 @@ test('real PostgreSQL visitor approval, group counts, expiring QR, replay and wo
       consentedAt: new Date(),
       createdByUserId: managerId,
     });
-    await dataSource.getRepository(WorkerSiteZoneAssignmentEntity).save({
-      id: assignmentId,
-      workerId,
-      siteId,
-      siteContractorId: participationId,
-      zoneIds: [randomUUID()],
-      status: WorkerSiteZoneAssignmentStatus.APPROVED,
-      validFrom: new Date(Date.now() - 60_000),
-      validUntil: new Date(Date.now() + 3600_000),
-      requestedByUserId: managerId,
-      siteManagerDecidedByUserId: managerId,
-    });
     const noShiftFallback = await service.cameraFallback(security, siteId, gateId, {
       direction: 'IN',
       reason: 'CAMERA_UNAVAILABLE',
@@ -711,6 +697,11 @@ test('real PostgreSQL visitor approval, group counts, expiring QR, replay and wo
       service.workerGate(security, siteId, gateId, scan),
     ]);
     assert.equal(workerResults[0].authorization, 'ALLOWED');
+    assert.equal(
+      await dataSource.getRepository(WorkerSiteZoneAssignmentEntity).countBy({ workerId }),
+      0,
+    );
+    assert.equal(workerResults[0].worker?.scheduleStatus, 'SCHEDULED');
     assert.equal(workerResults[0].log.method, 'QR');
     assert.equal(workerResults[0].log.id, workerResults[1].log.id);
     assert.equal(

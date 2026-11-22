@@ -48,7 +48,7 @@ it('shows the current workspace and workforce function in the header without glo
     </MemoryRouter>,
   );
   const header = within(screen.getByRole('banner'));
-  expect(header.getByText('Workforce Operations · Shift Approvals')).toBeTruthy();
+  expect(header.queryByText('Workforce Operations · Shift Approvals')).toBeNull();
   expect(header.getByRole('heading', { name: 'Contractor Review' })).toBeTruthy();
   expect(header.queryByRole('textbox', { name: 'Search SmartSite' })).toBeNull();
   await userEvent.setup().click(screen.getByRole('button', { name: 'Attendance' }));
@@ -112,6 +112,49 @@ it('uses the role-appropriate workforce default', () => {
     </MemoryRouter>,
   );
   expect(within(screen.getByRole('banner')).getByText('Contractor Review')).toBeTruthy();
+});
+
+it.each(['en', 'vi'])('shows the worker schedule title once in the %s header', async (language) => {
+  await i18n.changeLanguage(language);
+  roles = ['WORKER'];
+  render(
+    <MemoryRouter initialEntries={['/workforce?tab=schedule']}>
+      <AppLayout>Content</AppLayout>
+    </MemoryRouter>,
+  );
+  const header = within(screen.getByRole('banner'));
+  expect(header.getAllByText(i18n.t('app_layout.my_schedule_requests'))).toHaveLength(1);
+  expect(header.getByRole('heading', { level: 1, name: i18n.t('app_layout.my_schedule_requests') })).toBeTruthy();
+});
+
+it.each([
+  ['/dashboard', 'SITE_MANAGER', 'common.site_management_overview'],
+  ['/accounts', 'ADMIN', 'accounts.title'],
+  ['/contractor-teams', 'CONTRACTOR_REPRESENTATIVE', 'shell.contractorTeams'],
+  ['/worker-onboarding', 'CONTRACTOR_REPRESENTATIVE', 'shell.workerOnboarding'],
+  ['/worker-documents', 'WORKER', 'documents.title'],
+  ['/workforce?tab=schedule', 'WORKER', 'app_layout.my_schedule_requests'],
+  ['/workforce?tab=review', 'CONTRACTOR_REPRESENTATIVE', 'common.contractor_review'],
+  ['/site-setup', 'ADMIN', 'shell.siteSetup'],
+  ['/site-setup', 'SITE_MANAGER', 'siteOps.titleManage'],
+  ['/schedule-setup', 'SITE_MANAGER', 'common.schedule_setup'],
+  ['/access', 'SITE_MANAGER', 'access.tabs.attendance.label'],
+  ['/access', 'SECURITY_OFFICER', 'shell.access'],
+  ['/live-monitoring', 'SAFETY_OFFICER', 'shell.live'],
+  ['/camera-setup', 'SITE_MANAGER', 'shell.cameraSetup'],
+  ['/ppe', 'SAFETY_OFFICER', 'shell.ppe'],
+  ['/zones', 'SAFETY_OFFICER', 'shell.zones'],
+  ['/incidents', 'SAFETY_OFFICER', 'shell.incidents'],
+  ['/assigned-work', 'CONTRACTOR_REPRESENTATIVE', 'shell.assignedWork'],
+  ['/account/password', 'WORKER', 'auth.password.title'],
+])('renders a uniform header with a decorative function icon at %s for %s', (path, role, titleKey) => {
+  roles = [role];
+  render(<MemoryRouter initialEntries={[path]}><AppLayout>Content</AppLayout></MemoryRouter>);
+  const header = within(screen.getByRole('banner'));
+  expect(header.getByText(i18n.t(titleKey))).toBeTruthy();
+  const icon = header.getByTestId('workspace-header-icon');
+  expect(icon.getAttribute('aria-hidden')).toBe('true');
+  expect(icon.querySelector('svg')).toBeTruthy();
 });
 
 it.each([

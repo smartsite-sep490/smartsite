@@ -1,3 +1,4 @@
+import { SmartNativeSelect } from '../ui/SmartNativeSelect';
 import { useEffect, useId, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { useMutation, useQueries, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useTranslation } from 'react-i18next';
@@ -147,7 +148,7 @@ export function PolicyFields({
       <legend className="px-1 text-sm font-semibold text-slate-900">{label}</legend>
       <label className="grid gap-1 text-sm font-medium text-slate-800">
         <span>{t('cameraPpe.mode')}</span>
-        <select
+        <SmartNativeSelect
           className={CAMERA_FIELD_STYLES.input}
           value={value.mode}
           onChange={(event) => {
@@ -180,7 +181,7 @@ export function PolicyFields({
           <option value="EXPLICIT">{t('cameraPpe.EXPLICIT')}</option>
           <option value="DISABLED">{t('cameraPpe.DISABLED')}</option>
           {allowInherit && <option value="INHERIT">{t('cameraPpe.INHERIT')}</option>}
-        </select>
+        </SmartNativeSelect>
       </label>
       {value.mode === 'EXPLICIT' && (
         <div className="grid gap-2 min-w-0">
@@ -1020,7 +1021,7 @@ function PolicyEditor({
               {!initial && (
                 <label className="grid gap-1.5 text-sm font-semibold text-slate-800">
                   <span>{t('cameraPpe.target')}</span>
-                  <select
+                  <SmartNativeSelect
                     ref={selectRef}
                     className={CAMERA_FIELD_STYLES.input}
                     value={regionId}
@@ -1033,7 +1034,7 @@ function PolicyEditor({
                         {formatScopedRegionLabel(row, idx + 1)}
                       </option>
                     ))}
-                  </select>
+                  </SmartNativeSelect>
                 </label>
               )}
               {selected &&

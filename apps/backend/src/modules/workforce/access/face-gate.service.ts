@@ -1,4 +1,4 @@
-import { requireFaceSource } from '../../gates/gate-registry.js';
+import { requireActiveGate, requireFaceSource } from '../../gates/gate-registry.js';
 import { createHash, randomUUID } from 'node:crypto';
 import { QrAccessService } from './qr-access.service.js';
 import { HttpStatus, Inject, Injectable } from '@nestjs/common';
@@ -48,7 +48,7 @@ export class FaceGateService {
     gateId: string,
     frame: UploadedFaceSample | undefined,
     direction: 'IN' | 'OUT',
-    sourceCameraId: string,
+    sourceCameraId?: string,
   ): Promise<FaceGateVerificationResponse> {
     await this.requireOperator(actor, siteId, gateId);
     if (direction !== 'IN' && direction !== 'OUT')
@@ -56,7 +56,9 @@ export class FaceGateService {
         code: 'VALIDATION_FAILED',
         message: 'Invalid gate direction',
       });
-    await requireFaceSource(this.dataSource.manager, siteId, gateId, sourceCameraId);
+    if (sourceCameraId !== undefined)
+      await requireFaceSource(this.dataSource.manager, siteId, gateId, sourceCameraId);
+    else await requireActiveGate(this.dataSource.manager, siteId, gateId);
     const { evaluation, ...result } = await this.evaluate(siteId, gateId, frame, direction);
     const attempt = await this.dataSource.transaction(async (manager) =>
       this.qrAccess.recordAttempt(manager, {
@@ -118,18 +120,22 @@ export class FaceGateService {
     gateId: string,
     sessionId: string,
     frame: UploadedFaceSample | undefined,
-    sourceCameraId: string,
+    sourceCameraId?: string,
   ): Promise<GateFacePresenceResponse> {
     await this.requireOperator(actor, siteId, gateId);
     uuid(sessionId);
-    await requireFaceSource(this.dataSource.manager, siteId, gateId, sourceCameraId);
+    if (sourceCameraId !== undefined)
+      await requireFaceSource(this.dataSource.manager, siteId, gateId, sourceCameraId);
+    else await requireActiveGate(this.dataSource.manager, siteId, gateId);
     this.validateFrame(frame);
     const evidence = await this.adapter.verify({
       verificationId: randomUUID(),
       jpeg: frame.buffer,
       templates: [],
       gatePresenceSession: createHash('sha256')
-        .update(`${actor.id}:${siteId}:${gateId}:${sourceCameraId}:${sessionId}`)
+        .update(
+          `${actor.id}:${siteId}:${gateId}:${sourceCameraId ?? 'BROWSER_WEBCAM'}:${sessionId}`,
+        )
         .digest('hex'),
     });
     const reason = evidence.reasonCode;
@@ -316,6 +322,7 @@ export class FaceGateService {
                 displayName: worker.displayName,
                 contractorName: contractor?.name ?? 'Chưa gán nhà thầu',
                 assignmentStatus: evaluation.assignment ? 'APPROVED' : 'MISSING',
+                scheduleStatus: evaluation.scheduleStatus,
               },
             }
           : {}),

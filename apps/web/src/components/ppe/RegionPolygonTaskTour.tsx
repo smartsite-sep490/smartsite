@@ -102,7 +102,7 @@ function buildPolygonTourSteps(
   return [
     {
       id: 'polygon-camera-scope',
-      anchorSelector: 'select#select-camera-link',
+      anchorSelector: '[data-select-for="select-camera-link"]',
       titleKey: 'regionPolygon.tour.cameraScope.title',
       bodyKey: 'regionPolygon.tour.cameraScope.body',
       isAllowed: () => !isSaving,

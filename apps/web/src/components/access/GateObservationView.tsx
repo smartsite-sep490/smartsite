@@ -1,3 +1,4 @@
+import { SmartNativeSelect } from '../ui/SmartNativeSelect';
 import { useManagementClient } from '../../features/auth/auth-session';
 import { userErrorMessage } from '../../i18n/messages';
 import { localizedLabel } from '../../i18n/labels';
@@ -54,7 +55,7 @@ export function GateObservationView({
         <div className="flex min-w-0 max-w-full flex-wrap items-center gap-2">
           <label className="flex min-w-0 max-w-full flex-wrap items-center gap-2 text-xs font-bold text-slate-700">
             <span>{t('gateObservation.gateLabel')}</span>
-            <select
+            <SmartNativeSelect
               aria-label={t('gateObservation.gateSelectAria')}
               className="min-w-0 max-w-full rounded-xl border border-slate-200 bg-white px-3 py-1.5 text-xs font-semibold text-slate-800 shadow-2xs hover:border-slate-300 focus:outline-none focus:ring-2 focus:ring-[#F66B17]/20 focus:border-[#F66B17] transition-all cursor-pointer"
               value={gateId}
@@ -65,7 +66,7 @@ export function GateObservationView({
                   {g.name}
                 </option>
               ))}
-            </select>
+            </SmartNativeSelect>
           </label>
         </div>
       </div>

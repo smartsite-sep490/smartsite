@@ -1,3 +1,4 @@
+import { SmartNativeSelect } from '../ui/SmartNativeSelect';
 import { CameraApplySavedBar } from './CameraApplySavedBar';
 import { CameraSourceSetupPanel } from './CameraSourceSetupPanel';
 import type { CameraWorkspaceTask } from './CameraSetupContextPanel';
@@ -546,7 +547,7 @@ function SetupWorkspace({ apiUrl, session }: { apiUrl: string; session: SharedSe
               >
                 {t('cameraSetup.site')}
               </label>
-              <select
+              <SmartNativeSelect
                 id="camera-setup-site"
                 value={site?.id ?? ''}
                 disabled={sites.baseError || sites.isPending || effectiveRegionDraft.saving}
@@ -563,7 +564,7 @@ function SetupWorkspace({ apiUrl, session }: { apiUrl: string; session: SharedSe
                     {row.code} · {row.name}
                   </option>
                 ))}
-              </select>
+              </SmartNativeSelect>
               {sites.hasNextPage && !sites.baseError && (
                 <button
                   className={CAMERA_BUTTON_STYLES.compactSecondary}
