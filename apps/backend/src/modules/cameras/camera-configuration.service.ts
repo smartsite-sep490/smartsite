@@ -574,8 +574,6 @@ export class CameraConfigurationService {
         if (adopted.present && !ppePolicy)
           conflict('New Region requires an explicit PPE policy choice');
         if (!adopted.present && ppePolicy) conflict('Initialize camera PPE policies first');
-        // Otherwise an unissuable edit could save geometry but lose its new PPE choice.
-        if (adopted.present) await readCurrentCameraPolicyBundle(manager, camera.id);
         if (camera.type === 'GATE') conflict('Gate Cameras cannot have observation Regions');
         const zone = await this.zones.lockForRegion(manager, siteId, value.zoneId);
         const provenance = reference
@@ -605,6 +603,8 @@ export class CameraConfigurationService {
           this.zones,
           ppePolicy ? new Map([[region.id, ppePolicy]]) : undefined,
         );
+        // Verify issuance after recording the bundle so a retired empty-region view can rebind without hiding unissuable edits.
+        if (adopted.present) await readCurrentCameraPolicyBundle(manager, camera.id);
         return regionMutationResult(region, camera.configurationVersion, provenance);
       },
       siteManagerCommandAuthorization(siteId, context?.actorUserId),
