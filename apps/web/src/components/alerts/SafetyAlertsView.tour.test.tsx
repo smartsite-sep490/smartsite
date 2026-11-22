@@ -197,7 +197,7 @@ describe('SafetyAlertsView contextual guided tour (FE-F06)', () => {
     const inviteStart = await screen.findByTestId('safety-task-tour-invitation-start');
     expect(screen.getByTestId('safety-task-tour-trigger').textContent).toBe('Guided help');
 
-    const reasonInput = await screen.findByLabelText(/decision reason/i);
+    const reasonInput = await screen.findByLabelText(/review basis/i);
     await user.type(reasonInput, 'Clear missing hard hat in CAM-01 frame');
     expect((reasonInput as HTMLTextAreaElement).value).toBe(
       'Clear missing hard hat in CAM-01 frame',

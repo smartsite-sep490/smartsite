@@ -13,6 +13,7 @@ import { AiObservationEventEntity } from '../src/database/entities/ai-observatio
 import { AlertDetectionMappingEntity } from '../src/database/entities/alert-detection-mapping.entity.js';
 import { SafetyAlertEntity } from '../src/database/entities/safety-alert.entity.js';
 import { CameraEntity } from '../src/database/entities/camera.entity.js';
+import type { StorageService } from '../src/integrations/storage/storage.service.js';
 import { SafetyAlertEvidenceService } from '../src/modules/safety/alerts/safety-alert-evidence.service.js';
 
 const jpeg = Buffer.from([0xff, 0xd8, 0x01, 0x02, 0xff, 0xd9]);
@@ -29,6 +30,8 @@ function dataSourceFor(input: {
   alertId: string;
   eventId: string;
   rawPayload: unknown;
+  episodeId?: string;
+  personObservationIndex?: number;
   includeAlert?: boolean;
   includeMapping?: boolean;
   camera?: { id: string; siteId: string; externalId: string };
@@ -45,6 +48,13 @@ function dataSourceFor(input: {
             where.siteId === input.siteId
               ? { id: input.alertId, siteId: input.siteId }
               : null,
+          findOne: async (options: unknown) => {
+            assert.deepEqual(options, {
+              select: { episodeId: true },
+              where: { id: input.alertId, siteId: input.siteId },
+            });
+            return { episodeId: input.episodeId ?? null };
+          },
         };
       }
       if (entity === AlertDetectionMappingEntity) {
@@ -76,7 +86,7 @@ function dataSourceFor(input: {
             input.includeMapping !== false &&
             where.alertId === input.alertId &&
             where.eventId === input.eventId
-              ? where
+              ? { ...where, personObservationIndex: input.personObservationIndex ?? null }
               : null,
         };
       }
@@ -106,8 +116,67 @@ function isPublicError(code: string) {
     error instanceof PublicHttpException && error.publicPayload.code === code;
 }
 
+test('tracked alert reads select only the stored finding source and require the authenticated request', async () => {
+  const siteId = randomUUID();
+  const alertId = randomUUID();
+  const eventId = randomUUID();
+  const episodeId = randomUUID();
+  const rawPayload = {
+    schemaVersion: '1.7.0',
+    framePartition: { sequenceNumber: '9007199254740994' },
+    evidence: [
+      {
+        kind: 'FRAME',
+        uri: `local://evidence/${randomUUID()}/9007199254740994/${eventId}.jpg`,
+        sha256: jpegSha256,
+      },
+    ],
+  };
+  const settings = config();
+  settings.set('SAFETY_TRACKED_HISTORY_READ_ENABLED', true);
+  settings.set('AI_EVIDENCE_OBJECT_STORAGE_ENABLED', true);
+  const request = { headers: {} };
+  let reads = 0;
+  const frame = {
+    bytes: jpeg,
+    fileName: 'original.jpg',
+    representation: 'FRAME' as const,
+    sha256: jpegSha256,
+    frameSha256: jpegSha256,
+  };
+  const service = new SafetyAlertEvidenceService(
+    dataSourceFor({ siteId, alertId, eventId, episodeId, rawPayload, personObservationIndex: 4 }),
+    settings,
+    undefined,
+    {
+      async read(requested, scopedSite, scopedEpisode, source) {
+        reads += 1;
+        assert.equal(requested, request);
+        assert.equal(scopedSite, siteId);
+        assert.equal(scopedEpisode, episodeId);
+        assert.deepEqual(source, { alertId, eventId, personObservationIndex: 4, evidenceIndex: 0 });
+        return frame;
+      },
+    },
+  );
+  assert.deepEqual(service.summarize(rawPayload, eventId), [
+    { index: 0, kind: 'FRAME', available: true },
+  ]);
+  await assert.rejects(service.read(siteId, alertId, eventId, '0'), isPublicError('NOT_FOUND'));
+  await assert.rejects(
+    service.read(randomUUID(), alertId, eventId, '0', request),
+    isPublicError('NOT_FOUND'),
+  );
+  await assert.rejects(
+    service.read(siteId, alertId, randomUUID(), '0', request),
+    isPublicError('NOT_FOUND'),
+  );
+  assert.equal(await service.read(siteId, alertId, eventId, '0', request), frame);
+  assert.equal(reads, 1);
+});
+
 function identityFrameFixture(
-  root: string,
+  root: string | undefined,
   overrides?: {
     kind?: string;
     uriSessionId?: string;
@@ -118,6 +187,7 @@ function identityFrameFixture(
     conflictingSiteMapping?: boolean;
     schemaVersion?: '1.0.0' | '1.2.0' | '1.3.0';
     declaredSha?: string;
+    storage?: Pick<StorageService, 'readAiFrame'>;
   },
 ) {
   const siteId = randomUUID();
@@ -175,7 +245,12 @@ function identityFrameFixture(
         resolvedCameraId: cameraId,
       },
     }),
-    config(root),
+    overrides?.storage
+      ? new ConfigService<BackendEnvironment, true>(
+          validateEnvironment({ NODE_ENV: 'test', AI_EVIDENCE_OBJECT_STORAGE_ENABLED: 'true' }),
+        )
+      : config(root),
+    overrides?.storage,
   );
   return {
     service,
@@ -183,9 +258,43 @@ function identityFrameFixture(
     alertId,
     eventId,
     payloadHash,
+    rawPayload,
     fileName: `${uriSessionId}_9_${eventId}.jpg`,
   };
 }
+
+test('alert and identity review serve a scoped content-bound frame from private object storage', async () => {
+  const calls: unknown[] = [];
+  let stored: Buffer | null = jpeg;
+  const value = identityFrameFixture(undefined, {
+    schemaVersion: '1.2.0',
+    storage: {
+      async readAiFrame(sha, scope) {
+        calls.push({ sha, scope });
+        return stored;
+      },
+    },
+  });
+  const { service, siteId, alertId, eventId, payloadHash, rawPayload } = value;
+  assert.deepEqual(service.summarize(rawPayload, eventId), [
+    { index: 0, kind: 'FRAME', available: true },
+  ]);
+  await assert.rejects(
+    service.read(randomUUID(), alertId, eventId, '0'),
+    isPublicError('NOT_FOUND'),
+  );
+  assert.equal(calls.length, 0);
+  assert.deepEqual((await service.read(siteId, alertId, eventId, '0')).bytes, jpeg);
+  assert.deepEqual(calls[0], { sha: jpegSha256, scope: { eventId, payloadHash } });
+  assert.equal(
+    (await service.readFrameForIdentityReview(siteId, alertId, eventId, '0', payloadHash)).sha256,
+    jpegSha256,
+  );
+  stored = Buffer.from([0xff, 0xd8, 0x03, 0x04, 0xff, 0xd9]);
+  await assert.rejects(service.read(siteId, alertId, eventId, '0'), isPublicError('CONFLICT'));
+  stored = null;
+  await assert.rejects(service.read(siteId, alertId, eventId, '0'), isPublicError('NOT_FOUND'));
+});
 
 test('identity review FRAME digest describes exactly the protected bytes served', async (t) => {
   const root = await mkdtemp(join(tmpdir(), 'smartsite-identity-frame-'));
@@ -398,6 +507,19 @@ test('evidence content is returned only through the matching Site, alert and eve
 
   assert.equal(result.fileName, fileName);
   assert.deepEqual(result.bytes, jpeg);
+
+  // The existing linked-incident reader still serves local evidence under its own access check.
+  const incidentEvidence = new SafetyAlertEvidenceService(
+    dataSourceFor({
+      siteId,
+      alertId,
+      eventId,
+      rawPayload: { ...rawPayload, schemaVersion: '1.7.0' },
+    }),
+    config(root),
+  );
+  assert.deepEqual((await incidentEvidence.read(siteId, alertId, eventId, '0')).bytes, jpeg);
+
   await assert.rejects(
     service.read(randomUUID(), alertId, eventId, '0'),
     isPublicError('NOT_FOUND'),

@@ -146,6 +146,60 @@ describe('SafetyAlertsView Integration (Plan §15 A4 Parent View & Session Scope
     globalThis.fetch = originalFetch;
   });
 
+  it('opens the primary original frame automatically and leaves review below it', async () => {
+    vi.spyOn(URL, 'createObjectURL').mockReturnValue('blob:alert-frame-test');
+    vi.spyOn(URL, 'revokeObjectURL').mockImplementation(() => undefined);
+    const evidence = vi
+      .spyOn(SmartSiteManagementClient.prototype, 'getSafetyAlertEvidence')
+      .mockResolvedValue(new Blob(['frame'], { type: 'image/jpeg' }));
+    vi.spyOn(SmartSiteManagementClient.prototype, 'listSites').mockResolvedValue(mockSitesList);
+    vi.spyOn(SmartSiteManagementClient.prototype, 'listSafetyAlerts').mockResolvedValue({
+      items: [mockAlert],
+      total: 1,
+    });
+    const detection = mockAlertDetail.detections[0]!;
+    vi.spyOn(SmartSiteManagementClient.prototype, 'getSafetyAlert').mockResolvedValue({
+      ...mockAlertDetail,
+      detections: [
+        { ...detection, evidence: [{ index: 2, kind: 'FRAME', available: true }] },
+        {
+          ...detection,
+          eventId: '00000000-0000-4000-8000-000000000002',
+          evidence: [{ index: 0, kind: 'FRAME', available: true }],
+        },
+      ],
+    });
+    vi.spyOn(
+      SmartSiteManagementClient.prototype,
+      'getObservationIdentityContext',
+    ).mockResolvedValue(mockIdentityContext);
+    render(
+      <QueryClientProvider client={queryClient}>
+        <SafetyAlertsView
+          apiUrl="http://local"
+          authenticatedSession={mockSafetyOfficerLoginResponse}
+          initialSiteId={mockAlert.siteId}
+          initialAlertId={mockAlert.id}
+        />
+      </QueryClientProvider>,
+    );
+
+    await waitFor(() => expect(evidence).toHaveBeenCalledTimes(1));
+    const open = await screen.findByRole('button', { name: 'Enlarge image' });
+    const reason = screen.getByRole('textbox', { name: /Review basis/ });
+    expect(open.compareDocumentPosition(reason) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(evidence).toHaveBeenCalledTimes(1);
+    expect(evidence.mock.calls[0]?.slice(1, 5)).toEqual([
+      mockAlert.siteId,
+      mockAlert.id,
+      detection.eventId,
+      2,
+    ]);
+    await userEvent.click(open);
+    const dialog = await screen.findByRole('dialog', { name: 'Enlarge image' });
+    expect(dialog.querySelector('img')?.getAttribute('src')).toMatch(/^blob:/);
+  });
+
   it('does not offer a Site where the same account only represents a contractor', async () => {
     vi.spyOn(SmartSiteManagementClient.prototype, 'listSites').mockResolvedValue({
       items: [

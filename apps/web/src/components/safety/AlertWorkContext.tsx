@@ -1,26 +1,15 @@
 import { useTranslation } from 'react-i18next';
 import { translate as tr } from '../../i18n';
 import { localizeMessage } from '../../i18n/messages';
-import { useQuery } from '@tanstack/react-query';
-import type { WorkflowProps } from './safety-workflow';
+import type { UseQueryResult } from '@tanstack/react-query';
+import type { SafetyAlertWorkContextResponse } from '@smartsite/contracts';
 import { RequestError } from './SafetyWorkflowUi';
-export function AlertWorkContext(p: WorkflowProps & { alertId: string; revision: number }) {
+export function AlertWorkContext({
+  query,
+}: {
+  query: UseQueryResult<SafetyAlertWorkContextResponse>;
+}) {
   useTranslation();
-
-  const query = useQuery({
-    queryKey: [
-      'safety-workflow',
-      p.apiUrl,
-      p.scope,
-      p.siteId,
-      'alert-context',
-      p.alertId,
-      p.revision,
-    ],
-    queryFn: ({ signal }) => p.client.getAlertWorkContext(p.token, p.siteId, p.alertId, { signal }),
-    enabled: !!p.alertId,
-    retry: false,
-  });
   return (
     <section className="my-4 space-y-3 rounded-lg border border-[var(--border)] p-3">
       <h3 className="font-bold">{tr('safety_workspace.work_context')}</h3>

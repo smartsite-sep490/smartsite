@@ -39,6 +39,7 @@ import type { AuthenticatedRequest } from '../auth/auth.service.js';
 import { UserAuthGuard } from '../auth/user-auth.guard.js';
 import { pagination } from '../../common/http/pagination.js';
 import { invalid, missing } from '../../common/configuration/commands.js';
+import { UserRole } from '../../database/entities/user.entity.js';
 import { SafetyWorkflowService } from './safety-workflow.service.js';
 import { MAX_SAFETY_UPLOAD, type SafetyUpload } from './safety-upload.service.js';
 import { SafetyAlertQueryService } from './alerts/safety-alert-query.service.js';
@@ -380,7 +381,12 @@ export class SafetyWorkflowController {
     @Param('index') index: string,
   ) {
     await this.workflow.linkedAlert(siteId, id, req.user!.id, alertId);
-    const evidence = await this.cameraEvidence.read(siteId, alertId, eventId, index);
+    const safetyRequest = req.user!.roleAssignments.some(
+      (role) => role.role === UserRole.SAFETY_OFFICER && role.siteId === siteId.toLowerCase(),
+    )
+      ? req
+      : undefined;
+    const evidence = await this.cameraEvidence.read(siteId, alertId, eventId, index, safetyRequest);
     return new StreamableFile(evidence.bytes, {
       type: 'image/jpeg',
       length: evidence.bytes.length,

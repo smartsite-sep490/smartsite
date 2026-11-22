@@ -7,8 +7,7 @@ import { AlertWorkContext } from '../safety/AlertWorkContext';
 import type { RelatedAlertFilter } from '../safety/safety-context';
 import { localizedLabel } from '../../i18n/labels';
 import { userErrorMessage } from '../../i18n/messages';
-import { uiLocale } from '../../i18n';
-import { translate as tr } from '../../i18n';
+import i18n, { translate as tr, uiLocale } from '../../i18n';
 import { useTranslation } from 'react-i18next';
 import { StatusBadge, TechnicalDetails } from '../safety/SafetyWorkflowUi';
 import { IncidentView } from '../safety/IncidentView';
@@ -62,6 +61,11 @@ function formatLabel(value: string): string {
         .split('_')
         .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
         .join(' ');
+}
+
+function alertTitle(value: string): string {
+  const key = `ppeNotifications.${value}`;
+  return i18n.exists(key) ? tr(key) : formatLabel(value);
 }
 
 function formatDate(value: string): string {
@@ -123,7 +127,7 @@ function AlertRow({
             {formatLabel(alert.alertType)}
           </p>
           <p className="mt-1 font-semibold text-[#2F3437] break-words">
-            {formatLabel(alert.candidateSubtype)}
+            {alertTitle(alert.candidateSubtype)}
           </p>
         </div>
         <span
@@ -226,6 +230,7 @@ export function SafetyAlertsView({
   const [password, setPassword] = useState('');
   const [requestedSiteId, setRequestedSiteId] = useState(initialSiteId ?? '');
   const [requestedAlertId, setRequestedAlertId] = useState(initialAlertId ?? '');
+  const [expandedSourcesFor, setExpandedSourcesFor] = useState('');
   const [status, setStatus] = useState<'ALL' | SafetyAlertStatus>(initialStatus ?? 'ALL');
   const [type, setType] = useState<'ALL' | SafetyAlertType>(initialType ?? 'ALL');
   const [offset, setOffset] = useState(0);
@@ -505,6 +510,27 @@ export function SafetyAlertsView({
     detail.data?.status === 'CONFIRMED' &&
     !detail.data?.incidentId,
   );
+  const sourceScope = `${sessionScope}:${selectedAlertId}`;
+  const detections = detail.data?.detections ?? [];
+  const primaryDetection =
+    detections.find((detection) =>
+      detection.evidence?.some((item) => item.kind === 'FRAME' && item.available),
+    ) ?? detections[0];
+  const workContext = useQuery({
+    queryKey: [
+      'safety-workflow',
+      apiUrl,
+      sessionScope,
+      selectedSiteId,
+      'alert-context',
+      selectedAlertId,
+      detail.data?.revision,
+    ],
+    queryFn: ({ signal }) =>
+      client.getAlertWorkContext(token, selectedSiteId, selectedAlertId, { signal }),
+    enabled: Boolean(token && hasSelectedAlertSummary && primaryDetection),
+    retry: false,
+  });
   const hasAlertWorkContextAnchor = Boolean(
     hasSelectedAlertSummary && (detail.data?.detections.length ?? 0) > 0,
   );
@@ -648,6 +674,105 @@ export function SafetyAlertsView({
       </div>
     );
   }
+
+  const linkedIncident = detail.data?.incidentId;
+  const alertActions = (canRecordAlertReview || canCreateIncidentFromAlert || linkedIncident) && (
+    <div className="mt-4 space-y-3">
+      {canRecordAlertReview && (
+        <section
+          data-tour-anchor="alerts-action-bar"
+          className="rounded-lg border border-[#EAEAEA] bg-[#F7F6F3] p-3 sm:p-4 min-w-0"
+        >
+          <h3 className="text-sm font-bold text-[#111111]">
+            {tr('common.record_review_decision')}
+          </h3>
+          <p className="mt-1 text-xs leading-5 text-[#6B6B6B]">
+            {tr(
+              'safety_alerts_view.explain_the_evidence_behind_the_decision_the_reason_is_required_and_cannot_be_edit',
+            )}
+          </p>
+          <label
+            htmlFor="review-reason-textarea"
+            className="mt-3 block text-xs font-semibold text-[#2F3437]"
+          >
+            {tr('safety_alerts_view.review_basis')}{' '}
+            <span className="font-normal text-[#6B6B6B]">{tr('common.minimum_5_characters')}</span>
+          </label>
+          <textarea
+            id="review-reason-textarea"
+            name="reviewReason"
+            aria-label={tr('safety_alerts_view.review_basis_minimum')}
+            value={reviewReason}
+            onChange={(event) => setReviewReason(event.target.value)}
+            minLength={5}
+            maxLength={1000}
+            rows={3}
+            placeholder={tr(
+              'safety_alerts_view.example_worker_is_clearly_visible_without_a_hard_hat_across_the_linked_observation',
+            )}
+            className="mt-1.5 w-full min-w-0 rounded-md border border-[#EAEAEA] bg-white px-3 py-2 text-sm outline-none focus:border-[#F66B17] focus:ring-2 focus:ring-[#F66B17]/10 placeholder:text-[#6B6B6B]"
+          />
+          {review.error && (
+            <p role="alert" className="mt-2 rounded-md bg-[#FDEBEC] p-2 text-xs text-[#9F2F2D]">
+              {errorMessage(review.error)}
+            </p>
+          )}
+          {review.isSuccess && (
+            <p role="status" className="mt-2 rounded-md bg-[#EDF3EC] p-2 text-xs text-[#346538]">
+              {tr('common.review_decision_recorded')}
+            </p>
+          )}
+          <div className="mt-3 flex flex-wrap gap-2">
+            <button
+              type="button"
+              disabled={reviewReason.trim().length < 5 || review.isPending}
+              onClick={() => review.mutate('CONFIRMED')}
+              className="rounded-md bg-[#9F2F2D] px-3 py-2 text-xs font-bold text-white hover:bg-[#7F2524] disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              {tr('common.confirm_violation')}
+            </button>
+            <button
+              type="button"
+              disabled={reviewReason.trim().length < 5 || review.isPending}
+              onClick={() => review.mutate('DISMISSED')}
+              className="rounded-md bg-[#111111] px-3 py-2 text-xs font-bold text-white hover:bg-[#333333] disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              {tr('common.dismiss_alert')}
+            </button>
+          </div>
+        </section>
+      )}
+      {canCreateIncidentFromAlert && (
+        <button
+          type="button"
+          data-tour-anchor="alerts-followup"
+          className="min-h-10 rounded-lg bg-[var(--action-primary)] px-4 py-2 text-sm font-semibold text-white hover:bg-[var(--action-primary-hover)]"
+          onClick={() => {
+            setIncidentReturn(relatedAlertFilter ? 'Overview' : undefined);
+            setCreatedIncidentId('');
+            setIncidentSourceAlert(detail.data!.id);
+            setWorkspaceTab('Incidents');
+          }}
+        >
+          {tr('safety_alerts_view.create_incident_from_alert')}
+        </button>
+      )}
+      {linkedIncident && (
+        <button
+          type="button"
+          className="min-h-10 rounded-lg border border-[var(--border)] px-4 py-2 text-sm font-semibold"
+          onClick={() => {
+            setIncidentReturn(undefined);
+            setIncidentSourceAlert('');
+            setCreatedIncidentId(linkedIncident);
+            setWorkspaceTab('Incidents');
+          }}
+        >
+          {tr('safety_alerts_view.open_linked_incident')}
+        </button>
+      )}
+    </div>
+  );
 
   return (
     <div
@@ -1111,192 +1236,121 @@ export function SafetyAlertsView({
             )}
             {detail.data && !detailAccessDenied && (
               <div className="mt-4 space-y-5 min-w-0">
-                <div data-tour-anchor="alerts-case-summary" className="space-y-5 min-w-0">
-                  <TechnicalDetails>
+                <div data-tour-anchor="alerts-case-summary" className="space-y-2">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <h3 className="text-base font-bold text-[#111111]">
+                      {alertTitle(detail.data.candidateSubtype)}
+                    </h3>
+                    <StatusBadge value={detail.data.status} />
+                  </div>
+                  <div className="flex flex-wrap gap-x-4 gap-y-1 text-sm text-[#6B6B6B]">
+                    <span>
+                      {workContext.data?.zoneName ??
+                        (detail.data.zoneId
+                          ? tr('common.zone_value', { value1: detail.data.zoneId.slice(0, 8) })
+                          : tr('common.no_resolved_zone'))}
+                    </span>
+                    {primaryDetection && (
+                      <span>
+                        {tr('common.camera_value', {
+                          value1: workContext.data?.cameraName ?? primaryDetection.cameraExternalId,
+                        })}
+                      </span>
+                    )}
+                    <time dateTime={primaryDetection?.capturedAt ?? detail.data.lastDetectedAt}>
+                      {formatDate(primaryDetection?.capturedAt ?? detail.data.lastDetectedAt)}
+                    </time>
+                  </div>
+                </div>
+                {primaryDetection ? (
+                  <SafetyAlertEvidencePanel
+                    key={`${sessionScope}:${detail.data.id}:${primaryDetection.eventId}`}
+                    client={client}
+                    apiUrl={apiUrl}
+                    sessionScope={sessionScope}
+                    token={token}
+                    siteId={selectedSiteId}
+                    alertId={detail.data.id}
+                    detection={primaryDetection}
+                    canReviewIdentity={canReviewSafety}
+                    autoOpenFrame
+                  >
+                    {alertActions}
+                  </SafetyAlertEvidencePanel>
+                ) : (
+                  <>
+                    <p className="rounded-md bg-[#F7F6F3] p-3 text-sm text-[#6B6B6B]">
+                      {tr('safety_alerts_view.no_source_observation_is_linked_to_this_alert')}
+                    </p>
+                    {alertActions}
+                  </>
+                )}
+                {primaryDetection && (
+                  <div
+                    data-tour-anchor={!canCreateIncidentFromAlert ? 'alerts-followup' : undefined}
+                  >
+                    <AlertWorkContext query={workContext} />
+                  </div>
+                )}
+                <TechnicalDetails>
+                  <p>
                     {tr('safety_alerts_view.alert_value_revision_value', {
                       value1: detail.data.id,
                       value2: detail.data.revision,
                     })}
-                  </TechnicalDetails>
-                  <dl className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4 text-sm min-w-0">
-                    <div>
-                      <dt className="text-[#6B6B6B]">{tr('common.candidate_identity')}</dt>
-                      <dd className="mt-1 font-semibold text-[#2F3437] break-words">
-                        {detail.data.candidateWorkerId ?? tr('common.unknown')}
-                      </dd>
-                    </div>
-                    <div>
-                      <dt className="text-[#6B6B6B]">{tr('common.detections')}</dt>
-                      <dd className="mt-1 font-semibold text-[#2F3437]">
-                        {detail.data.detectionsTotal}
-                      </dd>
-                    </div>
-                    <div>
-                      <dt className="text-[#6B6B6B]">{tr('common.status')}</dt>
-                      <dd className="mt-1 font-semibold text-[#2F3437] break-words">
-                        <StatusBadge value={detail.data.status} />
-                      </dd>
-                    </div>
-                    <div>
-                      <dt className="text-[#6B6B6B]">{tr('common.first_seen')}</dt>
-                      <dd className="mt-1 font-semibold text-[#2F3437] break-words">
-                        {formatDate(detail.data.firstDetectedAt)}
-                      </dd>
-                    </div>
-                    <div>
-                      <dt className="text-[#6B6B6B]">{tr('common.last_seen')}</dt>
-                      <dd className="mt-1 font-semibold text-[#2F3437] break-words">
-                        {formatDate(detail.data.lastDetectedAt)}
-                      </dd>
-                    </div>
-                  </dl>
-                  <div>
-                    <h3 className="text-sm font-bold text-[#2F3437]">
-                      {tr('common.evidence_amp_sources')}
-                    </h3>
-                    <div
-                      className={`mt-2 space-y-2 ${canReviewSafety ? '' : 'max-h-80 overflow-auto'}`}
-                    >
-                      {detail.data.detections.map((detection, detectionIndex) => (
-                        <div
-                          key={`${detail.data.id}:${detection.eventId}`}
-                          className="rounded-md bg-[#F7F6F3] p-3 text-xs min-w-0"
-                        >
-                          <div className="flex justify-between gap-3">
-                            <span className="font-mono font-semibold text-[#2F3437]">
-                              {detection.cameraExternalId}
-                            </span>
-                            <span className="font-bold text-[#346538]">
-                              {formatLabel(detection.processingStatus)}
-                            </span>
-                          </div>
-                          <p className="mt-1 text-[#6B6B6B]">{formatDate(detection.capturedAt)}</p>
-                          <TechnicalDetails>
-                            {tr('common.observation')} <span>{detection.eventId}</span>
-                          </TechnicalDetails>
-                          <div
-                            data-tour-anchor={
-                              !canCreateIncidentFromAlert && detectionIndex === 0
-                                ? 'alerts-followup'
-                                : undefined
-                            }
-                          >
-                            <AlertWorkContext
-                              client={client}
-                              apiUrl={apiUrl}
-                              scope={sessionScope}
-                              token={token}
-                              siteId={selectedSiteId}
-                              user={session.user}
-                              alertId={detail.data.id}
-                              revision={detail.data.revision}
-                            />
-                          </div>
-                          <SafetyAlertEvidencePanel
-                            client={client}
-                            apiUrl={apiUrl}
-                            sessionScope={sessionScope}
-                            token={token}
-                            siteId={selectedSiteId}
-                            alertId={detail.data.id}
-                            detection={detection}
-                            canReviewIdentity={canReviewSafety}
-                          />
-                        </div>
-                      ))}
-                      {detail.data.detections.length === 0 && (
-                        <p className="rounded-md bg-[#F7F6F3] p-3 text-sm text-[#6B6B6B]">
-                          {tr('safety_alerts_view.no_source_observation_is_linked_to_this_alert')}
-                        </p>
-                      )}
-                    </div>
-                  </div>
-                </div>
-                {canReviewSafety && detail.data.status === 'PENDING_REVIEW' && (
-                  <section
-                    data-tour-anchor="alerts-action-bar"
-                    className="rounded-lg border border-[#EAEAEA] bg-[#F7F6F3] p-3 sm:p-4 min-w-0"
-                  >
-                    <h3 className="text-sm font-bold text-[#111111]">
-                      {tr('common.record_review_decision')}
-                    </h3>
-                    <p className="mt-1 text-xs leading-5 text-[#6B6B6B]">
-                      {tr(
-                        'safety_alerts_view.explain_the_evidence_behind_the_decision_the_reason_is_required_and_cannot_be_edit',
-                      )}
+                  </p>
+                  <p>
+                    {tr('common.candidate_identity')}:{' '}
+                    {detail.data.candidateWorkerId ?? tr('common.unknown')}
+                  </p>
+                  {primaryDetection && (
+                    <p>
+                      {tr('common.observation')} {primaryDetection.eventId} ·{' '}
+                      {formatLabel(primaryDetection.processingStatus)}
                     </p>
-                    <label
-                      htmlFor="review-reason-textarea"
-                      className="mt-3 block text-xs font-semibold text-[#2F3437]"
-                    >
-                      {tr('common.decision_reason')}{' '}
-                      <span className="font-normal text-[#6B6B6B]">
-                        {tr('common.minimum_5_characters')}
-                      </span>
-                    </label>
-                    <textarea
-                      id="review-reason-textarea"
-                      name="reviewReason"
-                      aria-label={tr('safety_alerts_view.decision_reason_minimum_5_characters')}
-                      value={reviewReason}
-                      onChange={(event) => setReviewReason(event.target.value)}
-                      minLength={5}
-                      maxLength={1000}
-                      rows={3}
-                      placeholder={tr(
-                        'safety_alerts_view.example_worker_is_clearly_visible_without_a_hard_hat_across_the_linked_observation',
-                      )}
-                      className="mt-1.5 w-full min-w-0 rounded-md border border-[#EAEAEA] bg-white px-3 py-2 text-sm outline-none focus:border-[#F66B17] focus:ring-2 focus:ring-[#F66B17]/10 placeholder:text-[#6B6B6B]"
-                    />
-                    {review.error && (
-                      <p
-                        role="alert"
-                        className="mt-2 rounded-md bg-[#FDEBEC] p-2 text-xs text-[#9F2F2D]"
-                      >
-                        {errorMessage(review.error)}
-                      </p>
-                    )}
-                    {review.isSuccess && (
-                      <p
-                        role="status"
-                        className="mt-2 rounded-md bg-[#EDF3EC] p-2 text-xs text-[#346538]"
-                      >
-                        {tr('common.review_decision_recorded')}
-                      </p>
-                    )}
-                    <div className="mt-3 flex flex-wrap gap-2">
-                      <button
-                        type="button"
-                        disabled={reviewReason.trim().length < 5 || review.isPending}
-                        onClick={() => review.mutate('CONFIRMED')}
-                        className="rounded-md bg-[#9F2F2D] px-3 py-2 text-xs font-bold text-white hover:bg-[#7F2524] disabled:cursor-not-allowed disabled:opacity-50"
-                      >
-                        {tr('common.confirm_violation')}
-                      </button>
-                      <button
-                        type="button"
-                        disabled={reviewReason.trim().length < 5 || review.isPending}
-                        onClick={() => review.mutate('DISMISSED')}
-                        className="rounded-md bg-[#111111] px-3 py-2 text-xs font-bold text-white hover:bg-[#333333] disabled:cursor-not-allowed disabled:opacity-50"
-                      >
-                        {tr('common.dismiss_alert')}
-                      </button>
-                    </div>
-                  </section>
-                )}
-                {canCreateIncidentFromAlert && (
-                  <button
-                    type="button"
-                    data-tour-anchor="alerts-followup"
-                    className="min-h-10 rounded-lg bg-[var(--action-primary)] px-4 py-2 text-sm font-semibold text-white hover:bg-[var(--action-primary-hover)]"
-                    onClick={() => {
-                      setIncidentReturn(relatedAlertFilter ? 'Overview' : undefined);
-                      setIncidentSourceAlert(detail.data!.id);
-                      setWorkspaceTab('Incidents');
-                    }}
+                  )}
+                </TechnicalDetails>
+                {detections.length > 1 && (
+                  <details
+                    key={sourceScope}
+                    open={expandedSourcesFor === sourceScope}
+                    onToggle={(event) =>
+                      setExpandedSourcesFor(event.currentTarget.open ? sourceScope : '')
+                    }
                   >
-                    {tr('safety_alerts_view.create_incident_from_alert')}
-                  </button>
+                    <summary className="cursor-pointer text-sm font-semibold">
+                      {tr('common.evidence_amp_sources')} ({detail.data.detectionsTotal})
+                    </summary>
+                    <div className="mt-2 space-y-2">
+                      {expandedSourcesFor === sourceScope &&
+                        detections
+                          .filter((detection) => detection !== primaryDetection)
+                          .map((detection) => (
+                            <div
+                              key={detection.eventId}
+                              className="rounded-md bg-[#F7F6F3] p-3 text-xs"
+                            >
+                              <p>
+                                {detection.cameraExternalId} · {formatDate(detection.capturedAt)}
+                              </p>
+                              <TechnicalDetails>
+                                {tr('common.observation')} {detection.eventId} ·{' '}
+                                {formatLabel(detection.processingStatus)}
+                              </TechnicalDetails>
+                              <SafetyAlertEvidencePanel
+                                client={client}
+                                apiUrl={apiUrl}
+                                sessionScope={sessionScope}
+                                token={token}
+                                siteId={selectedSiteId}
+                                alertId={detail.data!.id}
+                                detection={detection}
+                                canReviewIdentity={canReviewSafety}
+                              />
+                            </div>
+                          ))}
+                    </div>
+                  </details>
                 )}
                 <section className="min-w-0">
                   <h3 className="text-sm font-bold text-[#2F3437]">

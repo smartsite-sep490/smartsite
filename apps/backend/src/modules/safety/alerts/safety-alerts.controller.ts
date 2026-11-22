@@ -143,12 +143,13 @@ export class SafetyAlertsController {
     content: { 'image/jpeg': { schema: { type: 'string', format: 'binary' } } },
   })
   async getEvidence(
+    @Req() request: AuthenticatedRequest,
     @Param('siteId') siteId: string,
     @Param('alertId') alertId: string,
     @Param('eventId') eventId: string,
     @Param('evidenceIndex') evidenceIndex: string,
   ) {
-    const result = await this.evidence.read(siteId, alertId, eventId, evidenceIndex);
+    const result = await this.evidence.read(siteId, alertId, eventId, evidenceIndex, request);
     return new StreamableFile(result.bytes, {
       type: 'image/jpeg',
       disposition: `inline; filename="${result.fileName}"`,

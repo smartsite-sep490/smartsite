@@ -1,6 +1,7 @@
 import { translate as tr } from '../../i18n';
 import { useTranslation } from 'react-i18next';
-import { useEffect, useState } from 'react';
+import { useEffect, useState, type ReactNode } from 'react';
+import { PpeDialog } from '../ppe/PpeDialog';
 import { useQuery } from '@tanstack/react-query';
 import {
   SmartSiteManagementClient,
@@ -23,6 +24,8 @@ export interface SafetyAlertEvidencePanelProps {
   alertId: string;
   detection: SafetyAlertDetectionResponse;
   canReviewIdentity?: boolean;
+  autoOpenFrame?: boolean;
+  children?: ReactNode;
 }
 
 export function SafetyAlertEvidencePanel({
@@ -34,12 +37,19 @@ export function SafetyAlertEvidencePanel({
   alertId,
   detection,
   canReviewIdentity = false,
+  autoOpenFrame = false,
+  children,
 }: SafetyAlertEvidencePanelProps) {
   useTranslation();
 
-  const [selectedEvidenceIndex, setSelectedEvidenceIndex] = useState<number | null>(null);
+  const [selection, setSelection] = useState<number | null>();
 
   const evidenceList = detection.evidence ?? [];
+  const originalFrame = autoOpenFrame
+    ? evidenceList.find((item) => item.kind === 'FRAME' && item.available)
+    : undefined;
+  const selectedEvidenceIndex =
+    selection === undefined ? (originalFrame?.index ?? null) : selection;
   const selectedItem =
     selectedEvidenceIndex !== null
       ? evidenceList.find((item) => item.index === selectedEvidenceIndex)
@@ -47,7 +57,6 @@ export function SafetyAlertEvidencePanel({
 
   const isSelectedAvailable = Boolean(selectedItem?.available);
 
-  // Fetch only when the user explicitly clicks an available evidence item
   const evidenceQuery = useQuery({
     queryKey: buildEvidenceQueryKey(
       apiUrl,
@@ -77,13 +86,30 @@ export function SafetyAlertEvidencePanel({
       Boolean(detection.eventId) &&
       selectedEvidenceIndex !== null &&
       isSelectedAvailable,
+    retry: false,
     staleTime: 0,
     gcTime: 0,
   });
 
   const handleToggle = (index: number) => {
-    setSelectedEvidenceIndex((current) => (current === index ? null : index));
+    setSelection(selectedEvidenceIndex === index ? null : index);
   };
+
+  const identityReview = canReviewIdentity && (
+    <div className="mt-3 border-t border-[#EAEAEA] pt-3">
+      <ObservationIdentityReviewPanel
+        client={client}
+        apiUrl={apiUrl}
+        sessionScope={sessionScope}
+        token={token}
+        siteId={siteId}
+        alertId={alertId}
+        detection={detection}
+        evidenceIndex={selectedEvidenceIndex}
+        evidenceBlob={evidenceQuery.isSuccess ? evidenceQuery.data : null}
+      />
+    </div>
+  );
 
   if (evidenceList.length === 0) {
     return (
@@ -91,21 +117,8 @@ export function SafetyAlertEvidencePanel({
         <div className="text-[11px] text-[#6B6B6B]">
           {tr('safety_alert_evidence_panel.no_evidence_image_retained_for_this_observation')}
         </div>
-        {canReviewIdentity && (
-          <div className="mt-3 border-t border-[#EAEAEA] pt-3">
-            <ObservationIdentityReviewPanel
-              client={client}
-              apiUrl={apiUrl}
-              sessionScope={sessionScope}
-              token={token}
-              siteId={siteId}
-              alertId={alertId}
-              detection={detection}
-              evidenceIndex={null}
-              evidenceBlob={null}
-            />
-          </div>
-        )}
+        {children}
+        {identityReview}
       </div>
     );
   }
@@ -157,6 +170,9 @@ export function SafetyAlertEvidencePanel({
         </div>
       </div>
 
+      {autoOpenFrame && !originalFrame && (
+        <p className="mt-2 text-xs text-[#6B6B6B]">{tr('frameInbox.photoUnavailable')}</p>
+      )}
       {selectedEvidenceIndex !== null && isSelectedAvailable && (
         <div className="mt-2 rounded-md border border-[#EAEAEA] bg-white p-2">
           {evidenceQuery.isPending && (
@@ -195,6 +211,8 @@ export function SafetyAlertEvidencePanel({
                 <EvidenceImage
                   key={`${detection.eventId}:${selectedItem.index}:${evidenceQuery.dataUpdatedAt}`}
                   blob={evidenceQuery.data}
+                  allowEnlarge={selectedItem.kind === 'FRAME'}
+                  onRetry={() => void evidenceQuery.refetch()}
                   alt={formatEvidenceAltText(
                     selectedItem.kind,
                     detection.cameraExternalId,
@@ -211,7 +229,7 @@ export function SafetyAlertEvidencePanel({
                 </span>
                 <button
                   type="button"
-                  onClick={() => setSelectedEvidenceIndex(null)}
+                  onClick={() => setSelection(null)}
                   className="font-semibold text-[#6B6B6B] hover:text-[#2F3437] cursor-pointer"
                 >
                   {tr('common.close_image')}
@@ -222,27 +240,26 @@ export function SafetyAlertEvidencePanel({
         </div>
       )}
 
-      {canReviewIdentity && (
-        <div className="mt-3 border-t border-[#EAEAEA] pt-3">
-          <ObservationIdentityReviewPanel
-            client={client}
-            apiUrl={apiUrl}
-            sessionScope={sessionScope}
-            token={token}
-            siteId={siteId}
-            alertId={alertId}
-            detection={detection}
-            evidenceIndex={selectedEvidenceIndex}
-            evidenceBlob={evidenceQuery.data ?? null}
-          />
-        </div>
-      )}
+      {children}
+      {identityReview}
     </div>
   );
 }
 
-function EvidenceImage({ blob, alt }: { blob: Blob; alt: string }) {
+function EvidenceImage({
+  blob,
+  alt,
+  allowEnlarge,
+  onRetry,
+}: {
+  blob: Blob;
+  alt: string;
+  allowEnlarge: boolean;
+  onRetry(): void;
+}) {
   useTranslation();
+  const [enlarged, setEnlarged] = useState(false);
+  const [failed, setFailed] = useState(false);
 
   const [blobUrlState, setBlobUrlState] = useState<{ blob: Blob; url: string } | null>(null);
 
@@ -255,14 +272,12 @@ function EvidenceImage({ blob, alt }: { blob: Blob; alt: string }) {
       allocatedUrl = null;
     }
 
-    if (allocatedUrl) {
-      const urlToSet = allocatedUrl;
-      queueMicrotask(() => {
-        if (active) {
-          setBlobUrlState({ blob, url: urlToSet });
-        }
-      });
-    }
+    const urlToSet = allocatedUrl;
+    queueMicrotask(() => {
+      if (!active) return;
+      if (urlToSet) setBlobUrlState({ blob, url: urlToSet });
+      else setFailed(true);
+    });
 
     return () => {
       active = false;
@@ -277,6 +292,17 @@ function EvidenceImage({ blob, alt }: { blob: Blob; alt: string }) {
   }, [blob]);
 
   const activeObjectUrl = blob && blobUrlState?.blob === blob ? blobUrlState.url : null;
+
+  if (failed) {
+    return (
+      <div role="alert" className="flex w-full items-center justify-between gap-2 p-3 text-xs">
+        <span>{tr('frameInbox.photoUnavailable')}</span>
+        <button type="button" onClick={onRetry} className="font-semibold underline">
+          {tr('common.retry')}
+        </button>
+      </div>
+    );
+  }
 
   if (!activeObjectUrl) {
     return (
@@ -293,6 +319,33 @@ function EvidenceImage({ blob, alt }: { blob: Blob; alt: string }) {
       </div>
     );
   }
-
-  return <img src={activeObjectUrl} alt={alt} className="max-h-72 w-auto object-contain" />;
+  return (
+    <div className="w-full">
+      <img
+        src={activeObjectUrl}
+        alt={alt}
+        onError={() => setFailed(true)}
+        className="mx-auto max-h-96 w-full bg-slate-950 object-contain"
+      />
+      {allowEnlarge && (
+        <>
+          <button
+            type="button"
+            className="m-2 rounded-md border border-[#EAEAEA] bg-white px-3 py-2 text-xs font-semibold"
+            onClick={() => setEnlarged(true)}
+          >
+            {tr('safety_alert_evidence_panel.enlarge_image')}
+          </button>
+          <PpeDialog
+            wide
+            open={enlarged}
+            title={tr('safety_alert_evidence_panel.enlarge_image')}
+            onClose={() => setEnlarged(false)}
+          >
+            <img src={activeObjectUrl} alt={alt} className="max-h-[72dvh] w-full object-contain" />
+          </PpeDialog>
+        </>
+      )}
+    </div>
+  );
 }

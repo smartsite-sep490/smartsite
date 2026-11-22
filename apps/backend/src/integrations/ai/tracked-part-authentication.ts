@@ -45,14 +45,16 @@ const trackedValidators = {
   '1.7.0': validateTrackedCameraPpeEvent,
 };
 
+export function isTrackedPayloadVersion(
+  version: unknown,
+): version is keyof typeof trackedValidators {
+  return typeof version === 'string' && Object.hasOwn(trackedValidators, version);
+}
+
 /** Validate original payloads from immutable tracked storage. */
 export function isStoredTrackedPayloadValid(payload: unknown): boolean {
   const version = (payload as { schemaVersion?: unknown } | null)?.schemaVersion;
-  return (
-    typeof version === 'string' &&
-    Object.hasOwn(trackedValidators, version) &&
-    trackedValidators[version as keyof typeof trackedValidators](payload).isValid
-  );
+  return isTrackedPayloadVersion(version) && trackedValidators[version](payload).isValid;
 }
 function freezeJson(value: unknown): unknown {
   if (value && typeof value === 'object') {

@@ -72,15 +72,16 @@ derives the event ID, original payload hash and image hash from the validated
 stored evidence, verifies the original URI and JPEG dimensions again, and
 mechanically crops only the selected stored PERSON box. Authorization is
 rechecked after storage I/O by the existing query service. It never exposes
-object keys or public URLs. With the flag off, existing LOCAL readers remain
-unchanged. This does not yet rewire the separate C02 preview/Face preparation
+object keys or public URLs. The alert detail evidence endpoint uses the same
+tracked FRAME reader when a tracked finding links the original observation.
+With the flag off, existing LOCAL readers remain unchanged. This does not yet rewire the separate C02 preview/Face preparation
 readers; do not claim those workflows accept private cloud images.
 
 ## Activation checklist
 
 - Preserve real PostgreSQL generation/revocation and scoped FRAME/SUBJECT checks.
 - Qualify the separate C02 preview/Face preparation path before claiming identity integration.
-- Implement AI receipt-bound upload/retry and classify permanent versus retryable errors.
+- Enable `privateEvidenceUpload` for the selected LIVE camera after validating Backend storage. Verify signed-in alert detail and upload retries with the paired AI release.
 - Bound orphan retention/capacity; qualify real private storage without exposing public URLs.
 - Keep legacy LOCAL behavior and flags off until a reviewed deployment verifies the pair.
 - Roll back by disabling the upload flag; never delete shared immutable objects to roll back.

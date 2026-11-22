@@ -676,6 +676,25 @@ for (const variant of [
         assert.equal(media.status, 200, await media.clone().text());
         assert.deepEqual(Buffer.from(await media.arrayBuffer()), bytes);
       }
+      if (variant === 'camera-v17') {
+        const findingUrl = `${api}/sites/${fixture.siteId}/safety-alerts/${frameCase.source.alertId}`;
+        const finding = await fetch(findingUrl, { headers: officerHeaders });
+        assert.equal(finding.status, 200, await finding.clone().text());
+        assert.deepEqual((await finding.json()).detections[0].evidence, [
+          { index: 0, kind: 'FRAME', available: true },
+        ]);
+        const photoUrl = `${findingUrl}/detections/${event.eventId}/evidence/0`;
+        const photo = await fetch(photoUrl, { headers: officerHeaders });
+        assert.equal(photo.status, 200, await photo.clone().text());
+        assert.equal(photo.headers.get('cache-control'), 'private, no-store');
+        assert.deepEqual(Buffer.from(await photo.arrayBuffer()), bytes);
+        assert.equal((await fetch(photoUrl)).status, 401);
+        assert.equal(
+          (await fetch(photoUrl.replace(fixture.siteId, randomUUID()), { headers: officerHeaders }))
+            .status,
+          403,
+        );
+      }
       if (withC02) {
         const target = frames.items[0].cases.find(
           (item: { source: { personObservationIndex: number } }) =>
