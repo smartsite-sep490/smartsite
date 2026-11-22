@@ -282,10 +282,16 @@ describe('Site Access ERD integration', () => {
     await screen.findByText('No visitor pass requests at this site.');
     expect(authSessionMock.logout).not.toHaveBeenCalled();
   });
-  it('does not duplicate app-level sign out button inside access control', async () => {
+  it('does not duplicate app-level sign out in the Worker access header', async () => {
+    authSessionMock.user = {
+      ...mockAdminLoginResponse.user,
+      roleAssignments: [{ role: 'WORKER', siteId: 'site-alpha' }],
+    };
     mount();
-    await screen.findByRole('heading', { name: 'Worker assignments and Zone permissions' });
+    await screen.findByRole('heading', { name: 'Site Access & Biometric Identity Control' });
     expect(screen.queryByRole('button', { name: /sign out/i })).toBeNull();
+    expect(screen.queryByRole('button', { name: /Visitor Passes/i })).toBeNull();
+    expect(authSessionMock.logout).not.toHaveBeenCalled();
   });
   it('keeps sign-out in the shared shell for a manager attendance workspace', async () => {
     authSessionMock.user = {
