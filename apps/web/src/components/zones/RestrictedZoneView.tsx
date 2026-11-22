@@ -19,7 +19,8 @@ import {
   resolveZoneWorkerOperationalStatus,
   type ZonePolicyKind,
 } from './zone-monitor-model';
-import { Link, useInRouterContext } from 'react-router-dom';
+import { Link, useInRouterContext, useSearchParams } from 'react-router-dom';
+import { buildCameraSelectionSearch } from '../cameras/camera-navigation';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { ApiError, type LoginResponse } from '@smartsite/api-client';
 import {
@@ -102,14 +103,52 @@ export interface RestrictedZoneViewProps {
   ) => void;
 }
 
-export function RestrictedZoneView({
+function RouterZoneSelectionBridge({
+  children,
+}: {
+  children: (syncSelection: (siteId: string, cameraId?: string) => void) => React.ReactNode;
+}) {
+  const [searchParams, setSearchParams] = useSearchParams();
+  const syncSelection = useCallback(
+    (siteId: string, cameraId?: string) => {
+      const nextParams = buildCameraSelectionSearch(searchParams.toString(), {
+        siteId,
+        cameraId,
+      });
+      if (nextParams.toString() !== searchParams.toString()) {
+        setSearchParams(nextParams, { replace: true });
+      }
+    },
+    [searchParams, setSearchParams],
+  );
+  return <>{children(syncSelection)}</>;
+}
+
+export function RestrictedZoneView(props: RestrictedZoneViewProps) {
+  const inRouter = useInRouterContext();
+  if (inRouter) {
+    return (
+      <RouterZoneSelectionBridge>
+        {(onSyncUrlSelection) => (
+          <RestrictedZoneViewInner {...props} onSyncUrlSelection={onSyncUrlSelection} />
+        )}
+      </RouterZoneSelectionBridge>
+    );
+  }
+  return <RestrictedZoneViewInner {...props} />;
+}
+
+function RestrictedZoneViewInner({
   apiUrl = import.meta.env.VITE_API_URL || 'http://localhost:3000',
   onNavigate,
   authenticatedSession,
   linkedSiteId,
   linkedCameraId,
   onSignOut,
-}: RestrictedZoneViewProps) {
+  onSyncUrlSelection,
+}: RestrictedZoneViewProps & {
+  onSyncUrlSelection?: (siteId: string, cameraId?: string) => void;
+}) {
   const { t } = useTranslation();
   const { t: tSafety } = useTranslation(SAFETY_NAMESPACE);
 
@@ -143,6 +182,26 @@ export function RestrictedZoneView({
     linkedMonitoring ? (linkedCameraId ?? '') : '',
   );
   const [requestedRegionId, setRequestedRegionId] = useState('');
+  const nextLinkedSiteId = linkedMonitoring ? (linkedSiteId ?? '') : '';
+  const nextLinkedCameraId = linkedMonitoring ? (linkedCameraId ?? '') : '';
+  const [prevLinkedProps, setPrevLinkedProps] = useState({
+    siteId: nextLinkedSiteId,
+    cameraId: nextLinkedCameraId,
+  });
+  if (
+    prevLinkedProps.siteId !== nextLinkedSiteId ||
+    prevLinkedProps.cameraId !== nextLinkedCameraId
+  ) {
+    setPrevLinkedProps({ siteId: nextLinkedSiteId, cameraId: nextLinkedCameraId });
+    if (prevLinkedProps.siteId !== nextLinkedSiteId) {
+      setRequestedSiteId(nextLinkedSiteId);
+      setRequestedCameraId(nextLinkedCameraId);
+      setRequestedRegionId('');
+    } else if (nextLinkedCameraId !== requestedCameraId) {
+      setRequestedCameraId(nextLinkedCameraId);
+      setRequestedRegionId('');
+    }
+  }
   const [conflictMessage, setConflictMessage] = useState<string | null>(null);
   const [isDraftMode, setIsDraftMode] = useState(false);
   const [staleDraftInfo, setStaleDraftInfo] = useState<{ version: number } | null>(null);
@@ -1129,6 +1188,9 @@ export function RestrictedZoneView({
                       setRequestedSiteId(nextSiteId);
                       setRequestedCameraId('');
                       setRequestedRegionId('');
+                      if (linkedMonitoring) {
+                        onSyncUrlSelection?.(nextSiteId);
+                      }
                     }}
                     disabled={sites.isPending || !scopedSites.length}
                     className={selectControlClass}
@@ -1157,6 +1219,9 @@ export function RestrictedZoneView({
                       clearTransientFeedback();
                       setRequestedCameraId(nextCamId);
                       setRequestedRegionId('');
+                      if (linkedMonitoring) {
+                        onSyncUrlSelection?.(selectedSiteId, nextCamId);
+                      }
                     }}
                     disabled={cameras.isPending || !scopedCameras.length}
                     className={selectControlClass}

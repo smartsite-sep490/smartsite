@@ -1,6 +1,6 @@
 import { SmartNativeSelect } from '../ui/SmartNativeSelect';
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
-import { Link, useLocation } from 'react-router-dom';
+import { Link, useLocation, useSearchParams } from 'react-router-dom';
 import { ApiError } from '@smartsite/api-client';
 import { MonitorWorkspaceTour } from './MonitorWorkspaceTour';
 import { useTranslation } from 'react-i18next';
@@ -14,6 +14,7 @@ import { useMonitorPages } from './useMonitorPages';
 import { useMonitorReadabilityTranslate } from './monitor-readability';
 import { registerFeatureCatalog } from '../../i18n/feature-catalog-registry';
 import { SAFETY_NAMESPACE } from '../../i18n/runtime';
+import { buildCameraSelectionSearch } from '../cameras/camera-navigation';
 
 registerFeatureCatalog({
   en: {
@@ -142,7 +143,7 @@ export function PpeMonitorWorkspace({
   }
   return (
     <MonitorScope
-      key={JSON.stringify([identity.nonce, linkedSiteId, linkedCameraId])}
+      key={identity.nonce}
       {...{ apiUrl, session, client, aiPaused, enableFrameInboxLink }}
       scope={identity.nonce}
       linkedSiteId={linkedSiteId}
@@ -168,7 +169,32 @@ function MonitorScope({
 }) {
   const { t } = useTranslation(SAFETY_NAMESPACE);
   const trMonitor = useMonitorReadabilityTranslate();
+  const [searchParams, setSearchParams] = useSearchParams();
   const [chosenSite, setSite] = useState(linkedSiteId);
+  const [prevLinkedSiteId, setPrevLinkedSiteId] = useState(linkedSiteId);
+  if (prevLinkedSiteId !== linkedSiteId) {
+    setPrevLinkedSiteId(linkedSiteId);
+    setSite(linkedSiteId);
+  }
+  const syncMonitorSelection = useCallback(
+    (nextSiteId: string, nextCameraId?: string) => {
+      const nextParams = buildCameraSelectionSearch(searchParams.toString(), {
+        siteId: nextSiteId,
+        cameraId: nextCameraId || undefined,
+      });
+      if (nextParams.toString() !== searchParams.toString()) {
+        setSearchParams(nextParams, { replace: true });
+      }
+    },
+    [searchParams, setSearchParams],
+  );
+  const selectSite = useCallback(
+    (nextSiteId: string) => {
+      setSite(nextSiteId);
+      syncMonitorSelection(nextSiteId);
+    },
+    [syncMonitorSelection],
+  );
   const sites = useMonitorPages(scope, 'sites', true, (offset, signal) =>
     client.listSites(session.accessToken, { offset, limit: 20 }, { signal }),
   );
@@ -206,7 +232,7 @@ function MonitorScope({
         data-tour-anchor="monitor-site-scope"
         className="block h-10 flex-1 min-w-0 max-w-full truncate rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-sm font-normal text-slate-900 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-slate-900 disabled:bg-slate-50 disabled:text-slate-500"
         value={site?.id ?? ''}
-        onChange={(e) => setSite(e.target.value)}
+        onChange={(e) => selectSite(e.target.value)}
         disabled={sites.isPending || !visibleSites.length}
       >
         {!site && <option value="">{t('monitor.choose')}</option>}
@@ -243,7 +269,7 @@ function MonitorScope({
             <button
               type="button"
               className="inline-flex min-h-8 items-center rounded-lg border border-amber-300 bg-white px-3 py-1.5 text-xs font-semibold text-amber-950 hover:bg-amber-100 cursor-pointer"
-              onClick={() => setSite(visibleSites[0]!.id)}
+              onClick={() => selectSite(visibleSites[0]!.id)}
             >
               {t('monitor.choose')}
             </button>
@@ -319,6 +345,7 @@ function MonitorScope({
           )}
           canViewSafetyRecords={canViewSafetyRecords}
           linkedCameraId={site.id === linkedSiteId ? linkedCameraId : ''}
+          onSyncCameraUrl={syncMonitorSelection}
         />
       ) : (
         <div className="flex min-w-0 flex-wrap items-center gap-3 rounded-xl border border-slate-200 bg-white p-3">
@@ -343,6 +370,7 @@ function CameraScope({
   canManageCameras,
   canViewSafetyRecords,
   linkedCameraId,
+  onSyncCameraUrl,
 }: Props & {
   client: SmartSiteManagementClient;
   scope: string;
@@ -352,10 +380,11 @@ function CameraScope({
   canManageCameras: boolean;
   canViewSafetyRecords: boolean;
   linkedCameraId: string;
+  onSyncCameraUrl: (nextSiteId: string, nextCameraId?: string) => void;
 }) {
   const { t } = useTranslation(SAFETY_NAMESPACE);
   const trMonitor = useMonitorReadabilityTranslate();
-  const siteScopeKey = `${scope}:${site.id}:${linkedCameraId}`;
+  const siteScopeKey = `${scope}:${site.id}`;
   const [scopeState, setScopeState] = useState(() => ({
     siteScopeKey,
     chosen: linkedCameraId,
@@ -420,6 +449,24 @@ function CameraScope({
     (nextCameraId: string) =>
       updateScopeState((prev) => ({ ...prev, chosen: nextCameraId, focusRawMode: false })),
     [updateScopeState],
+  );
+  const [prevLinkedCameraId, setPrevLinkedCameraId] = useState(linkedCameraId);
+  if (prevLinkedCameraId !== linkedCameraId) {
+    setPrevLinkedCameraId(linkedCameraId);
+    if (scopeState.siteScopeKey === siteScopeKey && linkedCameraId !== activeScopeState.chosen) {
+      setScopeState((prev) => ({
+        ...prev,
+        chosen: linkedCameraId,
+        focusRawMode: false,
+      }));
+    }
+  }
+  const selectCamera = useCallback(
+    (nextCameraId: string) => {
+      setCamera(nextCameraId);
+      onSyncCameraUrl(site.id, nextCameraId);
+    },
+    [onSyncCameraUrl, setCamera, site.id],
   );
   const setLayoutMode = useCallback(
     (nextMode: 'focus' | 'grid') =>
@@ -606,7 +653,7 @@ function CameraScope({
             data-tour-anchor="monitor-camera-select"
             className="block h-10 flex-1 min-w-0 max-w-full truncate rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-sm font-normal text-slate-900 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-slate-900 disabled:bg-slate-50 disabled:text-slate-500"
             value={selected?.id ?? ''}
-            onChange={(e) => setCamera(e.target.value)}
+            onChange={(e) => selectCamera(e.target.value)}
             disabled={!active.length}
           >
             {!selected && <option value="">{t('monitor.choose')}</option>}
@@ -729,7 +776,7 @@ function CameraScope({
                   type="button"
                   data-testid="monitor-clear-linked-camera"
                   className="inline-flex min-h-9 items-center rounded-lg border border-amber-300 bg-white px-3.5 py-1.5 text-xs font-semibold text-amber-950 hover:bg-amber-100 cursor-pointer"
-                  onClick={() => setCamera(active[0]!.id)}
+                  onClick={() => selectCamera(active[0]!.id)}
                 >
                   {trMonitor('monitor.clearLinkedCamera')}
                 </button>
@@ -885,13 +932,13 @@ function CameraScope({
               {...common}
               cameras={wall}
               selectedCameraId={selected.id}
-              onSelectCamera={setCamera}
+              onSelectCamera={selectCamera}
               onOpenEvidence={canViewSafetyRecords ? (id) => setEvidenceCameraId(id) : undefined}
               onTilePreviewUpdate={handleTilePreviewUpdate}
               onTileUnmount={handleTileUnmount}
               onEnlargeCamera={(id) => {
                 pendingFocusTargetRef.current = { kind: 'focus-exit' };
-                setCamera(id);
+                selectCamera(id);
                 setLayoutMode('focus');
               }}
             />

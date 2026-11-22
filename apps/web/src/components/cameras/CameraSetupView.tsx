@@ -84,6 +84,7 @@ function SetupWorkspace({ apiUrl, session }: { apiUrl: string; session: SharedSe
     selectSite,
     refreshCameras,
     publishCameraUpdate,
+    syncCameraSelection,
     syncActiveRegionCameraParam,
     handleStatusUnauthorized,
   } = useCameraSetupWorkspace(apiUrl, session);
@@ -133,10 +134,11 @@ function SetupWorkspace({ apiUrl, session }: { apiUrl: string; session: SharedSe
 
   const applyCameraFocusSwitch = (cameraId: string) => {
     if (!site) return;
+    const switchingCamera = cameraId !== catalogSelectedCamera?.id;
     setPendingInlineExit(null);
     setFocusSelection({
       siteId: site.id,
-      requestedId: requestedCameraId,
+      requestedId: cameraId,
       cameraId,
     });
     if (activeDialog?.kind === 'regions') {
@@ -144,10 +146,15 @@ function SetupWorkspace({ apiUrl, session }: { apiUrl: string; session: SharedSe
       if (nextCam?.status === 'INACTIVE') {
         invalidateRegionSetupCaches(site.id);
         close();
+        syncCameraSelection(cameraId, true);
       } else if (nextCam?.status === 'ACTIVE' && cameraId !== activeDialog.cameraId) {
         open('regions', cameraId);
+      } else {
+        syncCameraSelection(cameraId, switchingCamera);
       }
+      return;
     }
+    syncCameraSelection(cameraId, switchingCamera);
   };
 
   const guardedSelectSite = (nextSiteId: string) => {
@@ -212,11 +219,15 @@ function SetupWorkspace({ apiUrl, session }: { apiUrl: string; session: SharedSe
     }
     if (pending?.kind === 'open') {
       if (pending.cameraId) {
+        const switchingCamera = pending.cameraId !== catalogSelectedCamera?.id;
         setFocusSelection({
           siteId: site.id,
-          requestedId: requestedCameraId,
+          requestedId: pending.cameraId,
           cameraId: pending.cameraId,
         });
+        if (pending.openKind !== 'regions') {
+          syncCameraSelection(pending.cameraId, switchingCamera);
+        }
       }
       if (pending.openKind !== 'regions') {
         invalidateRegionSetupCaches(site.id);
@@ -233,14 +244,20 @@ function SetupWorkspace({ apiUrl, session }: { apiUrl: string; session: SharedSe
       close();
       const targetId = pending.cameraId ?? catalogSelectedCamera?.id;
       if (targetId) {
-        if (targetId !== catalogSelectedCamera?.id) {
+        const switchingCamera = targetId !== catalogSelectedCamera?.id;
+        if (switchingCamera) {
           setFocusSelection({
             siteId: site.id,
-            requestedId: requestedCameraId,
+            requestedId: targetId,
             cameraId: targetId,
           });
         }
-        const nextScopeKey = `${site.id}:${targetId}:${requestedAction ?? ''}:${matchedRequestedCamera?.id ?? ''}`;
+        syncCameraSelection(targetId, switchingCamera);
+        const nextAction = switchingCamera ? '' : (requestedAction ?? '');
+        const nextMatchedId = rows.some((row) => row.id === targetId)
+          ? targetId
+          : (matchedRequestedCamera?.id ?? '');
+        const nextScopeKey = `${site.id}:${targetId}:${nextAction}:${nextMatchedId}`;
         setTaskSelection({ scopeKey: nextScopeKey, task: pending.task });
         if (pending.task === 'ppe') {
           setPpeExpandRequest((prev) => ({ cameraId: targetId, seq: (prev?.seq ?? 0) + 1 }));
@@ -361,7 +378,7 @@ function SetupWorkspace({ apiUrl, session }: { apiUrl: string; session: SharedSe
         }
         setFocusSelection({
           siteId: site.id,
-          requestedId: requestedCameraId,
+          requestedId: effectiveCameraId,
           cameraId: effectiveCameraId,
         });
       }
@@ -377,14 +394,20 @@ function SetupWorkspace({ apiUrl, session }: { apiUrl: string; session: SharedSe
       invalidateRegionSetupCaches(site.id);
       close();
     }
-    if (effectiveCameraId !== catalogSelectedCamera?.id) {
+    const switchingCamera = effectiveCameraId !== catalogSelectedCamera?.id;
+    if (switchingCamera) {
       setFocusSelection({
         siteId: site.id,
-        requestedId: requestedCameraId,
+        requestedId: effectiveCameraId,
         cameraId: effectiveCameraId,
       });
     }
-    const nextScopeKey = `${site.id}:${effectiveCameraId}:${requestedAction ?? ''}:${matchedRequestedCamera?.id ?? ''}`;
+    syncCameraSelection(effectiveCameraId, switchingCamera);
+    const nextAction = switchingCamera ? '' : (requestedAction ?? '');
+    const nextMatchedId = rows.some((row) => row.id === effectiveCameraId)
+      ? effectiveCameraId
+      : (matchedRequestedCamera?.id ?? '');
+    const nextScopeKey = `${site.id}:${effectiveCameraId}:${nextAction}:${nextMatchedId}`;
     setTaskSelection({ scopeKey: nextScopeKey, task: nextTask });
     if (nextTask === 'ppe') {
       setPpeExpandRequest((prev) => ({
@@ -761,6 +784,14 @@ function SetupWorkspace({ apiUrl, session }: { apiUrl: string; session: SharedSe
               (createdCamera && createdCamera.siteId !== site.id)
             ) {
               return;
+            }
+            if (createdCamera) {
+              setFocusSelection({
+                siteId: site.id,
+                requestedId: createdCamera.id,
+                cameraId: createdCamera.id,
+              });
+              syncCameraSelection(createdCamera.id, true);
             }
             close();
             refreshCameras(createdCamera?.id);
