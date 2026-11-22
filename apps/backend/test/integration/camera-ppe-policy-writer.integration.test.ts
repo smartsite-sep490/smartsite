@@ -846,6 +846,143 @@ test('authorized PPE commands initialize, revise and replay one immutable camera
       assert.equal(after.regions.length, 0);
     },
   );
+  await t.test(
+    'v2 camera with 0 active regions authors a new policy region on a fresh view and still rejects invalid or stale-region writes atomically',
+    async () => {
+      const before = await current();
+      assert.equal(before.regions.length, 0);
+      const refA = await reference();
+      assert.equal(refA.viewRevision, before.viewRevision);
+
+      // Simulate capturing a fresh reference frame after a source session change with 0 active regions.
+      sourceSession = randomUUID();
+      const refB = await reference();
+      assert.equal(refB.viewRevision, before.viewRevision + 1);
+      assert.equal(refB.configurationVersion, before.configurationVersion);
+      await assert.rejects(current(), /unavailable/);
+
+      const expiredReferenceId = randomUUID();
+      await db.query(
+        `INSERT INTO camera_configuration_reference
+         SELECT $1,camera_id,view_revision,site_id,session_id,source_kind,width,height,image_sha256,configuration_version,
+                clock_timestamp()-INTERVAL '10 minutes',clock_timestamp()-INTERVAL '10 minutes',clock_timestamp()-INTERVAL '6 minutes',issued_by_user_id
+         FROM camera_configuration_reference WHERE id=$2`,
+        [expiredReferenceId, refB.referenceId],
+      );
+
+      const unlinkedZoneId = randomUUID();
+      await db.query(
+        `INSERT INTO zone(id,site_id,code,name,type,restriction_policy,required_ppe,configuration_locked)
+         VALUES($1,$2,$3,$4,'STANDARD','NONE',ARRAY['HARD_HAT']::text[],false)`,
+        [unlinkedZoneId, site, `UNLINKED_${unlinkedZoneId.slice(0, 8)}`, 'Synthetic Unlinked Zone'],
+      );
+      await db.query(
+        `INSERT INTO zone_policy_revision(zone_id,policy_revision,site_id,zone_type,restriction_policy,required_ppe,is_cutover_baseline)
+         VALUES($1,1,$2,'STANDARD','NONE',ARRAY['HARD_HAT']::text[],false)`,
+        [unlinkedZoneId, site],
+      );
+
+      const snapshotState = async () => {
+        const [row] = await db.query(
+          `SELECT (SELECT configuration_version::int FROM camera WHERE id=$1) AS version,
+                  (SELECT count(*)::int FROM camera_observation_region WHERE camera_id=$1) AS total_regions,
+                  (SELECT count(*)::int FROM camera_observation_region WHERE camera_id=$1 AND is_active=true) AS active_regions,
+                  (SELECT count(*)::int FROM camera_region_geometry_revision WHERE camera_id=$1) AS region_revisions,
+                  (SELECT count(*)::int FROM camera_configuration_bundle WHERE camera_id=$1) AS bundles,
+                  (SELECT configuration_locked FROM zone WHERE id=$2) AS unlinked_zone_locked,
+                  (SELECT count(*)::int FROM zone_policy_revision WHERE zone_id=$2) AS unlinked_zone_policy_revisions`,
+          [camera, unlinkedZoneId],
+        );
+        return row;
+      };
+      const firstPolygon = {
+        coordinates: [
+          [0.05, 0.05],
+          [0.4, 0.05],
+          [0.2, 0.4],
+        ] as const,
+      };
+      const secondPolygon = {
+        coordinates: [
+          [0.55, 0.55],
+          [0.9, 0.55],
+          [0.7, 0.9],
+        ] as const,
+      };
+      const authorRegion = (
+        ref: { referenceId: string; viewRevision: number; configurationVersion: number },
+        targetZoneId: string,
+        polygonInput: { readonly coordinates: readonly (readonly [number, number])[] },
+        requiredPpe: readonly string[],
+      ) =>
+        policyRequest('/reference-regions', 'POST', {
+          expectedConfigurationVersion: ref.configurationVersion,
+          referenceId: ref.referenceId,
+          viewRevision: ref.viewRevision,
+          confirmReferenceView: true,
+          zoneId: targetZoneId,
+          polygon: polygonInput,
+          ppePolicy: { mode: 'EXPLICIT', requiredPpe },
+        });
+
+      const beforeInvalid = await snapshotState();
+      assert.equal(beforeInvalid.unlinked_zone_locked, false);
+      for (const badRef of [
+        {
+          referenceId: refA.referenceId,
+          viewRevision: refA.viewRevision,
+          configurationVersion: before.configurationVersion,
+        },
+        {
+          referenceId: randomUUID(),
+          viewRevision: refB.viewRevision,
+          configurationVersion: before.configurationVersion,
+        },
+        {
+          referenceId: expiredReferenceId,
+          viewRevision: refB.viewRevision,
+          configurationVersion: before.configurationVersion,
+        },
+      ]) {
+        const denied = await authorRegion(badRef, unlinkedZoneId, firstPolygon, ['HARD_HAT']);
+        assert.equal(denied.status, 409, `expected 409 for reference ${badRef.referenceId}`);
+        assert.deepEqual(await snapshotState(), beforeInvalid);
+      }
+
+      const created = await authorRegion(refB, zoneId, firstPolygon, ['HARD_HAT']);
+      assert.equal(created.status, 201, await created.clone().text());
+      const createdBody = (await created.json()) as {
+        configurationVersion: number;
+        region: { id: string };
+      };
+      assert.equal(createdBody.configurationVersion, before.configurationVersion + 1);
+
+      const issued = await current();
+      assert.equal(issued.configurationVersion, before.configurationVersion + 1);
+      assert.equal(issued.viewRevision, refB.viewRevision);
+      assert.deepEqual(issued.cameraPpePolicy, before.cameraPpePolicy);
+      assert.equal(issued.regions.length, 1);
+      assert.equal(issued.regions[0]!.regionId, createdBody.region.id);
+      assert.deepEqual(issued.regions[0]!.ppePolicy, {
+        mode: 'EXPLICIT',
+        requiredPpe: ['HARD_HAT'],
+      });
+
+      // Rotating to viewC while region B remains on retired viewB must still fail atomically.
+      sourceSession = randomUUID();
+      const refC = await reference();
+      assert.equal(refC.viewRevision, refB.viewRevision + 1);
+      assert.equal(refC.configurationVersion, issued.configurationVersion);
+      await assert.rejects(current(), /unavailable/);
+
+      const beforeStaleRejection = await snapshotState();
+      const blocked = await authorRegion(refC, unlinkedZoneId, secondPolygon, ['SAFETY_VEST']);
+      assert.equal(blocked.status, 409);
+      assert.match(await blocked.text(), /unavailable/);
+      assert.deepEqual(await snapshotState(), beforeStaleRejection);
+      await assert.rejects(current(), /unavailable/);
+    },
+  );
   await t.test('revocation prevents even an otherwise valid replay', async () => {
     await db.query("DELETE FROM user_role_assignment WHERE user_id=$1 AND role='SITE_MANAGER'", [
       manager.id,
