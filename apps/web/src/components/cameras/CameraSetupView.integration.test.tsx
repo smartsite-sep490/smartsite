@@ -279,7 +279,17 @@ describe('CameraSetupView parent workspace integration', () => {
     expect(within(workflowGroup).getByRole('button', { name: 'Register camera' })).toBeTruthy();
     expect(screen.getByRole('button', { name: 'Regions' })).toBeTruthy();
     expect(screen.getByRole('button', { name: 'Manage North Gate Camera' })).toBeTruthy();
-    expect(screen.queryByRole('navigation', { name: 'Open monitoring' })).toBeNull();
+    const monitoringNav = screen.getByRole('navigation', { name: 'Open monitoring' });
+    expect(
+      within(monitoringNav)
+        .getByRole('link', { name: /PPE monitoring/i })
+        .getAttribute('href'),
+    ).toBe(`/ppe?siteId=${SITE_A_ID}&cameraId=${CAM_1_ID}`);
+    expect(
+      within(monitoringNav)
+        .getByRole('link', { name: /Zone monitoring/i })
+        .getAttribute('href'),
+    ).toBe(`/zones?siteId=${SITE_A_ID}&cameraId=${CAM_1_ID}`);
     expect(document.querySelector('[data-tour-anchor="camera-setup-scope"]')).toBeTruthy();
 
     unmount();

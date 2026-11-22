@@ -203,9 +203,17 @@ export function useCameraSetupWorkspace(apiUrl: string, session: SharedSession) 
       : undefined;
   if (returnCamera) returnParams.set('cameraId', returnCamera.id);
 
-  const canOpenMonitoring = session.user.roleAssignments.some(
-    (role) => role.role === 'SAFETY_OFFICER' && role.siteId === site?.id,
-  );
+  const isAccountActive =
+    !session.user.mustChangePassword &&
+    (!('isActive' in session.user) || (session.user as { isActive?: boolean }).isActive !== false);
+  const canOpenMonitoring =
+    isAccountActive &&
+    Boolean(site?.id) &&
+    session.user.roleAssignments.some(
+      (role) =>
+        (role.role === 'SAFETY_OFFICER' || role.role === 'SITE_MANAGER') &&
+        role.siteId === site?.id,
+    );
 
   const activeDialog =
     dialog &&

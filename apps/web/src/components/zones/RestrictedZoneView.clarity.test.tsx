@@ -439,4 +439,116 @@ describe('MF06 RestrictedZoneView clarity: human Zone names, policy distinction,
     });
     expect(workerStatus.textContent).toMatch(/Worker status unavailable/i);
   });
+
+  it('allows an assigned SITE_MANAGER to monitor scoped camera geometry while hiding Officer-only incident navigation and other sites', async () => {
+    const otherSiteId = '99999999-9999-4999-8999-999999999999';
+    const onNavigate = vi.fn();
+    mockClient.current = makeBaseClient({
+      listSites: vi.fn().mockResolvedValue({
+        items: [
+          {
+            id: SITE_ID,
+            code: 'LOCAL-DEMO',
+            name: 'Local Demo Site',
+            createdAt: '2026-11-01T00:00:00.000Z',
+          },
+          {
+            id: otherSiteId,
+            code: 'OTHER-SITE',
+            name: 'Unassigned Site',
+            createdAt: '2026-11-01T00:00:00.000Z',
+          },
+        ],
+        total: 2,
+      } satisfies Page<SiteResponse>),
+    });
+    const managerSession: Pick<LoginResponse, 'accessToken' | 'user'> = {
+      accessToken: 'tok-manager',
+      user: {
+        id: 'manager-1',
+        username: 'demo.manager',
+        displayName: 'Site Manager Demo',
+        isActive: true,
+        mustChangePassword: false,
+        roleAssignments: [{ role: 'SITE_MANAGER', siteId: SITE_ID }],
+      },
+    };
+    const queryClient = new QueryClient({
+      defaultOptions: { queries: { retry: false, gcTime: 0 } },
+    });
+
+    const view = render(
+      <QueryClientProvider client={queryClient}>
+        <MemoryRouter>
+          <RestrictedZoneView
+            apiUrl="http://api.invalid"
+            authenticatedSession={managerSession}
+            onNavigate={onNavigate}
+          />
+        </MemoryRouter>
+      </QueryClientProvider>,
+    );
+
+    const media = await screen.findByTestId('mock-focused-camera-media');
+    expect(media.getAttribute('data-site')).toBe(SITE_ID);
+    expect(media.getAttribute('data-camera')).toBe(CAM_ID);
+    expect(screen.getByTestId('zones-edit-polygon-link')).toBeTruthy();
+
+    // Only the assigned site appears in the selector; other sites are excluded
+    const siteSelect = screen.getByLabelText(/Site/i) as HTMLSelectElement;
+    expect(Array.from(siteSelect.options).map((o) => o.value)).toEqual([SITE_ID]);
+
+    // Officer-only incidents/safety records navigation button is hidden for Manager-only
+    expect(screen.queryByRole('button', { name: /Safety Operations/i })).toBeNull();
+
+    // Officer retains the incidents navigation button on their assigned site
+    view.rerender(
+      <QueryClientProvider client={queryClient}>
+        <MemoryRouter>
+          <RestrictedZoneView
+            apiUrl="http://api.invalid"
+            authenticatedSession={OFFICER_SESSION}
+            onNavigate={onNavigate}
+          />
+        </MemoryRouter>
+      </QueryClientProvider>,
+    );
+    const incidentsBtn = await screen.findByRole('button', { name: /Safety Operations/i });
+    await userEvent.setup().click(incidentsBtn);
+    expect(onNavigate).toHaveBeenCalledWith('incidents', {
+      alertType: 'RESTRICTED_ZONE_INTRUSION',
+      siteId: SITE_ID,
+    });
+  });
+
+  it('denies unassigned Admin-only session in linked zone monitoring without requesting site or camera metadata', () => {
+    const client = makeBaseClient();
+    mockClient.current = client;
+    const adminSession: Pick<LoginResponse, 'accessToken' | 'user'> = {
+      accessToken: 'tok-admin',
+      user: {
+        id: 'admin-1',
+        username: 'demo.admin',
+        displayName: 'Admin Demo',
+        isActive: true,
+        mustChangePassword: false,
+        roleAssignments: [{ role: 'ADMIN', siteId: null }],
+      },
+    };
+    const queryClient = new QueryClient({
+      defaultOptions: { queries: { retry: false, gcTime: 0 } },
+    });
+
+    render(
+      <QueryClientProvider client={queryClient}>
+        <MemoryRouter>
+          <RestrictedZoneView apiUrl="http://api.invalid" authenticatedSession={adminSession} />
+        </MemoryRouter>
+      </QueryClientProvider>,
+    );
+
+    expect(screen.getByRole('alert')).toBeTruthy();
+    expect(client.listSites).not.toHaveBeenCalled();
+    expect(client.listCameras).not.toHaveBeenCalled();
+  });
 });
