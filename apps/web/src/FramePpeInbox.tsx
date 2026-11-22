@@ -1,8 +1,9 @@
-import { useMemo, useState } from 'react';
+import { useId, useMemo, useState } from 'react';
 import { useInfiniteQuery } from '@tanstack/react-query';
 import { Link, useSearchParams } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { ApiError, type LoginResponse } from '@smartsite/api-client';
+import { IconChevronDown } from './components/icons';
 import {
   isSafetyIdentificationRouteEnabled,
   matchCanonicalId,
@@ -110,7 +111,9 @@ function ScopedFramePpeInbox({
 }: ScopedProps) {
   const { t } = useTranslation();
   const { t: tSafety } = useTranslation(SAFETY_NAMESPACE);
+  const scopeNoteId = useId();
   const [unreadOnly, setUnreadOnly] = useState(false);
+  const [showScopeHelp, setShowScopeHelp] = useState(false);
   const [filterScopeKey, setFilterScopeKey] = useState(() =>
     JSON.stringify([siteId, cameraId, frameKey]),
   );
@@ -223,19 +226,19 @@ function ScopedFramePpeInbox({
       <div className="overflow-hidden rounded-xl border border-slate-200 bg-white">
         <header
           data-testid="frame-inbox-header"
-          className="space-y-3 border-b border-slate-200 px-4 py-4 sm:px-5"
+          className="space-y-2 border-b border-slate-200 px-3 py-2.5 sm:space-y-3 sm:px-5 sm:py-4"
         >
-          <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-2.5">
+          <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-2 sm:gap-x-4 sm:gap-y-2.5">
             <div
               data-testid="frame-inbox-title-row"
-              className="flex min-w-[min(100%,20rem)] flex-1 flex-wrap items-center gap-3"
+              className="flex min-w-[min(100%,20rem)] flex-1 flex-wrap items-center gap-x-2 gap-y-1.5 sm:gap-3"
             >
               <h1 className="text-2xl sm:text-[1.75rem] font-bold tracking-tight text-slate-950">
                 {t('frameInbox.title')}
               </h1>
               {visible && query.data && (
                 <div
-                  className={`inline-flex shrink-0 items-center gap-2 rounded-full border px-3 py-1 text-sm font-medium whitespace-nowrap tabular-nums ${
+                  className={`inline-flex shrink-0 items-center gap-1.5 rounded-full border px-2 py-0.5 text-xs font-medium whitespace-nowrap tabular-nums sm:gap-2 sm:px-3 sm:py-1 sm:text-sm ${
                     unreadCount > 0
                       ? 'border-teal-700/25 bg-teal-50/80 text-teal-900'
                       : 'border-slate-200 bg-slate-50 text-slate-600'
@@ -250,7 +253,7 @@ function ScopedFramePpeInbox({
               )}
               {frameKey && (
                 <Link
-                  className="inline-flex h-9 shrink-0 items-center rounded-lg border border-slate-200 bg-white px-3 text-sm font-medium whitespace-nowrap text-slate-800 transition-colors hover:border-slate-300 hover:bg-slate-50 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-teal-800"
+                  className="inline-flex h-9 shrink-0 items-center rounded-lg border border-slate-200 bg-white px-2.5 text-xs font-medium whitespace-nowrap text-slate-800 transition-colors hover:border-slate-300 hover:bg-slate-50 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-teal-800 sm:px-3 sm:text-sm"
                   to={`/incidents?${allFramesParams}`}
                 >
                   {t('frameInbox.allFrames')}
@@ -258,9 +261,9 @@ function ScopedFramePpeInbox({
               )}
             </div>
 
-            <div className="flex flex-wrap items-center gap-2">
+            <div className="flex flex-wrap items-center gap-1.5 sm:gap-2">
               <label
-                className={`inline-flex h-9 cursor-pointer select-none items-center gap-2 rounded-lg border px-3 text-sm font-medium whitespace-nowrap transition-colors has-[:focus-visible]:outline-2 has-[:focus-visible]:outline-offset-2 has-[:focus-visible]:outline-teal-800 ${
+                className={`inline-flex h-9 cursor-pointer select-none items-center gap-1.5 rounded-lg border px-2 text-xs font-medium whitespace-nowrap transition-colors has-[:focus-visible]:outline-2 has-[:focus-visible]:outline-offset-2 has-[:focus-visible]:outline-teal-800 sm:gap-2 sm:px-3 sm:text-sm ${
                   unreadOnly
                     ? 'border-teal-700/60 bg-teal-50/80 text-teal-950'
                     : 'border-slate-200 bg-white text-slate-700 hover:border-slate-300 hover:bg-slate-50'
@@ -278,21 +281,42 @@ function ScopedFramePpeInbox({
                 type="button"
                 disabled={query.isFetching || revoked}
                 onClick={() => void query.refetch()}
-                className="inline-flex h-9 items-center justify-center rounded-lg border border-slate-200 bg-white px-3.5 text-sm font-medium whitespace-nowrap text-slate-800 transition-colors hover:border-slate-300 hover:bg-slate-50 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-teal-800 disabled:cursor-not-allowed disabled:opacity-50"
+                className="inline-flex h-9 items-center justify-center rounded-lg border border-slate-200 bg-white px-2 text-xs font-medium whitespace-nowrap text-slate-800 transition-colors hover:border-slate-300 hover:bg-slate-50 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-teal-800 disabled:cursor-not-allowed disabled:opacity-50 sm:px-3.5 sm:text-sm"
               >
                 {query.isFetching ? t('frameInbox.refreshing') : t('common.refresh')}
+              </button>
+              <button
+                type="button"
+                data-testid="frame-inbox-scope-help-toggle"
+                aria-expanded={showScopeHelp}
+                aria-controls={scopeNoteId}
+                onClick={() => setShowScopeHelp((prev) => !prev)}
+                className={`inline-flex h-9 items-center gap-1 rounded-lg border px-2 text-xs font-medium whitespace-nowrap transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-teal-800 sm:hidden ${
+                  showScopeHelp
+                    ? 'border-slate-300 bg-slate-100 text-slate-950'
+                    : 'border-slate-200 bg-white text-slate-600 hover:border-slate-300 hover:bg-slate-50'
+                }`}
+              >
+                <span>{tSafety('frameInbox.scopeHelpToggle')}</span>
+                <IconChevronDown
+                  className={`h-3.5 w-3.5 shrink-0 transition-transform ${showScopeHelp ? 'rotate-180' : ''}`}
+                />
               </button>
             </div>
           </div>
 
           <p
+            id={scopeNoteId}
             data-testid="frame-inbox-header-scope-note"
-            className="w-full min-w-0 text-sm leading-snug text-slate-600"
+            className={`${showScopeHelp ? 'block' : 'hidden sm:block'} w-full min-w-0 text-xs leading-snug text-slate-600 sm:text-sm`}
           >
             {tSafety('frameInbox.scopeCountNote')}
           </p>
 
-          <div data-tour-anchor="frame-inbox-filters" className="border-t border-slate-100 pt-3">
+          <div
+            data-tour-anchor="frame-inbox-filters"
+            className="border-t border-slate-100 pt-2 sm:pt-3"
+          >
             <FrameInboxSiteFilter
               client={client}
               token={token}

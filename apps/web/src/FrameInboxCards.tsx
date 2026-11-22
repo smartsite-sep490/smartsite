@@ -118,10 +118,10 @@ export function FrameInboxCards({
   const hasMultiUnread = unreadFramesWithKeys.length > 1;
   const hasSelection = selectedUnreadFrames.length > 0;
   const rowOuterGridClass = hasMultiUnread
-    ? 'grid grid-cols-1 lg:grid-cols-[20px_minmax(0,1fr)_36px] lg:items-center gap-2.5 lg:gap-3'
-    : 'grid grid-cols-1 lg:grid-cols-[minmax(0,1fr)_36px] lg:items-center gap-2.5 lg:gap-3';
+    ? 'grid grid-cols-[auto_minmax(0,1fr)_auto] items-start gap-x-2 gap-y-1 lg:grid-cols-[20px_minmax(0,1fr)_36px] lg:items-center lg:gap-3'
+    : 'grid grid-cols-[minmax(0,1fr)_auto] items-start gap-x-2 gap-y-1 lg:grid-cols-[minmax(0,1fr)_36px] lg:items-center lg:gap-3';
   const rowColumnsGridClass =
-    'grid w-full min-w-0 grid-cols-1 gap-2 lg:grid-cols-[132px_minmax(175px,1.15fr)_122px_minmax(220px,1.55fr)_104px] lg:items-center lg:gap-4';
+    'grid w-full min-w-0 grid-cols-1 gap-1.5 lg:grid-cols-[132px_minmax(175px,1.15fr)_122px_minmax(220px,1.55fr)_104px] lg:items-center lg:gap-4';
 
   return (
     <>
@@ -196,53 +196,9 @@ export function FrameInboxCards({
           ) : (
             <div
               data-testid={hasMultiUnread ? 'frame-inbox-batch-bar' : undefined}
-              className="bg-slate-50/90 px-4 py-2.5 sm:px-5"
+              className="hidden bg-slate-50/90 px-4 py-2.5 sm:px-5 lg:block"
             >
-              <div className="flex flex-wrap items-center justify-between gap-2 lg:hidden">
-                {hasMultiUnread && (
-                  <>
-                    <label className="inline-flex cursor-pointer select-none items-center gap-2 text-sm font-medium text-slate-700">
-                      <input
-                        type="checkbox"
-                        checked={allPageUnreadSelected}
-                        disabled={read.isPending}
-                        className="h-4 w-4 rounded border-slate-400 accent-teal-800 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-teal-800"
-                        onChange={(event) => {
-                          if (event.target.checked) {
-                            const next: Record<string, boolean> = {};
-                            for (const item of unreadFramesWithKeys) next[item.key] = true;
-                            setSelectedFrameKeys(next);
-                          } else {
-                            setSelectedFrameKeys({});
-                          }
-                        }}
-                      />
-                      <span>
-                        {tSafety('frameInbox.selectAllUnreadPage', {
-                          count: unreadFramesWithKeys.length,
-                        })}
-                      </span>
-                    </label>
-                    <button
-                      type="button"
-                      disabled={read.isPending || batchTargetCases.length === 0}
-                      onClick={() => read.mutate(batchTargetCases)}
-                      className="inline-flex h-8 shrink-0 items-center gap-1.5 rounded-lg px-2.5 text-xs font-medium text-slate-600 hover:bg-slate-200/70 hover:text-slate-950 disabled:opacity-50"
-                    >
-                      <IconCheck className="h-3.5 w-3.5 shrink-0" />
-                      <span>
-                        {read.isPending
-                          ? t('frameInbox.markingRead')
-                          : tSafety('frameInbox.markPageReadShort')}
-                      </span>
-                    </button>
-                  </>
-                )}
-              </div>
-
-              <div
-                className={`hidden lg:grid ${rowOuterGridClass} border-l-[3px] border-l-transparent`}
-              >
+              <div className={`grid ${rowOuterGridClass} border-l-[3px] border-l-transparent`}>
                 {hasMultiUnread && (
                   <div className="flex items-center">
                     <input
@@ -369,9 +325,9 @@ export function FrameInboxCards({
                         : 'border-l-transparent bg-white hover:bg-slate-50/70'
                 }`}
               >
-                <div className={`${rowOuterGridClass} px-4 py-3.5 sm:px-5`}>
+                <div className={`${rowOuterGridClass} px-3 py-2.5 sm:px-5 lg:py-3.5`}>
                   {hasMultiUnread && (
-                    <div className="flex items-center">
+                    <div className="flex items-center pt-1 lg:pt-0">
                       {frame.unread ? (
                         <input
                           type="checkbox"
@@ -390,7 +346,7 @@ export function FrameInboxCards({
                           }
                         />
                       ) : (
-                        <span aria-hidden="true" className="hidden lg:block h-4 w-4 shrink-0" />
+                        <span aria-hidden="true" className="block h-4 w-4 shrink-0" />
                       )}
                     </div>
                   )}
@@ -408,7 +364,7 @@ export function FrameInboxCards({
                     className={`group ${rowColumnsGridClass} rounded-lg py-0.5 text-left focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-teal-800`}
                   >
                     {/* Col 1: Time & Read State */}
-                    <div className="min-w-0 space-y-0.5 tabular-nums">
+                    <div className="flex min-w-0 flex-wrap items-baseline gap-x-2 gap-y-0.5 tabular-nums lg:block lg:space-y-0.5">
                       <div className="flex items-center gap-2">
                         <span
                           aria-hidden="true"
@@ -430,7 +386,7 @@ export function FrameInboxCards({
                           {t(frame.unread ? 'episodes.unread' : 'episodes.read')}
                         </span>
                       </div>
-                      <div className="pl-4 text-xs text-slate-500">{displayDate}</div>
+                      <div className="text-xs text-slate-500 lg:pl-4">{displayDate}</div>
                     </div>
 
                     {/* Col 2: Location (Camera + Site) */}
@@ -595,7 +551,7 @@ export function FrameInboxCards({
                   <div
                     id={panelId}
                     data-testid="frame-expanded-workspace"
-                    className="min-w-0 border-t border-slate-200 bg-slate-50/70 px-4 py-4 sm:px-5 sm:py-5 space-y-4"
+                    className="min-w-0 border-t border-slate-200 bg-slate-50/70 px-3 py-3 sm:px-5 sm:py-5 space-y-4"
                   >
                     <div className="grid min-w-0 grid-cols-1 gap-5 lg:grid-cols-12 lg:items-start">
                       <div className="min-w-0 space-y-3 lg:col-span-5 lg:sticky lg:top-4">
