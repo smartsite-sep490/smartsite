@@ -47,7 +47,7 @@ export function WorkerDocumentBundleForm({
     phoneNumber: profile.phoneNumber ?? '',
     gender: profile.gender,
     address: profile.address ?? '',
-  }); 
+  });
   const [identityChanged, setIdentityChanged] = useState(false);
   const [expanded, setExpanded] = useState(true);
   const requestId = useRef(crypto.randomUUID());
