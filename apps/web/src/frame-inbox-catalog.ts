@@ -31,6 +31,10 @@ export const FRAME_INBOX_EXTRA_EN = {
   'frameInbox.inspectAction': 'Inspect',
   'frameInbox.collapseAction': 'Collapse',
   'frameInbox.markPageReadShort': 'Mark page read',
+  'frameInbox.scopeHelpToggle': 'Count scope',
+  'frameInbox.filtersToggle': 'Filters',
+  'frameInbox.filtersToggleActive': 'Filters ({{count}})',
+  'frameInbox.hideFilters': 'Hide filters',
 } as const;
 
 export type FrameInboxExtraKey = keyof typeof FRAME_INBOX_EXTRA_EN;
@@ -66,6 +70,10 @@ export const FRAME_INBOX_EXTRA_VI: Record<FrameInboxExtraKey, string> = {
   'frameInbox.inspectAction': 'Chi tiết',
   'frameInbox.collapseAction': 'Thu gọn',
   'frameInbox.markPageReadShort': 'Đọc cả trang',
+  'frameInbox.scopeHelpToggle': 'Phạm vi đếm',
+  'frameInbox.filtersToggle': 'Bộ lọc',
+  'frameInbox.filtersToggleActive': 'Bộ lọc ({{count}})',
+  'frameInbox.hideFilters': 'Ẩn bộ lọc',
 };
 
 export function registerFrameInboxExtraCatalog(): void {

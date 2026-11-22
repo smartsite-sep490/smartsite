@@ -144,8 +144,8 @@ export function SafetyEpisodeWorkspace({
 
   const navPillClass = (active: boolean) =>
     active
-      ? 'inline-flex h-9 items-center justify-center rounded-lg bg-[#0F172A] px-3.5 text-sm font-semibold whitespace-nowrap text-white transition-colors hover:bg-slate-800 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-slate-900'
-      : 'inline-flex h-9 items-center justify-center rounded-lg px-3.5 text-sm font-medium whitespace-nowrap text-slate-700 transition-colors hover:bg-slate-200/70 hover:text-slate-950 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-slate-900';
+      ? 'inline-flex h-9 shrink-0 items-center justify-center rounded-lg bg-[#0F172A] px-2.5 text-xs font-semibold whitespace-nowrap text-white transition-colors hover:bg-slate-800 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-slate-900 sm:px-3.5 sm:text-sm'
+      : 'inline-flex h-9 shrink-0 items-center justify-center rounded-lg px-2.5 text-xs font-medium whitespace-nowrap text-slate-700 transition-colors hover:bg-slate-200/70 hover:text-slate-950 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-slate-900 sm:px-3.5 sm:text-sm';
 
   const allowed =
     Boolean(session?.accessToken) &&
@@ -177,14 +177,14 @@ export function SafetyEpisodeWorkspace({
   }
 
   return (
-    <div className="w-full min-w-0 space-y-4">
+    <div className="w-full min-w-0 space-y-2.5 sm:space-y-4">
       {(allowed || identificationAllowed) && (
         <nav
           aria-label={t('episodes.views')}
           data-testid="safety-workspace-mode-bar"
-          className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-200 pb-3"
+          className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-200 pb-2 sm:gap-3 sm:pb-3"
         >
-          <p className="min-w-[min(100%,20rem)] flex-1 text-sm leading-snug text-slate-600">
+          <p className="hidden min-w-[min(100%,20rem)] flex-1 text-sm leading-snug text-slate-600 sm:block">
             {identification
               ? tSafety('episodes.identificationWorkspaceIntro')
               : frameGrouped
@@ -195,7 +195,7 @@ export function SafetyEpisodeWorkspace({
           </p>
           <div
             data-testid="safety-workspace-mode-actions"
-            className="flex flex-wrap items-center gap-1"
+            className="flex w-full min-w-0 flex-nowrap items-center gap-1 overflow-x-auto pb-0.5 sm:w-auto sm:flex-wrap sm:overflow-visible sm:pb-0"
           >
             <Link
               aria-current={isOperationsActive ? 'page' : undefined}
