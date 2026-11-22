@@ -15,7 +15,7 @@ import { SafetyTasksView } from '../safety/SafetyTasksView';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useInRouterContext } from 'react-router-dom';
 import type { FormEvent } from 'react';
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { skipToken, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import {
   ApiError,
   type LoginResponse,
@@ -516,19 +516,23 @@ export function SafetyAlertsView({
     detections.find((detection) =>
       detection.evidence?.some((item) => item.kind === 'FRAME' && item.available),
     ) ?? detections[0];
+  const canLoadWorkContext = Boolean(token && hasSelectedAlertSummary && primaryDetection);
   const workContext = useQuery({
-    queryKey: [
-      'safety-workflow',
-      apiUrl,
-      sessionScope,
-      selectedSiteId,
-      'alert-context',
-      selectedAlertId,
-      detail.data?.revision,
-    ],
-    queryFn: ({ signal }) =>
-      client.getAlertWorkContext(token, selectedSiteId, selectedAlertId, { signal }),
-    enabled: Boolean(token && hasSelectedAlertSummary && primaryDetection),
+    queryKey: canLoadWorkContext
+      ? [
+          'safety-workflow',
+          apiUrl,
+          sessionScope,
+          selectedSiteId,
+          'alert-context',
+          selectedAlertId,
+          detail.data?.revision,
+        ]
+      : ['safety-alert-context-inactive'],
+    queryFn: canLoadWorkContext
+      ? ({ signal }) =>
+          client.getAlertWorkContext(token, selectedSiteId, selectedAlertId, { signal })
+      : skipToken,
     retry: false,
   });
   const hasAlertWorkContextAnchor = Boolean(

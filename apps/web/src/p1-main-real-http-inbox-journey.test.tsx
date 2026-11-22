@@ -99,7 +99,7 @@ it.runIf(process.env.SMARTSITE_P1_OWNED_FIXTURE === '1')(
     for (const [index, finding] of tracked.findings.entries()) {
       await user.click(screen.getByTestId(`tracked-workspace-review-finding-${finding.alertId}`));
       await user.type(
-        await screen.findByRole('textbox', { name: /decision reason/i }),
+        await screen.findByRole('textbox', { name: /review basis/i }),
         'Synthetic integration review',
       );
       await user.click(

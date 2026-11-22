@@ -693,7 +693,7 @@ it('Confirming a filtered alert keeps its detail available for creating an Incid
   fireEvent.change(screen.getByLabelText('Username'), { target: { value: 'safety' } });
   fireEvent.change(screen.getByLabelText('Password'), { target: { value: 'Fake123!' } });
   fireEvent.click(screen.getByRole('button', { name: 'Sign in' }));
-  fireEvent.change(await screen.findByLabelText('Decision reason (minimum 5 characters)'), {
+  fireEvent.change(await screen.findByLabelText('Review basis (minimum 5 characters)'), {
     target: { value: 'Synthetic confirmed evidence' },
   });
   fireEvent.click(screen.getByRole('button', { name: 'Confirm violation' }));
