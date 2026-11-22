@@ -300,7 +300,7 @@ export function CameraSetupContextBar({
     return (
       <div
         data-testid="camera-setup-sticky-header"
-        className="min-w-0 space-y-2 bg-white/95 text-sm text-slate-700 backdrop-blur-xs lg:sticky lg:top-16 lg:z-10 lg:pb-1"
+        className="min-w-0 space-y-2 bg-white/95 text-sm text-slate-700 lg:pb-1"
       >
         {!canManageCameras && (
           <p className="min-w-0 break-words [overflow-wrap:anywhere] rounded-xl border border-slate-200 bg-slate-50/60 px-3 py-2 text-xs leading-relaxed text-slate-700">
