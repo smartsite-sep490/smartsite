@@ -149,7 +149,7 @@ test('zero-revision bootstrap helper issues null only for unowned v1.1 PREPARED,
     ports,
   );
 
-  assert.deepEqual(calls, ['auth', 'prepare', 'auth', 'issue', 'commit', 'auth']);
+  assert.deepEqual(calls, ['auth', 'prepare', 'auth', 'issue', 'auth', 'commit', 'auth']);
   assert.deepEqual(issuedWith, [null]);
   assert.equal(result.state, 'RUNNING');
   assert.equal(result.sourceRevision, 1);
@@ -332,4 +332,67 @@ test('revoked authority after unowned prepare never issues or commits, completed
     /commit failed/,
   );
   assert.equal(commitCalls, 1);
+});
+
+test('revoked authority at issue resolution rejects before commit can start a worker', async () => {
+  for (const mode of [
+    {
+      label: 'unowned v1.1 bootstrap',
+      expectedRevision: 0,
+      prepared: structuredClone(unownedExample),
+      expectedOwner: null as string | null,
+    },
+    {
+      label: 'owned v1.0 renewal',
+      expectedRevision: 1,
+      prepared: {
+        schemaVersion: '1.0.0',
+        state: 'PREPARED',
+        commandId,
+        sourceRevision: 1,
+        sourceKind: 'LIVE',
+        currentGenerationId: existingGenerationId,
+      },
+      expectedOwner: existingGenerationId as string | null,
+    },
+  ]) {
+    let revoked = false;
+    let issues = 0;
+    let commits = 0;
+    const ports: SourceActivationPorts = {
+      authorize: async () => {
+        if (revoked) throw new Error('revoked');
+      },
+      prepare: async () => sourceActivationStateSchema.parse(mode.prepared),
+      issue: async (expected, cmd) => {
+        assert.equal(expected, mode.expectedOwner, mode.label);
+        assert.equal(cmd, commandId, mode.label);
+        issues++;
+        revoked = true;
+        return issuedGeneration;
+      },
+      commit: async () => {
+        commits++;
+        return {
+          schemaVersion: '1.0.0',
+          state: 'RUNNING',
+          commandId,
+          sourceRevision: mode.expectedRevision + 1,
+          sourceKind: 'LIVE',
+          currentGenerationId: issuedGenerationId,
+        };
+      },
+    };
+
+    await assert.rejects(
+      activateTestedCameraSource(
+        { commandId, receiptId, expectedRevision: mode.expectedRevision },
+        ports,
+      ),
+      /revoked/,
+      mode.label,
+    );
+    assert.equal(issues, 1, mode.label);
+    assert.equal(commits, 0, mode.label);
+  }
 });

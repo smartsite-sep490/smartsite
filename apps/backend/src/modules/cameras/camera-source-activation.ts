@@ -46,6 +46,8 @@ export async function activateTestedCameraSource(
     throw new Error('Source revision changed');
   await ports.authorize();
   const generation = await ports.issue(prepared.currentGenerationId, command.commandId);
+  // Issuance may outlive the caller's authority; do not start its child after revocation.
+  await ports.authorize();
   const running = await ports.commit(command.commandId, generation);
   if (
     running.state !== 'RUNNING' ||
