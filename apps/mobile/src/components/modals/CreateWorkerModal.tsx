@@ -21,7 +21,7 @@ import type {
 import { healthCertificateExpiry } from '@smartsite/api-client';
 import { Attachments } from '../../features/shared/uploads';
 import { documentKinds } from '../../features/contractor/worker-documents';
-import { Choice, Disclosure, Hint } from '../../features/shared/ui';
+import { Choice, Disclosure, Hint, errorMessage } from '../../features/shared/ui';
 import { CalendarDateField } from '../../features/shared/calendar-date-field';
 
 import { RequestSheet } from '../../features/shared/request-sheet';
@@ -157,7 +157,7 @@ export function CreateWorkerModal({ visible, onClose, onSuccess }: CreateWorkerM
       onSuccess?.();
       onClose();
     } catch (err) {
-      setLocalError(err instanceof Error ? err.message : t('common.unexpectedError'));
+      setLocalError(errorMessage(err));
     }
   };
 
@@ -299,7 +299,7 @@ export function CreateWorkerModal({ visible, onClose, onSuccess }: CreateWorkerM
             editable={!pendingAccount && !command.isPending}
           />
         </View>
-        <View pointerEvents={pendingAccount || command.isPending ? 'none' : 'auto'}>
+        <View pointerEvents={command.isPending ? 'none' : 'auto'}>
           {(['FRONT', 'BACK'] as const).map((side) => (
             <Disclosure
               key={side}
@@ -309,6 +309,7 @@ export function CreateWorkerModal({ visible, onClose, onSuccess }: CreateWorkerM
                 files={identityFiles[side] ?? []}
                 maxFiles={1}
                 allowPdf={false}
+                disabled={command.isPending}
                 validateFile={async (file) => {
                   const result = await validateImage(file);
                   setIdentityChecks((previous) => ({ ...previous, [side]: result }));
@@ -371,6 +372,7 @@ export function CreateWorkerModal({ visible, onClose, onSuccess }: CreateWorkerM
               <Attachments
                 files={files[kind] ?? []}
                 maxFiles={1}
+                disabled={command.isPending}
                 validateFile={async (file) => {
                   const result = await validateImage(file);
                   setChecks((previous) => ({ ...previous, [kind]: result }));
