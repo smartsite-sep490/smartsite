@@ -47,10 +47,11 @@ it.each(['worker', 'contractor'] as const)(
       },
     };
     cache = new QueryClient({ defaultOptions: { queries: { retry: false, gcTime: 0 } } });
+    const switchScope = vi.fn();
     await act(async () => {
       root = create(
         <QueryClientProvider client={cache}>
-          <ProfileScreen onScopeChange={vi.fn()} />
+          <ProfileScreen onScopeChange={switchScope} />
         </QueryClientProvider>,
       );
     });
@@ -67,6 +68,19 @@ it.each(['worker', 'contractor'] as const)(
       await act(async () => button.props.onPress());
     };
     expect(JSON.stringify(root.toJSON())).not.toContain(t('push.title'));
+    await press(t('profile.siteLocation'));
+    expect(switchScope).toHaveBeenCalledTimes(1);
+    expect(
+      root.root.findAll(
+        (n) =>
+          String(n.type) === 'Pressable' && n.props.accessibilityLabel === t('scope.switchScope'),
+      ),
+    ).toHaveLength(0);
+    await press(t('profile.personalInfo'));
+    expect(JSON.stringify(root.toJSON())).toContain(t('workforce.username'));
+    expect(JSON.stringify(root.toJSON())).toContain(t('accountEmail.email'));
+    expect(JSON.stringify(root.toJSON())).not.toContain(t('documents.FRONT'));
+    await press(t('common.close'));
     await press(t('common.logout'));
     expect(JSON.stringify(root.toJSON())).toContain(t('profile.logoutConfirmMessage'));
     expect(logout).not.toHaveBeenCalled();
@@ -100,6 +114,23 @@ it('shows the Worker account without face enrollment controls or face API reques
     .spyOn(client, 'getFaceProfile')
     .mockRejectedValue(new Error('Worker cannot read face management'));
   const enroll = vi.spyOn(client, 'startFaceEnrollment');
+  const personal = vi.spyOn(client, 'workerCompliance').mockResolvedValue({
+    workerId: 'worker-a',
+    contractorId: 'contractor-a',
+    externalId: 'W000001',
+    displayName: 'Synthetic Worker',
+    nationalId: '000000000001',
+    phoneNumber: '0900000000',
+    gender: 'MALE',
+    address: 'Synthetic address',
+    identityImages: [],
+    documents: [],
+    missingKinds: [],
+    expiringKinds: [],
+    status: 'PENDING',
+    submissionStatus: 'NOT_SUBMITTED',
+    needsSupplement: false,
+  });
   workspace = {
     client,
     token: 'token',
@@ -149,6 +180,27 @@ it('shows the Worker account without face enrollment controls or face API reques
   expect(labels.some((label: string) => /khuôn mặt|đăng ký|thu hồi/i.test(label))).toBe(false);
   expect(face).not.toHaveBeenCalled();
   expect(enroll).not.toHaveBeenCalled();
+  expect(personal).not.toHaveBeenCalled();
+  await act(async () =>
+    pressables
+      .find((n) => n.props.accessibilityLabel === t('profile.personalInfo'))!
+      .props.onPress(),
+  );
+  await act(async () => {
+    await new Promise((resolve) => setTimeout(resolve, 40));
+  });
+  expect(personal).toHaveBeenCalledWith('token', 'site-a', 'worker-a');
+  for (const value of ['000000000001', '0900000000', 'Synthetic address', t('documents.MALE')])
+    expect(JSON.stringify(root.toJSON())).toContain(value);
+  expect(JSON.stringify(root.toJSON())).not.toContain(t('documents.FRONT'));
+  await act(async () =>
+    root.root
+      .findAll(
+        (n) => String(n.type) === 'Pressable' && n.props.accessibilityLabel === t('common.close'),
+      )
+      .at(-1)!
+      .props.onPress(),
+  );
 
   // Single-site worker must NOT have switch scope button
   const switchScopeBtn = pressables.find(
@@ -171,7 +223,7 @@ it('shows the Worker account without face enrollment controls or face API reques
   expect(JSON.stringify(root.toJSON())).toContain('Hồ sơ giấy tờ công nhân');
 });
 
-it('shows switch scope button when canSwitchScope is true for multi-scope user', async () => {
+it('uses the existing site row to switch scope without an extra menu item for multi-scope users', async () => {
   const client = new SmartSiteManagementClient('https://api.example.test');
   vi.spyOn(client, 'listWorkers').mockResolvedValue({
     items: [
@@ -233,9 +285,7 @@ it('shows switch scope button when canSwitchScope is true for multi-scope user',
   expect(JSON.stringify(root.toJSON())).toContain('W000002');
   const pressables = root.root.findAll((n) => String(n.type) === 'Pressable');
   const switchScopeBtn = pressables.find(
-    (n) =>
-      n.props.accessibilityLabel === 'Đổi công trường / vai trò được cấp' ||
-      n.props.accessibilityLabel === 'Switch site / assigned role',
+    (n) => n.props.accessibilityLabel === t('profile.siteLocation'),
   );
   expect(switchScopeBtn).toBeDefined();
   await act(async () => {

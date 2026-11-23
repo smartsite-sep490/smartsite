@@ -17,7 +17,8 @@ import { Button, ErrorNotice, Field, Page, QueryState, palette } from '../shared
 import { WorkerAvatar } from '../../components/common/WorkerAvatar';
 import { WorkerQrModal } from '../../components/worker/WorkerQrModal';
 import { WorkerRequestModal } from '../../components/modals/WorkerRequestModal';
-import { WorkerDocuments } from '../contractor/worker-documents';
+import { ProfileDetails, WorkerDocuments } from '../contractor/worker-documents';
+import { FormSection } from '../shared/form-section';
 import { AccountEmailCard } from '../auth/account-email-card';
 import { LogoutConfirmation } from '../auth/logout-confirmation';
 import { RequestSheet } from '../shared/request-sheet';
@@ -33,7 +34,6 @@ import {
   IconMapPin,
   IconGlobe,
   IconLogout,
-  IconSwap,
 } from '../../components/common/Icons';
 import { colors } from '../../theme/colors';
 import { useTranslation, setLanguage } from '../../i18n';
@@ -383,10 +383,11 @@ export function ProfileScreen({
   initialDocuments?: boolean;
 }) {
   const { t, i18n } = useTranslation();
-  const { scope, user, client, token, queryKey, canSwitchScope } = useWorkspace();
+  const { scope, user, client, token, queryKey } = useWorkspace();
   const [showPasswordModal, setShowPasswordModal] = useState(false);
   const [showLogoutModal, setShowLogoutModal] = useState(false);
   const [documents, setDocuments] = useState(initialDocuments);
+  const [accountDetails, setAccountDetails] = useState(false);
 
   const worker = useQuery({
     queryKey: [...queryKey, 'own-worker'],
@@ -395,6 +396,11 @@ export function ProfileScreen({
       (await allPages((p) => client.listWorkers(token, scope.siteId, p), signal)).find(
         (w) => w.userId === user.id,
       ) ?? null,
+  });
+  const personal = useQuery({
+    queryKey: [...queryKey, 'worker-documents', worker.data?.id],
+    enabled: accountDetails && scope.role === 'worker' && !!worker.data?.id,
+    queryFn: () => client.workerCompliance(token, scope.siteId, worker.data!.id),
   });
 
   if (documents && scope.role === 'worker' && worker.data)
@@ -521,7 +527,12 @@ export function ProfileScreen({
 
           <View style={profileStyles.menuGroupCard}>
             {/* Row 1: Profile Setting / Thông tin tài khoản */}
-            <View style={profileStyles.menuItem}>
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel={t('profile.personalInfo')}
+              style={({ pressed }) => [profileStyles.menuItem, pressed && { opacity: 0.75 }]}
+              onPress={() => setAccountDetails(true)}
+            >
               <View style={[profileStyles.menuIconBox, { backgroundColor: '#EFF6FF' }]}>
                 <IconUser size={18} color="#2563EB" />
               </View>
@@ -534,7 +545,7 @@ export function ProfileScreen({
                 </Text>
               </View>
               <IconChevronRight size={16} color="#CBD5E1" />
-            </View>
+            </Pressable>
 
             <View style={profileStyles.menuDivider} />
 
@@ -542,7 +553,12 @@ export function ProfileScreen({
             <View style={profileStyles.menuDivider} />
 
             {/* Row 2: Location / Công trường */}
-            <View style={profileStyles.menuItem}>
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel={t('profile.siteLocation')}
+              style={({ pressed }) => [profileStyles.menuItem, pressed && { opacity: 0.75 }]}
+              onPress={onScopeChange}
+            >
               <View style={[profileStyles.menuIconBox, { backgroundColor: '#FEF3C7' }]}>
                 <IconMapPin size={18} color="#D97706" />
               </View>
@@ -555,38 +571,7 @@ export function ProfileScreen({
                 </Text>
               </View>
               <IconChevronRight size={16} color="#CBD5E1" />
-            </View>
-
-            {/* Optional: Switch Scope (Only for multi-scope users) */}
-            {canSwitchScope && (
-              <>
-                <View style={profileStyles.menuDivider} />
-                <Pressable
-                  accessibilityRole="button"
-                  accessibilityLabel={t('scope.switchScope')}
-                  style={({ pressed }) => [
-                    profileStyles.menuItem,
-                    pressed && { opacity: 0.75, backgroundColor: '#F8FAFC' },
-                  ]}
-                  onPress={onScopeChange}
-                >
-                  <View style={[profileStyles.menuIconBox, { backgroundColor: '#FFF7ED' }]}>
-                    <IconSwap size={18} color="#EA580C" />
-                  </View>
-                  <View style={profileStyles.menuTextCol}>
-                    <Text numberOfLines={1} ellipsizeMode="tail" style={profileStyles.menuTitle}>
-                      {scope.role === 'worker'
-                        ? t('profile.switchMode')
-                        : t('profile.switchContractor')}
-                    </Text>
-                    <Text numberOfLines={1} ellipsizeMode="tail" style={profileStyles.menuSubtitle}>
-                      {t('scope.chooseAgain')}
-                    </Text>
-                  </View>
-                  <IconChevronRight size={16} color="#CBD5E1" />
-                </Pressable>
-              </>
-            )}
+            </Pressable>
 
             {/* Row 3: Manage Documents / Worker Documents (Worker only) */}
             {scope.role === 'worker' && (
@@ -743,6 +728,58 @@ export function ProfileScreen({
           onClose={() => setShowPasswordModal(false)}
         />
         {showLogoutModal && <LogoutConfirmation onClose={() => setShowLogoutModal(false)} />}
+        {accountDetails && (
+          <RequestSheet
+            visible
+            variant="compact"
+            title={t('profile.personalInfo')}
+            icon={<IconUser size={21} color={colors.primary} />}
+            onClose={() => setAccountDetails(false)}
+            footer={null}
+          >
+            <FormSection number="01" title={t('contractorUi.accountInfo')}>
+              {[
+                [t('workforce.fullName'), user.displayName],
+                [t('workforce.username'), user.username],
+                [t('accountEmail.email'), user.email],
+              ].map(([label, value]) => (
+                <View key={label} style={{ gap: 4 }}>
+                  <Text style={{ color: colors.textMuted, fontSize: 12, lineHeight: 19 }}>
+                    {label}
+                  </Text>
+                  <Text
+                    selectable
+                    style={{
+                      color: colors.textPrimary,
+                      fontSize: 14,
+                      lineHeight: 22,
+                      fontWeight: '600',
+                    }}
+                  >
+                    {value || t('common.notRecorded')}
+                  </Text>
+                </View>
+              ))}
+            </FormSection>
+            {scope.role === 'worker' && (
+              <QueryState query={worker}>
+                {(data) =>
+                  data ? (
+                    <QueryState query={personal}>
+                      {(profile) => (
+                        <FormSection number="02" title={t('profile.personalInfo')}>
+                          <ProfileDetails data={profile} />
+                        </FormSection>
+                      )}
+                    </QueryState>
+                  ) : (
+                    <Text>{t('profile.noWorkerProfile')}</Text>
+                  )
+                }
+              </QueryState>
+            )}
+          </RequestSheet>
+        )}
       </ScrollView>
     </SafeAreaView>
   );

@@ -235,7 +235,7 @@ export function WorkerDocuments({
   );
 }
 
-function ProfileDetails({ data }: { data: WorkerComplianceResponse }) {
+export function ProfileDetails({ data }: { data: WorkerComplianceResponse }) {
   const { t } = useTranslation();
   return (
     <View style={styles.details}>
