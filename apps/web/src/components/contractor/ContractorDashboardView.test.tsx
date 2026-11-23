@@ -23,6 +23,7 @@ const api = vi.hoisted(() => ({
   teamZoneSetup: vi.fn(),
   grantTeamZone: vi.fn(),
   revokeTeamZone: vi.fn(),
+  setContractorTeamLeader: vi.fn(),
 }));
 
 vi.mock('@smartsite/api-client', async (importOriginal) => ({
@@ -143,6 +144,26 @@ const syntheticWorkers = [
 ];
 
 let queryClient: QueryClient;
+
+it('opens team leader management for the selected Site and Contractor', async () => {
+  api.contractorTeamDetail.mockResolvedValue({ ...syntheticTeams[0], leaderWorkerId: null });
+  renderView();
+  const user = userEvent.setup();
+  await user.click((await screen.findAllByRole('button', { name: 'Team leader' }))[0]!);
+  await screen.findByLabelText('Select team leader');
+  expect(api.contractorTeamDetail).toHaveBeenCalledWith(
+    'synthetic-jwt-token',
+    'site-alpha',
+    'contractor-paint',
+    'team-1',
+  );
+  expect(api.listContractorTeamWorkers).toHaveBeenCalledWith(
+    'synthetic-jwt-token',
+    'site-alpha',
+    'contractor-paint',
+    { offset: 0, limit: 100, teamId: 'team-1' },
+  );
+});
 
 it('opens Assign Zone for the selected team and binds the dialog to the active Contractor scope', async () => {
   api.teamZoneSetup.mockResolvedValue({ availableZones: [], permissions: [] });

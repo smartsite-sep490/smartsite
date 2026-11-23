@@ -27,6 +27,7 @@ import {
   AttendanceEventEntity,
   AbsenceRequestEntity,
   AbsenceRequestStatus,
+  OvertimeRequestEntity,
   AuthSessionEntity,
 } from '../../src/database/entities/index.js';
 import { AttendanceReportsService } from '../../src/modules/workforce/attendance/attendance-reports.service.js';
@@ -235,6 +236,18 @@ test('attendance reports: real HTTP/auth, PostgreSQL totals, calendar data, sear
       reason: 'Synthetic approved full leave',
       status: AbsenceRequestStatus.APPROVED,
     });
+    // Full-shift leave approval deactivates the assigned schedule in the real workflow.
+    await dataSource
+      .getRepository(WorkerScheduleEntity)
+      .update(leaveSchedule.id, { isActive: false });
+    await dataSource.getRepository(AttendanceDayEntity).update(
+      { scheduleId: leaveSchedule.id },
+      {
+        status: 'NEEDS_REVIEW',
+        confirmedMinutes: null,
+        anomalies: ['PENDING_LEAVE', 'PENDING_REQUEST'],
+      },
+    );
     await attendance(worker.id, '2026-10-10', 'CONFIRMED', 240, 15);
     await attendance(worker.id, '2026-10-09', 'CONFIRMED', 120, 0, evening);
     await attendance(second.id, '2026-10-14', 'ABSENT', 0);
@@ -264,6 +277,53 @@ test('attendance reports: real HTTP/auth, PostgreSQL totals, calendar data, sear
     assert.equal(detail.total, 1);
     assert.equal(detail.items[0]?.attendanceRate, 50);
     assert.equal(detail.items[0]?.todayStatus, 'APPROVED_LEAVE');
+    const todayOnly = await service.list(actor(userId), siteId, {
+      fromDate: '2026-10-14',
+      toDate: '2026-10-14',
+      includeDaily: true,
+    });
+    assert.equal(todayOnly.items[0]?.totalMinutes, 0);
+    assert.equal(todayOnly.items[0]?.provisionalMinutes, 0);
+    assert.equal(todayOnly.items[0]?.todayStatus, 'APPROVED_LEAVE');
+    assert.equal(todayOnly.items[0]?.daily?.length, 1);
+    assert.equal(todayOnly.items[0]?.daily?.[0]?.status, 'APPROVED_LEAVE');
+    await t.test(
+      'approved leave does not conceal a separate pending overtime request',
+      async () => {
+        const overtimeId = randomUUID();
+        try {
+          await dataSource
+            .getRepository(OvertimeRequestEntity)
+            .save({
+              id: overtimeId,
+              siteId,
+              workerId: worker.id,
+              scheduleId: leaveSchedule.id,
+              expectedShiftId: shift.id,
+              requestedBy: userId,
+              startsAt: new Date('2026-10-14T11:00:00Z'),
+              endsAt: new Date('2026-10-14T12:00:00Z'),
+              reason: 'Synthetic pending overtime',
+              status: 'PENDING',
+            });
+          const pending = await service.list(actor(userId), siteId, query);
+          assert.equal(pending.items[0]?.todayStatus, 'NEEDS_REVIEW');
+        } finally {
+          await dataSource.getRepository(OvertimeRequestEntity).delete(overtimeId);
+        }
+        assert.equal(
+          (await service.list(actor(userId), siteId, query)).items[0]?.todayStatus,
+          'APPROVED_LEAVE',
+        );
+      },
+    );
+    const approvedLeaveFilter = await service.list(actor(repId), siteId, {
+      ...query,
+      todayStatus: 'APPROVED_LEAVE',
+      shiftId: shift.id,
+    });
+    assert.equal(approvedLeaveFilter.total, 1);
+    assert.equal(approvedLeaveFilter.items[0]?.workerId, worker.id);
     assert.equal(detail.items[0]?.daily?.find((d) => d.workDate === '2026-10-18')?.status, 'OFF');
     assert.equal(
       (await service.list(actor(repId), siteId, { ...query, search: second.externalId })).total,

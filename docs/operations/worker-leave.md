@@ -82,6 +82,29 @@ shows “Absent — leave awaiting review” only after the assigned shift ends 
 “Leave awaiting representative review” when there are worked hours. Existing absence
 notifications are retained as historical records; new pending-leave days do not emit absence.
 Approved leave is excluded from required time without fabricating attendance or paid work.
+When a full-shift leave is approved, an older pending leave for the same assigned
+shift does not add `PENDING_LEAVE` or `PENDING_REQUEST` to the attendance day.
+Both request records retain their original states and review history. With no
+other blocking evidence, that day has zero regular hours and no leave-related
+review warning; it is confirmed after the shift ends. Pending overtime or
+attendance corrections remain separate review requirements. Partial approved
+leave does not suppress pending leave review.
+
+Worker schedule reads add optional `approvedFullShiftLeave`. It is true only for
+approved leave covering the full current shift/version, including inactive schedules.
+The Web timetable and list show **Leave / Nghỉ phép** and **Approved / Đã duyệt**
+instead of Scheduled, and remove shift-change/swap and Zone attendance actions.
+An open Zone attendance dialog closes when refreshed schedules show approved full-shift leave.
+Existing Backend
+inactive-schedule checks also reject direct swap commands and candidate discovery.
+Partial leave does not label the whole day as off.
+
+Worker leave lists (`attendance-time-requests` and `my-requests`) omit a pending
+request whose entire interval is already covered by approved leave for the same
+Worker, Site, schedule, shift and version. Filtering happens before pagination/counts.
+Representative review queues and exact request-ID lookups preserve the original
+pending record; no request status or history is rewritten. Pending requests for a
+different schedule or an uncovered interval remain visible.
 For illness during a shift, select the remaining unworked interval; the Mobile form initially
 suggests now through shift end and retains recorded hours. Actual IN/OUT evidence is preserved.
 

@@ -114,6 +114,7 @@ beforeEach(() => {
   api.reviewAttendanceCorrection.mockResolvedValue({ id: pending.id });
 });
 afterEach(async () => {
+  vi.useRealTimers();
   cleanup();
   vi.resetAllMocks();
   window.history.replaceState({}, '', '/');
@@ -136,6 +137,36 @@ function mount(showRequests = true, canExport = true) {
     </QueryClientProvider>,
   );
 }
+
+it('opens on today in Vietnam and resets a historical range with Today', async () => {
+  vi.useFakeTimers({ toFake: ['Date'] });
+  vi.setSystemTime(new Date('2026-11-22T18:30:00Z'));
+  mount();
+  await screen.findByRole('button', { name: 'View worker' });
+  expect(api.attendanceSummary).toHaveBeenCalledWith(
+    'token',
+    'site',
+    expect.objectContaining({ fromDate: '2026-11-23', toDate: '2026-11-23' }),
+  );
+  expect(api.attendanceWorkers).toHaveBeenCalledWith(
+    'token',
+    'site',
+    expect.objectContaining({ fromDate: '2026-11-23', toDate: '2026-11-23' }),
+  );
+  fireEvent.change(screen.getByLabelText('From'), { target: { value: '2026-11-17' } });
+  await waitFor(() =>
+    expect(api.attendanceSummary).toHaveBeenLastCalledWith(
+      'token',
+      'site',
+      expect.objectContaining({ fromDate: '2026-11-17' }),
+    ),
+  );
+  expect(screen.getByText(/Hours and attendance rate cover the selected dates/)).toBeTruthy();
+  fireEvent.click(screen.getByRole('button', { name: tr('common.today') }));
+  await waitFor(() => expect(screen.getByLabelText('From')).toHaveProperty('value', '2026-11-23'));
+  expect(screen.getByLabelText('To')).toHaveProperty('value', '2026-11-23');
+  vi.useRealTimers();
+});
 
 it.each([
   '/access?tab=attendance&subtab=requests',

@@ -4277,5 +4277,6 @@
   "attendance_leave.planned_required": "Planned leave requires at least 24 hours before the shift starts.",
   "attendance_leave.emergency_today": "Emergency leave is only available for shifts taking place today.",
   "attendance_leave.shift_unavailable": "Shift times are unavailable. Reload the schedule and try again.",
-  "attendance_leave.cooldown_error": "A leave request can only be submitted once every 24 hours"
+  "attendance_leave.cooldown_error": "A leave request can only be submitted once every 24 hours",
+  "attendance_report.period_scope": "Hours and attendance rate cover the selected dates: {{from}} – {{to}}. Status and IN/OUT are for today. Confirmed and provisional hours are shown separately."
 }

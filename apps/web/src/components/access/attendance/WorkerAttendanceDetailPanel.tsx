@@ -1,4 +1,6 @@
 import { useManagementClient } from '../../../features/auth/auth-session';
+import { GateAbsenceReviewCard } from './GateAbsenceReviewCard';
+import { ZoneAttendanceReviewCard } from './ZoneAttendanceReviewCard';
 import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useQuery } from '@tanstack/react-query';
@@ -575,6 +577,24 @@ export function WorkerAttendanceDetailPanel({
                         ))}
                       </div>
                     )}
+                    <GateAbsenceReviewCard
+                      key={`${sessionScope}-${dayDetailQuery.data.day.id}`}
+                      detail={dayDetailQuery.data}
+                      apiUrl={apiUrl}
+                      token={token}
+                      siteId={siteId}
+                      sessionScope={sessionScope}
+                      unavailable={dayDetailQuery.isError || dayDetailQuery.isFetching}
+                    />
+                    <ZoneAttendanceReviewCard
+                      key={`zone-${sessionScope}-${dayDetailQuery.data.day.id}`}
+                      detail={dayDetailQuery.data}
+                      apiUrl={apiUrl}
+                      token={token}
+                      siteId={siteId}
+                      sessionScope={sessionScope}
+                      unavailable={dayDetailQuery.isError || dayDetailQuery.isFetching}
+                    />
                   </div>
                 )}
               </div>

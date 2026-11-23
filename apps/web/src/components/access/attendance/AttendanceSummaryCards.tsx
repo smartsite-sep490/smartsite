@@ -86,15 +86,15 @@ export function AttendanceSummaryCards({
                   {tr('attendance_report.compared_to_last_period', { percent: '' }).trim()}
                 </span>
               </span>
-            ) : summary.provisionalMinutes > 0 ? (
-              <span className="text-amber-600">
-                + {attendanceHours(summary.provisionalMinutes)}{' '}
-                {tr('attendance_report.provisional')}
-              </span>
             ) : (
               <span className="text-slate-400">—</span>
             )}
           </p>
+          {summary.provisionalMinutes > 0 && (
+            <p className="text-xs text-amber-600 mt-1">
+              + {attendanceHours(summary.provisionalMinutes)} {tr('attendance_report.provisional')}
+            </p>
+          )}
         </div>
       </div>
 

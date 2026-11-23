@@ -8,6 +8,8 @@ import {
   AttendanceTimeRequestsDto,
   AttendanceTimeRequestDto,
   ReviewAttendanceDayDto,
+  ConfirmAttendanceAbsenceDto,
+  ConfirmAttendanceZoneHoursDto,
   IgnoreDuplicateAttendanceDto,
   ReviewAttendanceTimeDto,
   WorkerRequestsDto,
@@ -84,5 +86,21 @@ export class AttendanceDaysController {
     @Body() input: ReviewAttendanceDayDto,
   ) {
     return this.days.acknowledge(req.user!, siteId, id, input);
+  }
+  @Post('attendance-days/:id/confirm-zone-hours') confirmZoneHours(
+    @Req() req: AuthenticatedRequest,
+    @Param('siteId') siteId: string,
+    @Param('id') id: string,
+    @Body() input: ConfirmAttendanceZoneHoursDto,
+  ) {
+    return this.days.confirmZoneHours(req.user!, siteId, id, input);
+  }
+  @Post('attendance-days/:id/confirm-absence') confirmAbsence(
+    @Req() req: AuthenticatedRequest,
+    @Param('siteId') siteId: string,
+    @Param('id') id: string,
+    @Body() input: ConfirmAttendanceAbsenceDto,
+  ) {
+    return this.days.confirmAbsence(req.user!, siteId, id, input);
   }
 }

@@ -68,7 +68,7 @@ const ppeAlertScope = `n.recipient_role='SAFETY_OFFICER'
  AND EXISTS(SELECT 1 FROM app_user u WHERE u.id=n.recipient_user_id AND u.is_active AND NOT u.must_change_password)
  AND EXISTS(SELECT 1 FROM user_role_assignment r WHERE r.user_id=n.recipient_user_id AND r.site_id=n.site_id AND r.role='SAFETY_OFFICER')
  AND EXISTS(SELECT 1 FROM safety_alert a WHERE a.id=n.request_id AND a.site_id=n.site_id AND a.alert_type='PPE_VIOLATION')`;
-const scope = `((n.request_type IN ('CHANGE','SWAP','ATTENDANCE','SCHEDULE') AND (${schedulingScope}) AND NOT (n.request_type='ATTENDANCE' AND n.event='TIME_REQUESTED' AND n.recipient_role<>'CONTRACTOR_REPRESENTATIVE')) OR (n.request_type='SAFETY' AND (${safetyScope})) OR (n.request_type='CHECKLIST' AND (${checklistScope})) OR (n.request_type='DOCUMENT' AND (${documentScope})) OR (n.request_type='SAFETY_ALERT' AND (${ppeAlertScope})))`;
+const scope = `((n.request_type IN ('CHANGE','SWAP','ATTENDANCE','SCHEDULE') AND (${schedulingScope}) AND NOT (n.request_type='ATTENDANCE' AND n.event IN ('TIME_REQUESTED','ABSENCE_REVIEW_REQUIRED','ZONE_REVIEW_REQUIRED') AND n.recipient_role<>'CONTRACTOR_REPRESENTATIVE')) OR (n.request_type='SAFETY' AND (${safetyScope})) OR (n.request_type='CHECKLIST' AND (${checklistScope})) OR (n.request_type='DOCUMENT' AND (${documentScope})) OR (n.request_type='SAFETY_ALERT' AND (${ppeAlertScope})))`;
 type SchedulingRequest = ShiftChangeRequestEntity | ShiftSwapRequestEntity;
 type Recipient = Pick<
   UserNotificationEntity,
@@ -226,7 +226,12 @@ export class SchedulingNotificationService {
     const worker = input.worker;
     if (!worker.contractorId) return;
     const recipients: Recipient[] = [];
-    if (worker.userId && input.event !== 'TIME_REQUESTED')
+    if (
+      worker.userId &&
+      input.event !== 'TIME_REQUESTED' &&
+      input.event !== 'ABSENCE_REVIEW_REQUIRED' &&
+      input.event !== 'ZONE_REVIEW_REQUIRED'
+    )
       recipients.push({
         recipientUserId: worker.userId,
         recipientRole: 'WORKER',

@@ -172,15 +172,17 @@ export function AttendanceDayView({
         <View style={styles.totalBlock}>
           <Text style={styles.label}>
             {t(
-              day.confirmedMinutes !== null
-                ? 'attendance.confirmedHours'
-                : 'attendance.provisionalHours',
+              day.status === 'ABSENT'
+                ? 'attendance.worked'
+                : day.confirmedMinutes !== null
+                  ? 'attendance.confirmedHours'
+                  : 'attendance.provisionalHours',
             )}
           </Text>
           <Text style={styles.total}>
             {minutes(day.confirmedMinutes ?? day.provisionalMinutes)}
           </Text>
-          {day.confirmedMinutes === null && (
+          {day.confirmedMinutes === null && day.status !== 'ABSENT' && (
             <Text style={styles.caption}>{t('attendanceDetail.provisionalHint')}</Text>
           )}
         </View>

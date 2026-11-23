@@ -21,6 +21,8 @@ export interface IgnoreDuplicateAttendanceCommand {
 }
 export type AttendanceDayStatus = 'IN_PROGRESS' | 'NEEDS_REVIEW' | 'CONFIRMED' | 'ABSENT';
 export type AttendanceNotificationEvent =
+  | 'ZONE_REVIEW_REQUIRED'
+  | 'ABSENCE_REVIEW_REQUIRED'
   | 'EARLY_EXIT'
   | 'MISSING_CHECKOUT'
   | 'ABSENT'
@@ -132,6 +134,27 @@ export interface AttendanceDaysResponse {
   canRequest: boolean;
 }
 export interface AttendanceDayDetailResponse {
+  zoneAttendanceReview?: {
+    canConfirm: boolean;
+    status: 'PENDING' | 'CONFIRMED' | 'CONFLICTED';
+    evidenceHash: string;
+    gateInCount: number;
+    gateOutCount: number;
+    sessionCount: number;
+    regularMinutes: number;
+    overtimeMinutes: number;
+    teamAttendanceStatus: 'NOT_YET' | 'PRESENT' | 'ABSENT';
+    decision?: { reviewedBy: string; reviewedByName?: string; reviewedAt: string; reason: string };
+  };
+  gateAbsenceReview?: {
+    canConfirm: boolean;
+    gateEventCount: number;
+    attendanceEventCount: number;
+    sessionCount: number;
+    status: 'PENDING' | 'CONFIRMED_ABSENT' | 'CONFLICTED';
+    teamAttendance?: { version: number; status: string; recordedBy: string; recordedAt: string };
+    decision?: { reviewedBy: string; reviewedAt: string; reason: string };
+  };
   /** Server-authorized acknowledgement of an otherwise resolved early checkout. */
   canAcknowledgeEarlyCheckout?: boolean;
   day: AttendanceDayResponse;
@@ -167,6 +190,20 @@ export interface AttendanceDaysQuery {
 export interface ReviewAttendanceDayCommand {
   expectedVersion: number;
   reviewNote: string;
+}
+/** Resolves a PRESENT roll call with no Gate or attendance evidence; never grants work hours. */
+export interface ConfirmAttendanceAbsenceCommand {
+  requestId: string;
+  expectedVersion: number;
+  expectedTeamAttendanceVersion: number;
+  reason: string;
+}
+/** Approves calculated Gate-backed hours while preserving the missing leader roll call. */
+export interface ConfirmAttendanceZoneHoursCommand {
+  requestId: string;
+  expectedVersion: number;
+  evidenceHash: string;
+  reason: string;
 }
 export interface AttendanceOverviewResponse {
   /** True even when the pending request belongs to a day outside the current filter. */

@@ -28,7 +28,7 @@ export async function auditAccess(
       [siteId],
     );
   }
-  await manager.getRepository(AccessAuditEntity).save({
+  return manager.getRepository(AccessAuditEntity).save({
     id: randomUUID(),
     actorAccountId: actorId,
     siteId,

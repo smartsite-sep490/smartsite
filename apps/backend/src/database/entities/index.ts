@@ -149,7 +149,10 @@ import {
   CameraConfigurationApplicationReceiptEntity,
 } from './camera-worker-generation.entity.js';
 export * from './camera-worker-generation.entity.js';
+import { AttendanceAbsenceReviewEntity } from './attendance-absence-review.entity.js';
+export * from './attendance-absence-review.entity.js';
 export const ENTITIES = [
+  AttendanceAbsenceReviewEntity,
   TeamAttendanceEntity,
   CameraWorkerGenerationEntity,
   CameraConfigurationApplicationReceiptEntity,

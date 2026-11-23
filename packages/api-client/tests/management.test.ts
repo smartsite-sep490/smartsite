@@ -10,6 +10,66 @@ function createFetchMock(responseFactory: () => Response | Promise<Response>) {
 }
 
 describe('management client', () => {
+  it('confirms calculated Zone hours with a scoped day and pinned evidence', async () => {
+    const fetchMock = createFetchMock(
+      () => new Response(JSON.stringify({ id: 'day' }), { status: 201 }),
+    );
+    vi.stubGlobal('fetch', fetchMock);
+    try {
+      const input = {
+        requestId: randomUUID(),
+        expectedVersion: 3,
+        evidenceHash: 'a'.repeat(64),
+        reason: 'Gate hours checked; leader did not record roll call',
+      };
+      await new SmartSiteManagementClient('https://api.example.test').confirmAttendanceZoneHours(
+        'rep-token',
+        'site/1',
+        'day/1',
+        input,
+      );
+      expect(fetchMock.mock.calls[0]?.[0]).toBe(
+        'https://api.example.test/api/v1/sites/site%2F1/attendance-days/day%2F1/confirm-zone-hours',
+      );
+      expect(fetchMock.mock.calls[0]?.[1]).toMatchObject({
+        method: 'POST',
+        body: JSON.stringify(input),
+        headers: { Authorization: 'Bearer rep-token' },
+      });
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  });
+  it('confirms absence through the scoped attendance command with both reviewed versions', async () => {
+    const fetchMock = createFetchMock(
+      () => new Response(JSON.stringify({ id: 'day' }), { status: 201 }),
+    );
+    vi.stubGlobal('fetch', fetchMock);
+    try {
+      const input = {
+        requestId: randomUUID(),
+        expectedVersion: 7,
+        expectedTeamAttendanceVersion: 2,
+        reason: 'No Gate evidence after checking the completed shift',
+      };
+      await new SmartSiteManagementClient('https://api.example.test').confirmAttendanceAbsence(
+        'rep-token',
+        'site/1',
+        'day/1',
+        input,
+      );
+      expect(fetchMock.mock.calls[0]?.[0]).toBe(
+        'https://api.example.test/api/v1/sites/site%2F1/attendance-days/day%2F1/confirm-absence',
+      );
+      expect(fetchMock.mock.calls[0]?.[1]).toMatchObject({
+        method: 'POST',
+        body: JSON.stringify(input),
+        headers: { Authorization: 'Bearer rep-token' },
+      });
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  });
   it('includes web credentials when changing a password so the revoked refresh cookie can be cleared', async () => {
     const fetchMock = createFetchMock(() => new Response(null, { status: 204 }));
     vi.stubGlobal('fetch', fetchMock);

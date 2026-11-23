@@ -5,6 +5,8 @@ import {
   type RequestOptions,
 } from './errors';
 export * from './errors';
+export type { ConfirmAttendanceAbsenceCommand } from '@smartsite/contracts';
+export type { ConfirmAttendanceZoneHoursCommand } from '@smartsite/contracts';
 export type {
   RegisterMobilePushCommand,
   RemoveMobilePushCommand,

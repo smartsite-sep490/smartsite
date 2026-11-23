@@ -175,6 +175,23 @@ test('MF03: interval totals, missing checkout, notifications, approvals, scope a
     await assert.rejects(() =>
       days.detail(actor(outsiderId, UserRole.WORKER), siteId, absentDay.id),
     );
+    const pendingDuplicateLeave = await dataSource.getRepository(AbsenceRequestEntity).save({
+      id: randomUUID(),
+      siteId,
+      workerId,
+      workerScheduleId: schedule.id,
+      shiftId: shift.id,
+      expectedScheduleVersionId: version.id,
+      requestedByUserId: userId,
+      status: AbsenceRequestStatus.PENDING_MANAGER,
+      reason: 'Synthetic pending legacy duplicate leave',
+    });
+    await reconciliation.runDue(at('18:00'));
+    const pendingLeaveDay = await dataSource
+      .getRepository(AttendanceDayEntity)
+      .findOneByOrFail({ id: absentDay.id });
+    assert.equal(pendingLeaveDay.status, 'NEEDS_REVIEW');
+    assert.ok(pendingLeaveDay.anomalies.includes('PENDING_LEAVE'));
     const approvedLeave = await dataSource.getRepository(AbsenceRequestEntity).save({
       id: randomUUID(),
       siteId,
@@ -197,6 +214,60 @@ test('MF03: interval totals, missing checkout, notifications, approvals, scope a
       await dataSource.getRepository(UserNotificationEntity).countBy({ siteId, event: 'ABSENT' }),
       0,
     );
+    const approvedLeaveDay = await dataSource
+      .getRepository(AttendanceDayEntity)
+      .findOneByOrFail({ id: absentDay.id });
+    assert.equal(approvedLeaveDay.regularMinutes, 0);
+    assert.equal(approvedLeaveDay.provisionalMinutes, 0);
+    assert.equal(approvedLeaveDay.confirmedMinutes, 0);
+    assert.ok(!approvedLeaveDay.anomalies.includes('PENDING_LEAVE'));
+    assert.ok(!approvedLeaveDay.anomalies.includes('PENDING_REQUEST'));
+    assert.equal(
+      (
+        await dataSource
+          .getRepository(AbsenceRequestEntity)
+          .findOneByOrFail({ id: pendingDuplicateLeave.id })
+      ).status,
+      AbsenceRequestStatus.PENDING_MANAGER,
+    );
+    await dataSource.transaction((manager) =>
+      reconciliation.refresh(manager, absentDay.id, at('07:00')),
+    );
+    const futureLeaveDay = await dataSource
+      .getRepository(AttendanceDayEntity)
+      .findOneByOrFail({ id: absentDay.id });
+    assert.notEqual(futureLeaveDay.status, 'NEEDS_REVIEW');
+    assert.equal(futureLeaveDay.provisionalMinutes, 0);
+    const pendingOvertime = await dataSource.getRepository(OvertimeRequestEntity).save({
+      id: randomUUID(),
+      siteId,
+      workerId,
+      scheduleId: schedule.id,
+      expectedShiftId: shift.id,
+      startsAt: at('17:00'),
+      endsAt: at('18:00'),
+      requestedBy: userId,
+      reason: 'Synthetic unrelated pending overtime',
+      status: 'PENDING',
+    });
+    await reconciliation.runDue(at('18:00'));
+    const pendingOvertimeDay = await dataSource
+      .getRepository(AttendanceDayEntity)
+      .findOneByOrFail({ id: absentDay.id });
+    assert.equal(pendingOvertimeDay.status, 'NEEDS_REVIEW');
+    assert.ok(pendingOvertimeDay.anomalies.includes('PENDING_REQUEST'));
+    assert.ok(!pendingOvertimeDay.anomalies.includes('PENDING_LEAVE'));
+    await dataSource.getRepository(OvertimeRequestEntity).delete(pendingOvertime.id);
+    await dataSource
+      .getRepository(AbsenceRequestEntity)
+      .update(approvedLeave.id, { startsAt: at('08:00'), endsAt: at('12:00') });
+    await reconciliation.runDue(at('18:00'));
+    const partialLeaveDay = await dataSource
+      .getRepository(AttendanceDayEntity)
+      .findOneByOrFail({ id: absentDay.id });
+    assert.equal(partialLeaveDay.status, 'NEEDS_REVIEW');
+    assert.ok(partialLeaveDay.anomalies.includes('PENDING_LEAVE'));
+    await dataSource.getRepository(AbsenceRequestEntity).delete(pendingDuplicateLeave.id);
     await dataSource.getRepository(AbsenceRequestEntity).delete(approvedLeave.id);
     await dataSource.getRepository(UserNotificationEntity).delete({ siteId, event: 'ABSENT' });
 

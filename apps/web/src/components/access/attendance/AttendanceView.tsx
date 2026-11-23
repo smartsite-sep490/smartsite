@@ -132,12 +132,10 @@ export function AttendanceView({
   const cache = useQueryClient();
   const timezone = 'Asia/Ho_Chi_Minh';
 
-  // Compute 7-day range (e.g. today minus 6 days to today, or current week)
+  // Open on today's work date; historical totals require an explicit date selection.
   const defaultDates = useMemo(() => {
     const todayStr = attendanceDate(new Date(), timezone);
-    const todayMs = Date.parse(`${todayStr}T00:00:00Z`);
-    const fromStr = new Date(todayMs - 6 * 86400000).toISOString().slice(0, 10);
-    return { fromDate: fromStr, toDate: todayStr };
+    return { fromDate: todayStr, toDate: todayStr };
   }, [timezone]);
 
   const [fromDate, setFromDate] = useState(defaultDates.fromDate);
@@ -999,6 +997,17 @@ export function AttendanceView({
                 </SmartNativeSelect>
 
                 {/* Date Controls */}
+                <button
+                  type="button"
+                  onClick={() => {
+                    const today = attendanceDate(new Date(), timezone);
+                    setFromDate(today);
+                    setToDate(today);
+                  }}
+                  className="px-3 py-2 rounded-xl border border-slate-200 bg-white text-xs font-semibold text-slate-700 hover:bg-slate-50 focus-visible:outline-2 focus-visible:outline-orange-500"
+                >
+                  {tr('common.today')}
+                </button>
                 <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl border border-slate-200 bg-white shadow-2xs">
                   <IconCalendar className="w-4 h-4 text-slate-400" />
                   <input
@@ -1035,6 +1044,12 @@ export function AttendanceView({
             </div>
 
             {/* Workers Table Component */}
+            <p className="text-xs text-slate-500">
+              {tr('attendance_report.period_scope', {
+                from: fromDate,
+                to: toDate,
+              })}
+            </p>
             <AttendanceWorkersTable
               workers={workers.data?.items ?? []}
               total={workers.data?.total ?? 0}

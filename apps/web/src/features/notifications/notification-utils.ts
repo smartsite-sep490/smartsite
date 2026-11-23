@@ -2,6 +2,7 @@ import i18n, { translate as tr, uiLocale } from '../../i18n';
 import { localizeMessage } from '../../i18n/messages';
 import { localizedLabel } from '../../i18n/labels';
 import type { UserNotificationResponse } from '@smartsite/api-client';
+import { teamText } from '../../components/team-attendance/team-attendance-copy';
 
 export function notificationHref(notification: UserNotificationResponse, assignedWork = false) {
   if (notification.target.tab === 'alerts')
@@ -14,6 +15,23 @@ export function notificationHref(notification: UserNotificationResponse, assigne
 export function formatNotificationDisplayMessage(
   item: Pick<UserNotificationResponse, 'event' | 'message' | 'workDate' | 'safetyAlert'>,
 ): string {
+  if (item.event === 'ZONE_REVIEW_REQUIRED') {
+    const match =
+      /^Worker ([\s\S]+) \(([^()]*)\) has complete Gate IN\/OUT on (\d{4}-\d{2}-\d{2}),/.exec(
+        item.message,
+      );
+    return match
+      ? teamText('teamWeb.zoneNotifyMessage', { name: match[1], code: match[2], date: match[3] })
+      : localizeMessage(item.message);
+  }
+  if (item.event === 'ABSENCE_REVIEW_REQUIRED') {
+    const match = /^Worker ([\s\S]+) \(([^()]*)\) was marked present on (\d{4}-\d{2}-\d{2}),/.exec(
+      item.message,
+    );
+    return match
+      ? teamText('teamWeb.absenceNotifyMessage', { name: match[1], code: match[2], date: match[3] })
+      : localizeMessage(item.message);
+  }
   if (item.event === 'PPE_ALERT_CREATED' && item.safetyAlert) {
     const metadata = item.safetyAlert;
     return tr('ppeNotifications.body', {
@@ -93,6 +111,8 @@ export function formatNotificationDisplayMessage(
 }
 
 export function formatNotificationTitle(item: Pick<UserNotificationResponse, 'event' | 'title'>) {
+  if (item.event === 'ZONE_REVIEW_REQUIRED') return teamText('teamWeb.zoneNotifyTitle');
+  if (item.event === 'ABSENCE_REVIEW_REQUIRED') return teamText('teamWeb.absenceNotifyTitle');
   if (item.event === 'PPE_ALERT_CREATED') return tr('notifications.PPE_ALERT_CREATED');
   if (item.event.startsWith('DOCUMENT_')) return tr(`notifications.${item.event}`);
   if (

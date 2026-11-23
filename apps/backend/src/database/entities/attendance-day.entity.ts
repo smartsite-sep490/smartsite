@@ -15,6 +15,7 @@ import { WorkerEntity } from './worker.entity.js';
 import { WorkerScheduleEntity } from './worker-schedule.entity.js';
 import { UserEntity } from './user.entity.js';
 import { ShiftEntity } from './shift.entity.js';
+import { AccessAuditEntity } from './access-audit.entity.js';
 export interface AttendanceZoneRequirement {
   version: 1;
   required: boolean;
@@ -49,6 +50,12 @@ export interface AttendanceZoneRequirement {
   "zone_attendance_requirement IS NULL OR ((jsonb_typeof(zone_attendance_requirement)='object' AND zone_attendance_requirement->>'version'='1' AND jsonb_typeof(zone_attendance_requirement->'required')='boolean') IS TRUE)",
 )
 export class AttendanceDayEntity {
+  @Column({ name: 'zone_attendance_review_audit_id', type: 'uuid', nullable: true })
+  @ForeignKey(() => AccessAuditEntity, {
+    name: 'fk_attendance_zone_review_audit',
+    onDelete: 'RESTRICT',
+  })
+  zoneAttendanceReviewAuditId?: string | null;
   @Column({ name: 'zone_attendance_requirement', type: 'jsonb', nullable: true })
   zoneAttendanceRequirement?: AttendanceZoneRequirement | null;
   @PrimaryColumn({ type: 'uuid' }) id!: string;

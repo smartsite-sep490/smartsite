@@ -3,6 +3,9 @@ import { translate as tr } from '../../i18n';
 import { useTranslation } from 'react-i18next';
 import React, { useState, useMemo, useRef } from 'react';
 import { TeamZoneDialog } from './TeamZoneDialog';
+import { TeamLeaderDialog } from '../team-attendance/TeamLeaderDialog';
+import { TeamAttendanceReportDialog } from '../team-attendance/TeamAttendanceReportDialog';
+import { teamText } from '../team-attendance/team-attendance-copy';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import {
   type ContractorDashboardScope,
@@ -125,6 +128,14 @@ export function ContractorDashboardView({
     teamId: string;
     name: string;
   } | null>(null);
+  const [leaderTeam, setLeaderTeam] = useState<{
+    siteId: string;
+    contractorId: string;
+    teamId: string;
+    name: string;
+    sessionScope: string;
+  } | null>(null);
+  const [reportTeam, setReportTeam] = useState<typeof leaderTeam>(null);
 
   // ── 3. Filters & Pagination States ────────────────────────────────────────────
   // Teams filters
@@ -143,6 +154,8 @@ export function ContractorDashboardView({
 
   const handleScopeSelect = (scopeKey: string) => {
     setZoneTeam(null);
+    setLeaderTeam(null);
+    setReportTeam(null);
     // 1. Close and clean all modals so old drafts/targets cannot be submitted into new scope
     createRequestIdRef.current = null;
     assignRequestIdRef.current = null;
@@ -613,6 +626,40 @@ export function ContractorDashboardView({
 
   return (
     <div className="space-y-6 max-w-7xl mx-auto pb-16">
+      {reportTeam &&
+        accessToken &&
+        reportTeam.sessionScope === sessionScope &&
+        activeScope?.siteId === reportTeam.siteId &&
+        activeScope?.contractorId === reportTeam.contractorId && (
+          <TeamAttendanceReportDialog
+            key={`${resolvedApiUrl}-${sessionScope}-${reportTeam.siteId}-${reportTeam.contractorId}-${reportTeam.teamId}`}
+            apiUrl={resolvedApiUrl}
+            token={accessToken}
+            sessionScope={sessionScope}
+            siteId={reportTeam.siteId}
+            contractorId={reportTeam.contractorId}
+            teamId={reportTeam.teamId}
+            teamName={reportTeam.name}
+            onClose={() => setReportTeam(null)}
+          />
+        )}
+      {leaderTeam &&
+        accessToken &&
+        leaderTeam.sessionScope === sessionScope &&
+        activeScope?.siteId === leaderTeam.siteId &&
+        activeScope?.contractorId === leaderTeam.contractorId && (
+          <TeamLeaderDialog
+            key={`${resolvedApiUrl}-${sessionScope}-${leaderTeam.siteId}-${leaderTeam.contractorId}-${leaderTeam.teamId}`}
+            apiUrl={resolvedApiUrl}
+            token={accessToken}
+            sessionScope={sessionScope}
+            siteId={leaderTeam.siteId}
+            contractorId={leaderTeam.contractorId}
+            teamId={leaderTeam.teamId}
+            teamName={leaderTeam.name}
+            onClose={() => setLeaderTeam(null)}
+          />
+        )}
       {zoneTeam &&
         activeScope?.siteId === zoneTeam.siteId &&
         activeScope?.contractorId === zoneTeam.contractorId && (
@@ -1018,6 +1065,13 @@ export function ContractorDashboardView({
                             <td className="py-3.5 px-4 font-bold text-[#071A2B]">
                               <span>{team.name}</span>
                               <p className="mt-1 text-xs font-medium text-slate-500">
+                                {team.leaderWorkerId === undefined
+                                  ? teamText('teamWeb.unavailableLeader')
+                                  : team.leaderWorkerId
+                                    ? teamText('teamWeb.hasLeader')
+                                    : teamText('teamWeb.noLeader')}
+                              </p>
+                              <p className="mt-1 text-xs font-medium text-slate-500">
                                 {team.zoneAssignments?.length
                                   ? team.zoneAssignments
                                       .map(
@@ -1065,6 +1119,36 @@ export function ContractorDashboardView({
                                 </button>
                                 {team.isActive && (
                                   <>
+                                    <Button
+                                      variant="outline"
+                                      size="sm"
+                                      onClick={() =>
+                                        setReportTeam({
+                                          siteId: activeScope!.siteId,
+                                          contractorId: activeScope!.contractorId,
+                                          teamId: team.id,
+                                          name: team.name,
+                                          sessionScope,
+                                        })
+                                      }
+                                    >
+                                      {teamText('teamWeb.viewAttendance')}
+                                    </Button>
+                                    <Button
+                                      variant="outline"
+                                      size="sm"
+                                      onClick={() =>
+                                        setLeaderTeam({
+                                          siteId: activeScope!.siteId,
+                                          contractorId: activeScope!.contractorId,
+                                          teamId: team.id,
+                                          name: team.name,
+                                          sessionScope,
+                                        })
+                                      }
+                                    >
+                                      {teamText('teamWeb.leader')}
+                                    </Button>
                                     <button
                                       type="button"
                                       onClick={() =>

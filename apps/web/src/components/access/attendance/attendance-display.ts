@@ -1,7 +1,15 @@
 import { translate as tr, uiLocale } from '../../../i18n';
 import { localizedLabel } from '../../../i18n/labels';
+import { teamText } from '../../team-attendance/team-attendance-copy';
 export const attendanceLabel = (value: string) =>
   ({
+    ZONE_ATTENDANCE_REVIEW_CONFLICT: teamText('teamWeb.zoneConflict'),
+    ABSENCE_REVIEW_CONFLICT: teamText('teamWeb.absenceConflict'),
+    ZONE_ATTENDANCE_PENDING: teamText('teamWeb.anomaly.ZONE_ATTENDANCE_PENDING'),
+    ZONE_ATTENDANCE_ABSENT: teamText('teamWeb.anomaly.ZONE_ATTENDANCE_ABSENT'),
+    ZONE_GATE_MISSING: teamText('teamWeb.anomaly.ZONE_GATE_MISSING'),
+    ZONE_ATTENDANCE_MISMATCH: teamText('teamWeb.anomaly.ZONE_ATTENDANCE_MISMATCH'),
+    ZONE_ASSIGNMENT_UNRESOLVED: teamText('teamWeb.anomaly.ZONE_ASSIGNMENT_UNRESOLVED'),
     IN_PROGRESS: tr('common.in_progress_c1f88e'),
     NEEDS_REVIEW: tr('common.needs_attention'),
     CONFIRMED: tr('common.confirmed'),

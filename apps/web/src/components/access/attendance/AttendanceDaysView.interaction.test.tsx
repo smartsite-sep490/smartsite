@@ -110,6 +110,21 @@ afterEach(async () => {
 });
 
 describe('MF03 interactive UI', () => {
+  it('shows zero hours for a finalized absence without an awaiting-confirmation badge', async () => {
+    api.attendanceDays.mockResolvedValue({
+      items: [
+        { ...day, status: 'ABSENT', anomalies: [], regularMinutes: 0, provisionalMinutes: 0 },
+      ],
+      total: 1,
+      requests: [],
+      canReview: true,
+      canRequest: false,
+    });
+    mount();
+    await screen.findByText('Synthetic Worker');
+    expect(screen.queryByText('Awaiting confirmation')).toBeNull();
+    expect(screen.getAllByText('0h 0m').length).toBeGreaterThan(0);
+  });
   it.each(['OVERTIME', 'LEAVE'] as const)(
     'opens a rejection form for %s and requires a reason before sending',
     async (kind) => {

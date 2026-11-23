@@ -98,6 +98,7 @@ test('rate counts completed required workdays once, excludes full approved leave
   data.leaves = [
     {
       workerScheduleId: dates[2],
+      shiftId: 'shift',
       status: 'APPROVED',
       startsAt: null,
       endsAt: null,
@@ -176,4 +177,90 @@ test('multiple shifts count as one workday and missing configuration is unavaila
   assert.equal(unavailable.todayStatus, 'UNAVAILABLE');
   assert.equal(unavailable.absentDays, 0);
   assert.equal(unavailable.isProvisional, true);
+});
+
+test('approved full-shift leave remains a leave day after its schedule is deactivated', () => {
+  const data = input(),
+    date = data.today;
+  data.dates = [date];
+  data.schedules = [{ ...data.schedules[4]!, isActive: false }];
+  data.days = [day(date, 'CONFIRMED', 0)];
+  data.leaves = [
+    {
+      workerScheduleId: date,
+      shiftId: 'shift',
+      status: 'APPROVED',
+      startsAt: null,
+      endsAt: null,
+    } as AbsenceRequestEntity,
+  ];
+  const result = workerAttendanceReport(data);
+  assert.equal(result.todayStatus, 'APPROVED_LEAVE');
+  assert.equal(result.daily?.[0]?.status, 'APPROVED_LEAVE');
+  assert.equal(result.totalMinutes, 0);
+  assert.equal(result.requiredDays, 0);
+  assert.equal(result.absentDays, 0);
+  assert.equal(result.reviewDays, 0);
+  for (const key of [
+    'workerId',
+    'siteId',
+    'workerScheduleId',
+    'shiftId',
+    'expectedScheduleVersionId',
+  ] as const) {
+    const original = data.leaves[0]![key];
+    data.leaves[0]![key] = 'different-scope-or-version';
+    assert.notEqual(workerAttendanceReport(data).todayStatus, 'APPROVED_LEAVE');
+    data.leaves[0]![key] = original;
+  }
+  data.leaves[0]!.status = 'PENDING_MANAGER' as AbsenceRequestEntity['status'];
+  assert.notEqual(workerAttendanceReport(data).todayStatus, 'APPROVED_LEAVE');
+  data.leaves[0]!.status = 'APPROVED' as AbsenceRequestEntity['status'];
+  data.leaves[0]!.endsAt = new Date(`${date}T10:00:00+07:00`);
+  assert.notEqual(workerAttendanceReport(data).todayStatus, 'APPROVED_LEAVE');
+});
+
+test('today status and IN/OUT never fall back to a past day when historical hours are selected', () => {
+  const data = input();
+  data.dates = [dates[0]!];
+  data.days = [day(dates[0]!, 'NEEDS_REVIEW', 87)];
+  data.sessions = [session(dates[0]!)];
+  data.now = new Date(`${data.today}T07:00:00+07:00`);
+  const result = workerAttendanceReport(data);
+  assert.equal(result.todayStatus, 'SCHEDULED');
+  assert.equal(result.todayFirstCheckInAt, null);
+  assert.equal(result.todayLastCheckOutAt, null);
+  assert.equal(result.provisionalMinutes, 87);
+});
+
+test('full approved leave hides only stale leave-only review after checking other pending requests', () => {
+  const data = input(),
+    date = data.today;
+  data.dates = [date];
+  data.schedules = [{ ...data.schedules[4]!, isActive: false }];
+  data.leaves = [
+    {
+      workerScheduleId: date,
+      shiftId: 'shift',
+      status: 'APPROVED',
+      startsAt: null,
+      endsAt: null,
+    } as AbsenceRequestEntity,
+  ];
+  data.days = [
+    { ...day(date, 'NEEDS_REVIEW', 0), anomalies: ['PENDING_LEAVE', 'PENDING_REQUEST'] },
+  ];
+  assert.equal(workerAttendanceReport(data).todayStatus, 'NEEDS_REVIEW');
+  data.pendingOtherRequestDayIds = [];
+  assert.equal(workerAttendanceReport(data).todayStatus, 'APPROVED_LEAVE');
+  assert.equal(workerAttendanceReport(data).reviewDays, 0);
+  assert.deepEqual(workerAttendanceReport(data).daily?.[0]?.anomalies, []);
+  data.pendingOtherRequestDayIds = [date];
+  assert.equal(workerAttendanceReport(data).todayStatus, 'NEEDS_REVIEW');
+  data.pendingOtherRequestDayIds = [];
+  data.days[0]!.anomalies.push('MISSING_OUT');
+  assert.equal(workerAttendanceReport(data).todayStatus, 'NEEDS_REVIEW');
+  data.days[0]!.anomalies = ['PENDING_LEAVE'];
+  data.sessions = [session(date)];
+  assert.equal(workerAttendanceReport(data).todayStatus, 'NEEDS_REVIEW');
 });

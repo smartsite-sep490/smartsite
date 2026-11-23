@@ -109,6 +109,97 @@ export function AttendanceDetail({ dayId, onBack }: { dayId: string; onBack: () 
                 onPress={() => setReview({ kind: 'day', value: data.day })}
               />
             )}
+            {data.zoneAttendanceReview && (
+              <View style={attStyles.correctionOriginal}>
+                <Text style={attStyles.quickTitle}>{t('attendanceReview.zoneTitle')}</Text>
+                <Text style={attStyles.quickHint}>
+                  {t('attendanceReview.zoneEvidence', {
+                    ins: data.zoneAttendanceReview.gateInCount,
+                    outs: data.zoneAttendanceReview.gateOutCount,
+                    sessions: data.zoneAttendanceReview.sessionCount,
+                  })}
+                </Text>
+                <Text style={attStyles.quickHint}>
+                  {t('attendanceReview.zoneRollCall')}{' '}
+                  {t(`labels.${data.zoneAttendanceReview.teamAttendanceStatus}`)}
+                </Text>
+                <Text style={attStyles.quickHint}>
+                  {t(
+                    data.zoneAttendanceReview.status === 'CONFIRMED'
+                      ? 'attendanceReview.zoneConfirmed'
+                      : data.zoneAttendanceReview.status === 'CONFLICTED'
+                        ? 'attendanceReview.zoneConflict'
+                        : 'attendanceReview.zoneHint',
+                  )}
+                </Text>
+                {data.zoneAttendanceReview.decision && (
+                  <>
+                    <Text style={attStyles.quickHint}>
+                      {t('attendanceReview.zoneReviewedBy', {
+                        name: data.zoneAttendanceReview.decision.reviewedByName ?? '',
+                        time: attendanceFullTime(
+                          data.zoneAttendanceReview.decision.reviewedAt,
+                          data.day.timezone,
+                        ),
+                      })}
+                    </Text>
+                    <Text style={attStyles.quickHint}>
+                      {data.zoneAttendanceReview.decision.reason}
+                    </Text>
+                  </>
+                )}
+                {scope.role === 'contractor' && data.zoneAttendanceReview.canConfirm && (
+                  <Button
+                    label={t('attendanceReview.confirmZoneHours')}
+                    onPress={() =>
+                      setReview({
+                        kind: 'zone',
+                        value: data.day,
+                        evidenceHash: data.zoneAttendanceReview!.evidenceHash,
+                      })
+                    }
+                  />
+                )}
+              </View>
+            )}
+            {data.gateAbsenceReview && (
+              <View style={attStyles.correctionOriginal}>
+                <Text style={attStyles.quickTitle}>{t('attendanceReview.absenceTitle')}</Text>
+                <Text style={attStyles.quickHint}>
+                  {t('attendanceReview.absenceEvidence', {
+                    gates: data.gateAbsenceReview.gateEventCount,
+                    events: data.gateAbsenceReview.attendanceEventCount,
+                    sessions: data.gateAbsenceReview.sessionCount,
+                  })}
+                </Text>
+                <Text style={attStyles.quickHint}>
+                  {t(
+                    data.gateAbsenceReview.status === 'CONFIRMED_ABSENT'
+                      ? 'attendanceReview.absenceConfirmed'
+                      : data.gateAbsenceReview.status === 'CONFLICTED'
+                        ? 'attendanceReview.absenceChanged'
+                        : 'attendanceReview.absenceHint',
+                  )}
+                </Text>
+                {data.gateAbsenceReview.decision && (
+                  <Text style={attStyles.quickHint}>{data.gateAbsenceReview.decision.reason}</Text>
+                )}
+                {scope.role === 'contractor' &&
+                  data.gateAbsenceReview.canConfirm &&
+                  data.gateAbsenceReview.teamAttendance && (
+                    <Button
+                      label={t('attendanceReview.confirmAbsence')}
+                      onPress={() =>
+                        setReview({
+                          kind: 'absence',
+                          value: data.day,
+                          teamAttendanceVersion: data.gateAbsenceReview!.teamAttendance!.version,
+                        })
+                      }
+                    />
+                  )}
+              </View>
+            )}
             <QueryState query={overview}>
               {(history) => (
                 <AttendanceCorrectionHistory
@@ -131,6 +222,23 @@ export function AttendanceDetail({ dayId, onBack }: { dayId: string; onBack: () 
       {review && query.data && (
         <AttendanceReviewSheet
           target={review}
+          stale={
+            (review.kind === 'zone' &&
+              (query.isError ||
+                query.isFetching ||
+                review.value.id !== query.data.day.id ||
+                !query.data.zoneAttendanceReview?.canConfirm ||
+                review.value.version !== query.data.day.version ||
+                review.evidenceHash !== query.data.zoneAttendanceReview.evidenceHash)) ||
+            (review.kind === 'absence' &&
+              (query.isError ||
+                review.value.id !== query.data.day.id ||
+                query.isFetching ||
+                !query.data.gateAbsenceReview?.canConfirm ||
+                review.value.version !== query.data.day.version ||
+                review.teamAttendanceVersion !==
+                  query.data.gateAbsenceReview.teamAttendance?.version))
+          }
           timezone={query.data.day.timezone}
           onClose={() => setReview(null)}
           onSaved={() => setReviewSaved(true)}

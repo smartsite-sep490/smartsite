@@ -121,6 +121,8 @@ import type {
   IgnoreDuplicateAttendanceCommand,
   AttendanceTimeRequestCommand,
   ReviewAttendanceDayCommand,
+  ConfirmAttendanceAbsenceCommand,
+  ConfirmAttendanceZoneHoursCommand,
   ConfirmIncidentResponsibilityCommand,
   CorrectIncidentResponsibilityCommand,
   TransferCorrectiveActionCommand,
@@ -773,6 +775,32 @@ export class SmartSiteManagementClient {
     return this.request<{ id: string }>(
       'POST',
       `/sites/${pathId(siteId)}/attendance-days/${pathId(id)}/confirm`,
+      token,
+      input,
+    );
+  }
+  confirmAttendanceZoneHours(
+    token: string,
+    siteId: string,
+    id: string,
+    input: ConfirmAttendanceZoneHoursCommand,
+  ) {
+    return this.request<{ id: string }>(
+      'POST',
+      `/sites/${pathId(siteId)}/attendance-days/${pathId(id)}/confirm-zone-hours`,
+      token,
+      input,
+    );
+  }
+  confirmAttendanceAbsence(
+    token: string,
+    siteId: string,
+    dayId: string,
+    input: ConfirmAttendanceAbsenceCommand,
+  ) {
+    return this.request<{ id: string }>(
+      'POST',
+      `/sites/${pathId(siteId)}/attendance-days/${pathId(dayId)}/confirm-absence`,
       token,
       input,
     );

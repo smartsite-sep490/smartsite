@@ -1,5 +1,7 @@
 import { createHash, randomUUID } from 'node:crypto';
 import { attendanceZoneIssue } from './attendance-zone-policy.js';
+import { attendanceGateAbsenceContext } from './attendance-gate-review.js';
+import { attendanceZoneReviewContext, canConfirmZoneHours } from './attendance-zone-review.js';
 import { Injectable, Logger, type OnModuleInit, type OnModuleDestroy } from '@nestjs/common';
 import { DataSource, In, LessThanOrEqual, MoreThan, type EntityManager } from 'typeorm';
 import type { AttendanceDayResponse, AttendanceNotificationEvent } from '@smartsite/contracts';
@@ -8,6 +10,7 @@ import {
   AttendanceEventEntity,
   AttendanceSessionEntity,
   AttendanceCorrectionEntity,
+  AttendanceAbsenceReviewEntity,
   OvertimeRequestEntity,
   AbsenceRequestEntity,
   GateEventEntity,
@@ -494,6 +497,9 @@ export class AttendanceReconciliationService implements OnModuleInit, OnModuleDe
           ? [{ start: +(r.startsAt ?? day.startsAt), end: +(r.endsAt ?? day.endsAt) }]
           : [],
       );
+    const fullLeave = leave.some(
+      (l) => day.startsAt && day.endsAt && l.start <= +day.startsAt && l.end >= +day.endsAt,
+    );
     const end = Math.max(day.endsAt ? +day.endsAt : 0, ...overtimeWindows.map((w) => w.end));
     let violations: Array<'EXIT_DURATION_EXCEEDED' | 'MAX_EXITS_EXCEEDED'> = [];
     let violationDetails: ShiftSubtractionResult['violationDetails'] = [];
@@ -529,16 +535,15 @@ export class AttendanceReconciliationService implements OnModuleInit, OnModuleDe
       day.deductedMinutes = 0;
     }
     const anomalies: string[] = [];
-    const pendingLeave = leaves.some((r) => r.status === 'PENDING_MANAGER');
+    // A legacy duplicate pending leave cannot reopen an already approved full-shift leave.
+    // Preserve its request history; unrelated overtime/corrections still require review.
+    const pendingLeave = !fullLeave && leaves.some((r) => r.status === 'PENDING_MANAGER');
     if (pendingLeave) anomalies.push('PENDING_LEAVE');
     if (!day.scheduleId) anomalies.push('NO_SCHEDULE');
     if (schedules.length > 1) anomalies.push('MULTIPLE_SHIFTS');
     const currentSchedule = day.scheduleId
       ? await manager.getRepository(WorkerScheduleEntity).findOneBy({ id: day.scheduleId })
       : null;
-    const fullLeave = leave.some(
-      (l) => day.startsAt && day.endsAt && l.start <= +day.startsAt && l.end >= +day.endsAt,
-    );
     if (currentSchedule && !fullLeave) {
       const template = await manager
         .getRepository(ShiftEntity)
@@ -586,25 +591,44 @@ export class AttendanceReconciliationService implements OnModuleInit, OnModuleDe
           .getRepository(AttendanceCorrectionEntity)
           .existsBy({ attendanceSessionId: In(sessions.map((s) => s.id)), status: 'PENDING' })
       : false;
-    if (
-      correctionPending ||
-      overtime.some((r) => r.status === 'PENDING') ||
-      leaves.some((r) => r.status === 'PENDING_MANAGER')
-    )
+    if (correctionPending || overtime.some((r) => r.status === 'PENDING') || pendingLeave)
       anomalies.push('PENDING_REQUEST');
     if (violations.includes('EXIT_DURATION_EXCEEDED')) anomalies.push('EXIT_DURATION_EXCEEDED');
     if (violations.includes('MAX_EXITS_EXCEEDED')) anomalies.push('MAX_EXITS_EXCEEDED');
     const zoneIssue = await attendanceZoneIssue(manager, day, now);
+    const zoneReview =
+      zoneIssue === 'ZONE_ATTENDANCE_PENDING' || day.zoneAttendanceReviewAuditId
+        ? await attendanceZoneReviewContext(manager, day, now)
+        : null;
+    const gateReview =
+      zoneIssue === 'ZONE_GATE_MISSING' ||
+      (day.zoneAttendanceRequirement?.required &&
+        (await manager.getRepository(AttendanceAbsenceReviewEntity).existsBy({ dayId: day.id })))
+        ? await attendanceGateAbsenceContext(manager, day)
+        : null;
     // Approved full-shift leave is not a worked shift; consistent absence earns no confirmed hours.
-    if (!fullLeave && zoneIssue && !(absent && zoneIssue === 'ZONE_ATTENDANCE_ABSENT'))
+    if (
+      !fullLeave &&
+      zoneIssue &&
+      !(absent && zoneIssue === 'ZONE_ATTENDANCE_ABSENT') &&
+      !(zoneReview?.resolved && zoneIssue === 'ZONE_ATTENDANCE_PENDING') &&
+      !(absent && gateReview?.resolved && zoneIssue === 'ZONE_GATE_MISSING')
+    )
       anomalies.push(zoneIssue);
+    if (gateReview?.conflicted) anomalies.push('ABSENCE_REVIEW_CONFLICT');
+    if (zoneReview?.conflicted) anomalies.push('ZONE_ATTENDANCE_REVIEW_CONFLICT');
+    if (!fullLeave && zoneIssue === 'ZONE_GATE_MISSING' && gateReview?.noEvidence) {
+      day.regularMinutes = 0;
+      day.overtimeMinutes = 0;
+      day.provisionalMinutes = 0;
+    }
     day.anomalies = anomalies;
     // Exit violations already have a deterministic deduction and notification.
     // Preserve review requirements for missing evidence and final early departure.
     const nonBlocking = (a: string) =>
       a === 'EXIT_DURATION_EXCEEDED' ||
       a === 'MAX_EXITS_EXCEEDED' ||
-      (a === 'EARLY_CHECKOUT' && Boolean(day.reviewedBy));
+      (a === 'EARLY_CHECKOUT' && (Boolean(day.reviewedBy) || Boolean(zoneReview?.resolved)));
     const blocking = anomalies.filter((a) => !nonBlocking(a));
     day.status = blocking.length
       ? 'NEEDS_REVIEW'
@@ -628,6 +652,45 @@ export class AttendanceReconciliationService implements OnModuleInit, OnModuleDe
     ]);
     if (before !== after) day.version += 1;
     await manager.getRepository(AttendanceDayEntity).save(day);
+    if (!fullLeave && canConfirmZoneHours(day, zoneReview, now)) {
+      const hash = createHash('sha256')
+        .update(`${day.id}:zone-hours:${zoneReview!.evidenceHash}`)
+        .digest('hex');
+      const notificationId = `${hash.slice(0, 8)}-${hash.slice(8, 12)}-8${hash.slice(13, 16)}-a${hash.slice(17, 20)}-${hash.slice(20, 32)}`;
+      await this.notify(
+        manager,
+        worker,
+        notificationId,
+        'ZONE_REVIEW_REQUIRED',
+        `Worker ${worker.displayName} (${worker.externalId}) has complete Gate IN/OUT on ${day.workDate}, but no team leader roll call was recorded. Review recorded hours before confirming attendance.`,
+        true,
+        day.workDate,
+        day.id,
+      );
+    }
+    if (
+      !fullLeave &&
+      zoneIssue === 'ZONE_GATE_MISSING' &&
+      gateReview?.matches &&
+      gateReview.noEvidence &&
+      !gateReview.resolved &&
+      now >= gateReview.requiredEnd
+    ) {
+      const hash = createHash('sha256')
+        .update(`${day.id}:gate-absence:${gateReview.record!.version}`)
+        .digest('hex');
+      const notificationId = `${hash.slice(0, 8)}-${hash.slice(8, 12)}-8${hash.slice(13, 16)}-a${hash.slice(17, 20)}-${hash.slice(20, 32)}`;
+      await this.notify(
+        manager,
+        worker,
+        notificationId,
+        'ABSENCE_REVIEW_REQUIRED',
+        `Worker ${worker.displayName} (${worker.externalId}) was marked present on ${day.workDate}, but no Gate IN/OUT was recorded. Review attendance before confirming absence.`,
+        true,
+        day.workDate,
+        day.id,
+      );
+    }
     if (day.status === 'ABSENT')
       await this.notify(
         manager,

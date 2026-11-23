@@ -3,6 +3,28 @@ import type { UserNotificationResponse } from '@smartsite/api-client';
 import { notificationTarget } from './notification-target';
 const notification = (target: UserNotificationResponse['target']) =>
   ({ target }) as UserNotificationResponse;
+it('opens the exact day for a missing leader roll-call review', () => {
+  const notice = {
+    ...notification({ siteId: 'a', dayId: 'zone-review-day', tab: 'attendance' }),
+    event: 'ZONE_REVIEW_REQUIRED',
+  } as UserNotificationResponse;
+  expect(notificationTarget(notice, 'a', 'contractor')).toEqual({
+    route: 'attendance',
+    id: 'zone-review-day',
+  });
+  expect(notificationTarget(notice, 'other', 'contractor')).toBeNull();
+});
+it('opens the exact attendance day for an absence review notice', () => {
+  const notice = {
+    ...notification({ siteId: 'a', dayId: 'missing-gate-day', tab: 'attendance' }),
+    event: 'ABSENCE_REVIEW_REQUIRED',
+  } as UserNotificationResponse;
+  expect(notificationTarget(notice, 'a', 'contractor')).toEqual({
+    route: 'attendance',
+    id: 'missing-gate-day',
+  });
+  expect(notificationTarget(notice, 'other', 'contractor')).toBeNull();
+});
 it('routes by the actual resource ID and type', () => {
   expect(
     notificationTarget(

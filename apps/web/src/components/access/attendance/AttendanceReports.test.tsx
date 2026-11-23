@@ -89,6 +89,8 @@ describe('AttendanceSummaryCards', () => {
     expect(screen.getByText('Total Working Hours')).toBeTruthy();
     expect(screen.getByText('400h 0m')).toBeTruthy();
     expect(screen.getByText('+4.5%')).toBeTruthy();
+    // Comparison to the previous period must never hide unresolved worked hours.
+    expect(screen.getByText(/10h 0m.*Provisional/i)).toBeTruthy();
 
     expect(screen.getByText('Absent Today')).toBeTruthy();
     expect(screen.getByText('5')).toBeTruthy();

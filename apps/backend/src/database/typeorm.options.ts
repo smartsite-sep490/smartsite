@@ -1,3 +1,5 @@
+import { AttendanceAbsenceReview1795651200000 } from './migrations/1795651200000-AttendanceAbsenceReview.js';
+import { AttendanceZoneReview1795651200001 } from './migrations/1795651200001-AttendanceZoneReview.js';
 import { SecurityBrowserWebcam1795564800000 } from './migrations/1795564800000-SecurityBrowserWebcam.js';
 import { WorkerDocumentReviewWorkflow1795478400000 } from './migrations/1795478400000-WorkerDocumentReviewWorkflow.js';
 import { GateRegistry1795046400001 } from './migrations/1795046400001-GateRegistry.js';
@@ -102,6 +104,8 @@ export function buildTypeOrmOptions(config: DatabaseConnectionConfig): DataSourc
     connectTimeoutMS: timeoutMs,
     entities: [...ENTITIES],
     migrations: [
+      AttendanceAbsenceReview1795651200000,
+      AttendanceZoneReview1795651200001,
       SecurityBrowserWebcam1795564800000,
       WorkerDocumentReviewWorkflow1795478400000,
       GateRegistry1795046400001,

@@ -10,10 +10,12 @@ import { colors } from '../../theme/colors';
 import { useWorkspace } from '../workspace/workspace-context';
 import { Button, ErrorNotice, Field } from '../shared/ui';
 import { RequestSheet } from '../shared/request-sheet';
-import { required, useCommand } from '../shared/data';
+import { minutes, required, useCommand, useRequestId } from '../shared/data';
 import { attendanceFullTime } from './attendance-day-view';
 
 export type AttendanceReviewTarget =
+  | { kind: 'zone'; value: AttendanceDayResponse; evidenceHash: string }
+  | { kind: 'absence'; value: AttendanceDayResponse; teamAttendanceVersion: number }
   | { kind: 'correction'; value: AttendanceOverviewResponse['corrections'][number] }
   | { kind: 'duplicate'; value: AttendanceSessionResponse }
   | { kind: 'day'; value: AttendanceDayResponse };
@@ -23,26 +25,54 @@ export function AttendanceReviewSheet({
   timezone,
   onClose,
   onSaved,
+  stale = false,
 }: {
   target: AttendanceReviewTarget;
   timezone: string;
   onClose: () => void;
   onSaved: () => void;
+  stale?: boolean;
 }) {
   const { t } = useTranslation();
   const { client, scope, token } = useWorkspace();
   const [note, setNote] = useState('');
   const command = useCommand();
+  const requestId = useRequestId();
   const title = t(
-    target.kind === 'correction'
-      ? 'attendanceReview.reviewCorrection'
-      : target.kind === 'duplicate'
-        ? 'attendanceReview.ignoreDuplicate'
-        : 'attendanceReview.acknowledge',
+    target.kind === 'zone'
+      ? 'attendanceReview.confirmZoneHours'
+      : target.kind === 'absence'
+        ? 'attendanceReview.confirmAbsence'
+        : target.kind === 'correction'
+          ? 'attendanceReview.reviewCorrection'
+          : target.kind === 'duplicate'
+            ? 'attendanceReview.ignoreDuplicate'
+            : 'attendanceReview.acknowledge',
   );
   const save = (approve = true) =>
     command.mutate(async () => {
-      if (target.kind === 'correction') {
+      if (stale) return;
+      if (target.kind === 'zone') {
+        const input = {
+          expectedVersion: target.value.version,
+          evidenceHash: target.evidenceHash,
+          reason: required(note, t('attendanceReview.reason')),
+        };
+        await client.confirmAttendanceZoneHours(token, scope.siteId, target.value.id, {
+          ...input,
+          requestId: requestId(input),
+        });
+      } else if (target.kind === 'absence') {
+        const input = {
+          expectedVersion: target.value.version,
+          expectedTeamAttendanceVersion: target.teamAttendanceVersion,
+          reason: required(note, t('attendanceReview.reason')),
+        };
+        await client.confirmAttendanceAbsence(token, scope.siteId, target.value.id, {
+          ...input,
+          requestId: requestId(input),
+        });
+      } else if (target.kind === 'correction') {
         await client.reviewAttendanceCorrection(token, scope.siteId, target.value.id, {
           approve,
           ...(note.trim() ? { reviewNote: note.trim() } : {}),
@@ -73,7 +103,13 @@ export function AttendanceReviewSheet({
           <ErrorNotice error={command.error} />
           <Button
             label={t(target.kind === 'correction' ? 'attendanceReview.approve' : 'common.confirm')}
-            disabled={command.isPending || (target.kind !== 'correction' && !note.trim())}
+            disabled={
+              command.isPending ||
+              stale ||
+              (target.kind === 'absence' || target.kind === 'zone'
+                ? note.trim().length < 5
+                : target.kind !== 'correction' && !note.trim())
+            }
             onPress={() => save(true)}
           />
           {target.kind === 'correction' && (
@@ -88,15 +124,30 @@ export function AttendanceReviewSheet({
       }
     >
       <Text style={styles.name}>{target.value.workerName}</Text>
+      {stale && <Text accessibilityRole="alert">{t('attendanceReview.absenceChanged')}</Text>}
       <Text style={styles.hint}>
         {t(
-          target.kind === 'correction'
-            ? 'attendanceReview.correctionHint'
-            : target.kind === 'duplicate'
-              ? 'attendanceReview.duplicateHint'
-              : 'attendanceReview.acknowledgeHint',
+          target.kind === 'zone'
+            ? 'attendanceReview.zoneHint'
+            : target.kind === 'absence'
+              ? 'attendanceReview.absenceHint'
+              : target.kind === 'correction'
+                ? 'attendanceReview.correctionHint'
+                : target.kind === 'duplicate'
+                  ? 'attendanceReview.duplicateHint'
+                  : 'attendanceReview.acknowledgeHint',
         )}
       </Text>
+      {target.kind === 'zone' && (
+        <View style={styles.summary}>
+          <Text style={styles.value}>
+            {t('attendance.regularHoursLabel')}: {minutes(target.value.regularMinutes)}
+          </Text>
+          <Text style={styles.value}>
+            {t('attendance.overtime')}: {minutes(target.value.overtimeMinutes)}
+          </Text>
+        </View>
+      )}
       {target.kind === 'correction' && (
         <View style={styles.summary}>
           <Text style={styles.caption}>{t('attendanceDetail.proposedTimes')}</Text>
@@ -121,6 +172,7 @@ export function AttendanceReviewSheet({
           target.kind === 'correction' ? 'attendanceReview.note' : 'attendanceReview.reason',
         )}
         value={note}
+        maxLength={target.kind === 'zone' || target.kind === 'absence' ? 1000 : undefined}
         onChangeText={setNote}
         editable={!command.isPending}
       />

@@ -4277,5 +4277,6 @@
   "attendance_leave.planned_required": "Nghỉ có kế hoạch cần được gửi trước giờ bắt đầu ca ít nhất 24 giờ.",
   "attendance_leave.emergency_today": "Nghỉ khẩn cấp chỉ áp dụng cho ca diễn ra trong ngày.",
   "attendance_leave.shift_unavailable": "Chưa xác minh được giờ ca. Vui lòng tải lại lịch và thử lại.",
-  "attendance_leave.cooldown_error": "Mỗi 24 giờ chỉ được gửi một đơn nghỉ mới"
+  "attendance_leave.cooldown_error": "Mỗi 24 giờ chỉ được gửi một đơn nghỉ mới",
+  "attendance_report.period_scope": "Giờ công và tỷ lệ tham dự tính trong khoảng: {{from}} – {{to}}. Trạng thái và giờ vào/ra là của hôm nay. Giờ đã xác nhận và giờ tạm tính được hiển thị riêng."
 }

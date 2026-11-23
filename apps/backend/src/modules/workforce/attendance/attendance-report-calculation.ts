@@ -52,33 +52,69 @@ export interface WorkerReportInput {
   today: string;
   now: Date;
   includeDaily: boolean;
+  /** Authoritative pending overtime/correction reads; undefined cannot clear stale review. */
+  pendingOtherRequestDayIds?: string[];
 }
+
+function approvedScheduleLeave(
+  schedule: WorkerScheduleEntity,
+  window: { startsAt: Date; endsAt: Date },
+  leaves: AbsenceRequestEntity[],
+) {
+  return unionIntervals(
+    leaves
+      .filter(
+        (l) =>
+          l.workerScheduleId === schedule.id &&
+          l.siteId === schedule.siteId &&
+          l.workerId === schedule.workerId &&
+          l.shiftId === schedule.shiftId &&
+          l.expectedScheduleVersionId === schedule.scheduleVersionId &&
+          l.status === 'APPROVED',
+      )
+      .map((l) => ({ start: +(l.startsAt ?? window.startsAt), end: +(l.endsAt ?? window.endsAt) })),
+  );
+}
+
+export function hasApprovedFullShiftLeave(
+  schedule: WorkerScheduleEntity,
+  shift: ShiftEntity | undefined,
+  leaves: AbsenceRequestEntity[],
+) {
+  if (!shift) return false;
+  try {
+    const window = scheduledShiftWindow(shift, schedule.workDate);
+    return approvedScheduleLeave(schedule, window, leaves).some(
+      (l) => l.start <= +window.startsAt && l.end >= +window.endsAt,
+    );
+  } catch {
+    return false;
+  }
+}
+
 export function workerAttendanceReport(input: WorkerReportInput): AttendanceWorkerReport {
   const { worker, schedules, shifts, days, sessions, leaves, dates, today, now } = input;
   const metrics = emptyReportMetrics();
   const calculateDay = (
     workDate: string,
   ): { report: AttendanceReportDay; required: boolean; present: boolean; review: boolean } => {
-    const assigned = schedules.filter((s) => s.isActive && s.workDate === workDate);
-    const windows = assigned.map((s) => {
-      const shift = shifts.find((v) => v.id === s.shiftId);
-      try {
-        if (!shift) return { schedule: s, shift, window: null, leave: false };
-        const window = scheduledShiftWindow(shift, workDate);
-        const approved = unionIntervals(
-          leaves
-            .filter((l) => l.workerScheduleId === s.id && l.status === 'APPROVED')
-            .map((l) => ({
-              start: +(l.startsAt ?? window.startsAt),
-              end: +(l.endsAt ?? window.endsAt),
-            })),
-        );
-        const leave = approved.some((l) => l.start <= +window.startsAt && l.end >= +window.endsAt);
-        return { schedule: s, shift, window, leave };
-      } catch {
-        return { schedule: s, shift, window: null, leave: false };
-      }
-    });
+    const windows = schedules
+      .filter((s) => s.workDate === workDate)
+      .map((s) => {
+        const shift = shifts.find((v) => v.id === s.shiftId);
+        try {
+          if (!shift) return { schedule: s, shift, window: null, leave: false };
+          const window = scheduledShiftWindow(shift, workDate);
+          const approved = approvedScheduleLeave(s, window, leaves);
+          const leave = approved.some(
+            (l) => l.start <= +window.startsAt && l.end >= +window.endsAt,
+          );
+          return { schedule: s, shift, window, leave };
+        } catch {
+          return { schedule: s, shift, window: null, leave: false };
+        }
+      })
+      .filter((w) => w.schedule.isActive || w.leave);
     const day = days.find((d) => d.workDate === workDate);
     const activeSessions = sessions.filter((s) => s.dayId === day?.id && s.status !== 'IGNORED');
     // A reviewed correction may legitimately restore a missing raw IN.
@@ -87,6 +123,19 @@ export function workerAttendanceReport(input: WorkerReportInput): AttendanceWork
     );
     const hasCheckIn = checkIns.length > 0;
     const obligations = windows.filter((w) => !w.leave);
+    const coveredLeaveReview =
+      !!day &&
+      day.status === 'NEEDS_REVIEW' &&
+      windows.length > 0 &&
+      obligations.length === 0 &&
+      activeSessions.length === 0 &&
+      day.provisionalMinutes === 0 &&
+      day.regularMinutes === 0 &&
+      day.overtimeMinutes === 0 &&
+      day.anomalies.length > 0 &&
+      day.anomalies.every((a) => a === 'PENDING_LEAVE' || a === 'PENDING_REQUEST') &&
+      input.pendingOtherRequestDayIds !== undefined &&
+      !input.pendingOtherRequestDayIds.includes(day.id);
     const invalid = windows.some((w) => !w.window);
     const required =
       !invalid && obligations.length > 0 && obligations.every((w) => +w.window!.endsAt <= +now);
@@ -106,11 +155,11 @@ export function workerAttendanceReport(input: WorkerReportInput): AttendanceWork
       .sort((a, b) => b - a);
     const status = invalid
       ? 'UNAVAILABLE'
-      : day?.status === 'NEEDS_REVIEW'
+      : day?.status === 'NEEDS_REVIEW' && !coveredLeaveReview
         ? 'NEEDS_REVIEW'
         : hasCheckIn
           ? 'PRESENT'
-          : !assigned.length
+          : !windows.length
             ? day
               ? 'NEEDS_REVIEW'
               : 'OFF'
@@ -154,7 +203,7 @@ export function workerAttendanceReport(input: WorkerReportInput): AttendanceWork
           : day && day.status !== 'ABSENT'
             ? 'PROVISIONAL'
             : 'NONE',
-        anomalies: day?.anomalies ?? [],
+        anomalies: coveredLeaveReview ? [] : (day?.anomalies ?? []),
       },
     };
   };
