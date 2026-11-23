@@ -12,7 +12,7 @@ import { userErrorMessage } from '../../i18n/messages';
 import { uiLocale } from '../../i18n';
 import { translate as tr } from '../../i18n';
 import { useTranslation } from 'react-i18next';
-import { StatusBadge, WorkflowDetailTabs } from '../safety/SafetyWorkflowUi';
+import { StatusBadge, WorkflowDetailTabs, WorkflowSplit } from '../safety/SafetyWorkflowUi';
 import { IncidentView } from '../safety/IncidentView';
 import { SafetyTasksView } from '../safety/SafetyTasksView';
 import { useCallback, useEffect, useId, useMemo, useRef, useState } from 'react';
@@ -28,8 +28,7 @@ import {
   type SafetyAlertType,
 } from '@smartsite/api-client';
 import { SafetyAlertEvidencePanel } from './SafetyAlertEvidencePanel';
-import { SafetyTaskTour } from '../safety/SafetyTaskTour';
-import { ALERTS_TOUR_VERSION, buildAlertsTourSteps } from '../safety/safetyTaskTourModel';
+import { resetWorkflowDetailScroll } from '../safety/safety-workflow';
 
 export interface SafetyAlertsViewProps {
   view?: SafetyOperationsView;
@@ -515,44 +514,12 @@ export function SafetyAlertsView({
   const hasSelectedAlertSummary = Boolean(
     hasAlertQueueFilter && detail.data && !detailAccessDenied,
   );
-  const canRecordAlertReview = Boolean(
-    hasSelectedAlertSummary && canReviewSafety && detail.data?.status === 'PENDING_REVIEW',
-  );
   const canCreateIncidentFromAlert = Boolean(
     hasSelectedAlertSummary &&
     canReviewSafety &&
     detail.data?.status === 'CONFIRMED' &&
     !detail.data?.incidentId,
   );
-  const hasAlertWorkContextAnchor = Boolean(
-    hasSelectedAlertSummary && (detail.data?.detections.length ?? 0) > 0,
-  );
-  const hasAlertFollowupContext = hasAlertWorkContextAnchor || canCreateIncidentFromAlert;
-  const alertsTourSteps = useMemo(
-    () =>
-      buildAlertsTourSteps({
-        hasQueueFilter: hasAlertQueueFilter,
-        hasSelectedCase: hasSelectedAlertSummary,
-        canRecordReview: canRecordAlertReview,
-        hasFollowupContext: hasAlertFollowupContext,
-      }),
-    [hasAlertQueueFilter, hasSelectedAlertSummary, canRecordAlertReview, hasAlertFollowupContext],
-  );
-  const alertsTourScopeKey = `${sessionScope}:${session?.user.id ?? 'anon'}:${selectedSiteId}:${workspaceTab}`;
-  const isAlertsTourAuthorized = Boolean(
-    session &&
-    token.length > 0 &&
-    session.user.isActive !== false &&
-    !session.user.mustChangePassword &&
-    hasAlertQueueFilter &&
-    !alertSiteUnavailable &&
-    !sites.isPending &&
-    !sites.error &&
-    !alerts.isPending &&
-    !alerts.error &&
-    (!selectedAlertId || (!detail.isPending && !detailAccessDenied)),
-  );
-
   const review = useMutation({
     mutationFn: async (targetStatus: SafetyAlertReviewTargetStatus) => {
       if (!detail.data || detailAccessDenied)
@@ -1009,19 +976,7 @@ export function SafetyAlertsView({
         />
       )}
       {selectedSiteId && workspaceTab === 'Alerts' && canAlerts && (
-        <div className="flex flex-wrap items-center justify-end gap-2">
-          <SafetyTaskTour
-            taskId="alerts"
-            tourVersion={ALERTS_TOUR_VERSION}
-            userId={session.user.id}
-            scopeKey={alertsTourScopeKey}
-            isAuthorized={isAlertsTourAuthorized}
-            steps={alertsTourSteps}
-          />
-        </div>
-      )}
-      {selectedSiteId && workspaceTab === 'Alerts' && canAlerts && (
-        <div className="workflow-split grid items-start gap-5 lg:grid-cols-[minmax(240px,0.65fr)_minmax(0,1.35fr)] min-w-0">
+        <WorkflowSplit className="workflow-split grid items-start gap-5 lg:grid-cols-[minmax(240px,0.65fr)_minmax(0,1.35fr)] min-w-0">
           <section
             aria-label={tr('common.alert_list')}
             className={'workflow-list-pane min-w-0 ' + (mobileAlertDetail ? 'hidden lg:flex' : '')}
@@ -1076,7 +1031,7 @@ export function SafetyAlertsView({
                     setRequestedAlertId(alert.id);
                     onRecordSelect?.('alertId', alert.id, selectedSiteId);
                     setAlertDetailTab('review');
-                    if (alertDetailScroll.current) alertDetailScroll.current.scrollTop = 0;
+                    resetWorkflowDetailScroll(alertDetailScroll.current);
                     setMobileAlertDetail(true);
                   }}
                 />
@@ -1129,31 +1084,33 @@ export function SafetyAlertsView({
             >
               {tr('common.back_to_alerts')}
             </button>
-            <div className="workflow-detail-heading flex items-center justify-between gap-3">
-              <h2 className="text-lg font-bold text-[#111111]">{tr('common.alert_detail')}</h2>
-              {selectedAlertId && (
-                <button
-                  type="button"
-                  onClick={() => void detail.refetch()}
-                  className="text-xs font-semibold text-[#F66B17] hover:text-[#D94E07] cursor-pointer"
-                >
-                  {tr('common.refresh_detail')}
-                </button>
-              )}
+            <div className="workflow-detail-navigation">
+              <div className="workflow-detail-heading flex items-center justify-between gap-3">
+                <h2 className="text-lg font-bold text-[#111111]">{tr('common.alert_detail')}</h2>
+                {selectedAlertId && (
+                  <button
+                    type="button"
+                    onClick={() => void detail.refetch()}
+                    className="text-xs font-semibold text-[#F66B17] hover:text-[#D94E07] cursor-pointer"
+                  >
+                    {tr('common.refresh_detail')}
+                  </button>
+                )}
+              </div>
+              <WorkflowDetailTabs
+                panelId={alertPanelId}
+                value={alertDetailTab}
+                onChange={(next) => {
+                  setAlertDetailTab(next);
+                  resetWorkflowDetailScroll(alertDetailScroll.current);
+                }}
+                options={[
+                  { value: 'review', label: tr('safetyUi.review') },
+                  { value: 'evidence', label: tr('safetyUi.evidence') },
+                  { value: 'history', label: tr('safetyUi.history') },
+                ]}
+              />
             </div>
-            <WorkflowDetailTabs
-              panelId={alertPanelId}
-              value={alertDetailTab}
-              onChange={(next) => {
-                setAlertDetailTab(next);
-                if (alertDetailScroll.current) alertDetailScroll.current.scrollTop = 0;
-              }}
-              options={[
-                { value: 'review', label: tr('safetyUi.review') },
-                { value: 'evidence', label: tr('safetyUi.evidence') },
-                { value: 'history', label: tr('safetyUi.history') },
-              ]}
-            />
             <div
               className="workflow-detail-content"
               role="tabpanel"
@@ -1218,6 +1175,16 @@ export function SafetyAlertsView({
                         </dd>
                       </div>
                     </dl>
+                    <AlertWorkContext
+                      client={client}
+                      apiUrl={apiUrl}
+                      scope={sessionScope}
+                      token={token}
+                      siteId={selectedSiteId}
+                      user={session.user}
+                      alertId={detail.data.id}
+                      revision={detail.data.revision}
+                    />
                     <div>
                       <h3 className="text-sm font-bold text-[#2F3437]">
                         {tr('common.evidence_amp_sources')}
@@ -1227,7 +1194,7 @@ export function SafetyAlertsView({
                       >
                         {detail.data.detections
                           .filter((_, index) => alertDetailTab === 'evidence' || index === 0)
-                          .map((detection, detectionIndex) => (
+                          .map((detection) => (
                             <div
                               key={`${detail.data.id}:${detection.eventId}`}
                               className="rounded-md bg-[#F7F6F3] p-3 text-xs min-w-0"
@@ -1243,24 +1210,6 @@ export function SafetyAlertsView({
                               <p className="mt-1 text-[#6B6B6B]">
                                 {formatDate(detection.capturedAt)}
                               </p>
-                              <div
-                                data-tour-anchor={
-                                  !canCreateIncidentFromAlert && detectionIndex === 0
-                                    ? 'alerts-followup'
-                                    : undefined
-                                }
-                              >
-                                <AlertWorkContext
-                                  client={client}
-                                  apiUrl={apiUrl}
-                                  scope={sessionScope}
-                                  token={token}
-                                  siteId={selectedSiteId}
-                                  user={session.user}
-                                  alertId={detail.data.id}
-                                  revision={detail.data.revision}
-                                />
-                              </div>
                               <SafetyAlertEvidencePanel
                                 client={client}
                                 apiUrl={apiUrl}
@@ -1405,7 +1354,7 @@ export function SafetyAlertsView({
               </footer>
             )}
           </aside>
-        </div>
+        </WorkflowSplit>
       )}
     </div>
   );

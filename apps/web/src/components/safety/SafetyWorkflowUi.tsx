@@ -13,7 +13,15 @@ import {
   formValues,
   photo,
 } from './safety-workflow';
-import { useEffect, useId, useLayoutEffect, useRef, useState, type ReactNode } from 'react';
+import {
+  useEffect,
+  useId,
+  useLayoutEffect,
+  useRef,
+  useState,
+  type ReactNode,
+  type PropsWithChildren,
+} from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { ApiError, type SafetyAuditResponse } from '@smartsite/api-client';
 export function Field({
@@ -760,6 +768,42 @@ export function WorkflowDetailTabs({
           {option.label}
         </button>
       ))}
+    </div>
+  );
+}
+
+export function WorkflowSplit({
+  children,
+  className = 'workflow-split',
+}: PropsWithChildren<{ className?: string }>) {
+  const ref = useRef<HTMLDivElement>(null);
+  useLayoutEffect(() => {
+    const node = ref.current!;
+    let frame = 0;
+    const measure = () => {
+      const top = node.getBoundingClientRect().top + window.scrollY;
+      const height = Math.max(224, Math.round(window.innerHeight - top - 16)) + 'px';
+      if (node.style.getPropertyValue('--workflow-list-height') !== height)
+        node.style.setProperty('--workflow-list-height', height);
+    };
+    const scheduleMeasure = () => {
+      cancelAnimationFrame(frame);
+      frame = requestAnimationFrame(measure);
+    };
+    measure();
+    const observer =
+      typeof ResizeObserver === 'undefined' ? undefined : new ResizeObserver(scheduleMeasure);
+    observer?.observe(node.parentElement ?? node);
+    window.addEventListener('resize', scheduleMeasure);
+    return () => {
+      observer?.disconnect();
+      cancelAnimationFrame(frame);
+      window.removeEventListener('resize', scheduleMeasure);
+    };
+  }, []);
+  return (
+    <div ref={ref} className={className}>
+      {children}
     </div>
   );
 }

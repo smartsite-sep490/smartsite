@@ -137,6 +137,15 @@ describe('SafetyAlertsView Integration (Plan §15 A4 Parent View & Session Scope
 
     // Default logout mock to protect cleanup/unmount in every test
     vi.spyOn(SmartSiteManagementClient.prototype, 'logout').mockResolvedValue(undefined as never);
+    vi.spyOn(SmartSiteManagementClient.prototype, 'getAlertWorkContext').mockResolvedValue({
+      capturedAt: mockAlert.lastDetectedAt,
+      identity: 'UNKNOWN',
+      workers: [],
+      relatedTeams: [],
+      zoneName: null,
+      cameraName: null,
+      warning: '',
+    });
   });
 
   afterEach(() => {

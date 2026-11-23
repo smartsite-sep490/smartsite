@@ -246,9 +246,15 @@ export function AppLayout({ currentTab: propCurrentTab, onSelectTab, children }:
     (activeTab === 'incidents' &&
       !['ppe-frames', 'episodes', 'identification'].includes(searchParams.get('tab') ?? '')) ||
     activeTab === 'assigned-work';
+  const naturalWorkspace =
+    boundedWorkspace &&
+    (activeTab === 'assigned-work'
+      ? searchParams.get('tab') !== 'checklists'
+      : ['Alerts', 'Incidents'].includes(safetyView));
   return (
     <div
       className={
+        (naturalWorkspace ? 'workflow-natural-page ' : '') +
         (boundedWorkspace ? 'workflow-app-shell ' : '') +
         'min-h-screen bg-[var(--surface-canvas)] text-[var(--text-body)] font-sans flex'
       }

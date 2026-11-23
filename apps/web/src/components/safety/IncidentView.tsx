@@ -5,6 +5,7 @@ import {
   type WorkflowProps,
   type WithoutCommandId,
   hasRole,
+  resetWorkflowDetailScroll,
   text,
   ids,
   deadline,
@@ -38,6 +39,7 @@ import type {
 } from '@smartsite/api-client';
 import {
   WorkflowDetailTabs,
+  WorkflowSplit,
   ConfirmedAlerts,
   Assignee,
   Field,
@@ -243,7 +245,7 @@ export function IncidentView(p: IncidentViewProps) {
   }
   const changeDetailTab = (next: string) => {
     setDetailTab(next);
-    if (detailScroll.current) detailScroll.current.scrollTop = 0;
+    resetWorkflowDetailScroll(detailScroll.current);
   };
   const current = detail.data,
     action = current?.actions.find((a) => a.id === editor?.actionId);
@@ -370,7 +372,7 @@ export function IncidentView(p: IncidentViewProps) {
           {tr('common.refresh_incidents')}
         </button>
       </div>
-      <div className="workflow-split grid items-start gap-5 lg:grid-cols-[minmax(240px,0.65fr)_minmax(0,1.35fr)]">
+      <WorkflowSplit className="workflow-split grid items-start gap-5 lg:grid-cols-[minmax(240px,0.65fr)_minmax(0,1.35fr)]">
         <section
           aria-label={tr('common.incident_list')}
           className={'workflow-list-pane min-w-0 ' + (mobileDetail ? 'hidden lg:flex' : '')}
@@ -396,7 +398,7 @@ export function IncidentView(p: IncidentViewProps) {
                   setSelected(item.id);
                   p.onSelect?.(item.id);
                   setMobileDetail(true);
-                  if (detailScroll.current) detailScroll.current.scrollTop = 0;
+                  resetWorkflowDetailScroll(detailScroll.current);
                   mutation.reset();
                 }}
               >
@@ -438,32 +440,34 @@ export function IncidentView(p: IncidentViewProps) {
           <RequestError error={detail.error} retry={() => void detail.refetch()} />
           {current && (
             <>
-              <header className="workflow-detail-heading">
-                <div className="flex flex-wrap items-start justify-between gap-3">
-                  <h3 className="min-w-0 break-words text-xl font-bold">{current.title}</h3>
-                  <div className="flex gap-2">
-                    <span className="text-xs">
-                      {tr('common.status_755c8b')}
-                      <StatusBadge value={current.status} />
-                    </span>
-                    <span className="text-xs">
-                      {tr('safety_workspace.severity')}
-                      <StatusBadge value={current.severity} />
-                    </span>
+              <div className="workflow-detail-navigation">
+                <header className="workflow-detail-heading">
+                  <div className="flex flex-wrap items-start justify-between gap-3">
+                    <h3 className="min-w-0 break-words text-xl font-bold">{current.title}</h3>
+                    <div className="flex gap-2">
+                      <span className="text-xs">
+                        {tr('common.status_755c8b')}
+                        <StatusBadge value={current.status} />
+                      </span>
+                      <span className="text-xs">
+                        {tr('safety_workspace.severity')}
+                        <StatusBadge value={current.severity} />
+                      </span>
+                    </div>
                   </div>
-                </div>
-              </header>
-              <WorkflowDetailTabs
-                value={detailTab}
-                onChange={changeDetailTab}
-                panelId={panelId}
-                options={[
-                  { value: 'summary', label: tr('safetyUi.summary') },
-                  { value: 'handling', label: tr('safetyUi.handling') },
-                  { value: 'evidence', label: tr('safetyUi.evidence') },
-                  { value: 'history', label: tr('safetyUi.history') },
-                ]}
-              />
+                </header>
+                <WorkflowDetailTabs
+                  value={detailTab}
+                  onChange={changeDetailTab}
+                  panelId={panelId}
+                  options={[
+                    { value: 'summary', label: tr('safetyUi.summary') },
+                    { value: 'handling', label: tr('safetyUi.handling') },
+                    { value: 'evidence', label: tr('safetyUi.evidence') },
+                    { value: 'history', label: tr('safetyUi.history') },
+                  ]}
+                />
+              </div>
               <div
                 ref={detailScroll}
                 role="tabpanel"
@@ -720,7 +724,7 @@ export function IncidentView(p: IncidentViewProps) {
             </>
           )}
         </section>
-      </div>
+      </WorkflowSplit>
       {editor && (
         <Dialog
           title={titles[editor.op]}

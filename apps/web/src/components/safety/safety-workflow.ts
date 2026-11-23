@@ -108,3 +108,10 @@ export function photo(form: FormData) {
     throw new Error(tr('safety-workflow.choose_a_jpeg_image_at_most_1_mib'));
   return value;
 }
+
+export function resetWorkflowDetailScroll(node: HTMLElement | null) {
+  if (!node) return;
+  if (window.innerWidth >= 1024 && node.closest('.workflow-natural-page')) {
+    node.closest('.workflow-detail-pane')?.scrollIntoView?.({ block: 'start' });
+  } else node.scrollTop = 0;
+}

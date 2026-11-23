@@ -412,3 +412,51 @@ input::-webkit-credentials-auto-fill-button {
 .assigned-work-workspace {
   overflow: auto;
 }
+
+.workflow-detail-navigation {
+  flex-shrink: 0;
+}
+@media (min-width: 1024px) {
+  .workflow-natural-page.workflow-app-shell {
+    height: auto;
+    min-height: 100dvh;
+    overflow: visible;
+  }
+  .workflow-natural-page .safety-desktop-workspace,
+  .workflow-natural-page .safety-operations-screen,
+  .workflow-natural-page .assigned-work-workspace,
+  .workflow-natural-page .workflow-incident-screen {
+    overflow: visible;
+  }
+  .workflow-natural-page .workflow-split {
+    flex: none;
+    align-items: start;
+    overflow: visible;
+  }
+  .workflow-natural-page .workflow-list-pane {
+    position: sticky;
+    top: 5rem;
+    height: var(--workflow-list-height, calc(100dvh - 20rem));
+    max-height: calc(100dvh - 6rem);
+  }
+  .workflow-natural-page .workflow-detail-pane {
+    overflow: visible;
+    scroll-margin-top: 5rem;
+  }
+  .workflow-natural-page .workflow-detail-navigation {
+    position: sticky;
+    top: 4rem;
+    z-index: 10;
+    background: var(--surface-white);
+    border-radius: 1rem 1rem 0 0;
+  }
+  .workflow-natural-page .workflow-detail-content {
+    flex: none;
+    overflow: visible;
+  }
+  .workflow-natural-page .workflow-detail-footer {
+    position: sticky;
+    bottom: 0;
+    z-index: 10;
+  }
+}

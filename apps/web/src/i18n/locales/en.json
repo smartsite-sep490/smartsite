@@ -4293,5 +4293,6 @@
   "safetyUi.returnResult": "Request rework",
   "safetyUi.siteUnavailable": "The linked site is unavailable.",
   "safetyUi.zoneRecorded": "Area recorded",
-  "safetyUi.handoverNumber": "Handover {{number}}"
+  "safetyUi.handoverNumber": "Handover {{number}}",
+  "safetyUi.contextUnknown": "No information yet"
 }

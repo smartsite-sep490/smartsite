@@ -43,8 +43,43 @@ async function install(
   });
 }
 
+for (const width of [1920, 1366, 1024])
+  test('natural detail page keeps the incident list independent at ' + width, async ({ page }) => {
+    const fixture = createSafetyFixture();
+    const incident = fixture.incidents[0]!;
+    incident.description = Array.from(
+      { length: 24 },
+      (_, i) => `Repair detail ${i + 1}: inspect the barrier and record the result.`,
+    ).join('\n\n');
+    await install(page, fixture);
+    await page.setViewportSize({ width, height: width === 1920 ? 1080 : 768 });
+    await page.goto(`/incidents?tab=incidents&siteId=${siteId}&incidentId=${incident.id}`);
+    await expect(page.getByRole('heading', { name: incident.title, exact: true })).toBeVisible();
+    const content = page.locator('.workflow-detail-content'),
+      list = page.locator('.workflow-list-items');
+    await expect(content).toHaveCSS('overflow-y', 'visible');
+    const listBox = (await list.boundingBox())!;
+    await page.mouse.move(listBox.x + listBox.width / 2, listBox.y + listBox.height / 2);
+    await page.mouse.wheel(0, 450);
+    await expect.poll(() => list.evaluate((el) => el.scrollTop)).toBeGreaterThan(0);
+    const position = await list.evaluate((el) => el.scrollTop);
+    const detailBox = (await content.boundingBox())!;
+    await page.mouse.move(detailBox.x + detailBox.width / 2, Math.min(detailBox.y + 100, 500));
+    await page.mouse.wheel(0, 600);
+    await expect.poll(() => page.evaluate(() => scrollY)).toBeGreaterThan(0);
+    expect(await list.evaluate((el) => el.scrollTop)).toBe(position);
+    expect(await content.evaluate((el) => el.scrollTop)).toBe(0);
+    expect(
+      (await page.locator('.workflow-detail-navigation').boundingBox())!.y,
+    ).toBeGreaterThanOrEqual(63);
+    expect((await page.getByRole('complementary').boundingBox())!.y).toBe(0);
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(
+      true,
+    );
+  });
+
 for (const width of [1920, 1366, 1024, 390])
-  test('Safety workspace navigation and bounded panels at ' + width, async ({ page }, info) => {
+  test('Safety workspace navigation and responsive panels at ' + width, async ({ page }, info) => {
     const fixture = createSafetyFixture(),
       errors: string[] = [];
     page.on('pageerror', (error) => errors.push(error.message));
@@ -76,12 +111,13 @@ for (const width of [1920, 1366, 1024, 390])
       expect(other).toBeTruthy();
       expect(await list.evaluate((el) => el.scrollHeight > el.clientHeight)).toBe(true);
       const initial = await detail.evaluate((el) => el.scrollTop);
+      const initialPageScroll = await page.evaluate(() => scrollY);
       await page.mouse.move(pane!.x + pane!.width / 2, pane!.y + pane!.height / 2);
       await page.mouse.wheel(0, 500);
       await expect.poll(() => list.evaluate((el) => el.scrollTop)).toBeGreaterThan(0);
       expect(await detail.evaluate((el) => el.scrollTop)).toBe(initial);
       await list.evaluate((el) => el.scrollTo(0, 0));
-      expect(await page.evaluate(() => scrollY)).toBe(0);
+      expect(await page.evaluate(() => scrollY)).toBe(initialPageScroll);
       const footer = await page
         .getByRole('button', { name: 'Duyệt kết quả', exact: true })
         .boundingBox();
@@ -224,7 +260,7 @@ test('canonical Safety navigation survives reload, Back, legacy links and collap
   await expect(page.getByRole('heading', { name: 'Safety overview', exact: true })).toBeVisible();
 });
 
-test('alerts retain the workspace height and do not scroll the whole page', async ({
+test('alerts show context without photos and use natural detail scrolling', async ({
   page,
 }, info) => {
   const fixture = createSafetyFixture();
@@ -232,17 +268,42 @@ test('alerts retain the workspace height and do not scroll the whole page', asyn
   await page.setViewportSize({ width: 1366, height: 768 });
   await page.goto(`/incidents?alertId=${fixture.alerts[0]!.id}&siteId=${siteId}`);
   await expect(page.getByRole('tab', { name: 'Xem xét', exact: true })).toBeVisible();
+  await expect(page.getByText(/Khu vực: Sảnh tầng 1.*Camera: Camera sảnh/)).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Ngữ cảnh công việc' })).toHaveCount(1);
+  await expect(page.getByRole('button', { name: /hướng dẫn/i })).toHaveCount(0);
+  const detail = page.locator('.workflow-detail-content');
+  await expect(detail).toHaveCSS('overflow-y', 'visible');
   const list = page.locator('.workflow-list-items');
   expect(await list.evaluate((e) => e.scrollHeight > e.clientHeight)).toBe(true);
-  expect(
-    await page.evaluate(() => ({
-      x: document.documentElement.scrollWidth,
-      y: document.documentElement.scrollHeight,
-    })),
-  ).toEqual({ x: 1366, y: 768 });
+  const box = (await detail.boundingBox())!;
+  await page.mouse.move(box.x + 40, box.y + 100);
+  await page.mouse.wheel(0, 500);
+  await expect.poll(() => page.evaluate(() => scrollY)).toBeGreaterThan(0);
+  expect(await detail.evaluate((e) => e.scrollTop)).toBe(0);
+  expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBe(1366);
+  await page.screenshot({
+    path: info.outputPath('alerts-context-without-photos.png'),
+    fullPage: true,
+  });
   await page.getByRole('tab', { name: 'Bằng chứng', exact: true }).click();
+  await expect(page.getByText(/Khu vực: Sảnh tầng 1.*Camera: Camera sảnh/)).toBeVisible();
   await page.getByRole('tab', { name: 'Lịch sử', exact: true }).click();
   await page.screenshot({ path: info.outputPath('alerts-desktop.png'), fullPage: true });
+});
+
+test('source-free alerts keep partial and missing context visible', async ({ page }) => {
+  const fixture = createSafetyFixture();
+  await install(page, fixture);
+  await page.setViewportSize({ width: 1366, height: 768 });
+  await page.goto(`/incidents?alertId=${fixture.alerts[1]!.id}&siteId=${siteId}`);
+  await expect(page.getByText(/Zone: Sảnh tầng 1.*Camera: No information yet/)).toBeVisible();
+  await expect(page.getByText(/No source observation is linked/)).toBeVisible();
+  await page.getByRole('tab', { name: 'Evidence', exact: true }).click();
+  await expect(page.getByText(/Zone: Sảnh tầng 1.*Camera: No information yet/)).toBeVisible();
+  await page.goto(`/incidents?alertId=${fixture.alerts[2]!.id}&siteId=${siteId}`);
+  await expect(
+    page.getByText('Zone: No information yet · Camera: No information yet'),
+  ).toBeVisible();
 });
 
 test('manual incident selection updates the URL and Back restores the linked handover', async ({

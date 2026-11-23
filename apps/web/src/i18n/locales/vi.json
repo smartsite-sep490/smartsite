@@ -4293,5 +4293,6 @@
   "safetyUi.returnResult": "Yêu cầu làm lại",
   "safetyUi.siteUnavailable": "Công trường trong liên kết không khả dụng.",
   "safetyUi.zoneRecorded": "Đã ghi nhận khu vực",
-  "safetyUi.handoverNumber": "Lần bàn giao {{number}}"
+  "safetyUi.handoverNumber": "Lần bàn giao {{number}}",
+  "safetyUi.contextUnknown": "Chưa có thông tin"
 }

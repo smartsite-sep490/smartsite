@@ -2,6 +2,7 @@ import type {
   AccountResponse,
   IncidentDetailResponse,
   SafetyAlertDetailResponse,
+  SafetyAlertWorkContextResponse,
 } from '@smartsite/api-client';
 
 export const siteId = '11111111-1111-4111-8111-111111111111';
@@ -90,21 +91,41 @@ export function createSafetyFixture() {
   const alerts: SafetyAlertDetailResponse[] = Array.from({ length: 48 }, (_, index) => ({
     id: uuid('9', index + 1),
     siteId,
-    zoneId: null,
+    zoneId: index < 2 ? uuid('4', 1) : null,
     candidateWorkerId: null,
     alertType: 'PPE_VIOLATION',
     candidateSubtype: 'PPE_HARD_HAT_MISSING',
     status: index < 24 ? 'CONFIRMED' : 'PENDING_REVIEW',
     firstDetectedAt: stamp,
     lastDetectedAt: stamp,
-    detectionCount: 1,
+    detectionCount: index === 0 ? 1 : 0,
     revision: 1,
     createdAt: stamp,
     updatedAt: stamp,
-    detections: [],
-    detectionsTotal: 0,
+    detections:
+      index === 0
+        ? [
+            {
+              eventId: uuid('3', 1),
+              cameraExternalId: 'qa-lobby-camera',
+              capturedAt: stamp,
+              processingStatus: 'PROCESSED',
+              evidence: [],
+            },
+          ]
+        : [],
+    detectionsTotal: index === 0 ? 1 : 0,
     reviews: [],
     reviewsTotal: 0,
+  }));
+  const alertContexts: SafetyAlertWorkContextResponse[] = alerts.map((_, index) => ({
+    capturedAt: stamp,
+    identity: 'UNKNOWN',
+    workers: [],
+    relatedTeams: [],
+    zoneName: index < 2 ? 'Sảnh tầng 1 (kiểm thử)' : null,
+    cameraName: index === 0 ? 'Camera sảnh (kiểm thử)' : null,
+    warning: '',
   }));
   const requests: { method: string; path: string; body: Record<string, unknown> }[] = [];
   const response = (data: unknown, status = 200) => ({ data, status });
@@ -112,6 +133,7 @@ export function createSafetyFixture() {
     site,
     incidents,
     alerts,
+    alertContexts,
     requests,
     user,
     setRole: (next: typeof role) => {
@@ -160,6 +182,21 @@ export function createSafetyFixture() {
           updatedAt: stamp,
           teams: { items: [], total: 0 },
         });
+      if (method === 'GET' && path.endsWith('/work-context')) {
+        const index = alerts.findIndex((item) => path.includes('/safety-alerts/' + item.id + '/'));
+        return index >= 0
+          ? response(alertContexts[index])
+          : response({ message: 'Not available' }, 404);
+      }
+      if (method === 'GET' && path.endsWith('/identity-subjects')) {
+        return response({
+          eventId: uuid('3', 1),
+          payloadHash: '0123456789abcdef'.repeat(4),
+          eventConsistent: true,
+          frames: [],
+          subjects: [],
+        });
+      }
       if (method === 'GET' && path.includes('/safety-alerts')) {
         const alert = alerts.find((item) => path.endsWith('/safety-alerts/' + item.id));
         if (alert) return response(alert);
