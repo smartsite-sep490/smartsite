@@ -78,6 +78,56 @@ for (const width of [1920, 1366, 1024])
     );
   });
 
+for (const [width, height, minimum] of [
+  [1366, 768, 4],
+  [1920, 1080, 5],
+])
+  for (const workspace of ['alerts', 'incidents', 'assigned'])
+    test(`compact ${workspace} list fits ${minimum} records at ${width}`, async ({
+      page,
+    }, info) => {
+      const fixture = createSafetyFixture();
+      if (workspace === 'assigned') fixture.setRole('CONTRACTOR_REPRESENTATIVE');
+      fixture.incidents[0]!.description = 'Synthetic detail for scrolling.\n\n'.repeat(30);
+      await install(page, fixture, 'vi');
+      await page.setViewportSize({ width, height });
+      const url =
+        workspace === 'alerts'
+          ? `/incidents?tab=alerts&siteId=${siteId}&alertId=${fixture.alerts[0]!.id}`
+          : `${workspace === 'assigned' ? '/assigned-work?' : '/incidents?tab=incidents&'}siteId=${siteId}&incidentId=${fixture.incidents[0]!.id}`;
+      await page.goto(url);
+      const list = page.locator('.workflow-list-items');
+      await expect(list.locator(':scope > button')).toHaveCount(20);
+      await expect
+        .poll(() =>
+          list.evaluate((el) => {
+            const bounds = el.getBoundingClientRect();
+            return [...el.querySelectorAll(':scope > button')].filter((button) => {
+              const box = button.getBoundingClientRect();
+              return box.top >= bounds.top - 1 && box.bottom <= bounds.bottom + 1;
+            }).length;
+          }),
+        )
+        .toBeGreaterThanOrEqual(minimum);
+      await page.evaluate(() => window.scrollTo(0, 400));
+      await expect
+        .poll(() =>
+          page
+            .locator('.workflow-list-pane')
+            .evaluate((el) => Math.abs(innerHeight - 16 - el.getBoundingClientRect().bottom)),
+        )
+        .toBeLessThan(3);
+      await page.setViewportSize({ width, height: height - 80 });
+      await expect
+        .poll(() =>
+          page
+            .locator('.workflow-list-pane')
+            .evaluate((el) => Math.abs(innerHeight - 16 - el.getBoundingClientRect().bottom)),
+        )
+        .toBeLessThan(3);
+      await page.screenshot({ path: info.outputPath(`${workspace}-${width}-compact.png`) });
+    });
+
 for (const width of [1920, 1366, 1024, 390])
   test('Safety workspace navigation and responsive panels at ' + width, async ({ page }, info) => {
     const fixture = createSafetyFixture(),

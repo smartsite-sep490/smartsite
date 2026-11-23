@@ -124,10 +124,10 @@ function AlertRow({
     >
       <div className="flex flex-wrap items-start justify-between gap-3 min-w-0">
         <div className="min-w-0">
-          <p className="text-xs font-bold uppercase tracking-widest text-[#6B6B6B]">
+          <p className="text-xs font-bold uppercase tracking-widest text-[#6B6B6B] lg:sr-only">
             {formatLabel(alert.alertType)}
           </p>
-          <p className="mt-1 font-semibold text-[#2F3437] break-words line-clamp-2">
+          <p className="mt-1 lg:mt-0 lg:text-sm lg:leading-[18px] font-semibold text-[#2F3437] break-words line-clamp-2">
             {formatLabel(alert.candidateSubtype)}
           </p>
         </div>
@@ -137,9 +137,20 @@ function AlertRow({
           {formatLabel(alert.status)}
         </span>
       </div>
-      <div className="mt-3 flex flex-wrap gap-x-4 gap-y-1 text-xs text-[#6B6B6B]">
+      <div className="mt-3 lg:mt-1 flex flex-wrap gap-x-4 lg:gap-x-2 gap-y-1 lg:gap-y-0 text-xs lg:text-[11px] lg:leading-4 text-[#6B6B6B]">
         <span>{tr('common.value_detections', { value1: alert.detectionCount })}</span>
-        <span>{tr('common.last_seen_value', { value1: formatDate(alert.lastDetectedAt) })}</span>
+        <span title={tr('common.last_seen_value', { value1: formatDate(alert.lastDetectedAt) })}>
+          <span className="lg:hidden">
+            {tr('common.last_seen_value', { value1: formatDate(alert.lastDetectedAt) })}
+          </span>
+          <time
+            className="hidden lg:inline"
+            dateTime={alert.lastDetectedAt}
+            aria-label={tr('common.last_seen_value', { value1: formatDate(alert.lastDetectedAt) })}
+          >
+            {formatDate(alert.lastDetectedAt)}
+          </time>
+        </span>
         <span>{alert.zoneId ? tr('safetyUi.zoneRecorded') : tr('common.no_resolved_zone')}</span>
       </div>
     </button>

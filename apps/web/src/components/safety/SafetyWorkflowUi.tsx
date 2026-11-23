@@ -779,9 +779,10 @@ export function WorkflowSplit({
   const ref = useRef<HTMLDivElement>(null);
   useLayoutEffect(() => {
     const node = ref.current!;
+    const pane = node.querySelector<HTMLElement>('.workflow-list-pane');
     let frame = 0;
     const measure = () => {
-      const top = node.getBoundingClientRect().top + window.scrollY;
+      const top = pane?.getBoundingClientRect().top ?? node.getBoundingClientRect().top;
       const height = Math.max(224, Math.round(window.innerHeight - top - 16)) + 'px';
       if (node.style.getPropertyValue('--workflow-list-height') !== height)
         node.style.setProperty('--workflow-list-height', height);
@@ -795,10 +796,12 @@ export function WorkflowSplit({
       typeof ResizeObserver === 'undefined' ? undefined : new ResizeObserver(scheduleMeasure);
     observer?.observe(node.parentElement ?? node);
     window.addEventListener('resize', scheduleMeasure);
+    window.addEventListener('scroll', scheduleMeasure, { passive: true });
     return () => {
       observer?.disconnect();
       cancelAnimationFrame(frame);
       window.removeEventListener('resize', scheduleMeasure);
+      window.removeEventListener('scroll', scheduleMeasure);
     };
   }, []);
   return (

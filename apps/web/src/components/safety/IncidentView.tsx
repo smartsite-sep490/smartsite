@@ -403,7 +403,7 @@ export function IncidentView(p: IncidentViewProps) {
                 }}
               >
                 <strong className="line-clamp-2 break-words text-sm">{item.title}</strong>
-                <div className="flex flex-wrap gap-2">
+                <div className="workflow-list-statuses flex flex-wrap gap-2">
                   <span className="text-xs">
                     <StatusBadge value={item.status} />
                   </span>
