@@ -385,6 +385,7 @@ it('keeps the original representative profile and account actions', async () => 
   expect(output).toContain(t('profile.generalSection'));
   expect(output).toContain(t('profile.personalInfo'));
   expect(workspace.client.listWorkers).not.toHaveBeenCalled();
-  expect(buttons(t('scope.switchScope'))).toHaveLength(1);
+  expect(buttons(t('profile.siteLocation'))).toHaveLength(1);
+  expect(buttons(t('scope.switchScope'))).toHaveLength(0);
   expect(buttons(t('common.logout'))).toHaveLength(1);
 });
