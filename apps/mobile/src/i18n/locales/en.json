@@ -651,7 +651,7 @@
     "revokeWorker": "Revoke worker access"
   },
   "assignedWork": {
-    "title": "Assigned Safety Work",
+    "title": "Assigned work",
     "noChecklists": "No assigned safety checklists found.",
     "startChecklist": "Start inspection",
     "submitChecklist": "Submit inspection report",
@@ -686,12 +686,19 @@
     "handedOver": "Handed over:",
     "startAction": "Start corrective action",
     "actionResult": "Corrective action result",
-    "refresh": "Refresh corrective work",
+    "refresh": "Refresh work",
     "awaitingReview": "Awaiting Safety review.",
     "otherWorkOpen": "This action is closed. The Incident still has other work to complete.",
     "submitToSafety": "Submit result to the Safety Officer",
     "linkedHandover": "Handover from this notification",
-    "handoverUnavailable": "This handover is no longer available."
+    "handoverUnavailable": "This handover is no longer available.",
+    "listHint": "Select a task to view it and take action.",
+    "startsAt": "Starts",
+    "criterion": "Criterion {{number}}",
+    "sourceDetails": "Work source & alerts",
+    "checklistTab": "Inspections",
+    "correctiveTab": "Corrective work",
+    "count": "Tasks: {{count}}"
   },
   "qr": {
     "title": "Emergency QR",

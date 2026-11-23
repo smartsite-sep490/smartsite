@@ -122,13 +122,14 @@ function WorkspaceApp({ onScopeChange }: { onScopeChange: () => void }) {
       >
         <MobileLayoutProvider
           compact={
-            contractor && ['workforce', 'schedule', 'requests', 'teams', 'access'].includes(route)
+            contractor &&
+            ['workforce', 'schedule', 'requests', 'teams', 'access', 'assigned'].includes(route)
           }
         >
           <View style={{ flex: 1, backgroundColor: palette.bg }}>
             <StatusBar style="dark" />
             {/* Top Header */}
-            {route !== 'profile' && (
+            {route !== 'profile' && route !== 'assigned' && (
               <ScreenHeader
                 mode={main ? 'root' : 'detail'}
                 title={
@@ -139,13 +140,11 @@ function WorkspaceApp({ onScopeChange }: { onScopeChange: () => void }) {
                         : t('teams.title')
                       : route === 'access'
                         ? t('access.title')
-                        : route === 'assigned'
-                          ? t('assignedWork.title')
-                          : route === 'qr'
-                            ? t('qr.title')
-                            : route === 'notifications'
-                              ? t('notifications.title')
-                              : undefined
+                        : route === 'qr'
+                          ? t('qr.title')
+                          : route === 'notifications'
+                            ? t('notifications.title')
+                            : undefined
                     : undefined
                 }
                 siteName={scope.siteName}
