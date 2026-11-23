@@ -110,13 +110,17 @@ export class CameraEventAdmissionService {
       generation.revokedAt
     )
       reject(401);
+    const storedReceipt =
+      'secret' in authentication
+        ? null
+        : await this.readStoredTrackedReceipt(manager, context, generation, authentication);
     const authenticated =
       'secret' in authentication
         ? timingSafeEqual(
             createHash('sha256').update(authentication.secret).digest(),
             Buffer.from(generation.credentialSha256, 'hex'),
           )
-        : await this.hasStoredTrackedReceipt(manager, context, generation, authentication);
+        : storedReceipt !== null;
     if (!authenticated) reject(401);
     const [{ now }] = await manager.query('SELECT clock_timestamp() AS now');
     if (!(now instanceof Date) || !Number.isFinite(now.getTime())) reject(409);
@@ -151,6 +155,20 @@ export class CameraEventAdmissionService {
         where: { workerGenerationId: generation.id, cameraId: camera.id },
         order: { configurationVersion: 'DESC', receiptOrder: 'DESC' },
       });
+    const latestMatchesBinding =
+      latest?.outcome === 'LOADED' &&
+      latest.siteId === camera.siteId &&
+      latest.streamSessionId === context.streamSessionId &&
+      latest.configurationVersion === String(context.configurationVersion) &&
+      latest.bundleSha256 === context.bundleSha256 &&
+      latest.viewRevision === String(context.viewRevision);
+    const originalReceiptFresh = now.getTime() - receipt.receivedAt.getTime() <= 60000;
+    const storedLatestReceiptFresh =
+      storedReceipt?.classification === 'LIVE' &&
+      latestMatchesBinding &&
+      latest.receivedAt <= now &&
+      latest.receivedAt >= receipt.receivedAt &&
+      now.getTime() - latest.receivedAt.getTime() <= 60000;
     const live =
       claimedCapture instanceof Date &&
       Number.isFinite(claimedCapture.getTime()) &&
@@ -167,11 +185,8 @@ export class CameraEventAdmissionService {
       now < generation.expiresAt &&
       view.isCurrent &&
       camera.configurationVersion === context.configurationVersion &&
-      latest?.outcome === 'LOADED' &&
-      latest.configurationVersion === String(context.configurationVersion) &&
-      latest.bundleSha256 === context.bundleSha256 &&
-      latest.viewRevision === String(context.viewRevision) &&
-      now.getTime() - receipt.receivedAt.getTime() <= 60000;
+      latestMatchesBinding &&
+      (originalReceiptFresh || storedLatestReceiptFresh);
     return {
       camera,
       bundle,
@@ -180,14 +195,15 @@ export class CameraEventAdmissionService {
     };
   }
 
-  private async hasStoredTrackedReceipt(
+  private async readStoredTrackedReceipt(
     manager: EntityManager,
     context: WorkerEventDeliveryContext,
     generation: CameraWorkerGenerationEntity,
     witness: StoredTrackedReceipt,
-  ) {
-    const rows = await manager.query(
-      `SELECT 1 FROM ai_observation_event
+  ): Promise<{ classification: string | null } | null> {
+    const rows = await manager.query<Array<{ classification: string | null }>>(
+      `SELECT admission_context->>'classification' AS classification
+      FROM ai_observation_event
       WHERE event_id=$1::uuid AND resolved_camera_id=$2 AND tracking_generation_id=$3
         AND stream_session_id=$4 AND tracking_site_id=$5 AND safety_route_mode='EPISODE_TRACKED'
         AND safety_route_epoch=$6 AND payload_hash=$7 AND admission_context->>'bindingHash'=$8
@@ -206,6 +222,6 @@ export class CameraEventAdmissionService {
         witness.bindingHash,
       ],
     );
-    return rows.length === 1;
+    return rows.length === 1 ? rows[0]! : null;
   }
 }
