@@ -41,6 +41,15 @@ export interface ScheduleAssignmentBatchResponse {
   members: ScheduleAssignmentPreview['members'];
   dates: string[];
   createdAt: string;
+  /** Live schedule state, grouped by date/shift. Input/dates retain the original assignment.
+   * Optional for compatibility with older servers; an empty array means no schedules remain.
+   */
+  currentSchedules?: Array<{
+    workDate: string;
+    shiftId: string;
+    activeCount: number;
+    cancelledCount: number;
+  }>;
 }
 export interface ChangeScheduleAssignmentCommand {
   requestId: string;

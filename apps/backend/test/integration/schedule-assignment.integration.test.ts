@@ -401,6 +401,21 @@ test('team assignments: scope, finite recurrence, stale preview, concurrent retr
     const changed = await service.change(rep, siteId, batch.id, change);
     assert.equal(changed.version, 2);
     assert.deepEqual(await service.change(rep, siteId, batch.id, change), changed);
+    const changedListing = (await service.list(rep, siteId, contractorId)).items.find(
+      (item) => item.id === batch.id,
+    )!;
+    assert.equal(changedListing.input.shiftId, shiftId, 'original assignment remains immutable');
+    assert.equal(changedListing.version, 2);
+    assert.deepEqual(
+      changedListing.currentSchedules!.filter((row) => row.workDate === change.workDate),
+      [shiftId, otherShift].sort().map((id) => ({
+        workDate: change.workDate,
+        shiftId: id,
+        activeCount: 1,
+        cancelledCount: 0,
+      })),
+      'list exposes a partial shift change instead of the original batch snapshot',
+    );
     const workerActor: AuthenticatedUser = {
       ...rep,
       id: workerUserIds[0]!,
@@ -546,6 +561,17 @@ test('team assignments: scope, finite recurrence, stale preview, concurrent retr
     assert.equal(cancelled.changedCount, 19);
     assert.equal(cancelled.skippedCount, 1);
     assert.deepEqual(await service.change(rep, siteId, batch.id, cancelUnstarted), cancelled);
+    const cancelledListing = (await service.list(rep, siteId, contractorId)).items.find(
+      (item) => item.id === batch.id,
+    )!;
+    assert.equal(
+      cancelledListing.currentSchedules!.reduce((n, row) => n + row.activeCount, 0),
+      21,
+    );
+    assert.equal(
+      cancelledListing.currentSchedules!.reduce((n, row) => n + row.cancelledCount, 0),
+      19,
+    );
     const cancelNotices = await source
       .getRepository(UserNotificationEntity)
       .findBy({ requestId: cancelUnstarted.requestId });

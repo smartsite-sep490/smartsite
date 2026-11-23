@@ -410,7 +410,7 @@ export class ScheduleAssignmentService {
     const siteId = uuid(site),
       contractorId = uuid(contractor),
       pagination = page(offset, limit);
-    return this.source.transaction(async (m) => {
+    return this.source.transaction('REPEATABLE READ', async (m) => {
       await this.scope(m, actor, siteId, contractorId, true);
       const [items, total] = await m.getRepository(ScheduleAssignmentBatchEntity).findAndCount({
         where: { siteId, contractorId },
@@ -418,7 +418,45 @@ export class ScheduleAssignmentService {
         skip: pagination.offset,
         take: pagination.limit,
       });
-      return { items: items.map((batch) => this.view(batch)), total };
+      const scheduleIds = [...new Set(items.flatMap((batch) => batch.scheduleIds))];
+      const byId = new Map<string, WorkerScheduleEntity>();
+      // Large batches must stay below PostgreSQL's bind-parameter limit.
+      for (let start = 0; start < scheduleIds.length; start += 50000) {
+        const schedules = await m.getRepository(WorkerScheduleEntity).find({
+          where: { siteId, id: In(scheduleIds.slice(start, start + 50000)) },
+          select: { id: true, workDate: true, shiftId: true, isActive: true },
+        });
+        for (const row of schedules) byId.set(row.id, row);
+      }
+      return {
+        items: items.map((batch) => {
+          const groups = new Map<
+            string,
+            NonNullable<ScheduleAssignmentBatchResponse['currentSchedules']>[number]
+          >();
+          for (const id of batch.scheduleIds) {
+            const row = byId.get(id);
+            if (!row) continue;
+            const key = `${row.workDate}:${row.shiftId}`;
+            const group = groups.get(key) ?? {
+              workDate: row.workDate,
+              shiftId: row.shiftId,
+              activeCount: 0,
+              cancelledCount: 0,
+            };
+            if (row.isActive) group.activeCount += 1;
+            else group.cancelledCount += 1;
+            groups.set(key, group);
+          }
+          return {
+            ...this.view(batch),
+            currentSchedules: [...groups.values()].sort(
+              (a, b) => a.workDate.localeCompare(b.workDate) || a.shiftId.localeCompare(b.shiftId),
+            ),
+          };
+        }),
+        total,
+      };
     });
   }
   async change(
