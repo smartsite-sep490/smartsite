@@ -1,5 +1,5 @@
 import React, { ReactNode, useState } from 'react';
-import { useLocation, useNavigate } from 'react-router-dom';
+import { Link, useLocation, useNavigate } from 'react-router-dom';
 import {
   IconDashboard,
   IconUsers,
@@ -23,6 +23,12 @@ import { buildCameraTabTarget } from '../cameras/camera-navigation';
 import { LanguageSwitcher } from '../../i18n/LanguageSwitcher';
 import { workspaceTabs } from '../../features/auth/workspace-access';
 import { getWorkforceTabs } from '../workforce/utils/workforce-tabs';
+
+import {
+  safetyOperationTabs,
+  safetyViewFromSearch,
+  safetyViewHref,
+} from '../safety/safety-operations-navigation';
 
 const apiUrl = import.meta.env.VITE_API_URL || 'http://localhost:3000';
 
@@ -116,6 +122,7 @@ export function AppLayout({ currentTab: propCurrentTab, onSelectTab, children }:
         { id: 'contractor-teams', label: t('shell.contractorTeams'), icon: IconUsers },
         { id: 'worker-onboarding', label: t('shell.workerOnboarding'), icon: IconUsers },
         { id: 'worker-documents', label: t('documents.title'), icon: IconUsers },
+        { id: 'assigned-work', label: t('shell.assignedWork'), icon: IconAlertTriangle },
         {
           id: 'workforce',
           label: t(workerOnly ? 'shell.mySchedule' : 'shell.workforce'),
@@ -155,6 +162,19 @@ export function AppLayout({ currentTab: propCurrentTab, onSelectTab, children }:
   const searchParams = new URLSearchParams(location.search);
   const selectedSiteId =
     searchParams.get('siteId') ?? currentUser?.roleAssignments.find((r) => r.siteId)?.siteId;
+  const safetyView = safetyViewFromSearch(
+    searchParams,
+    roles.includes('SAFETY_OFFICER') ? 'Alerts' : 'Safety Tasks',
+  );
+  const operationsActive =
+    activeTab === 'incidents' &&
+    !['ppe-frames', 'episodes', 'identification'].includes(searchParams.get('tab') ?? '');
+  const scopedRoles = (currentUser?.roleAssignments ?? [])
+    .filter((r) => r.siteId === selectedSiteId)
+    .map((r) => r.role);
+  const operationTabs = safetyOperationTabs.filter(
+    (item) => item.view !== 'Alerts' || scopedRoles.includes('SAFETY_OFFICER'),
+  );
   const workforceRoles = (currentUser?.roleAssignments ?? [])
     .filter((r) => r.siteId === selectedSiteId)
     .map((r) => r.role);
@@ -224,8 +244,23 @@ export function AppLayout({ currentTab: propCurrentTab, onSelectTab, children }:
             ? IconAlertTriangle
             : (currentItem?.icon ?? IconDashboard);
 
+  const boundedWorkspace =
+    (activeTab === 'incidents' &&
+      !['ppe-frames', 'episodes', 'identification'].includes(searchParams.get('tab') ?? '')) ||
+    activeTab === 'assigned-work';
+  const naturalWorkspace =
+    boundedWorkspace &&
+    (activeTab === 'assigned-work'
+      ? searchParams.get('tab') !== 'checklists'
+      : ['Alerts', 'Incidents'].includes(safetyView));
   return (
-    <div className="min-h-screen bg-[var(--surface-canvas)] text-[var(--text-body)] font-sans flex">
+    <div
+      className={
+        (naturalWorkspace ? 'workflow-natural-page ' : '') +
+        (boundedWorkspace ? 'workflow-app-shell ' : '') +
+        'min-h-screen bg-[var(--surface-canvas)] text-[var(--text-body)] font-sans flex'
+      }
+    >
       {/* Left Sidebar: Warm neutral shell */}
       <aside
         className={`${
@@ -289,51 +324,100 @@ export function AppLayout({ currentTab: propCurrentTab, onSelectTab, children }:
                     const isActive = activeTab === item.id;
                     const Icon = item.icon;
                     return (
-                      <button
-                        key={item.id}
-                        onClick={() => handleNav(item.id)}
-                        title={isCollapsed ? item.label : undefined}
-                        aria-label={item.label}
-                        aria-current={isActive ? 'page' : undefined}
-                        className={`w-full min-h-11 lg:min-h-0 flex items-center ${
-                          isCollapsed
-                            ? 'justify-center px-0 py-2.5'
-                            : 'justify-between px-3.5 py-2.5'
-                        } rounded-xl text-xs font-medium transition-all duration-200 cursor-pointer relative group border ${
-                          isActive
-                            ? 'bg-gradient-to-r from-[#FF7A1A]/20 via-[#FF7A1A]/10 to-transparent text-white font-semibold border-[#FF7A1A]/35 shadow-[0_0_20px_rgba(246,107,23,0.12)]'
-                            : 'text-slate-300/80 hover:text-white hover:bg-white/[0.06] border-transparent hover:border-white/5 hover:translate-x-0.5'
-                        }`}
-                      >
-                        <div
-                          className={`flex items-center ${
+                      <div key={item.id}>
+                        <button
+                          onClick={() =>
+                            item.id === 'incidents'
+                              ? navigate(
+                                  safetyViewHref(
+                                    operationTabs[0]?.view ?? 'Safety Tasks',
+                                    searchParams,
+                                  ),
+                                )
+                              : handleNav(item.id)
+                          }
+                          title={isCollapsed ? item.label : undefined}
+                          aria-label={item.label}
+                          aria-current={isActive ? 'page' : undefined}
+                          className={`w-full min-h-11 lg:min-h-0 flex items-center ${
                             isCollapsed
-                              ? 'justify-center'
-                              : 'justify-center lg:justify-start gap-0 lg:gap-3'
+                              ? 'justify-center px-0 py-2.5'
+                              : 'justify-between px-3.5 py-2.5'
+                          } rounded-xl text-xs font-medium transition-all duration-200 cursor-pointer relative group border ${
+                            isActive
+                              ? 'bg-gradient-to-r from-[#FF7A1A]/20 via-[#FF7A1A]/10 to-transparent text-white font-semibold border-[#FF7A1A]/35 shadow-[0_0_20px_rgba(246,107,23,0.12)]'
+                              : 'text-slate-300/80 hover:text-white hover:bg-white/[0.06] border-transparent hover:border-white/5 hover:translate-x-0.5'
                           }`}
                         >
-                          <Icon
-                            className={`w-4 h-4 shrink-0 transition-transform duration-200 group-hover:scale-110 ${
-                              isActive
-                                ? 'text-[#FF7A1A] filter drop-shadow-[0_0_8px_rgba(246,107,23,0.6)]'
-                                : 'text-slate-400 group-hover:text-slate-200'
-                            }`}
-                          />
-                          <span
-                            className={`whitespace-nowrap overflow-hidden ${
-                              isCollapsed ? 'hidden' : 'hidden lg:inline'
+                          <div
+                            className={`flex items-center ${
+                              isCollapsed
+                                ? 'justify-center'
+                                : 'justify-center lg:justify-start gap-0 lg:gap-3'
                             }`}
                           >
-                            {item.label}
-                          </span>
-                        </div>
-                        {isActive && !isCollapsed && (
-                          <span className="w-1.5 h-4 rounded-full bg-gradient-to-b from-[#FF8833] to-[#F66B17] shadow-[0_0_8px_rgba(246,107,23,0.8)]" />
+                            <Icon
+                              className={`w-4 h-4 shrink-0 transition-transform duration-200 group-hover:scale-110 ${
+                                isActive
+                                  ? 'text-[#FF7A1A] filter drop-shadow-[0_0_8px_rgba(246,107,23,0.6)]'
+                                  : 'text-slate-400 group-hover:text-slate-200'
+                              }`}
+                            />
+                            <span
+                              className={`whitespace-nowrap overflow-hidden ${
+                                isCollapsed ? 'hidden' : 'hidden lg:inline'
+                              }`}
+                            >
+                              {item.label}
+                            </span>
+                          </div>
+                          {isActive && !isCollapsed && (
+                            <span className="w-1.5 h-4 rounded-full bg-gradient-to-b from-[#FF8833] to-[#F66B17] shadow-[0_0_8px_rgba(246,107,23,0.8)]" />
+                          )}
+                          {isActive && isCollapsed && (
+                            <span className="absolute left-1 w-1 h-5 rounded-full bg-gradient-to-b from-[#FF8833] to-[#F66B17] shadow-[0_0_8px_rgba(246,107,23,0.8)]" />
+                          )}
+                        </button>
+                        {item.id === 'incidents' && (
+                          <div
+                            className={
+                              'mt-1 space-y-1 border-l border-white/15 ' +
+                              (isCollapsed ? 'ml-0 pl-0' : 'ml-0 pl-0 lg:ml-5 lg:pl-3')
+                            }
+                            aria-label={t('shell.incidents')}
+                          >
+                            {operationTabs.map((entry) => (
+                              <Link
+                                key={entry.tab}
+                                to={safetyViewHref(entry.view, searchParams)}
+                                title={t(entry.label)}
+                                aria-label={t(entry.label)}
+                                aria-current={
+                                  operationsActive && safetyView === entry.view ? 'page' : undefined
+                                }
+                                className={
+                                  'flex min-h-9 items-center rounded-lg px-2.5 py-2 text-xs font-medium transition-colors ' +
+                                  (operationsActive && safetyView === entry.view
+                                    ? 'bg-[var(--accent)] text-white'
+                                    : 'text-slate-300 hover:bg-white/10 hover:text-white')
+                                }
+                              >
+                                <span className={isCollapsed ? 'hidden' : 'hidden lg:inline'}>
+                                  {t(entry.label)}
+                                </span>
+                                <span className={isCollapsed ? '' : 'lg:hidden'} aria-hidden="true">
+                                  {t(entry.label)
+                                    .split(' ')
+                                    .map((word) => word[0])
+                                    .slice(0, 2)
+                                    .join('')
+                                    .toUpperCase()}
+                                </span>
+                              </Link>
+                            ))}
+                          </div>
                         )}
-                        {isActive && isCollapsed && (
-                          <span className="absolute left-1 w-1 h-5 rounded-full bg-gradient-to-b from-[#FF8833] to-[#F66B17] shadow-[0_0_8px_rgba(246,107,23,0.8)]" />
-                        )}
-                      </button>
+                      </div>
                     );
                   })}
                 </div>
@@ -449,7 +533,14 @@ export function AppLayout({ currentTab: propCurrentTab, onSelectTab, children }:
         </header>
 
         {/* Viewport Content */}
-        <main className="flex-1 min-w-0 p-4 sm:p-6 lg:p-8">{children}</main>
+        <main
+          className={
+            (boundedWorkspace ? 'safety-desktop-workspace ' : '') +
+            'flex-1 min-w-0 p-4 sm:p-6 lg:p-8'
+          }
+        >
+          {children}
+        </main>
       </div>
     </div>
   );

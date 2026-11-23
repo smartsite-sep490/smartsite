@@ -43,18 +43,19 @@ function mount(initialType?: 'PPE_VIOLATION') {
   const cache = new QueryClient({
     defaultOptions: { queries: { retry: false }, mutations: { retry: false } },
   });
-  const tree = (initialChecklistId?: string) => (
+  const tree = (initialChecklistId?: string, initialSiteId?: string) => (
     <QueryClientProvider client={cache}>
       <SafetyAlertsView
         apiUrl="http://local"
         authenticatedSession={{ accessToken: 'token', user }}
         initialType={initialType}
+        initialSiteId={initialSiteId}
         initialChecklistId={initialChecklistId}
       />
     </QueryClientProvider>
   );
   const view = render(tree());
-  return (id: string) => view.rerender(tree(id));
+  return (id?: string, site?: string) => view.rerender(tree(id, site));
 }
 it('Safety opens the overview and has a checklist queue; alert filters stay inside Alerts', async () => {
   mount();
@@ -429,4 +430,40 @@ it('a checklist draft uses the single planned shift', async () => {
       String(expected.getHours()).padStart(2, '0') + ':30',
     ),
   );
+});
+
+it('adding the implicit site to the URL preserves the Overview team filter', async () => {
+  const openLink = mount();
+  const team = {
+    id: 'team-context',
+    name: 'Context team',
+    description: '',
+    contractorId: 'contractor-a',
+    contractorName: 'Contractor A',
+    isActive: true,
+    workerCount: 1,
+    scheduledWorkerCount: 1,
+  };
+  vi.mocked(SmartSiteManagementClient.prototype.getSafetyOverview).mockResolvedValue({
+    site: { id: siteId, name: 'Site A', code: 'A' },
+    date: '2026-10-14',
+    timezone: 'Asia/Ho_Chi_Minh',
+    teams: { items: [team], total: 1 },
+    unassignedWorkers: { items: [], total: 0 },
+  });
+  vi.spyOn(SmartSiteManagementClient.prototype, 'getSafetyTeam').mockResolvedValue({
+    ...team,
+    date: '2026-10-14',
+    timezone: 'Asia/Ho_Chi_Minh',
+    workers: { items: [], total: 0 },
+    zones: [],
+    cameras: [],
+  });
+  vi.spyOn(SmartSiteManagementClient.prototype, 'getSafetyChecklist').mockRejectedValue(
+    new Error('Unavailable synthetic checklist'),
+  );
+  fireEvent.click(await screen.findByRole('button', { name: 'View checklists for this date' }));
+  expect(await screen.findByText(/Checklists: Context team/)).not.toBeNull();
+  openLink(undefined, siteId);
+  expect(await screen.findByText(/Checklists: Context team/)).not.toBeNull();
 });

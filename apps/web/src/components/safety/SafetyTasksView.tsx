@@ -36,7 +36,6 @@ import {
   Evidence,
   Dialog,
   StatusBadge,
-  TechnicalDetails,
 } from './SafetyWorkflowUi';
 const statuses = ['ASSIGNED', 'IN_PROGRESS', 'COMPLETED', 'VERIFIED', 'CANCELLED'];
 type Editor = 'create' | 'submit' | 'review' | 'cancel';
@@ -139,11 +138,7 @@ export function SafetyTasksView(p: WorkflowProps) {
         <div>
           <h2 className="text-xl font-bold">{tr('common.safety_tasks')}</h2>
           <p className="mt-1 text-sm text-[var(--text-secondary)]">
-            {manager
-              ? tr('safety_tasks_view.assign_site_safety_work_and_verify_the_reported_results')
-              : tr(
-                  'safety_tasks_view.complete_your_assigned_safety_work_and_report_results_to_the_site_manager',
-                )}
+            {tr('safetyUi.managerToSafety')}
           </p>
         </div>
         {manager && (
@@ -340,22 +335,6 @@ export function SafetyTasksView(p: WorkflowProps) {
                     {tr('safety_tasks_view.awaiting_site_manager_verification')}
                   </p>
                 )}
-                <TechnicalDetails>
-                  <p>{tr('common.task_value', { value1: current.id })}</p>
-                  <p>{tr('common.version_value', { value1: current.version })}</p>
-                  <p>{tr('common.assignee_value', { value1: current.assignedTo })}</p>
-                  {current.zoneId && <p>{tr('common.zone_value', { value1: current.zoneId })}</p>}
-                  {current.sourceAlertId && (
-                    <p>
-                      {tr('common.source_alert_value_fa081c', { value1: current.sourceAlertId })}
-                    </p>
-                  )}
-                  {current.sourceIncidentId && (
-                    <p>
-                      {tr('common.source_incident_value', { value1: current.sourceIncidentId })}
-                    </p>
-                  )}
-                </TechnicalDetails>
               </article>
               <section className={cardClass}>
                 <h3 className="font-bold">{tr('common.current_result')}</h3>

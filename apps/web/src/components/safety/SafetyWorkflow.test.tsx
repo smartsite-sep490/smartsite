@@ -35,6 +35,38 @@ function mount(child: React.ReactNode) {
   });
   return { ...render(<QueryClientProvider client={cache}>{child}</QueryClientProvider>), cache };
 }
+it('confirmed alert choices use business labels while preserving internal form IDs', async () => {
+  const id = '12345678-1111-4111-8111-111111111111';
+  vi.spyOn(props.client, 'listSafetyAlerts').mockResolvedValue({
+    items: [
+      {
+        id,
+        siteId: 'site',
+        zoneId: null,
+        candidateWorkerId: null,
+        alertType: 'PPE_VIOLATION',
+        candidateSubtype: 'PPE_HARD_HAT_MISSING',
+        status: 'CONFIRMED',
+        firstDetectedAt: '2026-11-22T01:00:00Z',
+        lastDetectedAt: '2026-11-22T01:00:00Z',
+        detectionCount: 1,
+        revision: 1,
+        createdAt: '',
+        updatedAt: '',
+      },
+    ],
+    total: 1,
+  });
+  mount(
+    <form aria-label="Confirmed choices">
+      <ConfirmedAlerts p={props} />
+    </form>,
+  );
+  fireEvent.click(await screen.findByRole('checkbox'));
+  expect(document.body.textContent).not.toContain(id.slice(0, 8));
+  expect(document.body.textContent).not.toContain('PPE_HARD_HAT_MISSING');
+  expect(new FormData(screen.getByRole('form') as HTMLFormElement).get('alertIds')).toBe(id);
+});
 describe('MF08 role screens', () => {
   it('Contractor representative sees own incidents without create controls, and supports retry', async () => {
     vi.spyOn(props.client, 'listIncidents')
@@ -158,6 +190,7 @@ it('Contractor representative can resubmit a rejected action while retaining the
   fireEvent.click(await screen.findByRole('button', { name: /Synthetic incident/ }));
   expect(await screen.findByText('Reported by Safety A')).not.toBeNull();
   expect(screen.getByText('Contractor A')).not.toBeNull();
+  fireEvent.click(screen.getByRole('tab', { name: 'Handling' }));
   expect(await screen.findByText(/Review: Incomplete/)).not.toBeNull();
   fireEvent.click(screen.getByRole('button', { name: 'Report handling outcome' }));
   fireEvent.change(screen.getByLabelText('Result description'), {
@@ -277,7 +310,7 @@ it.each(['current', 'cancelled', 'offline'])(
       expect(command).toHaveBeenCalledTimes(1);
       return;
     }
-    await waitFor(() => expect(screen.getByText(/Version 4/)).not.toBeNull());
+    await waitFor(() => expect(props.client.getSafetyTask).toHaveBeenCalledTimes(2));
     if (outcome === 'cancelled') {
       expect(screen.getByRole('button', { name: 'Record task review' }).matches(':disabled')).toBe(
         true,
@@ -533,7 +566,7 @@ it('Refresh tasks loads the selected task changed by another officer within the 
     </QueryClientProvider>,
   );
   fireEvent.click(await screen.findByRole('button', { name: /External officer update/ }));
-  await screen.findByText(/Version 1/);
+  await screen.findByRole('heading', { name: 'External officer update' });
   fireEvent.click(screen.getByRole('button', { name: 'Refresh tasks' }));
   expect(await screen.findByText('Officer submitted work')).not.toBeNull();
   expect(screen.getByRole('button', { name: 'Review task' })).not.toBeNull();
@@ -983,7 +1016,7 @@ it.each(['APPROVED', 'REJECTED'] as const)(
     mount(
       <IncidentView {...props} user={user} initialIncidentId="incident" initialActionId="action" />,
     );
-    fireEvent.click(await screen.findByRole('button', { name: 'Record handling outcome' }));
+    fireEvent.click(await screen.findByRole('button', { name: 'Approve result' }));
     const dialog = screen.getByRole('dialog');
     fireEvent.change(within(dialog).getByLabelText('Review decision'), {
       target: { value: decision },

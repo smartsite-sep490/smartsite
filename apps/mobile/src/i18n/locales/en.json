@@ -689,7 +689,9 @@
     "refresh": "Refresh corrective work",
     "awaitingReview": "Awaiting Safety review.",
     "otherWorkOpen": "This action is closed. The Incident still has other work to complete.",
-    "submitToSafety": "Submit result to the Safety Officer"
+    "submitToSafety": "Submit result to the Safety Officer",
+    "linkedHandover": "Handover from this notification",
+    "handoverUnavailable": "This handover is no longer available."
   },
   "qr": {
     "title": "Emergency QR",

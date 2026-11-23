@@ -51,6 +51,7 @@ export type NavigationTarget = {
   kind?: string;
   workDate?: string;
   requestView?: 'INCOMING';
+  actionId?: string;
 };
 
 function WorkspaceApp({ onScopeChange }: { onScopeChange: () => void }) {
@@ -198,6 +199,7 @@ function WorkspaceApp({ onScopeChange }: { onScopeChange: () => void }) {
                 <AssignedWorkScreen
                   initialId={navigation.id}
                   initialKind={navigation.kind}
+                  initialActionId={navigation.actionId}
                   onBack={back}
                 />
               )}

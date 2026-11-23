@@ -13,7 +13,15 @@ import {
   formValues,
   photo,
 } from './safety-workflow';
-import { useEffect, useId, useLayoutEffect, useRef, useState, type ReactNode } from 'react';
+import {
+  useEffect,
+  useId,
+  useLayoutEffect,
+  useRef,
+  useState,
+  type ReactNode,
+  type PropsWithChildren,
+} from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { ApiError, type SafetyAuditResponse } from '@smartsite/api-client';
 export function Field({
@@ -170,18 +178,6 @@ export function StatusBadge({ value, text: caption }: { value: string; text?: st
     </span>
   );
 }
-export function TechnicalDetails({ children }: { children: ReactNode }) {
-  useTranslation();
-
-  return (
-    <details className="text-xs text-[var(--text-secondary)]">
-      <summary className="cursor-pointer py-2 font-semibold">
-        {tr('common.technical_details')}
-      </summary>
-      <div className="space-y-2 break-all pt-2">{children}</div>
-    </details>
-  );
-}
 export function Dialog({
   title,
   children,
@@ -250,9 +246,9 @@ export function Dialog({
           if (!pending) onClose();
         }
       }}
-      className="m-auto max-h-[90dvh] w-[calc(100%-2rem)] max-w-xl overflow-y-auto rounded-2xl border border-[var(--border)] bg-white p-0 text-[var(--text-body)] shadow-xl backdrop:bg-black/40"
+      className="m-auto max-h-[90dvh] w-[calc(100%-2rem)] max-w-xl flex-col overflow-visible open:flex rounded-2xl border border-[var(--border)] bg-white p-0 text-[var(--text-body)] shadow-xl backdrop:bg-black/40"
     >
-      <div className="sticky top-0 z-10 flex items-center justify-between gap-4 border-b border-[var(--border)] bg-white p-5">
+      <div className="z-10 flex shrink-0 items-center justify-between gap-4 border-b border-[var(--border)] bg-white p-5">
         <h2 id={id} className="text-xl font-bold text-[var(--text-heading)]">
           {title}
         </h2>
@@ -260,7 +256,7 @@ export function Dialog({
           {tr('common.cancel')}
         </button>
       </div>
-      <div className="space-y-4 p-5">
+      <div className="flex min-h-0 flex-1 flex-col gap-4 overflow-hidden p-5">
         <RequestError error={error} retry={reload} />
         {children}
       </div>
@@ -490,9 +486,6 @@ export function Audit({ items }: { items: SafetyAuditResponse[] }) {
             {typeof item.changes.resultSummary === 'string' && (
               <p className="mt-2 break-words">{item.changes.resultSummary}</p>
             )}
-            <TechnicalDetails>
-              {tr('common.actor_value', { value1: item.actorId })}
-            </TechnicalDetails>
           </li>
         ))}
       </ol>
@@ -610,6 +603,7 @@ export function CommandForm({
   const [error, setError] = useState<unknown>();
   return (
     <form
+      className="flex min-h-0 flex-1 flex-col"
       onSubmit={(e) => {
         const form = formValues(e);
         try {
@@ -620,12 +614,17 @@ export function CommandForm({
         }
       }}
     >
-      <fieldset className="space-y-4" disabled={pending || disabled}>
-        {children}
-        <div className="border-t border-[var(--border)] pt-4">
-          <button className={primaryClass} type="submit">
-            {pending ? tr('common.saving') : caption}
-          </button>
+      {/* Keep native disabling without fieldset's anonymous box expanding the scroll area. */}
+      <fieldset className="contents" disabled={pending || disabled}>
+        <div className="flex min-h-0 flex-1 flex-col">
+          <div className="min-h-0 flex-1 space-y-4 overflow-y-auto overscroll-contain pr-1">
+            {children}
+          </div>
+          <div className="shrink-0 border-t border-[var(--border)] bg-white pt-4 mt-4">
+            <button className={primaryClass} type="submit">
+              {pending ? tr('common.saving') : caption}
+            </button>
+          </div>
         </div>
       </fieldset>
       <RequestError error={error} />
@@ -671,21 +670,21 @@ export function ConfirmedAlerts({
       {selected.map((id) => (
         <input key={id} type="hidden" name="alertIds" value={id} />
       ))}
-      {selected.map((id) => (
+      {selected.map((id, index) => (
         <button
           key={id}
           className={buttonClass}
           type="button"
           onClick={() => setSelected(selected.filter((value) => value !== id))}
         >
-          {tr('safety_workflow_ui.remove_selected_alert_value', { value1: id.slice(0, 8) })}
+          {tr('safety_workflow_ui.remove_selected_alert_value', { value1: index + 1 })}
         </button>
       ))}
       {query.isPending && <p>{tr('common.loading_confirmed_alerts')}</p>}
       <RequestError error={query.error} retry={() => void query.refetch()} />
       {query.data?.items
         .filter((a) => !a.incidentId)
-        .map((alert) => (
+        .map((alert, index) => (
           <label
             className="flex items-center gap-3 rounded-lg border border-[var(--border)] p-3 text-sm"
             key={alert.id}
@@ -702,8 +701,11 @@ export function ConfirmedAlerts({
               }
             />
             <span>
-              {label(alert.candidateSubtype)} · {date(alert.lastDetectedAt)} ·{' '}
-              {alert.id.slice(0, 8)}
+              {tr('safetyUi.sourceAlert', { number: offset + index + 1 })} ·{' '}
+              {tr('ppeNotifications.' + alert.candidateSubtype, {
+                defaultValue: tr('labels.ALERTS'),
+              })}{' '}
+              · {date(alert.lastDetectedAt)}
             </span>
           </label>
         ))}
@@ -719,4 +721,60 @@ export function ConfirmedAlerts({
       )}
     </fieldset>
   );
+}
+
+export function WorkflowDetailTabs({
+  value,
+  onChange,
+  options,
+  panelId,
+}: {
+  value: string;
+  onChange: (value: string) => void;
+  options: { value: string; label: string }[];
+  panelId: string;
+}) {
+  return (
+    <div role="tablist" aria-label={tr('safetyUi.detailSections')} className="workflow-detail-tabs">
+      {options.map((option, index) => (
+        <button
+          key={option.value}
+          id={panelId + '-' + option.value}
+          type="button"
+          role="tab"
+          aria-selected={value === option.value}
+          aria-controls={panelId}
+          tabIndex={value === option.value ? 0 : -1}
+          onClick={() => onChange(option.value)}
+          onKeyDown={(event) => {
+            if (!['ArrowLeft', 'ArrowRight', 'Home', 'End'].includes(event.key)) return;
+            event.preventDefault();
+            const next =
+              event.key === 'Home'
+                ? 0
+                : event.key === 'End'
+                  ? options.length - 1
+                  : (index + (event.key === 'ArrowRight' ? 1 : -1) + options.length) %
+                    options.length;
+            onChange(options[next]!.value);
+            const tabs =
+              event.currentTarget.parentElement?.querySelectorAll<HTMLButtonElement>(
+                '[role="tab"]',
+              );
+            tabs?.[next]?.focus();
+          }}
+          className={value === option.value ? 'is-active' : ''}
+        >
+          {option.label}
+        </button>
+      ))}
+    </div>
+  );
+}
+
+export function WorkflowSplit({
+  children,
+  className = 'workflow-split',
+}: PropsWithChildren<{ className?: string }>) {
+  return <div className={className}>{children}</div>;
 }
