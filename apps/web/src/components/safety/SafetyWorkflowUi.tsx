@@ -591,12 +591,14 @@ export function CommandForm({
   pending,
   label: caption,
   disabled = false,
+  secondaryAction,
 }: {
   children: ReactNode;
   onSubmit: (form: FormData) => void;
   pending: boolean;
   label: string;
   disabled?: boolean;
+  secondaryAction?: ReactNode;
 }) {
   useTranslation();
 
@@ -606,6 +608,9 @@ export function CommandForm({
       className="flex min-h-0 flex-1 flex-col"
       onSubmit={(e) => {
         const form = formValues(e);
+        const submitter = (e.nativeEvent as SubmitEvent).submitter;
+        if (submitter instanceof HTMLButtonElement && submitter.name)
+          form.set(submitter.name, submitter.value);
         try {
           onSubmit(form);
           setError(undefined);
@@ -617,13 +622,14 @@ export function CommandForm({
       {/* Keep native disabling without fieldset's anonymous box expanding the scroll area. */}
       <fieldset className="contents" disabled={pending || disabled}>
         <div className="flex min-h-0 flex-1 flex-col">
-          <div className="min-h-0 flex-1 space-y-4 overflow-y-auto overscroll-contain pr-1">
+          <div className="workflow-form-fields min-h-0 flex-1 space-y-4 overflow-y-auto overscroll-contain p-1">
             {children}
           </div>
-          <div className="shrink-0 border-t border-[var(--border)] bg-white pt-4 mt-4">
+          <div className="flex flex-wrap gap-2 shrink-0 border-t border-[var(--border)] bg-white pt-4 mt-4">
             <button className={primaryClass} type="submit">
               {pending ? tr('common.saving') : caption}
             </button>
+            {secondaryAction}
           </div>
         </div>
       </fieldset>

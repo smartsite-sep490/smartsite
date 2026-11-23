@@ -4316,5 +4316,12 @@
   "safetyUi.zoneRecorded": "Area recorded",
   "safetyUi.handoverNumber": "Handover {{number}}",
   "safetyUi.contextUnknown": "No information yet",
-  "attendance_report.period_scope": "Hours and attendance rate cover the selected dates: {{from}} – {{to}}. Status and IN/OUT are for today. Confirmed and provisional hours are shown separately."
+  "attendance_report.period_scope": "Hours and attendance rate cover the selected dates: {{from}} – {{to}}. Status and IN/OUT are for today. Confirmed and provisional hours are shown separately.",
+  "workflowUi.confirmHandover": "Confirm and hand over",
+  "workflowUi.onlyResponsibility": "Only confirm responsibility",
+  "workflowUi.partialHandover": "Contractor confirmed. Handover is not complete yet.",
+  "workflowUi.retrySameRequest": "The response was not confirmed. Retry the same request before editing it.",
+  "workflowUi.responsibilityRequired": "Choose a contractor and provide the verification reason.",
+  "workflowUi.checklistsTab": "Checklists",
+  "workflowUi.retryConfirmation": "Retry previous request"
 }

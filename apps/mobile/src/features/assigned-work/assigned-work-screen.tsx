@@ -1,7 +1,7 @@
 import { localizedLabel } from '../../i18n/messages';
 import { translate as tr } from '../../i18n';
 import { useRef, useState, type ComponentRef } from 'react';
-import { ScrollView, View } from 'react-native';
+import { Pressable, ScrollView, Text, View } from 'react-native';
 import { File } from 'expo-file-system';
 import { useQuery } from '@tanstack/react-query';
 import type {
@@ -16,7 +16,6 @@ import { allPages, displayTime, required, useCommand, useRequestId } from '../sh
 import {
   Body,
   Button,
-  Card,
   Choice,
   ErrorNotice,
   Field,
@@ -24,10 +23,16 @@ import {
   Page,
   Pager,
   QueryState,
-  CompactTabs,
+  Disclosure,
 } from '../shared/ui';
+import { ManagementLink, ManagementTabs } from '../shared/management-ui';
+import { EmptyState } from '../contractor/contractor-presentation';
+import { IconChevronRight, IconDocument, IconShield } from '../../components/common/Icons';
+import { colors } from '../../theme/colors';
+import { WorkMeta, WorkStatus, WorkSummary, workStyles } from './assigned-work-ui';
 import { Attachments, EvidenceButton } from '../shared/uploads';
 import { useTranslation } from '../../i18n';
+import { ScreenHeader } from '../../components/common/ScreenHeader';
 
 export function AssignedWorkScreen({
   initialId,
@@ -81,109 +86,185 @@ export function AssignedWorkScreen({
     refetchOnMount: 'always',
     refetchOnWindowFocus: 'always',
   });
+  const header = (
+    <ScreenHeader
+      mode="detail"
+      title={tr(
+        id
+          ? kind === 'checklist'
+            ? 'assignedWork.assignedChecklist'
+            : 'assignedWork.correctiveAction'
+          : 'assignedWork.title',
+      )}
+      onBack={() => {
+        if (id) setId('');
+        else onBack();
+      }}
+    />
+  );
   if (id)
-    return kind === 'checklist' ? (
-      <ChecklistDetail
-        id={id}
-        onBack={() => setId('')}
-        onIncident={(value) => {
-          setKind('incident');
-          setId(value);
-        }}
-      />
-    ) : (
-      <IncidentDetail
-        key={[id, id === initialId ? initialActionId : undefined].join(':')}
-        id={id}
-        actionId={id === initialId ? initialActionId : undefined}
-        onBack={() => setId('')}
-      />
+    return (
+      <>
+        {header}
+        {kind === 'checklist' ? (
+          <ChecklistDetail
+            id={id}
+            onIncident={(value) => {
+              setKind('incident');
+              setId(value);
+            }}
+          />
+        ) : (
+          <IncidentDetail
+            key={[id, id === initialId ? initialActionId : undefined].join(':')}
+            id={id}
+            actionId={id === initialId ? initialActionId : undefined}
+          />
+        )}
+      </>
     );
+  const total = kind === 'incident' ? incidents.data?.total : checklists.data?.total;
   return (
-    <Page title={tr('assignedWork.title')} onBack={onBack}>
-      <CompactTabs
-        value={kind}
-        onChange={(v) => {
-          setKind(v);
-          setOffset(0);
-        }}
-        options={[
-          { value: 'checklist', label: tr('assignedWork.checklist') },
-          { value: 'incident', label: tr('assignedWork.correctiveAction') },
-        ]}
-      />
-      {kind === 'incident' && (
-        <Button
-          secondary
-          label={tr('assignedWork.refresh')}
-          disabled={incidents.isFetching}
-          onPress={() => void incidents.refetch()}
+    <>
+      {header}
+      <Page>
+        <Text style={workStyles.context}>{scope.siteName}</Text>
+        <ManagementTabs
+          value={kind}
+          onChange={(v) => {
+            setKind(v);
+            setOffset(0);
+          }}
+          items={[
+            {
+              value: 'checklist',
+              label: tr('assignedWork.checklistTab'),
+              accessibilityLabel: tr('assignedWork.checklist'),
+            },
+            {
+              value: 'incident',
+              label: tr('assignedWork.correctiveTab'),
+              accessibilityLabel: tr('assignedWork.correctiveAction'),
+            },
+          ]}
         />
-      )}
-      {kind === 'checklist' ? (
-        <QueryState query={checklists}>
-          {(data) => (
-            <>
-              {!data.items.length && <Hint>{tr('assignedWork.noChecklists')}</Hint>}
-              {data.items
-                .filter((c) => c.contractorId === scope.contractorId)
-                .map((c) => (
-                  <Card key={c.id}>
-                    <Body>{c.description}</Body>
-                    <Hint>
-                      {c.teamName} · {c.zoneName} · {localizedLabel(c.status)}
-                    </Hint>
-                    <Hint>
-                      {tr('common.deadline')} {displayTime(c.endsAt)}
-                    </Hint>
-                    <Button
-                      secondary
-                      label={tr('assignedWork.openChecklist')}
+        <View style={workStyles.listHeading}>
+          <Text style={workStyles.listCount}>
+            {total === undefined
+              ? tr('assignedWork.listHint')
+              : tr('assignedWork.count', { count: total })}
+          </Text>
+          <ManagementLink
+            label={tr('assignedWork.refresh')}
+            disabled={kind === 'incident' ? incidents.isFetching : checklists.isFetching}
+            onPress={() => {
+              void (kind === 'incident' ? incidents : checklists).refetch();
+            }}
+          />
+        </View>
+        {kind === 'checklist' ? (
+          <QueryState query={checklists}>
+            {(data) => (
+              <>
+                {!data.items.length && (
+                  <EmptyState
+                    icon={<IconDocument size={26} color={colors.primary} />}
+                    title={tr('assignedWork.noChecklists')}
+                  />
+                )}
+                {data.items
+                  .filter((c) => c.contractorId === scope.contractorId)
+                  .map((c) => (
+                    <Pressable
+                      key={c.id}
+                      accessibilityRole="button"
+                      accessibilityLabel={tr('assignedWork.openChecklist')}
+                      accessibilityHint={c.description}
                       onPress={() => setId(c.id)}
-                    />
-                  </Card>
-                ))}
-              <Pager offset={offset} total={data.total} size={8} onChange={setOffset} />
-            </>
-          )}
-        </QueryState>
-      ) : (
-        <QueryState query={incidents}>
-          {(data) => (
-            <>
-              {!data.items.length && <Hint>{tr('assignedWork.noActions')}</Hint>}
-              {data.items
-                .filter((i) => i.siteId === scope.siteId && i.contractorId === scope.contractorId)
-                .map((i) => (
-                  <Card key={i.id}>
-                    <Body>{i.title}</Body>
-                    <Hint>
-                      {localizedLabel(i.status)} · {localizedLabel(i.severity)}
-                    </Hint>
-                    <Button
-                      secondary
-                      label={tr('assignedWork.openAction')}
+                      style={({ pressed }) => [workStyles.item, pressed && { opacity: 0.7 }]}
+                    >
+                      <View style={workStyles.badges}>
+                        <WorkStatus status={c.status} />
+                      </View>
+                      <View style={workStyles.heading}>
+                        <View style={workStyles.icon}>
+                          <IconDocument size={18} color={colors.primary} />
+                        </View>
+                        <Text style={workStyles.title}>{c.description}</Text>
+                      </View>
+                      <View style={workStyles.itemMeta}>
+                        <WorkMeta
+                          label={tr('scheduleAssign.team')}
+                          value={c.teamName ?? tr('common.notRecorded')}
+                        />
+                        <WorkMeta
+                          label={tr('common.zone')}
+                          value={c.zoneName ?? tr('common.notRecorded')}
+                        />
+                        <WorkMeta label={tr('common.deadline')} value={displayTime(c.endsAt)} />
+                      </View>
+                      <View style={workStyles.itemFooter}>
+                        <Text style={workStyles.link}>{tr('assignedWork.openChecklist')}</Text>
+                        <IconChevronRight size={17} color={colors.primary} />
+                      </View>
+                    </Pressable>
+                  ))}
+                {data.total > 8 && (
+                  <Pager offset={offset} total={data.total} size={8} onChange={setOffset} />
+                )}
+              </>
+            )}
+          </QueryState>
+        ) : (
+          <QueryState query={incidents}>
+            {(data) => (
+              <>
+                {!data.items.length && (
+                  <EmptyState
+                    icon={<IconShield size={26} color={colors.primary} />}
+                    title={tr('assignedWork.noActions')}
+                  />
+                )}
+                {data.items
+                  .filter((i) => i.siteId === scope.siteId && i.contractorId === scope.contractorId)
+                  .map((i) => (
+                    <Pressable
+                      key={i.id}
+                      accessibilityRole="button"
+                      accessibilityLabel={tr('assignedWork.openAction')}
+                      accessibilityHint={i.title}
                       onPress={() => setId(i.id)}
-                    />
-                  </Card>
-                ))}
-              <Pager offset={offset} total={data.total} size={8} onChange={setOffset} />
-            </>
-          )}
-        </QueryState>
-      )}
-    </Page>
+                      style={({ pressed }) => [workStyles.item, pressed && { opacity: 0.7 }]}
+                    >
+                      <View style={workStyles.badges}>
+                        <WorkStatus status={i.status} />
+                        <WorkStatus status={i.severity} />
+                      </View>
+                      <View style={workStyles.heading}>
+                        <View style={workStyles.icon}>
+                          <IconShield size={18} color={colors.primary} />
+                        </View>
+                        <Text style={workStyles.title}>{i.title}</Text>
+                      </View>
+                      {i.zoneName && <WorkMeta label={tr('common.zone')} value={i.zoneName} />}
+                      <View style={workStyles.itemFooter}>
+                        <Text style={workStyles.link}>{tr('assignedWork.openAction')}</Text>
+                        <IconChevronRight size={17} color={colors.primary} />
+                      </View>
+                    </Pressable>
+                  ))}
+                {data.total > 8 && (
+                  <Pager offset={offset} total={data.total} size={8} onChange={setOffset} />
+                )}
+              </>
+            )}
+          </QueryState>
+        )}
+      </Page>
+    </>
   );
 }
-function ChecklistDetail({
-  id,
-  onBack,
-  onIncident,
-}: {
-  id: string;
-  onBack: () => void;
-  onIncident: (id: string) => void;
-}) {
+function ChecklistDetail({ id, onIncident }: { id: string; onIncident: (id: string) => void }) {
   const { t } = useTranslation();
   const { scope, client, token, user, queryKey } = useWorkspace();
   const command = useCommand(),
@@ -193,7 +274,7 @@ function ChecklistDetail({
     queryFn: () => client.getSafetyChecklist(token, scope.siteId, id),
   });
   return (
-    <Page title={tr('assignedWork.assignedChecklist')} onBack={onBack}>
+    <Page>
       <ErrorNotice error={command.error} />
       <QueryState query={detail}>
         {(data) =>
@@ -201,14 +282,21 @@ function ChecklistDetail({
             <Hint>{tr('assignedWork.checklistScopeHint')}</Hint>
           ) : (
             <>
-              <Card>
-                <Body>{data.description}</Body>
-                <Hint>
-                  {data.teamName} · {data.zoneName} · {localizedLabel(data.status)}
-                </Hint>
-                <Hint>
-                  {displayTime(data.startsAt)} → {displayTime(data.endsAt)}
-                </Hint>
+              <WorkSummary
+                title={data.description}
+                status={data.status}
+                icon={<IconDocument size={19} color={colors.primary} />}
+              >
+                <WorkMeta
+                  label={tr('scheduleAssign.team')}
+                  value={data.teamName ?? tr('common.notRecorded')}
+                />
+                <WorkMeta
+                  label={tr('common.zone')}
+                  value={data.zoneName ?? tr('common.notRecorded')}
+                />
+                <WorkMeta label={tr('assignedWork.startsAt')} value={displayTime(data.startsAt)} />
+                <WorkMeta label={tr('common.deadline')} value={displayTime(data.endsAt)} />
                 {data.assignedTo === user.id && data.status === 'ASSIGNED' && (
                   <Button
                     label={t('assignedWork.startChecklist')}
@@ -224,26 +312,35 @@ function ChecklistDetail({
                     }
                   />
                 )}
-              </Card>
+              </WorkSummary>
               {data.assignedTo === user.id && data.status === 'IN_PROGRESS' && (
                 <ChecklistForm key={`${data.id}:${data.version}`} detail={data} />
               )}
-              <Card>
-                <Body>{tr('assignedWork.submissionHistory')}</Body>
+              <Disclosure
+                title={tr('assignedWork.submissionHistory')}
+                initiallyOpen={
+                  data.status === 'IN_PROGRESS' &&
+                  data.submissions.some((s) => s.status === 'RETURNED')
+                }
+              >
                 {!data.submissions.length && <Hint>{tr('assignedWork.noReports')}</Hint>}
                 {data.submissions.map((s) => (
-                  <Card key={s.id}>
-                    <Body>
-                      {localizedLabel(s.status)} · {s.submittedByName ?? tr('common.actor')}
-                    </Body>
+                  <View key={s.id} style={workStyles.record}>
+                    <WorkStatus status={s.status} />
+                    <Text style={workStyles.recordTitle}>
+                      {s.submittedByName ?? tr('common.actor')}
+                    </Text>
                     <Hint>
                       {displayTime(s.submittedAt)} · {s.reviewNote ?? ''}
                     </Hint>
                     {s.results.map((r) => (
-                      <Card key={r.id}>
-                        <Body>{data.items.find((i) => i.id === r.itemId)?.text}</Body>
+                      <View key={r.id} style={workStyles.record}>
+                        <Text style={workStyles.recordTitle}>
+                          {data.items.find((i) => i.id === r.itemId)?.text}
+                        </Text>
                         <Hint>
-                          {r.answer} · {r.note}
+                          {localizedLabel(r.answer)}
+                          {r.note ? ` · ${r.note}` : ''}
                         </Hint>
                         {r.evidence.map((e) => (
                           <EvidenceButton
@@ -259,20 +356,19 @@ function ChecklistDetail({
                             onPress={() => onIncident(r.linkedIncident!.id)}
                           />
                         )}
-                      </Card>
+                      </View>
                     ))}
-                  </Card>
+                  </View>
                 ))}
-              </Card>
-              <Card>
-                <Body>{tr('assignedWork.actionHistory')}</Body>
+              </Disclosure>
+              <Disclosure title={tr('assignedWork.actionHistory')}>
                 {data.audit.map((a) => (
                   <Hint key={a.id}>
                     {a.actorName ?? tr('common.actor')} · {a.action} · {displayTime(a.occurredAt)}
                     {a.reason ? ` · ${a.reason}` : ''}
                   </Hint>
                 ))}
-              </Card>
+              </Disclosure>
             </>
           )
         }
@@ -290,17 +386,42 @@ function ChecklistForm({ detail }: { detail: ChecklistDetailResponse }) {
     requestId = useRequestId();
   const completed = detail.items.filter((i) => !!answers[i.id]).length;
   return (
-    <Card>
-      <Body>
-        {completed}/{detail.items.length} {tr('assignedWork.criteriaUnit')}
-      </Body>
-      {detail.items.map((item) => (
-        <Card key={item.id}>
+    <View style={workStyles.card}>
+      <View style={workStyles.criteriaHeading}>
+        <Text style={workStyles.criteriaTitle}>{tr('assignedWork.criteria')}</Text>
+        <Text style={workStyles.context}>
+          {completed}/{detail.items.length} {tr('assignedWork.criteriaUnit')}
+        </Text>
+      </View>
+      <View
+        style={workStyles.progressTrack}
+        accessible
+        accessibilityRole="progressbar"
+        accessibilityValue={{ min: 0, max: detail.items.length, now: completed }}
+        accessibilityLabel={tr('assignedWork.criteria')}
+      >
+        <View
+          style={[
+            workStyles.progressValue,
+            { width: `${detail.items.length ? (completed / detail.items.length) * 100 : 0}%` },
+          ]}
+        />
+      </View>
+      {detail.items.map((item, index) => (
+        <Disclosure
+          key={item.id}
+          title={
+            tr('assignedWork.criterion', { number: index + 1 }) +
+            (answers[item.id] ? ` · ${localizedLabel(answers[item.id]!)}` : '')
+          }
+          initiallyOpen={index === 0}
+        >
           <Body>{item.text}</Body>
-          <Hint>{item.evidenceRequired ? tr('assignedWork.passEvidenceHint') : ''}</Hint>
+          {item.evidenceRequired && <Hint>{tr('assignedWork.passEvidenceHint')}</Hint>}
           <Choice
             label={tr('assignedWork.checkResult')}
             value={answers[item.id] ?? ''}
+            disabled={command.isPending}
             options={[
               { value: 'PASS', label: tr('assignedWork.pass') },
               { value: 'FAIL', label: tr('assignedWork.fail') },
@@ -313,12 +434,14 @@ function ChecklistForm({ detail }: { detail: ChecklistDetailResponse }) {
             value={notes[item.id] ?? ''}
             onChangeText={(value) => setNotes({ ...notes, [item.id]: value })}
             multiline
+            editable={!command.isPending}
           />
           <Attachments
             files={filesByItem[item.id] ?? []}
+            disabled={command.isPending}
             onChange={(files) => setFiles({ ...filesByItem, [item.id]: files })}
           />
-        </Card>
+        </Disclosure>
       ))}
       <ErrorNotice error={command.error} />
       <Button
@@ -356,18 +479,10 @@ function ChecklistForm({ detail }: { detail: ChecklistDetailResponse }) {
           })
         }
       />
-    </Card>
+    </View>
   );
 }
-function IncidentDetail({
-  id,
-  actionId,
-  onBack,
-}: {
-  id: string;
-  actionId?: string;
-  onBack: () => void;
-}) {
+function IncidentDetail({ id, actionId }: { id: string; actionId?: string }) {
   useTranslation();
   const { scope, client, token, user, queryKey } = useWorkspace();
   const scrollRef = useRef<ComponentRef<typeof ScrollView>>(null);
@@ -379,9 +494,8 @@ function IncidentDetail({
     refetchOnWindowFocus: 'always',
   });
   return (
-    <Page title={tr('assignedWork.correctiveAction')} onBack={onBack} scrollRef={scrollRef}>
-      <Button
-        secondary
+    <Page scrollRef={scrollRef}>
+      <ManagementLink
         label={tr('assignedWork.refresh')}
         disabled={query.isFetching}
         onPress={() => void query.refetch()}
@@ -392,26 +506,33 @@ function IncidentDetail({
             <Hint>{tr('assignedWork.actionScopeHint')}</Hint>
           ) : (
             <>
-              <Card>
-                <Body>{data.title}</Body>
-                <Body>{data.description}</Body>
-                <Hint>
-                  {localizedLabel(data.status)} · {localizedLabel(data.severity)} ·{' '}
-                  {data.zoneName ?? ''}
-                </Hint>
-                {data.sourceChecklist && (
-                  <Hint>
-                    {tr('assignedWork.sourceChecklist')} {data.sourceChecklist.description} ·{' '}
-                    {data.sourceChecklist.itemText} · {data.sourceChecklist.note}
-                  </Hint>
-                )}
-                {data.alerts.map((a) => (
-                  <Hint key={a.id}>
-                    {tr('assignedWork.linkedAlert')} {localizedLabel(a.alertType)} ·{' '}
-                    {localizedLabel(a.status)}
-                  </Hint>
-                ))}
-              </Card>
+              <WorkSummary
+                title={data.title}
+                status={data.status}
+                icon={<IconShield size={19} color={colors.primary} />}
+              >
+                <Text style={workStyles.recordBody}>{data.description}</Text>
+                <View style={workStyles.badges}>
+                  <WorkStatus status={data.severity} />
+                </View>
+                {data.zoneName && <WorkMeta label={tr('common.zone')} value={data.zoneName} />}
+              </WorkSummary>
+              {(data.sourceChecklist || data.alerts.length > 0) && (
+                <Disclosure title={tr('assignedWork.sourceDetails')}>
+                  {data.sourceChecklist && (
+                    <Hint>
+                      {tr('assignedWork.sourceChecklist')} {data.sourceChecklist.description} ·{' '}
+                      {data.sourceChecklist.itemText} · {data.sourceChecklist.note}
+                    </Hint>
+                  )}
+                  {data.alerts.map((a) => (
+                    <Hint key={a.id}>
+                      {tr('assignedWork.linkedAlert')} {localizedLabel(a.alertType)} ·{' '}
+                      {localizedLabel(a.status)}
+                    </Hint>
+                  ))}
+                </Disclosure>
+              )}
               {actionId &&
                 !data.actions.some((a) => a.id === actionId && a.assignedTo === user.id) && (
                   <Hint>{tr('assignedWork.handoverUnavailable')}</Hint>
@@ -450,15 +571,14 @@ function IncidentDetail({
                     />
                   </View>
                 ))}
-              <Card>
-                <Body>{tr('assignedWork.reviewHistory')}</Body>
+              <Disclosure title={tr('assignedWork.reviewHistory')}>
                 {data.audit.map((a) => (
                   <Hint key={a.id}>
                     {a.actorName ?? tr('common.actor')} · {a.action} · {displayTime(a.occurredAt)} ·{' '}
                     {a.reason ?? ''}
                   </Hint>
                 ))}
-              </Card>
+              </Disclosure>
             </>
           )
         }
@@ -482,13 +602,13 @@ function ActionForm({
   const command = useCommand(),
     requestId = useRequestId();
   return (
-    <Card>
-      <Body>{action.description}</Body>
-      <Hint>
-        {localizedLabel(action.status)} {tr('assignedWork.deadlineSuffix')}{' '}
-        {displayTime(action.dueAt)}
-      </Hint>
-      {action.status === 'SUBMITTED' && <Hint>{tr('assignedWork.awaitingReview')}</Hint>}
+    <WorkSummary title={action.description} status={action.status}>
+      <WorkMeta label={tr('common.deadline')} value={displayTime(action.dueAt)} />
+      {action.status === 'SUBMITTED' && (
+        <View style={workStyles.review}>
+          <Text style={workStyles.reviewText}>{tr('assignedWork.awaitingReview')}</Text>
+        </View>
+      )}
       {action.status === 'CLOSED' && !closed && <Hint>{tr('assignedWork.otherWorkOpen')}</Hint>}
       {action.supersededAt ? (
         <Hint>
@@ -522,8 +642,15 @@ function ActionForm({
                 multiline
                 value={result}
                 onChangeText={setResult}
+                editable={!command.isPending}
               />
-              <Attachments files={files} onChange={setFiles} jpegOnly maxFiles={1} />
+              <Attachments
+                files={files}
+                onChange={setFiles}
+                jpegOnly
+                maxFiles={1}
+                disabled={command.isPending}
+              />
               <Button
                 label={tr('assignedWork.submitToSafety')}
                 disabled={command.isPending || !result.trim()}
@@ -550,28 +677,39 @@ function ActionForm({
         </>
       )}
       <ErrorNotice error={command.error} />
-      {action.submissions.map((s) => (
-        <Card key={s.id}>
-          <Body>{s.resultDescription}</Body>
-          <Hint>
-            {localizedLabel(s.status)} · {displayTime(s.submittedAt)} · {s.reviewNote ?? ''}
-          </Hint>
-          {s.evidence && (
-            <EvidenceButton
-              mediaType={s.evidence.mediaType}
-              load={() =>
-                client.getWorkflowEvidence(
-                  token,
-                  scope.siteId,
-                  'incidents',
-                  incidentId,
-                  s.evidence!.id,
-                )
-              }
-            />
-          )}
-        </Card>
-      ))}
-    </Card>
+      {action.submissions.length > 0 && (
+        <Disclosure
+          title={tr('assignedWork.submissionHistory')}
+          initiallyOpen={action.submissions.some((s) => s.status === 'REJECTED')}
+        >
+          {action.submissions.map((s) => (
+            <View key={s.id} style={workStyles.record}>
+              <WorkStatus status={s.status} />
+              <Text style={workStyles.recordBody}>{s.resultDescription}</Text>
+              <Hint>{displayTime(s.submittedAt)}</Hint>
+              {s.reviewNote && (
+                <View style={workStyles.review}>
+                  <Text style={workStyles.reviewText}>{s.reviewNote}</Text>
+                </View>
+              )}
+              {s.evidence && (
+                <EvidenceButton
+                  mediaType={s.evidence.mediaType}
+                  load={() =>
+                    client.getWorkflowEvidence(
+                      token,
+                      scope.siteId,
+                      'incidents',
+                      incidentId,
+                      s.evidence!.id,
+                    )
+                  }
+                />
+              )}
+            </View>
+          ))}
+        </Disclosure>
+      )}
+    </WorkSummary>
   );
 }

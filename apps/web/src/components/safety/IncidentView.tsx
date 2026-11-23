@@ -16,10 +16,12 @@ import {
   primaryClass,
   cardClass,
   useWorkflowCommand,
+  useWorkflowTarget,
 } from './safety-workflow';
 import { useEffect, useId, useRef, useState, type ReactNode } from 'react';
 import { createPortal } from 'react-dom';
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { ApiError } from '@smartsite/api-client';
 import type {
   ConfirmIncidentResponsibilityCommand,
   CorrectIncidentResponsibilityCommand,
@@ -54,6 +56,7 @@ import {
   StatusBadge,
 } from './SafetyWorkflowUi';
 export interface IncidentViewProps extends WorkflowProps {
+  embedded?: boolean;
   context?: ReactNode;
   onBack?: () => void;
   backLabel?: string;
@@ -79,6 +82,7 @@ type Command =
 type Editor = {
   op:
     | 'responsibility'
+    | 'handover'
     | 'correct-responsibility'
     | 'transfer'
     | 'create'
@@ -92,6 +96,9 @@ type Editor = {
   decision?: 'APPROVED' | 'REJECTED';
 };
 const titles = {
+  get handover() {
+    return tr('workflowUi.confirmHandover');
+  },
   get responsibility() {
     return tr('common.confirm_responsibility');
   },
@@ -122,6 +129,7 @@ const titles = {
 };
 export function IncidentView(p: IncidentViewProps) {
   useTranslation();
+  const cache = useQueryClient();
 
   const [occurredDefault] = useState(() =>
     new Date(Date.now() - new Date().getTimezoneOffset() * 60000).toISOString().slice(0, 16),
@@ -129,6 +137,7 @@ export function IncidentView(p: IncidentViewProps) {
   const safety = hasRole(p, 'SAFETY_OFFICER'),
     representative = hasRole(p, 'CONTRACTOR_REPRESENTATIVE');
   const [resultFile, setResultFile] = useState<File>();
+  const [handoverPending, setHandoverPending] = useState(false);
   const [createAlertIds, setCreateAlertIds] = useState<string[]>(
     p.initialAlertId ? [p.initialAlertId] : [],
   );
@@ -148,7 +157,7 @@ export function IncidentView(p: IncidentViewProps) {
       setMobileDetail(true);
     }
   }
-  const mutation = useWorkflowCommand(p, (id) => {
+  const mutation = useWorkflowCommand<IncidentDetailResponse>(p, (id) => {
     setSelected(id);
     setMobileDetail(true);
     setEditor(undefined);
@@ -209,9 +218,33 @@ export function IncidentView(p: IncidentViewProps) {
   ) => {
     if (!detail.data) return;
     const id = detail.data.id;
+    const isCurrent = captureTarget();
     mutation.mutate({
       fingerprint: JSON.stringify({ id, op, input, actionId }),
       file,
+      ...(op === 'start'
+        ? {
+            onCommitted: (resource: IncidentDetailResponse) => {
+              if (!isCurrent() || resource.id !== id || resource.status === 'CLOSED') return;
+              const started = resource.actions.find((item) => item.id === actionId);
+              if (
+                !started ||
+                started.supersededAt ||
+                started.assignedTo !== p.user.id ||
+                started.status !== 'IN_PROGRESS'
+              )
+                return;
+              cache.setQueryData(
+                ['safety-workflow', p.apiUrl, p.scope, p.siteId, 'incident', id],
+                resource,
+              );
+              setChosenAction(actionId!);
+              setDetailTab('handling');
+              setResultFile(undefined);
+              setEditor({ op: 'submit', actionId });
+            },
+          }
+        : {}),
       run: (commandId, signal) =>
         p.client.incidentCommand(
           p.token,
@@ -232,11 +265,24 @@ export function IncidentView(p: IncidentViewProps) {
   const detailScroll = useRef<HTMLDivElement>(null);
   const [actionFooter, setActionFooter] = useState<HTMLDivElement | null>(null);
   const [chosenAction, setChosenAction] = useState(p.initialActionId ?? '');
+  const captureTarget = useWorkflowTarget(
+    JSON.stringify([
+      p.apiUrl,
+      p.scope,
+      p.siteId,
+      p.token,
+      selected,
+      chosenAction,
+      p.initialActionId,
+    ]),
+  );
   const [shownIncident, setShownIncident] = useState(p.initialIncidentId ?? '');
   if (shownIncident !== selected) {
     setShownIncident(selected);
     setChosenAction(p.initialIncidentId === selected ? (p.initialActionId ?? '') : '');
     setDetailTab(p.initialIncidentId === selected && p.initialActionId ? 'handling' : 'summary');
+    setEditor(undefined);
+    setResultFile(undefined);
   }
   if (previousActionLink !== linkedActionId) {
     setPreviousActionLink(linkedActionId);
@@ -286,44 +332,46 @@ export function IncidentView(p: IncidentViewProps) {
 
   return (
     <div className="workflow-incident-screen">
-      <div
-        className={
-          (mobileDetail ? 'hidden lg:flex ' : 'flex ') +
-          'flex-wrap items-start justify-between gap-3'
-        }
-      >
-        <div>
-          {p.onBack && (
-            <button className={buttonClass} onClick={p.onBack}>
-              {p.backLabel}
-            </button>
-          )}
-          <h2 className="text-xl font-bold">
-            {representative && !safety ? tr('common.my_assigned_cases') : tr('common.incidents')}
-          </h2>
-          {!p.context && (
-            <p className="mt-1 text-sm text-[var(--text-secondary)]">
-              {representative && !safety
-                ? tr('incident_view.handle_cases_independently_and_report_the_outcome_to_safety')
-                : tr(
-                    'incident_view.confirm_responsibility_hand_over_to_the_contractor_and_record_the_handling_outcome',
-                  )}
-            </p>
-          )}
+      {!p.embedded && (
+        <div
+          className={
+            (mobileDetail ? 'hidden lg:flex ' : 'flex ') +
+            'flex-wrap items-start justify-between gap-3'
+          }
+        >
+          <div>
+            {p.onBack && (
+              <button className={buttonClass} onClick={p.onBack}>
+                {p.backLabel}
+              </button>
+            )}
+            <h2 className="text-xl font-bold">
+              {representative && !safety ? tr('common.my_assigned_cases') : tr('common.incidents')}
+            </h2>
+            {!p.context && (
+              <p className="mt-1 text-sm text-[var(--text-secondary)]">
+                {representative && !safety
+                  ? tr('incident_view.handle_cases_independently_and_report_the_outcome_to_safety')
+                  : tr(
+                      'incident_view.confirm_responsibility_hand_over_to_the_contractor_and_record_the_handling_outcome',
+                    )}
+              </p>
+            )}
+          </div>
+          <div className="flex min-w-0 flex-wrap items-center gap-3">
+            {p.context}
+            {safety && (
+              <button
+                className={primaryClass}
+                disabled={mutation.isPending}
+                onClick={() => open({ op: 'create' })}
+              >
+                {tr('common.new_incident')}
+              </button>
+            )}
+          </div>
         </div>
-        <div className="flex min-w-0 flex-wrap items-center gap-3">
-          {p.context}
-          {safety && (
-            <button
-              className={primaryClass}
-              disabled={mutation.isPending}
-              onClick={() => open({ op: 'create' })}
-            >
-              {tr('common.new_incident')}
-            </button>
-          )}
-        </div>
-      </div>
+      )}
       {!editor && <RequestError error={mutation.error} retry={reload} />}
       {mutation.isSuccess && (
         <p
@@ -336,10 +384,10 @@ export function IncidentView(p: IncidentViewProps) {
       <div
         className={
           (mobileDetail ? 'hidden lg:flex ' : 'flex ') +
-          'flex-wrap items-end gap-3 rounded-xl border border-[var(--border)] bg-white p-4'
+          'workflow-filter-toolbar flex-wrap items-center gap-3'
         }
       >
-        <label className="text-sm font-semibold">
+        <label className="workflow-filter-field text-sm font-semibold">
           {tr('common.status')}
           <SmartNativeSelect
             className={fieldClass}
@@ -368,8 +416,12 @@ export function IncidentView(p: IncidentViewProps) {
             }}
           />
         )}
-        <button className={buttonClass} onClick={reload}>
-          {tr('common.refresh_incidents')}
+        <button
+          className={buttonClass}
+          aria-label={tr('common.refresh_incidents')}
+          onClick={reload}
+        >
+          {tr('common.refresh')}
         </button>
       </div>
       <WorkflowSplit className="workflow-split grid items-start gap-5 lg:grid-cols-[minmax(240px,0.65fr)_minmax(0,1.35fr)]">
@@ -523,15 +575,17 @@ export function IncidentView(p: IncidentViewProps) {
                     {current.responsibilityReason && (
                       <p className="whitespace-pre-wrap text-sm">{current.responsibilityReason}</p>
                     )}
-                    {safety && (current.status !== 'CLOSED' || !current.contractorId) && (
-                      <button
-                        className={current.contractorId ? buttonClass : primaryClass}
-                        disabled={mutation.isPending}
-                        onClick={() => open({ op: 'responsibility' })}
-                      >
-                        {tr('common.confirm_responsibility')}
-                      </button>
-                    )}
+                    {safety &&
+                      (current.status !== 'CLOSED' || !current.contractorId) &&
+                      (current.contractorId || current.status === 'CLOSED') && (
+                        <button
+                          className={current.contractorId ? buttonClass : primaryClass}
+                          disabled={mutation.isPending}
+                          onClick={() => open({ op: 'responsibility' })}
+                        >
+                          {tr('common.confirm_responsibility')}
+                        </button>
+                      )}
                     {safety && current.contractorId && current.actions.length > 0 && (
                       <button
                         className={buttonClass}
@@ -653,10 +707,14 @@ export function IncidentView(p: IncidentViewProps) {
                         <>
                           <button
                             className={currentActions.length ? buttonClass : primaryClass}
-                            disabled={mutation.isPending || !current.contractorId}
-                            onClick={() => open({ op: 'assign' })}
+                            disabled={mutation.isPending}
+                            onClick={() =>
+                              open({ op: current.contractorId ? 'assign' : 'handover' })
+                            }
                           >
-                            {tr('incident_view.hand_over_to_contractor')}
+                            {current.contractorId
+                              ? tr('incident_view.hand_over_to_contractor')
+                              : tr('workflowUi.confirmHandover')}
                           </button>
                           <button
                             className={buttonClass}
@@ -701,10 +759,14 @@ export function IncidentView(p: IncidentViewProps) {
                             <>
                               <button
                                 className={currentActions.length ? buttonClass : primaryClass}
-                                disabled={mutation.isPending || !current.contractorId}
-                                onClick={() => open({ op: 'assign' })}
+                                disabled={mutation.isPending}
+                                onClick={() =>
+                                  open({ op: current.contractorId ? 'assign' : 'handover' })
+                                }
                               >
-                                {tr('incident_view.hand_over_to_contractor')}
+                                {current.contractorId
+                                  ? tr('incident_view.hand_over_to_contractor')
+                                  : tr('workflowUi.confirmHandover')}
                               </button>
                               <button
                                 className={buttonClass}
@@ -728,248 +790,276 @@ export function IncidentView(p: IncidentViewProps) {
       {editor && (
         <Dialog
           title={titles[editor.op]}
-          pending={mutation.isPending}
+          pending={mutation.isPending || handoverPending}
           onClose={() => {
             setEditor(undefined);
             setResultFile(undefined);
             p.onSourceConsumed?.();
           }}
-          error={mutation.error ?? (editor.op !== 'create' ? detail.error : undefined)}
+          error={
+            editor.op === 'handover'
+              ? detail.error
+              : (mutation.error ?? (editor.op !== 'create' ? detail.error : undefined))
+          }
           reload={reload}
         >
           {editorBlocked && <p role="alert">{tr('safety_ux.action_no_longer_available')}</p>}
-          <CommandForm
-            pending={mutation.isPending}
-            disabled={editorDisabled}
-            label={
-              editor.op === 'create'
-                ? tr('common.create_incident')
-                : editor.op === 'review'
-                  ? tr('common.record_handling_outcome')
-                  : titles[editor.op]
-            }
-            onSubmit={(form) => {
-              if (editorDisabled) return;
-              if (editor.op === 'create') {
-                const input: Omit<CreateIncidentCommand, 'commandId'> = {
-                  title: text(form, 'title'),
-                  description: text(form, 'description'),
-                  severity: text(form, 'severity') as IncidentSeverity,
-                  occurredAt: new Date(text(form, 'occurredAt')).toISOString(),
-                  zoneId: text(form, 'zoneId') || null,
-                  alertIds: ids(form, 'alertIds'),
-                  ...(ids(form, 'alertIds').length
-                    ? {
-                        contractorId: text(form, 'contractorId'),
-                        workerIds: ids(form, 'workerIds'),
-                        responsibilityReason: text(form, 'reason'),
-                        initialAction: {
-                          assignedTo: text(form, 'assignedTo'),
-                          description: text(form, 'actionDescription'),
-                          dueAt: deadline(form),
-                        },
-                      }
-                    : {}),
-                };
-                mutation.mutate({
-                  fingerprint: JSON.stringify(input),
-                  run: (commandId, signal) =>
-                    p.client.createIncident(p.token, p.siteId, { ...input, commandId }, { signal }),
-                });
-                return;
+          {editor.op === 'handover' && current ? (
+            <IncidentHandoverForm
+              key={current.id}
+              p={p}
+              incident={current}
+              disabled={
+                detail.isFetching || detail.isError || !safety || current.status === 'CLOSED'
               }
-              if (!current) return;
-              if (editor.op === 'correct-responsibility')
-                command('correct-responsibility', {
-                  expectedVersion: current.version,
-                  contractorId: text(form, 'contractorId'),
-                  workerIds: ids(form, 'workerIds'),
-                  reason: text(form, 'reason'),
-                  assignedTo: text(form, 'assignedTo'),
-                  description: text(form, 'description'),
-                  dueAt: deadline(form),
-                } as CorrectIncidentResponsibilityCommand);
-              else if (editor.op === 'responsibility')
-                command('responsibility', {
-                  expectedVersion: current.version,
-                  contractorId: text(form, 'contractorId'),
-                  workerIds: ids(form, 'workerIds'),
-                  reason: text(form, 'reason'),
-                } as ConfirmIncidentResponsibilityCommand);
-              else if (editor.op === 'transfer' && action)
-                command(
-                  'transfer',
-                  {
-                    expectedVersion: action.version,
+              reload={reload}
+              onPendingChange={setHandoverPending}
+              onDone={() => {
+                setEditor(undefined);
+                p.onSourceConsumed?.();
+              }}
+            />
+          ) : (
+            <CommandForm
+              pending={mutation.isPending}
+              disabled={editorDisabled}
+              label={
+                editor.op === 'create'
+                  ? tr('common.create_incident')
+                  : editor.op === 'review'
+                    ? tr('common.record_handling_outcome')
+                    : titles[editor.op]
+              }
+              onSubmit={(form) => {
+                if (editorDisabled) return;
+                if (editor.op === 'create') {
+                  const input: Omit<CreateIncidentCommand, 'commandId'> = {
+                    title: text(form, 'title'),
+                    description: text(form, 'description'),
+                    severity: text(form, 'severity') as IncidentSeverity,
+                    occurredAt: new Date(text(form, 'occurredAt')).toISOString(),
+                    zoneId: text(form, 'zoneId') || null,
+                    alertIds: ids(form, 'alertIds'),
+                    ...(ids(form, 'alertIds').length
+                      ? {
+                          contractorId: text(form, 'contractorId'),
+                          workerIds: ids(form, 'workerIds'),
+                          responsibilityReason: text(form, 'reason'),
+                          initialAction: {
+                            assignedTo: text(form, 'assignedTo'),
+                            description: text(form, 'actionDescription'),
+                            dueAt: deadline(form),
+                          },
+                        }
+                      : {}),
+                  };
+                  mutation.mutate({
+                    fingerprint: JSON.stringify(input),
+                    run: (commandId, signal) =>
+                      p.client.createIncident(
+                        p.token,
+                        p.siteId,
+                        { ...input, commandId },
+                        { signal },
+                      ),
+                  });
+                  return;
+                }
+                if (!current) return;
+                if (editor.op === 'correct-responsibility')
+                  command('correct-responsibility', {
+                    expectedVersion: current.version,
+                    contractorId: text(form, 'contractorId'),
+                    workerIds: ids(form, 'workerIds'),
+                    reason: text(form, 'reason'),
                     assignedTo: text(form, 'assignedTo'),
+                    description: text(form, 'description'),
+                    dueAt: deadline(form),
+                  } as CorrectIncidentResponsibilityCommand);
+                else if (editor.op === 'responsibility')
+                  command('responsibility', {
+                    expectedVersion: current.version,
+                    contractorId: text(form, 'contractorId'),
+                    workerIds: ids(form, 'workerIds'),
                     reason: text(form, 'reason'),
-                  } as TransferCorrectiveActionCommand,
-                  action.id,
-                );
-              else if (editor.op === 'link')
-                command('link', {
-                  expectedVersion: current.version,
-                  alertIds: ids(form, 'alertIds'),
-                } as LinkIncidentAlertsCommand);
-              else if (editor.op === 'assign' || editor.op === 'reopen')
-                command(editor.op, {
-                  expectedVersion: current.version,
-                  assignedTo: text(form, 'assignedTo'),
-                  description: text(form, 'description'),
-                  dueAt: deadline(form),
-                  ...(editor.op === 'reopen' ? { reason: text(form, 'reason') } : {}),
-                } as AssignCorrectiveActionCommand | ReopenIncidentCommand);
-              else if (action && editor.op === 'submit')
-                command(
-                  'submit',
-                  {
-                    expectedVersion: action.version,
-                    resultDescription: text(form, 'resultDescription'),
-                  } as SubmitSafetyResultCommand,
-                  action.id,
-                  resultFile,
-                );
-              else if (action && editor.op === 'review')
-                command(
-                  'review',
-                  {
-                    expectedVersion: action.version,
-                    submissionId: editor.submissionId!,
-                    decision: text(form, 'decision') as ReviewSubmissionCommand['decision'],
-                    reason: text(form, 'reason'),
-                  } as ReviewSubmissionCommand,
-                  action.id,
-                );
-            }}
-          >
-            {editor.op === 'create' && (
-              <>
-                <Field name="title" label={tr('common.title')} required maxLength={200} />
-                <Field
-                  name="description"
-                  label={tr('common.description')}
-                  required
-                  type="textarea"
-                />
-                <label className="block text-sm font-semibold">
-                  {tr('common.severity')}
-                  <SmartNativeSelect className={fieldClass} name="severity">
-                    {['LOW', 'MEDIUM', 'HIGH', 'CRITICAL'].map((s) => (
-                      <option key={s} value={s}>
-                        {label(s)}
-                      </option>
-                    ))}
-                  </SmartNativeSelect>
-                </label>
-                <Field
-                  name="occurredAt"
-                  label={tr('incident_view.occurred_at_local_time')}
-                  type="datetime-local"
-                  required
-                  defaultValue={occurredDefault}
-                />
-                <details className="text-sm">
-                  <summary className="cursor-pointer font-semibold">
-                    {tr('common.optional_references')}
-                  </summary>
-                  <Field name="zoneId" label={tr('common.zone_id_optional')} />
-                </details>
-                <ConfirmedAlerts
-                  p={p}
-                  initialAlertId={p.initialAlertId}
-                  onSelectionChange={setCreateAlertIds}
-                />
-                {createAlertIds.length > 0 && <ResponsibilityFields p={p} handover creating />}
-                <p className="text-xs text-[var(--text-secondary)]">
-                  {tr(
-                    'incident_view.select_no_alerts_for_a_manual_incident_source_evidence_and_review_history_stay_int',
-                  )}
-                </p>
-              </>
-            )}
-            {(editor.op === 'responsibility' || editor.op === 'correct-responsibility') &&
-              current && (
-                <ResponsibilityFields
-                  p={p}
-                  incident={current}
-                  handover={editor.op === 'correct-responsibility'}
-                />
+                  } as ConfirmIncidentResponsibilityCommand);
+                else if (editor.op === 'transfer' && action)
+                  command(
+                    'transfer',
+                    {
+                      expectedVersion: action.version,
+                      assignedTo: text(form, 'assignedTo'),
+                      reason: text(form, 'reason'),
+                    } as TransferCorrectiveActionCommand,
+                    action.id,
+                  );
+                else if (editor.op === 'link')
+                  command('link', {
+                    expectedVersion: current.version,
+                    alertIds: ids(form, 'alertIds'),
+                  } as LinkIncidentAlertsCommand);
+                else if (editor.op === 'assign' || editor.op === 'reopen')
+                  command(editor.op, {
+                    expectedVersion: current.version,
+                    assignedTo: text(form, 'assignedTo'),
+                    description: text(form, 'description'),
+                    dueAt: deadline(form),
+                    ...(editor.op === 'reopen' ? { reason: text(form, 'reason') } : {}),
+                  } as AssignCorrectiveActionCommand | ReopenIncidentCommand);
+                else if (action && editor.op === 'submit')
+                  command(
+                    'submit',
+                    {
+                      expectedVersion: action.version,
+                      resultDescription: text(form, 'resultDescription'),
+                    } as SubmitSafetyResultCommand,
+                    action.id,
+                    resultFile,
+                  );
+                else if (action && editor.op === 'review')
+                  command(
+                    'review',
+                    {
+                      expectedVersion: action.version,
+                      submissionId: editor.submissionId!,
+                      decision: text(form, 'decision') as ReviewSubmissionCommand['decision'],
+                      reason: text(form, 'reason'),
+                    } as ReviewSubmissionCommand,
+                    action.id,
+                  );
+              }}
+            >
+              {editor.op === 'create' && (
+                <>
+                  <Field name="title" label={tr('common.title')} required maxLength={200} />
+                  <Field
+                    name="description"
+                    label={tr('common.description')}
+                    required
+                    type="textarea"
+                  />
+                  <label className="block text-sm font-semibold">
+                    {tr('common.severity')}
+                    <SmartNativeSelect className={fieldClass} name="severity">
+                      {['LOW', 'MEDIUM', 'HIGH', 'CRITICAL'].map((s) => (
+                        <option key={s} value={s}>
+                          {label(s)}
+                        </option>
+                      ))}
+                    </SmartNativeSelect>
+                  </label>
+                  <Field
+                    name="occurredAt"
+                    label={tr('incident_view.occurred_at_local_time')}
+                    type="datetime-local"
+                    required
+                    defaultValue={occurredDefault}
+                  />
+                  <details className="text-sm">
+                    <summary className="cursor-pointer font-semibold">
+                      {tr('common.optional_references')}
+                    </summary>
+                    <Field name="zoneId" label={tr('common.zone_id_optional')} />
+                  </details>
+                  <ConfirmedAlerts
+                    p={p}
+                    initialAlertId={p.initialAlertId}
+                    onSelectionChange={setCreateAlertIds}
+                  />
+                  {createAlertIds.length > 0 && <ResponsibilityFields p={p} handover creating />}
+                  <p className="text-xs text-[var(--text-secondary)]">
+                    {tr(
+                      'incident_view.select_no_alerts_for_a_manual_incident_source_evidence_and_review_history_stay_int',
+                    )}
+                  </p>
+                </>
               )}
-            {editor.op === 'transfer' && current && (
-              <>
-                <Assignee
-                  p={p}
-                  role="CONTRACTOR_REPRESENTATIVE"
-                  contractorId={current.contractorId ?? undefined}
-                />
-                <Field
-                  name="reason"
-                  label={tr('common.transfer_reason')}
-                  type="textarea"
-                  required
-                  maxLength={2000}
-                />
-                <p className="text-sm">
-                  {tr(
-                    'incident_view.the_action_returns_to_assigned_earlier_submissions_and_reviews_are_preserved',
-                  )}
-                </p>
-              </>
-            )}
-            {editor.op === 'link' && <ConfirmedAlerts p={p} />}
-            {(editor.op === 'assign' || editor.op === 'reopen') && (
-              <>
-                {editor.op === 'reopen' && (
+              {(editor.op === 'responsibility' || editor.op === 'correct-responsibility') &&
+                current && (
+                  <ResponsibilityFields
+                    p={p}
+                    incident={current}
+                    handover={editor.op === 'correct-responsibility'}
+                  />
+                )}
+              {editor.op === 'transfer' && current && (
+                <>
+                  <Assignee
+                    p={p}
+                    role="CONTRACTOR_REPRESENTATIVE"
+                    contractorId={current.contractorId ?? undefined}
+                  />
                   <Field
                     name="reason"
-                    label={tr('common.reopening_reason')}
+                    label={tr('common.transfer_reason')}
+                    type="textarea"
+                    required
+                    maxLength={2000}
+                  />
+                  <p className="text-sm">
+                    {tr(
+                      'incident_view.the_action_returns_to_assigned_earlier_submissions_and_reviews_are_preserved',
+                    )}
+                  </p>
+                </>
+              )}
+              {editor.op === 'link' && <ConfirmedAlerts p={p} />}
+              {(editor.op === 'assign' || editor.op === 'reopen') && (
+                <>
+                  {editor.op === 'reopen' && (
+                    <Field
+                      name="reason"
+                      label={tr('common.reopening_reason')}
+                      type="textarea"
+                      required
+                    />
+                  )}
+                  <Assignee
+                    p={p}
+                    role="CONTRACTOR_REPRESENTATIVE"
+                    contractorId={current?.contractorId ?? undefined}
+                  />
+                  <Field
+                    name="description"
+                    label={tr('common.handling_request')}
                     type="textarea"
                     required
                   />
-                )}
-                <Assignee
-                  p={p}
-                  role="CONTRACTOR_REPRESENTATIVE"
-                  contractorId={current?.contractorId ?? undefined}
-                />
-                <Field
-                  name="description"
-                  label={tr('common.handling_request')}
-                  type="textarea"
-                  required
-                />
-                <Field
-                  name="dueAt"
-                  label={tr('incident_view.deadline_optional_local_time')}
-                  type="datetime-local"
-                />
-              </>
-            )}
-            {editor.op === 'submit' && <ResultFields onFileChange={setResultFile} />}
-            {editor.op === 'review' && (
-              <>
-                <label className="block text-sm font-semibold">
-                  {tr('incident_view.review_decision')}
-                  <SmartNativeSelect
-                    className={fieldClass}
-                    name="decision"
+                  <Field
+                    name="dueAt"
+                    label={tr('incident_view.deadline_optional_local_time')}
+                    type="datetime-local"
+                  />
+                </>
+              )}
+              {editor.op === 'submit' && <ResultFields onFileChange={setResultFile} />}
+              {editor.op === 'review' && (
+                <>
+                  <label className="block text-sm font-semibold">
+                    {tr('incident_view.review_decision')}
+                    <SmartNativeSelect
+                      className={fieldClass}
+                      name="decision"
+                      required
+                      defaultValue={editor.decision ?? 'APPROVED'}
+                    >
+                      <option value="APPROVED">
+                        {tr('incident_view.verify_and_close_action')}
+                      </option>
+                      <option value="REJECTED">{tr('incident_view.return_for_rework')}</option>
+                    </SmartNativeSelect>
+                  </label>
+                  <Field
+                    name="reason"
+                    label={tr('common.recording_note')}
+                    type="textarea"
                     required
-                    defaultValue={editor.decision ?? 'APPROVED'}
-                  >
-                    <option value="APPROVED">{tr('incident_view.verify_and_close_action')}</option>
-                    <option value="REJECTED">{tr('incident_view.return_for_rework')}</option>
-                  </SmartNativeSelect>
-                </label>
-                <Field
-                  name="reason"
-                  label={tr('common.recording_note')}
-                  type="textarea"
-                  required
-                  maxLength={2000}
-                />
-              </>
-            )}
-          </CommandForm>
+                    maxLength={2000}
+                  />
+                </>
+              )}
+            </CommandForm>
+          )}
         </Dialog>
       )}
     </div>
@@ -1299,16 +1389,212 @@ function CameraPhoto({
   );
 }
 
+function IncidentHandoverForm({
+  p,
+  incident,
+  disabled,
+  onDone,
+  reload,
+  onPendingChange,
+}: {
+  p: WorkflowProps;
+  incident: IncidentDetailResponse;
+  disabled: boolean;
+  onDone: () => void;
+  reload: () => void;
+  onPendingChange: (pending: boolean) => void;
+}) {
+  const cache = useQueryClient();
+  const captureTarget = useWorkflowTarget(
+    JSON.stringify([p.apiUrl, p.scope, p.siteId, p.token, incident.id]),
+  );
+  const [confirmed, setConfirmed] = useState(false);
+  const confirmationAttempt = useRef<
+    | {
+        input: WithoutCommandId<ConfirmIncidentResponsibilityCommand>;
+        assignment?: Omit<WithoutCommandId<AssignCorrectiveActionCommand>, 'expectedVersion'>;
+      }
+    | undefined
+  >(undefined);
+  const assignmentAttempt = useRef<WithoutCommandId<AssignCorrectiveActionCommand> | undefined>(
+    undefined,
+  );
+  const assignment = useWorkflowCommand<IncidentDetailResponse>(p);
+  const confirmation = useWorkflowCommand<IncidentDetailResponse>(p);
+  const pending = assignment.isPending || confirmation.isPending;
+  useEffect(() => {
+    onPendingChange(pending);
+    return () => onPendingChange(false);
+  }, [pending, onPendingChange]);
+  const uncertain = (error: unknown) =>
+    error instanceof ApiError && (!error.status || error.status >= 500);
+  const confirmationUncertain = uncertain(confirmation.error);
+  const assignmentUncertain = uncertain(assignment.error);
+  const error = confirmation.error ?? assignment.error;
+  const commit = (resource: IncidentDetailResponse) => {
+    cache.setQueryData(
+      ['safety-workflow', p.apiUrl, p.scope, p.siteId, 'incident', incident.id],
+      resource,
+    );
+  };
+  const assign = (
+    input: WithoutCommandId<AssignCorrectiveActionCommand>,
+    isCurrent: () => boolean,
+  ) => {
+    assignmentAttempt.current = input;
+    assignment.mutate({
+      fingerprint: JSON.stringify({ id: incident.id, operation: 'assign', input }),
+      run: (commandId, signal) =>
+        p.client.incidentCommand(
+          p.token,
+          p.siteId,
+          incident.id,
+          'assign',
+          { ...input, commandId },
+          undefined,
+          undefined,
+          { signal },
+        ),
+      onCommitted: (resource) => {
+        if (!isCurrent() || resource.id !== incident.id) return;
+        commit(resource);
+        onDone();
+      },
+    });
+  };
+  return (
+    <CommandForm
+      pending={pending}
+      disabled={disabled}
+      label={
+        confirmationUncertain
+          ? tr('workflowUi.retryConfirmation')
+          : confirmed
+            ? tr('incident_view.hand_over_to_contractor')
+            : tr('workflowUi.confirmHandover')
+      }
+      secondaryAction={
+        !confirmed &&
+        !confirmationUncertain && (
+          <button
+            type="submit"
+            name="responsibilityOnly"
+            value="true"
+            formNoValidate
+            className={buttonClass}
+          >
+            {tr('workflowUi.onlyResponsibility')}
+          </button>
+        )
+      }
+      onSubmit={(form) => {
+        if (disabled || pending) return;
+        const isCurrent = captureTarget();
+        if (confirmed) {
+          const input =
+            assignmentUncertain && assignmentAttempt.current
+              ? assignmentAttempt.current
+              : {
+                  expectedVersion: incident.version,
+                  assignedTo: text(form, 'assignedTo'),
+                  description: text(form, 'actionDescription'),
+                  dueAt: deadline(form),
+                };
+          assign(input, isCurrent);
+          return;
+        }
+        const only = text(form, 'responsibilityOnly') === 'true';
+        const attempt =
+          confirmationUncertain && confirmationAttempt.current
+            ? confirmationAttempt.current
+            : {
+                input: {
+                  expectedVersion: incident.version,
+                  contractorId: text(form, 'contractorId'),
+                  workerIds: ids(form, 'workerIds'),
+                  reason: text(form, 'reason'),
+                },
+                ...(only
+                  ? {}
+                  : {
+                      assignment: {
+                        assignedTo: text(form, 'assignedTo'),
+                        description: text(form, 'actionDescription'),
+                        dueAt: deadline(form),
+                      },
+                    }),
+              };
+        if (!attempt.input.contractorId || !attempt.input.reason.trim())
+          throw new Error(tr('workflowUi.responsibilityRequired'));
+        confirmationAttempt.current = attempt;
+        confirmation.mutate({
+          fingerprint: JSON.stringify({
+            id: incident.id,
+            operation: 'responsibility',
+            input: attempt.input,
+          }),
+          run: (commandId, signal) =>
+            p.client.incidentCommand(
+              p.token,
+              p.siteId,
+              incident.id,
+              'responsibility',
+              { ...attempt.input, commandId },
+              undefined,
+              undefined,
+              { signal },
+            ),
+          onCommitted: (resource) => {
+            if (!isCurrent() || resource.id !== incident.id) return;
+            commit(resource);
+            if (!attempt.assignment) {
+              onDone();
+              return;
+            }
+            setConfirmed(true);
+            assign({ ...attempt.assignment, expectedVersion: resource.version }, isCurrent);
+          },
+        });
+      }}
+    >
+      {confirmed && assignment.isError && (
+        <p role="status" className="rounded-lg bg-[var(--semantic-amber-bg)] p-3 text-sm">
+          {tr('workflowUi.partialHandover')}
+        </p>
+      )}
+      {(confirmationUncertain || assignmentUncertain) && (
+        <p className="text-sm">{tr('workflowUi.retrySameRequest')}</p>
+      )}
+      <RequestError
+        error={error}
+        retry={error instanceof ApiError && error.status === 409 ? reload : undefined}
+      />
+      <ResponsibilityFields
+        p={p}
+        incident={incident}
+        handover
+        creating
+        responsibilityLocked={confirmed || confirmationUncertain}
+        handoverLocked={confirmationUncertain || assignmentUncertain}
+      />
+    </CommandForm>
+  );
+}
+
 function ResponsibilityFields({
   p,
   incident,
   handover = false,
   creating = false,
+  responsibilityLocked = false,
+  handoverLocked = false,
 }: {
   p: WorkflowProps;
   incident?: IncidentDetailResponse;
   handover?: boolean;
   creating?: boolean;
+  responsibilityLocked?: boolean;
+  handoverLocked?: boolean;
 }) {
   useTranslation();
 
@@ -1350,92 +1636,96 @@ function ResponsibilityFields({
   });
   return (
     <>
-      <label className="block text-sm font-semibold">
-        {tr('common.responsible_contractor')}
-        <SmartNativeSelect
-          className={fieldClass}
-          name="contractorId"
-          required
-          value={contractorId}
-          onChange={(e) => {
-            setContractorId(e.target.value);
-            setChosen([]);
-            setWorkerOffset(0);
-          }}
-        >
-          <option value="">
-            {tr('incident_view.choose_a_contractor_participating_in_this_site')}
-          </option>
-          {contractorId && !contractors.data?.items.some((c) => c.id === contractorId) && (
-            <option value={contractorId}>{tr('common.current_confirmed_contractor')}</option>
-          )}
-          {contractors.data?.items.map((c) => (
-            <option key={c.id} value={c.id}>
-              {c.name}
+      <fieldset className="contents" disabled={responsibilityLocked}>
+        <label className="block text-sm font-semibold">
+          {tr('common.responsible_contractor')}
+          <SmartNativeSelect
+            className={fieldClass}
+            name="contractorId"
+            required
+            value={contractorId}
+            onChange={(e) => {
+              setContractorId(e.target.value);
+              setChosen([]);
+              setWorkerOffset(0);
+            }}
+          >
+            <option value="">
+              {tr('incident_view.choose_a_contractor_participating_in_this_site')}
             </option>
-          ))}
-        </SmartNativeSelect>
-      </label>
-      {contractors.isPending && <p>{tr('common.loading_contractors')}</p>}
-      <RequestError error={contractors.error} retry={() => void contractors.refetch()} />
-      {contractors.data && contractors.data.total > 20 && (
-        <Pager
-          offset={contractorOffset}
-          total={contractors.data.total}
-          onChange={setContractorOffset}
-        />
-      )}
-      {contractorId && (
-        <fieldset className="space-y-2">
-          <legend className="text-sm font-semibold">
-            {tr('incident_view.confirmed_worker_subjects_optional')}
-          </legend>
-          <p className="text-sm">
-            {tr(
-              'incident_view.select_only_workers_you_have_verified_leave_empty_when_identity_is_unknown_camera',
+            {contractorId && !contractors.data?.items.some((c) => c.id === contractorId) && (
+              <option value={contractorId}>{tr('common.current_confirmed_contractor')}</option>
             )}
-          </p>
-          {workers.isPending && <p>{tr('common.loading_workers')}</p>}
-          <RequestError error={workers.error} retry={() => void workers.refetch()} />
-          {workers.data?.items.map((w) => (
-            <label key={w.id} className="flex items-center gap-2 text-sm">
-              <input
-                type="checkbox"
-                checked={chosen.includes(w.id)}
-                onChange={(e) =>
-                  setChosen((old) =>
-                    e.target.checked ? [...old, w.id] : old.filter((id) => id !== w.id),
-                  )
-                }
-              />
-              {w.displayName} · {w.externalId}
-            </label>
-          ))}
-          {workers.data && !workers.data.total && (
-            <p>
+            {contractors.data?.items.map((c) => (
+              <option key={c.id} value={c.id}>
+                {c.name}
+              </option>
+            ))}
+          </SmartNativeSelect>
+        </label>
+        {contractors.isPending && <p>{tr('common.loading_contractors')}</p>}
+        <RequestError error={contractors.error} retry={() => void contractors.refetch()} />
+        {contractors.data && contractors.data.total > 20 && (
+          <Pager
+            offset={contractorOffset}
+            total={contractors.data.total}
+            onChange={setContractorOffset}
+          />
+        )}
+        {contractorId && (
+          <fieldset className="space-y-2">
+            <legend className="text-sm font-semibold">
+              {tr('incident_view.confirmed_worker_subjects_optional')}
+            </legend>
+            <p className="text-sm">
               {tr(
-                'incident_view.no_active_workers_registered_for_this_contractor_identity_may_remain_unknown',
+                'incident_view.select_only_workers_you_have_verified_leave_empty_when_identity_is_unknown_camera',
               )}
             </p>
-          )}
-          <p className="text-xs">{tr('common.value_selected', { value1: chosen.length })}</p>
-          {workers.data && workers.data.total > 20 && (
-            <Pager offset={workerOffset} total={workers.data.total} onChange={setWorkerOffset} />
-          )}
-        </fieldset>
-      )}
-      <input type="hidden" name="workerIds" value={chosen.join(',')} />
-      <Field
-        name="reason"
-        label={
-          handover && !creating ? tr('common.correction_reason') : tr('common.verification_reason')
-        }
-        type="textarea"
-        required
-        maxLength={2000}
-      />
+            {workers.isPending && <p>{tr('common.loading_workers')}</p>}
+            <RequestError error={workers.error} retry={() => void workers.refetch()} />
+            {workers.data?.items.map((w) => (
+              <label key={w.id} className="flex items-center gap-2 text-sm">
+                <input
+                  type="checkbox"
+                  checked={chosen.includes(w.id)}
+                  onChange={(e) =>
+                    setChosen((old) =>
+                      e.target.checked ? [...old, w.id] : old.filter((id) => id !== w.id),
+                    )
+                  }
+                />
+                {w.displayName} · {w.externalId}
+              </label>
+            ))}
+            {workers.data && !workers.data.total && (
+              <p>
+                {tr(
+                  'incident_view.no_active_workers_registered_for_this_contractor_identity_may_remain_unknown',
+                )}
+              </p>
+            )}
+            <p className="text-xs">{tr('common.value_selected', { value1: chosen.length })}</p>
+            {workers.data && workers.data.total > 20 && (
+              <Pager offset={workerOffset} total={workers.data.total} onChange={setWorkerOffset} />
+            )}
+          </fieldset>
+        )}
+        <input type="hidden" name="workerIds" value={chosen.join(',')} />
+        <Field
+          name="reason"
+          label={
+            handover && !creating
+              ? tr('common.correction_reason')
+              : tr('common.verification_reason')
+          }
+          type="textarea"
+          required
+          maxLength={2000}
+        />
+      </fieldset>
       {handover && (
-        <>
+        <fieldset className="contents" disabled={handoverLocked}>
           <Assignee
             key={contractorId}
             p={p}
@@ -1460,7 +1750,7 @@ function ResponsibilityFields({
               )}
             </p>
           )}
-        </>
+        </fieldset>
       )}
       <p className="text-sm">
         {tr(

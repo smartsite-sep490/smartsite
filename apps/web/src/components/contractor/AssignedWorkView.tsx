@@ -2,6 +2,7 @@ import { SmartNativeSelect } from '../ui/SmartNativeSelect';
 import { useQuery } from '@tanstack/react-query';
 import { useSearchParams } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
+import { useId } from 'react';
 import type { AccountResponse } from '@smartsite/api-client';
 import { useManagementClient } from '../../features/auth/auth-session';
 import { IncidentView } from '../safety/IncidentView';
@@ -19,6 +20,7 @@ export function AssignedWorkView({
   const { t } = useTranslation();
   const client = useManagementClient(apiUrl);
   const [params, setParams] = useSearchParams();
+  const tabsId = useId();
   const choice = params.get('siteId') ?? '';
   const sites = useQuery({
     queryKey: ['assigned-work-sites', apiUrl, user.id],
@@ -70,33 +72,73 @@ export function AssignedWorkView({
           ))}
         </SmartNativeSelect>
       </label>
-      <nav className="flex flex-wrap gap-4">
-        <button aria-pressed={!checklist} onClick={() => navigate('incidents')}>
+      <div
+        role="tablist"
+        aria-label={t('shell.assignedWork')}
+        className="assigned-work-tabs"
+        onKeyDown={(event) => {
+          if (!['ArrowLeft', 'ArrowRight', 'Home', 'End'].includes(event.key)) return;
+          event.preventDefault();
+          const next = event.key === 'Home' ? 0 : event.key === 'End' ? 1 : checklist ? 0 : 1;
+          if (next !== Number(checklist)) navigate(next ? 'checklists' : 'incidents');
+          event.currentTarget.querySelectorAll<HTMLButtonElement>('[role="tab"]')[next]?.focus();
+        }}
+      >
+        <button
+          type="button"
+          role="tab"
+          id={tabsId + '-incidents'}
+          aria-controls={tabsId + '-panel'}
+          aria-selected={!checklist}
+          tabIndex={checklist ? -1 : 0}
+          onClick={() => {
+            if (checklist) navigate('incidents');
+          }}
+        >
           {t('shell.assignedActions')}
         </button>
-        <button aria-pressed={checklist} onClick={() => navigate('checklists')}>
-          {t('shell.assignedChecklists')}
+        <button
+          type="button"
+          role="tab"
+          id={tabsId + '-checklists'}
+          aria-controls={tabsId + '-panel'}
+          aria-selected={checklist}
+          tabIndex={checklist ? 0 : -1}
+          onClick={() => {
+            if (!checklist) navigate('checklists');
+          }}
+        >
+          {t('workflowUi.checklistsTab')}
         </button>
-      </nav>
-      {checklist ? (
-        <SafetyChecklistsView
-          key={siteId}
-          {...workflow}
-          active
-          initialChecklistId={params.get('checklistId') ?? undefined}
-          onDraftConsumed={() => {}}
-          onIncident={(id) => navigate('incidents', id)}
-        />
-      ) : (
-        <IncidentView
-          key={siteId}
-          {...workflow}
-          initialIncidentId={params.get('incidentId') ?? undefined}
-          initialActionId={params.get('actionId') ?? undefined}
-          onSelect={(id) => navigate('incidents', id)}
-          onOpenChecklist={(id) => navigate('checklists', id)}
-        />
-      )}
+      </div>
+      <div
+        role="tabpanel"
+        id={tabsId + '-panel'}
+        aria-labelledby={tabsId + (checklist ? '-checklists' : '-incidents')}
+        className="assigned-work-panel"
+      >
+        {checklist ? (
+          <SafetyChecklistsView
+            key={siteId}
+            {...workflow}
+            active
+            embedded
+            initialChecklistId={params.get('checklistId') ?? undefined}
+            onDraftConsumed={() => {}}
+            onIncident={(id) => navigate('incidents', id)}
+          />
+        ) : (
+          <IncidentView
+            key={siteId}
+            {...workflow}
+            embedded
+            initialIncidentId={params.get('incidentId') ?? undefined}
+            initialActionId={params.get('actionId') ?? undefined}
+            onSelect={(id) => navigate('incidents', id)}
+            onOpenChecklist={(id) => navigate('checklists', id)}
+          />
+        )}
+      </div>
     </section>
   );
 }

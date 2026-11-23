@@ -3,21 +3,16 @@ import React, { useState } from 'react';
 import { View, Text, StyleSheet, Pressable, ScrollView } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useQuery } from '@tanstack/react-query';
+import { ApiError } from '@smartsite/api-client';
 import { useAuth } from '../auth/auth-context';
 import { useWorkspace } from './workspace-context';
-import {
-  allPages,
-  displayShiftTime,
-  localDate,
-  minutes,
-  required,
-  useCommand,
-} from '../shared/data';
+import { allPages, displayShiftTime, localDate, minutes, useCommand } from '../shared/data';
 import { Button, ErrorNotice, Field, Page, QueryState, palette } from '../shared/ui';
 import { WorkerAvatar } from '../../components/common/WorkerAvatar';
 import { WorkerQrModal } from '../../components/worker/WorkerQrModal';
 import { WorkerRequestModal } from '../../components/modals/WorkerRequestModal';
-import { WorkerDocuments } from '../contractor/worker-documents';
+import { ProfileDetails, WorkerDocuments } from '../contractor/worker-documents';
+import { FormSection } from '../shared/form-section';
 import { AccountEmailCard } from '../auth/account-email-card';
 import { LogoutConfirmation } from '../auth/logout-confirmation';
 import { RequestSheet } from '../shared/request-sheet';
@@ -33,7 +28,6 @@ import {
   IconMapPin,
   IconGlobe,
   IconLogout,
-  IconSwap,
 } from '../../components/common/Icons';
 import { colors } from '../../theme/colors';
 import { useTranslation, setLanguage } from '../../i18n';
@@ -314,12 +308,58 @@ export function ChangePasswordModal({
   const [current, setCurrent] = useState('');
   const [next, setNext] = useState('');
   const [confirm, setConfirm] = useState('');
+  const [submitted, setSubmitted] = useState(false);
   const command = useCommand();
+  const validation = { current: [] as string[], next: [] as string[], confirm: [] as string[] };
+  if (!current) validation.current.push(t('profile.currentPasswordRequired'));
+  else if (Array.from(current).length > 128)
+    validation.current.push(t('profile.currentPasswordTooLong'));
+  if (!next) validation.next.push(t('validation.required', { label: t('profile.newPassword') }));
+  else {
+    if (Array.from(next).length < 8 || Array.from(next).length > 128)
+      validation.next.push(t('profile.passwordLengthRule'));
+    if (!/[A-Z]/.test(next)) validation.next.push(t('profile.passwordUppercaseRule'));
+    if (!/\d/.test(next)) validation.next.push(t('profile.passwordNumberRule'));
+    if (!/[^A-Za-z0-9\s]/.test(next)) validation.next.push(t('profile.passwordSpecialRule'));
+    if (/[\p{Cc}\p{Cs}]/u.test(next)) validation.next.push(t('profile.passwordCharactersRule'));
+  }
+  if (!confirm)
+    validation.confirm.push(t('validation.required', { label: t('profile.confirmNewPassword') }));
+  else if (next !== confirm) validation.confirm.push(t('profile.passwordMismatch'));
+  const error = command.error;
+  const validationFailed =
+    error instanceof ApiError &&
+    (error.backendError?.code === 'VALIDATION_FAILED' ||
+      (error.status === 400 && error.message === 'Validation failed'));
+  const currentRejected =
+    error instanceof ApiError && error.code === 'http' && error.status === 401;
+  const serverFields = new Set(
+    validationFailed
+      ? error.backendError?.issues?.map((issue) => issue.path.replace(/^\//, ''))
+      : [],
+  );
+  const errors = {
+    current: [
+      ...(submitted ? validation.current : []),
+      ...(currentRejected
+        ? [t('accountEmail.currentPasswordError')]
+        : serverFields.has('currentPassword')
+          ? [t('profile.currentPasswordTooLong')]
+          : []),
+    ],
+    next: [
+      ...(submitted ? validation.next : []),
+      ...(serverFields.has('newPassword') ? [t('profile.passwordServerRejected')] : []),
+    ],
+    confirm: submitted ? validation.confirm : [],
+  };
 
   const handleClose = () => {
     setCurrent('');
     setNext('');
     setConfirm('');
+    setSubmitted(false);
+    command.reset();
     onClose();
   };
 
@@ -333,43 +373,73 @@ export function ChangePasswordModal({
       icon={<IconLock size={23} color={colors.primary} />}
       footer={
         <View style={{ gap: 10 }}>
-          <ErrorNotice error={command.error} />
+          <ErrorNotice error={validationFailed || currentRejected ? null : command.error} />
+          {validationFailed &&
+            !serverFields.has('currentPassword') &&
+            !serverFields.has('newPassword') && (
+              <Text
+                accessibilityRole="alert"
+                style={{ color: colors.dangerText, fontSize: 12, lineHeight: 19 }}
+              >
+                {t('profile.passwordServerRejected')}
+              </Text>
+            )}
           <Button
             label={
               command.isPending ? t('profile.changingPassword') : t('profile.submitPasswordChange')
             }
-            disabled={command.isPending || !current || !next || !confirm}
-            onPress={() =>
+            disabled={command.isPending}
+            onPress={() => {
+              setSubmitted(true);
+              command.reset();
+              if (Object.values(validation).some((issues) => issues.length > 0)) return;
               command.mutate(async () => {
-                required(current, t('profile.currentPassword'));
-                if (next !== confirm) throw new Error(t('profile.passwordMismatch'));
-                if (next.length < 8) throw new Error(t('profile.passwordMinLength'));
                 await client.changePassword(token, current, next);
                 await session.afterPasswordChange();
                 handleClose();
-              })
-            }
+              });
+            }}
           />
         </View>
       }
     >
       {(
         [
-          [t('profile.currentPassword'), current, setCurrent],
-          [t('profile.newPassword'), next, setNext],
-          [t('profile.confirmNewPassword'), confirm, setConfirm],
+          ['current', t('profile.currentPassword'), current, setCurrent],
+          ['next', t('profile.newPassword'), next, setNext],
+          ['confirm', t('profile.confirmNewPassword'), confirm, setConfirm],
         ] as const
-      ).map(([label, value, onChangeText]) => (
-        <Field
-          key={label}
-          label={label}
-          value={value}
-          onChangeText={onChangeText}
-          secureTextEntry
-          autoCapitalize="none"
-          autoCorrect={false}
-          editable={!command.isPending}
-        />
+      ).map(([field, label, value, onChangeText]) => (
+        <View key={field} style={{ gap: 6 }}>
+          <Field
+            label={label}
+            value={value}
+            onChangeText={(value) => {
+              command.reset();
+              onChangeText(value);
+            }}
+            secureTextEntry
+            autoCapitalize="none"
+            autoCorrect={false}
+            editable={!command.isPending}
+            style={errors[field].length > 0 ? { borderColor: colors.danger } : undefined}
+            accessibilityHint={errors[field].join(' ')}
+          />
+          {field === 'next' && (
+            <Text style={{ color: colors.textMuted, fontSize: 12, lineHeight: 19 }}>
+              {t('profile.passwordPolicyHint')}
+            </Text>
+          )}
+          {errors[field].map((message) => (
+            <Text
+              key={message}
+              accessibilityRole="alert"
+              style={{ color: colors.dangerText, fontSize: 12, lineHeight: 19 }}
+            >
+              {message}
+            </Text>
+          ))}
+        </View>
       ))}
     </RequestSheet>
   );
@@ -383,10 +453,11 @@ export function ProfileScreen({
   initialDocuments?: boolean;
 }) {
   const { t, i18n } = useTranslation();
-  const { scope, user, client, token, queryKey, canSwitchScope } = useWorkspace();
+  const { scope, user, client, token, queryKey } = useWorkspace();
   const [showPasswordModal, setShowPasswordModal] = useState(false);
   const [showLogoutModal, setShowLogoutModal] = useState(false);
   const [documents, setDocuments] = useState(initialDocuments);
+  const [accountDetails, setAccountDetails] = useState(false);
 
   const worker = useQuery({
     queryKey: [...queryKey, 'own-worker'],
@@ -395,6 +466,11 @@ export function ProfileScreen({
       (await allPages((p) => client.listWorkers(token, scope.siteId, p), signal)).find(
         (w) => w.userId === user.id,
       ) ?? null,
+  });
+  const personal = useQuery({
+    queryKey: [...queryKey, 'worker-documents', worker.data?.id],
+    enabled: accountDetails && scope.role === 'worker' && !!worker.data?.id,
+    queryFn: () => client.workerCompliance(token, scope.siteId, worker.data!.id),
   });
 
   if (documents && scope.role === 'worker' && worker.data)
@@ -521,7 +597,12 @@ export function ProfileScreen({
 
           <View style={profileStyles.menuGroupCard}>
             {/* Row 1: Profile Setting / Thông tin tài khoản */}
-            <View style={profileStyles.menuItem}>
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel={t('profile.personalInfo')}
+              style={({ pressed }) => [profileStyles.menuItem, pressed && { opacity: 0.75 }]}
+              onPress={() => setAccountDetails(true)}
+            >
               <View style={[profileStyles.menuIconBox, { backgroundColor: '#EFF6FF' }]}>
                 <IconUser size={18} color="#2563EB" />
               </View>
@@ -534,7 +615,7 @@ export function ProfileScreen({
                 </Text>
               </View>
               <IconChevronRight size={16} color="#CBD5E1" />
-            </View>
+            </Pressable>
 
             <View style={profileStyles.menuDivider} />
 
@@ -542,7 +623,12 @@ export function ProfileScreen({
             <View style={profileStyles.menuDivider} />
 
             {/* Row 2: Location / Công trường */}
-            <View style={profileStyles.menuItem}>
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel={t('profile.siteLocation')}
+              style={({ pressed }) => [profileStyles.menuItem, pressed && { opacity: 0.75 }]}
+              onPress={onScopeChange}
+            >
               <View style={[profileStyles.menuIconBox, { backgroundColor: '#FEF3C7' }]}>
                 <IconMapPin size={18} color="#D97706" />
               </View>
@@ -555,38 +641,7 @@ export function ProfileScreen({
                 </Text>
               </View>
               <IconChevronRight size={16} color="#CBD5E1" />
-            </View>
-
-            {/* Optional: Switch Scope (Only for multi-scope users) */}
-            {canSwitchScope && (
-              <>
-                <View style={profileStyles.menuDivider} />
-                <Pressable
-                  accessibilityRole="button"
-                  accessibilityLabel={t('scope.switchScope')}
-                  style={({ pressed }) => [
-                    profileStyles.menuItem,
-                    pressed && { opacity: 0.75, backgroundColor: '#F8FAFC' },
-                  ]}
-                  onPress={onScopeChange}
-                >
-                  <View style={[profileStyles.menuIconBox, { backgroundColor: '#FFF7ED' }]}>
-                    <IconSwap size={18} color="#EA580C" />
-                  </View>
-                  <View style={profileStyles.menuTextCol}>
-                    <Text numberOfLines={1} ellipsizeMode="tail" style={profileStyles.menuTitle}>
-                      {scope.role === 'worker'
-                        ? t('profile.switchMode')
-                        : t('profile.switchContractor')}
-                    </Text>
-                    <Text numberOfLines={1} ellipsizeMode="tail" style={profileStyles.menuSubtitle}>
-                      {t('scope.chooseAgain')}
-                    </Text>
-                  </View>
-                  <IconChevronRight size={16} color="#CBD5E1" />
-                </Pressable>
-              </>
-            )}
+            </Pressable>
 
             {/* Row 3: Manage Documents / Worker Documents (Worker only) */}
             {scope.role === 'worker' && (
@@ -743,6 +798,58 @@ export function ProfileScreen({
           onClose={() => setShowPasswordModal(false)}
         />
         {showLogoutModal && <LogoutConfirmation onClose={() => setShowLogoutModal(false)} />}
+        {accountDetails && (
+          <RequestSheet
+            visible
+            variant="compact"
+            title={t('profile.personalInfo')}
+            icon={<IconUser size={21} color={colors.primary} />}
+            onClose={() => setAccountDetails(false)}
+            footer={null}
+          >
+            <FormSection number="01" title={t('contractorUi.accountInfo')}>
+              {[
+                [t('workforce.fullName'), user.displayName],
+                [t('workforce.username'), user.username],
+                [t('accountEmail.email'), user.email],
+              ].map(([label, value]) => (
+                <View key={label} style={{ gap: 4 }}>
+                  <Text style={{ color: colors.textMuted, fontSize: 12, lineHeight: 19 }}>
+                    {label}
+                  </Text>
+                  <Text
+                    selectable
+                    style={{
+                      color: colors.textPrimary,
+                      fontSize: 14,
+                      lineHeight: 22,
+                      fontWeight: '600',
+                    }}
+                  >
+                    {value || t('common.notRecorded')}
+                  </Text>
+                </View>
+              ))}
+            </FormSection>
+            {scope.role === 'worker' && (
+              <QueryState query={worker}>
+                {(data) =>
+                  data ? (
+                    <QueryState query={personal}>
+                      {(profile) => (
+                        <FormSection number="02" title={t('profile.personalInfo')}>
+                          <ProfileDetails data={profile} />
+                        </FormSection>
+                      )}
+                    </QueryState>
+                  ) : (
+                    <Text>{t('profile.noWorkerProfile')}</Text>
+                  )
+                }
+              </QueryState>
+            )}
+          </RequestSheet>
+        )}
       </ScrollView>
     </SafeAreaView>
   );

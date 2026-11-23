@@ -1,7 +1,7 @@
 import { localizedLabel } from '../../i18n/labels';
 import { uiLocale } from '../../i18n';
 import { translate as tr } from '../../i18n';
-import { useEffect, useRef, type FormEvent } from 'react';
+import { useEffect, useLayoutEffect, useRef, type FormEvent } from 'react';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import type { AccountResponse, SmartSiteManagementClient } from '@smartsite/api-client';
 export type WithoutCommandId<T> = T extends { commandId: string } ? Omit<T, 'commandId'> : never;
@@ -45,13 +45,17 @@ export const ids = (form: FormData, key: string) =>
     .filter(Boolean);
 export const deadline = (form: FormData) =>
   text(form, 'dueAt') ? new Date(text(form, 'dueAt')).toISOString() : null;
-type CommandRun = {
+type CommandRun<Resource extends { id: string }> = {
   fingerprint: string;
   file?: File;
   files?: File[];
-  run: (commandId: string, signal: AbortSignal) => Promise<{ resource: { id: string } }>;
+  run: (commandId: string, signal: AbortSignal) => Promise<{ resource: Resource }>;
+  onCommitted?: (resource: Resource) => void;
 };
-export function useWorkflowCommand(p: WorkflowProps, onSuccess?: (id: string) => void) {
+export function useWorkflowCommand<Resource extends { id: string } = { id: string }>(
+  p: WorkflowProps,
+  onSuccess?: (id: string) => void,
+) {
   const cache = useQueryClient();
   const lifecycle = useRef<{ active: boolean; controller?: AbortController }>({ active: true });
   const receipt = useRef<
@@ -71,7 +75,7 @@ export function useWorkflowCommand(p: WorkflowProps, onSuccess?: (id: string) =>
   return useMutation({
     meta: { safetySession: p.scope },
     retry: false,
-    mutationFn: async ({ fingerprint, file, files, run }: CommandRun) => {
+    mutationFn: async ({ fingerprint, file, files, run, onCommitted }: CommandRun<Resource>) => {
       if (
         !receipt.current ||
         receipt.current.fingerprint !== fingerprint ||
@@ -90,7 +94,8 @@ export function useWorkflowCommand(p: WorkflowProps, onSuccess?: (id: string) =>
       const result = await run(receipt.current.commandId, controller.signal);
       if (!lifecycle.current.active || controller.signal.aborted) return;
       receipt.current = undefined;
-      onSuccess?.(result.resource.id);
+      if (onCommitted) onCommitted(result.resource);
+      else onSuccess?.(result.resource.id);
       await Promise.all([
         cache.invalidateQueries({ queryKey: ['safety-workflow', p.apiUrl, p.scope, p.siteId] }),
         cache.invalidateQueries({ queryKey: ['notifications', p.apiUrl] }),
@@ -100,6 +105,21 @@ export function useWorkflowCommand(p: WorkflowProps, onSuccess?: (id: string) =>
       // Do not duplicate server records or authentication credentials in mutation data.
     },
   });
+}
+
+export function useWorkflowTarget(key: string) {
+  const generation = useRef({ value: 0 });
+  useLayoutEffect(() => {
+    const lifecycle = generation.current;
+    lifecycle.value++;
+    return () => {
+      lifecycle.value++;
+    };
+  }, [key]);
+  return () => {
+    const captured = generation.current.value;
+    return () => generation.current.value === captured;
+  };
 }
 export function photo(form: FormData) {
   const value = form.get('file');
