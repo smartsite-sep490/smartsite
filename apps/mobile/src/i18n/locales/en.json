@@ -126,7 +126,7 @@
   "workerHome": {
     "greeting": "Hello,",
     "todayShift": "Today's Shift",
-    "noShiftToday": "No shift assigned today",
+    "noShiftToday": "No shift yet",
     "viewSchedule": "Open calendar to view assignments",
     "scheduleUnavailable": "Today's schedule could not be loaded",
     "breakTime": "Break {{from}} – {{to}}",
@@ -1565,7 +1565,21 @@
     "UNSTARTED": "All unstarted schedules",
     "reason": "Reason for change",
     "saved": "Schedules updated.",
-    "result": "{{changed}} schedules changed; {{skipped}} ineligible schedules preserved."
+    "result": "{{changed}} schedules changed; {{skipped}} ineligible schedules preserved.",
+    "active": "Active",
+    "partial": "Partly cancelled",
+    "cancelled": "Cancelled",
+    "activeCount": "{{count}} active assignments",
+    "cancelledCount": "{{count}} cancelled assignments",
+    "selectedBatch": "SELECTED ASSIGNMENT",
+    "original": "ORIGINAL ASSIGNMENT",
+    "liveUnavailable": "The server has not provided the current schedule state.",
+    "reload": "Reload schedules",
+    "showDates": "View each day",
+    "hideDates": "Hide dates",
+    "noMatch": "No active schedules remain in this selection. Choose another date or scope.",
+    "noShifts": "No replacement shifts have been granted to this contractor.",
+    "reasonPlaceholder": "Why are you cancelling or changing this shift?"
   },
   "accountEmail": {
     "title": "Account email",

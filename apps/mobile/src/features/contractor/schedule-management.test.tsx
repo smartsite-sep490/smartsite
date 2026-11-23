@@ -3,6 +3,7 @@ import { act, create, type ReactTestRenderer } from 'react-test-renderer';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import {
   SmartSiteManagementClient,
+  ApiError,
   type ScheduleAssignmentBatchResponse,
 } from '@smartsite/api-client';
 import type { useWorkspace } from '../workspace/workspace-context';
@@ -187,6 +188,150 @@ it('only offers shifts granted to this contractor and keeps the same request ID 
     shiftId: 'allowed',
     expectedVersion: 7,
   });
+});
+it('shows the current shift after changing a batch, including after reopening the sheet', async () => {
+  vi.mocked(workspace.client.listScheduleAssignments).mockResolvedValue({
+    items: [
+      {
+        ...batch,
+        currentSchedules: [
+          { workDate: '2099-01-02', shiftId: 'current', activeCount: 2, cancelledCount: 0 },
+        ],
+      },
+    ],
+    total: 1,
+  });
+  vi.spyOn(workspace.client, 'changeScheduleAssignment').mockImplementation(async () => {
+    vi.mocked(workspace.client.listScheduleAssignments).mockResolvedValue({
+      items: [
+        {
+          ...batch,
+          version: 8,
+          currentSchedules: [
+            { workDate: '2099-01-02', shiftId: 'allowed', activeCount: 2, cancelledCount: 0 },
+          ],
+        },
+      ],
+      total: 1,
+    });
+    return { id: batch.id, version: 8, changedCount: 2, skippedCount: 0 };
+  });
+  await mount(<ScheduleBatchSheet onClose={vi.fn()} />);
+  await click(t('scheduleManage.change'));
+  await act(async () =>
+    root.root
+      .findAllByType(Choice)
+      .find((n) => n.props.label === t('schedule.shift'))!
+      .props.onChange('allowed'),
+  );
+  await act(async () =>
+    root.root
+      .findAll(
+        (n) =>
+          String(n.type) === 'TextInput' &&
+          n.props.accessibilityLabel === t('scheduleManage.reason'),
+      )[0]!
+      .props.onChangeText('Updated work plan'),
+  );
+  await click(t('common.save'));
+  expect(JSON.stringify(root.toJSON())).toContain('Allowed shift');
+  expect(JSON.stringify(root.toJSON())).not.toContain('Current shift');
+  await act(async () => root.unmount());
+  await mount(<ScheduleBatchSheet onClose={vi.fn()} />);
+  expect(JSON.stringify(root.toJSON())).toContain('Allowed shift');
+});
+it('refreshes a cancelled batch immediately and stops offering further changes', async () => {
+  vi.mocked(workspace.client.listScheduleAssignments).mockResolvedValue({
+    items: [
+      {
+        ...batch,
+        currentSchedules: [
+          { workDate: '2099-01-02', shiftId: 'current', activeCount: 2, cancelledCount: 0 },
+        ],
+      },
+    ],
+    total: 1,
+  });
+  vi.spyOn(workspace.client, 'changeScheduleAssignment').mockImplementation(async () => {
+    vi.mocked(workspace.client.listScheduleAssignments).mockResolvedValue({
+      items: [
+        {
+          ...batch,
+          version: 8,
+          currentSchedules: [
+            { workDate: '2099-01-02', shiftId: 'current', activeCount: 0, cancelledCount: 2 },
+          ],
+        },
+      ],
+      total: 1,
+    });
+    return { id: batch.id, version: 8, changedCount: 2, skippedCount: 0 };
+  });
+  await mount(<ScheduleBatchSheet onClose={vi.fn()} />);
+  await click(t('scheduleManage.cancel'));
+  await act(async () =>
+    root.root
+      .findAll(
+        (n) =>
+          String(n.type) === 'TextInput' &&
+          n.props.accessibilityLabel === t('scheduleManage.reason'),
+      )[0]!
+      .props.onChangeText('Cancel crew schedule'),
+  );
+  await click(t('scheduleManage.confirmCancel'));
+  expect(button(t('scheduleManage.cancel'))).toBeUndefined();
+  expect(button(t('scheduleManage.change'))).toBeUndefined();
+  expect(JSON.stringify(root.toJSON())).toContain(t('scheduleManage.cancelled'));
+});
+it('requires reloading a conflicting version and uses the new version after review', async () => {
+  const change = vi
+    .spyOn(workspace.client, 'changeScheduleAssignment')
+    .mockRejectedValueOnce(new ApiError('http', 'Batch changed', 409))
+    .mockResolvedValue({ id: batch.id, version: 9, changedCount: 2, skippedCount: 0 });
+  await mount(<ScheduleBatchSheet onClose={vi.fn()} />);
+  await click(t('scheduleManage.cancel'));
+  const enterReason = async () =>
+    act(async () =>
+      root.root
+        .findAll(
+          (n) =>
+            String(n.type) === 'TextInput' &&
+            n.props.accessibilityLabel === t('scheduleManage.reason'),
+        )[0]!
+        .props.onChangeText('Cancel crew schedule'),
+    );
+  await enterReason();
+  await click(t('scheduleManage.confirmCancel'));
+  expect(button(t('scheduleManage.confirmCancel')).props.disabled).toBe(true);
+  vi.mocked(workspace.client.listScheduleAssignments).mockResolvedValue({
+    items: [{ ...batch, version: 8 }],
+    total: 1,
+  });
+  await click(t('scheduleManage.reload'));
+  await click(t('scheduleManage.cancel'));
+  await enterReason();
+  await click(t('scheduleManage.confirmCancel'));
+  expect(change.mock.calls.map((call) => call[3].expectedVersion)).toEqual([7, 8]);
+});
+it('keeps cancelled dates visible beside active dates after a partial cancellation', async () => {
+  vi.mocked(workspace.client.listScheduleAssignments).mockResolvedValue({
+    items: [
+      {
+        ...batch,
+        currentSchedules: [
+          { workDate: '2099-01-02', shiftId: 'current', activeCount: 0, cancelledCount: 2 },
+          { workDate: '2099-01-03', shiftId: 'allowed', activeCount: 2, cancelledCount: 0 },
+        ],
+      },
+    ],
+    total: 1,
+  });
+  await mount(<ScheduleBatchSheet onClose={vi.fn()} />);
+  expect(JSON.stringify(root.toJSON())).toContain(t('scheduleManage.partial'));
+  expect(button(t('scheduleManage.cancel'))).toBeDefined();
+  await click(t('scheduleManage.showDates'));
+  expect(JSON.stringify(root.toJSON())).toContain('03/01/2099');
+  expect(JSON.stringify(root.toJSON())).toContain('02/01/2099');
 });
 it('loads the selected group shift roll call and opens the selected member attendance day', async () => {
   const load = vi.spyOn(workspace.client, 'contractorTeamAttendance').mockResolvedValue({
