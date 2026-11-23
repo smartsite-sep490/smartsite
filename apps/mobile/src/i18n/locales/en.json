@@ -126,6 +126,10 @@
   "workerHome": {
     "greeting": "Hello,",
     "todayShift": "Today's Shift",
+    "noShiftToday": "No shift assigned today",
+    "viewSchedule": "Open calendar to view assignments",
+    "scheduleUnavailable": "Today's schedule could not be loaded",
+    "breakTime": "Break {{from}} – {{to}}",
     "shiftHours": "08:00 – 17:00",
     "shiftBreak": "Lunch break 12:00 – 13:00",
     "onSite": "On Site",

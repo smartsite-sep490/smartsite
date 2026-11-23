@@ -126,6 +126,10 @@
   "workerHome": {
     "greeting": "Xin chào,",
     "todayShift": "Ca hôm nay",
+    "noShiftToday": "Hôm nay chưa có ca được phân công",
+    "viewSchedule": "Mở lịch để xem phân công",
+    "scheduleUnavailable": "Chưa tải được lịch hôm nay",
+    "breakTime": "Nghỉ giữa ca {{from}} – {{to}}",
     "shiftHours": "08:00 – 17:00",
     "shiftBreak": "Nghỉ trưa 12:00 – 13:00",
     "onSite": "Trong công trường",

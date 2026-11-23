@@ -1,6 +1,6 @@
 import { ContractorHome } from '../contractor/contractor-home';
 import React, { useState } from 'react';
-import { View, Text, StyleSheet, Pressable, ScrollView, Modal, Platform } from 'react-native';
+import { View, Text, StyleSheet, Pressable, ScrollView } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useQuery } from '@tanstack/react-query';
 import { useAuth } from '../auth/auth-context';
@@ -20,6 +20,7 @@ import { WorkerRequestModal } from '../../components/modals/WorkerRequestModal';
 import { WorkerDocuments } from '../contractor/worker-documents';
 import { AccountEmailCard } from '../auth/account-email-card';
 import { LogoutConfirmation } from '../auth/logout-confirmation';
+import { RequestSheet } from '../shared/request-sheet';
 import {
   IconDocument,
   IconPlus,
@@ -53,16 +54,16 @@ export function HomeScreen({ navigate }: { navigate: (target: NavigationTarget) 
     enabled: !contractor,
   });
   const todaySchedules = useQuery({
-    queryKey: [...queryKey, 'today-schedules', today],
+    queryKey: [...queryKey, 'today-schedules', today, workerId],
     queryFn: () =>
       client.listWorkerSchedules(token, scope.siteId, {
         fromDate: today,
         toDate: today,
-        workerId: workerId || undefined,
+        workerId,
         limit: 5,
-        status: 'ALL',
+        status: 'ACTIVE',
       }),
-    enabled: !contractor,
+    enabled: !contractor && !!workerId,
   });
   const shifts = useQuery({
     queryKey: [...queryKey, 'shifts'],
@@ -70,25 +71,33 @@ export function HomeScreen({ navigate }: { navigate: (target: NavigationTarget) 
     enabled: !contractor,
   });
   const attendanceDays = useQuery({
-    queryKey: [...queryKey, 'today-attendance', today],
+    queryKey: [...queryKey, 'today-attendance', today, workerId],
     queryFn: () =>
       client.attendanceDays(token, scope.siteId, {
         fromDate: today,
         toDate: today,
-        workerId: workerId || undefined,
+        workerId,
         limit: 5,
       }),
-    enabled: !contractor,
+    enabled: !contractor && !!workerId,
   });
 
   if (contractor) return <ContractorHome navigate={navigate} />;
 
   // Worker Experience
-  const currentSchedule = todaySchedules.data?.items?.[0];
+  const currentSchedule = todaySchedules.data?.items.find(
+    (schedule) =>
+      schedule.workerId === workerId &&
+      schedule.siteId === scope.siteId &&
+      schedule.workDate === today &&
+      schedule.isActive,
+  );
   const matchingShift = currentSchedule
     ? shifts.data?.find((s) => s.id === currentSchedule.shiftId)
     : undefined;
-  const todayAttendance = attendanceDays.data?.items?.[0];
+  const todayAttendance = attendanceDays.data?.items.find(
+    (day) => day.workerId === workerId && day.workDate === today,
+  );
   const insideNow = todayAttendance?.presence === 'INSIDE';
   const exitCount = todayAttendance?.exitCount ?? 0;
   const workedTime = minutes(
@@ -125,7 +134,9 @@ export function HomeScreen({ navigate }: { navigate: (target: NavigationTarget) 
       {/* Card: Ca hôm nay (Today's Shift) */}
       <Pressable
         accessibilityRole="button"
-        accessibilityLabel={t('workerHome.todayShift')}
+        accessibilityLabel={t(
+          currentSchedule ? 'workerHome.todayShift' : 'workerHome.viewSchedule',
+        )}
         style={({ pressed }) => [homeStyles.shiftCard, pressed && { opacity: 0.95 }]}
         onPress={() => navigate({ route: 'schedule' })}
       >
@@ -141,32 +152,46 @@ export function HomeScreen({ navigate }: { navigate: (target: NavigationTarget) 
         </View>
 
         <Text numberOfLines={2} style={homeStyles.shiftHours}>
-          {matchingShift
-            ? `${displayShiftTime(matchingShift.startsAt)} – ${displayShiftTime(matchingShift.endsAt)}`
-            : t('workerHome.shiftHours')}
+          {!workerId || todaySchedules.isPending
+            ? t('common.loading')
+            : todaySchedules.isError
+              ? t('workerHome.scheduleUnavailable')
+              : !currentSchedule
+                ? t('workerHome.noShiftToday')
+                : matchingShift
+                  ? `${displayShiftTime(matchingShift.startsAt, matchingShift.timezone)} – ${displayShiftTime(matchingShift.endsAt, matchingShift.timezone)}`
+                  : t('workerHome.viewSchedule')}
         </Text>
-        <Text numberOfLines={1} style={homeStyles.shiftBreak}>
-          {t('workerHome.shiftBreak')}
+        <Text numberOfLines={2} style={homeStyles.shiftBreak}>
+          {currentSchedule && matchingShift?.breakStartsAt && matchingShift.breakEndsAt
+            ? t('workerHome.breakTime', {
+                from: displayShiftTime(matchingShift.breakStartsAt, matchingShift.timezone),
+                to: displayShiftTime(matchingShift.breakEndsAt, matchingShift.timezone),
+              })
+            : t('workerHome.viewSchedule')}
         </Text>
+        <ErrorNotice error={todaySchedules.error} />
 
         {/* Dynamic Status badge */}
-        <View
-          style={[homeStyles.statusBadge, { backgroundColor: insideNow ? '#EDFAF2' : '#EFF6FF' }]}
-        >
+        {currentSchedule && (
           <View
-            style={[homeStyles.statusDot, { backgroundColor: insideNow ? '#10B981' : '#3B82F6' }]}
-          />
-          <Text
-            numberOfLines={1}
-            ellipsizeMode="tail"
-            style={[homeStyles.statusText, { color: insideNow ? '#065F46' : '#1E40AF' }]}
+            style={[homeStyles.statusBadge, { backgroundColor: insideNow ? '#EDFAF2' : '#EFF6FF' }]}
           >
-            {insideNow ? t('workerHome.onSite') : t('workerHome.notInShift')}
-          </Text>
-        </View>
+            <View
+              style={[homeStyles.statusDot, { backgroundColor: insideNow ? '#10B981' : '#3B82F6' }]}
+            />
+            <Text
+              numberOfLines={1}
+              ellipsizeMode="tail"
+              style={[homeStyles.statusText, { color: insideNow ? '#065F46' : '#1E40AF' }]}
+            >
+              {insideNow ? t('workerHome.onSite') : t('workerHome.notInShift')}
+            </Text>
+          </View>
+        )}
 
         {/* Team zones preview if any */}
-        {Boolean(team.data?.zones?.length) && (
+        {currentSchedule && Boolean(team.data?.zones?.length) && (
           <View style={homeStyles.zonesRow}>
             {team.data?.zones?.map((z) => (
               <View key={z.id} style={homeStyles.zoneChip}>
@@ -247,21 +272,22 @@ export function HomeScreen({ navigate }: { navigate: (target: NavigationTarget) 
         </Pressable>
       </View>
 
-      {/* Notice Card: Ca ngày mai đã được cập nhật */}
-      <Pressable
-        accessibilityRole="button"
-        accessibilityLabel={t('workerHome.shiftUpdated')}
-        style={({ pressed }) => [homeStyles.noticeCard, pressed && { opacity: 0.9 }]}
-        onPress={() => navigate({ route: 'schedule' })}
-      >
-        <View style={homeStyles.noticeLeft}>
-          <IconAlert size={20} color={colors.warning} />
-          <Text numberOfLines={1} ellipsizeMode="tail" style={homeStyles.noticeText}>
-            {t('workerHome.shiftUpdated')}
-          </Text>
-        </View>
-        <IconChevronRight size={18} color="#94A3B8" />
-      </Pressable>
+      {currentSchedule && (
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel={t('workerHome.shiftUpdated')}
+          style={({ pressed }) => [homeStyles.noticeCard, pressed && { opacity: 0.9 }]}
+          onPress={() => navigate({ route: 'schedule' })}
+        >
+          <View style={homeStyles.noticeLeft}>
+            <IconAlert size={20} color={colors.warning} />
+            <Text numberOfLines={1} ellipsizeMode="tail" style={homeStyles.noticeText}>
+              {t('workerHome.shiftUpdated')}
+            </Text>
+          </View>
+          <IconChevronRight size={18} color="#94A3B8" />
+        </Pressable>
+      )}
 
       {/* Modals for Worker */}
       <WorkerQrModal
@@ -298,71 +324,54 @@ export function ChangePasswordModal({
   };
 
   return (
-    <Modal visible={visible} transparent animationType="slide" onRequestClose={handleClose}>
-      <View style={homeStyles.modalOverlay}>
-        <Pressable style={homeStyles.modalBackdrop} onPress={handleClose} />
-        <View style={homeStyles.modalSheetCard}>
-          <View style={homeStyles.modalHeader}>
-            <Text style={homeStyles.modalTitle}>{t('profile.changePassword')}</Text>
-            <Pressable
-              accessibilityRole="button"
-              accessibilityLabel={t('common.close')}
-              onPress={handleClose}
-              style={homeStyles.modalCloseBtn}
-              hitSlop={10}
-            >
-              <Text style={homeStyles.modalCloseText}>✕</Text>
-            </Pressable>
-          </View>
-
-          <ScrollView
-            showsVerticalScrollIndicator={false}
-            contentContainerStyle={{ paddingBottom: 16 }}
-          >
-            <Field
-              label={t('profile.currentPassword')}
-              value={current}
-              onChangeText={setCurrent}
-              secureTextEntry
-            />
-            <Field
-              label={t('profile.newPassword')}
-              value={next}
-              onChangeText={setNext}
-              secureTextEntry
-            />
-            <Field
-              label={t('profile.confirmNewPassword')}
-              value={confirm}
-              onChangeText={setConfirm}
-              secureTextEntry
-            />
-            <ErrorNotice error={command.error} />
-
-            <View style={{ marginTop: 14 }}>
-              <Button
-                label={
-                  command.isPending
-                    ? t('profile.changingPassword')
-                    : t('profile.submitPasswordChange')
-                }
-                disabled={command.isPending || !current || !next || !confirm}
-                onPress={() =>
-                  command.mutate(async () => {
-                    required(current, t('profile.currentPassword'));
-                    if (next !== confirm) throw new Error(t('profile.passwordMismatch'));
-                    if (next.length < 8) throw new Error(t('profile.passwordMinLength'));
-                    await client.changePassword(token, current, next);
-                    await session.afterPasswordChange();
-                    handleClose();
-                  })
-                }
-              />
-            </View>
-          </ScrollView>
+    <RequestSheet
+      visible={visible}
+      title={t('profile.changePassword')}
+      onClose={handleClose}
+      busy={command.isPending}
+      variant="form"
+      icon={<IconLock size={23} color={colors.primary} />}
+      footer={
+        <View style={{ gap: 10 }}>
+          <ErrorNotice error={command.error} />
+          <Button
+            label={
+              command.isPending ? t('profile.changingPassword') : t('profile.submitPasswordChange')
+            }
+            disabled={command.isPending || !current || !next || !confirm}
+            onPress={() =>
+              command.mutate(async () => {
+                required(current, t('profile.currentPassword'));
+                if (next !== confirm) throw new Error(t('profile.passwordMismatch'));
+                if (next.length < 8) throw new Error(t('profile.passwordMinLength'));
+                await client.changePassword(token, current, next);
+                await session.afterPasswordChange();
+                handleClose();
+              })
+            }
+          />
         </View>
-      </View>
-    </Modal>
+      }
+    >
+      {(
+        [
+          [t('profile.currentPassword'), current, setCurrent],
+          [t('profile.newPassword'), next, setNext],
+          [t('profile.confirmNewPassword'), confirm, setConfirm],
+        ] as const
+      ).map(([label, value, onChangeText]) => (
+        <Field
+          key={label}
+          label={label}
+          value={value}
+          onChangeText={onChangeText}
+          secureTextEntry
+          autoCapitalize="none"
+          autoCorrect={false}
+          editable={!command.isPending}
+        />
+      ))}
+    </RequestSheet>
   );
 }
 
@@ -1490,60 +1499,6 @@ const homeStyles = StyleSheet.create({
     color: '#475569',
     fontWeight: '600',
     textAlign: 'center',
-  },
-  modalOverlay: {
-    flex: 1,
-    justifyContent: 'flex-end',
-    backgroundColor: 'rgba(15, 30, 54, 0.45)',
-  },
-  modalBackdrop: {
-    position: 'absolute',
-    top: 0,
-    left: 0,
-    right: 0,
-    bottom: 0,
-  },
-  modalSheetCard: {
-    backgroundColor: '#FFFFFF',
-    borderTopLeftRadius: 24,
-    borderTopRightRadius: 24,
-    paddingHorizontal: 20,
-    paddingTop: 16,
-    paddingBottom: Platform.OS === 'ios' ? 36 : 24,
-    maxHeight: '85%',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: -3 },
-    shadowOpacity: 0.15,
-    shadowRadius: 10,
-    elevation: 8,
-  },
-  modalHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingBottom: 14,
-    borderBottomWidth: 1,
-    borderBottomColor: '#EFF2F6',
-    marginBottom: 16,
-  },
-  modalTitle: {
-    fontSize: 18,
-    fontWeight: '800',
-    color: '#0F1E36',
-    letterSpacing: -0.3,
-  },
-  modalCloseBtn: {
-    width: 32,
-    height: 32,
-    borderRadius: 16,
-    backgroundColor: '#F1F5F9',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  modalCloseText: {
-    fontSize: 14,
-    fontWeight: '700',
-    color: '#64748B',
   },
   contractorScrollContent: {
     paddingHorizontal: 14,
