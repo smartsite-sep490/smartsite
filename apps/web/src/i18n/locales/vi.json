@@ -4315,5 +4315,12 @@
   "safetyUi.siteUnavailable": "Công trường trong liên kết không khả dụng.",
   "safetyUi.zoneRecorded": "Đã ghi nhận khu vực",
   "safetyUi.handoverNumber": "Lần bàn giao {{number}}",
-  "safetyUi.contextUnknown": "Chưa có thông tin"
+  "safetyUi.contextUnknown": "Chưa có thông tin",
+  "workflowUi.confirmHandover": "Xác nhận và bàn giao",
+  "workflowUi.onlyResponsibility": "Chỉ xác nhận trách nhiệm",
+  "workflowUi.partialHandover": "Đã xác nhận nhà thầu. Bàn giao chưa thành công.",
+  "workflowUi.retrySameRequest": "Chưa xác định được kết quả yêu cầu. Hãy thử lại yêu cầu này trước khi chỉnh sửa.",
+  "workflowUi.responsibilityRequired": "Chọn nhà thầu và nhập lý do xác nhận.",
+  "workflowUi.checklistsTab": "Phiếu kiểm tra",
+  "workflowUi.retryConfirmation": "Thử lại yêu cầu trước"
 }

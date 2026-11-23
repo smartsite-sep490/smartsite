@@ -1,5 +1,6 @@
 import type {
   AccountResponse,
+  ChecklistDetailResponse,
   IncidentDetailResponse,
   SafetyAlertDetailResponse,
   SafetyAlertWorkContextResponse,
@@ -127,11 +128,40 @@ export function createSafetyFixture() {
     cameraName: index === 0 ? 'Camera sảnh (kiểm thử)' : null,
     warning: '',
   }));
+  const checklists: ChecklistDetailResponse[] = [
+    {
+      id: uuid('a', 1),
+      siteId,
+      contractorId,
+      contractorName: 'Nhà thầu kiểm thử Đông Phú',
+      teamId: uuid('b', 1),
+      teamName: 'Tổ kiểm thử',
+      zoneId: uuid('4', 1),
+      zoneName: 'Sảnh kiểm thử',
+      assignedTo: repId,
+      assignedToName: 'Đại diện nhà thầu kiểm thử',
+      assignedBy: safetyId,
+      assignedByName: 'Cán bộ an toàn kiểm thử',
+      description: 'Inspect the synthetic barrier',
+      startsAt: stamp,
+      endsAt: '2026-12-23T02:00:00Z',
+      status: 'ASSIGNED',
+      version: 1,
+      createdAt: stamp,
+      updatedAt: stamp,
+      items: [
+        { id: uuid('c', 1), position: 0, text: 'Barrier installed', evidenceRequired: false },
+      ],
+      submissions: [],
+      audit: [],
+    },
+  ];
   const requests: { method: string; path: string; body: Record<string, unknown> }[] = [];
   const response = (data: unknown, status = 200) => ({ data, status });
   return {
     site,
     incidents,
+    checklists,
     alerts,
     alertContexts,
     requests,
@@ -206,9 +236,52 @@ export function createSafetyFixture() {
         const filtered = status ? alerts.filter((item) => item.status === status) : alerts;
         return response({ items: filtered.slice(offset, offset + limit), total: filtered.length });
       }
+      if (path.includes('/safety-checklists')) {
+        const checklist = checklists.find((item) => path.includes('/safety-checklists/' + item.id));
+        if (method === 'GET')
+          return response(checklist ?? { items: checklists, total: checklists.length });
+        if (!checklist) return response({ message: 'Not available' }, 404);
+        if (path.endsWith('/start')) checklist.status = 'IN_PROGRESS';
+        if (path.endsWith('/submissions')) {
+          checklist.status = 'SUBMITTED';
+          const results =
+            typeof body.results === 'string' ? JSON.parse(body.results) : body.results;
+          checklist.submissions.push({
+            id: uuid('d', requests.length),
+            submittedBy: repId,
+            submittedByName: 'Đại diện nhà thầu kiểm thử',
+            submittedAt: stamp,
+            status: 'PENDING',
+            reviewedBy: null,
+            reviewedByName: null,
+            reviewedAt: null,
+            reviewNote: null,
+            results: (results as { itemId: string; answer: 'PASS'; note?: string }[]).map(
+              (item, i) => ({
+                id: uuid('e', i + 1),
+                ...item,
+                note: item.note ?? '',
+                evidence: [],
+                incidentId: null,
+              }),
+            ),
+          });
+        }
+        checklist.version++;
+        return response({ resource: checklist, replayed: false });
+      }
       const incident = incidents.find((item) => path.includes('/incidents/' + item.id));
       if (incident && method === 'GET') return response(incident);
       if (incident && method === 'POST') {
+        if (path.endsWith('/responsibility')) {
+          incident.contractorId = String(body.contractorId);
+          incident.contractorName = 'Nhà thầu kiểm thử Đông Phú';
+          incident.responsibilityReason = String(body.reason);
+          incident.responsibilityConfirmedBy = safetyId;
+          incident.responsibilityConfirmedAt = stamp;
+          incident.version++;
+        }
+
         const action = incident.actions.find((item) => path.includes('/actions/' + item.id));
         if (action) {
           if (path.endsWith('/start')) {

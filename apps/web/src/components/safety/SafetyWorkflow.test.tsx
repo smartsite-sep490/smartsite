@@ -872,11 +872,7 @@ it('Safety must confirm responsibility before assignment and unknown Worker rema
     .mockRejectedValue(new ApiError('http', 'Conflict', 409));
   mount(<IncidentView {...officer} />);
   fireEvent.click(await screen.findByRole('button', { name: /Unresolved hazard/ }));
-  expect(
-    ((await screen.findByRole('button', { name: 'Hand over to contractor' })) as HTMLButtonElement)
-      .disabled,
-  ).toBe(true);
-  fireEvent.click(screen.getByRole('button', { name: 'Confirm responsibility' }));
+  fireEvent.click(await screen.findByRole('button', { name: 'Confirm and hand over' }));
   await screen.findByRole('option', { name: 'Contractor A' });
   fireEvent.change(await screen.findByLabelText('Responsible contractor'), {
     target: { value: 'contractor' },
@@ -884,8 +880,12 @@ it('Safety must confirm responsibility before assignment and unknown Worker rema
   fireEvent.change(screen.getByLabelText('Verification reason'), {
     target: { value: 'Safety verified contractor; Worker unknown' },
   });
-  fireEvent.click(
-    within(screen.getByRole('dialog')).getByRole('button', { name: 'Confirm responsibility' }),
+  const only = within(screen.getByRole('dialog')).getByRole('button', {
+    name: 'Only confirm responsibility',
+  });
+  fireEvent(
+    only.closest('form')!,
+    new SubmitEvent('submit', { bubbles: true, cancelable: true, submitter: only }),
   );
   await waitFor(() => expect(command).toHaveBeenCalled());
   expect(command.mock.calls[0]?.[4]).toMatchObject({
@@ -894,7 +894,7 @@ it('Safety must confirm responsibility before assignment and unknown Worker rema
     expectedVersion: 1,
     reason: 'Safety verified contractor; Worker unknown',
   });
-  expect(await screen.findByRole('dialog', { name: 'Confirm responsibility' })).not.toBeNull();
+  expect(await screen.findByRole('dialog', { name: 'Confirm and hand over' })).not.toBeNull();
   expect(await screen.findByRole('button', { name: 'Reload data' })).not.toBeNull();
 });
 it('Security has no start or submit controls for legacy Incident actions', async () => {

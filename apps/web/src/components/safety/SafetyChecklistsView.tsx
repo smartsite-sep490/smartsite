@@ -2,7 +2,7 @@ import { SmartNativeSelect } from '../ui/SmartNativeSelect';
 import { useTranslation } from 'react-i18next';
 import { translate as tr } from '../../i18n';
 import { useState } from 'react';
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import type {
   ChecklistResultResponse,
   ChecklistSubmissionResponse,
@@ -22,6 +22,7 @@ import {
   date,
   label,
   useWorkflowCommand,
+  useWorkflowTarget,
 } from './safety-workflow';
 import {
   Assignee,
@@ -47,6 +48,7 @@ type Editor = {
 export function SafetyChecklistsView(
   p: WorkflowProps & {
     active: boolean;
+    embedded?: boolean;
     context?: import('./safety-context').RelatedChecklistFilter;
     onClearContext?: () => void;
     onBackToOverview?: () => void;
@@ -57,6 +59,7 @@ export function SafetyChecklistsView(
   },
 ) {
   useTranslation();
+  const cache = useQueryClient();
 
   const safety = hasRole(p, 'SAFETY_OFFICER'),
     representative = hasRole(p, 'CONTRACTOR_REPRESENTATIVE');
@@ -119,6 +122,9 @@ export function SafetyChecklistsView(
     retry: false,
   });
   const selectedId = selected || list.data?.items[0]?.id || '';
+  const captureTarget = useWorkflowTarget(
+    JSON.stringify([p.apiUrl, p.scope, p.siteId, p.token, selectedId, p.context, p.active]),
+  );
   const detail = useQuery({
     queryKey: [...base, 'checklist', selectedId],
     queryFn: ({ signal }) => p.client.getSafetyChecklist(p.token, p.siteId, selectedId, { signal }),
@@ -130,7 +136,9 @@ export function SafetyChecklistsView(
     setRefreshed(false);
     p.onDraftConsumed();
   };
-  const mutation = useWorkflowCommand(p, (id) => {
+  const mutation = useWorkflowCommand<
+    ChecklistDetailResponse | import('@smartsite/api-client').IncidentDetailResponse
+  >(p, (id) => {
     if (editor?.op === 'incident') p.onIncident(id);
     else setSelected(id);
     setMobileDetail(true);
@@ -158,6 +166,38 @@ export function SafetyChecklistsView(
   };
   const current = detail.data,
     pending = current?.submissions.find((s) => s.status === 'PENDING');
+  const startAndReport = () => {
+    if (!current) return;
+    const id = current.id;
+    const isCurrent = captureTarget();
+    mutation.mutate({
+      fingerprint: JSON.stringify({ id, start: current.version }),
+      run: (commandId, signal) =>
+        p.client.checklistCommand(
+          p.token,
+          p.siteId,
+          id,
+          'start',
+          { commandId, expectedVersion: current.version },
+          { signal },
+        ),
+      onCommitted: (resource) => {
+        if (
+          !isCurrent() ||
+          !('items' in resource) ||
+          resource.id !== id ||
+          resource.assignedTo !== p.user.id ||
+          resource.status !== 'IN_PROGRESS'
+        )
+          return;
+        cache.setQueryData([...base, 'checklist', id], resource);
+        setSelected(id);
+        setMobileDetail(true);
+        setRefreshed(false);
+        setEditor({ op: 'submit', version: resource.version });
+      },
+    });
+  };
   const open = (next: Editor) => {
     mutation.reset();
     setRefreshed(false);
@@ -198,34 +238,36 @@ export function SafetyChecklistsView(
           </div>
         </div>
       )}
-      <div
-        className={
-          (mobileDetail ? 'hidden lg:flex ' : 'flex ') +
-          'flex-wrap items-start justify-between gap-3'
-        }
-      >
-        <div>
-          <h2 className="text-xl font-bold">
-            {representative && !safety
-              ? tr('safety_workspace.my_checklists')
-              : tr('safety_workspace.safety_checklists')}
-          </h2>
-          <p className="mt-1 text-sm text-[var(--text-secondary)]">
-            {tr('safetyUi.safetyToContractor')}
-          </p>
+      {!p.embedded && (
+        <div
+          className={
+            (mobileDetail ? 'hidden lg:flex ' : 'flex ') +
+            'flex-wrap items-start justify-between gap-3'
+          }
+        >
+          <div>
+            <h2 className="text-xl font-bold">
+              {representative && !safety
+                ? tr('safety_workspace.my_checklists')
+                : tr('safety_workspace.safety_checklists')}
+            </h2>
+            <p className="mt-1 text-sm text-[var(--text-secondary)]">
+              {tr('safetyUi.safetyToContractor')}
+            </p>
+          </div>
+          {safety && (
+            <button
+              className={primaryClass}
+              onClick={() => {
+                setDraft(undefined);
+                open({ op: 'create', version: 0 });
+              }}
+            >
+              {tr('safety_workspace.new_checklist')}
+            </button>
+          )}
         </div>
-        {safety && (
-          <button
-            className={primaryClass}
-            onClick={() => {
-              setDraft(undefined);
-              open({ op: 'create', version: 0 });
-            }}
-          >
-            {tr('safety_workspace.new_checklist')}
-          </button>
-        )}
-      </div>
+      )}
       {!editor && <RequestError error={mutation.error} retry={reload} />}
       {mutation.isSuccess && (
         <p role="status" className="rounded-lg bg-[var(--semantic-green-bg)] p-3 text-sm">
@@ -235,10 +277,10 @@ export function SafetyChecklistsView(
       <div
         className={
           (mobileDetail ? 'hidden lg:flex ' : 'flex ') +
-          'min-w-0 flex-wrap items-end gap-3 rounded-xl border border-[var(--border)] bg-white p-3'
+          'workflow-filter-toolbar min-w-0 flex-wrap items-center gap-3'
         }
       >
-        <label className="text-sm font-semibold">
+        <label className="workflow-filter-field text-sm font-semibold">
           {tr('common.status')}
           <SmartNativeSelect
             className={fieldClass}
@@ -280,7 +322,9 @@ export function SafetyChecklistsView(
       <div className="grid items-start gap-5 lg:grid-cols-[minmax(240px,0.65fr)_minmax(0,1.35fr)]">
         <section
           aria-label={tr('safety_workspace.checklist_list')}
-          className={'min-w-0 space-y-3 ' + (mobileDetail ? 'hidden lg:block' : '')}
+          className={
+            'workflow-card-list min-w-0 space-y-3 p-1 ' + (mobileDetail ? 'hidden lg:block' : '')
+          }
         >
           {list.isPending && p.active && (
             <p className={cardClass}>{tr('safety_workspace.loading_checklists')}</p>
@@ -393,20 +437,7 @@ export function SafetyChecklistsView(
                       <button
                         className={primaryClass}
                         disabled={mutation.isPending}
-                        onClick={() =>
-                          mutation.mutate({
-                            fingerprint: JSON.stringify({ id: current.id, start: current.version }),
-                            run: (commandId, signal) =>
-                              p.client.checklistCommand(
-                                p.token,
-                                p.siteId,
-                                current.id,
-                                'start',
-                                { commandId, expectedVersion: current.version },
-                                { signal },
-                              ),
-                          })
-                        }
+                        onClick={startAndReport}
                       >
                         {tr('safety_workspace.start_checklist')}
                       </button>

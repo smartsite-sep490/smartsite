@@ -26,7 +26,7 @@ async function install(
       body = request.postDataJSON() ?? {};
     } catch {
       const raw = request.postData() ?? '';
-      for (const key of ['expectedVersion', 'commandId', 'resultDescription']) {
+      for (const key of ['expectedVersion', 'commandId', 'resultDescription', 'results']) {
         const match = new RegExp('name="' + key + '"\\r\\n\\r\\n([\\s\\S]*?)\\r\\n--').exec(raw);
         if (match) body[key] = match[1];
       }
@@ -230,7 +230,7 @@ test('native Safety handover menu is clickable and the contractor can submit, re
   );
   await expect(page.getByRole('button', { name: 'Assigned work', exact: true })).toBeVisible();
   await page.getByRole('button', { name: 'Start handling', exact: true }).click();
-  await page.getByRole('button', { name: 'Report handling outcome', exact: true }).click();
+  await expect(page.getByRole('dialog')).toBeVisible();
   await page.getByLabel('Result description', { exact: true }).fill('Synthetic repair result');
   await page.getByLabel('Photo (optional JPEG, max 1 MiB)', { exact: true }).setInputFiles({
     name: 'synthetic.jpg',
@@ -426,3 +426,155 @@ for (const width of [1366, 390])
       fixture.requests.filter((r) => r.method === 'POST' && r.path.endsWith('/incidents')),
     ).toHaveLength(0);
   });
+
+for (const width of [1920, 1366, 1024]) {
+  test(`contractor clear tabs, compact filters and checklist form at ${width}`, async ({
+    page,
+  }, info) => {
+    const fixture = createSafetyFixture();
+    fixture.setRole('CONTRACTOR_REPRESENTATIVE');
+    await install(page, fixture);
+    await page.setViewportSize({ width, height: width === 1920 ? 1080 : 768 });
+    await page.goto(`/assigned-work?siteId=${siteId}`);
+    const actionsTab = page.getByRole('tab', { name: 'Corrective actions', exact: true });
+    const checklistsTab = page.getByRole('tab', { name: 'Checklists', exact: true });
+    await expect(actionsTab).toHaveAttribute('aria-selected', 'true');
+    await expect(actionsTab).toHaveCSS('color', 'rgb(255, 255, 255)');
+    await expect(page.locator('.workflow-filter-toolbar')).toBeVisible();
+    expect(
+      (await page.locator('.workflow-filter-toolbar').boundingBox())!.height,
+    ).toBeLessThanOrEqual(60);
+    await actionsTab.focus();
+    await page.keyboard.press('ArrowRight');
+    await expect(checklistsTab).toBeFocused();
+    await expect(checklistsTab).toHaveAttribute('aria-selected', 'true');
+    await expect(page).toHaveURL(/tab=checklists/);
+    await page.reload();
+    await expect(checklistsTab).toHaveAttribute('aria-selected', 'true');
+    await page.getByRole('button', { name: 'Inspect the synthetic barrier' }).click();
+    await page.getByRole('button', { name: 'Start checklist', exact: true }).click();
+    const dialog = page.getByRole('dialog');
+    await expect(dialog).toBeVisible();
+    const fields = dialog.locator('.workflow-form-fields');
+    await dialog.getByRole('button', { name: 'Add note', exact: true }).click();
+    const textarea = fields.locator('textarea').first();
+    await textarea.focus();
+    expect(
+      await fields.evaluate((el) => parseFloat(getComputedStyle(el).paddingLeft)),
+    ).toBeGreaterThanOrEqual(4);
+    const border = await textarea.boundingBox(),
+      viewport = await fields.boundingBox();
+    expect(border!.x - viewport!.x).toBeGreaterThanOrEqual(3);
+    await page.screenshot({ path: info.outputPath(`checklist-form-${width}.png`) });
+    await dialog.getByRole('button', { name: 'Cancel', exact: true }).click();
+    await expect(page.getByRole('button', { name: 'Report checklist', exact: true })).toBeVisible();
+    expect(
+      fixture.requests.filter((r) => r.method === 'POST' && r.path.endsWith('/start')),
+    ).toHaveLength(1);
+    const cards = page.locator('.workflow-card-list');
+    expect(
+      await cards.evaluate((el) => parseFloat(getComputedStyle(el).paddingLeft)),
+    ).toBeGreaterThanOrEqual(4);
+    expect(
+      (await page.locator('.workflow-filter-toolbar').boundingBox())!.height,
+    ).toBeLessThanOrEqual(60);
+    await page.screenshot({ path: info.outputPath(`assigned-tabs-${width}.png`), fullPage: true });
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(
+      true,
+    );
+  });
+}
+
+test('Safety confirms responsibility alone without filling assignment fields', async ({ page }) => {
+  const fixture = createSafetyFixture();
+  const incident = fixture.incidents[1]!;
+  incident.contractorId = null;
+  incident.contractorName = null;
+  incident.actions = [];
+  incident.responsibilityConfirmedAt = null;
+  await install(page, fixture);
+  await page.setViewportSize({ width: 1366, height: 768 });
+  await page.goto(`/incidents?tab=incidents&siteId=${siteId}&incidentId=${incident.id}`);
+  await page.getByRole('button', { name: 'Confirm and hand over', exact: true }).click();
+  const dialog = page.getByRole('dialog');
+  await dialog.locator('[data-value="Choose a contractor participating in this Site"]').click();
+  await page
+    .getByRole('listbox')
+    .getByRole('option', { name: 'Nhà thầu kiểm thử Đông Phú', exact: true })
+    .click();
+  await dialog
+    .getByLabel('Verification reason', { exact: true })
+    .fill('Confirmed with site representative');
+  await dialog.getByRole('button', { name: 'Only confirm responsibility', exact: true }).click();
+  await expect(dialog).not.toBeVisible();
+  expect(
+    fixture.requests
+      .filter((r) => r.method === 'POST' && r.path.includes('/incidents/'))
+      .map((r) => r.path.split('/').pop()),
+  ).toEqual(['responsibility']);
+  expect(incident.responsibilityConfirmedAt).toBeTruthy();
+});
+
+test('Safety keeps a partial handover open and retries assignment only', async ({ page }, info) => {
+  const fixture = createSafetyFixture();
+  const incident = fixture.incidents[1]!;
+  incident.contractorId = null;
+  incident.contractorName = null;
+  incident.responsibilityConfirmedAt = null;
+  incident.actions = [];
+  await install(page, fixture);
+  let failed = false;
+  await page.route('**/api/v1/**/incidents/*/actions', async (route) => {
+    if (route.request().method() !== 'POST' || failed) return route.fallback();
+    failed = true;
+    fixture.requests.push({
+      method: 'POST',
+      path: new URL(route.request().url()).pathname,
+      body: route.request().postDataJSON(),
+    });
+    await route.fulfill({
+      status: 503,
+      json: { message: 'Synthetic temporary handover failure' },
+      headers: { 'access-control-allow-origin': 'http://127.0.0.1:5181' },
+    });
+  });
+  await page.setViewportSize({ width: 1366, height: 768 });
+  await page.goto(`/incidents?tab=incidents&siteId=${siteId}&incidentId=${incident.id}`);
+  await page.getByRole('button', { name: 'Confirm and hand over', exact: true }).click();
+  const dialog = page.getByRole('dialog');
+  await dialog.locator('[data-value="Choose a contractor participating in this Site"]').click();
+  await page
+    .getByRole('listbox')
+    .getByRole('option', { name: 'Nhà thầu kiểm thử Đông Phú', exact: true })
+    .click();
+  await dialog
+    .getByLabel('Verification reason', { exact: true })
+    .fill('Verified responsibility with representative');
+  await dialog.locator('[data-value="Choose a contractor representative"]').click();
+  await page
+    .getByRole('listbox')
+    .getByRole('option', { name: 'Đại diện nhà thầu kiểm thử', exact: true })
+    .click();
+  await dialog.getByLabel('Handling request', { exact: true }).fill('Repair the synthetic barrier');
+  await dialog.getByRole('button', { name: 'Confirm and hand over', exact: true }).click();
+  await expect(
+    dialog.getByText('Contractor confirmed. Handover is not complete yet.'),
+  ).toBeVisible();
+  await expect(dialog.getByLabel('Handling request', { exact: true })).toHaveValue(
+    'Repair the synthetic barrier',
+  );
+  await page.screenshot({ path: info.outputPath('safety-partial-handover.png') });
+  await dialog.getByRole('button', { name: 'Hand over to contractor', exact: true }).click();
+  await expect(dialog).not.toBeVisible();
+  const requests = fixture.requests.filter(
+    (r) => r.method === 'POST' && r.path.includes('/incidents/'),
+  );
+  expect(requests.map((r) => r.path.split('/').pop())).toEqual([
+    'responsibility',
+    'actions',
+    'actions',
+  ]);
+  expect(requests[1]!.body.commandId).toBe(requests[2]!.body.commandId);
+  expect(requests[1]!.body.expectedVersion).toBe(2);
+  expect(incident.actions).toHaveLength(1);
+});
