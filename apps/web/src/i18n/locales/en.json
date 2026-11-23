@@ -4277,5 +4277,21 @@
   "attendance_leave.planned_required": "Planned leave requires at least 24 hours before the shift starts.",
   "attendance_leave.emergency_today": "Emergency leave is only available for shifts taking place today.",
   "attendance_leave.shift_unavailable": "Shift times are unavailable. Reload the schedule and try again.",
-  "attendance_leave.cooldown_error": "A leave request can only be submitted once every 24 hours"
+  "attendance_leave.cooldown_error": "A leave request can only be submitted once every 24 hours",
+  "safetyUi.summary": "Summary",
+  "safetyUi.handling": "Handling",
+  "safetyUi.evidence": "Evidence",
+  "safetyUi.history": "History",
+  "safetyUi.review": "Review",
+  "safetyUi.detailSections": "Record sections",
+  "safetyUi.handoverUnavailable": "This handover is no longer available.",
+  "safetyUi.sourceAlert": "Source alert {{number}}",
+  "safetyUi.identityReference": "Identity reference available; verification required",
+  "safetyUi.managerToSafety": "Work assigned by the Site Manager to Safety Officers.",
+  "safetyUi.safetyToContractor": "Checks assigned by Safety to contractor representatives.",
+  "safetyUi.approveResult": "Approve result",
+  "safetyUi.returnResult": "Request rework",
+  "safetyUi.siteUnavailable": "The linked site is unavailable.",
+  "safetyUi.zoneRecorded": "Area recorded",
+  "safetyUi.handoverNumber": "Handover {{number}}"
 }

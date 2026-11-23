@@ -685,7 +685,9 @@
     "refresh": "Làm mới công việc khắc phục",
     "awaitingReview": "Đang chờ cán bộ an toàn xác minh.",
     "otherWorkOpen": "Công việc này đã đóng. Vụ việc còn công việc khác cần hoàn thành.",
-    "submitToSafety": "Nộp kết quả cho cán bộ an toàn"
+    "submitToSafety": "Nộp kết quả cho cán bộ an toàn",
+    "linkedHandover": "Lần bàn giao từ thông báo",
+    "handoverUnavailable": "Lần bàn giao này không còn khả dụng."
   },
   "qr": {
     "title": "QR dự phòng",

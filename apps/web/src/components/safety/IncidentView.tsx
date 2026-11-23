@@ -16,7 +16,8 @@ import {
   cardClass,
   useWorkflowCommand,
 } from './safety-workflow';
-import { useEffect, useState } from 'react';
+import { useEffect, useId, useRef, useState, type ReactNode } from 'react';
+import { createPortal } from 'react-dom';
 import { useQuery } from '@tanstack/react-query';
 import type {
   ConfirmIncidentResponsibilityCommand,
@@ -36,6 +37,7 @@ import type {
   ReopenIncidentCommand,
 } from '@smartsite/api-client';
 import {
+  WorkflowDetailTabs,
   ConfirmedAlerts,
   Assignee,
   Field,
@@ -48,15 +50,16 @@ import {
   BlobImage,
   Dialog,
   StatusBadge,
-  TechnicalDetails,
 } from './SafetyWorkflowUi';
 export interface IncidentViewProps extends WorkflowProps {
+  context?: ReactNode;
   onBack?: () => void;
   backLabel?: string;
   initialAlertId?: string;
   initialIncidentId?: string;
   onOpenChecklist?: (id: string) => void;
   initialActionId?: string;
+  onSelect?: (incidentId: string) => void;
   onSourceConsumed?: () => void;
 }
 const statuses = ['OPEN', 'ASSIGNED', 'IN_PROGRESS', 'CLOSED', 'REOPENED'];
@@ -84,6 +87,7 @@ type Editor = {
     | 'reopen';
   actionId?: string;
   submissionId?: string;
+  decision?: 'APPROVED' | 'REJECTED';
 };
 const titles = {
   get responsibility() {
@@ -219,6 +223,28 @@ export function IncidentView(p: IncidentViewProps) {
         ),
     });
   };
+  const linkedActionId = selected === p.initialIncidentId ? p.initialActionId : undefined;
+  const [previousActionLink, setPreviousActionLink] = useState(linkedActionId);
+  const [detailTab, setDetailTab] = useState(p.initialActionId ? 'handling' : 'summary');
+  const panelId = useId();
+  const detailScroll = useRef<HTMLDivElement>(null);
+  const [actionFooter, setActionFooter] = useState<HTMLDivElement | null>(null);
+  const [chosenAction, setChosenAction] = useState(p.initialActionId ?? '');
+  const [shownIncident, setShownIncident] = useState(p.initialIncidentId ?? '');
+  if (shownIncident !== selected) {
+    setShownIncident(selected);
+    setChosenAction(p.initialIncidentId === selected ? (p.initialActionId ?? '') : '');
+    setDetailTab(p.initialIncidentId === selected && p.initialActionId ? 'handling' : 'summary');
+  }
+  if (previousActionLink !== linkedActionId) {
+    setPreviousActionLink(linkedActionId);
+    setChosenAction(linkedActionId ?? '');
+    setDetailTab(linkedActionId ? 'handling' : 'summary');
+  }
+  const changeDetailTab = (next: string) => {
+    setDetailTab(next);
+    if (detailScroll.current) detailScroll.current.scrollTop = 0;
+  };
   const current = detail.data,
     action = current?.actions.find((a) => a.id === editor?.actionId);
   const editorBlocked =
@@ -242,15 +268,22 @@ export function IncidentView(p: IncidentViewProps) {
         : false);
   const editorDisabled =
     editorBlocked || (editor?.op !== 'create' && (detail.isFetching || detail.isError));
+  const currentIncidentId = current?.id;
   useEffect(() => {
-    if (p.initialActionId && current)
-      document
-        .getElementById('action-' + p.initialActionId)
-        ?.scrollIntoView?.({ block: 'nearest' });
-  }, [p.initialActionId, current]);
+    if (linkedActionId && currentIncidentId) {
+      document.getElementById('action-' + linkedActionId)?.scrollIntoView?.({ block: 'nearest' });
+    }
+  }, [linkedActionId, currentIncidentId]);
   const currentActions = current?.actions.filter((a) => !a.supersededAt) ?? [];
+  const unavailableTarget =
+    !!linkedActionId &&
+    !!current &&
+    !current.actions.some((a) => a.id === linkedActionId && (safety || a.assignedTo === p.user.id));
+  const handlingActionId =
+    chosenAction || currentActions.find((a) => safety || a.assignedTo === p.user.id)?.id;
+
   return (
-    <div className="space-y-5">
+    <div className="workflow-incident-screen">
       <div
         className={
           (mobileDetail ? 'hidden lg:flex ' : 'flex ') +
@@ -266,23 +299,28 @@ export function IncidentView(p: IncidentViewProps) {
           <h2 className="text-xl font-bold">
             {representative && !safety ? tr('common.my_assigned_cases') : tr('common.incidents')}
           </h2>
-          <p className="mt-1 text-sm text-[var(--text-secondary)]">
-            {representative && !safety
-              ? tr('incident_view.handle_cases_independently_and_report_the_outcome_to_safety')
-              : tr(
-                  'incident_view.confirm_responsibility_hand_over_to_the_contractor_and_record_the_handling_outcome',
-                )}
-          </p>
+          {!p.context && (
+            <p className="mt-1 text-sm text-[var(--text-secondary)]">
+              {representative && !safety
+                ? tr('incident_view.handle_cases_independently_and_report_the_outcome_to_safety')
+                : tr(
+                    'incident_view.confirm_responsibility_hand_over_to_the_contractor_and_record_the_handling_outcome',
+                  )}
+            </p>
+          )}
         </div>
-        {safety && (
-          <button
-            className={primaryClass}
-            disabled={mutation.isPending}
-            onClick={() => open({ op: 'create' })}
-          >
-            {tr('common.new_incident')}
-          </button>
-        )}
+        <div className="flex min-w-0 flex-wrap items-center gap-3">
+          {p.context}
+          {safety && (
+            <button
+              className={primaryClass}
+              disabled={mutation.isPending}
+              onClick={() => open({ op: 'create' })}
+            >
+              {tr('common.new_incident')}
+            </button>
+          )}
+        </div>
       </div>
       {!editor && <RequestError error={mutation.error} retry={reload} />}
       {mutation.isSuccess && (
@@ -332,54 +370,56 @@ export function IncidentView(p: IncidentViewProps) {
           {tr('common.refresh_incidents')}
         </button>
       </div>
-      <div className="grid items-start gap-5 lg:grid-cols-[minmax(240px,0.65fr)_minmax(0,1.35fr)]">
+      <div className="workflow-split grid items-start gap-5 lg:grid-cols-[minmax(240px,0.65fr)_minmax(0,1.35fr)]">
         <section
           aria-label={tr('common.incident_list')}
-          className={'min-w-0 space-y-3 ' + (mobileDetail ? 'hidden lg:block' : '')}
+          className={'workflow-list-pane min-w-0 ' + (mobileDetail ? 'hidden lg:flex' : '')}
         >
-          {list.isPending && <p className={cardClass}>{tr('common.loading_incidents')}</p>}
-          <RequestError error={list.error} retry={() => void list.refetch()} />
-          {list.data && !list.data.items.length && (
-            <p className={cardClass + ' text-sm text-[var(--text-secondary)]'}>
-              {tr('common.no_incidents_found')}
-            </p>
-          )}
-          {list.data?.items.map((item) => (
-            <button
-              key={item.id}
-              className={
-                cardClass +
-                ' w-full text-left transition-colors hover:bg-[var(--surface-bone)] ' +
-                (selected === item.id ? 'border-[var(--accent)] ring-1 ring-[var(--accent)]' : '')
-              }
-              aria-current={selected === item.id ? 'true' : undefined}
-              onClick={() => {
-                setSelected(item.id);
-                setMobileDetail(true);
-                mutation.reset();
-              }}
-            >
-              <strong className="block break-words text-base">{item.title}</strong>
-              <div className="flex flex-wrap gap-2">
-                <span className="text-xs">
-                  {tr('common.status_755c8b')}
-                  <StatusBadge value={item.status} />
-                </span>
-                <span className="text-xs">
-                  {tr('safety_workspace.severity')}
-                  <StatusBadge value={item.severity} />
-                </span>
-              </div>
-              <p className="text-xs text-[var(--text-secondary)]">
-                {tr('common.occurred_value', { value1: date(item.occurredAt) })}
+          <div className="workflow-list-items custom-scrollbar space-y-3">
+            {list.isPending && <p className={cardClass}>{tr('common.loading_incidents')}</p>}
+            <RequestError error={list.error} retry={() => void list.refetch()} />
+            {list.data && !list.data.items.length && (
+              <p className={cardClass + ' text-sm text-[var(--text-secondary)]'}>
+                {tr('common.no_incidents_found')}
               </p>
-            </button>
-          ))}
+            )}
+            {list.data?.items.map((item) => (
+              <button
+                key={item.id}
+                className={
+                  cardClass +
+                  ' w-full text-left transition-colors hover:bg-[var(--surface-bone)] ' +
+                  (selected === item.id ? 'border-[var(--accent)] ring-1 ring-[var(--accent)]' : '')
+                }
+                aria-current={selected === item.id ? 'true' : undefined}
+                onClick={() => {
+                  setSelected(item.id);
+                  p.onSelect?.(item.id);
+                  setMobileDetail(true);
+                  if (detailScroll.current) detailScroll.current.scrollTop = 0;
+                  mutation.reset();
+                }}
+              >
+                <strong className="line-clamp-2 break-words text-sm">{item.title}</strong>
+                <div className="flex flex-wrap gap-2">
+                  <span className="text-xs">
+                    <StatusBadge value={item.status} />
+                  </span>
+                  <span className="text-xs">
+                    <StatusBadge value={item.severity} />
+                  </span>
+                </div>
+                <p className="text-xs text-[var(--text-secondary)]">
+                  {tr('common.occurred_value', { value1: date(item.occurredAt) })}
+                </p>
+              </button>
+            ))}
+          </div>
           {list.data && <Pager offset={offset} total={list.data.total} onChange={setOffset} />}
         </section>
         <section
           aria-label={tr('common.incident_detail')}
-          className={'min-w-0 space-y-4 ' + (!mobileDetail ? 'hidden lg:block' : '')}
+          className={'workflow-detail-pane min-w-0 ' + (!mobileDetail ? 'hidden lg:flex' : '')}
         >
           <button className={buttonClass + ' lg:hidden'} onClick={() => setMobileDetail(false)}>
             {tr('common.back_to_incidents')}
@@ -398,7 +438,7 @@ export function IncidentView(p: IncidentViewProps) {
           <RequestError error={detail.error} retry={() => void detail.refetch()} />
           {current && (
             <>
-              <article className={cardClass}>
+              <header className="workflow-detail-heading">
                 <div className="flex flex-wrap items-start justify-between gap-3">
                   <h3 className="min-w-0 break-words text-xl font-bold">{current.title}</h3>
                   <div className="flex gap-2">
@@ -412,187 +452,271 @@ export function IncidentView(p: IncidentViewProps) {
                     </span>
                   </div>
                 </div>
-                <p className="whitespace-pre-wrap break-words text-sm leading-6">
-                  {current.description}
-                </p>
-                <p className="text-xs text-[var(--text-secondary)]">
-                  {tr('common.occurred_valuevalue', {
-                    value1: date(current.occurredAt),
-                    value2:
-                      current.closedAt && ' · ' + label('CLOSED') + ' ' + date(current.closedAt),
-                  })}
-                </p>
-                <p className="text-sm">
-                  {tr('common.reported_by_value', {
-                    value1: current.reportedByName ?? tr('common.account_unavailable'),
-                  })}
-                </p>
-                {current.zoneId && (
-                  <p className="text-sm">
-                    {tr('common.zone_value_22c565', {
-                      value1: current.zoneName ?? tr('common.zone_unavailable'),
+              </header>
+              <WorkflowDetailTabs
+                value={detailTab}
+                onChange={changeDetailTab}
+                panelId={panelId}
+                options={[
+                  { value: 'summary', label: tr('safetyUi.summary') },
+                  { value: 'handling', label: tr('safetyUi.handling') },
+                  { value: 'evidence', label: tr('safetyUi.evidence') },
+                  { value: 'history', label: tr('safetyUi.history') },
+                ]}
+              />
+              <div
+                ref={detailScroll}
+                role="tabpanel"
+                id={panelId}
+                aria-labelledby={panelId + '-' + detailTab}
+                className="workflow-detail-content custom-scrollbar space-y-4"
+              >
+                <article hidden={detailTab !== 'summary'} className={cardClass}>
+                  <p className="whitespace-pre-wrap break-words text-sm leading-6">
+                    {current.description}
+                  </p>
+                  <p className="text-xs text-[var(--text-secondary)]">
+                    {tr('common.occurred_valuevalue', {
+                      value1: date(current.occurredAt),
+                      value2:
+                        current.closedAt && ' · ' + label('CLOSED') + ' ' + date(current.closedAt),
                     })}
                   </p>
-                )}
-                <section className="space-y-2 rounded-lg bg-[var(--surface-bone)] p-4">
-                  <h3 className="font-bold">{tr('common.responsibility')}</h3>
                   <p className="text-sm">
-                    {current.contractorId ? (
-                      <strong>
-                        {current.contractorName ?? tr('common.contractor_unavailable')}
-                      </strong>
-                    ) : (
-                      tr('incident_view.unresolved_safety_must_confirm_the_contractor')
+                    {tr('common.reported_by_value', {
+                      value1: current.reportedByName ?? tr('common.account_unavailable'),
+                    })}
+                  </p>
+                  {current.zoneId && (
+                    <p className="text-sm">
+                      {tr('common.zone_value_22c565', {
+                        value1: current.zoneName ?? tr('common.zone_unavailable'),
+                      })}
+                    </p>
+                  )}
+                  <section className="space-y-2 rounded-lg bg-[var(--surface-bone)] p-4">
+                    <h3 className="font-bold">{tr('common.responsibility')}</h3>
+                    <p className="text-sm">
+                      {current.contractorId ? (
+                        <strong>
+                          {current.contractorName ?? tr('common.contractor_unavailable')}
+                        </strong>
+                      ) : (
+                        tr('incident_view.unresolved_safety_must_confirm_the_contractor')
+                      )}
+                    </p>
+                    <p className="text-sm">
+                      {current.workerIds?.length
+                        ? current.workers?.length
+                          ? current.workers
+                              .map((w) => w.displayName + ' · ' + w.externalId)
+                              .join(', ')
+                          : tr('common.worker_references_unavailable')
+                        : tr(
+                            'incident_view.worker_identity_unknown_the_contractor_can_handle_the_case_after_safety_confirms_r',
+                          )}
+                    </p>
+                    {current.responsibilityReason && (
+                      <p className="whitespace-pre-wrap text-sm">{current.responsibilityReason}</p>
                     )}
-                  </p>
-                  <p className="text-sm">
-                    {current.workerIds?.length
-                      ? current.workers?.length
-                        ? current.workers
-                            .map((w) => w.displayName + ' · ' + w.externalId)
-                            .join(', ')
-                        : tr('common.worker_references_unavailable')
-                      : tr(
-                          'incident_view.worker_identity_unknown_the_contractor_can_handle_the_case_after_safety_confirms_r',
-                        )}
-                  </p>
-                  {current.responsibilityReason && (
-                    <p className="whitespace-pre-wrap text-sm">{current.responsibilityReason}</p>
-                  )}
-                  {safety && (current.status !== 'CLOSED' || !current.contractorId) && (
-                    <button
-                      className={current.contractorId ? buttonClass : primaryClass}
-                      disabled={mutation.isPending}
-                      onClick={() => open({ op: 'responsibility' })}
-                    >
-                      {tr('common.confirm_responsibility')}
-                    </button>
-                  )}
-                  {safety && current.contractorId && current.actions.length > 0 && (
-                    <button
-                      className={buttonClass}
-                      disabled={mutation.isPending}
-                      onClick={() => open({ op: 'correct-responsibility' })}
-                    >
-                      {tr('common.correct_responsibility')}
-                    </button>
-                  )}
-                  {current.contractorId && (
-                    <TechnicalDetails>
-                      {tr('common.contractor')} {current.contractorId}
-                      <br />
-                      {tr('common.workers')} {current.workerIds?.join(', ') || tr('common.unknown')}
-                      <br />
-                      {tr('common.confirmed')} {date(current.responsibilityConfirmedAt)}
-                    </TechnicalDetails>
-                  )}
-                </section>
-                {safety && (
-                  <div className="flex flex-wrap gap-2">
-                    {current.status === 'CLOSED' ? (
+                    {safety && (current.status !== 'CLOSED' || !current.contractorId) && (
                       <button
-                        className={primaryClass}
-                        disabled={mutation.isPending || !current.contractorId}
-                        onClick={() => open({ op: 'reopen' })}
+                        className={current.contractorId ? buttonClass : primaryClass}
+                        disabled={mutation.isPending}
+                        onClick={() => open({ op: 'responsibility' })}
                       >
-                        {tr('common.reopen_incident')}
+                        {tr('common.confirm_responsibility')}
                       </button>
-                    ) : (
-                      <>
-                        <button
-                          className={currentActions.length ? buttonClass : primaryClass}
-                          disabled={mutation.isPending || !current.contractorId}
-                          onClick={() => open({ op: 'assign' })}
-                        >
-                          {tr('incident_view.hand_over_to_contractor')}
-                        </button>
+                    )}
+                    {safety && current.contractorId && current.actions.length > 0 && (
+                      <button
+                        className={buttonClass}
+                        disabled={mutation.isPending}
+                        onClick={() => open({ op: 'correct-responsibility' })}
+                      >
+                        {tr('common.correct_responsibility')}
+                      </button>
+                    )}
+                    {current.responsibilityConfirmedAt && (
+                      <p className="text-xs text-[var(--text-secondary)]">
+                        {tr('common.confirmed')} {date(current.responsibilityConfirmedAt)}
+                      </p>
+                    )}
+                  </section>
+                  {current.status !== 'CLOSED' &&
+                    currentActions.some((a) => a.status === 'CLOSED') && (
+                      <p className="text-sm">{tr('incident_view.other_actions_remain_open')}</p>
+                    )}
+                </article>
+                <div hidden={detailTab !== 'evidence'} className="space-y-4">
+                  {current.sourceChecklist && (
+                    <section className={cardClass}>
+                      <h3 className="font-bold">{tr('safety_workspace.checklist_finding')}</h3>
+                      <p className="text-sm">{current.sourceChecklist.description}</p>
+                      <strong className="text-sm">{current.sourceChecklist.itemText}</strong>
+                      <p className="whitespace-pre-wrap text-sm">{current.sourceChecklist.note}</p>
+                      {p.onOpenChecklist && (
                         <button
                           className={buttonClass}
-                          disabled={mutation.isPending}
-                          onClick={() => open({ op: 'link' })}
+                          onClick={() => p.onOpenChecklist!(current.sourceChecklist!.assignmentId)}
                         >
-                          {tr('common.link_alerts')}
+                          {tr('safety_workspace.view_source_checklist_and_evidence')}
                         </button>
+                      )}
+                    </section>
+                  )}
+
+                  <section className={cardClass}>
+                    <h3 className="font-bold">
+                      {tr('common.source_alerts')}{' '}
+                      <span className="text-[var(--text-secondary)]">
+                        ({current.alerts.length})
+                      </span>
+                    </h3>
+                    {!current.alerts.length && (
+                      <p className="text-sm text-[var(--text-secondary)]">
+                        {current.sourceChecklistResultId
+                          ? tr(
+                              'safety_workspace.created_from_a_recorded_checklist_finding_no_linked_ai_alert',
+                            )
+                          : tr('incident_view.manual_incident_no_source_alert')}
+                      </p>
+                    )}
+                    {current.alerts.map((alert, index) => (
+                      <SourceAlert
+                        key={alert.id}
+                        p={p}
+                        incidentId={current.id}
+                        alertId={alert.id}
+                        position={index + 1}
+                      />
+                    ))}
+                  </section>
+                </div>
+                <section hidden={detailTab !== 'handling'} className="space-y-3">
+                  {unavailableTarget && <p role="status">{tr('safetyUi.handoverUnavailable')}</p>}
+                  <div className="flex items-center justify-between">
+                    <h3 className="font-bold">
+                      {tr('common.handovers_value_current', { value1: currentActions.length })}
+                    </h3>
+                    <span className="text-xs text-[var(--text-secondary)]">
+                      {tr('common.value_outcomes_recorded', {
+                        value1: currentActions.filter((a) => a.status === 'CLOSED').length,
+                      })}
+                    </span>
+                  </div>
+                  {!current.actions.length && (
+                    <p className={cardClass + ' text-sm text-[var(--text-secondary)]'}>
+                      {tr('common.no_handover_yet')}
+                    </p>
+                  )}
+                  {current.actions.map((a) => (
+                    <Action
+                      key={a.id}
+                      p={p}
+                      incident={current}
+                      action={a}
+                      footer={
+                        a.id === handlingActionId && detailTab === 'handling' ? actionFooter : null
+                      }
+                      selected={a.id === handlingActionId}
+                      onSelect={() => setChosenAction(a.id)}
+                      pending={mutation.isPending || unavailableTarget}
+                      checkedAt={detail.dataUpdatedAt}
+                      command={command}
+                      open={open}
+                    />
+                  ))}
+                </section>
+                <div hidden={detailTab !== 'history'}>
+                  <Audit items={current.audit} />
+                </div>
+              </div>
+              {detailTab === 'summary' && safety && (
+                <footer className="workflow-detail-footer">
+                  {' '}
+                  {safety && (
+                    <div className="flex flex-wrap gap-2">
+                      {current.status === 'CLOSED' ? (
+                        <button
+                          className={primaryClass}
+                          disabled={mutation.isPending || !current.contractorId}
+                          onClick={() => open({ op: 'reopen' })}
+                        >
+                          {tr('common.reopen_incident')}
+                        </button>
+                      ) : (
+                        <>
+                          <button
+                            className={currentActions.length ? buttonClass : primaryClass}
+                            disabled={mutation.isPending || !current.contractorId}
+                            onClick={() => open({ op: 'assign' })}
+                          >
+                            {tr('incident_view.hand_over_to_contractor')}
+                          </button>
+                          <button
+                            className={buttonClass}
+                            disabled={mutation.isPending}
+                            onClick={() => open({ op: 'link' })}
+                          >
+                            {tr('common.link_alerts')}
+                          </button>
+                        </>
+                      )}
+                    </div>
+                  )}
+                </footer>
+              )}
+              {detailTab === 'handling' && (
+                <footer className="workflow-detail-footer">
+                  <p className="w-full text-xs text-[var(--text-secondary)]">
+                    {handlingActionId && current.actions.some((a) => a.id === handlingActionId) && (
+                      <>
+                        {tr('safetyUi.handoverNumber', {
+                          number: current.actions.findIndex((a) => a.id === handlingActionId) + 1,
+                        })}{' '}
+                        · {current.actions.find((a) => a.id === handlingActionId)?.description}
                       </>
                     )}
-                  </div>
-                )}
-                {current.status !== 'CLOSED' &&
-                  currentActions.some((a) => a.status === 'CLOSED') && (
-                    <p className="text-sm">{tr('incident_view.other_actions_remain_open')}</p>
+                  </p>
+                  <div ref={setActionFooter} className="flex flex-wrap items-center gap-2" />
+                  {!current.actions.length && (
+                    <div>
+                      {' '}
+                      {safety && (
+                        <div className="flex flex-wrap gap-2">
+                          {current.status === 'CLOSED' ? (
+                            <button
+                              className={primaryClass}
+                              disabled={mutation.isPending || !current.contractorId}
+                              onClick={() => open({ op: 'reopen' })}
+                            >
+                              {tr('common.reopen_incident')}
+                            </button>
+                          ) : (
+                            <>
+                              <button
+                                className={currentActions.length ? buttonClass : primaryClass}
+                                disabled={mutation.isPending || !current.contractorId}
+                                onClick={() => open({ op: 'assign' })}
+                              >
+                                {tr('incident_view.hand_over_to_contractor')}
+                              </button>
+                              <button
+                                className={buttonClass}
+                                disabled={mutation.isPending}
+                                onClick={() => open({ op: 'link' })}
+                              >
+                                {tr('common.link_alerts')}
+                              </button>
+                            </>
+                          )}
+                        </div>
+                      )}
+                    </div>
                   )}
-                <TechnicalDetails>
-                  <p>{tr('common.incident_value', { value1: current.id })}</p>
-                  <p>{tr('common.version_value', { value1: current.version })}</p>
-                  <p>{tr('common.reported_by_value', { value1: current.reportedBy })}</p>
-                  {current.zoneId && <p>{tr('common.zone_value', { value1: current.zoneId })}</p>}
-                </TechnicalDetails>
-              </article>
-              {current.sourceChecklist && (
-                <section className={cardClass}>
-                  <h3 className="font-bold">{tr('safety_workspace.checklist_finding')}</h3>
-                  <p className="text-sm">{current.sourceChecklist.description}</p>
-                  <strong className="text-sm">{current.sourceChecklist.itemText}</strong>
-                  <p className="whitespace-pre-wrap text-sm">{current.sourceChecklist.note}</p>
-                  {p.onOpenChecklist && (
-                    <button
-                      className={buttonClass}
-                      onClick={() => p.onOpenChecklist!(current.sourceChecklist!.assignmentId)}
-                    >
-                      {tr('safety_workspace.view_source_checklist_and_evidence')}
-                    </button>
-                  )}
-                </section>
+                </footer>
               )}
-
-              <section className={cardClass}>
-                <h3 className="font-bold">
-                  {tr('common.source_alerts')}{' '}
-                  <span className="text-[var(--text-secondary)]">({current.alerts.length})</span>
-                </h3>
-                {!current.alerts.length && (
-                  <p className="text-sm text-[var(--text-secondary)]">
-                    {current.sourceChecklistResultId
-                      ? tr(
-                          'safety_workspace.created_from_a_recorded_checklist_finding_no_linked_ai_alert',
-                        )
-                      : tr('incident_view.manual_incident_no_source_alert')}
-                  </p>
-                )}
-                {current.alerts.map((alert) => (
-                  <SourceAlert key={alert.id} p={p} incidentId={current.id} alertId={alert.id} />
-                ))}
-              </section>
-              <section className="space-y-3">
-                <div className="flex items-center justify-between">
-                  <h3 className="font-bold">
-                    {tr('common.handovers_value_current', { value1: currentActions.length })}
-                  </h3>
-                  <span className="text-xs text-[var(--text-secondary)]">
-                    {tr('common.value_outcomes_recorded', {
-                      value1: currentActions.filter((a) => a.status === 'CLOSED').length,
-                    })}
-                  </span>
-                </div>
-                {!current.actions.length && (
-                  <p className={cardClass + ' text-sm text-[var(--text-secondary)]'}>
-                    {tr('common.no_handover_yet')}
-                  </p>
-                )}
-                {current.actions.map((a) => (
-                  <Action
-                    key={a.id}
-                    p={p}
-                    incident={current}
-                    action={a}
-                    pending={mutation.isPending}
-                    checkedAt={detail.dataUpdatedAt}
-                    command={command}
-                    open={open}
-                  />
-                ))}
-              </section>
-              <Audit items={current.audit} />
             </>
           )}
         </section>
@@ -822,7 +946,12 @@ export function IncidentView(p: IncidentViewProps) {
               <>
                 <label className="block text-sm font-semibold">
                   {tr('incident_view.review_decision')}
-                  <SmartNativeSelect className={fieldClass} name="decision" required>
+                  <SmartNativeSelect
+                    className={fieldClass}
+                    name="decision"
+                    required
+                    defaultValue={editor.decision ?? 'APPROVED'}
+                  >
                     <option value="APPROVED">{tr('incident_view.verify_and_close_action')}</option>
                     <option value="REJECTED">{tr('incident_view.return_for_rework')}</option>
                   </SmartNativeSelect>
@@ -850,7 +979,13 @@ function Action({
   checkedAt,
   command,
   open,
+  footer,
+  selected,
+  onSelect,
 }: {
+  footer?: HTMLElement | null;
+  selected?: boolean;
+  onSelect?: () => void;
   p: WorkflowProps;
   incident: IncidentDetailResponse;
   action: CorrectiveActionResponse;
@@ -910,18 +1045,51 @@ function Action({
         incident.status !== 'CLOSED' &&
         submission.status === 'PENDING' &&
         submission.submittedBy !== p.user.id && (
-          <button
-            className={primaryClass}
-            disabled={pending}
-            onClick={() => open({ op: 'review', actionId: action.id, submissionId: submission.id })}
-          >
-            {tr('common.record_handling_outcome')}
-          </button>
+          <ActionControl footer={footer}>
+            <>
+              <button
+                className={primaryClass}
+                disabled={pending}
+                onClick={() =>
+                  open({
+                    op: 'review',
+                    actionId: action.id,
+                    submissionId: submission.id,
+                    decision: 'APPROVED',
+                  })
+                }
+              >
+                {tr('safetyUi.approveResult')}
+              </button>
+              <button
+                className={buttonClass}
+                disabled={pending}
+                onClick={() =>
+                  open({
+                    op: 'review',
+                    actionId: action.id,
+                    submissionId: submission.id,
+                    decision: 'REJECTED',
+                  })
+                }
+              >
+                {tr('safetyUi.returnResult')}
+              </button>
+            </>
+          </ActionControl>
         )}
     </section>
   );
   return (
-    <article id={'action-' + action.id} className={cardClass}>
+    <article
+      id={'action-' + action.id}
+      className={cardClass + (selected ? ' ring-1 ring-[var(--accent)]' : '')}
+    >
+      <p className="text-xs font-semibold text-[var(--text-secondary)]">
+        {tr('safetyUi.handoverNumber', {
+          number: incident.actions.findIndex((item) => item.id === action.id) + 1,
+        })}
+      </p>
       {action.supersededAt && (
         <p className="text-sm font-semibold">
           {tr('common.superseded_handover')} {date(action.supersededAt)}
@@ -930,7 +1098,11 @@ function Action({
         </p>
       )}
       <div className="flex flex-wrap items-start justify-between gap-3">
-        <h4 className="min-w-0 break-words font-semibold">{action.description}</h4>
+        <h4 className="min-w-0 break-words font-semibold">
+          <button type="button" className="text-left" aria-pressed={selected} onClick={onSelect}>
+            {action.description}
+          </button>
+        </h4>
         <StatusBadge value={action.status} />
       </div>
       <p className="text-xs text-[var(--text-secondary)]">
@@ -951,13 +1123,15 @@ function Action({
         incident.status !== 'CLOSED' &&
         action.status !== 'CLOSED' && (
           <div className="space-y-2">
-            <button
-              className={buttonClass}
-              disabled={pending || !incident.contractorId || waiting.length > 0}
-              onClick={() => open({ op: 'transfer', actionId: action.id })}
-            >
-              {tr('common.transfer_action')}
-            </button>
+            <ActionControl footer={footer}>
+              <button
+                className={buttonClass}
+                disabled={pending || !incident.contractorId || waiting.length > 0}
+                onClick={() => open({ op: 'transfer', actionId: action.id })}
+              >
+                {tr('common.transfer_action')}
+              </button>
+            </ActionControl>
             {waiting.length > 0 && (
               <p className="text-xs">
                 {tr('incident_view.review_the_pending_result_before_transferring_this_action')}
@@ -966,22 +1140,26 @@ function Action({
           </div>
         )}
       {mine && action.status === 'ASSIGNED' && (
-        <button
-          className={primaryClass}
-          disabled={pending}
-          onClick={() => command('start', { expectedVersion: action.version }, action.id)}
-        >
-          {tr('common.start_handling')}
-        </button>
+        <ActionControl footer={footer}>
+          <button
+            className={primaryClass}
+            disabled={pending}
+            onClick={() => command('start', { expectedVersion: action.version }, action.id)}
+          >
+            {tr('common.start_handling')}
+          </button>
+        </ActionControl>
       )}
       {mine && action.status === 'IN_PROGRESS' && (
-        <button
-          className={primaryClass}
-          disabled={pending}
-          onClick={() => open({ op: 'submit', actionId: action.id })}
-        >
-          {tr('common.report_handling_outcome')}
-        </button>
+        <ActionControl footer={footer}>
+          <button
+            className={primaryClass}
+            disabled={pending}
+            onClick={() => open({ op: 'submit', actionId: action.id })}
+          >
+            {tr('common.report_handling_outcome')}
+          </button>
+        </ActionControl>
       )}
       {waiting.length > 0 && (
         <div className="space-y-3">
@@ -997,20 +1175,21 @@ function Action({
           <div className="mt-3 space-y-3">{history.map(result)}</div>
         </details>
       )}
-      <TechnicalDetails>
-        <p>{tr('common.action_value', { value1: action.id })}</p>
-        <p>{tr('common.version_value', { value1: action.version })}</p>
-        <p>{tr('common.assignee_value', { value1: action.assignedTo })}</p>
-      </TechnicalDetails>
     </article>
   );
 }
 
+function ActionControl({ footer, children }: { footer?: HTMLElement | null; children: ReactNode }) {
+  return footer ? createPortal(children, footer) : children;
+}
+
 function SourceAlert({
+  position,
   p,
   incidentId,
   alertId,
 }: {
+  position: number;
   p: WorkflowProps;
   incidentId: string;
   alertId: string;
@@ -1036,7 +1215,7 @@ function SourceAlert({
   return (
     <section className="space-y-2">
       <button className={buttonClass} onClick={() => setOpen(!open)}>
-        {tr('common.source_alert_value', { value1: alertId.slice(0, 8) })}
+        {tr('safetyUi.sourceAlert', { number: position })}
       </button>
       {open && (
         <>
@@ -1049,11 +1228,6 @@ function SourceAlert({
                   value1: label(query.data.alertType),
                   value2: label(query.data.status),
                   value3: query.data.detectionCount,
-                })}
-              </p>
-              <p>
-                {tr('incident_view.candidate_reference_value_unverified', {
-                  value1: query.data.candidateWorkerId ?? 'unknown',
                 })}
               </p>
               {query.data.detections.map((d) =>

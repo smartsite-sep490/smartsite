@@ -87,7 +87,7 @@ it('App clears the authenticated Safety workspace even when server logout fails'
       </MemoryRouter>
     </QueryClientProvider>,
   );
-  fireEvent.click(await screen.findByRole('button', { name: /^Incidents$/ }));
+  fireEvent.click(await screen.findByRole('link', { name: /^Incidents$/ }));
   expect(await screen.findByText('No incidents found.')).not.toBeNull();
   fireEvent.click(screen.getByRole('button', { name: 'Logout' }));
   await waitFor(() => expect(logout).toHaveBeenCalledOnce());

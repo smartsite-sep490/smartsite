@@ -1,5 +1,5 @@
 import { translate as tr } from '../../i18n';
-import { Fragment, useState, type PropsWithChildren } from 'react';
+import { Fragment, useState, type PropsWithChildren, type Ref, type ComponentRef } from 'react';
 import {
   ActivityIndicator,
   Pressable,
@@ -305,11 +305,17 @@ export function Page({
   title,
   onBack,
   children,
-}: PropsWithChildren<{ title?: string; onBack?: () => void }>) {
+  scrollRef,
+}: PropsWithChildren<{
+  title?: string;
+  onBack?: () => void;
+  scrollRef?: Ref<ComponentRef<typeof ScrollView>>;
+}>) {
   const { t } = useTranslation();
   const compact = useCompactLayout();
   return (
     <ScrollView
+      ref={scrollRef}
       keyboardShouldPersistTaps="handled"
       style={compact && compactStyles.screen}
       contentContainerStyle={[styles.page, compact && compactStyles.page]}

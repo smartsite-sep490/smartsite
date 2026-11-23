@@ -27,6 +27,11 @@ import { SafetyRouteBoundary } from './components/layout/SafetyRouteBoundary';
 import { CameraSetupBoundary } from './components/cameras/CameraSetupBoundary';
 import { DashboardView } from './components/dashboard/DashboardView';
 import { LandingPage } from './components/landing/LandingPage';
+import {
+  legacySafetyHref,
+  safetyViewFromSearch,
+  safetyViewHref,
+} from './components/safety/safety-operations-navigation';
 import { SafetyAlertsView } from './components/alerts/SafetyAlertsView';
 import { SafetyEpisodeWorkspace } from './components/safety-episodes/SafetyEpisodeWorkspace';
 import { AccessControlView } from './components/access/AccessControlView';
@@ -123,6 +128,66 @@ function ProtectedRoutes({ defaultAuthTab, alertsContext, onNavigate }: Protecte
     return <Navigate to={`/${fallback}`} replace />;
   }
 
+  const legacy = location.pathname === '/incidents' ? legacySafetyHref(incidentLink) : null;
+  if (legacy) return <Navigate to={legacy} replace />;
+  const safetyDashboard =
+    currentUser.data!.roleAssignments.length > 0 &&
+    currentUser.data!.roleAssignments.every((r) => r.role === 'SAFETY_OFFICER');
+  const safetyWorkspace = (
+    <SafetyEpisodeWorkspace
+      apiUrl={apiUrl}
+      session={{ accessToken, user: profile.data! }}
+      onSignOut={() => logout.mutate()}
+    >
+      <SafetyAlertsView
+        view={
+          location.pathname === '/dashboard'
+            ? 'Overview'
+            : safetyViewFromSearch(
+                incidentLink,
+                currentUser.data!.roleAssignments.some((r) => r.role === 'SAFETY_OFFICER')
+                  ? 'Alerts'
+                  : 'Safety Tasks',
+              )
+        }
+        onViewChange={(next, siteId) =>
+          navigate(safetyViewHref(next, new URLSearchParams({ siteId })))
+        }
+        onRecordSelect={(kind, id, siteId) => {
+          const next = new URLSearchParams({
+            siteId,
+            tab: kind === 'incidentId' ? 'incidents' : 'alerts',
+            [kind]: id,
+          });
+          navigate('/incidents?' + next);
+        }}
+        onSiteChange={(siteId) => {
+          const next = new URLSearchParams(location.search);
+          next.set('siteId', siteId);
+          for (const key of ['incidentId', 'actionId', 'alertId', 'checklistId', 'workerId'])
+            next.delete(key);
+          navigate(location.pathname + '?' + next);
+        }}
+        key={profile.data!.id + JSON.stringify(alertsContext ?? {})}
+        authenticatedSession={{ accessToken, user: profile.data! }}
+        onSignOut={() => logout.mutate()}
+        apiUrl={apiUrl}
+        initialSiteId={incidentLink.get('siteId') ?? alertsContext?.siteId}
+        initialIncidentId={incidentLink.get('incidentId') ?? undefined}
+        initialChecklistId={incidentLink.get('checklistId') ?? undefined}
+        initialActionId={incidentLink.get('actionId') ?? undefined}
+        initialDocumentWorkerId={
+          incidentLink.get('tab') === 'documents'
+            ? (incidentLink.get('workerId') ?? undefined)
+            : undefined
+        }
+        initialAlertId={incidentLink.get('alertId') ?? alertsContext?.alertId}
+        initialStatus={incidentLink.has('alertId') ? undefined : alertsContext?.status}
+        initialType={incidentLink.has('alertId') ? undefined : alertsContext?.alertType}
+      />
+    </SafetyEpisodeWorkspace>
+  );
+
   return (
     <AppLayout onSelectTab={onNavigate}>
       <Routes>
@@ -142,8 +207,8 @@ function ProtectedRoutes({ defaultAuthTab, alertsContext, onNavigate }: Protecte
         <Route
           path="/dashboard"
           element={
-            defaultAuthTab === 'incidents' ? (
-              <Navigate to="/incidents" replace />
+            safetyDashboard ? (
+              safetyWorkspace
             ) : defaultAuthTab === 'workforce' ? (
               <Navigate to="/workforce" replace />
             ) : (
@@ -228,33 +293,7 @@ function ProtectedRoutes({ defaultAuthTab, alertsContext, onNavigate }: Protecte
           path="/incidents"
           element={
             profile.data ? (
-              <SafetyEpisodeWorkspace
-                apiUrl={apiUrl}
-                session={{ accessToken, user: profile.data }}
-                onSignOut={() => logout.mutate()}
-              >
-                <SafetyAlertsView
-                  key={
-                    profile.data.id +
-                    JSON.stringify(alertsContext ?? {}) +
-                    (incidentLink.has('alertId') ? location.search : '')
-                  }
-                  authenticatedSession={{ accessToken, user: profile.data }}
-                  onSignOut={() => logout.mutate()}
-                  apiUrl={apiUrl}
-                  initialSiteId={incidentLink.get('siteId') ?? alertsContext?.siteId}
-                  initialIncidentId={incidentLink.get('incidentId') ?? undefined}
-                  initialActionId={incidentLink.get('actionId') ?? undefined}
-                  initialDocumentWorkerId={
-                    incidentLink.get('tab') === 'documents'
-                      ? (incidentLink.get('workerId') ?? undefined)
-                      : undefined
-                  }
-                  initialAlertId={incidentLink.get('alertId') ?? alertsContext?.alertId}
-                  initialStatus={incidentLink.has('alertId') ? undefined : alertsContext?.status}
-                  initialType={incidentLink.has('alertId') ? undefined : alertsContext?.alertType}
-                />
-              </SafetyEpisodeWorkspace>
+              safetyWorkspace
             ) : profile.isError ? (
               <div role="alert">
                 {t('auth.loadAccountError')}{' '}

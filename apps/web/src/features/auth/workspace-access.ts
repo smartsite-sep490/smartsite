@@ -34,7 +34,7 @@ export function defaultWorkspace(assignments: readonly RoleAssignmentResponse[])
       ['ADMIN', 'SITE_MANAGER', 'CONTRACTOR_REPRESENTATIVE'].includes(r.role),
     )
   )
-    return 'incidents';
+    return assignments.every((r) => r.role === 'SAFETY_OFFICER') ? 'dashboard' : 'incidents';
   if (
     assignments.length &&
     assignments.every((r) => r.role === 'WORKER') &&

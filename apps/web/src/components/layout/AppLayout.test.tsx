@@ -124,7 +124,9 @@ it.each(['en', 'vi'])('shows the worker schedule title once in the %s header', a
   );
   const header = within(screen.getByRole('banner'));
   expect(header.getAllByText(i18n.t('app_layout.my_schedule_requests'))).toHaveLength(1);
-  expect(header.getByRole('heading', { level: 1, name: i18n.t('app_layout.my_schedule_requests') })).toBeTruthy();
+  expect(
+    header.getByRole('heading', { level: 1, name: i18n.t('app_layout.my_schedule_requests') }),
+  ).toBeTruthy();
 });
 
 it.each([
@@ -147,15 +149,22 @@ it.each([
   ['/incidents', 'SAFETY_OFFICER', 'shell.incidents'],
   ['/assigned-work', 'CONTRACTOR_REPRESENTATIVE', 'shell.assignedWork'],
   ['/account/password', 'WORKER', 'auth.password.title'],
-])('renders a uniform header with a decorative function icon at %s for %s', (path, role, titleKey) => {
-  roles = [role];
-  render(<MemoryRouter initialEntries={[path]}><AppLayout>Content</AppLayout></MemoryRouter>);
-  const header = within(screen.getByRole('banner'));
-  expect(header.getByText(i18n.t(titleKey))).toBeTruthy();
-  const icon = header.getByTestId('workspace-header-icon');
-  expect(icon.getAttribute('aria-hidden')).toBe('true');
-  expect(icon.querySelector('svg')).toBeTruthy();
-});
+])(
+  'renders a uniform header with a decorative function icon at %s for %s',
+  (path, role, titleKey) => {
+    roles = [role];
+    render(
+      <MemoryRouter initialEntries={[path]}>
+        <AppLayout>Content</AppLayout>
+      </MemoryRouter>,
+    );
+    const header = within(screen.getByRole('banner'));
+    expect(header.getByText(i18n.t(titleKey))).toBeTruthy();
+    const icon = header.getByTestId('workspace-header-icon');
+    expect(icon.getAttribute('aria-hidden')).toBe('true');
+    expect(icon.querySelector('svg')).toBeTruthy();
+  },
+);
 
 it.each([
   ['CONTRACTOR_REPRESENTATIVE'],
@@ -166,7 +175,7 @@ it.each([
   expect(navigation.getByRole('button', { name: 'Attendance' })).toBeTruthy();
   expect(navigation.getByRole('button', { name: 'Workforce' })).toBeTruthy();
   expect(navigation.getByRole('button', { name: 'Schedule Setup' })).toBeTruthy();
-  expect(navigation.queryByRole('button', { name: 'Assigned work' })).toBeNull();
+  expect(navigation.getByRole('button', { name: 'Assigned work' })).toBeTruthy();
   expect(navigation.getByRole('button', { name: i18n.t('shell.contractorTeams') })).toBeTruthy();
   expect(navigation.getByRole('button', { name: i18n.t('shell.workerOnboarding') })).toBeTruthy();
   if (!userRoles.includes('SITE_MANAGER')) {
@@ -298,3 +307,17 @@ it.each(['WORKER', 'CONTRACTOR_REPRESENTATIVE', 'SECURITY_OFFICER'])(
     expect(screen.queryByText('Safety', { exact: true })).toBeNull();
   },
 );
+
+it('shows Safety operation submenus with a selected route instead of duplicate top-level pages', () => {
+  roles = ['SAFETY_OFFICER'];
+  render(
+    <MemoryRouter initialEntries={['/incidents?tab=incidents&siteId=synthetic-site']}>
+      <AppLayout>Safety content</AppLayout>
+    </MemoryRouter>,
+  );
+  const nav = within(screen.getByRole('navigation', { name: 'Main navigation' }));
+  expect(nav.getByRole('link', { name: 'Incidents' }).getAttribute('aria-current')).toBe('page');
+  expect(nav.getByRole('link', { name: 'Alerts' }).getAttribute('href')).toContain('tab=alerts');
+  expect(nav.getByRole('link', { name: 'Checklists' })).toBeTruthy();
+  expect(nav.getByRole('link', { name: 'Safety tasks' })).toBeTruthy();
+});

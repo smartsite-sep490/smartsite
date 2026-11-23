@@ -4277,5 +4277,21 @@
   "attendance_leave.planned_required": "Nghỉ có kế hoạch cần được gửi trước giờ bắt đầu ca ít nhất 24 giờ.",
   "attendance_leave.emergency_today": "Nghỉ khẩn cấp chỉ áp dụng cho ca diễn ra trong ngày.",
   "attendance_leave.shift_unavailable": "Chưa xác minh được giờ ca. Vui lòng tải lại lịch và thử lại.",
-  "attendance_leave.cooldown_error": "Mỗi 24 giờ chỉ được gửi một đơn nghỉ mới"
+  "attendance_leave.cooldown_error": "Mỗi 24 giờ chỉ được gửi một đơn nghỉ mới",
+  "safetyUi.summary": "Tóm tắt",
+  "safetyUi.handling": "Xử lý",
+  "safetyUi.evidence": "Bằng chứng",
+  "safetyUi.history": "Lịch sử",
+  "safetyUi.review": "Xem xét",
+  "safetyUi.detailSections": "Nội dung hồ sơ",
+  "safetyUi.handoverUnavailable": "Lần bàn giao này không còn khả dụng.",
+  "safetyUi.sourceAlert": "Cảnh báo nguồn {{number}}",
+  "safetyUi.identityReference": "Có tham chiếu định danh, cần xác minh",
+  "safetyUi.managerToSafety": "Công việc do quản lý công trường giao cho cán bộ an toàn.",
+  "safetyUi.safetyToContractor": "Phiếu kiểm tra do cán bộ an toàn giao cho đại diện nhà thầu.",
+  "safetyUi.approveResult": "Duyệt kết quả",
+  "safetyUi.returnResult": "Yêu cầu làm lại",
+  "safetyUi.siteUnavailable": "Công trường trong liên kết không khả dụng.",
+  "safetyUi.zoneRecorded": "Đã ghi nhận khu vực",
+  "safetyUi.handoverNumber": "Lần bàn giao {{number}}"
 }

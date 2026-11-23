@@ -206,7 +206,9 @@ it('Safety Officer opens review queue and pre-selects the worker from notificati
   mount('/worker-documents?siteId=site-a&workerId=worker-1&tab=documents');
   await screen.findByRole('heading', { name: tr('documents.reviewQueue') });
   expect(screen.queryByRole('heading', { name: tr('documents.title') })).toBeNull();
-  expect((screen.getByLabelText(tr('common.site_fa7955')) as HTMLSelectElement).value).toBe('site-a');
+  expect((screen.getByLabelText(tr('common.site_fa7955')) as HTMLSelectElement).value).toBe(
+    'site-a',
+  );
   expect(await screen.findByText(/Nguyễn Văn An/)).toBeTruthy();
   expect(await screen.findByText(/card\.jpg/)).toBeTruthy();
   expect(screen.getByRole('button', { name: tr('documents.approve') })).toBeTruthy();
@@ -233,7 +235,9 @@ it('Worker role opens their own read-only document panel directly', async () => 
   mount('/worker-documents?siteId=site-a');
   await screen.findByText(/card\.jpg/);
   expect(screen.queryByRole('heading', { name: tr('documents.title') })).toBeNull();
-  expect((screen.getByLabelText(tr('common.site_fa7955')) as HTMLSelectElement).value).toBe('site-a');
+  expect((screen.getByLabelText(tr('common.site_fa7955')) as HTMLSelectElement).value).toBe(
+    'site-a',
+  );
   expect(screen.queryByRole('heading', { name: tr('documents.reviewQueue') })).toBeNull();
   expect(await screen.findByText(/card\.jpg/)).toBeTruthy();
   expect(
@@ -242,4 +246,11 @@ it('Worker role opens their own read-only document panel directly', async () => 
   expect(screen.queryByRole('button', { name: tr('documents.sendBundle') })).toBeNull();
   expect(screen.getByText(tr('documents.readOnly'))).toBeTruthy();
   expect(screen.queryByRole('button', { name: tr('documents.approve') })).toBeNull();
+});
+
+it('does not open another site when a legacy document link requests an unavailable site', async () => {
+  mount('/worker-documents?siteId=other-site&workerId=worker-1');
+  expect((await screen.findByRole('alert')).textContent).toContain(tr('safetyUi.siteUnavailable'));
+  expect(SmartSiteManagementClient.prototype.listWorkerCompliance).not.toHaveBeenCalled();
+  expect(SmartSiteManagementClient.prototype.workerCompliance).not.toHaveBeenCalled();
 });

@@ -99,9 +99,9 @@ vi.mock('./components/alerts/SafetyAlertsView', () => ({
     initialSiteId?: string;
     initialAlertId?: string;
   }) => {
-    const [type] = React.useState(initialType ?? 'ALL');
-    const [site] = React.useState(initialSiteId ?? '');
-    const [alert] = React.useState(initialAlertId ?? '');
+    const type = initialType ?? 'ALL';
+    const site = initialSiteId ?? '';
+    const alert = initialAlertId ?? '';
     return (
       <div>
         <h2>Safety Alerts Queue</h2>

@@ -1,6 +1,5 @@
 import { SmartNativeSelect } from '../../ui/SmartNativeSelect';
-import { useState } from 'react';
-import { useLocation } from 'react-router-dom';
+import { useSearchParams } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import { useTranslation } from 'react-i18next';
 import { useAuth, useCurrentUser, useManagementClient } from '../../../features/auth/auth-session';
@@ -13,12 +12,11 @@ import { IconBuilding2, IconLoader, IconAlertTriangle } from '../../icons';
 
 export function WorkerDocumentsView({ apiUrl }: { apiUrl: string }) {
   useTranslation();
-  const location = useLocation();
-  const params = new URLSearchParams(location.search);
+  const [params, setParams] = useSearchParams();
   const { accessToken } = useAuth();
   const client = useManagementClient(apiUrl);
   const user = useCurrentUser(apiUrl);
-  const [requestedSite, setRequestedSite] = useState(params.get('siteId') ?? '');
+  const requestedSite = params.get('siteId') ?? '';
 
   const sites = useQuery({
     queryKey: ['worker-document-sites', apiUrl, user.data?.id],
@@ -35,9 +33,16 @@ export function WorkerDocumentsView({ apiUrl }: { apiUrl: string }) {
       ),
     ) ?? [];
 
-  const siteId = allowed.some((s) => s.id === requestedSite)
-    ? requestedSite
-    : (allowed[0]?.id ?? '');
+  const siteUnavailable =
+    !!requestedSite &&
+    sites.isSuccess &&
+    !!user.data &&
+    !allowed.some((site) => site.id === requestedSite);
+  const siteId = siteUnavailable
+    ? ''
+    : allowed.some((s) => s.id === requestedSite)
+      ? requestedSite
+      : (allowed[0]?.id ?? '');
 
   const safety =
     user.data?.roleAssignments.some((r) => r.siteId === siteId && r.role === 'SAFETY_OFFICER') ??
@@ -74,6 +79,7 @@ export function WorkerDocumentsView({ apiUrl }: { apiUrl: string }) {
     );
   }
 
+  if (siteUnavailable) return <p role="alert">{tr('safetyUi.siteUnavailable')}</p>;
   return (
     <div className="mx-auto max-w-7xl space-y-3 pb-8">
       {/* Site selector */}
@@ -91,7 +97,7 @@ export function WorkerDocumentsView({ apiUrl }: { apiUrl: string }) {
             <SmartNativeSelect
               id="worker-documents-site-select"
               value={siteId}
-              onChange={(e) => setRequestedSite(e.target.value)}
+              onChange={(e) => setParams({ siteId: e.target.value })}
               className="border-0 bg-transparent py-0.5 pr-6 text-xs font-bold text-slate-800 focus:outline-none cursor-pointer"
             >
               {allowed.map((s) => (
