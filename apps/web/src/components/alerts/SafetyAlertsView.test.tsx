@@ -137,6 +137,15 @@ describe('SafetyAlertsView Integration (Plan §15 A4 Parent View & Session Scope
 
     // Default logout mock to protect cleanup/unmount in every test
     vi.spyOn(SmartSiteManagementClient.prototype, 'logout').mockResolvedValue(undefined as never);
+    vi.spyOn(SmartSiteManagementClient.prototype, 'getAlertWorkContext').mockResolvedValue({
+      capturedAt: mockAlert.lastDetectedAt,
+      identity: 'UNKNOWN',
+      workers: [],
+      relatedTeams: [],
+      zoneName: null,
+      cameraName: null,
+      warning: '',
+    });
   });
 
   afterEach(() => {
@@ -183,8 +192,8 @@ describe('SafetyAlertsView Integration (Plan §15 A4 Parent View & Session Scope
     );
     await screen.findByRole('option', { name: /Công trường Alpha/ });
     expect(screen.queryByRole('option', { name: /Contractor-only Site/ })).toBeNull();
-    expect((screen.getByLabelText('Site') as HTMLSelectElement).value).toBe('site-alpha');
-    expect(alerts.mock.calls.every((call) => call[1] === 'site-alpha')).toBe(true);
+    expect((screen.getByLabelText('Site') as HTMLSelectElement).value).toBe('');
+    expect(alerts).not.toHaveBeenCalled();
   });
 
   it('shows an unavailable target instead of falling back to another Site for an alert link', async () => {
@@ -237,7 +246,14 @@ describe('SafetyAlertsView Integration (Plan §15 A4 Parent View & Session Scope
           />
         </QueryClientProvider>,
       );
-      await screen.findByText(/Alert sensitive-target · Revision 1/);
+      await waitFor(() =>
+        expect(
+          queryClient
+            .getQueryCache()
+            .findAll({ queryKey: ['safety-alert'] })
+            .some((q) => (q.state.data as { id?: string } | undefined)?.id === 'sensitive-target'),
+        ).toBe(true),
+      );
       const key = queryClient.getQueryCache().findAll({ queryKey: ['safety-alert'] })[0]!.queryKey;
       const evidenceKey = [
         'safety-alert-evidence',
@@ -255,7 +271,7 @@ describe('SafetyAlertsView Integration (Plan §15 A4 Parent View & Session Scope
       detail.mockRejectedValue(new ApiError('http', 'Access unavailable', status));
       await userEvent.setup().click(screen.getByRole('button', { name: 'Refresh detail' }));
       await screen.findByRole('alert');
-      expect(screen.queryByText(/Alert sensitive-target · Revision 1/)).toBeNull();
+      expect(screen.queryByText('Technical details')).toBeNull();
       expect(screen.queryByRole('button', { name: 'Confirm violation' })).toBeNull();
       await waitFor(() => expect(queryClient.getQueryData(evidenceKey)).toBeUndefined());
     },
@@ -303,17 +319,45 @@ describe('SafetyAlertsView Integration (Plan §15 A4 Parent View & Session Scope
       </QueryClientProvider>
     );
     const view = render(tree('site-alpha', 'target-a'));
-    await screen.findByText(/Alert target-a · Revision 1/);
+    await waitFor(() =>
+      expect(
+        queryClient
+          .getQueryCache()
+          .findAll({ queryKey: ['safety-alert'] })
+          .some((q) => (q.state.data as { id?: string } | undefined)?.id === 'target-a'),
+      ).toBe(true),
+    );
     expect(
       screen.getByRole('complementary', { name: 'Alert detail' }).className.split(/\s+/),
     ).not.toContain('hidden');
     view.rerender(tree('site-beta', 'target-b'));
-    expect(await screen.findByText(/Alert target-b · Revision 1/)).not.toBeNull();
+    expect(
+      await waitFor(() =>
+        expect(
+          queryClient
+            .getQueryCache()
+            .findAll({ queryKey: ['safety-alert'] })
+            .some((q) => (q.state.data as { id?: string } | undefined)?.id === 'target-b'),
+        ).toBe(true),
+      ),
+    ).not.toBeNull();
     expect(
       screen.getByRole('complementary', { name: 'Alert detail' }).className.split(/\s+/),
     ).not.toContain('hidden');
-    expect(screen.queryByText(/Alert target-a · Revision 1/)).toBeNull();
+    expect(screen.queryByText('Technical details')).toBeNull();
     expect(detail.mock.calls.at(-1)?.slice(1, 3)).toEqual(['site-beta', 'target-b']);
+    view.rerender(tree('site-beta', 'target-c'));
+    await waitFor(() =>
+      expect(detail.mock.calls.at(-1)?.slice(1, 3)).toEqual(['site-beta', 'target-c']),
+    );
+    await waitFor(() =>
+      expect(
+        queryClient
+          .getQueryCache()
+          .findAll({ queryKey: ['safety-alert'] })
+          .some((query) => (query.state.data as { id?: string } | undefined)?.id === 'target-c'),
+      ).toBe(true),
+    );
   });
 
   it.each([false, true])(
@@ -768,7 +812,14 @@ describe('SafetyAlertsView Integration (Plan §15 A4 Parent View & Session Scope
     await user.click(await screen.findByRole('button', { name: /First Alert/ }));
     await user.click(screen.getByRole('button', { name: 'Next' }));
     await screen.findByRole('button', { name: /Second Alert/ });
-    expect(await screen.findByText(/Alert second · Revision 1/)).not.toBeNull();
-    expect(screen.queryByText(/Alert first · Revision 1/)).toBeNull();
+    await waitFor(() =>
+      expect(
+        queryClient
+          .getQueryCache()
+          .findAll({ queryKey: ['safety-alert'] })
+          .some((q) => (q.state.data as { id?: string } | undefined)?.id === 'second'),
+      ).toBe(true),
+    );
+    expect(screen.queryByText('Technical details')).toBeNull();
   });
 });

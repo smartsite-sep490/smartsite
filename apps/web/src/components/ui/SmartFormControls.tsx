@@ -10,6 +10,15 @@ import { format, parse, isValid } from 'date-fns';
 import 'react-day-picker/style.css';
 import { IconX } from '../icons';
 
+// Native modal dialogs occupy the browser top layer; body portals sit behind them.
+function usePopoverHost() {
+  const [container, setContainer] = React.useState<HTMLElement | undefined>();
+  const attachHost = React.useCallback((node: HTMLElement | null) => {
+    setContainer(node?.closest('dialog') ?? undefined);
+  }, []);
+  return [container, attachHost] as const;
+}
+
 function calendarLabels(): Partial<Labels> {
   if (uiLanguage() !== 'vi') return {};
   const dayLabel: Labels['labelDayButton'] = (day, modifiers) => {
@@ -38,8 +47,7 @@ const FIELD_BASE =
   'w-full px-4 py-3 rounded-2xl border border-slate-200 bg-slate-50 text-sm font-semibold text-[#071A2B] placeholder-slate-400 outline-none transition-all duration-300 hover:border-slate-300 focus:border-[#071A2B] focus:bg-white focus:ring-4 focus:ring-[#071A2B]/5 shadow-sm';
 
 // ── SmartInput ────────────────────────────────────────────────────────────────
-export interface SmartInputProps
-  extends Omit<React.InputHTMLAttributes<HTMLInputElement>, 'size'> {
+export interface SmartInputProps extends Omit<React.InputHTMLAttributes<HTMLInputElement>, 'size'> {
   label?: string;
   fieldRequired?: boolean;
   error?: string;
@@ -48,16 +56,7 @@ export interface SmartInputProps
 
 export const SmartInput = React.forwardRef<HTMLInputElement, SmartInputProps>(
   (
-    {
-      label,
-      fieldRequired,
-      error,
-      className = '',
-      id: propId,
-      type,
-      size = 'md',
-      ...props
-    },
+    { label, fieldRequired, error, className = '', id: propId, type, size = 'md', ...props },
     ref,
   ) => {
     useTranslation();
@@ -201,6 +200,7 @@ export function SmartSelect({
   nativeControlRef,
 }: SmartSelectProps) {
   useTranslation();
+  const [popoverContainer, attachPopoverHost] = usePopoverHost();
 
   const fallbackId = useId();
   const id = propId ?? fallbackId;
@@ -241,7 +241,7 @@ export function SmartSelect({
         } ${className}`;
 
   return (
-    <Container className={nativeControl ? 'contents' : 'space-y-1.5'}>
+    <Container ref={attachPopoverHost} className={nativeControl ? 'contents' : 'space-y-1.5'}>
       {label && (
         <label
           htmlFor={id}
@@ -328,7 +328,7 @@ export function SmartSelect({
             </button>
           </Popover.Trigger>
         )}
-        <Popover.Portal>
+        <Popover.Portal container={popoverContainer}>
           <Popover.Content
             side="bottom"
             sideOffset={6}
@@ -714,6 +714,7 @@ export function SmartDatePicker({
   className = '',
 }: SmartDatePickerProps) {
   useTranslation();
+  const [popoverContainer, attachPopoverHost] = usePopoverHost();
 
   const fallbackId = useId();
   const id = propId ?? fallbackId;
@@ -752,7 +753,7 @@ export function SmartDatePicker({
       : `${FIELD_BASE} ${error ? 'border-red-300' : ''}`;
 
   return (
-    <div className={compact ? 'space-y-1' : 'space-y-1.5'}>
+    <div ref={attachPopoverHost} className={compact ? 'space-y-1' : 'space-y-1.5'}>
       {label && (
         <label
           htmlFor={id}
@@ -806,7 +807,7 @@ export function SmartDatePicker({
             </div>
           </button>
         </Popover.Trigger>
-        <Popover.Portal>
+        <Popover.Portal container={popoverContainer}>
           <Popover.Content
             side="bottom"
             sideOffset={8}
@@ -1101,6 +1102,7 @@ export function SmartTimePicker({
   minuteStep = 5,
 }: SmartTimePickerProps) {
   useTranslation();
+  const [popoverContainer, attachPopoverHost] = usePopoverHost();
 
   const fallbackId = useId();
   const id = propId ?? fallbackId;
@@ -1109,7 +1111,7 @@ export function SmartTimePicker({
   const displayVal = value ? formatDisplayTime(value) : '';
 
   return (
-    <div className="space-y-1.5">
+    <div ref={attachPopoverHost} className="space-y-1.5">
       {label && (
         <label
           htmlFor={id}
@@ -1135,7 +1137,7 @@ export function SmartTimePicker({
             <IconChevDown open={open} />
           </button>
         </Popover.Trigger>
-        <Popover.Portal>
+        <Popover.Portal container={popoverContainer}>
           <Popover.Content
             side="bottom"
             sideOffset={8}
@@ -1204,6 +1206,7 @@ export function SmartDateTimePicker({
   clearable = false,
 }: SmartDateTimePickerProps) {
   useTranslation();
+  const [popoverContainer, attachPopoverHost] = usePopoverHost();
 
   const fallbackId = useId();
   const id = propId ?? fallbackId;
@@ -1250,7 +1253,7 @@ export function SmartDateTimePicker({
   };
 
   return (
-    <div className="space-y-1.5">
+    <div ref={attachPopoverHost} className="space-y-1.5">
       {label && (
         <label
           htmlFor={id}
@@ -1276,7 +1279,7 @@ export function SmartDateTimePicker({
             <IconChevDown open={open} />
           </button>
         </Popover.Trigger>
-        <Popover.Portal>
+        <Popover.Portal container={popoverContainer}>
           <Popover.Content
             side="bottom"
             sideOffset={8}

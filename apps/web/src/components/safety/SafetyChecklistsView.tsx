@@ -32,7 +32,6 @@ import {
   Pager,
   RequestError,
   StatusBadge,
-  TechnicalDetails,
 } from './SafetyWorkflowUi';
 import { CreateChecklistForm, ReportChecklistForm } from './ChecklistForms';
 import { ChecklistEvidence } from './ChecklistEvidence';
@@ -212,7 +211,7 @@ export function SafetyChecklistsView(
               : tr('safety_workspace.safety_checklists')}
           </h2>
           <p className="mt-1 text-sm text-[var(--text-secondary)]">
-            {tr('safety_workspace.pre_work_reports_and_follow_up')}
+            {tr('safetyUi.safetyToContractor')}
           </p>
         </div>
         {safety && (
@@ -447,15 +446,11 @@ export function SafetyChecklistsView(
                     </button>
                   )}
                 </div>
-                <TechnicalDetails>
-                  <p>
-                    {tr('common.assigned_by_value', {
-                      value1: current.assignedByName ?? tr('labels.UNAVAILABLE'),
-                    })}
-                  </p>
-                  <p>{tr('safety_workspace.checklist_value1', { value1: current.id })}</p>
-                  <p>{tr('common.version_value', { value1: current.version })}</p>
-                </TechnicalDetails>
+                <p className="text-sm">
+                  {tr('common.assigned_by_value', {
+                    value1: current.assignedByName ?? tr('labels.UNAVAILABLE'),
+                  })}
+                </p>
               </article>
               <details key={current.id} open={!current.submissions.length} className={cardClass}>
                 <summary className="cursor-pointer font-semibold">

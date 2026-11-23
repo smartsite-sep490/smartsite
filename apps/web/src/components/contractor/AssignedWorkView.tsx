@@ -1,5 +1,4 @@
 import { SmartNativeSelect } from '../ui/SmartNativeSelect';
-import { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { useSearchParams } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
@@ -20,7 +19,7 @@ export function AssignedWorkView({
   const { t } = useTranslation();
   const client = useManagementClient(apiUrl);
   const [params, setParams] = useSearchParams();
-  const [choice, setChoice] = useState(params.get('siteId') ?? '');
+  const choice = params.get('siteId') ?? '';
   const sites = useQuery({
     queryKey: ['assigned-work-sites', apiUrl, user.id],
     queryFn: () => client.listSites(token, { limit: 100 }),
@@ -48,10 +47,12 @@ export function AssignedWorkView({
         <button onClick={() => sites.refetch()}>{t('accounts.retry')}</button>
       </p>
     );
+  if (params.get('siteId') && !allowed.some((site) => site.id === params.get('siteId')))
+    return <p role="alert">{t('safetyUi.siteUnavailable')}</p>;
   if (!siteId) return <p>{t('common.no_site_assigned')}</p>;
   const workflow = { client, apiUrl, token, user, siteId, scope: user.id };
   return (
-    <section className="space-y-5">
+    <section className="assigned-work-workspace">
       <h1 className="text-xl font-bold">{t('shell.assignedWork')}</h1>
       <label className="block min-w-0 text-sm">
         {t('common.site')}{' '}
@@ -59,7 +60,6 @@ export function AssignedWorkView({
           className="mt-1 block w-full min-w-0 max-w-full rounded-lg border border-slate-200 bg-white p-2"
           value={siteId}
           onChange={(e) => {
-            setChoice(e.target.value);
             setParams({ siteId: e.target.value });
           }}
         >
@@ -93,6 +93,7 @@ export function AssignedWorkView({
           {...workflow}
           initialIncidentId={params.get('incidentId') ?? undefined}
           initialActionId={params.get('actionId') ?? undefined}
+          onSelect={(id) => navigate('incidents', id)}
           onOpenChecklist={(id) => navigate('checklists', id)}
         />
       )}

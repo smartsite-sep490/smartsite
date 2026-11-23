@@ -15,10 +15,20 @@ vi.mock('./FocusedCameraMedia', () => ({
   FocusedCameraMedia: (p: {
     camera: { id: string };
     aiPaused?: boolean;
+    onOpenEvidence?: () => void;
     onExitFocus?: () => void;
   }) => (
-    <div data-testid="focus" data-paused={String(Boolean(p.aiPaused))}>
+    <div
+      data-testid="focus"
+      data-paused={String(Boolean(p.aiPaused))}
+      data-has-evidence={String(Boolean(p.onOpenEvidence))}
+    >
       {p.camera.id}
+      {p.onOpenEvidence && (
+        <button data-testid="focused-evidence-btn" onClick={p.onOpenEvidence}>
+          Evidence
+        </button>
+      )}
       <button data-testid="focused-exit-to-grid" onClick={p.onExitFocus}>
         Back to grid
       </button>
@@ -29,11 +39,13 @@ vi.mock('./FourSourceWall', () => ({
   FourSourceWall: (p: {
     selectedCameraId: string;
     isAiWorkPaused: boolean;
+    onOpenEvidence?: (id: string) => void;
     onEnlargeCamera: (id: string) => void;
   }) => (
     <button
       data-testid="wall"
       data-paused={String(p.isAiWorkPaused)}
+      data-has-evidence={String(Boolean(p.onOpenEvidence))}
       onClick={() => p.onEnlargeCamera(p.selectedCameraId)}
     >
       {p.selectedCameraId}
@@ -41,6 +53,11 @@ vi.mock('./FourSourceWall', () => ({
   ),
   FourSourceWallTile: (p: { camera: { id: string } }) => (
     <div data-testid="focus">{p.camera.id}</div>
+  ),
+}));
+vi.mock('./MonitorEvidenceDrawer', () => ({
+  MonitorEvidenceDrawer: (p: { open: boolean; siteId: string }) => (
+    <div data-testid="monitor-evidence-drawer" data-open={String(p.open)} data-site-id={p.siteId} />
   ),
 }));
 const site = '11111111-1111-4111-8111-111111111111';
@@ -160,7 +177,53 @@ it('credential replacement removes old camera content while replacement metadata
   ).not.toContain('second');
 });
 
-it('manager-only session does not request Safety monitoring metadata', () => {
+it('allows an active assigned SITE_MANAGER to view camera monitoring while hiding all Officer-only safety records and evidence drawer surfaces', async () => {
+  const otherSite = '44444444-4444-4444-8444-444444444444';
+  state.sites.mockResolvedValue({
+    items: [
+      { id: site, name: 'Site A', code: 'A' },
+      { id: otherSite, name: 'Other Site', code: 'B' },
+    ],
+    total: 2,
+  });
+
+  render(
+    <PpeMonitorWorkspace
+      apiUrl="https://backend.example"
+      session={session('manager', 'SITE_MANAGER')}
+      enableFrameInboxLink
+    />,
+    { wrapper },
+  );
+
+  const focused = await screen.findByTestId('focus');
+  expect(focused.textContent).toContain(camera.id);
+  expect(focused.getAttribute('data-has-evidence')).toBe('false');
+  expect(screen.queryByTestId('focused-evidence-btn')).toBeNull();
+  expect(screen.queryByTestId('monitor-evidence-drawer')).toBeNull();
+  expect(screen.queryByTestId('monitor-frame-inbox-link')).toBeNull();
+  expect(screen.queryByRole('link', { name: 'Open safety records' })).toBeNull();
+
+  // Only the Manager's assigned site is selectable; other sites are filtered out
+  const siteSelect = screen.getByRole('combobox', { name: 'Site' }) as HTMLSelectElement;
+  expect(Array.from(siteSelect.options).map((o) => o.value)).toEqual([site]);
+
+  // Grid mode also omits onOpenEvidence for Manager
+  fireEvent.click(screen.getByTestId('monitor-grid-btn'));
+  expect(screen.getByTestId('wall').getAttribute('data-has-evidence')).toBe('false');
+});
+
+it('blocks a SITE_MANAGER from opening another unassigned site via URL link', async () => {
+  const otherSite = '44444444-4444-4444-8444-444444444444';
+  entry = `/ppe?siteId=${otherSite}&cameraId=${camera.id}`;
+  state.sites.mockResolvedValue({
+    items: [
+      { id: site, name: 'Site A', code: 'A' },
+      { id: otherSite, name: 'Other Site', code: 'B' },
+    ],
+    total: 2,
+  });
+
   render(
     <PpeMonitorWorkspace
       apiUrl="https://backend.example"
@@ -168,9 +231,52 @@ it('manager-only session does not request Safety monitoring metadata', () => {
     />,
     { wrapper },
   );
-  expect(screen.getByRole('alert').textContent).toContain('requires an active Admin');
+
+  expect(await screen.findByText('The linked site is unavailable.')).toBeTruthy();
+  expect(state.cameras).not.toHaveBeenCalled();
+  expect(screen.queryByTestId('focus')).toBeNull();
+  expect(screen.queryByTestId('monitor-evidence-drawer')).toBeNull();
+});
+
+it('denies unassigned Admin or inactive users without requesting monitoring metadata', () => {
+  const adminOnlySession = {
+    accessToken: 'admin-token',
+    user: {
+      id: 'admin-1',
+      isActive: true,
+      mustChangePassword: false,
+      roleAssignments: [{ role: 'ADMIN', siteId: null }],
+    },
+  } as unknown as Pick<LoginResponse, 'accessToken' | 'user'>;
+
+  render(<PpeMonitorWorkspace apiUrl="https://backend.example" session={adminOnlySession} />, {
+    wrapper,
+  });
+  expect(screen.getByRole('alert').textContent).toContain(
+    'Camera monitoring requires an active Site Manager or Safety Officer assigned to a site.',
+  );
   expect(state.sites).not.toHaveBeenCalled();
   expect(state.cameras).not.toHaveBeenCalled();
+});
+
+it('retains Officer safety records, evidence callbacks, and drawer on an Officer-assigned site only', async () => {
+  render(
+    <PpeMonitorWorkspace
+      apiUrl="https://backend.example"
+      session={session('officer', 'SAFETY_OFFICER')}
+      enableFrameInboxLink
+    />,
+    { wrapper },
+  );
+
+  const focused = await screen.findByTestId('focus');
+  expect(focused.getAttribute('data-has-evidence')).toBe('true');
+  expect(screen.getByRole('link', { name: 'Open safety records' })).toBeTruthy();
+  expect(screen.getByTestId('monitor-frame-inbox-link')).toBeTruthy();
+  expect(screen.getByTestId('monitor-evidence-drawer').getAttribute('data-open')).toBe('false');
+
+  fireEvent.click(screen.getByTestId('focused-evidence-btn'));
+  expect(screen.getByTestId('monitor-evidence-drawer').getAttribute('data-open')).toBe('true');
 });
 
 it('transient next-page failure preserves the camera but a later forbidden page revokes it', async () => {

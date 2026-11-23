@@ -13,6 +13,7 @@ export function WorkerDocumentQuickScan({
   onUpdated,
   onActiveChange,
   disabled = false,
+  compact = false,
 }: {
   client: SmartSiteManagementClient;
   token: string;
@@ -21,6 +22,7 @@ export function WorkerDocumentQuickScan({
   onUpdated: () => void;
   onActiveChange?: (workerId: string | null) => void;
   disabled?: boolean;
+  compact?: boolean;
 }) {
   const stop = useRef(false);
   const mounted = useRef(true);
@@ -88,10 +90,25 @@ export function WorkerDocumentQuickScan({
     },
   });
   return (
-    <div className="space-y-3 rounded-xl border border-slate-200 bg-slate-50 p-3">
-      <p className="text-sm font-medium text-slate-700">
-        {tr('documents.scanSelection', { profiles: profiles.length, documents: work.length })}
-      </p>
+    <div
+      className={
+        compact
+          ? 'grid min-w-0 items-center gap-3 rounded-2xl border border-slate-200 bg-white p-4 sm:grid-cols-[minmax(0,1fr)_auto]'
+          : 'space-y-3 rounded-xl border border-slate-200 bg-slate-50 p-3'
+      }
+    >
+      <div className="space-y-1">
+        {compact && (
+          <p className="text-sm font-semibold text-slate-800">{tr('documents.batchTools')}</p>
+        )}
+        <p
+          className={
+            compact ? 'text-xs leading-5 text-slate-500' : 'text-sm font-medium text-slate-700'
+          }
+        >
+          {tr('documents.scanSelection', { profiles: profiles.length, documents: work.length })}
+        </p>
+      </div>
       <div className="flex flex-wrap gap-2">
         <button
           type="button"
@@ -114,7 +131,11 @@ export function WorkerDocumentQuickScan({
         )}
       </div>
       {progress.total > 0 && (
-        <div role="status" aria-live="polite" className="space-y-1 text-xs text-slate-600">
+        <div
+          role="status"
+          aria-live="polite"
+          className={`space-y-1 text-xs text-slate-600 ${compact ? 'sm:col-span-2' : ''}`}
+        >
           <progress
             className="w-full accent-orange-500"
             max={progress.total}
@@ -124,7 +145,7 @@ export function WorkerDocumentQuickScan({
         </div>
       )}
       {scan.isError && (
-        <p role="alert" className="text-sm text-red-700">
+        <p role="alert" className={`text-sm text-red-700 ${compact ? 'sm:col-span-2' : ''}`}>
           {userErrorMessage(scan.error)}
         </p>
       )}

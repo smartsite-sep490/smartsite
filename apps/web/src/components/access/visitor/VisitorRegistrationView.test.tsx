@@ -19,7 +19,8 @@ afterEach(() => {
 
 it('routes a representative group registration to the selected site and shows QR only after approval', async () => {
   await i18n.changeLanguage('en');
-  const user = userEvent.setup();
+  // Fixture typing does not need a timer tick between every character on Windows.
+  const user = userEvent.setup({ delay: null });
   const queryClient = new QueryClient({
     defaultOptions: { queries: { retry: false }, mutations: { retry: false } },
   });

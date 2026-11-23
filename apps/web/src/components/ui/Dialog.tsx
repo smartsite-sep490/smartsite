@@ -10,7 +10,7 @@ export interface DialogProps {
   description?: string;
   icon?: React.ReactNode;
   children: React.ReactNode;
-  maxWidth?: 'sm' | 'md' | 'lg' | 'xl';
+  maxWidth?: 'sm' | 'md' | 'lg' | 'xl' | '4xl';
 }
 
 const FOCUSABLE_SELECTOR =
@@ -339,6 +339,7 @@ export function Dialog({
     md: 'max-w-md',
     lg: 'max-w-lg',
     xl: 'max-w-xl',
+    '4xl': 'max-w-4xl',
   };
 
   return (

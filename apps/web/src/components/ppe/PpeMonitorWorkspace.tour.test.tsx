@@ -215,7 +215,7 @@ it('withholds the tutorial when access is denied or metadata fails, and skips un
   const denied = render(
     <PpeMonitorWorkspace
       apiUrl="https://backend.example"
-      session={session('mgr', 'SITE_MANAGER')}
+      session={session('worker', 'WORKER')}
       aiPaused
     />,
     { wrapper },

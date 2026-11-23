@@ -1,6 +1,6 @@
 import { SmartNativeSelect } from '../ui/SmartNativeSelect';
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
-import { Link, useLocation } from 'react-router-dom';
+import { Link, useLocation, useSearchParams } from 'react-router-dom';
 import { ApiError } from '@smartsite/api-client';
 import { MonitorWorkspaceTour } from './MonitorWorkspaceTour';
 import { useTranslation } from 'react-i18next';
@@ -14,6 +14,7 @@ import { useMonitorPages } from './useMonitorPages';
 import { useMonitorReadabilityTranslate } from './monitor-readability';
 import { registerFeatureCatalog } from '../../i18n/feature-catalog-registry';
 import { SAFETY_NAMESPACE } from '../../i18n/runtime';
+import { buildCameraSelectionSearch } from '../cameras/camera-navigation';
 
 registerFeatureCatalog({
   en: {
@@ -37,7 +38,7 @@ registerFeatureCatalog({
     'monitor.paused': 'AI processing is paused. Camera previews are disabled.',
     'monitor.evidence': 'Open safety records',
     'monitor.denied':
-      'Camera monitoring requires an active Admin or assigned Safety Officer session.',
+      'Camera monitoring requires an active Site Manager or Safety Officer assigned to a site.',
     'monitor.loaded': '{loaded} loaded / {total} reported',
     'monitor.hint':
       'Choose a Site, then select or enlarge a camera. Saved findings are reviewed in safety records.',
@@ -62,7 +63,8 @@ registerFeatureCatalog({
     'monitor.fullscreenError': 'Trình duyệt chưa cho phép toàn màn hình.',
     'monitor.paused': 'Đang tạm dừng xử lý AI. Xem trước camera đã tắt.',
     'monitor.evidence': 'Mở hồ sơ an toàn',
-    'monitor.denied': 'Cần phiên Admin hoặc Cán bộ an toàn đang hoạt động và được phân công.',
+    'monitor.denied':
+      'Màn giám sát camera dành cho Quản lý công trường hoặc Cán bộ an toàn đang hoạt động và được phân công tại công trường.',
     'monitor.loaded': 'Đã tải {loaded} / tổng báo về {total}',
     'monitor.hint':
       'Chọn công trường rồi chọn hoặc phóng to camera. Xem các phát hiện đã lưu tại hồ sơ an toàn.',
@@ -126,7 +128,9 @@ export function PpeMonitorWorkspace({
   const canRead =
     session.user.isActive &&
     !session.user.mustChangePassword &&
-    session.user.roleAssignments.some((r) => r.role === 'SAFETY_OFFICER' && !!r.siteId);
+    session.user.roleAssignments.some(
+      (r) => (r.role === 'SAFETY_OFFICER' || r.role === 'SITE_MANAGER') && !!r.siteId,
+    );
   if (!canRead) {
     return (
       <p
@@ -139,7 +143,7 @@ export function PpeMonitorWorkspace({
   }
   return (
     <MonitorScope
-      key={JSON.stringify([identity.nonce, linkedSiteId, linkedCameraId])}
+      key={identity.nonce}
       {...{ apiUrl, session, client, aiPaused, enableFrameInboxLink }}
       scope={identity.nonce}
       linkedSiteId={linkedSiteId}
@@ -165,7 +169,32 @@ function MonitorScope({
 }) {
   const { t } = useTranslation(SAFETY_NAMESPACE);
   const trMonitor = useMonitorReadabilityTranslate();
+  const [searchParams, setSearchParams] = useSearchParams();
   const [chosenSite, setSite] = useState(linkedSiteId);
+  const [prevLinkedSiteId, setPrevLinkedSiteId] = useState(linkedSiteId);
+  if (prevLinkedSiteId !== linkedSiteId) {
+    setPrevLinkedSiteId(linkedSiteId);
+    setSite(linkedSiteId);
+  }
+  const syncMonitorSelection = useCallback(
+    (nextSiteId: string, nextCameraId?: string) => {
+      const nextParams = buildCameraSelectionSearch(searchParams.toString(), {
+        siteId: nextSiteId,
+        cameraId: nextCameraId || undefined,
+      });
+      if (nextParams.toString() !== searchParams.toString()) {
+        setSearchParams(nextParams, { replace: true });
+      }
+    },
+    [searchParams, setSearchParams],
+  );
+  const selectSite = useCallback(
+    (nextSiteId: string) => {
+      setSite(nextSiteId);
+      syncMonitorSelection(nextSiteId);
+    },
+    [syncMonitorSelection],
+  );
   const sites = useMonitorPages(scope, 'sites', true, (offset, signal) =>
     client.listSites(session.accessToken, { offset, limit: 20 }, { signal }),
   );
@@ -173,7 +202,7 @@ function MonitorScope({
     () =>
       new Set(
         session.user.roleAssignments
-          .filter((r) => r.role === 'SAFETY_OFFICER')
+          .filter((r) => (r.role === 'SAFETY_OFFICER' || r.role === 'SITE_MANAGER') && !!r.siteId)
           .map((r) => r.siteId),
       ),
     [session.user.roleAssignments],
@@ -182,6 +211,10 @@ function MonitorScope({
   const site =
     visibleSites.find((row) => row.id === chosenSite) ??
     (linkedSiteId && chosenSite === linkedSiteId ? undefined : visibleSites[0]);
+  const canViewSafetyRecords = Boolean(
+    site &&
+    session.user.roleAssignments.some((r) => r.role === 'SAFETY_OFFICER' && r.siteId === site.id),
+  );
   useEffect(() => {
     if (
       (!visibleSites.length || (allowed.has(chosenSite) && !site)) &&
@@ -199,7 +232,7 @@ function MonitorScope({
         data-tour-anchor="monitor-site-scope"
         className="block h-10 flex-1 min-w-0 max-w-full truncate rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-sm font-normal text-slate-900 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-slate-900 disabled:bg-slate-50 disabled:text-slate-500"
         value={site?.id ?? ''}
-        onChange={(e) => setSite(e.target.value)}
+        onChange={(e) => selectSite(e.target.value)}
         disabled={sites.isPending || !visibleSites.length}
       >
         {!site && <option value="">{t('monitor.choose')}</option>}
@@ -236,7 +269,7 @@ function MonitorScope({
             <button
               type="button"
               className="inline-flex min-h-8 items-center rounded-lg border border-amber-300 bg-white px-3 py-1.5 text-xs font-semibold text-amber-950 hover:bg-amber-100 cursor-pointer"
-              onClick={() => setSite(visibleSites[0]!.id)}
+              onClick={() => selectSite(visibleSites[0]!.id)}
             >
               {t('monitor.choose')}
             </button>
@@ -272,7 +305,7 @@ function MonitorScope({
           </h1>
           <p className="mt-0.5 text-sm text-slate-600">{t('monitor.hint')}</p>
         </div>
-        {site && (
+        {site && canViewSafetyRecords && (
           <div className="flex min-w-0 max-w-full flex-wrap items-center gap-2">
             {enableFrameInboxLink && (
               <Link
@@ -310,7 +343,9 @@ function MonitorScope({
           canManageCameras={session.user.roleAssignments.some(
             (r) => r.role === 'SITE_MANAGER' && r.siteId === site.id,
           )}
+          canViewSafetyRecords={canViewSafetyRecords}
           linkedCameraId={site.id === linkedSiteId ? linkedCameraId : ''}
+          onSyncCameraUrl={syncMonitorSelection}
         />
       ) : (
         <div className="flex min-w-0 flex-wrap items-center gap-3 rounded-xl border border-slate-200 bg-white p-3">
@@ -333,7 +368,9 @@ function CameraScope({
   siteSelector,
   siteNotices,
   canManageCameras,
+  canViewSafetyRecords,
   linkedCameraId,
+  onSyncCameraUrl,
 }: Props & {
   client: SmartSiteManagementClient;
   scope: string;
@@ -341,11 +378,13 @@ function CameraScope({
   siteSelector: ReactNode;
   siteNotices: ReactNode;
   canManageCameras: boolean;
+  canViewSafetyRecords: boolean;
   linkedCameraId: string;
+  onSyncCameraUrl: (nextSiteId: string, nextCameraId?: string) => void;
 }) {
   const { t } = useTranslation(SAFETY_NAMESPACE);
   const trMonitor = useMonitorReadabilityTranslate();
-  const siteScopeKey = `${scope}:${site.id}:${linkedCameraId}`;
+  const siteScopeKey = `${scope}:${site.id}`;
   const [scopeState, setScopeState] = useState(() => ({
     siteScopeKey,
     chosen: linkedCameraId,
@@ -410,6 +449,24 @@ function CameraScope({
     (nextCameraId: string) =>
       updateScopeState((prev) => ({ ...prev, chosen: nextCameraId, focusRawMode: false })),
     [updateScopeState],
+  );
+  const [prevLinkedCameraId, setPrevLinkedCameraId] = useState(linkedCameraId);
+  if (prevLinkedCameraId !== linkedCameraId) {
+    setPrevLinkedCameraId(linkedCameraId);
+    if (scopeState.siteScopeKey === siteScopeKey && linkedCameraId !== activeScopeState.chosen) {
+      setScopeState((prev) => ({
+        ...prev,
+        chosen: linkedCameraId,
+        focusRawMode: false,
+      }));
+    }
+  }
+  const selectCamera = useCallback(
+    (nextCameraId: string) => {
+      setCamera(nextCameraId);
+      onSyncCameraUrl(site.id, nextCameraId);
+    },
+    [onSyncCameraUrl, setCamera, site.id],
   );
   const setLayoutMode = useCallback(
     (nextMode: 'focus' | 'grid') =>
@@ -493,9 +550,10 @@ function CameraScope({
   const selected =
     active.find((row) => row.id === chosen) ??
     (linkedCameraId && chosen === linkedCameraId ? undefined : active[0]);
-  const evidenceCamera = evidenceCameraId
-    ? active.find((row) => row.id === evidenceCameraId)
-    : undefined;
+  const evidenceCamera =
+    canViewSafetyRecords && evidenceCameraId
+      ? active.find((row) => row.id === evidenceCameraId)
+      : undefined;
 
   // With 1 available camera, open large single-camera Focus stage by default unless operator explicitly chose Grid.
   const focus =
@@ -595,7 +653,7 @@ function CameraScope({
             data-tour-anchor="monitor-camera-select"
             className="block h-10 flex-1 min-w-0 max-w-full truncate rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-sm font-normal text-slate-900 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-slate-900 disabled:bg-slate-50 disabled:text-slate-500"
             value={selected?.id ?? ''}
-            onChange={(e) => setCamera(e.target.value)}
+            onChange={(e) => selectCamera(e.target.value)}
             disabled={!active.length}
           >
             {!selected && <option value="">{t('monitor.choose')}</option>}
@@ -718,7 +776,7 @@ function CameraScope({
                   type="button"
                   data-testid="monitor-clear-linked-camera"
                   className="inline-flex min-h-9 items-center rounded-lg border border-amber-300 bg-white px-3.5 py-1.5 text-xs font-semibold text-amber-950 hover:bg-amber-100 cursor-pointer"
-                  onClick={() => setCamera(active[0]!.id)}
+                  onClick={() => selectCamera(active[0]!.id)}
                 >
                   {trMonitor('monitor.clearLinkedCamera')}
                 </button>
@@ -858,7 +916,9 @@ function CameraScope({
               siteName={site.name}
               camera={selected}
               aiPaused={!!aiPaused}
-              onOpenEvidence={() => setEvidenceCameraId(selected.id)}
+              onOpenEvidence={
+                canViewSafetyRecords ? () => setEvidenceCameraId(selected.id) : undefined
+              }
               onAiSnapshotUpdate={handleFocusSnapshotUpdate}
               onTransportChoice={() => setLayoutMode('focus')}
               onExitFocus={() => {
@@ -872,30 +932,32 @@ function CameraScope({
               {...common}
               cameras={wall}
               selectedCameraId={selected.id}
-              onSelectCamera={setCamera}
-              onOpenEvidence={(id) => setEvidenceCameraId(id)}
+              onSelectCamera={selectCamera}
+              onOpenEvidence={canViewSafetyRecords ? (id) => setEvidenceCameraId(id) : undefined}
               onTilePreviewUpdate={handleTilePreviewUpdate}
               onTileUnmount={handleTileUnmount}
               onEnlargeCamera={(id) => {
                 pendingFocusTargetRef.current = { kind: 'focus-exit' };
-                setCamera(id);
+                selectCamera(id);
                 setLayoutMode('focus');
               }}
             />
           ))}
-        <MonitorEvidenceDrawer
-          open={Boolean(evidenceCamera)}
-          onClose={() => setEvidenceCameraId(null)}
-          siteId={site.id}
-          siteCode={site.code}
-          siteName={site.name}
-          camera={evidenceCamera}
-          sessionScope={scope}
-          aiPaused={!!aiPaused}
-          enableFrameInboxLink={Boolean(enableFrameInboxLink)}
-          snapshot={evidenceCamera ? snapshotsByCamera[evidenceCamera.id] : undefined}
-          isRawModeActive={Boolean(focus && evidenceCamera?.id === selected?.id && focusRawMode)}
-        />
+        {canViewSafetyRecords && (
+          <MonitorEvidenceDrawer
+            open={Boolean(evidenceCamera)}
+            onClose={() => setEvidenceCameraId(null)}
+            siteId={site.id}
+            siteCode={site.code}
+            siteName={site.name}
+            camera={evidenceCamera}
+            sessionScope={scope}
+            aiPaused={!!aiPaused}
+            enableFrameInboxLink={Boolean(enableFrameInboxLink)}
+            snapshot={evidenceCamera ? snapshotsByCamera[evidenceCamera.id] : undefined}
+            isRawModeActive={Boolean(focus && evidenceCamera?.id === selected?.id && focusRawMode)}
+          />
+        )}
       </div>
       <div className="flex flex-wrap items-center justify-end gap-2 pt-0.5">
         <MonitorWorkspaceTour

@@ -95,92 +95,111 @@ export function WorkerDocumentReviewView(p: {
   };
 
   return (
-    <section className="space-y-4 rounded-2xl border border-slate-200/90 bg-white p-3 sm:p-5 shadow-xs">
+    <section className="min-w-0 space-y-4">
       {/* Screen-reader accessible title for tests & a11y */}
       <h2 className="sr-only">{tr('documents.reviewQueue')}</h2>
 
-      {/* Main Review Area: 2-column Master-Detail on desktop */}
-      <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
-        {/* Left Column: Search, Filters & Worker Queue */}
-        <div className="lg:col-span-4 space-y-4">
-          {/* Filter and Search Bar */}
-          <div className="p-3 sm:p-3.5 rounded-2xl border border-slate-200/90 bg-slate-50/60 space-y-2.5 shadow-2xs">
-            <div className="flex items-center justify-between pb-1">
-              <label
-                htmlFor="worker-documents-search-input"
-                className="block text-[11px] font-extrabold uppercase tracking-wider text-slate-500 cursor-pointer"
-              >
-                {tr('documents.search')}
-              </label>
-              <button
-                type="button"
-                onClick={refresh}
-                disabled={workers.isFetching}
-                className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg border border-slate-200 bg-white text-xs font-bold text-slate-700 hover:bg-slate-50 transition-all shadow-2xs cursor-pointer"
-              >
-                <IconRefresh
-                  className={`w-3.5 h-3.5 text-slate-500 ${workers.isFetching ? 'animate-spin text-[#F66B17]' : ''}`}
-                />
-                <span>{tr('documents.refresh')}</span>
-              </button>
-            </div>
-            <div className="relative">
-              <IconSearch className="w-4 h-4 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2 pointer-events-none" />
-              <input
-                id="worker-documents-search-input"
-                aria-label={tr('documents.search')}
-                value={search}
-                maxLength={120}
-                placeholder={tr('documents.search')}
-                onChange={(e) => {
-                  setSearch(e.target.value);
-                  setOffset(0);
-                }}
-                className="w-full pl-10 pr-4 py-2 rounded-xl border border-slate-200 bg-white text-xs font-medium text-slate-800 placeholder:text-slate-400 focus:border-[#F66B17] focus:ring-2 focus:ring-[#F66B17]/15 focus:outline-none transition-all shadow-2xs"
-              />
-            </div>
+      <div className="grid items-end gap-3 rounded-2xl border border-slate-200 bg-white p-4 md:grid-cols-[minmax(0,1fr)_220px] xl:grid-cols-[minmax(0,1fr)_220px_auto_auto]">
+        <div className="min-w-0 space-y-2">
+          <label
+            htmlFor="worker-documents-search-input"
+            className="block text-xs font-medium text-slate-500"
+          >
+            {tr('documents.search')}
+          </label>
+          <div className="relative">
+            <IconSearch className="w-4 h-4 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2 pointer-events-none" />
+            <input
+              id="worker-documents-search-input"
+              aria-label={tr('documents.search')}
+              value={search}
+              maxLength={120}
+              placeholder={tr('documents.search')}
+              onChange={(e) => {
+                setSearch(e.target.value);
+                setOffset(0);
+              }}
+              className="h-11 w-full rounded-xl border border-slate-200 bg-slate-50/60 pl-10 pr-3 text-sm text-slate-800 placeholder:text-slate-400 focus:border-[#F66B17] focus:bg-white focus:outline-none focus:ring-2 focus:ring-[#F66B17]/15"
+            />
+          </div>
+        </div>
+        <label className="block min-w-0 space-y-2 text-xs font-medium text-slate-500">
+          <span className="block">{tr('documents.submissionFilter')}</span>
+          <SmartNativeSelect
+            value={submissionStatus}
+            onChange={(e) => {
+              setSubmissionStatus(e.target.value as WorkerDocumentSubmissionStatus | '');
+              setOffset(0);
+            }}
+            className="h-11 w-full rounded-xl border border-slate-200 bg-slate-50/60 px-3 text-sm text-slate-800 focus:border-[#F66B17] focus:outline-none focus:ring-2 focus:ring-[#F66B17]/15"
+          >
+            <option value="">{tr('documents.allSubmissions')}</option>
+            {(['NOT_SUBMITTED', 'PENDING_REVIEW', 'REVIEWED'] as const).map((status) => (
+              <option key={status} value={status}>
+                {tr(`documents.${status}`)}
+              </option>
+            ))}
+          </SmartNativeSelect>
+        </label>
 
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-              <label className="block text-xs font-bold text-slate-700 space-y-1">
-                <span className="block text-[11px] font-extrabold uppercase tracking-wider text-slate-500 truncate">
-                  {tr('documents.submissionFilter')}
-                </span>
-                <SmartNativeSelect
-                  value={submissionStatus}
-                  onChange={(e) => {
-                    setSubmissionStatus(e.target.value as WorkerDocumentSubmissionStatus | '');
-                    setOffset(0);
-                  }}
-                  className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-800 shadow-2xs focus:border-[#F66B17] focus:ring-2 focus:ring-[#F66B17]/15 focus:outline-none transition-all cursor-pointer"
-                >
-                  <option value="">{tr('documents.allSubmissions')}</option>
-                  {(['NOT_SUBMITTED', 'PENDING_REVIEW', 'REVIEWED'] as const).map((status) => (
-                    <option key={status} value={status}>
-                      {tr(`documents.${status}`)}
-                    </option>
-                  ))}
-                </SmartNativeSelect>
-              </label>
+        <label
+          className={`flex min-h-11 items-center gap-2 rounded-xl border px-3 py-2 text-xs font-medium transition-colors ${
+            needsSupplement
+              ? 'bg-rose-50 border-rose-300 text-rose-800 ring-1 ring-rose-300/40'
+              : 'bg-white border-slate-200 text-slate-600 hover:bg-slate-50 hover:border-slate-300'
+          }`}
+        >
+          <input
+            type="checkbox"
+            checked={needsSupplement}
+            onChange={(e) => {
+              setNeedsSupplement(e.target.checked);
+              setOffset(0);
+            }}
+            className="w-4 h-4 rounded text-[#F66B17] focus:ring-[#F66B17] border-slate-300 accent-[#F66B17] cursor-pointer shrink-0"
+          />
+          <span>{tr('documents.onlyNeedsSupplement')}</span>
+        </label>
+        <button
+          type="button"
+          onClick={refresh}
+          disabled={workers.isFetching}
+          className="inline-flex min-h-11 items-center justify-center gap-2 rounded-xl border border-slate-200 px-4 text-xs font-semibold text-slate-600 hover:bg-slate-50 disabled:opacity-50"
+        >
+          <IconRefresh className={`h-4 w-4 shrink-0 ${workers.isFetching ? 'animate-spin' : ''}`} />
+          {tr('documents.refresh')}
+        </button>
+      </div>
 
-              <label
-                className={`flex items-center gap-2 px-3 py-2 rounded-xl border transition-all cursor-pointer select-none text-xs font-bold shadow-2xs self-end min-h-11 ${
-                  needsSupplement
-                    ? 'bg-rose-50 border-rose-300 text-rose-800 ring-1 ring-rose-300/40'
-                    : 'bg-white border-slate-200 text-slate-600 hover:bg-slate-50 hover:border-slate-300'
-                }`}
-              >
-                <input
-                  type="checkbox"
-                  checked={needsSupplement}
-                  onChange={(e) => {
-                    setNeedsSupplement(e.target.checked);
-                    setOffset(0);
-                  }}
-                  className="w-4 h-4 rounded text-[#F66B17] focus:ring-[#F66B17] border-slate-300 accent-[#F66B17] cursor-pointer shrink-0"
-                />
-                <span className="truncate">{tr('documents.onlyNeedsSupplement')}</span>
-              </label>
-            </div>
+      {(p.canReview ?? true) && (
+        <WorkerDocumentQuickScan
+          compact
+          key={selectionKey}
+          client={p.client}
+          token={p.token}
+          siteId={p.siteId}
+          profiles={
+            workers.data?.items.filter((worker) => checkedIds.includes(worker.workerId)) ?? []
+          }
+          disabled={!!selection.manualWorker}
+          onUpdated={refresh}
+          onActiveChange={(workerId) =>
+            setSelection((current) =>
+              current.revision === selection.revision
+                ? { ...current, activeWorker: workerId }
+                : current,
+            )
+          }
+        />
+      )}
+
+      <div className="grid min-w-0 grid-cols-1 overflow-hidden rounded-2xl border border-slate-200 bg-white lg:grid-cols-[280px_minmax(0,1fr)]">
+        <div className="min-w-0 border-b border-slate-200 p-4 lg:border-b-0 lg:border-r">
+          <div className="mb-4 flex flex-wrap items-center justify-between gap-2">
+            <h3 className="text-sm font-semibold text-slate-800">{tr('common.workers')}</h3>
+            <span className="rounded-lg bg-slate-100 px-2 py-1 text-xs text-slate-500">
+              {workers.isPending ? '…' : tr('documents.profileCount', { count: total })}
+            </span>
           </div>
 
           {/* Loading state */}
@@ -216,60 +235,41 @@ export function WorkerDocumentReviewView(p: {
 
           {/* Empty State */}
           {workers.data && workers.data.items.length === 0 && (
-            <div className="p-8 rounded-2xl border border-slate-200/80 bg-slate-50/50 text-center text-slate-500 space-y-2">
+            <div className="space-y-2 rounded-xl bg-slate-50 p-6 text-center text-slate-500">
               <IconUsers className="w-8 h-8 text-slate-400 mx-auto" />
-              <p className="text-sm font-semibold">{tr('documents.noFile')}</p>
+              <p className="text-sm">{tr('documents.noProfiles')}</p>
             </div>
           )}
 
           {(p.canReview ?? true) && (
-            <>
-              <label className="flex items-center gap-2 text-sm font-semibold text-slate-700">
-                <input
-                  type="checkbox"
-                  className="h-4 w-4 accent-orange-500"
-                  checked={
-                    !!workers.data?.items.length &&
-                    workers.data.items.every((worker) => checkedIds.includes(worker.workerId))
-                  }
-                  onChange={(event) =>
-                    setSelection({
-                      ...selection,
-                      ids: event.target.checked
-                        ? (workers.data?.items.map((worker) => worker.workerId) ?? [])
-                        : [],
-                    })
-                  }
-                />
-                {tr('documents.selectPage')}
-              </label>
-              <WorkerDocumentQuickScan
-                key={selectionKey}
-                client={p.client}
-                token={p.token}
-                siteId={p.siteId}
-                profiles={
-                  workers.data?.items.filter((worker) => checkedIds.includes(worker.workerId)) ?? []
+            <label className="mb-3 flex items-center gap-2 text-xs text-slate-500">
+              <input
+                type="checkbox"
+                aria-label={tr('documents.selectPage')}
+                className="h-4 w-4 accent-orange-500"
+                checked={
+                  !!workers.data?.items.length &&
+                  workers.data.items.every((worker) => checkedIds.includes(worker.workerId))
                 }
-                disabled={!!selection.manualWorker}
-                onUpdated={refresh}
-                onActiveChange={(workerId) =>
-                  setSelection((current) =>
-                    current.revision === selection.revision
-                      ? { ...current, activeWorker: workerId }
-                      : current,
-                  )
+                onChange={(event) =>
+                  setSelection({
+                    ...selection,
+                    ids: event.target.checked
+                      ? (workers.data?.items.map((worker) => worker.workerId) ?? [])
+                      : [],
+                  })
                 }
               />
-            </>
+              {tr('documents.selectPageShort')}
+            </label>
           )}
           {/* Worker List Stack without visible scrollbar */}
-          <ul className="space-y-2.5 max-h-[560px] overflow-y-auto [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden">
+          <ul className="max-h-96 space-y-2 overflow-y-auto pr-1 [scrollbar-width:thin] lg:max-h-[560px]">
             {workers.data?.items.map((w) => {
               const isSelected = selected === w.workerId;
 
               return (
-                <li key={w.workerId} className="flex items-start gap-2">
+                <li key={w.workerId} className="flex items-start gap-2 rounded-xl p-1">
                   {(p.canReview ?? true) && (
                     <input
                       type="checkbox"
@@ -283,60 +283,50 @@ export function WorkerDocumentReviewView(p: {
                     />
                   )}
                   <button
-                    className={`w-full rounded-2xl border p-3.5 text-left transition-all relative overflow-hidden group shadow-2xs cursor-pointer ${
+                    className={`min-w-0 flex-1 rounded-xl border border-transparent p-3 text-left transition-colors relative group cursor-pointer focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#F66B17] ${
                       isSelected
-                        ? 'border-[#F66B17] bg-orange-50/50 ring-2 ring-[#F66B17]/20 shadow-xs'
-                        : 'border-slate-200/90 bg-white hover:border-slate-300 hover:bg-slate-50/60'
+                        ? 'border-orange-300 bg-orange-50/60'
+                        : 'bg-white hover:bg-slate-50'
                     }`}
                     onClick={() => setSelected(w.workerId)}
                     aria-pressed={isSelected}
                   >
                     {isSelected && (
-                      <div className="absolute left-0 top-0 bottom-0 w-1.5 bg-[#F66B17]" />
+                      <div className="absolute left-0 top-0 bottom-0 w-0.5 bg-[#F66B17]" />
                     )}
-                    <div className="space-y-2.5">
-                      <div className="flex items-center justify-between gap-3 min-w-0">
-                        <div className="flex items-center gap-2.5 min-w-0 flex-1">
-                          <div
-                            className={`w-9 h-9 rounded-xl flex items-center justify-center font-extrabold text-xs shrink-0 transition-colors ${
-                              isSelected
-                                ? 'bg-[#F66B17] text-white shadow-2xs'
-                                : 'bg-slate-100 text-[#041D2E] border border-slate-200'
-                            }`}
-                          >
-                            {w.displayName.charAt(0).toUpperCase()}
-                          </div>
-                          <div className="min-w-0 flex-1">
-                            <p className="font-bold text-sm text-slate-900 group-hover:text-[#F66B17] transition-colors truncate">
-                              {w.displayName}
-                            </p>
-                            <span className="font-mono text-[10px] font-semibold text-slate-500 bg-slate-100 px-1 py-0.5 rounded border border-slate-200/80">
-                              {w.externalId}
-                            </span>
-                          </div>
+                    <div className="space-y-2">
+                      <div className="min-w-0 space-y-2">
+                        <div className="min-w-0 flex-1">
+                          <p className="text-sm font-semibold leading-5 text-slate-800 [overflow-wrap:anywhere]">
+                            {w.displayName}
+                          </p>
                         </div>
 
-                        {/* Top-right: Single primary status badge */}
-                        <span
-                          className={`inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-md text-xs font-bold border shrink-0 ${
-                            w.submissionStatus === 'PENDING_REVIEW'
-                              ? 'bg-amber-50 text-amber-800 border-amber-200/90'
-                              : w.submissionStatus === 'REVIEWED'
-                                ? 'bg-emerald-50 text-emerald-700 border-emerald-200/90'
-                                : 'bg-slate-100 text-slate-600 border-slate-200'
-                          }`}
-                        >
+                        <div className="flex items-center gap-1.5 whitespace-nowrap">
+                          <span className="shrink-0 rounded-md bg-slate-100 px-1.5 py-0.5 font-mono text-[10px] font-medium text-slate-500">
+                            {w.externalId}
+                          </span>
                           <span
-                            className={`w-1.5 h-1.5 rounded-full shrink-0 ${
+                            className={`inline-flex shrink-0 items-center gap-1 rounded-md border px-2 py-0.5 text-[10px] font-semibold ${
                               w.submissionStatus === 'PENDING_REVIEW'
-                                ? 'bg-amber-500'
+                                ? 'bg-amber-50 text-amber-800 border-amber-200/90'
                                 : w.submissionStatus === 'REVIEWED'
-                                  ? 'bg-emerald-500'
-                                  : 'bg-slate-400'
+                                  ? 'bg-emerald-50 text-emerald-700 border-emerald-200/90'
+                                  : 'bg-slate-100 text-slate-600 border-slate-200'
                             }`}
-                          />
-                          <span>{tr(`documents.${w.submissionStatus ?? 'NOT_SUBMITTED'}`)}</span>
-                        </span>
+                          >
+                            <span
+                              className={`w-1.5 h-1.5 rounded-full shrink-0 ${
+                                w.submissionStatus === 'PENDING_REVIEW'
+                                  ? 'bg-amber-500'
+                                  : w.submissionStatus === 'REVIEWED'
+                                    ? 'bg-emerald-500'
+                                    : 'bg-slate-400'
+                              }`}
+                            />
+                            <span>{tr(`documents.${w.submissionStatus ?? 'NOT_SUBMITTED'}`)}</span>
+                          </span>
+                        </div>
                       </div>
 
                       {/* Sub-row for Warning / Supplement Badges and AI Status */}
@@ -414,7 +404,7 @@ export function WorkerDocumentReviewView(p: {
         </div>
 
         {/* Right Column: Selected Worker Details & Document Review */}
-        <div className="lg:col-span-8">
+        <div className="min-w-0 p-4 sm:p-6">
           {selected ? (
             <WorkerDocumentsPanel
               key={selected}

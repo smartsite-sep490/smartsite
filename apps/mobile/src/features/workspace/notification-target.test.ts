@@ -98,7 +98,22 @@ it('opens a Safety handover Incident only for the current Site contractor worksp
     route: 'assigned',
     id: 'incident-a',
     kind: 'incident',
+    actionId: 'action-a',
   });
   expect(notificationTarget(handover, 'a', 'worker')).toBeNull();
   expect(notificationTarget(handover, 'b', 'contractor')).toBeNull();
+});
+
+it('keeps old handover notices without an action target compatible', () => {
+  expect(
+    notificationTarget(
+      notification({
+        siteId: 'a',
+        incidentId: 'incident-a',
+        tab: 'incidents',
+      } as UserNotificationResponse['target']),
+      'a',
+      'contractor',
+    ),
+  ).toEqual({ route: 'assigned', id: 'incident-a', kind: 'incident' });
 });

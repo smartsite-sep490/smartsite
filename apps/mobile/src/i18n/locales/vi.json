@@ -126,6 +126,10 @@
   "workerHome": {
     "greeting": "Xin chào,",
     "todayShift": "Ca hôm nay",
+    "noShiftToday": "Hôm nay chưa có ca được phân công",
+    "viewSchedule": "Mở lịch để xem phân công",
+    "scheduleUnavailable": "Chưa tải được lịch hôm nay",
+    "breakTime": "Nghỉ giữa ca {{from}} – {{to}}",
     "shiftHours": "08:00 – 17:00",
     "shiftBreak": "Nghỉ trưa 12:00 – 13:00",
     "onSite": "Trong công trường",
@@ -685,7 +689,9 @@
     "refresh": "Làm mới công việc khắc phục",
     "awaitingReview": "Đang chờ cán bộ an toàn xác minh.",
     "otherWorkOpen": "Công việc này đã đóng. Vụ việc còn công việc khác cần hoàn thành.",
-    "submitToSafety": "Nộp kết quả cho cán bộ an toàn"
+    "submitToSafety": "Nộp kết quả cho cán bộ an toàn",
+    "linkedHandover": "Lần bàn giao từ thông báo",
+    "handoverUnavailable": "Lần bàn giao này không còn khả dụng."
   },
   "qr": {
     "title": "QR dự phòng",
@@ -1441,6 +1447,13 @@
     "confirmCLEAR_LEADER": "Gỡ vai trò nhóm trưởng",
     "confirmEDIT": "Lưu thay đổi",
     "confirmARCHIVE": "Lưu trữ nhóm",
+    "archiveBlockedMembers": "Nhóm còn {{count}} thành viên. Chuyển hoặc gỡ hết thành viên trước khi lưu trữ.",
+    "manageMembers": "Quản lý thành viên",
+    "archiveReasonRequired": "Vui lòng nhập lý do lưu trữ có ít nhất 5 ký tự.",
+    "archiveChanged": "Thông tin nhóm đã thay đổi. Tải lại, kiểm tra thành viên rồi xác nhận lưu trữ lại.",
+    "reloadArchive": "Tải lại thông tin nhóm",
+    "archivedSuccess": "Đã lưu trữ nhóm {{name}}. Nhóm nằm trong mục Đã lưu trữ.",
+    "archiveUnavailable": "Chưa tìm thấy nhóm hoặc chức năng lưu trữ chưa sẵn sàng. Tải lại nhóm và thử lại.",
     "assignedZone": "Khu vực được giao",
     "zoneEmptyHint": "Phân khu vực để thành viên biết nơi làm việc của nhóm.",
     "zoneHistory": "Lịch sử phân khu vực",

@@ -17,7 +17,12 @@ export function notificationTarget(
       : null;
   if ('incidentId' in target)
     return role === 'contractor'
-      ? { route: 'assigned', id: target.incidentId, kind: 'incident' }
+      ? {
+          route: 'assigned',
+          id: target.incidentId,
+          kind: 'incident',
+          ...('actionId' in target && target.actionId ? { actionId: target.actionId } : {}),
+        }
       : null;
   if ('requestId' in target && target.requestId && target.requestType)
     return {

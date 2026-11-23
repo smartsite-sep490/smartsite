@@ -1,3 +1,4 @@
+import type { SafetyOperationsView } from '../safety/safety-operations-navigation';
 import { SmartNativeSelect } from '../ui/SmartNativeSelect';
 import { loadAllPages } from '../workforce/load-all-pages';
 import { useManagementClient } from '../../features/auth/auth-session';
@@ -11,10 +12,10 @@ import { userErrorMessage } from '../../i18n/messages';
 import { uiLocale } from '../../i18n';
 import { translate as tr } from '../../i18n';
 import { useTranslation } from 'react-i18next';
-import { StatusBadge, TechnicalDetails } from '../safety/SafetyWorkflowUi';
+import { StatusBadge, WorkflowDetailTabs, WorkflowSplit } from '../safety/SafetyWorkflowUi';
 import { IncidentView } from '../safety/IncidentView';
 import { SafetyTasksView } from '../safety/SafetyTasksView';
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useId, useMemo, useRef, useState } from 'react';
 import { useInRouterContext } from 'react-router-dom';
 import type { FormEvent } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
@@ -27,10 +28,13 @@ import {
   type SafetyAlertType,
 } from '@smartsite/api-client';
 import { SafetyAlertEvidencePanel } from './SafetyAlertEvidencePanel';
-import { SafetyTaskTour } from '../safety/SafetyTaskTour';
-import { ALERTS_TOUR_VERSION, buildAlertsTourSteps } from '../safety/safetyTaskTourModel';
+import { resetWorkflowDetailScroll } from '../safety/safety-workflow';
 
 export interface SafetyAlertsViewProps {
+  view?: SafetyOperationsView;
+  onViewChange?: (view: SafetyOperationsView, siteId: string) => void;
+  onSiteChange?: (siteId: string) => void;
+  onRecordSelect?: (kind: 'alertId' | 'incidentId', id: string, siteId: string) => void;
   apiUrl: string;
   authenticatedSession?: Pick<LoginResponse, 'accessToken' | 'user'>;
   onSignOut?: () => void;
@@ -118,12 +122,12 @@ function AlertRow({
           : 'border-[#EAEAEA] bg-white hover:border-[#2F3437]/15 hover:bg-[#F7F6F3]'
       }`}
     >
-      <div className="flex flex-wrap items-start justify-between gap-3 min-w-0">
-        <div className="min-w-0">
-          <p className="text-xs font-bold uppercase tracking-widest text-[#6B6B6B]">
+      <div className="flex flex-wrap lg:flex-nowrap items-start justify-between gap-3 lg:gap-2 min-w-0">
+        <div className="min-w-0 lg:flex-1">
+          <p className="text-xs font-bold uppercase tracking-widest text-[#6B6B6B] lg:sr-only">
             {formatLabel(alert.alertType)}
           </p>
-          <p className="mt-1 font-semibold text-[#2F3437] break-words">
+          <p className="mt-1 lg:mt-0 lg:text-sm lg:leading-[18px] font-semibold text-[#2F3437] break-words line-clamp-2">
             {formatLabel(alert.candidateSubtype)}
           </p>
         </div>
@@ -133,13 +137,28 @@ function AlertRow({
           {formatLabel(alert.status)}
         </span>
       </div>
-      <div className="mt-3 flex flex-wrap gap-x-4 gap-y-1 text-xs text-[#6B6B6B]">
+      <div className="workflow-alert-meta mt-3 lg:mt-1 flex flex-wrap gap-x-4 lg:gap-x-2 gap-y-1 lg:gap-y-0 text-xs lg:text-[11px] lg:leading-4 text-[#6B6B6B]">
         <span>{tr('common.value_detections', { value1: alert.detectionCount })}</span>
-        <span>{tr('common.last_seen_value', { value1: formatDate(alert.lastDetectedAt) })}</span>
-        <span>
-          {alert.zoneId
-            ? tr('common.zone_value', { value1: alert.zoneId.slice(0, 8) })
-            : tr('common.no_resolved_zone')}
+        <span
+          className="workflow-alert-time"
+          title={tr('common.last_seen_value', { value1: formatDate(alert.lastDetectedAt) })}
+        >
+          <span className="lg:hidden">
+            {tr('common.last_seen_value', { value1: formatDate(alert.lastDetectedAt) })}
+          </span>
+          <time
+            className="hidden lg:inline"
+            dateTime={alert.lastDetectedAt}
+            aria-label={tr('common.last_seen_value', { value1: formatDate(alert.lastDetectedAt) })}
+          >
+            {formatDate(alert.lastDetectedAt)}
+          </time>
+        </span>
+        <span
+          className="lg:truncate"
+          title={alert.zoneId ? tr('safetyUi.zoneRecorded') : tr('common.no_resolved_zone')}
+        >
+          {alert.zoneId ? tr('safetyUi.zoneRecorded') : tr('common.no_resolved_zone')}
         </span>
       </div>
     </button>
@@ -158,6 +177,10 @@ function initialWorkspaceTab(session: Pick<LoginResponse, 'user'>): WorkspaceTab
 }
 
 export function SafetyAlertsView({
+  view,
+  onViewChange,
+  onSiteChange,
+  onRecordSelect,
   apiUrl,
   authenticatedSession,
   onSignOut,
@@ -176,18 +199,24 @@ export function SafetyAlertsView({
   const inRouter = useInRouterContext();
   const queryClient = useQueryClient();
   const [workspaceTab, setWorkspaceTab] = useState<WorkspaceTab>(
-    initialDocumentWorkerId
-      ? 'Documents'
-      : initialIncidentId
-        ? 'Incidents'
-        : initialChecklistId
-          ? 'Checklists'
-          : initialAlertId || initialType || initialStatus
-            ? 'Alerts'
-            : authenticatedSession
-              ? initialWorkspaceTab(authenticatedSession)
-              : 'Alerts',
+    view ??
+      (initialDocumentWorkerId
+        ? 'Documents'
+        : initialIncidentId
+          ? 'Incidents'
+          : initialChecklistId
+            ? 'Checklists'
+            : initialAlertId || initialType || initialStatus
+              ? 'Alerts'
+              : authenticatedSession
+                ? initialWorkspaceTab(authenticatedSession)
+                : 'Alerts'),
   );
+  const [previousView, setPreviousView] = useState(view);
+  if (view !== previousView) {
+    setPreviousView(view);
+    if (view) setWorkspaceTab(view);
+  }
   const [relatedAlertFilter, setRelatedAlertFilter] = useState<RelatedAlertFilter>();
   const [relatedChecklistFilter, setRelatedChecklistFilter] =
     useState<import('../safety/safety-context').RelatedChecklistFilter>();
@@ -218,6 +247,9 @@ export function SafetyAlertsView({
     }
   }
   const [incidentSourceAlert, setIncidentSourceAlert] = useState('');
+  const alertPanelId = useId();
+  const [alertDetailTab, setAlertDetailTab] = useState('review');
+  const alertDetailScroll = useRef<HTMLDivElement>(null);
   const [mobileAlertDetail, setMobileAlertDetail] = useState(!!initialAlertId);
   const [localSession, setSession] = useState<LoginResponse | null>(null);
   const session = authenticatedSession ?? localSession;
@@ -248,21 +280,6 @@ export function SafetyAlertsView({
   if (prevInitialStatus !== initialStatus) {
     setPrevInitialStatus(initialStatus);
     setStatus(initialStatus ?? 'ALL');
-  }
-
-  const [prevInitialSiteId, setPrevInitialSiteId] = useState(initialSiteId);
-  if (prevInitialSiteId !== initialSiteId) {
-    setPrevInitialSiteId(initialSiteId);
-    setIncidentReturn(undefined);
-    setRelatedAlertFilter(undefined);
-    setChecklistDraft(undefined);
-    setRelatedChecklistFilter(undefined);
-    setRequestedChecklistId(initialChecklistId ?? '');
-    setCreatedIncidentId('');
-    setRequestedSiteId(initialSiteId ?? '');
-    setRequestedAlertId('');
-    setMobileAlertDetail(!!initialAlertId);
-    setIncidentSourceAlert('');
   }
 
   const [prevInitialAlertId, setPrevInitialAlertId] = useState(initialAlertId);
@@ -403,7 +420,6 @@ export function SafetyAlertsView({
   );
 
   const alertSiteUnavailable =
-    !!requestedAlertId &&
     !!requestedSiteId &&
     sites.isSuccess &&
     !visibleSites.some((site) => site.id === requestedSiteId);
@@ -413,6 +429,26 @@ export function SafetyAlertsView({
       ? requestedSiteId
       : (visibleSites[0]?.id ?? '');
 
+  const [prevInitialSiteId, setPrevInitialSiteId] = useState(initialSiteId);
+  if (prevInitialSiteId !== initialSiteId) {
+    setPrevInitialSiteId(initialSiteId);
+    if (initialSiteId !== selectedSiteId) {
+      setIncidentReturn(undefined);
+      setRelatedAlertFilter(undefined);
+      setChecklistDraft(undefined);
+      setRelatedChecklistFilter(undefined);
+      setRequestedChecklistId(initialChecklistId ?? '');
+      setCreatedIncidentId('');
+      setRequestedAlertId(initialAlertId ?? '');
+      setMobileAlertDetail(!!initialAlertId);
+      setIncidentSourceAlert('');
+    }
+    setRequestedSiteId(initialSiteId ?? '');
+  }
+
+  useEffect(() => {
+    if (view && view !== workspaceTab) onViewChange?.(workspaceTab, selectedSiteId);
+  }, [view, workspaceTab, onViewChange, selectedSiteId]);
   const canReviewSafety =
     session?.user.roleAssignments.some(
       (r) => r.role === 'SAFETY_OFFICER' && r.siteId === selectedSiteId,
@@ -497,44 +533,12 @@ export function SafetyAlertsView({
   const hasSelectedAlertSummary = Boolean(
     hasAlertQueueFilter && detail.data && !detailAccessDenied,
   );
-  const canRecordAlertReview = Boolean(
-    hasSelectedAlertSummary && canReviewSafety && detail.data?.status === 'PENDING_REVIEW',
-  );
   const canCreateIncidentFromAlert = Boolean(
     hasSelectedAlertSummary &&
     canReviewSafety &&
     detail.data?.status === 'CONFIRMED' &&
     !detail.data?.incidentId,
   );
-  const hasAlertWorkContextAnchor = Boolean(
-    hasSelectedAlertSummary && (detail.data?.detections.length ?? 0) > 0,
-  );
-  const hasAlertFollowupContext = hasAlertWorkContextAnchor || canCreateIncidentFromAlert;
-  const alertsTourSteps = useMemo(
-    () =>
-      buildAlertsTourSteps({
-        hasQueueFilter: hasAlertQueueFilter,
-        hasSelectedCase: hasSelectedAlertSummary,
-        canRecordReview: canRecordAlertReview,
-        hasFollowupContext: hasAlertFollowupContext,
-      }),
-    [hasAlertQueueFilter, hasSelectedAlertSummary, canRecordAlertReview, hasAlertFollowupContext],
-  );
-  const alertsTourScopeKey = `${sessionScope}:${session?.user.id ?? 'anon'}:${selectedSiteId}:${workspaceTab}`;
-  const isAlertsTourAuthorized = Boolean(
-    session &&
-    token.length > 0 &&
-    session.user.isActive !== false &&
-    !session.user.mustChangePassword &&
-    hasAlertQueueFilter &&
-    !alertSiteUnavailable &&
-    !sites.isPending &&
-    !sites.error &&
-    !alerts.isPending &&
-    !alerts.error &&
-    (!selectedAlertId || (!detail.isPending && !detailAccessDenied)),
-  );
-
   const review = useMutation({
     mutationFn: async (targetStatus: SafetyAlertReviewTargetStatus) => {
       if (!detail.data || detailAccessDenied)
@@ -650,105 +654,125 @@ export function SafetyAlertsView({
     );
   }
 
+  const contextControls = (
+    <div className="flex min-w-0 flex-wrap items-center gap-3">
+      <label className="flex min-w-0 w-full sm:w-auto flex-wrap sm:flex-nowrap items-center gap-2.5 text-sm font-semibold text-slate-700">
+        <span className="shrink-0">{tr('common.site_fa7955')}</span>
+        <SmartNativeSelect
+          value={selectedSiteId}
+          onChange={(event) => {
+            setRelatedAlertFilter(undefined);
+            setRelatedChecklistFilter(undefined);
+            setIncidentReturn(undefined);
+            setChecklistDraft(undefined);
+            setRequestedChecklistId('');
+            setCreatedIncidentId('');
+            setRequestedSiteId(event.target.value);
+            onSiteChange?.(event.target.value);
+            setMobileAlertDetail(false);
+            setIncidentSourceAlert('');
+            setRequestedAlertId('');
+            setOffset(0);
+            resetReviewDraft();
+          }}
+          disabled={sites.isPending || visibleSites.length === 0}
+          className="h-10 w-full sm:w-80 min-w-0 truncate rounded-xl border border-slate-300 bg-white px-3.5 text-sm font-medium text-slate-900 shadow-2xs transition-colors hover:border-slate-400 focus-visible:border-slate-900 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-slate-900"
+        >
+          {alertSiteUnavailable && (
+            <option value="" disabled>
+              {tr('accounts.selectSite')}
+            </option>
+          )}
+          {visibleSites.map((site) => (
+            <option key={site.id} value={site.id}>
+              {site.code} · {site.name}
+            </option>
+          ))}
+        </SmartNativeSelect>
+      </label>
+      {(!externalSession || (!inRouter && Boolean(onSignOut))) && (
+        <button
+          type="button"
+          onClick={handleLogout}
+          className="inline-flex h-10 items-center rounded-xl border border-slate-300 bg-white px-3.5 text-sm font-semibold text-slate-800 hover:bg-slate-50 shrink-0 max-w-full truncate"
+        >
+          {tr('common.sign_out_value', { value1: session.user.displayName })}
+        </button>
+      )}
+    </div>
+  );
+
   return (
     <div
       data-testid="safety-operations-fullwidth-root"
-      className="w-full min-w-0 space-y-3.5 pb-10 text-slate-900"
+      className={
+        view ? 'safety-operations-screen' : 'w-full min-w-0 space-y-3.5 pb-10 text-slate-900'
+      }
     >
       {alertSiteUnavailable && <p role="alert">{tr('ppeNotifications.targetUnavailable')}</p>}
-      <div className="rounded-2xl border border-slate-200/90 bg-white shadow-2xs min-w-0">
-        <header className="flex flex-col gap-3 px-4 py-3.5 sm:px-5 lg:flex-row lg:items-center lg:justify-between min-w-0">
-          <div className="min-w-0">
-            <h1 className="text-2xl sm:text-[26px] font-bold tracking-tight text-slate-950">
-              {tr('common.safety_operations')}
-            </h1>
-            <p className="mt-0.5 text-xs sm:text-[13px] text-slate-500">
-              {tr(
-                'safety_alerts_view.review_alerts_manage_corrective_work_and_verify_safety_tasks_for_your_site',
-              )}
-            </p>
-          </div>
-          <div className="flex min-w-0 flex-wrap items-center gap-3">
-            <label className="flex min-w-0 w-full sm:w-auto flex-wrap sm:flex-nowrap items-center gap-2.5 text-sm font-semibold text-slate-700">
-              <span className="shrink-0">{tr('common.site_fa7955')}</span>
-              <SmartNativeSelect
-                value={selectedSiteId}
-                onChange={(event) => {
-                  setRelatedAlertFilter(undefined);
-                  setRelatedChecklistFilter(undefined);
-                  setIncidentReturn(undefined);
-                  setChecklistDraft(undefined);
-                  setRequestedChecklistId('');
-                  setCreatedIncidentId('');
-                  setRequestedSiteId(event.target.value);
-                  setMobileAlertDetail(false);
-                  setIncidentSourceAlert('');
-                  setRequestedAlertId('');
-                  setOffset(0);
-                  resetReviewDraft();
-                }}
-                disabled={sites.isPending || visibleSites.length === 0}
-                className="h-10 w-full sm:w-80 min-w-0 truncate rounded-xl border border-slate-300 bg-white px-3.5 text-sm font-medium text-slate-900 shadow-2xs transition-colors hover:border-slate-400 focus-visible:border-slate-900 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-slate-900"
-              >
-                {alertSiteUnavailable && (
-                  <option value="" disabled>
-                    {tr('accounts.selectSite')}
-                  </option>
-                )}
-                {visibleSites.map((site) => (
-                  <option key={site.id} value={site.id}>
-                    {site.code} · {site.name}
-                  </option>
-                ))}
-              </SmartNativeSelect>
-            </label>
-            {(!externalSession || (!inRouter && Boolean(onSignOut))) && (
-              <button
-                type="button"
-                onClick={handleLogout}
-                className="inline-flex h-10 items-center rounded-xl border border-slate-300 bg-white px-3.5 text-sm font-semibold text-slate-800 hover:bg-slate-50 shrink-0 max-w-full truncate"
-              >
-                {tr('common.sign_out_value', { value1: session.user.displayName })}
-              </button>
-            )}
-          </div>
-        </header>
-
-        <nav
-          className="flex flex-wrap items-center gap-1 border-t border-slate-100 bg-slate-50/70 px-3 py-2 sm:px-4 rounded-b-2xl"
-          aria-label={tr('common.safety_workspace')}
+      {view !== 'Incidents' && (
+        <div
+          className={
+            view
+              ? 'safety-workspace-context'
+              : 'rounded-2xl border border-slate-200/90 bg-white shadow-2xs min-w-0'
+          }
         >
-          {(
-            [
-              'Overview',
-              'Alerts',
-              'Incidents',
-              'Checklists',
-              'Safety Tasks',
-              ...(canReviewSafety ? ['Documents' as const] : []),
-            ] as const
-          ).map((tab) => (
-            <button
-              type="button"
-              key={tab}
-              aria-pressed={workspaceTab === tab}
-              disabled={
-                (tab === 'Alerts' && !canAlerts) ||
-                ((tab === 'Safety Tasks' || tab === 'Overview') && !canTasks)
-              }
-              onClick={() => setWorkspaceTab(tab)}
-              className={
-                'min-h-9 rounded-xl px-3.5 py-1.5 text-sm font-semibold transition-colors cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed ' +
-                (workspaceTab === tab
-                  ? 'bg-[#0F172A] text-white shadow-2xs'
-                  : 'text-slate-700 hover:bg-white hover:text-slate-950')
-              }
+          <header className="flex flex-col gap-3 px-4 py-3.5 sm:px-5 lg:flex-row lg:items-center lg:justify-between min-w-0">
+            {view === 'Alerts' && <h1 className="text-xl font-bold">{tr('labels.ALERTS')}</h1>}
+            {!view && (
+              <div className="min-w-0">
+                <h1 className="text-2xl sm:text-[26px] font-bold tracking-tight text-slate-950">
+                  {tr('common.safety_operations')}
+                </h1>
+                <p className="mt-0.5 text-xs sm:text-[13px] text-slate-500">
+                  {tr(
+                    'safety_alerts_view.review_alerts_manage_corrective_work_and_verify_safety_tasks_for_your_site',
+                  )}
+                </p>
+              </div>
+            )}
+            {contextControls}
+          </header>
+
+          {!view && (
+            <nav
+              className="flex flex-wrap items-center gap-1 border-t border-slate-100 bg-slate-50/70 px-3 py-2 sm:px-4 rounded-b-2xl"
+              aria-label={tr('common.safety_workspace')}
             >
-              {tab === 'Documents' ? tr('documents.reviewQueue') : localizedLabel(tab)}
-            </button>
-          ))}
-        </nav>
-      </div>
+              {(
+                [
+                  'Overview',
+                  'Alerts',
+                  'Incidents',
+                  'Checklists',
+                  'Safety Tasks',
+                  ...(canReviewSafety ? ['Documents' as const] : []),
+                ] as const
+              ).map((tab) => (
+                <button
+                  type="button"
+                  key={tab}
+                  aria-pressed={workspaceTab === tab}
+                  disabled={
+                    (tab === 'Alerts' && !canAlerts) ||
+                    ((tab === 'Safety Tasks' || tab === 'Overview') && !canTasks)
+                  }
+                  onClick={() => setWorkspaceTab(tab)}
+                  className={
+                    'min-h-9 rounded-xl px-3.5 py-1.5 text-sm font-semibold transition-colors cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed ' +
+                    (workspaceTab === tab
+                      ? 'bg-[#0F172A] text-white shadow-2xs'
+                      : 'text-slate-700 hover:bg-white hover:text-slate-950')
+                  }
+                >
+                  {tab === 'Documents' ? tr('documents.reviewQueue') : localizedLabel(tab)}
+                </button>
+              ))}
+            </nav>
+          )}
+        </div>
+      )}
       <section
         data-tour-anchor="alerts-queue-filter"
         className={
@@ -932,6 +956,7 @@ export function SafetyAlertsView({
 
       {selectedSiteId && workspaceTab === 'Incidents' && (
         <IncidentView
+          context={view ? contextControls : undefined}
           onBack={incidentReturn ? () => setWorkspaceTab(incidentReturn) : undefined}
           backLabel={
             incidentReturn === 'Overview'
@@ -946,6 +971,7 @@ export function SafetyAlertsView({
           }}
           initialIncidentId={createdIncidentId || initialIncidentId}
           initialActionId={initialActionId}
+          onSelect={(id) => onRecordSelect?.('incidentId', id, selectedSiteId)}
           key={sessionScope + selectedSiteId}
           client={client}
           apiUrl={apiUrl}
@@ -969,22 +995,10 @@ export function SafetyAlertsView({
         />
       )}
       {selectedSiteId && workspaceTab === 'Alerts' && canAlerts && (
-        <div className="flex flex-wrap items-center justify-end gap-2">
-          <SafetyTaskTour
-            taskId="alerts"
-            tourVersion={ALERTS_TOUR_VERSION}
-            userId={session.user.id}
-            scopeKey={alertsTourScopeKey}
-            isAuthorized={isAlertsTourAuthorized}
-            steps={alertsTourSteps}
-          />
-        </div>
-      )}
-      {selectedSiteId && workspaceTab === 'Alerts' && canAlerts && (
-        <div className="grid items-start gap-5 lg:grid-cols-[minmax(240px,0.65fr)_minmax(0,1.35fr)] min-w-0">
+        <WorkflowSplit className="workflow-split grid items-start gap-5 lg:grid-cols-[minmax(240px,0.65fr)_minmax(0,1.35fr)] min-w-0">
           <section
             aria-label={tr('common.alert_list')}
-            className={'space-y-3 min-w-0 ' + (mobileAlertDetail ? 'hidden lg:block' : '')}
+            className={'workflow-list-pane min-w-0 ' + (mobileAlertDetail ? 'hidden lg:flex' : '')}
           >
             <div className="flex items-center justify-between gap-3">
               <div>
@@ -1012,31 +1026,36 @@ export function SafetyAlertsView({
                 {tr('common.refresh')}
               </button>
             </div>
-            {alerts.isPending && (
-              <p className="rounded-lg bg-white p-5 text-sm">{tr('common.loading_alerts')}</p>
-            )}
-            {alerts.error && (
-              <p role="alert" className="rounded-lg bg-[#FDEBEC] p-5 text-sm text-[#9F2F2D]">
-                {errorMessage(alerts.error)}
-              </p>
-            )}
-            {alerts.data?.items.length === 0 && (
-              <p className="rounded-lg border border-dashed border-[#EAEAEA] bg-white p-8 text-center text-sm text-[#6B6B6B]">
-                {tr('safety_alerts_view.no_alerts_match_the_selected_site_and_filters')}
-              </p>
-            )}
-            {alerts.data?.items.map((alert) => (
-              <AlertRow
-                key={alert.id}
-                alert={alert}
-                selected={selectedAlertId === alert.id}
-                onSelect={() => {
-                  if (alert.id !== selectedAlertId) resetReviewDraft();
-                  setRequestedAlertId(alert.id);
-                  setMobileAlertDetail(true);
-                }}
-              />
-            ))}
+            <div className="workflow-list-items space-y-3">
+              {alerts.isPending && (
+                <p className="rounded-lg bg-white p-5 text-sm">{tr('common.loading_alerts')}</p>
+              )}
+              {alerts.error && (
+                <p role="alert" className="rounded-lg bg-[#FDEBEC] p-5 text-sm text-[#9F2F2D]">
+                  {errorMessage(alerts.error)}
+                </p>
+              )}
+              {alerts.data?.items.length === 0 && (
+                <p className="rounded-lg border border-dashed border-[#EAEAEA] bg-white p-8 text-center text-sm text-[#6B6B6B]">
+                  {tr('safety_alerts_view.no_alerts_match_the_selected_site_and_filters')}
+                </p>
+              )}
+              {alerts.data?.items.map((alert) => (
+                <AlertRow
+                  key={alert.id}
+                  alert={alert}
+                  selected={selectedAlertId === alert.id}
+                  onSelect={() => {
+                    if (alert.id !== selectedAlertId) resetReviewDraft();
+                    setRequestedAlertId(alert.id);
+                    onRecordSelect?.('alertId', alert.id, selectedSiteId);
+                    setAlertDetailTab('review');
+                    resetWorkflowDetailScroll(alertDetailScroll.current);
+                    setMobileAlertDetail(true);
+                  }}
+                />
+              ))}
+            </div>
             {alerts.data && alerts.data.total > alertPageSize && (
               <div className="flex items-center justify-end gap-2 pt-2">
                 <button
@@ -1074,8 +1093,7 @@ export function SafetyAlertsView({
           <aside
             aria-label={tr('common.alert_detail')}
             className={
-              'min-h-80 rounded-xl border border-[#EAEAEA] bg-white p-4 sm:p-5 min-w-0 ' +
-              (!mobileAlertDetail ? 'hidden lg:block' : '')
+              'workflow-detail-pane min-w-0 ' + (!mobileAlertDetail ? 'hidden lg:flex' : '')
             }
           >
             <button
@@ -1085,258 +1103,277 @@ export function SafetyAlertsView({
             >
               {tr('common.back_to_alerts')}
             </button>
-            <div className="flex items-center justify-between gap-3">
-              <h2 className="text-lg font-bold text-[#111111]">{tr('common.alert_detail')}</h2>
-              {selectedAlertId && (
-                <button
-                  type="button"
-                  onClick={() => void detail.refetch()}
-                  className="text-xs font-semibold text-[#F66B17] hover:text-[#D94E07] cursor-pointer"
-                >
-                  {tr('common.refresh_detail')}
-                </button>
-              )}
-            </div>
-            {!selectedAlertId && (
-              <p className="mt-4 text-sm text-[#6B6B6B]">
-                {tr('safety_alerts_view.select_an_alert_to_inspect_its_sources')}
-              </p>
-            )}
-            {detail.isPending && selectedAlertId && (
-              <p className="mt-4 text-sm text-[#6B6B6B]">{tr('common.loading_alert_detail')}</p>
-            )}
-            {detail.error && (
-              <p role="alert" className="mt-4 rounded-md bg-[#FDEBEC] p-3 text-sm text-[#9F2F2D]">
-                {errorMessage(detail.error)}
-              </p>
-            )}
-            {detail.data && !detailAccessDenied && (
-              <div className="mt-4 space-y-5 min-w-0">
-                <div data-tour-anchor="alerts-case-summary" className="space-y-5 min-w-0">
-                  <TechnicalDetails>
-                    {tr('safety_alerts_view.alert_value_revision_value', {
-                      value1: detail.data.id,
-                      value2: detail.data.revision,
-                    })}
-                  </TechnicalDetails>
-                  <dl className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4 text-sm min-w-0">
-                    <div>
-                      <dt className="text-[#6B6B6B]">{tr('common.candidate_identity')}</dt>
-                      <dd className="mt-1 font-semibold text-[#2F3437] break-words">
-                        {detail.data.candidateWorkerId ?? tr('common.unknown')}
-                      </dd>
-                    </div>
-                    <div>
-                      <dt className="text-[#6B6B6B]">{tr('common.detections')}</dt>
-                      <dd className="mt-1 font-semibold text-[#2F3437]">
-                        {detail.data.detectionsTotal}
-                      </dd>
-                    </div>
-                    <div>
-                      <dt className="text-[#6B6B6B]">{tr('common.status')}</dt>
-                      <dd className="mt-1 font-semibold text-[#2F3437] break-words">
-                        <StatusBadge value={detail.data.status} />
-                      </dd>
-                    </div>
-                    <div>
-                      <dt className="text-[#6B6B6B]">{tr('common.first_seen')}</dt>
-                      <dd className="mt-1 font-semibold text-[#2F3437] break-words">
-                        {formatDate(detail.data.firstDetectedAt)}
-                      </dd>
-                    </div>
-                    <div>
-                      <dt className="text-[#6B6B6B]">{tr('common.last_seen')}</dt>
-                      <dd className="mt-1 font-semibold text-[#2F3437] break-words">
-                        {formatDate(detail.data.lastDetectedAt)}
-                      </dd>
-                    </div>
-                  </dl>
-                  <div>
-                    <h3 className="text-sm font-bold text-[#2F3437]">
-                      {tr('common.evidence_amp_sources')}
-                    </h3>
-                    <div
-                      className={`mt-2 space-y-2 ${canReviewSafety ? '' : 'max-h-80 overflow-auto'}`}
-                    >
-                      {detail.data.detections.map((detection, detectionIndex) => (
-                        <div
-                          key={`${detail.data.id}:${detection.eventId}`}
-                          className="rounded-md bg-[#F7F6F3] p-3 text-xs min-w-0"
-                        >
-                          <div className="flex justify-between gap-3">
-                            <span className="font-mono font-semibold text-[#2F3437]">
-                              {detection.cameraExternalId}
-                            </span>
-                            <span className="font-bold text-[#346538]">
-                              {formatLabel(detection.processingStatus)}
-                            </span>
-                          </div>
-                          <p className="mt-1 text-[#6B6B6B]">{formatDate(detection.capturedAt)}</p>
-                          <TechnicalDetails>
-                            {tr('common.observation')} <span>{detection.eventId}</span>
-                          </TechnicalDetails>
-                          <div
-                            data-tour-anchor={
-                              !canCreateIncidentFromAlert && detectionIndex === 0
-                                ? 'alerts-followup'
-                                : undefined
-                            }
-                          >
-                            <AlertWorkContext
-                              client={client}
-                              apiUrl={apiUrl}
-                              scope={sessionScope}
-                              token={token}
-                              siteId={selectedSiteId}
-                              user={session.user}
-                              alertId={detail.data.id}
-                              revision={detail.data.revision}
-                            />
-                          </div>
-                          <SafetyAlertEvidencePanel
-                            client={client}
-                            apiUrl={apiUrl}
-                            sessionScope={sessionScope}
-                            token={token}
-                            siteId={selectedSiteId}
-                            alertId={detail.data.id}
-                            detection={detection}
-                            canReviewIdentity={canReviewSafety}
-                          />
-                        </div>
-                      ))}
-                      {detail.data.detections.length === 0 && (
-                        <p className="rounded-md bg-[#F7F6F3] p-3 text-sm text-[#6B6B6B]">
-                          {tr('safety_alerts_view.no_source_observation_is_linked_to_this_alert')}
-                        </p>
-                      )}
-                    </div>
-                  </div>
-                </div>
-                {canReviewSafety && detail.data.status === 'PENDING_REVIEW' && (
-                  <section
-                    data-tour-anchor="alerts-action-bar"
-                    className="rounded-lg border border-[#EAEAEA] bg-[#F7F6F3] p-3 sm:p-4 min-w-0"
-                  >
-                    <h3 className="text-sm font-bold text-[#111111]">
-                      {tr('common.record_review_decision')}
-                    </h3>
-                    <p className="mt-1 text-xs leading-5 text-[#6B6B6B]">
-                      {tr(
-                        'safety_alerts_view.explain_the_evidence_behind_the_decision_the_reason_is_required_and_cannot_be_edit',
-                      )}
-                    </p>
-                    <label
-                      htmlFor="review-reason-textarea"
-                      className="mt-3 block text-xs font-semibold text-[#2F3437]"
-                    >
-                      {tr('common.decision_reason')}{' '}
-                      <span className="font-normal text-[#6B6B6B]">
-                        {tr('common.minimum_5_characters')}
-                      </span>
-                    </label>
-                    <textarea
-                      id="review-reason-textarea"
-                      name="reviewReason"
-                      aria-label={tr('safety_alerts_view.decision_reason_minimum_5_characters')}
-                      value={reviewReason}
-                      onChange={(event) => setReviewReason(event.target.value)}
-                      minLength={5}
-                      maxLength={1000}
-                      rows={3}
-                      placeholder={tr(
-                        'safety_alerts_view.example_worker_is_clearly_visible_without_a_hard_hat_across_the_linked_observation',
-                      )}
-                      className="mt-1.5 w-full min-w-0 rounded-md border border-[#EAEAEA] bg-white px-3 py-2 text-sm outline-none focus:border-[#F66B17] focus:ring-2 focus:ring-[#F66B17]/10 placeholder:text-[#6B6B6B]"
-                    />
-                    {review.error && (
-                      <p
-                        role="alert"
-                        className="mt-2 rounded-md bg-[#FDEBEC] p-2 text-xs text-[#9F2F2D]"
-                      >
-                        {errorMessage(review.error)}
-                      </p>
-                    )}
-                    {review.isSuccess && (
-                      <p
-                        role="status"
-                        className="mt-2 rounded-md bg-[#EDF3EC] p-2 text-xs text-[#346538]"
-                      >
-                        {tr('common.review_decision_recorded')}
-                      </p>
-                    )}
-                    <div className="mt-3 flex flex-wrap gap-2">
-                      <button
-                        type="button"
-                        disabled={reviewReason.trim().length < 5 || review.isPending}
-                        onClick={() => review.mutate('CONFIRMED')}
-                        className="rounded-md bg-[#9F2F2D] px-3 py-2 text-xs font-bold text-white hover:bg-[#7F2524] disabled:cursor-not-allowed disabled:opacity-50"
-                      >
-                        {tr('common.confirm_violation')}
-                      </button>
-                      <button
-                        type="button"
-                        disabled={reviewReason.trim().length < 5 || review.isPending}
-                        onClick={() => review.mutate('DISMISSED')}
-                        className="rounded-md bg-[#111111] px-3 py-2 text-xs font-bold text-white hover:bg-[#333333] disabled:cursor-not-allowed disabled:opacity-50"
-                      >
-                        {tr('common.dismiss_alert')}
-                      </button>
-                    </div>
-                  </section>
-                )}
-                {canCreateIncidentFromAlert && (
+            <div className="workflow-detail-navigation">
+              <div className="workflow-detail-heading flex items-center justify-between gap-3">
+                <h2 className="text-lg font-bold text-[#111111]">{tr('common.alert_detail')}</h2>
+                {selectedAlertId && (
                   <button
                     type="button"
-                    data-tour-anchor="alerts-followup"
-                    className="min-h-10 rounded-lg bg-[var(--action-primary)] px-4 py-2 text-sm font-semibold text-white hover:bg-[var(--action-primary-hover)]"
-                    onClick={() => {
-                      setIncidentReturn(relatedAlertFilter ? 'Overview' : undefined);
-                      setIncidentSourceAlert(detail.data!.id);
-                      setWorkspaceTab('Incidents');
-                    }}
+                    onClick={() => void detail.refetch()}
+                    className="text-xs font-semibold text-[#F66B17] hover:text-[#D94E07] cursor-pointer"
                   >
-                    {tr('safety_alerts_view.create_incident_from_alert')}
+                    {tr('common.refresh_detail')}
                   </button>
                 )}
-                <section className="min-w-0">
-                  <h3 className="text-sm font-bold text-[#2F3437]">
-                    {tr('common.review_history_value', { value1: detail.data.reviewsTotal })}
-                  </h3>
-                  <div className="mt-2 space-y-2">
-                    {detail.data.reviews.map((item) => (
-                      <article
-                        key={item.id}
-                        className="rounded-md border border-[#EAEAEA] p-3 text-xs min-w-0"
-                      >
-                        <div className="flex flex-wrap justify-between gap-2">
-                          <span className="font-bold text-[#2F3437] break-words">
-                            {formatLabel(item.fromStatus)} → {formatLabel(item.toStatus)}
-                          </span>
-                          <time className="text-[#6B6B6B]">{formatDate(item.createdAt)}</time>
-                        </div>
-                        <p className="mt-2 whitespace-pre-wrap break-words text-[#2F3437]">
-                          {item.reason}
-                        </p>
-                        <TechnicalDetails>
-                          {tr('safety_alerts_view.actor_value_revision_value', {
-                            value1: item.actorUserId,
-                            value2: item.alertRevision,
-                          })}
-                        </TechnicalDetails>
-                      </article>
-                    ))}
-                    {detail.data.reviews.length === 0 && (
-                      <p className="rounded-md bg-[#F7F6F3] p-3 text-sm text-[#6B6B6B]">
-                        {tr('safety_alerts_view.no_review_decision_has_been_recorded')}
-                      </p>
-                    )}
-                  </div>
-                </section>
               </div>
+              <WorkflowDetailTabs
+                panelId={alertPanelId}
+                value={alertDetailTab}
+                onChange={(next) => {
+                  setAlertDetailTab(next);
+                  resetWorkflowDetailScroll(alertDetailScroll.current);
+                }}
+                options={[
+                  { value: 'review', label: tr('safetyUi.review') },
+                  { value: 'evidence', label: tr('safetyUi.evidence') },
+                  { value: 'history', label: tr('safetyUi.history') },
+                ]}
+              />
+            </div>
+            <div
+              className="workflow-detail-content"
+              role="tabpanel"
+              id={alertPanelId}
+              aria-labelledby={alertPanelId + '-' + alertDetailTab}
+              ref={alertDetailScroll}
+            >
+              {!selectedAlertId && (
+                <p className="mt-4 text-sm text-[#6B6B6B]">
+                  {tr('safety_alerts_view.select_an_alert_to_inspect_its_sources')}
+                </p>
+              )}
+              {detail.isPending && selectedAlertId && (
+                <p className="mt-4 text-sm text-[#6B6B6B]">{tr('common.loading_alert_detail')}</p>
+              )}
+              {detail.error && (
+                <p role="alert" className="mt-4 rounded-md bg-[#FDEBEC] p-3 text-sm text-[#9F2F2D]">
+                  {errorMessage(detail.error)}
+                </p>
+              )}
+              {detail.data && !detailAccessDenied && (
+                <div className="mt-4 space-y-5 min-w-0">
+                  <div
+                    hidden={alertDetailTab === 'history'}
+                    data-tour-anchor="alerts-case-summary"
+                    className="space-y-5 min-w-0"
+                  >
+                    <dl
+                      hidden={alertDetailTab !== 'review'}
+                      className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4 text-sm min-w-0"
+                    >
+                      <div>
+                        <dt className="text-[#6B6B6B]">{tr('common.candidate_identity')}</dt>
+                        <dd className="mt-1 font-semibold text-[#2F3437] break-words line-clamp-2">
+                          {detail.data.candidateWorkerId
+                            ? tr('safetyUi.identityReference')
+                            : tr('common.unknown')}
+                        </dd>
+                      </div>
+                      <div>
+                        <dt className="text-[#6B6B6B]">{tr('common.detections')}</dt>
+                        <dd className="mt-1 font-semibold text-[#2F3437]">
+                          {detail.data.detectionsTotal}
+                        </dd>
+                      </div>
+                      <div>
+                        <dt className="text-[#6B6B6B]">{tr('common.status')}</dt>
+                        <dd className="mt-1 font-semibold text-[#2F3437] break-words line-clamp-2">
+                          <StatusBadge value={detail.data.status} />
+                        </dd>
+                      </div>
+                      <div>
+                        <dt className="text-[#6B6B6B]">{tr('common.first_seen')}</dt>
+                        <dd className="mt-1 font-semibold text-[#2F3437] break-words line-clamp-2">
+                          {formatDate(detail.data.firstDetectedAt)}
+                        </dd>
+                      </div>
+                      <div>
+                        <dt className="text-[#6B6B6B]">{tr('common.last_seen')}</dt>
+                        <dd className="mt-1 font-semibold text-[#2F3437] break-words line-clamp-2">
+                          {formatDate(detail.data.lastDetectedAt)}
+                        </dd>
+                      </div>
+                    </dl>
+                    <AlertWorkContext
+                      client={client}
+                      apiUrl={apiUrl}
+                      scope={sessionScope}
+                      token={token}
+                      siteId={selectedSiteId}
+                      user={session.user}
+                      alertId={detail.data.id}
+                      revision={detail.data.revision}
+                    />
+                    <div>
+                      <h3 className="text-sm font-bold text-[#2F3437]">
+                        {tr('common.evidence_amp_sources')}
+                      </h3>
+                      <div
+                        className={`mt-2 space-y-2 ${canReviewSafety ? '' : 'max-h-80 overflow-auto'}`}
+                      >
+                        {detail.data.detections
+                          .filter((_, index) => alertDetailTab === 'evidence' || index === 0)
+                          .map((detection) => (
+                            <div
+                              key={`${detail.data.id}:${detection.eventId}`}
+                              className="rounded-md bg-[#F7F6F3] p-3 text-xs min-w-0"
+                            >
+                              <div className="flex justify-between gap-3">
+                                <span className="font-mono font-semibold text-[#2F3437]">
+                                  {detection.cameraExternalId}
+                                </span>
+                                <span className="font-bold text-[#346538]">
+                                  {formatLabel(detection.processingStatus)}
+                                </span>
+                              </div>
+                              <p className="mt-1 text-[#6B6B6B]">
+                                {formatDate(detection.capturedAt)}
+                              </p>
+                              <SafetyAlertEvidencePanel
+                                client={client}
+                                apiUrl={apiUrl}
+                                sessionScope={sessionScope}
+                                token={token}
+                                siteId={selectedSiteId}
+                                alertId={detail.data.id}
+                                detection={detection}
+                                canReviewIdentity={canReviewSafety}
+                              />
+                            </div>
+                          ))}
+                        {detail.data.detections.length === 0 && (
+                          <p className="rounded-md bg-[#F7F6F3] p-3 text-sm text-[#6B6B6B]">
+                            {tr('safety_alerts_view.no_source_observation_is_linked_to_this_alert')}
+                          </p>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                  <section hidden={alertDetailTab !== 'history'} className="min-w-0">
+                    <h3 className="text-sm font-bold text-[#2F3437]">
+                      {tr('common.review_history_value', { value1: detail.data.reviewsTotal })}
+                    </h3>
+                    <div className="mt-2 space-y-2">
+                      {detail.data.reviews.map((item) => (
+                        <article
+                          key={item.id}
+                          className="rounded-md border border-[#EAEAEA] p-3 text-xs min-w-0"
+                        >
+                          <div className="flex flex-wrap justify-between gap-2">
+                            <span className="font-bold text-[#2F3437] break-words">
+                              {formatLabel(item.fromStatus)} → {formatLabel(item.toStatus)}
+                            </span>
+                            <time className="text-[#6B6B6B]">{formatDate(item.createdAt)}</time>
+                          </div>
+                          <p className="mt-2 whitespace-pre-wrap break-words text-[#2F3437]">
+                            {item.reason}
+                          </p>
+                        </article>
+                      ))}
+                      {detail.data.reviews.length === 0 && (
+                        <p className="rounded-md bg-[#F7F6F3] p-3 text-sm text-[#6B6B6B]">
+                          {tr('safety_alerts_view.no_review_decision_has_been_recorded')}
+                        </p>
+                      )}
+                    </div>
+                  </section>
+                </div>
+              )}
+            </div>
+            {detail.data && !detailAccessDenied && alertDetailTab === 'review' && (
+              <footer className="workflow-detail-footer workflow-alert-footer">
+                <div className="w-full space-y-2">
+                  {canReviewSafety && detail.data.status === 'PENDING_REVIEW' && (
+                    <section
+                      data-tour-anchor="alerts-action-bar"
+                      className="rounded-lg border border-[#EAEAEA] bg-[#F7F6F3] p-3 sm:p-4 min-w-0"
+                    >
+                      <h3 className="text-sm font-bold text-[#111111]">
+                        {tr('common.record_review_decision')}
+                      </h3>
+                      <p className="mt-1 text-xs leading-5 text-[#6B6B6B]">
+                        {tr(
+                          'safety_alerts_view.explain_the_evidence_behind_the_decision_the_reason_is_required_and_cannot_be_edit',
+                        )}
+                      </p>
+                      <label
+                        htmlFor="review-reason-textarea"
+                        className="mt-3 block text-xs font-semibold text-[#2F3437]"
+                      >
+                        {tr('common.decision_reason')}{' '}
+                        <span className="font-normal text-[#6B6B6B]">
+                          {tr('common.minimum_5_characters')}
+                        </span>
+                      </label>
+                      <textarea
+                        id="review-reason-textarea"
+                        name="reviewReason"
+                        aria-label={tr('safety_alerts_view.decision_reason_minimum_5_characters')}
+                        value={reviewReason}
+                        onChange={(event) => setReviewReason(event.target.value)}
+                        minLength={5}
+                        maxLength={1000}
+                        rows={3}
+                        placeholder={tr(
+                          'safety_alerts_view.example_worker_is_clearly_visible_without_a_hard_hat_across_the_linked_observation',
+                        )}
+                        className="mt-1.5 w-full min-w-0 rounded-md border border-[#EAEAEA] bg-white px-3 py-2 text-sm outline-none focus:border-[#F66B17] focus:ring-2 focus:ring-[#F66B17]/10 placeholder:text-[#6B6B6B]"
+                      />
+                      {review.error && (
+                        <p
+                          role="alert"
+                          className="mt-2 rounded-md bg-[#FDEBEC] p-2 text-xs text-[#9F2F2D]"
+                        >
+                          {errorMessage(review.error)}
+                        </p>
+                      )}
+                      {review.isSuccess && (
+                        <p
+                          role="status"
+                          className="mt-2 rounded-md bg-[#EDF3EC] p-2 text-xs text-[#346538]"
+                        >
+                          {tr('common.review_decision_recorded')}
+                        </p>
+                      )}
+                      <div className="mt-3 flex flex-wrap gap-2">
+                        <button
+                          type="button"
+                          disabled={reviewReason.trim().length < 5 || review.isPending}
+                          onClick={() => review.mutate('CONFIRMED')}
+                          className="rounded-md bg-[#9F2F2D] px-3 py-2 text-xs font-bold text-white hover:bg-[#7F2524] disabled:cursor-not-allowed disabled:opacity-50"
+                        >
+                          {tr('common.confirm_violation')}
+                        </button>
+                        <button
+                          type="button"
+                          disabled={reviewReason.trim().length < 5 || review.isPending}
+                          onClick={() => review.mutate('DISMISSED')}
+                          className="rounded-md bg-[#111111] px-3 py-2 text-xs font-bold text-white hover:bg-[#333333] disabled:cursor-not-allowed disabled:opacity-50"
+                        >
+                          {tr('common.dismiss_alert')}
+                        </button>
+                      </div>
+                    </section>
+                  )}
+                  {canCreateIncidentFromAlert && (
+                    <button
+                      type="button"
+                      data-tour-anchor="alerts-followup"
+                      className="min-h-10 rounded-lg bg-[var(--action-primary)] px-4 py-2 text-sm font-semibold text-white hover:bg-[var(--action-primary-hover)]"
+                      onClick={() => {
+                        setIncidentReturn(relatedAlertFilter ? 'Overview' : undefined);
+                        setIncidentSourceAlert(detail.data!.id);
+                        setWorkspaceTab('Incidents');
+                      }}
+                    >
+                      {tr('safety_alerts_view.create_incident_from_alert')}
+                    </button>
+                  )}
+                </div>
+              </footer>
             )}
           </aside>
-        </div>
+        </WorkflowSplit>
       )}
     </div>
   );

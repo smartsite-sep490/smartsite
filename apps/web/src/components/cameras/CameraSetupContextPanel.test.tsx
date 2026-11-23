@@ -227,13 +227,48 @@ describe('CameraSetupContextPanel saved configuration vs worker-applied status',
     await waitFor(() => {
       expect(appStatus.getAttribute('data-application-state')).toBe('LOADED');
     });
-    expect(within(appStatus).getByText('Saved v3 · Worker reported: v3')).toBeTruthy();
-    expect(within(appStatus).getByText('Worker loaded v3')).toBeTruthy();
+    const primaryStatus = within(appStatus).getByTestId('camera-application-primary-status');
+    expect(primaryStatus.textContent).toBe('AI has received the configuration');
+    expect(primaryStatus.textContent).not.toMatch(/Worker|v3/);
+    const technicalDetails = within(appStatus).getByTestId(
+      'camera-application-technical-details',
+    ) as HTMLDetailsElement;
+    expect(technicalDetails.open).toBe(false);
+    expect(within(technicalDetails).getByText('Saved version: v3 · AI reported: v3')).toBeTruthy();
     expect(screen.queryByTestId('camera-saved-config-summary')).toBeNull();
     expect(
       screen.getByText(
         'Catalog status (Enabled/Disabled) and vN reflect saved configuration only, not worker application or live video. Check the selected camera status summary for worker receipts and Regions for reference-frame status.',
       ),
     ).toBeTruthy();
+  });
+
+  it('keeps compact context header and expanded diagnostics in normal document scroll without sticky positioning', () => {
+    render(
+      <CameraSetupContextBar
+        compact
+        siteCode="SITE-01"
+        siteName="North Yard"
+        rows={[ACTIVE_CAMERA]}
+        selectedCamera={ACTIVE_CAMERA}
+        canManageCameras={true}
+        canOpenMonitoring={false}
+        open={vi.fn()}
+        diagnosticsSlot={<div data-testid="expanded-diagnostics-slot">Diagnostics details</div>}
+      />,
+    );
+
+    const header = screen.getByTestId('camera-setup-sticky-header');
+    const tokens = header.className.split(/\s+/);
+    expect(tokens).not.toContain('lg:sticky');
+    expect(tokens).not.toContain('lg:top-16');
+    expect(tokens).not.toContain('lg:z-10');
+    expect(tokens).not.toContain('backdrop-blur-xs');
+
+    const diagnostics = within(header).getByTestId(
+      'camera-setup-diagnostics-disclosure',
+    ) as HTMLDetailsElement;
+    diagnostics.open = true;
+    expect(within(diagnostics).getByTestId('expanded-diagnostics-slot')).toBeTruthy();
   });
 });

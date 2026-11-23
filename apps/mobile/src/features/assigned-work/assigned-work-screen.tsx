@@ -1,6 +1,7 @@
 import { localizedLabel } from '../../i18n/messages';
 import { translate as tr } from '../../i18n';
-import { useState } from 'react';
+import { useRef, useState, type ComponentRef } from 'react';
+import { ScrollView, View } from 'react-native';
 import { File } from 'expo-file-system';
 import { useQuery } from '@tanstack/react-query';
 import type {
@@ -31,10 +32,12 @@ import { useTranslation } from '../../i18n';
 export function AssignedWorkScreen({
   initialId,
   initialKind,
+  initialActionId,
   onBack,
 }: {
   initialId?: string;
   initialKind?: string;
+  initialActionId?: string;
   onBack: () => void;
 }) {
   useTranslation();
@@ -42,6 +45,14 @@ export function AssignedWorkScreen({
   const [kind, setKind] = useState(initialKind === 'incident' ? 'incident' : 'checklist'),
     [id, setId] = useState(initialId ?? ''),
     [offset, setOffset] = useState(0);
+  const targetKey = [initialKind, initialId, initialActionId].join(':');
+  const [previousTarget, setPreviousTarget] = useState(targetKey);
+  if (previousTarget !== targetKey) {
+    setPreviousTarget(targetKey);
+    setKind(initialKind === 'incident' ? 'incident' : 'checklist');
+    setId(initialId ?? '');
+    setOffset(0);
+  }
   const checklists = useQuery({
     queryKey: [...queryKey, 'assigned-checklists', offset],
     queryFn: async ({ signal }) => {
@@ -81,7 +92,12 @@ export function AssignedWorkScreen({
         }}
       />
     ) : (
-      <IncidentDetail id={id} onBack={() => setId('')} />
+      <IncidentDetail
+        key={[id, id === initialId ? initialActionId : undefined].join(':')}
+        id={id}
+        actionId={id === initialId ? initialActionId : undefined}
+        onBack={() => setId('')}
+      />
     );
   return (
     <Page title={tr('assignedWork.title')} onBack={onBack}>
@@ -343,9 +359,19 @@ function ChecklistForm({ detail }: { detail: ChecklistDetailResponse }) {
     </Card>
   );
 }
-function IncidentDetail({ id, onBack }: { id: string; onBack: () => void }) {
+function IncidentDetail({
+  id,
+  actionId,
+  onBack,
+}: {
+  id: string;
+  actionId?: string;
+  onBack: () => void;
+}) {
   useTranslation();
   const { scope, client, token, user, queryKey } = useWorkspace();
+  const scrollRef = useRef<ComponentRef<typeof ScrollView>>(null);
+  const focusedTarget = useRef(false);
   const query = useQuery({
     queryKey: [...queryKey, 'incident', id],
     queryFn: () => client.getIncident(token, scope.siteId, id),
@@ -353,7 +379,7 @@ function IncidentDetail({ id, onBack }: { id: string; onBack: () => void }) {
     refetchOnWindowFocus: 'always',
   });
   return (
-    <Page title={tr('assignedWork.correctiveAction')} onBack={onBack}>
+    <Page title={tr('assignedWork.correctiveAction')} onBack={onBack} scrollRef={scrollRef}>
       <Button
         secondary
         label={tr('assignedWork.refresh')}
@@ -386,15 +412,43 @@ function IncidentDetail({ id, onBack }: { id: string; onBack: () => void }) {
                   </Hint>
                 ))}
               </Card>
+              {actionId &&
+                !data.actions.some((a) => a.id === actionId && a.assignedTo === user.id) && (
+                  <Hint>{tr('assignedWork.handoverUnavailable')}</Hint>
+                )}
               {data.actions
                 .filter((a) => a.assignedTo === user.id)
                 .map((a) => (
-                  <ActionForm
-                    key={`${a.id}:${a.version}`}
-                    action={a}
-                    incidentId={id}
-                    closed={data.status === 'CLOSED'}
-                  />
+                  <View
+                    key={a.id}
+                    onLayout={(event) => {
+                      if (a.id !== actionId || focusedTarget.current) return;
+                      focusedTarget.current = true;
+                      const y = event.nativeEvent.layout.y;
+                      requestAnimationFrame(() =>
+                        scrollRef.current?.scrollTo({ y: Math.max(0, y - 12), animated: true }),
+                      );
+                    }}
+                    style={
+                      a.id === actionId
+                        ? { borderColor: '#F66B17', borderWidth: 2, borderRadius: 20, padding: 3 }
+                        : undefined
+                    }
+                  >
+                    {a.id === actionId && <Hint>{tr('assignedWork.linkedHandover')}</Hint>}
+                    <ActionForm
+                      key={`${a.id}:${a.version}`}
+                      action={a}
+                      incidentId={id}
+                      closed={
+                        data.status === 'CLOSED' ||
+                        (!!actionId &&
+                          !data.actions.some(
+                            (target) => target.id === actionId && target.assignedTo === user.id,
+                          ))
+                      }
+                    />
+                  </View>
                 ))}
               <Card>
                 <Body>{tr('assignedWork.reviewHistory')}</Body>

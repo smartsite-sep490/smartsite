@@ -261,3 +261,28 @@ it('updates dynamic options and searches long lists without submitting the form'
   );
   expect(selectValue('New camera')).toBeTruthy();
 });
+
+it('keeps the shared option menu inside its owning native Safety dialog', async () => {
+  render(
+    <dialog open aria-label="Safety handover">
+      <form aria-label="Handover">
+        <label>
+          Representative
+          <SmartNativeSelect name="assignedTo" defaultValue="">
+            <option value="">Choose representative</option>
+            <option value="rep">Contractor representative</option>
+          </SmartNativeSelect>
+        </label>
+        <button type="submit">Save handover</button>
+      </form>
+    </dialog>,
+  );
+  const dialog = screen.getByRole('dialog', { name: 'Safety handover' });
+  const user = userEvent.setup();
+  await user.click(selectValue('Choose representative'));
+  const menu = screen.getByRole('listbox');
+  expect(dialog.contains(menu)).toBe(true);
+  await user.click(screen.getByRole('option', { name: 'Contractor representative' }));
+  expect(new FormData(screen.getByRole('form') as HTMLFormElement).get('assignedTo')).toBe('rep');
+  expect(dialog.hasAttribute('open')).toBe(true);
+});

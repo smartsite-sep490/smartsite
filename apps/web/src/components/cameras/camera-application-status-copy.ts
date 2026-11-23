@@ -5,62 +5,66 @@ const en = {
   'cameraSetup.savedConfigVersionStatus':
     'Saved config version v{{version}}; worker application status unavailable.',
   'cameraSetup.appStatus.refresh': 'Refresh status',
-  'cameraSetup.appStatus.details': 'Details',
-  'cameraSetup.appStatus.checking': 'Checking worker application status…',
-  'cameraSetup.appStatus.error': 'Could not verify worker application status.',
-  'cameraSetup.appStatus.forbidden': 'Worker application status is unavailable for this scope.',
-  'cameraSetup.appStatus.revisions': 'Saved v{{desired}} · Worker reported: {{reported}}',
+  'cameraSetup.appStatus.details': 'Technical details',
+  'cameraSetup.appStatus.checking': 'Checking whether AI has received the saved configuration…',
+  'cameraSetup.appStatus.error': 'Could not confirm whether AI has received the configuration.',
+  'cameraSetup.appStatus.forbidden': 'AI application status is unavailable for this scope.',
+  'cameraSetup.appStatus.unavailablePrimary': 'Saved · Unable to confirm',
+  'cameraSetup.appStatus.savedOnlyVersion': 'Saved version: v{{version}}',
+  'cameraSetup.appStatus.revisions': 'Saved version: v{{desired}} · AI reported: {{reported}}',
   'cameraSetup.appStatus.reportedNone': 'none',
   'cameraSetup.appStatus.reportedVersion': 'v{{version}}',
-  'cameraSetup.appStatus.state.UNCONFIRMED': 'Worker application unconfirmed',
-  'cameraSetup.appStatus.state.PENDING': 'Pending worker application',
-  'cameraSetup.appStatus.state.LOADED': 'Worker loaded v{{reported}}',
-  'cameraSetup.appStatus.state.REJECTED': 'Worker rejected v{{reported}}',
-  'cameraSetup.appStatus.state.STALE': 'Application receipt is old',
-  'cameraSetup.appStatus.viewValidity.UNCONFIRMED': 'Physical camera view is unconfirmed.',
-  'cameraSetup.appStatus.viewValidity.NEEDS_REVALIDATION': 'Reference view needs revalidation.',
-  'cameraSetup.appStatus.viewValidity.UNAVAILABLE': 'Reference view is unavailable.',
+  'cameraSetup.appStatus.state.UNCONFIRMED': 'Saved · Unable to confirm',
+  'cameraSetup.appStatus.state.PENDING': 'Saved · Waiting for AI application',
+  'cameraSetup.appStatus.state.LOADED': 'AI has received the configuration',
+  'cameraSetup.appStatus.state.REJECTED': 'Saved · AI could not apply configuration',
+  'cameraSetup.appStatus.state.STALE': 'Saved · Unable to confirm',
+  'cameraSetup.appStatus.viewValidity.UNCONFIRMED': 'Needs camera angle review',
+  'cameraSetup.appStatus.viewValidity.NEEDS_REVALIDATION': 'Needs camera angle review',
+  'cameraSetup.appStatus.viewValidity.UNAVAILABLE': 'Camera angle reference unavailable',
   'cameraSetup.appStatus.timestamps': 'Observed: {{observedAt}} · Last receipt: {{lastReceiptAt}}',
+  'cameraSetup.appStatus.reasonCodeLine': 'Reason code: {{code}}',
   'cameraSetup.appStatus.caveat':
-    'Configuration receipt does not prove live stream or model health.',
-  'cameraSetup.appStatus.reasonLine': 'Reason: {{reason}} ({{code}})',
+    'Configuration receipt does not prove live video or model accuracy.',
+  'cameraSetup.appStatus.reasonLine': 'Reason: {{reason}}',
   'cameraSetup.appStatus.reason.CAMERA_INACTIVE': 'Camera is disabled in configuration.',
-  'cameraSetup.appStatus.reason.NO_WORKER_GENERATION': 'No active worker generation enrolled.',
+  'cameraSetup.appStatus.reason.NO_WORKER_GENERATION':
+    'No active AI session is connected for this camera.',
   'cameraSetup.appStatus.reason.WORKER_GENERATION_STALE':
-    'Worker generation expired or was superseded.',
+    'Previous AI session expired or was replaced.',
   'cameraSetup.appStatus.reason.VIEW_UNAVAILABLE': 'Current reference view is unavailable.',
   'cameraSetup.appStatus.reason.CONFIGURATION_NOT_ISSUED':
-    'Configuration bundle is not issued yet.',
-  'cameraSetup.appStatus.reason.NO_APPLICATION_RECEIPT': 'No worker receipt recorded yet.',
+    'Configuration package is not ready to send to AI yet.',
+  'cameraSetup.appStatus.reason.NO_APPLICATION_RECEIPT': 'AI has not confirmed the settings yet.',
   'cameraSetup.appStatus.reason.RECEIPT_CONTEXT_STALE':
-    'Historical worker claim belongs to an older session or reference view.',
+    'Previous AI confirmation belongs to an older session or camera angle.',
   'cameraSetup.appStatus.reason.APPLICATION_RECEIPT_STALE':
-    'Historical worker claim / old receipt past 60s window; does not mean camera is offline.',
+    'Latest AI confirmation is over 60 seconds old; this does not mean the camera is offline.',
   'cameraSetup.appStatus.reason.DESIRED_CONFIGURATION_PENDING':
-    'Worker receipt is for an earlier saved revision.',
-  'cameraSetup.appStatus.reason.OTHER': 'Worker reported reason code.',
+    'AI is still using an earlier saved configuration.',
+  'cameraSetup.appStatus.reason.OTHER': 'AI reported an application issue.',
   'cameraSetup.appStatus.action.CAMERA_INACTIVE':
-    'Next step: enable this camera in configuration before the edge worker can apply it.',
+    'Next step: enable this camera in configuration before AI can apply it.',
   'cameraSetup.appStatus.action.NO_WORKER_GENERATION':
-    'Next step: verify the edge worker is enrolled and running for this camera source, then refresh status.',
+    'Next step: verify the AI device is connected and running for this camera source, then refresh status.',
   'cameraSetup.appStatus.action.WORKER_GENERATION_STALE':
-    'Next step: check edge worker health or restart the worker session, then refresh status.',
+    'Next step: check AI device status or restart the camera session, then refresh status.',
   'cameraSetup.appStatus.action.VIEW_UNAVAILABLE':
     'Next step: check camera capture availability and load a fresh configuration image in Regions.',
   'cameraSetup.appStatus.action.CONFIGURATION_NOT_ISSUED':
-    'Next step: complete active region and PPE configuration, then refresh status once issued.',
+    'Next step: complete active region and PPE configuration, then refresh status.',
   'cameraSetup.appStatus.action.NO_APPLICATION_RECEIPT':
-    'Next step: wait for the next edge worker poll cycle and refresh status to confirm ACK.',
+    'Next step: wait a moment and click Refresh status to confirm AI has received the settings.',
   'cameraSetup.appStatus.action.RECEIPT_CONTEXT_STALE':
-    'Next step: revalidate the camera reference view or wait for a fresh worker session receipt.',
+    'Next step: review the camera angle reference image or wait for a fresh AI confirmation.',
   'cameraSetup.appStatus.action.APPLICATION_RECEIPT_STALE':
-    'Next step: refresh status to check for a newer worker ACK (live video is checked separately).',
+    'Next step: click Refresh status to check for a newer AI confirmation (live video is checked separately).',
   'cameraSetup.appStatus.action.DESIRED_CONFIGURATION_PENDING':
-    'Next step: saved configuration is ahead of the worker; refresh status after the worker polls the new revision.',
+    'Next step: your saved settings are newer than what AI last confirmed; apply or refresh status shortly.',
   'cameraSetup.appStatus.action.REJECTED_DEFAULT':
-    'Next step: review camera source, active region geometry, and PPE policy before saving a new revision.',
+    'Next step: review camera source, active region geometry, and PPE policy before saving again.',
   'cameraSetup.appStatus.action.OTHER':
-    'Next step: inspect camera source and worker logs, then refresh status.',
+    'Next step: check the camera source and AI device status, then refresh status.',
 };
 
 const vi: Record<keyof typeof en, string> = {
@@ -68,63 +72,70 @@ const vi: Record<keyof typeof en, string> = {
   'cameraSetup.savedConfigVersionStatus':
     'Phiên bản cấu hình đã lưu v{{version}}; chưa có trạng thái áp dụng của worker.',
   'cameraSetup.appStatus.refresh': 'Làm mới trạng thái',
-  'cameraSetup.appStatus.details': 'Chi tiết',
-  'cameraSetup.appStatus.checking': 'Đang kiểm tra trạng thái áp dụng của worker…',
-  'cameraSetup.appStatus.error': 'Không kiểm tra được trạng thái áp dụng của worker.',
+  'cameraSetup.appStatus.details': 'Chi tiết kỹ thuật',
+  'cameraSetup.appStatus.checking': 'Đang kiểm tra máy AI đã nhận cấu hình chưa…',
+  'cameraSetup.appStatus.error': 'Chưa xác nhận được máy AI đã nhận cấu hình hay chưa.',
   'cameraSetup.appStatus.forbidden':
-    'Trạng thái áp dụng của worker không khả dụng trong phạm vi này.',
-  'cameraSetup.appStatus.revisions': 'Đã lưu v{{desired}} · Worker báo cáo: {{reported}}',
+    'Trạng thái áp dụng của máy AI không khả dụng trong phạm vi này.',
+  'cameraSetup.appStatus.unavailablePrimary': 'Đã lưu · Chưa xác nhận được',
+  'cameraSetup.appStatus.savedOnlyVersion': 'Phiên bản đã lưu: v{{version}}',
+  'cameraSetup.appStatus.revisions':
+    'Phiên bản đã lưu: v{{desired}} · Máy AI báo cáo: {{reported}}',
   'cameraSetup.appStatus.reportedNone': 'chưa có',
   'cameraSetup.appStatus.reportedVersion': 'v{{version}}',
-  'cameraSetup.appStatus.state.UNCONFIRMED': 'Chưa xác nhận áp dụng',
-  'cameraSetup.appStatus.state.PENDING': 'Đang chờ áp dụng',
-  'cameraSetup.appStatus.state.LOADED': 'Worker đã nạp v{{reported}}',
-  'cameraSetup.appStatus.state.REJECTED': 'Worker từ chối v{{reported}}',
-  'cameraSetup.appStatus.state.STALE': 'Biên nhận áp dụng đã cũ',
-  'cameraSetup.appStatus.viewValidity.UNCONFIRMED': 'Góc nhìn vật lý chưa được xác nhận.',
-  'cameraSetup.appStatus.viewValidity.NEEDS_REVALIDATION': 'Khung tham chiếu cần xác nhận lại.',
-  'cameraSetup.appStatus.viewValidity.UNAVAILABLE': 'Chưa có khung tham chiếu.',
+  'cameraSetup.appStatus.state.UNCONFIRMED': 'Đã lưu · Chưa xác nhận được',
+  'cameraSetup.appStatus.state.PENDING': 'Đã lưu · Chờ máy AI áp dụng',
+  'cameraSetup.appStatus.state.LOADED': 'Máy AI đã nhận cấu hình',
+  'cameraSetup.appStatus.state.REJECTED': 'Đã lưu · Máy AI không áp dụng được cấu hình',
+  'cameraSetup.appStatus.state.STALE': 'Đã lưu · Chưa xác nhận được',
+  'cameraSetup.appStatus.viewValidity.UNCONFIRMED': 'Cần kiểm tra góc camera',
+  'cameraSetup.appStatus.viewValidity.NEEDS_REVALIDATION': 'Cần kiểm tra lại góc camera',
+  'cameraSetup.appStatus.viewValidity.UNAVAILABLE': 'Chưa có ảnh góc nhìn camera',
   'cameraSetup.appStatus.timestamps':
-    'Ghi nhận: {{observedAt}} · Biên nhận gần nhất: {{lastReceiptAt}}',
+    'Ghi nhận: {{observedAt}} · Xác nhận gần nhất: {{lastReceiptAt}}',
+  'cameraSetup.appStatus.reasonCodeLine': 'Mã lý do: {{code}}',
   'cameraSetup.appStatus.caveat':
-    'Biên nhận cấu hình không chứng minh luồng trực tiếp hay độ chính xác mô hình.',
-  'cameraSetup.appStatus.reasonLine': 'Lý do: {{reason}} ({{code}})',
+    'Xác nhận cấu hình không chứng minh video trực tiếp hay độ chính xác mô hình.',
+  'cameraSetup.appStatus.reasonLine': 'Lý do: {{reason}}',
   'cameraSetup.appStatus.reason.CAMERA_INACTIVE': 'Camera đang tắt trong cấu hình.',
-  'cameraSetup.appStatus.reason.NO_WORKER_GENERATION': 'Chưa có thế hệ worker đang hoạt động.',
+  'cameraSetup.appStatus.reason.NO_WORKER_GENERATION':
+    'Chưa có phiên máy AI đang hoạt động cho camera này.',
   'cameraSetup.appStatus.reason.WORKER_GENERATION_STALE':
-    'Thế hệ worker đã hết hạn hoặc bị thay thế.',
+    'Phiên máy AI trước đó đã hết hạn hoặc bị thay thế.',
   'cameraSetup.appStatus.reason.VIEW_UNAVAILABLE': 'Chưa có khung tham chiếu hiện tại.',
-  'cameraSetup.appStatus.reason.CONFIGURATION_NOT_ISSUED': 'Chưa phát hành gói cấu hình.',
-  'cameraSetup.appStatus.reason.NO_APPLICATION_RECEIPT': 'Chưa có biên nhận từ worker.',
+  'cameraSetup.appStatus.reason.CONFIGURATION_NOT_ISSUED':
+    'Cấu hình chưa sẵn sàng gửi xuống máy AI.',
+  'cameraSetup.appStatus.reason.NO_APPLICATION_RECEIPT':
+    'Máy AI chưa gửi xác nhận đã nhận cấu hình.',
   'cameraSetup.appStatus.reason.RECEIPT_CONTEXT_STALE':
-    'Ghi nhận lịch sử từ worker thuộc phiên hoặc khung tham chiếu cũ.',
+    'Xác nhận trước đó của máy AI thuộc phiên hoặc góc nhìn cũ.',
   'cameraSetup.appStatus.reason.APPLICATION_RECEIPT_STALE':
-    'Ghi nhận lịch sử từ worker / biên nhận cũ quá 60 giây; không đồng nghĩa camera mất kết nối.',
+    'Xác nhận gần nhất từ máy AI đã cũ quá 60 giây; không đồng nghĩa camera mất kết nối.',
   'cameraSetup.appStatus.reason.DESIRED_CONFIGURATION_PENDING':
-    'Biên nhận của worker thuộc phiên bản đã lưu trước đó.',
-  'cameraSetup.appStatus.reason.OTHER': 'Worker báo cáo mã lý do.',
+    'Máy AI vẫn đang dùng bản cấu hình đã lưu trước đó.',
+  'cameraSetup.appStatus.reason.OTHER': 'Máy AI báo lỗi khi áp dụng cấu hình.',
   'cameraSetup.appStatus.action.CAMERA_INACTIVE':
-    'Bước tiếp theo: bật camera trong cấu hình trước khi worker có thể áp dụng.',
+    'Bước tiếp theo: bật camera trong cấu hình trước khi máy AI có thể áp dụng.',
   'cameraSetup.appStatus.action.NO_WORKER_GENERATION':
-    'Bước tiếp theo: kiểm tra tiến trình edge worker đã đăng ký cho nguồn camera này rồi làm mới trạng thái.',
+    'Bước tiếp theo: kiểm tra máy AI đã kết nối và đang chạy cho nguồn camera này, rồi làm mới trạng thái.',
   'cameraSetup.appStatus.action.WORKER_GENERATION_STALE':
-    'Bước tiếp theo: kiểm tra tình trạng hoặc khởi động lại phiên edge worker, sau đó làm mới trạng thái.',
+    'Bước tiếp theo: kiểm tra tình trạng máy AI hoặc khởi động lại phiên camera, sau đó làm mới trạng thái.',
   'cameraSetup.appStatus.action.VIEW_UNAVAILABLE':
     'Bước tiếp theo: kiểm tra nguồn thu hình camera và lấy ảnh cấu hình mới trong mục Vùng quan sát.',
   'cameraSetup.appStatus.action.CONFIGURATION_NOT_ISSUED':
-    'Bước tiếp theo: hoàn tất vùng quan sát đang bật và chính sách PPE, rồi làm mới khi gói cấu hình được phát hành.',
+    'Bước tiếp theo: hoàn tất vùng quan sát đang bật và chính sách PPE, rồi làm mới trạng thái.',
   'cameraSetup.appStatus.action.NO_APPLICATION_RECEIPT':
-    'Bước tiếp theo: chờ chu kỳ đồng bộ tiếp theo của edge worker và nhấn Làm mới trạng thái để xác nhận ACK.',
+    'Bước tiếp theo: chờ một chút rồi nhấn Làm mới trạng thái để kiểm tra xác nhận từ máy AI.',
   'cameraSetup.appStatus.action.RECEIPT_CONTEXT_STALE':
-    'Bước tiếp theo: xác nhận lại khung tham chiếu camera hoặc chờ biên nhận từ phiên worker mới.',
+    'Bước tiếp theo: kiểm tra lại ảnh góc nhìn tham chiếu hoặc chờ xác nhận mới từ máy AI.',
   'cameraSetup.appStatus.action.APPLICATION_RECEIPT_STALE':
-    'Bước tiếp theo: nhấn Làm mới trạng thái để kiểm tra ACK mới hơn từ worker (luồng video trực tiếp được kiểm tra riêng).',
+    'Bước tiếp theo: nhấn Làm mới trạng thái để kiểm tra xác nhận mới hơn từ máy AI (video trực tiếp được kiểm tra riêng).',
   'cameraSetup.appStatus.action.DESIRED_CONFIGURATION_PENDING':
-    'Bước tiếp theo: bản đã lưu mới hơn bản trên worker; hãy làm mới trạng thái sau khi worker nạp phiên bản mới.',
+    'Bước tiếp theo: cấu hình bạn vừa lưu mới hơn bản máy AI xác nhận lần cuối; hãy áp dụng hoặc làm mới trạng thái sau ít giây.',
   'cameraSetup.appStatus.action.REJECTED_DEFAULT':
-    'Bước tiếp theo: rà lại mã nguồn camera, đa giác vùng quan sát và chính sách PPE trước khi lưu phiên bản mới.',
+    'Bước tiếp theo: rà lại nguồn camera, đa giác vùng quan sát và chính sách PPE trước khi lưu lại.',
   'cameraSetup.appStatus.action.OTHER':
-    'Bước tiếp theo: kiểm tra nguồn camera và nhật ký worker, sau đó làm mới trạng thái.',
+    'Bước tiếp theo: kiểm tra nguồn camera và trạng thái máy AI, sau đó làm mới trạng thái.',
 };
 
 registerFeatureCatalog({ en, vi });

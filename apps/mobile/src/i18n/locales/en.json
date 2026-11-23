@@ -126,6 +126,10 @@
   "workerHome": {
     "greeting": "Hello,",
     "todayShift": "Today's Shift",
+    "noShiftToday": "No shift assigned today",
+    "viewSchedule": "Open calendar to view assignments",
+    "scheduleUnavailable": "Today's schedule could not be loaded",
+    "breakTime": "Break {{from}} – {{to}}",
     "shiftHours": "08:00 – 17:00",
     "shiftBreak": "Lunch break 12:00 – 13:00",
     "onSite": "On Site",
@@ -685,7 +689,9 @@
     "refresh": "Refresh corrective work",
     "awaitingReview": "Awaiting Safety review.",
     "otherWorkOpen": "This action is closed. The Incident still has other work to complete.",
-    "submitToSafety": "Submit result to the Safety Officer"
+    "submitToSafety": "Submit result to the Safety Officer",
+    "linkedHandover": "Handover from this notification",
+    "handoverUnavailable": "This handover is no longer available."
   },
   "qr": {
     "title": "Emergency QR",
@@ -1443,6 +1449,13 @@
     "confirmCLEAR_LEADER": "Remove leader role",
     "confirmEDIT": "Save changes",
     "confirmARCHIVE": "Archive team",
+    "archiveBlockedMembers": "This team still has {{count}} members. Transfer or remove all members before archiving.",
+    "manageMembers": "Manage members",
+    "archiveReasonRequired": "Enter an archive reason with at least 5 characters.",
+    "archiveChanged": "The team has changed. Reload, check its members and confirm archiving again.",
+    "reloadArchive": "Reload team information",
+    "archivedSuccess": "Team {{name}} was archived. Find it in Archived.",
+    "archiveUnavailable": "The team could not be found or archiving is unavailable. Reload the team and try again.",
     "assignedZone": "Assigned zone",
     "zoneEmptyHint": "Assign a zone so members know where their team works.",
     "zoneHistory": "Zone assignment history",

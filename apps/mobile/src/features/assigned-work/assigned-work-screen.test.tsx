@@ -92,7 +92,11 @@ afterEach(async () => {
   cache.clear();
   vi.restoreAllMocks();
 });
-async function mount(initialKind = 'checklist', initialId = 'checklist-a') {
+async function mount(
+  initialKind = 'checklist',
+  initialId = 'checklist-a',
+  initialActionId?: string,
+) {
   await act(async () => {
     root = create(
       createElement(
@@ -101,6 +105,7 @@ async function mount(initialKind = 'checklist', initialId = 'checklist-a') {
         createElement(AssignedWorkScreen, {
           initialId,
           initialKind,
+          initialActionId,
           onBack: () => {},
         }),
       ),
@@ -435,4 +440,43 @@ it('keeps closed work read-only while other Incident actions are still open', as
   );
   expect(buttons('Bắt đầu khắc phục')).toHaveLength(0);
   expect(buttons('Nộp kết quả cho cán bộ an toàn')).toHaveLength(0);
+});
+
+it('identifies the handover linked from a notification without changing its authorization', async () => {
+  vi.spyOn(workspace.client, 'getIncident').mockResolvedValue(incidentFixture());
+  await mount('incident', 'incident-a', 'action-a');
+  expect(renderedText()).toContain('Lần bàn giao từ thông báo');
+  expect(buttons('Bắt đầu khắc phục')).toHaveLength(1);
+});
+it.each(['missing', 'other-assignee'])(
+  'does not fall back to another editable action for a %s notification target',
+  async (kind) => {
+    const incident = incidentFixture();
+    if (kind === 'other-assignee')
+      incident.actions.push({ ...incident.actions[0]!, id: 'other', assignedTo: 'someone-else' });
+    vi.spyOn(workspace.client, 'getIncident').mockResolvedValue(incident);
+    await mount('incident', 'incident-a', kind === 'missing' ? 'missing-action' : 'other');
+    expect(renderedText()).toContain('Lần bàn giao này không còn khả dụng.');
+    expect(buttons('Bắt đầu khắc phục')).toHaveLength(0);
+  },
+);
+
+it('releases the notification action when another assigned incident is opened', async () => {
+  const first = incidentFixture();
+  const other = {
+    ...first,
+    id: 'incident-b',
+    title: 'Another incident',
+    actions: [{ ...first.actions[0]!, id: 'action-b' }],
+  };
+  vi.spyOn(workspace.client, 'getIncident').mockImplementation(async (_token, _site, id) =>
+    id === 'incident-b' ? other : first,
+  );
+  vi.spyOn(workspace.client, 'listIncidents').mockResolvedValue({ items: [other], total: 1 });
+  await mount('incident', 'incident-a', 'action-a');
+  await click('‹ Quay lại');
+  await click('Mở công việc khắc phục');
+  expect(renderedText()).toContain('Another incident');
+  expect(buttons('Bắt đầu khắc phục')).toHaveLength(1);
+  expect(renderedText()).not.toContain('Lần bàn giao này không còn khả dụng.');
 });

@@ -105,7 +105,10 @@ export async function hasMainAuthorityCapture(
           AND p.pronargdefaults=0 AND p.proargdefaults IS NULL
           AND COALESCE(p.proconfig,ARRAY[]::text[])=
             (CASE WHEN f.owned_path THEN ARRAY['search_path='||format('%I, pg_catalog, pg_temp',current_schema())]
-              WHEN f.search_path THEN ARRAY['search_path='||current_setting('search_path')]
+              -- Journal installation pins these functions to their owning schema.
+              -- A pooled caller may have a different session search_path; it must
+              -- not define the expected security profile of stored functions.
+              WHEN f.search_path THEN ARRAY['search_path='||current_schema()]
               ELSE ARRAY[]::text[] END ||
              CASE WHEN f.utc THEN ARRAY['TimeZone=UTC'] ELSE ARRAY[]::text[] END)
           AND encode(sha256(convert_to(p.prosrc,'UTF8')),'hex')=ANY(

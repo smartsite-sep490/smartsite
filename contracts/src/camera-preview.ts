@@ -55,6 +55,9 @@ export type CameraPreviewDetection = {
   confirmedMissingItems?: PpeItem[];
   regionId?: string | null;
 };
+export const CAMERA_PREVIEW_ZONE_ANCHORS = ['BOTTOM_CENTER', 'BOX_CENTER'] as const;
+export type CameraPreviewZoneAnchor = (typeof CAMERA_PREVIEW_ZONE_ANCHORS)[number];
+
 export type CameraPreviewFrame = {
   type: 'frame';
   previewVersion: 1;
@@ -68,6 +71,8 @@ export type CameraPreviewFrame = {
   detections: CameraPreviewDetection[];
   zoneDetections: CameraPreviewDetection[];
   zonePolygons: { regionId: string; geometryVersion: number; coordinates: [number, number][] }[];
+  /** Technical point tested against zone polygons; omitted means legacy BOTTOM_CENTER. */
+  zoneAnchor?: CameraPreviewZoneAnchor;
   /** Same-frame raw objects, separate from wearer states and business decisions. */
   modelObjects?: CameraPreviewModelObjects;
 };
@@ -274,6 +279,11 @@ export function parseCameraPreviewFrame(value: unknown): CameraPreviewFrame {
   );
   validateDetections(value.detections, true);
   validateDetections(value.zoneDetections, false);
+  check(
+    value.zoneAnchor === undefined ||
+      value.zoneAnchor === 'BOTTOM_CENTER' ||
+      value.zoneAnchor === 'BOX_CENTER',
+  );
   if (value.modelObjects !== undefined) validateModelObjects(value.modelObjects);
   check(Array.isArray(value.zonePolygons) && value.zonePolygons.length <= 64);
   for (const p of value.zonePolygons) {
@@ -308,6 +318,7 @@ export function parseCameraPreviewFrame(value: unknown): CameraPreviewFrame {
         'detections',
         'zoneDetections',
         'zonePolygons',
+        'zoneAnchor',
         'modelObjects',
       ].includes(key),
     ),

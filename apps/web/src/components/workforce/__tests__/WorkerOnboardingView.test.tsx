@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
-import { cleanup, render, screen, waitFor } from '@testing-library/react';
+import { cleanup, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import {
@@ -148,19 +148,30 @@ async function fill() {
   await fillDocuments(user);
   return user;
 }
-async function fillDocuments(user: ReturnType<typeof userEvent.setup>) {
-  await user.selectOptions(screen.getByLabelText(tr('documents.safetyCardRequired')), 'true');
+async function fillDocuments(user: ReturnType<typeof userEvent.setup>, safetyRequired = true) {
+  await user.selectOptions(
+    screen.getByLabelText(tr('documents.safetyCardRequired')),
+    String(safetyRequired),
+  );
   await user.type(screen.getByLabelText(tr('documents.nationalId')), '000000000001');
   await user.type(screen.getByLabelText(tr('documents.phoneNumber')), '0900000001');
   await user.selectOptions(screen.getByLabelText(tr('documents.gender')), 'MALE');
   await user.type(screen.getByLabelText(tr('documents.address')), 'Synthetic address');
-  for (const kind of ['FRONT', 'BACK', 'SAFETY_CARD', 'HEALTH_CERTIFICATE', 'PERSONAL_INSURANCE'])
+  for (const kind of [
+    'FRONT',
+    'BACK',
+    ...(safetyRequired ? ['SAFETY_CARD'] : []),
+    'HEALTH_CERTIFICATE',
+    'PERSONAL_INSURANCE',
+  ])
     await user.upload(
       screen.getByLabelText(tr(`documents.${kind}`)),
       new File(['synthetic'], `${kind}.jpg`, { type: 'image/jpeg' }),
     );
   await waitFor(() =>
-    expect(SmartSiteManagementClient.prototype.checkDocumentImageQuality).toHaveBeenCalledTimes(5),
+    expect(SmartSiteManagementClient.prototype.checkDocumentImageQuality).toHaveBeenCalledTimes(
+      safetyRequired ? 5 : 4,
+    ),
   );
 }
 it('submits the selected dates and files as one bundle after account creation', async () => {
@@ -221,19 +232,124 @@ it('retries a failed bundle without creating another Worker account', async () =
   );
 });
 
+it('can replace a citizen ID after a failed bundle without recreating the account or reusing the old request ID', async () => {
+  vi.mocked(SmartSiteManagementClient.prototype.submitWorkerDocuments).mockRejectedValueOnce(
+    new Error('Synthetic interruption'),
+  );
+  mount();
+  const user = await fill();
+  await user.click(screen.getByRole('button', { name: tr('documents.sendBundle') }));
+  await screen.findByText(tr('errors.unexpected'));
+  const front = screen.getByLabelText(tr('documents.FRONT'));
+  expect(front.hasAttribute('disabled')).toBe(false);
+  const replacement = new File(['synthetic replacement'], 'front-retaken.jpg', {
+    type: 'image/jpeg',
+  });
+  await user.upload(front, replacement);
+  await screen.findByText('front-retaken.jpg');
+  await user.click(screen.getByRole('button', { name: tr('documents.sendBundle') }));
+  await waitFor(() =>
+    expect(SmartSiteManagementClient.prototype.submitWorkerDocuments).toHaveBeenCalledTimes(2),
+  );
+  const attempts = vi.mocked(SmartSiteManagementClient.prototype.submitWorkerDocuments).mock.calls;
+  expect(attempts[1]![3].requestId).not.toBe(attempts[0]![3].requestId);
+  expect(attempts[1]![4].FRONT).toBe(replacement);
+  expect(SmartSiteManagementClient.prototype.createContractorWorkerAccount).toHaveBeenCalledOnce();
+});
+
+it.each(['en', 'vi'] as const)(
+  'explains missing fields and attachments in %s before creating an account',
+  async (language) => {
+    await i18n.changeLanguage(language);
+    mount();
+    await screen.findByRole('heading', { name: tr('common.create_worker_account') });
+    await userEvent.setup().click(screen.getByRole('button', { name: tr('documents.sendBundle') }));
+    const summary = screen.getByRole('alert', {
+      name: tr('worker_onboarding_view.validationTitle'),
+    });
+    expect(
+      within(summary).getByText(
+        tr('worker_onboarding_view.missingField', { field: tr('common.full_name') }),
+      ),
+    ).toBeTruthy();
+    expect(
+      within(summary).getByText(
+        tr('worker_onboarding_view.missingField', { field: tr('documents.FRONT') }),
+      ),
+    ).toBeTruthy();
+    const front = screen.getByLabelText(tr('documents.FRONT'));
+    const frontError = document.getElementById(front.getAttribute('aria-describedby')!);
+    expect(frontError?.textContent).toBe(
+      tr('worker_onboarding_view.missingField', { field: tr('documents.FRONT') }),
+    );
+    const name = screen.getByLabelText(tr('common.full_name'));
+    expect(name.getAttribute('aria-invalid')).toBe('true');
+    expect(document.activeElement).toBe(name);
+    await userEvent.setup().type(name, 'Corrected name');
+    expect(name.getAttribute('aria-invalid')).not.toBe('true');
+    expect(
+      SmartSiteManagementClient.prototype.createContractorWorkerAccount,
+    ).not.toHaveBeenCalled();
+  },
+);
+
 it('requires a valid worker email before sending the bundle', async () => {
   mount();
   const user = await fill();
   const field = screen.getByLabelText(tr('worker_onboarding_view.email'));
   await user.clear(field);
-  expect(
-    screen.getByRole('button', { name: tr('documents.sendBundle') }).hasAttribute('disabled'),
-  ).toBe(true);
+  await user.click(screen.getByRole('button', { name: tr('documents.sendBundle') }));
+  expect(field.getAttribute('aria-invalid')).toBe('true');
   await user.type(field, 'not-an-email');
-  expect(
-    screen.getByRole('button', { name: tr('documents.sendBundle') }).hasAttribute('disabled'),
-  ).toBe(true);
+  expect(screen.getAllByText(tr('worker_onboarding_view.invalidEmail')).length).toBeGreaterThan(0);
   expect(SmartSiteManagementClient.prototype.createContractorWorkerAccount).not.toHaveBeenCalled();
+  await user.clear(field);
+  await user.type(field, 'corrected@example.test');
+  await user.click(screen.getByRole('button', { name: tr('documents.sendBundle') }));
+  await waitFor(() =>
+    expect(
+      SmartSiteManagementClient.prototype.createContractorWorkerAccount,
+    ).toHaveBeenCalledOnce(),
+  );
+  expect(
+    screen.queryByRole('alert', { name: tr('worker_onboarding_view.validationTitle') }),
+  ).toBeNull();
+});
+it('identifies malformed username, citizen ID and phone without creating an account', async () => {
+  mount();
+  await screen.findByRole('heading', { name: tr('common.create_worker_account') });
+  const user = userEvent.setup();
+  await user.type(screen.getByLabelText(tr('common.full_name')), 'Synthetic Worker');
+  await user.type(screen.getByLabelText(tr('common.username')), 'bad name!');
+  await user.type(screen.getByLabelText(tr('documents.nationalId')), '123');
+  await user.type(screen.getByLabelText(tr('documents.phoneNumber')), '12');
+  await user.click(screen.getByRole('button', { name: tr('documents.sendBundle') }));
+  const summary = screen.getByRole('alert', { name: tr('worker_onboarding_view.validationTitle') });
+  for (const key of ['invalidUsername', 'invalidNationalId', 'invalidPhone'])
+    expect(within(summary).getByText(tr(`worker_onboarding_view.${key}`))).toBeTruthy();
+  expect(document.activeElement).toBe(screen.getByLabelText(tr('common.username')));
+  expect(SmartSiteManagementClient.prototype.createContractorWorkerAccount).not.toHaveBeenCalled();
+});
+
+it('does not require a safety-card attachment or date when that card is explicitly optional', async () => {
+  mount();
+  await screen.findByRole('heading', { name: tr('common.create_worker_account') });
+  const user = userEvent.setup();
+  await user.type(screen.getByLabelText(tr('common.full_name')), 'Synthetic Worker');
+  await user.type(screen.getByLabelText(tr('common.username')), 'worker001');
+  await user.type(screen.getByLabelText(tr('worker_onboarding_view.email')), 'worker@example.test');
+  await fillDocuments(user, false);
+  await user.click(screen.getByRole('button', { name: tr('documents.sendBundle') }));
+  await waitFor(() =>
+    expect(SmartSiteManagementClient.prototype.submitWorkerDocuments).toHaveBeenCalledOnce(),
+  );
+  expect(SmartSiteManagementClient.prototype.submitWorkerDocuments).toHaveBeenCalledWith(
+    'representative-token',
+    'site-a',
+    'worker-1',
+    expect.objectContaining({ safetyCardRequired: false }),
+    expect.not.objectContaining({ SAFETY_CARD: expect.anything() }),
+  );
 });
 it.each(['en', 'vi'] as const)(
   'keeps bundle and email draft when switching from %s',

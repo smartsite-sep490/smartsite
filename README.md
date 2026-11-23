@@ -34,6 +34,12 @@ The shared API client reads scoped host capabilities using
 existing authorized camera readers can inspect capabilities. Authentication is
 rechecked after the remote call. Draft/scope changes cancel pending tests.
 
+An active Site Manager or Safety Officer assigned to the exact Site can read
+camera monitoring metadata, live media, analyzed previews and observation-area
+context. Managers can open PPE/Zone monitoring directly after setup. This camera
+read permission does not grant Safety Officer case, evidence-archive, identity
+review or inbox actions. Admin alone does not grant operational camera access.
+
 USB webcams belong to the selected AI host; approved recorded videos are REPLAY;
 IP/RTSP cameras use a separate URL and credentials. This browser's camera is
 explicitly unsupported until media ingestion is implemented. Successful tests
@@ -48,6 +54,25 @@ No generation secret is returned to the browser. Apply does not claim inference
 or business alert readiness; a fresh view and PPE configuration are still required.
 Browser media transport, replay activation and general remote-host rollout remain
 unfinished. Native RTSP redirect/SDP egress still needs deployment-level enforcement.
+
+Tracked runtime recovery can opt into Backend-owned source-gap resume through
+`AI_TRACKED_FRAME_RUNTIME_POLICY.recovery.automaticResume`, for example
+`{"hostId":"local-ai","minPersistentMs":2000,"maxStarts":3}`. Omit it to keep
+manual recovery. The host must already be configured for the Camera's Site and
+both camera allowlists must admit the Camera; tracked runtime and source apply
+must also be enabled. Detection must occur before the pending-frame TTL.
+Recovery rechecks the current gap, owner and accepted configuration under the
+existing source-operation lock, then reuses the normal prepare/renew/commit
+lifecycle. Old evidence and cases remain; subjects are not linked across the
+new session. Sequence/time continuity bounds are not relaxed.
+
+Automatic attempts are limited to at most three per Camera per Backend process.
+This conservative circuit breaker resets only on an explicit process restart;
+it is not a cluster-wide durable retry budget. A failed or uncertain attempt is
+not automatically retried for that generation. Exhaustion/failure emits a safe
+operational log and requires operator attention. Shutdown stops accepting new
+work and drains operations already started. This opt-in source capability does
+not activate a deployed host or qualify unattended multi-instance operation.
 
 The Backend also accepts the explicit `1.1.0` unowned PREPARED receipt for a
 genuinely new allowed Camera. This uses guarded first issuance, not a fabricated

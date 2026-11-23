@@ -7,6 +7,7 @@ import { AuthService } from '../auth/auth.service.js';
 import { UserRole } from '../../database/entities/user.entity.js';
 import { CameraConfigurationService } from './camera-configuration.service.js';
 import { DataSource } from 'typeorm';
+import { randomUUID } from 'node:crypto';
 import {
   bootstrapCameraWorkerGeneration,
   renewCameraWorkerGeneration,
@@ -257,9 +258,143 @@ export class CameraSourceService {
     hostId: string,
     input: unknown,
   ): Promise<SourceConfigurationResumeResult> {
+    return this.resumeWithAuthority(
+      () => this.authorize(token, uuid(siteValue), true),
+      siteValue,
+      cameraValue,
+      hostId,
+      input,
+    );
+  }
+
+  /** Internal Backend recovery only; no HTTP route or browser credential bypass. */
+  async resumeAfterSourceGap(
+    source: Readonly<{ cameraId: string; generationId: string; streamSessionId: string }>,
+    gapStillCurrent: () => Promise<boolean>,
+  ): Promise<SourceConfigurationResumeResult> {
+    const cameraId = uuid(source.cameraId),
+      owner = {
+        generationId: uuid(source.generationId),
+        streamSessionId: uuid(source.streamSessionId),
+      };
+    const policy = this.config.get('AI_TRACKED_FRAME_RUNTIME_POLICY', { infer: true });
+    const automatic = policy?.recovery.automaticResume;
+    const enabled = () => {
+      const current = this.config.get('AI_TRACKED_FRAME_RUNTIME_POLICY', { infer: true });
+      return (
+        this.config.get('AI_TRACKED_FRAME_RUNTIME_ENABLED', { infer: true }) === true &&
+        this.config.get('SMARTSITE_AI_SOURCE_APPLY_ENABLED', { infer: true }) === true &&
+        current?.recovery.automaticResume?.hostId === automatic?.hostId &&
+        current?.recovery.automaticResume !== undefined &&
+        current.profile.allowedCameraIds.includes(cameraId) &&
+        (this.config.get('AI_CONFIGURATION_CAMERA_IDS', { infer: true }) ?? []).includes(cameraId)
+      );
+    };
+    if (!automatic || !enabled() || !this.database) unavailable();
+    const database = this.database!;
+    const rows = await database.query<
+      Array<{
+        site_id: string;
+        external_id: string;
+        configuration_version: string;
+        view_revision: string;
+        bundle_sha256: string;
+      }>
+    >(
+      `SELECT c.site_id,c.external_id,c.configuration_version,v.revision AS view_revision,b.bundle_sha256
+       FROM camera c JOIN camera_worker_generation g ON g.camera_id=c.id AND g.site_id=c.site_id
+       JOIN camera_view_revision v ON v.camera_id=c.id AND v.site_id=c.site_id AND v.is_current AND v.source_kind='LIVE'
+       JOIN camera_configuration_bundle b ON b.camera_id=c.id AND b.site_id=c.site_id
+         AND b.configuration_version=c.configuration_version AND b.view_revision=v.revision
+       WHERE c.id=$1 AND c.status='ACTIVE' AND g.id=$2 AND g.stream_session_id=$3
+         AND g.is_current AND g.revoked_at IS NULL AND g.superseded_at IS NULL
+         AND g.expires_at>clock_timestamp() AND g.observation_route_mode='EPISODE_TRACKED'`,
+      [cameraId, owner.generationId, owner.streamSessionId],
+    );
+    const snapshot = rows[0];
+    if (rows.length !== 1 || !snapshot) conflict('Camera recovery source changed');
+    const siteId = uuid(snapshot!.site_id),
+      host = this.hosts(siteId).find((h) => h.id === automatic!.hostId);
+    if (!host) unavailable();
+    let renewed = false;
+    const authorize = async () => {
+      if (!enabled()) unavailable();
+      const matches = await database.query(
+        `SELECT 1 FROM camera c JOIN camera_worker_generation g ON g.camera_id=c.id AND g.site_id=c.site_id
+         JOIN camera_view_revision v ON v.camera_id=c.id AND v.site_id=c.site_id AND v.is_current AND v.source_kind='LIVE'
+         JOIN camera_configuration_bundle b ON b.camera_id=c.id AND b.site_id=c.site_id
+           AND b.configuration_version=c.configuration_version AND b.view_revision=v.revision
+         WHERE c.id=$1 AND c.site_id=$2 AND c.status='ACTIVE' AND c.configuration_version=$5
+           AND c.external_id=$8 AND g.id=$3 AND g.stream_session_id=$4
+           AND g.is_current AND g.revoked_at IS NULL AND g.superseded_at IS NULL
+           AND g.expires_at>clock_timestamp()
+           AND (g.observation_route_mode='EPISODE_TRACKED' OR ($9::boolean AND g.observation_route_mode IS NULL))
+           AND v.revision=$6 AND b.bundle_sha256=$7`,
+        [
+          cameraId,
+          siteId,
+          owner.generationId,
+          owner.streamSessionId,
+          snapshot!.configuration_version,
+          snapshot!.view_revision,
+          snapshot!.bundle_sha256,
+          snapshot!.external_id,
+          renewed,
+        ],
+      );
+      if (matches.length !== 1 || (!renewed && !(await gapStillCurrent())))
+        conflict('Camera recovery source or configuration changed');
+    };
+    await authorize();
+    let capabilities: ReturnType<typeof sourceCapabilitiesSchema.parse>;
+    try {
+      capabilities = sourceCapabilitiesSchema.parse(
+        await this.call(
+          host!.origin,
+          `/v1/source-control/${siteId}/${encodeURIComponent(snapshot!.external_id)}/capabilities`,
+          undefined,
+          AbortSignal.timeout(5000),
+        ),
+      );
+    } catch (error) {
+      if (error instanceof HttpException) throw error;
+      return unavailable();
+    }
+    if (
+      capabilities.hostId !== automatic!.hostId ||
+      capabilities.configurationResumeSupported !== true ||
+      capabilities.sourceRevision === undefined
+    )
+      unavailable();
+    return this.resumeWithAuthority(
+      authorize,
+      siteId,
+      cameraId,
+      automatic!.hostId,
+      {
+        commandId: randomUUID(),
+        expectedRevision: capabilities.sourceRevision,
+        expectedConfigurationVersion: Number(snapshot!.configuration_version),
+      },
+      owner,
+      () => {
+        renewed = true;
+      },
+    );
+  }
+
+  private async resumeWithAuthority(
+    authorize: () => Promise<void>,
+    siteValue: string,
+    cameraValue: string,
+    hostId: string,
+    input: unknown,
+    expectedSource?: { generationId: string; streamSessionId: string },
+    onIssued?: () => void,
+  ): Promise<SourceConfigurationResumeResult> {
     const siteId = uuid(siteValue),
       cameraId = uuid(cameraValue);
-    await this.authorize(token, siteId, true);
+    await authorize();
     const command = sourceConfigurationResumeSchema.safeParse(input);
     if (!command.success) invalid('Invalid camera configuration resume');
     const camera = await this.cameras.get(siteId, cameraId),
@@ -322,6 +457,9 @@ export class CameraSourceService {
       if (
         rows.length !== 1 ||
         !expected ||
+        (expectedSource &&
+          (expected.generation_id !== expectedSource.generationId ||
+            expected.stream_session_id !== expectedSource.streamSessionId)) ||
         expected.external_id !== camera.externalId ||
         Number(expected.configuration_version) !== command.data.expectedConfigurationVersion ||
         !Number.isSafeInteger(Number(expected.view_revision))
@@ -367,7 +505,7 @@ export class CameraSourceService {
               code: 'CONFLICT',
               message: 'Configuration resume owner changed',
             });
-          await this.authorize(token, siteId, true);
+          await authorize();
           return {
             state: 'STARTED',
             commandId: status.commandId,
@@ -391,7 +529,7 @@ export class CameraSourceService {
           await this.call(host!.origin, path + suffix, body, AbortSignal.timeout(45000)),
         );
       const running = await resumeAcceptedCameraSource(command.data, expected.generation_id, {
-        authorize: () => this.authorize(token, siteId, true),
+        authorize,
         prepare: () =>
           remote('/prepare-resume', {
             commandId: command.data.commandId,
@@ -403,11 +541,27 @@ export class CameraSourceService {
             },
             configuration,
           }),
-        issue: (owner, id) =>
-          renewCameraWorkerGeneration(database, cameraId, allowed, 43200000, undefined, owner, id, {
-            ...configuration,
-            streamSessionId: expected.stream_session_id,
-          }),
+        issue: async (owner, id) => {
+          const issued = await renewCameraWorkerGeneration(
+            database,
+            cameraId,
+            allowed,
+            43200000,
+            undefined,
+            owner,
+            id,
+            {
+              ...configuration,
+              streamSessionId: expected.stream_session_id,
+            },
+          );
+          if (expectedSource) {
+            expectedSource.generationId = issued.workerGenerationId;
+            expectedSource.streamSessionId = issued.streamSessionId;
+          }
+          onIssued?.();
+          return issued;
+        },
         commit: (commandId, generation) => remote('/commit-resume', { commandId, generation }),
       });
       return {

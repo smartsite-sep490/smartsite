@@ -1,8 +1,10 @@
+import type { CameraPreviewZoneAnchor } from '@smartsite/contracts/camera-preview';
 import { translate as tr } from '../../i18n';
 import type { VideoTestDetection } from './videoTestFixture';
 
 export interface RealtimePreview {
   zonePolygons: { regionId: string; geometryVersion: number; coordinates: [number, number][] }[];
+  zoneAnchor?: CameraPreviewZoneAnchor;
   sessionId: string;
   sequenceNumber: string;
   cameraExternalId: string;
@@ -163,8 +165,14 @@ export function parseRealtimePreview(value: unknown): RealtimePreview {
       coordinates: polygon.coordinates as [number, number][],
     };
   });
+  const rawAnchor = value.zoneAnchor;
+  if (rawAnchor !== undefined && rawAnchor !== 'BOTTOM_CENTER' && rawAnchor !== 'BOX_CENTER') {
+    throw new Error(tr('realtime_preview.synchronized_preview_unavailable_or_malformed'));
+  }
+  const zoneAnchor: CameraPreviewZoneAnchor | undefined = rawAnchor;
   return {
     zonePolygons,
+    ...(zoneAnchor !== undefined ? { zoneAnchor } : {}),
     sessionId: value.sessionId,
     sequenceNumber: value.sequenceNumber,
     cameraExternalId: value.cameraExternalId,

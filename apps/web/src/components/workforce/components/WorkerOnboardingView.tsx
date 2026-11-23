@@ -3,7 +3,7 @@ import { isWorkerDocumentDate } from '@smartsite/api-client';
 import { userErrorMessage } from '../../../i18n/messages';
 import { translate as tr, uiLanguage } from '../../../i18n';
 import { useTranslation } from 'react-i18next';
-import React, { useState } from 'react';
+import React, { useId, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import {
   type WorkerResponse,
@@ -20,7 +20,6 @@ import {
   IconAlertTriangle,
   IconBuilding2,
   IconCheck,
-  IconKey,
   IconRefresh,
   IconSearch,
   IconShield,
@@ -239,10 +238,95 @@ function WorkerAccountForm({
     null,
   );
   const [fileVersion, setFileVersion] = useState(0);
+  const [attempted, setAttempted] = useState(false);
+  const formId = useId();
   const contractors = options.data?.contractors ?? [];
   const selected = contractors.some((c) => c.id === contractorId)
     ? contractorId
     : (contractors[0]?.id ?? '');
+  const validationErrors: Record<string, string> = {};
+  for (const [key, value, label] of [
+    ['displayName', displayName, tr('common.full_name')],
+    ['username', username, tr('common.username')],
+    ['email', email, tr('worker_onboarding_view.email')],
+    ['nationalId', nationalId, tr('documents.nationalId')],
+    ['phoneNumber', phoneNumber, tr('documents.phoneNumber')],
+    ['gender', gender, tr('documents.gender')],
+    ['address', address, tr('documents.address')],
+    ['safetyCardRequired', safetyCardRequired, tr('documents.safetyCardRequired')],
+  ] as const) {
+    if (!value.trim())
+      validationErrors[key] = tr('worker_onboarding_view.missingField', { field: label });
+  }
+  if (username.trim() && !/^[a-zA-Z0-9][a-zA-Z0-9._-]{2,63}$/.test(username.trim()))
+    validationErrors.username = tr('worker_onboarding_view.invalidUsername');
+  if (
+    email.trim() &&
+    (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim()) || email.trim().length > 254)
+  )
+    validationErrors.email = tr('worker_onboarding_view.invalidEmail');
+  if (nationalId && !/^[0-9]{12}$/.test(nationalId))
+    validationErrors.nationalId = tr('worker_onboarding_view.invalidNationalId');
+  if (phoneNumber && !/^\+?[0-9]{9,15}$/.test(phoneNumber))
+    validationErrors.phoneNumber = tr('worker_onboarding_view.invalidPhone');
+  for (const [key, value, label, max] of [
+    ['displayName', displayName, tr('common.full_name'), 255],
+    ['address', address, tr('documents.address'), 1000],
+  ] as const) {
+    if (value.trim().length > max || /[\p{Cc}\p{Cs}]/u.test(value.trim()))
+      validationErrors[key] = tr('worker_onboarding_view.invalidText', { field: label, max });
+  }
+  for (const side of ['FRONT', 'BACK'] as const)
+    if (!identityFiles[side])
+      validationErrors[side] = tr('worker_onboarding_view.missingField', {
+        field: tr(`documents.${side}`),
+      });
+  for (const kind of documentKinds) {
+    const required = kind !== 'SAFETY_CARD' || safetyCardRequired !== 'false';
+    if (required && !files[kind])
+      validationErrors[`${kind}-file`] = tr('worker_onboarding_view.missingField', {
+        field: tr(`documents.${kind}`),
+      });
+    if ((required || files[kind]) && !isWorkerDocumentDate(expiries[kind]))
+      validationErrors[`${kind}-date`] = tr('worker_onboarding_view.invalidDocumentDate', {
+        field: tr(`documents.${kind}`),
+      });
+  }
+  const invalidFields = [
+    'displayName',
+    'username',
+    'email',
+    'nationalId',
+    'phoneNumber',
+    'gender',
+    'address',
+    'FRONT',
+    'BACK',
+    'safetyCardRequired',
+    ...documentKinds.flatMap((kind) => [`${kind}-date`, `${kind}-file`]),
+  ].filter((key) => !!validationErrors[key]);
+  const visibleErrors = attempted ? validationErrors : {};
+  const fieldId = (key: string) => `${formId}-${key}`;
+  const feedback = (key: string, label: string) => ({
+    id: fieldId(key),
+    'aria-label': label,
+    'aria-invalid': visibleErrors[key] ? true : undefined,
+    'aria-describedby': visibleErrors[key] ? `${fieldId(key)}-error` : undefined,
+  });
+  const fieldError = (key: string) =>
+    visibleErrors[key] ? (
+      <span
+        id={`${fieldId(key)}-error`}
+        className="mt-2 block text-xs font-medium normal-case leading-5 tracking-normal text-rose-700"
+      >
+        {visibleErrors[key]}
+      </span>
+    ) : null;
+  const focusField = (key: string) => {
+    const element = document.getElementById(fieldId(key));
+    element?.focus({ preventScroll: true });
+    element?.scrollIntoView?.({ behavior: 'smooth', block: 'center' });
+  };
   const validateImage = async (file: File) => {
     const result = await client.checkDocumentImageQuality(token, siteId, selected, file);
     return result;
@@ -251,24 +335,12 @@ function WorkerAccountForm({
   const create = useMutation({
     mutationFn: async () => {
       const recipient = email.trim().toLowerCase();
-      if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(recipient))
-        throw new Error(tr('worker_onboarding_view.invalidEmail'));
-      if (
-        !/^[0-9]{12}$/.test(nationalId) ||
-        !/^\+?[0-9]{9,15}$/.test(phoneNumber) ||
-        !gender ||
-        !address.trim() ||
-        !identityFiles.FRONT ||
-        !identityFiles.BACK ||
-        !safetyCardRequired ||
-        documentKinds.some(
-          (kind) => (kind !== 'SAFETY_CARD' || safetyCardRequired === 'true') && !files[kind],
-        )
-      )
-        throw new Error(tr('documents.required'));
-      for (const kind of documentKinds)
-        if (files[kind] && !isWorkerDocumentDate(expiries[kind]))
-          throw new Error(tr('documents.dateRequiredHint'));
+      const firstError = invalidFields[0] ? validationErrors[invalidFields[0]] : undefined;
+      if (firstError || !gender)
+        throw new Error(
+          firstError ??
+            tr('worker_onboarding_view.missingField', { field: tr('documents.gender') }),
+        );
       for (const file of Object.values(files))
         if (file && !validDocumentFile(file)) throw new Error(tr('documents.invalidFile'));
       const account =
@@ -311,6 +383,7 @@ function WorkerAccountForm({
       return account;
     },
     onSuccess: () => {
+      setAttempted(false);
       setDisplayName('');
       setUsername('');
       setEmail('');
@@ -335,7 +408,7 @@ function WorkerAccountForm({
   });
 
   const field =
-    'mt-1.5 block w-full rounded-xl border border-slate-200 bg-slate-50/70 px-4 py-2.5 text-sm font-semibold text-slate-800 placeholder:text-slate-400 focus:border-[#F66B17] focus:bg-white focus:ring-2 focus:ring-[#F66B17]/15 focus:outline-none transition-all';
+    'mt-1.5 block w-full rounded-xl border border-slate-200 bg-slate-50/70 px-4 py-2.5 text-sm font-semibold text-slate-800 placeholder:text-slate-400 focus:border-[#F66B17] focus:bg-white focus:ring-2 focus:ring-[#F66B17]/15 focus:outline-none transition-all aria-[invalid=true]:border-rose-400 aria-[invalid=true]:bg-rose-50/40';
 
   if (options.isPending) {
     return (
@@ -408,15 +481,23 @@ function WorkerAccountForm({
 
         {/* Creation Form */}
         <form
+          noValidate
           className="space-y-6"
           onSubmit={(e) => {
             e.preventDefault();
-            if (!create.isPending && selected) create.mutate();
+            if (create.isPending || !selected) return;
+            setAttempted(true);
+            const firstInvalid = invalidFields[0];
+            if (firstInvalid) {
+              focusField(firstInvalid);
+              return;
+            }
+            create.mutate();
           }}
         >
-          <fieldset disabled={create.isPending} className="space-y-6">
+          <fieldset disabled={create.isPending} className="grid gap-5 xl:grid-cols-2">
             {/* Step 1: Đơn vị nhà thầu & Tài khoản đăng nhập */}
-            <div className="rounded-2xl border border-slate-200/80 bg-slate-50/50 p-5 sm:p-6 space-y-4">
+            <div className="space-y-4 rounded-2xl border border-slate-200 bg-white p-4 sm:p-5">
               <div className="flex items-center gap-3 pb-3 border-b border-slate-200/70">
                 <div className="w-7 h-7 rounded-lg bg-orange-100 text-[#F66B17] flex items-center justify-center font-black text-xs">
                   1
@@ -425,11 +506,6 @@ function WorkerAccountForm({
                   <h3 className="text-sm font-bold text-[#041D2E]">
                     {tr('common.contractor')} & {tr('common.account')}
                   </h3>
-                  <p className="text-xs text-slate-500">
-                    {tr(
-                      'worker_onboarding_view.the_account_receives_the_worker_role_at_this_site_and_can_sign_in_immediately_pass',
-                    )}
-                  </p>
                 </div>
               </div>
 
@@ -453,6 +529,7 @@ function WorkerAccountForm({
                 <label className="text-xs font-bold uppercase tracking-wider text-slate-700">
                   {tr('common.full_name')}
                   <input
+                    {...feedback('displayName', tr('common.full_name'))}
                     className={field}
                     required
                     maxLength={255}
@@ -462,11 +539,13 @@ function WorkerAccountForm({
                     disabled={!!pendingAccount}
                     onChange={(e) => setDisplayName(e.target.value)}
                   />
+                  {fieldError('displayName')}
                 </label>
 
                 <label className="text-xs font-bold uppercase tracking-wider text-slate-700 sm:col-span-2">
                   {tr('common.username')}
                   <input
+                    {...feedback('username', tr('common.username'))}
                     className={field}
                     required
                     minLength={3}
@@ -478,6 +557,7 @@ function WorkerAccountForm({
                     disabled={!!pendingAccount}
                     onChange={(e) => setUsername(e.target.value)}
                   />
+                  {fieldError('username')}
                 </label>
               </div>
 
@@ -485,10 +565,16 @@ function WorkerAccountForm({
               <label className="block text-xs font-bold uppercase tracking-wider text-slate-700">
                 {tr('worker_onboarding_view.email')}
                 <input
+                  {...feedback('email', tr('worker_onboarding_view.email'))}
                   className={field}
                   type="email"
                   aria-label={tr('worker_onboarding_view.email')}
-                  aria-describedby="worker-onboarding-email-hint"
+                  aria-describedby={[
+                    'worker-onboarding-email-hint',
+                    visibleErrors.email ? `${fieldId('email')}-error` : '',
+                  ]
+                    .filter(Boolean)
+                    .join(' ')}
                   required
                   maxLength={254}
                   autoComplete="email"
@@ -496,6 +582,7 @@ function WorkerAccountForm({
                   disabled={!!pendingAccount}
                   onChange={(event) => setEmail(event.target.value)}
                 />
+                {fieldError('email')}
                 <span
                   id="worker-onboarding-email-hint"
                   className="mt-2 block text-xs font-medium normal-case tracking-normal text-slate-500"
@@ -503,21 +590,11 @@ function WorkerAccountForm({
                   {tr('worker_onboarding_view.emailHint')}
                 </span>
               </label>
-              <div className="rounded-xl border border-blue-200/80 bg-blue-50/70 p-4 flex items-start gap-3 shadow-2xs">
-                <IconKey className="w-5 h-5 text-blue-600 shrink-0 mt-0.5" />
-                <div className="text-xs space-y-1">
-                  <p className="font-bold text-blue-950">{tr('documents.accountHint')}</p>
-                  <p className="text-blue-700 leading-relaxed font-medium">
-                    {tr(
-                      'worker_onboarding_view.the_account_receives_the_worker_role_at_this_site_and_can_sign_in_immediately_pass',
-                    )}
-                  </p>
-                </div>
-              </div>
+              <p className="text-xs leading-5 text-slate-500">{tr('documents.accountHint')}</p>
             </div>
 
             {/* Step 2: Thông tin định danh & Liên hệ */}
-            <div className="rounded-2xl border border-slate-200/80 bg-slate-50/50 p-5 sm:p-6 space-y-4">
+            <div className="space-y-4 rounded-2xl border border-slate-200 bg-white p-4 sm:p-5">
               <div className="flex items-center gap-3 pb-3 border-b border-slate-200/70">
                 <div className="w-7 h-7 rounded-lg bg-orange-100 text-[#F66B17] flex items-center justify-center font-black text-xs">
                   2
@@ -538,6 +615,7 @@ function WorkerAccountForm({
                 <label className="text-xs font-bold uppercase tracking-wider text-slate-700">
                   {tr('documents.nationalId')}
                   <input
+                    {...feedback('nationalId', tr('documents.nationalId'))}
                     className={field}
                     required
                     inputMode="numeric"
@@ -548,11 +626,13 @@ function WorkerAccountForm({
                     disabled={!!pendingAccount}
                     onChange={(e) => setNationalId(e.target.value.trim())}
                   />
+                  {fieldError('nationalId')}
                 </label>
 
                 <label className="text-xs font-bold uppercase tracking-wider text-slate-700">
                   {tr('documents.phoneNumber')}
                   <input
+                    {...feedback('phoneNumber', tr('documents.phoneNumber'))}
                     className={field}
                     required
                     type="tel"
@@ -563,11 +643,13 @@ function WorkerAccountForm({
                     disabled={!!pendingAccount}
                     onChange={(e) => setPhoneNumber(e.target.value.replace(/\s/g, ''))}
                   />
+                  {fieldError('phoneNumber')}
                 </label>
 
                 <label className="text-xs font-bold uppercase tracking-wider text-slate-700 sm:col-span-2">
                   {tr('documents.gender')}
                   <SmartNativeSelect
+                    {...feedback('gender', tr('documents.gender'))}
                     className={field}
                     required
                     disabled={!!pendingAccount}
@@ -581,11 +663,13 @@ function WorkerAccountForm({
                       </option>
                     ))}
                   </SmartNativeSelect>
+                  {fieldError('gender')}
                 </label>
 
                 <label className="text-xs font-bold uppercase tracking-wider text-slate-700 sm:col-span-2">
                   {tr('documents.address')}
                   <textarea
+                    {...feedback('address', tr('documents.address'))}
                     className={`${field} min-h-[72px] resize-y`}
                     required
                     maxLength={1000}
@@ -594,12 +678,13 @@ function WorkerAccountForm({
                     disabled={!!pendingAccount}
                     onChange={(e) => setAddress(e.target.value)}
                   />
+                  {fieldError('address')}
                 </label>
               </div>
             </div>
 
             {/* Step 3: Căn cước công dân & Hồ sơ an toàn */}
-            <div className="rounded-2xl border border-slate-200/80 bg-slate-50/50 p-5 sm:p-6 space-y-4">
+            <div className="space-y-5 rounded-2xl border border-slate-200 bg-slate-50/50 p-4 sm:p-5 xl:col-span-2">
               <div className="flex items-center gap-3 pb-3 border-b border-slate-200/70">
                 <div className="w-7 h-7 rounded-lg bg-orange-100 text-[#F66B17] flex items-center justify-center font-black text-xs">
                   3
@@ -618,26 +703,29 @@ function WorkerAccountForm({
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                   {(['FRONT', 'BACK'] as const).map((side) => (
                     <DocumentMediaPicker
+                      inputId={fieldId(side)}
+                      fieldError={visibleErrors[side]}
                       key={`${fileVersion}:${side}`}
                       label={tr(`documents.${side}`)}
                       allowPdf={false}
                       referenceNationalId={nationalId}
                       file={identityFiles[side]}
-                      disabled={!!pendingAccount}
                       validate={validateImage}
-                      onSelect={(file) =>
-                        setIdentityFiles((previous) => ({ ...previous, [side]: file }))
-                      }
+                      onSelect={(file) => {
+                        setIdentityFiles((previous) => ({ ...previous, [side]: file }));
+                        setSubmissionId(crypto.randomUUID());
+                      }}
                     />
                   ))}
                 </div>
               </div>
 
               {/* 3 Safety & Health Documents */}
-              <div className="pt-3 border-t border-slate-200/70">
+              <div className="space-y-4 border-t border-slate-200/70 pt-4">
                 <label className="block space-y-2 text-sm font-semibold text-slate-700">
                   <span>{tr('documents.safetyCardRequired')}</span>
                   <SmartNativeSelect
+                    {...feedback('safetyCardRequired', tr('documents.safetyCardRequired'))}
                     required
                     className={field}
                     value={safetyCardRequired}
@@ -651,8 +739,11 @@ function WorkerAccountForm({
                     <option value="true">{tr('documents.cardRequired')}</option>
                     <option value="false">{tr('documents.cardNotRequired')}</option>
                   </SmartNativeSelect>
+                  {fieldError('safetyCardRequired')}
                 </label>
                 <DocumentFileInputs
+                  inputIdPrefix={formId}
+                  validationErrors={visibleErrors}
                   key={fileVersion}
                   nationalId={nationalId}
                   safetyCardRequired={safetyCardRequired !== 'false'}
@@ -682,11 +773,37 @@ function WorkerAccountForm({
             )}
 
             {/* Submit Action Bar */}
-            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pt-2">
-              <div className="flex items-center gap-3 text-xs text-slate-500 font-medium">
+            {attempted && Object.keys(validationErrors).length > 0 && (
+              <div
+                role="alert"
+                aria-label={tr('worker_onboarding_view.validationTitle')}
+                className="rounded-xl border border-rose-200 bg-rose-50/60 p-4 text-sm text-rose-800 xl:col-span-2"
+              >
+                <p className="font-semibold">{tr('worker_onboarding_view.validationTitle')}</p>
+                <ul className="mt-3 grid gap-x-5 gap-y-2 sm:grid-cols-2">
+                  {invalidFields.map((key) => (
+                    <li key={key} className="flex min-w-0 items-start gap-2 text-xs leading-5">
+                      <span
+                        aria-hidden="true"
+                        className="mt-2 h-1 w-1 shrink-0 rounded-full bg-rose-500"
+                      />
+                      <button
+                        type="button"
+                        onClick={() => focusField(key)}
+                        className="min-w-0 flex-1 text-left underline decoration-rose-300 underline-offset-2 [overflow-wrap:anywhere] hover:decoration-rose-700 focus-visible:outline-2 focus-visible:outline-rose-500"
+                      >
+                        {validationErrors[key]}
+                      </button>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            )}
+            <div className="grid w-full gap-4 border-t border-slate-100 pt-5 xl:col-span-2 md:grid-cols-[minmax(0,1fr)_auto] md:items-center">
+              <div className="flex min-w-0 flex-wrap items-center gap-x-4 gap-y-2 text-xs font-medium text-slate-500">
                 <div className="flex items-center gap-1.5">
                   <span
-                    className={`w-2 h-2 rounded-full ${
+                    className={`h-2 w-2 shrink-0 rounded-full ${
                       displayName.trim() &&
                       username.trim() &&
                       nationalId &&
@@ -701,10 +818,9 @@ function WorkerAccountForm({
                     {tr('common.full_name')} & {tr('common.username')}
                   </span>
                 </div>
-                <span>·</span>
                 <div className="flex items-center gap-1.5">
                   <span
-                    className={`w-2 h-2 rounded-full ${
+                    className={`h-2 w-2 shrink-0 rounded-full ${
                       identityFiles.FRONT &&
                       identityFiles.BACK &&
                       documentKinds
@@ -720,28 +836,8 @@ function WorkerAccountForm({
 
               <button
                 type="submit"
-                className="rounded-xl bg-[#F66B17] hover:bg-[#E05A0B] px-8 py-3 text-sm font-bold text-white shadow-xs hover:shadow-sm transition-all flex items-center justify-center gap-2 cursor-pointer active:scale-[0.99] disabled:opacity-50 disabled:cursor-not-allowed"
-                disabled={
-                  !selected ||
-                  !displayName.trim() ||
-                  !username.trim() ||
-                  !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim()) ||
-                  !nationalId ||
-                  !phoneNumber ||
-                  !gender ||
-                  !address.trim() ||
-                  !identityFiles.FRONT ||
-                  !identityFiles.BACK ||
-                  !safetyCardRequired ||
-                  documentKinds.some(
-                    (kind) =>
-                      (kind !== 'SAFETY_CARD' || safetyCardRequired === 'true') && !files[kind],
-                  ) ||
-                  documentKinds.some(
-                    (kind) => !!files[kind] && !isWorkerDocumentDate(expiries[kind]),
-                  ) ||
-                  create.isPending
-                }
+                className="flex min-h-12 w-full items-center justify-center gap-2 whitespace-nowrap rounded-xl bg-[#F66B17] px-8 py-3 text-sm font-bold text-white shadow-xs transition-all hover:bg-[#E05A0B] hover:shadow-sm active:scale-[0.99] disabled:cursor-not-allowed disabled:opacity-50 md:min-w-64 md:w-auto"
+                disabled={!selected || create.isPending}
               >
                 {create.isPending ? (
                   <>
