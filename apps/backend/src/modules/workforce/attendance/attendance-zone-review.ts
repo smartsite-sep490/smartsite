@@ -1,11 +1,12 @@
 import { createHash } from 'node:crypto';
-import type { EntityManager } from 'typeorm';
+import { In, type EntityManager } from 'typeorm';
 import {
   AccessAuditEntity,
   AbsenceRequestEntity,
   AbsenceRequestStatus,
   AttendanceDayEntity,
   AttendanceSessionEntity,
+  AttendanceCorrectionEntity,
   OvertimeRequestEntity,
   TeamAttendanceEntity,
   WorkerScheduleEntity,
@@ -101,11 +102,32 @@ export async function attendanceZoneReviewContext(
     sessions.flatMap((value) => [value.checkInEventId, value.checkOutEventId]).filter(Boolean),
   );
   const working = sessions.filter((value) => value.status !== 'IGNORED');
+  const correctionIds = working.flatMap((s) =>
+    s.appliedCorrectionId ? [s.appliedCorrectionId] : [],
+  );
+  const corrections = correctionIds.length
+    ? await manager
+        .getRepository(AttendanceCorrectionEntity)
+        .findBy({ id: In(correctionIds), status: 'APPROVED' })
+    : [];
+  const approved = (value: AttendanceSessionEntity) =>
+    corrections.some(
+      (c) =>
+        c.id === value.appliedCorrectionId &&
+        c.attendanceSessionId === value.id &&
+        c.reviewedBy &&
+        c.reviewedBy !== c.requestedBy &&
+        value.status === 'CORRECTED' &&
+        value.effectiveInAt &&
+        value.effectiveOutAt &&
+        +value.effectiveInAt === +c.proposedInAt &&
+        +value.effectiveOutAt === +c.proposedOutAt &&
+        +value.effectiveOutAt > +value.effectiveInAt &&
+        +value.effectiveOutAt <= +now,
+    );
   const gateInCount = gates.filter((value) => value.direction === 'IN').length;
   const gateOutCount = gates.filter((value) => value.direction === 'OUT').length;
   const complete =
-    gateInCount > 0 &&
-    gateOutCount > 0 &&
     working.length > 0 &&
     gates.every((value) => events.some((event) => event.gateEventId === value.id)) &&
     events.every((value) => {
@@ -128,9 +150,10 @@ export async function attendanceZoneReviewContext(
         value.siteId === day.siteId &&
         value.workerId === day.workerId &&
         value.shiftAssignmentId === day.scheduleId &&
-        entry?.kind === 'CHECK_IN' &&
-        exit?.kind === 'CHECK_OUT' &&
-        +exit.occurredAt >= +entry.occurredAt &&
+        (approved(value) ||
+          (entry?.kind === 'CHECK_IN' &&
+            exit?.kind === 'CHECK_OUT' &&
+            +exit.occurredAt >= +entry.occurredAt)) &&
         value.effectiveInAt &&
         value.effectiveOutAt &&
         +value.effectiveOutAt >= +value.effectiveInAt &&

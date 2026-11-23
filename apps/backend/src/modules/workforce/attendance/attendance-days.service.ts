@@ -879,6 +879,12 @@ export class AttendanceDaysService {
         conflict('Schedule changed; leave must remain inside the shift');
       if (value.approve && overtime && start <= new Date())
         conflict('Overtime approval must precede its start');
+      if (value.approve && overtime) {
+        await manager.query('SELECT pg_advisory_xact_lock(hashtext($1))', [
+          `${siteId}${worker.id}`,
+        ]);
+        await assertWorkerIntervalAvailable(manager, siteId, worker.id, start, end, schedule.id);
+      }
       if (value.approve) {
         const overlaps: unknown[] = await manager.query(
           `SELECT id FROM ${overtime ? 'overtime_request' : 'absence_request'} WHERE ${overtime ? 'schedule_id' : 'worker_schedule_id'}=$1 AND status='APPROVED' AND id<>$2 AND COALESCE(starts_at,$3)<$4 AND COALESCE(ends_at,$4)>$3`,
@@ -1171,3 +1177,4 @@ export class AttendanceDaysService {
     });
   }
 }
+import { assertWorkerIntervalAvailable } from '../scheduling/worker-shift-overlap.js';

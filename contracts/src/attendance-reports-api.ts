@@ -40,6 +40,8 @@ export interface AttendanceReportMetrics {
   isProvisional: boolean;
 }
 export interface AttendanceReportDay {
+  /** Individual shift records; daily totals remain aggregated once per date. */
+  shiftRecords?: Array<Omit<AttendanceReportDay, 'shiftRecords'>>;
   workDate: string;
   attendanceDayId: string | null;
   status: AttendanceReportStatus;
@@ -66,6 +68,7 @@ export interface AttendanceWorkerReport extends AttendanceReportMetrics {
   workerName: string;
   contractorId: string | null;
   todayStatus: AttendanceReportStatus;
+  todayAnomalies?: string[];
   todayFirstCheckInAt: string | null;
   todayLastCheckOutAt: string | null;
   /** Included only when includeDaily=true. Includes OFF days in the requested range. */

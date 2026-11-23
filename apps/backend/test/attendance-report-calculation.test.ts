@@ -179,6 +179,51 @@ test('multiple shifts count as one workday and missing configuration is unavaila
   assert.equal(unavailable.isProvisional, true);
 });
 
+test('multiple shifts sum confirmed and provisional minutes independently without counting a date twice', () => {
+  const data = input(),
+    date = data.today;
+  data.dates = [date];
+  data.schedules = [
+    data.schedules[4]!,
+    { ...data.schedules[4]!, id: 'second', shiftId: 'afternoon' },
+  ];
+  data.shifts = [
+    shift,
+    {
+      ...shift,
+      id: 'afternoon',
+      startsAt: new Date('2026-09-01T11:00:00Z'),
+      endsAt: new Date('2026-09-01T12:00:00Z'),
+    },
+  ];
+  data.days = [
+    day(date, 'CONFIRMED', 60),
+    {
+      ...day(date, 'NEEDS_REVIEW', 30),
+      id: 'second-day',
+      scheduleId: 'second',
+      anomalies: ['ZONE_ATTENDANCE_PENDING'],
+    },
+  ];
+  data.sessions = [
+    session(date),
+    { ...session(date), dayId: 'second-day', shiftAssignmentId: 'second' },
+  ];
+  const result = workerAttendanceReport(data);
+  assert.equal(result.totalMinutes, 60);
+  assert.equal(result.provisionalMinutes, 30);
+  assert.equal(result.requiredDays, 1);
+  assert.equal(result.presentDays, 1);
+  assert.equal(result.reviewDays, 1);
+  assert.equal(result.daily?.[0]?.shiftRecords?.length, 2);
+  data.days[1]!.status = 'CONFIRMED';
+  data.days[1]!.confirmedMinutes = 30;
+  data.days[1]!.anomalies = [];
+  const confirmed = workerAttendanceReport(data);
+  assert.equal(confirmed.totalMinutes, 90);
+  assert.equal(confirmed.provisionalMinutes, 0);
+  assert.equal(confirmed.confirmedDays, 1);
+});
 test('approved full-shift leave remains a leave day after its schedule is deactivated', () => {
   const data = input(),
     date = data.today;

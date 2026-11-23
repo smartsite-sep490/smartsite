@@ -15,9 +15,17 @@ export function notificationHref(notification: UserNotificationResponse, assigne
 export function formatNotificationDisplayMessage(
   item: Pick<UserNotificationResponse, 'event' | 'message' | 'workDate' | 'safetyAlert'>,
 ): string {
+  if (item.event === 'MISSING_ATTENDANCE')
+    return uiLocale().startsWith('vi')
+      ? `Thiếu lượt IN/OUT được xác nhận (${item.workDate ?? ''}). Công nhân gửi đơn báo thiếu chấm công theo ca; Đại diện nhà thầu kiểm tra và duyệt hoặc từ chối. Mở thông báo để xem bản ghi cần xử lý.`
+      : item.message;
+  if (item.event === 'ASSIGNMENT_REVIEW')
+    return uiLocale().startsWith('vi')
+      ? `Phân công không khớp (${item.workDate ?? ''}). Đại diện nhà thầu kiểm tra lịch, nhóm và khu vực được giao. Mở thông báo để kiểm tra phân công.`
+      : item.message;
   if (item.event === 'ZONE_REVIEW_REQUIRED') {
     const match =
-      /^Worker ([\s\S]+) \(([^()]*)\) has complete Gate IN\/OUT on (\d{4}-\d{2}-\d{2}),/.exec(
+      /^Worker ([\s\S]+) \(([^()]*)\) (?:has complete Gate IN\/OUT|has approved attendance intervals) on (\d{4}-\d{2}-\d{2}),/.exec(
         item.message,
       );
     return match
@@ -111,6 +119,14 @@ export function formatNotificationDisplayMessage(
 }
 
 export function formatNotificationTitle(item: Pick<UserNotificationResponse, 'event' | 'title'>) {
+  if (item.event === 'MISSING_ATTENDANCE')
+    return uiLocale().startsWith('vi')
+      ? 'Thiếu chấm công — công nhân cần gửi đơn'
+      : 'Missing attendance — Worker correction required';
+  if (item.event === 'ASSIGNMENT_REVIEW')
+    return uiLocale().startsWith('vi')
+      ? 'Phân công cần kiểm tra — nhà thầu xử lý'
+      : 'Assignment conflict — Contractor review required';
   if (item.event === 'ZONE_REVIEW_REQUIRED') return teamText('teamWeb.zoneNotifyTitle');
   if (item.event === 'ABSENCE_REVIEW_REQUIRED') return teamText('teamWeb.absenceNotifyTitle');
   if (item.event === 'PPE_ALERT_CREATED') return tr('notifications.PPE_ALERT_CREATED');

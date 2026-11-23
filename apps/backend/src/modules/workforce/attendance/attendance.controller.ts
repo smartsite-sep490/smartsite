@@ -38,6 +38,14 @@ export class AttendanceController {
   ) {
     return this.attendance.requestCorrection(req.user!, siteId, id, input);
   }
+  @Post('worker-schedules/:id/missing-attendance') reportMissing(
+    @Req() req: AuthenticatedRequest,
+    @Param('siteId') siteId: string,
+    @Param('id') id: string,
+    @Body() input: RequestAttendanceCorrectionCommand,
+  ) {
+    return this.attendance.requestMissingAttendance(req.user!, siteId, id, input);
+  }
   @Post('attendance-corrections/:id/review') review(
     @Req() req: AuthenticatedRequest,
     @Param('siteId') siteId: string,

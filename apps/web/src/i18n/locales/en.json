@@ -3197,6 +3197,7 @@
   "time.nextDays_one": " (next day)",
   "time.nextDays_other": " (+{{count}} days)",
   "time.hoursMinutes": "{{hours}}h {{minutes}}m",
+  "time.hoursMinutesSeconds": "{{hours}}h {{minutes}}m {{seconds}}s",
   "labels.ACCEPTED": "Accepted",
   "labels.ACTIVE": "Active",
   "labels.ACTIVE_ONLY": "Active only",

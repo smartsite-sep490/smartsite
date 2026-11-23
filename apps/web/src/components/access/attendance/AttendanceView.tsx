@@ -1,3 +1,4 @@
+import { teamText } from '../../team-attendance/team-attendance-copy';
 import { SmartNativeSelect } from '../../ui/SmartNativeSelect';
 import { useManagementClient } from '../../../features/auth/auth-session';
 import { userErrorMessage } from '../../../i18n/messages';
@@ -345,7 +346,11 @@ export function AttendanceView({
   const correction = useMutation({
     mutationFn: () => {
       const session = overview.data?.sessions.find((s) => s.id === sessionId);
-      if (!session) throw new Error(tr('attendance_view.select_a_current_attendance_session'));
+      const missing = overview.data?.missingSchedules?.find(
+        (s) => `schedule:${s.scheduleId}` === sessionId,
+      );
+      if (!session && !missing)
+        throw new Error(tr('attendance_view.select_a_current_attendance_session'));
       if (
         overview.data?.hasPendingCorrection ||
         overview.data?.corrections.some((c) => c.status === 'PENDING')
@@ -356,7 +361,7 @@ export function AttendanceView({
           ),
         );
       const input = {
-        expectedSessionVersion: session.version,
+        expectedSessionVersion: session?.version ?? 1,
         proposedInAt: new Date(proposedIn).toISOString(),
         proposedOutAt: new Date(proposedOut).toISOString(),
         reason: reason.trim(),
@@ -364,7 +369,12 @@ export function AttendanceView({
       const fingerprint = JSON.stringify([sessionId, input]);
       if (request.current?.fingerprint !== fingerprint)
         request.current = { fingerprint, id: crypto.randomUUID() };
-      return client.requestAttendanceCorrection(token, siteId, session.id, {
+      if (missing)
+        return client.requestMissingAttendance(token, siteId, missing.scheduleId, {
+          requestId: request.current.id,
+          ...input,
+        });
+      return client.requestAttendanceCorrection(token, siteId, session!.id, {
         requestId: request.current.id,
         ...input,
       });
@@ -541,12 +551,20 @@ export function AttendanceView({
                   onChange={(e) => {
                     setSessionId(e.target.value);
                     const selected = data.sessions.find((session) => session.id === e.target.value);
-                    setProposedIn(localDateTime(selected?.effectiveInAt));
-                    setProposedOut(localDateTime(selected?.effectiveOutAt));
+                    const missing = data.missingSchedules?.find(
+                      (s) => `schedule:${s.scheduleId}` === e.target.value,
+                    );
+                    setProposedIn(localDateTime(selected?.effectiveInAt ?? missing?.startsAt));
+                    setProposedOut(localDateTime(selected?.effectiveOutAt ?? missing?.endsAt));
                   }}
                   className="mt-1.5 block w-full px-4 py-3 rounded-2xl border border-slate-200 bg-slate-50 text-sm font-semibold text-[#071A2B] placeholder-slate-400 hover:border-slate-300 focus:border-[#071A2B] focus:bg-white focus:ring-4 focus:ring-[#071A2B]/5 shadow-sm outline-none transition-all duration-300"
                 >
                   <option value="">{tr('common.select_session')}</option>
+                  {data.missingSchedules?.map((s) => (
+                    <option key={s.scheduleId} value={`schedule:${s.scheduleId}`}>
+                      {s.workDate} · {s.shiftName} · {teamText('teamWeb.missingSession')}
+                    </option>
+                  ))}
                   {data.sessions.map(
                     (s) =>
                       s.status !== 'IGNORED' &&

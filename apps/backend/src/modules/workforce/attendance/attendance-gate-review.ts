@@ -28,12 +28,14 @@ export async function attendanceGateAbsenceContext(
     }[]
   >(
     `
-    WITH bounds AS (SELECT GREATEST($6::timestamptz, COALESCE((SELECT max(o.ends_at) FROM overtime_request o WHERE o.schedule_id=$7 AND o.status='APPROVED'),$6::timestamptz)) AS required_end)
+    WITH bounds AS (SELECT $3::date AS work_date,$4::text AS timezone,GREATEST($6::timestamptz, COALESCE((SELECT max(o.ends_at) FROM overtime_request o WHERE o.schedule_id=$7 AND o.status='APPROVED'),$6::timestamptz)) AS required_end)
     SELECT
       (SELECT count(*)::int FROM gate_event g WHERE g.site_id=$1 AND g.worker_id=$2
-        AND ((g.occurred_at AT TIME ZONE $4)::date=$3::date OR g.occurred_at BETWEEN $5 AND (SELECT required_end FROM bounds))) AS "gateEventCount",
+        AND (EXISTS(SELECT 1 FROM attendance_event e WHERE e.gate_event_id=g.id AND e.shift_assignment_id=$7)
+          OR (g.occurred_at BETWEEN $5 AND (SELECT required_end FROM bounds)
+            AND NOT EXISTS(SELECT 1 FROM attendance_event e WHERE e.gate_event_id=g.id AND e.shift_assignment_id IS NOT NULL AND e.shift_assignment_id<>$7)))) AS "gateEventCount",
       (SELECT count(*)::int FROM attendance_event e WHERE e.site_id=$1 AND e.worker_id=$2
-        AND (e.shift_assignment_id=$7 OR (e.occurred_at AT TIME ZONE $4)::date=$3::date OR e.occurred_at BETWEEN $5 AND (SELECT required_end FROM bounds))) AS "attendanceEventCount",
+        AND (e.shift_assignment_id=$7 OR (e.shift_assignment_id IS NULL AND e.occurred_at BETWEEN $5 AND (SELECT required_end FROM bounds)))) AS "attendanceEventCount",
       (SELECT count(*)::int FROM attendance_session s WHERE s.day_id=$8) AS "sessionCount",
       (SELECT required_end FROM bounds) AS "requiredEnd"`,
     [

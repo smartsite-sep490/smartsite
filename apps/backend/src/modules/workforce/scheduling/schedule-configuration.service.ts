@@ -391,16 +391,19 @@ export class ScheduleConfigurationService {
       await manager.query('SELECT pg_advisory_xact_lock(hashtext($1))', [
         `${scopedSiteId}${worker.id}${value.workDate}`,
       ]);
-      if (
-        (value.isActive ?? true) &&
-        (await manager.getRepository(WorkerScheduleEntity).existsBy({
-          siteId: scopedSiteId,
-          workerId: worker.id,
-          workDate: value.workDate,
-          isActive: true,
-        }))
-      )
-        conflict('Worker already has an active shift on this date');
+      await manager.query('SELECT pg_advisory_xact_lock(hashtext($1))', [
+        `${scopedSiteId}${worker.id}`,
+      ]);
+      if (value.isActive ?? true) {
+        const window = scheduledShiftWindow(shift, value.workDate);
+        await assertWorkerIntervalAvailable(
+          manager,
+          scopedSiteId,
+          worker.id,
+          window.startsAt,
+          window.endsAt,
+        );
+      }
       try {
         return await manager.getRepository(WorkerScheduleEntity).save({
           id: randomUUID(),
@@ -823,3 +826,4 @@ export class ScheduleConfigurationService {
     return { items, total: items.length };
   }
 }
+import { assertWorkerIntervalAvailable } from './worker-shift-overlap.js';

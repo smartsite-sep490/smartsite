@@ -6,7 +6,7 @@ import { useTranslation } from 'react-i18next';
 import { useQuery } from '@tanstack/react-query';
 import { translate as tr, uiLocale } from '../../../i18n';
 import { userErrorMessage } from '../../../i18n/messages';
-import { attendanceHours, attendanceLabel } from './attendance-display';
+import { attendanceHours, attendanceLabel, attendanceSessionDuration } from './attendance-display';
 import { AttendanceStatusBadge } from './AttendanceStatusBadge';
 import { AttendanceDailyBarChart } from './AttendanceDailyBarChart';
 import {
@@ -100,6 +100,7 @@ export function WorkerAttendanceDetailPanel({
         timeZone: timezone,
         hour: '2-digit',
         minute: '2-digit',
+        second: '2-digit',
         hourCycle: 'h23',
       }).format(new Date(isoString));
     } catch {
@@ -341,65 +342,75 @@ export function WorkerAttendanceDetailPanel({
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-slate-100">
-                    {daily.map((day) => {
-                      const isOff = day.status === 'OFF';
-                      const isExpanded = expandedDayId === day.attendanceDayId;
-                      const shiftName = day.shifts[0]?.name ?? (isOff ? tr('labels.OFF') : '—');
+                    {daily
+                      .flatMap((day) => day.shiftRecords ?? [day])
+                      .map((day) => {
+                        const isOff = day.status === 'OFF';
+                        const isExpanded = expandedDayId === day.attendanceDayId;
+                        const shiftName = day.shifts[0]?.name ?? (isOff ? tr('labels.OFF') : '—');
 
-                      return (
-                        <tr
-                          key={day.workDate}
-                          className={`hover:bg-slate-50/60 transition-colors ${
-                            isExpanded ? 'bg-orange-50/20' : ''
-                          }`}
-                        >
-                          <td className="p-3.5 pl-6 font-semibold text-[#071A2B] whitespace-nowrap">
-                            {formatDayDate(day.workDate)}
-                          </td>
-                          <td className="p-3.5 text-slate-600 whitespace-nowrap">{shiftName}</td>
-                          <td className="p-3.5 font-mono text-slate-700 whitespace-nowrap">
-                            {formatShortTime(day.firstCheckInAt)}
-                          </td>
-                          <td className="p-3.5 font-mono text-slate-700 whitespace-nowrap">
-                            {formatShortTime(day.lastCheckOutAt)}
-                          </td>
-                          <td className="p-3.5 font-mono font-bold text-[#071A2B] whitespace-nowrap">
-                            {day.hoursStatus === 'CONFIRMED'
-                              ? attendanceHours(day.totalMinutes)
-                              : day.provisionalMinutes > 0
-                                ? `${attendanceHours(day.provisionalMinutes)}*`
-                                : attendanceHours(0)}
-                          </td>
-                          <td className="p-3.5 font-mono text-slate-600 whitespace-nowrap">
-                            {attendanceHours(day.regularMinutes)}
-                          </td>
-                          <td className="p-3.5 font-mono text-slate-600 whitespace-nowrap">
-                            {attendanceHours(day.overtimeMinutes)}
-                          </td>
-                          <td className="p-3.5 whitespace-nowrap">
-                            <AttendanceStatusBadge status={day.status} />
-                          </td>
-                          <td className="p-3.5 pr-6 text-right whitespace-nowrap">
-                            {day.attendanceDayId ? (
-                              <button
-                                onClick={() => handleToggleDaySessions(day.attendanceDayId)}
-                                className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg border border-slate-200 bg-white text-[11px] font-semibold text-slate-700 hover:bg-slate-50 hover:border-slate-300 transition-colors cursor-pointer"
-                                aria-expanded={isExpanded}
-                              >
-                                <span>
-                                  {tr(isExpanded ? 'common.hide_details' : 'common.view_details')}
-                                </span>
-                                <IconChevronDown
-                                  className={`w-3 h-3 transition-transform ${isExpanded ? 'rotate-180' : ''}`}
-                                />
-                              </button>
-                            ) : (
-                              <span className="text-slate-300 text-xs">—</span>
-                            )}
-                          </td>
-                        </tr>
-                      );
-                    })}
+                        return (
+                          <tr
+                            key={
+                              day.attendanceDayId ??
+                              `${day.workDate}-${day.shifts[0]?.scheduleId ?? 'off'}`
+                            }
+                            className={`hover:bg-slate-50/60 transition-colors ${
+                              isExpanded ? 'bg-orange-50/20' : ''
+                            }`}
+                          >
+                            <td className="p-3.5 pl-6 font-semibold text-[#071A2B] whitespace-nowrap">
+                              {formatDayDate(day.workDate)}
+                            </td>
+                            <td className="p-3.5 text-slate-600 whitespace-nowrap">{shiftName}</td>
+                            <td className="p-3.5 font-mono text-slate-700 whitespace-nowrap">
+                              {formatShortTime(day.firstCheckInAt)}
+                            </td>
+                            <td className="p-3.5 font-mono text-slate-700 whitespace-nowrap">
+                              {formatShortTime(day.lastCheckOutAt)}
+                            </td>
+                            <td className="p-3.5 font-mono font-bold text-[#071A2B] whitespace-nowrap">
+                              {day.hoursStatus === 'CONFIRMED'
+                                ? attendanceHours(day.totalMinutes)
+                                : day.provisionalMinutes > 0
+                                  ? `${attendanceHours(day.provisionalMinutes)}*`
+                                  : attendanceHours(0)}
+                            </td>
+                            <td className="p-3.5 font-mono text-slate-600 whitespace-nowrap">
+                              {attendanceHours(day.regularMinutes)}
+                            </td>
+                            <td className="p-3.5 font-mono text-slate-600 whitespace-nowrap">
+                              {attendanceHours(day.overtimeMinutes)}
+                            </td>
+                            <td className="p-3.5 whitespace-nowrap">
+                              <AttendanceStatusBadge status={day.status} />
+                              {day.status === 'NEEDS_REVIEW' && (
+                                <p className="mt-1 max-w-sm whitespace-normal text-xs text-amber-700">
+                                  {attendanceResolution(day.anomalies ?? [])?.message}
+                                </p>
+                              )}
+                            </td>
+                            <td className="p-3.5 pr-6 text-right whitespace-nowrap">
+                              {day.attendanceDayId ? (
+                                <button
+                                  onClick={() => handleToggleDaySessions(day.attendanceDayId)}
+                                  className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg border border-slate-200 bg-white text-[11px] font-semibold text-slate-700 hover:bg-slate-50 hover:border-slate-300 transition-colors cursor-pointer"
+                                  aria-expanded={isExpanded}
+                                >
+                                  <span>
+                                    {tr(isExpanded ? 'common.hide_details' : 'common.view_details')}
+                                  </span>
+                                  <IconChevronDown
+                                    className={`w-3 h-3 transition-transform ${isExpanded ? 'rotate-180' : ''}`}
+                                  />
+                                </button>
+                              ) : (
+                                <span className="text-slate-300 text-xs">—</span>
+                              )}
+                            </td>
+                          </tr>
+                        );
+                      })}
                   </tbody>
                 </table>
               </div>
@@ -479,6 +490,10 @@ export function WorkerAttendanceDetailPanel({
 
                 {dayDetailQuery.data && (
                   <div className="space-y-3">
+                    <AttendanceResolutionNotice
+                      issues={dayDetailQuery.data.day.anomalies ?? []}
+                      siteId={siteId}
+                    />
                     <div className="p-3 rounded-xl bg-white border border-slate-200/80 grid grid-cols-2 sm:grid-cols-4 gap-2 text-xs">
                       <div>
                         <span className="text-slate-400 block text-[10px] font-bold uppercase">
@@ -550,9 +565,10 @@ export function WorkerAttendanceDetailPanel({
                                 })}
                               </span>
                               <span className="font-mono text-slate-500 font-bold">
-                                {session.workedMinutes !== null
-                                  ? attendanceHours(session.workedMinutes)
-                                  : '—'}
+                                {attendanceSessionDuration(
+                                  session.effectiveInAt,
+                                  session.effectiveOutAt,
+                                )}
                               </span>
                             </div>
                             {(session.rawInAt || session.rawOutAt) && (
@@ -605,3 +621,5 @@ export function WorkerAttendanceDetailPanel({
     </section>
   );
 }
+import { AttendanceResolutionNotice } from './AttendanceResolutionNotice';
+import { attendanceResolution } from './attendance-resolution';

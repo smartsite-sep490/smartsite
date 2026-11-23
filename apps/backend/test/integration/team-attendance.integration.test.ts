@@ -349,9 +349,48 @@ test('zone roll call: scoped leadership, explicit statuses, correction audit, re
       },
     );
     await t.test(
+      'membership added after shift start resolves incomplete attendance without backdating',
+      async () => {
+        await db.query('UPDATE team_attendance_policy SET effective_from=$1', [from]);
+        const joined = await db.query(
+          'SELECT joined_at FROM contractor_team_membership WHERE id=$1',
+          [peerMembership.membershipId],
+        );
+        const startsAt = new Date(`${workDate}T00:00:00Z`);
+        assert.ok(+joined[0].joined_at > +startsAt);
+        const incomplete = Object.assign(new AttendanceDayEntity(), {
+          siteId,
+          workerId: peerId,
+          scheduleId: member.id,
+          startsAt,
+          status: 'NEEDS_REVIEW',
+          zoneAttendanceRequirement: {
+            version: 1,
+            required: true,
+            teamId: team.id,
+            zoneId: zone.id,
+            membershipId: null,
+          },
+        });
+        assert.equal(await attendanceZoneIssue(db.manager, incomplete, new Date()), null);
+        assert.equal(
+          incomplete.zoneAttendanceRequirement?.membershipId,
+          peerMembership.membershipId,
+        );
+        assert.equal(
+          +(
+            await db.query('SELECT joined_at FROM contractor_team_membership WHERE id=$1', [
+              peerMembership.membershipId,
+            ])
+          )[0].joined_at,
+          +joined[0].joined_at,
+        );
+      },
+    );
+    await t.test(
       'contractor aggregate stays scoped and policy checks real gate plus matching roll call',
       async () => {
-        // Team membership starts during this synthetic shift; align its historical start for this case.
+        // This historical roster fixture remains independent of the live attendance policy.
         await db.query('UPDATE contractor_team_membership SET joined_at=$2 WHERE team_id=$1', [
           team.id,
           from,
@@ -397,6 +436,22 @@ test('zone roll call: scoped leadership, explicit statuses, correction audit, re
         });
         await db.query('UPDATE team_attendance_policy SET effective_from=$1', [from]);
         assert.equal(await attendanceZoneIssue(db.manager, day, new Date()), null);
+        assert.equal(day.zoneAttendanceRequirement?.membershipId, peerMembership.membershipId);
+        const incomplete = {
+          ...day,
+          zoneAttendanceRequirement: {
+            version: 1 as const,
+            required: true,
+            teamId: team.id,
+            zoneId: zone.id,
+            membershipId: null,
+          },
+        };
+        assert.equal(await attendanceZoneIssue(db.manager, incomplete, new Date()), null);
+        assert.equal(
+          incomplete.zoneAttendanceRequirement?.membershipId,
+          peerMembership.membershipId,
+        );
         assert.equal(day.zoneAttendanceRequirement?.teamId, team.id);
         assert.equal(day.zoneAttendanceRequirement?.zoneId, zone.id);
         await db.query("UPDATE team_attendance SET status='ABSENT' WHERE schedule_id=$1", [

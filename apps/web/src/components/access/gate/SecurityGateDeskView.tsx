@@ -1,3 +1,4 @@
+import { teamText } from '../../team-attendance/team-attendance-copy';
 import { SmartNativeSelect } from '../../ui/SmartNativeSelect';
 import { useManagementClient } from '../../../features/auth/auth-session';
 import { localizedError, localizeMessage, userErrorMessage } from '../../../i18n/messages';
@@ -16,6 +17,7 @@ import type {
   WorkerQrVerificationCommand,
   AccessAttemptResponse,
   GateEventResponse,
+  GateQrSessionReason,
 } from '@smartsite/contracts';
 import { QrScannerView } from './QrScannerView';
 import { inspectGateCamera } from '../enrollment/gateCameraReadiness';
@@ -28,7 +30,6 @@ import {
   IconClock,
   IconKey,
   IconRefresh,
-  IconShield,
   IconX,
 } from '../../icons';
 import {
@@ -221,9 +222,14 @@ function ScopedSecurityGateDeskView({
       if (!currentAttempt) throw new Error(tr('security_gate_desk_view.verify_the_worker_first'));
       if (passageKey.current?.attemptId !== currentAttempt.id)
         passageKey.current = { attemptId: currentAttempt.id, idempotencyKey: crypto.randomUUID() };
+      const note =
+        reviewNote.trim() ||
+        (direction === 'IN' && currentAttempt.scheduleStatus !== 'SCHEDULED'
+          ? 'Xác nhận lượt vào ngoài ca'
+          : undefined);
       return client.confirmGatePassage(token!, selectedSiteId, currentAttempt.id, {
         idempotencyKey: passageKey.current.idempotencyKey,
-        reviewNote: reviewNote.trim() || undefined,
+        reviewNote: note,
         separatePassage: separatePassage || undefined,
       });
     },
@@ -233,6 +239,7 @@ function ScopedSecurityGateDeskView({
       setSeparatePassage(false);
       setCurrentAttempt(null);
       setConfirmedEvent(event);
+      setScanMessage(teamText('teamWeb.gateRecordedShort'));
       void queryClient.invalidateQueries({
         queryKey: ['attendance', apiUrl, sessionScope, selectedSiteId],
       });
@@ -271,10 +278,16 @@ function ScopedSecurityGateDeskView({
     ? `${localizedLabel(qrResult.authorization)}: ${qrResult.worker.displayName} · ${getSafeReasonMessage(qrResult.reasonCode)}`
     : '';
   const qrCommand = useRef<WorkerQrVerificationCommand | null>(null);
-  const fallbackMutation = useMutation<QrFallbackResponse, Error, number>({
-    mutationFn: () =>
-      client.openCameraQrFallback(token!, selectedSiteId, selectedGateId, direction),
-    onSuccess: (r, generation) => {
+  const fallbackMutation = useMutation<
+    QrFallbackResponse,
+    Error,
+    { generation: number; reason?: GateQrSessionReason }
+  >({
+    mutationFn: ({ reason }) =>
+      reason
+        ? client.openCameraQrFallback(token!, selectedSiteId, selectedGateId, direction, reason)
+        : client.openCameraQrFallback(token!, selectedSiteId, selectedGateId, direction),
+    onSuccess: (r, { generation }) => {
       if (generation !== scanGeneration.current || !cameraMountedRef.current) return;
       setFallback(r);
       setQrModalOpen(true);
@@ -288,8 +301,14 @@ function ScopedSecurityGateDeskView({
       setRepeatNotice('');
       setSeparatePassage(false);
       setQrResult(r);
+      setQrModalOpen(false);
       setCandidateWorker(r.worker);
       setCurrentAttempt(r.attempt ?? null);
+      setScanMessage(
+        r.authorization === 'ALLOWED'
+          ? teamText('teamWeb.gateAwaitingShort')
+          : getSafeReasonMessage(r.reasonCode),
+      );
       setQrCodeInput('');
       setFallback(null);
       qrCommand.current = null;
@@ -578,7 +597,12 @@ function ScopedSecurityGateDeskView({
 
   // Face decisions are already saved by the Backend. Never fabricate clearance logs.
   const handleRecordGateEvent = () => {
-    if (lastDecision?.authorization === 'ALLOWED') handleResetScan();
+    handleResetScan();
+  };
+  const openDirectQr = () => {
+    handleResetScan();
+    stopCamera();
+    fallbackMutation.mutate({ generation: scanGeneration.current, reason: 'OPERATOR_QR_SELECTED' });
   };
 
   const handleConfirmQrFallback = () => {
@@ -606,9 +630,48 @@ function ScopedSecurityGateDeskView({
     authorization: lastDecision?.authorization,
     isNetworkError: networkError,
   });
+  const deniedScan =
+    lastDecision?.authorization === 'DENIED' ||
+    qrResult?.authorization === 'DENIED' ||
+    currentAttempt?.status === 'DENIED';
+  const resultLabel = confirmedEvent
+    ? teamText('teamWeb.gateRecordedShort')
+    : currentAttempt?.status === 'READY'
+      ? teamText('teamWeb.gateAwaitingShort')
+      : qrResult
+        ? localizedLabel(qrResult.authorization)
+        : lastDecision || networkError
+          ? uiState.label
+          : teamText('teamWeb.gateReady');
+  const resultDescription = confirmedEvent
+    ? teamText('teamWeb.gateRecorded', { direction: confirmedEvent.direction })
+    : currentAttempt?.status === 'READY'
+      ? teamText('teamWeb.gateAwaiting')
+      : qrResult
+        ? getSafeReasonMessage(qrResult.reasonCode)
+        : lastDecision || networkError
+          ? uiState.safeDescription
+          : teamText('teamWeb.gateReadyHint');
+  const resultBadge = confirmedEvent
+    ? 'border-emerald-200 bg-emerald-50 text-emerald-800'
+    : deniedScan
+      ? 'border-rose-200 bg-rose-50 text-rose-800'
+      : currentAttempt?.status === 'READY'
+        ? 'border-blue-200 bg-blue-50 text-blue-800'
+        : lastDecision || networkError
+          ? uiState.badgeClass
+          : 'border-slate-200 bg-slate-50 text-slate-600';
 
   return (
     <div className="space-y-6">
+      {fallbackMutation.error && (
+        <p
+          role="alert"
+          className="rounded-xl border border-rose-200 bg-rose-50 p-3 text-sm text-rose-800"
+        >
+          {userErrorMessage(fallbackMutation.error)}
+        </p>
+      )}
       {/* Top Bar: Gate Console Strip */}
       <section className="rounded-2xl border border-slate-200/80 bg-white p-4 sm:p-5 shadow-xs space-y-4">
         {/* Row 1: Site, Gate & Direction */}
@@ -679,7 +742,26 @@ function ScopedSecurityGateDeskView({
           </div>
 
           {/* Direction Switcher (IN vs OUT) */}
-          <div className="flex items-center gap-3 ml-auto">
+          <div className="flex flex-wrap items-center gap-3 ml-auto">
+            <button
+              type="button"
+              onClick={openDirectQr}
+              disabled={
+                !isSecurityOfficer ||
+                !token ||
+                !selectedGateId ||
+                isScanning ||
+                qrProcessing ||
+                fallbackMutation.isPending ||
+                deniedScan
+              }
+              className="inline-flex min-h-10 items-center justify-center gap-2 rounded-xl bg-orange-700 px-4 py-2 text-sm font-bold text-white shadow-xs hover:bg-orange-800 disabled:opacity-50 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-orange-500"
+            >
+              <IconKey className="h-4 w-4" />
+              {fallbackMutation.isPending
+                ? tr('common.opening_session')
+                : teamText('teamWeb.scanQr')}
+            </button>
             <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400 hidden sm:inline-block">
               {tr('common.direction')}
             </span>
@@ -810,7 +892,7 @@ function ScopedSecurityGateDeskView({
                           stopCamera();
                           qrVerification.reset();
                           setQrResult(null);
-                          fallbackMutation.mutate(scanGeneration.current);
+                          fallbackMutation.mutate({ generation: scanGeneration.current });
                         }}
                       >
                         <IconKey className="h-3.5 w-3.5" />
@@ -820,11 +902,6 @@ function ScopedSecurityGateDeskView({
                             : tr('security_gate_desk_view.camera_error_use_fallback_qr')}
                         </span>
                       </button>
-                    )}
-                    {fallbackMutation.error && (
-                      <p role="alert" className="text-red-400">
-                        {userErrorMessage(fallbackMutation.error)}
-                      </p>
                     )}
                   </div>
                 )}
@@ -899,7 +976,7 @@ function ScopedSecurityGateDeskView({
               </span>
             </div>
 
-            {(lastDecision || networkError) && (
+            {(lastDecision || networkError || qrResult || currentAttempt || confirmedEvent) && (
               <button
                 type="button"
                 onClick={handleResetScan}
@@ -918,36 +995,37 @@ function ScopedSecurityGateDeskView({
 
         {/* Right Column: Authorization & Technical Result Panel (5 Cols) */}
         <div className="space-y-4 lg:col-span-5">
-          <div
-            className={`rounded-2xl border p-5 shadow-xs transition-colors ${uiState.panelClass}`}
-          >
+          <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-xs">
             {/* Header: Outcome Badge */}
-            <div className="flex items-center justify-between border-b border-slate-200/80 pb-3">
+            <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-100 pb-4">
               <span className="text-xs font-bold tracking-wider text-slate-500 uppercase">
                 {tr('common.last_scan_result')}
               </span>
               <span
-                className={`inline-flex items-center gap-1.5 rounded-full border px-3 py-1 text-xs font-bold ${uiState.badgeClass}`}
+                className={`inline-flex items-center gap-1.5 rounded-full border px-3 py-1 text-xs font-bold ${resultBadge}`}
               >
-                {uiState.type === 'ALLOWED' && <IconCheck className="h-3.5 w-3.5" />}
-                {uiState.type === 'DENIED' && <IconX className="h-3.5 w-3.5" />}
-                {uiState.type === 'FALLBACK_REQUIRED' && (
-                  <IconAlertTriangle className="h-3.5 w-3.5" />
+                {deniedScan ? (
+                  <IconX className="h-3.5 w-3.5" />
+                ) : confirmedEvent ? (
+                  <IconCheck className="h-3.5 w-3.5" />
+                ) : (
+                  <IconKey className="h-3.5 w-3.5" />
                 )}
-                {uiState.type === 'MANUAL_REVIEW' && <IconKey className="h-3.5 w-3.5" />}
-                {uiState.label}
+                {localizedLabel(direction)}
               </span>
             </div>
 
-            {/* Description & Safe Reason Message */}
-            <div className="mt-4 space-y-2">
-              <p className="text-sm font-semibold text-slate-900">
-                {lastDecision?.reasonCode && uiState.type === 'DENIED'
-                  ? getSafeReasonMessage(lastDecision.reasonCode)
-                  : uiState.safeDescription}
+            <div className="mt-5 space-y-2">
+              <p role="status" className="text-xl font-bold tracking-tight text-slate-900">
+                {resultLabel}
               </p>
-              {lastDecision?.reasonCode && uiState.type !== 'DENIED' && (
-                <p className="text-xs font-medium text-slate-600">
+              <p className="text-sm leading-relaxed text-slate-600">
+                {lastDecision?.reasonCode && lastDecision.authorization === 'DENIED' && !qrResult
+                  ? getSafeReasonMessage(lastDecision.reasonCode)
+                  : resultDescription}
+              </p>
+              {lastDecision?.reasonCode && !deniedScan && !qrResult && !currentAttempt && (
+                <p className="text-xs leading-relaxed text-slate-500">
                   {getSafeReasonMessage(lastDecision.reasonCode)}
                 </p>
               )}
@@ -955,14 +1033,16 @@ function ScopedSecurityGateDeskView({
 
             {/* Candidate Worker Card (if identified) */}
             {candidateWorker && (
-              <div className="mt-4 rounded-xl border border-slate-200 bg-white p-4 shadow-2xs">
-                <p className="mb-3 text-[11px] font-semibold text-slate-500">
-                  {tr(
-                    'security_gate_desk_view.last_identified_worker_retained_until_another_worker_is_identified_not_clearance_f',
-                  )}
-                </p>
+              <div className="mt-5 rounded-xl border border-slate-100 bg-slate-50 p-4">
+                {!currentAttempt && !qrResult && lastDecision?.technicalOutcome !== 'MATCHED' && (
+                  <p className="mb-3 text-[11px] leading-relaxed text-slate-500">
+                    {tr(
+                      'security_gate_desk_view.last_identified_worker_retained_until_another_worker_is_identified_not_clearance_f',
+                    )}
+                  </p>
+                )}
                 <div className="flex items-center gap-3">
-                  <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-gradient-to-tr from-slate-800 to-slate-700 text-sm font-bold text-white shadow-xs">
+                  <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-slate-900 text-sm font-bold text-white shadow-xs">
                     {candidateWorker.displayName.slice(0, 2).toUpperCase()}
                   </div>
                   <div className="min-w-0 flex-1">
@@ -994,9 +1074,104 @@ function ScopedSecurityGateDeskView({
               </div>
             )}
 
+            {currentAttempt &&
+              ['READY', 'PENDING'].includes(currentAttempt.status) &&
+              candidateWorker && (
+                <section className="rounded-xl border border-slate-200 bg-white p-5 space-y-4 shadow-xs">
+                  <div className="flex items-center gap-3">
+                    <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-orange-50 text-[#F66B17] border border-orange-100/60 font-bold">
+                      ✓
+                    </div>
+                    <div>
+                      <p className="font-bold text-slate-900 text-sm">
+                        {tr(
+                          'security_gate_desk_view.verification_recorded_confirm_the_actual_passage_for_value',
+                          { value1: candidateWorker.displayName },
+                        )}
+                      </p>
+                      {currentAttempt.scheduleStatus === 'SCHEDULED' && (
+                        <p className="text-xs text-emerald-700 font-medium mt-0.5">
+                          {teamText('teamWeb.gateScheduled')}
+                        </p>
+                      )}
+                    </div>
+                  </div>
+
+                  {Boolean(
+                    repeatNotice ||
+                      separatePassage ||
+                      (passage.error instanceof ApiError &&
+                        passage.error.backendError?.code === 'GATE_PASSAGE_ALREADY_RECORDED'),
+                  ) && (
+                    <label className="block text-xs font-semibold text-slate-700">
+                      {tr(
+                        'security_gate_desk_view.security_review_reason_required_outside_a_shift_or_for_a_separate_passage',
+                      )}
+                      <input
+                        className="mt-1 block w-full rounded-xl border border-slate-300 p-2 text-sm focus-visible:outline-2 focus-visible:outline-orange-500"
+                        value={reviewNote}
+                        maxLength={1000}
+                        onChange={(e) => setReviewNote(e.target.value)}
+                      />
+                    </label>
+                  )}
+
+                  <button
+                    className="w-full sm:w-auto rounded-xl bg-slate-900 px-5 py-2.5 text-sm font-bold text-white hover:bg-slate-800 transition-colors disabled:opacity-50 cursor-pointer shadow-xs"
+                    disabled={
+                      passage.isPending ||
+                      (Boolean(
+                        repeatNotice ||
+                        (passage.error instanceof ApiError &&
+                          passage.error.backendError?.code === 'GATE_PASSAGE_ALREADY_RECORDED'),
+                      ) &&
+                        (!separatePassage || reviewNote.trim().length < 5)) ||
+                      (direction === 'IN' &&
+                        currentAttempt.scheduleStatus !== 'SCHEDULED' &&
+                        !isSecurityOfficer)
+                    }
+                    onClick={() => passage.mutate(scanGeneration.current)}
+                  >
+                    {tr('common.confirm_actual_passage')}
+                  </button>
+                  {(repeatNotice ||
+                    (passage.error instanceof ApiError &&
+                      passage.error.backendError?.code === 'GATE_PASSAGE_ALREADY_RECORDED')) && (
+                    <div className="space-y-2">
+                      <p role="status">{localizedError(repeatNotice || passage.error?.message)}</p>
+                      {isSecurityOfficer && (
+                        <label className="flex items-center gap-2 text-sm">
+                          <input
+                            type="checkbox"
+                            checked={separatePassage}
+                            onChange={(event) => setSeparatePassage(event.target.checked)}
+                          />
+                          {tr(
+                            'security_gate_desk_view.this_is_a_separate_physical_passage_not_a_repeated_scan',
+                          )}
+                        </label>
+                      )}
+                      <button type="button" onClick={handleResetScan}>
+                        {tr('common.dismiss_repeated_scan')}
+                      </button>
+                    </div>
+                  )}
+                  {passage.error && <p role="alert">{userErrorMessage(passage.error)}</p>}
+                  {direction === 'IN' &&
+                    currentAttempt.scheduleStatus !== 'SCHEDULED' &&
+                    !isSecurityOfficer && (
+                      <p className="text-sm text-amber-700">
+                        {tr(
+                          'security_gate_desk_view.security_must_verify_and_confirm_entry_outside_a_scheduled_shift',
+                        )}
+                      </p>
+                    )}
+                </section>
+              )}
+
             {/* Actions for Security Officer */}
             <div className="mt-5 space-y-2">
-              {uiState.canRecordInOut && (
+              {confirmedEvent && (
                 <div>
                   <p className="mb-2 text-xs font-medium text-emerald-700">
                     {tr('security_gate_desk_view.value_clearance_recorded_in_database', {
@@ -1052,44 +1227,22 @@ function ScopedSecurityGateDeskView({
               )}
             </div>
           </div>
-
-          {/* Quick Security Officer Guidelines */}
-          <div className="rounded-2xl border border-slate-200/90 bg-white p-4 shadow-xs text-xs text-slate-600 space-y-2">
-            <div className="flex items-center gap-2 text-slate-900 font-bold border-b border-slate-100 pb-2">
-              <IconShield className="h-4 w-4 text-[#F66B17]" />
-              <h5>{tr('security_gate_desk_view.security_officer_operating_guidelines_sop')}</h5>
-            </div>
-            <ul className="list-disc space-y-1 pl-4 text-slate-600">
-              <li>
-                {tr(
-                  'security_gate_desk_view.webcam_match_provides_preliminary_identity_verification_backend_authorizes_access',
-                )}
-              </li>
-              <li>
-                {tr(
-                  'security_gate_desk_view.when_clearance_is_denied_red_do_not_admit_worker_or_initiate_qr_fallback_without_s',
-                )}
-              </li>
-              <li>
-                {tr(
-                  'security_gate_desk_view.for_inconclusive_face_matches_give_the_worker_a_fallback_session_id_and_request_th',
-                )}
-              </li>
-            </ul>
-          </div>
         </div>
       </div>
 
       {/* QR Fallback Modal */}
       {qrModalOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4 backdrop-blur-xs">
-          <div className="w-full max-w-md rounded-2xl border border-slate-200 bg-white p-6 shadow-2xl">
+          <div
+            role="dialog"
+            aria-modal="true"
+            aria-label={teamText('teamWeb.qrTitle')}
+            className="max-h-[90dvh] overflow-y-auto w-full max-w-md rounded-2xl border border-slate-200 bg-white p-6 shadow-2xl"
+          >
             <div className="flex items-center justify-between border-b border-slate-100 pb-3">
               <div className="flex items-center gap-2">
                 <IconKey className="h-5 w-5 text-[#F66B17]" />
-                <h3 className="font-bold text-slate-900">
-                  {tr('security_gate_desk_view.worker_dynamic_qr_fallback')}
-                </h3>
+                <h3 className="font-bold text-slate-900">{teamText('teamWeb.qrTitle')}</h3>
               </div>
               <button
                 type="button"
@@ -1134,16 +1287,18 @@ function ScopedSecurityGateDeskView({
               {qrResultMessage && (
                 <div
                   role="status"
-                  className="flex items-center gap-2 rounded-xl border border-emerald-200 bg-emerald-50 p-3 text-xs font-semibold text-emerald-800"
+                  className={`flex items-center gap-2 rounded-xl border p-3 text-xs font-semibold ${qrResult?.authorization === 'ALLOWED' ? 'border-emerald-200 bg-emerald-50 text-emerald-800' : qrResult?.authorization === 'DENIED' ? 'border-rose-200 bg-rose-50 text-rose-800' : 'border-amber-200 bg-amber-50 text-amber-900'}`}
                 >
-                  <IconCheck className="h-4 w-4 shrink-0 text-emerald-600" />
+                  {qrResult?.authorization === 'ALLOWED' ? (
+                    <IconCheck className="h-4 w-4 shrink-0 text-emerald-600" />
+                  ) : (
+                    <IconAlertTriangle className="h-4 w-4 shrink-0" />
+                  )}
                   <span>{qrResultMessage}</span>
                 </div>
               )}
               <div className="rounded-xl border border-amber-200 bg-amber-50 p-3 text-xs text-amber-900 leading-relaxed">
-                {tr(
-                  'security_gate_desk_view.dynamic_qr_is_a_fallback_method_when_facial_recognition_is_inconclusive_security_o',
-                )}
+                {teamText('teamWeb.directQrHint')}
               </div>
 
               <div>
@@ -1190,97 +1345,6 @@ function ScopedSecurityGateDeskView({
         </div>
       )}
 
-      {currentAttempt &&
-        ['READY', 'PENDING'].includes(currentAttempt.status) &&
-        candidateWorker && (
-          <section className="rounded-xl border bg-white p-5 space-y-3">
-            <p className="font-semibold">
-              {tr(
-                'security_gate_desk_view.verification_recorded_confirm_the_actual_passage_for_value',
-                { value1: candidateWorker.displayName },
-              )}
-            </p>
-            <p className="text-xs">
-              {tr(
-                'security_gate_desk_view.schedule_value_temporary_passage_does_not_create_attendance',
-                { value1: currentAttempt.scheduleStatus },
-              )}
-            </p>
-            <label className="block text-xs">
-              {tr(
-                'security_gate_desk_view.security_review_reason_required_outside_a_shift_or_for_a_separate_passage',
-              )}
-              <input
-                className="mt-1 block w-full rounded border p-2"
-                value={reviewNote}
-                maxLength={1000}
-                onChange={(e) => setReviewNote(e.target.value)}
-              />
-            </label>
-            <button
-              className="rounded bg-slate-900 px-4 py-2 text-sm text-white disabled:opacity-50"
-              disabled={
-                passage.isPending ||
-                (Boolean(
-                  repeatNotice ||
-                  (passage.error instanceof ApiError &&
-                    passage.error.backendError?.code === 'GATE_PASSAGE_ALREADY_RECORDED'),
-                ) &&
-                  (!separatePassage || reviewNote.trim().length < 5)) ||
-                (direction === 'IN' &&
-                  currentAttempt.scheduleStatus !== 'SCHEDULED' &&
-                  !isSecurityOfficer)
-              }
-              onClick={() => passage.mutate(scanGeneration.current)}
-            >
-              {tr('common.confirm_actual_passage')}
-            </button>
-            {(repeatNotice ||
-              (passage.error instanceof ApiError &&
-                passage.error.backendError?.code === 'GATE_PASSAGE_ALREADY_RECORDED')) && (
-              <div className="space-y-2">
-                <p role="status">{localizedError(repeatNotice || passage.error?.message)}</p>
-                {isSecurityOfficer && (
-                  <label className="flex items-center gap-2 text-sm">
-                    <input
-                      type="checkbox"
-                      checked={separatePassage}
-                      onChange={(event) => setSeparatePassage(event.target.checked)}
-                    />
-                    {tr(
-                      'security_gate_desk_view.this_is_a_separate_physical_passage_not_a_repeated_scan',
-                    )}
-                  </label>
-                )}
-                <button type="button" onClick={handleResetScan}>
-                  {tr('common.dismiss_repeated_scan')}
-                </button>
-              </div>
-            )}
-            {passage.error && <p role="alert">{userErrorMessage(passage.error)}</p>}
-            {direction === 'IN' &&
-              currentAttempt.scheduleStatus !== 'SCHEDULED' &&
-              !isSecurityOfficer && (
-                <p className="text-sm text-amber-700">
-                  {tr(
-                    'security_gate_desk_view.security_must_verify_and_confirm_entry_outside_a_scheduled_shift',
-                  )}
-                </p>
-              )}
-          </section>
-        )}
-      {passage.isSuccess && <p role="status">{tr('common.actual_passage_recorded')}</p>}
-      {confirmedEvent && isSecurityOfficer && (
-        <section className="space-y-3 rounded-xl border bg-white p-5">
-          <p className="text-sm">
-            {tr(
-              confirmedEvent.direction === 'IN'
-                ? 'security_gate_desk_view.entry_recorded'
-                : 'security_gate_desk_view.exit_recorded',
-            )}
-          </p>
-        </section>
-      )}
       {/* Recent verification decisions */}
       <section className="rounded-2xl border border-slate-200/90 bg-white p-5 shadow-xs">
         <div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-100 pb-3">

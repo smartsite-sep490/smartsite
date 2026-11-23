@@ -138,7 +138,7 @@ export class VisitZoneEntity {
 @Check('chk_fallback_direction', "direction IN ('IN','OUT')")
 @Check(
   'chk_fallback_reason',
-  "reason IN ('CAMERA_UNAVAILABLE','UNKNOWN','LOW_CONFIDENCE','QUALITY_FAILED','AI_UNAVAILABLE')",
+  "reason IN ('CAMERA_UNAVAILABLE','UNKNOWN','LOW_CONFIDENCE','QUALITY_FAILED','AI_UNAVAILABLE','OPERATOR_QR_SELECTED')",
 )
 @ForeignKey(() => GateEntity, ['gateId', 'siteId'], ['id', 'siteId'], {
   name: 'fk_fallback_gate_site',

@@ -16,7 +16,13 @@ import {
 } from 'class-validator';
 import { DataSource, In, IsNull, type EntityManager } from 'typeorm';
 import type { AttendanceOverviewResponse, AttendanceSessionResponse } from '@smartsite/contracts';
-import { command, conflict, missing, uuid } from '../../../common/configuration/commands.js';
+import {
+  command,
+  conflict,
+  missing,
+  uuid,
+  knownUnique,
+} from '../../../common/configuration/commands.js';
 import {
   AccessAttemptEntity,
   AttendanceEventEntity,
@@ -38,6 +44,7 @@ import { SchedulingNotificationService } from '../notifications/scheduling-notif
 import { attendanceAccess } from './attendance-access.js';
 import { requireWorkerDocuments } from '../documents/worker-compliance.js';
 import { AttendanceOverviewQueryDto } from './dto/attendance.dto.js';
+import { scheduledShiftWindow } from './attendance-calculation.js';
 
 export class RecordAttendanceCommand {
   @IsUUID() requestId!: string;
@@ -302,7 +309,50 @@ export class AttendanceService {
           ...(filter.dayId ? {} : { take: 100 }),
         })
       : [];
+    const own = workers.find((w) => w.userId === actor.id);
+    const missingSchedules: NonNullable<AttendanceOverviewResponse['missingSchedules']> = [];
+    if (own) {
+      const candidates = await this.source
+        .getRepository(WorkerScheduleEntity)
+        .createQueryBuilder('s')
+        .where('s.site_id=:siteId AND s.worker_id=:workerId AND s.is_active', {
+          siteId,
+          workerId: own.id,
+        })
+        .andWhere(
+          'NOT EXISTS(SELECT 1 FROM attendance_session a WHERE a.site_id=s.site_id AND a.worker_id=s.worker_id AND a.shift_assignment_id=s.id)',
+        )
+        .andWhere(
+          filter.dayId
+            ? 'EXISTS(SELECT 1 FROM attendance_day d WHERE d.id=:dayId AND d.schedule_id=s.id AND d.site_id=s.site_id AND d.worker_id=s.worker_id)'
+            : 'true',
+          { dayId: filter.dayId },
+        )
+        .orderBy('s.work_date', 'DESC')
+        .addOrderBy('s.id', 'ASC')
+        .take(100)
+        .getMany();
+      const templates = candidates.length
+        ? await this.source
+            .getRepository(ShiftEntity)
+            .findBy({ siteId, id: In([...new Set(candidates.map((s) => s.shiftId))]) })
+        : [];
+      for (const schedule of candidates) {
+        const shift = templates.find((s) => s.id === schedule.shiftId);
+        if (!shift) continue;
+        const window = scheduledShiftWindow(shift, schedule.workDate);
+        if (window.endsAt > new Date()) continue;
+        missingSchedules.push({
+          scheduleId: schedule.id,
+          workDate: schedule.workDate,
+          shiftName: shift.name,
+          startsAt: window.startsAt.toISOString(),
+          endsAt: window.endsAt.toISOString(),
+        });
+      }
+    }
     return {
+      missingSchedules,
       hasPendingCorrection:
         workers.length > 0 &&
         (await this.source
@@ -353,10 +403,11 @@ export class AttendanceService {
     siteId: string,
     sessionId: string,
     input: RequestAttendanceCorrectionCommand,
+    transactionManager?: EntityManager,
   ) {
     const value = command(RequestAttendanceCorrectionCommand, input);
     uuid(sessionId);
-    return this.source.transaction(async (manager) => {
+    const execute = async (manager: EntityManager) => {
       const seed = await manager
         .getRepository(AttendanceSessionEntity)
         .findOneBy({ id: sessionId, siteId });
@@ -379,6 +430,23 @@ export class AttendanceService {
         proposedOutAt = new Date(value.proposedOutAt);
       if (proposedOutAt < proposedInAt) conflict('Correction checkout cannot precede check-in');
       if (proposedOutAt <= proposedInAt) conflict('Correction requires a positive interval');
+      if (proposedOutAt > new Date()) conflict('Correction cannot claim future working hours');
+      if (session.shiftAssignmentId) {
+        const schedule = await manager
+          .getRepository(WorkerScheduleEntity)
+          .findOneBy({ id: session.shiftAssignmentId, siteId, workerId: worker.id });
+        const shift = schedule
+          ? await manager.getRepository(ShiftEntity).findOneBy({ id: schedule.shiftId, siteId })
+          : null;
+        if (!schedule || !shift) conflict('Assigned shift information unavailable');
+        const window = scheduledShiftWindow(shift, schedule.workDate);
+        if (
+          proposedInAt >= window.endsAt ||
+          proposedOutAt <= window.startsAt ||
+          +proposedOutAt - +proposedInAt > 36 * 3600000
+        )
+          conflict('Correction must relate to its assigned shift');
+      }
       const existing = await manager
         .getRepository(AttendanceCorrectionEntity)
         .findOneBy({ id: value.requestId });
@@ -417,7 +485,7 @@ export class AttendanceService {
         conflict(
           'You already have an attendance correction awaiting contractor review. Wait for approval or rejection before submitting another request.',
         );
-      const correction = await manager.getRepository(AttendanceCorrectionEntity).save({
+      const correction = manager.getRepository(AttendanceCorrectionEntity).create({
         id: value.requestId,
         attendanceSessionId: session.id,
         requestedBy: actor.id,
@@ -430,6 +498,11 @@ export class AttendanceService {
         reviewedAt: null,
         reviewNote: null,
       });
+      try {
+        await manager.getRepository(AttendanceCorrectionEntity).insert(correction);
+      } catch (error) {
+        knownUnique(error, ['pk_attendance_correction_id']);
+      }
       await auditAccess(
         manager,
         actor.id,
@@ -455,6 +528,65 @@ export class AttendanceService {
         );
       }
       return { id: correction.id };
+    };
+    return transactionManager ? execute(transactionManager) : this.source.transaction(execute);
+  }
+  async requestMissingAttendance(
+    actor: WorkforceActor,
+    siteId: string,
+    scheduleId: string,
+    input: RequestAttendanceCorrectionCommand,
+  ) {
+    uuid(scheduleId);
+    const value = command(RequestAttendanceCorrectionCommand, input);
+    return this.source.transaction(async (manager) => {
+      const schedule = await manager
+        .getRepository(WorkerScheduleEntity)
+        .findOneBy({ id: scheduleId, siteId });
+      if (!schedule) missing();
+      const worker = await this.requireSelf(manager, actor, siteId, schedule.workerId);
+      await manager
+        .getRepository(WorkerEntity)
+        .findOneOrFail({ where: { id: worker.id, siteId }, lock: { mode: 'pessimistic_write' } });
+      await manager.query('SELECT pg_advisory_xact_lock(hashtext($1))', [
+        `mf03:${siteId}:${worker.id}`,
+      ]);
+      const shift = await manager
+        .getRepository(ShiftEntity)
+        .findOneBy({ id: schedule.shiftId, siteId });
+      if (!shift) missing();
+      const window = scheduledShiftWindow(shift, schedule.workDate);
+      if (!schedule.isActive || window.endsAt > new Date())
+        conflict('Report missing attendance after the assigned shift has ended');
+      const day = await this.reconciliation.ensureDay(manager, worker, new Date(), schedule, shift);
+      const existing = await manager
+        .getRepository(AttendanceSessionEntity)
+        .findOneBy({ id: value.requestId, dayId: day.id, siteId, workerId: worker.id });
+      if (!existing) {
+        if (await manager.getRepository(AttendanceSessionEntity).existsBy({ id: value.requestId }))
+          conflict('Request ID was already used');
+        if (await manager.getRepository(AttendanceSessionEntity).existsBy({ dayId: day.id }))
+          conflict('Attendance exists; select the recorded session for correction');
+        try {
+          await manager.getRepository(AttendanceSessionEntity).insert({
+            id: value.requestId,
+            dayId: day.id,
+            siteId,
+            workerId: worker.id,
+            shiftAssignmentId: schedule.id,
+            checkInEventId: null,
+            checkOutEventId: null,
+            effectiveInAt: null,
+            effectiveOutAt: null,
+            status: 'MISSING_IN',
+            version: 1,
+            appliedCorrectionId: null,
+          });
+        } catch (error) {
+          knownUnique(error, ['pk_attendance_session_id']);
+        }
+      }
+      return this.requestCorrection(actor, siteId, value.requestId, value, manager);
     });
   }
   async reviewCorrection(
@@ -541,6 +673,15 @@ export class AttendanceService {
         session.appliedCorrectionId = correction.id;
         session.version += 1;
         await manager.getRepository(AttendanceSessionEntity).save(session);
+        if (session.dayId)
+          await manager.getRepository(AttendanceDayEntity).update(
+            { id: session.dayId, siteId, workerId: worker.id },
+            {
+              reviewedBy: actor.id,
+              reviewedAt: correction.reviewedAt,
+              reviewNote: reviewNote ?? correction.reason,
+            },
+          );
       }
       await auditAccess(
         manager,

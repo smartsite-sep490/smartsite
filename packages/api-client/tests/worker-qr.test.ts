@@ -2,6 +2,16 @@ import { afterEach, expect, it, vi } from 'vitest';
 import { SmartSiteManagementClient } from '../src/index';
 
 afterEach(() => vi.unstubAllGlobals());
+it('records direct QR selection separately from unavailable camera hardware', async () => {
+  const fetch = vi.fn(async () => Response.json({ id: 'session' }));
+  vi.stubGlobal('fetch', fetch);
+  const client = new SmartSiteManagementClient('https://api.example.test');
+  await client.openCameraQrFallback('security-token', 'site', 'gate', 'IN', 'OPERATOR_QR_SELECTED');
+  expect(fetch.mock.calls[0]).toMatchObject([
+    'https://api.example.test/api/v1/sites/site/gates/gate/qr-fallback',
+    { body: JSON.stringify({ direction: 'IN', reason: 'OPERATOR_QR_SELECTED' }) },
+  ]);
+});
 
 it('issues the Worker own code by direction and sends Security internal session for manual verification', async () => {
   const fetch = vi.fn(async () =>

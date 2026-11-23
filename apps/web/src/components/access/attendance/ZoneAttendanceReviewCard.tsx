@@ -67,6 +67,7 @@ export function ZoneAttendanceReviewCard({
       snapshot.evidenceHash !== info.evidenceHash);
   return (
     <section
+      id="zone-hours-review"
       aria-label={teamText('teamWeb.zoneTitle')}
       className="space-y-3 rounded-xl border border-amber-200 bg-amber-50/60 p-4 text-sm"
     >

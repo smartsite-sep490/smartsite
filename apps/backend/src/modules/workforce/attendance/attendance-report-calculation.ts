@@ -95,11 +95,12 @@ export function hasApprovedFullShiftLeave(
 export function workerAttendanceReport(input: WorkerReportInput): AttendanceWorkerReport {
   const { worker, schedules, shifts, days, sessions, leaves, dates, today, now } = input;
   const metrics = emptyReportMetrics();
-  const calculateDay = (
+  const calculateShiftDay = (
     workDate: string,
+    scheduleId?: string | null,
   ): { report: AttendanceReportDay; required: boolean; present: boolean; review: boolean } => {
     const windows = schedules
-      .filter((s) => s.workDate === workDate)
+      .filter((s) => s.workDate === workDate && (scheduleId === undefined || s.id === scheduleId))
       .map((s) => {
         const shift = shifts.find((v) => v.id === s.shiftId);
         try {
@@ -115,7 +116,9 @@ export function workerAttendanceReport(input: WorkerReportInput): AttendanceWork
         }
       })
       .filter((w) => w.schedule.isActive || w.leave);
-    const day = days.find((d) => d.workDate === workDate);
+    const day = days.find(
+      (d) => d.workDate === workDate && (scheduleId === undefined || d.scheduleId === scheduleId),
+    );
     const activeSessions = sessions.filter((s) => s.dayId === day?.id && s.status !== 'IGNORED');
     // A reviewed correction may legitimately restore a missing raw IN.
     const checkIns = activeSessions.filter(
@@ -207,6 +210,66 @@ export function workerAttendanceReport(input: WorkerReportInput): AttendanceWork
       },
     };
   };
+  const calculateDay = (workDate: string) => {
+    const scheduleIds = [
+      ...new Set([
+        ...schedules
+          .filter(
+            (s) =>
+              s.workDate === workDate &&
+              (s.isActive ||
+                hasApprovedFullShiftLeave(
+                  s,
+                  shifts.find((v) => v.id === s.shiftId),
+                  leaves,
+                )),
+          )
+          .map((s) => s.id),
+        ...days.filter((d) => d.workDate === workDate).map((d) => d.scheduleId),
+      ]),
+    ];
+    if (scheduleIds.length <= 1) return calculateShiftDay(workDate);
+    const results = scheduleIds.map((id) => calculateShiftDay(workDate, id));
+    const records = results.map((r) => r.report);
+    const sum = (
+      key: 'regularMinutes' | 'overtimeMinutes' | 'totalMinutes' | 'provisionalMinutes',
+    ) => records.reduce((n, r) => n + r[key], 0);
+    const ordered = [...records].sort((a, b) =>
+      (a.shifts[0]?.startsAt ?? '').localeCompare(b.shifts[0]?.startsAt ?? ''),
+    );
+    const review = results.some((r) => r.review);
+    const preferred =
+      records.find((r) => r.status === 'UNAVAILABLE') ??
+      records.find((r) => r.status === 'NEEDS_REVIEW') ??
+      records.find((r) => r.status === 'PRESENT') ??
+      records.find((r) => r.status === 'NOT_ARRIVED') ??
+      records.find((r) => r.status === 'SCHEDULED') ??
+      records[0]!;
+    const checksIn = records.flatMap((r) => (r.firstCheckInAt ? [r.firstCheckInAt] : [])).sort();
+    const checksOut = records.flatMap((r) => (r.lastCheckOutAt ? [r.lastCheckOutAt] : [])).sort();
+    return {
+      required: results.some((r) => r.required),
+      present: results.some((r) => r.present),
+      review,
+      report: {
+        ...preferred,
+        shiftRecords: ordered,
+        shifts: ordered.flatMap((r) => r.shifts),
+        firstCheckInAt: checksIn[0] ?? null,
+        lastCheckOutAt: checksOut.at(-1) ?? null,
+        regularMinutes: sum('regularMinutes'),
+        overtimeMinutes: sum('overtimeMinutes'),
+        totalMinutes: sum('totalMinutes'),
+        provisionalMinutes: sum('provisionalMinutes'),
+        hoursStatus: records.some((r) => r.hoursStatus === 'PROVISIONAL')
+          ? ('PROVISIONAL' as const)
+          : records.some((r) => r.hoursStatus === 'CONFIRMED')
+            ? ('CONFIRMED' as const)
+            : ('NONE' as const),
+        anomalies: [...new Set(records.flatMap((r) => r.anomalies))],
+      },
+    };
+  };
   const daily = dates.map((date) => {
     const { report, required, present, review } = calculateDay(date);
     metrics.regularMinutes += report.regularMinutes;
@@ -230,6 +293,7 @@ export function workerAttendanceReport(input: WorkerReportInput): AttendanceWork
     workerName: worker.displayName,
     contractorId: worker.contractorId,
     todayStatus: todayReport.status,
+    todayAnomalies: todayReport.anomalies,
     todayFirstCheckInAt: todayReport.firstCheckInAt,
     todayLastCheckOutAt: todayReport.lastCheckOutAt,
     ...(input.includeDaily ? { daily } : {}),

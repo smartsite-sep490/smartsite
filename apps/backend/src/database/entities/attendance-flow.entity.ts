@@ -73,7 +73,7 @@ export class AttendanceEventEntity {
 })
 @Check(
   'ck_attendance_session_events',
-  'check_in_event_id IS NOT NULL OR check_out_event_id IS NOT NULL',
+  "check_in_event_id IS NOT NULL OR check_out_event_id IS NOT NULL OR (day_id IS NOT NULL AND shift_assignment_id IS NOT NULL AND status IN ('MISSING_IN','CORRECTED') AND (status <> 'CORRECTED' OR applied_correction_id IS NOT NULL))",
 )
 @Check(
   'ck_attendance_session_distinct',

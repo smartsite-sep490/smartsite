@@ -813,6 +813,19 @@ export class SmartSiteManagementClient {
       input,
     );
   }
+  requestMissingAttendance(
+    token: string,
+    siteId: string,
+    scheduleId: string,
+    input: RequestAttendanceCorrectionCommand,
+  ): Promise<{ id: string }> {
+    return this.request<{ id: string }>(
+      'POST',
+      `/sites/${pathId(siteId)}/worker-schedules/${pathId(scheduleId)}/missing-attendance`,
+      token,
+      input,
+    );
+  }
   requestAttendanceCorrection(
     token: string,
     siteId: string,
@@ -969,12 +982,18 @@ export class SmartSiteManagementClient {
       options,
     );
   }
-  openCameraQrFallback(token: string, siteId: string, gateId: string, direction: 'IN' | 'OUT') {
+  openCameraQrFallback(
+    token: string,
+    siteId: string,
+    gateId: string,
+    direction: 'IN' | 'OUT',
+    reason: GateQrSessionReason = 'CAMERA_UNAVAILABLE',
+  ) {
     return this.request<QrFallbackResponse>(
       'POST',
       `/sites/${pathId(siteId)}/gates/${pathId(gateId)}/qr-fallback`,
       token,
-      { direction, reason: 'CAMERA_UNAVAILABLE' },
+      { direction, reason },
     );
   }
   verifyWorkerQr(
@@ -4750,3 +4769,4 @@ import type {
 } from '@smartsite/contracts';
 import type { ContractorTeamCalendarQuery } from '@smartsite/contracts';
 import type { ContractorTeamCalendarResponse } from '@smartsite/contracts';
+import type { GateQrSessionReason } from '@smartsite/contracts';

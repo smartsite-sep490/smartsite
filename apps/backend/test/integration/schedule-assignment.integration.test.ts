@@ -760,10 +760,15 @@ test('team assignments: scope, finite recurrence, stale preview, concurrent retr
       fromDate: single.fromDate,
       toDate: single.toDate,
     });
-    assert.equal(legacyConflict.conflicts.length, 1);
+    assert.equal(legacyConflict.conflicts.length, 0);
     assert.equal(
-      (await automaticSchedules.findOneByOrFail({ id: legacyConflict.conflicts[0]!.scheduleId }))
-        .scheduleVersionId,
+      (
+        await automaticSchedules.findOneByOrFail({
+          siteId,
+          workerId: single.workerId,
+          workDate: single.fromDate,
+        })
+      ).scheduleVersionId,
       versionId,
     );
 

@@ -3,7 +3,7 @@ import { attendanceZoneIssue } from './attendance-zone-policy.js';
 import { attendanceGateAbsenceContext } from './attendance-gate-review.js';
 import { attendanceZoneReviewContext, canConfirmZoneHours } from './attendance-zone-review.js';
 import { Injectable, Logger, type OnModuleInit, type OnModuleDestroy } from '@nestjs/common';
-import { DataSource, In, LessThanOrEqual, MoreThan, type EntityManager } from 'typeorm';
+import { DataSource, In, IsNull, LessThanOrEqual, MoreThan, type EntityManager } from 'typeorm';
 import type { AttendanceDayResponse, AttendanceNotificationEvent } from '@smartsite/contracts';
 import {
   AttendanceDayEntity,
@@ -188,9 +188,12 @@ export class AttendanceReconciliationService implements OnModuleInit, OnModuleDe
     if (schedule && shift) shift = { ...shift, ...scheduledShiftWindow(shift, schedule.workDate) };
     const timezone = shift?.timezone ?? 'Asia/Ho_Chi_Minh';
     const workDate = schedule?.workDate ?? workDateAt(at, timezone);
-    let day = await manager
-      .getRepository(AttendanceDayEntity)
-      .findOneBy({ siteId: worker.siteId, workerId: worker.id, workDate });
+    let day = await manager.getRepository(AttendanceDayEntity).findOneBy({
+      siteId: worker.siteId,
+      workerId: worker.id,
+      workDate,
+      scheduleId: schedule?.id ?? IsNull(),
+    });
     if (!day)
       day = await manager.getRepository(AttendanceDayEntity).save({
         id: randomUUID(),
@@ -282,8 +285,11 @@ export class AttendanceReconciliationService implements OnModuleInit, OnModuleDe
         'session.site_id=:siteId AND session.worker_id=:workerId AND session.effective_out_at IS NULL AND session.check_out_event_id IS NULL',
         { siteId: worker.siteId, workerId: worker.id },
       )
+      .andWhere('(session.effective_in_at IS NULL OR session.effective_in_at<=:occurredAt)', {
+        occurredAt: passage.occurredAt,
+      })
       .setLock('pessimistic_write')
-      .orderBy('session.effectiveInAt', 'DESC')
+      .orderBy('session.effectiveInAt', 'DESC', 'NULLS LAST')
       .addOrderBy('session.id', 'DESC')
       .getOne();
     const active = choices.filter(
@@ -315,7 +321,13 @@ export class AttendanceReconciliationService implements OnModuleInit, OnModuleDe
       );
       const newDate =
         selected?.schedule.workDate ?? workDateAt(passage.occurredAt, previousDay.timezone);
-      if (newDate !== previousDay.workDate && +passage.occurredAt >= previousEnd) {
+      if (
+        (newDate !== previousDay.workDate ||
+          (passage.direction === 'IN' &&
+            selected &&
+            selected.schedule.id !== previousDay.scheduleId)) &&
+        +passage.occurredAt >= previousEnd
+      ) {
         // Neither IN nor OUT on a new workday repairs yesterday's missing checkout.
         // A still-running overnight shift or approved overtime retains its workday.
         open = null;
@@ -540,7 +552,6 @@ export class AttendanceReconciliationService implements OnModuleInit, OnModuleDe
     const pendingLeave = !fullLeave && leaves.some((r) => r.status === 'PENDING_MANAGER');
     if (pendingLeave) anomalies.push('PENDING_LEAVE');
     if (!day.scheduleId) anomalies.push('NO_SCHEDULE');
-    if (schedules.length > 1) anomalies.push('MULTIPLE_SHIFTS');
     const currentSchedule = day.scheduleId
       ? await manager.getRepository(WorkerScheduleEntity).findOneBy({ id: day.scheduleId })
       : null;
@@ -579,7 +590,6 @@ export class AttendanceReconciliationService implements OnModuleInit, OnModuleDe
       .reduce((last, l) => (l.end >= last && l.start < last ? l.start : last), end);
     const absent =
       !!currentSchedule?.isActive &&
-      schedules.length === 1 &&
       !!day.endsAt &&
       +now >= +day.endsAt &&
       !fullLeave &&
@@ -652,6 +662,41 @@ export class AttendanceReconciliationService implements OnModuleInit, OnModuleDe
     ]);
     if (before !== after) day.version += 1;
     await manager.getRepository(AttendanceDayEntity).save(day);
+    if (+now >= end && day.status === 'NEEDS_REVIEW') {
+      if (anomalies.some((a) => ['ZONE_GATE_MISSING', 'MISSING_IN', 'MISSING_OUT'].includes(a))) {
+        await this.notify(
+          manager,
+          worker,
+          day.id,
+          'MISSING_ATTENDANCE',
+          `Worker ${worker.displayName} (${worker.externalId}) has missing confirmed IN/OUT on ${day.workDate}. The Worker must submit a missing-attendance correction for this shift; the Contractor Representative must check and approve or reject the proposed times.`,
+          true,
+          day.workDate,
+          day.id,
+        );
+      }
+      if (
+        anomalies.some((a) =>
+          [
+            'ZONE_ASSIGNMENT_UNRESOLVED',
+            'ZONE_ATTENDANCE_MISMATCH',
+            'NO_SCHEDULE',
+            'SCHEDULE_CHANGED',
+          ].includes(a),
+        )
+      ) {
+        await this.notify(
+          manager,
+          worker,
+          day.id,
+          'ASSIGNMENT_REVIEW',
+          `Worker ${worker.displayName} (${worker.externalId}) has an assignment conflict on ${day.workDate}. The Contractor Representative must review the assigned shift, team and work Zone.`,
+          true,
+          day.workDate,
+          day.id,
+        );
+      }
+    }
     if (!fullLeave && canConfirmZoneHours(day, zoneReview, now)) {
       const hash = createHash('sha256')
         .update(`${day.id}:zone-hours:${zoneReview!.evidenceHash}`)
@@ -662,7 +707,7 @@ export class AttendanceReconciliationService implements OnModuleInit, OnModuleDe
         worker,
         notificationId,
         'ZONE_REVIEW_REQUIRED',
-        `Worker ${worker.displayName} (${worker.externalId}) has complete Gate IN/OUT on ${day.workDate}, but no team leader roll call was recorded. Review recorded hours before confirming attendance.`,
+        `Worker ${worker.displayName} (${worker.externalId}) ${zoneReview!.gateInCount > 0 && zoneReview!.gateOutCount > 0 ? 'has complete Gate IN/OUT' : 'has approved attendance intervals'} on ${day.workDate}, but no team leader roll call was recorded. The Contractor Representative must review the evidence and confirm working hours.`,
         true,
         day.workDate,
         day.id,

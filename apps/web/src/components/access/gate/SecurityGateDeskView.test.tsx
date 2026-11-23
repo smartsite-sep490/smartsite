@@ -99,6 +99,36 @@ function deferred<T>() {
   });
   return { promise, resolve, reject };
 }
+it('opens QR directly without a face failure and removes the SOP block', async () => {
+  cameraMock.active = false;
+  cameraMock.failed = false;
+  vi.spyOn(SmartSiteManagementClient.prototype, 'observeGateFace').mockResolvedValue({
+    state: 'SAME_FACE',
+    reasonCode: 'FACE_PRESENCE_SAME',
+  });
+  const open = vi
+    .spyOn(SmartSiteManagementClient.prototype, 'openCameraQrFallback')
+    .mockResolvedValue({
+      id: 'direct-session',
+      siteId: 'site',
+      gateId: 'gate',
+      direction: 'IN',
+      expiresAt: '2030-01-01T00:05:00Z',
+    });
+  const verify = vi.spyOn(SmartSiteManagementClient.prototype, 'verifyFaceGate');
+  renderSourceDesk();
+  await waitFor(() =>
+    expect((screen.getByRole('button', { name: 'Scan QR' }) as HTMLButtonElement).disabled).toBe(
+      false,
+    ),
+  );
+  fireEvent.click(screen.getByRole('button', { name: 'Scan QR' }));
+  await waitFor(() => expect(open).toHaveBeenCalled());
+  expect(open.mock.calls[0]?.[4]).toBe('OPERATOR_QR_SELECTED');
+  expect(await screen.findByRole('heading', { name: 'Verify Worker QR' })).toBeTruthy();
+  expect(verify).not.toHaveBeenCalled();
+  expect(screen.queryByText(/operating guidelines.*SOP/i)).toBeNull();
+});
 
 function renderQrDesk() {
   cameraMock.failed = true;
@@ -180,6 +210,31 @@ async function submitQr() {
   });
   fireEvent.click(screen.getByRole('button', { name: /Confirm.*QR/ }));
 }
+it('keeps QR denial blocked and offers an explicit reset for the next Worker', async () => {
+  vi.spyOn(SmartSiteManagementClient.prototype, 'openCameraQrFallback').mockResolvedValue(
+    fallbackSession,
+  );
+  vi.spyOn(SmartSiteManagementClient.prototype, 'verifyWorkerQr').mockResolvedValue({
+    ...qrAllowed,
+    authorization: 'DENIED',
+    reasonCode: 'ASSIGNMENT_MISSING',
+    attempt: { ...qrAllowed.attempt!, status: 'DENIED' },
+  });
+  renderQrDesk();
+  await submitQr();
+  await waitFor(() =>
+    expect((screen.getByRole('button', { name: 'Scan QR' }) as HTMLButtonElement).disabled).toBe(
+      true,
+    ),
+  );
+  expect(screen.queryByRole('dialog')).toBeNull();
+  fireEvent.click(screen.getByRole('button', { name: /Clear \/ New Scan/i }));
+  await waitFor(() =>
+    expect((screen.getByRole('button', { name: 'Scan QR' }) as HTMLButtonElement).disabled).toBe(
+      false,
+    ),
+  );
+});
 
 it.each(['gate', 'direction'] as const)(
   'ignores a pending fallback after changing %s and allows a fresh session',
@@ -266,7 +321,9 @@ it.each(['success', 'error'] as const)(
           }),
         );
     });
-    expect(screen.queryByText(/Actual passage recorded/i)).toBeNull();
+    expect(
+      screen.queryByText(/recorded: actual passage saved for attendance processing/i),
+    ).toBeNull();
     expect(screen.queryByText(/Old passage failure/)).toBeNull();
     expect(screen.queryByText(/Old QR worker/)).toBeNull();
     expect(screen.queryByText(/Worker has no assigned shift for this workday/)).toBeNull();
@@ -545,6 +602,9 @@ it.each(automaticFaceOutcomes)(
       );
       expect(message.tagName).toBe('P');
       expect(screen.getByText('Access Denied')).toBeTruthy();
+      expect((screen.getByRole('button', { name: 'Scan QR' }) as HTMLButtonElement).disabled).toBe(
+        true,
+      );
       expect(screen.queryByText(/Access denied by backend policy/)).toBeNull();
       expect(screen.queryByRole('button', { name: 'Confirm actual passage' })).toBeNull();
       expect(confirm).not.toHaveBeenCalled();

@@ -45,12 +45,15 @@ import {
   AttendanceSessionEntity,
   AttendanceDayEntity,
   OvertimeRequestEntity,
+  WorkerScheduleEntity,
+  ShiftEntity,
 } from '../../../database/entities/index.js';
 import { evaluateWorkerAccess } from './worker-access-evaluation.js';
 import { requireWorkerDocuments } from '../documents/worker-compliance.js';
 import { auditAccess } from '../shared/access-audit.js';
 import { AttendanceReconciliationService } from '../attendance/attendance-reconciliation.service.js';
 import { isRepeatedGatePassage } from './gate-repeat-policy.js';
+import { scheduledShiftWindow } from '../attendance/attendance-calculation.js';
 import { SchedulingNotificationService } from '../notifications/scheduling-notification.service.js';
 import {
   RegisterVisitCommand,
@@ -296,6 +299,20 @@ export class QrAccessService {
         ...overtime.map((request) => +request.endsAt),
       );
       if (end) day.endsAt = new Date(end);
+      if (direction === 'IN' && day.endsAt && at >= day.endsAt) {
+        const schedules = await manager
+          .getRepository(WorkerScheduleEntity)
+          .findBy({ siteId: worker.siteId, workerId: worker.id, isActive: true });
+        for (const schedule of schedules) {
+          if (schedule.id === day.scheduleId) continue;
+          const shift = await manager
+            .getRepository(ShiftEntity)
+            .findOneBy({ siteId: worker.siteId, id: schedule.shiftId });
+          if (!shift) continue;
+          const window = scheduledShiftWindow(shift, schedule.workDate);
+          if (window.startsAt <= at && at < window.endsAt) return false;
+        }
+      }
     }
     return isRepeatedGatePassage(direction, at, previous, day);
   }
@@ -1061,7 +1078,7 @@ export class QrAccessService {
     await requireActiveGate(this.source.manager, siteId, gateId);
     const value = command(CameraFallbackCommand, input);
     if (!(await this.source.getRepository(SiteEntity).existsBy({ id: siteId }))) missing();
-    // This records an authorized operator's report of unavailable hardware, not AI evidence.
+    // Security may select QR directly or report unavailable hardware; neither grants access.
     return this.openFallback(actor, siteId, gateId, value.direction, value.reason);
   }
   async openFallback(

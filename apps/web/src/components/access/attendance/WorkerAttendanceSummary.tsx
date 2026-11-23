@@ -2,6 +2,8 @@ import { useManagementClient } from '../../../features/auth/auth-session';
 import { translate as tr } from '../../../i18n';
 import { useTranslation } from 'react-i18next';
 import { useState } from 'react';
+import { teamText } from '../../team-attendance/team-attendance-copy';
+import { AttendanceResolutionNotice } from './AttendanceResolutionNotice';
 import { useQuery } from '@tanstack/react-query';
 import {
   IconChevronDown,
@@ -16,6 +18,7 @@ import {
   attendanceDate,
   attendanceHours,
   attendanceLabel,
+  attendanceSessionDuration,
   attendanceTime,
   formatWorkDate,
 } from './attendance-display';
@@ -36,6 +39,7 @@ export function WorkerAttendanceSummary({
   useTranslation();
 
   const [isExpanded, setIsExpanded] = useState(false);
+  const [pickedShift, setPickedShift] = useState({ scope: '', id: '' });
   const client = useManagementClient(apiUrl);
   const scope = [apiUrl, sessionScope, siteId];
   const context = useQuery({
@@ -55,7 +59,7 @@ export function WorkerAttendanceSummary({
     queryKey: ['attendance-worker-today', ...scope, today],
     enabled,
     queryFn: () =>
-      client.attendanceDays(token, siteId, { fromDate: today, toDate: today, limit: 1 }),
+      client.attendanceDays(token, siteId, { fromDate: today, toDate: today, limit: 100 }),
     refetchInterval: 30000,
   });
   const monthly = useQuery({
@@ -92,14 +96,24 @@ export function WorkerAttendanceSummary({
     },
     refetchInterval: 30000,
   });
-  const attention = useQuery({
-    queryKey: ['attendance-worker-attention', ...scope, fromDate, toDate],
-    enabled,
-    queryFn: () =>
-      client.attendanceDays(token, siteId, { fromDate, toDate, status: 'NEEDS_REVIEW', limit: 1 }),
-    refetchInterval: 30000,
-  });
-  const dayId = selectedDayId || current.data?.items[0]?.id || '';
+  const selectionScope = JSON.stringify([...scope, today]);
+  const todayShifts = [...(current.data?.items ?? [])].sort(
+    (a, b) =>
+      Date.parse(b.startsAt ?? `${b.workDate}T00:00:00Z`) -
+      Date.parse(a.startsAt ?? `${a.workDate}T00:00:00Z`),
+  );
+  const now = current.dataUpdatedAt;
+  const preferredShift =
+    todayShifts.find(
+      (d) => d.startsAt && d.endsAt && Date.parse(d.startsAt) <= now && now < Date.parse(d.endsAt),
+    ) ??
+    todayShifts.find((d) => !d.startsAt || Date.parse(d.startsAt) <= now) ??
+    todayShifts.at(-1);
+  const selectedShift =
+    pickedShift.scope === selectionScope && todayShifts.some((d) => d.id === pickedShift.id)
+      ? pickedShift.id
+      : '';
+  const dayId = selectedDayId || selectedShift || preferredShift?.id || '';
   const detail = useQuery({
     queryKey: ['attendance-day-detail', ...scope, dayId],
     enabled: enabled && !!dayId,
@@ -115,7 +129,9 @@ export function WorkerAttendanceSummary({
       icon: IconClock,
       iconBg: 'bg-orange-50 text-[#F66B17] border border-orange-100/60',
       query: current,
-      value: attendanceHours(current.data?.items[0]?.provisionalMinutes ?? 0),
+      value: attendanceHours(
+        current.data?.items.reduce((n, d) => n + d.provisionalMinutes, 0) ?? 0,
+      ),
     },
     {
       get label() {
@@ -152,8 +168,8 @@ export function WorkerAttendanceSummary({
       },
       icon: IconAlertTriangle,
       iconBg: 'bg-amber-50 text-amber-600 border border-amber-100/60',
-      query: attention,
-      value: String(attention.data?.total ?? 0),
+      query: daysPresent,
+      value: String(daysPresent.data?.reviewDays ?? 0),
     },
   ];
 
@@ -300,6 +316,32 @@ export function WorkerAttendanceSummary({
               </p>
             ) : (
               <div className="mt-4 space-y-4">
+                {!selectedDayId && todayShifts.length > 1 && (
+                  <label className="block text-xs font-semibold text-slate-600">
+                    {teamText('teamWeb.selectAttendanceShift')}
+                    <select
+                      aria-label={teamText('teamWeb.selectAttendanceShift')}
+                      value={dayId}
+                      onChange={(event) =>
+                        setPickedShift({ scope: selectionScope, id: event.target.value })
+                      }
+                      className="mt-2 block w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm text-slate-900 focus-visible:outline-2 focus-visible:outline-orange-500"
+                    >
+                      {todayShifts.map((d) => (
+                        <option key={d.id} value={d.id}>
+                          {d.shiftName ?? tr('common.shift')} ·{' '}
+                          {attendanceTime(d.startsAt, d.timezone)} →{' '}
+                          {attendanceTime(d.endsAt, d.timezone)} ·{' '}
+                          {attendanceHours(d.provisionalMinutes)}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                )}
+                <AttendanceResolutionNotice
+                  issues={detail.data?.day.anomalies ?? []}
+                  siteId={siteId}
+                />
                 <div className="flex items-center gap-2 text-xs font-semibold text-slate-700 bg-slate-50/80 px-3.5 py-2 rounded-xl border border-slate-100">
                   <span>
                     {detail.data?.day.shiftName ??
@@ -335,7 +377,7 @@ export function WorkerAttendanceSummary({
                           </span>
                           {s.workedMinutes !== null && (
                             <span className="font-mono font-bold text-emerald-700 text-xs">
-                              {attendanceHours(s.workedMinutes)}
+                              {attendanceSessionDuration(s.effectiveInAt, s.effectiveOutAt)}
                             </span>
                           )}
                         </div>
@@ -343,17 +385,17 @@ export function WorkerAttendanceSummary({
                           <p className="text-slate-600">
                             {tr(
                               'worker_attendance_summary.duplicate_check_in_value_no_work_hours_added',
-                              { value1: attendanceTime(s.rawInAt, tz) },
+                              { value1: attendanceTime(s.rawInAt, tz, true) },
                             )}
                           </p>
                         ) : (
                           <p className="text-slate-600 font-medium">
                             {s.effectiveInAt
-                              ? attendanceTime(s.effectiveInAt, tz)
+                              ? attendanceTime(s.effectiveInAt, tz, true)
                               : tr('common.missing_check_in')}{' '}
                             →{' '}
                             {s.effectiveOutAt
-                              ? attendanceTime(s.effectiveOutAt, tz)
+                              ? attendanceTime(s.effectiveOutAt, tz, true)
                               : tr('common.open_session')}
                           </p>
                         )}
@@ -361,15 +403,15 @@ export function WorkerAttendanceSummary({
                           <p className="text-amber-700 font-medium">
                             {tr(
                               'worker_attendance_summary.the_value_check_out_has_no_matching_check_in',
-                              { value1: attendanceTime(s.rawOutAt ?? s.effectiveOutAt, tz) },
+                              { value1: attendanceTime(s.rawOutAt ?? s.effectiveOutAt, tz, true) },
                             )}
                           </p>
                         )}
                         {!duplicate && s.status === 'CORRECTED' && (
                           <p className="text-[11px] text-slate-400">
                             {tr('worker_attendance_summary.original_events_value_value', {
-                              value1: attendanceTime(s.rawInAt, tz),
-                              value2: attendanceTime(s.rawOutAt, tz),
+                              value1: attendanceTime(s.rawInAt, tz, true),
+                              value2: attendanceTime(s.rawOutAt, tz, true),
                             })}
                           </p>
                         )}

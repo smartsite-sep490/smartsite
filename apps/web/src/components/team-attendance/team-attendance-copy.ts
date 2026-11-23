@@ -3,9 +3,32 @@ import { registerFeatureCatalog } from '../../i18n/feature-catalog-registry';
 import { SAFETY_NAMESPACE } from '../../i18n/runtime';
 
 const en = {
+  'teamWeb.selectAttendanceShift': 'Select attendance shift',
+  'teamWeb.scanQr': 'Scan QR',
+  'teamWeb.directQrHint':
+    'Use the Worker’s current QR code or eight-character code. Access permission is checked before passage confirmation.',
+  'teamWeb.qrTitle': 'Verify Worker QR',
+  'teamWeb.gateReady': 'Ready to verify',
+  'teamWeb.gateReadyHint': 'Scan a face or choose Scan QR to verify the next Worker.',
+  'teamWeb.gateAwaitingShort': 'Awaiting passage confirmation',
+  'teamWeb.gateRecordedShort': 'Passage recorded',
+  'teamWeb.assignmentAction': 'Review schedule assignments',
+  'teamWeb.hoursReviewAction': 'Review and confirm working hours',
+  'teamWeb.correctionAction': 'Open attendance corrections',
+  'teamWeb.missingSession': 'No attendance session — report missing attendance',
+  'teamWeb.gateProgress': 'Gate passage status',
+  'teamWeb.gateAllowed': '1. Allowed: identity and access permission verified.',
+  'teamWeb.gateSecurityReview': '1. Security review is required before confirming passage.',
+  'teamWeb.gateAwaiting':
+    '2. Awaiting passage confirmation: security must confirm the person has passed. IN/OUT has not been recorded.',
+  'teamWeb.gateRecordedStep': '3. IN/OUT recorded: completed only after successful confirmation.',
+  'teamWeb.gateScheduled':
+    'A work schedule is available. IN/OUT is saved only after security confirms below.',
+  'teamWeb.gateRecorded':
+    '{direction} recorded: actual passage saved for attendance processing. Working hours depend on the assigned schedule and reconciliation.',
   'teamWeb.zoneTitle': 'Review hours: missing team leader roll call',
   'teamWeb.zoneHint':
-    'Confirm only calculated hours from complete Gate IN/OUT sessions. Deductions remain applied. This does not create a leader roll call.',
+    'Check completed Gate IN/OUT sessions or approved attendance corrections before confirming calculated hours. Deductions remain applied.',
   'teamWeb.zoneEvidence': 'Gate IN: {ins} · Gate OUT: {outs} · completed sessions: {sessions}',
   'teamWeb.zoneHours': 'Regular hours: {regular} · overtime: {overtime}',
   'teamWeb.zoneRollCall': 'Current leader roll call:',
@@ -14,13 +37,13 @@ const en = {
   'teamWeb.zoneConfirmed':
     'Working hours confirmed by the Contractor Representative. Original roll call retained.',
   'teamWeb.zoneWaiting':
-    'Confirmation requires an authorized Contractor Representative, ended shift/overtime, complete Gate evidence and no unresolved requests.',
+    'Confirmation requires an authorized Contractor Representative, ended shift/overtime, complete Gate evidence or approved corrections, and no unresolved requests.',
   'teamWeb.zoneConflict':
     'Evidence changed after the previous review. Check the current intervals and hours again.',
   'teamWeb.zoneChanged': 'Attendance changed. Refresh the record and review the evidence again.',
   'teamWeb.zoneNotifyTitle': 'Missing team leader roll call — hours review required',
   'teamWeb.zoneNotifyMessage':
-    '{name} ({code}) has complete Gate IN/OUT on {date}, but no leader roll call. Review the recorded hours.',
+    '{name} ({code}) has attendance evidence on {date}, but no leader roll call. The Contractor Representative checks Gate sessions or approved corrections and confirms working hours.',
   'teamWeb.zoneReviewedBy': 'Reviewed by {name} at {time}',
 
   'teamWeb.absenceTitle': 'Review: Present without Gate IN/OUT',
@@ -39,7 +62,7 @@ const en = {
   'teamWeb.absenceChanged': 'Attendance changed. Refresh the record and check the evidence again.',
   'teamWeb.absenceNotifyTitle': 'Present without Gate evidence — review required',
   'teamWeb.absenceNotifyMessage':
-    '{name} ({code}) was marked present on {date}, but has no Gate IN/OUT. Check attendance before confirming absence.',
+    '{name} ({code}) was marked present on {date}, but has no Gate IN/OUT. The Contractor Representative checks and confirms absence if the Worker did not attend. If the Worker attended, ask them to submit a missing-attendance correction.',
   'teamWeb.leader': 'Team leader',
   'teamWeb.manageLeader': 'Manage team leader',
   'teamWeb.noLeader': 'No team leader assigned',
@@ -112,9 +135,32 @@ const en = {
 };
 
 const vi: Record<keyof typeof en, string> = {
+  'teamWeb.selectAttendanceShift': 'Chọn ca chấm công',
+  'teamWeb.scanQr': 'Quét QR',
+  'teamWeb.directQrHint':
+    'Dùng mã QR hiện tại hoặc mã 8 ký tự của công nhân. Hệ thống kiểm tra quyền trước khi bảo vệ xác nhận qua cổng.',
+  'teamWeb.qrTitle': 'Xác minh QR công nhân',
+  'teamWeb.gateReady': 'Sẵn sàng xác minh',
+  'teamWeb.gateReadyHint': 'Quét khuôn mặt hoặc chọn Quét QR để xác minh công nhân tiếp theo.',
+  'teamWeb.gateAwaitingShort': 'Chờ xác nhận qua cổng',
+  'teamWeb.gateRecordedShort': 'Đã ghi nhận lượt qua cổng',
+  'teamWeb.assignmentAction': 'Kiểm tra phân công',
+  'teamWeb.hoursReviewAction': 'Kiểm tra và chốt giờ công',
+  'teamWeb.correctionAction': 'Mở đơn báo thiếu / sửa công',
+  'teamWeb.missingSession': 'Chưa có lượt chấm công — báo thiếu',
+  'teamWeb.gateProgress': 'Trạng thái qua cổng',
+  'teamWeb.gateAllowed': '1. Được phép: đã kiểm tra danh tính và quyền.',
+  'teamWeb.gateSecurityReview': '1. Cần bảo vệ kiểm tra trước khi xác nhận qua cổng.',
+  'teamWeb.gateAwaiting':
+    '2. Chờ xác nhận qua cổng: bảo vệ cần xác nhận người đã đi qua. Chưa ghi nhận IN/OUT.',
+  'teamWeb.gateRecordedStep': '3. Đã ghi nhận IN/OUT: chỉ hoàn tất sau khi xác nhận thành công.',
+  'teamWeb.gateScheduled':
+    'Có lịch làm việc. Lượt IN/OUT chỉ được lưu sau khi bảo vệ xác nhận bên dưới.',
+  'teamWeb.gateRecorded':
+    'Đã ghi nhận {direction}: đã lưu lượt qua cổng thực tế và đưa vào xử lý chấm công. Giờ công phụ thuộc lịch và kết quả đối soát.',
   'teamWeb.zoneTitle': 'Đối soát giờ công: thiếu điểm danh nhóm trưởng',
   'teamWeb.zoneHint':
-    'Chỉ chốt giờ thực tế từ các phiên IN/OUT đã khép, giữ nguyên các khoản trừ. Thao tác này không tạo điểm danh thay nhóm trưởng.',
+    'Kiểm tra các phiên IN/OUT đã khép hoặc giờ sửa công đã được duyệt trước khi chốt giờ công. Giữ nguyên các khoản trừ đã tính.',
   'teamWeb.zoneEvidence': 'Lượt IN: {ins} · lượt OUT: {outs} · phiên đã khép: {sessions}',
   'teamWeb.zoneHours': 'Giờ trong ca: {regular} · tăng ca: {overtime}',
   'teamWeb.zoneRollCall': 'Điểm danh nhóm trưởng hiện tại:',
@@ -122,13 +168,13 @@ const vi: Record<keyof typeof en, string> = {
   'teamWeb.zoneReason': 'Lý do chốt giờ công',
   'teamWeb.zoneConfirmed': 'Đã chốt giờ công bởi Đại diện nhà thầu. Giữ nguyên điểm danh ban đầu.',
   'teamWeb.zoneWaiting':
-    'Chỉ Đại diện nhà thầu có quyền chốt sau khi ca/tăng ca kết thúc, đủ bằng chứng cổng và không còn yêu cầu chờ xử lý.',
+    'Chỉ Đại diện nhà thầu có quyền chốt sau khi ca/tăng ca kết thúc, đủ bằng chứng cổng hoặc đơn sửa công đã duyệt và không còn yêu cầu chờ xử lý.',
   'teamWeb.zoneConflict':
     'Bằng chứng đã thay đổi sau lần chốt trước. Kiểm tra lại các khoảng thời gian và giờ công hiện tại.',
   'teamWeb.zoneChanged': 'Dữ liệu chấm công đã thay đổi. Hãy làm mới và kiểm tra lại bằng chứng.',
   'teamWeb.zoneNotifyTitle': 'Thiếu điểm danh nhóm trưởng — cần chốt giờ công',
   'teamWeb.zoneNotifyMessage':
-    '{name} ({code}) có đủ IN/OUT ngày {date} nhưng chưa được nhóm trưởng điểm danh. Hãy kiểm tra giờ công.',
+    '{name} ({code}) có bằng chứng giờ làm ngày {date} nhưng chưa được nhóm trưởng điểm danh. Đại diện nhà thầu kiểm tra lượt cổng hoặc giờ sửa công đã duyệt và chốt giờ công.',
   'teamWeb.zoneReviewedBy': 'Người chốt: {name} · {time}',
 
   'teamWeb.absenceTitle': 'Cần đối soát: Có mặt nhưng không có IN/OUT',
@@ -147,7 +193,7 @@ const vi: Record<keyof typeof en, string> = {
     'Dữ liệu chấm công đã thay đổi. Hãy làm mới và kiểm tra lại bằng chứng.',
   'teamWeb.absenceNotifyTitle': 'Có mặt nhưng thiếu bằng chứng cổng — cần đối soát',
   'teamWeb.absenceNotifyMessage':
-    '{name} ({code}) được điểm danh Có mặt ngày {date} nhưng không có lượt vào/ra cổng. Hãy kiểm tra trước khi xác nhận vắng.',
+    '{name} ({code}) được điểm danh Có mặt ngày {date} nhưng không có lượt vào/ra cổng. Đại diện nhà thầu kiểm tra và xác nhận vắng nếu không đi làm. Nếu có đi làm, công nhân gửi đơn báo thiếu chấm công.',
   'teamWeb.leader': 'Nhóm trưởng',
   'teamWeb.manageLeader': 'Quản lý nhóm trưởng',
   'teamWeb.noLeader': 'Chưa có nhóm trưởng',

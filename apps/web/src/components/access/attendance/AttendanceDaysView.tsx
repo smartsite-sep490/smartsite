@@ -971,6 +971,7 @@ export function AttendanceDaysView({
             </div>
 
             <div className="p-6 space-y-5">
+              <AttendanceResolutionNotice issues={activeDay.anomalies} siteId={siteId} />
               {detail.data && (
                 <>
                   <GateAbsenceReviewCard
@@ -2114,3 +2115,4 @@ export function AttendanceDaysView({
     </section>
   );
 }
+import { AttendanceResolutionNotice } from './AttendanceResolutionNotice';

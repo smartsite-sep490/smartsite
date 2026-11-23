@@ -603,17 +603,16 @@ export class SchedulingNotificationService {
         workDate: n.content.workDate,
         createdAt: n.createdAt.toISOString(),
         readAt: n.readAt?.toISOString() ?? null,
-        target:
-          n.event === 'ENTRY_DENIED_NO_SCHEDULE'
-            ? { siteId: n.siteId, workDate: n.content.workDate ?? '', tab: 'schedule' }
-            : {
-                siteId: n.siteId,
-                dayId: n.content.dayId ?? n.requestId,
-                tab: 'attendance',
-                ...(['TIME_REQUESTED', 'TIME_APPROVED', 'TIME_REJECTED'].includes(n.event)
-                  ? { requestId: n.requestId, requestType: 'TIME' as const }
-                  : {}),
-              },
+        target: ['ENTRY_DENIED_NO_SCHEDULE', 'ASSIGNMENT_REVIEW'].includes(n.event)
+          ? { siteId: n.siteId, workDate: n.content.workDate ?? '', tab: 'schedule' }
+          : {
+              siteId: n.siteId,
+              dayId: n.content.dayId ?? n.requestId,
+              tab: 'attendance',
+              ...(['TIME_REQUESTED', 'TIME_APPROVED', 'TIME_REJECTED'].includes(n.event)
+                ? { requestId: n.requestId, requestType: 'TIME' as const }
+                : {}),
+            },
       };
     }
     if (n.requestType === 'SAFETY')

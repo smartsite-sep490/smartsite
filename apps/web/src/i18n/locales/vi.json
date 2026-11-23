@@ -3197,6 +3197,7 @@
   "time.nextDays_one": " (ngày kế tiếp)",
   "time.nextDays_other": " (+{{count}} ngày)",
   "time.hoursMinutes": "{{hours}} giờ {{minutes}} phút",
+  "time.hoursMinutesSeconds": "{{hours}} giờ {{minutes}} phút {{seconds}} giây",
   "labels.ACCEPTED": "Đã chấp nhận",
   "labels.ACTIVE": "Đang hoạt động",
   "labels.ACTIVE_ONLY": "Đang hoạt động",

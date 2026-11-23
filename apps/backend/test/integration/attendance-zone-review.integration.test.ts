@@ -5,6 +5,9 @@ import test from 'node:test';
 import type { DataSource, EntityManager } from 'typeorm';
 import { createIsolatedTestDatabase } from '../support/isolated-test-database.js';
 import { AttendanceDaysService } from '../../src/modules/workforce/attendance/attendance-days.service.js';
+import { AttendanceService } from '../../src/modules/workforce/attendance/attendance.service.js';
+import { approvedWorkerDocuments } from '../support/approved-worker-documents.js';
+import { AttendanceMultipleShifts1795651200002 } from '../../src/database/migrations/1795651200002-AttendanceMultipleShifts.js';
 import { AttendanceReconciliationService } from '../../src/modules/workforce/attendance/attendance-reconciliation.service.js';
 import { SchedulingNotificationService } from '../../src/modules/workforce/notifications/scheduling-notification.service.js';
 import { ContractorTeamsService } from '../../src/modules/workforce/teams/contractor-teams.service.js';
@@ -322,10 +325,12 @@ test('Zone hours review: scoped consent, complete Gate evidence, audit receipts 
         const runner = db.createQueryRunner();
         await runner.connect();
         try {
+          await runner.startTransaction();
           const migration = new AttendanceZoneReview1795651200001();
           await migration.down(runner);
           await migration.up(runner);
         } finally {
+          await runner.rollbackTransaction();
           await runner.release();
         }
         assert.deepEqual(
@@ -557,19 +562,17 @@ test('Zone hours review: scoped consent, complete Gate evidence, audit receipts 
       async () => {
         const { day, schedule } = await makeCase('2026-11-19');
         await pair(day);
-        await db
-          .getRepository(AbsenceRequestEntity)
-          .save({
-            id: randomUUID(),
-            siteId,
-            workerId,
-            workerScheduleId: schedule.id,
-            shiftId: shift.id,
-            expectedScheduleVersionId: version.id,
-            requestedByUserId: workerUser,
-            reason: 'Synthetic approved full-shift leave',
-            status: AbsenceRequestStatus.APPROVED,
-          });
+        await db.getRepository(AbsenceRequestEntity).save({
+          id: randomUUID(),
+          siteId,
+          workerId,
+          workerScheduleId: schedule.id,
+          shiftId: shift.id,
+          expectedScheduleVersionId: version.id,
+          requestedByUserId: workerUser,
+          reason: 'Synthetic approved full-shift leave',
+          status: AbsenceRequestStatus.APPROVED,
+        });
         await db.transaction((manager) => reconciliation.refresh(manager, day.id));
         const detail = await days.detail(rep, siteId, day.id);
         assert.equal(detail.day.confirmedMinutes, 0);
@@ -759,6 +762,289 @@ test('Zone hours review: scoped consent, complete Gate evidence, audit receipts 
         } finally {
           await runner.release();
         }
+      },
+    );
+    await t.test(
+      'leader PRESENT plus approved missing checkout confirms hours without a new raw OUT',
+      async () => {
+        await approvedWorkerDocuments(db, [workerId], repId);
+        const attendance = new AttendanceService(db, reconciliation);
+        const { day, schedule } = await makeCase('2026-09-30');
+        await pair(day, '09:00', null);
+        await db.getRepository(TeamAttendanceEntity).save({
+          scheduleId: schedule.id,
+          teamId: team.id,
+          membershipId: membership.membershipId!,
+          zoneId: zone.id,
+          status: 'PRESENT',
+          version: 1,
+          updatedBy: leaderUser,
+          updatedAt: new Date(),
+        });
+        await db.transaction((m) => reconciliation.refresh(m, day.id));
+        const before = await days.detail(rep, siteId, day.id);
+        assert.ok(before.day.anomalies.includes('MISSING_OUT'));
+        const request = {
+          requestId: randomUUID(),
+          expectedSessionVersion: before.sessions[0]!.version,
+          proposedInAt: '2026-09-30T09:00:00Z',
+          proposedOutAt: '2026-09-30T09:50:00Z',
+          reason: 'Forgot checkout after work',
+        };
+        await attendance.requestCorrection(peer, siteId, before.sessions[0]!.id, request);
+        await attendance.reviewCorrection(rep, siteId, request.requestId, { approve: true });
+        const after = await days.detail(rep, siteId, day.id);
+        assert.equal(after.day.status, 'CONFIRMED');
+        assert.equal(after.day.confirmedMinutes, 50);
+        assert.equal(after.sessions[0]!.rawOutAt, null);
+        assert.equal(after.day.anomalies.includes('ZONE_GATE_MISSING'), false);
+      },
+    );
+    await t.test(
+      'approved missing-attendance reports replace missing Gate evidence, preserve raw history and still require missing leader review',
+      async () => {
+        await approvedWorkerDocuments(db, [workerId], repId);
+        const attendance = new AttendanceService(db, reconciliation);
+        const { day, schedule } = await makeCase('2026-10-01');
+        const input = {
+          requestId: randomUUID(),
+          expectedSessionVersion: 1,
+          proposedInAt: '2026-10-01T09:00:00Z',
+          proposedOutAt: '2026-10-01T10:00:00Z',
+          reason: 'Worked on site but both gate scans were missed',
+        };
+        assert.ok(
+          (await attendance.overview(peer, siteId)).missingSchedules?.some(
+            (s) => s.scheduleId === schedule.id,
+          ),
+        );
+        await assert.rejects(
+          attendance.requestMissingAttendance(
+            actor(leaderUser, UserRole.WORKER),
+            siteId,
+            schedule.id,
+            input,
+          ),
+        );
+        await attendance.requestMissingAttendance(peer, siteId, schedule.id, input);
+        await attendance.requestMissingAttendance(peer, siteId, schedule.id, input);
+        let detail = await days.detail(rep, siteId, day.id);
+        assert.equal(detail.day.confirmedMinutes, null);
+        assert.equal(detail.day.provisionalMinutes, 0);
+        await assert.rejects(
+          attendance.reviewCorrection(
+            actor(otherRep, UserRole.CONTRACTOR_REPRESENTATIVE),
+            siteId,
+            input.requestId,
+            { approve: true },
+          ),
+        );
+        await attendance.reviewCorrection(rep, siteId, input.requestId, { approve: true });
+        detail = await days.detail(rep, siteId, day.id);
+        assert.equal(detail.day.anomalies.includes('ZONE_GATE_MISSING'), false);
+        assert.equal(detail.zoneAttendanceReview?.canConfirm, true);
+        assert.equal(detail.day.provisionalMinutes, 60);
+        assert.equal(detail.sessions[0]?.rawInAt, null);
+        assert.equal(detail.sessions[0]?.rawOutAt, null);
+        await days.confirmZoneHours(rep, siteId, day.id, await commandFor(day.id));
+        assert.equal((await days.detail(rep, siteId, day.id)).day.confirmedMinutes, 60);
+        assert.equal(
+          await db.getRepository(AttendanceEventEntity).countBy({ shiftAssignmentId: schedule.id }),
+          0,
+        );
+        const runner = db.createQueryRunner();
+        await runner.connect();
+        try {
+          await assert.rejects(
+            new AttendanceMultipleShifts1795651200002().down(runner),
+            /history must be preserved/,
+          );
+        } finally {
+          await runner.release();
+        }
+      },
+    );
+    await t.test(
+      'a later shift IN never repairs an earlier missing OUT and overnight overlaps are blocked',
+      async () => {
+        const first = await makeCase('2026-10-04');
+        const later = await db.getRepository(ShiftEntity).save({
+          ...shift,
+          id: randomUUID(),
+          startsAt: new Date('2020-01-01T11:00:00Z'),
+          endsAt: new Date('2020-01-01T12:00:00Z'),
+        });
+        const laterSchedule = await db
+          .getRepository(WorkerScheduleEntity)
+          .save({ ...first.schedule, id: randomUUID(), shiftId: later.id });
+        for (const [direction, time] of [
+          ['IN', '09:00'],
+          ['IN', '11:00'],
+          ['OUT', '12:00'],
+        ] as const) {
+          const gateEvent = await recordGate(
+            first.day,
+            direction,
+            new Date(`2026-10-04T${time}:00Z`),
+          );
+          const attempt = await db
+            .getRepository(AccessAttemptEntity)
+            .findOneByOrFail({ id: gateEvent.accessAttemptId });
+          const worker = await db.getRepository(WorkerEntity).findOneByOrFail({ id: workerId });
+          await db.transaction((m) => reconciliation.recordPassage(m, gateEvent, attempt, worker));
+        }
+        const firstSession = await db
+          .getRepository(AttendanceSessionEntity)
+          .findOneByOrFail({ dayId: first.day.id });
+        assert.equal(firstSession.checkOutEventId, null);
+        const laterDay = await db
+          .getRepository(AttendanceDayEntity)
+          .findOneByOrFail({ scheduleId: laterSchedule.id });
+        const laterSession = await db
+          .getRepository(AttendanceSessionEntity)
+          .findOneByOrFail({ dayId: laterDay.id });
+        assert.equal(laterSession.status, 'MATCHED');
+        assert.equal(+laterSession.effectiveInAt!, +new Date('2026-10-04T11:00:00Z'));
+        const night = await db.getRepository(ShiftEntity).save({
+          ...shift,
+          id: randomUUID(),
+          startsAt: new Date('2020-01-01T22:00:00Z'),
+          endsAt: new Date('2020-01-02T02:00:00Z'),
+        });
+        await db
+          .getRepository(WorkerScheduleEntity)
+          .save({ ...first.schedule, id: randomUUID(), shiftId: night.id });
+        const overlap = await db.getRepository(ShiftEntity).save({
+          ...shift,
+          id: randomUUID(),
+          startsAt: new Date('2020-01-01T01:00:00Z'),
+          endsAt: new Date('2020-01-01T03:00:00Z'),
+        });
+        await assert.rejects(
+          db.getRepository(WorkerScheduleEntity).save({
+            ...first.schedule,
+            id: randomUUID(),
+            shiftId: overlap.id,
+            workDate: '2026-10-05',
+          }),
+        );
+      },
+    );
+    await t.test(
+      'a reused missing-report ID cannot overwrite an existing raw attendance session',
+      async () => {
+        const attendance = new AttendanceService(db, reconciliation);
+        const raw = await ready();
+        const original = await db
+          .getRepository(AttendanceSessionEntity)
+          .findOneByOrFail({ dayId: raw.day.id });
+        const target = await makeCase('2026-08-02');
+        await assert.rejects(
+          attendance.requestMissingAttendance(peer, siteId, target.schedule.id, {
+            requestId: original.id,
+            expectedSessionVersion: 1,
+            proposedInAt: '2026-08-02T09:00:00Z',
+            proposedOutAt: '2026-08-02T10:00:00Z',
+            reason: 'Colliding request ID must not rewrite another session',
+          }),
+          /Request ID was already used/,
+        );
+        assert.deepEqual(
+          await db.getRepository(AttendanceSessionEntity).findOneByOrFail({ id: original.id }),
+          original,
+        );
+        assert.equal(
+          await db.getRepository(AttendanceSessionEntity).countBy({ dayId: target.day.id }),
+          0,
+        );
+      },
+    );
+    await t.test(
+      'two non-overlapping shifts have separate reviews and totals; duplicate and overlapping schedules are rejected',
+      async () => {
+        const attendance = new AttendanceService(db, reconciliation);
+        const first = await makeCase('2026-10-02');
+        const secondShift = await db.getRepository(ShiftEntity).save({
+          ...shift,
+          id: randomUUID(),
+          name: 'Second shift',
+          startsAt: new Date('2020-01-01T11:00:00Z'),
+          endsAt: new Date('2020-01-01T12:00:00Z'),
+        });
+        const second = await db
+          .getRepository(WorkerScheduleEntity)
+          .save({ ...first.schedule, id: randomUUID(), shiftId: secondShift.id });
+        const secondDay = await db.transaction((m) =>
+          reconciliation.ensureDay(
+            m,
+            Object.assign(new WorkerEntity(), { id: workerId, siteId }),
+            new Date(),
+            second,
+            secondShift,
+          ),
+        );
+        assert.notEqual(first.day.id, secondDay.id);
+        assert.equal(
+          (
+            await db.transaction((m) =>
+              reconciliation.ensureDay(
+                m,
+                Object.assign(new WorkerEntity(), { id: workerId, siteId }),
+                new Date(),
+                second,
+                secondShift,
+              ),
+            )
+          ).id,
+          secondDay.id,
+        );
+        await db
+          .getRepository(AttendanceDayEntity)
+          .update(secondDay.id, { zoneAttendanceRequirement: first.day.zoneAttendanceRequirement });
+        await assert.rejects(
+          db.getRepository(WorkerScheduleEntity).save({ ...first.schedule, id: randomUUID() }),
+        );
+        await assert.rejects(
+          db.getRepository(WorkerScheduleEntity).save({
+            ...first.schedule,
+            id: randomUUID(),
+            shiftId: secondShift.id,
+            workDate: first.schedule.workDate,
+          }),
+        );
+        await db.getRepository(TeamAttendanceEntity).save({
+          teamId: team.id,
+          scheduleId: first.schedule.id,
+          membershipId: membership.membershipId!,
+          zoneId: zone.id,
+          status: 'PRESENT',
+          version: 1,
+          updatedBy: leaderUser,
+          updatedAt: new Date(),
+        });
+        const input = {
+          requestId: randomUUID(),
+          expectedSessionVersion: 1,
+          proposedInAt: '2026-10-02T09:00:00Z',
+          proposedOutAt: '2026-10-02T10:00:00Z',
+          reason: 'First shift missing scans',
+        };
+        await attendance.requestMissingAttendance(peer, siteId, first.schedule.id, input);
+        await attendance.reviewCorrection(rep, siteId, input.requestId, { approve: true });
+        assert.equal((await days.detail(rep, siteId, first.day.id)).day.confirmedMinutes, 60);
+        const report2 = {
+          ...input,
+          requestId: randomUUID(),
+          proposedInAt: '2026-10-02T11:00:00Z',
+          proposedOutAt: '2026-10-02T12:00:00Z',
+        };
+        await attendance.requestMissingAttendance(peer, siteId, second.id, report2);
+        await attendance.reviewCorrection(rep, siteId, report2.requestId, {
+          approve: false,
+          reviewNote: 'Need additional evidence',
+        });
+        assert.equal((await days.detail(rep, siteId, secondDay.id)).day.confirmedMinutes, null);
+        assert.equal((await days.detail(rep, siteId, first.day.id)).day.confirmedMinutes, 60);
       },
     );
   } finally {

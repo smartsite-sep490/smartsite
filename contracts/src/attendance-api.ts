@@ -21,6 +21,8 @@ export interface IgnoreDuplicateAttendanceCommand {
 }
 export type AttendanceDayStatus = 'IN_PROGRESS' | 'NEEDS_REVIEW' | 'CONFIRMED' | 'ABSENT';
 export type AttendanceNotificationEvent =
+  | 'MISSING_ATTENDANCE'
+  | 'ASSIGNMENT_REVIEW'
   | 'ZONE_REVIEW_REQUIRED'
   | 'ABSENCE_REVIEW_REQUIRED'
   | 'EARLY_EXIT'
@@ -206,6 +208,14 @@ export interface ConfirmAttendanceZoneHoursCommand {
   reason: string;
 }
 export interface AttendanceOverviewResponse {
+  /** Ended own shifts without any session; a missing-attendance report requires contractor review. */
+  missingSchedules?: Array<{
+    scheduleId: string;
+    workDate: string;
+    shiftName: string;
+    startsAt: string;
+    endsAt: string;
+  }>;
   /** True even when the pending request belongs to a day outside the current filter. */
   hasPendingCorrection?: boolean;
   canRequestCorrection: boolean;
