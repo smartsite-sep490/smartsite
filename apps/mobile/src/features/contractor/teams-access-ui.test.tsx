@@ -1,7 +1,11 @@
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import { act, create, type ReactTestRenderer } from 'react-test-renderer';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { SmartSiteManagementClient, type ContractorTeamResponse } from '@smartsite/api-client';
+import {
+  ApiError,
+  SmartSiteManagementClient,
+  type ContractorTeamResponse,
+} from '@smartsite/api-client';
 import type { useWorkspace } from '../workspace/workspace-context';
 import { MobileLayoutProvider } from '../shared/mobile-layout';
 import { Choice } from '../shared/ui';
@@ -258,6 +262,7 @@ it('keeps archival disabled for a nonempty team and transfers directly from the 
   await click(t('contractorUi.archiveTeam'));
   await text(t('teams.membershipReason'), 'Close this team');
   expect(buttons(t('teamUi.confirmARCHIVE'))[0]!.props.disabled).toBe(true);
+  expect(JSON.stringify(root.toJSON())).toContain(t('teamUi.archiveBlockedMembers', { count: 1 }));
   await click(t('common.close'));
   await click(t('teamUi.memberActions', { name: 'Own Worker' }));
   await click(t('teamUi.transferMember'));
@@ -279,6 +284,101 @@ it('keeps archival disabled for a nonempty team and transfers directly from the 
       requestId: expect.any(String),
     },
   );
+});
+
+it('explains a short archive reason and archives an empty team through the scoped API', async () => {
+  const emptyTeam = { ...team, memberCount: 0 };
+  let archived = false;
+  vi.mocked(workspace.client.contractorTeamDetail).mockResolvedValue(emptyTeam);
+  vi.mocked(workspace.client.listContractorTeamWorkers).mockResolvedValue({ items: [], total: 0 });
+  vi.mocked(workspace.client.listContractorTeams).mockImplementation(async () => ({
+    items: archived ? [] : [emptyTeam],
+    total: archived ? 0 : 1,
+  }));
+  const archive = vi
+    .spyOn(workspace.client, 'archiveContractorTeam')
+    .mockImplementation(async () => {
+      archived = true;
+      return { ...emptyTeam, isActive: false, version: 4 };
+    });
+  await mount(<TeamsScreen />);
+  await click(t('teamUi.openTeam', { name: team.name }));
+  await click(t('teamUi.teamActions'));
+  await click(t('contractorUi.archiveTeam'));
+  await text(t('teams.membershipReason'), 'abc');
+  expect(buttons(t('teamUi.confirmARCHIVE'))[0]!.props.disabled).toBe(false);
+  await click(t('teamUi.confirmARCHIVE'));
+  expect(JSON.stringify(root.toJSON())).toContain(t('teamUi.archiveReasonRequired'));
+  expect(archive).not.toHaveBeenCalled();
+  await text(t('teams.membershipReason'), '  Close this empty team  ');
+  await click(t('teamUi.confirmARCHIVE'));
+  expect(archive).toHaveBeenCalledWith('token', 'site', 'contractor', 'team', {
+    expectedVersion: 3,
+    reason: 'Close this empty team',
+  });
+  expect(JSON.stringify(root.toJSON())).toContain(t('teamUi.archivedSuccess', { name: team.name }));
+  expect(buttons(t('teamUi.openTeam', { name: team.name }))).toHaveLength(0);
+});
+
+it('returns to member management from a blocked archive without changing memberships', async () => {
+  const archive = vi.spyOn(workspace.client, 'archiveContractorTeam');
+  await mount(<TeamsScreen selectedTeam={team} />);
+  await click(t('teamUi.teamActions'));
+  await click(t('contractorUi.archiveTeam'));
+  await click(t('teamUi.manageMembers'));
+  expect(buttons(t('teamUi.confirmARCHIVE'))).toHaveLength(0);
+  expect(buttons(t('teamUi.memberActions', { name: 'Own Worker' }))).toHaveLength(1);
+  expect(archive).not.toHaveBeenCalled();
+  expect(workspace.client.assignContractorTeam).not.toHaveBeenCalled();
+});
+
+it('requires an explicit reload after an archive conflict and retries with the fresh version', async () => {
+  const emptyTeam = { ...team, memberCount: 0 };
+  vi.mocked(workspace.client.contractorTeamDetail).mockResolvedValue(emptyTeam);
+  vi.mocked(workspace.client.listContractorTeamWorkers).mockResolvedValue({ items: [], total: 0 });
+  const onSelect = vi.fn();
+  const archive = vi
+    .spyOn(workspace.client, 'archiveContractorTeam')
+    .mockRejectedValueOnce(new ApiError('http', 'Synthetic team changed', 409))
+    .mockResolvedValue({ ...emptyTeam, isActive: false, version: 5 });
+  await mount(<TeamsScreen selectedTeam={emptyTeam} onSelectTeam={onSelect} />);
+  await click(t('teamUi.teamActions'));
+  await click(t('contractorUi.archiveTeam'));
+  await text(t('teams.membershipReason'), 'Close this empty team');
+  await click(t('teamUi.confirmARCHIVE'));
+  expect(onSelect).not.toHaveBeenCalled();
+  expect(JSON.stringify(root.toJSON())).toContain(t('teamUi.archiveChanged'));
+  expect(buttons(t('teamUi.confirmARCHIVE'))[0]!.props.disabled).toBe(true);
+  vi.mocked(workspace.client.contractorTeamDetail).mockResolvedValue({ ...emptyTeam, version: 4 });
+  await click(t('teamUi.reloadArchive'));
+  await click(t('teamUi.confirmARCHIVE'));
+  expect(archive).toHaveBeenLastCalledWith('token', 'site', 'contractor', 'team', {
+    expectedVersion: 4,
+    reason: 'Close this empty team',
+  });
+  expect(onSelect).toHaveBeenCalledWith(null);
+});
+
+it('keeps the archive confirmation open when the server fails and allows a deliberate retry', async () => {
+  const emptyTeam = { ...team, memberCount: 0 };
+  vi.mocked(workspace.client.contractorTeamDetail).mockResolvedValue(emptyTeam);
+  vi.mocked(workspace.client.listContractorTeamWorkers).mockResolvedValue({ items: [], total: 0 });
+  const onSelect = vi.fn();
+  const archive = vi
+    .spyOn(workspace.client, 'archiveContractorTeam')
+    .mockRejectedValueOnce(new ApiError('network', 'Synthetic network failure'))
+    .mockResolvedValue({ ...emptyTeam, isActive: false, version: 4 });
+  await mount(<TeamsScreen selectedTeam={emptyTeam} onSelectTeam={onSelect} />);
+  await click(t('teamUi.teamActions'));
+  await click(t('contractorUi.archiveTeam'));
+  await text(t('teams.membershipReason'), 'Close this empty team');
+  await click(t('teamUi.confirmARCHIVE'));
+  expect(onSelect).not.toHaveBeenCalled();
+  expect(JSON.stringify(root.toJSON())).toContain(t('auth.networkError'));
+  expect(buttons(t('teamUi.confirmARCHIVE'))[0]!.props.disabled).toBe(false);
+  await click(t('teamUi.confirmARCHIVE'));
+  expect(archive).toHaveBeenCalledTimes(2);
+  expect(onSelect).toHaveBeenCalledWith(null);
 });
 
 it('keeps the team zone expiry as a calendar date when editing it with the native picker', async () => {
