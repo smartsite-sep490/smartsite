@@ -50,6 +50,8 @@ export function DocumentFileInputs({
   disabled = false,
   nationalId = '',
   safetyCardRequired = true,
+  validationErrors,
+  inputIdPrefix,
 }: {
   nationalId?: string;
   safetyCardRequired?: boolean;
@@ -59,6 +61,8 @@ export function DocumentFileInputs({
   expiries: Partial<Record<WorkerDocumentKind, string>>;
   onExpiryChange: (kind: WorkerDocumentKind, value: string, preserveExisting?: boolean) => void;
   disabled?: boolean;
+  validationErrors?: Record<string, string>;
+  inputIdPrefix?: string;
 }) {
   useTranslation();
   const [checks, setChecks] = useState<
@@ -73,7 +77,7 @@ export function DocumentFileInputs({
         </p>
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+      <div className="grid grid-cols-[repeat(auto-fit,minmax(min(100%,240px),1fr))] gap-4">
         {documentKinds.map((kind) => {
           const checked = checks[kind];
           const detected =
@@ -88,11 +92,29 @@ export function DocumentFileInputs({
           return (
             <div
               key={kind}
-              className="space-y-3 rounded-2xl border border-slate-200/90 bg-white p-4 shadow-2xs"
+              className="min-w-0 space-y-4 rounded-2xl border border-slate-200 bg-white p-4"
             >
+              <div className="flex items-start justify-between gap-3">
+                <h4 className="min-w-0 flex-1 text-sm font-semibold leading-5 text-slate-800">
+                  {tr(`documents.${kind}`)}
+                </h4>
+                <span className="shrink-0 rounded-lg bg-slate-100 px-2 py-1 text-[11px] font-medium text-slate-500">
+                  {tr(
+                    kind === 'SAFETY_CARD' && !safetyCardRequired
+                      ? 'documents.optional'
+                      : 'common.required',
+                  )}
+                </span>
+              </div>
               <fieldset disabled={disabled}>
                 <SmartDatePicker
-                  label={`${tr(`documents.${kind}`)} - ${tr(kind === 'HEALTH_CERTIFICATE' ? 'documents.submittedIssuedOn' : 'documents.submittedExpiresOn')}`}
+                  id={inputIdPrefix ? `${inputIdPrefix}-${kind}-date` : undefined}
+                  error={validationErrors?.[`${kind}-date`]}
+                  label={tr(
+                    kind === 'HEALTH_CERTIFICATE'
+                      ? 'documents.submittedIssuedOn'
+                      : 'documents.submittedExpiresOn',
+                  )}
                   value={expiries[kind] ?? ''}
                   disablePast={false}
                   onChange={(value) => onExpiryChange(kind, value)}
@@ -105,7 +127,10 @@ export function DocumentFileInputs({
                 </p>
               )}
               <DocumentMediaPicker
+                inputId={inputIdPrefix ? `${inputIdPrefix}-${kind}-file` : undefined}
+                fieldError={validationErrors?.[`${kind}-file`]}
                 label={tr(`documents.${kind}`)}
+                hideHeader
                 file={files[kind]}
                 disabled={disabled}
                 validate={async (file) => {
@@ -202,11 +227,7 @@ export function WorkerDocumentsPanel(p: Props) {
 
   const toggleAll = () => {
     const shouldCollapse = expandedSections.length > 0;
-    setSectionChoices(
-      Object.fromEntries(
-        allSections.map((id) => [id, !shouldCollapse]),
-      ),
-    );
+    setSectionChoices(Object.fromEntries(allSections.map((id) => [id, !shouldCollapse])));
   };
 
   useEffect(
@@ -408,9 +429,7 @@ export function WorkerDocumentsPanel(p: Props) {
           className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl border border-slate-200 bg-white hover:bg-slate-50 text-xs font-bold text-slate-700 transition-all shadow-2xs active:scale-[0.98] cursor-pointer select-none"
         >
           <span>
-            {expandedSections.length > 0
-              ? tr('documents.collapseAll')
-              : tr('documents.expandAll')}
+            {expandedSections.length > 0 ? tr('documents.collapseAll') : tr('documents.expandAll')}
           </span>
           <IconChevronDown
             className={`w-3.5 h-3.5 text-slate-500 transition-transform duration-200 ${
