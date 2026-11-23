@@ -126,7 +126,7 @@
   "workerHome": {
     "greeting": "Xin chào,",
     "todayShift": "Ca hôm nay",
-    "noShiftToday": "Hôm nay chưa có ca được phân công",
+    "noShiftToday": "Chưa có ca",
     "viewSchedule": "Mở lịch để xem phân công",
     "scheduleUnavailable": "Chưa tải được lịch hôm nay",
     "breakTime": "Nghỉ giữa ca {{from}} – {{to}}",
@@ -1552,7 +1552,7 @@
   "scheduleManage": {
     "open": "Chỉnh lịch đã giao",
     "title": "Các đợt giao lịch",
-    "hint": "Chọn thao tác trên đợt lịch muốn điều chỉnh.",
+    "hint": "Theo dõi lịch hiện tại và chọn đợt cần điều chỉnh.",
     "empty": "Chưa có đợt giao lịch được lưu. Lịch cũ không có thông tin đợt sẽ không nằm trong danh sách này.",
     "cancel": "Hủy lịch",
     "change": "Đổi ca",
@@ -1565,7 +1565,21 @@
     "UNSTARTED": "Tất cả lịch chưa bắt đầu",
     "reason": "Lý do điều chỉnh",
     "saved": "Đã cập nhật lịch.",
-    "result": "Đã thay đổi {{changed}} lịch; giữ lại {{skipped}} lịch không đủ điều kiện."
+    "result": "Đã thay đổi {{changed}} lịch; giữ lại {{skipped}} lịch không đủ điều kiện.",
+    "active": "Còn hiệu lực",
+    "partial": "Đã hủy một phần",
+    "cancelled": "Đã hủy",
+    "activeCount": "{{count}} lượt còn hiệu lực",
+    "cancelledCount": "{{count}} lượt đã hủy",
+    "selectedBatch": "ĐỢT LỊCH ĐANG CHỌN",
+    "original": "THÔNG TIN GIAO BAN ĐẦU",
+    "liveUnavailable": "Máy chủ chưa cung cấp trạng thái lịch hiện tại.",
+    "reload": "Tải lại lịch",
+    "showDates": "Xem từng ngày",
+    "hideDates": "Thu gọn ngày",
+    "noMatch": "Không còn lịch có hiệu lực trong phạm vi này. Hãy chọn ngày hoặc phạm vi khác.",
+    "noShifts": "Chưa có ca thay thế được cấp cho nhà thầu.",
+    "reasonPlaceholder": "Nhập lý do hủy hoặc đổi ca…"
   },
   "accountEmail": {
     "title": "Email tài khoản",
