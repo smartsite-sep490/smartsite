@@ -43,10 +43,12 @@ export function TeamDetailScreen({
   teamId,
   standalone = false,
   onBack,
+  onArchived,
 }: {
   teamId: string;
   standalone?: boolean;
   onBack: () => void;
+  onArchived?: (name: string) => void;
 }) {
   const { t } = useTranslation();
   const { scope, client, token, queryKey } = useWorkspace();
@@ -60,6 +62,7 @@ export function TeamDetailScreen({
   const [name, setName] = useState('');
   const [description, setDescription] = useState('');
   const [notice, setNotice] = useState('');
+  const [archiveAttempted, setArchiveAttempted] = useState(false);
   const command = useCommand(),
     requestId = useRequestId();
   const detail = useQuery({
@@ -91,7 +94,13 @@ export function TeamDetailScreen({
   const busy = command.isPending;
   const error =
     command.error instanceof ApiError && command.error.status === 404
-      ? new Error(t('teamUi.serverUpdateRequired'))
+      ? new Error(
+          t(
+            action?.kind === 'ARCHIVE'
+              ? 'teamUi.archiveUnavailable'
+              : 'teamUi.serverUpdateRequired',
+          ),
+        )
       : command.error;
 
   return (
@@ -105,6 +114,7 @@ export function TeamDetailScreen({
           const leader = members.find((member) => member.workerId === team.leaderWorkerId);
           const begin = (kind: ActionKind, member?: Member) => {
             command.reset();
+            setArchiveAttempted(false);
             setNotice('');
             setAction({ kind, member, version: team.version });
             setSelectedId(member?.workerId ?? '');
@@ -123,6 +133,10 @@ export function TeamDetailScreen({
               ? (action.member?.displayName ?? team.name)
               : t(`teamUi.action${action?.kind ?? 'TEAM'}`);
           const confirmable = action && !['TEAM', 'MEMBER'].includes(action.kind);
+          const archiveNeedsRefresh =
+            action?.kind === 'ARCHIVE' &&
+            (action.version !== team.version ||
+              (command.error instanceof ApiError && command.error.status === 409));
           const canSave =
             !blocked &&
             !!action &&
@@ -141,9 +155,12 @@ export function TeamDetailScreen({
                       : action.kind === 'EDIT'
                         ? !!name.trim()
                         : action.kind === 'ARCHIVE'
-                          ? team.memberCount === 0 && reason.trim().length >= 5
+                          ? team.memberCount === 0 &&
+                            reason.trim().length >= 5 &&
+                            !archiveNeedsRefresh
                           : false);
           const submit = () => {
+            if (action?.kind === 'ARCHIVE') setArchiveAttempted(true);
             if (!action || !canSave || busy) return;
             command.mutate(async () => {
               if (action.kind === 'LEADER' || action.kind === 'CLEAR_LEADER')
@@ -178,6 +195,7 @@ export function TeamDetailScreen({
                   { expectedVersion: action.version, reason: reason.trim() },
                 );
                 setAction(null);
+                onArchived?.(team.name);
                 onBack();
                 return;
               } else {
@@ -397,10 +415,14 @@ export function TeamDetailScreen({
                   footer={
                     confirmable ? (
                       <View style={styles.footer}>
-                        <ErrorNotice error={error} />
+                        <ErrorNotice error={archiveNeedsRefresh ? null : error} />
                         <Button
                           label={t(`teamUi.confirm${action.kind}`)}
-                          disabled={!canSave}
+                          disabled={
+                            action.kind === 'ARCHIVE'
+                              ? blocked || team.memberCount > 0 || archiveNeedsRefresh
+                              : !canSave
+                          }
                           onPress={submit}
                         />
                       </View>
@@ -563,7 +585,52 @@ export function TeamDetailScreen({
                       />
                     </>
                   )}
-                  {action.kind === 'ARCHIVE' && <Hint>{t('teams.archiveHint')}</Hint>}
+                  {action.kind === 'ARCHIVE' && (
+                    <>
+                      <Hint>{t('teams.archiveHint')}</Hint>
+                      {archiveNeedsRefresh && (
+                        <>
+                          <ErrorNotice error={new Error(t('teamUi.archiveChanged'))} />
+                          <ManagementAction
+                            label={t('teamUi.reloadArchive')}
+                            disabled={busy || detail.isFetching}
+                            onPress={() => {
+                              void detail.refetch().then((latest) => {
+                                if (latest.isError || !latest.data) return;
+                                command.reset();
+                                setArchiveAttempted(false);
+                                setAction((current) =>
+                                  current?.kind === 'ARCHIVE'
+                                    ? { ...current, version: latest.data.version }
+                                    : current,
+                                );
+                              });
+                            }}
+                          />
+                        </>
+                      )}
+                      {team.memberCount > 0 && (
+                        <>
+                          <ErrorNotice
+                            error={
+                              new Error(
+                                t('teamUi.archiveBlockedMembers', { count: team.memberCount }),
+                              )
+                            }
+                          />
+                          <ManagementAction
+                            label={t('teamUi.manageMembers')}
+                            icon={<IconUsers size={19} color={colors.primary} />}
+                            onPress={() => {
+                              setAction(null);
+                              setTab('MEMBERS');
+                              setSearch('');
+                            }}
+                          />
+                        </>
+                      )}
+                    </>
+                  )}
                   {['TRANSFER', 'REMOVE', 'ARCHIVE'].includes(action.kind) && (
                     <Field
                       label={t('teams.membershipReason')}
@@ -573,6 +640,9 @@ export function TeamDetailScreen({
                       onChangeText={setReason}
                       placeholder={t('teamUi.reasonHint')}
                     />
+                  )}
+                  {action.kind === 'ARCHIVE' && archiveAttempted && reason.trim().length < 5 && (
+                    <ErrorNotice error={new Error(t('teamUi.archiveReasonRequired'))} />
                   )}
                 </RequestSheet>
               )}
