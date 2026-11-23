@@ -3,16 +3,10 @@ import React, { useState } from 'react';
 import { View, Text, StyleSheet, Pressable, ScrollView } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useQuery } from '@tanstack/react-query';
+import { ApiError } from '@smartsite/api-client';
 import { useAuth } from '../auth/auth-context';
 import { useWorkspace } from './workspace-context';
-import {
-  allPages,
-  displayShiftTime,
-  localDate,
-  minutes,
-  required,
-  useCommand,
-} from '../shared/data';
+import { allPages, displayShiftTime, localDate, minutes, useCommand } from '../shared/data';
 import { Button, ErrorNotice, Field, Page, QueryState, palette } from '../shared/ui';
 import { WorkerAvatar } from '../../components/common/WorkerAvatar';
 import { WorkerQrModal } from '../../components/worker/WorkerQrModal';
@@ -314,12 +308,58 @@ export function ChangePasswordModal({
   const [current, setCurrent] = useState('');
   const [next, setNext] = useState('');
   const [confirm, setConfirm] = useState('');
+  const [submitted, setSubmitted] = useState(false);
   const command = useCommand();
+  const validation = { current: [] as string[], next: [] as string[], confirm: [] as string[] };
+  if (!current) validation.current.push(t('profile.currentPasswordRequired'));
+  else if (Array.from(current).length > 128)
+    validation.current.push(t('profile.currentPasswordTooLong'));
+  if (!next) validation.next.push(t('validation.required', { label: t('profile.newPassword') }));
+  else {
+    if (Array.from(next).length < 8 || Array.from(next).length > 128)
+      validation.next.push(t('profile.passwordLengthRule'));
+    if (!/[A-Z]/.test(next)) validation.next.push(t('profile.passwordUppercaseRule'));
+    if (!/\d/.test(next)) validation.next.push(t('profile.passwordNumberRule'));
+    if (!/[^A-Za-z0-9\s]/.test(next)) validation.next.push(t('profile.passwordSpecialRule'));
+    if (/[\p{Cc}\p{Cs}]/u.test(next)) validation.next.push(t('profile.passwordCharactersRule'));
+  }
+  if (!confirm)
+    validation.confirm.push(t('validation.required', { label: t('profile.confirmNewPassword') }));
+  else if (next !== confirm) validation.confirm.push(t('profile.passwordMismatch'));
+  const error = command.error;
+  const validationFailed =
+    error instanceof ApiError &&
+    (error.backendError?.code === 'VALIDATION_FAILED' ||
+      (error.status === 400 && error.message === 'Validation failed'));
+  const currentRejected =
+    error instanceof ApiError && error.code === 'http' && error.status === 401;
+  const serverFields = new Set(
+    validationFailed
+      ? error.backendError?.issues?.map((issue) => issue.path.replace(/^\//, ''))
+      : [],
+  );
+  const errors = {
+    current: [
+      ...(submitted ? validation.current : []),
+      ...(currentRejected
+        ? [t('accountEmail.currentPasswordError')]
+        : serverFields.has('currentPassword')
+          ? [t('profile.currentPasswordTooLong')]
+          : []),
+    ],
+    next: [
+      ...(submitted ? validation.next : []),
+      ...(serverFields.has('newPassword') ? [t('profile.passwordServerRejected')] : []),
+    ],
+    confirm: submitted ? validation.confirm : [],
+  };
 
   const handleClose = () => {
     setCurrent('');
     setNext('');
     setConfirm('');
+    setSubmitted(false);
+    command.reset();
     onClose();
   };
 
@@ -333,43 +373,73 @@ export function ChangePasswordModal({
       icon={<IconLock size={23} color={colors.primary} />}
       footer={
         <View style={{ gap: 10 }}>
-          <ErrorNotice error={command.error} />
+          <ErrorNotice error={validationFailed || currentRejected ? null : command.error} />
+          {validationFailed &&
+            !serverFields.has('currentPassword') &&
+            !serverFields.has('newPassword') && (
+              <Text
+                accessibilityRole="alert"
+                style={{ color: colors.dangerText, fontSize: 12, lineHeight: 19 }}
+              >
+                {t('profile.passwordServerRejected')}
+              </Text>
+            )}
           <Button
             label={
               command.isPending ? t('profile.changingPassword') : t('profile.submitPasswordChange')
             }
-            disabled={command.isPending || !current || !next || !confirm}
-            onPress={() =>
+            disabled={command.isPending}
+            onPress={() => {
+              setSubmitted(true);
+              command.reset();
+              if (Object.values(validation).some((issues) => issues.length > 0)) return;
               command.mutate(async () => {
-                required(current, t('profile.currentPassword'));
-                if (next !== confirm) throw new Error(t('profile.passwordMismatch'));
-                if (next.length < 8) throw new Error(t('profile.passwordMinLength'));
                 await client.changePassword(token, current, next);
                 await session.afterPasswordChange();
                 handleClose();
-              })
-            }
+              });
+            }}
           />
         </View>
       }
     >
       {(
         [
-          [t('profile.currentPassword'), current, setCurrent],
-          [t('profile.newPassword'), next, setNext],
-          [t('profile.confirmNewPassword'), confirm, setConfirm],
+          ['current', t('profile.currentPassword'), current, setCurrent],
+          ['next', t('profile.newPassword'), next, setNext],
+          ['confirm', t('profile.confirmNewPassword'), confirm, setConfirm],
         ] as const
-      ).map(([label, value, onChangeText]) => (
-        <Field
-          key={label}
-          label={label}
-          value={value}
-          onChangeText={onChangeText}
-          secureTextEntry
-          autoCapitalize="none"
-          autoCorrect={false}
-          editable={!command.isPending}
-        />
+      ).map(([field, label, value, onChangeText]) => (
+        <View key={field} style={{ gap: 6 }}>
+          <Field
+            label={label}
+            value={value}
+            onChangeText={(value) => {
+              command.reset();
+              onChangeText(value);
+            }}
+            secureTextEntry
+            autoCapitalize="none"
+            autoCorrect={false}
+            editable={!command.isPending}
+            style={errors[field].length > 0 ? { borderColor: colors.danger } : undefined}
+            accessibilityHint={errors[field].join(' ')}
+          />
+          {field === 'next' && (
+            <Text style={{ color: colors.textMuted, fontSize: 12, lineHeight: 19 }}>
+              {t('profile.passwordPolicyHint')}
+            </Text>
+          )}
+          {errors[field].map((message) => (
+            <Text
+              key={message}
+              accessibilityRole="alert"
+              style={{ color: colors.dangerText, fontSize: 12, lineHeight: 19 }}
+            >
+              {message}
+            </Text>
+          ))}
+        </View>
       ))}
     </RequestSheet>
   );

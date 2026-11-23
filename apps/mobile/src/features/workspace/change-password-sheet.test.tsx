@@ -1,7 +1,7 @@
 import { afterEach, expect, it, vi } from 'vitest';
 import { act, create, type ReactTestRenderer } from 'react-test-renderer';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { SmartSiteManagementClient } from '@smartsite/api-client';
+import { ApiError, SmartSiteManagementClient } from '@smartsite/api-client';
 import { ChangePasswordModal } from './home-profile';
 import type { useWorkspace } from './workspace-context';
 import { translate as t } from '../../i18n';
@@ -79,3 +79,110 @@ it.each(['worker', 'contractor'] as const)(
     ).toBe(true);
   },
 );
+
+async function passwordForm(current: string, next: string, confirm = next) {
+  const client = new SmartSiteManagementClient('https://api.example.test');
+  const change = vi.spyOn(client, 'changePassword').mockResolvedValue(undefined);
+  workspace = { client, token: 'token', scope: { role: 'worker' } } as ReturnType<
+    typeof useWorkspace
+  >;
+  cache = new QueryClient({ defaultOptions: { mutations: { retry: false } } });
+  await act(async () => {
+    root = create(
+      <QueryClientProvider client={cache}>
+        <ChangePasswordModal visible onClose={vi.fn()} />
+      </QueryClientProvider>,
+    );
+  });
+  const input = (label: string) =>
+    root.root.findAll(
+      (n) => String(n.type) === 'TextInput' && n.props.accessibilityLabel === label,
+    )[0]!;
+  await act(async () => {
+    input(t('profile.currentPassword')).props.onChangeText(current);
+    input(t('profile.newPassword')).props.onChangeText(next);
+    input(t('profile.confirmNewPassword')).props.onChangeText(confirm);
+  });
+  const submit = async () => {
+    await act(async () =>
+      root.root
+        .findAll(
+          (n) =>
+            String(n.type) === 'Pressable' &&
+            n.props.accessibilityLabel === t('profile.submitPasswordChange'),
+        )[0]!
+        .props.onPress(),
+    );
+    await act(async () => {
+      await new Promise((resolve) => setTimeout(resolve, 20));
+    });
+  };
+  return { change, input, submit };
+}
+
+it.each([
+  ['password1!', 'profile.passwordUppercaseRule'],
+  ['Password!!', 'profile.passwordNumberRule'],
+  ['Password12', 'profile.passwordSpecialRule'],
+  ['Ab1!', 'profile.passwordLengthRule'],
+  ['Ab1!' + 'x'.repeat(125), 'profile.passwordLengthRule'],
+  ['Pass1!\nxx', 'profile.passwordCharactersRule'],
+])(
+  'explains the exact unmet rule for %s and does not send an invalid change',
+  async (password, message) => {
+    const { change, input, submit } = await passwordForm('OriginalPassword1!', password);
+    await submit();
+    expect(change).not.toHaveBeenCalled();
+    expect(input(t('profile.newPassword')).props.accessibilityHint).toContain(t(message));
+    expect(JSON.stringify(root.toJSON())).not.toContain('Validation failed');
+  },
+);
+
+it('identifies missing fields instead of silently disabling password submission', async () => {
+  const { change, input, submit } = await passwordForm('', '', '');
+  await submit();
+  expect(change).not.toHaveBeenCalled();
+  expect(input(t('profile.currentPassword')).props.accessibilityHint).toContain(
+    t('profile.currentPasswordRequired'),
+  );
+});
+
+it('maps a server validation issue to its password field instead of showing Validation failed', async () => {
+  const { change, input, submit } = await passwordForm('OriginalPassword1!', 'ValidPassword1!');
+  change.mockRejectedValue(
+    new ApiError('http', 'Validation failed', 400, {
+      success: false,
+      statusCode: 400,
+      code: 'VALIDATION_FAILED',
+      message: 'Validation failed',
+      requestId: 'synthetic',
+      timestamp: '2026-11-23T00:00:00Z',
+      path: '/api/v1/auth/change-password',
+      issues: [{ path: '/newPassword', code: 'INVALID_VALUE', message: 'Invalid value' }],
+    }),
+  );
+  await submit();
+  expect(input(t('profile.newPassword')).props.accessibilityHint).toContain(
+    t('profile.passwordServerRejected'),
+  );
+  expect(JSON.stringify(root.toJSON())).not.toContain('Validation failed');
+  expect(afterPasswordChange).not.toHaveBeenCalled();
+});
+
+it('identifies the incorrect current password and keeps the form available to retry', async () => {
+  const { change, input, submit } = await passwordForm('IncorrectPassword1!', 'ValidPassword1!');
+  change.mockRejectedValue(new ApiError('http', 'Unauthorized', 401));
+  await submit();
+  expect(input(t('profile.currentPassword')).props.accessibilityHint).toContain(
+    t('accountEmail.currentPasswordError'),
+  );
+  expect(input(t('profile.newPassword')).props.value).toBe('ValidPassword1!');
+  expect(afterPasswordChange).not.toHaveBeenCalled();
+});
+
+it('accepts the real Backend policy without adding a lowercase-letter requirement', async () => {
+  const { change, submit } = await passwordForm('OriginalPassword1!', 'ABCDEFG1!');
+  await submit();
+  expect(change).toHaveBeenCalledWith('token', 'OriginalPassword1!', 'ABCDEFG1!');
+  expect(afterPasswordChange).toHaveBeenCalledOnce();
+});

@@ -1,5 +1,5 @@
 import { translate as tr } from '../../i18n';
-import React, { useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState, type ComponentRef } from 'react';
 import {
   View,
   Text,
@@ -8,6 +8,7 @@ import {
   Pressable,
   ScrollView,
   KeyboardAvoidingView,
+  Keyboard,
   Platform,
   ImageBackground,
   Dimensions,
@@ -33,28 +34,84 @@ export function LoginScreen({ onLogin, pending, error, expired, notice }: LoginS
   const { t } = useTranslation();
   const currentLang = uiLanguage();
   const insets = useSafeAreaInsets();
+  const scroll = useRef<ComponentRef<typeof ScrollView>>(null);
+  const passwordInput = useRef<ComponentRef<typeof TextInput>>(null);
+  const activeField = useRef<'username' | 'password' | null>(null);
+  const keyboardVisible = useRef(false);
+  const formTop = useRef<number | null>(null);
+  const fieldTops = useRef<{ username: number | null; password: number | null }>({
+    username: null,
+    password: null,
+  });
+  const [keyboardOpen, setKeyboardOpen] = useState(false);
+  const revealFocusedField = useCallback(() => {
+    if (!keyboardVisible.current) return;
+    const field = activeField.current;
+    const top = field ? fieldTops.current[field] : null;
+    if (top !== null && formTop.current !== null)
+      scroll.current?.scrollTo({ y: Math.max(0, formTop.current + top - 16), animated: true });
+  }, []);
+  useEffect(() => {
+    const show = Keyboard.addListener('keyboardDidShow', () => {
+      keyboardVisible.current = true;
+      setKeyboardOpen(true);
+      revealFocusedField();
+    });
+    const hide = Keyboard.addListener('keyboardDidHide', () => {
+      keyboardVisible.current = false;
+      setKeyboardOpen(false);
+    });
+    const willShow =
+      Platform.OS === 'ios'
+        ? Keyboard.addListener('keyboardWillShow', () => {
+            keyboardVisible.current = true;
+            setKeyboardOpen(true);
+          })
+        : undefined;
+    const willHide =
+      Platform.OS === 'ios'
+        ? Keyboard.addListener('keyboardWillHide', () => {
+            keyboardVisible.current = false;
+            setKeyboardOpen(false);
+          })
+        : undefined;
+    return () => {
+      show.remove();
+      hide.remove();
+      willShow?.remove();
+      willHide?.remove();
+    };
+  }, [revealFocusedField]);
   // Capture the base size once; Android can resize the window for the keyboard.
   const [stableScreenHeight] = useState(() =>
     Math.max(Dimensions.get('screen').height, Dimensions.get('window').height),
   );
   // Sheet card occupies ~3/5 of mobile screen height; hero section occupies remaining ~2/5
-  const heroHeight = Math.max(220, Math.round(stableScreenHeight * 0.4) + 32 - insets.top);
+  const heroHeight = keyboardOpen
+    ? 96
+    : Math.max(220, Math.round(stableScreenHeight * 0.4) + 32 - insets.top);
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [recoveryOpen, setRecoveryOpen] = useState(false);
 
   const handleLogin = () => {
+    if (pending || !username.trim() || !password) return;
     onLogin(username.trim(), password);
   };
 
   return (
     <KeyboardAvoidingView
       style={styles.container}
-      behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+      behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
     >
       <StatusBar style="light" />
       <ScrollView
+        ref={scroll}
+        style={styles.scroller}
+        onLayout={revealFocusedField}
+        onContentSizeChange={revealFocusedField}
+        automaticallyAdjustKeyboardInsets={false}
         contentContainerStyle={styles.scrollContent}
         bounces={false}
         overScrollMode="never"
@@ -80,7 +137,13 @@ export function LoginScreen({ onLogin, pending, error, expired, notice }: LoginS
         </ImageBackground>
 
         {/* Bottom Rounded Form Card */}
-        <View style={[styles.sheetCard, { paddingBottom: Math.max(insets.bottom + 24, 40) }]}>
+        <View
+          style={[styles.sheetCard, { paddingBottom: Math.max(insets.bottom + 24, 40) }]}
+          onLayout={(event) => {
+            formTop.current = event.nativeEvent.layout.y;
+            revealFocusedField();
+          }}
+        >
           {/* Language Switcher */}
           <View style={styles.langRow}>
             <Pressable
@@ -120,7 +183,13 @@ export function LoginScreen({ onLogin, pending, error, expired, notice }: LoginS
           <ErrorNotice error={error} context="login" />
 
           {/* Input: Username */}
-          <View style={styles.inputWrapper}>
+          <View
+            style={styles.inputWrapper}
+            onLayout={(event) => {
+              fieldTops.current.username = event.nativeEvent.layout.y;
+              revealFocusedField();
+            }}
+          >
             <IconUser size={20} color="#94A3B8" />
             <TextInput
               style={styles.input}
@@ -131,13 +200,29 @@ export function LoginScreen({ onLogin, pending, error, expired, notice }: LoginS
               onChangeText={setUsername}
               autoCapitalize="none"
               autoCorrect={false}
+              editable={!pending}
+              autoComplete="username"
+              returnKeyType="next"
+              submitBehavior="submit"
+              onFocus={() => {
+                activeField.current = 'username';
+                revealFocusedField();
+              }}
+              onSubmitEditing={() => passwordInput.current?.focus()}
             />
           </View>
 
           {/* Input: Password */}
-          <View style={styles.inputWrapper}>
+          <View
+            style={styles.inputWrapper}
+            onLayout={(event) => {
+              fieldTops.current.password = event.nativeEvent.layout.y;
+              revealFocusedField();
+            }}
+          >
             <IconLock size={20} color="#94A3B8" />
             <TextInput
+              ref={passwordInput}
               style={styles.input}
               placeholder={t('auth.password')}
               placeholderTextColor="#94A3B8"
@@ -146,6 +231,15 @@ export function LoginScreen({ onLogin, pending, error, expired, notice }: LoginS
               onChangeText={setPassword}
               secureTextEntry={!showPassword}
               autoCapitalize="none"
+              autoCorrect={false}
+              editable={!pending}
+              autoComplete="current-password"
+              returnKeyType="go"
+              onFocus={() => {
+                activeField.current = 'password';
+                revealFocusedField();
+              }}
+              onSubmitEditing={handleLogin}
             />
             <Pressable hitSlop={12} onPress={() => setShowPassword(!showPassword)}>
               <IconEye size={20} color="#94A3B8" />
@@ -193,6 +287,7 @@ const styles = StyleSheet.create({
     flexGrow: 1,
     backgroundColor: '#FFFFFF',
   },
+  scroller: { flex: 1 },
   heroSection: {
     width: '100%',
   },
