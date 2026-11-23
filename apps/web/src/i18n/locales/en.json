@@ -4315,5 +4315,12 @@
   "safetyUi.siteUnavailable": "The linked site is unavailable.",
   "safetyUi.zoneRecorded": "Area recorded",
   "safetyUi.handoverNumber": "Handover {{number}}",
-  "safetyUi.contextUnknown": "No information yet"
+  "safetyUi.contextUnknown": "No information yet",
+  "workflowUi.confirmHandover": "Confirm and hand over",
+  "workflowUi.onlyResponsibility": "Only confirm responsibility",
+  "workflowUi.partialHandover": "Contractor confirmed. Handover is not complete yet.",
+  "workflowUi.retrySameRequest": "The response was not confirmed. Retry the same request before editing it.",
+  "workflowUi.responsibilityRequired": "Choose a contractor and provide the verification reason.",
+  "workflowUi.checklistsTab": "Checklists",
+  "workflowUi.retryConfirmation": "Retry previous request"
 }
