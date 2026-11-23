@@ -66,6 +66,19 @@ describe('exact-frame preview', () => {
     const frame = parseRealtimePreview(packet);
     expect(frame.sequenceNumber).toBe('9223372036854775807');
     expect(frame.detections).toEqual([]);
+    expect(frame.zoneAnchor).toBeUndefined();
+  });
+
+  it('preserves optional zoneAnchor enum values and rejects invalid values', () => {
+    expect(parseRealtimePreview({ ...packet, zoneAnchor: 'BOTTOM_CENTER' }).zoneAnchor).toBe(
+      'BOTTOM_CENTER',
+    );
+    expect(parseRealtimePreview({ ...packet, zoneAnchor: 'BOX_CENTER' }).zoneAnchor).toBe(
+      'BOX_CENTER',
+    );
+    for (const invalidAnchor of [null, '', 'TOP_CENTER', 'box_center', 123]) {
+      expect(() => parseRealtimePreview({ ...packet, zoneAnchor: invalidAnchor })).toThrow();
+    }
   });
 
   it('rejects metadata-only overlays, oversized images and invalid box coordinates', () => {

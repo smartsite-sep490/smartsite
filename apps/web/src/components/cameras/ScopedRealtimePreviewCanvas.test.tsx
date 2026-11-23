@@ -55,6 +55,7 @@ function makePreviewFixture(overrides?: {
   cameraExternalId?: string;
   width?: number;
   height?: number;
+  zoneAnchor?: 'BOTTOM_CENTER' | 'BOX_CENTER';
 }): ScopedDecodedPreview {
   const width = overrides?.width ?? 640;
   const height = overrides?.height ?? 480;
@@ -72,6 +73,7 @@ function makePreviewFixture(overrides?: {
     width,
     height,
     imageDataUrl: 'data:image/jpeg;base64,AA==',
+    ...(overrides?.zoneAnchor !== undefined ? { zoneAnchor: overrides.zoneAnchor } : {}),
     zonePolygons: [
       {
         regionId: 'region-alpha',
@@ -253,6 +255,31 @@ describe('ScopedRealtimePreviewCanvas software draw-call and accessible DOM boun
     // Person #7: bottom-center (192, 336), independent of zone-entry detections.
     expect(mockCtx.fillRect).toHaveBeenCalledWith(189, 333, 6, 6);
     expect(screen.getByText(/Bottom-center marker/)).toBeTruthy();
+  });
+
+  it('draws box-center anchor and matching EN/VI help copy when zoneAnchor is BOX_CENTER, while BOTTOM_CENTER stays bottom-center', async () => {
+    const boxCenterPreview = makePreviewFixture({ zoneAnchor: 'BOX_CENTER' });
+    boxCenterPreview.frame.zoneDetections = [];
+    const { rerender } = render(
+      <ScopedRealtimePreviewCanvas preview={boxCenterPreview} mode="zone" />,
+    );
+    // Person #7 box: x=[0.2, 0.4], y=[0.2, 0.7] on 640x480 -> box-center (192, 216)
+    expect(mockCtx.fillRect).toHaveBeenCalledWith(189, 213, 6, 6);
+    expect(mockCtx.fillRect).not.toHaveBeenCalledWith(189, 333, 6, 6);
+    expect(screen.getByText(/Box-center marker/)).toBeTruthy();
+
+    await act(async () => {
+      await i18n.changeLanguage('vi');
+    });
+    expect(screen.getByText(/Điểm xanh tâm khung/)).toBeTruthy();
+
+    mockCtx.fillRect.mockClear();
+    const bottomCenterPreview = makePreviewFixture({ zoneAnchor: 'BOTTOM_CENTER' });
+    bottomCenterPreview.frame.zoneDetections = [];
+    rerender(<ScopedRealtimePreviewCanvas preview={bottomCenterPreview} mode="zone" />);
+    expect(mockCtx.fillRect).toHaveBeenCalledWith(189, 333, 6, 6);
+    expect(mockCtx.fillRect).not.toHaveBeenCalledWith(189, 213, 6, 6);
+    expect(screen.getByText(/Điểm xanh giữa đáy khung/)).toBeTruthy();
   });
 
   it('respects showModelObjects off/on and filterClasses presets without turning raw detector boxes into wearer verdicts', () => {

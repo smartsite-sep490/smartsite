@@ -19,7 +19,9 @@ const SESSION_ID = '44444444-4444-4444-8444-444444444444';
 
 function buildFixture() {
   const state = {
-    roleAssignments: [{ role: UserRole.SITE_MANAGER, siteId: SITE_A }] as AuthenticatedUser['roleAssignments'],
+    roleAssignments: [
+      { role: UserRole.SITE_MANAGER, siteId: SITE_A },
+    ] as AuthenticatedUser['roleAssignments'],
     isActive: true,
     mustChangePassword: false,
     revokedAfterFetch: false,
@@ -28,6 +30,7 @@ function buildFixture() {
     cameraType: 'ZONE' as 'ZONE' | 'GATE',
     cameraStatus: CameraStatus.ACTIVE,
     cameraSiteId: SITE_A,
+    frameZoneAnchor: undefined as unknown,
   };
 
   const config = {
@@ -119,6 +122,7 @@ function buildFixture() {
         detections: [],
         zoneDetections: [],
         zonePolygons: [],
+        ...(state.frameZoneAnchor !== undefined ? { zoneAnchor: state.frameZoneAnchor } : {}),
       },
     });
   };
@@ -193,4 +197,27 @@ test('CameraPreviewService retains GATE camera 503 denial and post-fetch revocat
     (error: unknown) => error instanceof UnauthorizedException,
   );
   assert.equal(revoked.state.fetchCalls, 1);
+});
+
+test('CameraPreviewService preserves optional canonical zoneAnchor and fails closed on invalid anchor values', async () => {
+  const legacy = buildFixture();
+  const legacyPreview = await legacy.service.read('token', SITE_A, CAMERA_ID);
+  assert.equal(legacyPreview.frame.zoneAnchor, undefined);
+
+  const boxCenter = buildFixture();
+  boxCenter.state.frameZoneAnchor = 'BOX_CENTER';
+  const boxCenterPreview = await boxCenter.service.read('token', SITE_A, CAMERA_ID);
+  assert.equal(boxCenterPreview.frame.zoneAnchor, 'BOX_CENTER');
+
+  const bottomCenter = buildFixture();
+  bottomCenter.state.frameZoneAnchor = 'BOTTOM_CENTER';
+  const bottomCenterPreview = await bottomCenter.service.read('token', SITE_A, CAMERA_ID);
+  assert.equal(bottomCenterPreview.frame.zoneAnchor, 'BOTTOM_CENTER');
+
+  const invalid = buildFixture();
+  invalid.state.frameZoneAnchor = 'TOP_CENTER';
+  await assert.rejects(
+    invalid.service.read('token', SITE_A, CAMERA_ID),
+    (error: unknown) => error instanceof PublicHttpException && error.getStatus() === 503,
+  );
 });

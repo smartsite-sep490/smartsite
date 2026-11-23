@@ -77,7 +77,20 @@ it('defaults zone wearer state to UNKNOWN and rejects credential/identity or mal
     { ...frame(), detections: [{ ...detection(), workerId: 'not-identity' }] },
     { ...frame(), sequenceNumber: 3 },
     { ...frame(), width: 0 },
+    { ...frame(), zoneAnchor: 'TOP_CENTER' },
+    { ...frame(), zoneAnchor: null },
+    { ...frame(), zoneAnchor: 'box_center' },
   ]) {
     expect(() => parseScopedRealtimePreview(value)).toThrow();
   }
+});
+
+it('preserves optional canonical zoneAnchor and defaults omitted anchor to undefined (legacy bottom-center)', () => {
+  expect(parseScopedRealtimePreview(frame()).zoneAnchor).toBeUndefined();
+  expect(parseScopedRealtimePreview({ ...frame(), zoneAnchor: 'BOTTOM_CENTER' }).zoneAnchor).toBe(
+    'BOTTOM_CENTER',
+  );
+  expect(parseScopedRealtimePreview({ ...frame(), zoneAnchor: 'BOX_CENTER' }).zoneAnchor).toBe(
+    'BOX_CENTER',
+  );
 });
