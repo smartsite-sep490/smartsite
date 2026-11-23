@@ -97,6 +97,43 @@ it('opens pending documents and respects a manual collapse after refresh', async
   expect(vi.mocked(client.workerCompliance).mock.calls.length).toBeGreaterThan(calls);
   expect(screen.queryByText(doc.originalName)).toBeNull();
 });
+it('lets Safety switch document cards while showing only the selected review form', async () => {
+  const profile = await client.workerCompliance('token', 'site', 'worker');
+  const health = {
+    ...doc,
+    id: 'health-document',
+    kind: 'HEALTH_CERTIFICATE' as const,
+    originalName: 'synthetic-health.jpg',
+    submittedIssuedOn: '2026-10-17',
+  };
+  vi.mocked(client.workerCompliance).mockResolvedValue({
+    ...profile,
+    documents: [doc, health],
+  });
+  mount(true);
+  await screen.findByText(doc.originalName);
+  expect(screen.queryByText(health.originalName)).toBeNull();
+  expect(screen.getAllByLabelText(tr('documents.note'))).toHaveLength(1);
+  const user = userEvent.setup();
+  await user.click(
+    screen.getByRole('button', { name: new RegExp(tr('documents.HEALTH_CERTIFICATE')) }),
+  );
+  expect(screen.queryByText(doc.originalName)).toBeNull();
+  expect(screen.getByText(health.originalName)).toBeTruthy();
+  expect(screen.getAllByLabelText(tr('documents.note'))).toHaveLength(1);
+  await user.type(screen.getByLabelText(tr('documents.note')), 'Checked health original');
+  await user.click(screen.getByLabelText(tr('documents.confirm')));
+  await user.click(screen.getByRole('button', { name: tr('documents.approve') }));
+  await waitFor(() =>
+    expect(client.reviewWorkerDocument).toHaveBeenCalledWith(
+      'token',
+      'site',
+      'worker',
+      health.id,
+      expect.objectContaining({ approve: true, issuedOn: '2026-10-17', expectedVersion: 3 }),
+    ),
+  );
+});
 it('shows the citizen ID warning to Safety without blocking explicit approval', async () => {
   const profile = await client.workerCompliance('token', 'site', 'worker');
   vi.mocked(client.workerCompliance).mockResolvedValue({
@@ -270,10 +307,17 @@ it('Safety hides citizen ID OCR controls and keeps the mismatch warning concise'
     ],
   });
   mount(true);
+  await screen.findByText(doc.originalName);
+  expect(screen.getAllByRole('button', { name: tr('documents.ocr') })).toHaveLength(1);
+  await userEvent.setup().click(
+    screen.getByRole('button', {
+      name: (name) => name.startsWith(tr('documents.identityBothSides')),
+    }),
+  );
   await screen.findByText(tr('documents.identityMismatch'));
   expect(screen.queryByText(tr('documents.identityAdvisory'))).toBeNull();
-  expect(screen.getAllByRole('button', { name: tr('documents.ocr') })).toHaveLength(1);
-  expect(screen.getAllByRole('button', { name: tr('documents.view') })).toHaveLength(2);
+  expect(screen.queryByRole('button', { name: tr('documents.ocr') })).toBeNull();
+  expect(screen.getAllByRole('button', { name: tr('documents.view') })).toHaveLength(1);
 });
 
 it('Representative has one bundle submission form and Workers have no write controls', async () => {

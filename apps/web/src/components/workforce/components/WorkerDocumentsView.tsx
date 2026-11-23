@@ -77,22 +77,29 @@ export function WorkerDocumentsView({ apiUrl }: { apiUrl: string }) {
   return (
     <div className="mx-auto max-w-7xl space-y-3 pb-8">
       {/* Site selector */}
-      <div className="flex justify-end">
+      <div className="flex flex-col gap-4 py-2 sm:flex-row sm:items-center sm:justify-between">
+        {safety && (
+          <div className="min-w-0 space-y-1.5">
+            <h1 className="text-xl font-bold tracking-tight text-slate-900">
+              {tr('documents.workspaceTitle')}
+            </h1>
+            <p className="text-sm leading-6 text-slate-500">{tr('documents.workspaceHint')}</p>
+          </div>
+        )}
         {allowed.length > 0 && (
-          <div className="shrink-0 flex items-center gap-2 rounded-xl border border-slate-200/90 bg-white px-3 py-1.5 shadow-2xs self-start sm:self-auto">
+          <div className="flex min-w-0 items-center gap-2 self-start rounded-xl border border-slate-200 bg-white px-3 py-2 sm:ml-auto sm:max-w-sm">
             <IconBuilding2 className="w-4 h-4 text-[#F66B17] shrink-0" />
             <label
               htmlFor="worker-documents-site-select"
-              className="text-xs font-bold uppercase tracking-wider text-slate-500 cursor-pointer"
+              className="shrink-0 text-xs font-medium text-slate-500"
             >
               {tr('common.site_fa7955')}
             </label>
-            <span className="text-slate-300">|</span>
             <SmartNativeSelect
               id="worker-documents-site-select"
               value={siteId}
               onChange={(e) => setRequestedSite(e.target.value)}
-              className="border-0 bg-transparent py-0.5 pr-6 text-xs font-bold text-slate-800 focus:outline-none cursor-pointer"
+              className="min-w-0 border-0 bg-transparent py-1 pr-6 text-sm font-semibold text-slate-800 focus:outline-none focus-visible:ring-2 focus-visible:ring-orange-200"
             >
               {allowed.map((s) => (
                 <option key={s.id} value={s.id}>

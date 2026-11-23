@@ -13,7 +13,7 @@ export function WorkerDocumentAnalysisNotice({
   const unknown = tr('documents.notDetermined');
 
   return (
-    <div className="space-y-2 rounded-xl border border-slate-200 bg-white p-3 text-xs text-slate-700">
+    <div className="min-w-0 space-y-2 rounded-xl border border-slate-200 bg-white p-3 text-xs leading-6 text-slate-700 [overflow-wrap:anywhere]">
       <h4 className="font-bold">{tr('documents.aiAnalysis')}</h4>
       {analysis.status === 'ANALYZING' ? (
         <p>{tr('documents.aiAnalyzing')}</p>
@@ -30,7 +30,7 @@ export function WorkerDocumentAnalysisNotice({
                   : 'documents.aiInsufficient',
             )}
           </p>
-          <dl className="grid grid-cols-1 sm:grid-cols-[minmax(0,1fr)_minmax(0,1fr)] gap-x-3 gap-y-1 [&_dd]:break-words [&_dd]:min-w-0 [&_dt]:text-slate-500">
+          <dl className="grid min-w-0 grid-cols-1 gap-x-3 gap-y-1 @min-[480px]:grid-cols-[minmax(0,1fr)_minmax(0,1fr)] [&_dd]:min-w-0 [&_dt]:text-slate-500">
             <dt>{tr('documents.aiSelectedKind')}</dt>
             <dd>{tr('documents.' + kind)}</dd>
             <dt>{tr('documents.aiDetectedKind')}</dt>
