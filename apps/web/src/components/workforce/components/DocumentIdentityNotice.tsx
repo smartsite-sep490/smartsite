@@ -27,10 +27,10 @@ export function DocumentIdentityNotice({
   return (
     <div
       role="alert"
-      className="rounded-2xl border border-amber-300/90 bg-amber-50/80 p-3.5 sm:p-4 text-xs text-amber-900 shadow-2xs space-y-1.5"
+      className="min-w-0 space-y-1.5 rounded-xl border border-amber-200 bg-amber-50 p-3 text-xs leading-6 text-amber-900 [overflow-wrap:anywhere]"
     >
-      <div className="flex items-center gap-2 font-bold text-amber-950">
-        <IconAlertTriangle className="w-4 h-4 text-amber-600 shrink-0" />
+      <div className="flex items-start gap-2 font-semibold text-amber-950">
+        <IconAlertTriangle className="mt-1 h-4 w-4 shrink-0 text-amber-600" />
         <p>{tr('documents.identityMismatch')}</p>
       </div>
       <p className="font-semibold text-amber-900">

@@ -15,7 +15,7 @@ export function WorkerDocumentDateNotice({ check }: { check: WorkerDocumentDateC
   return (
     <div
       role="status"
-      className={`space-y-1 rounded-xl border p-3 text-xs ${check.status === 'MATCH' ? 'border-emerald-200 bg-emerald-50 text-emerald-800' : 'border-amber-200 bg-amber-50 text-amber-900'}`}
+      className={`min-w-0 space-y-1 rounded-xl border p-3 text-xs leading-6 [overflow-wrap:anywhere] ${check.status === 'MATCH' ? 'border-emerald-200 bg-emerald-50 text-emerald-800' : 'border-amber-200 bg-amber-50 text-amber-900'}`}
     >
       <p className="font-semibold">{tr(label)}</p>
       <p>

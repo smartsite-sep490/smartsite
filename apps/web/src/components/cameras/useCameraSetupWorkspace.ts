@@ -7,6 +7,7 @@ import { useManagementClient } from '../../features/auth/auth-session';
 import { deriveZonePpeCapabilities, getOpaqueTokenNonce } from '../ppe/zone-ppe-scope';
 import { buildCameraSetupTourSteps } from '../safety/safetyTaskTourModel';
 import { publishUpdatedSetupCamera, refreshCameraSetupCaches } from './camera-setup-cache';
+import { buildCameraSelectionSearch } from './camera-navigation';
 import type { CameraSetupOpenHandler, CameraSetupOpenKind } from './CameraSetupWorkflow';
 import { setupErrorStatus, useSetupCatalog } from './useSetupCatalog';
 
@@ -203,9 +204,17 @@ export function useCameraSetupWorkspace(apiUrl: string, session: SharedSession) 
       : undefined;
   if (returnCamera) returnParams.set('cameraId', returnCamera.id);
 
-  const canOpenMonitoring = session.user.roleAssignments.some(
-    (role) => role.role === 'SAFETY_OFFICER' && role.siteId === site?.id,
-  );
+  const isAccountActive =
+    !session.user.mustChangePassword &&
+    (!('isActive' in session.user) || (session.user as { isActive?: boolean }).isActive !== false);
+  const canOpenMonitoring =
+    isAccountActive &&
+    Boolean(site?.id) &&
+    session.user.roleAssignments.some(
+      (role) =>
+        (role.role === 'SAFETY_OFFICER' || role.role === 'SITE_MANAGER') &&
+        role.siteId === site?.id,
+    );
 
   const activeDialog =
     dialog &&
@@ -247,6 +256,20 @@ export function useCameraSetupWorkspace(apiUrl: string, session: SharedSession) 
     }
   };
 
+  const syncCameraSelection = (cameraId?: string, stripActionParams = false) => {
+    if (!site) {
+      return;
+    }
+    const nextParams = buildCameraSelectionSearch(
+      params.toString(),
+      { siteId: site.id, cameraId },
+      stripActionParams ? ['action', 'regionId'] : [],
+    );
+    if (nextParams.toString() !== params.toString()) {
+      setParams(nextParams, { replace: true });
+    }
+  };
+
   const syncActiveRegionCameraParam = (cameraId?: string, allowUnloaded = false) => {
     if (!site || !canManageCameras || !cameraId) {
       return;
@@ -278,7 +301,7 @@ export function useCameraSetupWorkspace(apiUrl: string, session: SharedSession) 
   const selectSite = (nextSiteId: string) => {
     close();
     setSelectedRegionCamera(null);
-    setParams({ siteId: nextSiteId });
+    setParams(buildCameraSelectionSearch('', { siteId: nextSiteId }));
   };
 
   const handleStatusUnauthorized = (targetSiteId: string) => {
@@ -361,6 +384,7 @@ export function useCameraSetupWorkspace(apiUrl: string, session: SharedSession) 
     selectSite,
     refreshCameras,
     publishCameraUpdate,
+    syncCameraSelection,
     syncActiveRegionCameraParam,
     handleStatusUnauthorized,
   };

@@ -5,7 +5,7 @@ import { useQuery } from '@tanstack/react-query';
 import type { ContractorTeamResponse } from '@smartsite/api-client';
 import { useWorkspace } from '../workspace/workspace-context';
 import { required, useCommand, useRequestId } from '../shared/data';
-import { Button, ErrorNotice, Field, Page, Pager, QueryState } from '../shared/ui';
+import { Button, ErrorNotice, Field, Hint, Page, Pager, QueryState } from '../shared/ui';
 import { useTranslation } from '../../i18n';
 import { IconChevronRight, IconUsers } from '../../components/common/Icons';
 import { colors } from '../../theme/colors';
@@ -30,6 +30,7 @@ export function TeamsScreen({
   const team = selectedTeam !== undefined ? selectedTeam : internalTeam;
   const setTeam = onSelectTeam ?? setInternalTeam;
   const [creating, setCreating] = useState(false);
+  const [archivedTeamName, setArchivedTeamName] = useState('');
 
   const query = useQuery({
     queryKey: [...queryKey, 'teams', search, status, offset],
@@ -49,6 +50,7 @@ export function TeamsScreen({
         teamId={team.id}
         standalone={!onSelectTeam}
         onBack={() => setTeam(null)}
+        onArchived={setArchivedTeamName}
       />
     );
 
@@ -61,6 +63,7 @@ export function TeamsScreen({
         </View>
         <ManagementLink label={t('teams.createTeam')} onPress={() => setCreating(true)} />
       </View>
+      {!!archivedTeamName && <Hint>{t('teamUi.archivedSuccess', { name: archivedTeamName })}</Hint>}
 
       <Field
         label={t('teams.searchTeam')}

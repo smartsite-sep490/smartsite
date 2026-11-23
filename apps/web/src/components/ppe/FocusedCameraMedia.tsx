@@ -1,4 +1,4 @@
-import { useContext, useEffect, useState } from 'react';
+import { useContext, useEffect, useMemo, useState } from 'react';
 import { QueryClientContext } from '@tanstack/react-query';
 import { useTranslation } from 'react-i18next';
 import type { SmartSiteManagementClient } from '@smartsite/api-client';
@@ -146,7 +146,11 @@ export function FocusedCameraMedia({
   const [zonesErrorStatus, setZonesErrorStatus] = useState<number | null>(null);
   const [mode, setMode] = useState<'ai' | 'live' | 'recorded'>('ai');
   const options = { ...scope, cameraId: camera.id, cameraExternalId: camera.externalId };
-  const snapshot = useScopedCameraPreview({ ...options, enabled: !aiPaused && mode === 'ai' });
+  // Live video uses only the scoped geometry metadata; person/PPE overlays stay on exact AI frames.
+  const snapshot = useScopedCameraPreview({
+    ...options,
+    enabled: !aiPaused && mode !== 'recorded',
+  });
   // These are requested transports, not asserted camera capabilities. Backend validates support.
   const raw = useScopedCameraMedia({
     ...options,
@@ -173,9 +177,31 @@ export function FocusedCameraMedia({
   const denied = [401, 403, 404].includes(effectiveErrorStatus ?? 0);
 
   const aiStatus =
-    snapshot.status ??
-    (snapshot.isLoading ? 'CONNECTING' : snapshot.preview ? 'LIVE' : 'UNAVAILABLE');
-  const detectionsCount = snapshot.preview?.frame?.detections?.length ?? 0;
+    mode !== 'ai'
+      ? present
+        ? 'LIVE'
+        : pending
+          ? 'CONNECTING'
+          : 'UNAVAILABLE'
+      : (snapshot.status ??
+        (snapshot.isLoading ? 'CONNECTING' : snapshot.preview ? 'LIVE' : 'UNAVAILABLE'));
+  const displayedAiPreview = !aiPaused && mode === 'ai' ? (snapshot.preview ?? null) : null;
+  const displayedAiSourceKind = !aiPaused && mode === 'ai' ? (snapshot.sourceKind ?? null) : null;
+  const displayedAiCapturedAt =
+    !aiPaused && mode === 'ai'
+      ? (snapshot.capturedAt ?? snapshot.preview?.frame?.capturedAt ?? null)
+      : null;
+  const liveGeometry = useMemo(() => {
+    const frame = snapshot.preview?.frame;
+    return snapshot.sourceKind === 'LIVE' && frame
+      ? {
+          cameraExternalId: frame.cameraExternalId,
+          sessionId: frame.sessionId,
+          zonePolygons: frame.zonePolygons,
+        }
+      : null;
+  }, [snapshot.sourceKind, snapshot.preview?.frame]);
+  const detectionsCount = mode === 'ai' ? (snapshot.preview?.frame?.detections?.length ?? 0) : 0;
   const isRawMode = !aiPaused && mode !== 'ai';
   const telemetry = resolveMonitorTelemetryState({
     isAiPaused: aiPaused,
@@ -200,13 +226,10 @@ export function FocusedCameraMedia({
           client: scope.client,
           token: scope.token,
         },
-        preview: !aiPaused && mode === 'ai' ? (snapshot.preview ?? null) : null,
+        preview: displayedAiPreview,
         status: aiPaused ? 'UNAVAILABLE' : pending ? 'CONNECTING' : aiStatus,
-        sourceKind: !aiPaused && mode === 'ai' ? (snapshot.sourceKind ?? null) : null,
-        capturedAt:
-          !aiPaused && mode === 'ai'
-            ? (snapshot.capturedAt ?? snapshot.preview?.frame?.capturedAt ?? null)
-            : null,
+        sourceKind: displayedAiSourceKind,
+        capturedAt: displayedAiCapturedAt,
         errorStatus: effectiveErrorStatus,
         receivedAt: Date.now(),
       },
@@ -224,9 +247,9 @@ export function FocusedCameraMedia({
     isRawMode,
     pending,
     aiStatus,
-    snapshot.preview,
-    snapshot.sourceKind,
-    snapshot.capturedAt,
+    displayedAiPreview,
+    displayedAiSourceKind,
+    displayedAiCapturedAt,
     effectiveErrorStatus,
     onAiSnapshotUpdate,
   ]);
@@ -384,7 +407,7 @@ export function FocusedCameraMedia({
           />
         )}
         {!aiPaused && mode === 'live' && (
-          <RawCameraMediaCanvas image={raw.image} frame={raw.frame} />
+          <RawCameraMediaCanvas image={raw.image} frame={raw.frame} geometry={liveGeometry} />
         )}
         {!aiPaused && mode === 'recorded' && recorded.videoUrl && (
           <video

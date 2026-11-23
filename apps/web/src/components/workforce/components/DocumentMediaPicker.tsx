@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useId, useRef, useState } from 'react';
 import type { DocumentImageQuality } from '@smartsite/api-client';
 import { useTranslation } from 'react-i18next';
 import { translate as tr } from '../../../i18n';
@@ -14,6 +14,8 @@ export function DocumentMediaPicker({
   allowPdf = true,
   referenceNationalId,
   hideHeader = false,
+  fieldError,
+  inputId,
 }: {
   label: string;
   file?: File;
@@ -23,11 +25,16 @@ export function DocumentMediaPicker({
   disabled?: boolean;
   allowPdf?: boolean;
   hideHeader?: boolean;
+  fieldError?: string;
+  inputId?: string;
 }) {
   useTranslation();
   const [pending, setPending] = useState(false);
   const [check, setCheck] = useState<DocumentImageQuality>();
   const [error, setError] = useState('');
+  const generatedId = useId();
+  const controlId = inputId ?? generatedId;
+  const visibleError = error || fieldError;
   const preview = useRef<HTMLImageElement>(null);
   useEffect(() => {
     if (!file?.type.startsWith('image/') || !preview.current) return;
@@ -58,29 +65,29 @@ export function DocumentMediaPicker({
   };
   return (
     <div
+      aria-busy={pending}
       className={
         hideHeader
           ? 'space-y-2'
-          : `group relative min-w-0 rounded-2xl border p-3 sm:p-4 transition-all duration-200 ${
-              error
+          : `group relative min-w-0 rounded-2xl border p-4 transition-colors ${
+              visibleError
                 ? 'border-red-300 bg-red-50/30'
                 : file
-                  ? 'border-emerald-300 bg-emerald-50/20'
-                  : 'border-slate-200/90 bg-white hover:border-slate-300 shadow-2xs'
+                  ? 'border-orange-200 bg-white'
+                  : 'border-slate-200 bg-white'
             }`
       }
     >
       {/* Header with Title & Status Badge */}
       {!hideHeader && (
-        <div className="flex items-center justify-between gap-2 mb-3">
-          <p className="text-xs font-bold uppercase tracking-wider text-slate-700 flex items-center gap-1.5">
-            <span className="w-1.5 h-1.5 rounded-full bg-[#F66B17]" />
+        <div className="mb-3 flex items-start justify-between gap-3">
+          <p className="text-sm font-semibold text-slate-800">
             <span>{label}</span>
           </p>
 
           {file ? (
-            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-emerald-100 text-emerald-800 text-[11px] font-bold">
-              ✓ {tr('documents.qualityAccepted')}
+            <span className="shrink-0 rounded-lg bg-orange-50 px-2 py-1 text-[11px] font-semibold text-orange-700">
+              1/1
             </span>
           ) : pending ? (
             <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-blue-100 text-blue-800 text-[11px] font-bold">
@@ -92,32 +99,48 @@ export function DocumentMediaPicker({
 
       {/* Upload Zone */}
       <div className="space-y-2">
-        <label className="block text-xs font-semibold text-slate-600 cursor-pointer">
-          {!hideHeader && (
-            <span className="mb-1.5 block">
-              {tr('documents.library')} - {label}
-            </span>
-          )}
+        <label
+          className={`relative flex min-h-28 min-w-0 flex-col items-center justify-center gap-2 rounded-xl border border-dashed border-slate-300 bg-slate-50/60 px-4 py-5 text-center transition-colors focus-within:border-orange-500 focus-within:ring-2 focus-within:ring-orange-100 ${disabled || pending ? 'cursor-wait opacity-60' : 'cursor-pointer hover:border-orange-400 hover:bg-orange-50/40'}`}
+        >
           <input
+            id={controlId}
+            aria-invalid={!!visibleError || undefined}
+            aria-describedby={visibleError ? `${controlId}-error` : undefined}
             aria-label={label}
             type="file"
             accept={allowPdf ? 'image/jpeg,image/png,application/pdf' : 'image/jpeg,image/png'}
             disabled={disabled || pending}
-            className="block w-full min-w-0 text-xs text-slate-500 file:mr-2.5 file:py-1.5 file:px-3 file:rounded-lg file:border-0 file:text-xs file:font-bold file:bg-orange-50 file:text-[#F66B17] hover:file:bg-orange-100 cursor-pointer rounded-xl border border-slate-200 bg-slate-50/70 p-1 focus:outline-none focus:border-[#F66B17] transition-all disabled:opacity-50"
+            className="sr-only"
             onChange={(e) => {
               const candidate = e.target.files?.[0];
               e.target.value = '';
               if (candidate) void select(candidate);
             }}
           />
+          <span
+            aria-hidden="true"
+            className="flex h-9 w-9 items-center justify-center rounded-xl border border-orange-100 bg-orange-50 text-xl font-medium text-orange-600"
+          >
+            ↑
+          </span>
+          <span className="text-xs font-semibold text-slate-700">
+            {tr(
+              pending
+                ? 'documents.checkingSupport'
+                : file
+                  ? 'documents.replaceFile'
+                  : 'documents.selectFile',
+            )}
+          </span>
+          <span className="text-[11px] leading-4 text-slate-500">
+            {tr(allowPdf ? 'documents.documentFileHint' : 'documents.imageFileHint')}
+          </span>
         </label>
 
         {/* File Accepted Notice */}
         {file && (
-          <p className="text-xs font-semibold text-emerald-700 flex items-center gap-1.5 break-all">
-            <span>
-              📎 {file.name} - {tr('documents.qualityAccepted')}
-            </span>
+          <p className="min-w-0 break-words rounded-lg bg-slate-50 px-3 py-2 text-xs font-medium text-slate-700 [overflow-wrap:anywhere]">
+            {file.name}
           </p>
         )}
 
@@ -131,8 +154,12 @@ export function DocumentMediaPicker({
         )}
         {/* Image Preview Thumbnail */}
         {file?.type.startsWith('image/') && (
-          <div className="relative mt-2 overflow-hidden rounded-xl border border-slate-200 bg-slate-50 p-1.5 flex items-center justify-center max-h-48">
-            <img ref={preview} alt={label} className="max-h-44 w-auto rounded-lg object-contain" />
+          <div className="mt-2 flex max-h-36 items-center justify-center overflow-hidden rounded-xl border border-slate-200 bg-slate-50 p-2">
+            <img
+              ref={preview}
+              alt={label}
+              className="max-h-32 max-w-full rounded-lg object-contain"
+            />
           </div>
         )}
 
@@ -148,12 +175,13 @@ export function DocumentMediaPicker({
         )}
 
         {/* Error Notice */}
-        {error && (
+        {visibleError && (
           <p
+            id={`${controlId}-error`}
             role="alert"
             className="text-xs font-bold text-red-700 bg-red-100/70 px-2.5 py-1.5 rounded-lg border border-red-200"
           >
-            {localizedError(error)}
+            {error ? localizedError(error) : fieldError}
           </p>
         )}
       </div>

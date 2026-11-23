@@ -19,6 +19,7 @@ import {
 import { useLogout, useCurrentUser } from '../../features/auth/auth-session';
 import { NotificationBell } from '../../features/notifications/NotificationBell';
 import { useTranslation } from 'react-i18next';
+import { buildCameraTabTarget } from '../cameras/camera-navigation';
 import { LanguageSwitcher } from '../../i18n/LanguageSwitcher';
 import { workspaceTabs } from '../../features/auth/workspace-access';
 import { getWorkforceTabs } from '../workforce/utils/workforce-tabs';
@@ -71,8 +72,9 @@ export function AppLayout({ currentTab: propCurrentTab, onSelectTab, children }:
   const handleNav = (tabId: string) => {
     if (onSelectTab) {
       onSelectTab(tabId as ActiveTab);
+      return;
     }
-    navigate(`/${tabId}`);
+    navigate(buildCameraTabTarget(location.pathname, location.search, tabId));
   };
 
   // useCurrentUser calls /auth/me using the live accessToken; works after hard refresh.

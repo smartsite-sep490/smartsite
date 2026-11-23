@@ -25,6 +25,7 @@ const PpeMonitorWorkspace = lazy(() =>
 );
 import { SafetyRouteBoundary } from './components/layout/SafetyRouteBoundary';
 import { CameraSetupBoundary } from './components/cameras/CameraSetupBoundary';
+import { buildCameraTabTarget } from './components/cameras/camera-navigation';
 import { DashboardView } from './components/dashboard/DashboardView';
 import { LandingPage } from './components/landing/LandingPage';
 import {
@@ -278,7 +279,6 @@ function ProtectedRoutes({ defaultAuthTab, alertsContext, onNavigate }: Protecte
           element={
             <SafetyRouteBoundary>
               <RestrictedZoneView
-                key={location.search}
                 linkedSiteId={incidentLink.get('siteId') ?? undefined}
                 linkedCameraId={incidentLink.get('cameraId') ?? undefined}
                 authenticatedSession={{ accessToken, user: currentUser.data! }}
@@ -327,6 +327,7 @@ function PublicOnlyRoute({
 export function App() {
   const { t } = useTranslation();
   const navigate = useNavigate();
+  const location = useLocation();
   const { accessToken, isSessionExpired, dismissSessionExpired } = useAuth();
   const sessionRestore = useRestoreSession(apiUrl);
   const { isLoading: isRestoringSession } = sessionRestore;
@@ -345,6 +346,10 @@ export function App() {
   const handleNavigate = (tab: ActiveTab, context?: AlertsNavigationContext) => {
     if (tab === 'incidents') {
       setAlertsContext(context);
+    }
+    if (!context) {
+      navigate(buildCameraTabTarget(location.pathname, location.search, tab));
+      return;
     }
     navigate(`/${tab}`);
   };

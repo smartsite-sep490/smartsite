@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import { cleanup, render, screen, fireEvent, waitFor, within } from '@testing-library/react';
-import { MemoryRouter } from 'react-router-dom';
+import { MemoryRouter, useLocation, useNavigate } from 'react-router-dom';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import {
   SmartSiteManagementClient,
@@ -96,11 +96,23 @@ afterEach(() => {
   vi.restoreAllMocks();
 });
 
-function mount(initialUrl = '/worker-documents') {
+function DocumentRouteProbe() {
+  const location = useLocation();
+  const navigate = useNavigate();
+  return (
+    <>
+      <output data-testid="document-url">{location.search}</output>
+      <button onClick={() => navigate(-1)}>Back to previous document site</button>
+    </>
+  );
+}
+
+function mount(initialUrl = '/worker-documents', probe = false) {
   return render(
     <QueryClientProvider client={cache}>
       <MemoryRouter initialEntries={[initialUrl]}>
         <WorkerDocumentsView apiUrl="https://api.example.test" />
+        {probe && <DocumentRouteProbe />}
       </MemoryRouter>
     </QueryClientProvider>,
   );
@@ -253,4 +265,36 @@ it('does not open another site when a legacy document link requests an unavailab
   expect((await screen.findByRole('alert')).textContent).toContain(tr('safetyUi.siteUnavailable'));
   expect(SmartSiteManagementClient.prototype.listWorkerCompliance).not.toHaveBeenCalled();
   expect(SmartSiteManagementClient.prototype.workerCompliance).not.toHaveBeenCalled();
+});
+
+it('keeps the new Safety header while switching sites through URL history', async () => {
+  user.roleAssignments.push({ role: 'SAFETY_OFFICER', siteId: 'site-b' });
+  vi.mocked(SmartSiteManagementClient.prototype.listSites).mockResolvedValue({
+    items: ['site-a', 'site-b'].map((id) => ({ id, code: id, name: id, createdAt: '' })),
+    total: 2,
+  });
+  mount('/worker-documents?siteId=site-a&workerId=worker-1', true);
+  await screen.findByText('card.jpg');
+  expect(screen.getByRole('heading', { name: tr('documents.workspaceTitle') })).toBeTruthy();
+  fireEvent.change(screen.getByLabelText(tr('common.site_fa7955')), {
+    target: { value: 'site-b' },
+  });
+  await waitFor(() =>
+    expect(screen.getByTestId('document-url').textContent).toBe('?siteId=site-b'),
+  );
+  await waitFor(() =>
+    expect(SmartSiteManagementClient.prototype.listWorkerCompliance).toHaveBeenLastCalledWith(
+      'synthetic-token',
+      'site-b',
+      expect.any(Object),
+    ),
+  );
+  fireEvent.click(screen.getByRole('button', { name: 'Back to previous document site' }));
+  await waitFor(() =>
+    expect(screen.getByTestId('document-url').textContent).toBe('?siteId=site-a&workerId=worker-1'),
+  );
+  expect((screen.getByLabelText(tr('common.site_fa7955')) as HTMLSelectElement).value).toBe(
+    'site-a',
+  );
+  expect(await screen.findByText('card.jpg')).toBeTruthy();
 });

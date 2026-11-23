@@ -34,6 +34,12 @@ The shared API client reads scoped host capabilities using
 existing authorized camera readers can inspect capabilities. Authentication is
 rechecked after the remote call. Draft/scope changes cancel pending tests.
 
+An active Site Manager or Safety Officer assigned to the exact Site can read
+camera monitoring metadata, live media, analyzed previews and observation-area
+context. Managers can open PPE/Zone monitoring directly after setup. This camera
+read permission does not grant Safety Officer case, evidence-archive, identity
+review or inbox actions. Admin alone does not grant operational camera access.
+
 USB webcams belong to the selected AI host; approved recorded videos are REPLAY;
 IP/RTSP cameras use a separate URL and credentials. This browser's camera is
 explicitly unsupported until media ingestion is implemented. Successful tests

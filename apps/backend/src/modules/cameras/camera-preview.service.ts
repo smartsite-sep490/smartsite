@@ -8,7 +8,7 @@ import { conflict, missing, uuid } from '../../common/configuration/commands.js'
 import { PublicHttpException } from '../../common/http/public-http-exception.js';
 import { CameraStatus } from '../../database/entities/enums.js';
 import { AuthService } from '../auth/auth.service.js';
-import { assertSafetySiteAccess } from '../safety/alerts/safety-alert-access.guard.js';
+import { assertCameraMonitoringSiteAccess } from './camera-monitoring-access.js';
 import { CameraConfigurationService } from './camera-configuration.service.js';
 
 export const CAMERA_PREVIEW_FETCH = Symbol('CAMERA_PREVIEW_FETCH');
@@ -81,7 +81,7 @@ export class CameraPreviewService implements OnModuleDestroy {
     if (this.shuttingDown) unavailable();
     const { user } = await this.auth.authenticate(token);
     if (this.shuttingDown) unavailable();
-    assertSafetySiteAccess(user, siteId);
+    assertCameraMonitoringSiteAccess(user, siteId);
   }
 
   private async camera(siteId: string, cameraId: string) {

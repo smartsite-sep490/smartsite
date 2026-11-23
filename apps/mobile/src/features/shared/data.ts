@@ -59,11 +59,16 @@ export function instant(value: string) {
 export function displayTime(value: string | null | undefined) {
   return value ? new Date(value).toLocaleString(uiLocale()) : tr('common.notRecorded');
 }
-export function displayShiftTime(value: string | null | undefined) {
+export function displayShiftTime(value: string | null | undefined, timezone?: string) {
   if (!value) return tr('common.notRecorded');
   const d = new Date(value);
   if (!Number.isFinite(+d)) return tr('common.notRecorded');
-  return d.toLocaleTimeString(uiLocale(), { hour: '2-digit', minute: '2-digit', hour12: false });
+  return d.toLocaleTimeString(uiLocale(), {
+    hour: '2-digit',
+    minute: '2-digit',
+    hour12: false,
+    ...(timezone ? { timeZone: timezone } : {}),
+  });
 }
 export function minutes(value: number | null | undefined) {
   return value === null || value === undefined
