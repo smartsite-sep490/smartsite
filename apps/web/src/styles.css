@@ -269,21 +269,41 @@ input::-webkit-credentials-auto-fill-button {
     gap: 0.75rem;
   }
   .workflow-list-items {
-    flex: 1;
+    --workflow-list-row-height: 5.25rem;
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+    flex: 0 1 auto;
+    height: calc(var(--workflow-list-row-height) * 5 + 2rem + 4px);
     min-height: 0;
     overflow-y: auto;
     overscroll-behavior: contain;
     scrollbar-gutter: stable;
   }
   .workflow-list-items > button {
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    gap: 0.125rem;
+    height: var(--workflow-list-row-height);
+    flex-shrink: 0;
     padding: 0.25rem 0.625rem;
     --tw-space-y-reverse: 0;
   }
   .workflow-list-items > button > :not(:last-child) {
-    margin-bottom: 0.125rem;
+    margin: 0;
   }
-  .workflow-list-items > button:not(:last-child) {
-    margin-bottom: 0.5rem;
+  .workflow-list-items > button {
+    margin: 0;
+  }
+  .workflow-alert-meta {
+    display: grid;
+    grid-template-columns: auto minmax(0, 1fr);
+    width: 100%;
+  }
+  .workflow-alert-time {
+    grid-column: 1 / -1;
+    grid-row: 2;
   }
   .workflow-list-items > button strong {
     font-size: 0.8125rem;
@@ -457,7 +477,7 @@ input::-webkit-credentials-auto-fill-button {
   .workflow-natural-page .workflow-list-pane {
     position: sticky;
     top: 5rem;
-    height: var(--workflow-list-height, calc(100dvh - 20rem));
+    height: auto;
     max-height: calc(100dvh - 6rem);
   }
   .workflow-natural-page .workflow-detail-pane {

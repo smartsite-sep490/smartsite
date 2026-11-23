@@ -78,14 +78,13 @@ for (const width of [1920, 1366, 1024])
     );
   });
 
-for (const [width, height, minimum] of [
-  [1366, 768, 4],
-  [1920, 1080, 5],
-])
+for (const [width, height] of [
+  [1024, 768],
+  [1366, 768],
+  [1920, 1080],
+] as const)
   for (const workspace of ['alerts', 'incidents', 'assigned'])
-    test(`compact ${workspace} list fits ${minimum} records at ${width}`, async ({
-      page,
-    }, info) => {
+    test(`fixed five ${workspace} records at ${width}`, async ({ page }, info) => {
       const fixture = createSafetyFixture();
       if (workspace === 'assigned') fixture.setRole('CONTRACTOR_REPRESENTATIVE');
       fixture.incidents[0]!.description = 'Synthetic detail for scrolling.\n\n'.repeat(30);
@@ -108,24 +107,33 @@ for (const [width, height, minimum] of [
             }).length;
           }),
         )
-        .toBeGreaterThanOrEqual(minimum);
+        .toBe(5);
+      const listHeight = await list.evaluate((el) => el.clientHeight);
+      const paneHeight = await page
+        .locator('.workflow-list-pane')
+        .evaluate((el) => el.clientHeight);
       await page.evaluate(() => window.scrollTo(0, 400));
       await expect
-        .poll(() =>
-          page
-            .locator('.workflow-list-pane')
-            .evaluate((el) => Math.abs(innerHeight - 16 - el.getBoundingClientRect().bottom)),
-        )
-        .toBeLessThan(3);
-      await page.setViewportSize({ width, height: height - 80 });
+        .poll(() => page.locator('.workflow-list-pane').evaluate((el) => el.clientHeight))
+        .toBe(paneHeight);
+      expect(await list.evaluate((el) => el.clientHeight)).toBe(listHeight);
       await expect
         .poll(() =>
           page
             .locator('.workflow-list-pane')
-            .evaluate((el) => Math.abs(innerHeight - 16 - el.getBoundingClientRect().bottom)),
+            .evaluate((el) => el.getBoundingClientRect().bottom <= innerHeight),
         )
-        .toBeLessThan(3);
-      await page.screenshot({ path: info.outputPath(`${workspace}-${width}-compact.png`) });
+        .toBe(true);
+      await page.setViewportSize({ width, height: height - 40 });
+      await expect.poll(() => list.evaluate((el) => el.clientHeight)).toBe(listHeight);
+      await list.evaluate((el) => el.scrollTo(0, 10000));
+      await expect(list.locator(':scope > button').last()).toBeVisible();
+      expect(await list.evaluate((el) => el.scrollTop)).toBeGreaterThan(0);
+      expect(await page.locator('.workflow-list-pane').evaluate((el) => el.clientHeight)).toBe(
+        paneHeight,
+      );
+      await list.evaluate((el) => el.scrollTo(0, 0));
+      await page.screenshot({ path: info.outputPath(`${workspace}-${width}-fixed-five.png`) });
     });
 
 for (const width of [1920, 1366, 1024, 390])
