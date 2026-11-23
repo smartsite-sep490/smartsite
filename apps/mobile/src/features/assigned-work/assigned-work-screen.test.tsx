@@ -10,6 +10,8 @@ import {
 } from '@smartsite/api-client';
 import { Attachments } from '../shared/uploads';
 import { AssignedWorkScreen } from './assigned-work-screen';
+import { translate as t } from '../../i18n';
+import { ScreenHeader } from '../../components/common/ScreenHeader';
 import type { useWorkspace } from '../workspace/workspace-context';
 vi.mock('expo-file-system', () => ({
   File: class {
@@ -96,6 +98,7 @@ async function mount(
   initialKind = 'checklist',
   initialId = 'checklist-a',
   initialActionId?: string,
+  onBack: () => void = () => {},
 ) {
   await act(async () => {
     root = create(
@@ -106,7 +109,7 @@ async function mount(
           initialId,
           initialKind,
           initialActionId,
-          onBack: () => {},
+          onBack,
         }),
       ),
     );
@@ -186,6 +189,82 @@ it('requires evidence for a passing criterion that requests it, without reportin
     root.root.findAll((n) => String(n.type) === 'Text' && n.props.accessibilityRole === 'alert')
       .length,
   ).toBeGreaterThan(0);
+});
+
+it('refreshes assigned checklists from the list and keeps other Contractor work out of the cards', async () => {
+  let description = detail.description;
+  const list = vi.spyOn(workspace.client, 'listSafetyChecklists').mockImplementation(async () => ({
+    items: [
+      { ...detail, description },
+      { ...detail, id: 'foreign', contractorId: 'other-contractor', description: 'Foreign work' },
+    ],
+    total: 2,
+  }));
+  await mount('checklist', '');
+  expect(buttons(t('assignedWork.openChecklist'))).toHaveLength(1);
+  expect(JSON.stringify(root.toJSON())).not.toContain('Foreign work');
+  description = 'Updated inspection from Safety';
+  await click(t('assignedWork.refresh'));
+  expect(list).toHaveBeenCalledWith(
+    'token',
+    'site-a',
+    expect.objectContaining({ assignedTo: 'rep' }),
+  );
+  expect(JSON.stringify(root.toJSON())).toContain(description);
+  await click(t('assignedWork.openChecklist'));
+  expect(buttons(t('assignedWork.startChecklist'))).toHaveLength(1);
+});
+
+it('keeps criterion answers and notes when sections are folded, then submits all criteria', async () => {
+  detail = {
+    ...detail,
+    status: 'IN_PROGRESS',
+    items: [
+      ...detail.items,
+      { id: 'item-b', position: 1, text: 'Inspect access route', evidenceRequired: false },
+    ],
+  };
+  const submit = vi
+    .spyOn(workspace.client, 'submitSafetyChecklist')
+    .mockResolvedValue({ resource: detail, replayed: false });
+  await mount();
+  await click('Chọn… ▾');
+  await act(async () =>
+    root.root
+      .findAll((n) => String(n.type) === 'Pressable' && n.props.accessibilityRole === 'radio')[0]!
+      .props.onPress(),
+  );
+  await act(async () =>
+    root.root
+      .findAll(
+        (n) =>
+          String(n.type) === 'TextInput' &&
+          n.props.accessibilityLabel === t('assignedWork.criterionNote'),
+      )[0]!
+      .props.onChangeText('Guardrail checked'),
+  );
+  await click(`${t('assignedWork.criterion', { number: 1 })} · ${t('assignedWork.pass')}`);
+  await click(t('assignedWork.criterion', { number: 2 }));
+  await click('Chọn… ▾');
+  await act(async () =>
+    root.root
+      .findAll((n) => String(n.type) === 'Pressable' && n.props.accessibilityRole === 'radio')
+      .at(-3)!
+      .props.onPress(),
+  );
+  await click(t('assignedWork.submitChecklist'));
+  expect(submit).toHaveBeenCalledWith(
+    'token',
+    'site-a',
+    'checklist-a',
+    expect.objectContaining({
+      results: [
+        { itemId: 'item-a', answer: 'PASS', note: 'Guardrail checked', fileIndexes: [] },
+        { itemId: 'item-b', answer: 'PASS', note: '', fileIndexes: [] },
+      ],
+    }),
+    [],
+  );
 });
 
 function incidentFixture(): IncidentDetailResponse {
@@ -279,7 +358,7 @@ it('starts corrective work, submits a versioned result and refreshes the final c
     status: 'CLOSED',
     actions: [{ ...incident.actions[0]!, status: 'CLOSED', version: 4 }],
   };
-  await click('Làm mới công việc khắc phục');
+  await click(t('assignedWork.refresh'));
   expect(renderedText()).toContain('Đã đóng');
   expect(buttons('Bắt đầu khắc phục')).toHaveLength(0);
   expect(buttons('Nộp kết quả cho cán bộ an toàn')).toHaveLength(0);
@@ -370,7 +449,7 @@ it('refreshes assigned incidents explicitly and reloads a fresh cache on foregro
     expect.objectContaining({ assignedTo: 'rep' }),
   );
   incident = { ...incident, title: 'Updated by Safety' };
-  await click('Làm mới công việc khắc phục');
+  await click(t('assignedWork.refresh'));
   expect(renderedText()).toContain('Updated by Safety');
   const count = list.mock.calls.length;
   await act(async () => {
@@ -480,3 +559,26 @@ it('releases the notification action when another assigned incident is opened', 
   expect(buttons('Bắt đầu khắc phục')).toHaveLength(1);
   expect(renderedText()).not.toContain('Lần bàn giao này không còn khả dụng.');
 });
+
+it.each(['checklist', 'incident'])(
+  'keeps one header Back button for %s and returns through the list before leaving assigned work',
+  async (kind) => {
+    const incident = incidentFixture();
+    vi.spyOn(workspace.client, 'getIncident').mockResolvedValue(incident);
+    vi.spyOn(workspace.client, 'listIncidents').mockResolvedValue({ items: [incident], total: 1 });
+    vi.spyOn(workspace.client, 'listSafetyChecklists').mockResolvedValue({
+      items: [detail],
+      total: 1,
+    });
+    const leave = vi.fn();
+    await mount(kind, kind === 'checklist' ? detail.id : incident.id, undefined, leave);
+    expect(root.root.findAllByType(ScreenHeader)).toHaveLength(1);
+    expect(buttons(t('common.back'))).toHaveLength(1);
+    await click(t('common.back'));
+    expect(leave).not.toHaveBeenCalled();
+    expect(root.root.findByType(ScreenHeader).props.title).toBe(t('assignedWork.title'));
+    expect(buttons(t('common.back'))).toHaveLength(1);
+    await click(t('common.back'));
+    expect(leave).toHaveBeenCalledTimes(1);
+  },
+);

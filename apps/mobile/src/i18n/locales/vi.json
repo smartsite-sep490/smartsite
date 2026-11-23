@@ -651,7 +651,7 @@
     "revokeWorker": "Thu hồi quyền Worker"
   },
   "assignedWork": {
-    "title": "Công việc an toàn được giao",
+    "title": "Công việc được giao",
     "noChecklists": "Không có danh mục kiểm tra an toàn nào được giao.",
     "startChecklist": "Bắt đầu kiểm tra",
     "submitChecklist": "Nộp báo cáo kiểm tra",
@@ -686,12 +686,19 @@
     "handedOver": "Đã chuyển giao:",
     "startAction": "Bắt đầu khắc phục",
     "actionResult": "Kết quả khắc phục",
-    "refresh": "Làm mới công việc khắc phục",
+    "refresh": "Tải lại công việc",
     "awaitingReview": "Đang chờ cán bộ an toàn xác minh.",
     "otherWorkOpen": "Công việc này đã đóng. Vụ việc còn công việc khác cần hoàn thành.",
     "submitToSafety": "Nộp kết quả cho cán bộ an toàn",
     "linkedHandover": "Lần bàn giao từ thông báo",
-    "handoverUnavailable": "Lần bàn giao này không còn khả dụng."
+    "handoverUnavailable": "Lần bàn giao này không còn khả dụng.",
+    "listHint": "Chọn công việc để xem và thực hiện.",
+    "startsAt": "Bắt đầu",
+    "criterion": "Tiêu chí {{number}}",
+    "sourceDetails": "Nguồn công việc & cảnh báo",
+    "checklistTab": "Kiểm tra",
+    "correctiveTab": "Khắc phục",
+    "count": "Số việc: {{count}}"
   },
   "qr": {
     "title": "QR dự phòng",
