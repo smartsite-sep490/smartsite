@@ -413,3 +413,33 @@ it.each([
     if (remainingHours > 0) expect(rendered).not.toContain('Vắng — đang chờ xử lý nghỉ');
   },
 );
+it('offers missing attendance from the board even when no attendance day exists', async () => {
+  vi.mocked(workspace.client.attendanceDays).mockResolvedValue({
+    items: [],
+    total: 0,
+    requests: [],
+    canRequest: true,
+    canReview: false,
+  });
+  vi.mocked(workspace.client.attendanceOverview).mockResolvedValue({
+    sessions: [],
+    corrections: [],
+    canRequestCorrection: true,
+    canReviewCorrection: false,
+    missingSchedules: [
+      {
+        scheduleId: 'missing',
+        workDate: today,
+        shiftName: 'Missing shift',
+        startsAt: `${today}T01:00:00Z`,
+        endsAt: `${today}T10:00:00Z`,
+      },
+    ],
+  });
+  await mount();
+  for (let attempt = 0; !buttons('Báo thiếu công').length && attempt < 40; attempt++)
+    await settle();
+  expect(buttons('Báo thiếu công')).toHaveLength(1);
+  await click('Báo thiếu công');
+  expect(JSON.stringify(root.toJSON())).toContain('Ca chưa có phiên quét cổng');
+});
