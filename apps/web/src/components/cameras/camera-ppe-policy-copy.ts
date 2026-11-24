@@ -1,4 +1,4 @@
-import type { PpeItem } from '@smartsite/contracts/ppe-items';
+import type { PPE_FAMILY_CATALOG, PpeFamily, PpeItem } from '@smartsite/contracts/ppe-items';
 import { registerFeatureCatalog } from '../../i18n/feature-catalog-registry';
 
 const en = {
@@ -49,11 +49,24 @@ const en = {
   'item.GLOVES': 'Gloves',
   'item.BOOTS': 'Boots',
   'item.GOGGLES': 'Goggles',
+  'item.MASK': 'Mask',
+  'item.FULL_BODY_HARNESS': 'Full-body harness',
+  'item.LANYARD_HOOK': 'Lanyard hook',
   requiredItemsGroup: 'Required PPE items',
   readinessCoreBadge: 'Core',
   readinessExperimentalBadge: 'Experimental',
   readinessGuidanceNote:
     'Hard hat, vest: baseline; gloves, boots, goggles: experimental. Saved changes apply once camera confirms.',
+  catalogNotSelectableHeading:
+    'Not selectable in rules yet ({{unsupportedCount}} of {{totalCount}} PPE types)',
+  catalogNotSelectableBadge: 'Not selectable',
+  catalogSemanticsPresentOnly: 'Presence only',
+  catalogSemanticsContractPending: 'Not configurable yet',
+  'catalogReason.NOT_IN_POLICY_CONTRACT': 'Cannot be selected as a required monitoring rule yet.',
+  'catalogReason.PRESENT_ONLY_SAFETY_BOUNDARY':
+    'Shows equipment presence only; does not confirm proper wearing or tie-off and cannot trigger automatic alerts.',
+  catalogBoundaryNote:
+    '{{totalCount}} PPE types in total: {{selectableCount}} can be selected for rules today, {{unsupportedCount}} are not selectable yet. Listing an item here does not mean the AI model is running or verified for it.',
   validationExplicitEmpty: 'Select at least one PPE item before saving this custom policy.',
   validationDisabledReasonRequired: 'Enter a reason for turning off PPE checks before saving.',
   validationDisabledReasonInvalid:
@@ -177,11 +190,24 @@ const vi: Record<keyof typeof en, string> = {
   'item.GLOVES': 'Găng tay',
   'item.BOOTS': 'Giày bảo hộ',
   'item.GOGGLES': 'Kính bảo hộ',
+  'item.MASK': 'Khẩu trang',
+  'item.FULL_BODY_HARNESS': 'Dây đai an toàn toàn thân',
+  'item.LANYARD_HOOK': 'Móc dây an toàn',
   requiredItemsGroup: 'Các hạng mục PPE bắt buộc',
   readinessCoreBadge: 'Cơ bản',
   readinessExperimentalBadge: 'Thử nghiệm',
   readinessGuidanceNote:
     'Mũ, áo: cơ bản; găng, giày, kính: thử nghiệm. Bản đã lưu chỉ áp dụng sau khi camera xác nhận.',
+  catalogNotSelectableHeading:
+    'Chưa hỗ trợ cấu hình trong quy tắc ({{unsupportedCount}} / {{totalCount}} loại PPE)',
+  catalogNotSelectableBadge: 'Chưa chọn được',
+  catalogSemanticsPresentOnly: 'Chỉ ghi nhận trang bị',
+  catalogSemanticsContractPending: 'Chưa hỗ trợ cấu hình',
+  'catalogReason.NOT_IN_POLICY_CONTRACT': 'Hiện chưa thể chọn làm yêu cầu giám sát tự động.',
+  'catalogReason.PRESENT_ONLY_SAFETY_BOUNDARY':
+    'Chỉ ghi nhận trang bị; không xác nhận đeo hoặc móc đúng và không tự động báo vi phạm.',
+  catalogBoundaryNote:
+    'Tổng {{totalCount}} loại PPE: hiện chọn được {{selectableCount}} loại cho quy tắc giám sát, {{unsupportedCount}} loại chưa thể chọn. Hiển thị tại đây không đồng nghĩa máy AI đã chạy đủ hoặc đạt độ chính xác.',
   validationExplicitEmpty: 'Chọn ít nhất một hạng mục PPE trước khi lưu chính sách tùy chỉnh.',
   validationDisabledReasonRequired: 'Nhập lý do tắt kiểm tra PPE trước khi lưu.',
   validationDisabledReasonInvalid:
@@ -257,6 +283,11 @@ const vi: Record<keyof typeof en, string> = {
 
 export type CameraPpeCopyKey = `cameraPpe.${keyof typeof en}`;
 
+export type PpeCatalogUnsupportedReasonCode = Exclude<
+  (typeof PPE_FAMILY_CATALOG)[number]['unsupportedReasonCode'],
+  null
+>;
+
 export const PPE_ITEM_LABEL_KEY: Record<PpeItem, CameraPpeCopyKey> = {
   HARD_HAT: 'cameraPpe.item.HARD_HAT',
   SAFETY_VEST: 'cameraPpe.item.SAFETY_VEST',
@@ -264,6 +295,19 @@ export const PPE_ITEM_LABEL_KEY: Record<PpeItem, CameraPpeCopyKey> = {
   BOOTS: 'cameraPpe.item.BOOTS',
   GOGGLES: 'cameraPpe.item.GOGGLES',
 };
+
+export const PPE_FAMILY_LABEL_KEY: Record<PpeFamily, CameraPpeCopyKey> = {
+  ...PPE_ITEM_LABEL_KEY,
+  MASK: 'cameraPpe.item.MASK',
+  FULL_BODY_HARNESS: 'cameraPpe.item.FULL_BODY_HARNESS',
+  LANYARD_HOOK: 'cameraPpe.item.LANYARD_HOOK',
+};
+
+export const PPE_UNSUPPORTED_REASON_KEY: Record<PpeCatalogUnsupportedReasonCode, CameraPpeCopyKey> =
+  {
+    NOT_IN_POLICY_CONTRACT: 'cameraPpe.catalogReason.NOT_IN_POLICY_CONTRACT',
+    PRESENT_ONLY_SAFETY_BOUNDARY: 'cameraPpe.catalogReason.PRESENT_ONLY_SAFETY_BOUNDARY',
+  };
 
 const CORE_BASELINE_PPE_ITEMS: ReadonlySet<PpeItem> = new Set<PpeItem>(['HARD_HAT', 'SAFETY_VEST']);
 

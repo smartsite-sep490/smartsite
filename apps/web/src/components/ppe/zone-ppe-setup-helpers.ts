@@ -13,6 +13,12 @@ export function formatPpeLabel(item: string, t: (key: ZonePpeSetupCopyKey) => st
       return t('zoneSetup.ppe.BOOTS');
     case 'GOGGLES':
       return t('zoneSetup.ppe.GOGGLES');
+    case 'MASK':
+      return t('zoneSetup.ppe.MASK');
+    case 'FULL_BODY_HARNESS':
+      return t('zoneSetup.ppe.FULL_BODY_HARNESS');
+    case 'LANYARD_HOOK':
+      return t('zoneSetup.ppe.LANYARD_HOOK');
     default:
       return item;
   }

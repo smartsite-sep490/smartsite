@@ -10,7 +10,7 @@ import {
 import { parseCameraObservationZones } from '@smartsite/contracts/camera-observation-zones';
 import { parseCameraPpePolicy } from '@smartsite/contracts/camera-ppe-policy';
 import type { CameraResponse } from '@smartsite/contracts/management';
-import { PPE_ITEMS, type PpeItem } from '@smartsite/contracts/ppe-items';
+import { PPE_FAMILY_CATALOG, type PpeItem } from '@smartsite/contracts/ppe-items';
 import { SAFETY_NAMESPACE } from '../../i18n/runtime';
 import { CAMERA_BUTTON_STYLES, CAMERA_FIELD_STYLES } from './camera-dialog-styles';
 import {
@@ -27,7 +27,9 @@ import {
   type CameraApplicationStatusContext,
 } from './useCameraApplicationStatus';
 import {
+  PPE_FAMILY_LABEL_KEY,
   PPE_ITEM_LABEL_KEY,
+  PPE_UNSUPPORTED_REASON_KEY,
   isCoreBaselinePpeItem,
   registerCameraPpePolicyCopy,
   type CameraPpeCopyKey,
@@ -64,6 +66,9 @@ export interface CameraPpeContext {
 }
 
 const empty: PpePolicyDraft = { mode: '' };
+
+const SELECTABLE_PPE_CATALOG = PPE_FAMILY_CATALOG.filter((entry) => entry.policySelectable);
+const NON_SELECTABLE_PPE_CATALOG = PPE_FAMILY_CATALOG.filter((entry) => !entry.policySelectable);
 
 function readHttpStatus(error: unknown): number | undefined {
   if (error instanceof ApiError && typeof error.status === 'number') return error.status;
@@ -191,7 +196,7 @@ export function PolicyFields({
             aria-describedby={explicitGroupDescribedBy}
             className="flex flex-wrap gap-2 min-w-0"
           >
-            {PPE_ITEMS.map((item) => {
+            {SELECTABLE_PPE_CATALOG.map(({ item }) => {
               const isCore = isCoreBaselinePpeItem(item);
               const itemBadgeId = `${fieldId}-badge-${item.toLowerCase()}`;
               const itemDescribedBy = [
@@ -262,6 +267,61 @@ export function PolicyFields({
             >
               {t('cameraPpe.validationExplicitEmpty')}
             </p>
+          )}
+          {NON_SELECTABLE_PPE_CATALOG.length > 0 && (
+            <div
+              data-testid="ppe-catalog-not-selectable"
+              className="grid gap-2 rounded-xl border border-dashed border-slate-300 bg-slate-50/80 p-3 min-w-0"
+            >
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <p className="text-xs font-semibold text-slate-700 break-words">
+                  {t('cameraPpe.catalogNotSelectableHeading', {
+                    unsupportedCount: NON_SELECTABLE_PPE_CATALOG.length,
+                    totalCount: PPE_FAMILY_CATALOG.length,
+                  })}
+                </p>
+              </div>
+              <ul className="grid gap-2 min-w-0">
+                {NON_SELECTABLE_PPE_CATALOG.map((entry) => (
+                  <li
+                    key={entry.item}
+                    data-ppe-family={entry.item}
+                    data-unsupported-reason={entry.unsupportedReasonCode}
+                    data-observation-semantics={entry.observationSemantics}
+                    className="grid gap-1 rounded-lg border border-slate-200/90 bg-white/80 p-2.5 min-w-0"
+                  >
+                    <div className="flex flex-wrap items-center gap-1.5 min-w-0">
+                      <span className="text-sm font-semibold text-slate-700 break-words">
+                        {t(PPE_FAMILY_LABEL_KEY[entry.item])}
+                      </span>
+                      <span className="inline-flex items-center rounded-full border border-slate-200 bg-slate-100 px-2 py-0.5 text-[11px] font-medium text-slate-600">
+                        {t('cameraPpe.catalogNotSelectableBadge')}
+                      </span>
+                      <span className="inline-flex items-center rounded-md bg-amber-50 px-1.5 py-0.5 text-[11px] font-medium text-amber-900 border border-amber-200/80">
+                        {t(
+                          entry.observationSemantics === 'PRESENT_ONLY'
+                            ? 'cameraPpe.catalogSemanticsPresentOnly'
+                            : 'cameraPpe.catalogSemanticsContractPending',
+                        )}
+                      </span>
+                    </div>
+                    <p className="text-xs leading-relaxed text-slate-600 break-words">
+                      {t(PPE_UNSUPPORTED_REASON_KEY[entry.unsupportedReasonCode])}
+                    </p>
+                  </li>
+                ))}
+              </ul>
+              <p
+                data-testid="ppe-catalog-boundary-note"
+                className="text-xs leading-relaxed text-slate-600 break-words"
+              >
+                {t('cameraPpe.catalogBoundaryNote', {
+                  totalCount: PPE_FAMILY_CATALOG.length,
+                  selectableCount: SELECTABLE_PPE_CATALOG.length,
+                  unsupportedCount: NON_SELECTABLE_PPE_CATALOG.length,
+                })}
+              </p>
+            </div>
           )}
         </div>
       )}
