@@ -13,7 +13,6 @@ import { teamText } from '../../team-attendance/team-attendance-copy';
 import {
   IconCheckCircle2,
   IconShield,
-  IconUsers,
   IconAlertCircle,
   IconAlertTriangle,
   IconUser,
@@ -170,7 +169,10 @@ export function GateAbsenceReviewCard({
             )}
           </div>
         ) : isConflicted ? (
-          <div role="alert" className="p-3 rounded-xl bg-rose-50 border border-rose-200 text-rose-800 text-xs font-medium flex items-center gap-2">
+          <div
+            role="alert"
+            className="p-3 rounded-xl bg-rose-50 border border-rose-200 text-rose-800 text-xs font-medium flex items-center gap-2"
+          >
             <IconAlertTriangle className="w-4 h-4 text-rose-600 shrink-0" />
             <span>{teamText('teamWeb.absenceConflict')}</span>
           </div>
@@ -233,7 +235,10 @@ export function GateAbsenceReviewCard({
                 </div>
 
                 {changed && (
-                  <div role="alert" className="flex items-center justify-between p-3 rounded-xl bg-amber-50 border border-amber-200 text-xs text-amber-800">
+                  <div
+                    role="alert"
+                    className="flex items-center justify-between p-3 rounded-xl bg-amber-50 border border-amber-200 text-xs text-amber-800"
+                  >
                     <span>{teamText('teamWeb.absenceChanged')}</span>
                     <Button
                       variant="outline"

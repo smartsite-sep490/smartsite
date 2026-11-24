@@ -221,7 +221,10 @@ export function ZoneAttendanceReviewCard({
         ) : (
           <div className="space-y-3 pt-1">
             {isConflicted && (
-              <div role="alert" className="p-3 rounded-xl bg-rose-50 border border-rose-200 text-rose-800 text-xs font-medium flex items-center gap-2">
+              <div
+                role="alert"
+                className="p-3 rounded-xl bg-rose-50 border border-rose-200 text-rose-800 text-xs font-medium flex items-center gap-2"
+              >
                 <IconAlertTriangle className="w-4 h-4 text-rose-600 shrink-0" />
                 <span>{teamText('teamWeb.zoneConflict')}</span>
               </div>
@@ -284,7 +287,10 @@ export function ZoneAttendanceReviewCard({
                 </div>
 
                 {changed && (
-                  <div role="alert" className="flex items-center justify-between p-3 rounded-xl bg-amber-50 border border-amber-200 text-xs text-amber-800">
+                  <div
+                    role="alert"
+                    className="flex items-center justify-between p-3 rounded-xl bg-amber-50 border border-amber-200 text-xs text-amber-800"
+                  >
                     <span>{teamText('teamWeb.zoneChanged')}</span>
                     <Button
                       variant="outline"

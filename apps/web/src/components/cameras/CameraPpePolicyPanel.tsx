@@ -10,7 +10,7 @@ import {
 import { parseCameraObservationZones } from '@smartsite/contracts/camera-observation-zones';
 import { parseCameraPpePolicy } from '@smartsite/contracts/camera-ppe-policy';
 import type { CameraResponse } from '@smartsite/contracts/management';
-import { PPE_ITEMS, type PpeItem } from '@smartsite/contracts/ppe-items';
+import { PPE_FAMILY_CATALOG, type PpeItem } from '@smartsite/contracts/ppe-items';
 import { SAFETY_NAMESPACE } from '../../i18n/runtime';
 import { CAMERA_BUTTON_STYLES, CAMERA_FIELD_STYLES } from './camera-dialog-styles';
 import {
@@ -27,7 +27,9 @@ import {
   type CameraApplicationStatusContext,
 } from './useCameraApplicationStatus';
 import {
+  PPE_FAMILY_LABEL_KEY,
   PPE_ITEM_LABEL_KEY,
+  PPE_UNSUPPORTED_REASON_KEY,
   isCoreBaselinePpeItem,
   registerCameraPpePolicyCopy,
   type CameraPpeCopyKey,
@@ -64,6 +66,9 @@ export interface CameraPpeContext {
 }
 
 const empty: PpePolicyDraft = { mode: '' };
+
+const SELECTABLE_PPE_CATALOG = PPE_FAMILY_CATALOG.filter((entry) => entry.policySelectable);
+const NON_SELECTABLE_PPE_CATALOG = PPE_FAMILY_CATALOG.filter((entry) => !entry.policySelectable);
 
 function readHttpStatus(error: unknown): number | undefined {
   if (error instanceof ApiError && typeof error.status === 'number') return error.status;
@@ -143,10 +148,10 @@ export function PolicyFields({
   return (
     <fieldset
       aria-describedby={activeFieldsetErrorId}
-      className="grid gap-3 rounded-xl border border-slate-200 bg-slate-50/40 p-3.5 min-w-0"
+      className="grid gap-2.5 rounded-xl border border-slate-200 bg-white p-3 min-w-0"
     >
-      <legend className="px-1 text-sm font-semibold text-slate-900">{label}</legend>
-      <label className="grid gap-1 text-sm font-medium text-slate-800">
+      <legend className="px-1 text-xs font-semibold text-slate-600">{label}</legend>
+      <label className="grid gap-1 text-xs font-semibold text-slate-700">
         <span>{t('cameraPpe.mode')}</span>
         <SmartNativeSelect
           className={CAMERA_FIELD_STYLES.input}
@@ -189,9 +194,9 @@ export function PolicyFields({
             role="group"
             aria-label={t('cameraPpe.requiredItemsGroup')}
             aria-describedby={explicitGroupDescribedBy}
-            className="flex flex-wrap gap-2 min-w-0"
+            className="flex flex-wrap gap-1.5 min-w-0"
           >
-            {PPE_ITEMS.map((item) => {
+            {SELECTABLE_PPE_CATALOG.map(({ item }) => {
               const isCore = isCoreBaselinePpeItem(item);
               const itemBadgeId = `${fieldId}-badge-${item.toLowerCase()}`;
               const itemDescribedBy = [
@@ -205,9 +210,9 @@ export function PolicyFields({
                 <div
                   key={item}
                   data-readiness-tier={isCore ? 'core' : 'experimental'}
-                  className="inline-flex min-h-9 flex-wrap items-center gap-2 rounded-xl border border-slate-200 bg-white px-3 py-1.5 min-w-0"
+                  className="inline-flex min-h-8 flex-wrap items-center gap-1.5 rounded-lg border border-slate-200 bg-slate-50/40 px-2.5 py-1 min-w-0"
                 >
-                  <label className="inline-flex items-center gap-2 text-sm font-medium text-slate-800 cursor-pointer">
+                  <label className="inline-flex items-center gap-1.5 text-xs sm:text-sm font-medium text-slate-800 cursor-pointer">
                     <input
                       type="checkbox"
                       className="h-4 w-4 rounded border-slate-300"
@@ -250,7 +255,7 @@ export function PolicyFields({
           <p
             id={readinessGuidanceId}
             data-testid="ppe-readiness-guidance"
-            className="text-sm leading-relaxed text-slate-600 break-words"
+            className="text-xs leading-relaxed text-slate-600 break-words"
           >
             {t('cameraPpe.readinessGuidanceNote')}
           </p>
@@ -262,6 +267,69 @@ export function PolicyFields({
             >
               {t('cameraPpe.validationExplicitEmpty')}
             </p>
+          )}
+          {NON_SELECTABLE_PPE_CATALOG.length > 0 && (
+            <details
+              data-testid="ppe-catalog-not-selectable"
+              className="group min-w-0 rounded-lg border border-dashed border-slate-300 bg-slate-50/70 px-3 py-2 text-xs text-slate-600"
+            >
+              <summary className="flex cursor-pointer list-none items-center justify-between gap-2 font-medium text-slate-700 hover:text-slate-950 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#0F172A]">
+                <span className="min-w-0 break-words">
+                  {t('cameraPpe.catalogUnsupportedSummary', {
+                    unsupportedCount: NON_SELECTABLE_PPE_CATALOG.length,
+                    totalCount: PPE_FAMILY_CATALOG.length,
+                    names: NON_SELECTABLE_PPE_CATALOG.map((entry) =>
+                      t(PPE_FAMILY_LABEL_KEY[entry.item]),
+                    ).join(', '),
+                  })}
+                </span>
+                <span
+                  aria-hidden="true"
+                  className="shrink-0 text-xs text-slate-500 transition-transform duration-150 group-open:rotate-180"
+                >
+                  ▾
+                </span>
+              </summary>
+              <div className="mt-2 space-y-2 border-t border-slate-200/80 pt-2">
+                <ul className="space-y-1.5">
+                  {NON_SELECTABLE_PPE_CATALOG.map((entry) => (
+                    <li
+                      key={entry.item}
+                      data-ppe-family={entry.item}
+                      data-unsupported-reason={entry.unsupportedReasonCode}
+                      data-observation-semantics={entry.observationSemantics}
+                      className="rounded-md border border-slate-200 bg-white px-2.5 py-1.5 space-y-0.5"
+                    >
+                      <div className="flex flex-wrap items-center gap-1.5">
+                        <span className="font-semibold text-slate-800">
+                          {t(PPE_FAMILY_LABEL_KEY[entry.item])}
+                        </span>
+                        <span className="rounded bg-amber-50 border border-amber-200/80 px-1.5 py-0.5 text-[11px] font-medium text-amber-900">
+                          {t(
+                            entry.observationSemantics === 'PRESENT_ONLY'
+                              ? 'cameraPpe.catalogSemanticsPresentOnly'
+                              : 'cameraPpe.catalogSemanticsContractPending',
+                          )}
+                        </span>
+                      </div>
+                      <p className="text-xs leading-snug text-slate-600 break-words">
+                        {t(PPE_UNSUPPORTED_REASON_KEY[entry.unsupportedReasonCode])}
+                      </p>
+                    </li>
+                  ))}
+                </ul>
+                <p
+                  data-testid="ppe-catalog-boundary-note"
+                  className="text-xs leading-snug text-slate-500 break-words"
+                >
+                  {t('cameraPpe.catalogBoundaryNote', {
+                    totalCount: PPE_FAMILY_CATALOG.length,
+                    selectableCount: SELECTABLE_PPE_CATALOG.length,
+                    unsupportedCount: NON_SELECTABLE_PPE_CATALOG.length,
+                  })}
+                </p>
+              </div>
+            </details>
           )}
         </div>
       )}
@@ -348,7 +416,7 @@ export function CameraPpePolicyPanel({
       data-tour-anchor="camera-setup-ppe-policy"
       className={
         embeddedInTab
-          ? 'rounded-xl border border-slate-200 bg-white p-4 min-w-0'
+          ? 'rounded-xl border border-slate-200 bg-white p-3.5 min-w-0'
           : 'rounded-xl border border-slate-200 bg-white p-4 sm:p-5 min-w-0'
       }
     >
@@ -857,7 +925,7 @@ function PolicyEditor({
   return (
     <div
       className={
-        embeddedInTab ? 'mt-2.5 grid gap-3 text-sm min-w-0' : 'mt-4 grid gap-4 text-sm min-w-0'
+        embeddedInTab ? 'mt-2 grid gap-2.5 text-sm min-w-0' : 'mt-4 grid gap-4 text-sm min-w-0'
       }
     >
       {activeDenialStatus !== null ? (
@@ -899,19 +967,45 @@ function PolicyEditor({
         </p>
       ) : (
         <>
-          <SavedVsAppliedBanner
-            compact={embeddedInTab}
-            state={savedVsApplied}
-            onRefreshStatus={
-              applicationStatus.canQuery
-                ? () => {
-                    void applicationStatus.query.refetch();
-                  }
-                : undefined
+          <div
+            className={
+              embeddedInTab ? 'flex flex-wrap items-center justify-between gap-2' : 'grid gap-2.5'
             }
-            isRefreshingStatus={applicationStatus.query.isFetching}
-            onOpenApply={onOpenApply}
-          />
+          >
+            <div className="min-w-0 flex-1">
+              <SavedVsAppliedBanner
+                compact={embeddedInTab}
+                state={savedVsApplied}
+                onRefreshStatus={
+                  applicationStatus.canQuery
+                    ? () => {
+                        void applicationStatus.query.refetch();
+                      }
+                    : undefined
+                }
+                isRefreshingStatus={applicationStatus.query.isFetching}
+                onOpenApply={onOpenApply}
+              />
+            </div>
+            <details
+              data-testid="camera-ppe-capability-note"
+              className="group min-w-0 rounded-lg border border-slate-200 bg-slate-50/50 px-2.5 py-1.5 text-xs text-slate-600"
+            >
+              <summary className="inline-flex cursor-pointer list-none items-center gap-1 font-medium text-slate-700 hover:text-slate-950 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#0F172A]">
+                <span>{t('cameraPpe.capabilityNoteSummary')}</span>
+                <span
+                  aria-hidden="true"
+                  className="text-xs text-slate-400 transition-transform duration-150 group-open:rotate-180"
+                >
+                  ▾
+                </span>
+              </summary>
+              <div className="mt-1.5 max-w-md space-y-1 leading-relaxed">
+                <p>{t('cameraPpe.capabilityTruthNote')}</p>
+                <p>{t('cameraPpe.modelCapabilityDistinction')}</p>
+              </div>
+            </details>
+          </div>
           {((initial && applicationStatus.verifiedPayload?.status.viewValidity === 'UNAVAILABLE') ||
             applicationStatus.verifiedPayload?.status.viewValidity === 'NEEDS_REVALIDATION') && (
             <div
@@ -939,20 +1033,8 @@ function PolicyEditor({
             </div>
           )}
 
-          <div
-            data-testid="camera-ppe-capability-note"
-            className={
-              embeddedInTab
-                ? 'rounded-lg border border-slate-200 bg-slate-50/50 px-3 py-2 text-xs leading-relaxed text-slate-600 space-y-0.5'
-                : 'rounded-xl border border-slate-200 bg-slate-50/50 px-3.5 py-2.5 text-sm leading-relaxed text-slate-600 space-y-1'
-            }
-          >
-            <p>{t('cameraPpe.capabilityTruthNote')}</p>
-            <p className="text-xs text-slate-600">{t('cameraPpe.modelCapabilityDistinction')}</p>
-          </div>
-
-          <div className="grid grid-cols-1 gap-4 xl:grid-cols-[minmax(0,1fr)_minmax(21rem,1fr)] items-start">
-            <div className="space-y-4 min-w-0">
+          <div className="grid grid-cols-1 gap-3 xl:grid-cols-[minmax(0,0.9fr)_minmax(21rem,1.1fr)] items-start">
+            <div className="space-y-3 min-w-0">
               {camera.data && (
                 <CameraDefaultSummaryCard
                   cameraSaved={camera.data}
@@ -980,7 +1062,7 @@ function PolicyEditor({
               />
             </div>
 
-            <div className="rounded-xl border border-slate-200 bg-slate-50/40 p-4 space-y-3.5 min-w-0">
+            <div className="rounded-xl border border-slate-200 bg-slate-50/40 p-3 space-y-2.5 min-w-0">
               <div className="flex flex-wrap items-center justify-between gap-2">
                 <div className="flex flex-wrap items-center gap-2">
                   <h4 className="text-sm font-semibold text-slate-950">
@@ -1019,7 +1101,7 @@ function PolicyEditor({
               )}
 
               {!initial && (
-                <label className="grid gap-1.5 text-sm font-semibold text-slate-800">
+                <label className="grid gap-1 text-xs font-semibold text-slate-700">
                   <span>{t('cameraPpe.target')}</span>
                   <SmartNativeSelect
                     ref={selectRef}

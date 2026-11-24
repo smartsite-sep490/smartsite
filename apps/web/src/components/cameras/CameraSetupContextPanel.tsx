@@ -32,7 +32,7 @@ const en = {
   'cameraSetup.scopeReadOnlyReason':
     'Read-only catalog scope: only the assigned Site Manager can register cameras, change status, or edit Zone and region policies.',
   'cameraSetup.scopeManagerReason':
-    'Site Manager scope: edit Zones, cameras, and regions directly. Live monitoring views require Safety Officer or Admin access.',
+    'Site Manager scope: edit Zones, cameras, and regions directly, and view monitoring feeds for your assigned Site. Safety case review and alert inbox actions remain Safety Officer responsibilities.',
   'cameraSetup.revisionLabel': 'Saved config version',
   'cameraSetup.savedConfigVersionStatus':
     'Saved config version v{{version}}; worker application status unavailable.',
@@ -67,12 +67,11 @@ const en = {
   'cameraSetup.selectCameraBtn': 'Select {{code}}',
   'cameraSetup.selectedCameraBtn': 'Selected {{code}}',
   'cameraSetup.technicalSourceDetails': 'Technical source details',
-  'cameraSetup.disabledStageHeading':
-    'Reference image & region stage unavailable while camera is disabled',
+  'cameraSetup.disabledStageHeading': 'Camera is disabled',
   'cameraSetup.disabledStageBody':
-    '{{name}} ({{code}}) is saved as Disabled (v{{version}}). No live or 5-minute reference frame is requested while disabled. Enable the camera in Manage first, then open Edit observation regions.',
+    'Test a video source below, or enable {{code}} (v{{version}}) to draw areas and run AI.',
   'cameraSetup.disabledStageReadOnlyBody':
-    '{{name}} ({{code}}) is saved as Disabled (v{{version}}). Only the assigned Site Manager can enable this camera before reference frames or observation regions can be verified.',
+    '{{name}} ({{code}}, v{{version}}) is disabled. Only the Site Manager can enable it.',
   'cameraSetup.disabledStageAction': 'Enable camera in settings ({{code}})',
 };
 
@@ -94,7 +93,7 @@ const vi: Record<keyof typeof en, string> = {
   'cameraSetup.scopeReadOnlyReason':
     'Phạm vi xem danh mục: chỉ Quản lý công trường được phân công mới được đăng ký camera, đổi trạng thái hoặc sửa khu vực và vùng quan sát.',
   'cameraSetup.scopeManagerReason':
-    'Phạm vi Quản lý công trường: sửa trực tiếp khu vực, camera và vùng quan sát. Màn hình giám sát trực tiếp yêu cầu quyền Cán bộ an toàn hoặc Quản trị viên.',
+    'Phạm vi Quản lý công trường: sửa trực tiếp khu vực, camera và vùng quan sát, đồng thời xem luồng giám sát của công trường được phân công. Xử lý hồ sơ an toàn và hộp thư cảnh báo thuộc quyền Cán bộ an toàn.',
   'cameraSetup.revisionLabel': 'Phiên bản cấu hình đã lưu',
   'cameraSetup.savedConfigVersionStatus':
     'Phiên bản cấu hình đã lưu v{{version}}; chưa có trạng thái áp dụng của worker.',
@@ -129,12 +128,11 @@ const vi: Record<keyof typeof en, string> = {
   'cameraSetup.selectCameraBtn': 'Chọn {{code}}',
   'cameraSetup.selectedCameraBtn': 'Đang chọn {{code}}',
   'cameraSetup.technicalSourceDetails': 'Chi tiết nguồn kỹ thuật',
-  'cameraSetup.disabledStageHeading':
-    'Khung tham chiếu & vùng quan sát tạm ngưng khi camera đang tắt',
+  'cameraSetup.disabledStageHeading': 'Camera đang tắt',
   'cameraSetup.disabledStageBody':
-    '{{name}} ({{code}}) đang lưu ở trạng thái Tắt (v{{version}}). Hệ thống không lấy khung hình trực tiếp hay ảnh tham chiếu 5 phút khi đang tắt. Hãy bật camera trong Quản lý trước rồi mở Sửa vùng quan sát.',
+    'Có thể kiểm tra nguồn hình bên dưới, hoặc bật {{code}} (v{{version}}) để vẽ vùng và chạy AI.',
   'cameraSetup.disabledStageReadOnlyBody':
-    '{{name}} ({{code}}) đang lưu ở trạng thái Tắt (v{{version}}). Chỉ Quản lý công trường được phân công mới có thể bật camera trước khi kiểm tra ảnh tham chiếu hoặc vùng quan sát.',
+    '{{name}} ({{code}}, v{{version}}) đang tắt. Chỉ Quản lý công trường mới có thể bật.',
   'cameraSetup.disabledStageAction': 'Bật camera trong cài đặt ({{code}})',
 };
 
@@ -211,14 +209,14 @@ export function CameraSetupRowMetadata(props: { row: CameraResponse; isEnabled: 
           ·
         </span>
         <div className="inline-flex items-baseline gap-1 text-xs text-slate-500">
-          <dt>{t('cameraSetup.revisionLabel')}</dt>
-          <dd className="font-mono text-xs font-semibold tabular-nums text-slate-800">
+          <dt className="sr-only">{t('cameraSetup.revisionLabel')}</dt>
+          <dd className="font-mono text-xs font-semibold tabular-nums text-slate-700">
             v{row.configurationVersion}
           </dd>
         </div>
       </dl>
-      <details className="min-w-0 text-xs text-slate-500">
-        <summary className="inline-flex min-h-7 cursor-pointer select-none items-center gap-1 rounded-md py-0.5 text-xs font-medium text-slate-600 hover:text-slate-900 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#0F172A]">
+      <details className="min-w-0 text-[11px] text-slate-500">
+        <summary className="inline-flex min-h-6 cursor-pointer select-none items-center gap-1 rounded-md py-0.5 text-[11px] font-medium text-slate-500 hover:text-slate-900 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#0F172A]">
           <span>{t('cameraSetup.technicalSourceDetails')}</span>
         </summary>
         <dl className="mt-1 min-w-0">
@@ -293,7 +291,7 @@ export function CameraSetupContextBar({
       (hasSourceTask || canManageCameras || Boolean(onOpenPpePolicy)),
     );
     const taskTabBase =
-      'inline-flex min-h-8 items-center justify-center rounded-lg px-2 py-1 text-xs sm:px-3 sm:text-sm font-semibold transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#0F172A] cursor-pointer';
+      'inline-flex min-h-8 items-center justify-center rounded-lg px-2.5 py-1 text-xs font-semibold transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#0F172A] cursor-pointer';
     const taskTabActive = `${taskTabBase} bg-[#0F172A] text-white shadow-2xs`;
     const taskTabIdle = `${taskTabBase} text-slate-700 hover:bg-white hover:text-slate-950`;
 
@@ -318,27 +316,29 @@ export function CameraSetupContextBar({
             }`}
           >
             {rows.length > 1 && onSelectCamera && (
-              <div className="flex min-w-0 items-center gap-2 border-b border-slate-100 pb-1.5 lg:hidden">
+              <div className="flex min-w-0 flex-col gap-1 border-b border-slate-100 pb-2 sm:flex-row sm:items-center sm:gap-2 lg:hidden">
                 <label
                   htmlFor="camera-setup-quick-select"
                   className="shrink-0 text-xs font-semibold text-slate-700"
                 >
                   {t('cameraSetup.chooseCamera')}
                 </label>
-                <SmartNativeSelect
-                  id="camera-setup-quick-select"
-                  data-testid="camera-setup-quick-select"
-                  aria-label={t('cameraSetup.chooseCamera')}
-                  value={selectedCamera.id}
-                  onChange={(event) => onSelectCamera(event.target.value)}
-                  className="min-h-8 min-w-0 flex-1 rounded-lg border border-slate-300 bg-white px-2 py-1 text-xs font-medium text-slate-900 hover:border-slate-400 focus-visible:border-[#0F172A] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#0F172A]"
-                >
-                  {rows.map((row) => (
-                    <option key={row.id} value={row.id}>
-                      {row.name} ({row.code})
-                    </option>
-                  ))}
-                </SmartNativeSelect>
+                <div className="min-w-0 w-full max-w-full flex-1 overflow-hidden">
+                  <SmartNativeSelect
+                    id="camera-setup-quick-select"
+                    data-testid="camera-setup-quick-select"
+                    aria-label={t('cameraSetup.chooseCamera')}
+                    value={selectedCamera.id}
+                    onChange={(event) => onSelectCamera(event.target.value)}
+                    className="min-h-8 w-full min-w-0 max-w-full rounded-lg border border-slate-300 bg-white px-2 py-1 text-xs font-medium text-slate-900 hover:border-slate-400 focus-visible:border-[#0F172A] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#0F172A]"
+                  >
+                    {rows.map((row) => (
+                      <option key={row.id} value={row.id}>
+                        {`${row.name} (${row.code} · ${t(row.status === 'ACTIVE' ? 'cameraSetup.enabled' : 'cameraSetup.disabled')})`}
+                      </option>
+                    ))}
+                  </SmartNativeSelect>
+                </div>
               </div>
             )}
 
@@ -378,8 +378,8 @@ export function CameraSetupContextBar({
                       type="button"
                       className={
                         isSelectedActive
-                          ? 'inline-flex min-h-8 items-center justify-center rounded-lg border border-slate-300 bg-white px-2.5 py-1 text-xs font-semibold text-slate-700 transition-colors hover:bg-slate-50 hover:text-slate-950 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#0F172A] cursor-pointer'
-                          : CAMERA_BUTTON_STYLES.primary
+                          ? 'inline-flex min-h-8 max-w-full items-center justify-center rounded-lg border border-slate-300 bg-white px-2.5 py-1 text-xs font-semibold text-slate-700 transition-colors hover:bg-slate-50 hover:text-slate-950 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#0F172A] cursor-pointer whitespace-normal text-center'
+                          : 'inline-flex min-h-8 max-w-full items-center justify-center rounded-lg bg-[#0F172A] px-3 py-1 text-xs font-semibold text-white transition-colors hover:bg-slate-800 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#0F172A] cursor-pointer whitespace-normal text-center'
                       }
                       onClick={(event) => open('manage', selectedCamera.id, event.currentTarget)}
                     >
@@ -391,6 +391,25 @@ export function CameraSetupContextBar({
                       )}
                     </button>
                   </span>
+                )}
+                {canManageCameras && canOpenMonitoring && Boolean(selectedMonitorQuery) && (
+                  <div
+                    data-testid="selected-camera-mobile-monitor-nav"
+                    className="flex flex-wrap items-center gap-1.5 sm:hidden"
+                  >
+                    <Link
+                      className="inline-flex min-h-8 items-center justify-center rounded-lg border border-slate-300 bg-white px-2.5 py-1 text-xs font-semibold text-slate-700 transition-colors hover:bg-slate-50 hover:text-slate-950"
+                      to={`/ppe?${selectedMonitorQuery}`}
+                    >
+                      {t('cameraSetup.monitorPpe')}
+                    </Link>
+                    <Link
+                      className="inline-flex min-h-8 items-center justify-center rounded-lg border border-slate-300 bg-white px-2.5 py-1 text-xs font-semibold text-slate-700 transition-colors hover:bg-slate-50 hover:text-slate-950"
+                      to={`/zones?${selectedMonitorQuery}`}
+                    >
+                      {t('cameraSetup.monitorZones')}
+                    </Link>
+                  </div>
                 )}
                 {!canManageCameras && canOpenMonitoring && Boolean(selectedMonitorQuery) && (
                   <>
@@ -455,64 +474,100 @@ export function CameraSetupContextBar({
                   data-tour-anchor="camera-setup-regions"
                   className="inline-flex min-w-0 flex-wrap items-center gap-1 rounded-xl border border-slate-200 bg-slate-100/80 p-0.5"
                 >
-                  {hasSourceTask && (
-                    <button
-                      type="button"
-                      data-testid="camera-workspace-tab-source"
-                      aria-pressed={activeTask === 'source'}
-                      className={activeTask === 'source' ? taskTabActive : taskTabIdle}
-                      onClick={(event) => onSelectTask?.('source', event.currentTarget)}
-                    >
-                      {t('cameraSetup.tabSource')}
-                    </button>
-                  )}
-                  {canManageCameras && (
-                    <button
-                      type="button"
-                      data-testid="camera-workspace-tab-regions"
-                      aria-label={t('cameraSetup.editSelectedRegions', {
-                        code: selectedCamera.code,
-                      })}
-                      aria-pressed={activeTask === 'regions'}
-                      className={activeTask === 'regions' ? taskTabActive : taskTabIdle}
-                      onClick={(event) => {
-                        if (onSelectTask) {
-                          onSelectTask('regions', event.currentTarget);
-                        } else {
-                          open('regions', selectedCamera.id, event.currentTarget);
-                        }
-                      }}
-                    >
-                      {t('cameraSetup.tabRegions')}
-                    </button>
-                  )}
-                  {onOpenPpePolicy && (
-                    <button
-                      type="button"
-                      data-testid="selected-camera-open-ppe"
-                      aria-label={t('cameraSetup.configureSelectedPpe', {
-                        code: selectedCamera.code,
-                      })}
-                      aria-pressed={activeTask === 'ppe'}
-                      className={activeTask === 'ppe' ? taskTabActive : taskTabIdle}
-                      onClick={(event) => {
-                        if (onSelectTask) {
-                          onSelectTask('ppe', event.currentTarget);
-                        } else {
-                          onOpenPpePolicy();
-                        }
-                      }}
-                    >
-                      {t('cameraSetup.tabPpe')}
-                    </button>
-                  )}
+                  {(() => {
+                    let stepNum = 0;
+                    const nextStep = () => ++stepNum;
+                    const sourceStep = hasSourceTask ? nextStep() : 0;
+                    const regionsStep = canManageCameras ? nextStep() : 0;
+                    const ppeStep = onOpenPpePolicy ? nextStep() : 0;
+                    const badgeClass = (isActive: boolean) =>
+                      `mr-1.5 inline-flex h-4 w-4 shrink-0 items-center justify-center rounded-full text-[11px] font-bold tabular-nums ${
+                        isActive ? 'bg-white/20 text-white' : 'bg-slate-200/90 text-slate-700'
+                      }`;
+                    return (
+                      <>
+                        {hasSourceTask && (
+                          <button
+                            type="button"
+                            data-testid="camera-workspace-tab-source"
+                            aria-pressed={activeTask === 'source'}
+                            className={activeTask === 'source' ? taskTabActive : taskTabIdle}
+                            onClick={(event) => onSelectTask?.('source', event.currentTarget)}
+                          >
+                            <span
+                              aria-hidden="true"
+                              data-testid="camera-workspace-step-source"
+                              className={badgeClass(activeTask === 'source')}
+                            >
+                              {sourceStep}
+                            </span>
+                            <span>{t('cameraSetup.tabSource')}</span>
+                          </button>
+                        )}
+                        {canManageCameras && (
+                          <button
+                            type="button"
+                            data-testid="camera-workspace-tab-regions"
+                            aria-label={t('cameraSetup.editSelectedRegions', {
+                              code: selectedCamera.code,
+                            })}
+                            aria-pressed={activeTask === 'regions'}
+                            className={activeTask === 'regions' ? taskTabActive : taskTabIdle}
+                            onClick={(event) => {
+                              if (onSelectTask) {
+                                onSelectTask('regions', event.currentTarget);
+                              } else {
+                                open('regions', selectedCamera.id, event.currentTarget);
+                              }
+                            }}
+                          >
+                            <span
+                              aria-hidden="true"
+                              data-testid="camera-workspace-step-regions"
+                              className={badgeClass(activeTask === 'regions')}
+                            >
+                              {regionsStep}
+                            </span>
+                            <span>{t('cameraSetup.tabRegions')}</span>
+                          </button>
+                        )}
+                        {onOpenPpePolicy && (
+                          <button
+                            type="button"
+                            data-testid="selected-camera-open-ppe"
+                            aria-label={t('cameraSetup.configureSelectedPpe', {
+                              code: selectedCamera.code,
+                            })}
+                            aria-pressed={activeTask === 'ppe'}
+                            className={activeTask === 'ppe' ? taskTabActive : taskTabIdle}
+                            onClick={(event) => {
+                              if (onSelectTask) {
+                                onSelectTask('ppe', event.currentTarget);
+                              } else {
+                                onOpenPpePolicy();
+                              }
+                            }}
+                          >
+                            <span
+                              aria-hidden="true"
+                              data-testid="camera-workspace-step-ppe"
+                              className={badgeClass(activeTask === 'ppe')}
+                            >
+                              {ppeStep}
+                            </span>
+                            <span>{t('cameraSetup.tabPpe')}</span>
+                          </button>
+                        )}
+                      </>
+                    );
+                  })()}
                 </div>
               )}
 
-              <div className="flex min-w-0 flex-wrap items-center gap-x-3 gap-y-1 text-xs text-slate-600">
+              <div className="flex min-w-0 flex-wrap items-center gap-x-2.5 gap-y-1 text-xs text-slate-600">
                 <details
                   data-testid="camera-setup-diagnostics-disclosure"
-                  className="group min-w-0"
+                  className="group relative min-w-0"
                 >
                   <summary className="inline-flex min-h-7 cursor-pointer list-none items-center gap-1 rounded-md py-0.5 font-medium text-slate-600 hover:text-slate-950 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#0F172A]">
                     <span>{t('cameraSetup.diagnosticsDisclosure')}</span>
@@ -523,7 +578,7 @@ export function CameraSetupContextBar({
                       ▾
                     </span>
                   </summary>
-                  <div className="mt-2 min-w-0 space-y-2.5 rounded-xl border border-slate-200 bg-slate-50/50 p-3 text-xs leading-relaxed text-slate-600">
+                  <div className="mt-2 min-w-0 space-y-2.5 rounded-xl border border-slate-200 bg-white p-3 text-xs leading-relaxed text-slate-600 shadow-lg lg:absolute lg:right-0 lg:z-20 lg:w-[26rem]">
                     {diagnosticsSlot}
                     <div className="space-y-1 border-t border-slate-200/80 pt-2">
                       {siteBadge && rows.length > 0 && (

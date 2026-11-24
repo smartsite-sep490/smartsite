@@ -1,3 +1,4 @@
+import { IsNull } from 'typeorm';
 import { seedGateFixture, cleanupGateFixture, sourceForGate } from '../support/gate-fixture.js';
 import 'reflect-metadata';
 import { approvedWorkerDocuments } from '../support/approved-worker-documents.js';
@@ -1686,6 +1687,54 @@ test('MF03: interval totals, missing checkout, notifications, approvals, scope a
         assert.equal(shortSession.effectiveOutAt?.toISOString(), shortOut.occurredAt.toISOString());
         assert.equal(shortDay.anomalies.includes('MISSING_IN'), false);
         assert.equal(shortDay.anomalies.includes('NO_SCHEDULE'), false);
+        for (const [date, inTime] of [
+          ['2026-12-01', '08:00:00'],
+          ['2026-12-02', '12:59:52'],
+        ]) {
+          const assigned = await setup(date!);
+          const gateIn = await passage('IN', new Date(date + 'T' + inTime + '+07:00'));
+          const source = await dataSource
+            .getRepository(AttendanceDayEntity)
+            .findOneByOrFail({ siteId, workerId, workDate: date!, scheduleId: IsNull() });
+          const beforeStart = new Date(date + 'T12:59:59+07:00');
+          t.mock.timers.setTime(+beforeStart);
+          await reconciliation.runDue(beforeStart);
+          assert.equal(
+            (
+              await dataSource
+                .getRepository(AttendanceSessionEntity)
+                .findOneByOrFail({ dayId: source.id })
+            ).shiftAssignmentId,
+            null,
+          );
+          const start = new Date(date + 'T13:00:00+07:00');
+          t.mock.timers.setTime(+start);
+          await reconciliation.runDue(start);
+          const openDay = await dataSource
+            .getRepository(AttendanceDayEntity)
+            .findOneByOrFail({ scheduleId: assigned.id });
+          const openSession = await dataSource
+            .getRepository(AttendanceSessionEntity)
+            .findOneByOrFail({ dayId: openDay.id });
+          assert.equal(openSession.shiftAssignmentId, assigned.id);
+          assert.equal(openSession.effectiveInAt?.toISOString(), gateIn.occurredAt.toISOString());
+          assert.equal(openSession.effectiveOutAt, null);
+          assert.equal(openDay.regularMinutes, 0);
+          await reconciliation.runDue(start);
+          assert.equal(
+            await dataSource.getRepository(AttendanceSessionEntity).countBy({ dayId: openDay.id }),
+            1,
+          );
+          await passage('OUT', new Date(date + 'T13:05:00+07:00'));
+          assert.equal(
+            (
+              await dataSource
+                .getRepository(AttendanceDayEntity)
+                .findOneByOrFail({ id: openDay.id })
+            ).regularMinutes,
+            5,
+          );
+        }
       },
     );
     await dataSource

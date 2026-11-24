@@ -89,9 +89,12 @@ describe('CameraApplicationStatusSummary plain-language status & technical detai
     expect(primary.textContent).toBe('Saved · Waiting for AI application');
     expect(primary.textContent).not.toMatch(/Worker|v5|v6|DESIRED_CONFIGURATION_PENDING/);
 
-    expect(within(statusBox).getByTestId('camera-view-validity-warning').textContent).toContain(
-      'Needs camera angle review',
+    const compactHint = within(statusBox).getByTestId('camera-view-validity-warning');
+    expect(compactHint.textContent).toContain(
+      'Keep the camera fixed; review the region after changing its angle.',
     );
+    expect(compactHint.className).toContain('text-slate-600');
+    expect(compactHint.className).not.toContain('text-amber-900');
 
     const guidance = within(statusBox).getByTestId('camera-application-reason-guidance');
     expect(guidance.textContent).toContain('AI is still using an earlier saved configuration.');
@@ -115,15 +118,15 @@ describe('CameraApplicationStatusSummary plain-language status & technical detai
     await waitFor(() => {
       expect(primary.textContent).toBe('Đã lưu · Chờ máy AI áp dụng');
     });
-    expect(within(statusBox).getByTestId('camera-view-validity-warning').textContent).toContain(
-      'Cần kiểm tra góc camera',
+    expect(compactHint.textContent).toContain(
+      'Giữ camera cố định; kiểm tra lại vùng sau khi đổi góc.',
     );
     expect(within(details).getByText('Chi tiết kỹ thuật')).toBeTruthy();
     expect(within(details).getByText('Phiên bản đã lưu: v6 · Máy AI báo cáo: v5')).toBeTruthy();
     expect(within(details).getByText('Mã lý do: DESIRED_CONFIGURATION_PENDING')).toBeTruthy();
   });
 
-  it('uses honest plain copy for LOADED in EN and VI without equating receipt to live monitoring or model accuracy', async () => {
+  it('uses honest plain copy for LOADED and renders UNCONFIRMED view validity as a neutral slate reminder in EN and VI', async () => {
     const nowIso = new Date().toISOString();
     renderSummary({
       siteId: SITE_ID,
@@ -141,11 +144,23 @@ describe('CameraApplicationStatusSummary plain-language status & technical detai
     await waitFor(() => {
       expect(statusBox.getAttribute('data-application-state')).toBe('LOADED');
     });
+    expect(statusBox.getAttribute('data-view-validity')).toBe('UNCONFIRMED');
 
     const primary = within(statusBox).getByTestId('camera-application-primary-status');
     expect(primary.textContent).toBe('AI has received the configuration');
     expect(primary.textContent).not.toMatch(/Ready|Live|Monitoring|Accurate|Worker|v6/i);
     expect(screen.queryByTestId('camera-application-reason-guidance')).toBeNull();
+
+    const angleHint = within(statusBox).getByTestId('camera-view-validity-warning');
+    expect(angleHint.textContent).toContain(
+      'Keep the camera fixed; review the region after changing its angle.',
+    );
+    expect(angleHint.textContent).not.toMatch(/Verified|Confirmed|Live|Ready/i);
+    expect(angleHint.className).toContain('text-slate-600');
+    expect(angleHint.className).not.toContain('text-amber-900');
+    const hintDot = angleHint.querySelector('span[aria-hidden="true"]');
+    expect(hintDot?.className).toContain('bg-slate-400');
+    expect(hintDot?.className).not.toContain('bg-amber-600');
 
     const details = within(statusBox).getByTestId(
       'camera-application-technical-details',
@@ -158,6 +173,10 @@ describe('CameraApplicationStatusSummary plain-language status & technical detai
       expect(primary.textContent).toBe('Máy AI đã nhận cấu hình');
     });
     expect(primary.textContent).not.toMatch(/Sẵn sàng|Đang giám sát|Worker|v6/i);
+    expect(angleHint.textContent).toContain(
+      'Giữ camera cố định; kiểm tra lại vùng sau khi đổi góc.',
+    );
+    expect(angleHint.textContent).not.toMatch(/Đã xác nhận|Đang giám sát|Sẵn sàng/i);
   });
 
   it('preserves STALE and REJECTED state distinctions and unavailable/refresh error handling', async () => {
@@ -211,9 +230,21 @@ describe('CameraApplicationStatusSummary plain-language status & technical detai
     expect(within(staleBox).getByTestId('camera-application-primary-status').textContent).toBe(
       'Saved · Unable to confirm',
     );
-    expect(within(staleBox).getByTestId('camera-view-validity-warning').textContent).toContain(
-      'Needs camera angle review',
+    const revalidationWarning = within(staleBox).getByTestId('camera-view-validity-warning');
+    expect(revalidationWarning.textContent).toContain('Needs camera angle review');
+    expect(revalidationWarning.className).toContain('text-amber-900');
+    expect(revalidationWarning.className).not.toContain('text-slate-600');
+    expect(revalidationWarning.querySelector('span[aria-hidden="true"]')?.className).toContain(
+      'bg-amber-600',
     );
+    await i18n.changeLanguage('vi');
+    await waitFor(() => {
+      expect(revalidationWarning.textContent).toContain('Cần kiểm tra lại góc camera');
+    });
+    await i18n.changeLanguage('en');
+    await waitFor(() => {
+      expect(revalidationWarning.textContent).toContain('Needs camera angle review');
+    });
     expect(
       within(staleBox).getByTestId('camera-application-reason-guidance').textContent,
     ).toContain('over 60 seconds old');
@@ -225,6 +256,38 @@ describe('CameraApplicationStatusSummary plain-language status & technical detai
         'Reason code: APPLICATION_RECEIPT_STALE',
       ),
     ).toBeTruthy();
+
+    cleanup();
+
+    renderSummary({
+      siteId: SITE_ID,
+      cameraId: CAMERA.id,
+      desiredRevision: 6,
+      reportedRevision: null,
+      applicationState: 'UNCONFIRMED',
+      viewValidity: 'UNAVAILABLE',
+      reasonCode: 'VIEW_UNAVAILABLE',
+      lastReceiptAt: null,
+      observedAt: nowIso,
+    });
+    const unavailableViewBox = await screen.findByTestId('camera-application-status');
+    await waitFor(() => {
+      expect(unavailableViewBox.getAttribute('data-view-validity')).toBe('UNAVAILABLE');
+    });
+    const unavailableWarning = within(unavailableViewBox).getByTestId(
+      'camera-view-validity-warning',
+    );
+    expect(unavailableWarning.textContent).toContain('Camera angle reference unavailable');
+    expect(unavailableWarning.className).toContain('text-amber-900');
+    expect(unavailableWarning.className).not.toContain('text-slate-600');
+    expect(unavailableWarning.querySelector('span[aria-hidden="true"]')?.className).toContain(
+      'bg-amber-600',
+    );
+    await i18n.changeLanguage('vi');
+    await waitFor(() => {
+      expect(unavailableWarning.textContent).toContain('Chưa có ảnh góc nhìn camera');
+    });
+    await i18n.changeLanguage('en');
 
     cleanup();
 

@@ -22,17 +22,17 @@ const en = {
   'cameraSource.host': 'AI host',
   'cameraSource.offline': 'offline',
   'cameraSource.chooseHost': 'Choose the AI host assigned to this site',
+  'cameraSource.hostHelpToggle': 'Where are devices read?',
   'cameraSource.hostHelp':
     'USB cameras and video files are read on the selected AI host, not on every computer that opens this website.',
   'cameraSource.WEBCAM': 'USB / host webcam',
-  'cameraSource.WEBCAMHelp':
-    'A webcam plugged into the computer running AI. No RTSP address is needed.',
+  'cameraSource.WEBCAMHelp': 'Plugged into the AI host.',
   'cameraSource.RTSP': 'IP camera / RTSP',
-  'cameraSource.RTSPHelp': 'A network camera reachable from the selected AI host.',
+  'cameraSource.RTSPHelp': 'Network stream via AI host.',
   'cameraSource.VIDEO': 'Recorded video',
-  'cameraSource.VIDEOHelp': 'Choose an approved video on the AI host. It is analysed as replay.',
+  'cameraSource.VIDEOHelp': 'Replay file on the AI host.',
   'cameraSource.BROWSER': 'This browser camera',
-  'cameraSource.BROWSERHelp': 'A camera attached to the computer where you opened this website.',
+  'cameraSource.BROWSERHelp': 'Not supported for AI yet.',
   'cameraSource.browserUnavailable':
     'Browser camera transport to AI is not available on this host. A browser preview alone would not connect AI. Use a webcam attached to the AI host or an IP camera.',
   'cameraSource.device': 'Device',
@@ -51,7 +51,20 @@ const en = {
   'cameraSource.refresh': 'Refresh hosts',
   'cameraSource.loading': 'Checking available AI hosts…',
   'cameraSource.noHosts':
-    'No AI host is assigned to this site yet. Connect a site AI host before testing a camera. The saved camera information is unchanged.',
+    'No AI host connected — assign a site AI host before testing video sources.',
+  'cameraSource.hostFetchError': 'Could not check AI hosts. Retry or verify backend connection.',
+  'cameraSource.retryHosts': 'Retry',
+  'cameraSource.allHostsOffline':
+    'AI host offline ({{hosts}}) — reconnect it and refresh before testing.',
+  'cameraSource.testOnlyNote': '{{host}} is test-only (cannot activate live AI here).',
+  'cameraSource.emptyWebcams':
+    'No USB webcams found on {{host}}. Plug into the AI host or use RTSP.',
+  'cameraSource.emptyVideos': 'No approved videos found on {{host}}.',
+  'cameraSource.inactiveBadge': 'Disabled · Test only',
+  'cameraSource.inactivePrepNotice':
+    'Camera is disabled — you can test a connection now, then enable it in settings to activate AI.',
+  'cameraSource.inactiveEnableToActivate':
+    'Connection preview succeeded, but this camera is Disabled in configuration. Enable the camera in settings first before activating a live AI source.',
   'cameraSource.unavailable':
     'The selected AI host is offline or does not support source setup. Check its connection and refresh.',
   'cameraSource.unsupported': 'This source type is not configured on the selected AI host.',
@@ -116,17 +129,17 @@ const vi: Record<keyof typeof en, string> = {
   'cameraSource.host': 'Máy AI',
   'cameraSource.offline': 'ngoại tuyến',
   'cameraSource.chooseHost': 'Chọn máy AI được cấp cho công trường',
+  'cameraSource.hostHelpToggle': 'Thiết bị được đọc ở đâu?',
   'cameraSource.hostHelp':
     'Webcam USB và tệp video được đọc trên máy AI đã chọn, không phải trên mọi máy đang mở website.',
   'cameraSource.WEBCAM': 'Webcam / camera USB',
-  'cameraSource.WEBCAMHelp': 'Camera cắm vào máy chạy AI. Không cần nhập địa chỉ RTSP.',
+  'cameraSource.WEBCAMHelp': 'Cắm trực tiếp trên máy AI.',
   'cameraSource.RTSP': 'Camera IP / RTSP',
-  'cameraSource.RTSPHelp': 'Camera qua mạng mà máy AI đã chọn có thể kết nối được.',
+  'cameraSource.RTSPHelp': 'Luồng mạng qua máy AI.',
   'cameraSource.VIDEO': 'Video đã ghi',
-  'cameraSource.VIDEOHelp':
-    'Chọn video được cấp trên máy AI. Hệ thống phân tích ở chế độ phát lại.',
-  'cameraSource.BROWSER': 'Camera của trình duyệt này',
-  'cameraSource.BROWSERHelp': 'Camera trên máy tính bạn đang dùng để mở website.',
+  'cameraSource.VIDEOHelp': 'Phát lại tệp trên máy AI.',
+  'cameraSource.BROWSER': 'Camera trình duyệt',
+  'cameraSource.BROWSERHelp': 'Chưa hỗ trợ cho AI.',
   'cameraSource.browserUnavailable':
     'Máy AI này chưa hỗ trợ nhận hình từ camera trình duyệt. Chỉ mở xem trước trên web chưa kết nối được AI. Hãy dùng webcam gắn vào máy AI hoặc camera IP.',
   'cameraSource.device': 'Thiết bị',
@@ -144,7 +157,20 @@ const vi: Record<keyof typeof en, string> = {
   'cameraSource.refresh': 'Kiểm tra lại máy AI',
   'cameraSource.loading': 'Đang kiểm tra các máy AI…',
   'cameraSource.noHosts':
-    'Công trường chưa được cấp máy AI. Cần nối máy AI của công trường trước khi thử camera. Thông tin camera đã lưu vẫn được giữ nguyên.',
+    'Chưa kết nối máy AI — cần gắn máy AI cho công trường trước khi thử nguồn.',
+  'cameraSource.hostFetchError': 'Không kiểm tra được máy AI. Hãy thử lại hoặc kiểm tra kết nối.',
+  'cameraSource.retryHosts': 'Thử lại',
+  'cameraSource.allHostsOffline':
+    'Máy AI đang ngoại tuyến ({{hosts}}) — kết nối lại rồi làm mới để kiểm tra.',
+  'cameraSource.testOnlyNote':
+    '{{host}} chỉ hỗ trợ kiểm tra (chưa kích hoạt AI trực tiếp tại đây).',
+  'cameraSource.emptyWebcams': 'Chưa thấy webcam USB trên {{host}}. Cắm vào máy AI hoặc dùng RTSP.',
+  'cameraSource.emptyVideos': 'Chưa có video đã ghi trên {{host}}.',
+  'cameraSource.inactiveBadge': 'Đang tắt · Chỉ kiểm tra',
+  'cameraSource.inactivePrepNotice':
+    'Camera đang tắt — bạn vẫn kiểm tra kết nối được, sau đó bật trong cài đặt để chạy AI.',
+  'cameraSource.inactiveEnableToActivate':
+    'Kiểm tra kết nối đã lấy được ảnh xem trước, nhưng camera đang Tắt trong cấu hình. Hãy bật camera trong cài đặt trước khi kích hoạt nguồn AI trực tiếp.',
   'cameraSource.unavailable':
     'Máy AI đã chọn đang ngoại tuyến hoặc chưa hỗ trợ thiết lập nguồn. Kiểm tra kết nối của máy rồi tải lại.',
   'cameraSource.unsupported': 'Loại nguồn này chưa được cấu hình trên máy AI đã chọn.',

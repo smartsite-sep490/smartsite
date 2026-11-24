@@ -18,7 +18,11 @@ import {
 } from '../utils/workforce-format';
 import { WORKFORCE_POLL_INTERVAL_MS } from '../constants/workforce.constants';
 import { useEffect } from 'react';
-import { isShiftEnded, isShiftStarted, scheduledShiftWindow } from '@smartsite/contracts/management';
+import {
+  isShiftEnded,
+  isShiftStarted,
+  scheduledShiftWindow,
+} from '@smartsite/contracts/management';
 import { loadAllPages } from '../load-all-pages';
 import { WorkerAbsenceSummary } from './WorkerAbsenceSummary';
 import { TeamAttendanceDialog } from '../../team-attendance/TeamAttendanceDialog';
@@ -1302,20 +1306,25 @@ export function WorkforceScheduleTab({
                                     <div className="space-y-1.5">
                                       {(() => {
                                         const status = scheduleAttendance(sched.id);
-                                        const day = attendanceQuery.data?.find((d) => d.scheduleId === sched.id);
-                                        const isPresent =
-                                          status === 'CONFIRMED' ||
-                                          (day && ((day.regularMinutes ?? 0) > 0 || (day.confirmedMinutes ?? 0) > 0 || day.presence === 'INSIDE'));
+                                        const isPresent = status === 'CONFIRMED';
                                         return (
                                           <div
                                             className={`flex items-center justify-center gap-1.5 py-1 px-2.5 rounded-lg text-xs font-bold border ${
                                               isPresent
                                                 ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
-                                                : 'bg-rose-50 text-rose-700 border-rose-200'
+                                                : status === 'ABSENT'
+                                                  ? 'bg-rose-50 text-rose-700 border-rose-200'
+                                                  : 'bg-amber-50 text-amber-800 border-amber-200'
                                             }`}
                                           >
-                                            <span className={`w-1.5 h-1.5 rounded-full ${isPresent ? 'bg-emerald-500' : 'bg-rose-500'}`} />
-                                            <span>{teamText(isPresent ? 'teamWeb.status.PRESENT' : 'teamWeb.status.ABSENT')}</span>
+                                            <span
+                                              className={`w-1.5 h-1.5 rounded-full ${isPresent ? 'bg-emerald-500' : status === 'ABSENT' ? 'bg-rose-500' : 'bg-amber-500'}`}
+                                            />
+                                            <span>
+                                              {isPresent
+                                                ? teamText('teamWeb.status.PRESENT')
+                                                : localizedLabel(status ?? 'PENDING')}
+                                            </span>
                                           </div>
                                         );
                                       })()}
@@ -1510,20 +1519,25 @@ export function WorkforceScheduleTab({
                                       <div className="flex items-center justify-between gap-2">
                                         {(() => {
                                           const status = scheduleAttendance(sched.id);
-                                          const day = attendanceQuery.data?.find((d) => d.scheduleId === sched.id);
-                                          const isPresent =
-                                            status === 'CONFIRMED' ||
-                                            (day && ((day.regularMinutes ?? 0) > 0 || (day.confirmedMinutes ?? 0) > 0 || day.presence === 'INSIDE'));
+                                          const isPresent = status === 'CONFIRMED';
                                           return (
                                             <div
                                               className={`inline-flex items-center gap-1.5 py-1 px-2.5 rounded-lg text-xs font-bold border ${
                                                 isPresent
                                                   ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
-                                                  : 'bg-rose-50 text-rose-700 border-rose-200'
+                                                  : status === 'ABSENT'
+                                                    ? 'bg-rose-50 text-rose-700 border-rose-200'
+                                                    : 'bg-amber-50 text-amber-800 border-amber-200'
                                               }`}
                                             >
-                                              <span className={`w-1.5 h-1.5 rounded-full ${isPresent ? 'bg-emerald-500' : 'bg-rose-500'}`} />
-                                              <span>{teamText(isPresent ? 'teamWeb.status.PRESENT' : 'teamWeb.status.ABSENT')}</span>
+                                              <span
+                                                className={`w-1.5 h-1.5 rounded-full ${isPresent ? 'bg-emerald-500' : status === 'ABSENT' ? 'bg-rose-500' : 'bg-amber-500'}`}
+                                              />
+                                              <span>
+                                                {isPresent
+                                                  ? teamText('teamWeb.status.PRESENT')
+                                                  : localizedLabel(status ?? 'PENDING')}
+                                              </span>
                                             </div>
                                           );
                                         })()}
@@ -1541,7 +1555,11 @@ export function WorkforceScheduleTab({
                                           className="mb-2"
                                           aria-label={`${teamText('teamWeb.attendance')}: ${getShiftName(sched.shiftId)}, ${formatWorkDate(sched.workDate)}`}
                                           onClick={() =>
-                                            setZoneSchedule({ schedule: sched, siteId, sessionScope })
+                                            setZoneSchedule({
+                                              schedule: sched,
+                                              siteId,
+                                              sessionScope,
+                                            })
                                           }
                                         >
                                           {teamText('teamWeb.attendance')}

@@ -64,22 +64,17 @@ export async function attendanceZoneReviewContext(
     throw new Error('Attendance review history unavailable');
   const requiredEnd = new Date(Math.max(+day.endsAt, ...overtime.map((value) => +value.endsAt)));
   if (!Number.isFinite(+requiredEnd)) throw new Error('Attendance schedule unavailable');
-  const bounds = [
-    day.siteId,
-    day.workerId,
-    day.workDate,
-    day.timezone,
-    day.startsAt,
-    requiredEnd,
-    day.scheduleId,
-  ];
+  // Assigned evidence stays attached even outside shift bounds (early IN/late OUT).
+  // Unassigned evidence can block review only inside this shift/overtime window,
+  // never merely because it occurred on the same calendar day.
+  const bounds = [day.siteId, day.workerId, day.scheduleId, day.startsAt, requiredEnd];
   const [gates, events] = await Promise.all([
     manager.query<{ id: string; direction: string; occurredAt: Date }[]>(
       `SELECT g.id,g.direction,g.occurred_at AS "occurredAt" FROM gate_event g
        WHERE g.site_id=$1 AND g.worker_id=$2 AND (
-         EXISTS(SELECT 1 FROM attendance_event e WHERE e.gate_event_id=g.id AND e.site_id=g.site_id AND e.worker_id=g.worker_id AND e.shift_assignment_id=$7)
-         OR (((g.occurred_at AT TIME ZONE $4)::date=$3::date OR g.occurred_at BETWEEN $5 AND $6)
-           AND NOT EXISTS(SELECT 1 FROM attendance_event e WHERE e.gate_event_id=g.id AND e.site_id=g.site_id AND e.worker_id=g.worker_id AND e.shift_assignment_id IS NOT NULL AND e.shift_assignment_id<>$7))
+         EXISTS(SELECT 1 FROM attendance_event e WHERE e.gate_event_id=g.id AND e.site_id=g.site_id AND e.worker_id=g.worker_id AND e.shift_assignment_id=$3)
+         OR (g.occurred_at BETWEEN $4 AND $5
+           AND NOT EXISTS(SELECT 1 FROM attendance_event e WHERE e.gate_event_id=g.id AND e.site_id=g.site_id AND e.worker_id=g.worker_id AND e.shift_assignment_id IS NOT NULL AND e.shift_assignment_id<>$3))
        ) ORDER BY g.id`,
       bounds,
     ),
@@ -92,7 +87,7 @@ export async function attendanceZoneReviewContext(
         scheduleId: string | null;
       }[]
     >(
-      `SELECT id,kind,gate_event_id AS "gateEventId",occurred_at AS "occurredAt",shift_assignment_id AS "scheduleId" FROM attendance_event WHERE site_id=$1 AND worker_id=$2 AND (shift_assignment_id=$7 OR (shift_assignment_id IS NULL AND ((occurred_at AT TIME ZONE $4)::date=$3::date OR occurred_at BETWEEN $5 AND $6))) ORDER BY id`,
+      `SELECT id,kind,gate_event_id AS "gateEventId",occurred_at AS "occurredAt",shift_assignment_id AS "scheduleId" FROM attendance_event WHERE site_id=$1 AND worker_id=$2 AND (shift_assignment_id=$3 OR (shift_assignment_id IS NULL AND occurred_at BETWEEN $4 AND $5)) ORDER BY id`,
       bounds,
     ),
   ]);

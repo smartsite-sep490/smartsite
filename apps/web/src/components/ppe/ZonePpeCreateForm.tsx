@@ -1,7 +1,18 @@
 import type React from 'react';
+import { PPE_FAMILY_CATALOG } from '@smartsite/contracts/ppe-items';
+import { isCoreBaselinePpeItem } from '../cameras/camera-ppe-policy-copy';
 import { IconAlertTriangle, IconCheck } from '../icons';
-import type { ZonePpeSetupCopyKey } from './zone-ppe-setup-copy';
+import {
+  ZONE_PPE_FAMILY_LABEL_KEY,
+  ZONE_PPE_UNSUPPORTED_REASON_KEY,
+  type ZonePpeSetupCopyKey,
+} from './zone-ppe-setup-copy';
 import type { CanonicalPpeItem } from './zone-ppe-setup-types';
+
+const SELECTABLE_ZONE_PPE_CATALOG = PPE_FAMILY_CATALOG.filter((entry) => entry.policySelectable);
+const NON_SELECTABLE_ZONE_PPE_CATALOG = PPE_FAMILY_CATALOG.filter(
+  (entry) => !entry.policySelectable,
+);
 
 export interface ZonePpeCreateFormProps {
   canManageZones: boolean;
@@ -147,175 +158,105 @@ export function ZonePpeCreateForm({
             {t('zoneSetup.field.ppeLegend')}
           </legend>
           <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-2.5">
-            <label
-              htmlFor="ppe-item-hard-hat"
-              className="flex items-center gap-2.5 rounded-xl border border-slate-200/80 p-3 bg-white hover:bg-slate-50 transition-colors cursor-pointer shadow-xs"
-            >
-              <input
-                id="ppe-item-hard-hat"
-                ref={firstPpeInputRef}
-                aria-invalid={Boolean(ppeError)}
-                aria-describedby={ppeError ? 'zone-ppe-error' : undefined}
-                type="checkbox"
-                checked={selectedPpe.includes('HARD_HAT')}
-                onChange={() => onTogglePpe('HARD_HAT')}
-                disabled={isCreatingZone}
-                className="h-4 w-4 rounded border-slate-300 text-slate-900 focus:ring-slate-900"
-              />
-              <span className="text-xs font-medium text-slate-800">
-                {t('zoneSetup.ppe.HARD_HAT')}{' '}
-                <span className="text-[10px] text-emerald-700 font-bold">
-                  {t('zoneSetup.ppe.coreTag')}
-                </span>
-              </span>
-            </label>
-
-            <label
-              htmlFor="ppe-item-safety-vest"
-              className="flex items-center gap-2.5 rounded-xl border border-slate-200/80 p-3 bg-white hover:bg-slate-50 transition-colors cursor-pointer shadow-xs"
-            >
-              <input
-                id="ppe-item-safety-vest"
-                type="checkbox"
-                checked={selectedPpe.includes('SAFETY_VEST')}
-                onChange={() => onTogglePpe('SAFETY_VEST')}
-                disabled={isCreatingZone}
-                className="h-4 w-4 rounded border-slate-300 text-slate-900 focus:ring-slate-900"
-              />
-              <span className="text-xs font-medium text-slate-800">
-                {t('zoneSetup.ppe.SAFETY_VEST')}{' '}
-                <span className="text-[10px] text-emerald-700 font-bold">
-                  {t('zoneSetup.ppe.coreTag')}
-                </span>
-              </span>
-            </label>
-
-            <label
-              htmlFor="ppe-item-gloves"
-              className="flex items-center gap-2.5 rounded-xl border border-slate-200/80 p-3 bg-white hover:bg-slate-50 transition-colors cursor-pointer shadow-xs"
-            >
-              <input
-                id="ppe-item-gloves"
-                type="checkbox"
-                checked={selectedPpe.includes('GLOVES')}
-                onChange={() => onTogglePpe('GLOVES')}
-                disabled={isCreatingZone}
-                className="h-4 w-4 rounded border-slate-300 text-slate-900 focus:ring-slate-900"
-              />
-              <span className="text-xs font-medium text-slate-800">
-                {t('zoneSetup.ppe.GLOVES')}{' '}
-                <span className="text-[10px] text-sky-700 font-bold">
-                  {t('zoneSetup.ppe.experimentalTag')}
-                </span>
-                <span className="text-[10px] text-slate-500 block">
-                  {t('zoneSetup.ppe.experimentalNote')}
-                </span>
-              </span>
-            </label>
-
-            <label
-              htmlFor="ppe-item-boots"
-              className="flex items-center gap-2.5 rounded-xl border border-slate-200/80 p-3 bg-white hover:bg-slate-50 transition-colors cursor-pointer shadow-xs"
-            >
-              <input
-                id="ppe-item-boots"
-                type="checkbox"
-                checked={selectedPpe.includes('BOOTS')}
-                onChange={() => onTogglePpe('BOOTS')}
-                disabled={isCreatingZone}
-                className="h-4 w-4 rounded border-slate-300 text-slate-900 focus:ring-slate-900"
-              />
-              <span className="text-xs font-medium text-slate-800">
-                {t('zoneSetup.ppe.BOOTS')}{' '}
-                <span className="text-[10px] text-sky-700 font-bold">
-                  {t('zoneSetup.ppe.experimentalTag')}
-                </span>
-                <span className="text-[10px] text-slate-500 block">
-                  {t('zoneSetup.ppe.experimentalNote')}
-                </span>
-              </span>
-            </label>
-
-            <label
-              htmlFor="ppe-item-goggles"
-              className="flex items-center gap-2.5 rounded-xl border border-slate-200/80 p-3 bg-white hover:bg-slate-50 transition-colors cursor-pointer shadow-xs"
-            >
-              <input
-                id="ppe-item-goggles"
-                type="checkbox"
-                checked={selectedPpe.includes('GOGGLES')}
-                onChange={() => onTogglePpe('GOGGLES')}
-                disabled={isCreatingZone}
-                className="h-4 w-4 rounded border-slate-300 text-slate-900 focus:ring-slate-900"
-              />
-              <span className="text-xs font-medium text-slate-800">
-                {t('zoneSetup.ppe.GOGGLES')}{' '}
-                <span className="text-[10px] text-sky-700 font-bold">
-                  {t('zoneSetup.ppe.experimentalTag')}
-                </span>
-                <span className="text-[10px] text-slate-500 block">
-                  {t('zoneSetup.ppe.experimentalNote')}
-                </span>
-              </span>
-            </label>
-
-            <label
-              htmlFor="ppe-item-harness"
-              className="flex items-center gap-2.5 rounded-xl border border-dashed border-slate-200 p-3 bg-slate-50/70 opacity-60 cursor-not-allowed"
-            >
-              <input
-                id="ppe-item-harness"
-                type="checkbox"
-                checked={false}
-                disabled={true}
-                className="h-4 w-4 rounded border-slate-300"
-              />
-              <span className="text-xs text-slate-500">
-                {t('zoneSetup.ppe.HARNESS')}{' '}
-                <span className="text-[10px] text-slate-500 block">
-                  {t('zoneSetup.ppe.notAvailableNote')}
-                </span>
-              </span>
-            </label>
-
-            <label
-              htmlFor="ppe-item-mask"
-              className="flex items-center gap-2.5 rounded-xl border border-dashed border-slate-200 p-3 bg-slate-50/70 opacity-60 cursor-not-allowed"
-            >
-              <input
-                id="ppe-item-mask"
-                type="checkbox"
-                checked={false}
-                disabled={true}
-                className="h-4 w-4 rounded border-slate-300"
-              />
-              <span className="text-xs text-slate-500">
-                {t('zoneSetup.ppe.MASK')}{' '}
-                <span className="text-[10px] text-slate-500 block">
-                  {t('zoneSetup.ppe.notAvailableNote')}
-                </span>
-              </span>
-            </label>
-
-            <label
-              htmlFor="ppe-item-hook"
-              className="flex items-center gap-2.5 rounded-xl border border-dashed border-slate-200 p-3 bg-slate-50/70 opacity-60 cursor-not-allowed"
-            >
-              <input
-                id="ppe-item-hook"
-                type="checkbox"
-                checked={false}
-                disabled={true}
-                className="h-4 w-4 rounded border-slate-300"
-              />
-              <span className="text-xs text-slate-500">
-                {t('zoneSetup.ppe.HOOK')}{' '}
-                <span className="text-[10px] text-slate-500 block">
-                  {t('zoneSetup.ppe.notAvailableNote')}
-                </span>
-              </span>
-            </label>
+            {SELECTABLE_ZONE_PPE_CATALOG.map((entry, index) => {
+              const isCore = isCoreBaselinePpeItem(entry.item);
+              const inputId = `ppe-item-${entry.item.toLowerCase().replace(/_/g, '-')}`;
+              return (
+                <label
+                  key={entry.item}
+                  htmlFor={inputId}
+                  className="flex items-center gap-2.5 rounded-xl border border-slate-200/80 p-3 bg-white hover:bg-slate-50 transition-colors cursor-pointer shadow-xs"
+                >
+                  <input
+                    id={inputId}
+                    ref={index === 0 ? firstPpeInputRef : undefined}
+                    aria-invalid={index === 0 ? Boolean(ppeError) : undefined}
+                    aria-describedby={index === 0 && ppeError ? 'zone-ppe-error' : undefined}
+                    type="checkbox"
+                    checked={selectedPpe.includes(entry.item)}
+                    onChange={() => onTogglePpe(entry.item)}
+                    disabled={isCreatingZone}
+                    className="h-4 w-4 rounded border-slate-300 text-slate-900 focus:ring-slate-900"
+                  />
+                  <span className="text-xs font-medium text-slate-800">
+                    {t(ZONE_PPE_FAMILY_LABEL_KEY[entry.item])}{' '}
+                    <span
+                      className={`text-[10px] font-bold ${
+                        isCore ? 'text-emerald-700' : 'text-sky-700'
+                      }`}
+                    >
+                      {t(isCore ? 'zoneSetup.ppe.coreTag' : 'zoneSetup.ppe.experimentalTag')}
+                    </span>
+                    {!isCore && (
+                      <span className="text-[10px] text-slate-500 block">
+                        {t('zoneSetup.ppe.experimentalNote')}
+                      </span>
+                    )}
+                  </span>
+                </label>
+              );
+            })}
           </div>
+          {NON_SELECTABLE_ZONE_PPE_CATALOG.length > 0 && (
+            <details
+              data-testid="zone-ppe-catalog-not-selectable"
+              className="group mt-3 min-w-0 rounded-xl border border-dashed border-slate-300 bg-slate-50/70 px-3 py-2 text-xs text-slate-600"
+            >
+              <summary className="flex cursor-pointer list-none items-center justify-between gap-2 font-medium text-slate-700 hover:text-slate-950 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#0F172A]">
+                <span className="min-w-0 break-words">
+                  {t('zoneSetup.ppe.unsupportedSummary', {
+                    unsupportedCount: NON_SELECTABLE_ZONE_PPE_CATALOG.length,
+                    totalCount: PPE_FAMILY_CATALOG.length,
+                    names: NON_SELECTABLE_ZONE_PPE_CATALOG.map((entry) =>
+                      t(ZONE_PPE_FAMILY_LABEL_KEY[entry.item]),
+                    ).join(', '),
+                  })}
+                </span>
+                <span
+                  aria-hidden="true"
+                  className="shrink-0 text-xs text-slate-500 transition-transform duration-150 group-open:rotate-180"
+                >
+                  ▾
+                </span>
+              </summary>
+              <div className="mt-2 space-y-2 border-t border-slate-200/80 pt-2">
+                <ul className="grid grid-cols-1 md:grid-cols-3 gap-2 min-w-0">
+                  {NON_SELECTABLE_ZONE_PPE_CATALOG.map((entry) => (
+                    <li
+                      key={entry.item}
+                      data-ppe-family={entry.item}
+                      data-unsupported-reason={entry.unsupportedReasonCode}
+                      data-observation-semantics={entry.observationSemantics}
+                      className="grid gap-1 rounded-lg border border-slate-200/90 bg-white p-2.5 min-w-0"
+                    >
+                      <div className="flex flex-wrap items-center gap-1.5 min-w-0">
+                        <span className="text-xs font-semibold text-slate-800 break-words">
+                          {t(ZONE_PPE_FAMILY_LABEL_KEY[entry.item])}
+                        </span>
+                        <span className="inline-flex w-fit items-center rounded-md border border-amber-200/80 bg-amber-50 px-1.5 py-0.5 text-[10px] font-medium text-amber-900">
+                          {t(
+                            entry.observationSemantics === 'PRESENT_ONLY'
+                              ? 'zoneSetup.ppe.semantics.PRESENT_ONLY'
+                              : 'zoneSetup.ppe.semantics.CONTRACT_PENDING',
+                          )}
+                        </span>
+                      </div>
+                      <p className="text-[11px] leading-snug text-slate-600 break-words">
+                        {t(ZONE_PPE_UNSUPPORTED_REASON_KEY[entry.unsupportedReasonCode])}
+                      </p>
+                    </li>
+                  ))}
+                </ul>
+                <p className="text-[11px] leading-snug text-slate-500 break-words">
+                  {t('zoneSetup.ppe.catalogBoundaryNote', {
+                    totalCount: PPE_FAMILY_CATALOG.length,
+                    selectableCount: SELECTABLE_ZONE_PPE_CATALOG.length,
+                    unsupportedCount: NON_SELECTABLE_ZONE_PPE_CATALOG.length,
+                  })}
+                </p>
+              </div>
+            </details>
+          )}
           {ppeError && (
             <p
               id="zone-ppe-error"

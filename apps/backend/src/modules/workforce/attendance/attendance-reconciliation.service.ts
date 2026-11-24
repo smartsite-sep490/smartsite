@@ -51,7 +51,7 @@ export class AttendanceReconciliationService implements OnModuleInit, OnModuleDe
     this.running = true;
     try {
       await this.ensureScheduledDays(now);
-      // Repair closed evidence before any empty scheduled day can emit a no-show notice.
+      // Repair Gate evidence before any empty scheduled day can emit a no-show notice.
       let unassignedCursor: string | undefined;
       while (true) {
         const pending = await this.source.getRepository(AttendanceDayEntity).find({
@@ -69,7 +69,7 @@ export class AttendanceReconciliationService implements OnModuleInit, OnModuleDe
               await manager.query('SELECT pg_advisory_xact_lock(hashtext($1))', [
                 `mf03:${day.siteId}:${day.workerId}`,
               ]);
-              await this.reassignClosedEarlySessions(manager, day.id, now);
+              await this.reassignEarlySessions(manager, day.id, now);
             });
           } catch {
             this.logger.error({
@@ -98,7 +98,7 @@ export class AttendanceReconciliationService implements OnModuleInit, OnModuleDe
               ]);
               const repaired = day.scheduleId
                 ? { targetIds: [] as string[], retired: false }
-                : await this.reassignClosedEarlySessions(manager, day.id, now);
+                : await this.reassignEarlySessions(manager, day.id, now);
               for (const targetId of repaired.targetIds) await this.refresh(manager, targetId, now);
               if (!repaired.retired) await this.refresh(manager, day.id, now);
             });
@@ -458,7 +458,7 @@ export class AttendanceReconciliationService implements OnModuleInit, OnModuleDe
       await manager.getRepository(AttendanceSessionEntity).save(open);
     }
     if (passage.direction === 'OUT' && !day.scheduleId && open?.id) {
-      const repaired = await this.reassignClosedEarlySessions(manager, day.id, passage.occurredAt);
+      const repaired = await this.reassignEarlySessions(manager, day.id, passage.occurredAt);
       if (repaired.targetIds.length) {
         const reassigned = await manager
           .getRepository(AttendanceSessionEntity)
@@ -507,7 +507,7 @@ export class AttendanceReconciliationService implements OnModuleInit, OnModuleDe
     );
   }
   /** Caller holds the Site/Worker advisory lock; only derived assignment metadata changes. */
-  private async reassignClosedEarlySessions(manager: EntityManager, sourceId: string, now: Date) {
+  private async reassignEarlySessions(manager: EntityManager, sourceId: string, now: Date) {
     const unchanged = { targetIds: [] as string[], retired: false };
     const source = await manager
       .getRepository(AttendanceDayEntity)
@@ -534,12 +534,12 @@ export class AttendanceReconciliationService implements OnModuleInit, OnModuleDe
           s.siteId !== source.siteId ||
           s.workerId !== source.workerId ||
           s.shiftAssignmentId ||
-          s.status !== 'MATCHED' ||
+          (s.effectiveOutAt ? s.status !== 'MATCHED' : s.status !== 'MISSING_OUT') ||
           s.appliedCorrectionId ||
           !s.effectiveInAt ||
-          !s.effectiveOutAt ||
-          +s.effectiveOutAt <= +s.effectiveInAt ||
-          s.effectiveOutAt > now,
+          s.effectiveInAt > now ||
+          (s.effectiveOutAt !== null &&
+            (+s.effectiveOutAt <= +s.effectiveInAt || s.effectiveOutAt > now)),
       )
     )
       return unchanged;
@@ -575,7 +575,9 @@ export class AttendanceReconciliationService implements OnModuleInit, OnModuleDe
     const matches = sessions.flatMap((session) => {
       const overlaps = windows.filter(
         (w) =>
-          +w.shift.startsAt < +session.effectiveOutAt! && +w.shift.endsAt > +session.effectiveInAt!,
+          (session.effectiveOutAt
+            ? +w.shift.startsAt < +session.effectiveOutAt
+            : +w.shift.startsAt <= +now) && +w.shift.endsAt > +session.effectiveInAt!,
       );
       if (overlaps.length !== 1 || overlaps[0]!.schedule.createdAt > session.effectiveInAt!)
         return [];
@@ -610,23 +612,25 @@ export class AttendanceReconciliationService implements OnModuleInit, OnModuleDe
       return unchanged;
     for (const { session } of matches) {
       const events = await manager.getRepository(AttendanceEventEntity).findBy({
-        id: In([session.checkInEventId!, session.checkOutEventId!]),
+        id: In(
+          [session.checkInEventId, session.checkOutEventId].filter((id): id is string => !!id),
+        ),
         siteId: source.siteId,
         workerId: source.workerId,
       });
       const entry = events.find((e) => e.id === session.checkInEventId && e.kind === 'CHECK_IN');
       const exit = events.find((e) => e.id === session.checkOutEventId && e.kind === 'CHECK_OUT');
       if (
-        events.length !== 2 ||
+        events.length !== (session.effectiveOutAt ? 2 : 1) ||
         !entry?.gateEventId ||
-        !exit?.gateEventId ||
+        (session.effectiveOutAt && !exit?.gateEventId) ||
         events.some((e) => e.shiftAssignmentId !== null) ||
         +entry.occurredAt !== +session.effectiveInAt! ||
-        +exit.occurredAt !== +session.effectiveOutAt!
+        (session.effectiveOutAt && +exit!.occurredAt !== +session.effectiveOutAt)
       )
         return unchanged;
       const gates = await manager.getRepository(GateEventEntity).findBy({
-        id: In([entry.gateEventId, exit.gateEventId]),
+        id: In([entry.gateEventId, exit?.gateEventId].filter((id): id is string => !!id)),
         siteId: source.siteId,
         workerId: source.workerId,
       });
@@ -637,12 +641,13 @@ export class AttendanceReconciliationService implements OnModuleInit, OnModuleDe
             g.direction === 'IN' &&
             +g.occurredAt === +entry.occurredAt,
         ) ||
-        !gates.some(
-          (g) =>
-            g.id === exit.gateEventId &&
-            g.direction === 'OUT' &&
-            +g.occurredAt === +exit.occurredAt,
-        )
+        (session.effectiveOutAt &&
+          !gates.some(
+            (g) =>
+              g.id === exit!.gateEventId &&
+              g.direction === 'OUT' &&
+              +g.occurredAt === +exit!.occurredAt,
+          ))
       )
         return unchanged;
     }
@@ -654,7 +659,9 @@ export class AttendanceReconciliationService implements OnModuleInit, OnModuleDe
       };
       await manager.getRepository(AttendanceEventEntity).update(
         {
-          id: In([session.checkInEventId!, session.checkOutEventId!]),
+          id: In(
+            [session.checkInEventId, session.checkOutEventId].filter((id): id is string => !!id),
+          ),
           siteId: source.siteId,
           workerId: source.workerId,
         },
@@ -671,7 +678,7 @@ export class AttendanceReconciliationService implements OnModuleInit, OnModuleDe
         'ATTENDANCE_EARLY_SESSION_ASSIGNED',
         'attendance_session',
         session.id,
-        'Closed Gate interval overlaps exactly one existing assigned shift',
+        'Gate presence interval overlaps exactly one existing assigned shift',
         {
           workerId: source.workerId,
           before,

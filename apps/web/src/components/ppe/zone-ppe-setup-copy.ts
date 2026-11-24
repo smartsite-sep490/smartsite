@@ -1,3 +1,4 @@
+import type { PPE_FAMILY_CATALOG, PpeFamily } from '@smartsite/contracts/ppe-items';
 import { registerFeatureCatalog } from '../../i18n/feature-catalog-registry';
 
 const en = {
@@ -17,13 +18,22 @@ const en = {
   'zoneSetup.ppe.GLOVES': 'Gloves',
   'zoneSetup.ppe.BOOTS': 'Boots',
   'zoneSetup.ppe.GOGGLES': 'Goggles',
-  'zoneSetup.ppe.HARNESS': 'Harness',
   'zoneSetup.ppe.MASK': 'Mask',
-  'zoneSetup.ppe.HOOK': 'Hook',
+  'zoneSetup.ppe.FULL_BODY_HARNESS': 'Full-body harness',
+  'zoneSetup.ppe.LANYARD_HOOK': 'Lanyard hook',
   'zoneSetup.ppe.coreTag': '(Core)',
   'zoneSetup.ppe.experimentalTag': '(Experimental)',
   'zoneSetup.ppe.experimentalNote': 'Technical capability · experimental',
-  'zoneSetup.ppe.notAvailableNote': 'Not available as a zone requirement',
+  'zoneSetup.ppe.unsupportedSummary':
+    'Unsupported PPE types ({{unsupportedCount}} of {{totalCount}}): {{names}}',
+  'zoneSetup.ppe.semantics.PRESENT_ONLY': 'Presence only',
+  'zoneSetup.ppe.semantics.CONTRACT_PENDING': 'Not configurable yet',
+  'zoneSetup.ppe.reason.NOT_IN_POLICY_CONTRACT':
+    'Cannot be selected as a required monitoring rule yet.',
+  'zoneSetup.ppe.reason.PRESENT_ONLY_SAFETY_BOUNDARY':
+    'Shows equipment presence only; does not confirm proper wearing or tie-off and cannot trigger automatic alerts.',
+  'zoneSetup.ppe.catalogBoundaryNote':
+    '{{totalCount}} PPE types in total: {{selectableCount}} can be selected today, {{unsupportedCount}} are not selectable yet. Listing an item here does not mean the AI model is running or verified for it.',
 
   'zoneSetup.action.cancel': 'Cancel',
   'zoneSetup.action.clearForm': 'Clear form',
@@ -121,13 +131,21 @@ const vi: Record<ZonePpeSetupCopyKey, string> = {
   'zoneSetup.ppe.GLOVES': 'Găng tay',
   'zoneSetup.ppe.BOOTS': 'Giày bảo hộ',
   'zoneSetup.ppe.GOGGLES': 'Kính bảo hộ',
-  'zoneSetup.ppe.HARNESS': 'Dây an toàn',
   'zoneSetup.ppe.MASK': 'Khẩu trang',
-  'zoneSetup.ppe.HOOK': 'Móc dây cứu sinh',
+  'zoneSetup.ppe.FULL_BODY_HARNESS': 'Dây đai an toàn toàn thân',
+  'zoneSetup.ppe.LANYARD_HOOK': 'Móc dây an toàn',
   'zoneSetup.ppe.coreTag': '(Cơ bản)',
   'zoneSetup.ppe.experimentalTag': '(Thử nghiệm)',
   'zoneSetup.ppe.experimentalNote': 'Năng lực kỹ thuật · thử nghiệm',
-  'zoneSetup.ppe.notAvailableNote': 'Chưa hỗ trợ làm yêu cầu bắt buộc của khu vực',
+  'zoneSetup.ppe.unsupportedSummary':
+    'Thiết bị chưa hỗ trợ ({{unsupportedCount}} / {{totalCount}}): {{names}}',
+  'zoneSetup.ppe.semantics.PRESENT_ONLY': 'Chỉ ghi nhận trang bị',
+  'zoneSetup.ppe.semantics.CONTRACT_PENDING': 'Chưa hỗ trợ cấu hình',
+  'zoneSetup.ppe.reason.NOT_IN_POLICY_CONTRACT': 'Hiện chưa thể chọn làm yêu cầu giám sát tự động.',
+  'zoneSetup.ppe.reason.PRESENT_ONLY_SAFETY_BOUNDARY':
+    'Chỉ ghi nhận trang bị; không xác nhận đeo hoặc móc đúng và không tự động báo vi phạm.',
+  'zoneSetup.ppe.catalogBoundaryNote':
+    'Tổng {{totalCount}} loại PPE: hiện chọn được {{selectableCount}} loại, {{unsupportedCount}} loại chưa thể chọn. Hiển thị tại đây không đồng nghĩa máy AI đã chạy đủ hoặc đạt độ chính xác.',
 
   'zoneSetup.action.cancel': 'Hủy',
   'zoneSetup.action.clearForm': 'Xóa nháp',
@@ -205,6 +223,30 @@ const vi: Record<ZonePpeSetupCopyKey, string> = {
 
   'regionSetup.title': 'Liên kết Khu vực với Vùng quan sát Camera',
   'regionSetup.subtitle': 'Vẽ và gắn đa giác vùng quan sát của camera vào khu vực đã chọn.',
+};
+
+export type ZonePpeUnsupportedReasonCode = Exclude<
+  (typeof PPE_FAMILY_CATALOG)[number]['unsupportedReasonCode'],
+  null
+>;
+
+export const ZONE_PPE_FAMILY_LABEL_KEY: Record<PpeFamily, ZonePpeSetupCopyKey> = {
+  HARD_HAT: 'zoneSetup.ppe.HARD_HAT',
+  SAFETY_VEST: 'zoneSetup.ppe.SAFETY_VEST',
+  GLOVES: 'zoneSetup.ppe.GLOVES',
+  BOOTS: 'zoneSetup.ppe.BOOTS',
+  GOGGLES: 'zoneSetup.ppe.GOGGLES',
+  MASK: 'zoneSetup.ppe.MASK',
+  FULL_BODY_HARNESS: 'zoneSetup.ppe.FULL_BODY_HARNESS',
+  LANYARD_HOOK: 'zoneSetup.ppe.LANYARD_HOOK',
+};
+
+export const ZONE_PPE_UNSUPPORTED_REASON_KEY: Record<
+  ZonePpeUnsupportedReasonCode,
+  ZonePpeSetupCopyKey
+> = {
+  NOT_IN_POLICY_CONTRACT: 'zoneSetup.ppe.reason.NOT_IN_POLICY_CONTRACT',
+  PRESENT_ONLY_SAFETY_BOUNDARY: 'zoneSetup.ppe.reason.PRESENT_ONLY_SAFETY_BOUNDARY',
 };
 
 let registered = false;

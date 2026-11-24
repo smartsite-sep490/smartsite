@@ -7,6 +7,7 @@ export default mergeConfig(
     test: {
       include: ['src/**/*.test.{ts,tsx}'],
       setupFiles: ['./src/i18n/test-setup.ts'],
+      testTimeout: 15_000,
     },
   }),
 );
