@@ -124,7 +124,7 @@ const vi: Record<keyof typeof en, string> = {
   'cameraSource.running':
     'Nguồn đang chạy trong phiên mới. Lấy ảnh tham chiếu mới và xác nhận vùng/PPE trước khi giám sát.',
   'cameraSource.applyError':
-    'Chưa xác nhận được kích hoạt. Kiểm tra trạng thái camera/worker trước khi thử lại; nguồn cũ có thể đã dừng.',
+    'Chưa xác nhận được kích hoạt. Kiểm tra trạng thái camera/máy AI trước khi thử lại; nguồn cũ có thể đã dừng.',
   'cameraSource.intro': 'Chọn nơi camera được kết nối. Lưu tên camera chưa đồng nghĩa đã có hình.',
   'cameraSource.host': 'Máy AI',
   'cameraSource.offline': 'ngoại tuyến',
@@ -202,11 +202,11 @@ const vi: Record<keyof typeof en, string> = {
   'cameraSource.stage3Label': '3 · Cấu hình đã lưu',
   'cameraSource.stage3Value': 'Backend v{{version}}',
   'cameraSource.stage3Note': 'Quy tắc PPE & vùng mới chỉ lưu ở máy chủ.',
-  'cameraSource.stage4Label': '4 · Trạng thái AI worker',
+  'cameraSource.stage4Label': '4 · Trạng thái máy AI',
   'cameraSource.stage4Running': 'Đã kích hoạt nguồn trực tiếp mới',
-  'cameraSource.stage4Resumed': 'Đã gửi cấu hình v{{version}} cho worker',
+  'cameraSource.stage4Resumed': 'Đã gửi cấu hình v{{version}} xuống máy AI',
   'cameraSource.stage4ReplayLocked': 'Video phát lại không bật giám sát trực tiếp',
-  'cameraSource.stage4CheckBelow': 'Xem biên nhận worker bên dưới',
+  'cameraSource.stage4CheckBelow': 'Xem xác nhận máy AI bên dưới',
   'cameraSource.replayNoLiveApply':
     'Video đã ghi chỉ được xác minh ở chế độ PHÁT LẠI để xem lại và không thể kích hoạt làm nguồn AI trực tiếp.',
   'cameraSource.liveExpiresIn': 'Biên nhận còn hiệu lực (~{{seconds}} giây)',

@@ -321,7 +321,7 @@ describe('Camera setup Slice 1: AI-host prerequisites, historical PPE truthfulne
       policy: { mode: 'EXPLICIT', requiredPpe: ['GLOVES', 'HARD_HAT'] },
     });
 
-    // Vietnamese parity on policy scope, readiness guidance, and collapsed unsupported families (no jargon)
+    // Vietnamese parity on policy scope, readiness guidance, save receipt, and collapsed unsupported families (no worker/ACK/contract jargon)
     await i18n.changeLanguage('vi');
     await waitFor(() => {
       expect(screen.getByTestId('ppe-readiness-guidance').textContent).toMatch(/Mũ, áo: cơ bản/);
@@ -331,6 +331,9 @@ describe('Camera setup Slice 1: AI-host prerequisites, historical PPE truthfulne
         /Khẩu trang.*Dây đai an toàn toàn thân.*Móc dây an toàn/,
       );
       expect(viUnsupported.textContent).not.toMatch(/hợp đồng|cứu sinh|ranh giới/i);
+      const panelText = screen.getByTestId('camera-ppe-policy-panel').textContent ?? '';
+      expect(panelText).toMatch(/Đã lưu phiên bản 5\. Xem riêng trạng thái áp dụng trên máy AI\./);
+      expect(panelText).not.toMatch(/\bworker\b|\bACK\b/i);
     });
   });
 

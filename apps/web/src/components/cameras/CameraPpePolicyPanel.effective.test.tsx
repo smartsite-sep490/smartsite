@@ -604,7 +604,7 @@ describe('CameraPpePolicyPanel effective PPE, mode distinction, and saved vs app
       expect(within(unresolvedCard).getByText('Vùng quan sát #2')).toBeTruthy();
       expect(within(unresolvedCard).getByText('Chưa có thông tin khu vực')).toBeTruthy();
       expect(screen.getByTestId('camera-ppe-capability-note').textContent).toMatch(
-        /mô hình worker đang chạy/i,
+        /mô hình trên máy AI đang chạy/i,
       );
     });
   });
