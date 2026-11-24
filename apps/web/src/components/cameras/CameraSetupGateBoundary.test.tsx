@@ -173,7 +173,7 @@ describe('CameraSetup GATE camera boundary (follow-up to #338)', () => {
     expect(within(gateItem).queryByRole('button', { name: /Manage/i })).toBeNull();
 
     const expectedGateHref = `/site-setup?siteId=${SITE_ID}&gateId=${GATE_ID}`;
-    const gateRowLink = within(gateItem).getByRole('link', { name: /Open gate configuration/i });
+    const gateRowLink = within(gateItem).getByRole('link', { name: /Open Site Setup/i });
     expect(gateRowLink.getAttribute('href')).toBe(expectedGateHref);
 
     // Select the GATE camera and verify detail pane + header isolation
@@ -186,6 +186,7 @@ describe('CameraSetup GATE camera boundary (follow-up to #338)', () => {
     const boundaryStage = await screen.findByTestId('camera-setup-gate-boundary-stage');
     expect(boundaryStage.textContent).toMatch(/Gate camera/i);
     expect(boundaryStage.textContent).toMatch(/Site Setup/i);
+    expect(boundaryStage.textContent).not.toMatch(/MF04/i);
     expect(
       within(boundaryStage).getByTestId('gate-camera-open-site-setup').getAttribute('href'),
     ).toBe(expectedGateHref);
@@ -222,12 +223,13 @@ describe('CameraSetup GATE camera boundary (follow-up to #338)', () => {
       false,
     );
 
-    // Vietnamese localization check
+    // Vietnamese localization check (plain user language, zero internal MF04 codes)
     await i18n.changeLanguage('vi');
     await waitFor(() => {
       const viStage = screen.getByTestId('camera-setup-gate-boundary-stage');
       expect(viStage.textContent).toMatch(/Camera cổng/i);
-      expect(viStage.textContent).toMatch(/Mở cấu hình cổng/i);
+      expect(viStage.textContent).toMatch(/Mở Thiết lập công trường/i);
+      expect(viStage.textContent).not.toMatch(/MF04/i);
     });
   });
 
