@@ -16,6 +16,13 @@ import {
 import { CameraSetupChecklist } from './CameraSetupTour';
 import { CameraSetupWorkflow, type CameraSetupOpenHandler } from './CameraSetupWorkflow';
 import { CameraPpePolicyPanel, type CameraPpeContext } from './CameraPpePolicyPanel';
+import { CameraGateBoundaryCard } from './CameraGateBoundaryCard';
+import {
+  buildGateConfigurationHref,
+  registerCameraGateBoundaryCopy,
+} from './camera-gate-boundary-copy';
+
+registerCameraGateBoundaryCopy();
 
 export function CameraSetupCatalog({
   siteId,
@@ -103,10 +110,13 @@ export function CameraSetupCatalog({
   const selectedCamera =
     (focusedCameraId ? rows.find((row) => row.id === focusedCameraId) : undefined) ??
     (requestedCameraId ? rows.find((row) => row.id === requestedCameraId) : undefined) ??
+    rows.find((row) => row.type === 'ZONE') ??
     rows[0] ??
     null;
-  const effectiveActiveTask: CameraWorkspaceTask | null =
-    controlledActiveTask !== undefined
+  const isSelectedGateCamera = selectedCamera?.type === 'GATE';
+  const effectiveActiveTask: CameraWorkspaceTask | null = isSelectedGateCamera
+    ? null
+    : controlledActiveTask !== undefined
       ? controlledActiveTask
       : !selectedCamera || selectedCamera.status !== 'ACTIVE'
         ? null
@@ -223,18 +233,23 @@ export function CameraSetupCatalog({
               >
                 {rows.map((row) => {
                   const isEnabled = row.status === 'ACTIVE';
+                  const isGateCamera = row.type === 'GATE';
                   const isSelectedCamera = selectedCamera?.id === row.id;
                   const nameId = `${catalogId}-camera-name-${row.id}`;
                   const hintId = `${catalogId}-inactive-hint-${row.id}`;
                   const ppeMonitorId = `${catalogId}-camera-ppe-${row.id}`;
                   const zonesMonitorId = `${catalogId}-camera-zones-${row.id}`;
                   const canMonitorRow =
+                    !isGateCamera &&
                     canOpenMonitoring &&
                     isEnabled &&
                     Boolean(siteId && row.siteId === siteId) &&
                     !cameras.baseError;
                   const monitorParams = canMonitorRow
                     ? new URLSearchParams({ siteId: row.siteId, cameraId: row.id }).toString()
+                    : '';
+                  const gateConfigHref = isGateCamera
+                    ? buildGateConfigurationHref(siteId || row.siteId, row.gateId)
                     : '';
                   return (
                     <li
@@ -252,7 +267,15 @@ export function CameraSetupCatalog({
                           id={nameId}
                           className="min-w-0 max-w-full break-words [overflow-wrap:anywhere] text-sm leading-snug font-semibold tracking-tight text-slate-950"
                         >
-                          {canManageCameras ? (
+                          {isGateCamera ? (
+                            <button
+                              type="button"
+                              className="cursor-pointer rounded-md text-left underline decoration-slate-300 underline-offset-4 hover:decoration-[#0F172A] focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-[#0F172A]"
+                              onClick={() => setFocusedCameraId(row.id)}
+                            >
+                              {row.name}
+                            </button>
+                          ) : canManageCameras ? (
                             <button
                               type="button"
                               aria-haspopup={!isEnabled ? 'dialog' : undefined}
@@ -269,13 +292,20 @@ export function CameraSetupCatalog({
                           )}
                         </h3>
                         <CameraSetupRowMetadata row={row} isEnabled={isEnabled} />
-                        {!isEnabled && canManageCameras && (
-                          <p id={hintId} className="sr-only">
-                            {t('cameraSetup.inactiveHint')}
+                        {isGateCamera ? (
+                          <p className="text-xs leading-5 text-slate-500">
+                            {t('cameraSetup.gateRowHint')}
                           </p>
+                        ) : (
+                          !isEnabled &&
+                          canManageCameras && (
+                            <p id={hintId} className="sr-only">
+                              {t('cameraSetup.inactiveHint')}
+                            </p>
+                          )
                         )}
                       </div>
-                      {(canManageCameras || canMonitorRow || rows.length > 1) && (
+                      {(canManageCameras || canMonitorRow || isGateCamera || rows.length > 1) && (
                         <div className="flex min-w-0 flex-wrap items-center gap-x-2.5 gap-y-1.5 pt-1">
                           {rows.length > 1 && (
                             <button
@@ -296,66 +326,74 @@ export function CameraSetupCatalog({
                               )}
                             </button>
                           )}
-                          {canManageCameras && (
-                            <div className="flex flex-wrap items-center gap-x-1 gap-y-0.5">
-                              {isEnabled && (
-                                <button
-                                  type="button"
-                                  className={railInlineAction}
-                                  aria-describedby={nameId}
-                                  onClick={(event) => {
-                                    setFocusedCameraId(row.id);
-                                    open('regions', row.id, event.currentTarget);
-                                  }}
-                                >
-                                  {t('cameraSetup.regionsAction')}
-                                </button>
+                          {isGateCamera ? (
+                            <Link className={`${railInlineAction} shrink-0`} to={gateConfigHref}>
+                              {t('cameraSetup.gateOpenConfigAction')}
+                            </Link>
+                          ) : (
+                            <>
+                              {canManageCameras && (
+                                <div className="flex flex-wrap items-center gap-x-1 gap-y-0.5">
+                                  {isEnabled && (
+                                    <button
+                                      type="button"
+                                      className={railInlineAction}
+                                      aria-describedby={nameId}
+                                      onClick={(event) => {
+                                        setFocusedCameraId(row.id);
+                                        open('regions', row.id, event.currentTarget);
+                                      }}
+                                    >
+                                      {t('cameraSetup.regionsAction')}
+                                    </button>
+                                  )}
+                                  {isEnabled && policyContext && (
+                                    <button
+                                      type="button"
+                                      className={railInlineAction}
+                                      aria-describedby={nameId}
+                                      onClick={(event) => {
+                                        handleSelectTask('ppe', event.currentTarget, row.id);
+                                      }}
+                                    >
+                                      {t('cameraSetup.ppeAction')}
+                                    </button>
+                                  )}
+                                  <button
+                                    type="button"
+                                    className={`${railInlineAction} shrink-0`}
+                                    aria-label={t('cameraSetup.manage', { name: row.name })}
+                                    aria-describedby={!isEnabled ? hintId : undefined}
+                                    onClick={(event) => {
+                                      setFocusedCameraId(row.id);
+                                      open('manage', row.id, event.currentTarget);
+                                    }}
+                                  >
+                                    {t('cameraSetup.manageAction')}
+                                  </button>
+                                </div>
                               )}
-                              {isEnabled && policyContext && (
-                                <button
-                                  type="button"
-                                  className={railInlineAction}
-                                  aria-describedby={nameId}
-                                  onClick={(event) => {
-                                    handleSelectTask('ppe', event.currentTarget, row.id);
-                                  }}
-                                >
-                                  {t('cameraSetup.ppeAction')}
-                                </button>
+                              {canMonitorRow && (
+                                <div className="flex flex-wrap items-center gap-x-2.5 gap-y-1">
+                                  <Link
+                                    id={ppeMonitorId}
+                                    aria-labelledby={`${ppeMonitorId} ${nameId}`}
+                                    className={`${railInlineAction} shrink-0`}
+                                    to={`/ppe?${monitorParams}`}
+                                  >
+                                    {t('cameraSetup.monitorPpe')}
+                                  </Link>
+                                  <Link
+                                    id={zonesMonitorId}
+                                    aria-labelledby={`${zonesMonitorId} ${nameId}`}
+                                    className={`${railInlineAction} shrink-0`}
+                                    to={`/zones?${monitorParams}`}
+                                  >
+                                    {t('cameraSetup.monitorZones')}
+                                  </Link>
+                                </div>
                               )}
-                              <button
-                                type="button"
-                                className={`${railInlineAction} shrink-0`}
-                                aria-label={t('cameraSetup.manage', { name: row.name })}
-                                aria-describedby={!isEnabled ? hintId : undefined}
-                                onClick={(event) => {
-                                  setFocusedCameraId(row.id);
-                                  open('manage', row.id, event.currentTarget);
-                                }}
-                              >
-                                {t('cameraSetup.manageAction')}
-                              </button>
-                            </div>
-                          )}
-                          {canMonitorRow && (
-                            <div className="flex flex-wrap items-center gap-x-2.5 gap-y-1">
-                              <Link
-                                id={ppeMonitorId}
-                                aria-labelledby={`${ppeMonitorId} ${nameId}`}
-                                className={`${railInlineAction} shrink-0`}
-                                to={`/ppe?${monitorParams}`}
-                              >
-                                {t('cameraSetup.monitorPpe')}
-                              </Link>
-                              <Link
-                                id={zonesMonitorId}
-                                aria-labelledby={`${zonesMonitorId} ${nameId}`}
-                                className={`${railInlineAction} shrink-0`}
-                                to={`/zones?${monitorParams}`}
-                              >
-                                {t('cameraSetup.monitorZones')}
-                              </Link>
-                            </div>
+                            </>
                           )}
                         </div>
                       )}
@@ -403,18 +441,18 @@ export function CameraSetupCatalog({
                 canOpenMonitoring={canOpenMonitoring}
                 open={open}
                 onSelectCamera={rows.length > 1 ? setFocusedCameraId : undefined}
-                hasSourceTask={Boolean(sourceSetupStage)}
+                hasSourceTask={!isSelectedGateCamera && Boolean(sourceSetupStage)}
                 activeTask={effectiveActiveTask}
                 onSelectTask={handleSelectTask}
                 onOpenPpePolicy={
-                  policyContext && selectedCamera
+                  policyContext && selectedCamera && !isSelectedGateCamera
                     ? () => handleSelectTask('ppe', undefined, selectedCamera.id)
                     : undefined
                 }
-                statusContext={statusContext}
-                applySlot={applySavedBar}
+                statusContext={isSelectedGateCamera ? undefined : statusContext}
+                applySlot={isSelectedGateCamera ? undefined : applySavedBar}
                 diagnosticsSlot={
-                  !cameras.isPending ? (
+                  !cameras.isPending && !isSelectedGateCamera ? (
                     <CameraSetupChecklist
                       compact
                       siteId={siteId}
@@ -425,7 +463,9 @@ export function CameraSetupCatalog({
                   ) : undefined
                 }
               />
-              {selectedCamera && selectedCamera.status !== 'ACTIVE' ? (
+              {selectedCamera && isSelectedGateCamera ? (
+                <CameraGateBoundaryCard camera={selectedCamera} siteId={siteId} />
+              ) : selectedCamera && selectedCamera.status !== 'ACTIVE' ? (
                 <>
                   <div
                     data-testid="camera-setup-disabled-stage"
