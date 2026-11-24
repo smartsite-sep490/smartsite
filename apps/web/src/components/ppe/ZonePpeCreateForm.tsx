@@ -198,54 +198,64 @@ export function ZonePpeCreateForm({
             })}
           </div>
           {NON_SELECTABLE_ZONE_PPE_CATALOG.length > 0 && (
-            <div
+            <details
               data-testid="zone-ppe-catalog-not-selectable"
-              className="mt-3 grid gap-2 rounded-xl border border-dashed border-slate-300 bg-slate-50/80 p-3 min-w-0"
+              className="group mt-3 min-w-0 rounded-xl border border-dashed border-slate-300 bg-slate-50/70 px-3 py-2 text-xs text-slate-600"
             >
-              <p className="text-xs font-semibold text-slate-700 break-words">
-                {t('zoneSetup.ppe.notSelectableHeading', {
-                  unsupportedCount: NON_SELECTABLE_ZONE_PPE_CATALOG.length,
-                  totalCount: PPE_FAMILY_CATALOG.length,
-                })}
-              </p>
-              <ul className="grid grid-cols-1 md:grid-cols-3 gap-2 min-w-0">
-                {NON_SELECTABLE_ZONE_PPE_CATALOG.map((entry) => (
-                  <li
-                    key={entry.item}
-                    data-ppe-family={entry.item}
-                    data-unsupported-reason={entry.unsupportedReasonCode}
-                    data-observation-semantics={entry.observationSemantics}
-                    className="grid gap-1 rounded-lg border border-slate-200/90 bg-white/80 p-2.5 min-w-0"
-                  >
-                    <div className="flex flex-wrap items-center justify-between gap-1.5 min-w-0">
-                      <span className="text-xs font-semibold text-slate-700 break-words">
-                        {t(ZONE_PPE_FAMILY_LABEL_KEY[entry.item])}
-                      </span>
-                      <span className="inline-flex items-center rounded-full border border-slate-200 bg-slate-100 px-2 py-0.5 text-[10px] font-medium text-slate-600">
-                        {t('zoneSetup.ppe.notSelectableBadge')}
-                      </span>
-                    </div>
-                    <span className="inline-flex w-fit items-center rounded-md border border-amber-200/80 bg-amber-50 px-1.5 py-0.5 text-[10px] font-medium text-amber-900">
-                      {t(
-                        entry.observationSemantics === 'PRESENT_ONLY'
-                          ? 'zoneSetup.ppe.semantics.PRESENT_ONLY'
-                          : 'zoneSetup.ppe.semantics.CONTRACT_PENDING',
-                      )}
-                    </span>
-                    <p className="text-[11px] leading-relaxed text-slate-600 break-words">
-                      {t(ZONE_PPE_UNSUPPORTED_REASON_KEY[entry.unsupportedReasonCode])}
-                    </p>
-                  </li>
-                ))}
-              </ul>
-              <p className="text-[11px] leading-relaxed text-slate-600 break-words">
-                {t('zoneSetup.ppe.catalogBoundaryNote', {
-                  totalCount: PPE_FAMILY_CATALOG.length,
-                  selectableCount: SELECTABLE_ZONE_PPE_CATALOG.length,
-                  unsupportedCount: NON_SELECTABLE_ZONE_PPE_CATALOG.length,
-                })}
-              </p>
-            </div>
+              <summary className="flex cursor-pointer list-none items-center justify-between gap-2 font-medium text-slate-700 hover:text-slate-950 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#0F172A]">
+                <span className="min-w-0 break-words">
+                  {t('zoneSetup.ppe.unsupportedSummary', {
+                    unsupportedCount: NON_SELECTABLE_ZONE_PPE_CATALOG.length,
+                    totalCount: PPE_FAMILY_CATALOG.length,
+                    names: NON_SELECTABLE_ZONE_PPE_CATALOG.map((entry) =>
+                      t(ZONE_PPE_FAMILY_LABEL_KEY[entry.item]),
+                    ).join(', '),
+                  })}
+                </span>
+                <span
+                  aria-hidden="true"
+                  className="shrink-0 text-xs text-slate-500 transition-transform duration-150 group-open:rotate-180"
+                >
+                  ▾
+                </span>
+              </summary>
+              <div className="mt-2 space-y-2 border-t border-slate-200/80 pt-2">
+                <ul className="grid grid-cols-1 md:grid-cols-3 gap-2 min-w-0">
+                  {NON_SELECTABLE_ZONE_PPE_CATALOG.map((entry) => (
+                    <li
+                      key={entry.item}
+                      data-ppe-family={entry.item}
+                      data-unsupported-reason={entry.unsupportedReasonCode}
+                      data-observation-semantics={entry.observationSemantics}
+                      className="grid gap-1 rounded-lg border border-slate-200/90 bg-white p-2.5 min-w-0"
+                    >
+                      <div className="flex flex-wrap items-center gap-1.5 min-w-0">
+                        <span className="text-xs font-semibold text-slate-800 break-words">
+                          {t(ZONE_PPE_FAMILY_LABEL_KEY[entry.item])}
+                        </span>
+                        <span className="inline-flex w-fit items-center rounded-md border border-amber-200/80 bg-amber-50 px-1.5 py-0.5 text-[10px] font-medium text-amber-900">
+                          {t(
+                            entry.observationSemantics === 'PRESENT_ONLY'
+                              ? 'zoneSetup.ppe.semantics.PRESENT_ONLY'
+                              : 'zoneSetup.ppe.semantics.CONTRACT_PENDING',
+                          )}
+                        </span>
+                      </div>
+                      <p className="text-[11px] leading-snug text-slate-600 break-words">
+                        {t(ZONE_PPE_UNSUPPORTED_REASON_KEY[entry.unsupportedReasonCode])}
+                      </p>
+                    </li>
+                  ))}
+                </ul>
+                <p className="text-[11px] leading-snug text-slate-500 break-words">
+                  {t('zoneSetup.ppe.catalogBoundaryNote', {
+                    totalCount: PPE_FAMILY_CATALOG.length,
+                    selectableCount: SELECTABLE_ZONE_PPE_CATALOG.length,
+                    unsupportedCount: NON_SELECTABLE_ZONE_PPE_CATALOG.length,
+                  })}
+                </p>
+              </div>
+            </details>
           )}
           {ppeError && (
             <p

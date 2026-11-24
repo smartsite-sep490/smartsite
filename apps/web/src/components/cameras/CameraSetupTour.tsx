@@ -66,6 +66,7 @@ export function CameraSetupTour({
       scopeKey={effectiveScopeKey}
       isAuthorized={isAuthorized}
       steps={steps}
+      unobtrusiveEntry
     />
   );
 }

@@ -162,7 +162,7 @@ describe('Camera setup Slice 1: AI-host prerequisites, historical PPE truthfulne
     await waitFor(() => {
       const noHostBanner = screen.getByTestId('camera-source-host-prerequisite');
       expect(noHostBanner.getAttribute('role')).toBe('status');
-      expect(noHostBanner.textContent).toMatch(/No AI host is assigned to this site yet/i);
+      expect(noHostBanner.textContent).toMatch(/No AI host connected/i);
     });
 
     // Refresh -> 3) All assigned hosts offline -> distinct offline-hosts prerequisite naming the host
@@ -179,13 +179,13 @@ describe('Camera setup Slice 1: AI-host prerequisites, historical PPE truthfulne
     expect(testOnlyNote.textContent).toMatch(/test-only|cannot activate live AI/i);
 
     const emptyWebcams = await screen.findByTestId('camera-source-empty-devices');
-    expect(emptyWebcams.textContent).toMatch(/No USB webcams detected/i);
+    expect(emptyWebcams.textContent).toMatch(/No USB webcams found/i);
     const testBtn = screen.getByRole('button', { name: /Test connection/i }) as HTMLButtonElement;
     expect(testBtn.disabled).toBe(true);
 
     await user.click(screen.getByRole('radio', { name: /Recorded video/i }));
     const emptyVideos = await screen.findByTestId('camera-source-empty-videos');
-    expect(emptyVideos.textContent).toMatch(/No approved recorded videos/i);
+    expect(emptyVideos.textContent).toMatch(/No approved videos found/i);
   });
 
   it('supports post-setup per-region PPE policy editing alongside camera defaults using strictly canonical contract PPE_ITEMS (EN/VI)', async () => {
@@ -288,6 +288,24 @@ describe('Camera setup Slice 1: AI-host prerequisites, historical PPE truthfulne
     const initialCheckboxes = await screen.findAllByRole('checkbox');
     expect(initialCheckboxes).toHaveLength(PPE_ITEMS.length);
 
+    // Capability notes & 3 non-selectable PPE families are collapsed by default (<details>),
+    // keeping all 8 families discoverable on expand without extra checkboxes or technical jargon
+    const capabilityDetails = screen.getByTestId(
+      'camera-ppe-capability-note',
+    ) as HTMLDetailsElement;
+    expect(capabilityDetails.tagName).toBe('DETAILS');
+    expect(capabilityDetails.open).toBe(false);
+
+    const unsupportedDetails = screen.getByTestId(
+      'ppe-catalog-not-selectable',
+    ) as HTMLDetailsElement;
+    expect(unsupportedDetails.tagName).toBe('DETAILS');
+    expect(unsupportedDetails.open).toBe(false);
+    expect(unsupportedDetails.textContent).toMatch(/Unsupported PPE types \(3 of 8\)/i);
+    expect(unsupportedDetails.textContent).toMatch(/Mask.*Full-body harness.*Lanyard hook/i);
+    expect(within(unsupportedDetails).queryAllByRole('checkbox')).toHaveLength(0);
+    expect(unsupportedDetails.textContent).not.toMatch(/contract/i);
+
     // Edit post-setup Region policy -> switch to EXPLICIT -> select HARD_HAT + GLOVES -> save submits ONLY valid contract PPE_ITEMS
     const scopeSelect = screen.getByLabelText('Policy scope');
     await user.selectOptions(scopeSelect, REGION_ID);
@@ -303,10 +321,16 @@ describe('Camera setup Slice 1: AI-host prerequisites, historical PPE truthfulne
       policy: { mode: 'EXPLICIT', requiredPpe: ['GLOVES', 'HARD_HAT'] },
     });
 
-    // Vietnamese parity on policy scope & readiness guidance
+    // Vietnamese parity on policy scope, readiness guidance, and collapsed unsupported families (no jargon)
     await i18n.changeLanguage('vi');
     await waitFor(() => {
       expect(screen.getByTestId('ppe-readiness-guidance').textContent).toMatch(/Mũ, áo: cơ bản/);
+      const viUnsupported = screen.getByTestId('ppe-catalog-not-selectable');
+      expect(viUnsupported.textContent).toMatch(/Thiết bị chưa hỗ trợ \(3 \/ 8\)/);
+      expect(viUnsupported.textContent).toMatch(
+        /Khẩu trang.*Dây đai an toàn toàn thân.*Móc dây an toàn/,
+      );
+      expect(viUnsupported.textContent).not.toMatch(/hợp đồng|cứu sinh|ranh giới/i);
     });
   });
 
@@ -451,10 +475,10 @@ describe('Camera setup Slice 1: AI-host prerequisites, historical PPE truthfulne
     // Explicit Disabled badge & preparation notice, plus upfront missing AI-host prerequisite before enabling
     expect(await screen.findByTestId('camera-source-inactive-badge')).toBeTruthy();
     expect(screen.getByTestId('camera-source-inactive-notice').textContent).toMatch(
-      /Disabled in configuration/i,
+      /Camera is disabled/i,
     );
     expect((await screen.findByTestId('camera-source-host-prerequisite')).textContent).toMatch(
-      /No AI host is assigned to this site yet/i,
+      /No AI host connected/i,
     );
 
     // Refresh to online host -> probe works for connection prep, but live Save & activate / Apply saved config stay blocked

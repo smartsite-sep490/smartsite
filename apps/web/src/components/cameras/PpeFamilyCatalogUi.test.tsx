@@ -79,12 +79,15 @@ describe('Slice 2: Canonical 8-family PPE_FAMILY_CATALOG UI in Camera PPE policy
     const selectableGroup = await screen.findByRole('group', { name: 'Required PPE items' });
     expect(within(selectableGroup).getAllByRole('checkbox')).toHaveLength(PPE_ITEMS.length);
 
-    const unsupportedSection = screen.getByTestId('ppe-catalog-not-selectable');
+    const unsupportedSection = screen.getByTestId(
+      'ppe-catalog-not-selectable',
+    ) as HTMLDetailsElement;
+    expect(unsupportedSection.tagName).toBe('DETAILS');
+    expect(unsupportedSection.open).toBe(false);
     expect(within(unsupportedSection).queryAllByRole('checkbox')).toHaveLength(0);
-    expect(unsupportedSection.textContent).toMatch(/3 of 8 PPE types/i);
-    expect(unsupportedSection.textContent).not.toMatch(
-      /FULL_BODY_HARNESS|LANYARD_HOOK|\bMASK\b|contract|safety boundary/i,
-    );
+    expect(unsupportedSection.textContent).toMatch(/3 of 8/i);
+    expect(unsupportedSection.textContent).not.toMatch(/FULL_BODY_HARNESS|LANYARD_HOOK|\bMASK\b/);
+    expect(unsupportedSection.textContent).not.toMatch(/contract|safety boundary/i);
 
     const maskRow = unsupportedSection.querySelector('[data-ppe-family="MASK"]') as HTMLElement;
     const harnessRow = unsupportedSection.querySelector(
@@ -121,7 +124,7 @@ describe('Slice 2: Canonical 8-family PPE_FAMILY_CATALOG UI in Camera PPE policy
     await i18n.changeLanguage('vi');
     await waitFor(() => {
       const viUnsupported = screen.getByTestId('ppe-catalog-not-selectable');
-      expect(viUnsupported.textContent).toMatch(/3 \/ 8 loại PPE/i);
+      expect(viUnsupported.textContent).toMatch(/3 \/ 8/i);
       expect(viUnsupported.textContent).toMatch(/Khẩu trang/i);
       expect(viUnsupported.textContent).toMatch(/Dây đai an toàn toàn thân/i);
       expect(viUnsupported.textContent).toMatch(/Móc dây an toàn/i);
@@ -184,11 +187,15 @@ describe('Slice 2: Canonical 8-family PPE_FAMILY_CATALOG UI in Camera PPE policy
     fireEvent.click(screen.getByRole('checkbox', { name: /Safety Vest/i }));
     expect(onTogglePpe).toHaveBeenCalledWith('SAFETY_VEST');
 
-    const unsupportedBox = screen.getByTestId('zone-ppe-catalog-not-selectable');
+    const unsupportedBox = screen.getByTestId(
+      'zone-ppe-catalog-not-selectable',
+    ) as HTMLDetailsElement;
+    expect(unsupportedBox.tagName).toBe('DETAILS');
+    expect(unsupportedBox.open).toBe(false);
     expect(within(unsupportedBox).queryAllByRole('checkbox')).toHaveLength(0);
-    expect(unsupportedBox.textContent).not.toMatch(
-      /FULL_BODY_HARNESS|LANYARD_HOOK|\bMASK\b|contract|safety boundary/i,
-    );
+    expect(unsupportedBox.textContent).toMatch(/3 of 8/i);
+    expect(unsupportedBox.textContent).not.toMatch(/FULL_BODY_HARNESS|LANYARD_HOOK|\bMASK\b/);
+    expect(unsupportedBox.textContent).not.toMatch(/contract|safety boundary/i);
 
     const maskItem = unsupportedBox.querySelector('[data-ppe-family="MASK"]') as HTMLElement;
     const harnessItem = unsupportedBox.querySelector(

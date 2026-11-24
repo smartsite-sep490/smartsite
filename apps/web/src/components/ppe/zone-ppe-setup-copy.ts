@@ -24,9 +24,8 @@ const en = {
   'zoneSetup.ppe.coreTag': '(Core)',
   'zoneSetup.ppe.experimentalTag': '(Experimental)',
   'zoneSetup.ppe.experimentalNote': 'Technical capability · experimental',
-  'zoneSetup.ppe.notSelectableHeading':
-    'Not selectable as a zone requirement yet ({{unsupportedCount}} of {{totalCount}} PPE types)',
-  'zoneSetup.ppe.notSelectableBadge': 'Not selectable',
+  'zoneSetup.ppe.unsupportedSummary':
+    'Unsupported PPE types ({{unsupportedCount}} of {{totalCount}}): {{names}}',
   'zoneSetup.ppe.semantics.PRESENT_ONLY': 'Presence only',
   'zoneSetup.ppe.semantics.CONTRACT_PENDING': 'Not configurable yet',
   'zoneSetup.ppe.reason.NOT_IN_POLICY_CONTRACT':
@@ -138,9 +137,8 @@ const vi: Record<ZonePpeSetupCopyKey, string> = {
   'zoneSetup.ppe.coreTag': '(Cơ bản)',
   'zoneSetup.ppe.experimentalTag': '(Thử nghiệm)',
   'zoneSetup.ppe.experimentalNote': 'Năng lực kỹ thuật · thử nghiệm',
-  'zoneSetup.ppe.notSelectableHeading':
-    'Chưa hỗ trợ cấu hình cho khu vực ({{unsupportedCount}} / {{totalCount}} loại PPE)',
-  'zoneSetup.ppe.notSelectableBadge': 'Chưa chọn được',
+  'zoneSetup.ppe.unsupportedSummary':
+    'Thiết bị chưa hỗ trợ ({{unsupportedCount}} / {{totalCount}}): {{names}}',
   'zoneSetup.ppe.semantics.PRESENT_ONLY': 'Chỉ ghi nhận trang bị',
   'zoneSetup.ppe.semantics.CONTRACT_PENDING': 'Chưa hỗ trợ cấu hình',
   'zoneSetup.ppe.reason.NOT_IN_POLICY_CONTRACT': 'Hiện chưa thể chọn làm yêu cầu giám sát tự động.',

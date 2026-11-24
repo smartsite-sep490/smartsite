@@ -23,7 +23,21 @@ export function CameraSetupWorkflow({
   const { t } = useTranslation(SAFETY_NAMESPACE);
   const showZonesAction = canWriteZones || canReadZones;
   return (
-    <div className="contents">
+    <div className="flex flex-wrap items-center gap-1.5 sm:justify-end">
+      <details className="group relative hidden sm:block text-xs text-slate-600">
+        <summary className="inline-flex min-h-8 cursor-pointer list-none items-center gap-1 rounded-lg px-2 py-1 text-xs font-medium text-slate-600 transition-colors hover:bg-slate-100 hover:text-slate-900 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-slate-900">
+          <span>{t('cameraSetup.help')}</span>
+          <span
+            aria-hidden="true"
+            className="text-xs text-slate-500 transition-transform duration-150 group-open:rotate-180"
+          >
+            ▾
+          </span>
+        </summary>
+        <div className="mt-1.5 sm:absolute sm:right-0 sm:z-20 sm:w-[34rem] max-w-[calc(100vw-2rem)] rounded-xl border border-slate-200 bg-white p-3 text-left text-sm text-slate-700 shadow-lg">
+          <CameraSetupStageCards />
+        </div>
+      </details>
       {(canManageCameras || showZonesAction) && (
         <div
           role="group"
@@ -52,20 +66,6 @@ export function CameraSetupWorkflow({
           )}
         </div>
       )}
-      <details className="group hidden sm:block col-span-full w-full text-xs text-slate-600">
-        <summary className="inline-flex min-h-7 cursor-pointer list-none items-center gap-1 rounded-md px-1.5 py-0.5 text-xs font-medium text-slate-600 transition-colors hover:bg-slate-100 hover:text-slate-900 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-slate-900">
-          <span>{t('cameraSetup.help')}</span>
-          <span
-            aria-hidden="true"
-            className="text-xs text-slate-500 transition-transform duration-150 group-open:rotate-180"
-          >
-            ▾
-          </span>
-        </summary>
-        <div className="mt-1.5 rounded-xl border border-slate-200 bg-slate-50/40 p-3 text-left text-sm text-slate-700">
-          <CameraSetupStageCards />
-        </div>
-      </details>
     </div>
   );
 }

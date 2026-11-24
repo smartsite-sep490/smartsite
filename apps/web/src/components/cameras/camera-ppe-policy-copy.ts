@@ -57,9 +57,8 @@ const en = {
   readinessExperimentalBadge: 'Experimental',
   readinessGuidanceNote:
     'Hard hat, vest: baseline; gloves, boots, goggles: experimental. Saved changes apply once camera confirms.',
-  catalogNotSelectableHeading:
-    'Not selectable in rules yet ({{unsupportedCount}} of {{totalCount}} PPE types)',
-  catalogNotSelectableBadge: 'Not selectable',
+  catalogUnsupportedSummary:
+    'Unsupported PPE types ({{unsupportedCount}} of {{totalCount}}): {{names}}',
   catalogSemanticsPresentOnly: 'Presence only',
   catalogSemanticsContractPending: 'Not configurable yet',
   'catalogReason.NOT_IN_POLICY_CONTRACT': 'Cannot be selected as a required monitoring rule yet.',
@@ -67,6 +66,7 @@ const en = {
     'Shows equipment presence only; does not confirm proper wearing or tie-off and cannot trigger automatic alerts.',
   catalogBoundaryNote:
     '{{totalCount}} PPE types in total: {{selectableCount}} can be selected for rules today, {{unsupportedCount}} are not selectable yet. Listing an item here does not mean the AI model is running or verified for it.',
+  capabilityNoteSummary: 'Policy vs AI model capability notes',
   validationExplicitEmpty: 'Select at least one PPE item before saving this custom policy.',
   validationDisabledReasonRequired: 'Enter a reason for turning off PPE checks before saving.',
   validationDisabledReasonInvalid:
@@ -198,9 +198,8 @@ const vi: Record<keyof typeof en, string> = {
   readinessExperimentalBadge: 'Thử nghiệm',
   readinessGuidanceNote:
     'Mũ, áo: cơ bản; găng, giày, kính: thử nghiệm. Bản đã lưu chỉ áp dụng sau khi camera xác nhận.',
-  catalogNotSelectableHeading:
-    'Chưa hỗ trợ cấu hình trong quy tắc ({{unsupportedCount}} / {{totalCount}} loại PPE)',
-  catalogNotSelectableBadge: 'Chưa chọn được',
+  catalogUnsupportedSummary:
+    'Thiết bị chưa hỗ trợ ({{unsupportedCount}} / {{totalCount}}): {{names}}',
   catalogSemanticsPresentOnly: 'Chỉ ghi nhận trang bị',
   catalogSemanticsContractPending: 'Chưa hỗ trợ cấu hình',
   'catalogReason.NOT_IN_POLICY_CONTRACT': 'Hiện chưa thể chọn làm yêu cầu giám sát tự động.',
@@ -208,6 +207,7 @@ const vi: Record<keyof typeof en, string> = {
     'Chỉ ghi nhận trang bị; không xác nhận đeo hoặc móc đúng và không tự động báo vi phạm.',
   catalogBoundaryNote:
     'Tổng {{totalCount}} loại PPE: hiện chọn được {{selectableCount}} loại cho quy tắc giám sát, {{unsupportedCount}} loại chưa thể chọn. Hiển thị tại đây không đồng nghĩa máy AI đã chạy đủ hoặc đạt độ chính xác.',
+  capabilityNoteSummary: 'Lưu ý về chính sách và năng lực máy AI',
   validationExplicitEmpty: 'Chọn ít nhất một hạng mục PPE trước khi lưu chính sách tùy chỉnh.',
   validationDisabledReasonRequired: 'Nhập lý do tắt kiểm tra PPE trước khi lưu.',
   validationDisabledReasonInvalid:

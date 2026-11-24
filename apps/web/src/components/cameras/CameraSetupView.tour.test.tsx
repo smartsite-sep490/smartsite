@@ -206,10 +206,11 @@ describe('CameraSetupView guided tour and persisted setup checklist (P3.3)', () 
   it('guides an assigned Site Manager through selecting camera, provisioned source, zone & inherited/override/disabled PPE, reference & small polygon, and saved vs worker-applied receipt', async () => {
     renderSetup();
 
-    expect(await screen.findByTestId('safety-task-tour-invitation')).toBeTruthy();
-    expect(screen.getByTestId('safety-task-tour-trigger').textContent).toBe('Guided help');
+    const trigger = await screen.findByTestId('safety-task-tour-trigger');
+    expect(trigger.textContent).toBe('Guided help');
+    expect(screen.queryByTestId('safety-task-tour-invitation')).toBeNull();
 
-    fireEvent.click(screen.getByTestId('safety-task-tour-invitation-start'));
+    fireEvent.click(trigger);
 
     const step1 = await screen.findByTestId('safety-task-tour');
     expect(step1.getAttribute('data-tour-step')).toBe('camera-setup-scope');
@@ -300,7 +301,7 @@ describe('CameraSetupView guided tour and persisted setup checklist (P3.3)', () 
     const user = userEvent.setup();
     renderSetup();
 
-    const startBtn = await screen.findByTestId('safety-task-tour-invitation-start');
+    const startBtn = await screen.findByTestId('safety-task-tour-trigger');
     startBtn.focus();
     await user.keyboard('{Enter}');
 
@@ -457,7 +458,7 @@ describe('CameraSetupView guided tour and persisted setup checklist (P3.3)', () 
     expect(checklist.getAttribute('data-setup-complete')).toBe('false');
 
     // Completing the guided tour in localStorage must NEVER mark camera setup complete
-    fireEvent.click(await screen.findByTestId('safety-task-tour-invitation-start'));
+    fireEvent.click(await screen.findByTestId('safety-task-tour-trigger'));
     for (let i = 0; i < 5; i += 1) {
       fireEvent.click(screen.getByTestId('safety-task-tour-next'));
     }
