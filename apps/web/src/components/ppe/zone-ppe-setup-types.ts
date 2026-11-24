@@ -1,16 +1,11 @@
 import type { SmartSiteManagementClient } from '@smartsite/api-client';
+import { PPE_ITEMS, type PpeItem } from '@smartsite/contracts/ppe-items';
 
-export const CANONICAL_PPE_ITEMS = [
-  'HARD_HAT',
-  'SAFETY_VEST',
-  'GLOVES',
-  'BOOTS',
-  'GOGGLES',
-] as const;
+export const CANONICAL_PPE_ITEMS = PPE_ITEMS;
 
 export const UNSUPPORTED_PPE_ITEMS = ['HARNESS', 'MASK', 'HOOK'] as const;
 
-export type CanonicalPpeItem = (typeof CANONICAL_PPE_ITEMS)[number];
+export type CanonicalPpeItem = PpeItem;
 export type UnsupportedPpeItem = (typeof UNSUPPORTED_PPE_ITEMS)[number];
 
 export const ZONE_PAGE_SIZE = 20;

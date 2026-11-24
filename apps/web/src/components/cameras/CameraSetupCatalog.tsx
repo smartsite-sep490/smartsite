@@ -463,7 +463,8 @@ export function CameraSetupCatalog({
                       </div>
                     )}
                   </div>
-                  {!sourceSetupStage && policyContext && (
+                  {sourceSetupStage}
+                  {policyContext && (
                     <CameraPpePolicyPanel
                       key={selectedCamera.id}
                       cameraId={selectedCamera.id}
