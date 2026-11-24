@@ -121,6 +121,8 @@ import type {
   IgnoreDuplicateAttendanceCommand,
   AttendanceTimeRequestCommand,
   ReviewAttendanceDayCommand,
+  ConfirmAttendanceAbsenceCommand,
+  ConfirmAttendanceZoneHoursCommand,
   ConfirmIncidentResponsibilityCommand,
   CorrectIncidentResponsibilityCommand,
   TransferCorrectiveActionCommand,
@@ -777,10 +779,49 @@ export class SmartSiteManagementClient {
       input,
     );
   }
+  confirmAttendanceZoneHours(
+    token: string,
+    siteId: string,
+    id: string,
+    input: ConfirmAttendanceZoneHoursCommand,
+  ) {
+    return this.request<{ id: string }>(
+      'POST',
+      `/sites/${pathId(siteId)}/attendance-days/${pathId(id)}/confirm-zone-hours`,
+      token,
+      input,
+    );
+  }
+  confirmAttendanceAbsence(
+    token: string,
+    siteId: string,
+    dayId: string,
+    input: ConfirmAttendanceAbsenceCommand,
+  ) {
+    return this.request<{ id: string }>(
+      'POST',
+      `/sites/${pathId(siteId)}/attendance-days/${pathId(dayId)}/confirm-absence`,
+      token,
+      input,
+    );
+  }
   recordAttendance(token: string, siteId: string, eventId: string, input: RecordAttendanceCommand) {
     return this.request<AttendanceSessionResponse>(
       'POST',
       `/sites/${pathId(siteId)}/gate-events/${pathId(eventId)}/attendance`,
+      token,
+      input,
+    );
+  }
+  requestMissingAttendance(
+    token: string,
+    siteId: string,
+    scheduleId: string,
+    input: RequestAttendanceCorrectionCommand,
+  ): Promise<{ id: string }> {
+    return this.request<{ id: string }>(
+      'POST',
+      `/sites/${pathId(siteId)}/worker-schedules/${pathId(scheduleId)}/missing-attendance`,
       token,
       input,
     );
@@ -941,12 +982,18 @@ export class SmartSiteManagementClient {
       options,
     );
   }
-  openCameraQrFallback(token: string, siteId: string, gateId: string, direction: 'IN' | 'OUT') {
+  openCameraQrFallback(
+    token: string,
+    siteId: string,
+    gateId: string,
+    direction: 'IN' | 'OUT',
+    reason: GateQrSessionReason = 'CAMERA_UNAVAILABLE',
+  ) {
     return this.request<QrFallbackResponse>(
       'POST',
       `/sites/${pathId(siteId)}/gates/${pathId(gateId)}/qr-fallback`,
       token,
-      { direction, reason: 'CAMERA_UNAVAILABLE' },
+      { direction, reason },
     );
   }
   verifyWorkerQr(
@@ -4722,3 +4769,4 @@ import type {
 } from '@smartsite/contracts';
 import type { ContractorTeamCalendarQuery } from '@smartsite/contracts';
 import type { ContractorTeamCalendarResponse } from '@smartsite/contracts';
+import type { GateQrSessionReason } from '@smartsite/contracts';

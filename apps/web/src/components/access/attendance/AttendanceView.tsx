@@ -1,3 +1,4 @@
+import { teamText } from '../../team-attendance/team-attendance-copy';
 import { SmartNativeSelect } from '../../ui/SmartNativeSelect';
 import { useManagementClient } from '../../../features/auth/auth-session';
 import { userErrorMessage } from '../../../i18n/messages';
@@ -132,12 +133,10 @@ export function AttendanceView({
   const cache = useQueryClient();
   const timezone = 'Asia/Ho_Chi_Minh';
 
-  // Compute 7-day range (e.g. today minus 6 days to today, or current week)
+  // Open on today's work date; historical totals require an explicit date selection.
   const defaultDates = useMemo(() => {
     const todayStr = attendanceDate(new Date(), timezone);
-    const todayMs = Date.parse(`${todayStr}T00:00:00Z`);
-    const fromStr = new Date(todayMs - 6 * 86400000).toISOString().slice(0, 10);
-    return { fromDate: fromStr, toDate: todayStr };
+    return { fromDate: todayStr, toDate: todayStr };
   }, [timezone]);
 
   const [fromDate, setFromDate] = useState(defaultDates.fromDate);
@@ -347,7 +346,11 @@ export function AttendanceView({
   const correction = useMutation({
     mutationFn: () => {
       const session = overview.data?.sessions.find((s) => s.id === sessionId);
-      if (!session) throw new Error(tr('attendance_view.select_a_current_attendance_session'));
+      const missing = overview.data?.missingSchedules?.find(
+        (s) => `schedule:${s.scheduleId}` === sessionId,
+      );
+      if (!session && !missing)
+        throw new Error(tr('attendance_view.select_a_current_attendance_session'));
       if (
         overview.data?.hasPendingCorrection ||
         overview.data?.corrections.some((c) => c.status === 'PENDING')
@@ -358,7 +361,7 @@ export function AttendanceView({
           ),
         );
       const input = {
-        expectedSessionVersion: session.version,
+        expectedSessionVersion: session?.version ?? 1,
         proposedInAt: new Date(proposedIn).toISOString(),
         proposedOutAt: new Date(proposedOut).toISOString(),
         reason: reason.trim(),
@@ -366,7 +369,12 @@ export function AttendanceView({
       const fingerprint = JSON.stringify([sessionId, input]);
       if (request.current?.fingerprint !== fingerprint)
         request.current = { fingerprint, id: crypto.randomUUID() };
-      return client.requestAttendanceCorrection(token, siteId, session.id, {
+      if (missing)
+        return client.requestMissingAttendance(token, siteId, missing.scheduleId, {
+          requestId: request.current.id,
+          ...input,
+        });
+      return client.requestAttendanceCorrection(token, siteId, session!.id, {
         requestId: request.current.id,
         ...input,
       });
@@ -543,12 +551,20 @@ export function AttendanceView({
                   onChange={(e) => {
                     setSessionId(e.target.value);
                     const selected = data.sessions.find((session) => session.id === e.target.value);
-                    setProposedIn(localDateTime(selected?.effectiveInAt));
-                    setProposedOut(localDateTime(selected?.effectiveOutAt));
+                    const missing = data.missingSchedules?.find(
+                      (s) => `schedule:${s.scheduleId}` === e.target.value,
+                    );
+                    setProposedIn(localDateTime(selected?.effectiveInAt ?? missing?.startsAt));
+                    setProposedOut(localDateTime(selected?.effectiveOutAt ?? missing?.endsAt));
                   }}
                   className="mt-1.5 block w-full px-4 py-3 rounded-2xl border border-slate-200 bg-slate-50 text-sm font-semibold text-[#071A2B] placeholder-slate-400 hover:border-slate-300 focus:border-[#071A2B] focus:bg-white focus:ring-4 focus:ring-[#071A2B]/5 shadow-sm outline-none transition-all duration-300"
                 >
                   <option value="">{tr('common.select_session')}</option>
+                  {data.missingSchedules?.map((s) => (
+                    <option key={s.scheduleId} value={`schedule:${s.scheduleId}`}>
+                      {s.workDate} · {s.shiftName} · {teamText('teamWeb.missingSession')}
+                    </option>
+                  ))}
                   {data.sessions.map(
                     (s) =>
                       s.status !== 'IGNORED' &&
@@ -999,6 +1015,17 @@ export function AttendanceView({
                 </SmartNativeSelect>
 
                 {/* Date Controls */}
+                <button
+                  type="button"
+                  onClick={() => {
+                    const today = attendanceDate(new Date(), timezone);
+                    setFromDate(today);
+                    setToDate(today);
+                  }}
+                  className="px-3 py-2 rounded-xl border border-slate-200 bg-white text-xs font-semibold text-slate-700 hover:bg-slate-50 focus-visible:outline-2 focus-visible:outline-orange-500"
+                >
+                  {tr('common.today')}
+                </button>
                 <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl border border-slate-200 bg-white shadow-2xs">
                   <IconCalendar className="w-4 h-4 text-slate-400" />
                   <input
@@ -1035,6 +1062,12 @@ export function AttendanceView({
             </div>
 
             {/* Workers Table Component */}
+            <p className="text-xs text-slate-500">
+              {tr('attendance_report.period_scope', {
+                from: fromDate,
+                to: toDate,
+              })}
+            </p>
             <AttendanceWorkersTable
               workers={workers.data?.items ?? []}
               total={workers.data?.total ?? 0}

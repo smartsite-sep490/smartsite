@@ -2,6 +2,27 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { SmartSiteManagementClient } from '../src/index';
 afterEach(() => vi.unstubAllGlobals());
 describe('MF03 client', () => {
+  it('submits missing attendance by scoped schedule without inventing a session or gate event', async () => {
+    const fetchMock = vi.fn(
+      async () => new Response(JSON.stringify({ id: 'report-1' }), { status: 200 }),
+    );
+    vi.stubGlobal('fetch', fetchMock);
+    const client = new SmartSiteManagementClient('https://api.example.test');
+    const input = {
+      requestId: 'request-1',
+      expectedSessionVersion: 1,
+      proposedInAt: '2026-11-23T01:00:00Z',
+      proposedOutAt: '2026-11-23T02:00:00Z',
+      reason: 'Missed scans',
+    };
+    await client.requestMissingAttendance('synthetic-token', 'site/1', 'schedule/1', input);
+    const calls = fetchMock.mock.calls as unknown as [string, RequestInit][];
+    expect(calls[0]![0]).toContain(
+      '/sites/site%2F1/worker-schedules/schedule%2F1/missing-attendance',
+    );
+    expect(calls[0]![1].headers).toMatchObject({ Authorization: 'Bearer synthetic-token' });
+    expect(JSON.parse(calls[0]![1].body as string)).toEqual(input);
+  });
   it('encodes scoped dates and IDs, authenticates and sends versions for review', async () => {
     const fetchMock = vi.fn(
       async () =>

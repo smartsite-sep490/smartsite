@@ -25,7 +25,7 @@ test('requires matching team, membership, work zone, leader presence and real ga
     );
   assert.equal(
     zoneAttendanceIssue({ ...requirement, zoneId: null }, record, true),
-    'ZONE_ASSIGNMENT_UNRESOLVED',
+    'ZONE_ATTENDANCE_PENDING',
   );
 });
 test('does not invent a zone requirement for a legacy/unassigned day', () => {

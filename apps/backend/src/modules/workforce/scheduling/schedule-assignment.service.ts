@@ -275,8 +275,21 @@ export class ScheduleAssignmentService {
       order: { id: 'ASC' },
     });
     // Inactive rows also retain the version/worker/shift/date unique key.
+    const existingShifts = schedules.length
+      ? await m
+          .getRepository(ShiftEntity)
+          .findBy({ siteId, id: In([...new Set(schedules.map((s) => s.shiftId))]) })
+      : [];
     const conflicts = schedules
-      .filter((s) => s.isActive || (s.scheduleVersionId === version?.id && s.shiftId === shift.id))
+      .filter((s) => {
+        if (s.scheduleVersionId === version?.id && s.shiftId === shift.id) return true;
+        if (!s.isActive) return false;
+        const template = existingShifts.find((v) => v.id === s.shiftId);
+        if (!template) return true;
+        const existing = scheduledShiftWindow(template, s.workDate);
+        const proposed = scheduledShiftWindow(shift, s.workDate);
+        return existing.startsAt < proposed.endsAt && existing.endsAt > proposed.startsAt;
+      })
       .map((s) => ({
         workerId: s.workerId,
         workerName: workers.find((w) => w.id === s.workerId)!.displayName,
@@ -374,6 +387,17 @@ export class ScheduleAssignmentService {
           workDate,
           isActive: true,
         })),
+      );
+      const template = await m
+        .getRepository(ShiftEntity)
+        .findOneByOrFail({ id: selected.shiftId, siteId });
+      await assertWorkerIntervalsAvailable(
+        m,
+        siteId,
+        rows.map((row) => {
+          const window = scheduledShiftWindow(template, row.workDate);
+          return { workerId: row.workerId, start: window.startsAt, end: window.endsAt };
+        }),
       );
       await m.getRepository(WorkerScheduleEntity).insert(rows);
       const batch = await m.getRepository(ScheduleAssignmentBatchEntity).save({
@@ -572,9 +596,7 @@ export class ScheduleAssignmentService {
           if (!shift) conflict('Schedule shift is unavailable. Reload before editing');
           const protectedRow =
             scheduledShiftWindow(shift, row.workDate).startsAt <= now ||
-            attendance.some(
-              (day) => day.workerId === row.workerId && day.workDate === row.workDate,
-            );
+            attendance.some((day) => day.scheduleId === row.id);
           if (protectedRow) skippedCount += 1;
           return !protectedRow;
         });
@@ -587,7 +609,7 @@ export class ScheduleAssignmentService {
           !shift ||
           scheduledShiftWindow(shift, row.workDate).startsAt <= now ||
           (replacement && scheduledShiftWindow(replacement, row.workDate).startsAt <= now) ||
-          attendance.some((day) => day.workerId === row.workerId && day.workDate === row.workDate)
+          attendance.some((day) => day.scheduleId === row.id)
         )
           conflict('Started shifts or days with attendance cannot be changed or cancelled');
       }
@@ -616,6 +638,19 @@ export class ScheduleAssignmentService {
           )
         )
           conflict('Replacement conflicts with existing schedule history');
+        await assertWorkerIntervalsAvailable(
+          m,
+          siteId,
+          rows.map((row) => {
+            const window = scheduledShiftWindow(replacement, row.workDate);
+            return {
+              workerId: row.workerId,
+              start: window.startsAt,
+              end: window.endsAt,
+              excludedScheduleId: row.id,
+            };
+          }),
+        );
       }
       await m
         .getRepository(WorkerScheduleEntity)
@@ -657,3 +692,4 @@ export class ScheduleAssignmentService {
     });
   }
 }
+import { assertWorkerIntervalsAvailable } from './worker-shift-overlap.js';

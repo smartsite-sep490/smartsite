@@ -375,17 +375,19 @@ export class SchedulingWorkflowService {
     schedule: WorkerScheduleEntity,
     targetShiftId: string,
   ): Promise<void> {
-    const existing = await manager
-      .getRepository(WorkerScheduleEntity)
-      .createQueryBuilder('schedule')
-      .where('schedule.site_id = :siteId', { siteId: schedule.siteId })
-      .andWhere('schedule.worker_id = :workerId', { workerId: schedule.workerId })
-      .andWhere('schedule.work_date = :workDate', { workDate: schedule.workDate })
-      .andWhere('schedule.is_active = true')
-      .andWhere('schedule.id <> :scheduleId', { scheduleId: schedule.id })
-      .getOne();
-    if (existing)
-      conflict(`Worker already has another shift assigned on this date (${targetShiftId})`);
+    const template = await manager
+      .getRepository(ShiftEntity)
+      .findOneBy({ id: targetShiftId, siteId: schedule.siteId });
+    if (!template) missing();
+    const window = scheduledShiftWindow(template, schedule.workDate);
+    await assertWorkerIntervalAvailable(
+      manager,
+      schedule.siteId,
+      schedule.workerId,
+      window.startsAt,
+      window.endsAt,
+      schedule.id,
+    );
   }
 
   private scheduleStillMatches(
@@ -1339,3 +1341,4 @@ export class SchedulingWorkflowService {
     return { items, total };
   }
 }
+import { assertWorkerIntervalAvailable } from './worker-shift-overlap.js';

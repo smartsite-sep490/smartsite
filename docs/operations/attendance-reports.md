@@ -147,6 +147,23 @@ obligation and persisted absence state. Missing configuration is UNAVAILABLE;
 no assigned shift is OFF; full approved leave is APPROVED_LEAVE. Before all
 required shifts end, lack of check-in is SCHEDULED or NOT_ARRIVED, never ABSENT.
 
+The Web management timesheet opens with both dates set to today in
+`Asia/Ho_Chi_Minh`. The **Today / hôm nay** control restores that one-day range.
+Choosing a historical range changes hour totals and attendance rate; the explicitly
+labeled Today status and IN/OUT remain today's values and never fall back to yesterday.
+An explanatory line states these different scopes. Provisional hours remain visible
+separately even when a comparison with the previous period is available.
+
+Approved full-shift leave remains `APPROVED_LEAVE` after its schedule is deactivated
+by leave approval. This includes day details, today's status and the status/shift
+filters. Only matching Site/Worker/schedule/shift/version approval counts. Inactive
+cancelled schedules and partial leave do not become full-shift approved leave, and
+unresolved evidence still takes precedence as `NEEDS_REVIEW`.
+For legacy days retaining only `PENDING_LEAVE`/`PENDING_REQUEST` flags, full approved
+leave with no sessions or worked minutes displays as approved leave only after the
+Backend verifies there is no pending overtime or correction. This is a read-time
+classification; raw day/request history is preserved and no worked hours are granted.
+
 With `includeDaily=true`, each row includes `daily` for every date in the range:
 `workDate`, `attendanceDayId`, `status`, `shifts` (actual dated windows/timezones),
 `firstCheckInAt`, `lastCheckOutAt`, minute fields, `hoursStatus` and `anomalies`.

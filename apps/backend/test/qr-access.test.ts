@@ -20,6 +20,15 @@ import {
 } from '../src/modules/workforce/access/qr-access.commands.js';
 import { UserRole } from '../src/database/entities/user.entity.js';
 
+test('Security can select QR directly without claiming a camera failure', () => {
+  assert.equal(
+    command(CameraFallbackCommand, { direction: 'IN', reason: 'OPERATOR_QR_SELECTED' }).reason,
+    'OPERATOR_QR_SELECTED',
+  );
+  assert.throws(() =>
+    command(CameraFallbackCommand, { direction: 'IN', reason: 'ALLOW_WITHOUT_AUTHORIZATION' }),
+  );
+});
 test('worker issues its own code by direction and Security accepts short or legacy credentials', () => {
   const requestId = randomUUID();
   assert.equal(command(IssueWorkerQrCommand, { direction: 'IN' }).direction, 'IN');

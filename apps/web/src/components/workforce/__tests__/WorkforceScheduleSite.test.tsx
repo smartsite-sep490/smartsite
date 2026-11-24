@@ -104,6 +104,120 @@ function mount(siteId = 'site-1') {
   return { changeSite: (id: string) => result.rerender(view(id)) };
 }
 
+it.each(['timetable', 'list'])(
+  'shows approved full-shift leave and removes change/swap in %s',
+  async (mode) => {
+    vi.setSystemTime(new Date('2030-01-01T00:00:00Z'));
+    vi.mocked(SmartSiteManagementClient.prototype.listShifts).mockResolvedValue({
+      items: [
+        {
+          id: 'morning',
+          siteId: 'site-1',
+          name: 'Morning',
+          startsAt: '2030-01-01T08:00Z',
+          endsAt: '2030-01-01T12:00Z',
+          timezone: 'UTC',
+          createdAt: '2030-01-01T00:00Z',
+        },
+      ],
+      total: 1,
+    });
+    vi.mocked(SmartSiteManagementClient.prototype.listWorkerSchedules).mockResolvedValue({
+      items: [
+        {
+          id: 'leave-shift',
+          siteId: 'site-1',
+          workerId: 'worker-a',
+          shiftId: 'morning',
+          scheduleVersionId: 'version-1',
+          workDate: '2030-01-01',
+          isActive: false,
+          approvedFullShiftLeave: true,
+          createdAt: '2030-01-01T00:00:00Z',
+        },
+      ],
+      total: 1,
+    });
+    mount();
+    if (mode === 'list') fireEvent.click(await screen.findByRole('button', { name: 'List' }));
+    expect(await screen.findByText('Leave')).toBeTruthy();
+    expect(screen.getByText('Approved')).toBeTruthy();
+    expect(screen.queryByRole('button', { name: 'Swap shift' })).toBeNull();
+    expect(screen.queryByRole('button', { name: 'Request change' })).toBeNull();
+    expect(screen.queryByRole('button', { name: /^Zone attendance:/ })).toBeNull();
+    expect(screen.queryByText('Scheduled')).toBeNull();
+    await act(async () => {
+      await i18n.changeLanguage('vi');
+    });
+    expect(await screen.findByText('Nghỉ phép')).toBeTruthy();
+    expect(screen.getByText('Đã duyệt')).toBeTruthy();
+  },
+);
+
+it.each([
+  ['timetable', 'Site change'],
+  ['list', 'Site change'],
+  ['timetable', 'approved leave'],
+  ['list', 'approved leave'],
+])(
+  'opens Zone attendance from a started shift in %s view and closes it on %s',
+  async (mode, change) => {
+    vi.spyOn(SmartSiteManagementClient.prototype, 'scheduleTeamAttendance').mockResolvedValue({
+      own: {
+        scheduleId: 'site-1-morning',
+        membershipId: 'mem-1',
+        workerId: 'worker-a',
+        displayName: 'Worker A',
+        status: 'NOT_YET',
+        version: 0,
+        updatedAt: null,
+        gateCheck: 'GATE_ONLY',
+        locked: false,
+      },
+      teamId: 'team-paint',
+      teamName: 'Painting Squad',
+      zoneId: 'zone',
+      zoneName: 'Painting Zone',
+      canManage: false,
+      canSubmit: false,
+      members: [],
+    });
+    const page = mount();
+    const user = userEvent.setup();
+    if (mode === 'list') await user.click(await screen.findByRole('button', { name: 'List' }));
+    await user.click((await screen.findAllByRole('button', { name: /^Zone attendance:/ }))[0]!);
+    await screen.findByText(/Your team leader records Zone attendance/);
+    expect(SmartSiteManagementClient.prototype.scheduleTeamAttendance).toHaveBeenCalledWith(
+      'synthetic-token',
+      'site-1',
+      expect.stringMatching(/^site-1-/),
+    );
+    if (change === 'approved leave') {
+      await act(async () => {
+        queries.setQueriesData(
+          { queryKey: ['worker-schedules', 'site-1'] },
+          (old: { items: Array<Record<string, unknown>>; total: number } | undefined) =>
+            old && {
+              ...old,
+              items: old.items.map((item) => ({
+                ...item,
+                isActive: false,
+                approvedFullShiftLeave: true,
+              })),
+            },
+        );
+      });
+      await waitFor(() =>
+        expect(screen.queryByRole('dialog', { name: 'Zone attendance' })).toBeNull(),
+      );
+      expect(screen.queryByRole('button', { name: /^Zone attendance:/ })).toBeNull();
+    } else page.changeSite('site-2');
+    await waitFor(() =>
+      expect(screen.queryByRole('dialog', { name: 'Zone attendance' })).toBeNull(),
+    );
+  },
+);
+
 it.each(['timetable', 'list'])('shows backend ABSENT in the %s schedule view', async (mode) => {
   vi.mocked(SmartSiteManagementClient.prototype.attendanceDays).mockResolvedValue({
     items: [
@@ -325,6 +439,47 @@ it('displays worker assigned team and enables eligible swap workflow', async () 
   expect(await screen.findByText(/Team: Painting Squad/i)).not.toBeNull();
   expect(await screen.findByText('Zone: Painting Zone')).not.toBeNull();
   expect(screen.queryByText(/Member of Painting Squad/i)).toBeNull();
+});
+
+it('locks an already open swap form when leave approval arrives', async () => {
+  vi.setSystemTime(new Date('2030-01-01T00:00:00Z'));
+  vi.mocked(SmartSiteManagementClient.prototype.listShifts).mockResolvedValue({
+    items: ['morning', 'evening'].map((id) => ({
+      id,
+      siteId: 'site-1',
+      name: id,
+      startsAt: '2026-01-01T08:00:00Z',
+      endsAt: '2026-01-01T10:00:00Z',
+      timezone: 'UTC',
+      createdAt: '2026-01-01T00:00:00Z',
+    })),
+    total: 2,
+  });
+  vi.spyOn(SmartSiteManagementClient.prototype, 'listSwapCandidates').mockResolvedValue({
+    items: [],
+    total: 0,
+  });
+  mount();
+  fireEvent.click((await screen.findAllByRole('button', { name: 'Swap shift' }))[0]!);
+  await screen.findByRole('button', { name: 'Submit Swap Request' });
+  await act(async () => {
+    queries.setQueriesData(
+      { queryKey: ['worker-schedules', 'site-1'] },
+      (old: { items: Array<Record<string, unknown>>; total: number } | undefined) =>
+        old && {
+          ...old,
+          items: old.items.map((item) =>
+            item.id === 'site-1-morning'
+              ? { ...item, isActive: false, approvedFullShiftLeave: true }
+              : item,
+          ),
+        },
+    );
+  });
+  expect(await screen.findByRole('alert')).toHaveProperty('textContent', 'Leave — Approved');
+  expect(screen.getByRole('button', { name: 'Submit Swap Request' }).hasAttribute('disabled')).toBe(
+    true,
+  );
 });
 
 it('displays unassigned status and disables swap submission when worker is not in a team', async () => {

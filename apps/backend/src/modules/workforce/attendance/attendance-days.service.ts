@@ -20,6 +20,9 @@ import {
   AttendanceSessionEntity,
   AttendanceEventEntity,
   AttendanceCorrectionEntity,
+  AttendanceAbsenceReviewEntity,
+  AccessAuditEntity,
+  UserEntity,
   OvertimeRequestEntity,
   AbsenceRequestEntity,
   AbsenceRequestStatus,
@@ -33,16 +36,25 @@ import {
   invalid,
   missing,
   uuid,
+  knownUnique,
 } from '../../../common/configuration/commands.js';
 import type { WorkforceActor } from '../directory/contractor-operations.service.js';
 import { attendanceAccess } from './attendance-access.js';
 import { canAcknowledgeEarlyCheckout } from './attendance-review-policy.js';
+import { attendanceGateAbsenceContext, canConfirmGateAbsence } from './attendance-gate-review.js';
+import {
+  attendanceZoneReviewContext,
+  canConfirmZoneHours,
+  ZONE_HOURS_REVIEW_ACTION,
+} from './attendance-zone-review.js';
 import { AttendanceReconciliationService } from './attendance-reconciliation.service.js';
 import {
   AttendanceDaysDto,
   AttendanceTimeRequestsDto,
   AttendanceTimeRequestDto,
   ReviewAttendanceDayDto,
+  ConfirmAttendanceAbsenceDto,
+  ConfirmAttendanceZoneHoursDto,
   IgnoreDuplicateAttendanceDto,
   ReviewAttendanceTimeDto,
 } from './dto/attendance.dto.js';
@@ -50,6 +62,7 @@ import { auditAccess } from '../shared/access-audit.js';
 import { workDateAt, scheduledShiftWindow } from './attendance-calculation.js';
 import { assertWorkerLeaveAvailable, workerRequests } from './worker-requests.js';
 import { WorkerRequestsDto } from './dto/attendance.dto.js';
+import { coveredPendingLeaveSql } from '../shared/leave-display.js';
 
 @Injectable()
 export class AttendanceDaysService {
@@ -92,9 +105,11 @@ export class AttendanceDaysService {
       ...(value.workerId ? { id: value.workerId } : {}),
     });
     const visible: WorkerEntity[] = [];
+    const selfWorkerIds: string[] = [];
     for (const worker of workers) {
       try {
-        await attendanceAccess(this.source.manager, actor, worker);
+        const access = await attendanceAccess(this.source.manager, actor, worker);
+        if (access === 'SELF') selfWorkerIds.push(worker.id);
         visible.push(worker);
       } catch (error) {
         if (!(error instanceof PublicHttpException && error.getStatus() === 403)) throw error;
@@ -142,10 +157,22 @@ export class AttendanceDaysService {
         : value.status === 'APPROVED'
           ? AbsenceRequestStatus.APPROVED
           : AbsenceRequestStatus.REJECTED;
-    const [requests, total] = await this.source.getRepository(AbsenceRequestEntity).findAndCount({
-      where: { ...where, ...(value.status ? { status } : {}) },
-      ...page,
-    });
+    const leaveQuery = this.source
+      .getRepository(AbsenceRequestEntity)
+      .createQueryBuilder('request')
+      .where({ ...where, ...(value.status ? { status } : {}) });
+    if (!value.requestId && selfWorkerIds.length) {
+      leaveQuery.andWhere(
+        `NOT (request.worker_id IN (:...selfWorkerIds) AND ${coveredPendingLeaveSql('request')})`,
+        { selfWorkerIds },
+      );
+    }
+    const [requests, total] = await leaveQuery
+      .orderBy('request.createdAt', 'DESC')
+      .addOrderBy('request.id', 'ASC')
+      .skip(page.skip)
+      .take(page.take)
+      .getManyAndCount();
     const schedules = requests.length
       ? await this.source.getRepository(WorkerScheduleEntity).findBy({
           siteId,
@@ -464,8 +491,90 @@ export class AttendanceDaysService {
     const rawEvents = eventIds.length
       ? await this.source.getRepository(AttendanceEventEntity).findBy({ id: In(eventIds) })
       : [];
+    const gateReview = await attendanceGateAbsenceContext(this.source.manager, day);
+    const zoneReview = await attendanceZoneReviewContext(this.source.manager, day);
+    const zoneReviewer = zoneReview?.decision?.actorAccountId
+      ? await this.source
+          .getRepository(UserEntity)
+          .findOneBy({ id: zoneReview.decision.actorAccountId })
+      : null;
     return {
       currentSchedule,
+      ...(zoneReview &&
+      ((day.anomalies.includes('ZONE_ATTENDANCE_PENDING') &&
+        zoneReview.complete &&
+        !zoneReview.record) ||
+        zoneReview.decision)
+        ? {
+            zoneAttendanceReview: {
+              canConfirm:
+                canReview &&
+                worker.userId !== actor.id &&
+                canConfirmZoneHours(day, zoneReview, new Date()),
+              status: zoneReview.conflicted
+                ? ('CONFLICTED' as const)
+                : zoneReview.resolved || (zoneReview.decision && day.status === 'CONFIRMED')
+                  ? ('CONFIRMED' as const)
+                  : ('PENDING' as const),
+              evidenceHash: zoneReview.evidenceHash,
+              gateInCount: zoneReview.gateInCount,
+              gateOutCount: zoneReview.gateOutCount,
+              sessionCount: zoneReview.sessionCount,
+              regularMinutes: day.regularMinutes,
+              overtimeMinutes: day.overtimeMinutes,
+              teamAttendanceStatus: zoneReview.record?.status ?? ('NOT_YET' as const),
+              ...(zoneReview.decision
+                ? {
+                    decision: {
+                      reviewedBy: zoneReview.decision.actorAccountId!,
+                      ...(zoneReviewer ? { reviewedByName: zoneReviewer.displayName } : {}),
+                      reviewedAt: zoneReview.decision.occurredAt.toISOString(),
+                      reason: zoneReview.decision.reason!,
+                    },
+                  }
+                : {}),
+            },
+          }
+        : {}),
+      ...(gateReview &&
+      ((day.anomalies.includes('ZONE_GATE_MISSING') && gateReview.noEvidence) ||
+        gateReview.decision)
+        ? {
+            gateAbsenceReview: {
+              canConfirm:
+                canReview &&
+                worker.userId !== actor.id &&
+                canConfirmGateAbsence(day, gateReview, new Date()),
+              gateEventCount: gateReview.gateEventCount,
+              attendanceEventCount: gateReview.attendanceEventCount,
+              sessionCount: gateReview.sessionCount,
+              status: gateReview.conflicted
+                ? ('CONFLICTED' as const)
+                : gateReview.resolved || (gateReview.decision && day.status === 'ABSENT')
+                  ? ('CONFIRMED_ABSENT' as const)
+                  : ('PENDING' as const),
+              ...(gateReview.record
+                ? {
+                    teamAttendance: {
+                      version: gateReview.record.version,
+                      status: gateReview.record.status,
+                      recordedBy: gateReview.record.updatedBy,
+                      recordedAt: gateReview.record.updatedAt.toISOString(),
+                    },
+                  }
+                : {}),
+              ...(gateReview.decision
+                ? {
+                    decision: {
+                      reviewedBy: gateReview.decision.reviewedBy,
+                      reviewedAt: gateReview.decision.reviewedAt.toISOString(),
+                      reason: gateReview.decision.reason,
+                    },
+                  }
+                : {}),
+            },
+          }
+        : {}),
       canAcknowledgeEarlyCheckout:
         canReview &&
         worker.userId !== actor.id &&
@@ -770,6 +879,12 @@ export class AttendanceDaysService {
         conflict('Schedule changed; leave must remain inside the shift');
       if (value.approve && overtime && start <= new Date())
         conflict('Overtime approval must precede its start');
+      if (value.approve && overtime) {
+        await manager.query('SELECT pg_advisory_xact_lock(hashtext($1))', [
+          `${siteId}${worker.id}`,
+        ]);
+        await assertWorkerIntervalAvailable(manager, siteId, worker.id, start, end, schedule.id);
+      }
       if (value.approve) {
         const overlaps: unknown[] = await manager.query(
           `SELECT id FROM ${overtime ? 'overtime_request' : 'absence_request'} WHERE ${overtime ? 'schedule_id' : 'worker_schedule_id'}=$1 AND status='APPROVED' AND id<>$2 AND COALESCE(starts_at,$3)<$4 AND COALESCE(ends_at,$4)>$3`,
@@ -853,6 +968,168 @@ export class AttendanceDaysService {
       return { id };
     });
   }
+  async confirmAbsence(
+    actor: WorkforceActor,
+    siteIdValue: string,
+    idValue: string,
+    input: ConfirmAttendanceAbsenceDto,
+  ) {
+    const siteId = uuid(siteIdValue),
+      id = uuid(idValue),
+      value = command(ConfirmAttendanceAbsenceDto, input);
+    return this.source
+      .transaction(async (manager) => {
+        const seed = await manager.getRepository(AttendanceDayEntity).findOneBy({ id, siteId });
+        if (!seed) missing();
+        const worker = await manager
+          .getRepository(WorkerEntity)
+          .findOne({ where: { id: seed.workerId, siteId }, lock: { mode: 'pessimistic_write' } });
+        if (!worker) missing();
+        await attendanceAccess(manager, actor, worker, true);
+        if (worker.userId === actor.id) conflict('Workers cannot review their own hours');
+        await manager.query('SELECT pg_advisory_xact_lock(hashtext($1))', [
+          `mf03:${siteId}:${worker.id}`,
+        ]);
+        const previous = await manager
+          .getRepository(AttendanceAbsenceReviewEntity)
+          .findOneBy({ id: value.requestId });
+        if (previous) {
+          if (
+            previous.dayId !== id ||
+            previous.reviewedBy !== actor.id ||
+            previous.reason !== value.reason ||
+            previous.expectedDayVersion !== value.expectedVersion ||
+            previous.teamAttendanceVersion !== value.expectedTeamAttendanceVersion
+          )
+            conflict('Request ID was already used');
+          return { id };
+        }
+        const day = await this.reconciliation.refresh(manager, id);
+        if (day.version !== value.expectedVersion)
+          conflict('Attendance changed; reload before reviewing');
+        const context = await attendanceGateAbsenceContext(manager, day);
+        if (
+          !canConfirmGateAbsence(day, context, new Date()) ||
+          !context?.record ||
+          context.record.version !== value.expectedTeamAttendanceVersion
+        )
+          conflict(
+            'Absence can only be confirmed after the shift ends with unchanged roll call and no Gate or attendance evidence',
+          );
+        await manager.getRepository(AttendanceAbsenceReviewEntity).save({
+          id: value.requestId,
+          dayId: id,
+          expectedDayVersion: value.expectedVersion,
+          teamAttendanceVersion: context.record.version,
+          teamId: context.record.teamId,
+          membershipId: context.record.membershipId,
+          zoneId: context.record.zoneId,
+          reviewedBy: actor.id,
+          reason: value.reason,
+        });
+        await auditAccess(
+          manager,
+          actor.id,
+          siteId,
+          'ATTENDANCE_ABSENCE_CONFIRMED',
+          'attendance_day',
+          id,
+          value.reason,
+          {
+            requestId: value.requestId,
+            before: day.status,
+            after: 'ABSENT',
+            teamAttendanceVersion: context.record.version,
+          },
+        );
+        await this.reconciliation.refresh(manager, id);
+        return { id };
+      })
+      .catch((error: unknown) =>
+        knownUnique(error, ['uq_absence_review_snapshot', 'attendance_absence_review_pkey']),
+      );
+  }
+  async confirmZoneHours(
+    actor: WorkforceActor,
+    siteIdValue: string,
+    idValue: string,
+    input: ConfirmAttendanceZoneHoursDto,
+  ) {
+    const siteId = uuid(siteIdValue),
+      id = uuid(idValue),
+      value = command(ConfirmAttendanceZoneHoursDto, input);
+    return this.source
+      .transaction(async (manager) => {
+        const seed = await manager.getRepository(AttendanceDayEntity).findOneBy({ id, siteId });
+        if (!seed) missing();
+        const worker = await manager
+          .getRepository(WorkerEntity)
+          .findOne({ where: { id: seed.workerId, siteId }, lock: { mode: 'pessimistic_write' } });
+        if (!worker) missing();
+        await attendanceAccess(manager, actor, worker, true);
+        if (worker.userId === actor.id) conflict('Workers cannot review their own hours');
+        await manager.query('SELECT pg_advisory_xact_lock(hashtext($1))', [
+          `mf03:${siteId}:${worker.id}`,
+        ]);
+        const previous = await manager
+          .getRepository(AccessAuditEntity)
+          .findOneBy({ action: ZONE_HOURS_REVIEW_ACTION, entityId: value.requestId });
+        if (previous) {
+          if (
+            previous.siteId !== siteId ||
+            previous.entityType !== 'attendance_zone_review' ||
+            previous.actorAccountId !== actor.id ||
+            previous.reason !== value.reason ||
+            previous.changes?.dayId !== id ||
+            previous.changes.expectedVersion !== value.expectedVersion ||
+            previous.changes.evidenceHash !== value.evidenceHash
+          )
+            conflict('Request ID was already used');
+          await this.reconciliation.refresh(manager, id);
+          return { id };
+        }
+        const day = await this.reconciliation.refresh(manager, id);
+        if (day.version !== value.expectedVersion)
+          conflict('Attendance changed; reload before reviewing');
+        const context = await attendanceZoneReviewContext(manager, day);
+        if (
+          !canConfirmZoneHours(day, context, new Date()) ||
+          !context ||
+          context.evidenceHash !== value.evidenceHash
+        )
+          conflict(
+            'Resolve incomplete Gate evidence, changed attendance and pending requests before confirming hours',
+          );
+        const requirement = day.zoneAttendanceRequirement!;
+        const audit = await auditAccess(
+          manager,
+          actor.id,
+          siteId,
+          ZONE_HOURS_REVIEW_ACTION,
+          'attendance_zone_review',
+          value.requestId,
+          value.reason,
+          {
+            dayId: id,
+            expectedVersion: value.expectedVersion,
+            evidenceHash: context.evidenceHash,
+            teamId: requirement.teamId,
+            membershipId: requirement.membershipId,
+            zoneId: requirement.zoneId,
+            teamAttendanceStatus: 'NOT_YET',
+            regularMinutes: day.regularMinutes,
+            overtimeMinutes: day.overtimeMinutes,
+            approvedAnomalies: day.anomalies,
+            evidence: context.evidence,
+          },
+        );
+        day.zoneAttendanceReviewAuditId = audit.id;
+        await manager.getRepository(AttendanceDayEntity).save(day);
+        await this.reconciliation.refresh(manager, id);
+        return { id };
+      })
+      .catch((error: unknown) => knownUnique(error, ['uq_zone_hours_review_request']));
+  }
   async acknowledge(
     actor: WorkforceActor,
     siteIdValue: string,
@@ -900,3 +1177,4 @@ export class AttendanceDaysService {
     });
   }
 }
+import { assertWorkerIntervalAvailable } from '../scheduling/worker-shift-overlap.js';

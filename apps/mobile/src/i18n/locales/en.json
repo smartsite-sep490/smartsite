@@ -719,6 +719,8 @@
     "serverFallback": "Server-issued backup QR"
   },
   "notifications": {
+    "ABSENCE_REVIEW_REQUIRED": "Present without Gate evidence — review required",
+    "gateAbsenceReviewMessage": "{{name}} ({{code}}) was marked present on {{date}}, but has no Gate IN/OUT. Check attendance before confirming absence.",
     "title": "Notifications",
     "detailTitle": "Notification Details",
     "viewTarget": "Open related page",
@@ -790,7 +792,9 @@
     "DOCUMENT_EXPIRED": "Document expired",
     "actions": "Actions",
     "unreadCount": "{{count}} unread",
-    "emptyHint": "New notifications and updates will appear here."
+    "emptyHint": "New notifications and updates will appear here.",
+    "ZONE_REVIEW_REQUIRED": "Missing team leader roll call — hours review required",
+    "zoneReviewMessage": "{{name}} ({{code}}) has complete Gate IN/OUT on {{date}}, but no leader roll call. Review the recorded hours."
   },
   "profile": {
     "title": "Account",
@@ -1294,7 +1298,8 @@
     "ZONE_ATTENDANCE_PENDING": "Waiting for the team leader’s zone attendance",
     "ZONE_ATTENDANCE_MISMATCH": "Attendance does not match the assigned team or zone",
     "ZONE_ATTENDANCE_ABSENT": "Recorded absent from the work zone",
-    "ZONE_GATE_MISSING": "Present in the zone without a gate entry"
+    "ZONE_GATE_MISSING": "Present in the zone without a gate entry",
+    "ZONE_ATTENDANCE_REVIEW_CONFLICT": "Evidence changed after the previous review. Check the current intervals and hours again."
   },
   "systemMessages": {
     "errors_gate_assignment_required": "An approved worker assignment with an expiry is required",
@@ -1542,6 +1547,12 @@
     "groupHint": "Scheduled workers for this shift; attendance has not been confirmed by this count."
   },
   "attendanceReview": {
+    "confirmAbsence": "Confirm absent — 0 hours",
+    "absenceTitle": "Review: Present without Gate IN/OUT",
+    "absenceHint": "Hours stay at zero. Check Gate evidence and the leader’s roll call. Absence can be confirmed only after the shift and approved overtime end, with no Gate or attendance evidence.",
+    "absenceEvidence": "Gate passages: {{gates}} · attendance events: {{events}} · sessions: {{sessions}}",
+    "absenceConfirmed": "Absence confirmed — 0 hours. Original roll call retained.",
+    "absenceChanged": "Attendance evidence changed. Reload and check again.",
     "ignoreDuplicate": "Ignore duplicate entry",
     "reviewCorrection": "Review time correction",
     "acknowledge": "Acknowledge early checkout",
@@ -1553,7 +1564,15 @@
     "correctionHint": "Original scans are preserved. Approval updates effective times and recalculates the workday.",
     "duplicateHint": "Only the duplicate session is ignored. Original evidence and your reason remain in the history.",
     "acknowledgeHint": "Acknowledge a reviewed early departure. Other anomalies must be resolved first.",
-    "saved": "Review updated."
+    "saved": "Review updated.",
+    "zoneTitle": "Review hours: missing team leader roll call",
+    "zoneHint": "Confirm only calculated hours from complete Gate IN/OUT sessions. Deductions remain applied. This does not create a leader roll call.",
+    "zoneEvidence": "Gate IN: {{ins}} · Gate OUT: {{outs}} · completed sessions: {{sessions}}",
+    "confirmZoneHours": "Confirm working hours",
+    "zoneConfirmed": "Working hours confirmed by the Contractor Representative. Original roll call retained.",
+    "zoneConflict": "Evidence changed after the previous review. Check the current intervals and hours again.",
+    "zoneRollCall": "Current leader roll call:",
+    "zoneReviewedBy": "Reviewed by {{name}} at {{time}}"
   },
   "teamReview": {
     "title": "Team attendance comparison",

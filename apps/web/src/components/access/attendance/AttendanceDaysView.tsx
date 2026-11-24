@@ -1,4 +1,6 @@
 import { SmartNativeSelect } from '../../ui/SmartNativeSelect';
+import { GateAbsenceReviewCard } from './GateAbsenceReviewCard';
+import { ZoneAttendanceReviewCard } from './ZoneAttendanceReviewCard';
 import { useManagementClient } from '../../../features/auth/auth-session';
 import { localizedError, userErrorMessage } from '../../../i18n/messages';
 import { uiLocale } from '../../../i18n';
@@ -837,7 +839,9 @@ export function AttendanceDaysView({
                           {hours(day.provisionalMinutes)}
                         </td>
                         <td className="px-4 py-3.5 text-xs font-mono whitespace-nowrap">
-                          {day.confirmedMinutes === null ? (
+                          {day.status === 'ABSENT' ? (
+                            <span className="text-slate-600">{hours(0)}</span>
+                          ) : day.confirmedMinutes === null ? (
                             <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-slate-100 text-slate-600 text-[11px] font-medium border border-slate-200/60">
                               <span className="w-1.5 h-1.5 rounded-full bg-slate-400" />
                               {tr('common.awaiting_confirmation')}
@@ -967,6 +971,29 @@ export function AttendanceDaysView({
             </div>
 
             <div className="p-6 space-y-5">
+              <AttendanceResolutionNotice issues={activeDay.anomalies} siteId={siteId} />
+              {detail.data && (
+                <>
+                  <GateAbsenceReviewCard
+                    key={`${sessionScope}-${activeDay.id}`}
+                    detail={detail.data}
+                    apiUrl={apiUrl}
+                    token={token}
+                    siteId={siteId}
+                    sessionScope={sessionScope}
+                    unavailable={detail.isError || detail.isFetching}
+                  />
+                  <ZoneAttendanceReviewCard
+                    key={`zone-${sessionScope}-${activeDay.id}`}
+                    detail={detail.data}
+                    apiUrl={apiUrl}
+                    token={token}
+                    siteId={siteId}
+                    sessionScope={sessionScope}
+                    unavailable={detail.isError || detail.isFetching}
+                  />
+                </>
+              )}
               {/* Schedule Changed Warning */}
               {activeDay.anomalies.includes('SCHEDULE_CHANGED') && (
                 <div className="rounded-xl border border-amber-200 bg-amber-50 p-4 space-y-3">
@@ -2088,3 +2115,4 @@ export function AttendanceDaysView({
     </section>
   );
 }
+import { AttendanceResolutionNotice } from './AttendanceResolutionNotice';

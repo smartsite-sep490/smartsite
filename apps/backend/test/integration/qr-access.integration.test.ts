@@ -8,6 +8,35 @@ import 'reflect-metadata';
 import assert from 'node:assert/strict';
 import { createHash, randomUUID } from 'node:crypto';
 import { test } from 'node:test';
+import { createIsolatedTestDatabase } from '../support/isolated-test-database.js';
+
+test('direct QR reason migration matches metadata and is reversible before use', async () => {
+  const owned = createIsolatedTestDatabase();
+  try {
+    await owned.initialize();
+    const db = owned.dataSource;
+    assert.deepEqual(
+      (await db.driver.createSchemaBuilder().log()).upQueries.map((q) => q.query),
+      [],
+    );
+    const runner = db.createQueryRunner();
+    await runner.connect();
+    await runner.startTransaction();
+    try {
+      await new DirectWorkerQrSession1795651200003().down(runner);
+      await new DirectWorkerQrSession1795651200003().up(runner);
+    } finally {
+      await runner.rollbackTransaction();
+      await runner.release();
+    }
+    assert.deepEqual(
+      (await db.driver.createSchemaBuilder().log()).upQueries.map((q) => q.query),
+      [],
+    );
+  } finally {
+    await owned.dispose();
+  }
+});
 import { WorkerQrShortCodes1792454400000 } from '../../src/database/migrations/1792454400000-WorkerQrShortCodes.js';
 import { QrAccessService } from '../../src/modules/workforce/access/qr-access.service.js';
 import { PublicHttpException } from '../../src/common/http/public-http-exception.js';
@@ -623,8 +652,35 @@ test('real PostgreSQL visitor approval, group counts, expiring QR, replay and wo
     );
     const fallback = await service.cameraFallback(security, siteId, gateId, {
       direction: 'IN',
-      reason: 'CAMERA_UNAVAILABLE',
+      reason: 'OPERATOR_QR_SELECTED',
     });
+    assert.equal(
+      (await dataSource.getRepository(QrFallbackSessionEntity).findOneByOrFail({ id: fallback.id }))
+        .reason,
+      'OPERATOR_QR_SELECTED',
+    );
+    const directRunner = dataSource.createQueryRunner();
+    await directRunner.connect();
+    try {
+      await assert.rejects(
+        new DirectWorkerQrSession1795651200003().down(directRunner),
+        /Preserve direct QR verification history/,
+      );
+    } finally {
+      await directRunner.release();
+    }
+    await assert.rejects(
+      service.cameraFallback(workerActor, siteId, gateId, {
+        direction: 'IN',
+        reason: 'OPERATOR_QR_SELECTED',
+      }),
+    );
+    await assert.rejects(
+      service.cameraFallback(security, otherSiteId, gateId, {
+        direction: 'IN',
+        reason: 'OPERATOR_QR_SELECTED',
+      }),
+    );
     await assert.rejects(service.workerPass(security, siteId, { direction: 'IN' }));
     await assert.rejects(service.workerPass(workerActor, otherSiteId, { direction: 'IN' }));
     await assert.rejects(
@@ -920,3 +976,4 @@ test('real PostgreSQL visitor approval, group counts, expiring QR, replay and wo
     await dataSource.destroy();
   }
 });
+import { DirectWorkerQrSession1795651200003 } from '../../src/database/migrations/1795651200003-DirectWorkerQrSession.js';

@@ -9,6 +9,7 @@ const api = vi.hoisted(() => ({
   attendanceOverview: vi.fn(),
   reviewAttendanceCorrection: vi.fn(),
   requestAttendanceCorrection: vi.fn(),
+  requestMissingAttendance: vi.fn(),
 }));
 vi.mock('@smartsite/api-client', async (importOriginal) => ({
   ...(await importOriginal<typeof import('@smartsite/api-client')>()),
@@ -111,6 +112,35 @@ it('uses minute-only 24-hour controls and preserves seconds on the untouched rec
   fireEvent.change(screen.getByLabelText('Session'), { target: { value: '' } });
   fireEvent.change(screen.getByLabelText('Session'), { target: { value: session.id } });
   expect((screen.getByLabelText('Proposed out hour') as HTMLSelectElement).value).toBe('');
+});
+it('can report an ended shift without a session and submits it for review rather than granting hours', async () => {
+  api.attendanceOverview.mockResolvedValue({
+    canRequestCorrection: true,
+    canReviewCorrection: false,
+    sessions: [],
+    corrections: [],
+    missingSchedules: [
+      {
+        scheduleId: 'schedule-1',
+        workDate: '2026-11-23',
+        shiftName: 'Demo shift',
+        startsAt: '2026-11-23T01:00:00Z',
+        endsAt: '2026-11-23T02:00:00Z',
+      },
+    ],
+  });
+  api.requestMissingAttendance.mockResolvedValue({ id: 'report-1' });
+  mount();
+  await screen.findByRole('option', { name: /Demo shift.*No attendance session/ });
+  fireEvent.change(screen.getByLabelText('Session'), { target: { value: 'schedule:schedule-1' } });
+  fireEvent.change(screen.getByLabelText('Reason'), { target: { value: 'Missed both scans' } });
+  fireEvent.click(screen.getByRole('button', { name: 'Send to Contractor Representative' }));
+  await waitFor(() => expect(api.requestMissingAttendance).toHaveBeenCalled());
+  expect(api.requestMissingAttendance.mock.calls.at(-1)?.slice(1, 3)).toEqual([
+    'site',
+    'schedule-1',
+  ]);
+  expect(api.requestAttendanceCorrection).not.toHaveBeenCalled();
 });
 it('blocks another submission even when the pending correction is outside the day filter', async () => {
   api.attendanceOverview.mockResolvedValue({

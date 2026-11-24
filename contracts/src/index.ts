@@ -15,6 +15,8 @@ export type {
   AttendanceOverviewQuery,
   IgnoreDuplicateAttendanceCommand,
   ReviewAttendanceDayCommand,
+  ConfirmAttendanceAbsenceCommand,
+  ConfirmAttendanceZoneHoursCommand,
   AttendanceDayDetailResponse,
   AttendanceTimesheetResponse,
 } from './attendance-api.js';

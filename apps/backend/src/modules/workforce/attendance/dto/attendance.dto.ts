@@ -104,6 +104,26 @@ export class ReviewAttendanceDayDto {
   @MaxLength(1000)
   reviewNote!: string;
 }
+export class ConfirmAttendanceAbsenceDto {
+  @IsUUID() requestId!: string;
+  @IsInt() @Min(1) expectedVersion!: number;
+  @IsInt() @Min(1) expectedTeamAttendanceVersion!: number;
+  @Transform(({ value }: { value: unknown }) => (typeof value === 'string' ? value.trim() : value))
+  @IsString()
+  @MinLength(5)
+  @MaxLength(1000)
+  reason!: string;
+}
+export class ConfirmAttendanceZoneHoursDto {
+  @IsUUID() requestId!: string;
+  @IsInt() @Min(1) expectedVersion!: number;
+  @IsString() @Matches(/^[a-f0-9]{64}$/) evidenceHash!: string;
+  @Transform(({ value }: { value: unknown }) => (typeof value === 'string' ? value.trim() : value))
+  @IsString()
+  @MinLength(5)
+  @MaxLength(1000)
+  reason!: string;
+}
 export class ReviewAttendanceTimeDto {
   @IsBoolean() approve!: boolean;
   @ValidateIf(

@@ -57,6 +57,21 @@ async function click(label: string) {
   await act(async () => buttons(label)[0]!.props.onPress());
 }
 
+it('shows finalized absence as worked time zero without a provisional confirmation hint', async () => {
+  detail.day = {
+    ...detail.day,
+    status: 'ABSENT',
+    anomalies: [],
+    regularMinutes: 0,
+    provisionalMinutes: 0,
+    confirmedMinutes: null,
+  };
+  await mount();
+  expect(text()).toContain(t('attendance.worked'));
+  expect(text()).not.toContain(t('attendanceDetail.provisionalHint'));
+  expect(text()).toContain(minutes(0));
+});
+
 beforeEach(async () => {
   await setLanguage('vi');
   cache = new QueryClient({ defaultOptions: { queries: { retry: false, gcTime: 0 } } });
@@ -359,6 +374,112 @@ it('offers early-checkout acknowledgement only when the server capability permit
   });
 });
 
+it('opens the absence review from an authorized day and preserves the day/roll-call versions', async () => {
+  workspace.scope.role = 'contractor';
+  detail.sessions = [];
+  detail.gateAbsenceReview = {
+    canConfirm: true,
+    gateEventCount: 0,
+    attendanceEventCount: 0,
+    sessionCount: 0,
+    status: 'PENDING',
+    teamAttendance: {
+      version: 4,
+      status: 'PRESENT',
+      recordedBy: 'leader',
+      recordedAt: '2026-11-20T10:05:00Z',
+    },
+  };
+  const confirm = vi
+    .spyOn(workspace.client, 'confirmAttendanceAbsence')
+    .mockResolvedValue({ id: 'day' });
+  await mount();
+  await click(t('attendanceReview.confirmAbsence'));
+  expect(buttons(t('common.confirm'))[0]!.props.disabled).toBe(true);
+  await act(async () =>
+    root.root
+      .findAll(
+        (node) =>
+          String(node.type) === 'TextInput' &&
+          node.props.accessibilityLabel === t('attendanceReview.reason'),
+      )[0]!
+      .props.onChangeText('Verified absent from the Site'),
+  );
+  await click(t('common.confirm'));
+  await settle();
+  expect(confirm).toHaveBeenCalledWith('token', 'site', 'day', {
+    requestId: expect.any(String),
+    expectedVersion: 1,
+    expectedTeamAttendanceVersion: 4,
+    reason: 'Verified absent from the Site',
+  });
+});
+it('does not offer absence confirmation without the Backend capability', async () => {
+  workspace.scope.role = 'contractor';
+  detail.gateAbsenceReview = {
+    canConfirm: false,
+    gateEventCount: 1,
+    attendanceEventCount: 0,
+    sessionCount: 0,
+    status: 'CONFLICTED',
+  };
+  await mount();
+  expect(buttons(t('attendanceReview.confirmAbsence'))).toHaveLength(0);
+});
+it('opens the missing-roll-call review from an authorized day and preserves the day and evidence snapshot', async () => {
+  workspace.scope.role = 'contractor';
+  detail.sessions = [];
+  detail.zoneAttendanceReview = {
+    canConfirm: true,
+    status: 'PENDING',
+    evidenceHash: 'a'.repeat(64),
+    gateInCount: 1,
+    gateOutCount: 1,
+    sessionCount: 1,
+    regularMinutes: 420,
+    overtimeMinutes: 0,
+    teamAttendanceStatus: 'NOT_YET',
+  };
+  const confirm = vi
+    .spyOn(workspace.client, 'confirmAttendanceZoneHours')
+    .mockResolvedValue({ id: 'day' });
+  await mount();
+  await click(t('attendanceReview.confirmZoneHours'));
+  expect(buttons(t('common.confirm'))[0]!.props.disabled).toBe(true);
+  await act(async () =>
+    root.root
+      .findAll(
+        (node) =>
+          String(node.type) === 'TextInput' &&
+          node.props.accessibilityLabel === t('attendanceReview.reason'),
+      )[0]!
+      .props.onChangeText('Verified absent from the Site'),
+  );
+  await click(t('common.confirm'));
+  await settle();
+  expect(confirm).toHaveBeenCalledWith('token', 'site', 'day', {
+    requestId: expect.any(String),
+    expectedVersion: 1,
+    evidenceHash: 'a'.repeat(64),
+    reason: 'Verified absent from the Site',
+  });
+});
+it('does not offer hours confirmation without the Backend capability', async () => {
+  workspace.scope.role = 'contractor';
+  detail.zoneAttendanceReview = {
+    canConfirm: false,
+    status: 'CONFLICTED',
+    evidenceHash: 'a'.repeat(64),
+    gateInCount: 1,
+    gateOutCount: 0,
+    sessionCount: 1,
+    regularMinutes: 0,
+    overtimeMinutes: 0,
+    teamAttendanceStatus: 'NOT_YET',
+  };
+  await mount();
+  expect(buttons(t('attendanceReview.confirmZoneHours'))).toHaveLength(0);
+});
 it.each(['worker', 'contractor'] as const)(
   'hides out-of-scope day content and does not fetch corrections for %s',
   async (role) => {

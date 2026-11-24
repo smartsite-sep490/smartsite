@@ -18,9 +18,11 @@ import {
 } from '../utils/workforce-format';
 import { WORKFORCE_POLL_INTERVAL_MS } from '../constants/workforce.constants';
 import { useEffect } from 'react';
-import { isShiftStarted, scheduledShiftWindow } from '@smartsite/contracts/management';
+import { isShiftEnded, isShiftStarted, scheduledShiftWindow } from '@smartsite/contracts/management';
 import { loadAllPages } from '../load-all-pages';
 import { WorkerAbsenceSummary } from './WorkerAbsenceSummary';
+import { TeamAttendanceDialog } from '../../team-attendance/TeamAttendanceDialog';
+import { teamText } from '../../team-attendance/team-attendance-copy';
 import { useShiftRequests } from '../hooks/useShiftRequests';
 import { RequestPagination } from './RequestPagination';
 import { schedulingError } from '../utils/scheduling-error';
@@ -209,6 +211,11 @@ export function WorkforceScheduleTab({
   const target = useNotificationRequest(apiUrl, siteId, token);
 
   const [selectedSchedule, setSelectedSchedule] = useState<WorkerScheduleResponse | null>(null);
+  const [zoneSchedule, setZoneSchedule] = useState<{
+    schedule: WorkerScheduleResponse;
+    siteId: string;
+    sessionScope: string;
+  } | null>(null);
   const [modalType, setModalType] = useState<'swap' | 'change' | null>(null);
   const [userView, setActiveView] = useState<'schedule' | 'requests' | 'coworker' | null>(null);
   const activeView =
@@ -521,8 +528,11 @@ export function WorkforceScheduleTab({
   }, [scheduleList]);
   const resetSchedulePage = () => setSchedulePage(0);
   const currentWorkerId = useMemo(
-    () => workers?.items.find((worker) => worker.userId === currentUserId)?.id ?? null,
-    [workers?.items, currentUserId],
+    () =>
+      myTeam?.workerId ??
+      workers?.items.find((worker) => worker.userId === currentUserId)?.id ??
+      null,
+    [myTeam?.workerId, workers?.items, currentUserId],
   );
   const allMyRequests = requestsQuery.data?.items ?? [];
   const selectedRequest =
@@ -541,13 +551,32 @@ export function WorkforceScheduleTab({
     ...incomingItems.filter((r) => r.requestType === 'SWAP'),
   ];
   const pendingScheduleIds = new Set(requestsQuery.data?.pendingScheduleIds ?? []);
+  const selectedOnLeave =
+    schedules?.items.find((entry) => entry.id === selectedSchedule?.id)?.approvedFullShiftLeave ===
+    true;
   const isLockedSchedule = (schedule: WorkerScheduleResponse, at = now) => {
+    const current = schedules?.items.find((entry) => entry.id === schedule.id) ?? schedule;
+    if (!current.isActive || current.approvedFullShiftLeave) return true;
     const shift = getShiftObj(schedule.shiftId);
     if (!shift) return true;
     try {
       return isShiftStarted(schedule.workDate, shift, at);
     } catch {
       return true;
+    }
+  };
+
+  const isEndedSchedule = (schedule: WorkerScheduleResponse, at = now) => {
+    const current = schedules?.items.find((entry) => entry.id === schedule.id) ?? schedule;
+    if (!current.isActive) return false;
+    if (schedule.workDate < todayIso) return true;
+    if (schedule.workDate > todayIso) return false;
+    const shift = getShiftObj(schedule.shiftId);
+    if (!shift) return false;
+    try {
+      return isShiftEnded(schedule.workDate, shift, at);
+    } catch {
+      return false;
     }
   };
 
@@ -1186,8 +1215,10 @@ export function WorkforceScheduleTab({
                       ) : (
                         <div className="space-y-2 flex-1 flex flex-col">
                           {daySchedules.map((sched) => {
+                            const onLeave = sched.approvedFullShiftLeave === true;
                             const shiftObj = getShiftObj(sched.shiftId);
                             const isPast = isLockedSchedule(sched);
+                            const isEnded = isEndedSchedule(sched);
                             const hasPendingRequest = pendingScheduleIds.has(sched.id);
 
                             return (
@@ -1215,24 +1246,28 @@ export function WorkforceScheduleTab({
                                     </div>
                                     <span
                                       className={`px-1.5 py-0.5 rounded text-[9px] font-bold tracking-tight uppercase shrink-0 ${
-                                        scheduleAttendance(sched.id) === 'ABSENT'
-                                          ? 'bg-rose-50 text-rose-700 border border-rose-200/60'
-                                          : isPast
-                                            ? 'bg-slate-100 text-slate-500 border border-slate-200/60'
-                                            : hasPendingRequest
-                                              ? 'bg-amber-50 text-amber-700 border border-amber-200/60'
-                                              : isToday
-                                                ? 'bg-blue-50 text-blue-700 border border-blue-200/60'
-                                                : 'bg-emerald-50 text-emerald-700 border border-emerald-200/60'
+                                        onLeave
+                                          ? 'bg-emerald-50 text-emerald-700 border border-emerald-200/60'
+                                          : scheduleAttendance(sched.id) === 'ABSENT'
+                                            ? 'bg-rose-50 text-rose-700 border border-rose-200/60'
+                                            : isPast
+                                              ? 'bg-slate-100 text-slate-500 border border-slate-200/60'
+                                              : hasPendingRequest
+                                                ? 'bg-amber-50 text-amber-700 border border-amber-200/60'
+                                                : isToday
+                                                  ? 'bg-blue-50 text-blue-700 border border-blue-200/60'
+                                                  : 'bg-emerald-50 text-emerald-700 border border-emerald-200/60'
                                       }`}
                                     >
-                                      {scheduleAttendance(sched.id) === 'ABSENT'
-                                        ? localizedLabel('ABSENT')
-                                        : isPast
-                                          ? localizedLabel('PAST')
-                                          : hasPendingRequest
-                                            ? localizedLabel('PENDING')
-                                            : localizedLabel('SCHEDULED')}
+                                      {onLeave
+                                        ? tr('common.leave')
+                                        : scheduleAttendance(sched.id) === 'ABSENT'
+                                          ? localizedLabel('ABSENT')
+                                          : isPast
+                                            ? localizedLabel('PAST')
+                                            : hasPendingRequest
+                                              ? localizedLabel('PENDING')
+                                              : localizedLabel('SCHEDULED')}
                                     </span>
                                   </div>
 
@@ -1259,41 +1294,85 @@ export function WorkforceScheduleTab({
 
                                 {/* Action Buttons or Past Status */}
                                 <div className="pt-2 border-t border-slate-100">
-                                  {isPast ? (
-                                    <div className="text-[10px] text-slate-400 italic text-center py-1 bg-slate-50/80 rounded-md border border-slate-100">
-                                      {tr('common.shift_started_locked')}
+                                  {onLeave ? (
+                                    <p className="text-xs text-emerald-700 text-center">
+                                      {tr('common.approved')}
+                                    </p>
+                                  ) : isEnded ? (
+                                    <div className="space-y-1.5">
+                                      {(() => {
+                                        const status = scheduleAttendance(sched.id);
+                                        const day = attendanceQuery.data?.find((d) => d.scheduleId === sched.id);
+                                        const isPresent =
+                                          status === 'CONFIRMED' ||
+                                          (day && ((day.regularMinutes ?? 0) > 0 || (day.confirmedMinutes ?? 0) > 0 || day.presence === 'INSIDE'));
+                                        return (
+                                          <div
+                                            className={`flex items-center justify-center gap-1.5 py-1 px-2.5 rounded-lg text-xs font-bold border ${
+                                              isPresent
+                                                ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
+                                                : 'bg-rose-50 text-rose-700 border-rose-200'
+                                            }`}
+                                          >
+                                            <span className={`w-1.5 h-1.5 rounded-full ${isPresent ? 'bg-emerald-500' : 'bg-rose-500'}`} />
+                                            <span>{teamText(isPresent ? 'teamWeb.status.PRESENT' : 'teamWeb.status.ABSENT')}</span>
+                                          </div>
+                                        );
+                                      })()}
+                                      <div className="text-[10px] text-slate-400 italic text-center py-0.5">
+                                        {tr('common.shift_started_locked')}
+                                      </div>
                                     </div>
                                   ) : (
-                                    <div className="flex flex-col gap-1.5">
-                                      <button
-                                        type="button"
-                                        disabled={hasPendingRequest}
-                                        onClick={() => openChangeModal(sched)}
-                                        className="w-full flex items-center justify-center gap-1.5 px-2 py-1.5 h-7 rounded-full border border-slate-200 bg-white text-[10px] font-bold text-slate-700 hover:bg-slate-50 hover:border-slate-300 disabled:opacity-50 transition-all cursor-pointer shadow-xs"
-                                        title={
-                                          hasPendingRequest
-                                            ? tr('common.request_pending_approval')
-                                            : tr('common.change_shift')
+                                    <>
+                                      <Button
+                                        variant="outline"
+                                        size="sm"
+                                        className="mb-2 w-full"
+                                        aria-label={`${teamText('teamWeb.attendance')}: ${getShiftName(sched.shiftId)}, ${formatWorkDate(sched.workDate)}`}
+                                        onClick={() =>
+                                          setZoneSchedule({ schedule: sched, siteId, sessionScope })
                                         }
                                       >
-                                        <IconClock className="w-3 h-3 text-blue-600 shrink-0" />
-                                        <span>{tr('common.request_change')}</span>
-                                      </button>
-                                      <button
-                                        type="button"
-                                        disabled={hasPendingRequest}
-                                        onClick={() => openSwapModal(sched)}
-                                        className="w-full flex items-center justify-center gap-1.5 px-2 py-1.5 h-7 rounded-full bg-[#071A2B] text-white text-[10px] font-bold hover:bg-[#0E2841] disabled:opacity-50 transition-all cursor-pointer shadow-xs"
-                                        title={
-                                          hasPendingRequest
-                                            ? tr('common.request_pending_approval')
-                                            : tr('common.swap_with_coworker')
-                                        }
-                                      >
-                                        <IconUsers className="w-3 h-3 text-white shrink-0" />
-                                        <span>{tr('common.swap_shift')}</span>
-                                      </button>
-                                    </div>
+                                        {teamText('teamWeb.attendance')}
+                                      </Button>
+                                      {isPast ? (
+                                        <div className="text-[10px] text-slate-400 italic text-center py-0.5">
+                                          {tr('common.shift_started_locked')}
+                                        </div>
+                                      ) : (
+                                        <div className="flex flex-col gap-1.5">
+                                          <button
+                                            type="button"
+                                            disabled={hasPendingRequest}
+                                            onClick={() => openChangeModal(sched)}
+                                            className="w-full flex items-center justify-center gap-1.5 px-2 py-1.5 h-7 rounded-full border border-slate-200 bg-white text-[10px] font-bold text-slate-700 hover:bg-slate-50 hover:border-slate-300 disabled:opacity-50 transition-all cursor-pointer shadow-xs"
+                                            title={
+                                              hasPendingRequest
+                                                ? tr('common.request_pending_approval')
+                                                : tr('common.change_shift')
+                                            }
+                                          >
+                                            <IconClock className="w-3 h-3 text-blue-600 shrink-0" />
+                                            <span>{tr('common.request_change')}</span>
+                                          </button>
+                                          <button
+                                            type="button"
+                                            disabled={hasPendingRequest}
+                                            onClick={() => openSwapModal(sched)}
+                                            className="w-full flex items-center justify-center gap-1.5 px-2 py-1.5 h-7 rounded-full bg-[#071A2B] text-white text-[10px] font-bold hover:bg-[#0E2841] disabled:opacity-50 transition-all cursor-pointer shadow-xs"
+                                            title={
+                                              hasPendingRequest
+                                                ? tr('common.request_pending_approval')
+                                                : tr('common.swap_with_coworker')
+                                            }
+                                          >
+                                            <IconUsers className="w-3 h-3 text-white shrink-0" />
+                                            <span>{tr('common.swap_shift')}</span>
+                                          </button>
+                                        </div>
+                                      )}
+                                    </>
                                   )}
                                 </div>
                               </div>
@@ -1357,9 +1436,11 @@ export function WorkforceScheduleTab({
                         {!collapsed && (
                           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
                             {dateSchedules.map((sched) => {
+                              const onLeave = sched.approvedFullShiftLeave === true;
                               const shiftObj = getShiftObj(sched.shiftId);
                               const hasPendingRequest = pendingScheduleIds.has(sched.id);
                               const isPast = isLockedSchedule(sched);
+                              const isEnded = isEndedSchedule(sched);
 
                               return (
                                 <Card key={sched.id} doubleBezel className="space-y-3.5">
@@ -1377,22 +1458,26 @@ export function WorkforceScheduleTab({
 
                                     <Badge
                                       variant={
-                                        scheduleAttendance(sched.id) === 'ABSENT'
-                                          ? 'danger'
-                                          : isPast
-                                            ? 'neutral'
-                                            : hasPendingRequest
-                                              ? 'warning'
-                                              : 'success'
+                                        onLeave
+                                          ? 'success'
+                                          : scheduleAttendance(sched.id) === 'ABSENT'
+                                            ? 'danger'
+                                            : isPast
+                                              ? 'neutral'
+                                              : hasPendingRequest
+                                                ? 'warning'
+                                                : 'success'
                                       }
                                     >
-                                      {scheduleAttendance(sched.id) === 'ABSENT'
-                                        ? localizedLabel('ABSENT')
-                                        : isPast
-                                          ? localizedLabel('PAST')
-                                          : hasPendingRequest
-                                            ? tr('common.pending_review_ac9bf8')
-                                            : localizedLabel('SCHEDULED')}
+                                      {onLeave
+                                        ? tr('common.leave')
+                                        : scheduleAttendance(sched.id) === 'ABSENT'
+                                          ? localizedLabel('ABSENT')
+                                          : isPast
+                                            ? localizedLabel('PAST')
+                                            : hasPendingRequest
+                                              ? tr('common.pending_review_ac9bf8')
+                                              : localizedLabel('SCHEDULED')}
                                     </Badge>
                                   </div>
 
@@ -1417,47 +1502,95 @@ export function WorkforceScheduleTab({
                                   />
 
                                   <div className="pt-2.5 border-t border-slate-100">
-                                    {isPast ? (
-                                      <div className="text-xs text-slate-400 italic text-center py-1.5 bg-slate-50 rounded-lg border border-slate-100">
-                                        {tr(
-                                          'workforce_schedule_tab.shift_started_change_swap_unavailable',
-                                        )}
+                                    {onLeave ? (
+                                      <p className="text-xs text-emerald-700">
+                                        {tr('common.approved')}
+                                      </p>
+                                    ) : isEnded ? (
+                                      <div className="flex items-center justify-between gap-2">
+                                        {(() => {
+                                          const status = scheduleAttendance(sched.id);
+                                          const day = attendanceQuery.data?.find((d) => d.scheduleId === sched.id);
+                                          const isPresent =
+                                            status === 'CONFIRMED' ||
+                                            (day && ((day.regularMinutes ?? 0) > 0 || (day.confirmedMinutes ?? 0) > 0 || day.presence === 'INSIDE'));
+                                          return (
+                                            <div
+                                              className={`inline-flex items-center gap-1.5 py-1 px-2.5 rounded-lg text-xs font-bold border ${
+                                                isPresent
+                                                  ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
+                                                  : 'bg-rose-50 text-rose-700 border-rose-200'
+                                              }`}
+                                            >
+                                              <span className={`w-1.5 h-1.5 rounded-full ${isPresent ? 'bg-emerald-500' : 'bg-rose-500'}`} />
+                                              <span>{teamText(isPresent ? 'teamWeb.status.PRESENT' : 'teamWeb.status.ABSENT')}</span>
+                                            </div>
+                                          );
+                                        })()}
+                                        <span className="text-xs text-slate-400 italic">
+                                          {tr(
+                                            'workforce_schedule_tab.shift_started_change_swap_unavailable',
+                                          )}
+                                        </span>
                                       </div>
                                     ) : (
-                                      <div className="flex flex-col sm:flex-row items-center justify-end gap-2.5">
-                                        <button
-                                          type="button"
-                                          disabled={hasPendingRequest}
-                                          onClick={() => openChangeModal(sched)}
-                                          className="w-full sm:w-auto flex items-center justify-center gap-1.5 px-4 py-2 rounded-full border border-slate-200 bg-white text-xs font-bold text-slate-700 hover:bg-slate-50 hover:border-slate-300 disabled:opacity-50 transition-all cursor-pointer shadow-xs"
-                                          title={
-                                            hasPendingRequest
-                                              ? tr(
-                                                  'workforce_schedule_tab.a_request_for_this_shift_is_already_pending_review',
-                                                )
-                                              : undefined
+                                      <>
+                                        <Button
+                                          variant="outline"
+                                          size="sm"
+                                          className="mb-2"
+                                          aria-label={`${teamText('teamWeb.attendance')}: ${getShiftName(sched.shiftId)}, ${formatWorkDate(sched.workDate)}`}
+                                          onClick={() =>
+                                            setZoneSchedule({ schedule: sched, siteId, sessionScope })
                                           }
                                         >
-                                          <IconClock className="w-3.5 h-3.5 text-blue-600 shrink-0" />
-                                          <span>{tr('common.request_change')}</span>
-                                        </button>
-                                        <button
-                                          type="button"
-                                          disabled={hasPendingRequest}
-                                          onClick={() => openSwapModal(sched)}
-                                          className="w-full sm:w-auto flex items-center justify-center gap-1.5 px-4 py-2 rounded-full bg-[#071A2B] text-white text-xs font-bold hover:bg-[#0E2841] disabled:opacity-50 transition-all cursor-pointer shadow-xs"
-                                          title={
-                                            hasPendingRequest
-                                              ? tr(
-                                                  'workforce_schedule_tab.a_request_for_this_shift_is_already_pending_review',
-                                                )
-                                              : undefined
-                                          }
-                                        >
-                                          <IconUsers className="w-3.5 h-3.5 text-white shrink-0" />
-                                          <span>{tr('common.swap_shift')}</span>
-                                        </button>
-                                      </div>
+                                          {teamText('teamWeb.attendance')}
+                                        </Button>
+                                        <div className="flex flex-col sm:flex-row items-center justify-end gap-2.5">
+                                          {isPast ? (
+                                            <span className="text-xs text-slate-400 italic">
+                                              {tr(
+                                                'workforce_schedule_tab.shift_started_change_swap_unavailable',
+                                              )}
+                                            </span>
+                                          ) : (
+                                            <>
+                                              <button
+                                                type="button"
+                                                disabled={hasPendingRequest}
+                                                onClick={() => openChangeModal(sched)}
+                                                className="w-full sm:w-auto flex items-center justify-center gap-1.5 px-4 py-2 rounded-full border border-slate-200 bg-white text-xs font-bold text-slate-700 hover:bg-slate-50 hover:border-slate-300 disabled:opacity-50 transition-all cursor-pointer shadow-xs"
+                                                title={
+                                                  hasPendingRequest
+                                                    ? tr(
+                                                        'workforce_schedule_tab.a_request_for_this_shift_is_already_pending_review',
+                                                      )
+                                                    : undefined
+                                                }
+                                              >
+                                                <IconClock className="w-3.5 h-3.5 text-blue-600 shrink-0" />
+                                                <span>{tr('common.request_change')}</span>
+                                              </button>
+                                              <button
+                                                type="button"
+                                                disabled={hasPendingRequest}
+                                                onClick={() => openSwapModal(sched)}
+                                                className="w-full sm:w-auto flex items-center justify-center gap-1.5 px-4 py-2 rounded-full bg-[#071A2B] text-white text-xs font-bold hover:bg-[#0E2841] disabled:opacity-50 transition-all cursor-pointer shadow-xs"
+                                                title={
+                                                  hasPendingRequest
+                                                    ? tr(
+                                                        'workforce_schedule_tab.a_request_for_this_shift_is_already_pending_review',
+                                                      )
+                                                    : undefined
+                                                }
+                                              >
+                                                <IconUsers className="w-3.5 h-3.5 text-white shrink-0" />
+                                                <span>{tr('common.swap_shift')}</span>
+                                              </button>
+                                            </>
+                                          )}
+                                        </div>
+                                      </>
                                     )}
                                   </div>
                                 </Card>
@@ -1778,6 +1911,24 @@ export function WorkforceScheduleTab({
       )}
 
       {/* ── MODAL: Request Shift Change Dialog ──────────────────────────────── */}
+      {zoneSchedule &&
+        zoneSchedule.siteId === siteId &&
+        !(
+          schedules?.items.find((entry) => entry.id === zoneSchedule.schedule.id)
+            ?.approvedFullShiftLeave ?? zoneSchedule.schedule.approvedFullShiftLeave
+        ) &&
+        zoneSchedule.sessionScope === sessionScope && (
+          <TeamAttendanceDialog
+            key={`${apiUrl}-${sessionScope}-${siteId}-${zoneSchedule.schedule.id}`}
+            apiUrl={apiUrl}
+            token={token}
+            sessionScope={sessionScope}
+            siteId={siteId}
+            schedule={zoneSchedule.schedule}
+            shift={getShiftObj(zoneSchedule.schedule.shiftId)}
+            onClose={() => setZoneSchedule(null)}
+          />
+        )}
       <Dialog
         open={Boolean(declineTarget)}
         onClose={closeDeclineModal}
@@ -1888,7 +2039,9 @@ export function WorkforceScheduleTab({
         >
           {selectedSchedule && (isLockedSchedule(selectedSchedule) || isTargetLocked('change')) && (
             <p role="alert">
-              {tr('workforce_schedule_tab.this_shift_has_started_changes_are_no_longer_allowed')}
+              {selectedOnLeave
+                ? `${tr('common.leave')} — ${tr('common.approved')}`
+                : tr('workforce_schedule_tab.this_shift_has_started_changes_are_no_longer_allowed')}
             </p>
           )}
           {eligibleQuery.isLoading && <p role="status">{tr('common.loading_eligible_shifts')}</p>}
@@ -2069,7 +2222,9 @@ export function WorkforceScheduleTab({
           )}
           {selectedSchedule && (isLockedSchedule(selectedSchedule) || isTargetLocked('swap')) && (
             <p role="alert">
-              {tr('workforce_schedule_tab.this_shift_has_started_changes_are_no_longer_allowed')}
+              {selectedOnLeave
+                ? `${tr('common.leave')} — ${tr('common.approved')}`
+                : tr('workforce_schedule_tab.this_shift_has_started_changes_are_no_longer_allowed')}
             </p>
           )}
           {candidateQuery.isLoading && <p role="status">{tr('common.loading_coworker_shifts')}</p>}

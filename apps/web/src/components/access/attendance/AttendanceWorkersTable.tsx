@@ -1,3 +1,4 @@
+import { attendanceResolution } from './attendance-resolution';
 import { translate as tr, uiLocale } from '../../../i18n';
 import { attendanceHours } from './attendance-display';
 import { AttendanceStatusBadge } from './AttendanceStatusBadge';
@@ -116,6 +117,11 @@ export function AttendanceWorkersTable({
                     <td className="p-3.5 whitespace-nowrap">
                       <div>
                         <AttendanceStatusBadge status={worker.todayStatus} />
+                        {worker.todayStatus === 'NEEDS_REVIEW' && (
+                          <p className="mt-1 max-w-sm whitespace-normal text-xs text-amber-700">
+                            {attendanceResolution(worker.todayAnomalies ?? [])?.message}
+                          </p>
+                        )}
                         {inTime && (
                           <p className="text-[10px] text-slate-400 mt-1 font-medium">
                             {tr('attendance_report.in_since', { time: inTime })}

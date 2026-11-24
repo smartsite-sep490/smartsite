@@ -27,3 +27,4 @@ export interface GateEventResponse {
   occurredAt: string;
   gateName: string;
 }
+export type GateQrSessionReason = 'CAMERA_UNAVAILABLE' | 'OPERATOR_QR_SELECTED';

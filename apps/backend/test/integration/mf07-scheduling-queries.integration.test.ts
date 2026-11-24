@@ -578,7 +578,11 @@ test('MF07 scheduling queries enforce role and scope boundaries', async (t) => {
       isActive: true,
     },
   );
-  assert.equal(secondShiftSameDay.status, 409);
+  assert.equal(secondShiftSameDay.status, 201);
+  // Keep the remaining authorization/filter fixtures independent of this new multi-shift case.
+  await dataSource
+    .getRepository(WorkerScheduleEntity)
+    .delete({ id: (secondShiftSameDay.json as { id: string }).id });
   const nextDaySchedule = await postJson(
     `/sites/${siteA}/schedule-versions/${managerVersionId}/worker-schedules`,
     repTokenA,

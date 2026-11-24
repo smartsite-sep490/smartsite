@@ -11,6 +11,33 @@ import { displayTime, minutes } from '../features/shared/data';
 afterEach(async () => {
   await setLanguage('vi');
 });
+it('translates the missing roll-call review message while preserving Worker identity and work date', async () => {
+  await setLanguage('vi');
+  const notice = {
+    event: 'ZONE_REVIEW_REQUIRED' as const,
+    title: 'ZONE REVIEW REQUIRED',
+    message:
+      'Worker Synthetic Worker (WTEST) has complete Gate IN/OUT on 2026-11-23, but no team leader roll call was recorded. Review recorded hours before confirming attendance.',
+  };
+  expect(notificationTitle(notice)).toBe(translate('notifications.ZONE_REVIEW_REQUIRED'));
+  expect(notificationMessage(notice)).toContain('Synthetic Worker (WTEST)');
+  expect(notificationMessage(notice)).toContain('2026-11-23');
+  expect(notificationMessage(notice)).not.toContain('no team leader');
+});
+
+it('translates a missing Gate review notice without changing the Worker or work date', async () => {
+  const notice = {
+    event: 'ABSENCE_REVIEW_REQUIRED' as const,
+    title: 'Attendance review required',
+    message:
+      'Worker Synthetic A (WTEST) was marked present on 2030-01-01, but no Gate IN/OUT was recorded. Review attendance before confirming absence.',
+  };
+  await setLanguage('vi');
+  expect(notificationTitle(notice)).toBe(translate('notifications.ABSENCE_REVIEW_REQUIRED'));
+  expect(notificationMessage(notice)).toContain('Synthetic A');
+  expect(notificationMessage(notice)).toContain('2030-01-01');
+  expect(notificationMessage(notice)).not.toContain('was marked present');
+});
 
 it('changes stored validation messages, enum labels and time formatting with the selected language', async () => {
   await setLanguage('vi');

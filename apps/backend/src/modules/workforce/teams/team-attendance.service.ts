@@ -191,7 +191,7 @@ export class TeamAttendanceService {
         FROM worker_schedule s JOIN worker w ON w.id=s.worker_id AND w.site_id=s.site_id
         JOIN contractor_team_membership tm ON tm.worker_id=w.id AND tm.site_id=w.site_id AND tm.contractor_id=w.contractor_id
         LEFT JOIN team_attendance a ON a.schedule_id=s.id
-        LEFT JOIN attendance_day d ON d.site_id=s.site_id AND d.worker_id=s.worker_id AND d.work_date=s.work_date
+        LEFT JOIN attendance_day d ON d.site_id=s.site_id AND d.worker_id=s.worker_id AND d.schedule_id=s.id
         WHERE tm.team_id=$1 AND tm.left_at IS NULL AND w.is_active AND w.contractor_id=$2
         AND s.site_id=$3 AND s.work_date=$4 AND s.shift_id=$5 AND s.schedule_version_id=$6 AND s.is_active
         ORDER BY w.display_name,w.id`,

@@ -2,7 +2,10 @@ import { randomUUID } from 'node:crypto';
 import { teamSwapEligibility } from '../teams/team-swap-eligibility.js';
 import { isShiftStarted } from '@smartsite/contracts';
 import { HttpStatus, Injectable } from '@nestjs/common';
-import { DataSource, type EntityManager } from 'typeorm';
+import { DataSource, In, type EntityManager } from 'typeorm';
+import { AbsenceRequestEntity } from '../../../database/entities/absence-request.entity.js';
+import { AbsenceRequestStatus } from '../../../database/entities/enums.js';
+import { scheduledShiftWindow } from '../attendance/attendance-calculation.js';
 import {
   command,
   conflict,
@@ -388,16 +391,19 @@ export class ScheduleConfigurationService {
       await manager.query('SELECT pg_advisory_xact_lock(hashtext($1))', [
         `${scopedSiteId}${worker.id}${value.workDate}`,
       ]);
-      if (
-        (value.isActive ?? true) &&
-        (await manager.getRepository(WorkerScheduleEntity).existsBy({
-          siteId: scopedSiteId,
-          workerId: worker.id,
-          workDate: value.workDate,
-          isActive: true,
-        }))
-      )
-        conflict('Worker already has an active shift on this date');
+      await manager.query('SELECT pg_advisory_xact_lock(hashtext($1))', [
+        `${scopedSiteId}${worker.id}`,
+      ]);
+      if (value.isActive ?? true) {
+        const window = scheduledShiftWindow(shift, value.workDate);
+        await assertWorkerIntervalAvailable(
+          manager,
+          scopedSiteId,
+          worker.id,
+          window.startsAt,
+          window.endsAt,
+        );
+      }
       try {
         return await manager.getRepository(WorkerScheduleEntity).save({
           id: randomUUID(),
@@ -538,7 +544,10 @@ export class ScheduleConfigurationService {
     user: AuthenticatedUser,
     siteId: string,
     input: ListWorkerSchedulesQueryDto = {},
-  ): Promise<{ items: WorkerScheduleEntity[]; total: number }> {
+  ): Promise<{
+    items: Array<WorkerScheduleEntity & { approvedFullShiftLeave: boolean }>;
+    total: number;
+  }> {
     const scopedSiteId = uuid(siteId).toLowerCase();
     const pagination = page(Number(input.offset ?? '0'), Number(input.limit ?? '20'));
     const requestedContractorId = input.contractorId
@@ -648,7 +657,41 @@ export class ScheduleConfigurationService {
       .take(pagination.limit)
       .getManyAndCount();
 
-    return { items, total };
+    const approved = items.length
+      ? await this.dataSource.getRepository(AbsenceRequestEntity).findBy({
+          siteId: scopedSiteId,
+          workerScheduleId: In(items.map((schedule) => schedule.id)),
+          status: AbsenceRequestStatus.APPROVED,
+        })
+      : [];
+    const templates = approved.length
+      ? await this.dataSource.getRepository(ShiftEntity).findBy({
+          siteId: scopedSiteId,
+          id: In(approved.map((request) => request.shiftId)),
+        })
+      : [];
+    return {
+      total,
+      items: items.map((schedule) => ({
+        ...schedule,
+        approvedFullShiftLeave: approved.some((request) => {
+          if (
+            request.workerScheduleId !== schedule.id ||
+            request.workerId !== schedule.workerId ||
+            request.shiftId !== schedule.shiftId ||
+            request.expectedScheduleVersionId !== schedule.scheduleVersionId
+          )
+            return false;
+          const template = templates.find((shift) => shift.id === schedule.shiftId);
+          if (!template) return false;
+          const window = scheduledShiftWindow(template, schedule.workDate);
+          return (
+            (request.startsAt ?? window.startsAt) <= window.startsAt &&
+            (request.endsAt ?? window.endsAt) >= window.endsAt
+          );
+        }),
+      })),
+    };
   }
 
   async listEligibleShifts(user: AuthenticatedUser, siteId: string, workerScheduleId: string) {
@@ -783,3 +826,4 @@ export class ScheduleConfigurationService {
     return { items, total: items.length };
   }
 }
+import { assertWorkerIntervalAvailable } from './worker-shift-overlap.js';

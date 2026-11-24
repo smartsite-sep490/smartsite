@@ -1,7 +1,15 @@
 import { translate as tr, uiLocale } from '../../../i18n';
 import { localizedLabel } from '../../../i18n/labels';
+import { teamText } from '../../team-attendance/team-attendance-copy';
 export const attendanceLabel = (value: string) =>
   ({
+    ZONE_ATTENDANCE_REVIEW_CONFLICT: teamText('teamWeb.zoneConflict'),
+    ABSENCE_REVIEW_CONFLICT: teamText('teamWeb.absenceConflict'),
+    ZONE_ATTENDANCE_PENDING: teamText('teamWeb.anomaly.ZONE_ATTENDANCE_PENDING'),
+    ZONE_ATTENDANCE_ABSENT: teamText('teamWeb.anomaly.ZONE_ATTENDANCE_ABSENT'),
+    ZONE_GATE_MISSING: teamText('teamWeb.anomaly.ZONE_GATE_MISSING'),
+    ZONE_ATTENDANCE_MISMATCH: teamText('teamWeb.anomaly.ZONE_ATTENDANCE_MISMATCH'),
+    ZONE_ASSIGNMENT_UNRESOLVED: teamText('teamWeb.anomaly.ZONE_ASSIGNMENT_UNRESOLVED'),
     IN_PROGRESS: tr('common.in_progress_c1f88e'),
     NEEDS_REVIEW: tr('common.needs_attention'),
     CONFIRMED: tr('common.confirmed'),
@@ -22,6 +30,19 @@ export const attendanceLabel = (value: string) =>
 export const attendanceHours = (minutes: number) =>
   tr('time.hoursMinutes', { hours: Math.floor(minutes / 60), minutes: minutes % 60 });
 
+/** Display the recorded interval, independently of payable shift minutes. */
+export function attendanceSessionDuration(start: string | null, end: string | null) {
+  if (!start || !end) return '—';
+  const elapsed = Date.parse(end) - Date.parse(start);
+  if (!Number.isFinite(elapsed) || elapsed < 0) return '—';
+  const seconds = Math.floor(elapsed / 1000);
+  return tr('time.hoursMinutesSeconds', {
+    hours: Math.floor(seconds / 3600),
+    minutes: Math.floor((seconds % 3600) / 60),
+    seconds: seconds % 60,
+  });
+}
+
 export function attendanceDate(now: Date, timezone: string) {
   const parts = new Intl.DateTimeFormat('en-GB', {
     timeZone: timezone,
@@ -33,7 +54,11 @@ export function attendanceDate(now: Date, timezone: string) {
   return `${part('year')}-${part('month')}-${part('day')}`;
 }
 
-export function attendanceTime(value: string | null | undefined, timezone: string) {
+export function attendanceTime(
+  value: string | null | undefined,
+  timezone: string,
+  withSeconds = false,
+) {
   return value
     ? new Intl.DateTimeFormat(uiLocale(), {
         timeZone: timezone,
@@ -41,6 +66,7 @@ export function attendanceTime(value: string | null | undefined, timezone: strin
         month: 'short',
         hour: '2-digit',
         minute: '2-digit',
+        ...(withSeconds ? { second: '2-digit' as const } : {}),
         hourCycle: 'h23',
       }).format(new Date(value))
     : '—';

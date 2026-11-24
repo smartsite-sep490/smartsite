@@ -2,6 +2,10 @@ import { Column, CreateDateColumn, Entity, ForeignKey, Index, PrimaryColumn } fr
 import { SiteEntity } from './site.entity.js';
 import { UserEntity } from './user.entity.js';
 @Entity({ name: 'audit_log' })
+@Index('uq_zone_hours_review_request', ['entityId'], {
+  unique: true,
+  where: "action = 'ATTENDANCE_ZONE_HOURS_CONFIRMED'",
+})
 @Index('uq_team_attendance_request', ['entityId'], {
   unique: true,
   where: "action = 'TEAM_ATTENDANCE_SUBMITTED'",

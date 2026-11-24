@@ -63,6 +63,8 @@ export function notificationTitle(item: Pick<UserNotificationResponse, 'event' |
   if (
     i18n.exists(key) &&
     (item.event.startsWith('DOCUMENT_') ||
+      item.event === 'ABSENCE_REVIEW_REQUIRED' ||
+      item.event === 'ZONE_REVIEW_REQUIRED' ||
       item.title === item.event ||
       item.title === item.event.replaceAll('_', ' '))
   )
@@ -73,6 +75,31 @@ export function notificationTitle(item: Pick<UserNotificationResponse, 'event' |
 export function notificationMessage(
   item: Pick<UserNotificationResponse, 'event' | 'message' | 'workDate'>,
 ): string {
+  if (item.event === 'ZONE_REVIEW_REQUIRED') {
+    const match =
+      /^Worker ([\s\S]+) \(([^()]*)\) has complete Gate IN\/OUT on (\d{4}-\d{2}-\d{2}),/.exec(
+        item.message,
+      );
+    return match
+      ? translate('notifications.zoneReviewMessage', {
+          name: match[1],
+          code: match[2],
+          date: match[3],
+        })
+      : localizeMessage(item.message);
+  }
+  if (item.event === 'ABSENCE_REVIEW_REQUIRED') {
+    const match = /^Worker ([\s\S]+) \(([^()]*)\) was marked present on (\d{4}-\d{2}-\d{2}),/.exec(
+      item.message,
+    );
+    return match
+      ? translate('notifications.gateAbsenceReviewMessage', {
+          name: match[1],
+          code: match[2],
+          date: match[3],
+        })
+      : localizeMessage(item.message);
+  }
   if (
     [
       'SAFETY_HANDOVER',

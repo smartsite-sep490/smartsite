@@ -99,7 +99,7 @@ export class LookupVisitorPassCommand {
 }
 export class CameraFallbackCommand {
   @IsIn(['IN', 'OUT']) direction!: 'IN' | 'OUT';
-  @IsIn(['CAMERA_UNAVAILABLE']) reason!: 'CAMERA_UNAVAILABLE';
+  @IsIn(['CAMERA_UNAVAILABLE', 'OPERATOR_QR_SELECTED']) reason!: GateQrSessionReason;
 }
 export class IssueWorkerQrCommand implements IssueWorkerQrInput {
   @IsOptional() @IsUUID() fallbackSessionId?: string;
@@ -127,3 +127,4 @@ export class VerifyVisitorQrCommand implements VisitorGateCommand {
 export class PreviewVisitorQrCommand {
   @Transform(visitorToken) @Matches(/^(SSQ-[a-f0-9]{64}|[A-HJ-NP-Z2-9]{8})$/) token!: string;
 }
+import type { GateQrSessionReason } from '@smartsite/contracts';

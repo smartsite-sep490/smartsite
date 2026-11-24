@@ -30,6 +30,7 @@ import {
   emptyReportMetrics,
   reportDates,
   workerAttendanceReport,
+  hasApprovedFullShiftLeave,
 } from './attendance-report-calculation.js';
 import { AttendanceReportDto, AttendanceWorkersDto } from './dto/attendance-report.dto.js';
 
@@ -194,7 +195,13 @@ export class AttendanceReportsService {
     const schedules = await manager
       .getRepository(WorkerScheduleEntity)
       .createQueryBuilder('s')
-      .where('s.site_id=:siteId AND s.worker_id IN (:...ids) AND s.is_active=true', parameters)
+      .where('s.site_id=:siteId AND s.worker_id IN (:...ids)', parameters)
+      .andWhere(
+        `(s.is_active=true OR EXISTS (SELECT 1 FROM absence_request approved
+        WHERE approved.worker_schedule_id=s.id AND approved.site_id=s.site_id
+        AND approved.worker_id=s.worker_id AND approved.shift_id=s.shift_id
+        AND approved.expected_schedule_version_id=s.schedule_version_id AND approved.status='APPROVED'))`,
+      )
       .andWhere(
         `(s.work_date BETWEEN :from AND :to OR s.work_date=:today${compare && value.shiftId ? ' OR s.work_date BETWEEN :previousFrom AND :previousTo' : ''})`,
       )
@@ -225,9 +232,26 @@ export class AttendanceReportsService {
         })
       : [];
     const dates = reportDates(value.fromDate, value.toDate);
-    const selectedSchedules = value.shiftId
-      ? schedules.filter((s) => s.shiftId === value.shiftId)
-      : schedules;
+    const pendingOtherRequests: Array<{ id: string }> = days.length
+      ? await manager.query(
+          `SELECT d.id FROM attendance_day d
+       WHERE d.site_id=$1 AND d.worker_id=ANY($2::uuid[]) AND d.id=ANY($3::uuid[]) AND (
+         EXISTS (SELECT 1 FROM overtime_request o WHERE o.site_id=d.site_id AND o.worker_id=d.worker_id AND o.schedule_id=d.schedule_id AND o.status='PENDING')
+         OR EXISTS (SELECT 1 FROM attendance_correction c JOIN attendance_session s ON s.id=c.attendance_session_id
+           WHERE s.day_id=d.id AND s.site_id=d.site_id AND s.worker_id=d.worker_id AND c.status='PENDING'))`,
+          [siteId, ids, days.map((d) => d.id)],
+        )
+      : [];
+    const selectedSchedules = schedules.filter(
+      (s) =>
+        (!value.shiftId || s.shiftId === value.shiftId) &&
+        (s.isActive ||
+          hasApprovedFullShiftLeave(
+            s,
+            shifts.find((shift) => shift.id === s.shiftId),
+            leaves,
+          )),
+    );
     const selectedIds = new Set(selectedSchedules.map((s) => s.id));
     const selectedWorkers = value.shiftId
       ? workers.filter((w) =>
@@ -256,6 +280,7 @@ export class AttendanceReportsService {
           today: range.today,
           now,
           includeDaily,
+          pendingOtherRequestDayIds: pendingOtherRequests.map((r) => r.id),
         }),
       )
       .filter((w) => !value.todayStatus || w.todayStatus === value.todayStatus);

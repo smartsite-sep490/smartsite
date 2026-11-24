@@ -59,7 +59,7 @@ beforeEach(() => {
   });
   api.attendanceDayDetail.mockResolvedValue({ day: today, sessions: [] });
   api.attendanceWorkers.mockResolvedValue({
-    items: [{ workerId: 'mine', presentDays: 2, requiredDays: 3 }],
+    items: [{ workerId: 'mine', presentDays: 2, requiredDays: 3, reviewDays: 31 }],
   });
   api.listWorkers.mockResolvedValue({ items: [{ id: 'mine', userId: 'worker' }], total: 1 });
 });
@@ -69,6 +69,38 @@ afterEach(() => {
   vi.useRealTimers();
 });
 
+it('opens the latest shift and lets the Worker inspect both shifts on the same date', async () => {
+  const first = {
+    ...today,
+    id: 'first',
+    shiftName: 'First shift',
+    startsAt: '2026-10-10T01:00:00Z',
+    endsAt: '2026-10-10T02:00:00Z',
+  };
+  const second = {
+    ...today,
+    id: 'second',
+    shiftName: 'Second shift',
+    startsAt: '2026-10-10T02:00:00Z',
+    endsAt: '2026-10-10T02:30:00Z',
+  };
+  api.attendanceDays.mockResolvedValue({ items: [first, second], total: 2 });
+  api.attendanceDayDetail.mockImplementation(async (_token, _site, id) => ({
+    day: id === 'first' ? first : second,
+    sessions: [],
+  }));
+  mount();
+  await waitFor(() =>
+    expect(api.attendanceDayDetail).toHaveBeenCalledWith('synthetic', 'site', 'second'),
+  );
+  fireEvent.click(screen.getByRole('button', { name: /View details/i }));
+  const select = await screen.findByRole('combobox', { name: 'Select attendance shift' });
+  expect((select as HTMLSelectElement).value).toBe('second');
+  fireEvent.change(select, { target: { value: 'first' } });
+  await waitFor(() =>
+    expect(api.attendanceDayDetail).toHaveBeenCalledWith('synthetic', 'site', 'first'),
+  );
+});
 it('uses independent full-month aggregates, minutes and scoped attention totals', async () => {
   mount();
   await screen.findByText('12h 40m');
@@ -83,7 +115,7 @@ it('uses independent full-month aggregates, minutes and scoped attention totals'
   expect(api.attendanceDays).toHaveBeenCalledWith('synthetic', 'site', {
     fromDate: '2026-10-10',
     toDate: '2026-10-10',
-    limit: 1,
+    limit: 100,
   });
   expect(api.attendanceDayDetail).toHaveBeenCalledWith('synthetic', 'site', 'today');
 });

@@ -719,6 +719,8 @@
     "serverFallback": "QR dự phòng do máy chủ cấp"
   },
   "notifications": {
+    "ABSENCE_REVIEW_REQUIRED": "Có mặt nhưng thiếu bằng chứng cổng — cần đối soát",
+    "gateAbsenceReviewMessage": "{{name}} ({{code}}) được điểm danh Có mặt ngày {{date}} nhưng không có lượt vào/ra cổng. Hãy kiểm tra trước khi xác nhận vắng.",
     "title": "Thông báo",
     "detailTitle": "Chi tiết thông báo",
     "viewTarget": "Mở trang liên quan",
@@ -790,7 +792,9 @@
     "DOCUMENT_EXPIRED": "Giấy tờ đã hết hạn",
     "actions": "Thao tác",
     "unreadCount": "{{count}} chưa đọc",
-    "emptyHint": "Thông báo và cập nhật mới sẽ hiện ở đây."
+    "emptyHint": "Thông báo và cập nhật mới sẽ hiện ở đây.",
+    "ZONE_REVIEW_REQUIRED": "Thiếu điểm danh nhóm trưởng — cần chốt giờ công",
+    "zoneReviewMessage": "{{name}} ({{code}}) có đủ IN/OUT ngày {{date}} nhưng chưa được nhóm trưởng điểm danh. Hãy kiểm tra giờ công."
   },
   "profile": {
     "title": "Tài khoản",
@@ -1294,7 +1298,8 @@
     "ZONE_ATTENDANCE_PENDING": "Chờ nhóm trưởng điểm danh khu vực",
     "ZONE_ATTENDANCE_MISMATCH": "Điểm danh chưa khớp nhóm hoặc khu vực được giao",
     "ZONE_ATTENDANCE_ABSENT": "Nhóm trưởng ghi nhận vắng tại khu vực",
-    "ZONE_GATE_MISSING": "Có mặt tại khu vực nhưng chưa có lượt vào cổng"
+    "ZONE_GATE_MISSING": "Có mặt tại khu vực nhưng chưa có lượt vào cổng",
+    "ZONE_ATTENDANCE_REVIEW_CONFLICT": "Bằng chứng đã thay đổi sau lần chốt trước. Kiểm tra lại các khoảng thời gian và giờ công hiện tại."
   },
   "systemMessages": {
     "errors_gate_assignment_required": "Cần có phân công công trường đã được duyệt và còn thời hạn trước khi cấp quyền khu vực.",
@@ -1542,6 +1547,12 @@
     "groupHint": "Số công nhân được phân công vào ca, chưa phải số đã có mặt."
   },
   "attendanceReview": {
+    "confirmAbsence": "Xác nhận vắng — 0 giờ",
+    "absenceTitle": "Cần đối soát: Có mặt nhưng không có IN/OUT",
+    "absenceHint": "Giữ 0 giờ công. Kiểm tra bằng chứng cổng và điểm danh của nhóm trưởng. Chỉ xác nhận vắng khi ca và tăng ca được duyệt đã kết thúc, không có bằng chứng cổng hoặc chấm công.",
+    "absenceEvidence": "Lượt qua cổng: {{gates}} · sự kiện chấm công: {{events}} · phiên làm việc: {{sessions}}",
+    "absenceConfirmed": "Đã xác nhận vắng — 0 giờ. Giữ nguyên điểm danh ban đầu.",
+    "absenceChanged": "Bằng chứng chấm công đã thay đổi. Hãy tải lại và kiểm tra.",
     "ignoreDuplicate": "Bỏ lượt vào trùng",
     "reviewCorrection": "Xét duyệt sửa công",
     "acknowledge": "Xác nhận về sớm",
@@ -1553,7 +1564,15 @@
     "correctionHint": "Giờ gốc được giữ nguyên. Khi duyệt, hệ thống cập nhật giờ hiệu lực và tính lại ngày công.",
     "duplicateHint": "Chỉ bỏ phiên bị ghi trùng; dữ liệu gốc và lý do xử lý được giữ trong lịch sử.",
     "acknowledgeHint": "Xác nhận trường hợp về sớm đã kiểm tra. Các bất thường khác vẫn phải được giải quyết trước.",
-    "saved": "Đã cập nhật kết quả xét duyệt."
+    "saved": "Đã cập nhật kết quả xét duyệt.",
+    "zoneTitle": "Đối soát giờ công: thiếu điểm danh nhóm trưởng",
+    "zoneHint": "Chỉ chốt giờ thực tế từ các phiên IN/OUT đã khép, giữ nguyên các khoản trừ. Thao tác này không tạo điểm danh thay nhóm trưởng.",
+    "zoneEvidence": "Lượt IN: {{ins}} · lượt OUT: {{outs}} · phiên đã khép: {{sessions}}",
+    "confirmZoneHours": "Chốt giờ công",
+    "zoneConfirmed": "Đã chốt giờ công bởi Đại diện nhà thầu. Giữ nguyên điểm danh ban đầu.",
+    "zoneConflict": "Bằng chứng đã thay đổi sau lần chốt trước. Kiểm tra lại các khoảng thời gian và giờ công hiện tại.",
+    "zoneRollCall": "Điểm danh nhóm trưởng hiện tại:",
+    "zoneReviewedBy": "Người chốt: {{name}} · {{time}}"
   },
   "teamReview": {
     "title": "Đối chiếu điểm danh nhóm",

@@ -399,6 +399,8 @@ export interface WorkerScheduleResponse {
   shiftId: string;
   workDate: string;
   isActive: boolean;
+  /** Approved leave covers the entire assigned shift. Additive for older clients. */
+  approvedFullShiftLeave?: boolean;
   createdAt: string;
 }
 

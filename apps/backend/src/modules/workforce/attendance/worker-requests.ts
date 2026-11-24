@@ -6,6 +6,7 @@ import type {
 } from '@smartsite/contracts';
 import { conflict } from '../../../common/configuration/commands.js';
 import type { WorkerEntity } from '../../../database/entities/index.js';
+import { coveredPendingLeaveSql } from '../shared/leave-display.js';
 
 export const LEAVE_COOLDOWN_MESSAGE = 'A leave request can only be submitted once every 24 hours';
 
@@ -46,6 +47,7 @@ export async function workerRequests(
       a.starts_at,a.ends_at,NULL::uuid AS day_id
     FROM absence_request a JOIN worker_schedule s ON s.id=a.worker_schedule_id AND s.site_id=a.site_id
     WHERE a.site_id=$1 AND a.worker_id=$2 AND a.requested_by_user_id=$3
+      AND ($6::uuid IS NOT NULL OR NOT ${coveredPendingLeaveSql('a')})
     UNION ALL
     SELECT o.id,'OVERTIME',o.status,o.reason,o.created_at,o.review_note,to_char(s.work_date,'YYYY-MM-DD'),
       o.starts_at,o.ends_at,NULL::uuid

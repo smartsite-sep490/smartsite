@@ -1,3 +1,5 @@
+import { AttendanceAbsenceReview1795651200000 } from './migrations/1795651200000-AttendanceAbsenceReview.js';
+import { AttendanceZoneReview1795651200001 } from './migrations/1795651200001-AttendanceZoneReview.js';
 import { SecurityBrowserWebcam1795564800000 } from './migrations/1795564800000-SecurityBrowserWebcam.js';
 import { WorkerDocumentReviewWorkflow1795478400000 } from './migrations/1795478400000-WorkerDocumentReviewWorkflow.js';
 import { GateRegistry1795046400001 } from './migrations/1795046400001-GateRegistry.js';
@@ -102,6 +104,10 @@ export function buildTypeOrmOptions(config: DatabaseConnectionConfig): DataSourc
     connectTimeoutMS: timeoutMs,
     entities: [...ENTITIES],
     migrations: [
+      DirectWorkerQrSession1795651200003,
+      AttendanceMultipleShifts1795651200002,
+      AttendanceAbsenceReview1795651200000,
+      AttendanceZoneReview1795651200001,
       SecurityBrowserWebcam1795564800000,
       WorkerDocumentReviewWorkflow1795478400000,
       GateRegistry1795046400001,
@@ -217,3 +223,5 @@ import { TeamAttendance1795219200000 } from './migrations/1795219200000-TeamAtte
 import { MobileAttendanceCompletion1795305600000 } from './migrations/1795305600000-MobileAttendanceCompletion.js';
 import { AccountEmailRecovery1795392000000 } from './migrations/1795392000000-AccountEmailRecovery.js';
 import { MobilePushDelivery1795478400000 } from './migrations/1795478400000-MobilePushDelivery.js';
+import { AttendanceMultipleShifts1795651200002 } from './migrations/1795651200002-AttendanceMultipleShifts.js';
+import { DirectWorkerQrSession1795651200003 } from './migrations/1795651200003-DirectWorkerQrSession.js';
