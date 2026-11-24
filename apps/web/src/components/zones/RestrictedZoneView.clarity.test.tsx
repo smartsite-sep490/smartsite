@@ -408,14 +408,22 @@ describe('MF06 RestrictedZoneView clarity: human Zone names, policy distinction,
     await waitFor(() => {
       expect(workerStatus.getAttribute('data-worker-state')).toBe('STALE');
     });
-    expect(workerStatus.textContent).toMatch(/stale/i);
+    expect(workerStatus.textContent).toMatch(/No recent confirmation from AI/i);
+    expect(workerStatus.textContent).not.toMatch(/Worker|receipt/i);
+
+    await i18n.changeLanguage('vi');
+    await waitFor(() => {
+      expect(workerStatus.textContent).toContain('Chưa có xác nhận mới từ máy AI');
+    });
+    expect(workerStatus.textContent).not.toMatch(/Worker|Biên nhận/i);
+    await i18n.changeLanguage('en');
 
     // AI boundary info disclosure must not claim unconditional server sync
     const boundaryNote = screen.getByText(/Saved region boundaries/i);
     expect(boundaryNote.textContent).not.toMatch(/is synced from the server configuration/i);
   });
 
-  it('shows Worker status unavailable honestly when application-status query fails or is absent', async () => {
+  it('shows plain AI unavailable copy when application-status query fails or is absent', async () => {
     mockClient.current = makeBaseClient({
       getCameraApplicationStatus: vi.fn().mockRejectedValue(new Error('Status endpoint offline')),
     });
@@ -437,7 +445,59 @@ describe('MF06 RestrictedZoneView clarity: human Zone names, policy distinction,
     await waitFor(() => {
       expect(workerStatus.getAttribute('data-worker-state')).toBe('UNAVAILABLE');
     });
-    expect(workerStatus.textContent).toMatch(/Worker status unavailable/i);
+    expect(workerStatus.textContent).toMatch(/Unable to confirm AI/i);
+    expect(workerStatus.textContent).not.toMatch(/Worker/i);
+
+    await i18n.changeLanguage('vi');
+    await waitFor(() => {
+      expect(workerStatus.textContent).toContain('Chưa xác nhận được máy AI');
+    });
+    expect(workerStatus.textContent).not.toMatch(/worker/i);
+  });
+
+  it('uses plain AI received configuration copy for LOADED in EN and VI without worker jargon', async () => {
+    const nowIso = new Date().toISOString();
+    mockClient.current = makeBaseClient({
+      getCameraApplicationStatus: vi.fn().mockResolvedValue({
+        siteId: SITE_ID,
+        cameraId: CAM_ID,
+        desiredRevision: 17,
+        reportedRevision: 17,
+        applicationState: 'LOADED',
+        viewValidity: 'UNCONFIRMED',
+        reasonCode: null,
+        lastReceiptAt: nowIso,
+        observedAt: nowIso,
+      } satisfies CameraApplicationStatus),
+    });
+    const queryClient = new QueryClient({
+      defaultOptions: { queries: { retry: false, gcTime: 0 } },
+    });
+
+    render(
+      <QueryClientProvider client={queryClient}>
+        <MemoryRouter>
+          <RestrictedZoneView apiUrl="http://api.invalid" authenticatedSession={OFFICER_SESSION} />
+        </MemoryRouter>
+      </QueryClientProvider>,
+    );
+
+    await screen.findByTestId('mock-focused-camera-media');
+    const savedBadge = screen.getByTestId('zone-monitor-saved-config');
+    expect(savedBadge.textContent).toMatch(/Saved config v17/i);
+
+    const workerStatus = await screen.findByTestId('zone-monitor-worker-status');
+    await waitFor(() => {
+      expect(workerStatus.getAttribute('data-worker-state')).toBe('LOADED');
+    });
+    expect(workerStatus.textContent).toBe('AI has received configuration');
+    expect(workerStatus.textContent).not.toMatch(/Worker|v17|Live|Ready/i);
+
+    await i18n.changeLanguage('vi');
+    await waitFor(() => {
+      expect(workerStatus.textContent).toBe('Máy AI đã nhận cấu hình');
+    });
+    expect(workerStatus.textContent).not.toMatch(/Worker|v17|Sẵn sàng/i);
   });
 
   it('allows an assigned SITE_MANAGER to monitor scoped camera geometry while hiding Officer-only incident navigation and other sites', async () => {
