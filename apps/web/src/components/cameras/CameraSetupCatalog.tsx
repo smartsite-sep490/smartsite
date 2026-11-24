@@ -168,18 +168,20 @@ export function CameraSetupCatalog({
   );
   const primarySurface = 'min-w-0 rounded-xl border border-slate-200 bg-white px-3 py-3 sm:p-4';
   const railInlineAction =
-    'inline-flex min-h-8 items-center rounded-md px-1.5 py-1 text-sm font-medium text-slate-700 underline decoration-slate-300 underline-offset-4 transition-colors hover:text-[#0F172A] hover:decoration-[#0F172A] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#0F172A] cursor-pointer';
+    'inline-flex min-h-7 items-center rounded-md px-1.5 py-0.5 text-xs font-medium text-slate-600 transition-colors hover:bg-slate-200/70 hover:text-[#0F172A] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#0F172A] cursor-pointer';
   return (
     <div>
       <section className={primarySurface} aria-label={t('cameraSetup.cameras')}>
-        <div className="grid grid-cols-1 items-center gap-x-3 gap-y-1.5 border-b border-slate-200 pb-2.5 sm:grid-cols-[minmax(0,1fr)_auto]">
-          <div className="min-w-0 flex flex-wrap items-baseline gap-x-2.5 gap-y-0.5">
-            <h2 className="text-base font-bold tracking-tight text-slate-950">
+        <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-1.5 border-b border-slate-200 pb-2">
+          <div className="min-w-0 flex flex-wrap items-center gap-x-2 gap-y-0.5">
+            <h2 className="text-sm font-bold tracking-tight text-slate-950">
               {t('cameraSetup.cameras')}
             </h2>
-            <p className="hidden xl:inline text-xs text-slate-500">
-              {t(capabilities.canManageRegions ? 'cameraSetup.metadata' : 'cameraSetup.adminHint')}
-            </p>
+            {hasLoadedCameraPages && (
+              <span className="rounded-md bg-slate-100 px-1.5 py-0.5 text-xs font-semibold tabular-nums text-slate-600">
+                {rows.length}/{cameras.total}
+              </span>
+            )}
           </div>
           <CameraSetupWorkflow
             canWriteZones={canWriteZones}
@@ -203,9 +205,11 @@ export function CameraSetupCatalog({
             >
               {hasLoadedCameraPages && (
                 <div
-                  className={`${
-                    !cameras.baseError && cameras.hasNextPage ? 'flex' : 'hidden lg:flex'
-                  } flex-wrap items-center justify-between gap-2 px-0.5`}
+                  className={
+                    !cameras.baseError && cameras.hasNextPage
+                      ? 'flex flex-wrap items-center justify-between gap-2 px-0.5'
+                      : 'sr-only'
+                  }
                 >
                   <p className="text-xs font-medium text-slate-600 tabular-nums">
                     {t('cameraSetup.count', { loaded: rows.length, total: cameras.total })}
@@ -237,16 +241,16 @@ export function CameraSetupCatalog({
                       key={row.id}
                       aria-labelledby={nameId}
                       aria-current={isSelectedCamera ? 'true' : undefined}
-                      className={`min-w-0 space-y-2 border-l-[3px] px-3.5 py-3 transition-colors ${
+                      className={`min-w-0 space-y-1.5 border-l-[3px] px-3 py-2.5 transition-colors ${
                         isSelectedCamera
                           ? 'border-l-[#0F172A] bg-slate-100/75'
                           : 'border-l-transparent bg-white hover:bg-slate-50/70'
                       }`}
                     >
-                      <div className="min-w-0 space-y-1.5">
+                      <div className="min-w-0 space-y-1">
                         <h3
                           id={nameId}
-                          className="min-w-0 max-w-full break-words [overflow-wrap:anywhere] text-base leading-snug font-semibold tracking-tight text-slate-950"
+                          className="min-w-0 max-w-full break-words [overflow-wrap:anywhere] text-sm leading-snug font-semibold tracking-tight text-slate-950"
                         >
                           {canManageCameras ? (
                             <button
@@ -266,12 +270,7 @@ export function CameraSetupCatalog({
                         </h3>
                         <CameraSetupRowMetadata row={row} isEnabled={isEnabled} />
                         {!isEnabled && canManageCameras && (
-                          <p
-                            id={hintId}
-                            className={
-                              isSelectedCamera ? 'sr-only' : 'text-xs leading-5 text-slate-500'
-                            }
-                          >
+                          <p id={hintId} className="sr-only">
                             {t('cameraSetup.inactiveHint')}
                           </p>
                         )}
@@ -284,8 +283,8 @@ export function CameraSetupCatalog({
                               aria-pressed={isSelectedCamera}
                               className={
                                 isSelectedCamera
-                                  ? 'inline-flex min-h-8 items-center rounded-lg bg-[#0F172A] px-2.5 py-1 text-sm font-semibold text-white cursor-pointer'
-                                  : 'inline-flex min-h-8 items-center rounded-lg border border-slate-300 bg-white px-2.5 py-1 text-sm font-semibold text-slate-700 hover:bg-slate-50 hover:text-slate-950 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#0F172A] cursor-pointer'
+                                  ? 'inline-flex min-h-7 items-center rounded-lg bg-[#0F172A] px-2 py-0.5 text-xs font-semibold text-white cursor-pointer'
+                                  : 'inline-flex min-h-7 items-center rounded-lg border border-slate-300 bg-white px-2 py-0.5 text-xs font-semibold text-slate-700 hover:bg-slate-50 hover:text-slate-950 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#0F172A] cursor-pointer'
                               }
                               onClick={() => setFocusedCameraId(row.id)}
                             >
@@ -298,7 +297,7 @@ export function CameraSetupCatalog({
                             </button>
                           )}
                           {canManageCameras && (
-                            <div className="flex flex-wrap items-center gap-x-2.5 gap-y-1">
+                            <div className="flex flex-wrap items-center gap-x-1 gap-y-0.5">
                               {isEnabled && (
                                 <button
                                   type="button"
@@ -430,37 +429,31 @@ export function CameraSetupCatalog({
                 <>
                   <div
                     data-testid="camera-setup-disabled-stage"
-                    className="min-w-0 rounded-xl border border-dashed border-slate-300 bg-slate-50/60 p-5 space-y-3"
+                    className="flex min-w-0 flex-wrap items-center justify-between gap-2 rounded-xl border border-dashed border-slate-300 bg-slate-50/70 px-3.5 py-2.5"
                   >
-                    <div className="space-y-1">
-                      <h3 className="text-base font-bold tracking-tight text-slate-900">
-                        {t('cameraSetup.disabledStageHeading')}
-                      </h3>
-                      <p className="text-sm leading-relaxed text-slate-600 break-words [overflow-wrap:anywhere]">
-                        {t(
-                          canManageCameras
-                            ? 'cameraSetup.disabledStageBody'
-                            : 'cameraSetup.disabledStageReadOnlyBody',
-                          {
-                            name: selectedCamera.name,
-                            code: selectedCamera.code,
-                            version: selectedCamera.configurationVersion,
-                          },
-                        )}
-                      </p>
-                    </div>
+                    <p className="min-w-0 flex-1 text-xs sm:text-sm leading-snug text-slate-700 break-words [overflow-wrap:anywhere]">
+                      <span className="font-semibold text-slate-900">
+                        {t('cameraSetup.disabledStageHeading')}:{' '}
+                      </span>
+                      {t(
+                        canManageCameras
+                          ? 'cameraSetup.disabledStageBody'
+                          : 'cameraSetup.disabledStageReadOnlyBody',
+                        {
+                          name: selectedCamera.name,
+                          code: selectedCamera.code,
+                          version: selectedCamera.configurationVersion,
+                        },
+                      )}
+                    </p>
                     {canManageCameras && (
-                      <div>
-                        <button
-                          type="button"
-                          className={CAMERA_BUTTON_STYLES.secondary}
-                          onClick={(event) =>
-                            open('manage', selectedCamera.id, event.currentTarget)
-                          }
-                        >
-                          {t('cameraSetup.disabledStageAction', { code: selectedCamera.code })}
-                        </button>
-                      </div>
+                      <button
+                        type="button"
+                        className={CAMERA_BUTTON_STYLES.compactSecondary}
+                        onClick={(event) => open('manage', selectedCamera.id, event.currentTarget)}
+                      >
+                        {t('cameraSetup.disabledStageAction', { code: selectedCamera.code })}
+                      </button>
                     )}
                   </div>
                   {sourceSetupStage}

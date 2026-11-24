@@ -551,14 +551,12 @@ function SetupWorkspace({ apiUrl, session }: { apiUrl: string; session: SharedSe
     >
       <header
         data-tour-anchor="camera-setup-scope"
-        className="rounded-xl border border-slate-200 bg-white px-3 py-2 sm:px-4 sm:py-2.5"
+        className="rounded-xl border border-slate-200 bg-white px-3 py-2 sm:px-3.5"
       >
-        <div className="flex flex-col gap-2 lg:flex-row lg:flex-wrap lg:items-center lg:justify-between">
-          <div className="flex min-w-0 flex-col gap-1.5 sm:flex-row sm:flex-wrap sm:items-center sm:gap-x-2.5 lg:flex-1">
-            <h1 className="text-base sm:text-xl font-bold tracking-tight text-slate-950 shrink-0">
-              {t('cameraSetup.title')}
-            </h1>
-            <div className="flex min-w-0 w-full flex-col gap-1 sm:w-auto sm:min-w-[12rem] sm:flex-1 sm:max-w-sm sm:flex-row sm:items-center sm:gap-1.5">
+        <div className="flex flex-col gap-2 lg:flex-row lg:items-center lg:justify-between">
+          <div className="flex min-w-0 flex-col gap-1.5 sm:flex-row sm:items-center sm:gap-2.5 lg:flex-1">
+            <h1 className="sr-only">{t('cameraSetup.title')}</h1>
+            <div className="flex min-w-0 w-full flex-col gap-1 sm:w-auto sm:min-w-[16rem] sm:flex-1 sm:max-w-md sm:flex-row sm:items-center sm:gap-2">
               <label
                 className="shrink-0 text-xs font-semibold text-slate-700"
                 htmlFor="camera-setup-site"

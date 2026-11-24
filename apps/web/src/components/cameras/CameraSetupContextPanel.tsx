@@ -67,12 +67,11 @@ const en = {
   'cameraSetup.selectCameraBtn': 'Select {{code}}',
   'cameraSetup.selectedCameraBtn': 'Selected {{code}}',
   'cameraSetup.technicalSourceDetails': 'Technical source details',
-  'cameraSetup.disabledStageHeading':
-    'Reference image & region stage unavailable while camera is disabled',
+  'cameraSetup.disabledStageHeading': 'Camera is disabled',
   'cameraSetup.disabledStageBody':
-    '{{name}} ({{code}}) is saved as Disabled (v{{version}}). No live or 5-minute reference frame is requested while disabled. Enable the camera in Manage first, then open Edit observation regions.',
+    'Test a video source below, or enable {{code}} (v{{version}}) to draw areas and run AI.',
   'cameraSetup.disabledStageReadOnlyBody':
-    '{{name}} ({{code}}) is saved as Disabled (v{{version}}). Only the assigned Site Manager can enable this camera before reference frames or observation regions can be verified.',
+    '{{name}} ({{code}}, v{{version}}) is disabled. Only the Site Manager can enable it.',
   'cameraSetup.disabledStageAction': 'Enable camera in settings ({{code}})',
 };
 
@@ -129,12 +128,11 @@ const vi: Record<keyof typeof en, string> = {
   'cameraSetup.selectCameraBtn': 'Chọn {{code}}',
   'cameraSetup.selectedCameraBtn': 'Đang chọn {{code}}',
   'cameraSetup.technicalSourceDetails': 'Chi tiết nguồn kỹ thuật',
-  'cameraSetup.disabledStageHeading':
-    'Khung tham chiếu & vùng quan sát tạm ngưng khi camera đang tắt',
+  'cameraSetup.disabledStageHeading': 'Camera đang tắt',
   'cameraSetup.disabledStageBody':
-    '{{name}} ({{code}}) đang lưu ở trạng thái Tắt (v{{version}}). Hệ thống không lấy khung hình trực tiếp hay ảnh tham chiếu 5 phút khi đang tắt. Hãy bật camera trong Quản lý trước rồi mở Sửa vùng quan sát.',
+    'Có thể kiểm tra nguồn hình bên dưới, hoặc bật {{code}} (v{{version}}) để vẽ vùng và chạy AI.',
   'cameraSetup.disabledStageReadOnlyBody':
-    '{{name}} ({{code}}) đang lưu ở trạng thái Tắt (v{{version}}). Chỉ Quản lý công trường được phân công mới có thể bật camera trước khi kiểm tra ảnh tham chiếu hoặc vùng quan sát.',
+    '{{name}} ({{code}}, v{{version}}) đang tắt. Chỉ Quản lý công trường mới có thể bật.',
   'cameraSetup.disabledStageAction': 'Bật camera trong cài đặt ({{code}})',
 };
 
@@ -211,14 +209,14 @@ export function CameraSetupRowMetadata(props: { row: CameraResponse; isEnabled: 
           ·
         </span>
         <div className="inline-flex items-baseline gap-1 text-xs text-slate-500">
-          <dt>{t('cameraSetup.revisionLabel')}</dt>
-          <dd className="font-mono text-xs font-semibold tabular-nums text-slate-800">
+          <dt className="sr-only">{t('cameraSetup.revisionLabel')}</dt>
+          <dd className="font-mono text-xs font-semibold tabular-nums text-slate-700">
             v{row.configurationVersion}
           </dd>
         </div>
       </dl>
-      <details className="min-w-0 text-xs text-slate-500">
-        <summary className="inline-flex min-h-7 cursor-pointer select-none items-center gap-1 rounded-md py-0.5 text-xs font-medium text-slate-600 hover:text-slate-900 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#0F172A]">
+      <details className="min-w-0 text-[11px] text-slate-500">
+        <summary className="inline-flex min-h-6 cursor-pointer select-none items-center gap-1 rounded-md py-0.5 text-[11px] font-medium text-slate-500 hover:text-slate-900 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#0F172A]">
           <span>{t('cameraSetup.technicalSourceDetails')}</span>
         </summary>
         <dl className="mt-1 min-w-0">
@@ -293,7 +291,7 @@ export function CameraSetupContextBar({
       (hasSourceTask || canManageCameras || Boolean(onOpenPpePolicy)),
     );
     const taskTabBase =
-      'inline-flex min-h-8 items-center justify-center rounded-lg px-2 py-1 text-xs sm:px-3 sm:text-sm font-semibold transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#0F172A] cursor-pointer';
+      'inline-flex min-h-8 items-center justify-center rounded-lg px-2.5 py-1 text-xs font-semibold transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#0F172A] cursor-pointer';
     const taskTabActive = `${taskTabBase} bg-[#0F172A] text-white shadow-2xs`;
     const taskTabIdle = `${taskTabBase} text-slate-700 hover:bg-white hover:text-slate-950`;
 
@@ -381,7 +379,7 @@ export function CameraSetupContextBar({
                       className={
                         isSelectedActive
                           ? 'inline-flex min-h-8 max-w-full items-center justify-center rounded-lg border border-slate-300 bg-white px-2.5 py-1 text-xs font-semibold text-slate-700 transition-colors hover:bg-slate-50 hover:text-slate-950 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#0F172A] cursor-pointer whitespace-normal text-center'
-                          : `${CAMERA_BUTTON_STYLES.primary} max-w-full whitespace-normal text-center`
+                          : 'inline-flex min-h-8 max-w-full items-center justify-center rounded-lg bg-[#0F172A] px-3 py-1 text-xs font-semibold text-white transition-colors hover:bg-slate-800 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#0F172A] cursor-pointer whitespace-normal text-center'
                       }
                       onClick={(event) => open('manage', selectedCamera.id, event.currentTarget)}
                     >
@@ -400,13 +398,13 @@ export function CameraSetupContextBar({
                     className="flex flex-wrap items-center gap-1.5 sm:hidden"
                   >
                     <Link
-                      className={CAMERA_BUTTON_STYLES.compactSecondary}
+                      className="inline-flex min-h-8 items-center justify-center rounded-lg border border-slate-300 bg-white px-2.5 py-1 text-xs font-semibold text-slate-700 transition-colors hover:bg-slate-50 hover:text-slate-950"
                       to={`/ppe?${selectedMonitorQuery}`}
                     >
                       {t('cameraSetup.monitorPpe')}
                     </Link>
                     <Link
-                      className={CAMERA_BUTTON_STYLES.compactSecondary}
+                      className="inline-flex min-h-8 items-center justify-center rounded-lg border border-slate-300 bg-white px-2.5 py-1 text-xs font-semibold text-slate-700 transition-colors hover:bg-slate-50 hover:text-slate-950"
                       to={`/zones?${selectedMonitorQuery}`}
                     >
                       {t('cameraSetup.monitorZones')}
@@ -566,10 +564,10 @@ export function CameraSetupContextBar({
                 </div>
               )}
 
-              <div className="flex min-w-0 flex-wrap items-center gap-x-3 gap-y-1 text-xs text-slate-600">
+              <div className="flex min-w-0 flex-wrap items-center gap-x-2.5 gap-y-1 text-xs text-slate-600">
                 <details
                   data-testid="camera-setup-diagnostics-disclosure"
-                  className="group min-w-0"
+                  className="group relative min-w-0"
                 >
                   <summary className="inline-flex min-h-7 cursor-pointer list-none items-center gap-1 rounded-md py-0.5 font-medium text-slate-600 hover:text-slate-950 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#0F172A]">
                     <span>{t('cameraSetup.diagnosticsDisclosure')}</span>
@@ -580,7 +578,7 @@ export function CameraSetupContextBar({
                       ▾
                     </span>
                   </summary>
-                  <div className="mt-2 min-w-0 space-y-2.5 rounded-xl border border-slate-200 bg-slate-50/50 p-3 text-xs leading-relaxed text-slate-600">
+                  <div className="mt-2 min-w-0 space-y-2.5 rounded-xl border border-slate-200 bg-white p-3 text-xs leading-relaxed text-slate-600 shadow-lg lg:absolute lg:right-0 lg:z-20 lg:w-[26rem]">
                     {diagnosticsSlot}
                     <div className="space-y-1 border-t border-slate-200/80 pt-2">
                       {siteBadge && rows.length > 0 && (
