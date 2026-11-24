@@ -259,7 +259,7 @@ export function AttendanceDayView({
             workDate={day.workDate}
             missing
           />
-          <DetailRow label={t('attendance.worked')} value={minutes(s.workedMinutes)} />
+          <Hint>{t('attendanceDetail.sessionTimeHint')}</Hint>
           <Disclosure title={t('attendanceDetail.originalSession', { index: index + 1 })}>
             <DetailRow
               label={t('attendance.checkIn')}

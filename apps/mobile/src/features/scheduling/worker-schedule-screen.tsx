@@ -16,6 +16,7 @@ import { colors } from '../../theme/colors';
 import { allPages, localDate, validDates } from '../shared/data';
 import { Button, Choice, QueryState } from '../shared/ui';
 import { ScheduleDaySheet } from './schedule-day-sheet';
+import { ScheduleAttendanceStatus } from './schedule-attendance-status';
 import { useWorkspace } from '../workspace/workspace-context';
 import { MonthYearPicker } from '../shared/month-year-picker';
 import {
@@ -378,6 +379,7 @@ export function WorkerScheduleScreen({
                           <IconMapPin size={15} color={colors.textMuted} />
                           <Text style={styles.metadataText}>{scope.siteName}</Text>
                         </View>
+                        {schedule.isActive && <ScheduleAttendanceStatus scheduleId={schedule.id} />}
                         <View style={styles.cardFooter}>
                           <View style={styles.assignment}>
                             <WorkerAvatar size={30} />

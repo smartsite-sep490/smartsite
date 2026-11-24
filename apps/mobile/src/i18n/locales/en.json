@@ -431,6 +431,8 @@
     "rawTime": "Original scans: {{in}} → {{out}}",
     "effectiveTime": "Effective: {{in}} → {{out}}",
     "worked": "Worked time",
+    "requestMissing": "Report missing attendance",
+    "missingHint": "This shift has no gate session. Submit actual working times for contractor review.",
     "requestSessionCorrection": "Request Session Correction",
     "correctionHistory": "Correction Request History",
     "pendingCorrectionWarning": "A correction request is currently pending review.",
@@ -1533,7 +1535,8 @@
     "maxExits": "Maximum exits",
     "correctionNumber": "Request {{index}}",
     "proposedTimes": "Proposed times",
-    "reviewNote": "Review note"
+    "reviewNote": "Review note",
+    "sessionTimeHint": "Entry and exit show the gate session times. Counted hours are limited to the shift and follow break and exit policies; see the confirmed or provisional total above."
   },
   "scheduleDay": {
     "title": "Workday details",

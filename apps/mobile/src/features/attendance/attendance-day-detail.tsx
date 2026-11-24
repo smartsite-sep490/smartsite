@@ -5,13 +5,12 @@ import type { AttendanceSessionResponse } from '@smartsite/api-client';
 import { useTranslation, translate as tr } from '../../i18n';
 import { useWorkspace } from '../workspace/workspace-context';
 import { useScopedWorkers } from '../workspace/use-scoped-workers';
-import { instant, required, useCommand, useRequestId } from '../shared/data';
-import { Button, ErrorNotice, Field, Hint, Page, QueryState } from '../shared/ui';
-import { DateTimeField } from '../shared/date-time-field';
-import { RequestSheet } from '../shared/request-sheet';
+import { Button, Hint, Page, QueryState } from '../shared/ui';
 import { IconChevronLeft } from '../../components/common/Icons';
 import { colors } from '../../theme/colors';
 import { AttendanceReviewSheet, type AttendanceReviewTarget } from './attendance-review-sheet';
+import { CorrectionModal } from './correction-modal';
+import { MissingAttendance } from './missing-attendance';
 import {
   AttendanceDayView,
   AttendanceCorrectionHistory,
@@ -84,6 +83,11 @@ export function AttendanceDetail({ dayId, onBack }: { dayId: string; onBack: () 
           {t('attendanceReview.saved')}
         </Text>
       )}
+      {scope.role === 'worker' &&
+        query.data &&
+        workers.data.some((w) => w.id === query.data?.day.workerId) && (
+          <MissingAttendance dayId={dayId} />
+        )}
       <QueryState query={query}>
         {(data) => (
           <>
@@ -254,88 +258,6 @@ export function AttendanceDetail({ dayId, onBack }: { dayId: string; onBack: () 
         />
       )}
     </ScrollView>
-  );
-}
-
-import { useRequestFeedback } from '../shared/request-feedback';
-
-function CorrectionModal({
-  session,
-  timezone,
-  visible,
-  onClose,
-  onSubmitted,
-}: {
-  session: AttendanceSessionResponse;
-  timezone: string;
-  visible: boolean;
-  onClose: () => void;
-  onSubmitted?: () => void;
-}) {
-  const { t } = useTranslation();
-  const { scope, client, token } = useWorkspace();
-  const [from, setFrom] = useState(session.effectiveInAt ?? session.rawInAt ?? ''),
-    [to, setTo] = useState(session.effectiveOutAt ?? session.rawOutAt ?? ''),
-    [reason, setReason] = useState('');
-  const command = useCommand(),
-    requestId = useRequestId();
-  const reportSubmitted = useRequestFeedback();
-
-  return (
-    <RequestSheet
-      visible={visible}
-      onClose={onClose}
-      busy={command.isPending}
-      title={t('attendance.requestSessionCorrection')}
-      subtitle={t('attendance.correctionHint')}
-      footer={
-        <View style={{ marginTop: 16 }}>
-          <ErrorNotice error={command.error} />
-          <Button
-            label={tr('attendance.submitToManager')}
-            disabled={command.isPending || !from || !to || !reason.trim()}
-            onPress={() =>
-              command.mutate(async () => {
-                const proposedInAt = instant(from),
-                  proposedOutAt = instant(to);
-                if (proposedOutAt <= proposedInAt) throw new Error(tr('validation.exitAfterEntry'));
-                const input = {
-                  expectedSessionVersion: session.version,
-                  proposedInAt,
-                  proposedOutAt,
-                  reason: required(reason, tr('validation.reasonLabel')),
-                };
-                await client.requestAttendanceCorrection(token, scope.siteId, session.id, {
-                  ...input,
-                  requestId: requestId(input),
-                });
-                reportSubmitted();
-                onSubmitted?.();
-                onClose();
-              })
-            }
-          />
-        </View>
-      }
-    >
-      <View style={attStyles.correctionOriginal}>
-        <Text style={attStyles.quickTitle}>{t('attendanceUi.originalTimes')}</Text>
-        <Text style={attStyles.quickHint}>
-          {t('attendance.checkIn')}: {attendanceFullTime(session.rawInAt, timezone)}
-        </Text>
-        <Text style={attStyles.quickHint}>
-          {t('attendance.checkOut')}: {attendanceFullTime(session.rawOutAt, timezone)}
-        </Text>
-      </View>
-      <DateTimeField compact label={tr('attendance.proposedIn')} value={from} onChange={setFrom} />
-      <DateTimeField compact label={tr('attendance.proposedOut')} value={to} onChange={setTo} />
-      <Field
-        label={tr('attendance.correctionReason')}
-        multiline
-        value={reason}
-        onChangeText={setReason}
-      />
-    </RequestSheet>
   );
 }
 
