@@ -7,6 +7,7 @@ import { userErrorMessage } from '../../i18n/messages';
 import { Button, Dialog, SmartDatePicker } from '../ui';
 import { attendanceDate } from '../access/attendance/attendance-display';
 import { loadAllPages } from '../workforce/load-all-pages';
+import { SmartNativeSelect } from '../ui/SmartNativeSelect';
 import { teamText } from './team-attendance-copy';
 
 export function TeamAttendanceReportDialog({
@@ -30,12 +31,9 @@ export function TeamAttendanceReportDialog({
 }) {
   useTranslation();
   const client = useManagementClient(apiUrl),
-    shiftInput = useId(),
-    versionInput = useId();
+    shiftInput = useId();
   const [workDate, setDate] = useState(() => attendanceDate(new Date(), 'Asia/Ho_Chi_Minh'));
-  const [shiftChoice, setShift] = useState(''),
-    [versionChoice, setVersion] = useState(''),
-    [offset, setOffset] = useState(0);
+  const [shiftChoice, setShift] = useState('');
   const options = useQuery({
     queryKey: ['contractor-zone-attendance-options', apiUrl, sessionScope, siteId, contractorId],
     queryFn: async ({ signal }) => {
@@ -49,9 +47,7 @@ export function TeamAttendanceReportDialog({
   });
   const shiftId =
     shiftChoice || (options.data?.shifts.length === 1 ? options.data.shifts[0]!.id : '');
-  const scheduleVersionId =
-    versionChoice || (options.data?.versions.length === 1 ? options.data.versions[0]!.id : '');
-  const enabled = options.isSuccess && !!workDate && !!shiftId && !!scheduleVersionId;
+  const enabled = options.isSuccess && !!workDate && !!shiftId && !!options.data.versions.length;
   const report = useQuery({
     queryKey: [
       'contractor-zone-attendance',
@@ -62,17 +58,35 @@ export function TeamAttendanceReportDialog({
       teamId,
       workDate,
       shiftId,
-      scheduleVersionId,
-      offset,
+      options.data?.versions.map((version) => version.id),
     ],
-    queryFn: () =>
-      client.contractorTeamAttendance(token, siteId, contractorId, teamId, {
-        workDate,
-        shiftId,
-        scheduleVersionId,
-        offset,
-        limit: 20,
-      }),
+    queryFn: async ({ signal }) => {
+      const pages = await Promise.all(
+        options.data!.versions.map((version) =>
+          loadAllPages(
+            (page) =>
+              client.contractorTeamAttendance(token, siteId, contractorId, teamId, {
+                workDate,
+                shiftId,
+                scheduleVersionId: version.id,
+                ...page,
+              }),
+            signal,
+          ),
+        ),
+      );
+      const items = [
+        ...new Map(
+          pages.flatMap((page) => page.items).map((member) => [member.scheduleId, member]),
+        ).values(),
+      ];
+      return {
+        items,
+        present: items.filter((m) => m.status === 'PRESENT').length,
+        absent: items.filter((m) => m.status === 'ABSENT').length,
+        pending: items.filter((m) => m.status === 'NOT_YET').length,
+      };
+    },
     enabled,
     retry: false,
     refetchInterval: 15000,
@@ -84,7 +98,6 @@ export function TeamAttendanceReportDialog({
       maxWidth="xl"
       onClose={onClose}
     >
-      <p className="text-sm text-slate-600">{teamText('teamWeb.reportHint')}</p>
       {options.isPending ? (
         <p role="status">{tr('common.loading')}</p>
       ) : options.isError ? (
@@ -94,25 +107,24 @@ export function TeamAttendanceReportDialog({
         </div>
       ) : (
         <>
-          <SmartDatePicker
-            label={teamText('teamWeb.workDate')}
-            value={workDate}
-            disablePast={false}
-            onChange={(date) => {
-              setDate(date);
-              setOffset(0);
-            }}
-          />
-          <div className="grid gap-3 sm:grid-cols-2">
+          <div className="mb-5 grid items-end gap-4 rounded-2xl bg-slate-50 p-4 sm:grid-cols-2">
+            <SmartDatePicker
+              label={teamText('teamWeb.workDate')}
+              value={workDate}
+              disablePast={false}
+              onChange={(date) => {
+                setDate(date);
+              }}
+            />
+
             <label htmlFor={shiftInput} className="space-y-2 text-sm font-semibold">
               {teamText('teamWeb.shift')}
-              <select
+              <SmartNativeSelect
                 id={shiftInput}
                 value={shiftId}
-                className="block w-full rounded-xl border border-slate-300 bg-white p-2.5 focus-visible:outline-2 focus-visible:outline-orange-600"
+                className="block w-full"
                 onChange={(event) => {
                   setShift(event.target.value);
-                  setOffset(0);
                 }}
               >
                 <option value="">{teamText('teamWeb.choose')}</option>
@@ -121,26 +133,7 @@ export function TeamAttendanceReportDialog({
                     {shift.name}
                   </option>
                 ))}
-              </select>
-            </label>
-            <label htmlFor={versionInput} className="space-y-2 text-sm font-semibold">
-              {teamText('teamWeb.version')}
-              <select
-                id={versionInput}
-                value={scheduleVersionId}
-                className="block w-full rounded-xl border border-slate-300 bg-white p-2.5 focus-visible:outline-2 focus-visible:outline-orange-600"
-                onChange={(event) => {
-                  setVersion(event.target.value);
-                  setOffset(0);
-                }}
-              >
-                <option value="">{teamText('teamWeb.choose')}</option>
-                {options.data.versions.map((version) => (
-                  <option key={version.id} value={version.id}>
-                    {teamText('teamWeb.versionValue', { version: version.version })}
-                  </option>
-                ))}
-              </select>
+              </SmartNativeSelect>
             </label>
           </div>
           {!options.data.shifts.length || !options.data.versions.length ? (
@@ -157,29 +150,54 @@ export function TeamAttendanceReportDialog({
           ) : (
             report.data && (
               <>
-                <p className="rounded-xl bg-slate-50 p-3 text-sm font-semibold">
-                  {teamText('teamWeb.reportTotals', {
-                    present: report.data.present,
-                    absent: report.data.absent,
-                    pending: report.data.pending,
-                  })}
-                </p>
+                <div
+                  className="mb-5 flex flex-wrap items-center gap-x-6 gap-y-3 rounded-xl border border-slate-200 px-4 py-3"
+                  role="status"
+                >
+                  {(['PRESENT', 'ABSENT', 'NOT_YET'] as const).map((status) => (
+                    <div key={status} className="flex items-baseline gap-2">
+                      <span
+                        className={
+                          'text-2xl font-bold tabular-nums ' +
+                          (status === 'PRESENT'
+                            ? 'text-emerald-700'
+                            : status === 'ABSENT'
+                              ? 'text-rose-700'
+                              : 'text-slate-700')
+                        }
+                      >
+                        {status === 'PRESENT'
+                          ? report.data.present
+                          : status === 'ABSENT'
+                            ? report.data.absent
+                            : report.data.pending}
+                      </span>
+                      <span className="text-xs font-medium text-slate-600">
+                        {teamText(`teamWeb.status.${status}`)}
+                      </span>
+                    </div>
+                  ))}
+                </div>
                 {!report.data.items.length ? (
                   <p>{teamText('teamWeb.emptyRoster')}</p>
                 ) : (
-                  <div className="overflow-x-auto">
-                    <table className="w-full text-left text-xs">
+                  <div className="max-h-96 overflow-auto rounded-xl border border-slate-200">
+                    <table className="w-full text-left text-sm">
                       <caption className="sr-only">
                         {teamName} · {workDate}
                       </caption>
-                      <thead>
+                      <thead className="sticky top-0 bg-slate-50 text-xs text-slate-600">
                         <tr>
                           {[
                             teamText('teamWeb.worker'),
                             teamText('teamWeb.result'),
                             teamText('teamWeb.gateResult'),
                           ].map((label) => (
-                            <th key={label} scope="col" className="border-b p-2">
+                            <th
+                              key={label}
+                              scope="col"
+                              className="border-b border-slate-200 px-4 py-3"
+                            >
                               {label}
                             </th>
                           ))}
@@ -188,9 +206,22 @@ export function TeamAttendanceReportDialog({
                       <tbody>
                         {report.data.items.map((member) => (
                           <tr key={member.scheduleId}>
-                            <td className="border-b p-2 font-semibold">{member.displayName}</td>
+                            <td className="border-b border-slate-100 px-4 py-4 font-semibold text-slate-900">
+                              {member.displayName}
+                            </td>
                             <td className="border-b p-2">
-                              {teamText(`teamWeb.status.${member.status}`)}
+                              <span
+                                className={
+                                  'inline-flex whitespace-nowrap items-center rounded-lg px-3 py-1.5 text-xs font-bold ring-1 ring-inset ' +
+                                  (member.status === 'PRESENT'
+                                    ? 'bg-emerald-50 text-emerald-800 ring-emerald-200'
+                                    : member.status === 'ABSENT'
+                                      ? 'bg-rose-50 text-rose-800 ring-rose-200'
+                                      : 'bg-slate-100 text-slate-700 ring-slate-200')
+                                }
+                              >
+                                {teamText(`teamWeb.status.${member.status}`)}
+                              </span>
                             </td>
                             <td className="border-b p-2">
                               {teamText(`teamWeb.gate.${member.gateCheck}`)}
@@ -201,24 +232,6 @@ export function TeamAttendanceReportDialog({
                     </table>
                   </div>
                 )}
-                <div className="flex justify-end gap-2">
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    disabled={offset === 0}
-                    onClick={() => setOffset((n) => Math.max(0, n - 20))}
-                  >
-                    {teamText('teamWeb.previous')}
-                  </Button>
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    disabled={offset + report.data.items.length >= report.data.total}
-                    onClick={() => setOffset((n) => n + 20)}
-                  >
-                    {teamText('teamWeb.next')}
-                  </Button>
-                </div>
               </>
             )
           )}

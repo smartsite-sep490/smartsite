@@ -1,3 +1,4 @@
+import { AttendanceRequestSection } from './AttendanceRequestSection';
 import { SmartNativeSelect } from '../../ui/SmartNativeSelect';
 import { GateAbsenceReviewCard } from './GateAbsenceReviewCard';
 import { ZoneAttendanceReviewCard } from './ZoneAttendanceReviewCard';
@@ -783,34 +784,9 @@ export function AttendanceDaysView({
                           </div>
                         </td>
                         <td className="px-4 py-3.5 text-xs text-slate-600 whitespace-nowrap">
-                          {day.shiftName ? (
-                            <span
-                              className={`inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-medium border shadow-2xs ${
-                                day.shiftName.toLowerCase().includes('morning')
-                                  ? 'bg-amber-50 text-amber-800 border-amber-200/60'
-                                  : day.shiftName.toLowerCase().includes('evening') ||
-                                      day.shiftName.toLowerCase().includes('night')
-                                    ? 'bg-indigo-50 text-indigo-800 border-indigo-200/60'
-                                    : 'bg-slate-100 text-slate-700 border-slate-200/60'
-                              }`}
-                            >
-                              <span
-                                className={`w-1.5 h-1.5 rounded-full ${
-                                  day.shiftName.toLowerCase().includes('morning')
-                                    ? 'bg-amber-500'
-                                    : day.shiftName.toLowerCase().includes('evening') ||
-                                        day.shiftName.toLowerCase().includes('night')
-                                      ? 'bg-indigo-500'
-                                      : 'bg-slate-400'
-                                }`}
-                              />
-                              {day.shiftName}
-                            </span>
-                          ) : (
-                            <span className="text-slate-400 italic text-xs">
-                              {tr('common.unassigned')}
-                            </span>
-                          )}
+                          <span className="font-semibold text-slate-900">
+                            {day.shiftName || tr('common.unassigned')}
+                          </span>
                           {day.breakStartsAt && day.breakEndsAt && (
                             <p className="text-[11px] text-slate-500 mt-1">
                               {tr('common.unpaid_break_value_value', {
@@ -827,31 +803,25 @@ export function AttendanceDaysView({
                                 ? tr('common.open_session')
                                 : tr('common.no_open_session')}
                             </td>
-                            <td className="px-4 py-3.5 text-xs font-mono text-slate-700 whitespace-nowrap">
+                            <td className="px-4 py-3.5 text-xs tabular-nums text-slate-700 whitespace-nowrap">
                               {hours(day.regularMinutes)}
                             </td>
-                            <td className="px-4 py-3.5 text-xs font-mono text-slate-700 whitespace-nowrap">
+                            <td className="px-4 py-3.5 text-xs tabular-nums text-slate-700 whitespace-nowrap">
                               {hours(day.overtimeMinutes)}
                             </td>
                           </>
                         )}
-                        <td className="px-4 py-3.5 text-xs font-mono text-slate-700 font-semibold whitespace-nowrap">
+                        <td className="px-4 py-3.5 text-xs tabular-nums text-slate-700 font-semibold whitespace-nowrap">
                           {hours(day.provisionalMinutes)}
                         </td>
-                        <td className="px-4 py-3.5 text-xs font-mono whitespace-nowrap">
-                          {day.status === 'ABSENT' ? (
-                            <span className="text-slate-600">{hours(0)}</span>
-                          ) : day.confirmedMinutes === null ? (
-                            <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-slate-100 text-slate-600 text-[11px] font-medium border border-slate-200/60">
-                              <span className="w-1.5 h-1.5 rounded-full bg-slate-400" />
-                              {tr('common.awaiting_confirmation')}
-                            </span>
-                          ) : (
-                            <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-emerald-50 text-emerald-700 text-xs font-bold border border-emerald-200/60 font-mono shadow-2xs">
-                              <IconCheck className="w-3 h-3 text-emerald-600" />
-                              {hours(day.confirmedMinutes)}
-                            </span>
-                          )}
+                        <td className="px-4 py-3.5 text-xs tabular-nums whitespace-nowrap">
+                          <span className="font-semibold text-slate-900">
+                            {day.status === 'ABSENT'
+                              ? hours(0)
+                              : day.confirmedMinutes === null
+                                ? tr('common.awaiting_confirmation')
+                                : hours(day.confirmedMinutes)}
+                          </span>
                         </td>
                         {!isWorker && (
                           <td className="px-4 py-3.5 whitespace-nowrap">
@@ -1121,7 +1091,7 @@ export function AttendanceDaysView({
                       (s.status === 'NEEDS_REVIEW' && !s.effectiveInAt) ? (
                         <div className="flex items-start justify-between gap-3">
                           <div className="space-y-0.5">
-                            <p className="text-xs font-mono font-semibold text-slate-600">
+                            <p className="text-xs tabular-nums font-semibold text-slate-600">
                               {tr('common.duplicate_in_value', {
                                 value1: s.rawInAt
                                   ? new Date(s.rawInAt).toLocaleString(uiLocale())
@@ -1144,7 +1114,7 @@ export function AttendanceDaysView({
                       ) : (
                         <div className="flex items-center justify-between gap-3">
                           <div className="space-y-0.5">
-                            <p className="text-xs font-mono font-semibold text-slate-800 tracking-tight">
+                            <p className="text-xs tabular-nums font-semibold text-slate-800 tracking-tight">
                               {s.effectiveInAt
                                 ? new Date(s.effectiveInAt).toLocaleString(uiLocale())
                                 : tr('common.missing_entry')}
@@ -1249,7 +1219,7 @@ export function AttendanceDaysView({
                             {tr('common.required')}
                           </span>
                         </div>
-                        <span className="text-[11px] font-mono text-slate-400">
+                        <span className="text-[11px] tabular-nums text-slate-400">
                           {reviewNote.length}/1000
                         </span>
                       </div>
@@ -1385,7 +1355,7 @@ export function AttendanceDaysView({
               ) : (
                 <>
                   <StatusBadge status={submittedStatus.data.status} />
-                  <p className="text-xs font-mono text-slate-600">
+                  <p className="text-xs tabular-nums text-slate-600">
                     {new Date(submittedStatus.data.startsAt).toLocaleString(uiLocale(), {
                       hour12: false,
                     })}{' '}
@@ -1422,15 +1392,7 @@ export function AttendanceDaysView({
           </section>
         )}
         {data.canRequest && !submittedRequest ? (
-          <div className="rounded-2xl border border-slate-200/80 bg-white shadow-[0_4px_20px_-4px_rgba(7,26,43,0.06)] overflow-hidden mt-6">
-            <div className="px-6 py-4.5 border-b border-slate-100 bg-gradient-to-r from-slate-50/60 to-white">
-              <span className="text-[10px] font-bold uppercase tracking-[0.16em] text-[#F66B17] block mb-0.5">
-                {tr('common.workforce_operations')}
-              </span>
-              <h3 className="text-sm font-extrabold text-[#071A2B] tracking-tight">
-                {tr('attendance_days_view.request_overtime_or_leave')}
-              </h3>
-            </div>
+          <AttendanceRequestSection title={tr('attendance_days_view.request_overtime_or_leave')}>
             {(schedules.isPending || requestShifts.isPending) && (
               <p role="status" className="p-6 text-xs text-slate-500 font-medium">
                 {tr('common.loading_assigned_shifts')}
@@ -1802,17 +1764,12 @@ export function AttendanceDaysView({
                   </form>
                 );
               })()}
-          </div>
+          </AttendanceRequestSection>
         ) : null}
 
         {/* ── TIME REQUESTS QUEUE ─────────────────────────────── */}
-        <div className="rounded-2xl border border-slate-200/80 bg-white shadow-xs overflow-hidden">
+        <AttendanceRequestSection title={tr('common.time_requests')}>
           <div className="flex flex-wrap items-center justify-between gap-3 px-6 py-4 border-b border-slate-100 bg-gradient-to-r from-slate-50/50 to-white">
-            <div>
-              <h3 className="text-sm font-extrabold text-[#071A2B] tracking-tight">
-                {tr('common.time_requests')}
-              </h3>
-            </div>
             <div className="flex items-center gap-2.5">
               <label htmlFor="queue-kind" className="sr-only">
                 {tr('common.queue_type')}
@@ -2031,7 +1988,7 @@ export function AttendanceDaysView({
               </button>
             </div>
           )}
-        </div>
+        </AttendanceRequestSection>
       </div>
 
       {/* ── CONFIRMED TIMESHEET ──────────────────────────────── */}
@@ -2070,7 +2027,7 @@ export function AttendanceDaysView({
                     {tr('common.value_confirmed_days', { value1: row.confirmedDays })}
                   </span>
                 </div>
-                <div className="flex items-center gap-4 text-xs font-mono">
+                <div className="flex items-center gap-4 text-xs tabular-nums">
                   <div className="text-center">
                     <p className="text-[10px] text-slate-400 uppercase tracking-wider">
                       {tr('common.regular')}

@@ -4,11 +4,16 @@ import { attendanceHours } from './attendance-display';
 import type { AttendanceReportDay } from '@smartsite/contracts';
 
 export function AttendanceDailyBarChart({ daily }: { daily: AttendanceReportDay[] }) {
-  // Find max daily minutes to scale bars reasonably. Baseline at least 10h (600 mins) or 12h (720 mins).
-  const maxDayMinutes = Math.max(
-    720,
-    ...daily.map((d) => (d.hoursStatus === 'CONFIRMED' ? d.totalMinutes : d.provisionalMinutes)),
-  );
+  // Default to eight hours; expand the scale for longer days.
+  const maxDayMinutes =
+    Math.ceil(
+      Math.max(
+        480,
+        ...daily.map((d) =>
+          d.hoursStatus === 'CONFIRMED' ? d.totalMinutes : d.provisionalMinutes,
+        ),
+      ) / 240,
+    ) * 240;
 
   const formatDayName = (dateStr: string) => {
     try {
@@ -73,11 +78,11 @@ export function AttendanceDailyBarChart({ daily }: { daily: AttendanceReportDay[
 
       {/* Chart Canvas Area */}
       <div className="relative pt-6 pb-2" aria-hidden="true">
-        {/* Y Axis Grid lines (12h, 8h, 4h, 0h) */}
+        {/* Grid labels share the bar scale */}
         <div className="absolute inset-x-0 top-6 bottom-8 flex flex-col justify-between pointer-events-none">
-          {[12, 8, 4, 0].map((h) => (
+          {[maxDayMinutes / 60, maxDayMinutes / 120, 0].map((h) => (
             <div key={h} className="relative flex items-center w-full">
-              <span className="w-8 text-[11px] font-mono text-slate-400 text-right pr-2 shrink-0">
+              <span className="w-12 whitespace-nowrap text-[11px] tabular-nums text-slate-600 text-right pr-2 shrink-0">
                 {tr('attendance_report.chart_hours', { hours: h })}
               </span>
               <div className="w-full border-b border-dashed border-slate-100" />
@@ -86,7 +91,7 @@ export function AttendanceDailyBarChart({ daily }: { daily: AttendanceReportDay[
         </div>
 
         {/* Bars Container */}
-        <div className="ml-8 flex items-end justify-around" style={{ height: `${chartHeight}px` }}>
+        <div className="ml-12 flex items-end justify-around" style={{ height: `${chartHeight}px` }}>
           {daily.map((d) => {
             const isConfirmed = d.hoursStatus === 'CONFIRMED';
             const regular = isConfirmed ? d.regularMinutes : d.provisionalMinutes;

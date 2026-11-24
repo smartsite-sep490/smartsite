@@ -124,8 +124,21 @@ export function workerAttendanceReport(input: WorkerReportInput): AttendanceWork
     const checkIns = activeSessions.filter(
       (s) => s.effectiveInAt && (s.checkInEventId || s.status === 'CORRECTED'),
     );
-    const hasCheckIn = checkIns.length > 0;
     const obligations = windows.filter((w) => !w.leave);
+    // Keep raw Gate times visible, but count attendance only inside an assigned shift.
+    const attended = (w: (typeof obligations)[number]) =>
+      !!w.window &&
+      +now >= +w.window.startsAt &&
+      checkIns.some(
+        (s) =>
+          (s.shiftAssignmentId === w.schedule.id || day?.scheduleId === w.schedule.id) &&
+          +s.effectiveInAt! <= +now &&
+          +s.effectiveInAt! < +w.window!.endsAt &&
+          (s.effectiveOutAt === null ||
+            s.effectiveOutAt === undefined ||
+            +s.effectiveOutAt > +w.window!.startsAt),
+      );
+    const hasShiftPresence = obligations.some(attended);
     const coveredLeaveReview =
       !!day &&
       day.status === 'NEEDS_REVIEW' &&
@@ -142,15 +155,7 @@ export function workerAttendanceReport(input: WorkerReportInput): AttendanceWork
     const invalid = windows.some((w) => !w.window);
     const required =
       !invalid && obligations.length > 0 && obligations.every((w) => +w.window!.endsAt <= +now);
-    const present =
-      required &&
-      obligations.some((w) =>
-        checkIns.some(
-          (s) =>
-            s.shiftAssignmentId === w.schedule.id ||
-            (s.dayId === day?.id && day?.scheduleId === w.schedule.id),
-        ),
-      );
+    const present = required && hasShiftPresence;
     const first = checkIns.map((s) => +s.effectiveInAt!).sort((a, b) => a - b)[0];
     const outs = activeSessions
       .filter((s) => s.effectiveOutAt && s.effectiveInAt)
@@ -160,7 +165,7 @@ export function workerAttendanceReport(input: WorkerReportInput): AttendanceWork
       ? 'UNAVAILABLE'
       : day?.status === 'NEEDS_REVIEW' && !coveredLeaveReview
         ? 'NEEDS_REVIEW'
-        : hasCheckIn
+        : hasShiftPresence
           ? 'PRESENT'
           : !windows.length
             ? day

@@ -135,3 +135,18 @@ it('allows editing policy and PPE on an unlocked Zone and supports cancelling ed
     requiredPpe: ['HARD_HAT'],
   });
 });
+
+it('keeps a Zone draft when collapsed and opens the form when editing a configured Zone', async () => {
+  const user = mount();
+  await user.type(screen.getByLabelText('Zone name'), 'New draft');
+  await user.click(screen.getByRole('button', { name: /Collapse/ }));
+  expect(screen.queryByRole('form', { name: 'Create Zone' })).toBeNull();
+  await user.click(screen.getByRole('button', { name: /Expand/ }));
+  expect((screen.getByLabelText('Zone name') as HTMLInputElement).value).toBe('New draft');
+  await user.click(screen.getByRole('button', { name: /Collapse/ }));
+  await user.click(await screen.findByRole('button', { name: 'Edit Zone' }));
+  expect(screen.getByRole('form', { name: 'Edit Zone' })).toBeTruthy();
+  expect(screen.getByRole('button', { name: /Collapse/ }).getAttribute('aria-expanded')).toBe(
+    'true',
+  );
+});

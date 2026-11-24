@@ -44,7 +44,7 @@ it('localizes chart weekdays, hour units and accessible status text in Vietnames
   );
   expect(screen.queryByText('Fri')).toBeNull();
   expect(screen.getByText(/Th(?:ứ)?\s*6/)).toBeTruthy();
-  expect(screen.getByText('12 giờ')).toBeTruthy();
+  expect(screen.getByText('8 giờ')).toBeTruthy();
   expect(screen.queryByText('PRESENT')).toBeNull();
   expect(screen.getByText('Có mặt')).toBeTruthy();
 });
@@ -88,13 +88,13 @@ describe('AttendanceSummaryCards', () => {
 
     expect(screen.getByText('Total Working Hours')).toBeTruthy();
     expect(screen.getByText('400h 0m')).toBeTruthy();
-    expect(screen.getByText('+4.5%')).toBeTruthy();
+    expect(screen.queryByText('+4.5%')).toBeNull();
     // Comparison to the previous period must never hide unresolved worked hours.
     expect(screen.getByText(/10h 0m.*Provisional/i)).toBeTruthy();
 
     expect(screen.getByText('Absent Today')).toBeTruthy();
     expect(screen.getByText('5')).toBeTruthy();
-    expect(screen.getByText('10%')).toBeTruthy();
+    expect(screen.queryByText('10%')).toBeNull();
 
     expect(screen.getByText('Overtime Hours')).toBeTruthy();
     expect(screen.getByText('50h 0m')).toBeTruthy();
@@ -138,7 +138,7 @@ describe('AttendanceSummaryCards', () => {
     render(<AttendanceSummaryCards summary={summary} isLoading={false} />);
     expect(screen.getAllByText('0h 0m')).toHaveLength(2);
     expect(screen.queryByText(/compared to last period/i)).toBeNull();
-    expect(screen.getByText('0%')).toBeTruthy();
+    expect(screen.queryByText('0%')).toBeNull();
   });
 });
 
@@ -229,6 +229,20 @@ describe('AttendanceWorkersTable', () => {
         workerCode: 'W001',
         workerName: 'Nguyen Van A',
         contractorId: 'c-1',
+        daily: ['2026-10-05', '2026-10-06'].map((workDate, index) => ({
+          workDate,
+          attendanceDayId: null,
+          status: index === 0 ? ('ABSENT' as const) : ('OFF' as const),
+          shifts: [],
+          firstCheckInAt: null,
+          lastCheckOutAt: null,
+          regularMinutes: 0,
+          overtimeMinutes: 0,
+          totalMinutes: 0,
+          provisionalMinutes: 0,
+          hoursStatus: 'NONE' as const,
+          anomalies: [],
+        })),
         todayStatus: 'PRESENT',
         todayFirstCheckInAt: '2026-10-07T08:00:00Z',
         todayLastCheckOutAt: '2026-10-07T17:00:00Z',
@@ -262,6 +276,11 @@ describe('AttendanceWorkersTable', () => {
     expect(screen.getByText('Nguyen Van A')).toBeTruthy();
     expect(screen.getByText(/W001/)).toBeTruthy();
     expect(screen.getByText('100%')).toBeTruthy();
+    expect(screen.getByText('Absent')).toBeTruthy();
+    expect(screen.getByText('Day off')).toBeTruthy();
+    expect(screen.queryByText('Present')).toBeNull();
+    expect(document.querySelector('time[datetime="2026-10-05"]')).toBeTruthy();
+    expect(document.querySelector('time[datetime="2026-10-06"]')).toBeTruthy();
 
     const viewButton = screen.getByRole('button', { name: /View Nguyen Van A/i });
     await userEvent.click(viewButton);

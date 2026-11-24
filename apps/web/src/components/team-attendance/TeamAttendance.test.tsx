@@ -212,7 +212,7 @@ it('lets the representative read scoped Zone results without attendance write co
       shiftId: 'shift',
       scheduleVersionId: 'version',
       offset: 0,
-      limit: 20,
+      limit: 100,
     },
   );
   expect(screen.queryByRole('button', { name: 'Present' })).toBeNull();
@@ -220,28 +220,68 @@ it('lets the representative read scoped Zone results without attendance write co
   expect(SmartSiteManagementClient.prototype.submitTeamAttendance).not.toHaveBeenCalled();
 });
 
-it('paginates the representative report through its scoped read API', async () => {
-  const response = await vi.mocked(SmartSiteManagementClient.prototype.contractorTeamAttendance)(
-    '',
-    '',
-    '',
-    '',
-    { workDate: '2030-01-01', shiftId: 'shift', scheduleVersionId: 'version' },
-  );
-  vi.mocked(SmartSiteManagementClient.prototype.contractorTeamAttendance)
-    .mockClear()
-    .mockResolvedValue({ ...response, total: 21 });
-  const user = mountReport();
-  await screen.findByText('Worker B');
-  await user.click(screen.getByRole('button', { name: 'Next' }));
-  await screen.findByText('Worker B');
-  expect(SmartSiteManagementClient.prototype.contractorTeamAttendance).toHaveBeenLastCalledWith(
+it('loads every report page without showing pagination or version controls', async () => {
+  const api = vi.mocked(SmartSiteManagementClient.prototype.contractorTeamAttendance);
+  const response = await api('', '', '', '', {
+    workDate: '2030-01-01',
+    shiftId: 'shift',
+    scheduleVersionId: 'version',
+  });
+  api.mockClear().mockImplementation(async (_token, _site, _contractor, _team, query) => ({
+    ...response,
+    total: 3,
+    items:
+      query.offset === 0
+        ? response.items
+        : [
+            {
+              ...response.items[0]!,
+              scheduleId: 'last-schedule',
+              displayName: 'Last worker',
+              status: 'PRESENT',
+            },
+          ],
+  }));
+  mountReport();
+  await screen.findByText('Last worker');
+  expect(api).toHaveBeenLastCalledWith(
     props.token,
     props.siteId,
     'contractor',
     'team',
-    expect.objectContaining({ offset: 20 }),
+    expect.objectContaining({ offset: 2, limit: 100 }),
   );
+  expect(screen.queryByRole('button', { name: 'Previous' })).toBeNull();
+  expect(screen.queryByRole('button', { name: 'Next' })).toBeNull();
+  expect(screen.queryByLabelText('Schedule version')).toBeNull();
+  expect(screen.getAllByText('Present').length).toBeGreaterThan(0);
+});
+
+it('includes results across schedule versions without asking the user to choose a version', async () => {
+  const versions = vi.mocked(SmartSiteManagementClient.prototype.listScheduleVersions);
+  const response = await versions('', '');
+  versions.mockResolvedValue({
+    items: [...response.items, { ...response.items[0]!, id: 'version-2', version: 2 }],
+    total: 2,
+  });
+  const api = vi.mocked(SmartSiteManagementClient.prototype.contractorTeamAttendance);
+  const report = await api('', '', '', '', {
+    workDate: '2030-01-01',
+    shiftId: 'shift',
+    scheduleVersionId: 'version',
+  });
+  api.mockClear().mockImplementation(async (_token, _site, _contractor, _team, query) => ({
+    ...report,
+    items: report.items.map((member) => ({
+      ...member,
+      scheduleId: member.scheduleId + query.scheduleVersionId,
+      displayName: member.displayName + ' ' + query.scheduleVersionId,
+    })),
+  }));
+  mountReport();
+  await screen.findByText('Worker B version-2');
+  expect(screen.getByText('Worker B version')).toBeTruthy();
+  expect(screen.queryByLabelText('Schedule version')).toBeNull();
 });
 
 it('shows a failed representative report as unavailable rather than a zero attendance result', async () => {
@@ -351,7 +391,8 @@ it('shows only personal status for an ordinary Worker', async () => {
   attendance.canManage = false;
   attendance.canSubmit = false;
   mountAttendance();
-  await screen.findByText(/Your team leader records Zone attendance/);
+  await screen.findByText('Team / Zone');
+  expect(screen.queryByText(/Your team leader records Zone attendance/)).toBeNull();
   expect(screen.queryByRole('group')).toBeNull();
   expect(screen.queryByText('Worker B')).toBeNull();
   expect(screen.queryByRole('button', { name: 'Save attendance' })).toBeNull();
@@ -441,6 +482,8 @@ it.each(['before-start', 'missing-zone', 'locked'] as const)(
     if (kind === 'locked') attendance.members[0] = { ...attendance.members[0]!, locked: true };
     mountAttendance();
     const member = await screen.findByRole('group', { name: 'Worker A' });
+    if (kind === 'before-start')
+      expect(screen.getByText(/The shift has not started yet/)).toBeTruthy();
     expect(within(member).getByRole('button', { name: 'Present' }).matches(':disabled')).toBe(true);
     expect(screen.getByRole('button', { name: 'Save attendance' }).hasAttribute('disabled')).toBe(
       true,
@@ -482,7 +525,8 @@ it('hides roster controls if leadership is revoked after selection', async () =>
       members: [],
     }),
   );
-  await screen.findByText(/Your team leader records Zone attendance/);
+  await screen.findByText('Team / Zone');
+  expect(screen.queryByText(/Your team leader records Zone attendance/)).toBeNull();
   expect(screen.queryByRole('button', { name: 'Save attendance' })).toBeNull();
   expect(SmartSiteManagementClient.prototype.submitTeamAttendance).not.toHaveBeenCalled();
 });

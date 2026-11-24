@@ -259,7 +259,7 @@ export class AttendanceReportsService {
             (s) =>
               s.workerId === w.id &&
               ((s.workDate >= value.fromDate && s.workDate <= value.toDate) ||
-                s.workDate === range.today),
+                (value.statusScope !== 'range' && s.workDate === range.today)),
           ),
         )
       : workers;
@@ -279,11 +279,17 @@ export class AttendanceReportsService {
           dates,
           today: range.today,
           now,
-          includeDaily,
+          includeDaily: includeDaily || value.statusScope === 'range',
           pendingOtherRequestDayIds: pendingOtherRequests.map((r) => r.id),
         }),
       )
-      .filter((w) => !value.todayStatus || w.todayStatus === value.todayStatus);
+      .filter(
+        (w) =>
+          !value.todayStatus ||
+          (value.statusScope === 'range'
+            ? w.daily?.some((day) => day.status === value.todayStatus)
+            : w.todayStatus === value.todayStatus),
+      );
     const resultIds = new Set(rows.map((r) => r.workerId));
     // Previous-period hours use the same current roster, search and status scope.
     const previousMinutes = days

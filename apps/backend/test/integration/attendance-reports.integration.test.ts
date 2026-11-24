@@ -277,6 +277,26 @@ test('attendance reports: real HTTP/auth, PostgreSQL totals, calendar data, sear
     assert.equal(detail.total, 1);
     assert.equal(detail.items[0]?.attendanceRate, 50);
     assert.equal(detail.items[0]?.todayStatus, 'APPROVED_LEAVE');
+    const historical = await service.list(actor(userId), siteId, {
+      fromDate: '2026-10-12',
+      toDate: '2026-10-12',
+      statusScope: 'range',
+      todayStatus: 'PRESENT',
+    });
+    assert.equal(historical.total, 1);
+    assert.equal(historical.items[0]?.daily?.[0]?.status, 'PRESENT');
+    assert.equal(historical.items[0]?.todayStatus, 'APPROVED_LEAVE');
+    assert.equal(
+      (
+        await service.list(actor(userId), siteId, {
+          fromDate: '2026-10-12',
+          toDate: '2026-10-12',
+          statusScope: 'range',
+          todayStatus: 'APPROVED_LEAVE',
+        })
+      ).total,
+      0,
+    );
     const todayOnly = await service.list(actor(userId), siteId, {
       fromDate: '2026-10-14',
       toDate: '2026-10-14',
@@ -292,20 +312,18 @@ test('attendance reports: real HTTP/auth, PostgreSQL totals, calendar data, sear
       async () => {
         const overtimeId = randomUUID();
         try {
-          await dataSource
-            .getRepository(OvertimeRequestEntity)
-            .save({
-              id: overtimeId,
-              siteId,
-              workerId: worker.id,
-              scheduleId: leaveSchedule.id,
-              expectedShiftId: shift.id,
-              requestedBy: userId,
-              startsAt: new Date('2026-10-14T11:00:00Z'),
-              endsAt: new Date('2026-10-14T12:00:00Z'),
-              reason: 'Synthetic pending overtime',
-              status: 'PENDING',
-            });
+          await dataSource.getRepository(OvertimeRequestEntity).save({
+            id: overtimeId,
+            siteId,
+            workerId: worker.id,
+            scheduleId: leaveSchedule.id,
+            expectedShiftId: shift.id,
+            requestedBy: userId,
+            startsAt: new Date('2026-10-14T11:00:00Z'),
+            endsAt: new Date('2026-10-14T12:00:00Z'),
+            reason: 'Synthetic pending overtime',
+            status: 'PENDING',
+          });
           const pending = await service.list(actor(userId), siteId, query);
           assert.equal(pending.items[0]?.todayStatus, 'NEEDS_REVIEW');
         } finally {

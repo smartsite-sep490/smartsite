@@ -109,7 +109,7 @@ it.each([null, 0, 420])(
     const expected =
       confirmedMinutes === null ? '1h 0m' : confirmedMinutes === 0 ? '0h 0m' : '7h 0m';
     expect(within(label.parentElement!).getByText(expected)).toBeTruthy();
-    expect(screen.getByText('0h 3m 42s')).toBeTruthy();
+    expect(screen.queryByText('0h 3m 42s')).toBeNull();
     expect(screen.getByText('Effective: 08:00:28 – 08:04:11')).toBeTruthy();
     expect(screen.getByText('-1 mins')).toBeTruthy();
     expect(screen.queryByText('8h 0m', { selector: '.text-emerald-700' })).toBeNull();
@@ -123,7 +123,7 @@ it.each([null, 0, 420])(
     expect(screen.getByText('Đã ghép lượt vào / ra')).toBeTruthy();
     expect(screen.getByText('Hiệu lực: 08:00:28 – 08:04:11')).toBeTruthy();
     expect(screen.getByText('Thực tế: 08:00:28 – 08:04:11')).toBeTruthy();
-    expect(screen.getByText('0 giờ 3 phút 42 giây')).toBeTruthy();
+    expect(screen.queryByText('0 giờ 3 phút 42 giây')).toBeNull();
     expect(screen.getByText('-1 phút')).toBeTruthy();
     expect(screen.getByText('Worker-authored note')).toBeTruthy();
     expect(screen.queryByText('0h 0m')).toBeNull();

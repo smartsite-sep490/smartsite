@@ -7,6 +7,9 @@ export interface AttendanceReportQuery {
   workerId?: string;
   shiftId?: string;
   search?: string;
+  /** Defaults to today. Range matches any daily status in the selected dates. */
+  statusScope?: 'today' | 'range';
+  /** Matches today by default, or any selected work date with statusScope=range. */
   todayStatus?: AttendanceReportStatus;
 }
 export type AttendanceReportStatus =
@@ -71,7 +74,7 @@ export interface AttendanceWorkerReport extends AttendanceReportMetrics {
   todayAnomalies?: string[];
   todayFirstCheckInAt: string | null;
   todayLastCheckOutAt: string | null;
-  /** Included only when includeDaily=true. Includes OFF days in the requested range. */
+  /** Included with includeDaily=true or statusScope=range. Includes OFF days. */
   daily?: AttendanceReportDay[];
 }
 export interface AttendanceWorkersResponse {

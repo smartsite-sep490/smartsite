@@ -26,6 +26,7 @@ it('attendance report queries encode filters/booleans, omit undefined fields and
     limit: 20,
     offset: 20,
     todayStatus: 'ABSENT',
+    statusScope: 'range',
   });
   const calls = fetchMock.mock.calls as unknown as [string, RequestInit][];
   expect(calls[0]![0]).toContain('/api/v1/sites/site%2F1/attendance-summary?');
@@ -33,6 +34,7 @@ it('attendance report queries encode filters/booleans, omit undefined fields and
   expect(first.searchParams.get('search')).toBe('Worker & 01');
   expect(first.searchParams.has('shiftId')).toBe(false);
   const second = new URL(calls[1]![0]);
+  expect(second.searchParams.get('statusScope')).toBe('range');
   expect(second.pathname).toContain('/attendance-workers');
   expect(second.searchParams.get('includeDaily')).toBe('false');
   expect(second.searchParams.get('workerId')).toBe('worker/1');

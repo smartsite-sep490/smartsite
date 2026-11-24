@@ -251,7 +251,7 @@ npx neon@latest env pull --project-id little-cloud-62052905 --branch production 
 
 ## Kiểm thử và quality gates
 
-Unit/HTTP tests xóa `.test-build` trước khi compile rồi chạy qua `scripts/run-tests.mjs`: đặt `NODE_ENV=test` trước import, loại các biến cấu hình runtime được thừa hưởng và không đọc `.env` local. HTTP tests dùng database stub; không kết nối database phát triển.
+Unit/HTTP tests chạy qua `scripts/run-tests.mjs --prepare`: giữ khóa độc quyền từ trước lúc xóa/compile `.test-build` đến khi test cuối cùng kết thúc. `test` và `test:integration` dùng cùng khóa; lượt chạy chồng sẽ báo PID đang giữ thư mục và dừng trước khi xóa file, tránh lỗi `MODULE_NOT_FOUND` giữa chừng. Khóa nằm trong `apps/backend/node_modules/.smartsite-backend-test.lock`, được tự gỡ khi runner thoát bình thường. Nếu tiến trình bị buộc dừng, chỉ gỡ khóa còn sót sau khi kiểm tra PID đã dừng. Không chạy lệnh xóa hoặc biên dịch trực tiếp vào `.test-build` khi runner đang hoạt động. Runner đặt `NODE_ENV=test` trước import, loại các biến cấu hình runtime được thừa hưởng và không đọc `.env` local. HTTP tests dùng database stub; không kết nối database phát triển.
 
 Integration chỉ nhận `TEST_DATABASE_URL` từ process hoặc file `apps/backend/.env.test` được tạo rõ ràng. Không fallback sang `DATABASE_URL`, direct URL hay `.env`. Validator chỉ chấp nhận host `localhost`, `127.0.0.1` hoặc `[::1]`, user và database đều là `smartsite_test`, không query/fragment. DataSource kiểm thử độc lập với runtime/CLI. Runner migrate database test **một lần**, rồi chạy tuần tự các test file (`--test-concurrency=1`); các thao tác đồng thời bên trong test race vẫn giữ nguyên.
 

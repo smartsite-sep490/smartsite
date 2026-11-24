@@ -1,3 +1,4 @@
+import { AttendanceRequestSection } from './AttendanceRequestSection';
 import { teamText } from '../../team-attendance/team-attendance-copy';
 import { SmartNativeSelect } from '../../ui/SmartNativeSelect';
 import { useManagementClient } from '../../../features/auth/auth-session';
@@ -255,6 +256,7 @@ export function AttendanceView({
 
   const hasReportsApi = typeof client.attendanceSummary === 'function';
   const reportFilters = {
+    statusScope: 'range' as const,
     fromDate,
     toDate,
     timezone,
@@ -522,7 +524,7 @@ export function AttendanceView({
                         : tr('common.open_missing')}
                   </td>
                   <td className="p-3 font-semibold text-slate-700">{attendanceLabel(s.status)}</td>
-                  <td className="p-3 font-mono text-slate-700">{s.workedMinutes ?? '—'}</td>
+                  <td className="p-3 tabular-nums text-slate-700">{s.workedMinutes ?? '—'}</td>
                 </tr>
               ))}
             </tbody>
@@ -828,7 +830,22 @@ export function AttendanceView({
           </div>
           {daysView}
           <div className={activeSubTab === 'timesheet' ? 'hidden' : 'block mt-6'}>
-            {correctionSection}
+            {correctionSection && (
+              <AttendanceRequestSection
+                title={tr(
+                  data?.canReviewCorrection
+                    ? 'common.correction_requests'
+                    : 'common.recent_attendance',
+                )}
+                initiallyOpen={
+                  !!selectedDayId ||
+                  (typeof window !== 'undefined' &&
+                    window.location.hash === '#attendance-correction-form')
+                }
+              >
+                {correctionSection}
+              </AttendanceRequestSection>
+            )}
           </div>
         </div>
       );
@@ -985,18 +1002,14 @@ export function AttendanceView({
                 <SmartNativeSelect
                   value={statusFilter}
                   onChange={(e) => setStatusFilter(e.target.value as AttendanceReportStatus | '')}
-                  aria-label={tr('attendance_report.today_status')}
+                  aria-label={tr('attendance_report.daily_status')}
                   className="px-3 py-2 rounded-xl border border-slate-200 bg-white text-xs font-semibold text-slate-700 hover:border-slate-300 focus:border-[#F66B17] focus:ring-2 focus:ring-orange-100 focus:outline-none cursor-pointer shadow-2xs"
                 >
                   <option value="">{tr('attendance_report.all_status')}</option>
                   <option value="PRESENT">{localizedLabel('PRESENT')}</option>
                   <option value="ABSENT">{localizedLabel('ABSENT')}</option>
                   <option value="NEEDS_REVIEW">{localizedLabel('NEEDS_REVIEW')}</option>
-                  <option value="SCHEDULED">{localizedLabel('SCHEDULED')}</option>
-                  <option value="NOT_ARRIVED">{localizedLabel('NOT_ARRIVED')}</option>
-                  <option value="OFF">{localizedLabel('OFF')}</option>
                   <option value="APPROVED_LEAVE">{localizedLabel('APPROVED_LEAVE')}</option>
-                  <option value="UNAVAILABLE">{localizedLabel('UNAVAILABLE')}</option>
                 </SmartNativeSelect>
 
                 {/* Shifts Select */}
@@ -1026,22 +1039,29 @@ export function AttendanceView({
                 >
                   {tr('common.today')}
                 </button>
-                <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl border border-slate-200 bg-white shadow-2xs">
-                  <IconCalendar className="w-4 h-4 text-slate-400" />
-                  <input
-                    type="date"
+                <div className="flex flex-wrap items-center gap-2">
+                  <SmartDatePicker
+                    label={tr('common.from')}
                     value={fromDate}
-                    onChange={(e) => setFromDate(e.target.value)}
-                    className="text-xs font-semibold text-slate-700 outline-none bg-transparent cursor-pointer"
-                    aria-label={tr('common.from')}
+                    disablePast={false}
+                    compact
+                    onChange={(date) => {
+                      setFromDate(date);
+                      if (date > toDate) setToDate(date);
+                    }}
                   />
-                  <span className="text-slate-400 text-xs">–</span>
-                  <input
-                    type="date"
+                  <span className="text-slate-400 text-xs" aria-hidden="true">
+                    –
+                  </span>
+                  <SmartDatePicker
+                    label={tr('common.to')}
                     value={toDate}
-                    onChange={(e) => setToDate(e.target.value)}
-                    className="text-xs font-semibold text-slate-700 outline-none bg-transparent cursor-pointer"
-                    aria-label={tr('common.to')}
+                    disablePast={false}
+                    compact
+                    onChange={(date) => {
+                      setToDate(date);
+                      if (date < fromDate) setFromDate(date);
+                    }}
                   />
                 </div>
 
@@ -1062,12 +1082,6 @@ export function AttendanceView({
             </div>
 
             {/* Workers Table Component */}
-            <p className="text-xs text-slate-500">
-              {tr('attendance_report.period_scope', {
-                from: fromDate,
-                to: toDate,
-              })}
-            </p>
             <AttendanceWorkersTable
               workers={workers.data?.items ?? []}
               total={workers.data?.total ?? 0}

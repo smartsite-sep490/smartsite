@@ -1,10 +1,30 @@
 import { spawnSync } from 'node:child_process';
-import { readdirSync } from 'node:fs';
+import { readdirSync, rmSync } from 'node:fs';
+import { createRequire } from 'node:module';
+import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { acquireTestBuildLock } from './test-build-lock.mjs';
 
 // Set before any application ESM imports, including ConfigModule.forRoot().
 process.env.NODE_ENV = 'test';
 const backendDirectory = fileURLToPath(new URL('../', import.meta.url));
+const release = acquireTestBuildLock(
+  resolve(backendDirectory, 'node_modules/.smartsite-backend-test.lock'),
+);
+process.once('exit', release);
+if (process.argv.includes('--prepare')) {
+  const buildDirectory = resolve(backendDirectory, '.test-build');
+  if (dirname(buildDirectory) !== resolve(backendDirectory))
+    throw new Error('Invalid test build directory');
+  rmSync(buildDirectory, { recursive: true, force: true });
+  const require = createRequire(import.meta.url);
+  const compilation = spawnSync(
+    process.execPath,
+    [require.resolve('typescript/bin/tsc'), '-p', 'tsconfig.test.json'],
+    { cwd: backendDirectory, env: process.env, stdio: 'inherit' },
+  );
+  if (compilation.error || compilation.status !== 0) process.exit(compilation.status ?? 1);
+}
 const { validateEnvironment } = await import('../.test-build/src/config/environment.js');
 for (const key of [
   ...Object.keys(validateEnvironment({ NODE_ENV: 'test' })),

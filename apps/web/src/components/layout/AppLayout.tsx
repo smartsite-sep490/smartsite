@@ -125,7 +125,13 @@ export function AppLayout({ currentTab: propCurrentTab, onSelectTab, children }:
         { id: 'assigned-work', label: t('shell.assignedWork'), icon: IconAlertTriangle },
         {
           id: 'workforce',
-          label: t(workerOnly ? 'shell.mySchedule' : 'shell.workforce'),
+          label: t(
+            workerOnly
+              ? 'shell.mySchedule'
+              : roles.includes('CONTRACTOR_REPRESENTATIVE')
+                ? 'common.contractor_review'
+                : 'shell.workforce',
+          ),
           icon: IconUsers,
         },
         { id: 'accounts', label: t('accounts.title'), icon: IconUsers },

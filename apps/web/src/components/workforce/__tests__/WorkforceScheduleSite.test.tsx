@@ -186,7 +186,8 @@ it.each([
     const user = userEvent.setup();
     if (mode === 'list') await user.click(await screen.findByRole('button', { name: 'List' }));
     await user.click((await screen.findAllByRole('button', { name: /^Zone attendance:/ }))[0]!);
-    await screen.findByText(/Your team leader records Zone attendance/);
+    await screen.findByText('Team / Zone');
+    expect(screen.queryByText(/Your team leader records Zone attendance/)).toBeNull();
     expect(SmartSiteManagementClient.prototype.scheduleTeamAttendance).toHaveBeenCalledWith(
       'synthetic-token',
       'site-1',
@@ -218,7 +219,28 @@ it.each([
   },
 );
 
-it.each(['timetable', 'list'])('shows backend ABSENT in the %s schedule view', async (mode) => {
+it.each([
+  ['timetable', 'ABSENT', 'Absent', 'Vắng mặt'],
+  ['list', 'ABSENT', 'Absent', 'Vắng mặt'],
+  ['timetable', 'NEEDS_REVIEW', 'Needs review', 'Cần xem xét'],
+  ['list', 'NEEDS_REVIEW', 'Needs review', 'Cần xem xét'],
+] as const)('shows backend status in %s (%s)', async (mode, status, enLabel, viLabel) => {
+  vi.setSystemTime(new Date('2030-01-01T11:00:00Z'));
+  vi.mocked(SmartSiteManagementClient.prototype.listShifts).mockResolvedValue({
+    items: [
+      {
+        id: 'morning',
+        siteId: 'site-1',
+        name: 'Morning',
+        startsAt: '2030-01-01T01:00:00Z',
+        endsAt: '2030-01-01T10:00:00Z',
+        timezone: 'Asia/Ho_Chi_Minh',
+        createdAt: '2030-01-01T00:00:00Z',
+      },
+    ],
+    total: 1,
+  });
+
   vi.mocked(SmartSiteManagementClient.prototype.attendanceDays).mockResolvedValue({
     items: [
       {
@@ -233,7 +255,7 @@ it.each(['timetable', 'list'])('shows backend ABSENT in the %s schedule view', a
         endsAt: '2030-01-01T10:00:00Z',
         breakStartsAt: null,
         breakEndsAt: null,
-        status: 'ABSENT',
+        status,
         regularMinutes: 0,
         overtimeMinutes: 0,
         provisionalMinutes: 0,
@@ -251,12 +273,13 @@ it.each(['timetable', 'list'])('shows backend ABSENT in the %s schedule view', a
   });
   mount();
   if (mode === 'list') fireEvent.click(await screen.findByRole('button', { name: 'List' }));
-  expect(await screen.findByText('Absent')).toBeTruthy();
+  expect((await screen.findAllByText(enLabel)).length).toBeGreaterThan(0);
+  if (status === 'NEEDS_REVIEW') expect(screen.queryByText('Absent')).toBeNull();
   expect(screen.queryByText('ABSENT')).toBeNull();
   await act(async () => {
     await i18n.changeLanguage('vi');
   });
-  expect(await screen.findByText('Vắng mặt')).toBeTruthy();
+  expect((await screen.findAllByText(viLabel)).length).toBeGreaterThan(0);
   expect(SmartSiteManagementClient.prototype.attendanceDays).toHaveBeenCalledWith(
     'synthetic-token',
     'site-1',

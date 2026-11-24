@@ -49,11 +49,11 @@ it('shows the current workspace and workforce function in the header without glo
   );
   const header = within(screen.getByRole('banner'));
   expect(header.queryByText('Workforce Operations · Shift Approvals')).toBeNull();
-  expect(header.getByRole('heading', { name: 'Contractor Review' })).toBeTruthy();
+  expect(header.getByRole('heading', { name: 'Shift Request Approvals' })).toBeTruthy();
   expect(header.queryByRole('textbox', { name: 'Search SmartSite' })).toBeNull();
   await userEvent.setup().click(screen.getByRole('button', { name: 'Attendance' }));
   expect(header.getByText('Attendance')).toBeTruthy();
-  expect(header.queryByText('Contractor Review')).toBeNull();
+  expect(header.queryByText('Shift Request Approvals')).toBeNull();
 });
 
 it('shows Site Operations Configuration in the manager header', () => {
@@ -111,7 +111,7 @@ it('uses the role-appropriate workforce default', () => {
       <AppLayout>Content</AppLayout>
     </MemoryRouter>,
   );
-  expect(within(screen.getByRole('banner')).getByText('Contractor Review')).toBeTruthy();
+  expect(within(screen.getByRole('banner')).getByText('Shift Request Approvals')).toBeTruthy();
 });
 
 it.each(['en', 'vi'])('shows the worker schedule title once in the %s header', async (language) => {
@@ -173,7 +173,7 @@ it.each([
 ])('shows the union of contractor workspace permissions for %j', (...userRoles) => {
   const navigation = navigationFor(userRoles);
   expect(navigation.getByRole('button', { name: 'Attendance' })).toBeTruthy();
-  expect(navigation.getByRole('button', { name: 'Workforce' })).toBeTruthy();
+  expect(navigation.getByRole('button', { name: 'Shift Request Approvals' })).toBeTruthy();
   expect(navigation.getByRole('button', { name: 'Schedule Setup' })).toBeTruthy();
   expect(navigation.getByRole('button', { name: 'Assigned work' })).toBeTruthy();
   expect(navigation.getByRole('button', { name: i18n.t('shell.contractorTeams') })).toBeTruthy();

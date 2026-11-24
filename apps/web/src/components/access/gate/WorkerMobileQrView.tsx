@@ -5,7 +5,7 @@ import { translate as tr } from '../../../i18n';
 import { useTranslation } from 'react-i18next';
 import { useState, type FormEvent } from 'react';
 import { useMutation } from '@tanstack/react-query';
-import { IconAlertTriangle, IconKey, IconLoader, IconShield } from '../../icons';
+import { IconAlertTriangle, IconKey, IconLoader } from '../../icons';
 import { QrPassCard } from './QrPassCard';
 
 export function WorkerMobileQrView({
@@ -149,18 +149,6 @@ export function WorkerMobileQrView({
               <QrPassCard pass={pass.data} onRefresh={() => pass.mutate(direction)} />
             </div>
           )}
-        </div>
-
-        {/* Security Note Footer */}
-        <div className="border-t border-slate-100 bg-amber-50/60 p-4">
-          <div className="flex items-start gap-2.5 text-xs text-amber-900">
-            <IconShield className="h-4 w-4 shrink-0 text-amber-600 mt-0.5" />
-            <p className="leading-relaxed">
-              {tr(
-                'worker_mobile_qr_view.backend_enforces_gate_clearance_rules_worker_status_and_contractor_credentials_bef',
-              )}
-            </p>
-          </div>
         </div>
       </section>
     </div>

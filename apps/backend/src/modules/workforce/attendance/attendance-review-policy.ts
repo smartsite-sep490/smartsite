@@ -7,3 +7,15 @@ export function canAcknowledgeEarlyCheckout(anomalies: string[]): boolean {
     )
   );
 }
+
+/** A physical departure before the assigned shift begins is not an early shift exit. */
+export function isEarlyShiftExit(
+  direction: 'IN' | 'OUT',
+  occurredAt: Date,
+  startsAt: Date | null,
+  endsAt: Date | null,
+): boolean {
+  return (
+    direction === 'OUT' && !!startsAt && !!endsAt && startsAt <= occurredAt && occurredAt < endsAt
+  );
+}

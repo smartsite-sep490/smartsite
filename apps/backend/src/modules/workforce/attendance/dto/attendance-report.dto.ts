@@ -34,6 +34,7 @@ export class AttendanceReportDto {
     'UNAVAILABLE',
   ])
   todayStatus?: AttendanceReportStatus;
+  @IsOptional() @IsIn(['today', 'range']) statusScope?: 'today' | 'range';
 }
 export class AttendanceWorkersDto extends AttendanceReportDto {
   @IsOptional()

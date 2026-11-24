@@ -497,7 +497,8 @@ test('Zone hours review: scoped consent, complete Gate evidence, audit receipts 
             expectedVersion: input.expectedVersion - 1,
           }),
         );
-        await recordGate(day, 'OUT', new Date(day.workDate + 'T10:05:00Z'));
+        // A newly discovered raw passage inside this shift must invalidate the snapshot.
+        await recordGate(day, 'OUT', new Date(day.workDate + 'T09:55:00Z'));
         await db.transaction((manager) => reconciliation.refresh(manager, day.id));
         assert.equal((await days.detail(rep, siteId, day.id)).day.version, input.expectedVersion);
         await assert.rejects(days.confirmZoneHours(rep, siteId, day.id, input));
@@ -620,6 +621,48 @@ test('Zone hours review: scoped consent, complete Gate evidence, audit receipts 
         ]);
         assert.equal(results.filter((result) => result.status === 'fulfilled').length, 1);
         assert.equal((await days.detail(rep, siteId, day.id)).day.confirmedMinutes, 45);
+      },
+    );
+    await t.test(
+      'unassigned IN/OUT outside a reviewed shift do not change its receipt; relevant unassigned evidence still blocks',
+      async () => {
+        const { day } = await ready();
+        const input = await commandFor(day.id);
+        await days.confirmZoneHours(rep, siteId, day.id, input);
+        for (const direction of ['IN', 'OUT'] as const) {
+          const gateEvent = await recordGate(day, direction, new Date(day.workDate + 'T11:30:00Z'));
+          await db.getRepository(AttendanceEventEntity).save({
+            id: randomUUID(),
+            siteId,
+            workerId,
+            shiftAssignmentId: null,
+            gateEventId: gateEvent.id,
+            kind: direction === 'IN' ? 'CHECK_IN' : 'CHECK_OUT',
+            method: 'QR',
+            occurredAt: gateEvent.occurredAt,
+            reasonCode: 'SYNTHETIC',
+          });
+          await db.transaction((m) => reconciliation.refresh(m, day.id));
+          const current = await days.detail(rep, siteId, day.id);
+          assert.equal(current.day.status, 'CONFIRMED');
+          assert.equal(current.day.confirmedMinutes, 60);
+          assert.equal(current.zoneAttendanceReview?.evidenceHash, input.evidenceHash);
+          assert.equal(current.day.anomalies.includes('ZONE_ATTENDANCE_REVIEW_CONFLICT'), false);
+        }
+        // A conflict created by the old same-day collector can recover the original receipt.
+        await db.getRepository(AttendanceDayEntity).update(day.id, {
+          status: 'NEEDS_REVIEW',
+          confirmedMinutes: null,
+          anomalies: ['ZONE_ATTENDANCE_PENDING', 'ZONE_ATTENDANCE_REVIEW_CONFLICT'],
+        });
+        await db.transaction((m) => reconciliation.refresh(m, day.id));
+        assert.equal((await days.detail(rep, siteId, day.id)).day.status, 'CONFIRMED');
+        await recordGate(day, 'IN', new Date(day.workDate + 'T09:30:00Z'));
+        await db.transaction((m) => reconciliation.refresh(m, day.id));
+        assert.equal(
+          (await days.detail(rep, siteId, day.id)).zoneAttendanceReview?.status,
+          'CONFLICTED',
+        );
       },
     );
     await t.test(

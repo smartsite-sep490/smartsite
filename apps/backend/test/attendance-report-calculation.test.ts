@@ -309,3 +309,34 @@ test('full approved leave hides only stale leave-only review after checking othe
   data.sessions = [session(date)];
   assert.equal(workerAttendanceReport(data).todayStatus, 'NEEDS_REVIEW');
 });
+
+test('pre-shift Gate IN/OUT stay visible without marking shift presence or attendance rate', () => {
+  const data = input(),
+    date = data.today;
+  data.dates = [date];
+  data.schedules = [data.schedules[4]!];
+  data.days = [day(date, 'IN_PROGRESS', 0)];
+  data.sessions = [
+    {
+      ...session(date),
+      effectiveInAt: new Date(date + 'T06:00:00+07:00'),
+      effectiveOutAt: new Date(date + 'T06:10:00+07:00'),
+    },
+  ];
+  data.now = new Date(date + 'T07:00:00+07:00');
+  const report = workerAttendanceReport(data);
+  assert.equal(report.todayStatus, 'SCHEDULED');
+  assert.equal(report.todayFirstCheckInAt, data.sessions[0]!.effectiveInAt!.toISOString());
+  assert.equal(report.todayLastCheckOutAt, data.sessions[0]!.effectiveOutAt!.toISOString());
+  assert.equal(report.totalMinutes, 0);
+  data.now = new Date(date + 'T09:00:00+07:00');
+  assert.equal(workerAttendanceReport(data).todayStatus, 'NOT_ARRIVED');
+  data.now = new Date(date + 'T18:00:00+07:00');
+  assert.equal(workerAttendanceReport(data).presentDays, 0);
+  assert.equal(workerAttendanceReport(data).attendanceRate, 0);
+  data.sessions[0]!.effectiveOutAt = null;
+  data.now = new Date(date + 'T07:00:00+07:00');
+  assert.equal(workerAttendanceReport(data).todayStatus, 'SCHEDULED');
+  data.now = new Date(date + 'T08:00:00+07:00');
+  assert.equal(workerAttendanceReport(data).todayStatus, 'PRESENT');
+});

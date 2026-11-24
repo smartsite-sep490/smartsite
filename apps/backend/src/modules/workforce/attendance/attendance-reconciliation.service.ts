@@ -1,3 +1,4 @@
+import { isEarlyShiftExit } from './attendance-review-policy.js';
 import { createHash, randomUUID } from 'node:crypto';
 import { attendanceZoneIssue } from './attendance-zone-policy.js';
 import { attendanceGateAbsenceContext } from './attendance-gate-review.js';
@@ -50,6 +51,37 @@ export class AttendanceReconciliationService implements OnModuleInit, OnModuleDe
     this.running = true;
     try {
       await this.ensureScheduledDays(now);
+      // Repair Gate evidence before any empty scheduled day can emit a no-show notice.
+      let unassignedCursor: string | undefined;
+      while (true) {
+        const pending = await this.source.getRepository(AttendanceDayEntity).find({
+          where: {
+            scheduleId: IsNull(),
+            ...(unassignedCursor ? { id: MoreThan(unassignedCursor) } : {}),
+          },
+          order: { id: 'ASC' },
+          take: 500,
+        });
+        if (!pending.length) break;
+        for (const day of pending) {
+          try {
+            await this.source.transaction(async (manager) => {
+              await manager.query('SELECT pg_advisory_xact_lock(hashtext($1))', [
+                `mf03:${day.siteId}:${day.workerId}`,
+              ]);
+              await this.reassignEarlySessions(manager, day.id, now);
+            });
+          } catch {
+            this.logger.error({
+              action: 'attendance.reconcile.assignment_failed',
+              dayId: day.id,
+              siteId: day.siteId,
+            });
+          }
+        }
+        unassignedCursor = pending[pending.length - 1]!.id;
+        if (pending.length < 500) break;
+      }
       let cursor: string | undefined;
       while (true) {
         const days = await this.source.getRepository(AttendanceDayEntity).find({
@@ -64,7 +96,11 @@ export class AttendanceReconciliationService implements OnModuleInit, OnModuleDe
               await manager.query('SELECT pg_advisory_xact_lock(hashtext($1))', [
                 `mf03:${day.siteId}:${day.workerId}`,
               ]);
-              await this.refresh(manager, day.id, now);
+              const repaired = day.scheduleId
+                ? { targetIds: [] as string[], retired: false }
+                : await this.reassignEarlySessions(manager, day.id, now);
+              for (const targetId of repaired.targetIds) await this.refresh(manager, targetId, now);
+              if (!repaired.retired) await this.refresh(manager, day.id, now);
             });
           } catch (error) {
             this.logger.error({
@@ -321,8 +357,28 @@ export class AttendanceReconciliationService implements OnModuleInit, OnModuleDe
       );
       const newDate =
         selected?.schedule.workDate ?? workDateAt(passage.occurredAt, previousDay.timezone);
+      const unassignedOvernight =
+        passage.direction === 'OUT' &&
+        !previousDay.scheduleId &&
+        !!open.effectiveInAt &&
+        schedules.filter((schedule) => {
+          const template = shifts.find((shift) => shift.id === schedule.shiftId);
+          if (!template || schedule.createdAt > open!.effectiveInAt!) return false;
+          try {
+            const window = scheduledShiftWindow(template, schedule.workDate);
+            return (
+              schedule.workDate === previousDay.workDate &&
+              workDateAt(window.endsAt, template.timezone) === newDate &&
+              workDateAt(window.startsAt, template.timezone) !== newDate &&
+              window.startsAt < passage.occurredAt &&
+              window.endsAt > open!.effectiveInAt!
+            );
+          } catch {
+            return false;
+          }
+        }).length === 1;
       if (
-        (newDate !== previousDay.workDate ||
+        ((newDate !== previousDay.workDate && !unassignedOvernight) ||
           (passage.direction === 'IN' &&
             selected &&
             selected.schedule.id !== previousDay.scheduleId)) &&
@@ -333,7 +389,7 @@ export class AttendanceReconciliationService implements OnModuleInit, OnModuleDe
         open = null;
       }
     }
-    const day = open?.dayId
+    let day = open?.dayId
       ? await manager.getRepository(AttendanceDayEntity).findOneByOrFail({ id: open.dayId })
       : await this.ensureDay(
           manager,
@@ -401,11 +457,23 @@ export class AttendanceReconciliationService implements OnModuleInit, OnModuleDe
       }
       await manager.getRepository(AttendanceSessionEntity).save(open);
     }
+    if (passage.direction === 'OUT' && !day.scheduleId && open?.id) {
+      const repaired = await this.reassignEarlySessions(manager, day.id, passage.occurredAt);
+      if (repaired.targetIds.length) {
+        const reassigned = await manager
+          .getRepository(AttendanceSessionEntity)
+          .findOneByOrFail({ id: open.id });
+        if (reassigned.dayId)
+          day = await manager
+            .getRepository(AttendanceDayEntity)
+            .findOneByOrFail({ id: reassigned.dayId });
+      }
+    }
     day.reviewedBy = null;
     day.reviewNote = null;
     day.reviewedAt = null;
     await manager.getRepository(AttendanceDayEntity).save(day);
-    if (passage.direction === 'OUT' && day.endsAt && passage.occurredAt < day.endsAt)
+    if (isEarlyShiftExit(passage.direction, passage.occurredAt, day.startsAt, day.endsAt))
       await this.notify(
         manager,
         worker,
@@ -437,6 +505,219 @@ export class AttendanceReconciliationService implements OnModuleInit, OnModuleDe
       null,
       { eventId: event.id, gateEventId: passage.id, dayId: day.id },
     );
+  }
+  /** Caller holds the Site/Worker advisory lock; only derived assignment metadata changes. */
+  private async reassignEarlySessions(manager: EntityManager, sourceId: string, now: Date) {
+    const unchanged = { targetIds: [] as string[], retired: false };
+    const source = await manager
+      .getRepository(AttendanceDayEntity)
+      .findOne({ where: { id: sourceId }, lock: { mode: 'pessimistic_write' } });
+    if (
+      !source ||
+      source.scheduleId ||
+      source.reviewedBy ||
+      source.zoneAttendanceReviewAuditId ||
+      source.status === 'CONFIRMED'
+    )
+      return unchanged;
+    if (await manager.getRepository(AttendanceAbsenceReviewEntity).existsBy({ dayId: source.id }))
+      return unchanged;
+    const sessions = await manager.getRepository(AttendanceSessionEntity).find({
+      where: { dayId: source.id },
+      order: { id: 'ASC' },
+      lock: { mode: 'pessimistic_write' },
+    });
+    if (
+      !sessions.length ||
+      sessions.some(
+        (s) =>
+          s.siteId !== source.siteId ||
+          s.workerId !== source.workerId ||
+          s.shiftAssignmentId ||
+          (s.effectiveOutAt ? s.status !== 'MATCHED' : s.status !== 'MISSING_OUT') ||
+          s.appliedCorrectionId ||
+          !s.effectiveInAt ||
+          s.effectiveInAt > now ||
+          (s.effectiveOutAt !== null &&
+            (+s.effectiveOutAt <= +s.effectiveInAt || s.effectiveOutAt > now)),
+      )
+    )
+      return unchanged;
+    if (
+      await manager
+        .getRepository(AttendanceCorrectionEntity)
+        .existsBy({ attendanceSessionId: In(sessions.map((s) => s.id)) })
+    )
+      return unchanged;
+    const schedules = await manager.getRepository(WorkerScheduleEntity).find({
+      where: { siteId: source.siteId, workerId: source.workerId, isActive: true },
+      lock: { mode: 'pessimistic_read' },
+    });
+    const shifts = schedules.length
+      ? await manager.getRepository(ShiftEntity).find({
+          where: { siteId: source.siteId, id: In(schedules.map((s) => s.shiftId)) },
+          lock: { mode: 'pessimistic_read' },
+        })
+      : [];
+    const windows: Array<{ schedule: WorkerScheduleEntity; shift: ShiftEntity }> = [];
+    for (const schedule of schedules) {
+      const template = shifts.find((s) => s.id === schedule.shiftId);
+      if (!template) return unchanged;
+      try {
+        windows.push({
+          schedule,
+          shift: { ...template, ...scheduledShiftWindow(template, schedule.workDate) },
+        });
+      } catch {
+        return unchanged;
+      }
+    }
+    const matches = sessions.flatMap((session) => {
+      const overlaps = windows.filter(
+        (w) =>
+          (session.effectiveOutAt
+            ? +w.shift.startsAt < +session.effectiveOutAt
+            : +w.shift.startsAt <= +now) && +w.shift.endsAt > +session.effectiveInAt!,
+      );
+      if (overlaps.length !== 1 || overlaps[0]!.schedule.createdAt > session.effectiveInAt!)
+        return [];
+      return [{ session, ...overlaps[0]! }];
+    });
+    // Never guess between shifts or move a whole day across several different targets.
+    if (!matches.length || new Set(matches.map((m) => m.schedule.id)).size !== 1) return unchanged;
+    const choice = matches[0]!;
+    const target = await this.ensureDay(
+      manager,
+      await manager
+        .getRepository(WorkerEntity)
+        .findOneByOrFail({ id: source.workerId, siteId: source.siteId }),
+      now,
+      choice.schedule,
+      choice.shift,
+    );
+    const lockedTarget = await manager
+      .getRepository(AttendanceDayEntity)
+      .findOne({ where: { id: target.id }, lock: { mode: 'pessimistic_write' } });
+    if (
+      !lockedTarget ||
+      +lockedTarget.startsAt! !== +choice.shift.startsAt ||
+      +lockedTarget.endsAt! !== +choice.shift.endsAt ||
+      lockedTarget.reviewedBy ||
+      lockedTarget.zoneAttendanceReviewAuditId ||
+      lockedTarget.status === 'CONFIRMED' ||
+      (await manager.getRepository(AttendanceAbsenceReviewEntity).existsBy({ dayId: target.id }))
+    )
+      return unchanged;
+    if (await manager.getRepository(AttendanceSessionEntity).existsBy({ dayId: target.id }))
+      return unchanged;
+    for (const { session } of matches) {
+      const events = await manager.getRepository(AttendanceEventEntity).findBy({
+        id: In(
+          [session.checkInEventId, session.checkOutEventId].filter((id): id is string => !!id),
+        ),
+        siteId: source.siteId,
+        workerId: source.workerId,
+      });
+      const entry = events.find((e) => e.id === session.checkInEventId && e.kind === 'CHECK_IN');
+      const exit = events.find((e) => e.id === session.checkOutEventId && e.kind === 'CHECK_OUT');
+      if (
+        events.length !== (session.effectiveOutAt ? 2 : 1) ||
+        !entry?.gateEventId ||
+        (session.effectiveOutAt && !exit?.gateEventId) ||
+        events.some((e) => e.shiftAssignmentId !== null) ||
+        +entry.occurredAt !== +session.effectiveInAt! ||
+        (session.effectiveOutAt && +exit!.occurredAt !== +session.effectiveOutAt)
+      )
+        return unchanged;
+      const gates = await manager.getRepository(GateEventEntity).findBy({
+        id: In([entry.gateEventId, exit?.gateEventId].filter((id): id is string => !!id)),
+        siteId: source.siteId,
+        workerId: source.workerId,
+      });
+      if (
+        !gates.some(
+          (g) =>
+            g.id === entry.gateEventId &&
+            g.direction === 'IN' &&
+            +g.occurredAt === +entry.occurredAt,
+        ) ||
+        (session.effectiveOutAt &&
+          !gates.some(
+            (g) =>
+              g.id === exit!.gateEventId &&
+              g.direction === 'OUT' &&
+              +g.occurredAt === +exit!.occurredAt,
+          ))
+      )
+        return unchanged;
+    }
+    for (const { session } of matches) {
+      const before = {
+        dayId: session.dayId,
+        scheduleId: session.shiftAssignmentId,
+        version: session.version,
+      };
+      await manager.getRepository(AttendanceEventEntity).update(
+        {
+          id: In(
+            [session.checkInEventId, session.checkOutEventId].filter((id): id is string => !!id),
+          ),
+          siteId: source.siteId,
+          workerId: source.workerId,
+        },
+        { shiftAssignmentId: choice.schedule.id },
+      );
+      session.dayId = target.id;
+      session.shiftAssignmentId = choice.schedule.id;
+      session.version += 1;
+      await manager.getRepository(AttendanceSessionEntity).save(session);
+      await auditAccess(
+        manager,
+        null,
+        source.siteId,
+        'ATTENDANCE_EARLY_SESSION_ASSIGNED',
+        'attendance_session',
+        session.id,
+        'Gate presence interval overlaps exactly one existing assigned shift',
+        {
+          workerId: source.workerId,
+          before,
+          dayId: target.id,
+          scheduleId: choice.schedule.id,
+          checkInEventId: session.checkInEventId,
+          checkOutEventId: session.checkOutEventId,
+          targetBefore: {
+            status: lockedTarget.status,
+            version: lockedTarget.version,
+            anomalies: lockedTarget.anomalies,
+          },
+        },
+      );
+    }
+    const retired = matches.length === sessions.length;
+    if (retired) {
+      await this.notifications.retargetAttendanceDay(
+        manager,
+        source.siteId,
+        source.workerId,
+        source.id,
+        target.id,
+      );
+      await auditAccess(
+        manager,
+        null,
+        source.siteId,
+        'ATTENDANCE_UNSCHEDULED_DAY_MERGED',
+        'attendance_day',
+        source.id,
+        'All original sessions were assigned without changing Gate evidence',
+        { sourceDayId: source.id, dayId: target.id, workerId: source.workerId, source },
+      );
+      await manager
+        .getRepository(AttendanceDayEntity)
+        .delete({ id: source.id, siteId: source.siteId, workerId: source.workerId });
+    }
+    return { targetIds: [target.id], retired };
   }
   async refresh(
     manager: EntityManager,
@@ -594,7 +875,16 @@ export class AttendanceReconciliationService implements OnModuleInit, OnModuleDe
       +now >= +day.endsAt &&
       !fullLeave &&
       sessions.every((s) => s.status === 'IGNORED');
-    if (day.scheduleId && +now >= end && !open && !fullLeave && !absent && finalOut < requiredEnd)
+    if (
+      day.scheduleId &&
+      day.startsAt &&
+      +now >= end &&
+      !open &&
+      !fullLeave &&
+      !absent &&
+      finalOut > +day.startsAt &&
+      finalOut < requiredEnd
+    )
       anomalies.push('EARLY_CHECKOUT');
     const correctionPending = sessions.length
       ? await manager

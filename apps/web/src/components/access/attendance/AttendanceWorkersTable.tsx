@@ -51,7 +51,7 @@ export function AttendanceWorkersTable({
           <thead>
             <tr className="bg-slate-50/70 border-b border-slate-100 text-[10px] font-bold uppercase tracking-wider text-slate-400">
               <th className="p-3.5 pl-6">{tr('attendance_report.worker')}</th>
-              <th className="p-3.5">{tr('attendance_report.today_status')}</th>
+              <th className="p-3.5">{tr('attendance_report.daily_status')}</th>
               <th className="p-3.5">{tr('attendance_report.working_hours')}</th>
               <th className="p-3.5">{tr('attendance_report.regular')}</th>
               <th className="p-3.5">{tr('attendance_report.overtime')}</th>
@@ -77,8 +77,6 @@ export function AttendanceWorkersTable({
               </tr>
             ) : (
               workers.map((worker) => {
-                const inTime = formatShortTime(worker.todayFirstCheckInAt);
-                const outTime = formatShortTime(worker.todayLastCheckOutAt);
                 const rate = worker.attendanceRate;
 
                 // Rate progress bar color
@@ -106,37 +104,60 @@ export function AttendanceWorkersTable({
                           <p className="font-bold text-[#071A2B] group-hover:text-[#F66B17] transition-colors">
                             {worker.workerName}
                           </p>
-                          <p className="text-[11px] text-slate-400 font-mono mt-0.5">
+                          <p className="text-[11px] text-slate-400 tabular-nums mt-0.5">
                             {tr('common.id_value', { value1: worker.workerCode })}
                           </p>
                         </div>
                       </div>
                     </td>
 
-                    {/* Today Status Column */}
-                    <td className="p-3.5 whitespace-nowrap">
-                      <div>
-                        <AttendanceStatusBadge status={worker.todayStatus} />
-                        {worker.todayStatus === 'NEEDS_REVIEW' && (
-                          <p className="mt-1 max-w-sm whitespace-normal text-xs text-amber-700">
-                            {attendanceResolution(worker.todayAnomalies ?? [])?.message}
-                          </p>
-                        )}
-                        {inTime && (
-                          <p className="text-[10px] text-slate-400 mt-1 font-medium">
-                            {tr('attendance_report.in_since', { time: inTime })}
-                          </p>
-                        )}
-                        {!inTime && outTime && (
-                          <p className="text-[10px] text-slate-400 mt-1 font-medium">
-                            {tr('attendance_report.out_at', { time: outTime })}
-                          </p>
+                    <td className="p-3.5">
+                      <div className="max-h-72 min-w-64 space-y-2 overflow-y-auto">
+                        {worker.daily?.length ? (
+                          worker.daily.map((day) => (
+                            <div
+                              key={day.workDate}
+                              className="grid min-h-10 grid-cols-[6.5rem_1fr] items-start gap-x-3 gap-y-1 py-1"
+                            >
+                              <p className="pt-1 text-xs font-medium text-slate-700 whitespace-nowrap">
+                                <time dateTime={day.workDate}>
+                                  {new Intl.DateTimeFormat(uiLocale(), { timeZone: 'UTC' }).format(
+                                    new Date(day.workDate + 'T00:00:00Z'),
+                                  )}
+                                </time>
+                              </p>
+                              <div className="min-h-7 flex items-center">
+                                <AttendanceStatusBadge status={day.status} />
+                              </div>
+                              {day.status === 'NEEDS_REVIEW' && (
+                                <p className="col-start-2 max-w-sm text-xs text-amber-700">
+                                  {attendanceResolution(day.anomalies)?.message}
+                                </p>
+                              )}
+                              {day.firstCheckInAt && (
+                                <p className="col-start-2 text-xs text-slate-600">
+                                  {tr('attendance_report.in_since', {
+                                    time: formatShortTime(day.firstCheckInAt),
+                                  })}
+                                </p>
+                              )}
+                              {day.lastCheckOutAt && (
+                                <p className="col-start-2 text-xs text-slate-600">
+                                  {tr('attendance_report.out_at', {
+                                    time: formatShortTime(day.lastCheckOutAt),
+                                  })}
+                                </p>
+                              )}
+                            </div>
+                          ))
+                        ) : (
+                          <AttendanceStatusBadge status="UNAVAILABLE" />
                         )}
                       </div>
                     </td>
 
                     {/* Total Working Hours Column */}
-                    <td className="p-3.5 font-mono font-bold text-[#071A2B] whitespace-nowrap">
+                    <td className="p-3.5 tabular-nums font-bold text-[#071A2B] whitespace-nowrap">
                       <div>
                         <span>{attendanceHours(worker.totalMinutes)}</span>
                         {worker.provisionalMinutes > 0 && (
@@ -149,12 +170,12 @@ export function AttendanceWorkersTable({
                     </td>
 
                     {/* Regular Hours Column */}
-                    <td className="p-3.5 font-mono text-slate-600 whitespace-nowrap">
+                    <td className="p-3.5 tabular-nums text-slate-600 whitespace-nowrap">
                       {attendanceHours(worker.regularMinutes)}
                     </td>
 
                     {/* Overtime Hours Column */}
-                    <td className="p-3.5 font-mono text-slate-600 whitespace-nowrap">
+                    <td className="p-3.5 tabular-nums text-slate-600 whitespace-nowrap">
                       {attendanceHours(worker.overtimeMinutes)}
                     </td>
 
@@ -167,7 +188,7 @@ export function AttendanceWorkersTable({
                             style={{ width: `${rate ?? 0}%` }}
                           />
                         </div>
-                        <span className="font-mono text-xs font-bold text-[#071A2B] shrink-0">
+                        <span className="tabular-nums text-xs font-bold text-[#071A2B] shrink-0">
                           {rate !== null ? `${rate}%` : '—'}
                         </span>
                       </div>
@@ -216,7 +237,7 @@ export function AttendanceWorkersTable({
             >
               {tr('common.previous')}
             </button>
-            <span className="text-xs text-slate-500 px-2 font-mono">
+            <span className="text-xs text-slate-500 px-2 tabular-nums">
               {currentPage} / {totalPages}
             </span>
             <button

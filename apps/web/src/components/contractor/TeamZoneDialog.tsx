@@ -90,12 +90,6 @@ export function TeamZoneDialog({
       maxWidth="xl"
     >
       <div className="max-h-[65vh] overflow-y-auto space-y-4">
-        <p className="text-sm text-slate-500">
-          {tr(
-            'team_zone_dialog.choose_a_zone_granted_to_your_contractor_dates_are_inclusive_permission_remains_wi',
-            { value1: timezone },
-          )}
-        </p>
         {data.isPending ? (
           <p role="status">{tr('common.loading_team_zones')}</p>
         ) : data.isError ? (
@@ -185,15 +179,26 @@ export function TeamZoneDialog({
             )}
             {data.data.permissions.map((p) => (
               <div key={p.id} className="rounded-xl border border-slate-200 p-3 space-y-2">
-                <p className="font-semibold">{p.name}</p>
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <p className="font-semibold text-slate-900">{p.name}</p>
+                  <span
+                    className={
+                      'inline-flex rounded-lg px-3 py-1.5 text-xs font-bold ring-1 ring-inset ' +
+                      (!p.revokedAt && p.effective
+                        ? 'bg-emerald-50 text-emerald-800 ring-emerald-200'
+                        : 'bg-slate-100 text-slate-700 ring-slate-200')
+                    }
+                  >
+                    {p.revokedAt
+                      ? tr('common.revoked')
+                      : p.effective
+                        ? tr('common.active')
+                        : tr('team_zone_dialog.inactive_outside_effective_period')}
+                  </span>
+                </div>
                 <p className="text-sm">
                   {display(p.validFrom)} –{' '}
-                  {display(new Date(+new Date(p.validUntil) - 1).toISOString())} ·{' '}
-                  {p.revokedAt
-                    ? tr('common.revoked')
-                    : p.effective
-                      ? tr('common.active')
-                      : tr('team_zone_dialog.inactive_outside_effective_period')}
+                  {display(new Date(+new Date(p.validUntil) - 1).toISOString())}
                 </p>
               </div>
             ))}
