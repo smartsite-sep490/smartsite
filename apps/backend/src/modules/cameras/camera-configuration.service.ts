@@ -221,11 +221,12 @@ export class CameraConfigurationService {
     siteId: string,
     offset = 0,
     limit = 20,
+    cameraType?: CameraEntity['type'],
   ): Promise<{ items: CameraEntity[]; total: number }> {
     await this.sites.get(siteId);
     const pagination = page(offset, limit);
     const [items, total] = await this.dataSource.getRepository(CameraEntity).findAndCount({
-      where: { siteId },
+      where: { siteId, ...(cameraType === undefined ? {} : { type: cameraType }) },
       order: { code: 'ASC', id: 'ASC' },
       skip: pagination.offset,
       take: pagination.limit,

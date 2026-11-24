@@ -394,7 +394,7 @@ export class CameraPreviewService implements OnModuleDestroy {
   async list(token: string, requestedSite: string, offset: number, limit: number) {
     const siteId = uuid(requestedSite).toLowerCase();
     await this.authorize(token, siteId);
-    const page = await this.cameras.list(siteId, offset, limit);
+    const page = await this.cameras.list(siteId, offset, limit, 'ZONE');
     await this.authorize(token, siteId);
     return {
       ...page,
