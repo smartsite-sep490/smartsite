@@ -447,38 +447,38 @@ export function AppLayout({ currentTab: propCurrentTab, onSelectTab, children }:
       </aside>
 
       {/* Main Content Area */}
-      <div className="flex-1 flex flex-col min-w-0 bg-[var(--surface-canvas)]">
+      <div className="flex-1 flex flex-col min-w-0 overflow-x-clip bg-[var(--surface-canvas)]">
         {/* Top Header Bar */}
         <header
           className={
             mainSafetyUi
-              ? 'h-16 bg-white border-b border-slate-200 px-3 sm:px-6 lg:px-8 flex items-center justify-between gap-2 sm:gap-3 shrink-0 sticky top-0 z-20 shadow-xs'
-              : 'h-16 bg-white border-b border-[#E2E8F0] px-3 sm:px-6 lg:px-8 flex items-center justify-between gap-2 sm:gap-3 shrink-0 sticky top-0 z-20 shadow-xs'
+              ? 'h-16 bg-white border-b border-slate-200 px-2 sm:px-6 lg:px-8 flex items-center justify-between gap-1.5 sm:gap-3 shrink-0 sticky top-0 z-20 shadow-xs'
+              : 'h-16 bg-white border-b border-[#E2E8F0] px-2 sm:px-6 lg:px-8 flex items-center justify-between gap-1.5 sm:gap-3 shrink-0 sticky top-0 z-20 shadow-xs'
           }
         >
           {/* Left: Brand/Context info */}
-          <div className="flex items-center gap-3 min-w-0">
+          <div className="flex items-center gap-2 sm:gap-3 min-w-0 flex-1">
             <div
               data-testid="workspace-header-icon"
               aria-hidden="true"
-              className="w-10 h-10 rounded-xl bg-[#071A2B] text-white flex items-center justify-center shadow-xs shrink-0"
+              className="w-8 h-8 sm:w-10 sm:h-10 rounded-xl bg-[#071A2B] text-white flex items-center justify-center shadow-xs shrink-0"
             >
-              <HeaderIcon className="w-5 h-5 text-[#F66B17]" />
+              <HeaderIcon className="w-4 h-4 sm:w-5 sm:h-5 text-[#F66B17]" />
             </div>
-            <div className="min-w-0">
+            <div className="min-w-0 flex-1">
               {headerContext && (
                 <span className="block text-xs font-semibold text-slate-500 truncate">
                   {headerContext}
                 </span>
               )}
-              <HeaderTitle className="block text-xl font-bold tracking-tight text-[#071A2B] truncate">
+              <HeaderTitle className="block text-sm sm:text-xl font-bold tracking-tight text-[#071A2B] truncate">
                 {headerTitle}
               </HeaderTitle>
             </div>
           </div>
 
           {/* Right: Search, Notification, Profile */}
-          <div className="flex items-center gap-1.5 sm:gap-4 shrink-0">
+          <div className="flex items-center gap-1 sm:gap-4 shrink-0">
             {!mainSafetyUi && <LanguageSwitcher />}
             {mainSafetyUi && <LanguageSwitcher />}
             <NotificationBell
@@ -496,8 +496,8 @@ export function AppLayout({ currentTab: propCurrentTab, onSelectTab, children }:
             />
 
             {/* User Profile */}
-            <div className="flex items-center gap-2.5 pl-2 sm:pl-3 border-l border-[#E2E8F0]">
-              <div className="w-8 h-8 rounded-full bg-[#041D2E] text-white flex items-center justify-center font-bold text-xs tracking-wider">
+            <div className="flex items-center gap-2 pl-1.5 sm:pl-3 border-l border-[#E2E8F0]">
+              <div className="w-7 h-7 sm:w-8 sm:h-8 rounded-full bg-[#041D2E] text-white flex items-center justify-center font-bold text-xs tracking-wider">
                 {userInitials}
               </div>
               <div
@@ -512,7 +512,7 @@ export function AppLayout({ currentTab: propCurrentTab, onSelectTab, children }:
               <button
                 type="button"
                 onClick={() => navigate('/account/password')}
-                className="p-2 rounded-lg text-[#62748E] hover:bg-slate-100 focus-visible:outline-2"
+                className="p-1.5 sm:p-2 rounded-lg text-[#62748E] hover:bg-slate-100 focus-visible:outline-2"
                 title={t('auth.password.title')}
                 aria-label={t('auth.password.title')}
               >
@@ -523,7 +523,7 @@ export function AppLayout({ currentTab: propCurrentTab, onSelectTab, children }:
             <button
               onClick={() => logoutMutation.mutate()}
               disabled={logoutMutation.isPending}
-              className="p-2 ml-0 sm:ml-1 rounded-lg hover:bg-red-50 text-[#62748E] hover:text-red-500 transition-all active:scale-90 relative cursor-pointer"
+              className="p-1.5 sm:p-2 ml-0 sm:ml-1 rounded-lg hover:bg-red-50 text-[#62748E] hover:text-red-500 transition-all active:scale-90 relative cursor-pointer"
               title={t('shell.logout')}
               aria-label={t('shell.logout')}
             >
@@ -536,7 +536,7 @@ export function AppLayout({ currentTab: propCurrentTab, onSelectTab, children }:
         <main
           className={
             (boundedWorkspace ? 'safety-desktop-workspace ' : '') +
-            'flex-1 min-w-0 p-4 sm:p-6 lg:p-8'
+            'flex-1 min-w-0 p-3 sm:p-6 lg:p-8'
           }
         >
           {children}
