@@ -1,8 +1,8 @@
 export const CONTRACTS_VERSION = '1.0.0';
 export * from './worker-event-delivery.js';
 export * from './camera-ppe-policy.js';
-export { PPE_ITEMS } from './ppe-items.js';
-export type { PpeItem } from './ppe-items.js';
+export { PPE_ITEMS, PPE_FAMILY_CATALOG } from './ppe-items.js';
+export type { PpeItem, PpeFamily } from './ppe-items.js';
 export type * from './attendance-reports-api.js';
 export type {
   AttendanceDayStatus,
