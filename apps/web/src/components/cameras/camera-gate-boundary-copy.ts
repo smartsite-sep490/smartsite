@@ -3,27 +3,27 @@ import { registerFeatureCatalog } from '../../i18n/feature-catalog-registry';
 const en = {
   'cameraSetup.gateBadge': 'Gate',
   'cameraSetup.gateCameraBadge': 'Gate camera',
-  'cameraSetup.gateRowHint': 'Gate access camera — configured in Site Setup.',
-  'cameraSetup.gateOpenConfigAction': 'Open gate configuration',
-  'cameraSetup.gateStageHeading': 'Gate camera — configured in Site Setup',
+  'cameraSetup.gateRowHint': 'Gate access camera — managed in Site Setup.',
+  'cameraSetup.gateOpenConfigAction': 'Open Site Setup',
+  'cameraSetup.gateStageHeading': 'Gate camera — managed in Site Setup',
   'cameraSetup.gateStageBody':
-    '{{name}} ({{code}}) is a Gate access camera (MF04), not a Zone PPE or Restricted Zone AI camera. PPE monitoring, Zone monitoring, observation regions, PPE policies, and Zone AI video-source apply are not used for Gate cameras.',
+    '{{name}} ({{code}}) is a gate access camera, not a PPE or Restricted Zone AI camera. Open Site Setup to manage gates for this site.',
   'cameraSetup.gateStageMetadataSummary': 'Gate camera details',
   'cameraSetup.gateStageGateIdLabel': 'Gate ID',
-  'cameraSetup.gateStageUnassignedGate': 'Not linked to a specific gate ID yet',
+  'cameraSetup.gateStageUnassignedGate': 'Not linked to a specific gate yet',
 };
 
 const vi: Record<keyof typeof en, string> = {
   'cameraSetup.gateBadge': 'Cổng',
   'cameraSetup.gateCameraBadge': 'Camera cổng',
-  'cameraSetup.gateRowHint': 'Camera kiểm soát cổng — cấu hình tại Thiết lập công trường.',
-  'cameraSetup.gateOpenConfigAction': 'Mở cấu hình cổng',
-  'cameraSetup.gateStageHeading': 'Camera cổng — cấu hình tại Thiết lập công trường',
+  'cameraSetup.gateRowHint': 'Camera kiểm soát cổng — quản lý tại Thiết lập công trường.',
+  'cameraSetup.gateOpenConfigAction': 'Mở Thiết lập công trường',
+  'cameraSetup.gateStageHeading': 'Camera cổng — quản lý tại Thiết lập công trường',
   'cameraSetup.gateStageBody':
-    '{{name}} ({{code}}) là camera kiểm soát cổng (MF04), không phải camera AI khu vực (PPE / vùng hạn chế). Màn hình giám sát PPE, giám sát khu vực, vùng quan sát, chính sách PPE và áp dụng nguồn video AI khu vực không áp dụng cho camera cổng.',
+    '{{name}} ({{code}}) là camera kiểm soát cổng ra vào, không dùng để giám sát PPE hay khu vực hạn chế bằng AI. Mở Thiết lập công trường để quản lý các cổng của công trường này.',
   'cameraSetup.gateStageMetadataSummary': 'Chi tiết camera cổng',
-  'cameraSetup.gateStageGateIdLabel': 'Mã cổng (Gate ID)',
-  'cameraSetup.gateStageUnassignedGate': 'Chưa gắn mã cổng cụ thể',
+  'cameraSetup.gateStageGateIdLabel': 'Mã cổng',
+  'cameraSetup.gateStageUnassignedGate': 'Chưa gắn cổng cụ thể',
 };
 
 let registered = false;
