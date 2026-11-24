@@ -16,10 +16,11 @@ test('reconciliation does not skip due days beyond the first 500 records', async
   const manager = { query: async () => [] } as unknown as EntityManager;
   const source = {
     getRepository: (entity: unknown) => ({
-      find: async () => {
+      find: async (options?: { where?: { scheduleId?: unknown } }) => {
         if (entity === WorkerScheduleEntity) return [];
+        if (options?.where?.scheduleId) return [];
         const batch = reads++ === 0 ? ids.slice(0, 500) : ids.slice(500);
-        return batch.map((id) => ({ id, siteId: 'synthetic-site', workerId: id }));
+        return batch.map((id) => ({ id, siteId: 'synthetic-site', workerId: id, scheduleId: id }));
       },
     }),
     transaction: async (action: (value: EntityManager) => Promise<void>) => action(manager),

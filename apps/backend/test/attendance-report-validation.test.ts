@@ -103,3 +103,11 @@ test('export rejects persisted Worker, Security and Safety roles even when the a
     );
   }
 });
+
+test('report status scope validates range selection and rejects unknown modes', () => {
+  assert.equal(
+    command(AttendanceReportDto, { ...range, statusScope: 'range' }).statusScope,
+    'range',
+  );
+  assert.throws(() => command(AttendanceReportDto, { ...range, statusScope: 'forged' }));
+});

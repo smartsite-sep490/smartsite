@@ -5,6 +5,7 @@ import { useManagementClient } from '../../features/auth/auth-session';
 import { translate as tr } from '../../i18n';
 import { userErrorMessage } from '../../i18n/messages';
 import { Button, Dialog } from '../ui';
+import { SmartNativeSelect } from '../ui/SmartNativeSelect';
 import { loadAllPages } from '../workforce/load-all-pages';
 import { teamText } from './team-attendance-copy';
 
@@ -96,7 +97,6 @@ export function TeamLeaderDialog({
         if (!mutation.isPending) onClose();
       }}
     >
-      <p className="text-sm text-slate-600">{teamText('teamWeb.leaderHint')}</p>
       {data.isPending ? (
         <p role="status">{tr('common.loading')}</p>
       ) : data.isError ? (
@@ -125,9 +125,9 @@ export function TeamLeaderDialog({
             <label htmlFor={selectId} className="block text-sm font-semibold">
               {teamText('teamWeb.selectLeader')}
             </label>
-            <select
+            <SmartNativeSelect
               id={selectId}
-              className="w-full rounded-xl border border-slate-300 bg-white p-3 text-sm focus-visible:outline-2 focus-visible:outline-orange-600"
+              className="w-full"
               disabled={!known || !value.team.isActive || mutation.isPending}
               value={selected ?? ''}
               onChange={(event) => {
@@ -149,7 +149,7 @@ export function TeamLeaderDialog({
                   {member.displayName}
                 </option>
               ))}
-            </select>
+            </SmartNativeSelect>
             {changed && (
               <p role="alert" className="text-sm text-amber-800">
                 {teamText('teamWeb.changed')}

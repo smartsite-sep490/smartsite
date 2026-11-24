@@ -644,9 +644,9 @@ function ScopedSecurityGateDeskView({
           ? uiState.label
           : teamText('teamWeb.gateReady');
   const resultDescription = confirmedEvent
-    ? teamText('teamWeb.gateRecorded', { direction: confirmedEvent.direction })
+    ? null
     : currentAttempt?.status === 'READY'
-      ? teamText('teamWeb.gateAwaiting')
+      ? null
       : qrResult
         ? getSafeReasonMessage(qrResult.reasonCode)
         : lastDecision || networkError
@@ -1019,11 +1019,13 @@ function ScopedSecurityGateDeskView({
               <p role="status" className="text-xl font-bold tracking-tight text-slate-900">
                 {resultLabel}
               </p>
-              <p className="text-sm leading-relaxed text-slate-600">
-                {lastDecision?.reasonCode && lastDecision.authorization === 'DENIED' && !qrResult
-                  ? getSafeReasonMessage(lastDecision.reasonCode)
-                  : resultDescription}
-              </p>
+              {resultDescription && (
+                <p className="text-sm leading-relaxed text-slate-600">
+                  {lastDecision?.reasonCode && lastDecision.authorization === 'DENIED' && !qrResult
+                    ? getSafeReasonMessage(lastDecision.reasonCode)
+                    : resultDescription}
+                </p>
+              )}
               {lastDecision?.reasonCode && !deniedScan && !qrResult && !currentAttempt && (
                 <p className="text-xs leading-relaxed text-slate-500">
                   {getSafeReasonMessage(lastDecision.reasonCode)}
@@ -1099,9 +1101,9 @@ function ScopedSecurityGateDeskView({
 
                   {Boolean(
                     repeatNotice ||
-                      separatePassage ||
-                      (passage.error instanceof ApiError &&
-                        passage.error.backendError?.code === 'GATE_PASSAGE_ALREADY_RECORDED'),
+                    separatePassage ||
+                    (passage.error instanceof ApiError &&
+                      passage.error.backendError?.code === 'GATE_PASSAGE_ALREADY_RECORDED'),
                   ) && (
                     <label className="block text-xs font-semibold text-slate-700">
                       {tr(
@@ -1173,11 +1175,6 @@ function ScopedSecurityGateDeskView({
             <div className="mt-5 space-y-2">
               {confirmedEvent && (
                 <div>
-                  <p className="mb-2 text-xs font-medium text-emerald-700">
-                    {tr('security_gate_desk_view.value_clearance_recorded_in_database', {
-                      value1: direction,
-                    })}
-                  </p>
                   <button
                     type="button"
                     onClick={handleRecordGateEvent}

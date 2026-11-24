@@ -30,13 +30,11 @@ export function AttendanceSummaryCards({
   // 1. Total Workers
   const totalWorkers = summary.totalWorkers;
 
-  // 2. Total Working Hours & change percent
+  // 2. Total Working Hours
   const totalMinutes = summary.totalMinutes;
-  const changePercent = summary.workingMinutesChangePercent;
 
   // 3. Absent Today
   const absentCount = summary.absentTodayCount;
-  const absentPercent = totalWorkers > 0 ? Math.round((absentCount / totalWorkers) * 100) : 0;
 
   // 4. Overtime Hours & worker count
   const overtimeMinutes = summary.overtimeMinutes;
@@ -55,7 +53,7 @@ export function AttendanceSummaryCards({
           </div>
         </div>
         <div className="mt-3">
-          <p className="text-3xl font-black text-[#071A2B] font-mono leading-none">
+          <p className="text-3xl font-black text-[#071A2B] tabular-nums leading-none">
             {totalWorkers}
           </p>
           <p className="text-xs text-slate-400 font-medium mt-2">
@@ -75,23 +73,11 @@ export function AttendanceSummaryCards({
           </div>
         </div>
         <div className="mt-3">
-          <p className="text-3xl font-black text-[#071A2B] font-mono leading-none">
+          <p className="text-3xl font-black text-[#071A2B] tabular-nums leading-none">
             {attendanceHours(totalMinutes)}
           </p>
-          <p className="text-xs font-medium mt-2">
-            {changePercent !== null ? (
-              <span className={changePercent >= 0 ? 'text-emerald-600' : 'text-rose-600'}>
-                {changePercent >= 0 ? `+${changePercent}%` : `${changePercent}%`}{' '}
-                <span className="text-slate-400">
-                  {tr('attendance_report.compared_to_last_period', { percent: '' }).trim()}
-                </span>
-              </span>
-            ) : (
-              <span className="text-slate-400">—</span>
-            )}
-          </p>
           {summary.provisionalMinutes > 0 && (
-            <p className="text-xs text-amber-600 mt-1">
+            <p className="text-xs text-amber-600 font-medium mt-2">
               + {attendanceHours(summary.provisionalMinutes)} {tr('attendance_report.provisional')}
             </p>
           )}
@@ -110,12 +96,13 @@ export function AttendanceSummaryCards({
         </div>
         <div className="mt-3">
           <div className="flex items-baseline gap-1.5">
-            <span className="text-3xl font-black text-[#071A2B] font-mono leading-none">
+            <span className="text-3xl font-black text-[#071A2B] tabular-nums leading-none">
               {absentCount}
             </span>
-            <span className="text-base font-bold text-slate-400 font-mono">/ {totalWorkers}</span>
+            <span className="text-base font-bold text-slate-400 tabular-nums">
+              / {totalWorkers}
+            </span>
           </div>
-          <p className="text-xs text-rose-600 font-semibold mt-2">{absentPercent}%</p>
         </div>
       </div>
 
@@ -130,7 +117,7 @@ export function AttendanceSummaryCards({
           </div>
         </div>
         <div className="mt-3">
-          <p className="text-3xl font-black text-[#071A2B] font-mono leading-none">
+          <p className="text-3xl font-black text-[#071A2B] tabular-nums leading-none">
             {attendanceHours(overtimeMinutes)}
           </p>
           <p className="text-xs text-slate-500 font-medium mt-2">

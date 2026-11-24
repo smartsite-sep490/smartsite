@@ -30,7 +30,11 @@ export async function createAttendanceExport(
   const headers = [
     t('attendance_export.worker_code'),
     t('attendance_export.worker_name'),
-    t('attendance_export.today_status'),
+    t(
+      filters.statusScope === 'range'
+        ? 'attendance_report.daily_status'
+        : 'attendance_export.today_status',
+    ),
     t(format === 'csv' ? 'attendance_export.total_minutes' : 'attendance_export.total_hours'),
     t(format === 'csv' ? 'attendance_export.regular_minutes' : 'attendance_export.regular_hours'),
     t(format === 'csv' ? 'attendance_export.overtime_minutes' : 'attendance_export.overtime_hours'),
@@ -52,7 +56,10 @@ export async function createAttendanceExport(
   const rows = report.items.map((worker) => [
     worker.workerCode,
     worker.workerName,
-    t(`labels.${worker.todayStatus}`),
+    filters.statusScope === 'range'
+      ? worker.daily?.map((day) => `${day.workDate}: ${t(`labels.${day.status}`)}`).join('; ') ||
+        t('labels.UNAVAILABLE')
+      : t(`labels.${worker.todayStatus}`),
     time(worker.totalMinutes),
     time(worker.regularMinutes),
     time(worker.overtimeMinutes),
@@ -73,7 +80,7 @@ export async function createAttendanceExport(
     [t('attendance_export.from'), report.fromDate],
     [t('attendance_export.to'), report.toDate],
     [t('attendance_export.timezone'), report.timezone],
-    [t('attendance_export.today'), report.today],
+    ...(filters.statusScope === 'range' ? [] : [[t('attendance_export.today'), report.today]]),
     [t('attendance_export.snapshot'), report.asOf],
     [t('attendance_export.exported_at'), exportedAt.toISOString()],
     [t('attendance_export.scope'), t('attendance_export.authorized_scope')],
@@ -83,7 +90,14 @@ export async function createAttendanceExport(
       filters.shiftId ? (shiftName ? `${shiftName} (${filters.shiftId})` : filters.shiftId) : '',
     ],
     [t('attendance_export.search'), filters.search ?? ''],
-    [t('attendance_export.status'), filters.todayStatus ? t(`labels.${filters.todayStatus}`) : ''],
+    [
+      t(
+        filters.statusScope === 'range'
+          ? 'attendance_report.daily_status'
+          : 'attendance_export.status',
+      ),
+      filters.todayStatus ? t(`labels.${filters.todayStatus}`) : '',
+    ],
   ];
   signal?.throwIfAborted();
 

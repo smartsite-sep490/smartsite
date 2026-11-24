@@ -83,7 +83,23 @@ const exportSnapshot: AttendanceExportResponse = {
       workerCode: 'W000001',
       workerName: 'Safety overview',
       contractorId: null,
-      todayStatus: 'PRESENT',
+      todayStatus: 'ABSENT',
+      daily: [
+        {
+          workDate: '2026-11-01',
+          attendanceDayId: null,
+          status: 'PRESENT',
+          shifts: [],
+          firstCheckInAt: null,
+          lastCheckOutAt: null,
+          regularMinutes: 480,
+          overtimeMinutes: 0,
+          totalMinutes: 480,
+          provisionalMinutes: 0,
+          hoursStatus: 'CONFIRMED',
+          anomalies: [],
+        },
+      ],
       todayFirstCheckInAt: null,
       todayLastCheckOutAt: null,
       totalMinutes: 480,
@@ -146,14 +162,15 @@ it('opens on today in Vietnam and resets a historical range with Today', async (
   expect(api.attendanceSummary).toHaveBeenCalledWith(
     'token',
     'site',
-    expect.objectContaining({ fromDate: '2026-11-23', toDate: '2026-11-23' }),
+    expect.objectContaining({ fromDate: '2026-11-23', toDate: '2026-11-23', statusScope: 'range' }),
   );
   expect(api.attendanceWorkers).toHaveBeenCalledWith(
     'token',
     'site',
     expect.objectContaining({ fromDate: '2026-11-23', toDate: '2026-11-23' }),
   );
-  fireEvent.change(screen.getByLabelText('From'), { target: { value: '2026-11-17' } });
+  fireEvent.click(screen.getByRole('button', { name: 'From' }));
+  fireEvent.click(screen.getByRole('button', { name: /November 17.*2026/ }));
   await waitFor(() =>
     expect(api.attendanceSummary).toHaveBeenLastCalledWith(
       'token',
@@ -161,10 +178,10 @@ it('opens on today in Vietnam and resets a historical range with Today', async (
       expect.objectContaining({ fromDate: '2026-11-17' }),
     ),
   );
-  expect(screen.getByText(/Hours and attendance rate cover the selected dates/)).toBeTruthy();
+  expect(screen.queryByText(/Status and IN\/OUT are shown for each selected date/)).toBeNull();
   fireEvent.click(screen.getByRole('button', { name: tr('common.today') }));
-  await waitFor(() => expect(screen.getByLabelText('From')).toHaveProperty('value', '2026-11-23'));
-  expect(screen.getByLabelText('To')).toHaveProperty('value', '2026-11-23');
+  await waitFor(() => expect(screen.getByLabelText('From').textContent).toContain('23/11/2026'));
+  expect(screen.getByLabelText('To').textContent).toContain('23/11/2026');
   vi.useRealTimers();
 });
 
@@ -298,14 +315,14 @@ it('keeps the clicked filters and language while a snapshot is loading', async (
   vi.spyOn(URL, 'revokeObjectURL').mockImplementation(() => {});
   vi.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(() => {});
   mount(false);
-  fireEvent.change(screen.getByRole('combobox', { name: 'Today Status' }), {
+  fireEvent.change(screen.getByRole('combobox', { name: 'Daily status' }), {
     target: { value: 'PRESENT' },
   });
   fireEvent.click(screen.getByRole('button', { name: 'Export CSV' }));
   expect((screen.getByRole('button', { name: 'Export PDF' }) as HTMLButtonElement).disabled).toBe(
     true,
   );
-  fireEvent.change(screen.getByRole('combobox', { name: 'Today Status' }), {
+  fireEvent.change(screen.getByRole('combobox', { name: 'Daily status' }), {
     target: { value: 'ABSENT' },
   });
   await act(async () => {
@@ -325,7 +342,7 @@ it('keeps the clicked filters and language while a snapshot is loading', async (
     reader.readAsText(blobs[0]!);
   });
   expect(content).toContain('"Worker Code","Worker Name"');
-  expect(content).toContain('"Present"');
+  expect(content).toContain('2026-11-01: Present');
   expect(content).not.toContain('Có mặt');
 });
 it('shows recorded and proposed hours and approval without expanding the report workflow', async () => {

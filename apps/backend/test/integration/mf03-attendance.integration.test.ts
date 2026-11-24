@@ -309,6 +309,7 @@ test('MF03: interval totals, missing checkout, notifications, approvals, scope a
       direction: 'IN' | 'OUT',
       time: string | Date,
       method: 'FACE' | 'QR' = 'FACE',
+      project = true,
     ) =>
       dataSource.transaction(async (manager) => {
         const attempt = await manager.getRepository(AccessAttemptEntity).save({
@@ -345,10 +346,50 @@ test('MF03: interval totals, missing checkout, notifications, approvals, scope a
           idempotencyKey: randomUUID(),
           recordedBy: securityId,
         });
-        await reconciliation.recordPassage(manager, event, attempt, worker);
-        await reconciliation.recordPassage(manager, event, attempt, worker);
+        if (project) {
+          await reconciliation.recordPassage(manager, event, attempt, worker);
+          await reconciliation.recordPassage(manager, event, attempt, worker);
+        }
         return event;
       });
+    const beforeShiftIn = await passage('IN', '07:30');
+    const beforeShiftOut = await passage('OUT', '07:40');
+    assert.equal(
+      await dataSource
+        .getRepository(UserNotificationEntity)
+        .countBy({ siteId, workerId, event: 'EARLY_EXIT' }),
+      0,
+    );
+    // Reconcile this edge case after shift end inside a rollback-only transaction.
+    const edgeRunner = dataSource.createQueryRunner();
+    await edgeRunner.connect();
+    await edgeRunner.startTransaction();
+    try {
+      const edgeDay = await edgeRunner.manager
+        .getRepository(AttendanceDayEntity)
+        .findOneByOrFail({ siteId, workerId });
+      const closed = await reconciliation.refresh(edgeRunner.manager, edgeDay.id, at('17:01'));
+      assert.equal(closed.anomalies.includes('EARLY_CHECKOUT'), false);
+      assert.equal(closed.regularMinutes, 0);
+      assert.equal(closed.provisionalMinutes, 0);
+    } finally {
+      await edgeRunner.rollbackTransaction();
+      await edgeRunner.release();
+    }
+    // Retire this isolated fixture before the existing session-count assertions.
+    for (const gate of [beforeShiftIn, beforeShiftOut]) {
+      const events = await dataSource
+        .getRepository(AttendanceEventEntity)
+        .findBy({ gateEventId: gate.id });
+      for (const event of events) {
+        await dataSource
+          .getRepository(AttendanceSessionEntity)
+          .delete([{ checkInEventId: event.id }, { checkOutEventId: event.id }]);
+        await dataSource.getRepository(AttendanceEventEntity).delete(event.id);
+      }
+      await dataSource.getRepository(GateEventEntity).delete(gate.id);
+      await dataSource.getRepository(AccessAttemptEntity).delete(gate.accessAttemptId);
+    }
     await passage('IN', '07:45');
     await passage('OUT', '11:00', 'QR');
     await passage('IN', '13:00');
@@ -1397,6 +1438,254 @@ test('MF03: interval totals, missing checkout, notifications, approvals, scope a
           (await days.detail(workerActor, siteId, earlyDay.id)).day.confirmedMinutes,
           455,
         );
+      },
+    );
+    await t.test(
+      'early multi-shift entry is assigned only by a unique completed interval; raw evidence and retries are preserved',
+      async () => {
+        async function setup(workDate: string, night = false, short = false) {
+          t.mock.timers.setTime(+new Date(workDate + 'T07:00:00+07:00'));
+          const first = await dataSource.getRepository(ShiftEntity).save({
+            ...shift,
+            id: randomUUID(),
+            name: night ? 'Synthetic night' : 'Synthetic afternoon',
+            startsAt: new Date(
+              night
+                ? '2026-09-01T15:00:00Z'
+                : short
+                  ? '2026-09-01T03:50:00Z'
+                  : '2026-09-01T06:00:00Z',
+            ),
+            endsAt: new Date(
+              night
+                ? '2026-09-02T01:00:00Z'
+                : short
+                  ? '2026-09-01T03:55:00Z'
+                  : '2026-09-01T10:00:00Z',
+            ),
+          });
+          const second = await dataSource.getRepository(ShiftEntity).save({
+            ...shift,
+            id: randomUUID(),
+            name: 'Synthetic later',
+            startsAt: new Date('2026-09-01T13:00:00Z'),
+            endsAt: new Date('2026-09-01T14:00:00Z'),
+          });
+          const target = await dataSource.getRepository(WorkerScheduleEntity).save({
+            id: randomUUID(),
+            siteId,
+            workerId,
+            shiftId: first.id,
+            scheduleVersionId: version.id,
+            workDate,
+            isActive: true,
+          });
+          await dataSource.getRepository(WorkerScheduleEntity).save({
+            id: randomUUID(),
+            siteId,
+            workerId,
+            shiftId: second.id,
+            scheduleVersionId: version.id,
+            workDate,
+            isActive: true,
+          });
+          return target;
+        }
+        const dateA = '2026-11-25';
+        await setup(dateA);
+        await passage('IN', new Date(dateA + 'T08:00:00+07:00'));
+        await passage('OUT', new Date(dateA + 'T09:00:00+07:00'));
+        const morning = await dataSource
+          .getRepository(AttendanceDayEntity)
+          .findOneByOrFail({ siteId, workerId, workDate: dateA });
+        assert.equal(morning.scheduleId, null);
+        assert.equal(morning.regularMinutes, 0);
+        // A later visit is matched using its own interval, never the earlier morning visit.
+        await passage('IN', new Date(dateA + 'T12:50:00+07:00'));
+        await passage('OUT', new Date(dateA + 'T17:00:00+07:00'));
+        const afternoon = await dataSource
+          .getRepository(AttendanceDayEntity)
+          .findBy({ siteId, workerId, workDate: dateA });
+        assert.equal(afternoon.find((d) => d.scheduleId)?.regularMinutes, 240);
+        assert.equal(afternoon.find((d) => !d.scheduleId)?.regularMinutes, 0);
+
+        const dateB = '2026-11-26';
+        const target = await setup(dateB);
+        const entry = await passage('IN', new Date(dateB + 'T08:00:00+07:00'));
+        const originalDay = await dataSource
+          .getRepository(AttendanceDayEntity)
+          .findOneByOrFail({ siteId, workerId, workDate: dateB });
+        const exit = await passage('OUT', new Date(dateB + 'T17:10:00+07:00'), 'QR', false);
+        const exitEvent = await dataSource.getRepository(AttendanceEventEntity).save({
+          id: randomUUID(),
+          siteId,
+          workerId,
+          workerAssignmentId: null,
+          shiftAssignmentId: null,
+          kind: 'CHECK_OUT',
+          method: 'QR',
+          gateEventId: exit.id,
+          occurredAt: exit.occurredAt,
+          recordedBy: securityId,
+          reasonCode: 'NORMAL_CHECK_OUT',
+        });
+        const session = await dataSource
+          .getRepository(AttendanceSessionEntity)
+          .findOneByOrFail({ dayId: originalDay.id });
+        await dataSource.getRepository(AttendanceSessionEntity).update(session.id, {
+          checkOutEventId: exitEvent.id,
+          effectiveOutAt: exit.occurredAt,
+          status: 'MATCHED',
+        });
+        const rawGates = await dataSource
+          .getRepository(GateEventEntity)
+          .find({ where: { siteId, workerId }, order: { id: 'ASC' } });
+        const rawTimes = (
+          await dataSource
+            .getRepository(AttendanceEventEntity)
+            .find({ where: { siteId, workerId }, order: { id: 'ASC' } })
+        ).map((e) => [e.id, e.occurredAt.toISOString(), e.gateEventId, e.kind, e.method]);
+        const targetTemplate = await dataSource
+          .getRepository(ShiftEntity)
+          .findOneByOrFail({ id: target.shiftId });
+        const protectedDay = await dataSource.transaction((manager) =>
+          reconciliation.ensureDay(
+            manager,
+            worker,
+            new Date(dateB + 'T17:10:00+07:00'),
+            target,
+            targetTemplate,
+          ),
+        );
+        await dataSource.getRepository(AttendanceDayEntity).update(protectedDay.id, {
+          reviewedBy: repId,
+          reviewNote: 'Synthetic manual review',
+          reviewedAt: new Date(),
+        });
+        t.mock.timers.setTime(+new Date(dateB + 'T18:00:00+07:00'));
+        await reconciliation.runDue();
+        assert.equal(
+          (
+            await dataSource
+              .getRepository(AttendanceSessionEntity)
+              .findOneByOrFail({ id: session.id })
+          ).shiftAssignmentId,
+          null,
+        );
+        await dataSource
+          .getRepository(AttendanceDayEntity)
+          .update(protectedDay.id, { reviewedBy: null, reviewNote: null, reviewedAt: null });
+        const blockedRetarget = t.mock.method(notifications, 'retargetAttendanceDay', async () => {
+          throw new Error('Synthetic link update failure');
+        });
+        await reconciliation.runDue();
+        assert.equal(
+          (
+            await dataSource
+              .getRepository(AttendanceSessionEntity)
+              .findOneByOrFail({ id: session.id })
+          ).shiftAssignmentId,
+          null,
+        );
+        assert.equal(
+          await dataSource.getRepository(AttendanceDayEntity).existsBy({ id: originalDay.id }),
+          true,
+        );
+        assert.equal(
+          await dataSource
+            .getRepository(AccessAuditEntity)
+            .countBy({ action: 'ATTENDANCE_EARLY_SESSION_ASSIGNED', entityId: session.id }),
+          0,
+        );
+        blockedRetarget.mock.restore();
+        await reconciliation.runDue();
+        await reconciliation.runDue();
+        const matched = await dataSource
+          .getRepository(AttendanceSessionEntity)
+          .findOneByOrFail({ id: session.id });
+        assert.equal(matched.shiftAssignmentId, target.id);
+        assert.equal(matched.version, session.version + 1);
+        assert.equal(matched.effectiveInAt?.toISOString(), entry.occurredAt.toISOString());
+        assert.equal(matched.effectiveOutAt?.toISOString(), exit.occurredAt.toISOString());
+        const targetDay = await dataSource
+          .getRepository(AttendanceDayEntity)
+          .findOneByOrFail({ id: matched.dayId! });
+        assert.equal(targetDay.regularMinutes, 240);
+        assert.equal(
+          await dataSource.getRepository(AttendanceDayEntity).existsBy({ id: originalDay.id }),
+          false,
+        );
+        assert.deepEqual(
+          await dataSource
+            .getRepository(GateEventEntity)
+            .find({ where: { siteId, workerId }, order: { id: 'ASC' } }),
+          rawGates,
+        );
+        assert.deepEqual(
+          (
+            await dataSource
+              .getRepository(AttendanceEventEntity)
+              .find({ where: { siteId, workerId }, order: { id: 'ASC' } })
+          ).map((e) => [e.id, e.occurredAt.toISOString(), e.gateEventId, e.kind, e.method]),
+          rawTimes,
+        );
+        assert.equal(
+          await dataSource
+            .getRepository(AccessAuditEntity)
+            .countBy({ action: 'ATTENDANCE_EARLY_SESSION_ASSIGNED', entityId: session.id }),
+          1,
+        );
+        const targetSessionCount = await dataSource
+          .getRepository(AttendanceSessionEntity)
+          .countBy({ dayId: targetDay.id });
+        assert.equal(targetSessionCount, 1);
+
+        const oldNotices = await dataSource
+          .getRepository(UserNotificationEntity)
+          .findBy({ siteId, requestId: originalDay.id });
+        assert.ok(oldNotices.length > 0);
+        assert.ok(oldNotices.every((n) => n.content.dayId === targetDay.id));
+        assert.ok(
+          (await notifications.list(workerActor)).items.some(
+            (n) => 'dayId' in n.target && n.target.dayId === targetDay.id,
+          ),
+        );
+
+        const dateC = '2026-11-27';
+        await setup(dateC);
+        await passage('IN', new Date(dateC + 'T08:00:00+07:00'));
+        await passage('OUT', new Date(dateC + 'T21:30:00+07:00'));
+        const ambiguous = await dataSource
+          .getRepository(AttendanceDayEntity)
+          .findOneByOrFail({ siteId, workerId, workDate: dateC });
+        assert.equal(ambiguous.scheduleId, null);
+        assert.equal(ambiguous.regularMinutes, 0);
+
+        const dateD = '2026-11-28';
+        const night = await setup(dateD, true);
+        // Before either evening assignment; checkout falls on the next calendar date.
+        await passage('IN', new Date(dateD + 'T21:50:00+07:00'));
+        await passage('OUT', new Date('2026-11-29T08:05:00+07:00'));
+        const overnight = await dataSource
+          .getRepository(AttendanceDayEntity)
+          .findOneByOrFail({ scheduleId: night.id });
+        assert.equal(overnight.workDate, dateD);
+        assert.equal(overnight.regularMinutes, 600);
+        const shortDate = '2026-11-30';
+        const shortTarget = await setup(shortDate, false, true);
+        const shortIn = await passage('IN', new Date(shortDate + 'T10:49:26+07:00'));
+        const shortOut = await passage('OUT', new Date(shortDate + 'T10:55:33+07:00'));
+        const shortDay = await dataSource
+          .getRepository(AttendanceDayEntity)
+          .findOneByOrFail({ scheduleId: shortTarget.id });
+        assert.equal(shortDay.regularMinutes, 5);
+        const shortSession = await dataSource
+          .getRepository(AttendanceSessionEntity)
+          .findOneByOrFail({ dayId: shortDay.id });
+        assert.equal(shortSession.effectiveInAt?.toISOString(), shortIn.occurredAt.toISOString());
+        assert.equal(shortSession.effectiveOutAt?.toISOString(), shortOut.occurredAt.toISOString());
+        assert.equal(shortDay.anomalies.includes('MISSING_IN'), false);
+        assert.equal(shortDay.anomalies.includes('NO_SCHEDULE'), false);
       },
     );
     await dataSource

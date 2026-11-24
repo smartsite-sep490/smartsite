@@ -6,7 +6,7 @@ import { useTranslation } from 'react-i18next';
 import { useQuery } from '@tanstack/react-query';
 import { translate as tr, uiLocale } from '../../../i18n';
 import { userErrorMessage } from '../../../i18n/messages';
-import { attendanceHours, attendanceLabel, attendanceSessionDuration } from './attendance-display';
+import { attendanceHours, attendanceLabel } from './attendance-display';
 import { AttendanceStatusBadge } from './AttendanceStatusBadge';
 import { AttendanceDailyBarChart } from './AttendanceDailyBarChart';
 import {
@@ -69,6 +69,7 @@ export function WorkerAttendanceDetailPanel({
         timezone,
         workerId,
         includeDaily: true,
+        statusScope: 'range',
         limit: 1,
       });
       return res.items[0] ?? null;
@@ -145,17 +146,28 @@ export function WorkerAttendanceDetailPanel({
                   >
                     {worker.workerName}
                   </h2>
-                  <AttendanceStatusBadge status={worker.todayStatus} />
-                </div>
-                <p className="text-xs text-slate-400 font-mono mt-0.5">
-                  {tr('common.id_value', { value1: worker.workerCode })}
-                  {worker.todayFirstCheckInAt && (
-                    <span className="ml-3 font-sans text-slate-500">
-                      {tr('attendance_report.in_since', {
-                        time: formatShortTime(worker.todayFirstCheckInAt),
-                      })}
-                    </span>
+                  {fromDate === toDate && (
+                    <AttendanceStatusBadge
+                      status={
+                        worker.daily?.find((day) => day.workDate === fromDate)?.status ??
+                        'UNAVAILABLE'
+                      }
+                    />
                   )}
+                </div>
+                <p className="text-xs text-slate-400 tabular-nums mt-0.5">
+                  {tr('common.id_value', { value1: worker.workerCode })}
+                  {fromDate === toDate &&
+                    worker.daily?.find((day) => day.workDate === fromDate)?.firstCheckInAt && (
+                      <span className="ml-3 font-sans text-slate-500">
+                        {tr('attendance_report.in_since', {
+                          time: formatShortTime(
+                            worker.daily?.find((day) => day.workDate === fromDate)
+                              ?.firstCheckInAt ?? null,
+                          ),
+                        })}
+                      </span>
+                    )}
                 </p>
               </div>
             </div>
@@ -241,7 +253,7 @@ export function WorkerAttendanceDetailPanel({
                   <p className="text-[11px] font-bold uppercase tracking-wider text-slate-400">
                     {tr('attendance_report.total_hours')}
                   </p>
-                  <p className="text-2xl font-black text-[#071A2B] mt-1 font-mono">
+                  <p className="text-2xl font-black text-[#071A2B] mt-1 tabular-nums">
                     {attendanceHours(worker.totalMinutes)}
                   </p>
                   {worker.provisionalMinutes > 0 && (
@@ -258,7 +270,7 @@ export function WorkerAttendanceDetailPanel({
                   <p className="text-[10px] font-bold uppercase tracking-wider text-blue-700">
                     {tr('attendance_report.regular_hours')}
                   </p>
-                  <p className="text-sm font-bold text-blue-950 font-mono mt-0.5">
+                  <p className="text-sm font-bold text-blue-950 tabular-nums mt-0.5">
                     {attendanceHours(worker.regularMinutes)}
                   </p>
                 </div>
@@ -267,7 +279,7 @@ export function WorkerAttendanceDetailPanel({
                   <p className="text-[10px] font-bold uppercase tracking-wider text-amber-700">
                     {tr('attendance_report.overtime_hours')}
                   </p>
-                  <p className="text-sm font-bold text-amber-950 font-mono mt-0.5">
+                  <p className="text-sm font-bold text-amber-950 tabular-nums mt-0.5">
                     {attendanceHours(worker.overtimeMinutes)}
                   </p>
                 </div>
@@ -276,7 +288,7 @@ export function WorkerAttendanceDetailPanel({
                   <p className="text-[10px] font-bold uppercase tracking-wider text-emerald-700">
                     {tr('attendance_report.days_present')}
                   </p>
-                  <p className="text-sm font-bold text-emerald-950 font-mono mt-0.5">
+                  <p className="text-sm font-bold text-emerald-950 tabular-nums mt-0.5">
                     {worker.presentDays} / {worker.requiredDays}
                   </p>
                 </div>
@@ -285,7 +297,7 @@ export function WorkerAttendanceDetailPanel({
                   <p className="text-[10px] font-bold uppercase tracking-wider text-slate-600">
                     {tr('attendance_report.rate')}
                   </p>
-                  <p className="text-sm font-bold text-[#071A2B] font-mono mt-0.5">
+                  <p className="text-sm font-bold text-[#071A2B] tabular-nums mt-0.5">
                     {worker.attendanceRate !== null ? `${worker.attendanceRate}%` : '—'}
                   </p>
                 </div>
@@ -362,24 +374,26 @@ export function WorkerAttendanceDetailPanel({
                             <td className="p-3.5 pl-6 font-semibold text-[#071A2B] whitespace-nowrap">
                               {formatDayDate(day.workDate)}
                             </td>
-                            <td className="p-3.5 text-slate-600 whitespace-nowrap">{shiftName}</td>
-                            <td className="p-3.5 font-mono text-slate-700 whitespace-nowrap">
+                            <td className="p-3.5 font-semibold text-slate-900 whitespace-nowrap">
+                              {shiftName}
+                            </td>
+                            <td className="p-3.5 tabular-nums text-slate-700 whitespace-nowrap">
                               {formatShortTime(day.firstCheckInAt)}
                             </td>
-                            <td className="p-3.5 font-mono text-slate-700 whitespace-nowrap">
+                            <td className="p-3.5 tabular-nums text-slate-700 whitespace-nowrap">
                               {formatShortTime(day.lastCheckOutAt)}
                             </td>
-                            <td className="p-3.5 font-mono font-bold text-[#071A2B] whitespace-nowrap">
+                            <td className="p-3.5 tabular-nums font-bold text-[#071A2B] whitespace-nowrap">
                               {day.hoursStatus === 'CONFIRMED'
                                 ? attendanceHours(day.totalMinutes)
                                 : day.provisionalMinutes > 0
                                   ? `${attendanceHours(day.provisionalMinutes)}*`
                                   : attendanceHours(0)}
                             </td>
-                            <td className="p-3.5 font-mono text-slate-600 whitespace-nowrap">
+                            <td className="p-3.5 tabular-nums text-slate-600 whitespace-nowrap">
                               {attendanceHours(day.regularMinutes)}
                             </td>
-                            <td className="p-3.5 font-mono text-slate-600 whitespace-nowrap">
+                            <td className="p-3.5 tabular-nums text-slate-600 whitespace-nowrap">
                               {attendanceHours(day.overtimeMinutes)}
                             </td>
                             <td className="p-3.5 whitespace-nowrap">
@@ -431,7 +445,7 @@ export function WorkerAttendanceDetailPanel({
                     <p className="text-[10px] font-bold uppercase tracking-wider text-slate-400">
                       {tr('attendance_report.regular')}
                     </p>
-                    <p className="text-lg font-bold text-[#071A2B] font-mono mt-1">
+                    <p className="text-lg font-bold text-[#071A2B] tabular-nums mt-1">
                       {attendanceHours(worker.regularMinutes)}
                     </p>
                   </div>
@@ -439,7 +453,7 @@ export function WorkerAttendanceDetailPanel({
                     <p className="text-[10px] font-bold uppercase tracking-wider text-slate-400">
                       {tr('attendance_report.overtime')}
                     </p>
-                    <p className="text-lg font-bold text-[#071A2B] font-mono mt-1">
+                    <p className="text-lg font-bold text-[#071A2B] tabular-nums mt-1">
                       {attendanceHours(worker.overtimeMinutes)}
                     </p>
                   </div>
@@ -447,7 +461,7 @@ export function WorkerAttendanceDetailPanel({
                     <p className="text-[10px] font-bold uppercase tracking-wider text-slate-400">
                       {tr('attendance_report.total_hours')}
                     </p>
-                    <p className="text-lg font-bold text-emerald-700 font-mono mt-1">
+                    <p className="text-lg font-bold text-emerald-700 tabular-nums mt-1">
                       {attendanceHours(worker.totalMinutes)}
                     </p>
                   </div>
@@ -455,7 +469,7 @@ export function WorkerAttendanceDetailPanel({
                     <p className="text-[10px] font-bold uppercase tracking-wider text-slate-400">
                       {tr('attendance_report.provisional')}
                     </p>
-                    <p className="text-lg font-bold text-amber-700 font-mono mt-1">
+                    <p className="text-lg font-bold text-amber-700 tabular-nums mt-1">
                       {attendanceHours(worker.provisionalMinutes)}
                     </p>
                   </div>
@@ -526,7 +540,7 @@ export function WorkerAttendanceDetailPanel({
                           {tr('attendance_report.deducted_time')}
                         </span>
                         <span
-                          className={`font-semibold font-mono ${(dayDetailQuery.data.day.deductedMinutes ?? 0) > 0 ? 'text-rose-600' : 'text-slate-700'}`}
+                          className={`font-semibold tabular-nums ${(dayDetailQuery.data.day.deductedMinutes ?? 0) > 0 ? 'text-rose-600' : 'text-slate-700'}`}
                         >
                           {tr('attendance_report.deducted_minutes_value', {
                             minutes: dayDetailQuery.data.day.deductedMinutes ?? 0,
@@ -537,7 +551,7 @@ export function WorkerAttendanceDetailPanel({
                         <span className="text-slate-400 block text-[10px] font-bold uppercase">
                           {tr('attendance_report.actual_working_hours')}
                         </span>
-                        <span className="font-semibold font-mono text-emerald-700">
+                        <span className="font-semibold tabular-nums text-emerald-700">
                           {attendanceHours(
                             dayDetailQuery.data.day.confirmedMinutes ??
                               dayDetailQuery.data.day.provisionalMinutes,
@@ -563,12 +577,6 @@ export function WorkerAttendanceDetailPanel({
                                   in: formatShortTime(session.effectiveInAt),
                                   out: formatShortTime(session.effectiveOutAt),
                                 })}
-                              </span>
-                              <span className="font-mono text-slate-500 font-bold">
-                                {attendanceSessionDuration(
-                                  session.effectiveInAt,
-                                  session.effectiveOutAt,
-                                )}
                               </span>
                             </div>
                             {(session.rawInAt || session.rawOutAt) && (

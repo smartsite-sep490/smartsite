@@ -34,6 +34,12 @@ const en = {
   'teamWeb.zoneRollCall': 'Current leader roll call:',
   'teamWeb.zoneConfirm': 'Confirm working hours',
   'teamWeb.zoneReason': 'Reason for confirming working hours',
+  'teamWeb.zoneReasonPlaceholder': 'Enter reason for confirming working hours...',
+  'teamWeb.zoneBadgeConfirmed': 'Hours confirmed',
+  'teamWeb.zoneBadgePending': 'Hours review required',
+  'teamWeb.zoneCardGate': 'Gate scan data',
+  'teamWeb.zoneCardHours': 'Working hours',
+  'teamWeb.zoneCardRollCall': 'On-site roll call',
   'teamWeb.zoneConfirmed':
     'Working hours confirmed by the Contractor Representative. Original roll call retained.',
   'teamWeb.zoneWaiting':
@@ -54,6 +60,10 @@ const en = {
   'teamWeb.absenceRecorded': 'Leader recorded Present at {time}',
   'teamWeb.absenceConfirm': 'Confirm absent — 0 hours',
   'teamWeb.absenceReason': 'Reason for confirming absence',
+  'teamWeb.absenceReasonPlaceholder': 'Enter reason for confirming absence...',
+  'teamWeb.absenceBadgeConfirmed': 'Absence confirmed',
+  'teamWeb.absenceBadgePending': 'Absence review required',
+  'teamWeb.absenceCardEvidence': 'Gate and attendance evidence',
   'teamWeb.absenceConfirmed': 'Absence confirmed — 0 hours. Original roll call retained.',
   'teamWeb.absenceWaiting':
     'Awaiting an authorized Contractor Representative. Confirmation requires the shift and approved overtime to have ended and no Gate or attendance evidence.',
@@ -87,8 +97,8 @@ const en = {
   'teamWeb.version': 'Schedule version',
   'teamWeb.versionValue': 'Version {version}',
   'teamWeb.choose': 'Select…',
-  'teamWeb.chooseFilters': 'Select a shift and schedule version to view attendance.',
-  'teamWeb.noSchedules': 'No shifts or schedule versions are available.',
+  'teamWeb.chooseFilters': 'Select a shift to view attendance.',
+  'teamWeb.noSchedules': 'No schedules are available for attendance.',
   'teamWeb.reportTotals': '{present} present · {absent} absent · {pending} not yet recorded',
   'teamWeb.worker': 'Worker',
   'teamWeb.result': 'Zone attendance status',
@@ -100,6 +110,11 @@ const en = {
   'teamWeb.assignment': 'Team / Zone',
   'teamWeb.noZone':
     'The assigned Zone is unavailable. Ask your Contractor Representative to check the team’s Zone assignment.',
+  'teamWeb.beforeStart':
+    'The shift has not started yet. You cannot record Zone attendance before the shift starts.',
+  'teamWeb.recordsLocked': 'Attendance records are locked. You can only view the results.',
+  'teamWeb.attendanceUnavailable':
+    'Zone attendance is currently unavailable. Refresh to check again.',
   'teamWeb.readOnly':
     'Attendance is read only before the shift starts or when all records are locked.',
   'teamWeb.memberHint':
@@ -166,6 +181,12 @@ const vi: Record<keyof typeof en, string> = {
   'teamWeb.zoneRollCall': 'Điểm danh nhóm trưởng hiện tại:',
   'teamWeb.zoneConfirm': 'Chốt giờ công',
   'teamWeb.zoneReason': 'Lý do chốt giờ công',
+  'teamWeb.zoneReasonPlaceholder': 'Nhập lý do chốt giờ công đối soát...',
+  'teamWeb.zoneBadgeConfirmed': 'Đã chốt giờ công',
+  'teamWeb.zoneBadgePending': 'Cần đối soát giờ công',
+  'teamWeb.zoneCardGate': 'Dữ liệu quét cổng',
+  'teamWeb.zoneCardHours': 'Thời gian làm việc',
+  'teamWeb.zoneCardRollCall': 'Điểm danh hiện trường',
   'teamWeb.zoneConfirmed': 'Đã chốt giờ công bởi Đại diện nhà thầu. Giữ nguyên điểm danh ban đầu.',
   'teamWeb.zoneWaiting':
     'Chỉ Đại diện nhà thầu có quyền chốt sau khi ca/tăng ca kết thúc, đủ bằng chứng cổng hoặc đơn sửa công đã duyệt và không còn yêu cầu chờ xử lý.',
@@ -185,6 +206,10 @@ const vi: Record<keyof typeof en, string> = {
   'teamWeb.absenceRecorded': 'Nhóm trưởng ghi Có mặt lúc {time}',
   'teamWeb.absenceConfirm': 'Xác nhận vắng — 0 giờ',
   'teamWeb.absenceReason': 'Lý do xác nhận vắng',
+  'teamWeb.absenceReasonPlaceholder': 'Nhập lý do chốt vắng mặt đối soát...',
+  'teamWeb.absenceBadgeConfirmed': 'Đã chốt vắng mặt',
+  'teamWeb.absenceBadgePending': 'Cần đối soát vắng mặt',
+  'teamWeb.absenceCardEvidence': 'Bằng chứng đối soát cổng & chấm công',
   'teamWeb.absenceConfirmed': 'Đã xác nhận vắng — 0 giờ. Giữ nguyên điểm danh ban đầu.',
   'teamWeb.absenceWaiting':
     'Chờ Đại diện nhà thầu có quyền kiểm tra. Chỉ xác nhận khi ca và tăng ca được duyệt đã kết thúc, không có bằng chứng cổng hoặc chấm công.',
@@ -218,8 +243,8 @@ const vi: Record<keyof typeof en, string> = {
   'teamWeb.version': 'Phiên bản lịch',
   'teamWeb.versionValue': 'Phiên bản {version}',
   'teamWeb.choose': 'Chọn…',
-  'teamWeb.chooseFilters': 'Chọn ca và phiên bản lịch để xem kết quả điểm danh.',
-  'teamWeb.noSchedules': 'Chưa có ca hoặc phiên bản lịch để xem.',
+  'teamWeb.chooseFilters': 'Chọn ca để xem kết quả điểm danh.',
+  'teamWeb.noSchedules': 'Chưa có lịch làm việc để xem điểm danh.',
   'teamWeb.reportTotals': '{present} có mặt · {absent} vắng · {pending} chưa điểm danh',
   'teamWeb.worker': 'Công nhân',
   'teamWeb.result': 'Trạng thái điểm danh khu vực',
@@ -231,6 +256,11 @@ const vi: Record<keyof typeof en, string> = {
   'teamWeb.assignment': 'Nhóm / Khu vực',
   'teamWeb.noZone':
     'Chưa xác định được khu vực làm việc. Hãy liên hệ Đại diện nhà thầu để kiểm tra khu vực được giao cho nhóm.',
+  'teamWeb.beforeStart':
+    'Chưa đến giờ bắt đầu ca làm. Bạn chưa thể điểm danh khu vực. Vui lòng quay lại khi ca làm bắt đầu.',
+  'teamWeb.recordsLocked': 'Các bản ghi điểm danh đã khóa. Bạn chỉ có thể xem kết quả.',
+  'teamWeb.attendanceUnavailable':
+    'Hiện chưa thể điểm danh khu vực. Vui lòng làm mới để kiểm tra lại.',
   'teamWeb.readOnly': 'Chỉ được xem trước giờ bắt đầu ca hoặc khi tất cả bản ghi đã khóa.',
   'teamWeb.memberHint':
     'Nhóm trưởng thực hiện điểm danh khu vực. Bạn có thể xem trạng thái của mình tại đây.',

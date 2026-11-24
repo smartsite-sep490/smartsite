@@ -156,17 +156,16 @@ export function TeamAttendanceDialog({
         if (!save.isPending) onClose();
       }}
     >
-      <div className="rounded-xl border border-slate-200 bg-slate-50 p-3 text-sm">
-        <p className="font-semibold">
+      <div className="mb-4 rounded-2xl border border-blue-200 bg-blue-50 p-4 text-sm">
+        <p className="text-base font-bold text-slate-900">
           {formatWorkDate(schedule.workDate)} · {shift?.name ?? tr('common.shift')}
         </p>
         {shift && (
           <p className="mt-1 text-slate-600">
-            {formatShiftRange(shift.startsAt, shift.endsAt, shift.timezone)} · {shift.timezone}
+            {formatShiftRange(shift.startsAt, shift.endsAt, shift.timezone)}
           </p>
         )}
       </div>
-      <p className="text-sm text-slate-600">{teamText('teamWeb.attendanceHint')}</p>
       {attendance.isPending ? (
         <p role="status">{tr('common.loading')}</p>
       ) : attendance.isError ? (
@@ -176,32 +175,38 @@ export function TeamAttendanceDialog({
       ) : (
         data && (
           <div className="space-y-4">
-            <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-slate-200 p-3 text-sm">
+            <div className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-slate-300 bg-slate-50 p-4 text-sm">
               <div>
                 <p className="text-xs text-slate-500">{teamText('teamWeb.assignment')}</p>
-                <p className="font-semibold">
+                <p className="text-base font-bold text-slate-900">
                   {data.teamName ?? '—'} / {data.zoneName ?? '—'}
                 </p>
               </div>
-              <span className="rounded-lg bg-slate-100 px-3 py-2 font-semibold">
+              <span className="rounded-lg border border-slate-200 bg-white px-3 py-2 font-semibold">
                 {teamText(`teamWeb.status.${data.own.status}`)}
               </span>
               <p className="w-full text-xs text-slate-600">
                 {teamText(`teamWeb.gate.${data.own.gateCheck}`)}
               </p>
             </div>
-            {!data.canManage && (
-              <p className="text-sm text-slate-600">{teamText('teamWeb.memberHint')}</p>
-            )}
             {data.canManage && !data.zoneId && (
               <p role="status" className="text-sm text-amber-800">
                 {teamText('teamWeb.noZone')}
               </p>
             )}
             {data.canManage && data.zoneId && !data.canSubmit && (
-              <p role="status" className="text-sm text-slate-600">
-                {teamText('teamWeb.readOnly')}
-              </p>
+              <div
+                role="status"
+                className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm font-semibold leading-relaxed text-amber-900"
+              >
+                {teamText(
+                  schedule.isActive && data.members.some((member) => !member.locked)
+                    ? 'teamWeb.beforeStart'
+                    : data.members.length > 0 && data.members.every((member) => member.locked)
+                      ? 'teamWeb.recordsLocked'
+                      : 'teamWeb.attendanceUnavailable',
+                )}
+              </div>
             )}
             {data.canManage && (
               <form

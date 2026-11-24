@@ -79,6 +79,22 @@ export const notificationVisibilityScope = scope;
 
 @Injectable()
 export class SchedulingNotificationService {
+  /** Keep existing attendance notifications navigable after retiring a derived day aggregate. */
+  async retargetAttendanceDay(
+    manager: EntityManager,
+    siteId: string,
+    workerId: string,
+    fromDayId: string,
+    toDayId: string,
+  ) {
+    await manager.query(
+      `UPDATE user_notification SET content=jsonb_set(content,'{dayId}',to_jsonb($4::text),true)
+      WHERE site_id=$1 AND request_type='ATTENDANCE'
+        AND (worker_id=$2 OR (worker_id IS NULL AND contractor_id=(SELECT contractor_id FROM worker WHERE id=$2 AND site_id=$1)))
+        AND (content->>'dayId'=$3 OR (NOT (content ? 'dayId') AND request_id=$3::uuid))`,
+      [siteId, workerId, fromDayId, toDayId],
+    );
+  }
   private readonly logger = new Logger(SchedulingNotificationService.name);
   constructor(private readonly dataSource: DataSource) {}
 

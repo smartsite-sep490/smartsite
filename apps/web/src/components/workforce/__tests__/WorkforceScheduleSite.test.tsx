@@ -186,7 +186,8 @@ it.each([
     const user = userEvent.setup();
     if (mode === 'list') await user.click(await screen.findByRole('button', { name: 'List' }));
     await user.click((await screen.findAllByRole('button', { name: /^Zone attendance:/ }))[0]!);
-    await screen.findByText(/Your team leader records Zone attendance/);
+    await screen.findByText('Team / Zone');
+    expect(screen.queryByText(/Your team leader records Zone attendance/)).toBeNull();
     expect(SmartSiteManagementClient.prototype.scheduleTeamAttendance).toHaveBeenCalledWith(
       'synthetic-token',
       'site-1',
