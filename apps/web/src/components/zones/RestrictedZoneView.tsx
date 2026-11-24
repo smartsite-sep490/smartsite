@@ -16,9 +16,11 @@ import './zone-monitor-catalog';
 import {
   buildRegionPresentationList,
   buildZoneLookupMap,
+  resolveZoneMonitorStageState,
   resolveZoneWorkerOperationalStatus,
   type ZonePolicyKind,
 } from './zone-monitor-model';
+import { ZoneMonitorEmptyState } from './ZoneMonitorEmptyState';
 import { Link, useInRouterContext, useSearchParams } from 'react-router-dom';
 import { buildCameraSelectionSearch } from '../cameras/camera-navigation';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
@@ -506,26 +508,51 @@ function RestrictedZoneViewInner({
     queryKey: ['zone-admin', apiUrl, sessionScope, selectedSiteId, 'cameras'],
     queryFn: async () => {
       const page = await client.listCameras(apiToken, selectedSiteId, { limit: 100 });
-      return { ...page, items: page.items.filter((camera) => camera.type !== 'GATE') };
+      const zoneItems = page.items.filter((camera) => camera.type !== 'GATE');
+      const gateCount = page.items.length - zoneItems.length;
+      return { ...page, items: zoneItems, gateCount };
     },
     enabled: !!canRead && apiToken.length > 0 && selectedSiteId.length > 0,
   });
 
+  const siteZoneCameras = cameras.isSuccess
+    ? cameras.data.items.filter((camera) => camera.siteId === selectedSiteId)
+    : [];
   const scopedCameras = linkedMonitoring
-    ? (cameras.isSuccess ? cameras.data.items : []).filter(
-        (camera) => camera.siteId === selectedSiteId && camera.status === 'ACTIVE',
-      )
+    ? siteZoneCameras.filter((camera) => camera.status === 'ACTIVE')
     : (cameras.data?.items ?? []);
+  const inactiveZoneCameraCount = siteZoneCameras.filter(
+    (camera) => camera.status !== 'ACTIVE',
+  ).length;
+  const gateCameraCount = cameras.isSuccess ? cameras.data.gateCount : 0;
   const selectedCameraId = scopedCameras.some((cam) => cam.id === requestedCameraId)
     ? requestedCameraId
     : linkedMonitoring && requestedCameraId === linkedCameraId
       ? ''
       : (scopedCameras[0]?.id ?? '');
 
-  const selectedCamera = useMemo(
-    () => cameras.data?.items.find((c) => c.id === selectedCameraId),
-    [cameras.data?.items, selectedCameraId],
-  );
+  const selectedCamera = cameras.data?.items.find((c) => c.id === selectedCameraId);
+
+  const stageEmptyState = resolveZoneMonitorStageState({
+    sitesPending: sites.isPending,
+    sitesError: sites.isError,
+    sitesErrorStatus: sites.error instanceof ApiError ? (sites.error.status ?? null) : null,
+    scopedSiteCount: scopedSites.length,
+    hasSelectedSite: selectedSiteId.length > 0,
+    hasUnresolvedLinkedSite: Boolean(
+      linkedSiteId && requestedSiteId === linkedSiteId && !selectedSiteId,
+    ),
+    firstAvailableSiteId: scopedSites[0]?.id ?? null,
+    camerasPending: cameras.isPending,
+    camerasError: cameras.isError,
+    camerasErrorStatus: cameras.error instanceof ApiError ? (cameras.error.status ?? null) : null,
+    hasUnresolvedLinkedCamera: Boolean(
+      linkedCameraId && requestedCameraId === linkedCameraId && !selectedCamera,
+    ),
+    firstActiveCameraId: scopedCameras[0]?.id ?? null,
+    inactiveZoneCameraCount,
+    gateCameraCount,
+  });
 
   const regions = useQuery({
     queryKey: ['zone-admin', apiUrl, sessionScope, selectedSiteId, selectedCameraId, 'regions'],
@@ -1427,13 +1454,41 @@ function RestrictedZoneViewInner({
                   observationMode="zone"
                   aiPaused={import.meta.env.VITE_AI_WORK_PAUSED === 'true'}
                 />
-              ) : session && !sites.isPending && (!selectedSiteId || !cameras.isPending) ? (
-                <p
-                  role="status"
-                  className="rounded-xl border border-slate-200 bg-white p-6 text-center text-sm text-slate-600"
-                >
-                  {tr('errors.cameraUnavailable')}
-                </p>
+              ) : session ? (
+                <ZoneMonitorEmptyState
+                  state={stageEmptyState}
+                  canAccessCameraSetup={canAccessCameraSetup}
+                  cameraSetupHref={cameraSetupHref}
+                  inRouter={inRouter}
+                  isFullscreen={isZoneFullscreen}
+                  onRetrySites={() => void sites.refetch()}
+                  onRetryCameras={() => void cameras.refetch()}
+                  onSelectSite={(nextSiteId) => {
+                    activeScopeRef.current = {
+                      userId: session.user.id,
+                      siteId: nextSiteId,
+                      cameraId: '',
+                      regionId: '',
+                    };
+                    clearTransientFeedback();
+                    setRequestedSiteId(nextSiteId);
+                    setRequestedCameraId('');
+                    setRequestedRegionId('');
+                    onSyncUrlSelection?.(nextSiteId);
+                  }}
+                  onSelectCamera={(nextCamId) => {
+                    activeScopeRef.current = {
+                      userId: session.user.id,
+                      siteId: selectedSiteId,
+                      cameraId: nextCamId,
+                      regionId: '',
+                    };
+                    clearTransientFeedback();
+                    setRequestedCameraId(nextCamId);
+                    setRequestedRegionId('');
+                    onSyncUrlSelection?.(selectedSiteId, nextCamId);
+                  }}
+                />
               ) : null}
             </div>
           </>
@@ -1720,805 +1775,769 @@ function RestrictedZoneViewInner({
         </div>
       )}
 
-      {linkedMonitoring ? (
-        session && canRead && selectedCamera ? (
-          <FocusedCameraMedia
-            key={JSON.stringify([sessionScope, selectedSiteId, selectedCameraId])}
-            apiUrl={apiUrl}
-            client={client}
-            token={apiToken}
-            sessionScope={sessionScope}
-            siteId={selectedSiteId}
-            camera={selectedCamera}
-            observationMode="zone"
-            aiPaused={import.meta.env.VITE_AI_WORK_PAUSED === 'true'}
-          />
-        ) : session && canRead && !sites.isPending && (!selectedSiteId || !cameras.isPending) ? (
-          <p role="status">{tr('errors.cameraUnavailable')}</p>
-        ) : null
-      ) : (
-        <>
-          {/* Main Section: Camera Video Viewport (829px) + Verification Card (355px) */}
-          <div className="grid grid-cols-1 xl:grid-cols-[minmax(0,1fr)_minmax(280px,355px)] gap-4 items-start mt-4">
-            {/* Left: Camera Video Feed */}
+      {/* Main Section: Camera Video Viewport (829px) + Verification Card (355px) */}
+      <div className="grid grid-cols-1 xl:grid-cols-[minmax(0,1fr)_minmax(280px,355px)] gap-4 items-start mt-4">
+        {/* Left: Camera Video Feed */}
+        <div
+          ref={containerRef}
+          className="relative bg-[#041D2E] rounded-xl overflow-hidden shadow-sm w-full aspect-video xl:h-[466px] flex flex-col justify-between select-none"
+        >
+          {/* Local MF05 test fixture driven by the video timeline. */}
+          <div className="absolute inset-0">
+            <video
+              ref={videoRef}
+              src="/assets/hazard_restricted_zone_test.mp4"
+              poster="/assets/crane-camera-view.png"
+              autoPlay
+              muted={isMuted}
+              loop
+              playsInline
+              onPlay={() => setIsPlaying(true)}
+              onPause={() => setIsPlaying(false)}
+              onLoadedMetadata={(event) => {
+                const video = event.currentTarget;
+                updateVideoTimeline(video);
+                if (video.videoWidth > 0 && video.videoHeight > 0) {
+                  setVideoNaturalSize({ width: video.videoWidth, height: video.videoHeight });
+                }
+              }}
+              onTimeUpdate={(event) => updateVideoTimeline(event.currentTarget)}
+              aria-label={tr('common.restricted_zone_test_video')}
+              className={`w-full h-full object-cover ${preview ? 'hidden' : ''}`}
+            />
+
+            {preview && <RealtimePreviewCanvas preview={preview} mode="zone" />}
+
+            {/* AI Status Badge */}
             <div
-              ref={containerRef}
-              className="relative bg-[#041D2E] rounded-xl overflow-hidden shadow-sm w-full aspect-video xl:h-[466px] flex flex-col justify-between select-none"
+              className={`absolute top-4 left-1/2 -translate-x-1/2 px-3 py-1 rounded text-[10px] font-black tracking-widest shadow-sm ${
+                testDetection?.active
+                  ? 'bg-[#DF2225]/90 text-white'
+                  : 'bg-slate-900/75 text-white/80'
+              }`}
             >
-              {/* Local MF05 test fixture driven by the video timeline. */}
-              <div className="absolute inset-0">
-                <video
-                  ref={videoRef}
-                  src="/assets/hazard_restricted_zone_test.mp4"
-                  poster="/assets/crane-camera-view.png"
-                  autoPlay
-                  muted={isMuted}
-                  loop
-                  playsInline
-                  onPlay={() => setIsPlaying(true)}
-                  onPause={() => setIsPlaying(false)}
-                  onLoadedMetadata={(event) => {
-                    const video = event.currentTarget;
-                    updateVideoTimeline(video);
-                    if (video.videoWidth > 0 && video.videoHeight > 0) {
-                      setVideoNaturalSize({ width: video.videoWidth, height: video.videoHeight });
-                    }
-                  }}
-                  onTimeUpdate={(event) => updateVideoTimeline(event.currentTarget)}
-                  aria-label={tr('common.restricted_zone_test_video')}
-                  className={`w-full h-full object-cover ${preview ? 'hidden' : ''}`}
-                />
+              {isLive
+                ? tr('common.mf05_ai_realtime')
+                : aiTimeline
+                  ? tr('common.mf05_ai_pipeline')
+                  : tr('restricted_zone_view.mf05_ai_output_required')}{' '}
+              ·{' '}
+              {testDetection
+                ? testDetection.active
+                  ? tr('common.zone_entry')
+                  : tr('labels.SCANNING')
+                : tr('common.no_targets')}{' '}
+              · {isLive ? clockTime : (testDetection?.timecode ?? '00:00')}
+            </div>
 
-                {preview && <RealtimePreviewCanvas preview={preview} mode="zone" />}
+            {/* Horizontal scanning line */}
+            <div className="absolute top-[52%] left-0 right-0 h-[1px] bg-[#F66B17] opacity-60 shadow-[0_0_8px_#F66B17]" />
 
-                {/* AI Status Badge */}
-                <div
-                  className={`absolute top-4 left-1/2 -translate-x-1/2 px-3 py-1 rounded text-[10px] font-black tracking-widest shadow-sm ${
-                    testDetection?.active
-                      ? 'bg-[#DF2225]/90 text-white'
-                      : 'bg-slate-900/75 text-white/80'
-                  }`}
-                >
-                  {isLive
-                    ? tr('common.mf05_ai_realtime')
-                    : aiTimeline
-                      ? tr('common.mf05_ai_pipeline')
-                      : tr('restricted_zone_view.mf05_ai_output_required')}{' '}
-                  ·{' '}
-                  {testDetection
-                    ? testDetection.active
-                      ? tr('common.zone_entry')
-                      : tr('labels.SCANNING')
-                    : tr('common.no_targets')}{' '}
-                  · {isLive ? clockTime : (testDetection?.timecode ?? '00:00')}
-                </div>
-
-                {/* Horizontal scanning line */}
-                <div className="absolute top-[52%] left-0 right-0 h-[1px] bg-[#F66B17] opacity-60 shadow-[0_0_8px_#F66B17]" />
-
-                {/* Manually adjustable restricted-zone polygon mapped through video content area */}
-                <svg
-                  className="absolute inset-0 w-full h-full"
-                  viewBox="0 0 1 1"
-                  preserveAspectRatio="none"
-                  onPointerMove={
-                    isEditingZone &&
-                    (!preview || selectedCamera?.externalId === preview.frame.cameraExternalId)
-                      ? updateZonePoint
-                      : undefined
-                  }
-                  onPointerUp={() => {
-                    activeZonePoint.current = null;
-                  }}
-                  aria-label={tr('common.restricted_zone_editor')}
-                  style={{
-                    visibility:
-                      isLive &&
-                      (!isEditingZone ||
-                        selectedCamera?.externalId !== preview?.frame.cameraExternalId)
-                        ? 'hidden'
-                        : 'visible',
-                  }}
-                >
-                  <polygon
-                    points={displayPolygon.map(([x, y]) => `${x},${y}`).join(' ')}
-                    fill="#DF2225"
-                    fillOpacity={testDetection?.active ? 0.16 : 0.08}
-                    stroke="#DF2225"
+            {/* Manually adjustable restricted-zone polygon mapped through video content area */}
+            <svg
+              className="absolute inset-0 w-full h-full"
+              viewBox="0 0 1 1"
+              preserveAspectRatio="none"
+              onPointerMove={
+                isEditingZone &&
+                (!preview || selectedCamera?.externalId === preview.frame.cameraExternalId)
+                  ? updateZonePoint
+                  : undefined
+              }
+              onPointerUp={() => {
+                activeZonePoint.current = null;
+              }}
+              aria-label={tr('common.restricted_zone_editor')}
+              style={{
+                visibility:
+                  isLive &&
+                  (!isEditingZone || selectedCamera?.externalId !== preview?.frame.cameraExternalId)
+                    ? 'hidden'
+                    : 'visible',
+              }}
+            >
+              <polygon
+                points={displayPolygon.map(([x, y]) => `${x},${y}`).join(' ')}
+                fill="#DF2225"
+                fillOpacity={testDetection?.active ? 0.16 : 0.08}
+                stroke="#DF2225"
+                strokeWidth="0.006"
+                vectorEffect="non-scaling-stroke"
+                pointerEvents="none"
+              />
+              <text
+                x={(displayPolygon[0]?.[0] ?? 0.63) + 0.012}
+                y={(displayPolygon[0]?.[1] ?? 0.2) + 0.035}
+                fill="white"
+                fontSize="0.025"
+                fontWeight="800"
+                letterSpacing="0.06em"
+                style={{ textTransform: 'uppercase' }}
+                pointerEvents="none"
+              >
+                {tr('common.no_entry_zone')}
+              </text>
+              {isEditingZone &&
+                displayPolygon.map(([x, y], index) => (
+                  <circle
+                    key={`zone-point-${index}`}
+                    cx={x}
+                    cy={y}
+                    r="0.018"
+                    fill="#F66B17"
+                    stroke="white"
                     strokeWidth="0.006"
-                    vectorEffect="non-scaling-stroke"
-                    pointerEvents="none"
+                    onPointerDown={(event) => {
+                      activeZonePoint.current = index;
+                      event.currentTarget.setPointerCapture(event.pointerId);
+                    }}
+                    onPointerUp={() => {
+                      activeZonePoint.current = null;
+                    }}
+                    style={{ cursor: 'grab', pointerEvents: 'all' }}
                   />
-                  <text
-                    x={(displayPolygon[0]?.[0] ?? 0.63) + 0.012}
-                    y={(displayPolygon[0]?.[1] ?? 0.2) + 0.035}
-                    fill="white"
-                    fontSize="0.025"
-                    fontWeight="800"
-                    letterSpacing="0.06em"
-                    style={{ textTransform: 'uppercase' }}
-                    pointerEvents="none"
-                  >
-                    {tr('common.no_entry_zone')}
-                  </text>
-                  {isEditingZone &&
-                    displayPolygon.map(([x, y], index) => (
-                      <circle
-                        key={`zone-point-${index}`}
-                        cx={x}
-                        cy={y}
-                        r="0.018"
-                        fill="#F66B17"
-                        stroke="white"
-                        strokeWidth="0.006"
-                        onPointerDown={(event) => {
-                          activeZonePoint.current = index;
-                          event.currentTarget.setPointerCapture(event.pointerId);
-                        }}
-                        onPointerUp={() => {
-                          activeZonePoint.current = null;
-                        }}
-                        style={{ cursor: 'grab', pointerEvents: 'all' }}
-                      />
-                    ))}
-                </svg>
+                ))}
+            </svg>
 
-                {canConfigure && (
-                  <div className="absolute left-4 bottom-16 z-20 flex flex-col gap-1.5 items-start">
+            {canConfigure && (
+              <div className="absolute left-4 bottom-16 z-20 flex flex-col gap-1.5 items-start">
+                <div className="flex items-center gap-2">
+                  {!isEditingZone ? (
                     <div className="flex items-center gap-2">
-                      {!isEditingZone ? (
-                        <div className="flex items-center gap-2">
-                          <button
-                            onClick={() => setIsEditingZone(true)}
-                            disabled={
-                              isLive &&
-                              selectedCamera?.externalId !== preview?.frame.cameraExternalId
-                            }
-                            title={
-                              isLive
-                                ? tr(
-                                    'restricted_zone_view.select_the_matching_backend_camera_before_editing_this_preview',
-                                  )
-                                : tr('common.edit_zone_draft')
-                            }
-                            className="rounded bg-slate-950/80 px-3 py-1.5 text-[10px] font-bold tracking-wide text-white backdrop-blur-sm hover:bg-slate-950 cursor-pointer"
-                          >
-                            {tr('common.edit_zone_8924f0')}
-                          </button>
-                          {isDraftMode && (
-                            <span className="rounded bg-amber-500/90 px-2 py-1 text-[9px] font-bold text-white backdrop-blur-sm ">
-                              {tr('common.unsaved_draft')}
-                            </span>
-                          )}
-                        </div>
-                      ) : (
-                        <>
-                          {session && selectedCamera && selectedRegion ? (
-                            <button
-                              onClick={handleSaveToBackend}
-                              disabled={savePolygonMutation.isPending}
-                              className="rounded bg-emerald-600 px-3 py-1.5 text-[10px] font-bold tracking-wide text-white shadow hover:bg-emerald-700 disabled:opacity-60 cursor-pointer"
-                            >
-                              {savePolygonMutation.isPending
-                                ? tr('common.saving_to_backend')
-                                : tr('common.save_to_backend')}
-                            </button>
-                          ) : null}
-                          <button
-                            onClick={saveDraft}
-                            className="rounded bg-amber-600 px-3 py-1.5 text-[10px] font-bold tracking-wide text-white shadow hover:bg-amber-700 cursor-pointer"
-                          >
-                            {tr('common.save_local_draft')}
-                          </button>
-                          <button
-                            onClick={resetToAuthoritative}
-                            className="rounded bg-slate-950/80 px-3 py-1.5 text-[10px] font-bold tracking-wide text-white backdrop-blur-sm hover:bg-slate-950 cursor-pointer"
-                          >
-                            {session && selectedRegion
-                              ? tr('common.reset_to_server')
-                              : tr('labels.RESET')}
-                          </button>
-                          <button
-                            onClick={exportZone}
-                            className="rounded bg-[#F66B17] px-3 py-1.5 text-[10px] font-bold tracking-wide text-white shadow hover:bg-[#E05A0B] cursor-pointer"
-                          >
-                            {tr('common.export_draft_json')}
-                          </button>
-                        </>
+                      <button
+                        onClick={() => setIsEditingZone(true)}
+                        disabled={
+                          isLive && selectedCamera?.externalId !== preview?.frame.cameraExternalId
+                        }
+                        title={
+                          isLive
+                            ? tr(
+                                'restricted_zone_view.select_the_matching_backend_camera_before_editing_this_preview',
+                              )
+                            : tr('common.edit_zone_draft')
+                        }
+                        className="rounded bg-slate-950/80 px-3 py-1.5 text-[10px] font-bold tracking-wide text-white backdrop-blur-sm hover:bg-slate-950 cursor-pointer"
+                      >
+                        {tr('common.edit_zone_8924f0')}
+                      </button>
+                      {isDraftMode && (
+                        <span className="rounded bg-amber-500/90 px-2 py-1 text-[9px] font-bold text-white backdrop-blur-sm ">
+                          {tr('common.unsaved_draft')}
+                        </span>
                       )}
                     </div>
-                    {saveStatusMessage && (
-                      <div className="rounded bg-black/75 px-2.5 py-1 text-[10px] font-medium text-amber-200 backdrop-blur-sm border border-amber-500/30">
-                        {localizeMessage(saveStatusMessage)}
-                      </div>
-                    )}
+                  ) : (
+                    <>
+                      {session && selectedCamera && selectedRegion ? (
+                        <button
+                          onClick={handleSaveToBackend}
+                          disabled={savePolygonMutation.isPending}
+                          className="rounded bg-emerald-600 px-3 py-1.5 text-[10px] font-bold tracking-wide text-white shadow hover:bg-emerald-700 disabled:opacity-60 cursor-pointer"
+                        >
+                          {savePolygonMutation.isPending
+                            ? tr('common.saving_to_backend')
+                            : tr('common.save_to_backend')}
+                        </button>
+                      ) : null}
+                      <button
+                        onClick={saveDraft}
+                        className="rounded bg-amber-600 px-3 py-1.5 text-[10px] font-bold tracking-wide text-white shadow hover:bg-amber-700 cursor-pointer"
+                      >
+                        {tr('common.save_local_draft')}
+                      </button>
+                      <button
+                        onClick={resetToAuthoritative}
+                        className="rounded bg-slate-950/80 px-3 py-1.5 text-[10px] font-bold tracking-wide text-white backdrop-blur-sm hover:bg-slate-950 cursor-pointer"
+                      >
+                        {session && selectedRegion
+                          ? tr('common.reset_to_server')
+                          : tr('labels.RESET')}
+                      </button>
+                      <button
+                        onClick={exportZone}
+                        className="rounded bg-[#F66B17] px-3 py-1.5 text-[10px] font-bold tracking-wide text-white shadow hover:bg-[#E05A0B] cursor-pointer"
+                      >
+                        {tr('common.export_draft_json')}
+                      </button>
+                    </>
+                  )}
+                </div>
+                {saveStatusMessage && (
+                  <div className="rounded bg-black/75 px-2.5 py-1 text-[10px] font-medium text-amber-200 backdrop-blur-sm border border-amber-500/30">
+                    {localizeMessage(saveStatusMessage)}
                   </div>
                 )}
+              </div>
+            )}
 
-                {/* Render one bounding box per active zone-entry track */}
-                {!isLive &&
-                  activeZoneDetections.map((detection) =>
-                    detection.boundingBox ? (
-                      <div
-                        key={`${detection.eventId}-${detection.trackId}`}
-                        className="absolute border-[1.6px] border-[#DF2225] pointer-events-none transition-all duration-300"
-                        style={{
-                          left: `${detection.boundingBox.x1 * 100}%`,
-                          top: `${detection.boundingBox.y1 * 100}%`,
-                          width: `${(detection.boundingBox.x2 - detection.boundingBox.x1) * 100}%`,
-                          height: `${(detection.boundingBox.y2 - detection.boundingBox.y1) * 100}%`,
-                        }}
-                      >
-                        <div className="absolute -top-[18px] left-[-1.6px] px-1.5 py-0.5 bg-[#DF2225] text-white text-[9px] font-extrabold uppercase tracking-wide whitespace-nowrap shadow-sm">
-                          {tr('ppe_monitoring_view.value_track_value', {
-                            value1: localizedDetectionLabel(detection.label),
-                            value2: detection.trackId,
-                          })}
-                        </div>
-                      </div>
-                    ) : null,
-                  )}
-
-                {/* Empty live frame indicator */}
-                {isLive && zoneDetections.length === 0 && (
-                  <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
-                    <div className="bg-black/60 backdrop-blur-sm px-4 py-2 rounded text-white/90 text-xs font-semibold">
-                      {tr('restricted_zone_view.live_feed_connected_no_restricted_zone_intrusions')}
+            {/* Render one bounding box per active zone-entry track */}
+            {!isLive &&
+              activeZoneDetections.map((detection) =>
+                detection.boundingBox ? (
+                  <div
+                    key={`${detection.eventId}-${detection.trackId}`}
+                    className="absolute border-[1.6px] border-[#DF2225] pointer-events-none transition-all duration-300"
+                    style={{
+                      left: `${detection.boundingBox.x1 * 100}%`,
+                      top: `${detection.boundingBox.y1 * 100}%`,
+                      width: `${(detection.boundingBox.x2 - detection.boundingBox.x1) * 100}%`,
+                      height: `${(detection.boundingBox.y2 - detection.boundingBox.y1) * 100}%`,
+                    }}
+                  >
+                    <div className="absolute -top-[18px] left-[-1.6px] px-1.5 py-0.5 bg-[#DF2225] text-white text-[9px] font-extrabold uppercase tracking-wide whitespace-nowrap shadow-sm">
+                      {tr('ppe_monitoring_view.value_track_value', {
+                        value1: localizedDetectionLabel(detection.label),
+                        value2: detection.trackId,
+                      })}
                     </div>
                   </div>
-                )}
-              </div>
-
-              {/* Top Header Overlay */}
-              <div className="relative z-10 px-5 py-4 flex items-start justify-between text-white">
-                <div className="flex flex-col gap-0.5">
-                  <span className="font-bold text-sm tracking-wide text-white drop-shadow-md">
-                    {activeCameraContext.camera}
-                  </span>
-                  <span className="text-white/90 font-semibold text-xs tracking-wider uppercase drop-shadow-md">
-                    {activeCameraContext.workArea}
-                  </span>
-                </div>
-                <div className="flex items-center gap-2 px-3 py-1 rounded bg-black/60 backdrop-blur-sm">
-                  <span
-                    className={`w-1.5 h-1.5 rounded-full ${
-                      isLive && socketConnected
-                        ? 'bg-[#DF2225] animate-ping'
-                        : socketError
-                          ? 'bg-amber-400'
-                          : 'bg-slate-400'
-                    }`}
-                  />
-                  <span className="font-mono text-[10px] font-bold text-white tracking-wider">
-                    {isLive && socketConnected
-                      ? tr('common.live_value', { value1: clockTime })
-                      : socketError
-                        ? tr('common.offline_socket_error')
-                        : tr('common.timeline_value', {
-                            value1: testDetection?.timecode ?? '00:00',
-                          })}
-                  </span>
-                </div>
-              </div>
-
-              {/* Socket error message banner if present */}
-              {socketError && (
-                <div className="relative z-10 px-5 py-1.5 bg-amber-900/80 text-amber-200 text-xs flex items-center gap-2 backdrop-blur-sm">
-                  <IconAlertTriangle className="w-3.5 h-3.5 flex-shrink-0 text-amber-400" />
-                  <span className="truncate">
-                    {tr('common.ai_websocket_value', { value1: socketError })}
-                  </span>
-                </div>
+                ) : null,
               )}
 
-              {/* Bottom Camera Controls Bar Overlay */}
-              <div className="relative z-10 px-5 py-3 bg-gradient-to-t from-black/60 to-transparent flex items-center justify-between text-white text-xs opacity-0 hover:opacity-100 focus-within:opacity-100 transition-opacity">
-                <div className="flex items-center gap-3">
-                  <button
-                    type="button"
-                    onClick={togglePlayback}
-                    disabled={isLive}
-                    className="p-1.5 rounded hover:bg-white/15 text-white transition-colors cursor-pointer disabled:cursor-not-allowed"
-                    aria-label={
-                      isPlaying ? tr('common.pause_playback') : tr('common.resume_playback')
-                    }
-                    title={
-                      isLive
-                        ? tr('ppe_monitoring_view.playback_controls_apply_to_timeline_replay_only')
-                        : isPlaying
-                          ? tr('common.pause')
-                          : tr('common.play')
-                    }
-                  >
-                    {isPlaying ? (
-                      <IconPause className="w-4 h-4" />
-                    ) : (
-                      <IconPlay className="w-4 h-4" />
-                    )}
-                  </button>
-                  <button
-                    type="button"
-                    onClick={toggleMuted}
-                    disabled={isLive}
-                    className="p-1.5 rounded hover:bg-white/15 text-white transition-colors cursor-pointer disabled:cursor-not-allowed"
-                    aria-label={isMuted ? tr('common.unmute_audio') : tr('common.mute_audio')}
-                    title={
-                      isLive
-                        ? tr('ppe_monitoring_view.realtime_preview_has_no_audio')
-                        : tr('common.sound')
-                    }
-                  >
-                    <IconVolume className="w-4 h-4" />
-                  </button>
+            {/* Empty live frame indicator */}
+            {isLive && zoneDetections.length === 0 && (
+              <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
+                <div className="bg-black/60 backdrop-blur-sm px-4 py-2 rounded text-white/90 text-xs font-semibold">
+                  {tr('restricted_zone_view.live_feed_connected_no_restricted_zone_intrusions')}
                 </div>
+              </div>
+            )}
+          </div>
 
-                <div className="flex items-center gap-3">
-                  <button
-                    type="button"
-                    disabled
-                    className="p-1.5 rounded text-white/40 cursor-not-allowed"
-                    title={tr(
-                      'ppe_monitoring_view.multi_camera_grid_view_is_currently_unavailable',
-                    )}
-                    aria-label={tr('common.grid_view_unavailable')}
-                  >
-                    <IconGrid className="w-4 h-4" />
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => void videoRef.current?.requestFullscreen()}
-                    className="p-1.5 rounded hover:bg-white/15 text-white transition-colors cursor-pointer"
-                    title={tr('common.fullscreen')}
-                    aria-label={tr('common.enter_fullscreen')}
-                  >
-                    <IconMaximize className="w-4 h-4" />
-                  </button>
-                </div>
+          {/* Top Header Overlay */}
+          <div className="relative z-10 px-5 py-4 flex items-start justify-between text-white">
+            <div className="flex flex-col gap-0.5">
+              <span className="font-bold text-sm tracking-wide text-white drop-shadow-md">
+                {activeCameraContext.camera}
+              </span>
+              <span className="text-white/90 font-semibold text-xs tracking-wider uppercase drop-shadow-md">
+                {activeCameraContext.workArea}
+              </span>
+            </div>
+            <div className="flex items-center gap-2 px-3 py-1 rounded bg-black/60 backdrop-blur-sm">
+              <span
+                className={`w-1.5 h-1.5 rounded-full ${
+                  isLive && socketConnected
+                    ? 'bg-[#DF2225] animate-ping'
+                    : socketError
+                      ? 'bg-amber-400'
+                      : 'bg-slate-400'
+                }`}
+              />
+              <span className="font-mono text-[10px] font-bold text-white tracking-wider">
+                {isLive && socketConnected
+                  ? tr('common.live_value', { value1: clockTime })
+                  : socketError
+                    ? tr('common.offline_socket_error')
+                    : tr('common.timeline_value', {
+                        value1: testDetection?.timecode ?? '00:00',
+                      })}
+              </span>
+            </div>
+          </div>
+
+          {/* Socket error message banner if present */}
+          {socketError && (
+            <div className="relative z-10 px-5 py-1.5 bg-amber-900/80 text-amber-200 text-xs flex items-center gap-2 backdrop-blur-sm">
+              <IconAlertTriangle className="w-3.5 h-3.5 flex-shrink-0 text-amber-400" />
+              <span className="truncate">
+                {tr('common.ai_websocket_value', { value1: socketError })}
+              </span>
+            </div>
+          )}
+
+          {/* Bottom Camera Controls Bar Overlay */}
+          <div className="relative z-10 px-5 py-3 bg-gradient-to-t from-black/60 to-transparent flex items-center justify-between text-white text-xs opacity-0 hover:opacity-100 focus-within:opacity-100 transition-opacity">
+            <div className="flex items-center gap-3">
+              <button
+                type="button"
+                onClick={togglePlayback}
+                disabled={isLive}
+                className="p-1.5 rounded hover:bg-white/15 text-white transition-colors cursor-pointer disabled:cursor-not-allowed"
+                aria-label={isPlaying ? tr('common.pause_playback') : tr('common.resume_playback')}
+                title={
+                  isLive
+                    ? tr('ppe_monitoring_view.playback_controls_apply_to_timeline_replay_only')
+                    : isPlaying
+                      ? tr('common.pause')
+                      : tr('common.play')
+                }
+              >
+                {isPlaying ? <IconPause className="w-4 h-4" /> : <IconPlay className="w-4 h-4" />}
+              </button>
+              <button
+                type="button"
+                onClick={toggleMuted}
+                disabled={isLive}
+                className="p-1.5 rounded hover:bg-white/15 text-white transition-colors cursor-pointer disabled:cursor-not-allowed"
+                aria-label={isMuted ? tr('common.unmute_audio') : tr('common.mute_audio')}
+                title={
+                  isLive
+                    ? tr('ppe_monitoring_view.realtime_preview_has_no_audio')
+                    : tr('common.sound')
+                }
+              >
+                <IconVolume className="w-4 h-4" />
+              </button>
+            </div>
+
+            <div className="flex items-center gap-3">
+              <button
+                type="button"
+                disabled
+                className="p-1.5 rounded text-white/40 cursor-not-allowed"
+                title={tr('ppe_monitoring_view.multi_camera_grid_view_is_currently_unavailable')}
+                aria-label={tr('common.grid_view_unavailable')}
+              >
+                <IconGrid className="w-4 h-4" />
+              </button>
+              <button
+                type="button"
+                onClick={() => void videoRef.current?.requestFullscreen()}
+                className="p-1.5 rounded hover:bg-white/15 text-white transition-colors cursor-pointer"
+                title={tr('common.fullscreen')}
+                aria-label={tr('common.enter_fullscreen')}
+              >
+                <IconMaximize className="w-4 h-4" />
+              </button>
+            </div>
+          </div>
+        </div>
+
+        {/* Right: Sidebar Verification Card (355px) */}
+        <div className="bg-white rounded-xl shadow-sm border border-[#EAEAEA] flex flex-col justify-between h-[600px] xl:h-[466px] overflow-y-auto min-w-0">
+          <div className="p-6 space-y-6">
+            {/* Header */}
+            <div className="flex flex-wrap items-center justify-between gap-2 pb-2 min-w-0">
+              <span className="text-xs font-bold text-[#6B6B6B] uppercase tracking-widest">
+                {tr('common.detection_details')}
+              </span>
+              <span className="max-w-full break-all font-mono text-[11px] font-semibold text-[#6B6B6B]">
+                {testDetection?.eventId ?? tr('common.no_detection')}
+              </span>
+            </div>
+
+            {/* 2-Column Metadata Grid */}
+            <div className="grid grid-cols-2 gap-x-4 gap-y-4">
+              <div>
+                <p className="text-[10px] font-bold text-[#6B6B6B] uppercase tracking-wider">
+                  {tr('common.identity')}
+                </p>
+                <p className="font-semibold text-[#2F3437] text-[13px] mt-1">
+                  {testDetection?.trackId !== null && testDetection?.trackId !== undefined
+                    ? tr('ppe_monitoring_view.unknown_not_identified')
+                    : tr('common.no_person_detected')}
+                </p>
+              </div>
+              <div>
+                <p className="text-[10px] font-bold text-[#6B6B6B] uppercase tracking-wider">
+                  {tr('common.track_id')}
+                </p>
+                <p className="font-semibold text-[#2F3437] text-[13px] mt-1">
+                  {zoneDetections
+                    .filter((detection) => detection.trackId !== null)
+                    .map((detection) => tr('messages.2c6bb8488230', { value1: detection.trackId }))
+                    .join(', ') || '—'}
+                </p>
+              </div>
+              <div>
+                <p className="text-[10px] font-bold text-[#6B6B6B] uppercase tracking-wider">
+                  {tr('common.camera')}
+                </p>
+                <p className="font-semibold text-[#2F3437] text-[13px] mt-1">
+                  {activeCameraContext.camera}
+                </p>
+              </div>
+              <div>
+                <p className="text-[10px] font-bold text-[#6B6B6B] uppercase tracking-wider">
+                  {tr('common.zone')}
+                </p>
+                <p className="font-semibold text-[#2F3437] text-[13px] mt-1 truncate">
+                  {activeCameraContext.workArea}
+                </p>
+              </div>
+              <div>
+                <p className="text-[10px] font-bold text-[#6B6B6B] uppercase tracking-wider">
+                  {tr('common.detected')}
+                </p>
+                <p className="font-semibold text-[#2F3437] text-[13px] mt-1">
+                  {isLive ? clockTime : (testDetection?.timecode ?? '00:00')}
+                </p>
+              </div>
+              <div>
+                <p className="text-[10px] font-bold text-[#6B6B6B] uppercase tracking-wider">
+                  {tr('common.detection_confidence')}
+                </p>
+                <p className="font-semibold text-[#2F3437] text-[13px] mt-1">
+                  {testDetection?.confidence === null || testDetection?.confidence === undefined
+                    ? '—'
+                    : `${Math.round(testDetection.confidence * 100)}%`}
+                </p>
               </div>
             </div>
 
-            {/* Right: Sidebar Verification Card (355px) */}
-            <div className="bg-white rounded-xl shadow-sm border border-[#EAEAEA] flex flex-col justify-between h-[600px] xl:h-[466px] overflow-y-auto min-w-0">
-              <div className="p-6 space-y-6">
-                {/* Header */}
-                <div className="flex flex-wrap items-center justify-between gap-2 pb-2 min-w-0">
-                  <span className="text-xs font-bold text-[#6B6B6B] uppercase tracking-widest">
-                    {tr('common.detection_details')}
-                  </span>
-                  <span className="max-w-full break-all font-mono text-[11px] font-semibold text-[#6B6B6B]">
-                    {testDetection?.eventId ?? tr('common.no_detection')}
-                  </span>
-                </div>
+            <div className="h-px bg-[#F7F6F3] w-full" />
 
-                {/* 2-Column Metadata Grid */}
-                <div className="grid grid-cols-2 gap-x-4 gap-y-4">
-                  <div>
-                    <p className="text-[10px] font-bold text-[#6B6B6B] uppercase tracking-wider">
-                      {tr('common.identity')}
-                    </p>
-                    <p className="font-semibold text-[#2F3437] text-[13px] mt-1">
+            {/* Verification Heading */}
+            <div>
+              <p className="text-[10px] font-bold text-[#6B6B6B] uppercase tracking-widest mb-4">
+                {tr('common.verification')}
+              </p>
+
+              {/* Verification items */}
+              <div className="space-y-2">
+                <div className="flex items-center justify-between p-3 rounded-lg bg-[#FBFBFA]">
+                  <div className="flex flex-col gap-0.5">
+                    <p className="font-semibold text-[#2F3437] text-xs">{tr('common.identity')}</p>
+                    <p className="text-[11px] text-[#6B6B6B]">
                       {testDetection?.trackId !== null && testDetection?.trackId !== undefined
                         ? tr('ppe_monitoring_view.unknown_not_identified')
                         : tr('common.no_person_detected')}
                     </p>
                   </div>
-                  <div>
-                    <p className="text-[10px] font-bold text-[#6B6B6B] uppercase tracking-wider">
-                      {tr('common.track_id')}
-                    </p>
-                    <p className="font-semibold text-[#2F3437] text-[13px] mt-1">
-                      {zoneDetections
-                        .filter((detection) => detection.trackId !== null)
-                        .map((detection) =>
-                          tr('messages.2c6bb8488230', { value1: detection.trackId }),
-                        )
-                        .join(', ') || '—'}
-                    </p>
-                  </div>
-                  <div>
-                    <p className="text-[10px] font-bold text-[#6B6B6B] uppercase tracking-wider">
-                      {tr('common.camera')}
-                    </p>
-                    <p className="font-semibold text-[#2F3437] text-[13px] mt-1">
-                      {activeCameraContext.camera}
-                    </p>
-                  </div>
-                  <div>
-                    <p className="text-[10px] font-bold text-[#6B6B6B] uppercase tracking-wider">
-                      {tr('common.zone')}
-                    </p>
-                    <p className="font-semibold text-[#2F3437] text-[13px] mt-1 truncate">
-                      {activeCameraContext.workArea}
-                    </p>
-                  </div>
-                  <div>
-                    <p className="text-[10px] font-bold text-[#6B6B6B] uppercase tracking-wider">
-                      {tr('common.detected')}
-                    </p>
-                    <p className="font-semibold text-[#2F3437] text-[13px] mt-1">
-                      {isLive ? clockTime : (testDetection?.timecode ?? '00:00')}
-                    </p>
-                  </div>
-                  <div>
-                    <p className="text-[10px] font-bold text-[#6B6B6B] uppercase tracking-wider">
-                      {tr('common.detection_confidence')}
-                    </p>
-                    <p className="font-semibold text-[#2F3437] text-[13px] mt-1">
-                      {testDetection?.confidence === null || testDetection?.confidence === undefined
-                        ? '—'
-                        : `${Math.round(testDetection.confidence * 100)}%`}
-                    </p>
-                  </div>
+                  <IconClock className="w-5 h-5 text-[#A3A09C]" />
                 </div>
 
-                <div className="h-px bg-[#F7F6F3] w-full" />
-
-                {/* Verification Heading */}
-                <div>
-                  <p className="text-[10px] font-bold text-[#6B6B6B] uppercase tracking-widest mb-4">
-                    {tr('common.verification')}
-                  </p>
-
-                  {/* Verification items */}
-                  <div className="space-y-2">
-                    <div className="flex items-center justify-between p-3 rounded-lg bg-[#FBFBFA]">
-                      <div className="flex flex-col gap-0.5">
-                        <p className="font-semibold text-[#2F3437] text-xs">
-                          {tr('common.identity')}
-                        </p>
-                        <p className="text-[11px] text-[#6B6B6B]">
-                          {testDetection?.trackId !== null && testDetection?.trackId !== undefined
-                            ? tr('ppe_monitoring_view.unknown_not_identified')
-                            : tr('common.no_person_detected')}
-                        </p>
-                      </div>
-                      <IconClock className="w-5 h-5 text-[#A3A09C]" />
-                    </div>
-
-                    <div className="flex items-center justify-between p-3 rounded-lg bg-[#FBFBFA]">
-                      <div className="flex flex-col gap-0.5">
-                        <p className="font-semibold text-[#2F3437] text-xs">
-                          {tr('common.site_assignment_1c7828')}
-                        </p>
-                        <p className="text-[11px] text-[#6B6B6B]">{tr('common.not_evaluated')}</p>
-                      </div>
-                      <IconClock className="w-5 h-5 text-[#A3A09C]" />
-                    </div>
-
-                    <div className="flex items-center justify-between p-3 rounded-lg bg-[#FBFBFA]">
-                      <div className="flex flex-col gap-0.5">
-                        <p className="font-semibold text-[#2F3437] text-xs">
-                          {tr('common.zone_permission')}
-                        </p>
-                        <p className="text-[11px] text-[#6B6B6B]">
-                          {tr('common.backend_evaluation_required')}
-                        </p>
-                      </div>
-                      <IconClock className="w-5 h-5 text-[#A3A09C]" />
-                    </div>
-
-                    <div className="flex items-center justify-between px-2 pt-2 pb-1 text-xs text-[#6B6B6B]">
-                      <span>{tr('common.permission_validity')}</span>
-                      <span className="font-bold text-slate-300">—</span>
-                    </div>
+                <div className="flex items-center justify-between p-3 rounded-lg bg-[#FBFBFA]">
+                  <div className="flex flex-col gap-0.5">
+                    <p className="font-semibold text-[#2F3437] text-xs">
+                      {tr('common.site_assignment_1c7828')}
+                    </p>
+                    <p className="text-[11px] text-[#6B6B6B]">{tr('common.not_evaluated')}</p>
                   </div>
+                  <IconClock className="w-5 h-5 text-[#A3A09C]" />
                 </div>
 
-                {/* Result Alert Box */}
-                <div className="pt-1">
-                  <div
-                    className={`border-l-[3px] pl-3 ${
-                      testDetection?.active ? 'border-red-500' : 'border-[#EAEAEA]'
-                    }`}
-                  >
-                    <p className="text-[9px] font-bold uppercase tracking-widest text-[#6B6B6B] mb-1">
-                      {tr('common.result')}
+                <div className="flex items-center justify-between p-3 rounded-lg bg-[#FBFBFA]">
+                  <div className="flex flex-col gap-0.5">
+                    <p className="font-semibold text-[#2F3437] text-xs">
+                      {tr('common.zone_permission')}
                     </p>
-                    <div
-                      className={`flex items-center gap-1.5 text-xs font-bold mb-1 ${
-                        testDetection?.active ? 'text-red-500' : 'text-[#6B6B6B]'
-                      }`}
-                    >
-                      {testDetection?.active && <IconAlertTriangle className="w-3.5 h-3.5" />}
-                      <span>
-                        {testDetection?.active
-                          ? tr('common.zone_entry_observation')
-                          : zoneDetections.length === 0
-                            ? tr('ppe_monitoring_view.clear_no_targets')
-                            : tr('common.scanning_video')}
-                      </span>
-                    </div>
-                    <p className="text-xs text-[#6B6B6B]">
-                      {testDetection?.active
-                        ? tr(
-                            'restricted_zone_view.technical_zone_entry_observation_backend_decides_authorization_and_violation',
-                          )
-                        : isLive
-                          ? tr('ppe_monitoring_view.streaming_live_inference_from_ai_websocket')
-                          : tr(
-                              'restricted_zone_view.generate_zone_ai_timeline_json_then_play_the_matching_video',
-                            )}
+                    <p className="text-[11px] text-[#6B6B6B]">
+                      {tr('common.backend_evaluation_required')}
                     </p>
                   </div>
+                  <IconClock className="w-5 h-5 text-[#A3A09C]" />
+                </div>
+
+                <div className="flex items-center justify-between px-2 pt-2 pb-1 text-xs text-[#6B6B6B]">
+                  <span>{tr('common.permission_validity')}</span>
+                  <span className="font-bold text-slate-300">—</span>
                 </div>
               </div>
+            </div>
 
-              {/* Action Buttons */}
-              <div className="p-6 pt-0 space-y-2">
-                <button
-                  onClick={openReviewFromDetection}
-                  disabled={!testDetection?.active}
-                  className={`w-full py-2.5 px-4 rounded-lg font-semibold text-sm shadow-sm transition-colors cursor-pointer ${
-                    testDetection?.active
-                      ? 'bg-[#F66B17] hover:bg-[#E05A0B] text-white'
-                      : 'bg-[#F7F6F3] text-[#A3A09C] cursor-not-allowed'
+            {/* Result Alert Box */}
+            <div className="pt-1">
+              <div
+                className={`border-l-[3px] pl-3 ${
+                  testDetection?.active ? 'border-red-500' : 'border-[#EAEAEA]'
+                }`}
+              >
+                <p className="text-[9px] font-bold uppercase tracking-widest text-[#6B6B6B] mb-1">
+                  {tr('common.result')}
+                </p>
+                <div
+                  className={`flex items-center gap-1.5 text-xs font-bold mb-1 ${
+                    testDetection?.active ? 'text-red-500' : 'text-[#6B6B6B]'
                   }`}
                 >
-                  {tr('common.review_incident')}
-                </button>
-                <button
-                  onClick={() => {
-                    if (testDetection?.trackId !== null && testDetection?.trackId !== undefined) {
-                      setActiveFilterWorker((prev) =>
-                        prev === testDetection.trackId ? null : testDetection.trackId,
-                      );
-                    }
-                  }}
-                  className="w-full py-2.5 px-4 rounded-lg bg-white border border-[#EAEAEA] text-[#2F3437] font-semibold text-sm hover:bg-[#FBFBFA] transition-colors cursor-pointer"
-                >
-                  {activeFilterWorker !== null
-                    ? tr('ppe_monitoring_view.clear_worker_filter_value', {
-                        value1: activeFilterWorker,
-                      })
-                    : testDetection?.trackId !== null && testDetection?.trackId !== undefined
-                      ? tr('ppe_monitoring_view.filter_by_worker_track_value', {
-                          value1: testDetection.trackId,
-                        })
-                      : tr('ppe_monitoring_view.view_worker_no_target')}
-                </button>
+                  {testDetection?.active && <IconAlertTriangle className="w-3.5 h-3.5" />}
+                  <span>
+                    {testDetection?.active
+                      ? tr('common.zone_entry_observation')
+                      : zoneDetections.length === 0
+                        ? tr('ppe_monitoring_view.clear_no_targets')
+                        : tr('common.scanning_video')}
+                  </span>
+                </div>
+                <p className="text-xs text-[#6B6B6B]">
+                  {testDetection?.active
+                    ? tr(
+                        'restricted_zone_view.technical_zone_entry_observation_backend_decides_authorization_and_violation',
+                      )
+                    : isLive
+                      ? tr('ppe_monitoring_view.streaming_live_inference_from_ai_websocket')
+                      : tr(
+                          'restricted_zone_view.generate_zone_ai_timeline_json_then_play_the_matching_video',
+                        )}
+                </p>
               </div>
             </div>
           </div>
 
-          {/* Live AI Observations status or Replay Observations Table */}
-          {isLive ? (
-            <div className="bg-white rounded-xl shadow-sm border border-[#EAEAEA] p-6 space-y-3">
-              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-                <div className="space-y-1">
-                  <div className="flex items-center gap-2">
-                    <span className="w-2 h-2 rounded-full bg-[#DF2225] animate-ping" />
-                    <h3 className="text-sm font-bold text-[#2F3437] uppercase tracking-wider">
-                      {tr('restricted_zone_view.live_zone_observations_active')}
-                    </h3>
-                  </div>
-                  <p className="text-xs text-[#6B6B6B] max-w-2xl leading-relaxed">
-                    {tr(
-                      'restricted_zone_view.technical_zone_entry_detections_are_rendered_directly_on_the_live_camera_feed_abov',
-                    )}
-                  </p>
-                </div>
-                {onNavigate && (
-                  <button
-                    type="button"
-                    onClick={() =>
-                      onNavigate('incidents', { alertType: 'RESTRICTED_ZONE_INTRUSION' })
-                    }
-                    className="self-start sm:self-auto px-3.5 py-2 rounded-lg border border-red-300 bg-red-50 text-[#DF2225] hover:bg-red-100 text-xs font-semibold transition-colors cursor-pointer whitespace-nowrap shadow-xs"
-                  >
-                    {tr('ppe_monitoring_view.view_in_safety_alerts')}
-                  </button>
+          {/* Action Buttons */}
+          <div className="p-6 pt-0 space-y-2">
+            <button
+              onClick={openReviewFromDetection}
+              disabled={!testDetection?.active}
+              className={`w-full py-2.5 px-4 rounded-lg font-semibold text-sm shadow-sm transition-colors cursor-pointer ${
+                testDetection?.active
+                  ? 'bg-[#F66B17] hover:bg-[#E05A0B] text-white'
+                  : 'bg-[#F7F6F3] text-[#A3A09C] cursor-not-allowed'
+              }`}
+            >
+              {tr('common.review_incident')}
+            </button>
+            <button
+              onClick={() => {
+                if (testDetection?.trackId !== null && testDetection?.trackId !== undefined) {
+                  setActiveFilterWorker((prev) =>
+                    prev === testDetection.trackId ? null : testDetection.trackId,
+                  );
+                }
+              }}
+              className="w-full py-2.5 px-4 rounded-lg bg-white border border-[#EAEAEA] text-[#2F3437] font-semibold text-sm hover:bg-[#FBFBFA] transition-colors cursor-pointer"
+            >
+              {activeFilterWorker !== null
+                ? tr('ppe_monitoring_view.clear_worker_filter_value', {
+                    value1: activeFilterWorker,
+                  })
+                : testDetection?.trackId !== null && testDetection?.trackId !== undefined
+                  ? tr('ppe_monitoring_view.filter_by_worker_track_value', {
+                      value1: testDetection.trackId,
+                    })
+                  : tr('ppe_monitoring_view.view_worker_no_target')}
+            </button>
+          </div>
+        </div>
+      </div>
+
+      {/* Live AI Observations status or Replay Observations Table */}
+      {isLive ? (
+        <div className="bg-white rounded-xl shadow-sm border border-[#EAEAEA] p-6 space-y-3">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+            <div className="space-y-1">
+              <div className="flex items-center gap-2">
+                <span className="w-2 h-2 rounded-full bg-[#DF2225] animate-ping" />
+                <h3 className="text-sm font-bold text-[#2F3437] uppercase tracking-wider">
+                  {tr('restricted_zone_view.live_zone_observations_active')}
+                </h3>
+              </div>
+              <p className="text-xs text-[#6B6B6B] max-w-2xl leading-relaxed">
+                {tr(
+                  'restricted_zone_view.technical_zone_entry_detections_are_rendered_directly_on_the_live_camera_feed_abov',
                 )}
-              </div>
+              </p>
             </div>
-          ) : (
-            <div className="bg-white rounded-xl shadow-sm border border-[#EAEAEA] p-6 space-y-4">
-              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-                <div>
-                  <h3 className="text-lg font-bold text-[#2F3437]">
-                    {tr('common.zone_replay_observations')}
-                  </h3>
-                  <p className="text-xs text-[#6B6B6B] mt-1">
-                    {tr(
-                      'ppe_monitoring_view.observations_from_the_sample_video_timeline_live_safety_alerts_are_available_in_sa',
-                      {
-                        value1:
-                          activeFilterWorker !== null &&
-                          tr('messages.becfe40eedac', { value1: activeFilterWorker }),
-                      },
-                    )}
-                  </p>
-                </div>
-                <div className="flex items-center gap-2 flex-wrap">
-                  {onNavigate && (
-                    <button
-                      type="button"
-                      onClick={() =>
-                        onNavigate('incidents', { alertType: 'RESTRICTED_ZONE_INTRUSION' })
-                      }
-                      className="px-2.5 py-1.5 rounded-lg border border-red-300 bg-red-50 text-[#DF2225] hover:bg-red-100 text-xs font-semibold transition-colors cursor-pointer"
-                    >
-                      {tr('ppe_monitoring_view.view_in_safety_alerts')}
-                    </button>
+            {onNavigate && (
+              <button
+                type="button"
+                onClick={() => onNavigate('incidents', { alertType: 'RESTRICTED_ZONE_INTRUSION' })}
+                className="self-start sm:self-auto px-3.5 py-2 rounded-lg border border-red-300 bg-red-50 text-[#DF2225] hover:bg-red-100 text-xs font-semibold transition-colors cursor-pointer whitespace-nowrap shadow-xs"
+              >
+                {tr('ppe_monitoring_view.view_in_safety_alerts')}
+              </button>
+            )}
+          </div>
+        </div>
+      ) : (
+        <div className="bg-white rounded-xl shadow-sm border border-[#EAEAEA] p-6 space-y-4">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+            <div>
+              <h3 className="text-lg font-bold text-[#2F3437]">
+                {tr('common.zone_replay_observations')}
+              </h3>
+              <p className="text-xs text-[#6B6B6B] mt-1">
+                {tr(
+                  'ppe_monitoring_view.observations_from_the_sample_video_timeline_live_safety_alerts_are_available_in_sa',
+                  {
+                    value1:
+                      activeFilterWorker !== null &&
+                      tr('messages.becfe40eedac', { value1: activeFilterWorker }),
+                  },
+                )}
+              </p>
+            </div>
+            <div className="flex items-center gap-2 flex-wrap">
+              {onNavigate && (
+                <button
+                  type="button"
+                  onClick={() =>
+                    onNavigate('incidents', { alertType: 'RESTRICTED_ZONE_INTRUSION' })
+                  }
+                  className="px-2.5 py-1.5 rounded-lg border border-red-300 bg-red-50 text-[#DF2225] hover:bg-red-100 text-xs font-semibold transition-colors cursor-pointer"
+                >
+                  {tr('ppe_monitoring_view.view_in_safety_alerts')}
+                </button>
+              )}
+              <button
+                onClick={() => setZoneFilter('ALL')}
+                className={`px-2.5 py-1.5 rounded-lg border text-xs font-semibold transition-colors ${
+                  zoneFilter === 'ALL'
+                    ? 'border-orange-300 bg-orange-50 text-[#F66B17]'
+                    : 'border-[#EAEAEA] bg-white text-[#6B6B6B] hover:bg-[#FBFBFA]'
+                }`}
+              >
+                {tr('common.all_events_value', { value1: events.length })}
+              </button>
+              <button
+                onClick={() => setZoneFilter('ACTIVE_ONLY')}
+                className={`px-2.5 py-1.5 rounded-lg border text-xs font-semibold transition-colors ${
+                  zoneFilter === 'ACTIVE_ONLY'
+                    ? 'border-orange-300 bg-orange-50 text-[#F66B17]'
+                    : 'border-[#EAEAEA] bg-white text-[#6B6B6B] hover:bg-[#FBFBFA]'
+                }`}
+              >
+                {tr('common.zone_entries_value', {
+                  value1: events.filter(
+                    (e) =>
+                      e.result.toLowerCase().includes('entry') ||
+                      e.result.toLowerCase().includes('violation'),
+                  ).length,
+                })}
+              </button>
+            </div>
+          </div>
+
+          <div className="overflow-x-auto">
+            <table className="w-full text-left border-collapse text-sm">
+              <thead>
+                <tr className="border-b border-[#EAEAEA] text-[#6B6B6B] font-bold uppercase tracking-wider text-[10px]">
+                  <th className="py-3 px-3">{tr('common.time')}</th>
+                  <th className="py-3 px-3">{tr('common.person_worker')}</th>
+                  <th className="py-3 px-3">{tr('common.zone')}</th>
+                  <th className="py-3 px-3">{tr('common.camera')}</th>
+                  <th className="py-3 px-3">{tr('common.identity')}</th>
+                  <th className="py-3 px-3">{tr('common.authorization')}</th>
+                  <th className="py-3 px-3">{tr('common.result_6e7d50')}</th>
+                  <th className="py-3 px-3 text-right">{tr('common.action')}</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-[#EAEAEA]">
+                {displayedEvents.map((evt) => (
+                  <tr key={evt.rowKey} className="hover:bg-[#FBFBFA] transition-colors group">
+                    <td className="py-3 px-3 font-mono text-[#6B6B6B] text-xs">{evt.time}</td>
+                    <td className="py-3 px-3 font-semibold text-[#2F3437]">{evt.person}</td>
+                    <td className="py-3 px-3 text-[#6B6B6B]">{evt.zone}</td>
+                    <td className="py-3 px-3 font-mono text-[#6B6B6B] text-xs">{evt.camera}</td>
+                    <td className="py-3 px-3 text-[#6B6B6B]">{evt.identity}</td>
+                    <td className="py-3 px-3 text-[#6B6B6B]">
+                      {localizedLabel(evt.authorization)}
+                    </td>
+                    <td className="py-3 px-3">
+                      <span
+                        className={`inline-flex items-center px-2 py-0.5 rounded text-[10px] font-bold ${
+                          evt.result === 'Violation'
+                            ? 'bg-red-50 text-red-600'
+                            : evt.result === 'Access Valid'
+                              ? 'bg-emerald-50 text-emerald-600'
+                              : 'bg-amber-50 text-amber-600'
+                        }`}
+                      >
+                        {localizedLabel(evt.result)}
+                      </span>
+                    </td>
+                    <td className="py-3 px-3 text-right">
+                      <button
+                        onClick={() => setSelectedIncident(evt)}
+                        className="px-3 py-1 rounded text-xs font-semibold transition-colors bg-[#F7F6F3] text-[#2F3437] hover:bg-slate-200"
+                      >
+                        {tr('common.review')}
+                      </button>
+                    </td>
+                  </tr>
+                ))}
+                {displayedEvents.length === 0 && (
+                  <tr>
+                    <td colSpan={8} className="py-6 text-center text-[#6B6B6B] text-xs">
+                      {tr('restricted_zone_view.no_zone_events_match_the_selected_criteria')}
+                    </td>
+                  </tr>
+                )}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
+
+      {/* Incident Review Modal with Bound Data */}
+      {selectedIncident && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4">
+          <div className="bg-white rounded-xl max-w-md w-full p-6 shadow-xl space-y-5">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <span className="px-2 py-0.5 rounded bg-red-100 text-red-700 text-[10px] font-bold font-mono uppercase tracking-wider">
+                  {selectedIncident.id}
+                </span>
+                <h3 className="font-bold text-[#2F3437]">{tr('common.review_action')}</h3>
+              </div>
+              <button
+                type="button"
+                onClick={() => setSelectedIncident(null)}
+                aria-label={tr('common.close_review_dialog')}
+                className="text-[#6B6B6B] hover:text-[#2F3437] cursor-pointer"
+              >
+                <IconX className="w-5 h-5" />
+              </button>
+            </div>
+
+            <div className="space-y-4 text-sm text-[#6B6B6B]">
+              <p>
+                {tr('restricted_zone_view.you_are_reviewing_a_restricted_zone_intrusion_at')}{' '}
+                <strong className="text-[#2F3437]">
+                  {
+                    resolveCameraAndWorkArea(selectedIncident.camera, selectedIncident.regionId)
+                      .workArea
+                  }{' '}
+                  ({selectedIncident.camera})
+                </strong>
+                {tr('restricted_zone_view.ai_detected_worker')}{' '}
+                <strong className="text-[#2F3437]">
+                  {selectedIncident.unknownTrack
+                    ? tr('common.unknown_person')
+                    : tr('messages.2c6bb8488230', { value1: selectedIncident.trackId })}
+                </strong>{' '}
+                {tr('common.with_status')}{' '}
+                <strong className="text-[#2F3437]">
+                  {localizeMessage(localizedLabel(selectedIncident.authorization))}
+                </strong>
+                .
+              </p>
+
+              <div className="p-3 bg-[#FBFBFA] border border-[#EAEAEA] rounded-lg space-y-1">
+                <p className="font-bold text-[#2F3437] text-xs uppercase tracking-wider">
+                  {tr('common.technical_evidence_preview')}
+                </p>
+                <p className="text-[#6B6B6B] text-xs leading-relaxed">
+                  {tr(
+                    'restricted_zone_view.ai_zone_detections_are_preliminary_observations_to_inspect_session_scoped_evidence',
                   )}
-                  <button
-                    onClick={() => setZoneFilter('ALL')}
-                    className={`px-2.5 py-1.5 rounded-lg border text-xs font-semibold transition-colors ${
-                      zoneFilter === 'ALL'
-                        ? 'border-orange-300 bg-orange-50 text-[#F66B17]'
-                        : 'border-[#EAEAEA] bg-white text-[#6B6B6B] hover:bg-[#FBFBFA]'
-                    }`}
-                  >
-                    {tr('common.all_events_value', { value1: events.length })}
-                  </button>
-                  <button
-                    onClick={() => setZoneFilter('ACTIVE_ONLY')}
-                    className={`px-2.5 py-1.5 rounded-lg border text-xs font-semibold transition-colors ${
-                      zoneFilter === 'ACTIVE_ONLY'
-                        ? 'border-orange-300 bg-orange-50 text-[#F66B17]'
-                        : 'border-[#EAEAEA] bg-white text-[#6B6B6B] hover:bg-[#FBFBFA]'
-                    }`}
-                  >
-                    {tr('common.zone_entries_value', {
-                      value1: events.filter(
-                        (e) =>
-                          e.result.toLowerCase().includes('entry') ||
-                          e.result.toLowerCase().includes('violation'),
-                      ).length,
-                    })}
-                  </button>
-                </div>
-              </div>
-
-              <div className="overflow-x-auto">
-                <table className="w-full text-left border-collapse text-sm">
-                  <thead>
-                    <tr className="border-b border-[#EAEAEA] text-[#6B6B6B] font-bold uppercase tracking-wider text-[10px]">
-                      <th className="py-3 px-3">{tr('common.time')}</th>
-                      <th className="py-3 px-3">{tr('common.person_worker')}</th>
-                      <th className="py-3 px-3">{tr('common.zone')}</th>
-                      <th className="py-3 px-3">{tr('common.camera')}</th>
-                      <th className="py-3 px-3">{tr('common.identity')}</th>
-                      <th className="py-3 px-3">{tr('common.authorization')}</th>
-                      <th className="py-3 px-3">{tr('common.result_6e7d50')}</th>
-                      <th className="py-3 px-3 text-right">{tr('common.action')}</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-[#EAEAEA]">
-                    {displayedEvents.map((evt) => (
-                      <tr key={evt.rowKey} className="hover:bg-[#FBFBFA] transition-colors group">
-                        <td className="py-3 px-3 font-mono text-[#6B6B6B] text-xs">{evt.time}</td>
-                        <td className="py-3 px-3 font-semibold text-[#2F3437]">{evt.person}</td>
-                        <td className="py-3 px-3 text-[#6B6B6B]">{evt.zone}</td>
-                        <td className="py-3 px-3 font-mono text-[#6B6B6B] text-xs">{evt.camera}</td>
-                        <td className="py-3 px-3 text-[#6B6B6B]">{evt.identity}</td>
-                        <td className="py-3 px-3 text-[#6B6B6B]">
-                          {localizedLabel(evt.authorization)}
-                        </td>
-                        <td className="py-3 px-3">
-                          <span
-                            className={`inline-flex items-center px-2 py-0.5 rounded text-[10px] font-bold ${
-                              evt.result === 'Violation'
-                                ? 'bg-red-50 text-red-600'
-                                : evt.result === 'Access Valid'
-                                  ? 'bg-emerald-50 text-emerald-600'
-                                  : 'bg-amber-50 text-amber-600'
-                            }`}
-                          >
-                            {localizedLabel(evt.result)}
-                          </span>
-                        </td>
-                        <td className="py-3 px-3 text-right">
-                          <button
-                            onClick={() => setSelectedIncident(evt)}
-                            className="px-3 py-1 rounded text-xs font-semibold transition-colors bg-[#F7F6F3] text-[#2F3437] hover:bg-slate-200"
-                          >
-                            {tr('common.review')}
-                          </button>
-                        </td>
-                      </tr>
-                    ))}
-                    {displayedEvents.length === 0 && (
-                      <tr>
-                        <td colSpan={8} className="py-6 text-center text-[#6B6B6B] text-xs">
-                          {tr('restricted_zone_view.no_zone_events_match_the_selected_criteria')}
-                        </td>
-                      </tr>
-                    )}
-                  </tbody>
-                </table>
+                </p>
               </div>
             </div>
-          )}
 
-          {/* Incident Review Modal with Bound Data */}
-          {selectedIncident && (
-            <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4">
-              <div className="bg-white rounded-xl max-w-md w-full p-6 shadow-xl space-y-5">
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-2">
-                    <span className="px-2 py-0.5 rounded bg-red-100 text-red-700 text-[10px] font-bold font-mono uppercase tracking-wider">
-                      {selectedIncident.id}
-                    </span>
-                    <h3 className="font-bold text-[#2F3437]">{tr('common.review_action')}</h3>
-                  </div>
-                  <button
-                    type="button"
-                    onClick={() => setSelectedIncident(null)}
-                    aria-label={tr('common.close_review_dialog')}
-                    className="text-[#6B6B6B] hover:text-[#2F3437] cursor-pointer"
-                  >
-                    <IconX className="w-5 h-5" />
-                  </button>
-                </div>
-
-                <div className="space-y-4 text-sm text-[#6B6B6B]">
-                  <p>
-                    {tr('restricted_zone_view.you_are_reviewing_a_restricted_zone_intrusion_at')}{' '}
-                    <strong className="text-[#2F3437]">
-                      {
-                        resolveCameraAndWorkArea(selectedIncident.camera, selectedIncident.regionId)
-                          .workArea
-                      }{' '}
-                      ({selectedIncident.camera})
-                    </strong>
-                    {tr('restricted_zone_view.ai_detected_worker')}{' '}
-                    <strong className="text-[#2F3437]">
-                      {selectedIncident.unknownTrack
-                        ? tr('common.unknown_person')
-                        : tr('messages.2c6bb8488230', { value1: selectedIncident.trackId })}
-                    </strong>{' '}
-                    {tr('common.with_status')}{' '}
-                    <strong className="text-[#2F3437]">
-                      {localizeMessage(localizedLabel(selectedIncident.authorization))}
-                    </strong>
-                    .
-                  </p>
-
-                  <div className="p-3 bg-[#FBFBFA] border border-[#EAEAEA] rounded-lg space-y-1">
-                    <p className="font-bold text-[#2F3437] text-xs uppercase tracking-wider">
-                      {tr('common.technical_evidence_preview')}
-                    </p>
-                    <p className="text-[#6B6B6B] text-xs leading-relaxed">
-                      {tr(
-                        'restricted_zone_view.ai_zone_detections_are_preliminary_observations_to_inspect_session_scoped_evidence',
-                      )}
-                    </p>
-                  </div>
-                </div>
-
-                <div className="grid grid-cols-2 gap-3 pt-2">
-                  {onNavigate ? (
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setSelectedIncident(null);
-                        onNavigate('incidents', { alertType: 'RESTRICTED_ZONE_INTRUSION' });
-                      }}
-                      className="py-2 px-4 rounded-lg bg-[#DF2225] hover:bg-[#B8191C] text-white font-bold text-sm shadow transition-colors cursor-pointer text-center"
-                    >
-                      {tr('ppe_monitoring_view.review_in_safety_alerts')}
-                    </button>
-                  ) : (
-                    <button
-                      disabled
-                      title={tr('ppe_monitoring_view.safety_alerts_navigation_not_configured')}
-                      className="py-2 px-4 rounded-lg bg-[#DF2225]/60 text-white font-bold text-sm cursor-not-allowed shadow transition-colors text-center"
-                    >
-                      {tr('common.review_in_alerts')}
-                    </button>
-                  )}
-                  <button
-                    type="button"
-                    onClick={() => setSelectedIncident(null)}
-                    className="py-2 px-4 rounded-lg bg-[#F7F6F3] hover:bg-slate-200 text-[#2F3437] font-bold text-sm transition-colors cursor-pointer text-center"
-                  >
-                    {tr('common.dismiss_preview')}
-                  </button>
-                </div>
-              </div>
+            <div className="grid grid-cols-2 gap-3 pt-2">
+              {onNavigate ? (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setSelectedIncident(null);
+                    onNavigate('incidents', { alertType: 'RESTRICTED_ZONE_INTRUSION' });
+                  }}
+                  className="py-2 px-4 rounded-lg bg-[#DF2225] hover:bg-[#B8191C] text-white font-bold text-sm shadow transition-colors cursor-pointer text-center"
+                >
+                  {tr('ppe_monitoring_view.review_in_safety_alerts')}
+                </button>
+              ) : (
+                <button
+                  disabled
+                  title={tr('ppe_monitoring_view.safety_alerts_navigation_not_configured')}
+                  className="py-2 px-4 rounded-lg bg-[#DF2225]/60 text-white font-bold text-sm cursor-not-allowed shadow transition-colors text-center"
+                >
+                  {tr('common.review_in_alerts')}
+                </button>
+              )}
+              <button
+                type="button"
+                onClick={() => setSelectedIncident(null)}
+                className="py-2 px-4 rounded-lg bg-[#F7F6F3] hover:bg-slate-200 text-[#2F3437] font-bold text-sm transition-colors cursor-pointer text-center"
+              >
+                {tr('common.dismiss_preview')}
+              </button>
             </div>
-          )}
-        </>
+          </div>
+        </div>
       )}
     </div>
   );
