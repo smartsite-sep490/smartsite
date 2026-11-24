@@ -38,6 +38,9 @@ function setup(
   fetcher: typeof fetch,
   role: UserRole = UserRole.SITE_MANAGER,
   origin = 'http://127.0.0.1:62035',
+  assignmentsForAuthentication: (
+    call: number,
+  ) => { role: UserRole; siteId: string | null }[] = () => [{ role, siteId: site }],
 ) {
   let authentications = 0;
   const config = new ConfigService<BackendEnvironment, true>({
@@ -51,7 +54,12 @@ function setup(
   const auth = {
     authenticate: async () => {
       authentications++;
-      return { user: { mustChangePassword: false, roleAssignments: [{ role, siteId: site }] } };
+      return {
+        user: {
+          mustChangePassword: false,
+          roleAssignments: assignmentsForAuthentication(authentications),
+        },
+      };
     },
   } as unknown as AuthService;
   const cameras = {
@@ -62,6 +70,75 @@ function setup(
     authentications: () => authentications,
   };
 }
+
+test('global Admin and foreign-site roles cannot read or probe camera source hosts', async () => {
+  let calls = 0;
+  const fetcher = (async () => {
+    calls++;
+    return Response.json(caps);
+  }) as typeof fetch;
+  for (const assignments of [
+    [{ role: UserRole.ADMIN, siteId: null }],
+    [{ role: UserRole.SITE_MANAGER, siteId: other }],
+    [{ role: UserRole.SAFETY_OFFICER, siteId: other }],
+    [],
+  ]) {
+    const { service } = setup(fetcher, UserRole.SITE_MANAGER, undefined, () => assignments);
+    const forbidden = (e: unknown) => (e as { getStatus(): number }).getStatus() === 403;
+    await assert.rejects(service.list('token', site, camera), forbidden);
+    await assert.rejects(
+      service.probe('token', site, camera, 'edge', { kind: 'WEBCAM', deviceId: 'usb-front' }),
+      forbidden,
+    );
+  }
+  assert.equal(calls, 0);
+});
+
+test('revoking the site role during host I/O denies results even when global Admin remains', async () => {
+  let calls = 0;
+  const { service, authentications } = setup(
+    (async () => {
+      calls++;
+      return Response.json(caps);
+    }) as typeof fetch,
+    UserRole.SITE_MANAGER,
+    undefined,
+    (call) => [
+      { role: UserRole.ADMIN, siteId: null },
+      ...(call === 1 ? [{ role: UserRole.SITE_MANAGER, siteId: site }] : []),
+    ],
+  );
+  await assert.rejects(
+    service.list('token', site, camera),
+    (e) => (e as { getStatus(): number }).getStatus() === 403,
+  );
+  assert.equal(calls, 1);
+  assert.equal(authentications(), 2);
+});
+
+test('explicit site roles retain source access independently of global Admin', async () => {
+  const officer = setup((async () => Response.json(caps)) as typeof fetch, UserRole.SAFETY_OFFICER);
+  assert.equal((await officer.service.list('token', site, camera)).hosts[0]?.available, true);
+  const manager = setup(
+    (async (url) => Response.json(String(url).endsWith('/probe') ? probe : caps)) as typeof fetch,
+    UserRole.SITE_MANAGER,
+    undefined,
+    () => [
+      { role: UserRole.ADMIN, siteId: null },
+      { role: UserRole.SITE_MANAGER, siteId: site },
+    ],
+  );
+  assert.equal((await manager.service.list('token', site, camera)).hosts[0]?.available, true);
+  assert.equal(
+    (
+      await manager.service.probe('token', site, camera, 'edge', {
+        kind: 'WEBCAM',
+        deviceId: 'usb-front',
+      })
+    ).state,
+    'TESTED',
+  );
+});
 
 test('host list is site-scoped, validates capabilities, and never sends service credentials to the browser', async () => {
   const calls: string[] = [];

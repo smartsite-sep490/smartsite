@@ -89,9 +89,9 @@ export class CameraSourceService {
       user.mustChangePassword ||
       !user.roleAssignments.some(
         (r) =>
-          (r.siteId?.toLowerCase() === siteId &&
-            (r.role === UserRole.SITE_MANAGER || (!write && r.role === UserRole.SAFETY_OFFICER))) ||
-          (!write && r.siteId === null && r.role === UserRole.ADMIN),
+          r.siteId !== null &&
+          r.siteId.toLowerCase() === siteId &&
+          (r.role === UserRole.SITE_MANAGER || (!write && r.role === UserRole.SAFETY_OFFICER)),
       )
     )
       throw new PublicHttpException(403, { code: 'FORBIDDEN', message: 'Forbidden' });
