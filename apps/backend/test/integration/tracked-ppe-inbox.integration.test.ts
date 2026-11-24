@@ -19,24 +19,34 @@ import { TrackedFramePrototypeStore } from '../../src/integrations/ai/tracked-fr
 import { TrackedFrameAdmission } from '../../src/integrations/ai/tracked-frame-admission.js';
 import { CameraEventAdmissionService } from '../../src/modules/cameras/camera-event-admission.service.js';
 
-test('tracked material batches project scoped inbox recipients atomically without per-frame unread resets', async () => {
+test('five PPE families share tracked episodes and scoped inbox revisions across Sites without per-frame unread resets', async () => {
   const owned = createIsolatedTestDatabase(),
     db = owned.dataSource;
   try {
     await owned.initialize();
     await db.transaction((m) => new WorkerEventAdmission1795046400002().up(m.queryRunner!));
     await db.transaction((m) => new TrackedSubjectStorage1795046400003().up(m.queryRunner!));
-    const f = await seedTrackedFrameFixture(db, ['HARD_HAT', 'SAFETY_VEST', 'GLOVES']);
+    const f = await seedTrackedFrameFixture(db, [
+      'HARD_HAT',
+      'SAFETY_VEST',
+      'GLOVES',
+      'BOOTS',
+      'GOGGLES',
+    ]);
     const { TrackedPpeInboxProjection } =
       await import('../../src/modules/safety/alerts/tracked-ppe-inbox-projection.js');
     const password = 'Synthetic_ppe_officer_123';
     const passwordHash = await hashPassword(password);
     const eligible: string[] = [];
-    const otherSite = randomUUID();
-    await db.query(
-      "INSERT INTO site(id,code,name) VALUES($1,$1::uuid::text,'Synthetic other Site')",
-      [otherSite],
-    );
+    const otherFixture = await seedTrackedFrameFixture(db, [
+      'HARD_HAT',
+      'SAFETY_VEST',
+      'GLOVES',
+      'BOOTS',
+      'GOGGLES',
+    ]);
+    const otherSite = otherFixture.siteId;
+    let otherSiteOfficer = '';
     for (let i = 0; i < 7; i++) {
       const user = randomUUID();
       await db.query(
@@ -54,10 +64,11 @@ test('tracked material batches project scoped inbox recipients atomically withou
         ],
       );
       if (i < 2) eligible.push(user);
+      if (i === 6) otherSiteOfficer = user;
     }
     const auth = new TrackedPartAuthenticator(new CameraEventAdmissionService(), {
       profileSha256: 'a'.repeat(64),
-      allowedCameraIds: [f.cameraId],
+      allowedCameraIds: [f.cameraId, otherFixture.cameraId],
       clockToleranceMs: 1000,
       routeEpoch: '00000000-0000-4000-8000-000000000001',
     });
@@ -92,28 +103,36 @@ test('tracked material batches project scoped inbox recipients atomically withou
       },
     );
     const segmentId = randomUUID();
-    const event = (sequence: string, previousEventId?: string, extra = false) => {
-      const base = f.event(0, 1, sequence);
+    const event = (
+      sequence: string,
+      previousEventId?: string,
+      extra = false,
+      owner = f,
+      ownerSegmentId = segmentId,
+    ) => {
+      const base = owner.event(0, 1, sequence);
       const trackId = 100 + Number(sequence);
       return {
         ...base,
         observations: [
           { type: 'PERSON', trackId },
-          ...['HARD_HAT', 'SAFETY_VEST', ...(extra ? ['GLOVES'] : [])].map((ppeItem) => ({
-            type: 'PPE',
-            trackId,
-            ppeItem,
-            status: 'MISSING',
-            regionId: f.ppeRegionId!,
-            geometryVersion: 1,
-          })),
+          ...['HARD_HAT', 'SAFETY_VEST', ...(extra ? ['GLOVES', 'BOOTS', 'GOGGLES'] : [])].map(
+            (ppeItem) => ({
+              type: 'PPE',
+              trackId,
+              ppeItem,
+              status: 'MISSING',
+              regionId: owner.ppeRegionId!,
+              geometryVersion: 1,
+            }),
+          ),
         ],
         continuity: {
           ...base.continuity,
           subjects: [
             {
               personObservationIndex: 0,
-              segmentId,
+              segmentId: ownerSegmentId,
               link: previousEventId
                 ? { kind: 'CONTINUE', previousEventId, previousPersonObservationIndex: 0 }
                 : { kind: 'START', reason: 'INITIAL' },
@@ -122,17 +141,17 @@ test('tracked material batches project scoped inbox recipients atomically withou
         },
       };
     };
-    const process = async (e: { framePartition: { frameId: string } }) => {
-      await store.store(db, e, f.context, f.generation.secret);
+    const process = async (e: { framePartition: { frameId: string } }, owner = f) => {
+      await store.store(db, e, owner.context, owner.generation.secret);
       return admission.process(
         db,
         {
-          cameraId: f.cameraId,
-          generationId: f.generation.workerGenerationId,
-          streamSessionId: f.generation.streamSessionId,
+          cameraId: owner.cameraId,
+          generationId: owner.generation.workerGenerationId,
+          streamSessionId: owner.generation.streamSessionId,
           frameId: e.framePartition.frameId,
         },
-        f.generation.secret,
+        owner.generation.secret,
       );
     };
     const first = event('0');
@@ -227,7 +246,20 @@ test('tracked material batches project scoped inbox recipients atomically withou
       (await db.query('SELECT content_revision AS revision FROM safety_episode'))[0].revision,
       2,
     );
-    assert.equal((await db.query('SELECT count(*)::int AS n FROM safety_alert'))[0].n, 3);
+    assert.equal((await db.query('SELECT count(*)::int AS n FROM safety_alert'))[0].n, 5);
+    assert.equal((await db.query('SELECT count(*)::int AS n FROM safety_episode'))[0].n, 1);
+    assert.deepEqual(
+      (await db.query('SELECT candidate_subtype FROM safety_alert ORDER BY candidate_subtype')).map(
+        (row: { candidate_subtype: string }) => row.candidate_subtype,
+      ),
+      [
+        'PPE_BOOTS_MISSING',
+        'PPE_GLOVES_MISSING',
+        'PPE_GOGGLES_MISSING',
+        'PPE_HARD_HAT_MISSING',
+        'PPE_SAFETY_VEST_MISSING',
+      ],
+    );
     const materialRows = await recipients();
     assert.equal(materialRows.length, 3);
     for (const old of readRows) {
@@ -244,8 +276,29 @@ test('tracked material batches project scoped inbox recipients atomically withou
       )?.seen_revision,
       0,
     );
+    const firstReader = readRows[0]!;
+    const renewedLogin = await account.login(
+      firstReader.recipient_user_id,
+      password,
+      AuthClientType.WEB,
+    );
+    const expanded = await inbox.list(
+      { headers: { authorization: 'Bearer ' + renewedLogin.accessToken } },
+      { recipientId: firstReader.id, limit: '1' },
+    );
+    assert.equal(expanded.total, 1);
+    assert.equal(expanded.items[0]?.episode.findingCount, 5);
+    assert.equal(expanded.items[0]?.unread, true);
+    const repeatedAllFamilies = event('3', material.eventId, true);
+    await process(repeatedAllFamilies);
+    assert.equal(outcomes[0]!.recipientOutcome, 'UNCHANGED');
+    assert.deepEqual(await recipients(), materialRows);
+    assert.equal(
+      (await db.query('SELECT content_revision AS revision FROM safety_episode'))[0].revision,
+      2,
+    );
     await db.query('DELETE FROM user_role_assignment WHERE user_id=ANY($1::uuid[])', [eligible]);
-    const next = event('3', material.eventId, false);
+    const next = event('4', repeatedAllFamilies.eventId, false);
     // A distinct technical subject owns a new episode; missing findings do not dismiss the old one.
     next.continuity.subjects[0]!.link = { kind: 'START', reason: 'INITIAL' };
     next.continuity.subjects[0]!.segmentId = randomUUID();
@@ -254,6 +307,36 @@ test('tracked material batches project scoped inbox recipients atomically withou
     assert.equal(outcomes[0]!.insertedRecipients, 0);
     assert.deepEqual(await recipients(), materialRows);
     assert.equal((await db.query('SELECT count(*)::int AS n FROM user_notification'))[0].n, 0);
+    // The same profile and track number at a different Site must not reuse the first Site's case.
+    await process(event('0', undefined, true, otherFixture, randomUUID()), otherFixture);
+    assert.equal(outcomes[0]!.recipientOutcome, 'PROJECTED');
+    assert.equal(outcomes[0]!.insertedRecipients, 1);
+    const foreignRows: Array<{ id: string; recipient_user_id: string; episode_id: string }> =
+      await db.query(
+        `SELECT r.id,r.recipient_user_id,r.episode_id FROM safety_episode_recipient r
+         JOIN safety_episode e ON e.id=r.episode_id WHERE e.site_id=$1`,
+        [otherSite],
+      );
+    assert.equal(foreignRows.length, 1);
+    assert.equal(foreignRows[0]!.recipient_user_id, otherSiteOfficer);
+    assert.notEqual(foreignRows[0]!.episode_id, firstReader.episode_id);
+    const otherLogin = await account.login(otherSiteOfficer, password, AuthClientType.WEB);
+    const otherRequest = { headers: { authorization: 'Bearer ' + otherLogin.accessToken } };
+    const otherInbox = await inbox.list(otherRequest, {
+      recipientId: foreignRows[0]!.id,
+      limit: '1',
+    });
+    assert.equal(otherInbox.total, 1);
+    assert.equal(otherInbox.items[0]?.episode.findingCount, 5);
+    assert.deepEqual(await inbox.list(otherRequest, { recipientId: firstReader.id, limit: '1' }), {
+      items: [],
+      total: 0,
+      unreadCount: 0,
+    });
+    assert.deepEqual(
+      (await recipients()).filter((row) => row.episode_id === firstReader.episode_id),
+      materialRows,
+    );
   } finally {
     await owned.dispose();
   }
