@@ -21,7 +21,12 @@ export interface CameraSourceSetupProps {
   apiUrl: string;
   token: string;
   siteId: string;
-  camera: { id: string; name: string; configurationVersion?: number };
+  camera: {
+    id: string;
+    name: string;
+    configurationVersion?: number;
+    status?: 'ACTIVE' | 'INACTIVE';
+  };
   setupKey: readonly unknown[];
   canWrite: boolean;
   onUnauthorized: () => void;
@@ -94,9 +99,12 @@ function SourceWorkspace({
     triggerResume,
   } = controller;
 
+  const isCameraInactive = camera.status === 'INACTIVE';
+
   const applying = useMutation({
     mutationFn: async () => {
       if (
+        isCameraInactive ||
         !result ||
         result.sourceKind !== 'LIVE' ||
         !caps?.applySupported ||
@@ -350,6 +358,16 @@ function SourceWorkspace({
     </dl>
   );
 
+  const hasConfiguredHosts = Boolean(hosts.data && hosts.data.length > 0);
+  const allHostsOffline = Boolean(
+    hasConfiguredHosts && hosts.data!.every((entry) => !entry.available),
+  );
+  const offlineHostNames =
+    hosts.data
+      ?.filter((entry) => !entry.available)
+      .map((entry) => entry.label)
+      .join(', ') ?? '';
+
   return (
     <section
       data-testid="camera-source-setup-panel"
@@ -366,21 +384,41 @@ function SourceWorkspace({
         {!embedded && (
           <p className="text-sm font-semibold text-slate-700 tabular-nums">{camera.name}</p>
         )}
-        <h2
-          id={`${id}-heading`}
-          className={
-            embedded
-              ? 'text-base font-bold tracking-tight text-slate-950'
-              : 'mt-1 text-lg font-bold tracking-tight text-slate-950'
-          }
-        >
-          {t('cameraSource.title')}
-        </h2>
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <h2
+            id={`${id}-heading`}
+            className={
+              embedded
+                ? 'text-base font-bold tracking-tight text-slate-950'
+                : 'mt-1 text-lg font-bold tracking-tight text-slate-950'
+            }
+          >
+            {t('cameraSource.title')}
+          </h2>
+          {isCameraInactive && (
+            <span
+              data-testid="camera-source-inactive-badge"
+              className="inline-flex items-center gap-1.5 rounded-full border border-slate-300 bg-slate-100 px-2.5 py-0.5 text-xs font-semibold text-slate-700"
+            >
+              <span aria-hidden="true" className="h-1.5 w-1.5 rounded-full bg-slate-500" />
+              {t('cameraSource.inactiveBadge')}
+            </span>
+          )}
+        </div>
         <p className="mt-0.5 max-w-3xl text-sm leading-relaxed text-slate-600">
           {t('cameraSource.intro')}
         </p>
       </header>
       <div className={embedded ? 'space-y-4 p-4' : 'space-y-5 p-4 sm:p-5'}>
+        {isCameraInactive && (
+          <p
+            role="status"
+            data-testid="camera-source-inactive-notice"
+            className="rounded-xl border border-slate-200 bg-slate-50 px-3.5 py-2.5 text-sm leading-relaxed text-slate-700"
+          >
+            {t('cameraSource.inactivePrepNotice')}
+          </p>
+        )}
         {embedded ? (
           <details
             data-testid="camera-source-stages-disclosure"
@@ -400,6 +438,45 @@ function SourceWorkspace({
         ) : (
           stageSummaryList
         )}
+
+        {hosts.isError ? (
+          <div
+            role="alert"
+            data-testid="camera-source-host-prerequisite"
+            className="flex flex-wrap items-center justify-between gap-2.5 rounded-xl border border-rose-200 bg-rose-50/80 px-3.5 py-2.5 text-sm text-rose-900"
+          >
+            <p className="min-w-0 flex-1 leading-relaxed break-words">
+              {t('cameraSource.hostFetchError')}
+            </p>
+            <button
+              type="button"
+              className={CAMERA_BUTTON_STYLES.compactSecondary}
+              disabled={hosts.isFetching || pending || applying.isPending}
+              onClick={() => {
+                reset();
+                void refreshHosts();
+              }}
+            >
+              {t('cameraSource.retryHosts')}
+            </button>
+          </div>
+        ) : !hosts.isPending && hosts.data?.length === 0 ? (
+          <p
+            role="status"
+            data-testid="camera-source-host-prerequisite"
+            className="rounded-xl border border-amber-200 bg-amber-50/90 px-3.5 py-2.5 text-sm leading-relaxed text-amber-950"
+          >
+            {t('cameraSource.noHosts')}
+          </p>
+        ) : !hosts.isPending && allHostsOffline ? (
+          <p
+            role="status"
+            data-testid="camera-source-host-prerequisite"
+            className="rounded-xl border border-amber-200 bg-amber-50/90 px-3.5 py-2.5 text-sm leading-relaxed text-amber-950"
+          >
+            {t('cameraSource.allHostsOffline', { hosts: offlineHostNames })}
+          </p>
+        ) : null}
 
         <fieldset className="grid min-w-0 grid-cols-1 gap-2.5 sm:grid-cols-2" disabled={blocked}>
           <legend className="sr-only">{t('cameraSource.title')}</legend>
@@ -485,25 +562,23 @@ function SourceWorkspace({
               </button>
             </div>
             <p className="text-sm leading-relaxed text-slate-600">{t('cameraSource.hostHelp')}</p>
-            {hosts.isPending ? (
+            {hosts.isPending && (
               <p role="status" className="text-sm text-slate-600">
                 {t('cameraSource.loading')}
               </p>
-            ) : hosts.isError ? (
-              <p role="alert" className="text-sm text-amber-900">
-                {t('cameraSource.unavailable')}
-              </p>
-            ) : hosts.data?.length === 0 ? (
-              <p
-                role="status"
-                className="rounded-xl border border-slate-200 bg-slate-50 p-3 text-sm text-slate-700"
-              >
-                {t('cameraSource.noHosts')}
-              </p>
-            ) : null}
-            {host && !host.available && (
+            )}
+            {host && !host.available && !allHostsOffline && (
               <p role="status" className="text-sm text-amber-900">
                 {t('cameraSource.unavailable')}
+              </p>
+            )}
+            {host?.available && caps && caps.applySupported === false && (
+              <p
+                role="status"
+                data-testid="camera-source-test-only-note"
+                className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-xs leading-relaxed text-slate-700"
+              >
+                {t('cameraSource.testOnlyNote', { host: host.label })}
               </p>
             )}
             {host?.available && !supported && (
@@ -522,7 +597,7 @@ function SourceWorkspace({
                       id={`${id}-device`}
                       className={CAMERA_FIELD_STYLES.input}
                       value={device}
-                      disabled={blocked}
+                      disabled={blocked || (caps?.webcams.length ?? 0) === 0}
                       onChange={(e) => change(() => setDevice(e.target.value))}
                     >
                       <option value="">{t('cameraSource.chooseDevice')}</option>
@@ -532,6 +607,15 @@ function SourceWorkspace({
                         </option>
                       ))}
                     </select>
+                    {host && caps && caps.webcams.length === 0 && (
+                      <p
+                        role="status"
+                        data-testid="camera-source-empty-devices"
+                        className="rounded-xl border border-amber-200 bg-amber-50/80 px-3 py-2 text-xs leading-relaxed text-amber-950"
+                      >
+                        {t('cameraSource.emptyWebcams', { host: host.label })}
+                      </p>
+                    )}
                   </div>
                 )}
                 {kind === 'VIDEO' && (
@@ -543,7 +627,7 @@ function SourceWorkspace({
                       id={`${id}-asset`}
                       className={CAMERA_FIELD_STYLES.input}
                       value={asset}
-                      disabled={blocked}
+                      disabled={blocked || (caps?.videos.length ?? 0) === 0}
                       onChange={(e) => change(() => setAsset(e.target.value))}
                     >
                       <option value="">{t('cameraSource.chooseVideo')}</option>
@@ -553,6 +637,15 @@ function SourceWorkspace({
                         </option>
                       ))}
                     </select>
+                    {host && caps && caps.videos.length === 0 && (
+                      <p
+                        role="status"
+                        data-testid="camera-source-empty-videos"
+                        className="rounded-xl border border-amber-200 bg-amber-50/80 px-3 py-2 text-xs leading-relaxed text-amber-950"
+                      >
+                        {t('cameraSource.emptyVideos', { host: host.label })}
+                      </p>
+                    )}
                   </div>
                 )}
                 {kind === 'RTSP' && (
@@ -633,7 +726,8 @@ function SourceWorkspace({
             {t(error)}
           </p>
         )}
-        {!externalController &&
+        {!isCameraInactive &&
+          !externalController &&
           caps?.configurationResumeSupported === true &&
           client.resume &&
           camera.configurationVersion !== undefined && (
@@ -751,7 +845,17 @@ function SourceWorkspace({
                 {t('cameraSource.replayNoLiveApply')}
               </p>
             )}
-            {caps?.applySupported &&
+            {isCameraInactive && activeResult.sourceKind === 'LIVE' && !isExpired && (
+              <p
+                role="status"
+                data-testid="camera-source-inactive-enable-required"
+                className="rounded-xl border border-amber-200 bg-amber-50/70 px-3 py-2 text-sm text-amber-950"
+              >
+                {t('cameraSource.inactiveEnableToActivate')}
+              </p>
+            )}
+            {!isCameraInactive &&
+              caps?.applySupported &&
               canWrite &&
               activeResult.sourceKind === 'LIVE' &&
               !applying.isSuccess && (

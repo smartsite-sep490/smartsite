@@ -52,6 +52,22 @@ const en = {
   'cameraSource.loading': 'Checking available AI hosts…',
   'cameraSource.noHosts':
     'No AI host is assigned to this site yet. Connect a site AI host before testing a camera. The saved camera information is unchanged.',
+  'cameraSource.hostFetchError':
+    'Could not check AI hosts for this site. Saved camera configuration is unchanged; retry or check your backend connection.',
+  'cameraSource.retryHosts': 'Retry',
+  'cameraSource.allHostsOffline':
+    'Assigned AI host(s) are currently offline ({{hosts}}). Reconnect the AI machine and refresh before testing video sources. Saved camera details remain intact.',
+  'cameraSource.testOnlyNote':
+    '{{host}} is in test-only mode: you can verify a preview image, but this host cannot activate live AI monitoring from here.',
+  'cameraSource.emptyWebcams':
+    'No USB webcams detected on {{host}}. Plug the camera into the AI machine (not this browser) or switch to IP camera / RTSP, then refresh hosts.',
+  'cameraSource.emptyVideos':
+    'No approved recorded videos are available on {{host}}. Add a permitted video on the AI machine or choose another source type.',
+  'cameraSource.inactiveBadge': 'Disabled in configuration · Test only',
+  'cameraSource.inactivePrepNotice':
+    'This camera is currently Disabled in configuration. You can check AI-host availability and test a video connection now without enabling it. Live activation and AI monitoring stay off until you explicitly enable the camera in settings.',
+  'cameraSource.inactiveEnableToActivate':
+    'Connection preview succeeded, but this camera is Disabled in configuration. Enable the camera in settings first before activating a live AI source.',
   'cameraSource.unavailable':
     'The selected AI host is offline or does not support source setup. Check its connection and refresh.',
   'cameraSource.unsupported': 'This source type is not configured on the selected AI host.',
@@ -145,6 +161,22 @@ const vi: Record<keyof typeof en, string> = {
   'cameraSource.loading': 'Đang kiểm tra các máy AI…',
   'cameraSource.noHosts':
     'Công trường chưa được cấp máy AI. Cần nối máy AI của công trường trước khi thử camera. Thông tin camera đã lưu vẫn được giữ nguyên.',
+  'cameraSource.hostFetchError':
+    'Không thể kiểm tra danh sách máy AI cho công trường này. Cấu hình camera đã lưu không thay đổi; hãy thử lại hoặc kiểm tra kết nối máy chủ.',
+  'cameraSource.retryHosts': 'Thử lại',
+  'cameraSource.allHostsOffline':
+    'Máy AI được cấp hiện đang ngoại tuyến ({{hosts}}). Hãy kết nối lại máy AI rồi làm mới trước khi thử nguồn hình. Thông tin camera đã lưu vẫn được giữ nguyên.',
+  'cameraSource.testOnlyNote':
+    '{{host}} đang ở chế độ chỉ kiểm tra: bạn có thể xem ảnh kiểm tra kết nối, nhưng máy này chưa hỗ trợ kích hoạt giám sát AI trực tiếp từ đây.',
+  'cameraSource.emptyWebcams':
+    'Không phát hiện webcam USB nào trên {{host}}. Hãy cắm camera vào máy chạy AI (không phải máy đang mở trình duyệt) hoặc chuyển sang Camera IP / RTSP, rồi kiểm tra lại máy AI.',
+  'cameraSource.emptyVideos':
+    'Chưa có video đã ghi được cấp phép trên {{host}}. Hãy thêm video hợp lệ trên máy AI hoặc chọn loại nguồn khác.',
+  'cameraSource.inactiveBadge': 'Đang tắt trong cấu hình · Chỉ kiểm tra',
+  'cameraSource.inactivePrepNotice':
+    'Camera hiện đang Tắt trong cấu hình. Bạn có thể kiểm tra sẵn máy AI và thử kết nối nguồn hình mà không cần bật trước. Kích hoạt nguồn trực tiếp và giám sát AI vẫn tắt cho đến khi bạn chủ động bật camera trong cài đặt.',
+  'cameraSource.inactiveEnableToActivate':
+    'Kiểm tra kết nối đã lấy được ảnh xem trước, nhưng camera đang Tắt trong cấu hình. Hãy bật camera trong cài đặt trước khi kích hoạt nguồn AI trực tiếp.',
   'cameraSource.unavailable':
     'Máy AI đã chọn đang ngoại tuyến hoặc chưa hỗ trợ thiết lập nguồn. Kiểm tra kết nối của máy rồi tải lại.',
   'cameraSource.unsupported': 'Loại nguồn này chưa được cấu hình trên máy AI đã chọn.',
