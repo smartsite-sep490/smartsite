@@ -491,3 +491,96 @@ it.each(['worker', 'contractor'] as const)(
     expect(workspace.client.attendanceOverview).not.toHaveBeenCalled();
   },
 );
+it('reports an ended missing shift without a session through the missing-attendance API', async () => {
+  detail.sessions = [];
+  overview.missingSchedules = [
+    {
+      scheduleId: 'schedule',
+      workDate: '2026-11-20',
+      shiftName: 'Synthetic Shift',
+      startsAt: '2026-11-20T01:00:00Z',
+      endsAt: '2026-11-20T10:00:00Z',
+    },
+  ];
+  const submit = vi
+    .spyOn(workspace.client, 'requestMissingAttendance')
+    .mockRejectedValueOnce(new Error('Network unavailable'))
+    .mockResolvedValue({ id: 'request' });
+  const correction = vi.spyOn(workspace.client, 'requestAttendanceCorrection');
+  await mount();
+  await click(t('attendance.requestMissing'));
+  await act(async () =>
+    root.root
+      .findAll(
+        (n) =>
+          String(n.type) === 'TextInput' &&
+          n.props.accessibilityLabel === t('attendance.correctionReason'),
+      )[0]!
+      .props.onChangeText('Worked but gate did not record scans'),
+  );
+  await click(t('attendance.submitToManager'));
+  await settle();
+  await click(t('attendance.submitToManager'));
+  await settle();
+  expect(submit).toHaveBeenCalledTimes(2);
+  expect(submit.mock.calls[1]).toEqual(submit.mock.calls[0]);
+  expect(submit).toHaveBeenCalledWith('token', 'site', 'schedule', {
+    expectedSessionVersion: 1,
+    proposedInAt: '2026-11-20T01:00:00.000Z',
+    proposedOutAt: '2026-11-20T10:00:00.000Z',
+    reason: 'Worked but gate did not record scans',
+    requestId: expect.any(String),
+  });
+  expect(correction).not.toHaveBeenCalled();
+  expect(text()).toContain(t('attendance.adjustmentSuccess'));
+});
+it.each(['denied', 'pending', 'contractor'] as const)(
+  'hides missing attendance when %s',
+  async (state) => {
+    detail.sessions = [];
+    overview.missingSchedules = [
+      {
+        scheduleId: 'schedule',
+        workDate: '2026-11-20',
+        shiftName: 'Synthetic Shift',
+        startsAt: '2026-11-20T01:00:00Z',
+        endsAt: '2026-11-20T10:00:00Z',
+      },
+    ];
+    if (state === 'denied') overview.canRequestCorrection = false;
+    if (state === 'pending') overview.hasPendingCorrection = true;
+    if (state === 'contractor') workspace.scope.role = 'contractor';
+    await mount();
+    expect(buttons(t('attendance.requestMissing'))).toHaveLength(0);
+  },
+);
+it('keeps confirmed shift minutes separate from elapsed gate-session minutes', async () => {
+  detail.day = {
+    ...detail.day,
+    status: 'CONFIRMED',
+    regularMinutes: 4,
+    overtimeMinutes: 0,
+    provisionalMinutes: 4,
+    confirmedMinutes: 4,
+    anomalies: [],
+    startsAt: '2026-11-20T15:25:00Z',
+    endsAt: '2026-11-20T15:30:00Z',
+  };
+  detail.sessions = [
+    {
+      ...detail.sessions[0]!,
+      effectiveInAt: '2026-11-20T15:25:30Z',
+      effectiveOutAt: '2026-11-20T15:31:30Z',
+      rawInAt: '2026-11-20T15:25:30Z',
+      rawOutAt: '2026-11-20T15:31:30Z',
+      workedMinutes: 6,
+      status: 'MATCHED',
+    },
+  ];
+  await mount();
+  expect(text()).toContain(minutes(4));
+  expect(text()).not.toContain(minutes(6));
+  expect(text()).toContain('22:25');
+  expect(text()).toContain('22:31');
+  expect(text()).toContain(t('attendanceDetail.sessionTimeHint'));
+});

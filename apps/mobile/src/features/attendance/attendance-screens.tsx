@@ -28,6 +28,7 @@ import { WorkerTodayCard } from './worker-today-card';
 import { WorkerAttendanceDay, WorkerAttendanceSummary } from './worker-attendance-board';
 import { AttendanceDetail } from './attendance-day-detail';
 import { RequestSheet } from '../shared/request-sheet';
+import { MissingAttendance } from './missing-attendance';
 
 export function AttendanceScreen({
   initialDayId,
@@ -212,6 +213,7 @@ export function AttendanceScreen({
           {scope.role === 'worker' && (
             <>
               <WorkerTodayCard dayId={days.data?.todayDayId} onDay={setDayId} />
+              <MissingAttendance fromDate={range.fromDate} toDate={range.toDate} />
               {days.data?.canRequest && (
                 <View style={attStyles.quickActions}>
                   {(['LEAVE', 'OVERTIME'] as const).map((kind) => (

@@ -431,6 +431,8 @@
     "rawTime": "Quét gốc: {{in}} → {{out}}",
     "effectiveTime": "Hiệu lực: {{in}} → {{out}}",
     "worked": "Thời gian tính",
+    "requestMissing": "Báo thiếu công",
+    "missingHint": "Ca chưa có phiên quét cổng. Gửi giờ làm thực tế để nhà thầu xét duyệt.",
     "requestSessionCorrection": "Yêu cầu sửa phiên công",
     "correctionHistory": "Lịch sử yêu cầu sửa công",
     "pendingCorrectionWarning": "Đang có yêu cầu chờ duyệt. Không gửi trùng.",
@@ -1533,7 +1535,8 @@
     "maxExits": "Số lần ra ngoài tối đa",
     "correctionNumber": "Yêu cầu {{index}}",
     "proposedTimes": "Giờ đề nghị điều chỉnh",
-    "reviewNote": "Ghi chú xét duyệt"
+    "reviewNote": "Ghi chú xét duyệt",
+    "sessionTimeHint": "Giờ vào/ra là mốc của phiên qua cổng. Công được tính trong phạm vi ca và theo chính sách nghỉ/ra ngoài; xem tổng công đã xác nhận hoặc tạm tính ở trên."
   },
   "scheduleDay": {
     "title": "Chi tiết ngày làm",

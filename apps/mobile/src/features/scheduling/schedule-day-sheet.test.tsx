@@ -8,6 +8,7 @@ import {
   type WorkerScheduleResponse,
 } from '@smartsite/api-client';
 import { ScheduleDaySheet } from './schedule-day-sheet';
+import { ScheduleAttendanceStatus } from './schedule-attendance-status';
 import type { useWorkspace } from '../workspace/workspace-context';
 import { setLanguage, translate as t } from '../../i18n';
 
@@ -257,4 +258,38 @@ it('does not silently submit an existing draft to a zone changed while the modal
   expect(button(t('rollCall.submit'))!.props.disabled).toBe(true);
   expect(JSON.stringify(root.toJSON())).toContain(t('rollCall.assignmentChanged'));
   expect(submit).not.toHaveBeenCalled();
+});
+it.each(['PRESENT', 'ABSENT', 'NOT_YET'] as const)(
+  'shows %s directly on the shift card without opening details',
+  async (status) => {
+    snapshot.own = { ...snapshot.own, status };
+    await act(async () => {
+      root = create(
+        <QueryClientProvider client={cache}>
+          <ScheduleAttendanceStatus scheduleId={schedule.id} />
+        </QueryClientProvider>,
+      );
+    });
+    await settle();
+    expect(JSON.stringify(root.toJSON())).toContain(t(`rollCall.${status}`));
+    expect(workspace.client.scheduleTeamAttendance).toHaveBeenCalledWith(
+      'test-only',
+      'site',
+      schedule.id,
+    );
+  },
+);
+it('does not turn unavailable card attendance into absent or not yet', async () => {
+  vi.mocked(workspace.client.scheduleTeamAttendance).mockRejectedValue(new Error('Unavailable'));
+  await act(async () => {
+    root = create(
+      <QueryClientProvider client={cache}>
+        <ScheduleAttendanceStatus scheduleId={schedule.id} />
+      </QueryClientProvider>,
+    );
+  });
+  await settle();
+  expect(JSON.stringify(root.toJSON())).not.toContain(t('rollCall.ABSENT'));
+  expect(JSON.stringify(root.toJSON())).not.toContain(t('rollCall.NOT_YET'));
+  expect(JSON.stringify(root.toJSON())).toContain(t('common.retry'));
 });
