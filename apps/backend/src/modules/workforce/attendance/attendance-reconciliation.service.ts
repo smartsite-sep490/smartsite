@@ -1,7 +1,11 @@
 import { isEarlyShiftExit } from './attendance-review-policy.js';
 import { createHash, randomUUID } from 'node:crypto';
 import { attendanceZoneIssue } from './attendance-zone-policy.js';
-import { attendanceGateAbsenceContext } from './attendance-gate-review.js';
+import {
+  attendanceGateAbsenceContext,
+  canConfirmGateAbsence,
+  rejectedEmptyReportSessionIds,
+} from './attendance-gate-review.js';
 import { attendanceZoneReviewContext, canConfirmZoneHours } from './attendance-zone-review.js';
 import { Injectable, Logger, type OnModuleInit, type OnModuleDestroy } from '@nestjs/common';
 import { DataSource, In, IsNull, LessThanOrEqual, MoreThan, type EntityManager } from 'typeorm';
@@ -773,6 +777,18 @@ export class AttendanceReconciliationService implements OnModuleInit, OnModuleDe
     const sessions = await manager
       .getRepository(AttendanceSessionEntity)
       .find({ where: { dayId: id }, order: { effectiveInAt: 'ASC' } });
+    const rejectedEmptyReports = sessions.some(
+      (s) =>
+        s.status === 'MISSING_IN' &&
+        !s.effectiveInAt &&
+        !s.effectiveOutAt &&
+        !s.checkInEventId &&
+        !s.checkOutEventId &&
+        !s.appliedCorrectionId,
+    )
+      ? await rejectedEmptyReportSessionIds(manager, day.id)
+      : new Set<string>();
+    const evidenceSessions = sessions.filter((s) => !rejectedEmptyReports.has(s.id));
     const overtime = day.scheduleId
       ? await manager.getRepository(OvertimeRequestEntity).findBy({ scheduleId: day.scheduleId })
       : [];
@@ -858,7 +874,7 @@ export class AttendanceReconciliationService implements OnModuleInit, OnModuleDe
       )
         anomalies.push('SCHEDULE_CHANGED');
     }
-    if (sessions.some((s) => s.status === 'MISSING_IN')) anomalies.push('MISSING_IN');
+    if (evidenceSessions.some((s) => s.status === 'MISSING_IN')) anomalies.push('MISSING_IN');
     if (sessions.some((s) => s.status === 'NEEDS_REVIEW')) anomalies.push('DUPLICATE_IN');
     const open = sessions.some((s) => s.effectiveInAt && !s.effectiveOutAt);
     if (+now >= end && open) anomalies.push('MISSING_OUT');
@@ -874,7 +890,7 @@ export class AttendanceReconciliationService implements OnModuleInit, OnModuleDe
       !!day.endsAt &&
       +now >= +day.endsAt &&
       !fullLeave &&
-      sessions.every((s) => s.status === 'IGNORED');
+      evidenceSessions.every((s) => s.status === 'IGNORED');
     if (
       day.scheduleId &&
       day.startsAt &&
@@ -902,6 +918,7 @@ export class AttendanceReconciliationService implements OnModuleInit, OnModuleDe
         : null;
     const gateReview =
       zoneIssue === 'ZONE_GATE_MISSING' ||
+      zoneIssue === 'ZONE_ATTENDANCE_PENDING' ||
       (day.zoneAttendanceRequirement?.required &&
         (await manager.getRepository(AttendanceAbsenceReviewEntity).existsBy({ dayId: day.id })))
         ? await attendanceGateAbsenceContext(manager, day)
@@ -912,7 +929,11 @@ export class AttendanceReconciliationService implements OnModuleInit, OnModuleDe
       zoneIssue &&
       !(absent && zoneIssue === 'ZONE_ATTENDANCE_ABSENT') &&
       !(zoneReview?.resolved && zoneIssue === 'ZONE_ATTENDANCE_PENDING') &&
-      !(absent && gateReview?.resolved && zoneIssue === 'ZONE_GATE_MISSING')
+      !(
+        absent &&
+        gateReview?.resolved &&
+        ['ZONE_GATE_MISSING', 'ZONE_ATTENDANCE_PENDING'].includes(zoneIssue)
+      )
     )
       anomalies.push(zoneIssue);
     if (gateReview?.conflicted) anomalies.push('ABSENCE_REVIEW_CONFLICT');
@@ -1005,14 +1026,14 @@ export class AttendanceReconciliationService implements OnModuleInit, OnModuleDe
     }
     if (
       !fullLeave &&
-      zoneIssue === 'ZONE_GATE_MISSING' &&
+      (zoneIssue === 'ZONE_GATE_MISSING' || zoneIssue === 'ZONE_ATTENDANCE_PENDING') &&
       gateReview?.matches &&
       gateReview.noEvidence &&
       !gateReview.resolved &&
-      now >= gateReview.requiredEnd
+      canConfirmGateAbsence(day, gateReview, now)
     ) {
       const hash = createHash('sha256')
-        .update(`${day.id}:gate-absence:${gateReview.record!.version}`)
+        .update(`${day.id}:gate-absence:${gateReview.teamAttendanceVersion}`)
         .digest('hex');
       const notificationId = `${hash.slice(0, 8)}-${hash.slice(8, 12)}-8${hash.slice(13, 16)}-a${hash.slice(17, 20)}-${hash.slice(20, 32)}`;
       await this.notify(
@@ -1020,7 +1041,9 @@ export class AttendanceReconciliationService implements OnModuleInit, OnModuleDe
         worker,
         notificationId,
         'ABSENCE_REVIEW_REQUIRED',
-        `Worker ${worker.displayName} (${worker.externalId}) was marked present on ${day.workDate}, but no Gate IN/OUT was recorded. Review attendance before confirming absence.`,
+        gateReview.record
+          ? `Worker ${worker.displayName} (${worker.externalId}) was marked present on ${day.workDate}, but no Gate IN/OUT was recorded. Review attendance before confirming absence.`
+          : `Worker ${worker.displayName} (${worker.externalId}) has no leader roll call on ${day.workDate}, and no Gate IN/OUT was recorded. Review attendance before confirming absence.`,
         true,
         day.workDate,
         day.id,

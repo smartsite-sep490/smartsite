@@ -721,7 +721,8 @@
     "serverFallback": "Server-issued backup QR"
   },
   "notifications": {
-    "ABSENCE_REVIEW_REQUIRED": "Present without Gate evidence — review required",
+    "ABSENCE_REVIEW_REQUIRED": "No Gate evidence — absence review required",
+    "missingRollCallAbsenceMessage": "{{name}} ({{code}}) has no leader roll call on {{date}} and no Gate IN/OUT. The Contractor Representative must check and confirm absent — 0 hours if the Worker did not attend.",
     "gateAbsenceReviewMessage": "{{name}} ({{code}}) was marked present on {{date}}, but has no Gate IN/OUT. Check attendance before confirming absence.",
     "title": "Notifications",
     "detailTitle": "Notification Details",
@@ -1554,8 +1555,9 @@
   },
   "attendanceReview": {
     "confirmAbsence": "Confirm absent — 0 hours",
-    "absenceTitle": "Review: Present without Gate IN/OUT",
+    "absenceTitle": "Review absence: no Gate IN/OUT",
     "absenceHint": "Hours stay at zero. Check Gate evidence and the leader’s roll call. Absence can be confirmed only after the shift and approved overtime end, with no Gate or attendance evidence.",
+    "absenceRejectedReport": "{{count}} empty missing-attendance report(s) were rejected. They are not worked attendance evidence; history is retained.",
     "absenceEvidence": "Gate passages: {{gates}} · attendance events: {{events}} · sessions: {{sessions}}",
     "absenceConfirmed": "Absence confirmed — 0 hours. Original roll call retained.",
     "absenceChanged": "Attendance evidence changed. Reload and check again.",

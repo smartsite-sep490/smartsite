@@ -81,28 +81,36 @@ function mount(unavailable = false) {
     change: (data: AttendanceDayDetailResponse) => result.rerender(view(data)),
   };
 }
-it('requires a reason and sends the selected day and roll-call versions', async () => {
-  const { user } = mount();
-  expect(screen.getByText(/Gate passages: 0/)).toBeTruthy();
-  const submit = screen.getByRole('button', { name: 'Confirm absent — 0 hours' });
-  expect(submit.hasAttribute('disabled')).toBe(true);
-  await user.type(
-    screen.getByLabelText('Reason for confirming absence'),
-    'Verified absent with the Site',
-  );
-  await user.click(submit);
-  expect(SmartSiteManagementClient.prototype.confirmAttendanceAbsence).toHaveBeenCalledWith(
-    props.token,
-    'site',
-    'day',
-    {
-      requestId: expect.any(String),
-      expectedVersion: 3,
-      expectedTeamAttendanceVersion: 2,
-      reason: 'Verified absent with the Site',
-    },
-  );
-});
+it.each([0, 2])(
+  'requires a reason and sends the selected day and roll-call version %s',
+  async (version) => {
+    if (version === 0) {
+      delete detail.gateAbsenceReview!.teamAttendance;
+      detail.gateAbsenceReview!.expectedTeamAttendanceVersion = 0;
+      detail.day.anomalies = ['ZONE_ATTENDANCE_PENDING'];
+    }
+    const { user } = mount();
+    expect(screen.getByText(/Gate passages: 0/)).toBeTruthy();
+    const submit = screen.getByRole('button', { name: 'Confirm absent — 0 hours' });
+    expect(submit.hasAttribute('disabled')).toBe(true);
+    await user.type(
+      screen.getByLabelText('Reason for confirming absence'),
+      'Verified absent with the Site',
+    );
+    await user.click(submit);
+    expect(SmartSiteManagementClient.prototype.confirmAttendanceAbsence).toHaveBeenCalledWith(
+      props.token,
+      'site',
+      'day',
+      {
+        requestId: expect.any(String),
+        expectedVersion: 3,
+        expectedTeamAttendanceVersion: version,
+        reason: 'Verified absent with the Site',
+      },
+    );
+  },
+);
 it('keeps failed input and the same command ID for an identical retry', async () => {
   vi.mocked(SmartSiteManagementClient.prototype.confirmAttendanceAbsence).mockRejectedValueOnce(
     new Error('Unavailable'),
@@ -180,9 +188,31 @@ it('opens the correct day from the new notification and translates its message',
     readAt: null,
     target: { siteId: 'site', dayId: 'day', tab: 'attendance' as const },
   };
-  expect(formatNotificationTitle(notice)).toContain('cần đối soát');
+  expect(formatNotificationTitle(notice)).toContain('cần xác nhận vắng');
   expect(formatNotificationDisplayMessage(notice)).toContain('Synthetic Worker (W000001)');
   const url = new URL(notificationHref(notice), 'https://web.example.test');
   expect(url.pathname).toBe('/access');
   expect(url.searchParams.get('dayId')).toBe('day');
+});
+
+it('translates a missing-roll-call absence notice without claiming the leader marked present', async () => {
+  await i18n.changeLanguage('vi');
+  const message = formatNotificationDisplayMessage({
+    event: 'ABSENCE_REVIEW_REQUIRED',
+    message:
+      'Worker Synthetic Worker (W01) has no leader roll call on 2026-11-23, and no Gate IN/OUT was recorded. Review attendance before confirming absence.',
+  } as Parameters<typeof formatNotificationDisplayMessage>[0]);
+  expect(message).toContain('chưa được đội trưởng điểm danh');
+  expect(message).toContain('0 giờ');
+});
+
+it('explains why a rejected empty report does not block authorized absence review', async () => {
+  await i18n.changeLanguage('en');
+  delete detail.gateAbsenceReview!.teamAttendance;
+  detail.gateAbsenceReview!.expectedTeamAttendanceVersion = 0;
+  detail.gateAbsenceReview!.sessionCount = 1;
+  detail.gateAbsenceReview!.emptyRejectedReportCount = 1;
+  mount();
+  expect(screen.getByText(/empty missing-attendance report/)).toBeTruthy();
+  expect(screen.getByRole('button', { name: 'Confirm absent — 0 hours' })).toBeTruthy();
 });

@@ -89,6 +89,16 @@ export function notificationMessage(
       : localizeMessage(item.message);
   }
   if (item.event === 'ABSENCE_REVIEW_REQUIRED') {
+    const missing =
+      /^Worker ([\s\S]+) \(([^()]*)\) has no leader roll call on (\d{4}-\d{2}-\d{2}),/.exec(
+        item.message,
+      );
+    if (missing)
+      return translate('notifications.missingRollCallAbsenceMessage', {
+        name: missing[1],
+        code: missing[2],
+        date: missing[3],
+      });
     const match = /^Worker ([\s\S]+) \(([^()]*)\) was marked present on (\d{4}-\d{2}-\d{2}),/.exec(
       item.message,
     );

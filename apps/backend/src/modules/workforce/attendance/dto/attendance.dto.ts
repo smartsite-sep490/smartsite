@@ -107,7 +107,7 @@ export class ReviewAttendanceDayDto {
 export class ConfirmAttendanceAbsenceDto {
   @IsUUID() requestId!: string;
   @IsInt() @Min(1) expectedVersion!: number;
-  @IsInt() @Min(1) expectedTeamAttendanceVersion!: number;
+  @IsInt() @Min(0) expectedTeamAttendanceVersion!: number;
   @Transform(({ value }: { value: unknown }) => (typeof value === 'string' ? value.trim() : value))
   @IsString()
   @MinLength(5)

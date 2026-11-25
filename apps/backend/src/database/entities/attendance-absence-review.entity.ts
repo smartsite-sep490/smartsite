@@ -14,7 +14,7 @@ import { ZoneEntity } from './zone.entity.js';
 
 @Entity({ name: 'attendance_absence_review' })
 @Unique('uq_absence_review_snapshot', ['dayId', 'teamAttendanceVersion'])
-@Check('ck_absence_review_version', 'expected_day_version > 0 AND team_attendance_version > 0')
+@Check('ck_absence_review_version', 'expected_day_version > 0 AND team_attendance_version >= 0')
 @Check('ck_absence_review_reason', 'char_length(trim(reason)) BETWEEN 5 AND 1000')
 export class AttendanceAbsenceReviewEntity {
   @PrimaryColumn({ type: 'uuid' }) id!: string;
