@@ -1,4 +1,7 @@
 {
+  "errors.qr_site_mismatch": "QR does not belong to this site",
+  "errors.qr_direction_mismatch": "QR direction does not match",
+  "errors.qr_site_or_direction_mismatch": "QR Site or direction does not match",
   "landing_page.back_to_top": "Back to top",
   "incident_view.review_decision": "Review decision",
   "incident_view.verify_and_close_action": "Verify and close action",
@@ -9,9 +12,6 @@
   "ppeNotifications.noZone": "Unspecified Zone",
   "ppeNotifications.PPE_HARD_HAT_MISSING": "Possible missing hard hat",
   "ppeNotifications.PPE_SAFETY_VEST_MISSING": "Possible missing safety vest",
-  "ppeNotifications.PPE_GLOVES_MISSING": "Possible missing gloves",
-  "ppeNotifications.PPE_BOOTS_MISSING": "Possible missing safety boots",
-  "ppeNotifications.PPE_GOGGLES_MISSING": "Possible missing safety goggles",
   "ppeNotifications.targetUnavailable": "This alert's site is unavailable or you no longer have access. Select an authorized site to continue.",
   "workerAccounts.title": "Worker accounts",
   "workerAccounts.create": "Create Worker account",
