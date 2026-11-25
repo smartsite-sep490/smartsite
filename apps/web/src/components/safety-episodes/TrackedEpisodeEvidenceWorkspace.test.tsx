@@ -320,7 +320,13 @@ describe('TrackedEpisodeEvidenceWorkspace', () => {
     expect(listTrackedEpisodeObservations.mock.calls[0]?.[3]).toEqual({
       offset: 0,
       limit: 20,
+      includeObservedPpe: true,
     });
+    const historyQueryEntry = queryClient
+      .getQueryCache()
+      .getAll()
+      .find((query) => query.queryKey.includes('history'));
+    expect(historyQueryEntry?.queryKey).toContain('includeObservedPpe:true');
 
     // Rows 0 and 1 share EVENT_1_ID and personObservationIndex 0 across two findings;
     // composite alertId:eventId:personObservationIndex deduplication preserves both.
@@ -342,6 +348,7 @@ describe('TrackedEpisodeEvidenceWorkspace', () => {
       offset: 20,
       limit: 20,
       throughSequence: '18446744073709551614',
+      includeObservedPpe: true,
     });
     expect(screen.getByTestId('tracked-history-count').textContent).toBe(
       'Loaded rows: 39 · Latest server total: 41',
@@ -359,6 +366,7 @@ describe('TrackedEpisodeEvidenceWorkspace', () => {
       offset: 40,
       limit: 20,
       throughSequence: '18446744073709551614',
+      includeObservedPpe: true,
     });
     expect(screen.getByTestId('tracked-history-count').textContent).toBe(
       'Loaded rows: 40 · Latest server total: 41',
@@ -375,6 +383,7 @@ describe('TrackedEpisodeEvidenceWorkspace', () => {
       offset: 0,
       limit: 20,
       alertId: FINDING_VEST_ID,
+      includeObservedPpe: true,
     });
 
     // Click Mechanical PERSON crop #3 on the second filtered row (OBS_3_VEST_EVENT_2)
@@ -545,7 +554,7 @@ describe('TrackedEpisodeEvidenceWorkspace', () => {
       'jwt-token-alpha',
       SITE_ID,
       EPISODE_ID,
-      { offset: 20, limit: 20, throughSequence: PAGE_1_FENCE },
+      { offset: 20, limit: 20, throughSequence: PAGE_1_FENCE, includeObservedPpe: true },
       expect.objectContaining({ signal: expect.any(AbortSignal) }),
     );
 

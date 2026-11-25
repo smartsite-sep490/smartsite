@@ -43,6 +43,20 @@ const en = {
   'trackedHistory.sourceSequence': 'Source sequence (uint64)',
   'trackedHistory.payloadHash': 'Payload SHA-256',
   'trackedHistory.frameSha256': 'Evidence #{{index}} SHA-256',
+  'trackedHistory.observedPpeTitle': 'Observed PPE on this person',
+  'trackedHistory.observedPpeStatus.PRESENT': 'Observed',
+  'trackedHistory.observedPpeStatus.MISSING': 'Missing',
+  'trackedHistory.observedPpeStatus.UNCLEAR': 'Unclear',
+  'trackedHistory.observedPpeBoundaryNote':
+    'Harness/lanyard hook indicates frame visibility only; does not confirm proper wear or tie-off.',
+  'trackedHistory.observedPpeItem.HARD_HAT': 'Hard Hat / Helmet',
+  'trackedHistory.observedPpeItem.SAFETY_VEST': 'Safety Vest',
+  'trackedHistory.observedPpeItem.GLOVES': 'Gloves',
+  'trackedHistory.observedPpeItem.BOOTS': 'Boots',
+  'trackedHistory.observedPpeItem.GOGGLES': 'Goggles',
+  'trackedHistory.observedPpeItem.MASK': 'Mask',
+  'trackedHistory.observedPpeItem.FULL_BODY_HARNESS': 'Full-body harness',
+  'trackedHistory.observedPpeItem.LANYARD_HOOK': 'Lanyard hook',
 };
 
 const vi: Record<keyof typeof en, string> = {
@@ -84,6 +98,20 @@ const vi: Record<keyof typeof en, string> = {
   'trackedHistory.sourceSequence': 'Thứ tự nguồn (uint64)',
   'trackedHistory.payloadHash': 'Mã băm gói dữ liệu (SHA-256)',
   'trackedHistory.frameSha256': 'SHA-256 bằng chứng #{{index}}',
+  'trackedHistory.observedPpeTitle': 'PPE ghi nhận trên người này',
+  'trackedHistory.observedPpeStatus.PRESENT': 'Thấy',
+  'trackedHistory.observedPpeStatus.MISSING': 'Thiếu',
+  'trackedHistory.observedPpeStatus.UNCLEAR': 'Không rõ',
+  'trackedHistory.observedPpeBoundaryNote':
+    'Dây đai/móc chỉ ghi nhận xuất hiện trong khung hình, không xác nhận đeo hay móc đúng chuẩn.',
+  'trackedHistory.observedPpeItem.HARD_HAT': 'Mũ bảo hộ',
+  'trackedHistory.observedPpeItem.SAFETY_VEST': 'Áo phản quang',
+  'trackedHistory.observedPpeItem.GLOVES': 'Găng tay',
+  'trackedHistory.observedPpeItem.BOOTS': 'Giày bảo hộ',
+  'trackedHistory.observedPpeItem.GOGGLES': 'Kính bảo hộ',
+  'trackedHistory.observedPpeItem.MASK': 'Khẩu trang',
+  'trackedHistory.observedPpeItem.FULL_BODY_HARNESS': 'Dây đai an toàn toàn thân',
+  'trackedHistory.observedPpeItem.LANYARD_HOOK': 'Móc dây an toàn',
 };
 
 if (!hasRegisteredFeatureKey('trackedHistory.title')) {
