@@ -762,10 +762,13 @@ describe('source-specific camera setup', () => {
       expect(details.textContent).toMatch(/camera processing computer/i);
       expect(details.textContent).toMatch(/stay online/i);
 
-      // Status is Not connected before live activation is proved (even after preview test!)
+      // Status is neutral Source not checked before running a test in this page session (never false-negative Not connected)
       const statusPill = screen.getByTestId('camera-source-connection-status');
-      expect(statusPill.textContent).toBe('Not connected');
-      expect(statusPill.getAttribute('data-connection-status')).toBe('not-connected');
+      expect(statusPill.textContent).toBe('Source not checked');
+      expect(statusPill.getAttribute('data-connection-status')).toBe('not-checked');
+      expect(statusPill.textContent).not.toMatch(
+        /Not connected|Chưa kết nối|Connected|Đã kết nối/i,
+      );
 
       await user.selectOptions(deviceSelect, 'usb0');
       expect(probe).not.toHaveBeenCalled();
@@ -775,10 +778,15 @@ describe('source-specific camera setup', () => {
       expect(probe.mock.calls[0]?.[4]).toBe('sole-edge');
       expect(apply).not.toHaveBeenCalled();
       expect(screen.getByTestId('camera-source-connection-status').textContent).toBe(
-        'Not connected',
+        'Test preview ready',
       );
+      expect(
+        screen
+          .getByTestId('camera-source-connection-status')
+          .getAttribute('data-connection-status'),
+      ).toBe('tested');
 
-      // Only after explicit confirmation and live activation succeeds does status become Connected
+      // Only after explicit confirmation and activation acknowledgement does status update (still not persistent LIVE proof)
       expect(screen.getByTestId('camera-source-shared-notice').textContent).toMatch(
         /same saved physical source/i,
       );
@@ -789,29 +797,29 @@ describe('source-specific camera setup', () => {
       await user.click(within(confirmBox).getByRole('button', { name: 'Cancel' }));
       expect(apply).not.toHaveBeenCalled();
       expect(screen.getByTestId('camera-source-connection-status').textContent).toBe(
-        'Not connected',
+        'Test preview ready',
       );
 
       await user.click(screen.getByRole('button', { name: 'Save and activate source' }));
       await user.click(screen.getByRole('button', { name: 'Confirm source replacement' }));
       await waitFor(() =>
         expect(screen.getByTestId('camera-source-connection-status').textContent).toBe(
-          'Source activated',
+          'Activation acknowledged',
         ),
       );
       expect(
         screen
           .getByTestId('camera-source-connection-status')
           .getAttribute('data-connection-status'),
-      ).toBe('activated');
+      ).toBe('activation-acknowledged');
       expect(screen.getByText(/does not prove ongoing live monitoring/i)).toBeTruthy();
 
-      // Vietnamese copy parity: heading Kết nối camera, honest activation status (does not claim proven LIVE), no máy AI jargon
+      // Vietnamese copy parity: heading Kết nối camera, honest page-local activation acknowledgement (not persistent LIVE proof), no máy AI jargon
       await i18n.changeLanguage('vi');
       await waitFor(() => {
         expect(screen.getByRole('heading', { name: 'Kết nối camera' })).toBeTruthy();
         expect(screen.getByTestId('camera-source-connection-status').textContent).toBe(
-          'Đã kích hoạt nguồn',
+          'Đã ghi nhận kích hoạt',
         );
         expect(screen.getByRole('button', { name: 'Kiểm tra kết nối' })).toBeTruthy();
       });
@@ -1024,6 +1032,76 @@ describe('source-specific camera setup', () => {
       await waitFor(() => expect(onUnauthorized).toHaveBeenCalledTimes(1));
       expect(resume.mock.calls[1]?.[5].commandId).not.toBe(resume.mock.calls[0]?.[5].commandId);
       expect(screen.queryByRole('button', { name: 'Apply saved configuration' })).toBeNull();
+    });
+
+    it('renders neutral Source not checked / Chưa kiểm tra nguồn when opening or remounting an existing camera without applying, never false-negative Not connected / Chưa kết nối', async () => {
+      const existingLiveHost: SourceHost = {
+        ...host,
+        id: 'site-cam1-host',
+        label: 'Site CAM1 PC',
+        capabilities: {
+          ...host.capabilities,
+          applySupported: true,
+          configurationResumeSupported: true,
+          sourceRevision: 3,
+        },
+      };
+      const hostsFn = vi.fn<CameraSourceClient['hosts']>().mockResolvedValue([existingLiveHost]);
+      const probe = vi.fn<CameraSourceClient['probe']>();
+      const apply = vi.fn<NonNullable<CameraSourceClient['apply']>>();
+
+      const renderExistingCam = (cache: QueryClient) => (
+        <QueryClientProvider client={cache}>
+          <CameraSourceSetupPanel
+            apiUrl="http://localhost"
+            token="tok"
+            siteId="site-a"
+            camera={{
+              id: 'cam-1-existing',
+              name: 'CAM1',
+              configurationVersion: 5,
+              status: 'ACTIVE',
+            }}
+            setupKey={['existing-cam-remount']}
+            canWrite
+            onUnauthorized={vi.fn()}
+            client={{ hosts: hostsFn, probe, apply }}
+          />
+        </QueryClientProvider>
+      );
+
+      // 1) Initial mount of existing CAM1 without running test or apply
+      const firstMount = render(
+        renderExistingCam(new QueryClient({ defaultOptions: { queries: { retry: false } } })),
+      );
+      await screen.findByLabelText('Device');
+      const pillEn = screen.getByTestId('camera-source-connection-status');
+      expect(pillEn.getAttribute('data-connection-status')).toBe('not-checked');
+      expect(pillEn.textContent).toBe('Source not checked');
+      expect(pillEn.textContent).not.toMatch(/Not connected|Offline|Connected/i);
+      expect(probe).not.toHaveBeenCalled();
+      expect(apply).not.toHaveBeenCalled();
+
+      // Vietnamese parity on existing camera open
+      await i18n.changeLanguage('vi');
+      await waitFor(() => {
+        expect(screen.getByTestId('camera-source-connection-status').textContent).toBe(
+          'Chưa kiểm tra nguồn',
+        );
+      });
+      expect(screen.getByTestId('camera-source-connection-status').textContent).not.toMatch(
+        /Chưa kết nối|Ngoại tuyến|Đã kết nối/i,
+      );
+
+      // 2) Unmount & remount the same existing camera (simulates navigating back to CAM1)
+      firstMount.unmount();
+      render(renderExistingCam(new QueryClient({ defaultOptions: { queries: { retry: false } } })));
+      await screen.findByLabelText('Thiết bị');
+      const remountPillVi = screen.getByTestId('camera-source-connection-status');
+      expect(remountPillVi.getAttribute('data-connection-status')).toBe('not-checked');
+      expect(remountPillVi.textContent).toBe('Chưa kiểm tra nguồn');
+      expect(remountPillVi.textContent).not.toMatch(/Chưa kết nối|Ngoại tuyến|Đã kết nối/i);
+      expect(apply).not.toHaveBeenCalled();
     });
   });
 });

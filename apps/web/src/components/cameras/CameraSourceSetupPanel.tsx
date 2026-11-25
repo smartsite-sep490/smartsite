@@ -391,17 +391,24 @@ function SourceWorkspace({
         }
       : applying.isSuccess
         ? {
-            state: 'activated' as const,
+            state: 'activation-acknowledged' as const,
             dot: 'bg-teal-600',
             pill: 'border-teal-200 bg-teal-50 text-teal-900',
             key: 'cameraSource.statusConnected' as const,
           }
-        : {
-            state: 'not-connected' as const,
-            dot: 'bg-slate-400',
-            pill: 'border-slate-200 bg-slate-50 text-slate-700',
-            key: 'cameraSource.statusNotConnected' as const,
-          };
+        : activeResult && !isExpired
+          ? {
+              state: 'tested' as const,
+              dot: 'bg-sky-600',
+              pill: 'border-sky-200 bg-sky-50 text-sky-900',
+              key: 'cameraSource.statusTested' as const,
+            }
+          : {
+              state: 'not-checked' as const,
+              dot: 'bg-slate-400',
+              pill: 'border-slate-200 bg-slate-50 text-slate-700',
+              key: 'cameraSource.statusNotConnected' as const,
+            };
 
   const openConnectionDetailsAndFocus = () => {
     if (detailsRef.current) {

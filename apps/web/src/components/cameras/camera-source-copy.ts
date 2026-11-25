@@ -11,8 +11,9 @@ const en = {
   'cameraSource.resumeStarted':
     'Check configuration status and live frames in the camera panel. A started session alone does not confirm monitoring is ready.',
   'cameraSource.title': 'Connect camera',
-  'cameraSource.statusConnected': 'Source activated',
-  'cameraSource.statusNotConnected': 'Not connected',
+  'cameraSource.statusConnected': 'Activation acknowledged',
+  'cameraSource.statusTested': 'Test preview ready',
+  'cameraSource.statusNotConnected': 'Source not checked',
   'cameraSource.statusChecking': 'Checking…',
   'cameraSource.apply': 'Save and activate source',
   'cameraSource.applying': 'Stopping previous source and activating…',
@@ -143,8 +144,9 @@ const vi: Record<keyof typeof en, string> = {
   'cameraSource.resumeStarted':
     'Kiểm tra trạng thái cấu hình và ảnh trực tiếp tại bảng camera. Phiên đã bắt đầu chưa có nghĩa giám sát đã sẵn sàng.',
   'cameraSource.title': 'Kết nối camera',
-  'cameraSource.statusConnected': 'Đã kích hoạt nguồn',
-  'cameraSource.statusNotConnected': 'Chưa kết nối',
+  'cameraSource.statusConnected': 'Đã ghi nhận kích hoạt',
+  'cameraSource.statusTested': 'Đã có ảnh kiểm tra',
+  'cameraSource.statusNotConnected': 'Chưa kiểm tra nguồn',
   'cameraSource.statusChecking': 'Đang kiểm tra',
   'cameraSource.apply': 'Lưu và kích hoạt nguồn',
   'cameraSource.applying': 'Đang dừng nguồn cũ và kích hoạt…',
