@@ -896,12 +896,20 @@ export interface LuxuryTimeSelectorProps {
 export function LuxuryTimeSelector({
   timeStr,
   onChange,
-  minuteStep = 5,
+  minuteStep = 1,
   embedded = false,
 }: LuxuryTimeSelectorProps) {
   useTranslation();
 
   const { hour12, minute, period } = parseHHMM(timeStr);
+
+  const selectedHourRef = React.useRef<HTMLButtonElement>(null);
+  const selectedMinuteRef = React.useRef<HTMLButtonElement>(null);
+
+  React.useEffect(() => {
+    selectedHourRef.current?.scrollIntoView?.({ block: 'nearest' });
+    selectedMinuteRef.current?.scrollIntoView?.({ block: 'nearest' });
+  }, []);
 
   const hoursList = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12];
   const minutesList = Array.from({ length: Math.ceil(60 / minuteStep) }, (_, i) => i * minuteStep);
@@ -1001,6 +1009,7 @@ export function LuxuryTimeSelector({
               return (
                 <button
                   key={h}
+                  ref={isSelected ? selectedHourRef : undefined}
                   type="button"
                   aria-label={tr('common.hour_value', { value1: String(h).padStart(2, '0') })}
                   aria-pressed={isSelected}
@@ -1029,6 +1038,7 @@ export function LuxuryTimeSelector({
               return (
                 <button
                   key={m}
+                  ref={isSelected ? selectedMinuteRef : undefined}
                   type="button"
                   aria-label={tr('common.minute_value', { value1: String(m).padStart(2, '0') })}
                   aria-pressed={isSelected}
@@ -1099,7 +1109,7 @@ export function SmartTimePicker({
   error,
   id: propId,
   className = '',
-  minuteStep = 5,
+  minuteStep = 1,
 }: SmartTimePickerProps) {
   useTranslation();
   const [popoverContainer, attachPopoverHost] = usePopoverHost();
@@ -1202,7 +1212,7 @@ export function SmartDateTimePicker({
   error,
   id: propId,
   disablePast = true,
-  minuteStep = 5,
+  minuteStep = 1,
   clearable = false,
 }: SmartDateTimePickerProps) {
   useTranslation();

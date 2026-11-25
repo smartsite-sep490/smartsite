@@ -5,6 +5,24 @@ import {
   TeamAttendanceEntity,
 } from '../../../database/entities/index.js';
 
+/** A rejected report's empty placeholder preserves history, but attests to no worked interval. */
+export async function rejectedEmptyReportSessionIds(manager: EntityManager, dayId: string) {
+  const rows = await manager.query<{ id: string }[]>(
+    `
+    SELECT s.id FROM attendance_session s
+    WHERE s.day_id=$1 AND s.status='MISSING_IN'
+      AND s.check_in_event_id IS NULL AND s.check_out_event_id IS NULL
+      AND s.effective_in_at IS NULL AND s.effective_out_at IS NULL
+      AND s.applied_correction_id IS NULL
+      AND EXISTS(SELECT 1 FROM attendance_correction c WHERE c.attendance_session_id=s.id
+        AND c.status='REJECTED' AND c.reviewed_by IS NOT NULL AND c.reviewed_at IS NOT NULL AND c.reviewed_by<>c.requested_by)
+      AND NOT EXISTS(SELECT 1 FROM attendance_correction c WHERE c.attendance_session_id=s.id
+        AND (c.status<>'REJECTED' OR c.reviewed_by IS NULL OR c.reviewed_at IS NULL OR c.reviewed_by=c.requested_by))`,
+    [dayId],
+  );
+  return new Set(rows.map((row) => row.id));
+}
+
 /** Read immutable Gate evidence as well as attendance, so a missing projection cannot authorize absence. */
 export async function attendanceGateAbsenceContext(
   manager: EntityManager,
@@ -18,7 +36,7 @@ export async function attendanceGateAbsenceContext(
       .getRepository(AttendanceAbsenceReviewEntity)
       .findOne({ where: { dayId: day.id }, order: { reviewedAt: 'DESC', id: 'DESC' } }),
   ]);
-  if (record?.status !== 'PRESENT' && !decision) return null;
+  if (record && record.status !== 'PRESENT' && !decision) return null;
   const [counts] = await manager.query<
     {
       gateEventCount: number;
@@ -58,31 +76,42 @@ export async function attendanceGateAbsenceContext(
     !Number.isFinite(+counts.requiredEnd)
   )
     throw new Error('Attendance evidence unavailable');
+  const emptyRejectedReportCount =
+    counts.sessionCount > 0 ? (await rejectedEmptyReportSessionIds(manager, day.id)).size : 0;
   const noEvidence =
-    counts.gateEventCount === 0 && counts.attendanceEventCount === 0 && counts.sessionCount === 0;
+    counts.gateEventCount === 0 &&
+    counts.attendanceEventCount === 0 &&
+    counts.sessionCount === emptyRejectedReportCount;
   const requirement = day.zoneAttendanceRequirement;
   const matches =
-    !!record &&
-    record.status === 'PRESENT' &&
-    record.teamId === requirement.teamId &&
-    record.membershipId === requirement.membershipId &&
-    record.zoneId === requirement.zoneId;
+    !!requirement.teamId &&
+    !!requirement.membershipId &&
+    !!requirement.zoneId &&
+    (!record ||
+      (record.status === 'PRESENT' &&
+        record.teamId === requirement.teamId &&
+        record.membershipId === requirement.membershipId &&
+        record.zoneId === requirement.zoneId));
+  // Version zero explicitly snapshots the absence of leader roll call.
+  const teamAttendanceVersion = record?.version ?? 0;
   const resolved =
     noEvidence &&
     matches &&
     !!decision &&
-    decision.teamAttendanceVersion === record!.version &&
-    decision.teamId === record!.teamId &&
-    decision.membershipId === record!.membershipId &&
-    decision.zoneId === record!.zoneId;
+    decision.teamAttendanceVersion === teamAttendanceVersion &&
+    decision.teamId === requirement.teamId &&
+    decision.membershipId === requirement.membershipId &&
+    decision.zoneId === requirement.zoneId;
   return {
     record,
+    teamAttendanceVersion,
     decision,
     ...counts,
+    emptyRejectedReportCount,
     noEvidence,
     matches,
     resolved,
-    conflicted: !!decision && !noEvidence,
+    conflicted: !!decision && (!noEvidence || !resolved),
   };
 }
 
@@ -98,7 +127,9 @@ export function canConfirmGateAbsence(
     !context.conflicted &&
     now >= context.requiredEnd &&
     day.status === 'NEEDS_REVIEW' &&
-    day.anomalies.includes('ZONE_GATE_MISSING') &&
-    day.anomalies.every((issue) => issue === 'ZONE_GATE_MISSING')
+    day.anomalies.includes(context.record ? 'ZONE_GATE_MISSING' : 'ZONE_ATTENDANCE_PENDING') &&
+    day.anomalies.every(
+      (issue) => issue === (context.record ? 'ZONE_GATE_MISSING' : 'ZONE_ATTENDANCE_PENDING'),
+    )
   );
 }

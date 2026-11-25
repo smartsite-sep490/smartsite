@@ -116,7 +116,9 @@ export function AccessControlView({ apiUrl }: AccessControlViewProps) {
   const client = useManagementClient(apiUrl);
   const { accessToken } = useAuth();
   const currentUserQuery = useCurrentUser(apiUrl);
-  const [requestedSiteId, setRequestedSiteId] = useState('');
+  const [requestedSiteId, setRequestedSiteId] = useState(
+    () => new URLSearchParams(window.location.search).get('siteId') ?? '',
+  );
   const [accessSubTab, setAccessSubTab] = useState<AccessSubTab>(() =>
     new URLSearchParams(window.location.search).get('tab') === 'attendance'
       ? 'attendance'

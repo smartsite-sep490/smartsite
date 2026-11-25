@@ -537,10 +537,14 @@ export class AttendanceDaysService {
           }
         : {}),
       ...(gateReview &&
-      ((day.anomalies.includes('ZONE_GATE_MISSING') && gateReview.noEvidence) ||
+      ((day.anomalies.some((issue) =>
+        ['ZONE_GATE_MISSING', 'ZONE_ATTENDANCE_PENDING'].includes(issue),
+      ) &&
+        gateReview.noEvidence) ||
         gateReview.decision)
         ? {
             gateAbsenceReview: {
+              expectedTeamAttendanceVersion: gateReview.teamAttendanceVersion,
               canConfirm:
                 canReview &&
                 worker.userId !== actor.id &&
@@ -548,6 +552,7 @@ export class AttendanceDaysService {
               gateEventCount: gateReview.gateEventCount,
               attendanceEventCount: gateReview.attendanceEventCount,
               sessionCount: gateReview.sessionCount,
+              emptyRejectedReportCount: gateReview.emptyRejectedReportCount,
               status: gateReview.conflicted
                 ? ('CONFLICTED' as const)
                 : gateReview.resolved || (gateReview.decision && day.status === 'ABSENT')
@@ -1010,8 +1015,8 @@ export class AttendanceDaysService {
         const context = await attendanceGateAbsenceContext(manager, day);
         if (
           !canConfirmGateAbsence(day, context, new Date()) ||
-          !context?.record ||
-          context.record.version !== value.expectedTeamAttendanceVersion
+          !context ||
+          context.teamAttendanceVersion !== value.expectedTeamAttendanceVersion
         )
           conflict(
             'Absence can only be confirmed after the shift ends with unchanged roll call and no Gate or attendance evidence',
@@ -1020,10 +1025,10 @@ export class AttendanceDaysService {
           id: value.requestId,
           dayId: id,
           expectedDayVersion: value.expectedVersion,
-          teamAttendanceVersion: context.record.version,
-          teamId: context.record.teamId,
-          membershipId: context.record.membershipId,
-          zoneId: context.record.zoneId,
+          teamAttendanceVersion: context.teamAttendanceVersion,
+          teamId: day.zoneAttendanceRequirement!.teamId!,
+          membershipId: day.zoneAttendanceRequirement!.membershipId!,
+          zoneId: day.zoneAttendanceRequirement!.zoneId!,
           reviewedBy: actor.id,
           reason: value.reason,
         });
@@ -1039,7 +1044,7 @@ export class AttendanceDaysService {
             requestId: value.requestId,
             before: day.status,
             after: 'ABSENT',
-            teamAttendanceVersion: context.record.version,
+            teamAttendanceVersion: context.teamAttendanceVersion,
           },
         );
         await this.reconciliation.refresh(manager, id);

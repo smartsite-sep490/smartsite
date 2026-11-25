@@ -1,4 +1,7 @@
 {
+  "errors.qr_site_mismatch": "QR does not belong to this site",
+  "errors.qr_direction_mismatch": "QR direction does not match",
+  "errors.qr_site_or_direction_mismatch": "QR Site or direction does not match",
   "landing_page.back_to_top": "Back to top",
   "incident_view.review_decision": "Review decision",
   "incident_view.verify_and_close_action": "Verify and close action",

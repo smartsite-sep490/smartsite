@@ -72,7 +72,8 @@ export function GateAbsenceReviewCard({
   const changed =
     !!snapshot &&
     (snapshot.expectedVersion !== detail.day.version ||
-      snapshot.expectedTeamAttendanceVersion !== info.teamAttendance?.version);
+      snapshot.expectedTeamAttendanceVersion !==
+        (info.expectedTeamAttendanceVersion ?? info.teamAttendance?.version));
   const isConfirmed = info.status === 'CONFIRMED_ABSENT';
   const isConflicted = info.status === 'CONFLICTED';
 
@@ -147,6 +148,11 @@ export function GateAbsenceReviewCard({
           </p>
         </div>
 
+        {!!info.emptyRejectedReportCount && (
+          <p className="text-xs text-slate-600">
+            {teamText('teamWeb.absenceRejectedReport', { count: info.emptyRejectedReportCount })}
+          </p>
+        )}
         {/* Confirmed State vs Pending Form */}
         {isConfirmed ? (
           <div className="space-y-3 pt-1">
@@ -225,10 +231,11 @@ export function GateAbsenceReviewCard({
                     onChange={(event) => {
                       setReason(event.target.value);
                       mutation.reset();
-                      if (!snapshot && info.teamAttendance)
+                      if (!snapshot)
                         setSnapshot({
                           expectedVersion: detail.day.version,
-                          expectedTeamAttendanceVersion: info.teamAttendance.version,
+                          expectedTeamAttendanceVersion:
+                            info.expectedTeamAttendanceVersion ?? info.teamAttendance?.version ?? 0,
                         });
                     }}
                   />

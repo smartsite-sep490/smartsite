@@ -83,3 +83,18 @@ it.each(['SAFETY_CARD', 'HEALTH_CERTIFICATE', 'PERSONAL_INSURANCE'] as const)(
     }
   },
 );
+
+it('explains missing roll call without claiming a PRESENT record', () => {
+  const notice = {
+    event: 'ABSENCE_REVIEW_REQUIRED',
+    message:
+      'Worker Synthetic Worker (W01) has no leader roll call on 2026-11-23, and no Gate IN/OUT was recorded. Review attendance before confirming absence.',
+  } as Parameters<typeof notificationMessage>[0];
+  expect(notificationMessage(notice)).toBe(
+    translate('notifications.missingRollCallAbsenceMessage', {
+      name: 'Synthetic Worker',
+      code: 'W01',
+      date: '2026-11-23',
+    }),
+  );
+});

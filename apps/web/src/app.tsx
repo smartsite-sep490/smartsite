@@ -242,7 +242,10 @@ function ProtectedRoutes({ defaultAuthTab, alertsContext, onNavigate }: Protecte
         <Route path="/worker-onboarding" element={<WorkerOnboardingView apiUrl={apiUrl} />} />
         <Route path="/worker-documents" element={<WorkerDocumentsView apiUrl={apiUrl} />} />
         <Route path="/schedule-setup" element={<ScheduleSetupView apiUrl={apiUrl} />} />
-        <Route path="/access" element={<AccessControlView apiUrl={apiUrl} />} />
+        <Route
+          path="/access"
+          element={<AccessControlView key={location.search} apiUrl={apiUrl} />}
+        />
         <Route
           path="/live-monitoring"
           element={

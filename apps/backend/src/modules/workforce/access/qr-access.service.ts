@@ -1524,8 +1524,10 @@ export class QrAccessService {
       if (!session) forbidden('QR does not belong to this gate fallback session');
       const credential = await this.credential(manager, value.token, fingerprint);
       if (credential.result) return credential.result as WorkerQrVerificationResponse;
-      if (credential.siteId !== siteId || credential.direction !== value.direction)
-        invalid('QR Site or direction does not match');
+      if (credential.siteId !== siteId)
+        invalid('QR does not belong to this site');
+      if (credential.direction !== value.direction)
+        invalid('QR direction does not match');
       if (session.consumedAt || session.expiresAt.getTime() <= Date.now())
         conflict('Fallback session has expired or has been used');
       const worker = await manager

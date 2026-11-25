@@ -177,6 +177,7 @@ describe('Site Access ERD integration', () => {
   });
   afterEach(() => {
     cleanup();
+    window.history.replaceState({}, '', '/');
     queryClient.clear();
     vi.restoreAllMocks();
   });
@@ -207,6 +208,22 @@ describe('Site Access ERD integration', () => {
     mount();
     expect(await screen.findByRole('alert')).toBeTruthy();
     expect(SmartSiteManagementClient.prototype.accessSetup).not.toHaveBeenCalled();
+  });
+  it('opens the scoped Site from an attendance notification instead of the first Site', async () => {
+    window.history.replaceState({}, '', '/access?tab=attendance&siteId=site-beta');
+    authSessionMock.user = {
+      ...mockAdminLoginResponse.user,
+      roleAssignments: [
+        { role: 'CONTRACTOR_REPRESENTATIVE', siteId: 'site-alpha' },
+        { role: 'CONTRACTOR_REPRESENTATIVE', siteId: 'site-beta' },
+      ],
+    };
+    mount();
+    await waitFor(() =>
+      expect((screen.getByLabelText(/Active Managed Site/) as HTMLSelectElement).value).toBe(
+        'site-beta',
+      ),
+    );
   });
   it('selects only the explicit site for a mixed Admin and Site Manager', async () => {
     authSessionMock.user = {
